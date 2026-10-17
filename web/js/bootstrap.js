@@ -30,6 +30,7 @@ var scripts = [
     "js/Helpers.js",
     "js/Catalog.js",
     "js/MainMenu.js",
+    "js/MaterialOverrides.js",
     "js/CarLoader.js",
     "js/MaterialLibrary.js",
     "js/TrackLoader.js",

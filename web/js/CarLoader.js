@@ -187,6 +187,8 @@ OpenRacer.loadCarModel = function (config, onLoad, onError) {
                     if(child.isMesh) child.castShadow = true;
                 });
             });
+            // the changes to the materials that were made in the car editor
+            OpenRacer.applyMaterialOverrides(THREE, [tilt].concat(wheelObjects), config.materials);
             onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1 });
         }
     }

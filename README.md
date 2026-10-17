@@ -40,6 +40,8 @@ The **car editor** at http://localhost:8000/tools/car-editor.html makes such a c
 
 The materials of a glTF model are used as they are (physically based: base colour, metalness, roughness, normal, occlusion and emissive maps, clearcoat, transmission). They are lit by the surroundings of the car: the cube map around the car is filtered by roughness and used as the lighting (image based lighting), so paint, glass and chrome reflect the track and the sky. The *Tone mapping* option of the settings menu (Neutral, AgX or ACES) gives a picture closer to Blender's; it is off by default, because it changes the colours of the track too. The car editor shows the model in a studio for the same reason.
 
+A model does not always arrive the way it looked in Blender: a shader that the glTF exporter does not know, such as the glass of many models, ends up as a plain opaque white metal. The *Materials* part of the car editor lists the materials of the model and sets them right with a preset (glass, car paint, chrome, rubber, plastic, brushed metal) or by hand (colour, metalness, roughness, opacity, clear coat, reflection), with a live preview. The changes are saved with the car (`materials` in `car.json`). Glass that arrives opaque is set to see-through glass as a suggestion.
+
 In Blender a car that looks towards -Y (the front view) exports as it should; the model needs a name per part for the wheels to be found. glTF files with Draco or Meshopt compression are not supported.
 
 ## Driving model

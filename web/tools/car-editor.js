@@ -24,6 +24,8 @@ const state = {
     mainFile: null,         // name of the glb or gltf among them
     existingId: null,       // the id of the car that is being edited
     existingModel: null,    // the model block of that car
+    materials: [],          // the materials of the model
+    overrides: {},          // changes to the materials: material name -> { field: value }
     nodes: [],              // the named nodes of the model
     root: null,
     curve: [[0, 0], [300, 80], [1000, 180], [2000, 230], [3000, 250], [4000, 255], [5000, 250], [6000, 225], [7000, 170]],
@@ -125,6 +127,17 @@ function setModel(root, isNew) {
     if (state.root) pivot.remove(state.root);
     state.root = root;
     pivot.add(root);
+    state.materials = OpenRacer.prepareMaterials(THREE, root);
+    if (isNew || state.autoGlass) {
+        // glass that the exporter did not understand arrives as an opaque white metal: start with glass that is see-through
+        if (isNew) state.overrides = {};
+        state.materials.forEach((m) => {
+            if (!state.overrides[m.name] && /glass|window|windscreen|windshield|ruit/i.test(m.name) && !m.map && !m.transparent && m.opacity === 1) {
+                state.overrides[m.name] = Object.assign({}, OpenRacer.materialPresets["Glass"]);
+            }
+        });
+    }
+    renderMaterials();
     state.nodes = [];
     const walk = (object, depth) => {
         if (object !== root && object.name) state.nodes.push({ name: object.name, depth });
@@ -304,6 +317,90 @@ function chassisFromWheels() {
     $("rearTrack").value = Math.abs(c.RL.c.x - c.RR.c.x).toFixed(3);
     $("tyre").value = (SLOTS.reduce((sum, s) => sum + c[s].size.y, 0) / 4).toFixed(3);
     updateHelpers();
+}
+
+// ---- materials
+
+function applyOverrides(name) {
+    state.materials.filter((m) => m.name === name).forEach((m) => OpenRacer.applyMaterialOverride(m, state.overrides[name]));
+}
+
+function renderMaterials() {
+    const box = $("materials");
+    box.innerHTML = "";
+    const names = [...new Set(state.materials.map((m) => m.name).filter(Boolean))];
+    if (!names.length) {
+        box.innerHTML = '<div class="hint">' + (state.root ? "The model has no named materials." : "Load a model to see its materials.") + "</div>";
+        return;
+    }
+    names.forEach((name) => {
+        const first = state.materials.find((m) => m.name === name);
+        const unnamedCount = state.materials.filter((m) => m.name === name).length;
+        const element = document.createElement("div");
+        element.className = "material";
+        const head = document.createElement("div");
+        head.className = "head";
+        const title = document.createElement("b");
+        title.textContent = name + (unnamedCount > 1 ? " (" + unnamedCount + "x)" : "");
+        title.title = name;
+        head.appendChild(title);
+        const presets = document.createElement("select");
+        presets.innerHTML = "<option value=''>Preset…</option>" + Object.keys(OpenRacer.materialPresets).map((p) => "<option>" + p + "</option>").join("");
+        head.appendChild(presets);
+        const reset = document.createElement("button");
+        reset.className = "small";
+        reset.textContent = "Reset";
+        reset.title = "Back to the material of the model";
+        head.appendChild(reset);
+        element.appendChild(head);
+
+        const fields = document.createElement("div");
+        fields.className = "fields";
+        const inputs = {};
+        const spec = [["color", "Colour"], ["metalness", "Metalness", 0, 1, 0.05], ["roughness", "Roughness", 0, 1, 0.05],
+            ["opacity", "Opacity", 0, 1, 0.05], ["clearcoat", "Clear coat", 0, 1, 0.05], ["clearcoatRoughness", "Coat roughness", 0, 1, 0.05],
+            ["envMapIntensity", "Reflection", 0, 5, 0.1]];
+        spec.forEach(([field, label, min, max, step]) => {
+            const wrap = document.createElement("div");
+            const l = document.createElement("label");
+            l.textContent = label;
+            const input = document.createElement("input");
+            if (field === "color") input.type = "color";
+            else { input.type = "number"; input.min = min; input.max = max; input.step = step; }
+            input.addEventListener("input", () => {
+                const value = field === "color" ? input.value : parseFloat(input.value);
+                if (field !== "color" && Number.isNaN(value)) return;
+                (state.overrides[name] = state.overrides[name] || {})[field] = value;
+                applyOverrides(name);
+                refresh();
+            });
+            inputs[field] = input;
+            wrap.appendChild(l);
+            wrap.appendChild(input);
+            fields.appendChild(wrap);
+        });
+        element.appendChild(fields);
+
+        const refresh = () => {
+            const values = Object.assign({}, first.userData.original, state.overrides[name] || {});
+            for (const field of Object.keys(inputs)) {
+                const shown = field === "color" ? values.color : Math.round(values[field] * 1000) / 1000;
+                if (document.activeElement !== inputs[field]) inputs[field].value = shown;
+            }
+            element.classList.toggle("changed", !!(state.overrides[name] && Object.keys(state.overrides[name]).length));
+        };
+        presets.addEventListener("change", () => {
+            if (!presets.value) return;
+            state.overrides[name] = Object.assign({}, state.overrides[name] || {}, OpenRacer.materialPresets[presets.value]);
+            presets.value = "";
+            applyOverrides(name);
+            refresh();
+        });
+        reset.addEventListener("click", () => { delete state.overrides[name]; applyOverrides(name); refresh(); });
+        applyOverrides(name);
+        refresh();
+        box.appendChild(element);
+    });
 }
 
 // ---- the engine
@@ -507,6 +604,11 @@ async function save() {
             throw new Error("Load a model first.");
         }
         if (config.model.type === "gltf") {
+            const overrides = {};
+            for (const [materialName, override] of Object.entries(state.overrides)) {
+                if (Object.keys(override).length) overrides[materialName] = override;
+            }
+            if (Object.keys(overrides).length) config.materials = overrides;
             config.model.rotation_y = num("rotation") || 0;
             config.model.scale = num("scale") > 0 ? num("scale") : 1;
             config.model.offset = [num("offsetX") || 0, num("offsetY") || 0, num("offsetZ") || 0];
@@ -584,6 +686,8 @@ function loadExisting() {
     state.existingId = car.id;
     state.existingModel = car.model;
     fill(car);
+    state.overrides = JSON.parse(JSON.stringify(car.materials || {}));
+    state.autoGlass = !car.materials; // a car that was made before the materials could be set gets see-through glass as a suggestion
     $("delete").style.display = "";
     if (car.model.type === "gltf") {
         const m = car.model;
@@ -620,6 +724,10 @@ function newCar() {
     if (state.root) pivot.remove(state.root);
     state.root = null;
     state.nodes = [];
+    state.materials = [];
+    state.overrides = {};
+    state.autoGlass = false;
+    renderMaterials();
     for (const slot of SLOTS) $("w" + slot).innerHTML = "";
     $("modelInfo").textContent = "No model loaded.";
     $("files").value = "";
