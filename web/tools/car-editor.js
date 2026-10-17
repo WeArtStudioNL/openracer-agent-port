@@ -587,6 +587,7 @@ function updateCameraMarkers() {
         line(0xff9f43, dot(0xff9f43, p[0], p[1], p[2], "cockpit"), new THREE.Vector3(p[0], p[1], p[2] + 2));
     }
     renderLayers();
+    updateThumbnail(); // the thumbnail follows the camera, also while it is dragged
 }
 
 // ---- the layers panel: the cameras, the model and the wheels, with a gizmo to move the cameras and the model, and a thumbnail
