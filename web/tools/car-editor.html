@@ -182,31 +182,17 @@
         <details class="card">
             <summary>Engine sound</summary>
             <div class="body">
-                <div><label>Sound model</label>
-                    <select id="soundModel"><option value="pipes">Pipes (waveguides, after Antonio-R1)</option><option value="engine-sim">Combustion (after engine-sim)</option></select></div>
-                <p class="sub">Press <b>Play</b> in the view to listen while you change the settings.</p>
-                <div id="pipesBlock" data-model="pipes">
-                    <div class="row">
-                        <div><label>Preset</label><select id="soundPreset"></select></div>
-                    </div>
-                    <div class="group">Recordings (optional)</div>
-                    <p class="sub">Seamless loops of the engine at a steady speed; say the rpm of each and whether the throttle was open. With recordings the car plays them instead of the calculated sound.</p>
-                    <input type="file" id="sampleFiles" multiple accept=".ogg,.mp3,.wav,.flac,.m4a,audio/*">
-                    <div id="samples"></div>
-                    <label class="check"><input type="checkbox" id="soundUseSamples" checked> Play the recordings in the preview</label>
+                <p class="sub">The gas in every cylinder is simulated and the pressure in the exhaust is played through the recorded impulse response of an exhaust (after engine-sim). Press <b>Play</b> in the view to listen while you change the settings.</p>
+                <div class="row">
+                    <div><label>Preset</label><select id="esPreset"></select></div>
+                    <div><label>Layout</label><select id="esLayout" class="es" data-key="layout"></select></div>
                 </div>
-                <div id="esBlock" data-model="engine-sim">
-                    <div class="row">
-                        <div><label>Preset</label><select id="esPreset"></select></div>
-                        <div><label>Layout</label><select id="esLayout" class="es" data-key="layout"></select></div>
-                    </div>
-                    <div class="row">
-                        <div><label>Exhaust (impulse response)</label><select class="es" data-key="impulse_response" id="esIr"></select></div>
-                        <div class="fixed" style="width:90px"><label>How much</label><input type="number" class="es" data-key="convolution" step="0.05" min="0" max="1"></div>
-                    </div>
+                <div class="row">
+                    <div><label>Exhaust (impulse response)</label><select class="es" data-key="impulse_response" id="esIr"></select></div>
+                    <div class="fixed" style="width:90px"><label>How much</label><input type="number" class="es" data-key="convolution" step="0.05" min="0" max="1"></div>
                 </div>
                 <div class="modal-link">
-                    <span class="hint">Pipes, valves and muffler, or the cylinders, camshaft and exhaust of the combustion model.</span>
+                    <span class="hint">The cylinders, the camshaft, the ports and the exhaust, and the mix of engine-sim.</span>
                     <button class="small" data-open="dlgSound">All settings…</button>
                 </div>
             </div>
@@ -321,49 +307,8 @@
 <dialog id="dlgSound">
     <div class="head"><h3>Engine sound settings</h3><button class="close" data-close>×</button></div>
     <div class="content">
-        <div id="pipesAdvanced" data-model="pipes">
-            <p class="sub">Every cylinder has pipes for the intake and the exhaust in which the pressure wave of the burn travels up and down and is partly reflected; the exhausts come together in a pipe, a muffler and the outlet.</p>
-            <div class="row">
-                <div><input type="number" class="snd" id="sndCylinders" min="1" max="16" step="1"><div class="hint">cylinders</div></div>
-                <div><input type="number" class="snd" id="sndVolume" min="0" max="3" step="0.05"><div class="hint">volume</div></div>
-                <div><input type="number" class="snd" id="sndIgnition" min="0.002" max="0.05" step="0.001"><div class="hint">ignition time</div></div>
-            </div>
-            <div class="group">Pipes (lengths in samples: the longer, the lower the resonance)</div>
-            <div class="row">
-                <div><input type="number" class="snd" id="sndIntakeLen" min="1" max="1000" step="5"><div class="hint">intake</div></div>
-                <div><input type="number" class="snd" id="sndExhaustLen" min="1" max="1000" step="5"><div class="hint">exhaust</div></div>
-                <div><input type="number" class="snd" id="sndExtractorLen" min="1" max="1000" step="5"><div class="hint">extractor</div></div>
-            </div>
-            <div class="row">
-                <div><input type="number" class="snd" id="sndStraightLen" min="1" max="1000" step="5"><div class="hint">straight pipe</div></div>
-                <div><input type="number" class="snd" id="sndOutletLen" min="1" max="500" step="1"><div class="hint">outlet</div></div>
-                <div><input type="number" class="snd" id="sndStraightRefl" min="0" max="0.99" step="0.01"><div class="hint">pipe reflection</div></div>
-            </div>
-            <div class="group">Valves and reflection (0 to 1)</div>
-            <div class="row">
-                <div><input type="number" class="snd" id="sndIntakeOpen" min="0" max="0.99" step="0.01"><div class="hint">intake open</div></div>
-                <div><input type="number" class="snd" id="sndIntakeClosed" min="0" max="0.99" step="0.01"><div class="hint">intake closed</div></div>
-                <div><input type="number" class="snd" id="sndOutletRefl" min="0" max="0.99" step="0.01"><div class="hint">outlet reflection</div></div>
-            </div>
-            <div class="row">
-                <div><input type="number" class="snd" id="sndExhaustOpen" min="0" max="0.99" step="0.01"><div class="hint">exhaust open</div></div>
-                <div><input type="number" class="snd" id="sndExhaustClosed" min="0" max="0.99" step="0.01"><div class="hint">exhaust closed</div></div>
-                <div></div>
-            </div>
-            <div class="group">Muffler (lengths of the elements in samples, and how much it holds back)</div>
-            <div class="row">
-                <div><input type="text" class="snd" id="sndMuffler"></div>
-                <div class="fixed" style="width:90px"><input type="number" class="snd" id="sndMufflerAction" min="0" max="0.99" step="0.01"></div>
-            </div>
-            <div class="group">Mix</div>
-            <div class="row">
-                <div><input type="number" class="snd" id="sndMixIntake" min="0" max="3" step="0.1"><div class="hint">intake</div></div>
-                <div><input type="number" class="snd" id="sndMixBlock" min="0" max="3" step="0.1"><div class="hint">engine block</div></div>
-                <div><input type="number" class="snd" id="sndMixOutlet" min="0" max="3" step="0.1"><div class="hint">outlet</div></div>
-            </div>
-        </div>
-        <div id="esAdvanced" data-model="engine-sim">
-            <p class="sub">The gas in every cylinder is simulated (compression, the burn, the valves, the exhaust runners and the collector) and the pressure in the exhaust is played through the recorded impulse response of an exhaust. It costs more of the computer than the pipes model.</p>
+        <div id="esAdvanced">
+            <p class="sub">The gas in every cylinder is simulated: compression, the burn, the valves, the exhaust runners and the collector. The simulation rate sets how much of the computer it costs; lower it if the sound stutters.</p>
             <div class="group">Cylinder</div>
             <div class="row">
                 <div><input type="number" class="es" data-key="bore" step="0.5" min="30"><div class="hint">bore (mm)</div></div>
@@ -422,8 +367,6 @@
 <script>var OpenRacer = {};</script>
 <script src="../js/MaterialOverrides.js"></script>
 <script src="../js/CarDefaults.js"></script>
-<script src="../js/EngineSynth.js"></script>
-<script src="../js/EngineSampler.js"></script>
 <script src="../js/EngineSim.js"></script>
 <script src="editor-ui.js"></script>
 <script type="module" src="car-editor.js"></script>

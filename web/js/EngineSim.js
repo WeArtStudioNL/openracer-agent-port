@@ -4,8 +4,7 @@
  * Description: The engine sound that is calculated from the combustion (EngineSimWorklet.js, after engine-sim of Ange Yaghi): the
  *              parameters of a car ("sound.engine_sim" of car.json, used when "sound.model" is "engine-sim"), the layouts and presets,
  *              and the sound in the audio graph: the worklet, the convolution with the impulse response of an exhaust, and the
- *              volume. The same functions as EngineSynth.js (setRpm, setThrottle, setInside, connect...), so the game and the car
- *              editor can use either.
+ *              volume. Used by the game (EngineSound.js) and by the car editor, which plays it while the parameters are set.
  *
  * Parameters of "engine_sim" (all optional; what is missing is taken from the defaults):
  *   layout (see engineSimLayouts: which cylinders fire when and on which exhaust system);

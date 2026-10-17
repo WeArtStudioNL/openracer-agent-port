@@ -74,20 +74,15 @@ var Tuning = (function() {
             ["esc_gain", "ESC: how hard it steps in", "%", 30, 250, 5]
         ] },
         { name: "Engine sound", items: [
-            ["snd_cylinders", "Cylinders", "", 1, 16, 1],
-            ["snd_volume", "Volume", "", 0, 3, 0.05],
-            ["snd_ignition_time", "Ignition time", "", 0.002, 0.05, 0.001],
-            ["snd_intake_length", "Intake pipe", "samples", 1, 400, 1],
-            ["snd_exhaust_length", "Exhaust pipe", "samples", 1, 400, 1],
-            ["snd_extractor_length", "Extractor pipe", "samples", 1, 400, 1],
-            ["snd_straight_pipe_length", "Straight pipe", "samples", 1, 400, 1],
-            ["snd_outlet_length", "Outlet", "samples", 1, 100, 1],
-            ["snd_intake_closed", "Intake valve closed: reflection", "", 0, 0.99, 0.01],
-            ["snd_exhaust_closed", "Exhaust valve closed: reflection", "", 0, 0.99, 0.01],
-            ["snd_muffler_action", "Muffler", "", 0, 0.99, 0.01],
-            ["snd_mix_intake", "Intake in the mix", "", 0, 3, 0.1],
-            ["snd_mix_block", "Engine block in the mix", "", 0, 3, 0.1],
-            ["snd_mix_outlet", "Outlet in the mix", "", 0, 3, 0.1]
+            ["es_volume", "Volume", "", 0, 3, 0.05],
+            ["es_convolution", "Through the exhaust (impulse response)", "", 0, 1, 0.05],
+            ["es_audio_volume", "Exhaust volume", "", 0, 10, 0.1],
+            ["es_hf_gain", "High frequency gain", "", 0, 0.2, 0.005],
+            ["es_noise", "Low frequency noise", "", 0, 1, 0.05],
+            ["es_jitter", "High frequency noise", "", 0, 2, 0.05],
+            ["es_exhaust_length", "Exhaust length", "m", 0.3, 6, 0.1],
+            ["es_primary_length", "Primary tube length", "m", 0.1, 2, 0.05],
+            ["es_idle_pressure", "Manifold pressure at idle", "atm", 0.1, 0.9, 0.05]
         ] }
     ];
 
@@ -133,11 +128,10 @@ var Tuning = (function() {
             esc_gain: (assists.esc_gain !== undefined ? assists.esc_gain : 1) * 100
         };
         dt.gear_ratios.forEach(function(ratio, i) { v["gear" + i] = ratio; });
-        var sound = OpenRacer.engineSoundParams(c);
-        Object.keys(sound).forEach(function(key) {
-            if(key !== "muffler") v["snd_" + key] = sound[key];
+        var sound = OpenRacer.engineSimParams(c);
+        ["volume", "convolution", "audio_volume", "hf_gain", "noise", "jitter", "exhaust_length", "primary_length", "idle_pressure"].forEach(function(key) {
+            v["es_" + key] = sound[key];
         });
-        v.snd_muffler = sound.muffler.slice();
         return v;
     }
 
@@ -190,7 +184,7 @@ var Tuning = (function() {
         car.turnLimit = car.maxTurn;
         var sound = {};
         Object.keys(v).forEach(function(key) {
-            if(key.indexOf("snd_") === 0) sound[key.substring(4)] = v[key];
+            if(key.indexOf("es_") === 0) sound[key.substring(3)] = v[key];
         });
         EngineSound.setParams(sound);
         updateInfo();
@@ -389,26 +383,6 @@ var Tuning = (function() {
         return item;
     }
 
-    function mufflerRow() {
-        var item = document.createElement("div");
-        item.className = "item";
-        var line = document.createElement("div");
-        line.className = "line";
-        line.innerHTML = "<span class=\"label\">Muffler elements (samples)</span>";
-        var input = document.createElement("input");
-        input.type = "text";
-        input.style.cssText = "width: 130px; background: #12161c; color: #fff; border: 1px solid #323c4a; border-radius: 4px; padding: 3px 5px; font: inherit;";
-        input.addEventListener("change", function() {
-            var list = input.value.split(/[,;\s]+/).map(parseFloat).filter(function(n) { return n > 0; });
-            if(list.length) set("snd_muffler", list);
-            input.blur();
-        });
-        line.appendChild(input);
-        item.appendChild(line);
-        controls.push({ key: "snd_muffler", text: input, line: line });
-        return item;
-    }
-
     function build() {
         addStyle();
         panel = document.createElement("div");
@@ -454,7 +428,6 @@ var Tuning = (function() {
                 if(SELECTS[def[0]]) details.appendChild(selectRow(def[0]));
                 else if(def[0] === "gears") details.appendChild(gearsRow());
                 else details.appendChild(slider(def));
-                if(def[0] === "snd_muffler_action") details.appendChild(mufflerRow());
             });
             panel.appendChild(details);
         });
@@ -477,9 +450,6 @@ var Tuning = (function() {
             } else if(c.select) {
                 c.select.value = values[c.key];
                 c.line.classList.toggle("changed", changed(c.key));
-            } else if(c.text) {
-                if(document.activeElement !== c.text) c.text.value = values.snd_muffler.join(", ");
-                c.line.classList.toggle("changed", changed("snd_muffler"));
             }
         });
         updateInfo();
@@ -521,8 +491,8 @@ var Tuning = (function() {
         c.brakes = { front: v.brake_front, rear: v.brake_rear };
         c.assists = { tc_allowance: v.tc_allowance / 100, esc_gain: v.esc_gain / 100 };
         var sound = {};
-        Object.keys(v).forEach(function(key) { if(key.indexOf("snd_") === 0) sound[key.substring(4)] = v[key]; });
-        c.sound = Object.assign({}, c.sound, sound); // the recordings, the model and the engine-sim settings stay
+        Object.keys(v).forEach(function(key) { if(key.indexOf("es_") === 0) sound[key.substring(3)] = v[key]; });
+        c.sound = { engine_sim: Object.assign({}, (c.sound || {}).engine_sim, sound) };
         delete c.id;
         return c;
     }

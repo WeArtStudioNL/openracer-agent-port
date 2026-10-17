@@ -46,8 +46,6 @@ var scripts = [
     "js/Smoke.js",
     "js/Vehicle.js",
     "js/Telemetry.js",
-    "js/EngineSynth.js",
-    "js/EngineSampler.js",
     "js/EngineSim.js",
     "js/EngineSound.js",
     "js/WheelControls.js",
