@@ -96,6 +96,18 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.drivelineRPM = 0;            // engine speed implied by the driven wheels in the current gear
     this.grip = 1;
 
+    // Walls and other things to drive into (see Collision.js); set by the caller
+    this.collision = null;
+    this.halfLength = (parameters.length || 4.8) / 2;
+    this.halfWidth = (parameters.width || 1.8) / 2;
+    this.bodyHeight = parameters.height || 1.3;
+    this.kerbHeight = 0.3;            // things lower than this above the road are driven over
+    this.groundLevel = 0;             // height of the road under the car
+    this.lastImpact = 0;              // speed of the last hit of a wall (m/s), for effects
+    this.impactTime = 0;
+    this.wallRestitution = 0.2;
+    this.wallFriction = 0.1;
+
     var longTransfer = 0;             // filtered load transfer (N), see step()
     var latTransfer = 0;
     var lastForceX = 0;
@@ -155,6 +167,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         }
         var front = (heights[0] + heights[1]) / 2;
         var rear = (heights[2] + heights[3]) / 2;
+        this.groundLevel = (front + rear) / 2;
         var rise = (front - rear) / this.wheelbase;
         var sin = Math.max(-0.5, Math.min(0.5, rise / Math.sqrt(1 + rise * rise)));
         // a little smoothing, so that the triangles of the road mesh do not shake the car
@@ -239,6 +252,58 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.startEngine = function () {
         this.engine.start();
     };
+
+    // Pushes the car out of the walls it is in and gives it an impulse that stops it moving further into them.
+    // The impulse acts on the point of the car that touched the wall, so the car also spins when it hits a wall
+    // with a corner. Some of the speed along the wall is lost to scraping.
+    function resolveCollisions() {
+        var m = self.mass;
+        var offset = (self.af - self.ar) / 2; // the rectangle of the car is centred between the axles
+        for(var pass = 0; pass < 3; pass++) {
+            var cosP = Math.cos(self.psi), sinP = Math.sin(self.psi);
+            var contacts = self.collision.query(self.x + cosP * offset, self.z + sinP * offset, self.psi,
+                self.halfLength, self.halfWidth, self.groundLevel + self.kerbHeight, self.groundLevel + self.bodyHeight);
+            if(contacts.length === 0) return;
+            var c = contacts[0];
+
+            // out of the wall
+            self.x += c.nx * c.depth;
+            self.z += c.nz * c.depth;
+
+            // velocity of the contact point
+            var vx = self.u * cosP - self.v * sinP;
+            var vz = self.u * sinP + self.v * cosP;
+            var rx = c.px - self.x, rz = c.pz - self.z;
+            var px = vx - self.r * rz;
+            var pz = vz + self.r * rx;
+            var vn = px * c.nx + pz * c.nz;
+            if(vn >= 0) continue; // already moving away
+
+            var arm = rx * c.nz - rz * c.nx;
+            var invMass = 1 / m + arm * arm / self.yawInertia;
+            var jn = -(1 + self.wallRestitution) * vn / invMass;
+            vx += jn * c.nx / m;
+            vz += jn * c.nz / m;
+            self.r += jn * arm / self.yawInertia;
+
+            // scraping along the wall
+            var tx = -c.nz, tz = c.nx;
+            var vt = px * tx + pz * tz;
+            var armT = rx * tz - rz * tx;
+            var invMassT = 1 / m + armT * armT / self.yawInertia;
+            var jt = Math.max(-self.wallFriction * jn, Math.min(self.wallFriction * jn, -vt / invMassT));
+            vx += jt * tx / m;
+            vz += jt * tz / m;
+            self.r += jt * armT / self.yawInertia;
+
+            self.u = vx * cosP + vz * sinP;
+            self.v = -vx * sinP + vz * cosP;
+            if(-vn > self.lastImpact || self.impactTime > 0.5) {
+                self.lastImpact = -vn;
+                self.impactTime = 0;
+            }
+        }
+    }
 
     // Advances the physics by dt (small: 1/200 s or less)
     function step(dt) {
@@ -448,6 +513,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         self.x += vx * dt;
         self.z += vz * dt;
         self.psi += self.r * dt;
+        if(self.collision) resolveCollisions();
 
         // forces that move load between the wheels (tyre forces and drag, not gravity)
         lastForceX = sumFx + dragX;
@@ -466,6 +532,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     // Moves the physics forward by delta seconds, in small steps. The 3D side of the car is left to Car.js.
     this.update = function (delta) {
         this.updateControls(delta);
+        this.impactTime += delta;
         var steps = Math.max(1, Math.ceil(delta / 0.0035));
         var dt = delta / steps;
         for(var s = 0; s < steps; s++) step(dt);

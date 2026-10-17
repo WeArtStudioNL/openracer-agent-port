@@ -198,10 +198,47 @@ function loadScene() {
                 }
             }
             
+            buildCollisionWorld();
             console.log("track loaded");
             trackLoadedCallback();
         }
     };
     xmlhttp.open("GET", url, true);
     xmlhttp.send();
+}
+
+// What the car can drive into: the steep triangles of the track objects, see Collision.js
+var collisionWorld;
+// objects that are only a backdrop (sky, horizon, trees on a picture) or too thin to matter
+var collisionIgnoredTextures = { "m_sky_blue": true, "horizon": true, "alpha": true, "grasst": true };
+var collisionSteepness = 0.5; // a triangle is a wall when its normal points up less than this
+
+function buildCollisionWorld() {
+    collisionWorld = new OpenRacer.CollisionWorld(10);
+    var a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    var ab = new THREE.Vector3(), ac = new THREE.Vector3();
+    for(var k = 0; k < searchOrder.length; k++) {
+        var meshes = trackObjects[searchOrder[k]];
+        for(var m = 0; m < meshes.length; m++) {
+            var mesh = meshes[m];
+            if(collisionIgnoredTextures[mesh.material.map.name]) continue;
+            var position = mesh.geometry.attributes.position;
+            var index = mesh.geometry.index;
+            var offset = mesh.position;
+            for(var t = 0; t < index.count; t += 3) {
+                a.fromBufferAttribute(position, index.getX(t)).add(offset);
+                b.fromBufferAttribute(position, index.getX(t + 1)).add(offset);
+                c.fromBufferAttribute(position, index.getX(t + 2)).add(offset);
+                ab.subVectors(b, a);
+                ac.subVectors(c, a);
+                ab.cross(ac);
+                var length = ab.length();
+                if(length < 1e-9) continue;
+                if(Math.abs(ab.y / length) < collisionSteepness) {
+                    collisionWorld.addTriangle(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+                }
+            }
+        }
+    }
+    console.log("collision triangles: " + collisionWorld.count());
 }

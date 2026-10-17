@@ -99,11 +99,13 @@ OpenRacer.Car = function( parameters, domElement ) {
         tire_diameter: this.tire_diameter,
         width: this.width,
         length: this.length,
+        height: this.height,
         Cdrag: this.Cdrag,
         gear_ratios: this.gear_ratios,
         final_drive: this.final_drive,
         getSurface: getSurface
     }, this);
+    this.vehicle.collision = collisionWorld;
     this.engine = this.vehicle.engine;
     this.wheels = this.vehicle.wheels;
     var placed = false; // set once the car has been put on the road

@@ -32,6 +32,7 @@ var scripts = [
     "js/Car.js",
     "js/Engine.js",
     "js/Wheel.js",
+    "js/Collision.js",
     "js/Vehicle.js",
     "js/Telemetry.js",
     "js/EngineSound.js",
