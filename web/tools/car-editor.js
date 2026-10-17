@@ -626,15 +626,8 @@ function selectLayer(id) {
             gizmo.showX = sel !== "chase" && sel !== "follow"; // the cameras behind the car are in the middle
             gizmo.showY = gizmo.showZ = true;
         }
-    } else if (sel && sel.charAt(0) === "w") {
-        const centres = wheelCenters();
-        const c = centres && centres[sel.substring(1)];
-        if (c) { controls.target.copy(c); controls.update(); }
-    } else if (sel === "steering") {
-        const node = state.nodes.find((n) => /steeringwheel|steerwheel/i.test(n.name.replace(/[^a-z0-9]/gi, "")));
-        const object = node && state.root ? state.root.getObjectByName(node.name) : null;
-        if (object) { const box = new THREE.Box3().setFromObject(object); controls.target.copy(box.getCenter(new THREE.Vector3())); controls.update(); }
     }
+    // a wheel or the steering wheel is only marked in the list: the view stays where it is
     updateCameraMarkers();
     updateThumbnail();
 }
