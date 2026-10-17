@@ -91,7 +91,7 @@ var Settings = (function() {
     var actionsById = {};
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
-    var DEFAULT_OPTIONS = { tc: true, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 1, volume: 0.8 };
+    var DEFAULT_OPTIONS = { tc: true, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, wheelDeadzone: 1, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 1, volume: 0.8 };
 
     var bindings = {};      // action id -> list of inputs
     var options = {};
@@ -582,6 +582,10 @@ var Settings = (function() {
         panel.appendChild(optionRow("Gearbox", gearboxNames[options.gearbox] || options.gearbox, function() { cycleGearbox(); }));
         panel.appendChild(optionRow("Wheel steering range", Math.round(options.wheelRange * 100) + "%",
             function() { setOption("wheelRange", options.wheelRange > 0.9 ? 0.75 : (options.wheelRange > 0.6 ? 0.5 : 1)); }));
+        // the part of the range around the middle of the wheel in which the steering stays straight (in percent of the range, one way)
+        var deadzones = [0, 0.5, 1, 2, 3, 5];
+        panel.appendChild(optionRow("Wheel dead zone", options.wheelDeadzone + "%" + (options.wheelDeadzone === 0 ? " (none)" : ""),
+            function() { setOption("wheelDeadzone", deadzones[(deadzones.indexOf(options.wheelDeadzone) + 1) % deadzones.length]); }));
         panel.appendChild(optionRow("HUD", options.hud ? "On" : "Off", function() { setOption("hud", !options.hud); }));
         panel.appendChild(optionRow("Units", options.units === "imperial" ? "Imperial (mph)" : "Metric (km/h)",
             function() { setOption("units", options.units === "imperial" ? "metric" : "imperial"); }));

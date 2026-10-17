@@ -42,8 +42,12 @@ var WheelControls = (function() {
     var LAST_KEY = "~last";    // the calibration of the wheel that was calibrated last
 
     var DEAD_ZONE = 0.03;      // ignore tiny pedal movements
-    var STEER_DEAD_ZONE = 0.01; // the wheel counts as centred within this part of its range (about 4 degrees of a 900 degree wheel); the steering
-                                // starts from zero at its edge, so there is no jump
+    // The wheel counts as centred within a part of its range that is set in the settings menu (1% is about 4 degrees of a 900 degree wheel); the
+    // steering starts from zero at its edge, so there is no jump.
+    function steerDeadZone() {
+        var percent = Settings.option("wheelDeadzone");
+        return (percent === undefined ? 1 : percent) / 100;
+    }
     var SETTLE_MS = 500;       // the device must be quiet this long before resting values are read
     var MAX_SETTLE_MS = 4000;  // give up waiting for a quiet device (noisy axes) after this long
     var QUIET_DELTA = 0.02;    // axis changes below this count as quiet
@@ -686,11 +690,12 @@ var WheelControls = (function() {
         // Only override an input while the wheel is using it (and once more when it is released).
         // The wheel turns the front wheels over its whole calibrated range (a 900 degree wheel gives full
         // lock at 450 degrees), or over a smaller part of it with the steering range of the settings menu.
-        if(Math.abs(steer) > STEER_DEAD_ZONE || ownsSteer) {
-            if(Math.abs(steer) > STEER_DEAD_ZONE) {
+        var deadZone = steerDeadZone();
+        if(Math.abs(steer) > deadZone || ownsSteer) {
+            if(Math.abs(steer) > deadZone) {
                 var range = Settings.option("wheelRange") || 1;
                 // the dead zone is taken off, so that the steering starts from zero and does not jump when the wheel leaves it
-                var eased = (Math.abs(steer) - STEER_DEAD_ZONE) / (1 - STEER_DEAD_ZONE) * (steer < 0 ? -1 : 1);
+                var eased = (Math.abs(steer) - deadZone) / (1 - deadZone) * (steer < 0 ? -1 : 1);
                 car.turnAngle = car.maxTurn * clamp(eased / range, -1, 1);
                 ownsSteer = true;
             } else {

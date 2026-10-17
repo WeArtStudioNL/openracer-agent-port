@@ -99,7 +99,7 @@ Wheels with pedals and a shifter are supported through the browser's Gamepad API
 3. The mapping is stored per device in the browser's localStorage, so it survives a refresh (steering, throttle and brake are already kept when the rest of the calibration is not finished). If the browser shows the wheel under another name, the calibration of the last calibrated wheel with the same number of axes and buttons is used. The settings menu shows what is known about the wheel. In the settings menu the ✎ next to a wheel input (pedal, steering, shift button or gear) measures just that input again.
 4. **M** switches the wheel off (keyboard only) and on again. The debug line at the top shows the live wheel values.
 
-The wheel steers the car over its whole calibrated range (a 900 degree wheel gives full lock at 450 degrees to each side). *Wheel steering range* in the settings menu lowers this to 75% or 50% of the range for full lock. Within a few percent of the middle the wheel counts as centred.
+The wheel steers the car over its whole calibrated range (a 900 degree wheel gives full lock at 450 degrees to each side). *Wheel steering range* in the settings menu lowers this to 75% or 50% of the range for full lock. Around the middle the wheel counts as centred: *Wheel dead zone* sets how much (0 to 5% of the range, 1% by default, about 4 degrees of a 900 degree wheel); the steering starts from zero at the edge of it.
 
 With both an H-pattern shifter and paddles mapped, the most recent action decides: moving the shifter into a gear gives control to the shifter, pulling a paddle gives control to the paddles.
 
