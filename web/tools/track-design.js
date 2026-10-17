@@ -129,7 +129,7 @@ export function createDesign(api) {
     const gizmo = new TransformControls(camera, renderer.domElement);
     gizmo.setSize(0.9);
     let dragging = false;
-    gizmo.addEventListener("dragging-changed", (e) => { controls.enabled = !e.value; dragging = e.value; });
+    gizmo.addEventListener("dragging-changed", (e) => { controls.enabled = !e.value; dragging = e.value; if (!e.value && gizmo.object && gizmo.object.userData.nodeIndex !== undefined) rebuild(true); });
     gizmo.addEventListener("objectChange", () => {
         const o = gizmo.object;
         if (!o) return;
@@ -205,11 +205,14 @@ export function createDesign(api) {
         return mesh;
     }
 
-    function rebuild() {
+    let lastTerrain = null;
+    function rebuild(withTerrain) {
+        if (withTerrain === undefined) withTerrain = !dragging;
         design.rebuildPending = false;
         const data = design.data;
         // the old parts go out of the list
         roadGroup.children.slice().forEach((m) => { roadGroup.remove(m); state.parts.delete(m.name); });
+        if (withTerrain) lastTerrain = null;
         if (!data || data.nodes.length < 2) { renderNodes(); renderParts(); return; }
         const curve = curveOf(data);
         const length = curve.getLength();
@@ -218,6 +221,7 @@ export function createDesign(api) {
         const count = data.closed ? samples : samples + 1;
         let minY = Infinity;
         const bounds = new THREE.Box2();
+        const centreLine = []; // { x, z, y, reach }: the road and its shoulders, for the terrain
         for (let i = 0; i < count; i++) {
             const u = data.closed ? i / samples : i / samples;
             const p = curve.getPointAt(Math.min(1, u));
@@ -230,10 +234,11 @@ export function createDesign(api) {
             kerbLo.push(p.clone().addScaledVector(side, w + 0.05).add(new THREE.Vector3(0, 0.012, 0)));
             kerbRi.push(p.clone().addScaledVector(side, -(w - 0.6)).add(new THREE.Vector3(0, 0.012, 0)));
             kerbRo.push(p.clone().addScaledVector(side, -(w + 0.05)).add(new THREE.Vector3(0, 0.012, 0)));
-            shoulderL.push(p.clone().addScaledVector(side, w + 14).add(new THREE.Vector3(0, -0.03, 0)));
-            shoulderR.push(p.clone().addScaledVector(side, -(w + 14)).add(new THREE.Vector3(0, -0.03, 0)));
+            shoulderL.push(p.clone().addScaledVector(side, w + 14).add(new THREE.Vector3(0, -0.3, 0)));
+            shoulderR.push(p.clone().addScaledVector(side, -(w + 14)).add(new THREE.Vector3(0, -0.3, 0)));
             minY = Math.min(minY, p.y);
             bounds.expandByPoint(new THREE.Vector2(p.x, p.z));
+            centreLine.push({ x: p.x, z: p.z, y: p.y, reach: w + 14 });
         }
         const road = strip("road", left, right, 0x40444b, "road", 0.9);
         const shoulderLeft = strip("shoulder_left", shoulderL, left, 0x4e8a3e, "grass");
@@ -260,14 +265,9 @@ export function createDesign(api) {
             m.userData.role = "road";
             kerbs.push(m);
         });
-        // the ground: a plane under everything
-        const size = Math.max(bounds.max.x - bounds.min.x, bounds.max.y - bounds.min.y) + 400;
-        const centre = bounds.getCenter(new THREE.Vector2());
-        const ground = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshStandardMaterial({ color: 0x8f7a52, roughness: 1 }));
-        ground.rotation.x = -Math.PI / 2;
-        ground.position.set(centre.x, minY - 0.4, centre.y);
-        ground.name = "ground";
-        ground.userData.role = "ground";
+        // the ground: a landscape that joins the shoulders of the road and rolls gently further away (during a drag the old one stays)
+        const ground = (!withTerrain && lastTerrain) ? lastTerrain : terrain(centreLine, bounds, minY);
+        lastTerrain = ground;
         [road, shoulderLeft, shoulderRight, ...kerbs, ground].forEach((m) => { roadGroup.add(m); registerMesh(m, m.userData.role); state.roles[m.name] = m.userData.role; });
         roadGroup.updateMatrixWorld(true);
         renderNodes();
@@ -277,10 +277,100 @@ export function createDesign(api) {
         $("modelInfo").textContent = "Designed track: " + data.nodes.length + " nodes, " + Math.round(length) + " m, " + data.prefabs.length + " prefabs";
     }
 
+    // The terrain: a grid of heights. Under the road and its shoulders it lies a little below the lowest road nearby (a road that
+    // crosses over another one becomes a bridge), further away it follows the heights of the road around it (the nearer, the more),
+    // with some gentle hills of its own that start where the shoulders end.
+    function terrain(centreLine, bounds, minY) {
+        const margin = 220;
+        const minX = bounds.min.x - margin, maxX = bounds.max.x + margin, minZ = bounds.min.y - margin, maxZ = bounds.max.y + margin;
+        const span = Math.max(maxX - minX, maxZ - minZ);
+        const cell = Math.min(10, Math.max(4, span / 110));
+        const nx = Math.ceil((maxX - minX) / cell) + 1, nz = Math.ceil((maxZ - minZ) / cell) + 1;
+        // the road samples in buckets, to find the ones nearby quickly
+        const bucket = 40;
+        const buckets = new Map();
+        const key = (bx, bz) => bx + ":" + bz;
+        centreLine.forEach((p) => {
+            const k = key(Math.floor(p.x / bucket), Math.floor(p.z / bucket));
+            if (!buckets.has(k)) buckets.set(k, []);
+            buckets.get(k).push(p);
+        });
+        const reachMax = 80; // how far the road pulls the terrain to its height
+        const cells = Math.ceil(reachMax / bucket);
+        const noise = (x, z) => {
+            // value noise with a few octaves: soft hills
+            let v = 0, amp = 1, f = 1 / 48;
+            for (let o = 0; o < 2; o++) {
+                v += amp * (Math.sin(x * f * 1.7 + Math.cos(z * f * 1.3)) * Math.cos(z * f * 1.1 - Math.sin(x * f * 0.7)));
+                amp *= 0.5; f *= 2.1;
+            }
+            return v;
+        };
+        const positions = new Float32Array(nx * nz * 3);
+        let n = 0;
+        for (let j = 0; j < nz; j++) {
+            for (let i = 0; i < nx; i++) {
+                const x = minX + i * cell, z = minZ + j * cell;
+                let weightSum = 0, heightSum = 0, nearest = Infinity, under = Infinity;
+                const bx = Math.floor(x / bucket), bz = Math.floor(z / bucket);
+                for (let dx = -cells; dx <= cells; dx++) {
+                    for (let dz = -cells; dz <= cells; dz++) {
+                        const list = buckets.get(key(bx + dx, bz + dz));
+                        if (!list) continue;
+                        for (let k = 0; k < list.length; k++) {
+                            const p = list[k];
+                            const d = Math.hypot(p.x - x, p.z - z);
+                            const outside = d - p.reach;          // distance beyond the shoulder
+                            if (outside < nearest) nearest = outside;
+                            if (outside <= 0.5) under = Math.min(under, p.y);
+                            if (outside < reachMax) {
+                                const w = 1 / (Math.max(outside, 0) * Math.max(outside, 0) * 0.02 + 1);
+                                weightSum += w; heightSum += w * p.y;
+                            }
+                        }
+                    }
+                }
+                let y;
+                if (under < Infinity) {
+                    y = under - 0.35;                       // under the road and the shoulders: just below the lowest road here
+                } else if (weightSum > 0) {
+                    const t = Math.min(1, nearest / reachMax);            // 0 at the shoulder, 1 far away
+                    const near = heightSum / weightSum - 0.35;
+                    const far = minY - 1 + noise(x, z) * 2.5;
+                    const s = t * t * (3 - 2 * t);
+                    y = near * (1 - s) + far * s + noise(x, z) * 1.2 * Math.min(1, nearest / 40);
+                } else {
+                    y = minY - 1 + noise(x, z) * 2.5;
+                }
+                positions[n++] = x; positions[n++] = y; positions[n++] = z;
+            }
+        }
+        const indices = [];
+        for (let j = 0; j < nz - 1; j++) {
+            for (let i = 0; i < nx - 1; i++) {
+                const a = j * nx + i, b = a + 1, c = a + nx, d = c + 1;
+                indices.push(a, c, b, b, c, d);
+            }
+        }
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+        geometry.setIndex(indices);
+        geometry.computeVertexNormals();
+        const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0x7f6f4a, roughness: 1 }));
+        mesh.name = "ground";
+        mesh.userData.role = "ground";
+        return mesh;
+    }
+
+    let terrainTimer = 0;
     function scheduleRebuild() {
-        if (design.rebuildPending) return;
-        design.rebuildPending = true;
-        requestAnimationFrame(rebuild);
+        // the road at once (without the terrain, which is slow), the terrain when the changes stop for a moment
+        if (!design.rebuildPending) {
+            design.rebuildPending = true;
+            requestAnimationFrame(() => rebuild(false));
+        }
+        clearTimeout(terrainTimer);
+        terrainTimer = setTimeout(() => { if (!dragging && design.data) rebuild(true); }, 400);
     }
 
     // ---- the node markers
