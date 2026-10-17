@@ -45,6 +45,8 @@ Wheels with pedals and a shifter are supported through the browser's Gamepad API
 3. The mapping is stored per device in the browser's localStorage. In the settings menu the ✎ next to a wheel input (pedal, steering, shift button or gear) measures just that input again.
 4. **M** switches the wheel off (keyboard only) and on again. The debug line at the top shows the live wheel values.
 
+The wheel steers the car over its whole calibrated range (a 900 degree wheel gives full lock at 450 degrees to each side). *Wheel steering range* in the settings menu lowers this to 75% or 50% of the range for full lock. Within a few percent of the middle the wheel counts as centred.
+
 With both an H-pattern shifter and paddles mapped, the most recent action decides: moving the shifter into a gear gives control to the shifter, pulling a paddle gives control to the paddles.
 
 With a shifter mapped, the gearbox becomes manual: sequential paddles shift up/down (shifting down from first gear at standstill selects reverse), and an H-pattern shifter selects gears directly, with neutral when no gear is engaged. Without a shifter the automatic gearbox is used.

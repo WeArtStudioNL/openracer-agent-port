@@ -41,7 +41,7 @@ var WheelControls = (function() {
     var STORAGE_PREFIX = "openracer.wheel.";
 
     var DEAD_ZONE = 0.03;      // ignore tiny pedal movements
-    var STEER_RATIO = 0.5;     // fraction of the wheel's range that gives full lock on the car
+    var STEER_DEAD_ZONE = 0.03; // the wheel counts as centred within this part of its range
     var SETTLE_MS = 500;       // the device must be quiet this long before resting values are read
     var MAX_SETTLE_MS = 4000;  // give up waiting for a quiet device (noisy axes) after this long
     var QUIET_DELTA = 0.02;    // axis changes below this count as quiet
@@ -638,10 +638,19 @@ var WheelControls = (function() {
         // without a clutch pedal the car works the clutch itself
         car.clutchPedalPresent = !!profile.clutch;
 
-        // Only override an input while the wheel is using it (and once more when it is released)
-        if(Math.abs(steer) > 0.03 || ownsSteer) {
-            car.turnAngle = car.maxTurn * clamp(steer / STEER_RATIO, -1, 1);
-            ownsSteer = Math.abs(steer) > 0.03;
+        // Only override an input while the wheel is using it (and once more when it is released).
+        // The wheel turns the front wheels over its whole calibrated range (a 900 degree wheel gives full
+        // lock at 450 degrees), or over a smaller part of it with the steering range of the settings menu.
+        if(Math.abs(steer) > STEER_DEAD_ZONE || ownsSteer) {
+            if(Math.abs(steer) > STEER_DEAD_ZONE) {
+                var range = Settings.option("wheelRange") || 1;
+                car.turnAngle = car.maxTurn * clamp(steer / range, -1, 1);
+                ownsSteer = true;
+            } else {
+                // back in the middle: straight ahead, not the last small angle that was above the dead zone
+                car.turnAngle = 0;
+                ownsSteer = false;
+            }
         }
         if(throttle > 0 || ownsThrottle) {
             car.throttle = throttle;
