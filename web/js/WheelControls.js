@@ -39,6 +39,7 @@ var WheelControls = (function() {
     // Ids of wheels that are recognised even when the browser reports a standard layout.
     var KNOWN_WHEELS = /wheel|g25|g27|g29|g920|g923|driving force|thrustmaster|t300|t150|tmx|fanatec|moza|simagic|simucube/i;
     var STORAGE_PREFIX = "openracer.wheel.";
+    var LAST_KEY = "~last";    // the calibration of the wheel that was calibrated last
 
     var DEAD_ZONE = 0.03;      // ignore tiny pedal movements
     var STEER_DEAD_ZONE = 0.03; // the wheel counts as centred within this part of its range
@@ -48,7 +49,8 @@ var WheelControls = (function() {
     var HOLD_MS = 600;         // an axis must be held still this long before its extreme is accepted
     var MAX_HOLD_MS = 4000;    // accept the extreme after this long even if the axis keeps jittering
     var STABLE_DELTA = 0.05;   // axis changes below this count as holding still
-    var DETECT_DELTA = 0.5;    // minimal axis movement to count as input during calibration
+    var DETECT_DELTA = 0.35;   // minimal axis movement to count as input during calibration
+    var NOISE_SHARE = 0.6;     // an axis that changes in more than this share of the frames while waiting for quiet is noise
     var REVERSE_MAX_MPH = 3;   // sequential shift into reverse is only allowed below this speed
 
     var profiles = {};
@@ -80,26 +82,75 @@ var WheelControls = (function() {
         return !!b && b.pressed;
     }
 
-    function loadProfile(id) {
-        if(profiles[id] !== undefined) return profiles[id];
-        var profile = null;
+    function normalise(id) {
+        return id.toLowerCase().replace(/[^a-z0-9]/g, "");
+    }
+
+    function readStored(key) {
         try {
-            var stored = window.localStorage.getItem(STORAGE_PREFIX + id);
-            if(stored) profile = JSON.parse(stored);
+            var stored = window.localStorage.getItem(key);
+            return stored ? JSON.parse(stored) : null;
+        } catch(e) {
+            return null;
+        }
+    }
+
+    function isWheelCandidate(pad) {
+        return pad.mapping !== "standard" || KNOWN_WHEELS.test(pad.id);
+    }
+
+    // The calibration of a pad. Pad ids are normally the same every time the wheel is connected, but the
+    // spelling can differ and a wheel can show up under another id (another USB port, a browser update). So
+    // after the exact id, the same id in another spelling is tried, and then the calibration of the last wheel
+    // that was calibrated, if this pad is a wheel with the same number of axes and buttons.
+    function loadProfile(id, pad) {
+        if(profiles[id]) return profiles[id];
+        var profile = readStored(STORAGE_PREFIX + id);
+        try {
+            if(!profile) {
+                var wanted = normalise(id);
+                for(var i = 0; i < window.localStorage.length && !profile; i++) {
+                    var name = window.localStorage.key(i);
+                    if(name.indexOf(STORAGE_PREFIX) === 0 && name !== STORAGE_PREFIX + LAST_KEY && normalise(name.substring(STORAGE_PREFIX.length)) === wanted) {
+                        profile = readStored(name);
+                    }
+                }
+            }
         } catch(e) {
             profile = null;
         }
-        profiles[id] = profile;
+        if(!profile && pad && isWheelCandidate(pad)) {
+            var last = readStored(STORAGE_PREFIX + LAST_KEY);
+            if(last && last.profile && last.axes === pad.axes.length && last.buttons === pad.buttons.length) {
+                profile = last.profile;
+                console.log("WheelControls: using the calibration of " + last.id + " for " + id);
+            }
+        }
+        if(profile) profiles[id] = profile;
         return profile;
     }
 
-    function saveProfile(id, profile) {
+    function saveProfile(id, profile, pad) {
         profiles[id] = profile;
         try {
             window.localStorage.setItem(STORAGE_PREFIX + id, JSON.stringify(profile));
+            var source = pad || findPadById(id);
+            if(source) {
+                window.localStorage.setItem(STORAGE_PREFIX + LAST_KEY, JSON.stringify({
+                    id: id, profile: profile, axes: source.axes.length, buttons: source.buttons.length
+                }));
+            }
         } catch(e) {
             console.log("Could not store wheel profile: " + e);
         }
+    }
+
+    function findPadById(id) {
+        var pads = getPads();
+        for(var i = 0; i < pads.length; i++) {
+            if(pads[i] && pads[i].id === id) return pads[i];
+        }
+        return null;
     }
 
     // Returns the connected pad that should be treated as a racing wheel.
@@ -107,10 +158,10 @@ var WheelControls = (function() {
         var pads = getPads();
         var i;
         for(i = 0; i < pads.length; i++) {
-            if(pads[i] && pads[i].connected && loadProfile(pads[i].id)) return pads[i];
+            if(pads[i] && pads[i].connected && loadProfile(pads[i].id, pads[i])) return pads[i];
         }
         for(i = 0; i < pads.length; i++) {
-            if(pads[i] && pads[i].connected && (pads[i].mapping !== "standard" || KNOWN_WHEELS.test(pads[i].id))) return pads[i];
+            if(pads[i] && pads[i].connected && isWheelCandidate(pads[i])) return pads[i];
         }
         return null;
     }
@@ -255,6 +306,10 @@ var WheelControls = (function() {
         calibration.detect = null;
         calibration.stepStart = Date.now();
         calibration.quietSince = calibration.stepStart;
+        // axes that were noisy in an earlier step may be the next pedal: look at them again
+        calibration.ignored = [];
+        calibration.moveFrames = [];
+        calibration.frames = 0;
         calibration.baselineReady = false;
         calibration.waiting = false;
         while(skipHShifter && calibration.step < calibration.steps.length && calibration.steps[calibration.step].hshifter) {
@@ -280,7 +335,7 @@ var WheelControls = (function() {
                     b.rest = raw;
                 }
             }
-            saveProfile(pad.id, calibration.profile);
+            saveProfile(pad.id, calibration.profile, pad);
             zeroed[pad.id] = true;
         }
         calibration = null;
@@ -298,6 +353,12 @@ var WheelControls = (function() {
             profile[step.id] = { axis: detect.axis, rest: detect.rest, full: detect.extreme };
         }
         if(calibration.usedAxes.indexOf(detect.axis) < 0) calibration.usedAxes.push(detect.axis);
+        // steering, throttle and brake are enough to drive: keep them already, in case the rest of the
+        // calibration is not finished (a finished calibration replaces this)
+        var calPad = getPads()[calibration.padIndex];
+        if(step.id === "brake" && calPad && !loadProfile(calPad.id, calPad)) {
+            saveProfile(calPad.id, JSON.parse(JSON.stringify(calibration.profile)), calPad);
+        }
         calibration.lastDetected = step.id + " = axis " + detect.axis + " (rest " + detect.rest.toFixed(2) +
             ", end " + detect.extreme.toFixed(2) + ")";
     }
@@ -369,11 +430,14 @@ var WheelControls = (function() {
         // Once the resting values are known they stay fixed, so that later movement is detected.
         if(!c.baselineReady) {
             var moved = false;
+            c.frames = (c.frames || 0) + 1;
+            c.moveFrames = c.moveFrames || [];
             for(i = 0; i < axes.length; i++) {
                 if(c.ignored[i]) continue;
                 if(c.prevAxes[i] === undefined || Math.abs(axes[i] - c.prevAxes[i]) > QUIET_DELTA) {
                     moved = true;
                     c.lastMove[i] = now;
+                    c.moveFrames[i] = (c.moveFrames[i] || 0) + 1;
                 }
             }
             c.prevAxes = axes;
@@ -384,8 +448,9 @@ var WheelControls = (function() {
             if(c.waiting) return;
             if(!quiet) {
                 // The device never settled: ignore the axes that keep moving on their own (noise)
+                // (only the axes that moved all the time: a pedal that was touched on the way is not noise)
                 for(i = 0; i < axes.length; i++) {
-                    if(now - c.lastMove[i] < SETTLE_MS) c.ignored[i] = true;
+                    if((c.moveFrames[i] || 0) > NOISE_SHARE * c.frames) c.ignored[i] = true;
                 }
             }
             c.baselineReady = true;
@@ -462,10 +527,20 @@ var WheelControls = (function() {
         showMessage(enabled ? "Wheel input on." : "Wheel input off (keyboard only).", 3000);
     }
 
+    // What is known about the wheel, for the settings menu
+    function statusText() {
+        var pad = findWheel();
+        if(!pad) return "No wheel found. Connect it and press a button on it, so the browser shows it.";
+        var profile = loadProfile(pad.id, pad);
+        if(!profile) return "Wheel found: " + pad.id + ". Not calibrated yet.";
+        var known = ["steer", "throttle", "brake", "clutch"].filter(function(name) { return profile[name]; });
+        return "Wheel: " + pad.id + ". Calibration saved in this browser (" + known.join(", ") + ").";
+    }
+
     // Text about what an action of the wheel is set to (axis or button), or null if it is not set
     function describe(name) {
         var pad = findWheel();
-        var profile = pad ? loadProfile(pad.id) : null;
+        var profile = pad ? loadProfile(pad.id, pad) : null;
         if(!profile) return null;
         if(name === "steer" || name === "throttle" || name === "brake" || name === "clutch") {
             return profile[name] ? "Axis " + profile[name].axis : null;
@@ -481,11 +556,11 @@ var WheelControls = (function() {
     // Forgets what the wheel is set to for an action
     function clear(name) {
         var pad = findWheel();
-        var profile = pad ? loadProfile(pad.id) : null;
+        var profile = pad ? loadProfile(pad.id, pad) : null;
         if(!profile) return;
         if(/^gear[0-9]+$/.test(name)) delete profile.gears[parseInt(name.substring(4), 10)];
         else delete profile[name];
-        saveProfile(pad.id, profile);
+        saveProfile(pad.id, profile, pad);
     }
 
     // Measures only some of the inputs of the wheel again (the calibration steps with these ids)
@@ -496,7 +571,7 @@ var WheelControls = (function() {
             showMessage("No wheel found. Connect it and press a button on it first.", 4000);
             return;
         }
-        var existing = loadProfile(pad.id) || { gears: {} };
+        var existing = loadProfile(pad.id, pad) || { gears: {} };
         var steps = buildSteps(car).filter(function(step) { return stepIds.indexOf(step.id) >= 0; });
         // a single step can always be skipped, to leave the input as it was
         steps.forEach(function(step) { step.optional = true; step.hshifter = false; });
@@ -615,7 +690,7 @@ var WheelControls = (function() {
             return false;
         }
 
-        var profile = loadProfile(pad.id);
+        var profile = loadProfile(pad.id, pad);
         if(!profile) {
             if(!hinted[pad.id]) {
                 hinted[pad.id] = true;
@@ -695,6 +770,7 @@ var WheelControls = (function() {
         describe: describe,
         clear: clear,
         toggle: toggle,
+        statusText: statusText,
         findWheel: findWheel,
         isCalibrating: function() { return !!calibration; }
     };

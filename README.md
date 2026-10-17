@@ -42,7 +42,7 @@ Wheels with pedals and a shifter are supported through the browser's Gamepad API
 
 1. Connect the wheel and press a button on it, so the browser exposes it.
 2. Open the settings menu (**Esc**) and press *Calibrate the wheel from scratch*, or use the **K** key. Follow the on-screen steps: steering left/right, throttle, brake, and optionally clutch, shift up/down buttons and an H-pattern shifter (gears and reverse). Every optional step can be skipped with **N**; **Esc** cancels and keeps the previous mapping.
-3. The mapping is stored per device in the browser's localStorage. In the settings menu the ✎ next to a wheel input (pedal, steering, shift button or gear) measures just that input again.
+3. The mapping is stored per device in the browser's localStorage, so it survives a refresh (steering, throttle and brake are already kept when the rest of the calibration is not finished). If the browser shows the wheel under another name, the calibration of the last calibrated wheel with the same number of axes and buttons is used. The settings menu shows what is known about the wheel. In the settings menu the ✎ next to a wheel input (pedal, steering, shift button or gear) measures just that input again.
 4. **M** switches the wheel off (keyboard only) and on again. The debug line at the top shows the live wheel values.
 
 The wheel steers the car over its whole calibrated range (a 900 degree wheel gives full lock at 450 degrees to each side). *Wheel steering range* in the settings menu lowers this to 75% or 50% of the range for full lock. Within a few percent of the middle the wheel counts as centred.

@@ -551,6 +551,10 @@ var Settings = (function() {
         explain.textContent = "Every action can have several inputs: a key, a button or axis of a controller, a button of a racing wheel. " +
             "✎ sets a new input, ✕ removes it and + adds one. The pedals and the steering of a wheel are set up by moving them.";
         panel.appendChild(explain);
+        var wheelStatus = document.createElement("div");
+        wheelStatus.className = "sub";
+        wheelStatus.textContent = WheelControls.statusText();
+        panel.appendChild(wheelStatus);
 
         groups.forEach(function(group) {
             var gh = document.createElement("h2");
