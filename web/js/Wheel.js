@@ -72,6 +72,7 @@ OpenRacer.Wheel = function (parameters) {
     this.slipPeak = 0.14;       // slip ratio with the most grip
     this.anglePeak = 0.15;      // tan of the slip angle with the most grip
     this.rollingResistance = 0.015;
+    this.gripScale = 1;         // tuning: the grip of the tyre, as a factor
     this.loadSensitivity = 0.00004; // grip coefficient lost per extra Newton of load above the nominal load
     this.nominalLoad = 3500;
 
@@ -93,12 +94,12 @@ OpenRacer.Wheel = function (parameters) {
     // for a large s. The force points along the combined slip: when a tyre spends its grip on
     // braking or driving, there is less left for cornering (friction circle).
     this.tyreForce = function (kappa, tanAlpha, load, surface) {
-        var mu = surface.static;
+        var mu = surface.static * this.gripScale;
         var slidingRatio = Math.min(0.98, surface.kinetic / surface.static);
         var C = 2 - (2 / Math.PI) * Math.asin(slidingRatio);
         var B = Math.tan(Math.PI / (2 * C));
 
-        mu = Math.max(0.2 * surface.static, mu - this.loadSensitivity * (load - this.nominalLoad));
+        mu = Math.max(0.2 * surface.static * this.gripScale, mu - this.loadSensitivity * (load - this.nominalLoad));
 
         var sx = kappa / this.slipPeak;
         var sy = tanAlpha / this.anglePeak;

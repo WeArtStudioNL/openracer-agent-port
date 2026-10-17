@@ -1,95 +1,72 @@
 /*
-    This file is part of OpenRacer.
-
-    OpenRacer is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    OpenRacer is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
-/*
  * EngineSound.js
  *
- * Description: Synthesised V8 engine sound driven by the engine RPM and throttle,
- *              using the Web Audio API (no audio files needed).
- * Notes: Browsers only start audio after a key press or click, so the sound starts
- *        on the first such interaction. The sound can be switched off in the settings menu (Esc).
+ * Description: The engine sound of the game: the physical model of EngineSynth.js, with the parameters of the car,
+ *              that follows the engine speed and the throttle. Louder, with a lower sound, in the cockpit view.
+ * Notes: Browsers only start audio after a key press or click, so the sound starts on the first such interaction.
+ *        The sound is switched on and off, and its volume set, in the settings menu.
  */
 
 var EngineSound = (function() {
-    var PULSES_PER_REV = 4;   // a V8 fires four cylinders per crankshaft revolution
-    var TARGET_SMOOTHING = 0.04; // seconds, so that pitch and volume changes are not steppy
-
     var ctx = null;
-    var master = null;
-    var filter = null;
-    var oscillators = [];     // { osc, ratio }: oscillator and its frequency relative to the firing frequency
+    var synth = null;
+    var output = null;           // the volume of the whole sound
+    var loading = false;
+    var failed = null;           // why the sound does not work, if it does not
+    var params = OpenRacer.engineSoundParams(null);
     var muted = false;
-    var paused = false;       // silent while the game is paused
+    var paused = false;          // silent while the game is paused
+    var volume = 1;
+    var inside = false;
     var enabledByUser = false;
+    var rpm = 0, throttle = 0;
+
+    function level() {
+        return (muted || paused) ? 0 : volume;
+    }
 
     function start() {
         enabledByUser = true;
+        if(failed) return;
         if(!ctx) {
             var AudioContextClass = window.AudioContext || window.webkitAudioContext;
-            if(!AudioContextClass) return;
-            ctx = new AudioContextClass();
-
-            master = ctx.createGain();
-            master.gain.value = 0;
-            master.connect(ctx.destination);
-
-            filter = ctx.createBiquadFilter();
-            filter.type = "lowpass";
-            filter.Q.value = 2;
-            filter.connect(master);
-
-            // The firing frequency plus a lower octave for the V8 rumble and an upper
-            // harmonic for some bite
-            var layers = [
-                { type: "sawtooth", ratio: 1, gain: 0.5 },
-                { type: "square", ratio: 0.5, gain: 0.35 },
-                { type: "triangle", ratio: 2, gain: 0.25 }
-            ];
-            for(var i = 0; i < layers.length; i++) {
-                var osc = ctx.createOscillator();
-                var gain = ctx.createGain();
-                osc.type = layers[i].type;
-                osc.frequency.value = 50;
-                gain.gain.value = layers[i].gain;
-                osc.connect(gain);
-                gain.connect(filter);
-                osc.start();
-                oscillators.push({ osc: osc, ratio: layers[i].ratio });
+            if(!AudioContextClass || !window.AudioWorkletNode) {
+                failed = "Engine sound needs a browser with AudioWorklet.";
+                return;
             }
+            ctx = new AudioContextClass();
+            output = ctx.createGain();
+            output.gain.value = level();
+            output.connect(ctx.destination);
         }
         if(ctx.state === "suspended") ctx.resume();
+        if(!synth && !loading) {
+            loading = true;
+            OpenRacer.EngineSynth.load(ctx, "js/EngineSoundWorklet.js").then(function() {
+                synth = new OpenRacer.EngineSynth(ctx, params);
+                synth.connect(output);
+                synth.setInside(inside);
+                loading = false;
+            }).catch(function(error) {
+                failed = "Could not start the engine sound: " + error.message;
+                console.error(error);
+            });
+        }
     }
 
-    // Called every frame with the engine RPM and the throttle position (0..1)
-    function update(rpm, throttle) {
-        if(!ctx || ctx.state !== "running") return;
-        var now = ctx.currentTime;
-        var firing = (rpm / 60) * PULSES_PER_REV;
-        for(var i = 0; i < oscillators.length; i++) {
-            oscillators[i].osc.frequency.setTargetAtTime(firing * oscillators[i].ratio, now, TARGET_SMOOTHING);
-        }
-        // Opening the throttle makes the engine louder and brighter
-        filter.frequency.setTargetAtTime(300 + rpm * 0.35 + throttle * 700, now, TARGET_SMOOTHING);
-        var volume = (muted || paused) ? 0 : 0.08 + 0.12 * Math.min(rpm / 6000, 1) + 0.15 * throttle;
-        master.gain.setTargetAtTime(volume, now, TARGET_SMOOTHING);
+    // Called every frame with the engine speed and the throttle position (0..1)
+    function update(newRpm, newThrottle) {
+        rpm = newRpm;
+        throttle = newThrottle;
+        if(!ctx || !synth || ctx.state !== "running") return;
+        output.gain.setTargetAtTime(level(), ctx.currentTime, 0.05);
+        synth.setRpm(rpm);
+        synth.setThrottle(throttle);
     }
 
     function status() {
-        if(muted) return "Engine sound: muted";
+        if(failed) return failed;
+        if(muted) return "Engine sound: off";
         if(!enabledByUser || !ctx || ctx.state !== "running") return "Engine sound: press any key or click to enable";
         return "";
     }
@@ -109,6 +86,22 @@ var EngineSound = (function() {
         update: update,
         status: status,
         setMuted: function(value) { muted = value; },
-        setPaused: function(value) { paused = value; }
+        setPaused: function(value) { paused = value; },
+        setVolume: function(value) { volume = value; },
+        // the sound parameters of a car (its configuration, "sound"); also while the engine runs, for tuning
+        setCar: function(config) {
+            params = OpenRacer.engineSoundParams(config);
+            if(synth) synth.setParams(params);
+        },
+        setParams: function(newParams) {
+            params = Object.assign({}, newParams);
+            if(synth) synth.setParams(params);
+        },
+        getParams: function() { return Object.assign({}, params); },
+        // the sound is heard inside the car (cockpit camera): the outlet is far away, the engine close
+        setInside: function(value) {
+            inside = value;
+            if(synth) synth.setInside(value);
+        }
     };
 })();

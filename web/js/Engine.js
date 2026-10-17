@@ -41,6 +41,8 @@ OpenRacer.Engine = function( parameters ) {
     this.inertia = parameters.inertia || 0.4; // crankshaft, flywheel and clutch plate (kg m^2)
     this.idleRPM = parameters.idle_rpm || 900;
     this.limiterRPM = parameters.limiter_rpm || 6600;
+    this.torqueScale = 1;     // tuning: all of the torque of the engine, as a factor
+    this.motoringFactor = 1;  // tuning: the engine braking, as a factor
     this.stallRPM = this.idleRPM * 0.4;
     this.maxRPM = this.limiterRPM + 1000;
     this.starterTorque = 150;
@@ -77,7 +79,7 @@ OpenRacer.Engine = function( parameters ) {
     // (scaled to the size of the engine; the numbers are for an engine with a peak torque of about 580 Nm)
     var motoringScale = Math.max(0.3, Math.min(2.5, this.getPeakTorque() / 580));
     this.getMotoringTorque = function( rpm ) {
-        return (30 + 0.0355 * rpm) * motoringScale;
+        return (30 + 0.0355 * rpm) * motoringScale * this.motoringFactor;
     };
 
     this.start = function() {
@@ -120,6 +122,6 @@ OpenRacer.Engine = function( parameters ) {
         }
         thr *= this.throttleCut;
 
-        return this.getTorque(rpm) * thr - (1 - thr) * this.getMotoringTorque(rpm);
+        return this.getTorque(rpm) * this.torqueScale * thr - (1 - thr) * this.getMotoringTorque(rpm);
     };
 };

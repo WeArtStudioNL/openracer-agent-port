@@ -24,6 +24,7 @@ const state = {
     mainFile: null,         // name of the glb or gltf among them
     existingId: null,       // the id of the car that is being edited
     existingModel: null,    // the model block of that car
+    existingCar: null,      // the configuration of that car as it was loaded
     materials: [],          // the materials of the model
     overrides: {},          // changes to the materials: material name -> { field: value }
     nodes: [],              // the named nodes of the model
@@ -465,6 +466,114 @@ function updateCameraMarkers() {
     }
 }
 
+// ---- engine sound, with a preview
+
+const SND = {
+    cylinders: "sndCylinders", volume: "sndVolume", ignition_time: "sndIgnition", intake_length: "sndIntakeLen", exhaust_length: "sndExhaustLen",
+    extractor_length: "sndExtractorLen", straight_pipe_length: "sndStraightLen", outlet_length: "sndOutletLen", straight_pipe_reflection: "sndStraightRefl",
+    intake_open: "sndIntakeOpen", intake_closed: "sndIntakeClosed", outlet_reflection: "sndOutletRefl", exhaust_open: "sndExhaustOpen",
+    exhaust_closed: "sndExhaustClosed", muffler_action: "sndMufflerAction", mix_intake: "sndMixIntake", mix_block: "sndMixBlock", mix_outlet: "sndMixOutlet"
+};
+const preview = { ctx: null, synth: null, playing: false, loading: false, sweep: null };
+
+function fillSound(params) {
+    for (const [key, id] of Object.entries(SND)) $(id).value = params[key];
+    $("sndMuffler").value = params.muffler.join(", ");
+}
+
+function readSound() {
+    const params = {};
+    for (const [key, id] of Object.entries(SND)) params[key] = parseFloat($(id).value);
+    params.muffler = $("sndMuffler").value.split(/[,;\s]+/).map(parseFloat).filter((v) => v > 0);
+    return params;
+}
+
+function soundValid(params) {
+    return Object.entries(params).every(([key, v]) => key === "muffler" ? v.length > 0 : Number.isFinite(v));
+}
+
+function soundChanged() {
+    const params = readSound();
+    if (preview.synth && soundValid(params)) preview.synth.setParams(Object.assign({}, OpenRacer.engineSoundDefaults, params));
+}
+
+async function playSound() {
+    if (preview.playing) {
+        // stop: silence, and keep the context for the next time
+        preview.playing = false;
+        preview.synth.setSilent(true);
+        $("soundPlay").textContent = "Play";
+        return;
+    }
+    if (!window.AudioWorkletNode) { status("This browser cannot play the engine sound (AudioWorklet).", "error"); return; }
+    if (!preview.ctx) preview.ctx = new AudioContext();
+    if (preview.ctx.state === "suspended") await preview.ctx.resume();
+    if (!preview.synth) {
+        try {
+            await OpenRacer.EngineSynth.load(preview.ctx, "../js/EngineSoundWorklet.js");
+            const params = readSound();
+            preview.synth = new OpenRacer.EngineSynth(preview.ctx, Object.assign({}, OpenRacer.engineSoundDefaults, soundValid(params) ? params : {}));
+            preview.synth.connect(preview.ctx.destination);
+        } catch (error) {
+            status("Could not start the engine sound: " + error.message, "error");
+            return;
+        }
+    }
+    preview.playing = true;
+    preview.synth.setSilent(false);
+    preview.synth.setInside($("soundInside").checked);
+    soundSliders();
+    $("soundPlay").textContent = "Stop";
+}
+
+function soundSliders() {
+    const rpm = parseFloat($("soundRpm").value);
+    const throttle = parseFloat($("soundThrottle").value) / 100;
+    $("soundRpmLabel").textContent = Math.round(rpm) + " rpm";
+    $("soundThrottleLabel").textContent = Math.round(throttle * 100) + "%";
+    if (preview.synth && preview.playing) {
+        preview.synth.setRpm(rpm);
+        preview.synth.setThrottle(throttle);
+    }
+}
+
+function soundSweep() {
+    if (!preview.playing) playSound().then(() => soundSweep());
+    if (!preview.playing) return;
+    const idle = num("idle") || 900, limit = num("limiter") || 6500, start = performance.now(), duration = 6000;
+    cancelAnimationFrame(preview.sweep);
+    const step = (now) => {
+        const t = Math.min(1, (now - start) / duration);
+        // up in the first half, down in the second; the throttle is open on the way up
+        const up = t < 0.5 ? t * 2 : 2 - t * 2;
+        $("soundRpm").value = idle + (limit - idle) * up;
+        $("soundThrottle").value = t < 0.5 ? 100 : 0;
+        soundSliders();
+        if (t < 1) preview.sweep = requestAnimationFrame(step);
+    };
+    preview.sweep = requestAnimationFrame(step);
+}
+
+function initSound() {
+    const select = $("soundPreset");
+    select.innerHTML = "<option value=''>Choose a preset…</option>" + Object.keys(OpenRacer.engineSoundPresets).map((n) => "<option>" + n + "</option>").join("");
+    select.addEventListener("change", () => {
+        if (!select.value) return;
+        const volume = parseFloat($("sndVolume").value) || 1;
+        fillSound(Object.assign({}, OpenRacer.engineSoundDefaults, OpenRacer.engineSoundPresets[select.value], { volume }));
+        select.value = "";
+        soundChanged();
+    });
+    document.querySelectorAll(".snd").forEach((el) => el.addEventListener("input", soundChanged));
+    $("soundPlay").addEventListener("click", playSound);
+    $("soundSweep").addEventListener("click", soundSweep);
+    $("soundRpm").addEventListener("input", soundSliders);
+    $("soundThrottle").addEventListener("input", soundSliders);
+    $("soundInside").addEventListener("change", () => { if (preview.synth) preview.synth.setInside($("soundInside").checked); });
+    fillSound(OpenRacer.engineSoundParams(null));
+    soundSliders();
+}
+
 // ---- the engine
 
 function power(rpm, nm) {
@@ -616,8 +725,10 @@ function buildConfig(id) {
             torque_curve: curve
         },
         brakes: { front: need("brakeFront", "The front brakes"), rear: need("brakeRear", "The rear brakes") },
-        cameras: readCameras()
+        cameras: readCameras(),
+        sound: readSound()
     };
+    if (!soundValid(config.sound)) throw new Error("Every field of the engine sound needs a number (and the muffler at least one length).");
     const camNumbers = [config.cameras.chase.distance, config.cameras.chase.height, config.cameras.chase.fov, config.cameras.follow.distance,
         config.cameras.follow.height, config.cameras.follow.look_height, config.cameras.follow.smoothing, config.cameras.follow.fov_standing,
         config.cameras.follow.fov_fast, config.cameras.follow.fov_full_speed, config.cameras.cockpit.fov, ...config.cameras.cockpit.position];
@@ -681,11 +792,19 @@ async function save() {
             config.model.offset = [num("offsetX") || 0, num("offsetY") || 0, num("offsetZ") || 0];
         }
 
+        // what the tuning menu of the game has put in the configuration, and that this form does not have, is kept
+        const old = state.existingCar;
+        if (old && id === state.existingId) {
+            for (const section of ["chassis", "drivetrain", "engine"]) config[section] = Object.assign({}, old[section], config[section]);
+            for (const section of ["tyres", "assists"]) if (old[section] && !config[section]) config[section] = old[section];
+        }
+
         status("Saving…");
         for (const [fileName, file] of uploads) await put("/api/cars/" + id + "/" + encodeURIComponent(fileName), file);
         await put("/api/cars/" + id + "/car.json", JSON.stringify(config, null, 2) + "\n");
         state.existingId = id;
         state.existingModel = config.model;
+        state.existingCar = Object.assign({}, config, { id });
         state.files = new Map();
         state.mainFile = null;
         await refreshList(id);
@@ -744,6 +863,8 @@ function fill(car) {
     state.curve = e.torque_curve.map((p) => [p[0], p[1]]);
     set("brakeFront", car.brakes.front); set("brakeRear", car.brakes.rear);
     fillCameras(OpenRacer.cameraSettings(car));
+    fillSound(OpenRacer.engineSoundParams(car));
+    soundChanged();
     renderCurve();
 }
 
@@ -753,6 +874,7 @@ function loadExisting() {
     newCar();
     state.existingId = car.id;
     state.existingModel = car.model;
+    state.existingCar = car;
     fill(car);
     state.overrides = JSON.parse(JSON.stringify(car.materials || {}));
     state.autoGlass = !car.materials; // a car that was made before the materials could be set gets see-through glass as a suggestion
@@ -791,6 +913,7 @@ function loadExisting() {
 function newCar() {
     state.existingId = null;
     state.existingModel = null;
+    state.existingCar = null;
     state.files = new Map();
     state.mainFile = null;
     state.idEdited = false;
@@ -833,7 +956,7 @@ $("addPoint").addEventListener("click", () => {
     renderCurve();
 });
 $("generate").addEventListener("click", generateCurve);
-for (const id of ["limiter", "idle"]) $(id).addEventListener("input", () => { drawChart(); updateSpeedInfo(); });
+for (const id of ["limiter", "idle"]) $(id).addEventListener("input", () => { drawChart(); updateSpeedInfo(); $("soundRpm").max = Math.round((num("limiter") || 7000) * 1.1); });
 for (const id of ["gears", "finalDrive", "tyre"]) $(id).addEventListener("input", updateSpeedInfo);
 $("name").addEventListener("input", () => { if (!state.idEdited) $("id").value = slug($("name").value); });
 $("id").addEventListener("input", () => { state.idEdited = true; });
@@ -845,6 +968,7 @@ $("newCar").addEventListener("click", () => { newCar(); $("existing").value = ""
 $("save").addEventListener("click", save);
 $("delete").addEventListener("click", deleteCar);
 
+initSound();
 renderCurve();
 updateSpeedInfo();
 defaultCameras();

@@ -14,9 +14,11 @@ var carConfig;
 // the engine sound follows the option of the settings menu
 Settings.onOptionChange(function(name, value) {
     if(name === "sound") EngineSound.setMuted(!value);
+    else if(name === "volume") EngineSound.setVolume(value);
     else if(name === "toneMapping" && typeof renderer !== "undefined" && renderer) applyToneMapping(value);
 });
 EngineSound.setMuted(!Settings.option("sound"));
+EngineSound.setVolume(Settings.option("volume"));
 
 function startGame(carId, trackId) {
     Promise.all([Catalog.load("cars"), Catalog.load("tracks")]).then(function(result) {
@@ -40,6 +42,7 @@ function startGame(carId, trackId) {
 
 function trackLoaded() {
     car = new OpenRacer.Car(carConfig);
+    Tuning.attach(car, carConfig); // the tuning menu, with the tuning that was kept for this car
     telemetry = new OpenRacer.Telemetry({car: car, domElement: document.getElementById("telemetry")});
 }
 

@@ -42,10 +42,12 @@ var scripts = [
     "js/Collision.js",
     "js/Vehicle.js",
     "js/Telemetry.js",
+    "js/EngineSynth.js",
     "js/EngineSound.js",
     "js/WheelControls.js",
     "js/Settings.js",
     "js/Hud.js",
+    "js/Tuning.js",
     "js/controls.js",
     "js/main.js"
 ];

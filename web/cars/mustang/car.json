@@ -132,5 +132,31 @@
       ],
       "fov": 75
     }
+  },
+  "sound": {
+    "cylinders": 8,
+    "intake_length": 120,
+    "exhaust_length": 140,
+    "extractor_length": 120,
+    "intake_open": 0.01,
+    "intake_closed": 0.95,
+    "exhaust_open": 0.01,
+    "exhaust_closed": 0.93,
+    "ignition_time": 0.018,
+    "straight_pipe_length": 160,
+    "straight_pipe_reflection": 0.01,
+    "muffler": [
+      14,
+      20,
+      26,
+      32
+    ],
+    "muffler_action": 0.06,
+    "outlet_length": 8,
+    "outlet_reflection": 0.01,
+    "volume": 1,
+    "mix_intake": 0.8,
+    "mix_block": 1.2,
+    "mix_outlet": 1.1
   }
 }

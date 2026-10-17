@@ -117,6 +117,7 @@ OpenRacer.Car = function( config, domElement ) {
     }, this);
     this.vehicle.collision = collisionWorld;
     this.engine = this.vehicle.engine;
+    EngineSound.setCar(config); // the engine sound of this car
     this.wheels = this.vehicle.wheels;
     var placed = false; // set once the car has been put on the road
 
@@ -280,6 +281,7 @@ OpenRacer.Car = function( config, domElement ) {
 
     this.setCameraMode = function(mode) {
         this.cameraMode = mode;
+        EngineSound.setInside(mode === 3);
         followYaw = null;
         cameraFov = null;
     };
@@ -402,7 +404,8 @@ OpenRacer.Car = function( config, domElement ) {
 
         v.update(delta);
         this.engineRPM = this.engine.getRPM();
-        EngineSound.update(this.engineRPM, this.throttle);
+        // the rev limiter cuts the fuel: the engine sounds like it too
+        EngineSound.update(this.engineRPM, this.throttle * this.engine.throttleCut);
 
         this.sampleGround();
         this.updateVisuals(delta);

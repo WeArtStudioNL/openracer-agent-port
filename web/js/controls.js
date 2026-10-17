@@ -9,6 +9,7 @@ var mLocation;
 window.onmousedown = function(e) {
     // a click in the settings menu is not driving
     if(Settings.isPaused()) return;
+    if(e.target && e.target.closest && e.target.closest("#tuning")) return; // the tuning menu
     mouseDown = true;
     //console.log("mouseDown " + e.screenX + ", " + e.screenY);
     mdX = e.screenX;

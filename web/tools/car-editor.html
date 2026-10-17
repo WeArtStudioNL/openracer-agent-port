@@ -220,6 +220,59 @@
     <div class="row"><div><input type="number" class="cam" id="camCockFov" step="1"><div class="hint">field of view</div></div></div>
     <div class="buttons"><button class="small" id="camDefaults">Set the cameras to the defaults for the size of the car</button></div>
 
+    <h2>Engine sound</h2>
+    <div class="sub">The sound is calculated from a model of the engine: every cylinder has pipes for the intake and the exhaust in which the pressure
+        wave of the burn travels up and down and is partly reflected, and the exhausts come together in a pipe, a muffler and the outlet
+        (after the engine sound generator of Antonio-R1). Press Play and change the values while you listen.</div>
+    <div class="row">
+        <div><label>Preset</label><select id="soundPreset"></select></div>
+        <div style="flex:none; align-self:flex-end"><button id="soundPlay" class="primary" style="padding:6px 18px">Play</button></div>
+    </div>
+    <label>Engine speed <span id="soundRpmLabel" class="hint"></span></label>
+    <input type="range" id="soundRpm" min="0" max="7000" value="900" step="10" style="width:100%">
+    <label>Throttle <span id="soundThrottleLabel" class="hint"></span></label>
+    <input type="range" id="soundThrottle" min="0" max="100" value="0" style="width:100%">
+    <div class="buttons"><button class="small" id="soundSweep">Rev up and down</button>
+        <label style="display:inline; margin:0 0 0 8px"><input type="checkbox" id="soundInside"> as heard in the cockpit</label></div>
+    <div class="row3 row">
+        <div><label>Cylinders</label><input type="number" class="snd" id="sndCylinders" min="1" max="16" step="1"></div>
+        <div><label>Volume</label><input type="number" class="snd" id="sndVolume" min="0" max="3" step="0.05"></div>
+        <div><label>Ignition time</label><input type="number" class="snd" id="sndIgnition" min="0.002" max="0.05" step="0.001"></div>
+    </div>
+    <label><b>Pipes</b> (lengths in samples: the longer, the lower the resonance)</label>
+    <div class="row3 row">
+        <div><input type="number" class="snd" id="sndIntakeLen" min="1" max="1000" step="5"><div class="hint">intake</div></div>
+        <div><input type="number" class="snd" id="sndExhaustLen" min="1" max="1000" step="5"><div class="hint">exhaust</div></div>
+        <div><input type="number" class="snd" id="sndExtractorLen" min="1" max="1000" step="5"><div class="hint">extractor</div></div>
+    </div>
+    <div class="row3 row">
+        <div><input type="number" class="snd" id="sndStraightLen" min="1" max="1000" step="5"><div class="hint">straight pipe</div></div>
+        <div><input type="number" class="snd" id="sndOutletLen" min="1" max="500" step="1"><div class="hint">outlet</div></div>
+        <div><input type="number" class="snd" id="sndStraightRefl" min="0" max="0.99" step="0.01"><div class="hint">pipe reflection</div></div>
+    </div>
+    <label><b>Valves and reflection</b> (0 to 1)</label>
+    <div class="row3 row">
+        <div><input type="number" class="snd" id="sndIntakeOpen" min="0" max="0.99" step="0.01"><div class="hint">intake open</div></div>
+        <div><input type="number" class="snd" id="sndIntakeClosed" min="0" max="0.99" step="0.01"><div class="hint">intake closed</div></div>
+        <div><input type="number" class="snd" id="sndOutletRefl" min="0" max="0.99" step="0.01"><div class="hint">outlet reflection</div></div>
+    </div>
+    <div class="row3 row">
+        <div><input type="number" class="snd" id="sndExhaustOpen" min="0" max="0.99" step="0.01"><div class="hint">exhaust open</div></div>
+        <div><input type="number" class="snd" id="sndExhaustClosed" min="0" max="0.99" step="0.01"><div class="hint">exhaust closed</div></div>
+        <div></div>
+    </div>
+    <label><b>Muffler</b> (lengths of the elements in samples, separated by commas, and how much it holds back)</label>
+    <div class="row">
+        <div><input type="text" class="snd" id="sndMuffler"></div>
+        <div style="flex:none; width:90px"><input type="number" class="snd" id="sndMufflerAction" min="0" max="0.99" step="0.01"></div>
+    </div>
+    <label><b>Mix</b> (the parts of the sound)</label>
+    <div class="row3 row">
+        <div><input type="number" class="snd" id="sndMixIntake" min="0" max="3" step="0.1"><div class="hint">intake</div></div>
+        <div><input type="number" class="snd" id="sndMixBlock" min="0" max="3" step="0.1"><div class="hint">engine block</div></div>
+        <div><input type="number" class="snd" id="sndMixOutlet" min="0" max="3" step="0.1"><div class="hint">outlet</div></div>
+    </div>
+
     <h2>Brakes</h2>
     <div class="row">
         <div><label>Front, per wheel (Nm)</label><input type="number" id="brakeFront" step="50" value="1600"></div>
@@ -236,6 +289,7 @@
 <script>var OpenRacer = {};</script>
 <script src="../js/MaterialOverrides.js"></script>
 <script src="../js/CarDefaults.js"></script>
+<script src="../js/EngineSynth.js"></script>
 <script type="module" src="car-editor.js"></script>
 </body>
 </html>

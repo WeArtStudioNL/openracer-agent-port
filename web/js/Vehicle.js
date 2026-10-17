@@ -76,6 +76,8 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.lockTorque = 150;            // limited slip differential: preload (Nm)
     this.lockStiffness = 60;          // and how fast it builds up with the speed difference (Nm per rad/s)
 
+    this.tcAllowance = 1;             // tuning: how much wheel spin the traction control allows, as a factor
+    this.escGain = 1;                 // tuning: how hard the stability control steps in, as a factor
     this.tcEnabled = false;           // traction control: takes power off when the driven wheels spin
     this.escEnabled = false;          // stability control (see step())
     this.absEnabled = true;
@@ -144,6 +146,63 @@ OpenRacer.Vehicle = function (parameters, input) {
         w.weight = defs[i].mass * G;
         this.wheels.push(w);
     }
+
+    // Changes what can be tuned while the car drives. The values (all optional): mass (kg), weight_distribution (front share, 0..1),
+    // cg_height, roll_front (share of the roll stiffness at the front), spring_front and spring_rear (N/m at the wheel),
+    // grip (factor), cornering (factor, the stiffness of the tyres against the slip angle), rolling_resistance, power (factor),
+    // idle_rpm, limiter_rpm, engine_inertia, engine_braking (factor), final_drive, gear_ratios, reverse_ratio, clutch (the
+    // capacity as a multiple of the peak torque), diff_preload, diff_lock, drive ("rwd" or "fwd"), brake_front, brake_rear (Nm),
+    // drag (Cdrag), tc_allowance, esc_gain.
+    this.baseAnglePeak = this.wheels[0].anglePeak;
+    this.retune = function (t) {
+        var i, w;
+        if(t.mass !== undefined) {
+            this.mass = t.mass;
+            this.yawInertia = this.mass * (Math.pow(parameters.width || 1.8, 2) + Math.pow(parameters.length || 4.8, 2)) / 12;
+        }
+        if(t.weight_distribution !== undefined) {
+            this.weight_distribution = t.weight_distribution;
+            this.af = this.wheelbase * (1 - this.weight_distribution);
+            this.ar = this.wheelbase * this.weight_distribution;
+        }
+        if(t.cg_height !== undefined) this.cgHeight = t.cg_height;
+        if(t.roll_front !== undefined) this.rollFrontShare = t.roll_front;
+        if(t.spring_front !== undefined) this.frontWheelRate = t.spring_front;
+        if(t.spring_rear !== undefined) this.rearWheelRate = t.spring_rear;
+        if(t.drive !== undefined) this.frontDriven = t.drive === "fwd";
+        for(i = 0; i < 4; i++) {
+            w = this.wheels[i];
+            w.a = w.front ? this.af : -this.ar;
+            w.mass = this.mass * (w.front ? this.weight_distribution : 1 - this.weight_distribution) / 2;
+            w.driven = w.front === this.frontDriven;
+            if(t.grip !== undefined) w.gripScale = t.grip;
+            if(t.cornering !== undefined) w.anglePeak = this.baseAnglePeak / t.cornering;
+            if(t.rolling_resistance !== undefined) w.rollingResistance = t.rolling_resistance;
+            if(t.brake_front !== undefined && w.front) w.maxBrakeTorque = t.brake_front;
+            if(t.brake_rear !== undefined && !w.front) w.maxBrakeTorque = t.brake_rear;
+        }
+        if(t.brake_front !== undefined) this.brakeFront = t.brake_front;
+        if(t.brake_rear !== undefined) this.brakeRear = t.brake_rear;
+        var engine = this.engine;
+        if(t.power !== undefined) engine.torqueScale = t.power;
+        if(t.engine_braking !== undefined) engine.motoringFactor = t.engine_braking;
+        if(t.idle_rpm !== undefined) { engine.idleRPM = t.idle_rpm; engine.stallRPM = t.idle_rpm * 0.4; }
+        if(t.limiter_rpm !== undefined) { engine.limiterRPM = t.limiter_rpm; engine.maxRPM = t.limiter_rpm + 1000; }
+        if(t.engine_inertia !== undefined) engine.inertia = t.engine_inertia;
+        if(t.final_drive !== undefined) this.final_drive = t.final_drive;
+        if(t.reverse_ratio !== undefined) this.reverseRatio = t.reverse_ratio;
+        if(t.gear_ratios !== undefined) {
+            // the same array is used by the car and by the controls: change it in place
+            for(i = 0; i < t.gear_ratios.length && i < this.gear_ratios.length; i++) this.gear_ratios[i] = t.gear_ratios[i];
+        }
+        if(t.clutch !== undefined) this.clutchCapacity = t.clutch * engine.getPeakTorque() * engine.torqueScale;
+        else if(t.power !== undefined) this.clutchCapacity = 1.5 * engine.getPeakTorque() * engine.torqueScale;
+        if(t.diff_preload !== undefined) this.lockTorque = t.diff_preload;
+        if(t.diff_lock !== undefined) this.lockStiffness = t.diff_lock;
+        if(t.drag !== undefined) this.Cdrag = t.drag;
+        if(t.tc_allowance !== undefined) this.tcAllowance = t.tc_allowance;
+        if(t.esc_gain !== undefined) this.escGain = t.esc_gain;
+    };
 
     // Static positions of the wheels and the heading, for the caller to place the car
     this.reset = function (x, z, psi) {
@@ -346,7 +405,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             self.yawWanted += (steady - self.yawWanted) * Math.min(1, dt / 0.25);
             var wanted = self.yawWanted;
             var error = r - wanted;
-            var amount = Math.min(1, Math.max(0, (Math.abs(error) - 0.1) / 0.3));
+            var amount = Math.min(1, Math.max(0, (Math.abs(error) - 0.1) / 0.3) * self.escGain);
             var magnitude = 0;
             // the direction the car moves in against the way it points (the slip angle of the car): a rear end that
             // slides out is seen at once, also when the car does not turn faster than the steering asks
@@ -361,7 +420,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             }
             self.escLevel += (magnitude - self.escLevel) * Math.min(1, dt / 0.04);
             escCut = self.escLevel;
-            for(var k = 0; k < 4; k++) escBrake[k] *= self.escLevel * (k < 2 ? self.brakeFront : self.brakeRear);
+            for(var k = 0; k < 4; k++) escBrake[k] *= self.escLevel * (k < 2 ? self.brakeFront : self.brakeRear) * Math.min(1.5, self.escGain);
         } else {
             self.escLevel = 0;
             self.yawWanted = r;
@@ -462,7 +521,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             sumFx += fxB;
             sumFy += fyB;
             sumMz += w.a * fyB - w.b * fxB;
-            if(w.driven) maxDrivenSlip = Math.max(maxDrivenSlip, (w.omega * w.radius - vl) / (1 + 0.12 * Math.abs(vl)));
+            if(w.driven) maxDrivenSlip = Math.max(maxDrivenSlip, (w.omega * w.radius - vl) / (self.tcAllowance * (1 + 0.12 * Math.abs(vl))));
         }
 
         // ---- traction control

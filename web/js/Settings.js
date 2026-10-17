@@ -78,6 +78,7 @@ var Settings = (function() {
         { id: "debugToggle", group: "Other", label: "Debug text on/off", defaults: [key("F3")] },
         { id: "cameraSwitch", group: "Other", label: "Switch camera (fixed, follow, cockpit)", defaults: [key("KeyV")] },
         { id: "toggleESC", group: "Other", label: "ESC (stability control) on/off", defaults: [key("KeyN")] },
+        { id: "tuningMenu", group: "Other", label: "Tuning menu on/off", defaults: [key("KeyU")] },
         { id: "toggleTC", group: "Other", label: "Traction control on/off", defaults: [key("KeyC")] },
         { id: "toggleABS", group: "Other", label: "ABS on/off", defaults: [key("KeyB")] },
         { id: "startEngine", group: "Other", label: "Start the engine", defaults: [key("KeyI")] },
@@ -90,7 +91,7 @@ var Settings = (function() {
     var actionsById = {};
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
-    var DEFAULT_OPTIONS = { tc: true, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 1 };
+    var DEFAULT_OPTIONS = { tc: true, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 1, volume: 0.8 };
 
     var bindings = {};      // action id -> list of inputs
     var options = {};
@@ -250,6 +251,9 @@ var Settings = (function() {
             if(!WheelControls.isCalibrating()) toggleMenu();
             return;
         }
+        // a key that is typed in a field of the tuning menu is not a key of the game
+        var target = event.target;
+        if(target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return;
         if(!paused) {
             if(event.code === "Space" || event.code.indexOf("Arrow") === 0) event.preventDefault();
             keysDown[event.code] = true;
@@ -582,10 +586,17 @@ var Settings = (function() {
         panel.appendChild(optionRow("Units", options.units === "imperial" ? "Imperial (mph)" : "Metric (km/h)",
             function() { setOption("units", options.units === "imperial" ? "metric" : "imperial"); }));
         panel.appendChild(optionRow("Debug text", options.debug ? "On" : "Off", function() { setOption("debug", !options.debug); }));
+        var tuningRow = optionRow("Tuning menu", "Open", function() { closeMenu(); Tuning.toggle(); });
+        panel.appendChild(tuningRow);
         var toneNames = { none: "Off", neutral: "Neutral", agx: "AgX", aces: "ACES" };
         var toneOrder = ["none", "neutral", "agx", "aces"];
         panel.appendChild(optionRow("Tone mapping", toneNames[options.toneMapping] || "Off",
             function() { setOption("toneMapping", toneOrder[(toneOrder.indexOf(options.toneMapping) + 1) % toneOrder.length]); }));
+        panel.appendChild(optionRow("Engine volume", Math.round(options.volume * 100) + "%", function() {
+            var steps = [0.2, 0.4, 0.6, 0.8, 1, 1.3];
+            var next = steps.find(function(v) { return v > options.volume + 0.01; });
+            setOption("volume", next === undefined ? steps[0] : next);
+        }));
         panel.appendChild(optionRow("Engine sound", options.sound ? "On" : "Off", function() { setOption("sound", !options.sound); }));
 
         var groups = [];
@@ -668,6 +679,7 @@ var Settings = (function() {
     handlers.gearboxMode = function() { cycleGearbox(); };
     handlers.toggleESC = function() { setOption("esc", !options.esc); };
     handlers.cameraSwitch = function() { setOption("camera", options.camera % 3 + 1); };
+    handlers.tuningMenu = function() { Tuning.toggle(); };
     handlers.hudToggle = function() { setOption("hud", !options.hud); };
     handlers.debugToggle = function() { setOption("debug", !options.debug); };
     handlers.mute = function() { setOption("sound", !options.sound); };
