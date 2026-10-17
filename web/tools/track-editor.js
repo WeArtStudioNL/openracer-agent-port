@@ -437,7 +437,7 @@ function readStartFields() {
 // the design of a track without a model: nodes, heights, widths and prefabs (see track-design.js)
 const design = createDesign({
     scene, trackGroup, camera, renderer, controls, state, registerMesh, applyColours, renderParts, updateMarkers, frameTrack, status, $,
-    setMode, getMode: () => state.mode
+    setMode, getMode: () => state.mode, roleMaterials
 });
 function startDesign(data) {
     clearTrack();

@@ -11,6 +11,7 @@
 import * as THREE from "three";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -113,7 +114,7 @@ function defaultDesign() {
 }
 
 export function createDesign(api) {
-    const { scene, trackGroup, camera, renderer, controls, state, registerMesh, applyColours, renderParts, updateMarkers, status, $ } = api;
+    const { scene, trackGroup, camera, renderer, controls, state, registerMesh, applyColours, renderParts, updateMarkers, status, $, roleMaterials } = api;
     const roadGroup = new THREE.Group();     // the road, the shoulders and the ground: made again whenever a node changes
     const prefabGroup = new THREE.Group();   // the prefabs, each a group with userData.prefab
     const nodeGroup = new THREE.Group();     // the markers of the nodes (not a part of the track)
@@ -129,22 +130,7 @@ export function createDesign(api) {
     const gizmo = new TransformControls(camera, renderer.domElement);
     gizmo.setSize(0.9);
     let dragging = false;
-    gizmo.addEventListener("dragging-changed", (e) => { controls.enabled = !e.value; dragging = e.value; if (!e.value && gizmo.object && gizmo.object.userData.nodeIndex !== undefined) rebuild(true); });
-    gizmo.addEventListener("objectChange", () => {
-        const o = gizmo.object;
-        if (!o) return;
-        if (o.userData.nodeIndex !== undefined) {
-            const n = design.data.nodes[o.userData.nodeIndex];
-            n.x = round(o.position.x); n.y = round(o.position.y); n.z = round(o.position.z);
-            fillNodeFields();
-            scheduleRebuild();
-        } else if (o.userData.prefab) {
-            const p = o.userData.prefab;
-            p.x = round(o.position.x); p.y = round(o.position.y); p.z = round(o.position.z);
-            if (gizmo.mode === "rotate") p.rotation = round(o.rotation.y);
-            fillPrefabFields();
-        }
-    });
+    gizmo.addEventListener("dragging-changed", (e) => { controls.enabled = !e.value; dragging = e.value; });
     scene.add(typeof gizmo.getHelper === "function" ? gizmo.getHelper() : gizmo);
     gizmo.enabled = false;
 
@@ -373,6 +359,46 @@ export function createDesign(api) {
         terrainTimer = setTimeout(() => { if (!dragging && design.data) rebuild(true); }, 400);
     }
 
+    // ---- undo and redo: snapshots of the design
+    const history = { past: [], future: [] };
+    function snapshot() { return JSON.stringify(design.data); }
+    function commit() {
+        if (!design.data) return;
+        const s = snapshot();
+        if (history.past.length && history.past[history.past.length - 1] === s) return;
+        history.past.push(s);
+        if (history.past.length > 100) history.past.shift();
+        history.future = [];
+        updateUndoButtons();
+    }
+    function restore(s) {
+        design.data = JSON.parse(s);
+        design.selectedNode = -1;
+        design.selectedPrefab = null;
+        gizmo.detach();
+        rebuild(true);
+        rebuildPrefabs();
+        fillNodeFields();
+        fillPrefabFields();
+    }
+    function undo() {
+        if (history.past.length < 2) return;
+        history.future.push(history.past.pop());
+        restore(history.past[history.past.length - 1]);
+        updateUndoButtons();
+    }
+    function redo() {
+        if (!history.future.length) return;
+        const s = history.future.pop();
+        history.past.push(s);
+        restore(s);
+        updateUndoButtons();
+    }
+    function updateUndoButtons() {
+        $("dsUndo").disabled = history.past.length < 2;
+        $("dsRedo").disabled = !history.future.length;
+    }
+
     // ---- the node markers
     function renderNodes() {
         nodeGroup.clear();
@@ -385,7 +411,6 @@ export function createDesign(api) {
             mesh.userData.nodeIndex = i;
             nodeGroup.add(mesh);
         });
-        // the line through the nodes, when there are too few for a road
         if (design.data.nodes.length >= 2) {
             const curve = curveOf(design.data);
             const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(Math.max(64, design.data.nodes.length * 16)).map((p) => p.clone().setY(p.y + 0.3))),
@@ -393,8 +418,11 @@ export function createDesign(api) {
             nodeGroup.add(line);
         }
         if (design.selectedNode >= 0 && nodeGroup.children[design.selectedNode]) {
+            // the gizmo of a node: only up and down (dragging the node itself moves it over the ground)
             gizmo.attach(nodeGroup.children[design.selectedNode]);
             gizmo.setMode("translate");
+            gizmo.showX = gizmo.showZ = false;
+            gizmo.showY = true;
             gizmo.enabled = true;
         }
     }
@@ -404,8 +432,10 @@ export function createDesign(api) {
         design.selectedPrefab = null;
         gizmo.detach();
         gizmo.enabled = false;
+        rowGroup.clear();
         renderNodes();
         fillNodeFields();
+        fillPrefabFields();
         renderPrefabList();
     }
 
@@ -437,34 +467,106 @@ export function createDesign(api) {
         design.selectedNode = at;
         rebuild();
         selectNode(at);
+        commit();
     }
 
     function deleteNode() {
-        if (design.selectedNode < 0) return;
+        if (design.selectedNode < 0 || design.data.nodes.length <= 3) return;
         design.data.nodes.splice(design.selectedNode, 1);
         design.selectedNode = Math.min(design.selectedNode, design.data.nodes.length - 1);
         rebuild();
         selectNode(design.selectedNode);
+        commit();
     }
 
     function fillNodeFields() {
         const n = design.selectedNode >= 0 ? design.data.nodes[design.selectedNode] : null;
         $("dsNodeBox").style.display = n ? "" : "none";
-        $("dsNodeInfo").textContent = n ? "Node " + (design.selectedNode + 1) + " of " + design.data.nodes.length : "No node selected: click a node, or add one.";
+        $("dsNodeInfo").textContent = n ? "Node " + (design.selectedNode + 1) + " of " + design.data.nodes.length
+            : (design.selectedPrefab !== null ? "Prefab selected" : "");
         if (n) { $("dsHeight").value = n.y; $("dsNodeWidth").value = n.width; }
     }
 
-    // ---- the prefabs
+    // ---- the prefabs: single ones, and rows (a prefab repeated along a line drawn on the ground)
+    const SPACING = { wall: 4, barrier: 4, tyres: 0.8, tyrewall: 2.3, cone: 3, tree: 8, bush: 3, house: 12, grandstand: 17, lamp: 20, sign: 8 };
+    const rowGroup = new THREE.Group();      // the markers of the points of a selected row
+    scene.add(rowGroup);
+
+    // the height of the ground (the road, the terrain or another prefab) under a point
+    function surfaceHeight(x, z, exclude) {
+        raycaster.set(new THREE.Vector3(x, 1000, z), new THREE.Vector3(0, -1, 0));
+        const targets = roadGroup.children.concat(prefabGroup.children.filter((g) => g !== exclude));
+        const hits = raycaster.intersectObjects(targets, true);
+        return hits.length ? hits[0].point.y : 0;
+    }
+
+    function instance(def, p, x, y, z, rotation, scale, name) {
+        const g = def.make();
+        g.position.set(x, y, z);
+        g.rotation.y = rotation || 0;
+        g.scale.setScalar(scale || 1);
+        g.traverse((m) => { if (m.isMesh) { m.name = name; m.userData.role = def.role; } });
+        return g;
+    }
+
+    function rowCurve(p) {
+        const pts = p.points.map((q) => new THREE.Vector3(q.x, q.y || 0, q.z));
+        if (pts.length === 1) return null;
+        return new THREE.CatmullRomCurve3(pts, false, "centripetal", 0.5);
+    }
+
     function makePrefab(p, index) {
         const def = PREFABS[p.type] || PREFABS.wall;
-        const g = def.make();
-        g.position.set(p.x, p.y, p.z);
-        g.rotation.y = p.rotation || 0;
-        g.scale.setScalar(p.scale || 1);
+        const name = "prefab_" + p.type + "_" + (index + 1);
+        const g = new THREE.Group();
+        g.name = name;
         g.userData.prefab = p;
-        g.name = "prefab_" + p.type + "_" + (index + 1);
-        g.traverse((m) => { if (m.isMesh) { m.name = g.name; m.userData.role = def.role; } });
+        if (p.row) {
+            // the copies along the line are merged into one mesh per material, so a long row stays light (also in the glb)
+            const curve = rowCurve(p);
+            const spacing = Math.max(0.3, p.spacing || SPACING[p.type] || 4);
+            const copies = [];
+            if (curve) {
+                const length = curve.getLength();
+                const count = Math.max(1, Math.min(400, Math.floor(length / spacing) + 1));
+                for (let k = 0; k < count; k++) {
+                    const u = count > 1 ? (k * spacing) / length : 0;
+                    const pos = curve.getPointAt(Math.min(1, u));
+                    const t = curve.getTangentAt(Math.min(1, u));
+                    copies.push(instance(def, p, pos.x, pos.y, pos.z, Math.atan2(-t.z, t.x), p.scale, name));
+                }
+            } else {
+                copies.push(instance(def, p, p.points[0].x, p.points[0].y || 0, p.points[0].z, 0, p.scale, name));
+            }
+            const byColour = new Map();
+            copies.forEach((c) => {
+                c.updateMatrixWorld(true);
+                c.traverse((m) => {
+                    if (!m.isMesh) return;
+                    const key = m.material.color.getHex();
+                    if (!byColour.has(key)) byColour.set(key, { material: m.material, geometries: [] });
+                    const geometry = m.geometry.clone().applyMatrix4(m.matrixWorld);
+                    byColour.get(key).geometries.push(geometry);
+                });
+            });
+            byColour.forEach((entry) => {
+                const merged = mergeGeometries(entry.geometries.map((geometry) => geometry.index ? geometry.toNonIndexed() : geometry), false);
+                entry.geometries.forEach((geometry) => geometry.dispose());
+                const m = new THREE.Mesh(merged, entry.material);
+                m.name = name;
+                m.userData.role = def.role;
+                m.userData.copies = copies.length;
+                g.add(m);
+            });
+        } else {
+            g.add(instance(def, p, p.x, p.y, p.z, p.rotation, p.scale, name));
+        }
         return g;
+    }
+
+    // the points of a row lie on the ground
+    function snapRow(p, exclude) {
+        p.points.forEach((q) => { q.y = round(surfaceHeight(q.x, q.z, exclude)); });
     }
 
     function rebuildPrefabs() {
@@ -480,26 +582,66 @@ export function createDesign(api) {
         applyColours();
         renderParts();
         renderPrefabList();
+        renderRowPoints();
         if (roadGroup.children.length) $("modelInfo").textContent = $("modelInfo").textContent.replace(/\d+ prefabs/, design.data.prefabs.length + " prefabs");
     }
 
-    function addPrefab(x, y, z) {
+    // only the one prefab is made again (while it is dragged)
+    function refreshPrefab(i) {
+        const old = prefabGroup.children[i];
+        if (!old) { rebuildPrefabs(); return; }
+        const g = makePrefab(design.data.prefabs[i], i);
+        prefabGroup.remove(old);
+        prefabGroup.children.splice(i, 0, g);
+        g.parent = prefabGroup;
+        g.traverse((m) => { if (m.isMesh) { m.userData.original = m.material; if (!$("colour").checked) return; m.material = roleMaterials[m.userData.role] || m.material; } });
+        g.updateMatrixWorld(true);
+        const parts = state.parts.get(g.name) || [];
+        parts.length = 0;
+        g.traverse((m) => { if (m.isMesh) parts.push(m); });
+        state.parts.set(g.name, parts);
+        if (design.selectedPrefab === i && !design.data.prefabs[i].row) { gizmo.attach(g); }
+        renderRowPoints();
+    }
+
+    function addPrefab(x, z) {
+        const y = surfaceHeight(x, z, null);
         const p = { type: design.prefabType, x: round(x), y: round(y), z: round(z), rotation: 0, scale: 1 };
         design.data.prefabs.push(p);
         rebuildPrefabs();
         selectPrefab(design.data.prefabs.length - 1);
+        commit();
+    }
+
+    function addRow(points) {
+        const p = { type: design.prefabType, row: true, points: points.map((q) => ({ x: round(q.x), y: 0, z: round(q.z) })), spacing: SPACING[design.prefabType] || 4, scale: 1 };
+        snapRow(p, null);
+        design.data.prefabs.push(p);
+        rebuildPrefabs();
+        selectPrefab(design.data.prefabs.length - 1);
+        commit();
     }
 
     function selectPrefab(i) {
         design.selectedNode = -1;
         design.selectedPrefab = i;
         gizmo.detach();
+        gizmo.enabled = false;
         renderNodes();
+        const p = design.data.prefabs[i];
         const g = prefabGroup.children[i];
-        if (g) { gizmo.attach(g); gizmo.setMode($("dsRotate").checked ? "rotate" : "translate"); gizmo.enabled = true; }
+        if (g && p && !p.row) {
+            // a ring to turn it; moving is by dragging the prefab itself
+            gizmo.attach(g);
+            gizmo.setMode("rotate");
+            gizmo.showX = gizmo.showZ = false;
+            gizmo.showY = true;
+            gizmo.enabled = true;
+        }
         fillNodeFields();
         fillPrefabFields();
         renderPrefabList();
+        renderRowPoints();
     }
 
     function deletePrefab() {
@@ -509,12 +651,48 @@ export function createDesign(api) {
         gizmo.detach();
         rebuildPrefabs();
         fillPrefabFields();
+        commit();
+    }
+
+    function duplicatePrefab() {
+        const p = design.selectedPrefab !== null ? design.data.prefabs[design.selectedPrefab] : null;
+        if (!p) return;
+        const copy = JSON.parse(JSON.stringify(p));
+        if (copy.row) copy.points.forEach((q) => { q.x += 5; q.z += 5; });
+        else { copy.x += 4 * Math.cos(copy.rotation || 0); copy.z -= 4 * Math.sin(copy.rotation || 0); copy.y = surfaceHeight(copy.x, copy.z, null); }
+        design.data.prefabs.push(copy);
+        rebuildPrefabs();
+        selectPrefab(design.data.prefabs.length - 1);
+        commit();
     }
 
     function fillPrefabFields() {
         const p = design.selectedPrefab !== null ? design.data.prefabs[design.selectedPrefab] : null;
         $("dsPrefabBox").style.display = p ? "" : "none";
-        if (p) { $("dsPrefabRotation").value = Math.round((p.rotation || 0) * 180 / Math.PI); $("dsPrefabScale").value = p.scale || 1; $("dsPrefabName").textContent = (PREFABS[p.type] || PREFABS.wall).label; }
+        if (!p) return;
+        const def = PREFABS[p.type] || PREFABS.wall;
+        const g = prefabGroup.children[design.selectedPrefab];
+        $("dsPrefabName").textContent = def.label + (p.row ? " (row of " + (g && g.children[0] ? g.children[0].userData.copies : 0) + ")" : "");
+        $("dsPrefabRotationBox").style.display = p.row ? "none" : "";
+        $("dsPrefabSpacingBox").style.display = p.row ? "" : "none";
+        $("dsPrefabRotation").value = Math.round((p.rotation || 0) * 180 / Math.PI);
+        $("dsPrefabSpacing").value = p.spacing || SPACING[p.type] || 4;
+        $("dsPrefabScale").value = p.scale || 1;
+    }
+
+    function renderRowPoints() {
+        rowGroup.clear();
+        const p = design.selectedPrefab !== null ? design.data.prefabs[design.selectedPrefab] : null;
+        if (!p || !p.row) return;
+        const scale = Math.max(1, state.markerScale || 1) * 0.6;
+        p.points.forEach((q, i) => {
+            const m = new THREE.Mesh(new THREE.SphereGeometry(scale, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffd04d }));
+            m.position.set(q.x, (q.y || 0) + 0.2, q.z);
+            m.userData.rowPoint = i;
+            rowGroup.add(m);
+        });
+        const curve = rowCurve(p);
+        if (curve) rowGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(64).map((v) => v.clone().setY(v.y + 0.2))), new THREE.LineBasicMaterial({ color: 0xffd04d })));
     }
 
     function renderPrefabList() {
@@ -524,82 +702,243 @@ export function createDesign(api) {
             const b = document.createElement("button");
             b.className = "small" + (type === design.prefabType ? " active" : "");
             b.innerHTML = "<span class='icon'>" + def.icon + "</span> " + def.label;
+            b.title = "Click on the ground to put one down, or drag a line to make a row of them";
             b.onclick = () => { design.prefabType = type; renderPrefabList(); api.setMode("prefab"); };
             list.appendChild(b);
         });
     }
 
-    // ---- pointer: adding nodes and prefabs, and picking them
+    // ---- pointer: dragging nodes, prefabs and row points over the ground, adding nodes, placing prefabs and drawing rows
     function pointerRay(event) {
         const rect = renderer.domElement.getBoundingClientRect();
         raycaster.setFromCamera(new THREE.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1), camera);
         return raycaster;
     }
-    function groundPoint(event) {
+    function groundPoint(event, exclude) {
         const ray = pointerRay(event);
-        const hits = ray.intersectObjects(roadGroup.children, true);
+        const targets = roadGroup.children.concat(prefabGroup.children.filter((g) => g !== exclude));
+        const hits = ray.intersectObjects(targets, true);
         if (hits.length) return hits[0].point;
         const plane = ray.intersectObject(pickPlane);
         return plane.length ? plane[0].point : null;
     }
-    let down = null;
-    renderer.domElement.addEventListener("pointerdown", (e) => { down = [e.clientX, e.clientY]; });
-    renderer.domElement.addEventListener("pointerup", (e) => {
-        if (!design.data || !down || dragging || e.button !== 0) { down = null; return; }
-        const moved = Math.abs(e.clientX - down[0]) + Math.abs(e.clientY - down[1]) > 4;
-        down = null;
-        if (moved) return;
+    // where the pointer is on a horizontal plane at a height (to drag something without it jumping with the terrain under the pointer)
+    function planePoint(event, y) {
+        const ray = pointerRay(event).ray;
+        return ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -y), new THREE.Vector3());
+    }
+    function prefabIndexOf(object) {
+        let g = object;
+        while (g.parent && g.parent !== prefabGroup) g = g.parent;
+        return prefabGroup.children.indexOf(g);
+    }
+    function under(event) {
+        const ray = pointerRay(event);
+        const node = ray.intersectObjects(nodeGroup.children.filter((o) => o.isMesh), false)[0];
+        if (node) return { node: node.object.userData.nodeIndex };
+        const point = ray.intersectObjects(rowGroup.children.filter((o) => o.isMesh), false)[0];
+        if (point) return { rowPoint: point.object.userData.rowPoint };
+        const prefab = ray.intersectObjects(prefabGroup.children, true)[0];
+        if (prefab) return { prefab: prefabIndexOf(prefab.object) };
+        return {};
+    }
+
+    let drag = null; // { kind, index, start, moved, offset, stroke }
+    renderer.domElement.addEventListener("pointerdown", (e) => {
+        if (!design.data || e.button !== 0 || dragging) return;
         const mode = api.getMode();
-        const ray = pointerRay(e);
-        // a node marker or a prefab under the pointer is selected in any design mode
-        const nodeHit = ray.intersectObjects(nodeGroup.children.filter((o) => o.isMesh), false)[0];
-        if (nodeHit && (mode === "node" || mode === "view")) { selectNode(nodeHit.object.userData.nodeIndex); return; }
-        const prefabHit = ray.intersectObjects(prefabGroup.children, true)[0];
-        if (prefabHit && (mode === "prefab" || mode === "view")) {
-            let g = prefabHit.object;
-            while (g.parent && g.parent !== prefabGroup) g = g.parent;
-            selectPrefab(prefabGroup.children.indexOf(g));
+        if (mode !== "node" && mode !== "prefab" && mode !== "view") return;
+        const hit = under(e);
+        drag = { start: [e.clientX, e.clientY], moved: false, stroke: null };
+        if (hit.node !== undefined && mode !== "prefab") {
+            if (design.selectedNode !== hit.node) selectNode(hit.node);
+            const n = design.data.nodes[hit.node];
+            drag.kind = "node"; drag.index = hit.node; drag.y = n.y;
+            const p = planePoint(e, n.y);
+            drag.offset = p ? { x: n.x - p.x, z: n.z - p.z } : { x: 0, z: 0 };
+        } else if (hit.rowPoint !== undefined) {
+            const p = design.data.prefabs[design.selectedPrefab];
+            const q = p.points[hit.rowPoint];
+            drag.kind = "rowPoint"; drag.index = hit.rowPoint; drag.y = q.y || 0;
+            const pp = planePoint(e, drag.y);
+            drag.offset = pp ? { x: q.x - pp.x, z: q.z - pp.z } : { x: 0, z: 0 };
+        } else if (hit.prefab !== undefined && hit.prefab >= 0 && mode !== "node") {
+            if (design.selectedPrefab !== hit.prefab) selectPrefab(hit.prefab);
+            const p = design.data.prefabs[hit.prefab];
+            drag.kind = "prefab"; drag.index = hit.prefab;
+            drag.y = p.row ? (p.points[0].y || 0) : p.y;
+            const pp = planePoint(e, drag.y);
+            const ox = p.row ? p.points[0].x : p.x, oz = p.row ? p.points[0].z : p.z;
+            drag.offset = pp ? { x: ox - pp.x, z: oz - pp.z } : { x: 0, z: 0 };
+            drag.origin = p.row ? p.points.map((q) => ({ x: q.x, z: q.z })) : null;
+        } else if (mode === "prefab") {
+            drag.kind = "draw"; drag.stroke = [];
+            const g = groundPoint(e, null);
+            if (g) drag.stroke.push({ x: g.x, z: g.z });
+        } else if (mode === "node") {
+            drag.kind = "add";
+        } else {
+            drag = null;
             return;
         }
-        if (mode === "node") {
-            const p = groundPoint(e);
-            if (p) addNode(p.x, p.z);
-        } else if (mode === "prefab") {
-            const p = groundPoint(e);
-            if (p) addPrefab(p.x, p.y, p.z);
+        controls.enabled = false;
+        renderer.domElement.setPointerCapture(e.pointerId);
+    });
+
+    renderer.domElement.addEventListener("pointermove", (e) => {
+        if (!drag) {
+            // the cursor says what can be dragged
+            if (design.data && !dragging) {
+                const mode = api.getMode();
+                const hit = (mode === "node" || mode === "prefab" || mode === "view") ? under(e) : {};
+                renderer.domElement.style.cursor = (hit.node !== undefined || hit.rowPoint !== undefined || (hit.prefab !== undefined && hit.prefab >= 0)) ? "grab"
+                    : (mode === "node" || mode === "prefab" ? "crosshair" : "");
+            }
+            return;
+        }
+        if (Math.abs(e.clientX - drag.start[0]) + Math.abs(e.clientY - drag.start[1]) > 3) drag.moved = true;
+        if (!drag.moved) return;
+        renderer.domElement.style.cursor = "grabbing";
+        if (drag.kind === "node") {
+            const p = planePoint(e, drag.y);
+            if (!p) return;
+            const n = design.data.nodes[drag.index];
+            n.x = round(p.x + drag.offset.x); n.z = round(p.z + drag.offset.z);
+            scheduleRebuild();
+        } else if (drag.kind === "rowPoint") {
+            const p = planePoint(e, drag.y);
+            if (!p) return;
+            const row = design.data.prefabs[design.selectedPrefab];
+            const q = row.points[drag.index];
+            q.x = round(p.x + drag.offset.x); q.z = round(p.z + drag.offset.z);
+            q.y = round(surfaceHeight(q.x, q.z, prefabGroup.children[design.selectedPrefab]));
+            refreshPrefab(design.selectedPrefab);
+        } else if (drag.kind === "prefab") {
+            const pp = planePoint(e, drag.y);
+            if (!pp) return;
+            const p = design.data.prefabs[drag.index];
+            const own = prefabGroup.children[drag.index];
+            if (p.row) {
+                const dx = pp.x + drag.offset.x - drag.origin[0].x, dz = pp.z + drag.offset.z - drag.origin[0].z;
+                p.points.forEach((q, i) => { q.x = round(drag.origin[i].x + dx); q.z = round(drag.origin[i].z + dz); });
+                snapRow(p, own);
+            } else {
+                p.x = round(pp.x + drag.offset.x); p.z = round(pp.z + drag.offset.z);
+                p.y = round(surfaceHeight(p.x, p.z, own)); // snaps to the ground, the road or what it is put on
+            }
+            refreshPrefab(drag.index);
+        } else if (drag.kind === "draw") {
+            const g = groundPoint(e, null);
+            if (!g) return;
+            const last = drag.stroke[drag.stroke.length - 1];
+            if (!last || Math.hypot(g.x - last.x, g.z - last.z) > 1.5) {
+                drag.stroke.push({ x: g.x, z: g.z });
+                previewStroke(drag.stroke);
+            }
         }
     });
+
+    renderer.domElement.addEventListener("pointerup", (e) => {
+        if (!drag) return;
+        const d = drag;
+        drag = null;
+        controls.enabled = true;
+        renderer.domElement.style.cursor = "";
+        strokeLine.visible = false;
+        if (d.kind === "add") {
+            if (!d.moved) { const g = groundPoint(e, null); if (g) addNode(g.x, g.z); }
+        } else if (d.kind === "draw") {
+            if (!d.moved || strokeLength(d.stroke) < 2) { const g = groundPoint(e, null); if (g) addPrefab(g.x, g.z); }
+            else addRow(simplify(d.stroke, 1.5));
+        } else if (d.moved) {
+            if (d.kind === "node") rebuild(true);
+            commit();
+        }
+    });
+
+    // the line that is being drawn
+    const strokeLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffd04d }));
+    strokeLine.visible = false;
+    scene.add(strokeLine);
+    function previewStroke(stroke) {
+        strokeLine.geometry.dispose();
+        strokeLine.geometry = new THREE.BufferGeometry().setFromPoints(stroke.map((q) => new THREE.Vector3(q.x, surfaceHeight(q.x, q.z, null) + 0.3, q.z)));
+        strokeLine.visible = true;
+    }
+    function strokeLength(stroke) {
+        let l = 0;
+        for (let i = 1; i < stroke.length; i++) l += Math.hypot(stroke[i].x - stroke[i - 1].x, stroke[i].z - stroke[i - 1].z);
+        return l;
+    }
+    // fewer points that still follow the line (Douglas-Peucker)
+    function simplify(points, tolerance) {
+        if (points.length <= 2) return points.slice();
+        const a = points[0], b = points[points.length - 1];
+        let far = 0, index = 0;
+        for (let i = 1; i < points.length - 1; i++) {
+            const p = points[i];
+            const dx = b.x - a.x, dz = b.z - a.z;
+            const len2 = dx * dx + dz * dz || 1;
+            const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / len2));
+            const d = Math.hypot(a.x + dx * t - p.x, a.z + dz * t - p.z);
+            if (d > far) { far = d; index = i; }
+        }
+        if (far <= tolerance) return [a, b];
+        return simplify(points.slice(0, index + 1), tolerance).slice(0, -1).concat(simplify(points.slice(index), tolerance));
+    }
+
+    gizmo.addEventListener("objectChange", () => {
+        const o = gizmo.object;
+        if (!o) return;
+        if (o.userData.nodeIndex !== undefined) {
+            const n = design.data.nodes[o.userData.nodeIndex];
+            n.y = round(o.position.y - 0.3);
+            fillNodeFields();
+            scheduleRebuild();
+        } else if (o.userData.prefab) {
+            const p = o.userData.prefab;
+            p.rotation = round(o.rotation.y);
+            fillPrefabFields();
+        }
+    });
+    gizmo.addEventListener("dragging-changed", (e) => { if (!e.value && gizmo.object) { if (gizmo.object.userData.nodeIndex !== undefined) rebuild(true); commit(); } });
+
     window.addEventListener("keydown", (e) => {
         if (!design.data || e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.target.tagName === "TEXTAREA") return;
-        if (e.key === "Delete" || e.key === "Backspace") { if (design.selectedPrefab !== null) deletePrefab(); else if (design.selectedNode >= 0 && design.data.nodes.length > 3) deleteNode(); }
-        if (e.key === "Escape") { design.selectedNode = -1; design.selectedPrefab = null; gizmo.detach(); renderNodes(); fillNodeFields(); fillPrefabFields(); }
-        if ((e.key === "r" || e.key === "R") && design.selectedPrefab !== null) { $("dsRotate").checked = !$("dsRotate").checked; gizmo.setMode($("dsRotate").checked ? "rotate" : "translate"); }
+        const ctrl = e.ctrlKey || e.metaKey;
+        if (ctrl && (e.key === "z" || e.key === "Z")) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+        if (ctrl && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); return; }
+        if (ctrl && (e.key === "d" || e.key === "D")) { e.preventDefault(); duplicatePrefab(); return; }
+        if (e.key === "Delete" || e.key === "Backspace") { if (design.selectedPrefab !== null) deletePrefab(); else if (design.selectedNode >= 0) deleteNode(); }
+        if (e.key === "Escape") {
+            if (design.selectedNode >= 0 || design.selectedPrefab !== null) { design.selectedNode = -1; design.selectedPrefab = null; gizmo.detach(); rowGroup.clear(); renderNodes(); fillNodeFields(); fillPrefabFields(); }
+            else api.setMode("view");
+        }
     });
 
     // ---- the drawer
-    $("dsHeight").addEventListener("input", () => { if (design.selectedNode >= 0) { design.data.nodes[design.selectedNode].y = parseFloat($("dsHeight").value) || 0; scheduleRebuild(); } });
-    $("dsNodeWidth").addEventListener("input", () => { if (design.selectedNode >= 0) { design.data.nodes[design.selectedNode].width = Math.max(3, parseFloat($("dsNodeWidth").value) || 12); scheduleRebuild(); } });
-    $("dsWidth").addEventListener("change", () => { if (!design.data) return; const w = Math.max(3, parseFloat($("dsWidth").value) || 12); design.data.nodes.forEach((n) => { n.width = w; }); rebuild(); fillNodeFields(); });
-    $("dsClosed").addEventListener("change", () => { if (design.data) { design.data.closed = $("dsClosed").checked; rebuild(); } });
-    $("dsFlatten").onclick = () => { if (design.data) { design.data.nodes.forEach((n) => { n.y = 0; }); rebuild(); fillNodeFields(); } };
+    let fieldTimer = 0;
+    const commitSoon = () => { clearTimeout(fieldTimer); fieldTimer = setTimeout(commit, 600); };
+    $("dsHeight").addEventListener("input", () => { if (design.selectedNode >= 0) { design.data.nodes[design.selectedNode].y = parseFloat($("dsHeight").value) || 0; scheduleRebuild(); commitSoon(); } });
+    $("dsNodeWidth").addEventListener("input", () => { if (design.selectedNode >= 0) { design.data.nodes[design.selectedNode].width = Math.max(3, parseFloat($("dsNodeWidth").value) || 12); scheduleRebuild(); commitSoon(); } });
+    $("dsWidth").addEventListener("change", () => { if (!design.data) return; const w = Math.max(3, parseFloat($("dsWidth").value) || 12); design.data.nodes.forEach((n) => { n.width = w; }); rebuild(); fillNodeFields(); commit(); });
+    $("dsClosed").addEventListener("change", () => { if (design.data) { design.data.closed = $("dsClosed").checked; rebuild(); commit(); } });
+    $("dsFlatten").onclick = () => { if (design.data) { design.data.nodes.forEach((n) => { n.y = 0; }); rebuild(); fillNodeFields(); commit(); } };
     $("dsDeleteNode").onclick = deleteNode;
     $("dsAddNode").onclick = () => api.setMode("node");
     $("dsDeletePrefab").onclick = deletePrefab;
-    $("dsPrefabRotation").addEventListener("input", () => { const p = design.data.prefabs[design.selectedPrefab]; if (p) { p.rotation = (parseFloat($("dsPrefabRotation").value) || 0) * Math.PI / 180; prefabGroup.children[design.selectedPrefab].rotation.y = p.rotation; } });
-    $("dsPrefabScale").addEventListener("input", () => { const p = design.data.prefabs[design.selectedPrefab]; if (p) { p.scale = Math.max(0.1, parseFloat($("dsPrefabScale").value) || 1); prefabGroup.children[design.selectedPrefab].scale.setScalar(p.scale); } });
-    $("dsRotate").addEventListener("change", () => { if (gizmo.object && gizmo.object.userData.prefab) gizmo.setMode($("dsRotate").checked ? "rotate" : "translate"); });
-    $("dsDuplicate").onclick = () => {
-        const p = design.selectedPrefab !== null ? design.data.prefabs[design.selectedPrefab] : null;
-        if (!p) return;
-        design.data.prefabs.push(Object.assign({}, p, { x: p.x + 4 * Math.cos(p.rotation || 0), z: p.z + 4 * Math.sin(p.rotation || 0) }));
-        rebuildPrefabs();
-        selectPrefab(design.data.prefabs.length - 1);
-    };
+    $("dsDuplicate").onclick = duplicatePrefab;
+    $("dsUndo").onclick = undo;
+    $("dsRedo").onclick = redo;
+    $("dsPrefabRotation").addEventListener("input", () => { const p = design.data.prefabs[design.selectedPrefab]; if (p && !p.row) { p.rotation = (parseFloat($("dsPrefabRotation").value) || 0) * Math.PI / 180; refreshPrefab(design.selectedPrefab); commitSoon(); } });
+    $("dsPrefabSpacing").addEventListener("input", () => { const p = design.data.prefabs[design.selectedPrefab]; if (p && p.row) { p.spacing = Math.max(0.3, parseFloat($("dsPrefabSpacing").value) || 1); refreshPrefab(design.selectedPrefab); fillPrefabFields(); commitSoon(); } });
+    $("dsPrefabScale").addEventListener("input", () => { const p = design.data.prefabs[design.selectedPrefab]; if (p) { p.scale = Math.max(0.1, parseFloat($("dsPrefabScale").value) || 1); refreshPrefab(design.selectedPrefab); commitSoon(); } });
     document.querySelectorAll("#drawer .tab").forEach((b) => b.addEventListener("click", () => {
         document.querySelectorAll("#drawer .tab").forEach((t) => t.classList.toggle("active", t === b));
         document.querySelectorAll("#drawer .page").forEach((p) => { p.style.display = p.dataset.page === b.dataset.tab ? "" : "none"; });
+        if (b.dataset.tab === "prefabs") api.setMode("prefab"); else if (b.dataset.tab === "track") api.setMode("node");
     }));
-    $("drawerToggle").onclick = () => $("drawer").classList.toggle("collapsed");
+    $("drawerToggle").onclick = () => { $("drawer").classList.toggle("collapsed"); $("drawerToggle").textContent = $("drawer").classList.contains("collapsed") ? "▴" : "▾"; };
 
     // ---- enable, disable, save, load
     function enable(data) {
@@ -613,11 +952,15 @@ export function createDesign(api) {
         $("dsWidth").value = design.data.nodes[0] ? design.data.nodes[0].width : 12;
         $("dsClosed").checked = design.data.closed !== false;
         renderPrefabList();
-        rebuild();
+        rebuild(true);
+        design.data.prefabs.forEach((p) => { if (p.row) snapRow(p, null); });
         rebuildPrefabs();
         fillNodeFields();
         fillPrefabFields();
         api.frameTrack();
+        history.past = [snapshot()];
+        history.future = [];
+        updateUndoButtons();
     }
 
     function disable() {
@@ -625,6 +968,7 @@ export function createDesign(api) {
         gizmo.detach();
         gizmo.enabled = false;
         nodeGroup.clear();
+        rowGroup.clear();
         roadGroup.clear();
         prefabGroup.clear();
         trackGroup.remove(roadGroup);
@@ -658,8 +1002,8 @@ export function createDesign(api) {
         enable, disable, toJSON, exportGlb,
         active: () => !!design.data,
         roles: () => { const r = {}; roadGroup.children.forEach((m) => { r[m.name] = m.userData.role; }); prefabGroup.children.forEach((g) => { r[g.name] = state.roles[g.name]; }); return r; },
-        hudText: (mode) => mode === "node" ? "Add node: click on the ground to add a node between the two nearest nodes; drag the arrows to move a node. Delete removes it."
-            : mode === "prefab" ? "Place prefab: click on the ground to put down a " + (PREFABS[design.prefabType] || PREFABS.wall).label.toLowerCase() + "; drag the arrows to move it, R turns the gizmo to rotation, Delete removes it."
-            : null
+        hudText: (mode) => mode === "node" ? "Nodes: click on the ground to add one between the two nearest nodes, drag a node to move it, the arrow for its height. Delete removes it, Ctrl+Z undoes."
+            : mode === "prefab" ? "Prefabs: click to put down a " + (PREFABS[design.prefabType] || PREFABS.wall).label.toLowerCase() + ", or drag a line to make a row of them. Drag one to move it (it sits on what is under it), the ring turns it, Delete removes it."
+            : (design.data ? "Look: drag to turn, right mouse button to move, scroll to zoom. Nodes and prefabs can be dragged here too." : null)
     };
 }
