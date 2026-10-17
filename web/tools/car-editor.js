@@ -10,6 +10,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
 const $ = (id) => document.getElementById(id);
@@ -69,6 +70,30 @@ scene.add(helpers);
 const cameraMarkers = new THREE.Group(); // where the cameras of the game are
 scene.add(cameraMarkers);
 
+// the layers panel (see further down): what can be selected, and the gizmo that moves the cameras and the model
+const LAYERS = [
+    { group: "Cameras" },
+    { id: "chase", label: "1 Fixed camera", color: "#4d8dff" },
+    { id: "follow", label: "2 Follow camera", color: "#37d67a" },
+    { id: "cockpit", label: "3 Cockpit camera", color: "#ff9f43" },
+    { group: "Car" },
+    { id: "model", label: "Model (offset)", color: "#c6cfdb" },
+    { id: "steering", label: "Steering wheel", color: "#e0b040" },
+    { group: "Wheels" },
+    { id: "wFR", label: "Front right", color: "#ff6b6b" },
+    { id: "wFL", label: "Front left", color: "#5ec8ff" },
+    { id: "wRR", label: "Rear right", color: "#ffd04d" },
+    { id: "wRL", label: "Rear left", color: "#8ee26b" }
+];
+const layers = { selected: null, dragging: false };
+const gizmoTargets = { chase: new THREE.Object3D(), follow: new THREE.Object3D(), cockpit: new THREE.Object3D(), model: pivot };
+[gizmoTargets.chase, gizmoTargets.follow, gizmoTargets.cockpit].forEach((o) => scene.add(o));
+const gizmo = new TransformControls(camera, renderer.domElement);
+gizmo.setSize(0.8);
+gizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !event.value; layers.dragging = event.value; if (!event.value) updateCameraMarkers(); });
+gizmo.addEventListener("objectChange", () => gizmoMoved());
+scene.add(typeof gizmo.getHelper === "function" ? gizmo.getHelper() : gizmo);
+
 function resize() {
     const w = view.clientWidth, h = view.clientHeight;
     renderer.setSize(w, h, false);
@@ -76,10 +101,12 @@ function resize() {
     camera.updateProjectionMatrix();
 }
 window.addEventListener("resize", resize);
+new ResizeObserver(resize).observe(view);
 resize();
 (function loop() {
     requestAnimationFrame(loop);
     renderer.render(scene, camera);
+    renderThumbnail();
 })();
 
 // ---- messages
@@ -517,10 +544,12 @@ function updateCameraMarkers() {
     cameraMarkers.clear();
     const c = readCameras();
     const r = (num("tyre") || 0.65) / 2;
-    const dot = (color, x, y, z) => {
-        const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 12), new THREE.MeshBasicMaterial({ color }));
+    const dot = (color, x, y, z, layer) => {
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(layer === layers.selected ? 0.13 : 0.09, 16, 12), new THREE.MeshBasicMaterial({ color }));
         mesh.position.set(x, y, z);
+        mesh.userData.layer = layer;
         cameraMarkers.add(mesh);
+        if (layer && gizmoTargets[layer] && !layers.dragging) gizmoTargets[layer].position.set(x, y, z);
         return mesh.position;
     };
     const line = (color, a, b) => {
@@ -528,10 +557,10 @@ function updateCameraMarkers() {
     };
     // the road is r below the origin of the model; the cameras behind the car look at the middle of it
     if (Number.isFinite(c.chase.distance) && Number.isFinite(c.chase.height)) {
-        line(0x4d8dff, dot(0x4d8dff, 0, c.chase.height - r, -c.chase.distance), new THREE.Vector3(0, 0, 0));
+        line(0x4d8dff, dot(0x4d8dff, 0, c.chase.height - r, -c.chase.distance, "chase"), new THREE.Vector3(0, 0, 0));
     }
     if (Number.isFinite(c.follow.distance) && Number.isFinite(c.follow.height)) {
-        line(0x37d67a, dot(0x37d67a, 0, c.follow.height - r, -c.follow.distance), new THREE.Vector3(0, (c.follow.look_height || 0) - r, 0));
+        line(0x37d67a, dot(0x37d67a, 0, c.follow.height - r, -c.follow.distance, "follow"), new THREE.Vector3(0, (c.follow.look_height || 0) - r, 0));
         // where the camera is at full speed: closer, in the measure that the field of view is wider
         const k = 1 + c.follow.dolly * (Math.tan(c.follow.fov_standing * Math.PI / 360) / Math.tan(c.follow.fov_fast * Math.PI / 360) - 1);
         if (Number.isFinite(k)) {
@@ -541,9 +570,167 @@ function updateCameraMarkers() {
     }
     const p = c.cockpit.position;
     if (p.every(Number.isFinite)) {
-        line(0xff9f43, dot(0xff9f43, p[0], p[1], p[2]), new THREE.Vector3(p[0], p[1], p[2] + 2));
+        line(0xff9f43, dot(0xff9f43, p[0], p[1], p[2], "cockpit"), new THREE.Vector3(p[0], p[1], p[2] + 2));
     }
+    renderLayers();
 }
+
+// ---- the layers panel: the cameras, the model and the wheels, with a gizmo to move the cameras and the model, and a thumbnail
+// of what the selected camera sees
+
+// the fields follow the gizmo
+function gizmoMoved() {
+    const id = layers.selected;
+    const r = (num("tyre") || 0.65) / 2;
+    const fix = (v) => Math.round(v * 100) / 100;
+    if (id === "chase" || id === "follow") {
+        const p = gizmoTargets[id].position;
+        p.x = 0;
+        if (p.z > -0.5) p.z = -0.5;
+        $(id === "chase" ? "camChaseDist" : "camFolDist").value = fix(-p.z);
+        $(id === "chase" ? "camChaseHeight" : "camFolHeight").value = fix(p.y + r);
+    } else if (id === "cockpit") {
+        const p = gizmoTargets.cockpit.position;
+        $("camCockX").value = fix(p.x); $("camCockY").value = fix(p.y); $("camCockZ").value = fix(p.z);
+    } else if (id === "model") {
+        const p = pivot.position;
+        $("offsetX").value = fix(p.x); $("offsetY").value = fix(p.y); $("offsetZ").value = fix(p.z);
+        applyTransform();
+        return;
+    }
+    updateCameraMarkers();
+}
+
+function selectLayer(id) {
+    layers.selected = layers.selected === id ? null : id;
+    const sel = layers.selected;
+    gizmo.detach();
+    if (sel && gizmoTargets[sel]) {
+        if (sel === "model" && !state.root) { layers.selected = null; }
+        else {
+            gizmo.attach(gizmoTargets[sel]);
+            gizmo.showX = sel !== "chase" && sel !== "follow"; // the cameras behind the car are in the middle
+            gizmo.showY = gizmo.showZ = true;
+        }
+    } else if (sel && sel.charAt(0) === "w") {
+        const centres = wheelCenters();
+        const c = centres && centres[sel.substring(1)];
+        if (c) { controls.target.copy(c); controls.update(); }
+    } else if (sel === "steering") {
+        const node = state.nodes.find((n) => /steeringwheel|steerwheel/i.test(n.name.replace(/[^a-z0-9]/gi, "")));
+        const object = node && state.root ? state.root.getObjectByName(node.name) : null;
+        if (object) { const box = new THREE.Box3().setFromObject(object); controls.target.copy(box.getCenter(new THREE.Vector3())); controls.update(); }
+    }
+    updateCameraMarkers();
+    updateThumbnail();
+}
+
+function renderLayers() {
+    const list = $("layerList");
+    list.innerHTML = "";
+    const centres = wheelCenters();
+    LAYERS.forEach((l) => {
+        if (l.group) {
+            const g = document.createElement("div");
+            g.className = "group";
+            g.textContent = l.group;
+            list.appendChild(g);
+            return;
+        }
+        const row = document.createElement("div");
+        row.className = "layer" + (l.id === layers.selected ? " selected" : "");
+        const dot = document.createElement("i");
+        dot.style.background = l.color;
+        const text = document.createElement("span");
+        text.textContent = l.label;
+        row.append(dot, text);
+        const meta = document.createElement("span");
+        meta.className = "meta";
+        if (l.id === "chase") meta.textContent = num("camChaseDist") + " m, " + num("camChaseFov") + "°";
+        if (l.id === "follow") meta.textContent = num("camFolDist") + " m, " + num("camFolFovStand") + "°";
+        if (l.id === "cockpit") meta.textContent = num("camCockFov") + "°";
+        if (l.id === "model") { meta.textContent = state.root ? "" : "none"; if (!state.root) row.classList.add("dim"); }
+        if (l.id.charAt(0) === "w") { const has = centres && centres[l.id.substring(1)]; if (!has) row.classList.add("dim"); meta.textContent = has ? "" : "not set"; }
+        if (l.id === "steering") { const has = state.nodes.some((n) => /steeringwheel|steerwheel/i.test(n.name.replace(/[^a-z0-9]/gi, ""))); if (!has) row.classList.add("dim"); meta.textContent = has ? "" : "none"; }
+        row.appendChild(meta);
+        row.addEventListener("click", () => selectLayer(l.id));
+        list.appendChild(row);
+    });
+}
+
+// a click on a marker in the view selects its layer
+const pickRay = new THREE.Raycaster();
+let pickDown = null;
+renderer.domElement.addEventListener("pointerdown", (e) => { pickDown = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener("pointerup", (e) => {
+    if (!pickDown || layers.dragging || Math.abs(e.clientX - pickDown[0]) + Math.abs(e.clientY - pickDown[1]) > 4) { pickDown = null; return; }
+    pickDown = null;
+    const rect = renderer.domElement.getBoundingClientRect();
+    pickRay.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
+    const hit = pickRay.intersectObjects(cameraMarkers.children, false).find((h) => h.object.userData.layer);
+    if (hit && hit.object.userData.layer !== layers.selected) selectLayer(hit.object.userData.layer);
+});
+
+// the thumbnail: a small renderer in the panel that looks through the selected camera, the way the game does
+const thumbRenderer = new THREE.WebGLRenderer({ antialias: true });
+thumbRenderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+thumbRenderer.setSize(246, 138, false);
+thumbRenderer.domElement.style.display = "none";
+$("thumb").insertBefore(thumbRenderer.domElement, $("thumbLabel"));
+const thumbCamera = new THREE.PerspectiveCamera(45, 246 / 138, 0.05, 300);
+
+function updateThumbnail() {
+    const id = layers.selected;
+    const isCamera = id === "chase" || id === "follow" || id === "cockpit";
+    thumbRenderer.domElement.style.display = isCamera ? "block" : "none";
+    if (!isCamera) { $("thumbLabel").textContent = "Select a camera to see what it sees."; return; }
+    const c = readCameras();
+    const r = (num("tyre") || 0.65) / 2;
+    if (id === "chase") {
+        thumbCamera.position.set(0, c.chase.height - r, -c.chase.distance);
+        thumbCamera.rotation.set(0, Math.PI, 0); // looks along the car
+        thumbCamera.fov = c.chase.fov;
+        $("thumbLabel").textContent = "1 Fixed camera, " + c.chase.distance + " m behind, " + c.chase.height + " m high, FOV " + c.chase.fov + "°";
+    } else if (id === "follow") {
+        thumbCamera.position.set(0, c.follow.height - r, -c.follow.distance);
+        thumbCamera.lookAt(0, (c.follow.look_height || 0) - r, 0);
+        thumbCamera.fov = c.follow.fov_standing;
+        $("thumbLabel").textContent = "2 Follow camera at a standstill, FOV " + c.follow.fov_standing + "° (" + c.follow.fov_fast + "° at full speed)";
+    } else {
+        const p = c.cockpit.position;
+        thumbCamera.position.set(p[0], p[1], p[2]);
+        thumbCamera.rotation.set(0, Math.PI, 0);
+        thumbCamera.fov = c.cockpit.fov;
+        $("thumbLabel").textContent = "3 Cockpit camera, FOV " + c.cockpit.fov + "°";
+    }
+    thumbCamera.updateProjectionMatrix();
+}
+
+function renderThumbnail() {
+    const id = layers.selected;
+    if (id !== "chase" && id !== "follow" && id !== "cockpit") return;
+    // without the markers and the gizmo, the way the game shows it
+    cameraMarkers.visible = false;
+    const helper = typeof gizmo.getHelper === "function" ? gizmo.getHelper() : gizmo;
+    const wasVisible = helper.visible;
+    helper.visible = false;
+    thumbRenderer.render(scene, thumbCamera);
+    helper.visible = wasVisible;
+    cameraMarkers.visible = true;
+}
+
+// the panel: hide, show, and resize by dragging its edge
+$("layersHide").addEventListener("click", () => { $("layers").classList.add("hidden"); $("layersOpen").style.display = ""; });
+$("layersShow").addEventListener("click", () => { $("layers").classList.remove("hidden"); $("layersOpen").style.display = "none"; });
+(function () {
+    const handle = $("layersHandle"), panel = $("layers");
+    let startX = 0, startWidth = 0;
+    const move = (e) => { panel.style.width = Math.max(190, Math.min(520, startWidth + (startX - e.clientX))) + "px"; };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    handle.addEventListener("pointerdown", (e) => { startX = e.clientX; startWidth = panel.offsetWidth; window.addEventListener("pointermove", move); window.addEventListener("pointerup", up); e.preventDefault(); });
+})();
+document.querySelectorAll(".cam").forEach((el) => el.addEventListener("input", updateThumbnail));
+window.addEventListener("keydown", (e) => { if (e.key === "Escape" && layers.selected && !document.querySelector("dialog[open]")) selectLayer(layers.selected); });
 
 // ---- the engine sound (the combustion model of EngineSim.js), with a preview
 

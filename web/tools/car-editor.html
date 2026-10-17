@@ -237,7 +237,18 @@
         <button id="soundSweep" class="small ghost">Rev</button>
         <label><input type="checkbox" id="soundInside"> cockpit</label>
     </div>
+    <div class="float top-right" id="layersOpen" style="display:none"><button class="small ghost" id="layersShow">Layers</button></div>
 </div>
+
+<aside id="layers">
+    <div class="handle" id="layersHandle" title="Drag to resize"></div>
+    <div class="head"><h3>Layers</h3><button class="close" id="layersHide" title="Hide">×</button></div>
+    <div id="layerList"></div>
+    <div id="thumb">
+        <div class="label" id="thumbLabel">Select a camera to see what it sees.</div>
+    </div>
+    <p class="hint" id="layerHint">Select a camera or the model and drag the arrows in the view to move it. The fields follow.</p>
+</aside>
 
 <dialog id="dlgCurve">
     <div class="head"><h3>Torque at full throttle</h3><button class="close" data-close>×</button></div>
