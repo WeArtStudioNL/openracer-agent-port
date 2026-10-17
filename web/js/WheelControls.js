@@ -42,8 +42,12 @@ var WheelControls = (function() {
 
     var DEAD_ZONE = 0.03;      // ignore tiny pedal movements
     var STEER_RATIO = 0.5;     // fraction of the wheel's range that gives full lock on the car
-    var SETTLE_MS = 500;       // time to read resting axis values at the start of a calibration step
-    var HOLD_MS = 600;         // time to measure the extreme value after movement is detected
+    var SETTLE_MS = 500;       // the device must be quiet this long before resting values are read
+    var MAX_SETTLE_MS = 4000;  // give up waiting for a quiet device (noisy axes) after this long
+    var QUIET_DELTA = 0.02;    // axis changes below this count as quiet
+    var HOLD_MS = 600;         // an axis must be held still this long before its extreme is accepted
+    var MAX_HOLD_MS = 4000;    // accept the extreme after this long even if the axis keeps jittering
+    var STABLE_DELTA = 0.05;   // axis changes below this count as holding still
     var DETECT_DELTA = 0.5;    // minimal axis movement to count as input during calibration
     var REVERSE_MAX_MPH = 3;   // sequential shift into reverse is only allowed below this speed
 
@@ -187,6 +191,13 @@ var WheelControls = (function() {
             usedAxes: [],
             usedButtons: [],
             baseline: [],
+            prevAxes: [],
+            lastMove: [],
+            ignored: [],
+            quietSince: Date.now(),
+            waiting: false,
+            baselineReady: false,
+            lastDetected: "",
             prevButtons: [],
             detect: null,
             stepStart: Date.now()
@@ -217,13 +228,18 @@ var WheelControls = (function() {
         for(var b = 0; b < pad.buttons.length; b++) {
             if(isPressed(pad, b)) pressed.push(b);
         }
-        overlay.textContent = calibration.text + "\naxes " + axes.join("  ") + "\nbuttons " + (pressed.join(",") || "-");
+        overlay.textContent = calibration.text + (calibration.waiting ? "\n(keep the wheel and pedals still...)" : "") +
+            "\naxes " + axes.join("  ") + "\nbuttons " + (pressed.join(",") || "-") +
+            (calibration.lastDetected ? "\nlast: " + calibration.lastDetected : "");
     }
 
     function nextStep(skipHShifter) {
         calibration.step++;
         calibration.detect = null;
         calibration.stepStart = Date.now();
+        calibration.quietSince = calibration.stepStart;
+        calibration.baselineReady = false;
+        calibration.waiting = false;
         while(skipHShifter && calibration.step < calibration.steps.length && calibration.steps[calibration.step].hshifter) {
             calibration.step++;
         }
@@ -252,6 +268,8 @@ var WheelControls = (function() {
             profile[step.id] = { axis: detect.axis, rest: detect.rest, full: detect.extreme };
         }
         if(calibration.usedAxes.indexOf(detect.axis) < 0) calibration.usedAxes.push(detect.axis);
+        calibration.lastDetected = step.id + " = axis " + detect.axis + " (rest " + detect.rest.toFixed(2) +
+            ", end " + detect.extreme.toFixed(2) + ")";
     }
 
     function commitButton(step, index) {
@@ -278,26 +296,32 @@ var WheelControls = (function() {
         var c = calibration;
         var now = Date.now();
         var axes = Array.prototype.slice.call(pad.axes);
+        var i;
 
-        // Keep reading resting values while the device settles
-        if(now - c.stepStart < SETTLE_MS) {
-            c.baseline = axes;
-            return;
-        }
-
+        // Track an axis that started moving until it has been held still, so that the
+        // measured extreme is the real end of its travel and not a point along the way.
         if(c.detect) {
             var d = c.detect;
             var v = axes[d.axis];
             if(Math.abs(v - d.rest) > Math.abs(d.extreme - d.rest)) d.extreme = v;
-            if(now - d.start > HOLD_MS) {
-                commitAxis(step, d);
-                nextStep(false);
+            if(Math.abs(v - d.lastValue) > STABLE_DELTA) {
+                d.lastValue = v;
+                d.stableSince = now;
+            }
+            if(now - d.stableSince > HOLD_MS || now - d.start > MAX_HOLD_MS) {
+                if(Math.abs(v - d.rest) >= DETECT_DELTA) {
+                    commitAxis(step, d);
+                    nextStep(false);
+                } else {
+                    // The axis went back to rest: it was a spike, not the requested input
+                    c.detect = null;
+                    c.baselineReady = false;
+                    c.quietSince = now;
+                }
             }
             return;
         }
 
-        var best = -1;
-        var bestDelta = DETECT_DELTA;
         if(step.id === "steerRight") {
             // The steering axis must move away from the left extreme, past the centre
             // measured when the wheel was released at the start of the left step
@@ -305,12 +329,45 @@ var WheelControls = (function() {
             var centre = steer.rest;
             var v2 = axes[steer.axis];
             if((v2 - centre) * (steer.left - centre) < 0 && Math.abs(v2 - centre) > Math.abs(steer.left - centre) / 2) {
-                c.detect = { axis: steer.axis, rest: centre, extreme: v2, start: now };
+                c.detect = { axis: steer.axis, rest: centre, extreme: v2, lastValue: v2, start: now, stableSince: now };
             }
             return;
         }
+
+        // Read the resting values only once the whole device is quiet. This skips axes
+        // that are still moving from the previous step (a released pedal or wheel).
+        // Once the resting values are known they stay fixed, so that later movement is detected.
+        if(!c.baselineReady) {
+            var moved = false;
+            for(i = 0; i < axes.length; i++) {
+                if(c.ignored[i]) continue;
+                if(c.prevAxes[i] === undefined || Math.abs(axes[i] - c.prevAxes[i]) > QUIET_DELTA) {
+                    moved = true;
+                    c.lastMove[i] = now;
+                }
+            }
+            c.prevAxes = axes;
+            if(moved) c.quietSince = now;
+            var quiet = now - c.quietSince >= SETTLE_MS;
+            c.waiting = !quiet && now - c.stepStart < MAX_SETTLE_MS;
+            c.baseline = axes;
+            if(c.waiting) return;
+            if(!quiet) {
+                // The device never settled: ignore the axes that keep moving on their own (noise)
+                for(i = 0; i < axes.length; i++) {
+                    if(now - c.lastMove[i] < SETTLE_MS) c.ignored[i] = true;
+                }
+            }
+            c.baselineReady = true;
+            return;
+        }
+
+        var best = -1;
+        var bestDelta = DETECT_DELTA;
         var bestRest = 0;
-        for(var i = 0; i < axes.length; i++) {
+        for(i = 0; i < axes.length; i++) {
+            // Skip axes outside the normal range, such as the hat switch on some devices
+            if(c.ignored[i] || Math.abs(c.baseline[i]) > 1.05 || Math.abs(axes[i]) > 1.05) continue;
             var rest = c.baseline[i];
             if(c.usedAxes.indexOf(i) >= 0) {
                 // Some wheels report throttle and brake on one combined axis. Allow a pedal to share
@@ -328,7 +385,7 @@ var WheelControls = (function() {
             }
         }
         if(best >= 0) {
-            c.detect = { axis: best, rest: bestRest, extreme: axes[best], start: now };
+            c.detect = { axis: best, rest: bestRest, extreme: axes[best], lastValue: axes[best], start: now, stableSince: now };
         }
     }
 
