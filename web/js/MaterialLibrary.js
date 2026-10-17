@@ -1,10 +1,13 @@
 var mlib;
 var cubeCamera;
 var cubeTarget;
+var environmentGenerator;   // makes the lighting of the physically based materials from the cube map
+var environmentTarget = null;
 
 function initialiseMaterials() {
     // the reflections of the car: a cube map of the surroundings that is refreshed while driving
-    cubeTarget = new THREE.WebGLCubeRenderTarget(128, { type: THREE.HalfFloatType });
+    cubeTarget = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType });
+    environmentGenerator = new THREE.PMREMGenerator(renderer);
     cubeCamera = new THREE.CubeCamera(1, 10000, cubeTarget);
     var envMap = cubeTarget.texture;
 
@@ -38,3 +41,13 @@ mlib.body.push( [ "Gold", new THREE.MeshPhongMaterial( { color: 0xaa9944, specul
 mlib.body.push( [ "Bronze", new THREE.MeshPhongMaterial( { color: 0x150505, specular: 0xee6600, shininess: 10, envMap: envMap, combine: THREE.MixOperation, reflectivity: 0.2 } ) ] );
 mlib.body.push( [ "Chrome", new THREE.MeshPhongMaterial( { color: 0xffffff, specular: 0xffffff, envMap: envMap, combine: THREE.MultiplyOperation } ) ] );
 */
+
+// The materials of glTF cars are physically based: they are lit by, and reflect, the surroundings. The cube map that
+// shows the surroundings of the car is filtered by roughness (PMREM) and used as the lighting of the scene (scene.environment),
+// which only physically based materials use. The materials of the track and of the original cars are not changed by it.
+function updateEnvironment() {
+    var target = environmentGenerator.fromCubemap(cubeTarget.texture);
+    if(environmentTarget) environmentTarget.dispose();
+    environmentTarget = target;
+    scene.environment = target.texture;
+}

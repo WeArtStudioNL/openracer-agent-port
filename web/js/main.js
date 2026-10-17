@@ -14,6 +14,7 @@ var carConfig;
 // the engine sound follows the option of the settings menu
 Settings.onOptionChange(function(name, value) {
     if(name === "sound") EngineSound.setMuted(!value);
+    else if(name === "toneMapping" && typeof renderer !== "undefined" && renderer) applyToneMapping(value);
 });
 EngineSound.setMuted(!Settings.option("sound"));
 

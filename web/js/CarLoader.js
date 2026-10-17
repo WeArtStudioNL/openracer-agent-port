@@ -180,18 +180,11 @@ OpenRacer.loadCarModel = function (config, onLoad, onError) {
 
         function finish(wheelObjects) {
             tilt.add(pivot);
-            // glTF models are made of physically based materials: they reflect the surroundings like the body of the demo car
+            // glTF models are made of physically based materials: they are lit by and reflect the surroundings of the
+            // scene (scene.environment, see MaterialLibrary.js)
             [tilt].concat(wheelObjects).forEach(function (object) {
                 object.traverse(function (child) {
-                    if(!child.isMesh) return;
-                    child.castShadow = true;
-                    var materials = Array.isArray(child.material) ? child.material : [child.material];
-                    materials.forEach(function (material) {
-                        if(material.isMeshStandardMaterial && !material.envMap && typeof cubeTarget !== "undefined") {
-                            material.envMap = cubeTarget.texture;
-                            material.envMapIntensity = 0.6;
-                        }
-                    });
+                    if(child.isMesh) child.castShadow = true;
                 });
             });
             onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1 });

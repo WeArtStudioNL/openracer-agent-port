@@ -33,6 +33,13 @@ var composer;
 var camera;
 var cubeUpdate = 2;
 var cubeCount = 0;
+var environmentCount = 0;
+var ENVIRONMENT_EVERY = 12; // the lighting of the physically based materials is made again after this many cube map updates
+var TONE_MAPPINGS = { none: THREE.NoToneMapping, neutral: THREE.NeutralToneMapping, agx: THREE.AgXToneMapping, aces: THREE.ACESFilmicToneMapping };
+
+function applyToneMapping(name) {
+    renderer.toneMapping = TONE_MAPPINGS[name] !== undefined ? TONE_MAPPINGS[name] : THREE.NoToneMapping;
+}
 var shadowLight;
 var SCREEN_WIDTH = window.innerWidth;
 var SCREEN_HEIGHT = window.innerHeight;
@@ -73,6 +80,7 @@ RACER.Scene = function (parameters, domElement) {
         // with post-processing the anti-aliasing is done on the buffer of the composer
         renderer = new THREE.WebGLRenderer( { antialias: !useComposer } );
         renderer.setPixelRatio( window.devicePixelRatio );
+        applyToneMapping(Settings.option("toneMapping"));
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -194,6 +202,7 @@ function render() {
                 car.wheels[w].object.visible = true;
             }
             cubeCount = 0;
+            if(environmentCount++ % ENVIRONMENT_EVERY === 0) updateEnvironment();
         }
         cubeCount++;
     }

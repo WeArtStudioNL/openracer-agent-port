@@ -85,7 +85,7 @@ var Settings = (function() {
     var actionsById = {};
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
-    var DEFAULT_OPTIONS = { tc: true, abs: true, transmission: "auto", sound: true, wheelRange: 1 };
+    var DEFAULT_OPTIONS = { tc: true, abs: true, transmission: "auto", sound: true, wheelRange: 1, toneMapping: "none" };
 
     var bindings = {};      // action id -> list of inputs
     var options = {};
@@ -563,6 +563,10 @@ var Settings = (function() {
             function() { setOption("transmission", options.transmission === "auto" ? "manual" : "auto"); }));
         panel.appendChild(optionRow("Wheel steering range", Math.round(options.wheelRange * 100) + "%",
             function() { setOption("wheelRange", options.wheelRange > 0.9 ? 0.75 : (options.wheelRange > 0.6 ? 0.5 : 1)); }));
+        var toneNames = { none: "Off", neutral: "Neutral", agx: "AgX", aces: "ACES" };
+        var toneOrder = ["none", "neutral", "agx", "aces"];
+        panel.appendChild(optionRow("Tone mapping", toneNames[options.toneMapping] || "Off",
+            function() { setOption("toneMapping", toneOrder[(toneOrder.indexOf(options.toneMapping) + 1) % toneOrder.length]); }));
         panel.appendChild(optionRow("Engine sound", options.sound ? "On" : "Off", function() { setOption("sound", !options.sound); }));
 
         var groups = [];

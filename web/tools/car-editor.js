@@ -10,6 +10,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
 const $ = (id) => document.getElementById(id);
 const SLOTS = ["FR", "FL", "RL", "RR"];
@@ -43,8 +44,10 @@ camera.position.set(-5, 3, 6);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0.4, 0);
 controls.update();
-scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 2.2));
-const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+// physically based materials need surroundings to reflect: a studio
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 0.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.2);
 sun.position.set(4, 8, 5);
 scene.add(sun);
 const grid = new THREE.GridHelper(20, 40, 0x56627a, 0x333c4b);

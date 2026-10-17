@@ -38,6 +38,8 @@ The **car editor** at http://localhost:8000/tools/car-editor.html makes such a c
 3. Set the mass, the gears, the engine (a torque table with a chart, or generate a typical curve from the peak power), and the brakes.
 4. *Save the car*: it is written to `web/cars/<id>/` and is in the main menu. Existing cars can be edited, copied (save under another id) and deleted from the same page.
 
+The materials of a glTF model are used as they are (physically based: base colour, metalness, roughness, normal, occlusion and emissive maps, clearcoat, transmission). They are lit by the surroundings of the car: the cube map around the car is filtered by roughness and used as the lighting (image based lighting), so paint, glass and chrome reflect the track and the sky. The *Tone mapping* option of the settings menu (Neutral, AgX or ACES) gives a picture closer to Blender's; it is off by default, because it changes the colours of the track too. The car editor shows the model in a studio for the same reason.
+
 In Blender a car that looks towards -Y (the front view) exports as it should; the model needs a name per part for the wheels to be found. glTF files with Draco or Meshopt compression are not supported.
 
 ## Driving model
