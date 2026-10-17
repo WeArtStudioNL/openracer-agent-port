@@ -44,6 +44,7 @@ var scripts = [
     "js/EngineSound.js",
     "js/WheelControls.js",
     "js/Settings.js",
+    "js/Hud.js",
     "js/controls.js",
     "js/main.js"
 ];

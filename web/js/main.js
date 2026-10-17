@@ -57,10 +57,6 @@ function onEnterFrame() {
     }
 }
 
-// the dashboard elements exist above this script, so they can be looked up immediately
-var dash_tc = document.getElementById("dash-tc");
-var dash_abs = document.getElementById("dash-abs");
-
 var query = new URLSearchParams(window.location.search);
 if(query.get("car") && query.get("track")) {
     startGame(query.get("car"), query.get("track"));

@@ -56,6 +56,8 @@ OpenRacer.Car = function( config, domElement ) {
     this.lapsCompleted = 0;
     this.lapStartTime;
     this.laps = [];
+    this.lapTimes = [];       // the times of the laps that are done, in seconds
+    this.clock = 0;           // the time that the car has been driven (not while the game is paused), in seconds
     this.checkPointsCompleted = trackCheckPoints.map(function() { return false; });
     this.currentCheckPoint = "";
     
@@ -302,6 +304,7 @@ OpenRacer.Car = function( config, domElement ) {
             if(showDebug) { debugOut("DELTA WARN - " + delta); }
             delta = 0.1;
         }
+        this.clock += delta;
 
         // steering with the keyboard: slower at speed, and the wheels centre themselves
         this.turnDir = 0;
@@ -331,19 +334,11 @@ OpenRacer.Car = function( config, domElement ) {
         this.sampleGround();
         this.updateVisuals(delta);
 
-        // dashboard lights: traction control and ABS while they are working
-        var tcOn = false;
-        var absOn = false;
-        for(var i = 0; i < this.wheels.length; i++) {
-            if(this.wheels[i].tc || this.wheels[i].esc) tcOn = true;
-            if(this.wheels[i].abs) absOn = true;
-        }
-        dash_tc.className = tcOn ? "dash-tc-on" : "dash-tc-off";
-        dash_abs.className = absOn ? "dash-abs-on" : "dash-abs-off";
+        Hud.update(this);
 
         if(showDebug) {
-            debugOut("Esc: settings and controls");
-            debugOut(Math.round(v.u * 2.2369362920544) + " mph | Gear: " + this.gearLabel() + " (" + this.gearboxMode +
+            var metric = Settings.option("units") !== "imperial";
+            debugOut(Math.round(v.u * (metric ? 3.6 : 2.2369362920544)) + (metric ? " km/h" : " mph") + " | Gear: " + this.gearLabel() + " (" + this.gearboxMode +
                 (this.clutchPedalPresent ? ", clutch pedal" : "") + ") | RPM: " + Math.round(this.engineRPM) +
                 (this.engine.running ? "" : " (STALLED: " + (this.clutchPedalPresent ? "clutch + throttle or I to start" : "starting") + ")") +
                 " | Throttle: " + this.throttle.toFixed(2) + " | Brake: " + this.brakePedal.toFixed(2) +
@@ -370,17 +365,15 @@ OpenRacer.Car = function( config, domElement ) {
                 }
                 if(checkpointsPassed) {
                     // we passed all checkpoints
-                    if(this.lapStartTime > 0) {
-                        var elapsedTime = Date.now() - this.lapStartTime;
-                        var min = (elapsedTime / 1000 / 60) << 0;
-                        var sec = (elapsedTime / 1000) % 60;
-                        var milli = elapsedTime % 1000;
-                        this.laps.push(min + ":" + sec + "." + milli.toFixed(3));
+                    if(this.lapStartTime !== undefined) {
+                        var lapTime = this.clock - this.lapStartTime;
+                        this.lapTimes.push(lapTime);
+                        this.laps.push(Hud.formatTime(lapTime));
                         console.log("lap time: " + this.laps[this.laps.length - 1]);
                     }
                     this.lapsCompleted++;
                 }
-                this.lapStartTime = Date.now();
+                this.lapStartTime = this.clock;
             } else {
                 for(var i = 1; i < this.checkPointsCompleted.length; i++) {
                     if(lastTerrain === trackCheckPoints[i]) {
@@ -388,16 +381,6 @@ OpenRacer.Car = function( config, domElement ) {
                         break;
                     }
                 }
-            }
-        }
-        if(showDebug) { debugOut("Laps: " + this.lapsCompleted); }
-        var lCount = 0;
-        for(var i = this.laps.length - 1; i >= 0; i--) {
-            if(showDebug) { debugOut("[" + this.laps[i] + "]"); }
-            
-            lCount++;
-            if(lCount === 3) {
-                break;
             }
         }
     };

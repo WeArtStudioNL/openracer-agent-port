@@ -74,6 +74,8 @@ var Settings = (function() {
         { id: "cameraLeft", group: "Other", label: "Camera left", defaults: [key("BracketLeft")] },
         { id: "cameraRight", group: "Other", label: "Camera right", defaults: [key("BracketRight")] },
         { id: "cameraReset", group: "Other", label: "Camera behind the car", defaults: [key("Backquote")] },
+        { id: "hudToggle", group: "Other", label: "HUD on/off", defaults: [key("KeyH")] },
+        { id: "debugToggle", group: "Other", label: "Debug text on/off", defaults: [key("F3")] },
         { id: "toggleTC", group: "Other", label: "Traction control on/off", defaults: [key("KeyC")] },
         { id: "toggleABS", group: "Other", label: "ABS on/off", defaults: [key("KeyB")] },
         { id: "startEngine", group: "Other", label: "Start the engine", defaults: [key("KeyI")] },
@@ -86,7 +88,7 @@ var Settings = (function() {
     var actionsById = {};
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
-    var DEFAULT_OPTIONS = { tc: true, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, toneMapping: "none" };
+    var DEFAULT_OPTIONS = { tc: true, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, toneMapping: "none", hud: true, units: "metric", debug: false };
 
     var bindings = {};      // action id -> list of inputs
     var options = {};
@@ -571,6 +573,10 @@ var Settings = (function() {
         panel.appendChild(optionRow("Gearbox", gearboxNames[options.gearbox] || options.gearbox, function() { cycleGearbox(); }));
         panel.appendChild(optionRow("Wheel steering range", Math.round(options.wheelRange * 100) + "%",
             function() { setOption("wheelRange", options.wheelRange > 0.9 ? 0.75 : (options.wheelRange > 0.6 ? 0.5 : 1)); }));
+        panel.appendChild(optionRow("HUD", options.hud ? "On" : "Off", function() { setOption("hud", !options.hud); }));
+        panel.appendChild(optionRow("Units", options.units === "imperial" ? "Imperial (mph)" : "Metric (km/h)",
+            function() { setOption("units", options.units === "imperial" ? "metric" : "imperial"); }));
+        panel.appendChild(optionRow("Debug text", options.debug ? "On" : "Off", function() { setOption("debug", !options.debug); }));
         var toneNames = { none: "Off", neutral: "Neutral", agx: "AgX", aces: "ACES" };
         var toneOrder = ["none", "neutral", "agx", "aces"];
         panel.appendChild(optionRow("Tone mapping", toneNames[options.toneMapping] || "Off",
@@ -655,6 +661,8 @@ var Settings = (function() {
     handlers.toggleTC = function() { setOption("tc", !options.tc); };
     handlers.toggleABS = function() { setOption("abs", !options.abs); };
     handlers.gearboxMode = function() { cycleGearbox(); };
+    handlers.hudToggle = function() { setOption("hud", !options.hud); };
+    handlers.debugToggle = function() { setOption("debug", !options.debug); };
     handlers.mute = function() { setOption("sound", !options.sound); };
     handlers.calibrate = function() { WheelControls.startCalibration(window.car); };
     handlers.wheelToggle = function() { WheelControls.toggle(); };

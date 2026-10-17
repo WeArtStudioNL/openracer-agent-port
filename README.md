@@ -56,6 +56,11 @@ The car is simulated as a chain of connected parts (`web/js/Vehicle.js`, with no
 
 * The car collides with walls, fences, buildings and steep embankments (`web/js/Collision.js`): the steep triangles of the track are kept as outlines in a grid, and the car is a rectangle that is pushed out of them. A hit stops the car, makes it bounce a little and spins it when it hits with a corner. Things lower than 30 cm (kerbs) are driven over.
 
+## HUD
+Bottom right is a round gauge: the ring is the engine speed (with a red zone at the rev limit and a shift light that goes orange and flashes at the limiter), in the middle are the speed, the gear (P R N D and the gear of the automatic, or 1, 2, … N R) and the gearbox mode, and the two small arcs are the throttle (green, left) and the brake (red, right). Next to it are the indicators of traction control (TC) and ABS: red is off, green is on and yellow is working; a red P shows while the parking lock holds the car. Top left are the lap, the time of the lap that is going and the last laps (the best one is green).
+
+In the settings menu (**Esc**) the HUD can be switched off (**H** by default, a key that can be remapped), the units are metric (km/h) or imperial (mph), and *Debug text* (**F3**) shows the technical text at the top of the screen (wheel values, clutch, FPS).
+
 ## Settings and controls
 Press **Esc** for the settings menu (the game pauses). It has options for traction control, ABS, the gearbox (automatic or manual) and the engine sound, and the list of all actions with their inputs. Every action can have several inputs at once: a key, a button or axis of a controller and a button of a racing wheel, shown as small chips. **✎** sets a new input (press a key or button, or move an axis; Esc cancels), **✕** removes it and **+** adds one. Buttons, axes and the D-pad of a wheel or controller can all be used (a D-pad that the browser reports as one axis with a value per direction is recognised, and every direction can have its own action). An input belongs to one action: taking it for another action removes it from the first. The pedals, steering and H-shifter of a wheel are measured by the wheel calibration, which can be redone per input from the same list. The bindings are stored in the browser (localStorage).
 
