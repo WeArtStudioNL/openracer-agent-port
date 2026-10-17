@@ -20,379 +20,412 @@
 <head>
     <meta charset="UTF-8">
     <title>OpenRacer car editor</title>
-    <style>
-        * { box-sizing: border-box; }
-        body { margin: 0; font-family: Arial, sans-serif; font-size: 14px; color: #e6e9ee; background: #14181f; height: 100vh; display: flex; overflow: hidden; }
-        #side { width: 430px; flex: none; overflow-y: auto; padding: 14px 16px 40px; background: #1c2129; border-right: 1px solid #2c3541; }
-        #view { flex: 1; position: relative; min-width: 0; }
-        #view canvas { display: block; width: 100%; height: 100%; }
-        #hud { position: absolute; left: 12px; top: 10px; color: #aab6c6; font-size: 13px; pointer-events: none; white-space: pre-line; text-shadow: 0 0 4px #000; }
-        h1 { font-size: 20px; margin: 0 0 2px; }
-        h2 { font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; color: #8fa3bd; margin: 22px 0 8px; border-bottom: 1px solid #2c3541; padding-bottom: 4px; }
-        .sub { color: #8895a7; margin-bottom: 8px; font-size: 13px; line-height: 1.45; }
-        label { display: block; margin: 7px 0 2px; color: #b6c0ce; }
-        .row { display: flex; gap: 8px; }
-        .row > * { flex: 1; min-width: 0; }
-        .row3 > * { flex: 1; }
-        input, select, textarea, button { font: inherit; color: inherit; }
-        input[type=text], input[type=number], select, textarea { width: 100%; background: #12161c; border: 1px solid #323c4a; border-radius: 4px; padding: 5px 7px; }
-        select[multiple] { height: 92px; }
-        input[type=file] { width: 100%; }
-        button { background: #36404e; border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; }
-        button:hover { background: #4a586b; }
-        button.primary { background: #2e9a5c; font-size: 15px; padding: 9px 20px; }
-        button.primary:hover { background: #38b56e; }
-        button.danger { background: #8a3a34; }
-        button.small { padding: 2px 8px; font-size: 12px; }
-        .buttons { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-        table { width: 100%; border-collapse: collapse; }
-        td, th { padding: 2px 3px; text-align: left; font-weight: normal; color: #8fa3bd; }
-        td input { padding: 3px 5px; }
-        #status { margin-top: 12px; padding: 8px 10px; border-radius: 4px; background: #232b36; min-height: 20px; white-space: pre-line; }
-        #status.error { background: #5a2823; }
-        #status.ok { background: #1f4a33; }
-        canvas#chart { width: 100%; height: 150px; background: #12161c; border: 1px solid #323c4a; border-radius: 4px; margin-top: 6px; }
-        .material { border-bottom: 1px solid #2c3541; padding: 6px 0 8px; }
-        .material .head { display: flex; gap: 6px; align-items: center; }
-        .material .head b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: normal; }
-        .material .head select { width: 120px; }
-        .material .fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 8px; margin-top: 5px; }
-        .material .fields label { margin: 0; font-size: 11px; color: #8895a7; }
-        .material input[type=color] { width: 100%; height: 26px; padding: 0; background: none; border: 1px solid #323c4a; }
-        .material.changed .head b { color: #ffd04d; }
-        .hint { color: #8895a7; font-size: 12px; margin-top: 3px; }
-        a { color: #7fb8ff; }
-        .legend span { display: inline-block; margin-right: 10px; }
-        .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
-    </style>
+    <link rel="stylesheet" href="editor.css">
     <script type="importmap">
         { "imports": { "three": "../js/three/build/three.module.js", "three/addons/": "../js/three/examples/jsm/" } }
     </script>
 </head>
 <body>
 <div id="side">
-    <h1>Car editor</h1>
-    <div class="sub">Make a car for OpenRacer from a glTF or glb model (for example from Blender), set it up and save it. It shows up in the main menu of the game. <a href="../index.html">Back to the game</a></div>
+    <header>
+        <h1>Car editor</h1>
+        <a href="track-editor.html">Track editor</a>
+        <a href="../index.html">← Game</a>
+    </header>
+    <div id="scroll">
 
-    <h2>Car</h2>
-    <label>Existing cars</label>
-    <div class="row">
-        <select id="existing"></select>
-        <button id="newCar" style="flex: none">New car</button>
-    </div>
-    <div class="hint" id="editing">Choose a car to change it, or make a new one below. Saving a car that was chosen here overwrites it.</div>
-    <label>Name</label>
-    <input type="text" id="name" placeholder="My car">
-    <label>Id (the folder name: lower case letters, digits, - and _)</label>
-    <input type="text" id="id" placeholder="my-car">
-    <label>Description</label>
-    <input type="text" id="description" placeholder="Short description for the menu">
+        <details class="card" open>
+            <summary>Car<span class="meta" id="editing"></span></summary>
+            <div class="body">
+                <div class="row">
+                    <select id="existing"></select>
+                    <button id="newCar" class="fixed ghost">New car</button>
+                </div>
+                <div class="row">
+                    <div><label>Name</label><input type="text" id="name" placeholder="My car"></div>
+                    <div><label>Id (folder name)</label><input type="text" id="id" placeholder="my-car"></div>
+                </div>
+                <div><label>Description</label><input type="text" id="description" placeholder="Short description for the menu"></div>
+            </div>
+        </details>
 
-    <h2>Model</h2>
-    <div class="sub">Pick a <b>.glb</b> file, or a <b>.gltf</b> together with its <b>.bin</b> and texture files (select them all at once).
-        The model has to face <b>forward</b> along the blue arrow, <b>up</b> is y. Blender exports a car that looks towards -Y (the front view) correctly;
-        otherwise turn it here.</div>
-    <input type="file" id="files" multiple accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2">
-    <div class="hint" id="modelInfo">No model loaded.</div>
-    <div class="hint" id="modelNote" style="color:#e0b040"></div>
-    <div id="modelControls">
-        <div class="row3 row">
-            <div><label>Turn (degrees)</label><input type="number" id="rotation" value="0" step="90"></div>
-            <div><label>Scale</label><input type="number" id="scale" value="1" step="0.01" min="0.0001"></div>
-        </div>
-        <div class="buttons">
-            <button class="small" data-turn="90">Turn 90°</button>
-            <button class="small" data-turn="180">Turn 180°</button>
-            <button class="small" data-turn="270">Turn 270°</button>
-        </div>
-        <label>Offset x / y / z (metres)</label>
-        <div class="row row3">
-            <input type="number" id="offsetX" value="0" step="0.01">
-            <input type="number" id="offsetY" value="0" step="0.01">
-            <input type="number" id="offsetZ" value="0" step="0.01">
-        </div>
-        <div class="hint">The origin of the model, after turning, scaling and the offset, has to be at the height of the wheel axles, in the middle between the axles. “Fit” does that.</div>
-        <div class="buttons"><button id="fit">Fit to the wheels / the floor</button></div>
-    </div>
+        <details class="card" open>
+            <summary>Model<span class="meta" id="modelInfo">No model loaded.</span></summary>
+            <div class="body">
+                <p class="sub">A <b>.glb</b>, or a <b>.gltf</b> with its <b>.bin</b> and textures (select them all). The car has to face the blue arrow, y is up. Blender exports a car that looks towards -Y correctly.</p>
+                <input type="file" id="files" multiple accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2">
+                <div class="hint warn" id="modelNote"></div>
+                <div id="modelControls">
+                    <div class="row">
+                        <div><label>Turn (°)</label><input type="number" id="rotation" value="0" step="90"></div>
+                        <div><label>Scale</label><input type="number" id="scale" value="1" step="0.01" min="0.0001"></div>
+                        <div class="fixed buttons" style="align-self:flex-end">
+                            <button class="small ghost" data-turn="90">90°</button>
+                            <button class="small ghost" data-turn="180">180°</button>
+                            <button class="small ghost" data-turn="270">270°</button>
+                        </div>
+                    </div>
+                    <label>Offset x / y / z (m)</label>
+                    <div class="row">
+                        <input type="number" id="offsetX" value="0" step="0.01">
+                        <input type="number" id="offsetY" value="0" step="0.01">
+                        <input type="number" id="offsetZ" value="0" step="0.01">
+                    </div>
+                    <div class="buttons"><button id="fit" class="accent small">Fit to the wheels and the floor</button><span class="hint">The origin has to be at axle height, between the axles.</span></div>
+                </div>
+            </div>
+        </details>
 
-    <h2>Steering wheel</h2>
-    <div class="sub">A part of the model called <b>steeringwheel</b> turns with the steering, around its own middle. The axis is found from the shape of the part (the direction in which it is flat).</div>
-    <div class="hint" id="steeringInfo">No model loaded.</div>
-    <label>Turn of the steering wheel at full lock (degrees, each way)</label>
-    <input type="number" id="steeringDegrees" min="30" max="1000" step="10" value="450">
+        <details class="card">
+            <summary>Wheels and steering<span class="meta" id="wheelInfo"></span></summary>
+            <div class="body">
+                <label class="check"><input type="radio" name="wheelMode" value="model" checked> The wheels are parts of the model</label>
+                <label class="check"><input type="radio" name="wheelMode" value="default"> No separate wheels: use the wheel of the demo car</label>
+                <div id="wheelSelects">
+                    <p class="sub">Select the parts of each wheel (tyre, rim, disc…); Ctrl or Cmd selects more.</p>
+                    <div class="row">
+                        <div><label><span style="color:#ff6b6b">■</span> Front right</label><select multiple id="wFR"></select></div>
+                        <div><label><span style="color:#5ec8ff">■</span> Front left</label><select multiple id="wFL"></select></div>
+                    </div>
+                    <div class="row">
+                        <div><label><span style="color:#ffd04d">■</span> Rear right</label><select multiple id="wRR"></select></div>
+                        <div><label><span style="color:#8ee26b">■</span> Rear left</label><select multiple id="wRL"></select></div>
+                    </div>
+                    <div class="buttons"><button id="guessWheels" class="small">Find the wheels by their names and places</button></div>
+                </div>
+                <div class="group">Steering wheel</div>
+                <div class="hint" id="steeringInfo">No model loaded.</div>
+                <div class="row">
+                    <div><label>Turn at full lock (°, each way)</label><input type="number" id="steeringDegrees" min="30" max="1000" step="10" value="450"></div>
+                    <div><span class="hint" style="display:block; margin-top:26px">A part called <b>steeringwheel</b> turns with the steering.</span></div>
+                </div>
+            </div>
+        </details>
 
-    <h2>Wheels</h2>
-    <div class="sub">The wheels steer and spin, so they have to be separate parts of the model. Select, for each wheel, the part or parts (tyre, rim, brake disc…) that belong to it. Hold Ctrl or Cmd to select more.</div>
-    <label><input type="radio" name="wheelMode" value="model" checked> The wheels are parts of the model</label>
-    <label><input type="radio" name="wheelMode" value="default"> The model has no separate wheels: use the wheel of the demo car</label>
-    <div id="wheelSelects">
-        <div class="row"><div><label><span style="color:#ff6b6b">■</span> Front right</label><select multiple id="wFR"></select></div>
-            <div><label><span style="color:#5ec8ff">■</span> Front left</label><select multiple id="wFL"></select></div></div>
-        <div class="row"><div><label><span style="color:#ffd04d">■</span> Rear right</label><select multiple id="wRR"></select></div>
-            <div><label><span style="color:#8ee26b">■</span> Rear left</label><select multiple id="wRL"></select></div></div>
-        <div class="buttons"><button id="guessWheels">Find the wheels by their names and places</button></div>
-        <div class="hint" id="wheelInfo"></div>
-    </div>
+        <details class="card">
+            <summary>Size, chassis and brakes</summary>
+            <div class="body">
+                <div class="row">
+                    <div><input type="number" id="length" step="0.01" value="4.5"><div class="hint">length (m)</div></div>
+                    <div><input type="number" id="width" step="0.01" value="1.8"><div class="hint">width (m)</div></div>
+                    <div><input type="number" id="height" step="0.01" value="1.35"><div class="hint">height (m)</div></div>
+                </div>
+                <div class="row">
+                    <div><input type="number" id="mass" step="10" value="1400"><div class="hint">mass (kg)</div></div>
+                    <div><input type="number" id="front" step="0.5" value="55"><div class="hint">front weight (%)</div></div>
+                    <div><input type="number" id="cgHeight" step="0.01" value="0.5"><div class="hint">CG height (m)</div></div>
+                </div>
+                <div class="row">
+                    <div><input type="number" id="wheelbase" step="0.01" value="2.7"><div class="hint">wheelbase (m)</div></div>
+                    <div><input type="number" id="frontTrack" step="0.01" value="1.55"><div class="hint">front track (m)</div></div>
+                    <div><input type="number" id="rearTrack" step="0.01" value="1.55"><div class="hint">rear track (m)</div></div>
+                </div>
+                <div class="row">
+                    <div><input type="number" id="tyre" step="0.005" value="0.65"><div class="hint">tyre diameter (m)</div></div>
+                    <div><input type="number" id="drag" step="0.01" value="0.32"><div class="hint">drag coefficient</div></div>
+                    <div><input type="number" id="steer" step="1" value="30"><div class="hint">steering lock (°)</div></div>
+                </div>
+                <div class="buttons">
+                    <button class="small ghost" id="sizeFromModel">Size from the model</button>
+                    <button class="small ghost" id="chassisFromWheels">Wheelbase, track and tyre from the wheels</button>
+                </div>
+                <div class="group">Brakes (per wheel)</div>
+                <div class="row">
+                    <div><input type="number" id="brakeFront" step="50" value="1600"><div class="hint">front (Nm)</div></div>
+                    <div><input type="number" id="brakeRear" step="50" value="900"><div class="hint">rear (Nm)</div></div>
+                    <div></div>
+                </div>
+            </div>
+        </details>
 
-    <h2>Materials</h2>
-    <div class="sub">The materials of the model are physically based and are used as they are. A model does not always arrive the way it looked in
-        Blender (the glass of many models becomes opaque white metal): set such a material right here, with a preset or by hand.
-        The changes are saved with the car.</div>
-    <div id="materials"></div>
+        <details class="card">
+            <summary>Drivetrain<span class="meta" id="speedInfo"></span></summary>
+            <div class="body">
+                <div class="row">
+                    <div><label>Drive</label><select id="drive"><option value="rwd">Rear wheel drive</option><option value="fwd">Front wheel drive</option><option value="awd">All wheel drive</option></select></div>
+                    <div><label>Differential</label><select id="diff"><option value="open">Open</option><option value="lsd">Limited slip</option><option value="welded">Welded (locked)</option></select></div>
+                </div>
+                <div class="row" id="lsdBox">
+                    <div><input type="number" id="diffPreload" step="10" min="0" value="150"><div class="hint">preload (Nm)</div></div>
+                    <div><input type="number" id="diffPower" step="5" min="0" max="100" value="30"><div class="hint">lock under power (%)</div></div>
+                    <div><input type="number" id="diffCoast" step="5" min="0" max="100" value="10"><div class="hint">lock off throttle (%)</div></div>
+                </div>
+                <div class="row">
+                    <div id="centerBox"><label>Centre differential (AWD)</label><select id="centerDiff"><option value="open">Open</option><option value="lsd">Limited slip</option><option value="locked">Locked</option></select></div>
+                    <div id="splitBox"><label>Torque to the front (%)</label><input type="number" id="centerSplit" step="1" min="0" max="100" value="40"></div>
+                </div>
+                <div class="hint" id="diffInfo"></div>
+                <div><label>Gear ratios (1st, 2nd, … separated by commas)</label><input type="text" id="gears" value="3.6, 2.1, 1.4, 1.0, 0.8"></div>
+                <div class="row">
+                    <div><input type="number" id="finalDrive" step="0.05" value="3.5"><div class="hint">final drive</div></div>
+                    <div><input type="number" id="reverse" step="0.05" value="3.4"><div class="hint">reverse ratio</div></div>
+                    <div><input type="number" id="efficiency" step="0.01" min="0.5" max="1" value="0.92"><div class="hint">efficiency</div></div>
+                </div>
+            </div>
+        </details>
 
-    <h2>Size and chassis</h2>
-    <div class="row3 row">
-        <div><label>Length (m)</label><input type="number" id="length" step="0.01" value="4.5"></div>
-        <div><label>Width (m)</label><input type="number" id="width" step="0.01" value="1.8"></div>
-        <div><label>Height (m)</label><input type="number" id="height" step="0.01" value="1.35"></div>
-    </div>
-    <div class="buttons"><button class="small" id="sizeFromModel">Take the size from the model</button></div>
-    <div class="row3 row">
-        <div><label>Mass (kg)</label><input type="number" id="mass" step="10" value="1400"></div>
-        <div><label>Front weight (%)</label><input type="number" id="front" step="0.5" value="55"></div>
-        <div><label>CG height (m)</label><input type="number" id="cgHeight" step="0.01" value="0.5"></div>
-    </div>
-    <div class="row3 row">
-        <div><label>Wheelbase (m)</label><input type="number" id="wheelbase" step="0.01" value="2.7"></div>
-        <div><label>Front track (m)</label><input type="number" id="frontTrack" step="0.01" value="1.55"></div>
-        <div><label>Rear track (m)</label><input type="number" id="rearTrack" step="0.01" value="1.55"></div>
-    </div>
-    <div class="row3 row">
-        <div><label>Tyre diameter (m)</label><input type="number" id="tyre" step="0.005" value="0.65"></div>
-        <div><label>Drag coefficient</label><input type="number" id="drag" step="0.01" value="0.32"></div>
-        <div><label>Steering lock (°)</label><input type="number" id="steer" step="1" value="30"></div>
-    </div>
-    <div class="buttons"><button class="small" id="chassisFromWheels">Take wheelbase, track and tyre from the wheels</button></div>
+        <details class="card">
+            <summary>Engine<span class="meta" id="peakInfo"></span></summary>
+            <div class="body">
+                <div class="row">
+                    <div><input type="number" id="idle" step="50" value="850"><div class="hint">idle (rpm)</div></div>
+                    <div><input type="number" id="limiter" step="100" value="6800"><div class="hint">rev limit (rpm)</div></div>
+                    <div><input type="number" id="inertia" step="0.05" value="0.3"><div class="hint">inertia (kg m²)</div></div>
+                </div>
+                <div class="modal-link">
+                    <span class="hint">The torque curve at full throttle, with a chart.</span>
+                    <button class="small" data-open="dlgCurve">Torque curve…</button>
+                </div>
+            </div>
+        </details>
 
-    <h2>Drivetrain</h2>
-    <div class="row">
-        <div><label>Drive</label><select id="drive"><option value="rwd">Rear wheel drive (RWD)</option><option value="fwd">Front wheel drive (FWD)</option><option value="awd">All wheel drive (AWD)</option></select></div>
-        <div><label>Final drive</label><input type="number" id="finalDrive" step="0.05" value="3.5"></div>
-    </div>
-    <div class="row">
-        <div><label>Differential (between the wheels of an axle)</label><select id="diff"><option value="open">Open</option><option value="lsd">Limited slip</option><option value="welded">Welded (locked)</option></select></div>
-        <div id="centerBox"><label>Centre differential (AWD)</label><select id="centerDiff"><option value="open">Open</option><option value="lsd">Limited slip</option><option value="locked">Locked</option></select></div>
-    </div>
-    <div class="row3 row" id="lsdBox">
-        <div><label>Preload (Nm)</label><input type="number" id="diffPreload" step="10" min="0" value="150"></div>
-        <div><label>Lock under power (%)</label><input type="number" id="diffPower" step="5" min="0" max="100" value="30"></div>
-        <div><label>Lock off the throttle (%)</label><input type="number" id="diffCoast" step="5" min="0" max="100" value="10"></div>
-    </div>
-    <div id="splitBox"><label>Torque to the front axle (%, AWD)</label><input type="number" id="centerSplit" step="1" min="0" max="100" value="40"></div>
-    <div class="hint" id="diffInfo"></div>
-    <label>Gear ratios (1st, 2nd, … separated by commas)</label>
-    <input type="text" id="gears" value="3.6, 2.1, 1.4, 1.0, 0.8">
-    <div class="row">
-        <div><label>Reverse ratio</label><input type="number" id="reverse" step="0.05" value="3.4"></div>
-        <div><label>Efficiency</label><input type="number" id="efficiency" step="0.01" min="0.5" max="1" value="0.92"></div>
-    </div>
-    <div class="hint" id="speedInfo"></div>
+        <details class="card">
+            <summary>Engine sound</summary>
+            <div class="body">
+                <div><label>Sound model</label>
+                    <select id="soundModel"><option value="pipes">Pipes (waveguides, after Antonio-R1)</option><option value="engine-sim">Combustion (after engine-sim)</option></select></div>
+                <p class="sub">Press <b>Play</b> in the view to listen while you change the settings.</p>
+                <div id="pipesBlock" data-model="pipes">
+                    <div class="row">
+                        <div><label>Preset</label><select id="soundPreset"></select></div>
+                    </div>
+                    <div class="group">Recordings (optional)</div>
+                    <p class="sub">Seamless loops of the engine at a steady speed; say the rpm of each and whether the throttle was open. With recordings the car plays them instead of the calculated sound.</p>
+                    <input type="file" id="sampleFiles" multiple accept=".ogg,.mp3,.wav,.flac,.m4a,audio/*">
+                    <div id="samples"></div>
+                    <label class="check"><input type="checkbox" id="soundUseSamples" checked> Play the recordings in the preview</label>
+                </div>
+                <div id="esBlock" data-model="engine-sim">
+                    <div class="row">
+                        <div><label>Preset</label><select id="esPreset"></select></div>
+                        <div><label>Layout</label><select id="esLayout" class="es" data-key="layout"></select></div>
+                    </div>
+                    <div class="row">
+                        <div><label>Exhaust (impulse response)</label><select class="es" data-key="impulse_response" id="esIr"></select></div>
+                        <div class="fixed" style="width:90px"><label>How much</label><input type="number" class="es" data-key="convolution" step="0.05" min="0" max="1"></div>
+                    </div>
+                </div>
+                <div class="modal-link">
+                    <span class="hint">Pipes, valves and muffler, or the cylinders, camshaft and exhaust of the combustion model.</span>
+                    <button class="small" data-open="dlgSound">All settings…</button>
+                </div>
+            </div>
+        </details>
 
-    <h2>Engine</h2>
-    <div class="row3 row">
-        <div><label>Idle (rpm)</label><input type="number" id="idle" step="50" value="850"></div>
-        <div><label>Rev limit (rpm)</label><input type="number" id="limiter" step="100" value="6800"></div>
-        <div><label>Inertia (kg m²)</label><input type="number" id="inertia" step="0.05" value="0.3"></div>
-    </div>
-    <label>Torque at full throttle</label>
-    <table id="curve"><thead><tr><th>rpm</th><th>Nm</th><th>hp</th><th></th></tr></thead><tbody></tbody></table>
-    <div class="buttons"><button class="small" id="addPoint">Add a point</button></div>
-    <canvas id="chart" width="800" height="300"></canvas>
-    <div class="legend hint"><span><i style="background:#ff9f43"></i>torque</span><span><i style="background:#54a0ff"></i>power</span> <span id="peakInfo"></span></div>
-    <label>Make a typical curve from the peak power</label>
-    <div class="row3 row">
-        <div><input type="number" id="genPower" value="250" step="5" title="peak power (hp)"><div class="hint">peak power (hp)</div></div>
-        <div><input type="number" id="genRpm" value="5500" step="100" title="at (rpm)"><div class="hint">at (rpm)</div></div>
-        <div><button id="generate" style="width:100%">Generate</button></div>
-    </div>
+        <details class="card">
+            <summary>Cameras</summary>
+            <div class="body">
+                <div class="legend hint"><span><i style="background:#4d8dff"></i>1 fixed</span><span><i style="background:#37d67a"></i>2 follow</span><span><i style="background:#ff9f43"></i>3 cockpit</span></div>
+                <div class="modal-link">
+                    <span class="hint">Where the three cameras of the game are for this car; the dots in the view show them.</span>
+                    <button class="small" data-open="dlgCameras">Cameras…</button>
+                </div>
+            </div>
+        </details>
 
-    <h2>Cameras</h2>
-    <div class="sub">The cameras of the game, per car: 1 is the fixed camera behind the car, 2 follows the direction of the car smoothly and
-        widens its field of view with the speed, 3 is in the car. The dots in the view show where the cameras are (heights are above the road,
-        the cockpit is from the origin of the model: x to the left, y up, z forward). Fields of view are the vertical angle in degrees.</div>
-    <div class="legend hint"><span><i style="background:#4d8dff"></i>1 fixed</span><span><i style="background:#37d67a"></i>2 follow</span><span><i style="background:#ff9f43"></i>3 cockpit</span></div>
-    <label><b>1 Fixed behind the car</b></label>
-    <div class="row3 row">
-        <div><input type="number" class="cam" id="camChaseDist" step="0.1"><div class="hint">distance (m)</div></div>
-        <div><input type="number" class="cam" id="camChaseHeight" step="0.05"><div class="hint">height (m)</div></div>
-        <div><input type="number" class="cam" id="camChaseFov" step="1"><div class="hint">field of view</div></div>
-    </div>
-    <label><b>2 Follow</b></label>
-    <div class="row3 row">
-        <div><input type="number" class="cam" id="camFolDist" step="0.1"><div class="hint">distance (m)</div></div>
-        <div><input type="number" class="cam" id="camFolHeight" step="0.05"><div class="hint">height (m)</div></div>
-        <div><input type="number" class="cam" id="camFolLook" step="0.05"><div class="hint">looks at height (m)</div></div>
-    </div>
-    <div class="row3 row">
-        <div><input type="number" class="cam" id="camFolSmooth" step="0.1"><div class="hint">follow speed (1/s)</div></div>
-        <div><input type="number" class="cam" id="camFolFovStand" step="1"><div class="hint">FOV standing</div></div>
-        <div><input type="number" class="cam" id="camFolFovFast" step="1"><div class="hint">FOV at full speed</div></div>
-    </div>
-    <div class="row3 row"><div><input type="number" class="cam" id="camFolSpeed" step="10"><div class="hint">full speed (km/h)</div></div>
-        <div><input type="number" class="cam" id="camFolDolly" min="0" max="1" step="0.1"><div class="hint">comes closer (0 to 1)</div></div><div></div></div>
-    <div class="hint">The faster the car, the wider the FOV, up to the full speed. With “comes closer” at 1 the camera moves in with it, so the car keeps its size in the picture and only the sense of speed changes (a dolly zoom). Distance and height are those at a standstill.</div>
-    <label><b>3 Cockpit</b></label>
-    <div class="row3 row">
-        <div><input type="number" class="cam" id="camCockX" step="0.01"><div class="hint">x (m, left)</div></div>
-        <div><input type="number" class="cam" id="camCockY" step="0.01"><div class="hint">y (m, up)</div></div>
-        <div><input type="number" class="cam" id="camCockZ" step="0.01"><div class="hint">z (m, forward)</div></div>
-    </div>
-    <div class="row"><div><input type="number" class="cam" id="camCockFov" step="1"><div class="hint">field of view</div></div></div>
-    <div class="buttons"><button class="small" id="camDefaults">Set the cameras to the defaults for the size of the car</button></div>
+        <details class="card">
+            <summary>Materials</summary>
+            <div class="body">
+                <div class="modal-link">
+                    <span class="hint">Set a material right that did not arrive as it looked in Blender (glass, paint, chrome…).</span>
+                    <button class="small" data-open="dlgMaterials">Materials…</button>
+                </div>
+            </div>
+        </details>
 
-    <h2>Engine sound</h2>
-    <div class="sub">The sound is calculated from a model of the engine, in one of two ways. <b>Pipes</b>: every cylinder has pipes for the intake and the
-        exhaust in which the pressure wave of the burn travels up and down and is partly reflected, and the exhausts come together in a pipe, a muffler
-        and the outlet (after the engine sound generator of Antonio-R1). <b>Combustion</b>: the gas in every cylinder is simulated (compression, the
-        burn, the valves, the exhaust runners and the collector) and the pressure in the exhaust is played through the recorded impulse response of
-        an exhaust (after engine-sim of Ange Yaghi; it costs more of the computer). Press Play and change the values while you listen.</div>
-    <div class="row">
-        <div><label>Sound model</label><select id="soundModel"><option value="pipes">Pipes (waveguides)</option><option value="engine-sim">Combustion (engine-sim)</option></select></div>
-        <div style="flex:none; align-self:flex-end"><button id="soundPlay" class="primary" style="padding:6px 18px">Play</button></div>
     </div>
-    <label>Engine speed <span id="soundRpmLabel" class="hint"></span></label>
-    <input type="range" id="soundRpm" min="0" max="7000" value="900" step="10" style="width:100%">
-    <label>Throttle <span id="soundThrottleLabel" class="hint"></span></label>
-    <input type="range" id="soundThrottle" min="0" max="100" value="0" style="width:100%">
-    <div class="buttons"><button class="small" id="soundSweep">Rev up and down</button>
-        <label style="display:inline; margin:0 0 0 8px"><input type="checkbox" id="soundInside"> as heard in the cockpit</label></div>
-
-    <div id="esBlock">
-    <label><b>Combustion model</b></label>
-    <div class="row">
-        <div><label>Preset</label><select id="esPreset"></select></div>
-        <div><label>Layout</label><select id="esLayout" class="es" data-key="layout"></select></div>
-    </div>
-    <label><b>Cylinder</b></label>
-    <div class="row3 row">
-        <div><input type="number" class="es" data-key="bore" step="0.5" min="30"><div class="hint">bore (mm)</div></div>
-        <div><input type="number" class="es" data-key="stroke" step="0.5" min="30"><div class="hint">stroke (mm)</div></div>
-        <div><input type="number" class="es" data-key="rod" step="1" min="50"><div class="hint">rod (mm)</div></div>
-    </div>
-    <div class="row3 row">
-        <div><input type="number" class="es" data-key="compression_ratio" step="0.1" min="5" max="18"><div class="hint">compression ratio</div></div>
-        <div><input type="number" class="es" data-key="burn_duration" step="1" min="15" max="120"><div class="hint">burn (crank °)</div></div>
-        <div><input type="number" class="es" data-key="burn_randomness" step="0.05" min="0" max="1"><div class="hint">burn randomness</div></div>
-    </div>
-    <label><b>Camshaft</b> (durations in crank degrees at 50 thou, lift in mm, lobe centres in degrees from TDC)</label>
-    <div class="row3 row">
-        <div><input type="number" class="es" data-key="intake_duration" step="2" min="150" max="330"><div class="hint">intake duration</div></div>
-        <div><input type="number" class="es" data-key="intake_lift" step="0.1" min="3" max="20"><div class="hint">intake lift</div></div>
-        <div><input type="number" class="es" data-key="intake_lobe_centre" step="1" min="80" max="140"><div class="hint">intake centre</div></div>
-    </div>
-    <div class="row3 row">
-        <div><input type="number" class="es" data-key="exhaust_duration" step="2" min="150" max="330"><div class="hint">exhaust duration</div></div>
-        <div><input type="number" class="es" data-key="exhaust_lift" step="0.1" min="3" max="20"><div class="hint">exhaust lift</div></div>
-        <div><input type="number" class="es" data-key="exhaust_lobe_centre" step="1" min="80" max="140"><div class="hint">exhaust centre</div></div>
-    </div>
-    <label><b>Ports</b> (flow at full lift, cfm at 28 inH2O)</label>
-    <div class="row3 row">
-        <div><input type="number" class="es" data-key="intake_flow" step="10" min="20"><div class="hint">intake port</div></div>
-        <div><input type="number" class="es" data-key="exhaust_flow" step="10" min="20"><div class="hint">exhaust port</div></div>
-        <div><input type="number" class="es" data-key="idle_pressure" step="0.05" min="0.1" max="0.9"><div class="hint">manifold at idle (atm)</div></div>
-    </div>
-    <label><b>Exhaust</b> (lengths in metres, flows in cfm)</label>
-    <div class="row3 row">
-        <div><select class="es" data-key="exhaust_systems"><option value="1">one exhaust</option><option value="2">two exhausts (per bank)</option></select><div class="hint">exhaust systems</div></div>
-        <div><input type="number" class="es" data-key="primary_length" step="0.05" min="0.05"><div class="hint">primary tube length</div></div>
-        <div><input type="number" class="es" data-key="primary_flow" step="10" min="20"><div class="hint">primary flow</div></div>
-    </div>
-    <div class="row3 row">
-        <div><input type="number" class="es" data-key="exhaust_length" step="0.1" min="0.2"><div class="hint">exhaust length</div></div>
-        <div><input type="number" class="es" data-key="outlet_flow" step="10" min="20"><div class="hint">outlet flow</div></div>
-        <div><input type="number" class="es" data-key="collector_area" step="1" min="2"><div class="hint">collector area (cm²)</div></div>
-    </div>
-    <label><b>Sound</b> (the exhaust that the sound is played through, and the mix of engine-sim)</label>
-    <div class="row">
-        <div><select class="es" data-key="impulse_response" id="esIr"></select><div class="hint">impulse response of the exhaust</div></div>
-        <div style="flex:none; width:90px"><input type="number" class="es" data-key="convolution" step="0.05" min="0" max="1"><div class="hint">how much</div></div>
-    </div>
-    <div class="row3 row">
-        <div><input type="number" class="es" data-key="hf_gain" step="0.005" min="0" max="1"><div class="hint">high frequency gain</div></div>
-        <div><input type="number" class="es" data-key="noise" step="0.05" min="0" max="1"><div class="hint">low frequency noise</div></div>
-        <div><input type="number" class="es" data-key="jitter" step="0.05" min="0" max="2"><div class="hint">high frequency noise</div></div>
-    </div>
-    <div class="row3 row">
-        <div><input type="number" class="es" data-key="volume" step="0.05" min="0" max="3"><div class="hint">volume</div></div>
-        <div><input type="number" class="es" data-key="audio_volume" step="0.1" min="0" max="10"><div class="hint">exhaust volume</div></div>
-        <div><input type="number" class="es" data-key="simulation_frequency" step="1000" min="4000" max="40000"><div class="hint">simulation (Hz)</div></div>
-    </div>
-    <label>Ignition timing (rpm:degrees of advance, separated by commas)</label>
-    <input type="text" class="es" data-key="timing" id="esTiming">
-    </div>
-
-    <div id="pipesBlock">
-    <label><b>Recordings</b> (optional)</label>
-    <div class="sub">Instead of the calculated sound the car can play recordings of its engine, the way most games do it: loops of the engine at a steady speed that
-        are played at a pitch that follows the engine speed and fade into each other. Take a few seamless loops (for example at idle, at 2500, at 4500 and at the
-        rev limit) and say at which engine speed each was recorded, and whether the throttle was open (on) or closed (off). One kind (on) is enough.
-        Without recordings the sound below is used.</div>
-    <input type="file" id="sampleFiles" multiple accept=".ogg,.mp3,.wav,.flac,.m4a,audio/*">
-    <div id="samples"></div>
-    <label style="display:inline-block"><input type="checkbox" id="soundUseSamples" checked> Play the recordings in the preview</label>
-    <label><b>Pipes model</b></label>
-    <div class="row">
-        <div><label>Preset</label><select id="soundPreset"></select></div>
-    </div>
-    <div class="row3 row">
-        <div><label>Cylinders</label><input type="number" class="snd" id="sndCylinders" min="1" max="16" step="1"></div>
-        <div><label>Volume</label><input type="number" class="snd" id="sndVolume" min="0" max="3" step="0.05"></div>
-        <div><label>Ignition time</label><input type="number" class="snd" id="sndIgnition" min="0.002" max="0.05" step="0.001"></div>
-    </div>
-    <label><b>Pipes</b> (lengths in samples: the longer, the lower the resonance)</label>
-    <div class="row3 row">
-        <div><input type="number" class="snd" id="sndIntakeLen" min="1" max="1000" step="5"><div class="hint">intake</div></div>
-        <div><input type="number" class="snd" id="sndExhaustLen" min="1" max="1000" step="5"><div class="hint">exhaust</div></div>
-        <div><input type="number" class="snd" id="sndExtractorLen" min="1" max="1000" step="5"><div class="hint">extractor</div></div>
-    </div>
-    <div class="row3 row">
-        <div><input type="number" class="snd" id="sndStraightLen" min="1" max="1000" step="5"><div class="hint">straight pipe</div></div>
-        <div><input type="number" class="snd" id="sndOutletLen" min="1" max="500" step="1"><div class="hint">outlet</div></div>
-        <div><input type="number" class="snd" id="sndStraightRefl" min="0" max="0.99" step="0.01"><div class="hint">pipe reflection</div></div>
-    </div>
-    <label><b>Valves and reflection</b> (0 to 1)</label>
-    <div class="row3 row">
-        <div><input type="number" class="snd" id="sndIntakeOpen" min="0" max="0.99" step="0.01"><div class="hint">intake open</div></div>
-        <div><input type="number" class="snd" id="sndIntakeClosed" min="0" max="0.99" step="0.01"><div class="hint">intake closed</div></div>
-        <div><input type="number" class="snd" id="sndOutletRefl" min="0" max="0.99" step="0.01"><div class="hint">outlet reflection</div></div>
-    </div>
-    <div class="row3 row">
-        <div><input type="number" class="snd" id="sndExhaustOpen" min="0" max="0.99" step="0.01"><div class="hint">exhaust open</div></div>
-        <div><input type="number" class="snd" id="sndExhaustClosed" min="0" max="0.99" step="0.01"><div class="hint">exhaust closed</div></div>
-        <div></div>
-    </div>
-    <label><b>Muffler</b> (lengths of the elements in samples, separated by commas, and how much it holds back)</label>
-    <div class="row">
-        <div><input type="text" class="snd" id="sndMuffler"></div>
-        <div style="flex:none; width:90px"><input type="number" class="snd" id="sndMufflerAction" min="0" max="0.99" step="0.01"></div>
-    </div>
-    <label><b>Mix</b> (the parts of the sound)</label>
-    <div class="row3 row">
-        <div><input type="number" class="snd" id="sndMixIntake" min="0" max="3" step="0.1"><div class="hint">intake</div></div>
-        <div><input type="number" class="snd" id="sndMixBlock" min="0" max="3" step="0.1"><div class="hint">engine block</div></div>
-        <div><input type="number" class="snd" id="sndMixOutlet" min="0" max="3" step="0.1"><div class="hint">outlet</div></div>
-    </div>
-    </div>
-
-    <h2>Brakes</h2>
-    <div class="row">
-        <div><label>Front, per wheel (Nm)</label><input type="number" id="brakeFront" step="50" value="1600"></div>
-        <div><label>Rear, per wheel (Nm)</label><input type="number" id="brakeRear" step="50" value="900"></div>
-    </div>
-
-    <div class="buttons" style="margin-top: 22px">
+    <footer class="bar">
+        <div id="status"></div>
+        <button class="danger" id="delete" style="display:none">Delete</button>
         <button class="primary" id="save">Save the car</button>
-        <button class="danger" id="delete" style="display:none">Delete this car</button>
-    </div>
-    <div id="status"></div>
+    </footer>
 </div>
-<div id="view"><div id="hud"></div></div>
+
+<div id="view">
+    <div id="hud"></div>
+    <div id="toast"></div>
+    <div class="float bottom">
+        <button id="soundPlay" class="accent">Play</button>
+        <div class="slider"><span><b>Engine speed</b><i id="soundRpmLabel"></i></span><input type="range" id="soundRpm" min="0" max="7000" value="900" step="10"></div>
+        <div class="slider"><span><b>Throttle</b><i id="soundThrottleLabel"></i></span><input type="range" id="soundThrottle" min="0" max="100" value="0"></div>
+        <button id="soundSweep" class="small ghost">Rev</button>
+        <label><input type="checkbox" id="soundInside"> cockpit</label>
+    </div>
+</div>
+
+<dialog id="dlgCurve">
+    <div class="head"><h3>Torque at full throttle</h3><button class="close" data-close>×</button></div>
+    <div class="content">
+        <canvas id="chart" width="800" height="300"></canvas>
+        <div class="legend hint"><span><i style="background:#ff9f43"></i>torque</span><span><i style="background:#54a0ff"></i>power</span></div>
+        <table id="curve"><thead><tr><th>rpm</th><th>Nm</th><th>hp</th><th></th></tr></thead><tbody></tbody></table>
+        <div class="buttons"><button class="small ghost" id="addPoint">Add a point</button></div>
+        <div class="group">A typical curve from the peak power</div>
+        <div class="row">
+            <div><input type="number" id="genPower" value="250" step="5"><div class="hint">peak power (hp)</div></div>
+            <div><input type="number" id="genRpm" value="5500" step="100"><div class="hint">at (rpm)</div></div>
+            <div><button id="generate" style="width:100%">Generate</button></div>
+        </div>
+    </div>
+</dialog>
+
+<dialog id="dlgCameras">
+    <div class="head"><h3>Cameras</h3><button class="close" data-close>×</button></div>
+    <div class="content">
+        <p class="sub">Heights are above the road; the cockpit is from the origin of the model (x to the left, y up, z forward). Fields of view are the vertical angle in degrees.</p>
+        <div class="group">1 Fixed behind the car</div>
+        <div class="row">
+            <div><input type="number" class="cam" id="camChaseDist" step="0.1"><div class="hint">distance (m)</div></div>
+            <div><input type="number" class="cam" id="camChaseHeight" step="0.05"><div class="hint">height (m)</div></div>
+            <div><input type="number" class="cam" id="camChaseFov" step="1"><div class="hint">field of view</div></div>
+        </div>
+        <div class="group">2 Follow</div>
+        <div class="row">
+            <div><input type="number" class="cam" id="camFolDist" step="0.1"><div class="hint">distance (m)</div></div>
+            <div><input type="number" class="cam" id="camFolHeight" step="0.05"><div class="hint">height (m)</div></div>
+            <div><input type="number" class="cam" id="camFolLook" step="0.05"><div class="hint">looks at height (m)</div></div>
+        </div>
+        <div class="row">
+            <div><input type="number" class="cam" id="camFolSmooth" step="0.1"><div class="hint">follow speed (1/s)</div></div>
+            <div><input type="number" class="cam" id="camFolFovStand" step="1"><div class="hint">FOV standing</div></div>
+            <div><input type="number" class="cam" id="camFolFovFast" step="1"><div class="hint">FOV at full speed</div></div>
+        </div>
+        <div class="row">
+            <div><input type="number" class="cam" id="camFolSpeed" step="10"><div class="hint">full speed (km/h)</div></div>
+            <div><input type="number" class="cam" id="camFolDolly" min="0" max="1" step="0.1"><div class="hint">comes closer (0 to 1)</div></div>
+            <div></div>
+        </div>
+        <p class="sub">The faster the car, the wider the FOV. With “comes closer” at 1 the camera moves in with it, so the car keeps its size and only the sense of speed changes (a dolly zoom).</p>
+        <div class="group">3 Cockpit</div>
+        <div class="row">
+            <div><input type="number" class="cam" id="camCockX" step="0.01"><div class="hint">x (m, left)</div></div>
+            <div><input type="number" class="cam" id="camCockY" step="0.01"><div class="hint">y (m, up)</div></div>
+            <div><input type="number" class="cam" id="camCockZ" step="0.01"><div class="hint">z (m, forward)</div></div>
+        </div>
+        <div class="row">
+            <div><input type="number" class="cam" id="camCockFov" step="1"><div class="hint">field of view</div></div>
+            <div></div><div></div>
+        </div>
+        <div class="buttons"><button class="small ghost" id="camDefaults">Defaults for the size of the car</button></div>
+    </div>
+</dialog>
+
+<dialog id="dlgMaterials">
+    <div class="head"><h3>Materials</h3><button class="close" data-close>×</button></div>
+    <div class="content">
+        <p class="sub">The materials of the model are physically based and used as they are. A model does not always arrive the way it looked in Blender (the glass of many models becomes opaque white metal): set such a material right with a preset or by hand. The changes are saved with the car.</p>
+        <div id="materials"></div>
+    </div>
+</dialog>
+
+<dialog id="dlgSound">
+    <div class="head"><h3>Engine sound settings</h3><button class="close" data-close>×</button></div>
+    <div class="content">
+        <div id="pipesAdvanced" data-model="pipes">
+            <p class="sub">Every cylinder has pipes for the intake and the exhaust in which the pressure wave of the burn travels up and down and is partly reflected; the exhausts come together in a pipe, a muffler and the outlet.</p>
+            <div class="row">
+                <div><input type="number" class="snd" id="sndCylinders" min="1" max="16" step="1"><div class="hint">cylinders</div></div>
+                <div><input type="number" class="snd" id="sndVolume" min="0" max="3" step="0.05"><div class="hint">volume</div></div>
+                <div><input type="number" class="snd" id="sndIgnition" min="0.002" max="0.05" step="0.001"><div class="hint">ignition time</div></div>
+            </div>
+            <div class="group">Pipes (lengths in samples: the longer, the lower the resonance)</div>
+            <div class="row">
+                <div><input type="number" class="snd" id="sndIntakeLen" min="1" max="1000" step="5"><div class="hint">intake</div></div>
+                <div><input type="number" class="snd" id="sndExhaustLen" min="1" max="1000" step="5"><div class="hint">exhaust</div></div>
+                <div><input type="number" class="snd" id="sndExtractorLen" min="1" max="1000" step="5"><div class="hint">extractor</div></div>
+            </div>
+            <div class="row">
+                <div><input type="number" class="snd" id="sndStraightLen" min="1" max="1000" step="5"><div class="hint">straight pipe</div></div>
+                <div><input type="number" class="snd" id="sndOutletLen" min="1" max="500" step="1"><div class="hint">outlet</div></div>
+                <div><input type="number" class="snd" id="sndStraightRefl" min="0" max="0.99" step="0.01"><div class="hint">pipe reflection</div></div>
+            </div>
+            <div class="group">Valves and reflection (0 to 1)</div>
+            <div class="row">
+                <div><input type="number" class="snd" id="sndIntakeOpen" min="0" max="0.99" step="0.01"><div class="hint">intake open</div></div>
+                <div><input type="number" class="snd" id="sndIntakeClosed" min="0" max="0.99" step="0.01"><div class="hint">intake closed</div></div>
+                <div><input type="number" class="snd" id="sndOutletRefl" min="0" max="0.99" step="0.01"><div class="hint">outlet reflection</div></div>
+            </div>
+            <div class="row">
+                <div><input type="number" class="snd" id="sndExhaustOpen" min="0" max="0.99" step="0.01"><div class="hint">exhaust open</div></div>
+                <div><input type="number" class="snd" id="sndExhaustClosed" min="0" max="0.99" step="0.01"><div class="hint">exhaust closed</div></div>
+                <div></div>
+            </div>
+            <div class="group">Muffler (lengths of the elements in samples, and how much it holds back)</div>
+            <div class="row">
+                <div><input type="text" class="snd" id="sndMuffler"></div>
+                <div class="fixed" style="width:90px"><input type="number" class="snd" id="sndMufflerAction" min="0" max="0.99" step="0.01"></div>
+            </div>
+            <div class="group">Mix</div>
+            <div class="row">
+                <div><input type="number" class="snd" id="sndMixIntake" min="0" max="3" step="0.1"><div class="hint">intake</div></div>
+                <div><input type="number" class="snd" id="sndMixBlock" min="0" max="3" step="0.1"><div class="hint">engine block</div></div>
+                <div><input type="number" class="snd" id="sndMixOutlet" min="0" max="3" step="0.1"><div class="hint">outlet</div></div>
+            </div>
+        </div>
+        <div id="esAdvanced" data-model="engine-sim">
+            <p class="sub">The gas in every cylinder is simulated (compression, the burn, the valves, the exhaust runners and the collector) and the pressure in the exhaust is played through the recorded impulse response of an exhaust. It costs more of the computer than the pipes model.</p>
+            <div class="group">Cylinder</div>
+            <div class="row">
+                <div><input type="number" class="es" data-key="bore" step="0.5" min="30"><div class="hint">bore (mm)</div></div>
+                <div><input type="number" class="es" data-key="stroke" step="0.5" min="30"><div class="hint">stroke (mm)</div></div>
+                <div><input type="number" class="es" data-key="rod" step="1" min="50"><div class="hint">rod (mm)</div></div>
+            </div>
+            <div class="row">
+                <div><input type="number" class="es" data-key="compression_ratio" step="0.1" min="5" max="18"><div class="hint">compression ratio</div></div>
+                <div><input type="number" class="es" data-key="burn_duration" step="1" min="15" max="120"><div class="hint">burn (crank °)</div></div>
+                <div><input type="number" class="es" data-key="burn_randomness" step="0.05" min="0" max="1"><div class="hint">burn randomness</div></div>
+            </div>
+            <div class="group">Camshaft (durations in crank degrees at 50 thou, lift in mm, lobe centres from TDC)</div>
+            <div class="row">
+                <div><input type="number" class="es" data-key="intake_duration" step="2" min="150" max="330"><div class="hint">intake duration</div></div>
+                <div><input type="number" class="es" data-key="intake_lift" step="0.1" min="3" max="20"><div class="hint">intake lift</div></div>
+                <div><input type="number" class="es" data-key="intake_lobe_centre" step="1" min="80" max="140"><div class="hint">intake centre</div></div>
+            </div>
+            <div class="row">
+                <div><input type="number" class="es" data-key="exhaust_duration" step="2" min="150" max="330"><div class="hint">exhaust duration</div></div>
+                <div><input type="number" class="es" data-key="exhaust_lift" step="0.1" min="3" max="20"><div class="hint">exhaust lift</div></div>
+                <div><input type="number" class="es" data-key="exhaust_lobe_centre" step="1" min="80" max="140"><div class="hint">exhaust centre</div></div>
+            </div>
+            <div class="group">Ports (flow at full lift, cfm at 28 inH2O)</div>
+            <div class="row">
+                <div><input type="number" class="es" data-key="intake_flow" step="10" min="20"><div class="hint">intake port</div></div>
+                <div><input type="number" class="es" data-key="exhaust_flow" step="10" min="20"><div class="hint">exhaust port</div></div>
+                <div><input type="number" class="es" data-key="idle_pressure" step="0.05" min="0.1" max="0.9"><div class="hint">manifold at idle (atm)</div></div>
+            </div>
+            <div class="group">Exhaust (lengths in metres, flows in cfm)</div>
+            <div class="row">
+                <div><select class="es" data-key="exhaust_systems"><option value="1">one exhaust</option><option value="2">two (per bank)</option></select><div class="hint">exhaust systems</div></div>
+                <div><input type="number" class="es" data-key="primary_length" step="0.05" min="0.05"><div class="hint">primary tube length</div></div>
+                <div><input type="number" class="es" data-key="primary_flow" step="10" min="20"><div class="hint">primary flow</div></div>
+            </div>
+            <div class="row">
+                <div><input type="number" class="es" data-key="exhaust_length" step="0.1" min="0.2"><div class="hint">exhaust length</div></div>
+                <div><input type="number" class="es" data-key="outlet_flow" step="10" min="20"><div class="hint">outlet flow</div></div>
+                <div><input type="number" class="es" data-key="collector_area" step="1" min="2"><div class="hint">collector area (cm²)</div></div>
+            </div>
+            <div class="group">The mix of engine-sim</div>
+            <div class="row">
+                <div><input type="number" class="es" data-key="hf_gain" step="0.005" min="0" max="1"><div class="hint">high frequency gain</div></div>
+                <div><input type="number" class="es" data-key="noise" step="0.05" min="0" max="1"><div class="hint">low frequency noise</div></div>
+                <div><input type="number" class="es" data-key="jitter" step="0.05" min="0" max="2"><div class="hint">high frequency noise</div></div>
+            </div>
+            <div class="row">
+                <div><input type="number" class="es" data-key="volume" step="0.05" min="0" max="3"><div class="hint">volume</div></div>
+                <div><input type="number" class="es" data-key="audio_volume" step="0.1" min="0" max="10"><div class="hint">exhaust volume</div></div>
+                <div><input type="number" class="es" data-key="simulation_frequency" step="1000" min="4000" max="40000"><div class="hint">simulation (Hz)</div></div>
+            </div>
+            <div><label>Ignition timing (rpm:degrees of advance, separated by commas)</label><input type="text" class="es" data-key="timing" id="esTiming"></div>
+        </div>
+    </div>
+</dialog>
+
 <script>var OpenRacer = {};</script>
 <script src="../js/MaterialOverrides.js"></script>
 <script src="../js/CarDefaults.js"></script>
 <script src="../js/EngineSynth.js"></script>
 <script src="../js/EngineSampler.js"></script>
 <script src="../js/EngineSim.js"></script>
+<script src="editor-ui.js"></script>
 <script type="module" src="car-editor.js"></script>
 </body>
 </html>

@@ -88,6 +88,7 @@ function status(text, kind) {
     const el = $("status");
     el.textContent = text;
     el.className = kind || "";
+    if (window.editorToast) window.editorToast(text, kind);
 }
 
 function num(id) {
@@ -588,9 +589,8 @@ function soundModel() {
 }
 
 function updateSoundModel() {
-    const es = soundModel() === "engine-sim";
-    $("esBlock").style.display = es ? "" : "none";
-    $("pipesBlock").style.display = es ? "none" : "";
+    const model = soundModel();
+    document.querySelectorAll("[data-model]").forEach((el) => { el.style.display = el.dataset.model === model ? "" : "none"; });
     stopPreview();
 }
 

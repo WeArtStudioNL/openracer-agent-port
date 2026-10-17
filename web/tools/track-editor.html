@@ -20,166 +20,134 @@
 <head>
     <meta charset="UTF-8">
     <title>OpenRacer track editor</title>
-    <style>
-        * { box-sizing: border-box; }
-        body { margin: 0; font-family: Arial, sans-serif; font-size: 14px; color: #e6e9ee; background: #14181f; height: 100vh; display: flex; overflow: hidden; }
-        #side { width: 430px; flex: none; overflow-y: auto; padding: 14px 16px 40px; background: #1c2129; border-right: 1px solid #2c3541; }
-        #view { flex: 1; position: relative; min-width: 0; }
-        #view canvas { display: block; width: 100%; height: 100%; }
-        #hud { position: absolute; left: 12px; top: 10px; color: #aab6c6; font-size: 13px; pointer-events: none; white-space: pre-line; text-shadow: 0 0 4px #000; }
-        h1 { font-size: 20px; margin: 0 0 2px; }
-        h2 { font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; color: #8fa3bd; margin: 22px 0 8px; border-bottom: 1px solid #2c3541; padding-bottom: 4px; }
-        .sub { color: #8895a7; margin-bottom: 8px; font-size: 13px; line-height: 1.45; }
-        label { display: block; margin: 7px 0 2px; color: #b6c0ce; }
-        .row { display: flex; gap: 8px; }
-        .row > * { flex: 1; min-width: 0; }
-        .row3 > * { flex: 1; }
-        input, select, textarea, button { font: inherit; color: inherit; }
-        input[type=text], input[type=number], select, textarea { width: 100%; background: #12161c; border: 1px solid #323c4a; border-radius: 4px; padding: 5px 7px; }
-        select[multiple] { height: 92px; }
-        input[type=file] { width: 100%; }
-        button { background: #36404e; border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; }
-        button:hover { background: #4a586b; }
-        button.primary { background: #2e9a5c; font-size: 15px; padding: 9px 20px; }
-        button.primary:hover { background: #38b56e; }
-        button.danger { background: #8a3a34; }
-        button.small { padding: 2px 8px; font-size: 12px; }
-        .buttons { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-        table { width: 100%; border-collapse: collapse; }
-        td, th { padding: 2px 3px; text-align: left; font-weight: normal; color: #8fa3bd; }
-        td input { padding: 3px 5px; }
-        #status { margin-top: 12px; padding: 8px 10px; border-radius: 4px; background: #232b36; min-height: 20px; white-space: pre-line; }
-        #status.error { background: #5a2823; }
-        #status.ok { background: #1f4a33; }
-        canvas#chart { width: 100%; height: 150px; background: #12161c; border: 1px solid #323c4a; border-radius: 4px; margin-top: 6px; }
-        .material { border-bottom: 1px solid #2c3541; padding: 6px 0 8px; }
-        .material .head { display: flex; gap: 6px; align-items: center; }
-        .material .head b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: normal; }
-        .material .head select { width: 120px; }
-        .material .fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 8px; margin-top: 5px; }
-        .material .fields label { margin: 0; font-size: 11px; color: #8895a7; }
-        .material input[type=color] { width: 100%; height: 26px; padding: 0; background: none; border: 1px solid #323c4a; }
-        .material.changed .head b { color: #ffd04d; }
-        .hint { color: #8895a7; font-size: 12px; margin-top: 3px; }
-        a { color: #7fb8ff; }
-        .legend span { display: inline-block; margin-right: 10px; }
-        .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
-    </style>
-    <style>
-        #parts { max-height: 320px; overflow-y: auto; border: 1px solid #2c3541; border-radius: 4px; }
-        #parts .part { display: flex; gap: 6px; align-items: center; padding: 2px 6px; border-bottom: 1px solid #232b36; cursor: pointer; }
-        #parts .part.selected { background: #2b3a52; }
-        #parts .part b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: normal; }
-        #parts .part select { width: 105px; padding: 2px 4px; }
-        #toast { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); max-width: 80%; padding: 9px 16px; border-radius: 6px; background: #232b36; border: 1px solid #3a4658; box-shadow: 0 2px 12px #0008; display: none; white-space: pre-line; pointer-events: none; }
-        #toast.error { background: #5a2823; border-color: #8a3a34; }
-        #toast.ok { background: #1f4a33; border-color: #2e7a52; }
-        .gate { display: flex; gap: 6px; align-items: center; padding: 3px 0; }
-        .gate span { flex: 1; }
-        button.active { background: #2e6fbf; }
-        #modes button { flex: 1; }
-    </style>
+    <link rel="stylesheet" href="editor.css">
     <script type="importmap">
         { "imports": { "three": "../js/three/build/three.module.js", "three/addons/": "../js/three/examples/jsm/" } }
     </script>
 </head>
 <body>
 <div id="side">
-    <h1>Track editor</h1>
-    <div class="sub">Make a track for OpenRacer from a glTF or glb model (for example from Blender): say what every part is made of, put the start and the lap gates on the road and save it. It shows up in the main menu of the game. <a href="../index.html">Back to the game</a></div>
+    <header>
+        <h1>Track editor</h1>
+        <a href="car-editor.html">Car editor</a>
+        <a href="../index.html">← Game</a>
+    </header>
+    <div id="scroll">
 
-    <h2>Track</h2>
-    <label>Existing tracks</label>
-    <div class="row">
-        <select id="existing"></select>
-        <button id="newTrack" style="flex: none">New track</button>
+        <details class="card" open>
+            <summary>Track<span class="meta" id="editing"></span></summary>
+            <div class="body">
+                <div class="row">
+                    <select id="existing"></select>
+                    <button id="newTrack" class="fixed ghost">New track</button>
+                </div>
+                <div class="row">
+                    <div><label>Name</label><input type="text" id="name" placeholder="My track"></div>
+                    <div><label>Id (folder name)</label><input type="text" id="id" placeholder="my-track"></div>
+                </div>
+                <div><label>Description</label><input type="text" id="description" placeholder="Short description for the menu"></div>
+            </div>
+        </details>
+
+        <details class="card" open>
+            <summary>Model<span class="meta" id="modelInfo">No model loaded.</span></summary>
+            <div class="body">
+                <p class="sub">A <b>.glb</b>, or a <b>.gltf</b> with its <b>.bin</b> and textures (select them all). Make the track in metres, y up. Importing a model in a track that exists replaces its model.</p>
+                <input type="file" id="files" multiple accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2">
+            </div>
+        </details>
+
+        <details class="card" open>
+            <summary>Surfaces<span class="meta" id="partsNote"></span></summary>
+            <div class="body">
+                <p class="sub"><b>Road</b>, <b>pit lane</b>, <b>grass</b> and <b>ground</b> can be driven on, <b>scenery</b> is driven into (walls, buildings), <b>decor</b> is only to look at (sky, trees). Click a part in the view to find it.</p>
+                <div class="row">
+                    <input type="text" id="filter" placeholder="Filter by name">
+                    <select id="bulkRole" class="fixed" style="width:120px"></select>
+                    <button id="bulkApply" class="fixed small ghost" style="height:32px">Set all shown</button>
+                </div>
+                <div id="parts"></div>
+                <div class="legend hint" id="legend"></div>
+            </div>
+        </details>
+
+        <details class="card" open>
+            <summary>Start and lap gates<span class="meta" id="gateNote"></span></summary>
+            <div class="body">
+                <p class="sub">Use the tools in the view: click on the road and drag in the direction that the car drives. The first gate is the finish line.</p>
+                <label>Start x / z / heading (°; 0 = towards +x, 90 = towards +z)</label>
+                <div class="row">
+                    <input type="number" id="startX" step="0.1">
+                    <input type="number" id="startZ" step="0.1">
+                    <input type="number" id="startHeading" step="1" value="0">
+                </div>
+                <div class="row">
+                    <div><label>Width of new gates (m)</label><input type="number" id="gateWidth" value="24" min="2" step="1"></div>
+                    <div><label>&nbsp;</label><button class="small ghost" id="gateAtStart" style="width:100%">Gate 1 at the start</button></div>
+                </div>
+                <div id="gates"></div>
+            </div>
+        </details>
+
+        <details class="card">
+            <summary>Sky and light</summary>
+            <div class="body">
+                <label class="check"><input type="checkbox" id="envOn" checked> Set the sky and the light of this track</label>
+                <p class="sub">A track of the old format has its own sky in its model: leave this off to keep it. Switch off the colours of the surfaces to see the model in this light.</p>
+                <div id="envFields">
+                    <div class="row">
+                        <div><label>Sky overhead</label><input type="color" id="skyTop"></div>
+                        <div><label>Sky at the horizon</label><input type="color" id="skyHorizon"></div>
+                    </div>
+                    <div><label>Picture of the whole sky instead (equirectangular, 2:1)</label><input type="file" id="skyImage" accept=".jpg,.jpeg,.png,.webp"></div>
+                    <div class="buttons"><span class="hint" id="skyImageName"></span><button class="small ghost" id="skyImageClear">No picture</button></div>
+                    <label class="check"><input type="checkbox" id="fogOn"> Fog (seen in the game, not here)</label>
+                    <div class="row">
+                        <div><input type="color" id="fogColor"><div class="hint">colour</div></div>
+                        <div><input type="number" id="fogNear" min="0" step="50"><div class="hint">from (m)</div></div>
+                        <div><input type="number" id="fogFar" min="10" step="100"><div class="hint">until (m)</div></div>
+                    </div>
+                    <div class="group">Sun</div>
+                    <div class="row">
+                        <div><input type="number" id="sunAz" step="5"><div class="hint">direction (°)</div></div>
+                        <div><input type="number" id="sunEl" min="2" max="90" step="5"><div class="hint">height (°)</div></div>
+                        <div><input type="number" id="sunInt" min="0" max="3" step="0.1"><div class="hint">strength</div></div>
+                    </div>
+                    <div class="row">
+                        <div><input type="color" id="sunColor"><div class="hint">colour of the sun</div></div>
+                        <div><input type="color" id="ambColor"><div class="hint">light of the sky</div></div>
+                        <div><input type="number" id="ambInt" min="0" max="3" step="0.1"><div class="hint">strength of it</div></div>
+                    </div>
+                    <div class="buttons"><button class="small ghost" id="envDefaults">Back to the defaults</button></div>
+                </div>
+            </div>
+        </details>
+
     </div>
-    <div class="hint" id="editing">Choose a track to change its start, gates and name (a track of the old format can be changed this way too), or import a model below. Saving a track that was chosen here overwrites it.</div>
-    <label>Name</label>
-    <input type="text" id="name" placeholder="My track">
-    <label>Id (the folder name: lower case letters, digits, - and _)</label>
-    <input type="text" id="id" placeholder="my-track">
-    <label>Description</label>
-    <input type="text" id="description" placeholder="Short description for the menu">
+    <footer class="bar">
+        <div id="status"></div>
+        <button class="danger" id="delete" style="display:none">Delete</button>
+        <button class="primary" id="save">Save the track</button>
+    </footer>
+</div>
 
-    <h2>Model</h2>
-    <div class="sub">Pick a <b>.glb</b> file, or a <b>.gltf</b> together with its <b>.bin</b> and texture files (select them all at once). Make the track in metres, <b>y is up</b> (Blender’s glTF export does this). Importing a model in a track that exists replaces its model.</div>
-    <input type="file" id="files" multiple accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2">
-    <div class="hint" id="modelInfo">No model loaded.</div>
-
-    <h2>Surfaces</h2>
-    <div class="sub">Say what every part is made of. <b>Road</b>, <b>pit lane</b>, <b>grass</b> and <b>ground</b> can be driven on (each with its own grip), <b>scenery</b> is something the car drives into (walls, buildings), <b>decor</b> is only to look at (sky, trees, flags). Click a part in the 3D view to find it in the list.</div>
-    <div class="row">
-        <input type="text" id="filter" placeholder="Filter by name">
-        <select id="bulkRole" style="flex: none; width: 120px"></select>
-        <button id="bulkApply" style="flex: none">Set all shown</button>
-    </div>
-    <div class="buttons" style="margin: 6px 0">
-        <label style="margin:0"><input type="checkbox" id="colour" checked> Show the surfaces in colour</label>
-    </div>
-    <div class="legend hint" id="legend"></div>
-    <div id="parts"></div>
-    <div class="hint" id="partsNote"></div>
-
-    <h2>Sky and light</h2>
-    <div class="sub">The sky, the fog and the sun of the track. Switch off “Show the surfaces in colour” above to see the real colours of the model in this light. A track of the old format has its own sky in its model: leave this off to keep it.</div>
-    <label><input type="checkbox" id="envOn" checked> Set the sky and the light of this track</label>
-    <div id="envFields">
-        <div class="row">
-            <div><label>Sky overhead</label><input type="color" id="skyTop" style="height:28px"></div>
-            <div><label>Sky at the horizon</label><input type="color" id="skyHorizon" style="height:28px"></div>
-        </div>
-        <label>Picture of the sky instead (equirectangular .jpg/.png/.webp, 2:1)</label>
-        <input type="file" id="skyImage" accept=".jpg,.jpeg,.png,.webp">
-        <div class="buttons"><span class="hint" id="skyImageName" style="align-self:center"></span><button class="small" id="skyImageClear">No picture</button></div>
-        <label><input type="checkbox" id="fogOn"> Fog (seen in the game, not in this view)</label>
-        <div class="row row3">
-            <div><label>Colour</label><input type="color" id="fogColor" style="height:28px"></div>
-            <div><label>From (m)</label><input type="number" id="fogNear" min="0" step="50"></div>
-            <div><label>Until (m)</label><input type="number" id="fogFar" min="10" step="100"></div>
-        </div>
-        <label>Sun: direction and height (degrees; 0 = towards +x, 90 = towards +z)</label>
-        <div class="row row3">
-            <div><input type="number" id="sunAz" step="5"><div class="hint">direction</div></div>
-            <div><input type="number" id="sunEl" min="2" max="90" step="5"><div class="hint">height</div></div>
-            <div><input type="number" id="sunInt" min="0" max="3" step="0.1"><div class="hint">strength</div></div>
-        </div>
-        <div class="row">
-            <div><label>Colour of the sun</label><input type="color" id="sunColor" style="height:28px"></div>
-            <div><label>Light of the sky</label><input type="color" id="ambColor" style="height:28px"></div>
-            <div><label>Strength of it</label><input type="number" id="ambInt" min="0" max="3" step="0.1"></div>
-        </div>
-        <div class="buttons"><button class="small" id="envDefaults">Back to the defaults</button></div>
-    </div>
-
-    <h2>Start and lap gates</h2>
-    <div class="sub">Choose a tool, then <b>click on the road</b> and <b>drag</b> in the direction that the car drives. The car starts at the start; a lap is counted when it drives through all the gates in order. The first gate is the finish line: put it just in front of the start.</div>
-    <div class="row" id="modes">
+<div id="view">
+    <div id="hud"></div>
+    <div id="toast"></div>
+    <div class="float bottom" id="modes">
         <button data-mode="view" class="active">Look</button>
         <button data-mode="start">Place start</button>
         <button data-mode="gate">Add gate</button>
     </div>
-    <div class="buttons"><button class="small" id="topView">View from above</button><button class="small" id="gateAtStart">Gate 1 at the start</button></div>
-    <label>Start x / z / heading (degrees, 0 = towards +x, 90 = towards +z)</label>
-    <div class="row row3">
-        <input type="number" id="startX" step="0.1">
-        <input type="number" id="startZ" step="0.1">
-        <input type="number" id="startHeading" step="1" value="0">
+    <div class="float top-right">
+        <label><input type="checkbox" id="colour" checked> colours of the surfaces</label>
+        <button class="small ghost" id="topView">From above</button>
     </div>
-    <label>Width of new gates (metres)</label>
-    <input type="number" id="gateWidth" value="24" min="2" step="1">
-    <div id="gates"></div>
-    <div class="hint" id="gateNote"></div>
-
-    <div class="buttons" style="margin-top: 22px">
-        <button class="primary" id="save">Save the track</button>
-        <button class="danger" id="delete" style="display:none">Delete this track</button>
-    </div>
-    <div id="status"></div>
 </div>
-<div id="view"><div id="hud"></div><div id="toast"></div></div>
+
 <script>var OpenRacer = {};</script>
 <script src="../js/TrackEnvironment.js"></script>
+<script src="editor-ui.js"></script>
 <script type="module" src="track-editor.js"></script>
 </body>
 </html>
