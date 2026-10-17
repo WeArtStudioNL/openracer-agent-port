@@ -39,6 +39,32 @@ var ForceFeedback = (function() {
 
     function clamp(x, min, max) { return Math.max(min, Math.min(max, x)); }
 
+    var logLines = [];
+    function log(text) {
+        logLines.push(text);
+        if(logLines.length > 60) logLines.shift();
+        console.log("Force feedback: " + text);
+    }
+
+    // Everything that is known about the device, to find out why a wheel does not work: the reports of its descriptor and what was made of them
+    function diagnose() {
+        if(!device) return "No device. " + (failure || "");
+        var lines = [deviceName + " vendor " + device.vendorId.toString(16) + " product " + device.productId.toString(16) + ", driver " + driver + (failure ? ", failure: " + failure : "")];
+        flattenReports(device.collections).forEach(function(r) {
+            lines.push(r.kind + " id " + r.id + " (" + r.bits + " bits): " + r.fields.map(function(f) {
+                if(f.array) return "[" + f.usages.map(function(u) { return u.toString(16); }).join(",") + "]x" + f.size + "b";
+                return f.usage.toString(16) + ":" + f.size + "b(" + f.min + ".." + f.max + ")";
+            }).join(" "));
+        });
+        if(pid) {
+            lines.push("PID: set effect " + (pid.setEffect && pid.setEffect.id) + ", constant " + (pid.setConstant && pid.setConstant.id) + ", condition " + (pid.setCondition && pid.setCondition.id) +
+                ", operation " + (pid.operation && pid.operation.id) + ", control " + (pid.control && pid.control.id) + ", gain " + (pid.deviceGain && pid.deviceGain.id) +
+                ", create " + (pid.create && pid.create.id) + ", block load " + (pid.blockLoad && pid.blockLoad.id) + "; types " + pid.types.map(function(u) { return u.toString(16); }).join(",") +
+                "; blocks " + JSON.stringify(blocks) + "; spring " + pid.hasSpring + " damper " + pid.hasDamper);
+        }
+        return lines.concat(logLines).join("\n");
+    }
+
     function option(name, fallback) {
         var v = Settings.option(name);
         return v === undefined ? fallback : v;
@@ -202,20 +228,22 @@ var ForceFeedback = (function() {
     Report.prototype.select = function(selectorUsages, chosen) {
         var hit = false;
         this.report.fields.forEach(function(f) {
-            if(!f.array) return;
-            if(!f.usages.some(function(u) { return selectorUsages.indexOf(u) >= 0; })) return;
+            if(!f.array || hit) return;
             var index = f.usages.indexOf(chosen);
             if(index < 0) return;
             writeBits(this.bytes, f.bit, f.size, f.min + index);
             hit = true;
         }, this);
+        if(!hit) log("the report has no selector for usage " + chosen.toString(16));
         return hit;
     };
     Report.prototype.send = function() {
         var r = this.report;
+        if(setupLogging) log((r.kind === "featureReports" ? "feature " : "output ") + r.id + ": " + Array.prototype.map.call(this.bytes, function(b) { return (b < 16 ? "0" : "") + b.toString(16); }).join(" "));
         if(r.kind === "featureReports") return device.sendFeatureReport(r.id, this.bytes);
         return device.sendReport(r.id, this.bytes);
     };
+    var setupLogging = true; // the reports of the setup are logged, the constant force every frame is not
 
     var U = { setEffect: 0x21, blockIndex: 0x22, pbo: 0x23, effectType: 0x25, constant: 0x26, spring: 0x40, damper: 0x41, byteCount: 0x2b,
         duration: 0x50, samplePeriod: 0x51, gain: 0x52, triggerButton: 0x53, triggerRepeat: 0x54, axesEnable: 0x55, directionEnable: 0x56, direction: 0x57,
@@ -251,7 +279,7 @@ var ForceFeedback = (function() {
     function later(fn) {
         queue = queue.then(fn).catch(function(error) {
             failure = "Force feedback: " + (error.message || error);
-            console.error(failure);
+            log("error: " + (error.message || error));
         });
         return queue;
     }
@@ -290,13 +318,15 @@ var ForceFeedback = (function() {
         r.setFraction(pidUsage(U.gain), 1);
         r.set(pidUsage(U.triggerButton), 0);
         r.set(pidUsage(U.startDelay), 0);
-        // the axes: the first one (X) on, the direction along it
+        // the axes: the first one (X) on, the direction along it. Axes Enable holds Generic Desktop X and Y (one bit each); the
+        // Direction collection holds two instances (the Ordinal page, or usages 1 and 2 of the PID page, or Generic Desktop X and Y).
         var axes = 0, dirs = 0;
         pid.setEffect.fields.forEach(function(f) {
             if(f.array) return;
-            var page = f.usage >>> 16;
-            if(page === 0x01 && f.size === 1) { writeBits(r.bytes, f.bit, 1, axes === 0 ? 1 : 0); axes++; }       // axes enable X, Y
-            if(page === 0x01 && f.size > 1) { writeBits(r.bytes, f.bit, f.size, dirs === 0 ? f.min + (f.max - f.min) * directionFraction : f.min); dirs++; } // direction X, Y
+            var page = f.usage >>> 16, id = f.usage & 0xffff;
+            if(page === 0x01 && f.size === 1) { writeBits(r.bytes, f.bit, 1, axes === 0 ? 1 : 0); axes++; return; }   // axes enable X, Y
+            var direction = (page === 0x0a) || (page === 0x0f && (id === 0x01 || id === 0x02)) || (page === 0x01 && f.size > 1);
+            if(direction) { writeBits(r.bytes, f.bit, f.size, dirs === 0 ? f.min + (f.max - f.min) * directionFraction : f.min); dirs++; return; }
             if(f.usage === pidUsage(U.directionEnable)) writeBits(r.bytes, f.bit, f.size, 1);
         });
         return r.send();
@@ -366,6 +396,7 @@ var ForceFeedback = (function() {
     }
 
     function sendConstant(value) {
+        if(blocks.constant && setupLogging && lastSent !== 0) setupLogging = false;
         var r = new Report(pid.setConstant);
         r.set(pidUsage(U.blockIndex), blocks.constant);
         r.setSigned(pidUsage(U.magnitude), value);
@@ -416,6 +447,7 @@ var ForceFeedback = (function() {
             device = d;
             deviceName = describe(d);
             pid = parsePid(d.collections);
+            log("opened " + deviceName + (pid ? ", HID PID: " + diagnose().split("\n").slice(-1)[0] : ", no HID PID reports found"));
             if(pid) driver = "pid";
             else if(d.vendorId === 0x046d) driver = "logitech";
             else {
@@ -545,7 +577,7 @@ var ForceFeedback = (function() {
     }
 
     function status() {
-        if(device && driver) return "Force feedback: " + deviceName + " (" + (driver === "pid" ? "HID PID" : "Logitech") + ")";
+        if(device && driver) return "Force feedback: " + deviceName + " (" + (driver === "pid" ? "HID PID" : "Logitech") + ")" + (failure ? " - " + failure : "") + (lastSent ? " sending " + lastSent.toFixed(2) : "");
         if(failure) return failure;
         if(!navigator.hid) return "Force feedback needs WebHID (Chrome or Edge); rumble only.";
         return "No force feedback device connected (connect it in the settings menu).";
@@ -562,6 +594,7 @@ var ForceFeedback = (function() {
         forget: forget,
         test: test,
         status: status,
+        diagnose: diagnose,
         isConnected: function() { return !!(device && driver); },
         deviceName: function() { return deviceName; },
         canConnect: function() { return !!navigator.hid; }

@@ -610,6 +610,13 @@ var Settings = (function() {
             panel.appendChild(optionRow("Road detail (bumps, grass, slip, ABS)", percent(options.ffbRoad), cycle("ffbRoad", [0, 0.25, 0.5, 0.75, 1])));
             panel.appendChild(optionRow("Direction", options.ffbInvert ? "Inverted" : "Normal", function() { setOption("ffbInvert", !options.ffbInvert); }));
             panel.appendChild(optionRow("Test", "Shake the wheel for two seconds", function() { ForceFeedback.test(); hint(ForceFeedback.status()); }));
+            panel.appendChild(optionRow("Diagnostics", "Copy to the clipboard", function() {
+                var text = ForceFeedback.diagnose();
+                var done = function() { hint("The diagnostics are on the clipboard (also in the console of the browser). Paste them to whoever helps you."); };
+                if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function() { hint(text); });
+                else hint(text);
+                console.log(text);
+            }));
             panel.appendChild(document.createElement("div"));
         }
         panel.appendChild(optionRow("HUD", options.hud ? "On" : "Off", function() { setOption("hud", !options.hud); }));
