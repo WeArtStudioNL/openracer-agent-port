@@ -46,6 +46,8 @@ var MainMenu = (function() {
             "#mainMenu .card .specs { color: #7e90a6; font-size: 13px; margin-top: 6px; }" +
             "#mainMenu .start { margin-top: 18px; font-size: 22px; padding: 14px 44px; border: 0; border-radius: 8px; background: #2e9a5c; color: #fff; cursor: pointer; }" +
             "#mainMenu .start:hover { background: #38b56e; }" +
+            "#mainMenu .secondary { margin-top: 18px; margin-left: 12px; font-size: 22px; padding: 14px 30px; border: 0; border-radius: 8px; background: #36404e; color: #fff; cursor: pointer; }" +
+            "#mainMenu .secondary:hover { background: #4a586b; }" +
             "#mainMenu .start:disabled { background: #3a4350; color: #7c8794; cursor: default; }" +
             "#mainMenu .foot { margin-top: 30px; color: #7e90a6; font-size: 14px; line-height: 1.6; }" +
             "#mainMenu .foot a { color: #7fb8ff; }" +
@@ -128,6 +130,12 @@ var MainMenu = (function() {
         button.disabled = !(choice.car && choice.track);
         button.onclick = start;
         wrap.appendChild(button);
+
+        var editor = document.createElement("button");
+        editor.className = "secondary";
+        editor.textContent = "Car editor";
+        editor.onclick = function() { window.location.href = "tools/car-editor.html"; };
+        wrap.appendChild(editor);
 
         var foot = document.createElement("div");
         foot.className = "foot";
