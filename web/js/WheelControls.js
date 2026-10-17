@@ -136,7 +136,7 @@ var WheelControls = (function() {
         if(!overlay) {
             overlay = document.createElement("div");
             overlay.style.cssText = "position: absolute; top: 20px; left: 50%; transform: translateX(-50%); " +
-                "z-index: 1001; padding: 10px 20px; background: rgba(0, 0, 0, 0.75); color: #ffffff; " +
+                "z-index: 1001; padding: 10px 20px; background: rgba(0, 0, 0, 0.75); color: #ffffff; white-space: pre-line; " +
                 "font-family: Arial; font-size: 16px; border-radius: 4px; display: none;";
             document.body.appendChild(overlay);
         }
@@ -204,8 +204,20 @@ var WheelControls = (function() {
         var hint = "";
         if(step.kind === "confirm") hint = "   [Y] yes  [N] no";
         else if(step.optional) hint = "   [N] skip";
-        showMessage("Wheel calibration (" + (calibration.step + 1) + "/" + calibration.steps.length + "): " +
-            step.text + hint + "   [Esc] cancel");
+        calibration.text = "Wheel calibration (" + (calibration.step + 1) + "/" + calibration.steps.length + "): " +
+            step.text + hint + "   [Esc] cancel";
+        showMessage(calibration.text);
+    }
+
+    // Shows the live input values below the instructions, to help diagnose odd wheel layouts.
+    function showLiveValues(pad) {
+        var axes = [];
+        for(var i = 0; i < pad.axes.length; i++) axes.push(i + ":" + pad.axes[i].toFixed(2));
+        var pressed = [];
+        for(var b = 0; b < pad.buttons.length; b++) {
+            if(isPressed(pad, b)) pressed.push(b);
+        }
+        overlay.textContent = calibration.text + "\naxes " + axes.join("  ") + "\nbuttons " + (pressed.join(",") || "-");
     }
 
     function nextStep(skipHShifter) {
@@ -254,6 +266,14 @@ var WheelControls = (function() {
         calibration.usedButtons.push(index);
     }
 
+    function findPedalOnAxis(profile, axis) {
+        var names = ["throttle", "brake", "clutch"];
+        for(var i = 0; i < names.length; i++) {
+            if(profile[names[i]] && profile[names[i]].axis === axis) return profile[names[i]];
+        }
+        return null;
+    }
+
     function calibrateAxisStep(pad, step) {
         var c = calibration;
         var now = Date.now();
@@ -289,16 +309,26 @@ var WheelControls = (function() {
             }
             return;
         }
+        var bestRest = 0;
         for(var i = 0; i < axes.length; i++) {
-            if(c.usedAxes.indexOf(i) >= 0) continue;
-            var delta = Math.abs(axes[i] - c.baseline[i]);
+            var rest = c.baseline[i];
+            if(c.usedAxes.indexOf(i) >= 0) {
+                // Some wheels report throttle and brake on one combined axis. Allow a pedal to share
+                // the axis of another pedal when it moves the opposite way from that pedal's rest value.
+                var other = findPedalOnAxis(c.profile, i);
+                if(!other) continue;
+                rest = other.rest;
+                if((axes[i] - rest) * (other.full - other.rest) >= 0) continue;
+            }
+            var delta = Math.abs(axes[i] - rest);
             if(delta > bestDelta) {
                 bestDelta = delta;
                 best = i;
+                bestRest = rest;
             }
         }
         if(best >= 0) {
-            c.detect = { axis: best, rest: c.baseline[best], extreme: axes[best], start: now };
+            c.detect = { axis: best, rest: bestRest, extreme: axes[best], start: now };
         }
     }
 
@@ -322,6 +352,7 @@ var WheelControls = (function() {
             for(var i = 0; i < pad.buttons.length; i++) {
                 calibration.prevButtons[i] = isPressed(pad, i);
             }
+            showLiveValues(pad);
         }
     }
 
