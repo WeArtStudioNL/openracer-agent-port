@@ -65,6 +65,7 @@ var WheelControls = (function() {
     var ownsThrottle = false;      // so the keyboard keeps working when the wheel is idle
     var ownsBrake = false;
     var lastStatus = "";
+    var shiftSource = null;        // "h" or "sequential": whichever the driver used last
 
     function clamp(x, min, max) {
         return Math.max(min, Math.min(max, x));
@@ -465,6 +466,7 @@ var WheelControls = (function() {
         if(ownsThrottle) car.throttle = 0;
         if(ownsBrake) car.brakePedal = 0;
         ownsSteer = ownsThrottle = ownsBrake = false;
+        shiftSource = null;
         lastStatus = "";
         if(reverseFromWheel) {
             car.reverse = false;
@@ -485,7 +487,26 @@ var WheelControls = (function() {
         }
         car.manualGearbox = true;
 
-        if(hasHShifter) {
+        var up = profile.shiftUp !== undefined && isPressed(pad, profile.shiftUp) && !lastButtons[profile.shiftUp];
+        var down = profile.shiftDown !== undefined && isPressed(pad, profile.shiftDown) && !lastButtons[profile.shiftDown];
+
+        // With both an H-pattern shifter and paddles mapped, the most recent action decides which
+        // one selects the gear: moving the shifter into a gear, or pulling a paddle.
+        var hMoved = false;
+        var hButtons = [];
+        for(var h = 0; h < car.gear_ratios.length; h++) {
+            if(gears[h] !== undefined) hButtons.push(gears[h]);
+        }
+        if(profile.reverseGear !== undefined) hButtons.push(profile.reverseGear);
+        for(var hb = 0; hb < hButtons.length; hb++) {
+            if(isPressed(pad, hButtons[hb]) && !lastButtons[hButtons[hb]]) hMoved = true;
+        }
+        if(!hasHShifter) shiftSource = "sequential";
+        else if(!sequential) shiftSource = "h";
+        else if(up || down) shiftSource = "sequential";
+        else if(hMoved || shiftSource === null) shiftSource = "h";
+
+        if(shiftSource === "h") {
             // The gear is whatever the shifter currently holds; nothing held means neutral
             var gear = -1;
             for(var g = 0; g < car.gear_ratios.length; g++) {
@@ -498,8 +519,6 @@ var WheelControls = (function() {
             if(gear >= 0) car.current_gear = gear;
         } else {
             car.neutral = false;
-            var up = profile.shiftUp !== undefined && isPressed(pad, profile.shiftUp) && !lastButtons[profile.shiftUp];
-            var down = profile.shiftDown !== undefined && isPressed(pad, profile.shiftDown) && !lastButtons[profile.shiftDown];
             if(up) {
                 if(car.reverse) {
                     car.reverse = false;

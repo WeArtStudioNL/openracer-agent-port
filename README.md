@@ -31,6 +31,11 @@ Wheels with pedals and a shifter are supported through the browser's Gamepad API
 3. The mapping is stored per device in the browser's localStorage. Press **K** again to recalibrate (finish all steps; **Esc** cancels and keeps the previous mapping). Every optional step, including each gear of an H-pattern shifter, can be skipped with **N**.
 4. Press **M** to switch the wheel off (keyboard only) and on again. The debug line at the top shows the live wheel values.
 
+With both an H-pattern shifter and paddles mapped, the most recent action decides: moving the shifter into a gear gives control to the shifter, pulling a paddle gives control to the paddles.
+
 With a shifter mapped, the gearbox becomes manual: sequential paddles shift up/down (shifting down from first gear at standstill selects reverse), and an H-pattern shifter selects gears directly, with neutral when no gear is engaged. Without a shifter the automatic gearbox is used.
 
 The pedals must be reported by the same device as the wheel, and each pedal needs its own axis.
+
+## Engine sound
+The engine sound is synthesised with the Web Audio API and follows the engine RPM and throttle, including free revving in neutral or with the clutch pressed. Browsers only start audio after a key press or click, so press any key once. Press **E** to mute or unmute. The RPM in the debug line at the top is the same value that drives the sound.
