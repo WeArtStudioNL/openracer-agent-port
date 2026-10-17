@@ -100,6 +100,8 @@ var Settings = (function() {
     var wasDown = {};
     var handlers = {};      // action id -> function that runs when the action is pressed
     var optionListeners = [];
+    var activeTab = "Car";    // the tab of the settings menu that is open
+    try { activeTab = localStorage.getItem("openracer.settingsTab") || activeTab; } catch(e) { /* no storage */ }
     var paused = false;
     var menu = null;
     var capture = null;     // { done: function(input), baseline: [...] } while the menu waits for an input
@@ -375,6 +377,11 @@ var Settings = (function() {
             "#settingsMenu .add { padding: 3px 10px; }" +
             "#settingsMenu .top { display: flex; justify-content: space-between; align-items: flex-start; }" +
             "#settingsMenu .version { text-align: right; color: #667; font-size: 12px; margin-top: 18px; }" +
+            "#settingsMenu .tabs { display: flex; gap: 4px; margin: 18px 0 6px; border-bottom: 1px solid #2c3036; }" +
+            "#settingsMenu .tab { background: transparent; color: #9ab; padding: 8px 14px; border-radius: 6px 6px 0 0; font-size: 15px; }" +
+            "#settingsMenu .tab:hover { background: #262b33; color: #fff; }" +
+            "#settingsMenu .tab.active { background: #2d333b; color: #fff; }" +
+            "#settingsMenu .page h2:first-child { margin-top: 10px; }" +
             "#settingsMenu .big { font-size: 16px; padding: 8px 18px; background: #2e7d46; }" +
             "#settingsMenu .big:hover { background: #3a9a58; }" +
             "#settingsMenu .none { color: #667; font-style: italic; }" +
@@ -570,30 +577,57 @@ var Settings = (function() {
         buttons.appendChild(mainMenu);
         top.appendChild(buttons);
         panel.appendChild(top);
+        // the tabs: every tabPage(name) call gives the page of that tab (made on the first call)
+        var tabBar = document.createElement("div");
+        tabBar.className = "tabs";
+        var pages = {};
+        var pagesBox = document.createElement("div");
+        panel.appendChild(tabBar);
+        panel.appendChild(pagesBox);
+        function tabPage(name) {
+            if(!pages[name]) {
+                var button = document.createElement("button");
+                button.className = "tab";
+                button.textContent = name;
+                button.onclick = function() { activeTab = name; try { localStorage.setItem("openracer.settingsTab", name); } catch(e) { /* no storage */ } showTab(); };
+                tabBar.appendChild(button);
+                var el = document.createElement("div");
+                el.className = "page";
+                pagesBox.appendChild(el);
+                pages[name] = { button: button, page: el };
+            }
+            return pages[name].page;
+        }
+        function showTab() {
+            if(!pages[activeTab]) activeTab = Object.keys(pages)[0];
+            Object.keys(pages).forEach(function(name) {
+                pages[name].page.style.display = name === activeTab ? "" : "none";
+                pages[name].button.classList.toggle("active", name === activeTab);
+            });
+        }
 
-        var h = document.createElement("h2");
-        h.textContent = "Car";
-        panel.appendChild(h);
-        panel.appendChild(optionRow("Traction control", options.tc ? "On" : "Off", function() { setOption("tc", !options.tc); }));
-        panel.appendChild(optionRow("ESC (stability control)", options.esc ? "On" : "Off", function() { setOption("esc", !options.esc); }));
+        var page = tabPage("Car");
+        page.appendChild(optionRow("Traction control", options.tc ? "On" : "Off", function() { setOption("tc", !options.tc); }));
+        page.appendChild(optionRow("ESC (stability control)", options.esc ? "On" : "Off", function() { setOption("esc", !options.esc); }));
         var cameraNames = ["1 Fixed behind the car", "2 Follow (smooth, FOV with speed)", "3 Cockpit"];
-        panel.appendChild(optionRow("Camera", cameraNames[options.camera - 1] || "1", function() { setOption("camera", options.camera % 3 + 1); }));
-        panel.appendChild(optionRow("ABS", options.abs ? "On" : "Off", function() { setOption("abs", !options.abs); }));
+        page.appendChild(optionRow("Camera", cameraNames[options.camera - 1] || "1", function() { setOption("camera", options.camera % 3 + 1); }));
+        page.appendChild(optionRow("ABS", options.abs ? "On" : "Off", function() { setOption("abs", !options.abs); }));
         var gearboxNames = { automatic: "Automatic (P R N D)", sequential: "Sequential (paddles)", manual: "Manual (H-shifter, clutch)" };
-        panel.appendChild(optionRow("Gearbox", gearboxNames[options.gearbox] || options.gearbox, function() { cycleGearbox(); }));
-        panel.appendChild(optionRow("Wheel steering range", Math.round(options.wheelRange * 100) + "%",
+        page.appendChild(optionRow("Gearbox", gearboxNames[options.gearbox] || options.gearbox, function() { cycleGearbox(); }));
+        page = tabPage("Wheel");
+        page.appendChild(optionRow("Wheel steering range", Math.round(options.wheelRange * 100) + "%",
             function() { setOption("wheelRange", options.wheelRange > 0.9 ? 0.75 : (options.wheelRange > 0.6 ? 0.5 : 1)); }));
         // the part of the range around the middle of the wheel in which the steering stays straight (in percent of the range, one way)
         var deadzones = [0, 0.5, 1, 2, 3, 5];
-        panel.appendChild(optionRow("Wheel dead zone", options.wheelDeadzone + "%" + (options.wheelDeadzone === 0 ? " (none)" : ""),
+        page.appendChild(optionRow("Wheel dead zone", options.wheelDeadzone + "%" + (options.wheelDeadzone === 0 ? " (none)" : ""),
             function() { setOption("wheelDeadzone", deadzones[(deadzones.indexOf(options.wheelDeadzone) + 1) % deadzones.length]); }));
         // force feedback (see ForceFeedback.js)
         if(typeof ForceFeedback !== "undefined") {
             var ffbTitle = document.createElement("h2");
             ffbTitle.textContent = "Force feedback";
-            panel.appendChild(ffbTitle);
+            page.appendChild(ffbTitle);
             var deviceText = ForceFeedback.isConnected() ? ForceFeedback.deviceName() : (ForceFeedback.canConnect() ? "Connect a wheel…" : "Needs Chrome or Edge (WebHID)");
-            panel.appendChild(optionRow("Wheel with force feedback", deviceText, function() {
+            page.appendChild(optionRow("Wheel with force feedback", deviceText, function() {
                 if(!ForceFeedback.canConnect()) { hint("Force feedback on the wheel itself needs WebHID, which Chrome and Edge have. Other browsers get rumble only."); return; }
                 if(ForceFeedback.isConnected()) {
                     ForceFeedback.forget().then(function() { renderMenu(); });
@@ -604,63 +638,73 @@ var Settings = (function() {
             }));
             var percent = function(v) { return Math.round(v * 100) + "%"; };
             var cycle = function(name, steps) { return function() { var v = options[name]; var next = steps.find(function(s) { return s > v + 0.001; }); setOption(name, next === undefined ? steps[0] : next); }; };
-            panel.appendChild(optionRow("Force feedback", options.ffb ? "On" : "Off", function() { setOption("ffb", !options.ffb); }));
-            panel.appendChild(optionRow("Strength", percent(options.ffbStrength), cycle("ffbStrength", [0.2, 0.4, 0.6, 0.8, 1, 1.25, 1.5])));
-            panel.appendChild(optionRow("Centring spring", percent(options.ffbSpring), cycle("ffbSpring", [0, 0.1, 0.15, 0.25, 0.4, 0.6, 1])));
-            panel.appendChild(optionRow("Damping", percent(options.ffbDamping), cycle("ffbDamping", [0, 0.1, 0.2, 0.35, 0.5, 0.75, 1])));
-            panel.appendChild(optionRow("Road detail (bumps, grass, slip, ABS)", percent(options.ffbRoad), cycle("ffbRoad", [0, 0.25, 0.5, 0.75, 1])));
-            panel.appendChild(optionRow("Direction", options.ffbInvert ? "Inverted" : "Normal", function() { setOption("ffbInvert", !options.ffbInvert); }));
-            panel.appendChild(optionRow("Test", "Shake the wheel for two seconds", function() { ForceFeedback.test(); hint(ForceFeedback.status()); }));
-            panel.appendChild(optionRow("Diagnostics", "Copy to the clipboard", function() {
+            page.appendChild(optionRow("Force feedback", options.ffb ? "On" : "Off", function() { setOption("ffb", !options.ffb); }));
+            page.appendChild(optionRow("Strength", percent(options.ffbStrength), cycle("ffbStrength", [0.2, 0.4, 0.6, 0.8, 1, 1.25, 1.5])));
+            page.appendChild(optionRow("Centring spring", percent(options.ffbSpring), cycle("ffbSpring", [0, 0.1, 0.15, 0.25, 0.4, 0.6, 1])));
+            page.appendChild(optionRow("Damping", percent(options.ffbDamping), cycle("ffbDamping", [0, 0.1, 0.2, 0.35, 0.5, 0.75, 1])));
+            page.appendChild(optionRow("Road detail (bumps, grass, slip, ABS)", percent(options.ffbRoad), cycle("ffbRoad", [0, 0.25, 0.5, 0.75, 1])));
+            page.appendChild(optionRow("Direction", options.ffbInvert ? "Inverted" : "Normal", function() { setOption("ffbInvert", !options.ffbInvert); }));
+            page.appendChild(optionRow("Test", "Shake the wheel for two seconds", function() { ForceFeedback.test(); hint(ForceFeedback.status()); }));
+            page.appendChild(optionRow("Diagnostics", "Copy to the clipboard", function() {
                 var text = ForceFeedback.diagnose();
                 var done = function() { hint("The diagnostics are on the clipboard (also in the console of the browser). Paste them to whoever helps you."); };
                 if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function() { hint(text); });
                 else hint(text);
                 console.log(text);
             }));
-            panel.appendChild(document.createElement("div"));
         }
-        panel.appendChild(optionRow("HUD", options.hud ? "On" : "Off", function() { setOption("hud", !options.hud); }));
-        panel.appendChild(optionRow("Units", options.units === "imperial" ? "Imperial (mph)" : "Metric (km/h)",
+        var calibrate = document.createElement("div");
+        calibrate.style.cssText = "margin-top: 14px;";
+        var wheelButton = document.createElement("button");
+        wheelButton.textContent = "Calibrate the wheel from scratch";
+        wheelButton.onclick = function() {
+            if(!WheelControls.findWheel()) { hint("No wheel found. Connect it and press a button on it first."); return; }
+            closeMenu();
+            WheelControls.startCalibration(window.car);
+        };
+        calibrate.appendChild(wheelButton);
+        page.appendChild(calibrate);
+        page = tabPage("Display and sound");
+        page.appendChild(optionRow("HUD", options.hud ? "On" : "Off", function() { setOption("hud", !options.hud); }));
+        page.appendChild(optionRow("Units", options.units === "imperial" ? "Imperial (mph)" : "Metric (km/h)",
             function() { setOption("units", options.units === "imperial" ? "metric" : "imperial"); }));
-        panel.appendChild(optionRow("Debug text", options.debug ? "On" : "Off", function() { setOption("debug", !options.debug); }));
+        page = tabPage("Tools");
+        page.appendChild(optionRow("Debug text", options.debug ? "On" : "Off", function() { setOption("debug", !options.debug); }));
         var tuningRow = optionRow("Tuning menu", "Open", function() { closeMenu(); Tuning.toggle(); });
-        panel.appendChild(tuningRow);
-        panel.appendChild(optionRow("Surroundings for Blender", "Save as HDR", function() {
+        page.appendChild(tuningRow);
+        page.appendChild(optionRow("Surroundings for Blender", "Save as HDR", function() {
             if(typeof EnvironmentExport !== "undefined" && window.car) EnvironmentExport.download();
         }));
         var toneNames = { none: "Off", neutral: "Neutral", agx: "AgX", aces: "ACES" };
         var toneOrder = ["none", "neutral", "agx", "aces"];
-        panel.appendChild(optionRow("Tone mapping", toneNames[options.toneMapping] || "Off",
+        page = tabPage("Display and sound");
+        page.appendChild(optionRow("Tone mapping", toneNames[options.toneMapping] || "Off",
             function() { setOption("toneMapping", toneOrder[(toneOrder.indexOf(options.toneMapping) + 1) % toneOrder.length]); }));
-        panel.appendChild(optionRow("Engine volume", Math.round(options.volume * 100) + "%", function() {
+        page.appendChild(optionRow("Engine volume", Math.round(options.volume * 100) + "%", function() {
             var steps = [0.2, 0.4, 0.6, 0.8, 1, 1.3];
             var next = steps.find(function(v) { return v > options.volume + 0.01; });
             setOption("volume", next === undefined ? steps[0] : next);
         }));
-        panel.appendChild(optionRow("Engine sound", options.sound ? "On" : "Off", function() { setOption("sound", !options.sound); }));
+        page.appendChild(optionRow("Engine sound", options.sound ? "On" : "Off", function() { setOption("sound", !options.sound); }));
 
         var groups = [];
         ACTIONS.forEach(function(a) { if(groups.indexOf(a.group) < 0) groups.push(a.group); });
-        panel.appendChild(document.createElement("div"));
-        var controlsTitle = document.createElement("h2");
-        controlsTitle.textContent = "Controls";
-        panel.appendChild(controlsTitle);
+        page = tabPage("Controls");
         var explain = document.createElement("div");
         explain.className = "sub";
         explain.textContent = "Every action can have several inputs: a key, a button or axis of a controller, a button of a racing wheel. " +
             "✎ sets a new input, ✕ removes it and + adds one. The pedals and the steering of a wheel are set up by moving them.";
-        panel.appendChild(explain);
+        page.appendChild(explain);
         var wheelStatus = document.createElement("div");
         wheelStatus.className = "sub";
         wheelStatus.textContent = WheelControls.statusText();
-        panel.appendChild(wheelStatus);
+        page.appendChild(wheelStatus);
 
         groups.forEach(function(group) {
             var gh = document.createElement("h2");
             gh.textContent = group;
-            panel.appendChild(gh);
-            ACTIONS.forEach(function(a) { if(a.group === group && visible(a)) panel.appendChild(renderRow(a)); });
+            page.appendChild(gh);
+            ACTIONS.forEach(function(a) { if(a.group === group && visible(a)) page.appendChild(renderRow(a)); });
         });
 
         var hintElement = document.createElement("div");
@@ -678,15 +722,8 @@ var Settings = (function() {
             renderMenu();
         };
         bottom.appendChild(reset);
-        var wheelButton = document.createElement("button");
-        wheelButton.textContent = "Calibrate the wheel from scratch";
-        wheelButton.onclick = function() {
-            if(!WheelControls.findWheel()) { hint("No wheel found. Connect it and press a button on it first."); return; }
-            closeMenu();
-            WheelControls.startCalibration(window.car);
-        };
-        bottom.appendChild(wheelButton);
-        panel.appendChild(bottom);
+        tabPage("Controls").appendChild(bottom);
+        showTab();
         var version = document.createElement("div");
         version.className = "version";
         version.textContent = "OpenRacer " + OpenRacer.VERSION;
