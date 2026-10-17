@@ -132,7 +132,8 @@ var ForceFeedback = (function() {
             ["inputReports", "outputReports", "featureReports"].forEach(function(kind) {
                 (collection[kind] || []).forEach(function(report) {
                     var key = kind + ":" + report.reportId;
-                    if(!byKey[key]) byKey[key] = { kind: kind, id: report.reportId, fields: [], bits: 0 };
+                    if(byKey[key]) return; // the outermost collection lists the whole report; the nested ones repeat their part of it
+                    byKey[key] = { kind: kind, id: report.reportId, fields: [], bits: 0 };
                     var r = byKey[key];
                     report.items.forEach(function(item) {
                         var usages = item.isRange ? rangeUsages(item) : (item.usages || []);
@@ -203,6 +204,12 @@ var ForceFeedback = (function() {
         }, this);
         return hit;
     };
+    Report.prototype.setRaw = function(usage, value) {
+        this.report.fields.forEach(function(f) {
+            if(f.usage !== usage || f.array) return;
+            writeBits(this.bytes, f.bit, f.size, value);
+        }, this);
+    };
     Report.prototype.setFraction = function(usage, fraction) {
         this.report.fields.forEach(function(f) {
             if(f.usage !== usage || f.array) return;
@@ -257,14 +264,14 @@ var ForceFeedback = (function() {
             return reports.filter(function(r) { return r.kind === "outputReports" && hasUsage(r, pidUsage(usageId)) && (!extra || extra(r)); })[0] || null;
         };
         var p = {
-            setEffect: out(U.effectType, function(r) { return hasUsage(r, pidUsage(U.duration)) || hasUsage(r, pidUsage(U.gain)); }),
-            setConstant: out(U.magnitude, function(r) { return !hasUsage(r, pidUsage(0x71)) && !hasUsage(r, pidUsage(0x72)); }),
+            setEffect: out(U.constant, function(r) { return hasUsage(r, pidUsage(U.duration)) || hasUsage(r, pidUsage(U.gain)); }),
+            setConstant: out(U.magnitude, function(r) { return !hasUsage(r, pidUsage(0x71)) && !hasUsage(r, pidUsage(0x72)) && !hasUsage(r, pidUsage(0x6f)); }),
             setCondition: out(U.cpOffset),
             operation: out(U.opStart),
             control: out(U.enableActuators),
             deviceGain: out(U.deviceGain),
-            create: reports.filter(function(r) { return r.kind === "featureReports" && hasUsage(r, pidUsage(U.effectType)); })[0] || null,
-            blockLoad: reports.filter(function(r) { return (r.kind === "featureReports" || r.kind === "inputReports") && hasUsage(r, pidUsage(U.blockLoadStatus)); })[0] || null
+            create: reports.filter(function(r) { return r.kind === "featureReports" && hasUsage(r, pidUsage(U.constant)); })[0] || null,
+            blockLoad: reports.filter(function(r) { return (r.kind === "featureReports" || r.kind === "inputReports") && hasUsage(r, pidUsage(U.loadSuccess)); })[0] || null
         };
         if(!p.setEffect || !p.setConstant || !p.operation) return null;
         // which effect types the device has
@@ -291,7 +298,8 @@ var ForceFeedback = (function() {
         if(!pid.create || !pid.blockLoad) return Promise.resolve(nextBlock++);
         var r = new Report(pid.create);
         r.select([pidUsage(U.effectType)], typeUsage);
-        r.set(pidUsage(U.byteCount), 0);
+        r.setRaw(pidUsage(U.byteCount), 0);
+        r.setRaw((0x01 << 16) | 0x3b, 0); // the byte count is on the Generic Desktop page in some descriptors
         return r.send().then(function() { return wait(20); }).then(function() {
             return device.receiveFeatureReport(pid.blockLoad.id);
         }).then(function(view) {
@@ -300,8 +308,9 @@ var ForceFeedback = (function() {
             var index = 1, status = null;
             pid.blockLoad.fields.forEach(function(f) {
                 if(f.usage === pidUsage(U.blockIndex)) index = readBits(view, f.bit + offset, f.size);
-                if(f.array) { var v = readBits(view, f.bit + offset, f.size); status = f.usages[v - f.min]; }
+                if(f.array && f.usages.indexOf(pidUsage(U.loadSuccess)) >= 0) { var v = readBits(view, f.bit + offset, f.size); status = f.usages[v - f.min]; }
             });
+            log("block load: index " + index + ", status " + (status === null ? "unknown" : status.toString(16)));
             if(status !== null && status !== pidUsage(U.loadSuccess)) throw new Error("the wheel could not make an effect (block load " + status.toString(16) + ")");
             return index || 1;
         });
@@ -316,8 +325,8 @@ var ForceFeedback = (function() {
         r.set(pidUsage(U.triggerRepeat), 0);
         r.set(pidUsage(U.samplePeriod), 0);
         r.setFraction(pidUsage(U.gain), 1);
-        r.set(pidUsage(U.triggerButton), 0);
-        r.set(pidUsage(U.startDelay), 0);
+        r.setRaw(pidUsage(U.triggerButton), 0);   // no trigger button (0 is outside the range of the buttons)
+        r.setRaw(pidUsage(U.startDelay), 0);
         // the axes: the first one (X) on, the direction along it. Axes Enable holds Generic Desktop X and Y (one bit each); the
         // Direction collection holds two instances (the Ordinal page, or usages 1 and 2 of the PID page, or Generic Desktop X and Y).
         var axes = 0, dirs = 0;
@@ -595,6 +604,8 @@ var ForceFeedback = (function() {
         test: test,
         status: status,
         diagnose: diagnose,
+        parse: parsePid,               // for tests: the PID reports of a descriptor (collections as WebHID gives them)
+        makeReport: function(report) { return new Report(report); },
         isConnected: function() { return !!(device && driver); },
         deviceName: function() { return deviceName; },
         canConnect: function() { return !!navigator.hid; }
