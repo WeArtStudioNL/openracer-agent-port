@@ -19,10 +19,9 @@ Chris Barnard.
 ## Running locally
 OpenRacer is a static web app. Serve the `web` folder with any local web server (opening `index.html` directly does not work, because the track and car models are loaded with XMLHttpRequest):
 
-    cd web
-    python3 -m http.server 8000
+    ./start-server.sh        # optionally pass a port, default 8000
 
-Then open http://localhost:8000 in a browser with WebGL.
+This serves the `web` folder and opens http://localhost:8000 in your browser (WebGL required). Without the script: `cd web && python3 -m http.server 8000`.
 
 ## Racing wheel support
 Wheels with pedals and a shifter are supported through the browser's Gamepad API.
