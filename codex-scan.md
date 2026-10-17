@@ -126,3 +126,19 @@ When the controller disappears, only `usingGamepad` is reset. Previously assigne
 - No full browser/WebGL run, physical gamepad/steering wheel test, or dependency vulnerability scan was performed.
 - This is a scoped code audit, not a guarantee that all defects or security issues have been identified.
 - File line numbers refer to the audited commit and may shift during the steering wheel work.
+
+## Resolution status (branch `claude/wheel-support`)
+
+Rechecked against the latest code after the steering wheel integration.
+
+| Finding | Status | Notes |
+| --- | --- | --- |
+| F01 | Resolved | `js/Telemetry.js` is loaded by `index.html`; pressing T is guarded until telemetry exists. |
+| F02 | Resolved | Dashboard elements are looked up synchronously. `Car.isReady()` gates `update()`. Model loads use an explicit error path that shows a banner and keeps the car idle. |
+| F03 | Resolved, with a caveat | `Wheel.updatePosition` (and the unused `updatePositionF`) now use velocity Verlet: velocity advances with the average of the previous and new acceleration. From rest with acceleration 10 and delta 0.1, VX is 0.5 after the first step and 1.5 after the second. The extra `updatePosition(delta, acc, true)` call in `Car.checkWheels2()` was not changed and still needs validation for double time integration. |
+| F04 | Resolved | `spring_maxCompression` uses `spring.free_length` and is finite (-0.30 m for the front coilover). |
+| F05 | Resolved | ABS and traction control compare the force magnitude with available grip, in both travel directions. |
+| F06 | Resolved | A disconnected wheel or gamepad releases the pedals it owned. A pad without the expected layout is ignored instead of throwing. Input from other sources is left untouched. |
+| F07 | Resolved | Bumps change a per-wheel copy of the friction coefficients; the shared surface table is not mutated. |
+
+Not verified: no browser/WebGL run and no physical wheel were available. Fixes were checked with Node VM reproductions only.

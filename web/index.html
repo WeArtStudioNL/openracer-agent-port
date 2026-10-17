@@ -98,6 +98,7 @@
         <script src="js/three/shaders/SSAOShader.js"></script>
         <script src="js/three/shaders/FXAAShader.js"></script>
         <script src="js/three/shaders/VignetteShader.js"></script>
+        <script src="js/Telemetry.js"></script>
         <script src="js/WheelControls.js"></script>
         <script src="js/controls.js"></script>
         
@@ -136,13 +137,9 @@
                 }
             }
             
-            var dash_tc;
-            var dash_abs;
-            
-            setTimeout(function() {
-                dash_tc = document.getElementById("dash-tc");
-                dash_abs = document.getElementById("dash-abs");
-            }, 1000);
+            // the dashboard elements exist above this script, so they can be looked up immediately
+            var dash_tc = document.getElementById("dash-tc");
+            var dash_abs = document.getElementById("dash-abs");
             
             loadTrack(trackLoaded);
         </script>

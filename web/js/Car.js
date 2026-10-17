@@ -29,6 +29,9 @@ OpenRacer.Car = function( parameters, domElement ) {
     this.bodyMeshFile = parameters.body;
     this.wheelMeshFile = parameters.wheel;
     this.wheels = [];
+    this.wheelsLoaded = false; // set once the wheel model has loaded and all four wheels exist
+    this.bodyLoaded = false;   // set once the body model has loaded
+    this.loadError = null;     // description of a failed model load, if any
     this.wheelbase = parameters.wheelbase;
     this.front_track = parameters.front_track;
     this.rear_track = parameters.rear_track;
@@ -159,6 +162,7 @@ OpenRacer.Car = function( parameters, domElement ) {
         scene.add(tobj.body);
 
         shadowLight.target = tobj.body;
+        tobj.bodyLoaded = true;
     }
     
     function wheelLoaded(geometry) {
@@ -213,6 +217,7 @@ OpenRacer.Car = function( parameters, domElement ) {
         var wRR = new THREE.Object3D();
         wRR.add(wRearRight);
         tobj.wheels.push(new OpenRacer.Wheel({ name: "RR", object: wRR, diameter: tobj.tire_diameter, right: true, car: tobj, mass: rearMass / 2, spring: rearSpring }));
+        tobj.wheelsLoaded = true;
 
         scene.add( wFL );
         scene.add( wFR );
@@ -239,6 +244,7 @@ OpenRacer.Car = function( parameters, domElement ) {
     };
         
     this.update = function( delta, showDebug ) {
+        if(!this.isReady()) return;
         gamepadUpdate();
         
         if(this.reset) {
@@ -453,9 +459,42 @@ OpenRacer.Car = function( parameters, domElement ) {
     };
 
     
-    var loader = new THREE.JSONLoader();
-    loader.load("models/mustang_wheel.json", wheelLoaded);
-    loader.load("models/mustang.json", bodyLoaded);
+    // Loads a model and reports failures explicitly (THREE.JSONLoader.load has no error callback).
+    function loadModel(url, onLoad) {
+        var request = new XMLHttpRequest();
+        request.onreadystatechange = function() {
+            if(request.readyState !== 4) return;
+            if(request.status !== 200 && request.status !== 0) {
+                modelFailed(url, "HTTP " + request.status);
+                return;
+            }
+            try {
+                onLoad(new THREE.JSONLoader().parse(JSON.parse(request.responseText)).geometry);
+            } catch(e) {
+                modelFailed(url, e);
+            }
+        };
+        request.open("GET", url, true);
+        request.send();
+    }
+
+    function modelFailed(url, reason) {
+        tobj.loadError = "Could not load " + url + " (" + reason + ")";
+        console.error(tobj.loadError);
+        var banner = document.createElement("div");
+        banner.style.cssText = "position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1001; " +
+            "padding: 10px 20px; background: rgba(160, 0, 0, 0.85); color: #ffffff; font-family: Arial;";
+        banner.textContent = tobj.loadError;
+        document.body.appendChild(banner);
+    }
+
+    // The car is only simulated once everything it needs has loaded.
+    this.isReady = function() {
+        return !this.loadError && this.bodyLoaded && this.wheelsLoaded && this.wheels.length === 4;
+    };
+
+    loadModel("models/mustang_wheel.json", wheelLoaded);
+    loadModel("models/mustang.json", bodyLoaded);
     
     /*
     var modelLoader = new XMLHttpRequest();
@@ -1031,7 +1070,7 @@ OpenRacer.Car = function( parameters, domElement ) {
             case 221: /*]*/ this.cameraRight = true; break;
             case 192: /*@*/ this.cameraAngle = 0; break;
             
-            case 84: /*t*/ telemetry.setVisible(!telemetry.visible);
+            case 84: /*t*/ if(telemetry) telemetry.setVisible(!telemetry.visible); break;
 
             default: console.log(event.keyCode + " pressed."); break;
 

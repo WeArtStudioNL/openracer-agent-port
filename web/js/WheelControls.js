@@ -350,6 +350,9 @@ var WheelControls = (function() {
         car.manualGearbox = false;
         car.neutral = false;
         car.clutch = 0;
+        // the wheel owned the pedals, so a disconnected wheel must not leave them pressed
+        car.throttle = 0;
+        car.brakePedal = 0;
         if(reverseFromWheel) {
             car.reverse = false;
             reverseFromWheel = false;

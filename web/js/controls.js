@@ -52,37 +52,34 @@ window.onmousemove = function(e) {
     }
 };
 
+// true while the regular gamepad is driving the throttle and brake
+var gamepadOwnsPedals = false;
+
 function gamepadUpdate() {
     // a racing wheel (with pedals and shifter) takes priority over a regular gamepad
     if(WheelControls.update(car)) {
+        gamepadOwnsPedals = false;
         usingGamepad = true;
         return;
     }
 
-    var gpad = navigator.getGamepads()[0];
-    //console.log(gpad);
-    if(gpad && gpad.buttons.length > 7 && gpad.axes.length > 0) {
-        var stickMovement = Math.abs(gpad.axes[0]);
-        if(stickMovement > 0.1) {
-            stickMovement = (stickMovement - 0.1) * (1 / 0.9);
-        }// else if(stickMovement < 0.1) {
-        //    stickMovement = (stickMovement + 0.1) * (1 / 0.9);
-        //}
-        car.turnAngle -= (car.turnAngle - (car.maxTurn * Math.pow(gpad.axes[0], 4) * getSign(gpad.axes[0]))) / 3;
+    var gpads = navigator.getGamepads ? navigator.getGamepads() : [];
+    var gpad = gpads[0];
+    // only use pads with the layout this code expects (an axis and at least 8 buttons)
+    if(gpad && gpad.connected && gpad.axes.length > 0 && gpad.buttons.length > 7) {
+        var steer = gpad.axes[0] || 0;
+        car.turnAngle -= (car.turnAngle - (car.maxTurn * Math.pow(steer, 4) * getSign(steer))) / 3;
         car.throttle = gpad.buttons[7].value;
         car.brakePedal = gpad.buttons[6].value;
-                //console.log(gpad.buttons[6]);
-        /*
-        if(gpad.axes[1] < 0) {
-            car.throttle = -gpad.axes[1];
-            car.brakePedal = 0;
-        } else {
-            car.brakePedal = gpad.axes[1];
-            car.throttle = 0;
-        }
-        */
+        gamepadOwnsPedals = true;
         usingGamepad = true;
     } else {
+        // release the pedals if the gamepad that held them has gone away
+        if(gamepadOwnsPedals) {
+            car.throttle = 0;
+            car.brakePedal = 0;
+            gamepadOwnsPedals = false;
+        }
         usingGamepad = false;
     }
 }

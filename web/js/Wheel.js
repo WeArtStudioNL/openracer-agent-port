@@ -85,7 +85,7 @@ OpenRacer.Wheel = function (parameters, domElement) {
         if(!this.spring.minimum_spring_length) {
             this.spring.minimum_spring_length = this.spring.wire_diameter * (this.spring.active_coils + 2); // assume one additional coil top and bottom
         }
-        this.spring_maxCompression = this.spring.minimum_spring_length - this.free_length;
+        this.spring_maxCompression = this.spring.minimum_spring_length - this.spring.free_length;
         break;
     case "leaf":
         // Poisson's ratio for steel is 0.27 - 0.30
@@ -172,14 +172,16 @@ OpenRacer.Wheel = function (parameters, domElement) {
         this.tc = false;
         this.abs = false;
         var forces = new THREE.Vector3(0,0,0);
-        var friction = uCoeff[lastGround];
-        if(!friction) friction = uCoeff["track01"];
-        if(friction.bumpChance > 0) {
-            if(Math.random() < friction.bumpChance) {
+        var surface = uCoeff[lastGround];
+        if(!surface) surface = uCoeff["track01"];
+        // use a per-wheel copy so that a bump never changes the shared surface configuration
+        var friction = { static: surface.static, kinetic: surface.kinetic };
+        if(surface.bumpChance > 0) {
+            if(Math.random() < surface.bumpChance) {
                 // we hit a bump!
                 //debugOut(this.name + " bump!");
-                friction.static = friction.bumpStatic;
-                friction.kinetic = friction.bumpKinetic;
+                friction.static = surface.bumpStatic;
+                friction.kinetic = surface.bumpKinetic;
                 //this.force3.y += this.weight + (this.weight * 14);//Math.abs(this.forwardSpeed * 10000 * Math.random());
             }
         }
@@ -359,17 +361,17 @@ OpenRacer.Wheel = function (parameters, domElement) {
         }
         */
         
-        if(this.turningForce > Ff) {
+        if(Math.abs(this.turningForce) > Ff) {
             this.tc = true;
-            var nThrottle = Math.abs((Ff * 0.9) / this.turningForce);
+            var nThrottle = (Ff * 0.9) / Math.abs(this.turningForce);
             if(nThrottle < this.car.throttle) {
                 this.car.throttle = nThrottle;
             }
             //this.car.throttle = 0;
         }
-        if(this.brakingForce > Ff) {
+        if(Math.abs(this.brakingForce) > Ff) {
             this.abs = true;
-            var nBrake = Math.abs((Ff * 0.9) / this.brakingForce);
+            var nBrake = (Ff * 0.9) / Math.abs(this.brakingForce);
             if(nBrake < this.car.brakePedal) {
                 this.car.brakePedal = nBrake;
             }
@@ -554,15 +556,13 @@ OpenRacer.Wheel = function (parameters, domElement) {
             this.position.x += delta * (this.velocity.x + delta * this.lastAcceleration.x / 2);
             this.position.y += delta * (this.velocity.y + delta * this.lastAcceleration.y / 2);
             this.position.z += delta * (this.velocity.z + delta * this.lastAcceleration.z / 2);
-            this.velocity.x += delta * this.lastAcceleration.x;
-            this.velocity.y += delta * this.lastAcceleration.y;
-            this.velocity.z += delta * this.lastAcceleration.z;
+            // velocity Verlet: the velocity advances with the average of the previous and new acceleration
             var newAccX = acceleration.x;
             var newAccY = acceleration.y;
             var newAccZ = acceleration.z;
-            this.velocity.x += delta * (newAccX - acceleration.x) / 2;
-            this.velocity.y += delta * (newAccY - acceleration.y) / 2;
-            this.velocity.z += delta * (newAccZ - acceleration.z) / 2;
+            this.velocity.x += delta * (this.lastAcceleration.x + newAccX) / 2;
+            this.velocity.y += delta * (this.lastAcceleration.y + newAccY) / 2;
+            this.velocity.z += delta * (this.lastAcceleration.z + newAccZ) / 2;
         //}
 
         this.lastAcceleration.x = newAccX;
@@ -641,15 +641,13 @@ OpenRacer.Wheel = function (parameters, domElement) {
         this.position.x += delta * (this.velocity.x + delta * this.lastAcceleration.x / 2);
         this.position.y += delta * (this.velocity.y + delta * this.lastAcceleration.y / 2);
         this.position.z += delta * (this.velocity.z + delta * this.lastAcceleration.z / 2);
-        this.velocity.x += delta * this.lastAcceleration.x;
-        this.velocity.y += delta * this.lastAcceleration.y;
-        this.velocity.z += delta * this.lastAcceleration.z;
+        // velocity Verlet: the velocity advances with the average of the previous and new acceleration
         var newAccX = acceleration.x;
         var newAccY = acceleration.y;
         var newAccZ = acceleration.z;
-        this.velocity.x += delta * (newAccX - acceleration.x) / 2;
-        this.velocity.y += delta * (newAccY - acceleration.y) / 2;
-        this.velocity.z += delta * (newAccZ - acceleration.z) / 2;
+        this.velocity.x += delta * (this.lastAcceleration.x + newAccX) / 2;
+        this.velocity.y += delta * (this.lastAcceleration.y + newAccY) / 2;
+        this.velocity.z += delta * (this.lastAcceleration.z + newAccZ) / 2;
 
         this.lastAcceleration.x = newAccX;
         this.lastAcceleration.y = newAccY;
