@@ -63,15 +63,19 @@ window.onresize = function() {
     camera.aspect = SCREEN_WIDTH / SCREEN_HEIGHT;
     camera.updateProjectionMatrix();
     
+    // The canvas has devicePixelRatio times more pixels than CSS pixels (2x on Retina
+    // displays), so the post-processing buffers must be sized in device pixels too.
+    var bufferWidth = Math.floor( SCREEN_WIDTH * renderer.devicePixelRatio );
+    var bufferHeight = Math.floor( SCREEN_HEIGHT * renderer.devicePixelRatio );
     var renderTargetParametersRGBA = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat };
-    depthTarget = new THREE.WebGLRenderTarget( SCREEN_WIDTH, SCREEN_HEIGHT, renderTargetParametersRGBA );
+    depthTarget = new THREE.WebGLRenderTarget( bufferWidth, bufferHeight, renderTargetParametersRGBA );
     renderTargetParameters = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBFormat, stencilBuffer: false };
-    renderTarget = new THREE.WebGLRenderTarget( SCREEN_WIDTH, SCREEN_HEIGHT, renderTargetParameters );
+    renderTarget = new THREE.WebGLRenderTarget( bufferWidth, bufferHeight, renderTargetParameters );
     renderTarget.generateMipmaps = false;
     
     if(useComposer) {
-        effectSSAO.uniforms[ 'size' ].value.set( SCREEN_WIDTH, SCREEN_HEIGHT );
-        effectFXAA.uniforms[ 'resolution' ].value.set( 1 / ( SCREEN_WIDTH ), 1 / ( SCREEN_HEIGHT ) );
+        effectSSAO.uniforms[ 'size' ].value.set( bufferWidth, bufferHeight );
+        effectFXAA.uniforms[ 'resolution' ].value.set( 1 / bufferWidth, 1 / bufferHeight );
         composer.reset(renderTarget);
         effectSSAO.uniforms[ 'tDepth' ].value = depthTarget;
     }
@@ -160,11 +164,14 @@ RACER.Scene = function (parameters, domElement) {
             });
             depthMaterial.blending = THREE.NoBlending;
             var SCALE = 1;
+            // size the buffers in device pixels (see window.onresize)
+            var bufferWidth = Math.floor( SCREEN_WIDTH * renderer.devicePixelRatio );
+            var bufferHeight = Math.floor( SCREEN_HEIGHT * renderer.devicePixelRatio );
             var renderTargetParametersRGBA = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat };
-            depthTarget = new THREE.WebGLRenderTarget( SCALE * SCREEN_WIDTH, SCALE * SCREEN_HEIGHT, renderTargetParametersRGBA );
+            depthTarget = new THREE.WebGLRenderTarget( SCALE * bufferWidth, SCALE * bufferHeight, renderTargetParametersRGBA );
 
             renderTargetParameters = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBFormat, stencilBuffer: false };
-            renderTarget = new THREE.WebGLRenderTarget( SCREEN_WIDTH, SCREEN_HEIGHT, renderTargetParameters );
+            renderTarget = new THREE.WebGLRenderTarget( bufferWidth, bufferHeight, renderTargetParameters );
             renderTarget.generateMipmaps = false;
             composer = new THREE.EffectComposer( renderer, renderTarget );
             
@@ -189,7 +196,7 @@ RACER.Scene = function (parameters, domElement) {
             
             effectSSAO = new THREE.ShaderPass( THREE.SSAOShader );
             effectSSAO.uniforms[ 'tDepth' ].value = depthTarget;
-            effectSSAO.uniforms[ 'size' ].value.set( SCREEN_WIDTH, SCREEN_HEIGHT );
+            effectSSAO.uniforms[ 'size' ].value.set( bufferWidth, bufferHeight );
             effectSSAO.uniforms[ 'cameraNear' ].value = camera.near;
             effectSSAO.uniforms[ 'cameraFar' ].value = camera.far / 10;
             //effectSSAO.uniforms[ 'fogNear' ].value = scene.fog.near;
@@ -208,7 +215,7 @@ RACER.Scene = function (parameters, domElement) {
             
             effectFXAA = new THREE.ShaderPass( THREE.FXAAShader );
             effectFXAA.renderToScreen = true;
-            effectFXAA.uniforms[ 'resolution' ].value.set( 1 / ( SCREEN_WIDTH ), 1 / ( SCREEN_HEIGHT ) );
+            effectFXAA.uniforms[ 'resolution' ].value.set( 1 / bufferWidth, 1 / bufferHeight );
             composer.addPass(effectFXAA);
 
         }
