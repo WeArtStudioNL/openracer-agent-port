@@ -100,6 +100,12 @@ OpenRacer.Car = function( config, domElement ) {
         rear_track: this.rear_track,
         weight_distribution: this.weight_distribution,
         cgHeight: chassis.cg_height,
+        roll_front: chassis.roll_front,
+        spring_front: chassis.spring_front,
+        spring_rear: chassis.spring_rear,
+        damping_front: chassis.damping_front,
+        damping_rear: chassis.damping_rear,
+        downforce: chassis.downforce,
         tire_diameter: this.tire_diameter,
         width: this.width,
         length: this.length,
@@ -116,6 +122,7 @@ OpenRacer.Car = function( config, domElement ) {
         getSurface: getSurface
     }, this);
     this.vehicle.collision = collisionWorld;
+    this.vehicle.ground = groundWorld;
     this.engine = this.vehicle.engine;
     EngineSound.setCar(config); // the engine sound of this car
     this.wheels = this.vehicle.wheels;
@@ -143,44 +150,10 @@ OpenRacer.Car = function( config, domElement ) {
         document.body.appendChild(banner);
     });
 
-    // ---- ground
-
-    // Samples the road under the wheels and gives it to the physics. The first time it also puts the car on the road.
-    this.sampleGround = function() {
-        var v = this.vehicle;
-        var cosP = Math.cos(v.psi);
-        var sinP = Math.sin(v.psi);
-        var heights = [];
-        var surfaces = [];
-        for(var i = 0; i < 4; i++) {
-            var w = this.wheels[i];
-            var x = v.x + cosP * w.a - sinP * w.b;
-            var z = v.z + sinP * w.a + cosP * w.b;
-            var ground = getGroundAt(x, z, w.groundY);
-            if(ground) {
-                heights.push(ground.y);
-                surfaces.push(ground.surface);
-                w.onGround = true;
-                if(i === 2) lastTerrain = ground.mesh;
-            } else {
-                // off the map: stay at the last known height
-                heights.push(w.groundY);
-                surfaces.push(w.surface);
-                w.onGround = false;
-            }
-        }
-        v.setGround(heights, surfaces);
-    };
-
     // Puts the car on the road at a position, standing still
     this.place = function(x, z, heading) {
         var v = this.vehicle;
-        // the road meshes only have their world matrices after a render; the ground queries need them now
-        scene.updateMatrixWorld(true);
-        for(var i = 0; i < 4; i++) this.wheels[i].groundY = 5;
         v.reset(x, z, heading);
-        this.sampleGround();
-        this.sampleGround(); // the second time with the road height as the starting point of the search
         this.throttle = 0;
         this.brakePedal = 0;
         this.turnAngle = 0;
@@ -190,12 +163,9 @@ OpenRacer.Car = function( config, domElement ) {
 
     // ---- display: the 3D objects follow the physics
 
-    var qYaw = new THREE.Quaternion();
-    var qPitch = new THREE.Quaternion();
-    var qRoll = new THREE.Quaternion();
-    var axisX = new THREE.Vector3(1, 0, 0);
-    var axisY = new THREE.Vector3(0, 1, 0);
-    var axisZ = new THREE.Vector3(0, 0, 1);
+    var bodyPosition = { x: 0, y: 0, z: 0 };
+    var bodyQuaternion = { x: 0, y: 0, z: 0, w: 1 };
+    var bodyUp = new THREE.Vector3();
 
     this.updateVisuals = function(delta) {
         var v = this.vehicle;
@@ -203,15 +173,6 @@ OpenRacer.Car = function( config, domElement ) {
         this.carAngle = v.psi;
         var cosP = Math.cos(v.psi);
         var sinP = Math.sin(v.psi);
-
-        // slope of the road under the car, from the heights under the wheels
-        var front = (w[0].groundY + w[1].groundY) / 2;
-        var rear = (w[2].groundY + w[3].groundY) / 2;
-        var left = (w[1].groundY + w[2].groundY) / 2;
-        var right = (w[0].groundY + w[3].groundY) / 2;
-        var groundPitch = Math.atan2(front - rear, this.wheelbase);              // positive = nose up
-        var groundRoll = Math.atan2(left - right, (this.front_track + this.rear_track) / 2); // positive = left side up
-        var avgGround = (front + rear) / 2;
         var yaw = piOver2 - v.psi; // the model faces +z
 
         // the middle between the axles, which is the centre of the body model
@@ -219,33 +180,31 @@ OpenRacer.Car = function( config, domElement ) {
         var cx = v.x + cosP * offset;
         var cz = v.z + sinP * offset;
 
-        var avgCompression = (w[0].compression + w[1].compression + w[2].compression + w[3].compression) / 4;
-        // the origin of the body model: see CarLoader.js
-        this.body.position.set(cx, avgGround + this.bodyLift * w[0].radius - avgCompression, cz);
-        this.body.rotation.set(0, yaw, 0);
-        if(this.body.children[0]) {
-            this.body.children[0].rotation.x = -groundPitch + v.pitchVisual;
-            this.body.children[0].rotation.z = groundRoll + v.rollVisual;
-        }
+        // the body follows the rigid body of the physics. Its origin is bodyLift tyre radii above the road at rest (see CarLoader.js),
+        // the physics gives the height of the axles at rest, one radius above the road.
+        v.getBodyPose(bodyPosition, bodyQuaternion);
+        this.body.quaternion.set(bodyQuaternion.x, bodyQuaternion.y, bodyQuaternion.z, bodyQuaternion.w);
+        bodyUp.set(0, 1, 0).applyQuaternion(this.body.quaternion);
+        var lift = (this.bodyLift - 1) * w[0].radius;
+        this.body.position.set(bodyPosition.x + bodyUp.x * lift, bodyPosition.y + bodyUp.y * lift, bodyPosition.z + bodyUp.z * lift);
+        if(this.body.children[0]) this.body.children[0].rotation.set(0, 0, 0);
 
-        // wheels sit on the road, tilted with it
-        qYaw.setFromAxisAngle(axisY, yaw);
-        qPitch.setFromAxisAngle(axisX, -groundPitch);
-        qRoll.setFromAxisAngle(axisZ, groundRoll);
-        qYaw.multiply(qPitch).multiply(qRoll);
+        // the wheels hang on their springs
         for(var i = 0; i < 4; i++) {
             var wheel = w[i];
-            wheel.position.set(v.x + cosP * wheel.a - sinP * wheel.b, wheel.groundY + wheel.radius, v.z + sinP * wheel.a + cosP * wheel.b);
+            wheel.position.set(wheel.center.x, wheel.center.y, wheel.center.z);
             if(wheel.object) {
                 wheel.object.position.copy(wheel.position);
-                wheel.object.quaternion.copy(qYaw);
+                wheel.object.quaternion.copy(this.body.quaternion);
                 if(i < 2) wheel.turn(this.vehicle.steerApplied);
                 wheel.object.children[0].children[0].rotation.x = wheel.spin;
             }
         }
+        // the checkpoint of the road under the rear wheel
+        var rear = w[2];
+        if(rear.hasContact && rear.normal) lastTerrain = rear.normal.mesh;
 
-        var tilt = this.body.children[0];
-        this.updateCamera(delta, cx, cz, avgGround, yaw, tilt ? tilt.rotation.x : 0, tilt ? tilt.rotation.z : 0);
+        this.updateCamera(delta, cx, cz, v.groundLevel, yaw, this.body.quaternion);
 
         shadowLight.position.x = this.body.position.x + 40;
         shadowLight.position.y = this.body.position.y + 70;
@@ -286,16 +245,14 @@ OpenRacer.Car = function( config, domElement ) {
         cameraFov = null;
     };
 
-    this.updateCamera = function(delta, cx, cz, avgGround, yaw, tiltX, tiltZ) {
+    this.updateCamera = function(delta, cx, cz, avgGround, yaw, bodyQ) {
         var cs = this.cameraSettings;
         var radius = this.wheels[0].radius;
         var speed = Math.abs(this.vehicle.u);
 
         if(this.cameraMode === 3) {
             // in the car: the camera goes with the body, with the pitch and the roll
-            eulerTilt.set(tiltX, 0, tiltZ, "XYZ");
-            qBody.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-            qBody.multiply(new THREE.Quaternion().setFromEuler(eulerTilt));
+            qBody.copy(bodyQ);
             var p = cs.cockpit.position;
             cockpitOffset.set(p[0], p[1], p[2]).applyQuaternion(qBody).add(this.body.position);
             camera.position.copy(cockpitOffset);
@@ -411,7 +368,6 @@ OpenRacer.Car = function( config, domElement ) {
         // the rev limiter cuts the fuel: the engine sounds like it too
         EngineSound.update(this.engineRPM, this.throttle * this.engine.throttleCut);
 
-        this.sampleGround();
         this.updateVisuals(delta);
 
         Hud.update(this);

@@ -19,27 +19,28 @@
 /*
  * Vehicle.js
  *
- * Author: Chris Barnard
- * Description: The physics of the car, without any 3D objects, so it can run (and be
- *              tested) on its own. Everything is connected through torque and speed:
+ * Description: The physics of the car, without any 3D objects, so it can run (and be tested) on its own. The way it is built
+ *              follows "Programming vehicles in games" of Wassim Alhajomar (wassimulator.com): three parts that are coupled
  *
- *                engine -> friction clutch -> gearbox -> differential -> rear wheels -> tyres
- *                                                                                        |
- *                chassis (speed, sideways speed, yaw rate) <------ tyre forces, gravity, drag
+ *                engine, gearbox, clutch, differential  <-- wheel speed / engine speed -->  wheels with tyres
+ *                                                                                            |  forces at the contact patches
+ *                chassis: a rigid body in 3D  <-----------------------------------------------+
+ *                  (gravity, aerodynamics, the road, walls)   --- weight, momentum ---> the load on every tyre
  *
- *              - The engine has inertia and can stall; the clutch transmits at most a
- *                torque set by the pedal, so it grips, slips or slides depending on the load.
- *              - Each wheel is an inertia whose speed follows from the engine, brake and
- *                tyre torque. The slip between wheel and road decides how much force the
- *                tyre makes, so wheels spin up or lock instead of being tied to the car speed.
- *              - The chassis is a rigid body on the road plane. Gravity pulls it down a slope,
- *                and load moves between the wheels while accelerating, braking and cornering.
+ *              - The chassis is a rigid body in three dimensions: a position, an orientation, a velocity and an angular velocity,
+ *                with a mass and an inertia. It can pitch, roll, jump and flip over.
+ *              - Every wheel hangs on a spring and damper (and an anti-roll bar). A ray from the mount of the wheel finds the
+ *                road (see Ground.js); how far the spring is pushed in gives the force on the car and the load on the tyre. The
+ *                weight and the momentum of the car reach the tyres through these springs, instead of a formula for it.
+ *              - The tyre makes a longitudinal force from the slip ratio and a lateral force from the slip angle (Pacejka's
+ *                magic formula, see Wheel.js), limited by a friction ellipse. The forces are applied to the chassis at the
+ *                contact patches, where the tyre touches the road.
+ *              - The engine has inertia and can stall. A friction clutch (that can slip) couples it to the wheels through the gearbox
+ *                and a differential; the wheels have their own inertia, brakes and slip against the road.
  *
- *              The road is supplied by the caller through setGround().
- *
- *              Conventions: heading psi is measured from +x towards +z (the car's forward
- *              vector is (cos psi, sin psi)); u is the speed forward, v the speed to the
- *              right and r the yaw rate (positive = turning right).
+ *              Axes of the body and the world: x to the left, y up, z forward (the way the 3D models are made). The heading psi is
+ *              the direction of the car on the ground plane, from +x towards +z. u is the speed forward, v the speed to the right and r
+ *              the yaw rate (positive = turning right) of the car.
  */
 
 OpenRacer.Vehicle = function (parameters, input) {
@@ -53,17 +54,27 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.rear_track = parameters.rear_track;
     this.weight_distribution = parameters.weight_distribution;
     this.Cdrag = parameters.Cdrag;
+    this.downforce = parameters.downforce || 0;   // N per (m/s)^2, pushing the car on the road
     this.gear_ratios = parameters.gear_ratios;
     this.final_drive = parameters.final_drive;
     this.getSurface = parameters.getSurface;
+    this.ground = null;               // the road (Ground.js, or anything with query(x, z, y, above)); without it the road is flat at 0
 
-    this.af = this.wheelbase * (1 - this.weight_distribution); // front axle to the centre of gravity
-    this.ar = this.wheelbase * this.weight_distribution;       // rear axle to the centre of gravity
     this.cgHeight = parameters.cgHeight || 0.55;
-    this.yawInertia = parameters.mass * (Math.pow(parameters.width || 1.8, 2) + Math.pow(parameters.length || 4.8, 2)) / 12;
-    this.rollFrontShare = 0.55;       // share of the lateral load transfer that goes over the front axle
-    this.frontWheelRate = 29000;      // suspension stiffness at the wheel (N/m), for body pitch and roll
-    this.rearWheelRate = 27000;
+    this.length = parameters.length || 4.8;
+    this.width = parameters.width || 1.8;
+    this.bodyHeight = parameters.height || 1.3;
+
+    // ---- the suspension (all of the values per wheel)
+    this.rollFrontShare = parameters.roll_front || 0.55;      // share of the roll stiffness at the front (the anti-roll bars make up the difference)
+    this.frontWheelRate = parameters.spring_front || 29000;   // spring stiffness at the wheel (N/m)
+    this.rearWheelRate = parameters.spring_rear || 27000;
+    this.frontDamping = parameters.damping_front || 0.35;     // damping ratio when the spring is pushed in (rebound is stiffer)
+    this.rearDamping = parameters.damping_rear || 0.35;
+    this.reboundFactor = 1.7;
+    this.restLength = 0.28;           // from the mount to the middle of the wheel, at rest (m)
+    this.bumpTravel = 0.09;           // how much further the spring can go in before the bump stop (m)
+    this.groundClearance = 0.13;      // of the underside of the body at rest (m)
 
     this.engine = new OpenRacer.Engine(parameters.engine);
     this.driveEfficiency = parameters.efficiency || 0.92;
@@ -84,102 +95,149 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.tcFactor = 1;
     this.escLevel = 0;                // how hard the stability control works (0..1)
     this.yawWanted = 0;               // the yaw rate the steering asks for, as the car can follow it (it needs a moment to turn)
-    this.steerApplied = 0;            // the angle of the front wheels after the stability control limited it
+    this.steerApplied = 0;            // the angle of the front wheels
     this.understeerGradient = 0.0008; // (rad s^2/m) of the car, to know what the car does at a steering angle
     this.shiftTimer = 0;
     this.lastGearKey = null;
     this.timeSinceShift = 10;
 
-    // State of the chassis
-    this.x = 0;
+    // ---- the state of the chassis: a rigid body
+    this.px = 0; this.py = 0; this.pz = 0;                     // the centre of gravity in the world
+    this.qx = 0; this.qy = 0; this.qz = 0; this.qw = 1;        // the orientation of the body
+    this.vx = 0; this.vy = 0; this.vz = 0;                     // the velocity of the centre of gravity
+    this.wx = 0; this.wy = 0; this.wz = 0;                     // the angular velocity (in the world)
+    // what the rest of the game wants to know, kept up to date
+    this.x = 0;                       // the position on the ground plane
     this.z = 0;
-    this.psi = 0;
-    this.u = 0;
-    this.v = 0;
-    this.r = 0;
-    this.sinSlope = 0;                // sine of the road slope along the car, positive uphill
-    this.cosSlope = 1;
-    this.pitchVisual = 0;             // body pitch from load transfer (positive = nose down)
-    this.rollVisual = 0;              // body roll from load transfer, as a rotation of the body around its length axis
-    this.ax = 0;                      // acceleration of the car along its length, filtered (m/s^2)
-    this.ay = 0;                      // acceleration across, filtered
+    this.psi = 0;                     // the heading
+    this.u = 0;                       // the speed along the car
+    this.v = 0;                       // the speed to the right
+    this.r = 0;                       // the yaw rate, positive to the right
+    this.ax = 0;                      // the acceleration along and across the car, filtered (m/s^2)
+    this.ay = 0;
+    this.groundLevel = 0;             // the height of the road under the car
     this.drivelineRPM = 0;            // engine speed implied by the driven wheels in the current gear
-    this.grip = 1;
+    this.airborne = false;            // no wheel touches the road
 
     // Walls and other things to drive into (see Collision.js); set by the caller
     this.collision = null;
-    this.halfLength = (parameters.length || 4.8) / 2;
-    this.halfWidth = (parameters.width || 1.8) / 2;
-    this.bodyHeight = parameters.height || 1.3;
+    this.halfLength = this.length / 2;
+    this.halfWidth = this.width / 2;
     this.kerbHeight = 0.3;            // things lower than this above the road are driven over
-    this.groundLevel = 0;             // height of the road under the car
     this.lastImpact = 0;              // speed of the last hit of a wall (m/s), for effects
     this.impactTime = 0;
     this.wallRestitution = 0.2;
     this.wallFriction = 0.1;
 
-    var longTransfer = 0;             // filtered load transfer (N), see step()
-    var latTransfer = 0;
-    var lastForceX = 0;
-    var lastForceY = 0;
-
-    // Wheels: 0 front right, 1 front left, 2 rear left, 3 rear right (see Car.js for the display order)
-    var diameter = parameters.tire_diameter;
+    // ---- the wheels: 0 front right, 1 front left, 2 rear left, 3 rear right
     this.brakeFront = parameters.brake_front || 1700;  // largest brake torque per wheel (Nm)
     this.brakeRear = parameters.brake_rear || 900;
-    var frontMass = parameters.mass * this.weight_distribution / 2;
-    var rearMass = parameters.mass * (1 - this.weight_distribution) / 2;
+    var diameter = parameters.tire_diameter;
     var defs = [
-        { name: "FR", right: true,  front: true,  driven: this.frontDriven, mass: frontMass, brake: this.brakeFront, a: this.af,  b:  this.front_track / 2 },
-        { name: "FL", right: false, front: true,  driven: this.frontDriven, mass: frontMass, brake: this.brakeFront, a: this.af,  b: -this.front_track / 2 },
-        { name: "RL", right: false, front: false, driven: !this.frontDriven, mass: rearMass,  brake: this.brakeRear, a: -this.ar, b: -this.rear_track / 2 },
-        { name: "RR", right: true,  front: false, driven: !this.frontDriven, mass: rearMass,  brake: this.brakeRear, a: -this.ar, b:  this.rear_track / 2 }
+        { name: "FR", right: true,  front: true },
+        { name: "FL", right: false, front: true },
+        { name: "RL", right: false, front: false },
+        { name: "RR", right: true,  front: false }
     ];
     this.wheels = [];
     for(var i = 0; i < 4; i++) {
         var w = new OpenRacer.Wheel({
             name: defs[i].name, diameter: diameter, right: defs[i].right, front: defs[i].front,
-            driven: defs[i].driven, mass: defs[i].mass, maxBrakeTorque: defs[i].brake
+            driven: defs[i].front === this.frontDriven, mass: 0, maxBrakeTorque: defs[i].front ? this.brakeFront : this.brakeRear
         });
-        w.a = defs[i].a;
-        w.b = defs[i].b;
-        w.weight = defs[i].mass * G;
-        this.wheels.push(w);
-    }
-
-    // Changes what can be tuned while the car drives. The values (all optional): mass (kg), weight_distribution (front share, 0..1),
-    // cg_height, roll_front (share of the roll stiffness at the front), spring_front and spring_rear (N/m at the wheel),
-    // grip (factor), cornering (factor, the stiffness of the tyres against the slip angle), rolling_resistance, power (factor),
-    // idle_rpm, limiter_rpm, engine_inertia, engine_braking (factor), final_drive, gear_ratios, reverse_ratio, clutch (the
-    // capacity as a multiple of the peak torque), diff_preload, diff_lock, drive ("rwd" or "fwd"), brake_front, brake_rear (Nm),
-    // drag (Cdrag), tc_allowance, esc_gain.
-    // A car that understeers at the limit is stable: the front tyres give up before the rear tyres. The rear tyres are a little
-    // stiffer against the slip angle, as the whole car is (a rear that is too weak spins from a small steering movement).
-    this.wheels.forEach(function (w) {
+        // A car that understeers at the limit is stable: the front tyres give up before the rear tyres. The rear tyres are
+        // a little stiffer against the slip angle, as the whole car is (a rear that is too weak spins from a small steering movement).
         w.stiffnessBias = w.front ? 1 : 1.08;
         w.anglePeak = w.anglePeak / w.stiffnessBias;
-    });
+        w.center = { x: 0, y: 0, z: 0 };    // the middle of the wheel in the world
+        w.contact = { x: 0, y: 0, z: 0 };   // where it touches the road
+        w.suspensionLength = 0;
+        w.hasContact = false;
+        w.normalForce = 0;
+        this.wheels.push(w);
+    }
     this.baseAnglePeak = this.wheels[0].anglePeak;
+
+    // ---- geometry that follows from the mass, the weight distribution and the springs
+    var arbFront = 0, arbRear = 0;    // anti-roll bars: the force at a wheel per metre that the wheels are pushed in differently
+    var inertiaX = 1, inertiaY = 1, inertiaZ = 1;
+    this.layout = function () {
+        this.af = this.wheelbase * (1 - this.weight_distribution); // front axle to the centre of gravity
+        this.ar = this.wheelbase * this.weight_distribution;       // rear axle to the centre of gravity
+        var radius = this.wheels[0].radius;
+        for(var i = 0; i < 4; i++) {
+            var w = this.wheels[i];
+            var track = w.front ? this.front_track : this.rear_track;
+            w.a = w.front ? this.af : -this.ar;                    // forward of the centre of gravity
+            w.b = (w.right ? 1 : -1) * track / 2;                  // to the right of it
+            w.mass = this.mass * (w.front ? this.weight_distribution : 1 - this.weight_distribution) / 2;
+            w.rate = w.front ? this.frontWheelRate : this.rearWheelRate;
+            w.staticLoad = w.mass * G;
+            // free length: the spring is pushed in by the weight at rest, to the rest length
+            w.freeLength = this.restLength + w.staticLoad / w.rate;
+            w.minLength = this.restLength - this.bumpTravel;
+            // the mount of the spring on the body (x to the left, y up, z forward) from the centre of gravity
+            w.mount = { x: -w.b, y: (radius - this.cgHeight) + this.restLength, z: w.a };
+        }
+        // the anti-roll bars give the roll stiffness the front share that was asked for
+        var Kf = this.frontWheelRate * this.front_track * this.front_track / 2;
+        var Kr = this.rearWheelRate * this.rear_track * this.rear_track / 2;
+        var share = this.rollFrontShare;
+        arbFront = arbRear = 0;
+        if(Kf / (Kf + Kr) < share) arbFront = Math.max(0, share * Kr / (1 - share) - Kf) / (this.front_track * this.front_track);
+        else arbRear = Math.max(0, Kf * (1 - share) / share - Kr) / (this.rear_track * this.rear_track);
+        // the inertia of a box (x: pitch, y: yaw, z: roll)
+        var m = this.mass;
+        inertiaX = m * (this.bodyHeight * this.bodyHeight + this.length * this.length) / 12;
+        inertiaY = m * (this.width * this.width + this.length * this.length) / 12;
+        inertiaZ = m * (this.width * this.width + this.bodyHeight * this.bodyHeight) / 12;
+        this.yawInertia = inertiaY;
+    };
+    this.layout();
+
+    // ---- vectors and quaternions
+    function rotate(qx, qy, qz, qw, x, y, z, out) {
+        // v + 2 w (q x v) + 2 q x (q x v)
+        var tx = 2 * (qy * z - qz * y), ty = 2 * (qz * x - qx * z), tz = 2 * (qx * y - qy * x);
+        out.x = x + qw * tx + (qy * tz - qz * ty);
+        out.y = y + qw * ty + (qz * tx - qx * tz);
+        out.z = z + qw * tz + (qx * ty - qy * tx);
+        return out;
+    }
+
+    function rotateInverse(qx, qy, qz, qw, x, y, z, out) {
+        return rotate(-qx, -qy, -qz, qw, x, y, z, out);
+    }
+
+    // the inverse inertia applied to a torque in the world: R diag(1/I) R^T torque
+    var tmpA = { x: 0, y: 0, z: 0 }, tmpB = { x: 0, y: 0, z: 0 };
+    function applyInverseInertia(tx, ty, tz, out) {
+        rotateInverse(self.qx, self.qy, self.qz, self.qw, tx, ty, tz, tmpA);
+        tmpA.x /= inertiaX; tmpA.y /= inertiaY; tmpA.z /= inertiaZ;
+        return rotate(self.qx, self.qy, self.qz, self.qw, tmpA.x, tmpA.y, tmpA.z, out);
+    }
+
+    // ---- changes while the car drives (the tuning menu), all optional: mass (kg), weight_distribution (front share, 0..1),
+    // cg_height, roll_front (share of the roll stiffness at the front), spring_front and spring_rear (N/m at the wheel),
+    // damping_front and damping_rear (damping ratio), grip (factor), cornering (factor: the stiffness of the tyres against the
+    // slip angle), rolling_resistance, power (factor), idle_rpm, limiter_rpm, engine_inertia, engine_braking (factor), final_drive,
+    // gear_ratios, reverse_ratio, clutch (the capacity as a multiple of the peak torque), diff_preload, diff_lock, drive ("rwd" or
+    // "fwd"), brake_front, brake_rear (Nm), drag (Cdrag), tc_allowance, esc_gain, downforce.
     this.retune = function (t) {
         var i, w;
-        if(t.mass !== undefined) {
-            this.mass = t.mass;
-            this.yawInertia = this.mass * (Math.pow(parameters.width || 1.8, 2) + Math.pow(parameters.length || 4.8, 2)) / 12;
-        }
-        if(t.weight_distribution !== undefined) {
-            this.weight_distribution = t.weight_distribution;
-            this.af = this.wheelbase * (1 - this.weight_distribution);
-            this.ar = this.wheelbase * this.weight_distribution;
-        }
+        if(t.mass !== undefined) this.mass = t.mass;
+        if(t.weight_distribution !== undefined) this.weight_distribution = t.weight_distribution;
         if(t.cg_height !== undefined) this.cgHeight = t.cg_height;
         if(t.roll_front !== undefined) this.rollFrontShare = t.roll_front;
         if(t.spring_front !== undefined) this.frontWheelRate = t.spring_front;
         if(t.spring_rear !== undefined) this.rearWheelRate = t.spring_rear;
+        if(t.damping_front !== undefined) this.frontDamping = t.damping_front;
+        if(t.damping_rear !== undefined) this.rearDamping = t.damping_rear;
         if(t.drive !== undefined) this.frontDriven = t.drive === "fwd";
+        if(t.downforce !== undefined) this.downforce = t.downforce;
+        this.layout();
         for(i = 0; i < 4; i++) {
             w = this.wheels[i];
-            w.a = w.front ? this.af : -this.ar;
-            w.mass = this.mass * (w.front ? this.weight_distribution : 1 - this.weight_distribution) / 2;
             w.driven = w.front === this.frontDriven;
             if(t.grip !== undefined) w.gripScale = t.grip;
             if(t.cornering !== undefined) w.anglePeak = this.baseAnglePeak / (t.cornering * w.stiffnessBias);
@@ -210,44 +268,40 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.esc_gain !== undefined) this.escGain = t.esc_gain;
     };
 
-    // Static positions of the wheels and the heading, for the caller to place the car
+    // The road under (x, z), as { y, nx, ny, nz, surface, mesh }; a flat road at 0 without a ground
+    var flat = { y: 0, nx: 0, ny: 1, nz: 0, surface: "road", mesh: "" };
+    function roadAt(x, z, y, above) {
+        if(!self.ground) return flat;
+        return self.ground.query(x, z, y, above);
+    }
+
+    // Puts the car on the road at a place, standing still with the springs at rest.
     this.reset = function (x, z, psi) {
-        this.x = x;
-        this.z = z;
-        this.psi = psi;
-        this.u = this.v = this.r = 0;
+        var road = roadAt(x, z, 1000, 0);
+        var height = road ? road.y : 0;
+        // the heading psi, from +x towards +z, is a turn around the y axis of the body of (pi / 2 - psi)
+        var angle = Math.PI / 2 - psi;
+        this.qx = 0; this.qy = Math.sin(angle / 2); this.qz = 0; this.qw = Math.cos(angle / 2);
+        this.px = x; this.py = height + this.cgHeight; this.pz = z;
+        this.vx = this.vy = this.vz = 0;
+        this.wx = this.wy = this.wz = 0;
         this.ax = this.ay = 0;
-        longTransfer = latTransfer = 0;
-        lastForceX = lastForceY = 0;
+        this.suspensionHistory = null;
         for(var i = 0; i < 4; i++) {
             var w = this.wheels[i];
             w.omega = 0;
             w.slipRatio = w.slipTan = 0;
             w.absFactor = 1;
             w.velocity.set(0, 0, 0);
+            w.lastCompression = undefined;
         }
         this.engine.omega = this.engine.idleRPM * Math.PI / 30;
         this.engine.running = true;
         this.engine.starting = false;
         this.clutchEngagement = 0;
         this.shiftTimer = 0;
-    };
-
-    // The road under the car: height of the road under each wheel, and the surface it is made of
-    // (see Car.js). From the heights follow the slope the car is on.
-    this.setGround = function (heights, surfaces) {
-        for(var i = 0; i < 4; i++) {
-            this.wheels[i].groundY = heights[i];
-            this.wheels[i].surface = surfaces[i];
-        }
-        var front = (heights[0] + heights[1]) / 2;
-        var rear = (heights[2] + heights[3]) / 2;
-        this.groundLevel = (front + rear) / 2;
-        var rise = (front - rear) / this.wheelbase;
-        var sin = Math.max(-0.5, Math.min(0.5, rise / Math.sqrt(1 + rise * rise)));
-        // a little smoothing, so that the triangles of the road mesh do not shake the car
-        this.sinSlope += (sin - this.sinSlope) * 0.5;
-        this.cosSlope = Math.sqrt(1 - this.sinSlope * this.sinSlope);
+        this.updateOutputs();
+        this.measureWheels();
     };
 
     // Total gear ratio from the engine to the wheels, including the final drive. Negative in reverse and 0 in neutral.
@@ -265,6 +319,13 @@ OpenRacer.Vehicle = function (parameters, input) {
 
     this.getSpeed = function () {
         return this.u;
+    };
+
+    // the place and the orientation of the middle of the body model: the middle between the axles, at the height of the axles at rest
+    this.getBodyPose = function (position, quaternion) {
+        var offset = rotate(this.qx, this.qy, this.qz, this.qw, 0, this.wheels[0].radius - this.cgHeight, (this.af - this.ar) / 2, { x: 0, y: 0, z: 0 });
+        position.x = this.px + offset.x; position.y = this.py + offset.y; position.z = this.pz + offset.z;
+        quaternion.x = this.qx; quaternion.y = this.qy; quaternion.z = this.qz; quaternion.w = this.qw;
     };
 
     // How hard the clutch is clamped for a pedal position: fully engaged for the first part of the
@@ -290,8 +351,8 @@ OpenRacer.Vehicle = function (parameters, input) {
         this.timeSinceShift += delta;
 
         // engine speed implied by the wheels in the current gear (the engine speed itself while slipping the clutch is no guide)
-        var rearOmega = (this.drivenA().omega + this.drivenB().omega) / 2;
-        this.drivelineRPM = Math.abs(rearOmega) * ratio * 30 / Math.PI;
+        var drivenOmega = (this.drivenA().omega + this.drivenB().omega) / 2;
+        this.drivelineRPM = Math.abs(drivenOmega) * ratio * 30 / Math.PI;
 
         // automatic gearbox
         if(!inp.manualGearbox && !inp.reverse && !inp.neutral) {
@@ -333,59 +394,132 @@ OpenRacer.Vehicle = function (parameters, input) {
         this.engine.start();
     };
 
+    // ---- what the rest of the game wants to know, from the rigid body
+    var axisX = { x: 0, y: 0, z: 0 }, axisY = { x: 0, y: 0, z: 0 }, axisZ = { x: 0, y: 0, z: 0 };
+    this.updateOutputs = function () {
+        rotate(this.qx, this.qy, this.qz, this.qw, 1, 0, 0, axisX);
+        rotate(this.qx, this.qy, this.qz, this.qw, 0, 1, 0, axisY);
+        rotate(this.qx, this.qy, this.qz, this.qw, 0, 0, 1, axisZ);
+        this.x = this.px;
+        this.z = this.pz;
+        this.psi = Math.atan2(axisZ.z, axisZ.x);
+        this.u = this.vx * axisZ.x + this.vy * axisZ.y + this.vz * axisZ.z;
+        this.v = -(this.vx * axisX.x + this.vy * axisX.y + this.vz * axisX.z);
+        this.r = -(this.wx * axisY.x + this.wy * axisY.y + this.wz * axisY.z);
+        var road = roadAt(this.px, this.pz, this.py, 1.5);
+        this.groundLevel = road ? road.y : this.py - this.cgHeight;
+    };
+
+    // Where the wheels are, from the springs, for the display (also when the car is not stepped)
+    this.measureWheels = function () {
+        var tmp = { x: 0, y: 0, z: 0 };
+        for(var i = 0; i < 4; i++) {
+            var w = this.wheels[i];
+            rotate(this.qx, this.qy, this.qz, this.qw, w.mount.x, w.mount.y, w.mount.z, tmp);
+            var mx = this.px + tmp.x, my = this.py + tmp.y, mz = this.pz + tmp.z;
+            var length = w.hasContact ? w.suspensionLength : w.freeLength;
+            w.center.x = mx - axisY.x * length;
+            w.center.y = my - axisY.y * length;
+            w.center.z = mz - axisY.z * length;
+        }
+    };
+
     // Pushes the car out of the walls it is in and gives it an impulse that stops it moving further into them.
     // The impulse acts on the point of the car that touched the wall, so the car also spins when it hits a wall
     // with a corner. Some of the speed along the wall is lost to scraping.
+    var rVec = { x: 0, y: 0, z: 0 }, rxn = { x: 0, y: 0, z: 0 }, ia = { x: 0, y: 0, z: 0 }, ib = { x: 0, y: 0, z: 0 };
+    function impulseAt(rx, ry, rz, nx, ny, nz, restitution, vnOut) {
+        // velocity of the point of contact along the normal
+        var cx = self.vx + (self.wy * rz - self.wz * ry);
+        var cy = self.vy + (self.wz * rx - self.wx * rz);
+        var cz = self.vz + (self.wx * ry - self.wy * rx);
+        var vn = cx * nx + cy * ny + cz * nz;
+        if(vn >= 0) return 0;
+        // 1/m + n . ((I^-1 (r x n)) x r)
+        rxn.x = ry * nz - rz * ny; rxn.y = rz * nx - rx * nz; rxn.z = rx * ny - ry * nx;
+        applyInverseInertia(rxn.x, rxn.y, rxn.z, ia);
+        var termX = ia.y * rz - ia.z * ry, termY = ia.z * rx - ia.x * rz, termZ = ia.x * ry - ia.y * rx;
+        var invMass = 1 / self.mass + nx * termX + ny * termY + nz * termZ;
+        var j = -(1 + restitution) * vn / invMass;
+        self.vx += j * nx / self.mass; self.vy += j * ny / self.mass; self.vz += j * nz / self.mass;
+        applyInverseInertia(rxn.x * j, rxn.y * j, rxn.z * j, ib);
+        self.wx += ib.x; self.wy += ib.y; self.wz += ib.z;
+        vnOut.value = -vn;
+        return j;
+    }
+
+    var impactSpeed = { value: 0 };
     function resolveCollisions() {
-        var m = self.mass;
         var offset = (self.af - self.ar) / 2; // the rectangle of the car is centred between the axles
         for(var pass = 0; pass < 3; pass++) {
             var cosP = Math.cos(self.psi), sinP = Math.sin(self.psi);
-            var contacts = self.collision.query(self.x + cosP * offset, self.z + sinP * offset, self.psi,
+            var contacts = self.collision.query(self.px + cosP * offset, self.pz + sinP * offset, self.psi,
                 self.halfLength, self.halfWidth, self.groundLevel + self.kerbHeight, self.groundLevel + self.bodyHeight);
             if(contacts.length === 0) return;
             var c = contacts[0];
 
             // out of the wall
-            self.x += c.nx * c.depth;
-            self.z += c.nz * c.depth;
+            self.px += c.nx * c.depth;
+            self.pz += c.nz * c.depth;
 
-            // velocity of the contact point
-            var vx = self.u * cosP - self.v * sinP;
-            var vz = self.u * sinP + self.v * cosP;
-            var rx = c.px - self.x, rz = c.pz - self.z;
-            var px = vx - self.r * rz;
-            var pz = vz + self.r * rx;
-            var vn = px * c.nx + pz * c.nz;
-            if(vn >= 0) continue; // already moving away
-
-            var arm = rx * c.nz - rz * c.nx;
-            var invMass = 1 / m + arm * arm / self.yawInertia;
-            var jn = -(1 + self.wallRestitution) * vn / invMass;
-            vx += jn * c.nx / m;
-            vz += jn * c.nz / m;
-            self.r += jn * arm / self.yawInertia;
-
-            // scraping along the wall
+            var rx = c.px - self.px, ry = 0, rz = c.pz - self.pz;
+            var jn = impulseAt(rx, ry, rz, c.nx, 0, c.nz, self.wallRestitution, impactSpeed);
+            if(jn === 0) continue; // already moving away
+            // scraping along the wall: an impulse along the surface, at most a share of the impulse of the hit
             var tx = -c.nz, tz = c.nx;
-            var vt = px * tx + pz * tz;
-            var armT = rx * tz - rz * tx;
-            var invMassT = 1 / m + armT * armT / self.yawInertia;
-            var jt = Math.max(-self.wallFriction * jn, Math.min(self.wallFriction * jn, -vt / invMassT));
-            vx += jt * tx / m;
-            vz += jt * tz / m;
-            self.r += jt * armT / self.yawInertia;
-
-            self.u = vx * cosP + vz * sinP;
-            self.v = -vx * sinP + vz * cosP;
-            if(-vn > self.lastImpact || self.impactTime > 0.5) {
-                self.lastImpact = -vn;
+            var cx = self.vx + (self.wy * rz - self.wz * ry);
+            var cz = self.vz + (self.wx * ry - self.wy * rx);
+            var vt = cx * tx + cz * tz;
+            var jt = Math.max(-self.wallFriction * jn, Math.min(self.wallFriction * jn, -vt * self.mass * 0.5));
+            self.vx += jt * tx / self.mass;
+            self.vz += jt * tz / self.mass;
+            if(impactSpeed.value > self.lastImpact || self.impactTime > 0.5) {
+                self.lastImpact = impactSpeed.value;
                 self.impactTime = 0;
             }
         }
     }
 
-    // Advances the physics by dt (small: 1/200 s or less)
+    // ---- the body on the road: the corners of the body touch it after a landing or when the car has turned over
+    var corner = { x: 0, y: 0, z: 0 }, local = { x: 0, y: 0, z: 0 };
+    var cornerForce = { x: 0, y: 0, z: 0 };
+    function bodyCorners(force, torque) {
+        var yBottom = -self.cgHeight + self.groundClearance;
+        var yTop = yBottom + self.bodyHeight;
+        var zCentre = (self.af - self.ar) / 2;
+        var kc = 60 * self.mass, cc = 0.25 * Math.sqrt(kc * self.mass);
+        for(var k = 0; k < 8; k++) {
+            local.x = (k & 1 ? 1 : -1) * self.halfWidth;
+            local.y = (k & 2 ? yTop : yBottom);
+            local.z = zCentre + (k & 4 ? 1 : -1) * self.halfLength;
+            rotate(self.qx, self.qy, self.qz, self.qw, local.x, local.y, local.z, corner);
+            var rx = corner.x, ry = corner.y, rz = corner.z;
+            var qx = self.px + rx, qy = self.py + ry, qz = self.pz + rz;
+            var road = roadAt(qx, qz, qy, 0.4);
+            if(!road || qy >= road.y) continue;
+            var depth = road.y - qy;
+            var cx = self.vx + (self.wy * rz - self.wz * ry);
+            var cy = self.vy + (self.wz * rx - self.wx * rz);
+            var cz = self.vz + (self.wx * ry - self.wy * rx);
+            var vn = cx * road.nx + cy * road.ny + cz * road.nz;
+            var fn = Math.max(0, kc * depth - cc * vn);
+            // friction along the road
+            var tx = cx - vn * road.nx, ty = cy - vn * road.ny, tz = cz - vn * road.nz;
+            var tl = Math.sqrt(tx * tx + ty * ty + tz * tz);
+            var ft = Math.min(0.6 * fn, tl * 0.5 * self.mass / 4);
+            var fx = fn * road.nx, fy = fn * road.ny, fz = fn * road.nz;
+            if(tl > 1e-6) { fx -= ft * tx / tl; fy -= ft * ty / tl; fz -= ft * tz / tl; }
+            force.x += fx; force.y += fy; force.z += fz;
+            torque.x += ry * fz - rz * fy; torque.y += rz * fx - rx * fz; torque.z += rx * fy - ry * fx;
+        }
+    }
+
+    // ---- one step of the physics (small: 1/300 s or less)
+    var Mv = { x: 0, y: 0, z: 0 }, Rv = { x: 0, y: 0, z: 0 }, Cv = { x: 0, y: 0, z: 0 };
+    var force = { x: 0, y: 0, z: 0 }, torque = { x: 0, y: 0, z: 0 };
+    var alpha = { x: 0, y: 0, z: 0 };
+    var comp = [0, 0, 0, 0], compVelocity = [0, 0, 0, 0], loadSpring = [0, 0, 0, 0];
+
     function step(dt) {
         var inp = self.input;
         var engine = self.engine;
@@ -394,6 +528,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         var L = self.wheelbase;
         var delta = inp.turnAngle || 0;
 
+        self.updateOutputs();
         var u = self.u, v = self.v, r = self.r;
 
         // ---- ESC, the electronic stability control
@@ -405,7 +540,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         // make the car slide.
         var escBrake = [0, 0, 0, 0];
         var escCut = 0;
-        if(self.escEnabled && !inp.handbrake && u > 5) {
+        if(self.escEnabled && !inp.handbrake && u > 5 && !self.airborne) {
             var steady = u * delta / (L + self.understeerGradient * u * u); // the yaw rate that goes with the steering
             // the car follows a steering movement with a delay: a car that is only just starting to turn is not understeering
             self.yawWanted += (steady - self.yawWanted) * Math.min(1, dt / 0.25);
@@ -415,7 +550,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             var magnitude = 0;
             // the direction the car moves in against the way it points (the slip angle of the car): a rear end that
             // slides out is seen at once, also when the car does not turn faster than the steering asks
-            var slipAngle = Math.atan2(self.v, u);
+            var slipAngle = Math.atan2(v, u);
             var rearOut = Math.min(1, Math.max(0, (-Math.sign(r) * slipAngle - 0.05) / 0.12)) * Math.min(1, Math.abs(r) / 0.15);
             if((Math.abs(r) > Math.abs(wanted) && r * error > 0) || rearOut > 0) {
                 escBrake[r > 0 ? 1 : 0] = 1;          // oversteer: the outer front wheel
@@ -435,99 +570,149 @@ OpenRacer.Vehicle = function (parameters, input) {
         var cosD = Math.cos(delta);
         var sinD = Math.sin(delta);
 
-        // ---- vertical load on each wheel: static share, plus the load transferred by the forces on the car
-        var N = m * G * self.cosSlope;
-        var tau = Math.min(1, dt / 0.05);
-        // tyre force at the ground (and drag) acts below the centre of gravity: it lifts the nose when accelerating
-        longTransfer += (lastForceX * self.cgHeight / L - longTransfer) * tau;
-        latTransfer += (lastForceY * self.cgHeight - latTransfer) * tau;
-        var frontAxle = N * self.ar / L - longTransfer;
-        var rearAxle = N * self.af / L + longTransfer;
-        var halfFront = latTransfer * self.rollFrontShare / self.front_track;
-        var halfRear = latTransfer * (1 - self.rollFrontShare) / self.rear_track;
-        // lateral force to the right moves load to the left wheels
-        var loads = [
-            frontAxle / 2 - halfFront,
-            frontAxle / 2 + halfFront,
-            rearAxle / 2 + halfRear,
-            rearAxle / 2 - halfRear
-        ];
+        // ---- the springs: how far every wheel is pushed in, and the force that makes
+        var down = { x: -axisY.x, y: -axisY.y, z: -axisY.z };
+        var anyContact = false;
+        for(var i = 0; i < 4; i++) {
+            var w = wheels[i];
+            rotate(self.qx, self.qy, self.qz, self.qw, w.mount.x, w.mount.y, w.mount.z, Rv);
+            var mx = self.px + Rv.x, my = self.py + Rv.y, mz = self.pz + Rv.z;
+            var road = roadAt(mx, mz, my, 0.3);
+            w.hasContact = false;
+            comp[i] = 0;
+            loadSpring[i] = 0;
+            if(road) {
+                // the ray from the mount along the suspension hits the road at distance t
+                var nd = road.nx * axisY.x + road.ny * axisY.y + road.nz * axisY.z;
+                if(nd < 0.3) nd = 0.3;
+                var t = ((my - road.y) * road.ny) / nd;
+                var length = t - w.radius;
+                if(length < w.freeLength) {
+                    w.hasContact = true;
+                    anyContact = true;
+                    w.suspensionLength = Math.max(0.02, length);
+                    w.surface = road.surface;
+                    w.groundY = road.y;
+                    w.normal = road;
+                    w.contact.x = mx + down.x * t; w.contact.y = my + down.y * t; w.contact.z = mz + down.z * t;
+                    // how fast the spring is pushed in: the speed of the mount towards the road
+                    var vmx = self.vx + (self.wy * Rv.z - self.wz * Rv.y);
+                    var vmy = self.vy + (self.wz * Rv.x - self.wx * Rv.z);
+                    var vmz = self.vz + (self.wx * Rv.y - self.wy * Rv.x);
+                    compVelocity[i] = vmx * down.x + vmy * down.y + vmz * down.z;
+                    comp[i] = w.freeLength - length;
+                }
+            }
+            if(!w.hasContact) {
+                w.suspensionLength = w.freeLength;
+                compVelocity[i] = 0;
+            }
+        }
+        self.airborne = !anyContact;
+        // the anti-roll bars push the wheel that is pushed in more down, and the other up
+        var arbF = arbFront * (comp[1] - comp[0]);       // front: left minus right
+        var arbR = arbRear * (comp[2] - comp[3]);        // rear: left minus right
+        var arbForce = [-arbF, arbF, arbR, -arbR];      // on FR, FL, RL, RR (in the order of the wheels)
 
-        // ---- tyres
-        var sumFx = 0, sumFy = 0, sumMz = 0;
+        force.x = 0; force.y = -m * G; force.z = 0;
+        torque.x = torque.y = torque.z = 0;
+        var tyreTorque = [0, 0, 0, 0];
+        var brakeTorque = [0, 0, 0, 0];
         var maxDrivenSlip = 0;
         var brakePedal = inp.brakePedal;
         var handbrake = inp.handbrake ? 1 : 0;
-        var tyreTorque = [0, 0, 0, 0];
-        var brakeTorque = [0, 0, 0, 0];
-        for(var i = 0; i < 4; i++) {
-            var w = wheels[i];
-            var Fz = Math.max(100, loads[i]);
-            w.weight = Fz;
+        var sumFx = 0, sumFy = 0;
 
-            // velocity of the contact point in the wheel frame
-            var up = u - r * w.b;
-            var vp = v + r * w.a;
-            var vl, vt;
-            if(w.front) {
-                vl = up * cosD + vp * sinD;
-                vt = vp * cosD - up * sinD;
+        for(var iw = 0; iw < 4; iw++) {
+            var wheel = wheels[iw];
+            var fz = 0, fxW = 0, fyW = 0;
+            var vl = 0;
+            if(wheel.hasContact) {
+                var road2 = wheel.normal;
+                var rate = wheel.rate;
+                var zeta = wheel.front ? self.frontDamping : self.rearDamping;
+                var cBump = 2 * zeta * Math.sqrt(rate * wheel.mass);
+                var xdot = compVelocity[iw];
+                var damper = (xdot > 0 ? cBump : cBump * self.reboundFactor) * xdot;
+                var bump = wheel.suspensionLength < wheel.minLength ? 12 * rate * (wheel.minLength - wheel.suspensionLength) : 0;
+                fz = Math.max(0, rate * comp[iw] + damper + bump + arbForce[iw]);
+                wheel.weight = fz;
+
+                var nx = road2.nx, ny = road2.ny, nz = road2.nz;
+                // the point of contact and its velocity
+                Cv.x = wheel.contact.x - self.px; Cv.y = wheel.contact.y - self.py; Cv.z = wheel.contact.z - self.pz;
+                var cvx = self.vx + (self.wy * Cv.z - self.wz * Cv.y);
+                var cvy = self.vy + (self.wz * Cv.x - self.wx * Cv.z);
+                var cvz = self.vz + (self.wx * Cv.y - self.wy * Cv.x);
+                // the direction of the wheel on the road: forward along the wheel (turned by the steering), and to the left of it
+                var fbx, fby, fbz;
+                if(wheel.front) {
+                    fbx = axisZ.x * cosD - axisX.x * sinD; fby = axisZ.y * cosD - axisX.y * sinD; fbz = axisZ.z * cosD - axisX.z * sinD;
+                } else {
+                    fbx = axisZ.x; fby = axisZ.y; fbz = axisZ.z;
+                }
+                var dotN = fbx * nx + fby * ny + fbz * nz;
+                var fpx = fbx - nx * dotN, fpy = fby - ny * dotN, fpz = fbz - nz * dotN;
+                var fl = Math.sqrt(fpx * fpx + fpy * fpy + fpz * fpz) || 1;
+                fpx /= fl; fpy /= fl; fpz /= fl;
+                var lx = ny * fpz - nz * fpy, ly = nz * fpx - nx * fpz, lz = nx * fpy - ny * fpx;   // n x f: to the left
+
+                vl = cvx * fpx + cvy * fpy + cvz * fpz;
+                var vt = cvx * lx + cvy * ly + cvz * lz;
+                wheel.forwardSpeed = vl;
+
+                // slip, with a relaxation length: the tyre needs to roll a bit before the slip builds up
+                var vref = Math.max(Math.abs(vl), 1.5);
+                var kappa = Math.max(-1.5, Math.min(1.5, (wheel.omega * wheel.radius - vl) / vref));
+                var tanA = Math.max(-1.5, Math.min(1.5, vt / vref));
+                var a = 1 - Math.exp(-dt * vref / wheel.relaxation);
+                wheel.slipRatio += (kappa - wheel.slipRatio) * a;
+                wheel.slipTan += (tanA - wheel.slipTan) * a;
+
+                var surface = self.getSurface(wheel.surface);
+                wheel.tyreForce(wheel.slipRatio, wheel.slipTan, fz, surface);
+                fxW = wheel.fx;
+                fyW = wheel.fy;
+                // a little damping on the slip speed keeps a nearly stationary wheel from ringing
+                fxW += 400 * Math.max(-0.3, Math.min(0.3, wheel.omega * wheel.radius - vl));
+                tyreTorque[iw] = -fxW * wheel.radius;
+
+                // rolling resistance (more on soft ground), not a torque on the wheel
+                var rr = wheel.rollingResistance * (surface.static < 0.5 ? 4 : 1) * fz * Math.tanh(vl / 0.3);
+                fxW -= rr;
+
+                // the forces on the car, at the point of contact: the load along the normal, and the forces of the tyre along the road
+                var fxx = fz * nx + fxW * fpx + fyW * lx;
+                var fyy = fz * ny + fxW * fpy + fyW * ly;
+                var fzz = fz * nz + fxW * fpz + fyW * lz;
+                force.x += fxx; force.y += fyy; force.z += fzz;
+                torque.x += Cv.y * fzz - Cv.z * fyy;
+                torque.y += Cv.z * fxx - Cv.x * fzz;
+                torque.z += Cv.x * fyy - Cv.y * fxx;
+                sumFx += fxW; sumFy += fyW;
             } else {
-                vl = up;
-                vt = vp;
+                wheel.weight = 0;
+                wheel.forwardSpeed = 0;
+                wheel.slipRatio *= 0.98;
+                wheel.slipTan *= 0.98;
             }
-            w.forwardSpeed = vl;
-
-            // slip, with a relaxation length: the tyre needs to roll a bit before the slip builds up
-            var vref = Math.max(Math.abs(vl), 1.5);
-            var kappa = Math.max(-1.5, Math.min(1.5, (w.omega * w.radius - vl) / vref));
-            var tanA = Math.max(-1.5, Math.min(1.5, vt / vref));
-            var a = 1 - Math.exp(-dt * vref / w.relaxation);
-            w.slipRatio += (kappa - w.slipRatio) * a;
-            w.slipTan += (tanA - w.slipTan) * a;
-
-            var surface = self.getSurface(w.surface);
-            w.tyreForce(w.slipRatio, w.slipTan, Fz, surface);
-            var fx = w.fx;
-            var fy = w.fy;
-            // a little damping on the slip speed keeps a nearly stationary wheel from ringing
-            fx += 400 * Math.max(-0.3, Math.min(0.3, w.omega * w.radius - vl));
-            tyreTorque[i] = -fx * w.radius;
-
-            // rolling resistance (more on soft ground), not a torque on the wheel
-            var rr = w.rollingResistance * (surface.static < 0.5 ? 4 : 1) * Fz * Math.tanh(vl / 0.3);
-            fx -= rr;
 
             // brakes, with ABS
-            var bias = w.front ? 1 : 1;
-            if(self.absEnabled && brakePedal > 0.05 && w.slipRatio < -0.08 && w.s > 1.1 && Math.abs(vl) > 2) {
-                w.absFactor = Math.max(0.05, w.absFactor - 15 * dt);
-                w.abs = true;
+            if(self.absEnabled && brakePedal > 0.05 && wheel.hasContact && wheel.slipRatio < -0.08 && wheel.s > 1.1 && Math.abs(vl) > 2) {
+                wheel.absFactor = Math.max(0.05, wheel.absFactor - 15 * dt);
+                wheel.abs = true;
             } else {
-                w.absFactor = Math.min(1, w.absFactor + 8 * dt);
-                if(w.absFactor > 0.98) w.abs = false;
+                wheel.absFactor = Math.min(1, wheel.absFactor + 8 * dt);
+                if(wheel.absFactor > 0.98) wheel.abs = false;
             }
-            var bt = brakePedal * w.maxBrakeTorque * w.absFactor * bias;
-            if(!w.front) bt += handbrake * 1800;
+            var bt = brakePedal * wheel.maxBrakeTorque * wheel.absFactor;
+            if(!wheel.front) bt += handbrake * 1800;
             if(inp.parkingLock) bt = Math.max(bt, 4000); // P: the parking lock holds all wheels
-            bt += escBrake[i];
-            w.esc = escBrake[i] > 30;
-            brakeTorque[i] = bt;
-            w.brakeTorque = bt;
-
-            // to the car (the front wheels are steered)
-            var fxB, fyB;
-            if(w.front) {
-                fxB = fx * cosD - fy * sinD;
-                fyB = fx * sinD + fy * cosD;
-            } else {
-                fxB = fx;
-                fyB = fy;
-            }
-            sumFx += fxB;
-            sumFy += fyB;
-            sumMz += w.a * fyB - w.b * fxB;
-            if(w.driven) maxDrivenSlip = Math.max(maxDrivenSlip, (w.omega * w.radius - vl) / (self.tcAllowance * (1 + 0.12 * Math.abs(vl))));
+            bt += escBrake[iw];
+            wheel.esc = escBrake[iw] > 30;
+            brakeTorque[iw] = bt;
+            wheel.brakeTorque = bt;
+            if(wheel.driven && wheel.hasContact) maxDrivenSlip = Math.max(maxDrivenSlip, (wheel.omega * wheel.radius - vl) / (self.tcAllowance * (1 + 0.12 * Math.abs(vl))));
         }
 
         // ---- traction control
@@ -561,8 +746,8 @@ OpenRacer.Vehicle = function (parameters, input) {
         } else {
             engagement = smoothstep(1050, 2000, rpm);
             if(self.shiftTimer > 0) {
-                var t = self.shiftTimer;
-                engagement = Math.min(engagement, t > 0.14 ? 0 : 1 - smoothstep(0, 0.14, t));
+                var ts = self.shiftTimer;
+                engagement = Math.min(engagement, ts > 0.14 ? 0 : 1 - smoothstep(0, 0.14, ts));
             }
         }
         self.clutchEngagement = engagement;
@@ -578,12 +763,12 @@ OpenRacer.Vehicle = function (parameters, input) {
             var dOmega = engine.omega - omegaS;
             var invJd = gs * gs / 4 * (1 / rl.inertia + 1 / rr_.inertia);
             var aExt = gs / 2 * (extL / rl.inertia + extR / rr_.inertia);
-            var k = cap / self.clutchSlipSpeed;
+            var kClutch = cap / self.clutchSlipSpeed;
             // Implicit solution of the slip between engine and driveline: it can be stiff (a locked
             // clutch), and this stays stable. Beyond the capacity the clutch slips with a fixed torque.
             var base = dOmega + dt * (Te / Je - aExt);
-            var den = 1 + dt * k * (1 / Je + invJd);
-            Tc = k * base / den;
+            var den = 1 + dt * kClutch * (1 / Je + invJd);
+            Tc = kClutch * base / den;
             if(Math.abs(Tc) > cap) Tc = cap * (base > 0 ? 1 : -1);
         }
         engine.omega += dt * (Te - Tc) / Je;
@@ -611,72 +796,64 @@ OpenRacer.Vehicle = function (parameters, input) {
             wj.spin += wj.omega * dt;
         }
 
-        // ---- the car as a whole
-        var speed = Math.sqrt(u * u + v * v);
-        var dragX = -self.Cdrag * speed * u;
-        var dragY = -self.Cdrag * speed * v;
-        var Fx = sumFx + dragX - m * G * self.sinSlope;
-        var Fy = sumFy + dragY;
-        var du = Fx / m + v * r;
-        var dv = Fy / m - u * r;
-        var dr = sumMz / self.yawInertia;
-        self.u = u + du * dt;
-        self.v = v + dv * dt;
-        self.r = r + dr * dt;
-        // body speeds when the car is (nearly) standing still: stop instead of drifting
-        if(Math.abs(self.u) < 0.02 && Math.abs(self.v) < 0.02 && inp.brakePedal > 0.3) {
-            self.u = self.v = self.r = 0;
+        // ---- the forces on the car that are not at the wheels: the air (drag, and downforce)
+        var speed = Math.sqrt(self.vx * self.vx + self.vy * self.vy + self.vz * self.vz);
+        var dragX = -self.Cdrag * speed * self.vx, dragY = -self.Cdrag * speed * self.vy, dragZ = -self.Cdrag * speed * self.vz;
+        force.x += dragX; force.y += dragY - self.downforce * speed * speed; force.z += dragZ;
+
+        // ---- the body on the road, for a landing or a car that has turned over
+        bodyCorners(force, torque);
+
+        // ---- integrate: Newton for the movement, Euler for the rotation (with the gyroscopic term of a body that is not round)
+        self.vx += force.x / m * dt; self.vy += force.y / m * dt; self.vz += force.z / m * dt;
+        rotateInverse(self.qx, self.qy, self.qz, self.qw, self.wx, self.wy, self.wz, tmpB);       // angular velocity in the body
+        var gx = (inertiaZ - inertiaY) * tmpB.y * tmpB.z, gy = (inertiaX - inertiaZ) * tmpB.z * tmpB.x, gz = (inertiaY - inertiaX) * tmpB.x * tmpB.y;
+        rotate(self.qx, self.qy, self.qz, self.qw, gx, gy, gz, Mv);
+        applyInverseInertia(torque.x + Mv.x, torque.y + Mv.y, torque.z + Mv.z, alpha);
+        self.wx += alpha.x * dt; self.wy += alpha.y * dt; self.wz += alpha.z * dt;
+
+        self.px += self.vx * dt; self.py += self.vy * dt; self.pz += self.vz * dt;
+        var hx = self.wx * dt * 0.5, hy = self.wy * dt * 0.5, hz = self.wz * dt * 0.5;
+        var nqx = self.qx + hx * self.qw + hy * self.qz - hz * self.qy;
+        var nqy = self.qy + hy * self.qw + hz * self.qx - hx * self.qz;
+        var nqz = self.qz + hz * self.qw + hx * self.qy - hy * self.qx;
+        var nqw = self.qw - hx * self.qx - hy * self.qy - hz * self.qz;
+        var norm = Math.sqrt(nqx * nqx + nqy * nqy + nqz * nqz + nqw * nqw);
+        self.qx = nqx / norm; self.qy = nqy / norm; self.qz = nqz / norm; self.qw = nqw / norm;
+
+        // a car that stands still on the brakes stays where it is: stop instead of drifting
+        if(!self.airborne && Math.abs(self.u) < 0.02 && Math.abs(self.v) < 0.02 && inp.brakePedal > 0.3 && Math.abs(self.vy) < 0.05) {
+            self.vx = self.vy = self.vz = 0;
+            self.wx = self.wy = self.wz = 0;
         }
 
-        var cosP = Math.cos(self.psi);
-        var sinP = Math.sin(self.psi);
-        var vx = self.u * cosP - self.v * sinP;
-        var vz = self.u * sinP + self.v * cosP;
-        self.x += vx * dt;
-        self.z += vz * dt;
-        self.psi += self.r * dt;
         if(self.collision) resolveCollisions();
 
-        // forces that move load between the wheels (tyre forces and drag, not gravity)
-        lastForceX = sumFx + dragX;
-        lastForceY = sumFy + dragY;
+        // accelerations along and across the car, for the display (the tyre forces and the air, without gravity)
+        var fAlong = (force.x * axisZ.x + force.y * axisZ.y + force.z * axisZ.z);
+        var fAcross = -(force.x * axisX.x + force.y * axisX.y + force.z * axisX.z);
         var aT = Math.min(1, dt / 0.1);
-        self.ax += (lastForceX / m - self.ax) * aT;
-        self.ay += (lastForceY / m - self.ay) * aT;
+        self.ax += ((fAlong + m * G * axisZ.y * -1 * -1) / m - self.ax) * aT * 0 + (sumFx / m - self.ax) * aT;
+        self.ay += (sumFy / m * -1 - self.ay) * aT;
 
         for(var q = 0; q < 4; q++) {
-            wheels[q].velocity.set(vx, 0, vz);
+            wheels[q].velocity.set(self.vx, self.vy, self.vz);
             wheels[q].RPM = wheels[q].omega * 30 / Math.PI;
             wheels[q].forwardMPH = Math.round(wheels[q].forwardSpeed * 2.2369362920544);
+            wheels[q].compression = comp[q];
+            wheels[q].onGround = wheels[q].hasContact;
         }
+        void fAcross;
     }
 
     // Moves the physics forward by delta seconds, in small steps. The 3D side of the car is left to Car.js.
     this.update = function (delta) {
         this.updateControls(delta);
         this.impactTime += delta;
-        var steps = Math.max(1, Math.ceil(delta / 0.0035));
+        var steps = Math.max(1, Math.ceil(delta / 0.003));
         var dt = delta / steps;
         for(var s = 0; s < steps; s++) step(dt);
-
-        // body pitch and roll from the loads on the wheels, relative to the loads at rest
-        var staticFront = this.mass * G * this.cosSlope * this.ar / this.wheelbase / 2;
-        var staticRear = this.mass * G * this.cosSlope * this.af / this.wheelbase / 2;
-        var comp = [];
-        for(var i = 0; i < 4; i++) {
-            var w = this.wheels[i];
-            var rate = w.front ? this.frontWheelRate : this.rearWheelRate;
-            var base = w.front ? staticFront : staticRear;
-            var target = (w.weight - base) / rate;
-            w.compression += (target - w.compression) * Math.min(1, delta / 0.06);
-            comp.push(w.compression);
-        }
-        var front = (comp[0] + comp[1]) / 2;
-        var rear = (comp[2] + comp[3]) / 2;
-        this.pitchVisual = (front - rear) / this.wheelbase;
-        var left = (comp[1] + comp[2]) / 2;
-        var right = (comp[0] + comp[3]) / 2;
-        this.rollVisual = -(left - right) / ((this.front_track + this.rear_track) / 2);
-        this.grip = 1;
+        this.updateOutputs();
+        this.measureWheels();
     };
 };

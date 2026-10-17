@@ -75,6 +75,9 @@ OpenRacer.Wheel = function (parameters) {
     this.gripScale = 1;         // tuning: the grip of the tyre, as a factor
     this.loadSensitivity = 0.00012; // grip coefficient lost per extra Newton of load above the nominal load (a tyre grips less
                                     // per Newton the more it is loaded: the axle that gets the most load transfer loses the most grip)
+    this.lateralGrip = 1.05;    // the grip across the tyre as a factor of the grip along it
+    this.shapeX = 0;            // the E of the magic formula along the tyre
+    this.shapeY = 0;            // and across it
     this.stiffnessBias = 1;     // the stiffness of the tyre against the slip angle, as a factor of the front tyres (the rear is a bit stiffer)
     this.nominalLoad = 3500;
 
@@ -88,34 +91,43 @@ OpenRacer.Wheel = function (parameters) {
         return Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.z * this.velocity.z);
     };
 
-    // Tyre force for a slip ratio and slip angle on a surface, with the load on the tyre.
-    // Returns the forces in the wheel frame: fx forward, fy to the right.
+    // Tyre force for a slip ratio and slip angle on a surface, with the load on the tyre. Returns the forces in the wheel frame:
+    // fx along the wheel (forward) and fy across it, towards the side that the slip angle is measured to the other side of: the
+    // force always opposes the slip.
     //
-    // A normalised slip s combines both slips (1 = peak grip). The force magnitude follows
-    // sin(C atan(B s)), which rises to the peak at s = 1 and settles to the sliding grip
-    // for a large s. The force points along the combined slip: when a tyre spends its grip on
-    // braking or driving, there is less left for cornering (friction circle).
+    // The Pacejka "magic formula" gives the force for each slip on its own:
+    //     F = D sin(C atan(B x - E (B x - atan(B x))))
+    // with the slip ratio as x for the longitudinal force and the tangent of the slip angle for the lateral force. D is the peak
+    // (the grip times the load), C sets the force when the tyre slides (the sliding grip of the surface), B puts the peak at the
+    // slip of the tyre, and E bends the curve. The force on the tyre is not the two together: the tyre has only a grip to
+    // spend, a friction circle (here an ellipse, for a tyre that grips a little more across than along). When the two forces
+    // together are more than the grip, both are scaled back, so a tyre that brakes hard has less to corner with.
     this.tyreForce = function (kappa, tanAlpha, load, surface) {
-        var mu = surface.static * this.gripScale;
+        var grip = surface.static * this.gripScale;
+        var mu = Math.min(1.4 * grip, Math.max(0.2 * grip, grip - this.loadSensitivity * (load - this.nominalLoad)));
         var slidingRatio = Math.min(0.98, surface.kinetic / surface.static);
         var C = 2 - (2 / Math.PI) * Math.asin(slidingRatio);
-        var B = Math.tan(Math.PI / (2 * C));
+        var peak = Math.tan(Math.PI / (2 * C)); // B x at the peak of the curve
 
-        mu = Math.min(1.4 * surface.static * this.gripScale, Math.max(0.2 * surface.static * this.gripScale, mu - this.loadSensitivity * (load - this.nominalLoad)));
+        var Dx = mu * load;
+        var Dy = mu * load * this.lateralGrip;
+        var Bx = peak / this.slipPeak, By = peak / this.anglePeak;
+        var bk = Bx * kappa, ba = By * tanAlpha;
+        var fx = Dx * Math.sin(C * Math.atan(bk - this.shapeX * (bk - Math.atan(bk))));
+        var fy = -Dy * Math.sin(C * Math.atan(ba - this.shapeY * (ba - Math.atan(ba))));
 
-        var sx = kappa / this.slipPeak;
-        var sy = tanAlpha / this.anglePeak;
-        var s = Math.sqrt(sx * sx + sy * sy);
-        this.s = s;
-        if(s < 1e-6) {
-            this.fx = 0;
-            this.fy = 0;
-            this.slip = false;
-            return;
+        // how far the tyre is towards its limit, for the traction control, ABS and slide detection
+        var sx = kappa / this.slipPeak, sy = tanAlpha / this.anglePeak;
+        this.s = Math.sqrt(sx * sx + sy * sy);
+
+        var ex = fx / Dx, ey = fy / Dy;
+        var used = Math.sqrt(ex * ex + ey * ey);
+        if(used > 1) {
+            fx /= used;
+            fy /= used;
         }
-        var f = Math.sin(C * Math.atan(B * s)) * mu * load;
-        this.fx = f * sx / s;
-        this.fy = -f * sy / s;
-        this.slip = s > 1.15;
+        this.fx = fx;
+        this.fy = fy;
+        this.slip = this.s > 1.15;
     };
 };

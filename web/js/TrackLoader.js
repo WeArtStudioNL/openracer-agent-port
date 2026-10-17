@@ -203,6 +203,7 @@ function loadScene() {
             }
             
             buildCollisionWorld();
+            buildGroundWorld();
             console.log("track loaded");
             trackLoadedCallback();
         }
@@ -245,4 +246,31 @@ function buildCollisionWorld() {
         }
     }
     console.log("collision triangles: " + collisionWorld.count());
+}
+
+// The road for the suspension of the car: the triangles of the drivable textures, in a grid, see Ground.js. Where roads lie over each
+// other (a road over grass) the order of searchOrder decides.
+var groundWorld;
+
+function buildGroundWorld() {
+    groundWorld = new OpenRacer.GroundWorld(5);
+    var a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    for(var k = 0; k < searchOrder.length; k++) {
+        var meshes = trackObjects[searchOrder[k]];
+        for(var m = 0; m < meshes.length; m++) {
+            var mesh = meshes[m];
+            var texture = mesh.material.map.name;
+            if(!drivableTextures[texture]) continue;
+            var position = mesh.geometry.attributes.position;
+            var index = mesh.geometry.index;
+            var offset = mesh.position;
+            for(var t = 0; t < index.count; t += 3) {
+                a.fromBufferAttribute(position, index.getX(t)).add(offset);
+                b.fromBufferAttribute(position, index.getX(t + 1)).add(offset);
+                c.fromBufferAttribute(position, index.getX(t + 2)).add(offset);
+                groundWorld.addTriangle(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, texture, mesh.name, k);
+            }
+        }
+    }
+    console.log("ground triangles: " + groundWorld.count());
 }

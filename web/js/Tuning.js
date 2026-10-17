@@ -31,7 +31,9 @@ var Tuning = (function() {
             ["cg_height", "Height of the centre of gravity", "m", 0.25, 1.0, 0.01],
             ["roll_front", "Roll stiffness at the front", "%", 30, 80, 1],
             ["spring_front", "Front springs (wheel rate)", "N/mm", 10, 90, 1],
-            ["spring_rear", "Rear springs (wheel rate)", "N/mm", 10, 90, 1]
+            ["spring_rear", "Rear springs (wheel rate)", "N/mm", 10, 90, 1],
+            ["damping_front", "Front dampers", "%", 10, 100, 1],
+            ["damping_rear", "Rear dampers", "%", 10, 100, 1]
         ] },
         { name: "Tyres", items: [
             ["grip", "Grip", "%", 50, 160, 1],
@@ -97,6 +99,8 @@ var Tuning = (function() {
             roll_front: (ch.roll_front !== undefined ? ch.roll_front : 0.55) * 100,
             spring_front: (ch.spring_front !== undefined ? ch.spring_front : 29000) / 1000,
             spring_rear: (ch.spring_rear !== undefined ? ch.spring_rear : 27000) / 1000,
+            damping_front: (ch.damping_front !== undefined ? ch.damping_front : 0.35) * 100,
+            damping_rear: (ch.damping_rear !== undefined ? ch.damping_rear : 0.35) * 100,
             grip: (tyres.grip !== undefined ? tyres.grip : 1) * 100,
             cornering: (tyres.cornering !== undefined ? tyres.cornering : 1) * 100,
             rolling_resistance: tyres.rolling_resistance !== undefined ? tyres.rolling_resistance : 0.015,
@@ -140,6 +144,8 @@ var Tuning = (function() {
             roll_front: v.roll_front / 100,
             spring_front: v.spring_front * 1000,
             spring_rear: v.spring_rear * 1000,
+            damping_front: v.damping_front / 100,
+            damping_rear: v.damping_rear / 100,
             grip: v.grip / 100,
             cornering: v.cornering / 100,
             rolling_resistance: v.rolling_resistance,
@@ -468,6 +474,8 @@ var Tuning = (function() {
         c.chassis.roll_front = v.roll_front / 100;
         c.chassis.spring_front = v.spring_front * 1000;
         c.chassis.spring_rear = v.spring_rear * 1000;
+        c.chassis.damping_front = v.damping_front / 100;
+        c.chassis.damping_rear = v.damping_rear / 100;
         c.chassis.drag_coefficient = v.drag_coefficient;
         c.chassis.max_steer_deg = v.max_steer_deg;
         c.tyres = { grip: v.grip / 100, cornering: v.cornering / 100, rolling_resistance: v.rolling_resistance };
