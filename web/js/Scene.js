@@ -31,25 +31,17 @@ var container;
 var renderer;
 var composer;
 var camera;
-var cubeCamera;
 var cubeUpdate = 2;
 var cubeCount = 0;
-var cubeTarget;
 var shadowLight;
 var SCREEN_WIDTH = window.innerWidth;
 var SCREEN_HEIGHT = window.innerHeight;
 
 var useComposer = true;
 var enableCubeCamera = true;
-var composer;
-var renderTarget;
-var depthTarget;
-var depthMaterial;
-var effectFXAA;
-var effectSSAO;
 
-window.onresize = function() {
-    console.log("resizing - " + telemetry);
+// Size of the picture in CSS pixels: the whole window, or the upper half while the telemetry is shown
+function updateScreenSize() {
     SCREEN_WIDTH = window.innerWidth;
     SCREEN_HEIGHT = window.innerHeight;
     if(telemetry) {
@@ -58,28 +50,19 @@ window.onresize = function() {
             SCREEN_HEIGHT = Math.floor(SCREEN_HEIGHT);
         }
     }
+}
+
+window.onresize = function() {
+    updateScreenSize();
 
     renderer.setSize( SCREEN_WIDTH, SCREEN_HEIGHT );
     camera.aspect = SCREEN_WIDTH / SCREEN_HEIGHT;
     camera.updateProjectionMatrix();
     
-    // The canvas has devicePixelRatio times more pixels than CSS pixels (2x on Retina
-    // displays), so the post-processing buffers must be sized in device pixels too.
-    var bufferWidth = Math.floor( SCREEN_WIDTH * renderer.devicePixelRatio );
-    var bufferHeight = Math.floor( SCREEN_HEIGHT * renderer.devicePixelRatio );
-    var renderTargetParametersRGBA = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat };
-    depthTarget = new THREE.WebGLRenderTarget( bufferWidth, bufferHeight, renderTargetParametersRGBA );
-    renderTargetParameters = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBFormat, stencilBuffer: false };
-    renderTarget = new THREE.WebGLRenderTarget( bufferWidth, bufferHeight, renderTargetParameters );
-    renderTarget.generateMipmaps = false;
-    
+    // the buffers of the post-processing are sized in device pixels (the composer takes care of that)
     if(useComposer) {
-        effectSSAO.uniforms[ 'size' ].value.set( bufferWidth, bufferHeight );
-        effectFXAA.uniforms[ 'resolution' ].value.set( 1 / bufferWidth, 1 / bufferHeight );
-        composer.reset(renderTarget);
-        effectSSAO.uniforms[ 'tDepth' ].value = depthTarget;
+        composer.setSize( SCREEN_WIDTH, SCREEN_HEIGHT );
     }
-    console.log(SCREEN_WIDTH + " x " + SCREEN_HEIGHT);
 };
 
 RACER.Scene = function (parameters, domElement) {
@@ -87,137 +70,79 @@ RACER.Scene = function (parameters, domElement) {
         container = document.createElement( 'div' );
         document.body.appendChild( container );
 
-        renderer = new THREE.WebGLRenderer( { antialias: true, logarithmicDepthBuffer: false } );
-        renderer.shadowMapEnabled = true;
-        renderer.shadowMapSoft = true;
-        renderer.shadowMapType = THREE.PCFSoftShadowMap;
-        renderer.shadowMapCullFace = THREE.CullFaceBack;
-
-        renderer.gammaInput = true;
-        renderer.gammaOutput = true;
-        renderer.physicallyBasedShading = true;
+        // with post-processing the anti-aliasing is done on the buffer of the composer
+        renderer = new THREE.WebGLRenderer( { antialias: !useComposer } );
+        renderer.setPixelRatio( window.devicePixelRatio );
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
         camera = new THREE.PerspectiveCamera( 35, SCREEN_WIDTH / SCREEN_HEIGHT, 1, 5000 );
 
-        //camera.position.x = -36.77731522287426;
-        //camera.position.y = -14.842332522928999;
-        //camera.position.z = 430.97136850461845;
-        
         camera.position.x = -130.38620930679173;
         camera.position.y = 5.1395574378241913;
         camera.position.z = 11.5269260973467418;
         
         scene = new THREE.Scene();
-        
-        if(enableCubeCamera) {
-            cubeCamera = new THREE.CubeCamera(1, 1500, 128);
-            cubeTarget = cubeCamera.renderTarget;
-            scene.add(cubeCamera);
-        }
 
-        //scene.fog = new THREE.Fog( 0x000000, 10, 400 );
-
-        var light = new THREE.DirectionalLight( 0xffffff, 0.7 );
+        // The lights are meant in physical units: a diffuse surface lit by a light of intensity PI
+        // looks as bright as the colour of the light itself.
+        var light = new THREE.DirectionalLight( 0xffffff, 0.7 * Math.PI );
         light.position.set( 350, 75, 250 );
         light.target.position.copy( scene.position );
         scene.add( light );
 
-        var light = new THREE.PointLight( 0xffffff, 1, 0 );
+        light = new THREE.PointLight( 0xffffff, Math.PI, 0, 0 );
         light.position.set( 500, 1000, 0 );
-        //light.castShadow = true;
         scene.add(light);
         
-        var light = new THREE.AmbientLight( 0x576777 );
+        light = new THREE.AmbientLight( 0x576777, Math.PI );
         scene.add(light);
 
-        shadowLight = new THREE.SpotLight( 0xffffff );
-        shadowLight.position.set(250, 500, 0);
-        shadowLight.target.lookAt(0,0,0);
+        // The sun that casts the shadow of the car. It follows the car (see Car.js), and its
+        // shadow map only covers the surroundings of the car.
+        shadowLight = new THREE.DirectionalLight( 0xffffff, 0.5 * Math.PI );
+        shadowLight.position.set(40, 70, 40);
         shadowLight.castShadow = true;
-        shadowLight.onlyShadow = true;
-        shadowLight.shadowCameraVisible = false;
-        shadowLight.shadowMapWidth = 512;
-        shadowLight.shadowMapHeight = 512;
-        shadowLight.shadowCameraNear = 20;
-        shadowLight.shadowCameraFar = 180;
-        shadowLight.shadowCameraFov = 4;
-        shadowLight.shadowBias = 0;
-        shadowLight.shadowDarkness = 0.8;
-
+        shadowLight.shadow.mapSize.set(1024, 1024);
+        shadowLight.shadow.camera.left = -8;
+        shadowLight.shadow.camera.right = 8;
+        shadowLight.shadow.camera.top = 8;
+        shadowLight.shadow.camera.bottom = -8;
+        shadowLight.shadow.camera.near = 20;
+        shadowLight.shadow.camera.far = 180;
+        shadowLight.shadow.bias = -0.0005;
+        shadowLight.shadow.normalBias = 0.02;
+        shadowLight.shadow.intensity = 0.8;
         scene.add(shadowLight);
+        scene.add(shadowLight.target);
 
         // RENDERER
         renderer.setSize( SCREEN_WIDTH, SCREEN_HEIGHT );
         renderer.setClearColor( 0xf2f7ff, 1 );
-        //renderer.autoClear = false;
 
         renderer.domElement.style.position = "relative";
         container.appendChild( renderer.domElement );
         
         if(useComposer) {
-            var depthShader = THREE.ShaderLib["depthRGBA"];
-            var depthUniforms = THREE.UniformsUtils.clone(depthShader.uniforms);
-            depthMaterial = new THREE.ShaderMaterial({
-                fragmentShader : depthShader.fragmentShader,
-                vertexShader : depthShader.vertexShader,
-                uniforms : depthUniforms
-            });
-            depthMaterial.blending = THREE.NoBlending;
-            var SCALE = 1;
-            // size the buffers in device pixels (see window.onresize)
-            var bufferWidth = Math.floor( SCREEN_WIDTH * renderer.devicePixelRatio );
-            var bufferHeight = Math.floor( SCREEN_HEIGHT * renderer.devicePixelRatio );
-            var renderTargetParametersRGBA = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat };
-            depthTarget = new THREE.WebGLRenderTarget( SCALE * bufferWidth, SCALE * bufferHeight, renderTargetParametersRGBA );
-
-            renderTargetParameters = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBFormat, stencilBuffer: false };
-            renderTarget = new THREE.WebGLRenderTarget( bufferWidth, bufferHeight, renderTargetParameters );
-            renderTarget.generateMipmaps = false;
+            var pixelRatio = renderer.getPixelRatio();
+            var renderTarget = new THREE.WebGLRenderTarget(
+                Math.floor( SCREEN_WIDTH * pixelRatio ), Math.floor( SCREEN_HEIGHT * pixelRatio ),
+                { type: THREE.HalfFloatType, samples: 4 } );
             composer = new THREE.EffectComposer( renderer, renderTarget );
             
-            var renderModel = new THREE.RenderPass( scene, camera );
-            composer.addPass(renderModel);
-            
-            //var bokehSettings = {
-            //    focus : 0.995, aperture : 0.2,  maxblur : 5.0,
-            //    width: window.innerWidth, height : window.innerHeight
-            //};
-            //var bokehPass = new THREE.BokehPass( scene, camera, bokehSettings );
-            //bokehPass.renderToScreen = true;
-            //composer.addPass(bokehPass);
-            
-            //var copyPass = new THREE.ShaderPass(THREE.CopyShader);
-            //composer.addPass(copyPass);
+            composer.addPass( new THREE.RenderPass( scene, camera ) );
             
             var effectColor = new THREE.ShaderPass( THREE.ColorCorrectionShader );
             effectColor.uniforms[ 'mulRGB' ].value.set( 1.2, 1.2, 1.2 );
             effectColor.uniforms[ 'powRGB' ].value.set( 1.1, 1.1, 1.1 );
-            composer.addPass(effectColor);
-            
-            effectSSAO = new THREE.ShaderPass( THREE.SSAOShader );
-            effectSSAO.uniforms[ 'tDepth' ].value = depthTarget;
-            effectSSAO.uniforms[ 'size' ].value.set( bufferWidth, bufferHeight );
-            effectSSAO.uniforms[ 'cameraNear' ].value = camera.near;
-            effectSSAO.uniforms[ 'cameraFar' ].value = camera.far / 10;
-            //effectSSAO.uniforms[ 'fogNear' ].value = scene.fog.near;
-            //effectSSAO.uniforms[ 'fogFar' ].value = scene.fog.far;
-            //effectSSAO.uniforms[ 'fogEnabled' ].value = 0;
-            //effectSSAO.uniforms[ 'aoClamp' ].value = 10;
-            effectSSAO.uniforms.onlyAO.value = 0;
-            //effectSSAO.material.defines = { "RGBA_DEPTH": true, "ONLY_AO_COLOR": "1.0, 0.7, 0.5" };
-            effectSSAO.renderToScreen = false;
-            effectSSAO.enabled = false;
-            composer.addPass(effectSSAO);
+            composer.addPass( effectColor );
 
             var effectVignette = new THREE.ShaderPass( THREE.VignetteShader );
             effectVignette.uniforms[ "darkness" ].value = 1.2;
-            composer.addPass(effectVignette);
-            
-            effectFXAA = new THREE.ShaderPass( THREE.FXAAShader );
-            effectFXAA.renderToScreen = true;
-            effectFXAA.uniforms[ 'resolution' ].value.set( 1 / bufferWidth, 1 / bufferHeight );
-            composer.addPass(effectFXAA);
+            composer.addPass( effectVignette );
 
+            // converts the picture to the colours of the screen
+            composer.addPass( new THREE.OutputPass() );
         }
         
         animate();
@@ -227,7 +152,7 @@ RACER.Scene = function (parameters, domElement) {
 
 function animate() {
     requestAnimationFrame( animate );
-    this.render();
+    render();
 };
 
 var frameCount = 0;
@@ -261,7 +186,7 @@ function render() {
             }
 
             //renderer.autoClear = true;
-            cubeCamera.updateCubeMap( renderer, scene );
+            cubeCamera.update( renderer, scene );
             //renderer.autoClear = false;
 
             car.body.visible = true;
@@ -274,12 +199,7 @@ function render() {
     }
     
     if(useComposer) {
-        if(effectSSAO.enabled) {
-            scene.overrideMaterial = depthMaterial;
-            renderer.render(scene, camera, depthTarget, true);
-            scene.overrideMaterial = null;
-        }
-        composer.render(0.1);
+        composer.render();
     } else {
         renderer.render(scene, camera);
     }

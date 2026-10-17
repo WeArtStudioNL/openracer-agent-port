@@ -39,6 +39,7 @@ var searchOrder = ["track", "grass", "ground", "other"];
 var trackCheckPoints = ["r9","r8","r7","r6","r5","r4","r3","r2","r1","r0"];
 
 var trackLoadedCallback;
+var textureLoader = new THREE.TextureLoader();
 
 function loadTrack(tlCallback) {
     trackLoadedCallback = tlCallback;
@@ -72,53 +73,29 @@ function loadScene() {
                         //console.log(circuitObjects[objName]);
                         if(circuitObjects[objName]) {
                             //console.log("    Found " + objName);
-                            var geometry = new THREE.Geometry();
-                            var gotVerts = false;
-                            var gotTris = false;
-                            for(var thing in circuitObjects[objName]) {
-                                //console.log("        " + thing);
-                                if(thing == "vertices") {
-                                    //console.log("        got verts");
-                                    gotVerts = true;
-                                    for(var i = 0; i < circuitObjects[objName][thing].length; i = i + 3) {
-                                        //console.log("[" + myArr[obj][thing][i] + ", " + myArr[obj][thing][i + 1] + ", " + myArr[obj][thing][i + 2] + "]" );
-                                        geometry.vertices.push(new THREE.Vector3(circuitObjects[objName][thing][i], circuitObjects[objName][thing][i + 1], circuitObjects[objName][thing][i + 2]));
-                                    }
-                                } else if (thing == "tris") {
-                                    //console.log("        got tris");
-                                    gotTris = true;
-                                    for(var i = 0; i < circuitObjects[objName][thing].length; i = i + 3) {
-                                        var i0 = circuitObjects[objName][thing][i];
-                                        var i1 = circuitObjects[objName][thing][i + 1];
-                                        var i2 = circuitObjects[objName][thing][i + 2];
-
-                                        if(geometry.vertices.length < i0) {
-                                            console.log("warning - " + i0 + " doesn't exist.");
-                                        }
-                                        if(geometry.vertices.length < i1) {
-                                            console.log("warning - " + i1 + " doesn't exist.");
-                                        }
-                                        if(geometry.vertices.length < i2) {
-                                            console.log("warning - " + i2 + " doesn't exist.");
-                                        }
-
-                                        geometry.faces.push(new THREE.Face3(i2, i1, i0));
-
-                                        // now get uvs
-                                        var uv0 = new THREE.Vector2(circuitObjects[objName].uv1[i0 * 2], circuitObjects[objName].uv1[(i0 * 2) + 1]);
-                                        var uv1 = new THREE.Vector2(circuitObjects[objName].uv1[i1 * 2], circuitObjects[objName].uv1[(i1 * 2) + 1]);
-                                        var uv2 = new THREE.Vector2(circuitObjects[objName].uv1[i2 * 2], circuitObjects[objName].uv1[(i2 * 2) + 1]);
-                                        geometry.faceVertexUvs[0].push([uv2, uv1, uv0]);
-
-                                        uv0 = new THREE.Vector2(circuitObjects[objName].uv2[i0 * 2], circuitObjects[objName].uv2[(i0 * 2) + 1]);
-                                        uv1 = new THREE.Vector2(circuitObjects[objName].uv2[i1 * 2], circuitObjects[objName].uv2[(i1 * 2) + 1]);
-                                        uv2 = new THREE.Vector2(circuitObjects[objName].uv2[i2 * 2], circuitObjects[objName].uv2[(i2 * 2) + 1]);
-                                        if(!geometry.faceVertexUvs[1]) {
-                                            geometry.faceVertexUvs[1] = [];
-                                        }
-                                        geometry.faceVertexUvs[1].push([uv2, uv1, uv0]);
-                                    }                                        
+                            var objectData = circuitObjects[objName];
+                            var gotVerts = !!objectData.vertices;
+                            var gotTris = !!objectData.tris;
+                            var geometry = new THREE.BufferGeometry();
+                            if(gotVerts && gotTris) {
+                                var vertexCount = objectData.vertices.length / 3;
+                                geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(objectData.vertices), 3));
+                                var uvs = new Float32Array(vertexCount * 2);
+                                if(objectData.uv1) {
+                                    for(var u = 0; u < uvs.length; u++) uvs[u] = objectData.uv1[u] || 0;
                                 }
+                                geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+                                var indices = new Uint32Array(objectData.tris.length);
+                                for(var i = 0; i < objectData.tris.length; i = i + 3) {
+                                    // the faces are stored the other way around
+                                    indices[i] = objectData.tris[i + 2];
+                                    indices[i + 1] = objectData.tris[i + 1];
+                                    indices[i + 2] = objectData.tris[i];
+                                    if(objectData.tris[i] >= vertexCount || objectData.tris[i + 1] >= vertexCount || objectData.tris[i + 2] >= vertexCount) {
+                                        console.log("warning - " + objName + " refers to a vertex that doesn't exist.");
+                                    }
+                                }
+                                geometry.setIndex(new THREE.BufferAttribute(indices, 1));
                             }
                             if(gotVerts && gotTris) {
                                 geometry.computeBoundingSphere();
@@ -139,7 +116,8 @@ function loadScene() {
                                     //console.log("            material name: " + matName);
                                     //console.log("            texture name: " + textureName);
                                     //console.log("            texture file: " + textureFile);
-                                    var texture = THREE.ImageUtils.loadTexture( "images/" + textureFile );
+                                    var texture = textureLoader.load( "images/" + textureFile );
+                                    texture.colorSpace = THREE.SRGBColorSpace;
                                     var bumpTexture;
                                     if(textureName === "road") {
                                         //console.log(myArr.textures[textureName]);
@@ -148,7 +126,7 @@ function loadScene() {
                                     }
                                     if(myArr.textures[textureName + "-bump"]) {
                                         //console.log("BUMP: " + myArr.textures[textureName + "-bump"].file);
-                                        bumpTexture = THREE.ImageUtils.loadTexture( "images/" + myArr.textures[textureName + "-bump"].file );
+                                        bumpTexture = textureLoader.load( "images/" + myArr.textures[textureName + "-bump"].file );
                                     }
                                     //console.log("            textureTile: " + textureTile);
                                     if(textureTile) {
@@ -168,7 +146,7 @@ function loadScene() {
                                         }
                                     }
 
-                                    var maxAnisotropy = renderer.getMaxAnisotropy();
+                                    var maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
                                     texture.anisotropy = maxAnisotropy;
 
                                     if(textureName === "road") {
@@ -178,7 +156,7 @@ function loadScene() {
                                     }
                                     mat.name = matName;
                                     texture.name = textureName;
-                                    mat.shininess = shine;
+                                    if(shine !== undefined && mat.isMeshPhongMaterial) mat.shininess = shine;
                                     if(endsWith(textureFile, ".png")) {
                                         mat.transparent = true;
                                     }
@@ -187,7 +165,6 @@ function loadScene() {
                                     //console.log("uv1 count = " + geometry.faceVertexUvs[0].length);
                                     //console.log("uv2 count = " + geometry.faceVertexUvs[1].length);
 
-                                    geometry.computeFaceNormals();
                                     geometry.computeVertexNormals();
 
                                     var mesh = new THREE.Mesh( geometry, mat );

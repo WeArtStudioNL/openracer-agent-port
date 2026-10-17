@@ -94,6 +94,69 @@ function getSurface(name) {
     return uCoeff[name] || uCoeff["track01"];
 }
 
+// Converts a model in the old three.js JSON format (version 3, as exported from 3ds Max) to a
+// BufferGeometry. Vertices stay shared between the faces, so the normals are smooth, and the faces
+// are grouped by material so that a mesh can take an array of materials.
+function parseLegacyModel(json) {
+    var scale = json.scale !== undefined ? json.scale : 1;
+    var vertices = json.vertices;
+    var normals = json.normals || [];
+    var faces = json.faces;
+    var materialCount = json.materials ? Math.max(1, json.materials.length) : 1;
+    var positions = new Float32Array(vertices.length);
+    for(var v = 0; v < vertices.length; v++) positions[v] = vertices[v] * scale;
+
+    // triangles per material
+    var perMaterial = [];
+    for(var m = 0; m < materialCount; m++) perMaterial.push([]);
+
+    var hasUv = json.uvs && json.uvs[0] && json.uvs[0].length > 0;
+    var offset = 0;
+    while(offset < faces.length) {
+        var type = faces[offset++];
+        var isQuad = (type & 1) !== 0;
+        var hasMaterial = (type & 2) !== 0;
+        var hasFaceUv = (type & 4) !== 0;
+        var hasFaceVertexUv = (type & 8) !== 0;
+        var hasFaceNormal = (type & 16) !== 0;
+        var hasFaceVertexNormal = (type & 32) !== 0;
+        var hasFaceColor = (type & 64) !== 0;
+        var hasFaceVertexColor = (type & 128) !== 0;
+        var count = isQuad ? 4 : 3;
+
+        var idx = [];
+        for(var i = 0; i < count; i++) idx.push(faces[offset++]);
+        var material = 0;
+        if(hasMaterial) material = faces[offset++];
+        if(hasFaceUv) offset += hasUv ? 1 : 0;
+        if(hasFaceVertexUv) offset += hasUv ? count : 0;
+        if(hasFaceNormal) offset += 1;
+        if(hasFaceVertexNormal) offset += count;
+        if(hasFaceColor) offset += 1;
+        if(hasFaceVertexColor) offset += count;
+
+        if(material >= perMaterial.length) material = 0;
+        perMaterial[material].push(idx[0], idx[1], idx[2]);
+        if(isQuad) perMaterial[material].push(idx[0], idx[2], idx[3]);
+    }
+
+    var total = 0;
+    for(var k = 0; k < perMaterial.length; k++) total += perMaterial[k].length;
+    var indices = new Uint32Array(total);
+    var geometry = new THREE.BufferGeometry();
+    var start = 0;
+    for(var g = 0; g < perMaterial.length; g++) {
+        indices.set(perMaterial[g], start);
+        if(perMaterial[g].length > 0) geometry.addGroup(start, perMaterial[g].length, g);
+        start += perMaterial[g].length;
+    }
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+    return geometry;
+}
+
 var dO = document.getElementById("debugOut");
 var debugText = "";
 //var debugCount = 0;

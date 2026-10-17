@@ -111,17 +111,16 @@ OpenRacer.Car = function( parameters, domElement ) {
     var placed = false; // set once the car has been put on the road
 
     function bodyLoaded(geometry) {
-        geometry.computeFaceNormals();
-        geometry.computeVertexNormals();
-
-        var material = new THREE.MeshFaceMaterial();
-        material.materials[0] = mlib["Black metal"]; /* windows */ //new THREE.MeshPhongMaterial ( { color: 0x000000 } );
-        material.materials[1] = new THREE.MeshLambertMaterial ( { color: 0x000000 } ); /* front grille */
-        material.materials[2] = mlib["Black metal"];/* rear lights */ //new THREE.MeshLambertMaterial ( { color: 0x858585, shading: THREE.FlatShading } );
-        material.materials[3] = mlib["Chrome"]; /* bumpers */ //new THREE.MeshPhongMaterial ( { color: 0xffffff, shininess: 10 } );
-        material.materials[4] = mlib.body["Orange"]; /* car body */ //new THREE.MeshPhongMaterial ( { emissive: 0x000000, color: 0xff0000, specular: 0xff0000, shininess: 40, shading: THREE.SmoothShading } );
-        material.materials[5] = mlib["Chrome"]; /* chrome trim */ //new THREE.MeshPhongMaterial ( { color: 0xffff00, shininess: 10 } );
-        material.materials[6] = new THREE.MeshBasicMaterial ( { color: 0x0000ff, shininess: 10 } );
+        // one material for every part of the body model, in the order of the model
+        var material = [
+            mlib["Black metal"], /* windows */
+            new THREE.MeshLambertMaterial ( { color: 0x000000 } ), /* front grille */
+            mlib["Black metal"], /* rear lights */
+            mlib["Chrome"], /* bumpers */
+            mlib.body["Orange"], /* car body */
+            mlib["Chrome"], /* chrome trim */
+            new THREE.MeshBasicMaterial ( { color: 0x0000ff } )
+        ];
 
         var mesh = new THREE.Mesh( geometry, material );
         mesh.scale.set(0.5, 0.5, 0.5);
@@ -139,13 +138,11 @@ OpenRacer.Car = function( parameters, domElement ) {
     }
     
     function wheelLoaded(geometry) {
-        geometry.computeFaceNormals();
-        geometry.computeVertexNormals();
-
-        var material = new THREE.MeshFaceMaterial();
-        material.materials[0] = new THREE.MeshPhongMaterial ( { color: 0x878787 } );
-        material.materials[1] = mlib["Chrome"]; /* alloys */ //new THREE.MeshPhongMaterial ( { color: 0xc2c2c2 } );
-        material.materials[2] = new THREE.MeshBasicMaterial ( { color: 0x000000, shininess: 10, emissive: 0x000000, specular: 0xffffff } );
+        var material = [
+            new THREE.MeshPhongMaterial ( { color: 0x878787 } ), /* brakes */
+            mlib["Chrome"], /* alloys */
+            new THREE.MeshBasicMaterial ( { color: 0x000000 } ) /* tyre */
+        ];
         var mesh = new THREE.Mesh( geometry, material );
         mesh.castShadow = true;
         mesh.scale.set(0.5, 0.5, 0.5);
@@ -168,7 +165,7 @@ OpenRacer.Car = function( parameters, domElement ) {
         tobj.wheelsLoaded = true;
     }
 
-    // Loads a model and reports failures explicitly (THREE.JSONLoader.load has no error callback).
+    // Loads a model and reports failures explicitly (the old JSON models have no loader any more).
     function loadModel(url, onLoad) {
         var request = new XMLHttpRequest();
         request.onreadystatechange = function() {
@@ -178,7 +175,7 @@ OpenRacer.Car = function( parameters, domElement ) {
                 return;
             }
             try {
-                onLoad(new THREE.JSONLoader().parse(JSON.parse(request.responseText)).geometry);
+                onLoad(parseLegacyModel(JSON.parse(request.responseText)));
             } catch(e) {
                 modelFailed(url, e);
             }

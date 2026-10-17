@@ -23,6 +23,15 @@ OpenRacer is a static web app. Serve the `web` folder with any local web server 
 
 This serves the `web` folder and opens http://localhost:8000 in your browser (WebGL required). The server does not cache, so after a `git pull` a normal page refresh is enough and the server never needs a restart. Without the script: `cd web && python3 -m http.server 8000`. With Node instead: `npx http-server web -c-1 -o` (`-c-1` disables caching).
 
+## Driving model
+The car is simulated as a chain of connected parts (`web/js/Vehicle.js`, with no 3D dependencies): engine (with inertia, idle, rev limiter and stalling) → friction clutch → gearbox → differential → rear wheels → tyres. The clutch can only transmit a limited torque, so it grips, slips or slides depending on the pedal and the load. Each wheel is an inertia whose speed follows from the engine, brakes and tyre; the slip between the tyre and the road decides how much force it makes (peak grip, then sliding), so wheels can spin or lock up. Gravity pulls the car down the slope of the road, and load moves between the wheels while accelerating, braking and cornering.
+
+* Without a clutch pedal the car works the clutch itself (it engages with the engine speed and opens while shifting), so it does not stall. With a clutch pedal on a calibrated wheel the clutch is yours: release it too quickly and the engine stalls (clutch + throttle, or **I**, starts it again), dump it at high revs and the tyres spin.
+* **C** toggles traction control and **B** toggles ABS (both on by default; the dashboard lights show when they act). **Space** is the handbrake, **R** puts the car back at the start.
+
+## three.js
+The game uses three.js r186 (`web/js/three`, vendored: the build and the few add-ons for post-processing). three.js is an ES module, so `web/js/bootstrap.js` imports it, exposes it as the global `THREE` and then loads the other scripts in order. The old JSON car models are converted to `BufferGeometry` by `parseLegacyModel` in `Helpers.js`.
+
 ## Racing wheel support
 Wheels with pedals and a shifter are supported through the browser's Gamepad API.
 
