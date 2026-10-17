@@ -153,6 +153,12 @@ OpenRacer.Vehicle = function (parameters, input) {
     // idle_rpm, limiter_rpm, engine_inertia, engine_braking (factor), final_drive, gear_ratios, reverse_ratio, clutch (the
     // capacity as a multiple of the peak torque), diff_preload, diff_lock, drive ("rwd" or "fwd"), brake_front, brake_rear (Nm),
     // drag (Cdrag), tc_allowance, esc_gain.
+    // A car that understeers at the limit is stable: the front tyres give up before the rear tyres. The rear tyres are a little
+    // stiffer against the slip angle, as the whole car is (a rear that is too weak spins from a small steering movement).
+    this.wheels.forEach(function (w) {
+        w.stiffnessBias = w.front ? 1 : 1.08;
+        w.anglePeak = w.anglePeak / w.stiffnessBias;
+    });
     this.baseAnglePeak = this.wheels[0].anglePeak;
     this.retune = function (t) {
         var i, w;
@@ -176,7 +182,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             w.mass = this.mass * (w.front ? this.weight_distribution : 1 - this.weight_distribution) / 2;
             w.driven = w.front === this.frontDriven;
             if(t.grip !== undefined) w.gripScale = t.grip;
-            if(t.cornering !== undefined) w.anglePeak = this.baseAnglePeak / t.cornering;
+            if(t.cornering !== undefined) w.anglePeak = this.baseAnglePeak / (t.cornering * w.stiffnessBias);
             if(t.rolling_resistance !== undefined) w.rollingResistance = t.rolling_resistance;
             if(t.brake_front !== undefined && w.front) w.maxBrakeTorque = t.brake_front;
             if(t.brake_rear !== undefined && !w.front) w.maxBrakeTorque = t.brake_rear;

@@ -73,7 +73,9 @@ OpenRacer.Wheel = function (parameters) {
     this.anglePeak = 0.15;      // tan of the slip angle with the most grip
     this.rollingResistance = 0.015;
     this.gripScale = 1;         // tuning: the grip of the tyre, as a factor
-    this.loadSensitivity = 0.00004; // grip coefficient lost per extra Newton of load above the nominal load
+    this.loadSensitivity = 0.00012; // grip coefficient lost per extra Newton of load above the nominal load (a tyre grips less
+                                    // per Newton the more it is loaded: the axle that gets the most load transfer loses the most grip)
+    this.stiffnessBias = 1;     // the stiffness of the tyre against the slip angle, as a factor of the front tyres (the rear is a bit stiffer)
     this.nominalLoad = 3500;
 
     // Brings the wheel to the position and rotation display state. Safe without a 3D object.
@@ -99,7 +101,7 @@ OpenRacer.Wheel = function (parameters) {
         var C = 2 - (2 / Math.PI) * Math.asin(slidingRatio);
         var B = Math.tan(Math.PI / (2 * C));
 
-        mu = Math.max(0.2 * surface.static * this.gripScale, mu - this.loadSensitivity * (load - this.nominalLoad));
+        mu = Math.min(1.4 * surface.static * this.gripScale, Math.max(0.2 * surface.static * this.gripScale, mu - this.loadSensitivity * (load - this.nominalLoad)));
 
         var sx = kappa / this.slipPeak;
         var sy = tanAlpha / this.anglePeak;

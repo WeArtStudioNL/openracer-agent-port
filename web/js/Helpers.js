@@ -84,10 +84,10 @@ function getGroundAt(x, z, hintY) {
 
 // Friction of the surfaces: the grip at the peak of the tyre curve (static) and while sliding (kinetic).
 var uCoeff = {
-    "road": { static: 1.1, kinetic: 0.98 },
-    "track01": { static: 0.95, kinetic: 0.85 },
-    "grass": { static: 0.4, kinetic: 0.33 },
-    "ground": { static: 0.5, kinetic: 0.42 }
+    "road": { static: 1.2, kinetic: 1.06 },
+    "track01": { static: 1.03, kinetic: 0.93 },
+    "grass": { static: 0.44, kinetic: 0.36 },
+    "ground": { static: 0.55, kinetic: 0.46 }
 };
 
 function getSurface(name) {
