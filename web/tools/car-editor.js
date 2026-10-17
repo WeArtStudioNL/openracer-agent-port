@@ -552,7 +552,74 @@ const SND = {
     intake_open: "sndIntakeOpen", intake_closed: "sndIntakeClosed", outlet_reflection: "sndOutletRefl", exhaust_open: "sndExhaustOpen",
     exhaust_closed: "sndExhaustClosed", muffler_action: "sndMufflerAction", mix_intake: "sndMixIntake", mix_block: "sndMixBlock", mix_outlet: "sndMixOutlet"
 };
-const preview = { ctx: null, synth: null, playing: false, loading: false, sweep: null };
+const preview = { ctx: null, synth: null, realSynth: null, sampler: null, playing: false, loading: false, sweep: null };
+
+// ---- the recordings of the engine
+
+state.samples = [];        // [{ file, rpm, load, blob }]: blob is the file that was picked, none for a file that is in the folder of the car already
+state.removedSamples = []; // files of the car that are not used any more
+
+function guessSample(name) {
+    const lower = name.toLowerCase();
+    const number = lower.match(/(\d{3,5})\s*(rpm)?/);
+    let rpm = number ? parseInt(number[1], 10) : (/idle/.test(lower) ? (num("idle") || 900) : 3000);
+    const load = /off|decel|coast|lift/.test(lower) ? "off" : "on";
+    return { rpm, load };
+}
+
+function resetSamplePreview() {
+    if (preview.playing) {
+        preview.playing = false;
+        if (preview.synth && preview.synth.setSilent) preview.synth.setSilent(true);
+        $("soundPlay").textContent = "Play";
+    }
+    if (preview.sampler) { preview.sampler.disconnect(); preview.sampler = null; }
+    preview.synth = preview.realSynth;
+}
+
+function renderSamples() {
+    const list = $("samples");
+    list.innerHTML = "";
+    state.samples.forEach((sample, i) => {
+        const row = document.createElement("div");
+        row.className = "row";
+        row.style.cssText = "align-items:center; margin:3px 0";
+        const name = document.createElement("span");
+        name.textContent = sample.file;
+        name.style.cssText = "flex:2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap";
+        const rpm = document.createElement("input");
+        rpm.type = "number"; rpm.min = 100; rpm.max = 20000; rpm.step = 50; rpm.value = sample.rpm; rpm.title = "engine speed of the recording (rpm)";
+        rpm.addEventListener("change", () => { sample.rpm = parseFloat(rpm.value) || sample.rpm; resetSamplePreview(); });
+        const load = document.createElement("select");
+        load.innerHTML = "<option value='on'>throttle on</option><option value='off'>throttle off</option>";
+        load.value = sample.load;
+        load.addEventListener("change", () => { sample.load = load.value; resetSamplePreview(); });
+        const remove = document.createElement("button");
+        remove.className = "small danger"; remove.textContent = "×";
+        remove.addEventListener("click", () => {
+            if (!sample.blob) state.removedSamples.push(sample.file);
+            state.samples.splice(i, 1);
+            resetSamplePreview();
+            renderSamples();
+        });
+        row.append(name, rpm, load, remove);
+        list.appendChild(row);
+    });
+}
+
+function addSamples(files) {
+    for (const file of files) {
+        if (!/\.(ogg|mp3|wav|flac|m4a)$/i.test(file.name)) { status("“" + file.name + "” is not an audio file (ogg, mp3, wav, flac or m4a).", "error"); continue; }
+        if (!FILE_PATTERN.test(file.name)) { status("The file name “" + file.name + "” has characters that are not allowed. Use letters, digits, - _ . and spaces.", "error"); continue; }
+        state.samples = state.samples.filter((s) => s.file !== file.name);
+        state.samples.push(Object.assign({ file: file.name, blob: file }, guessSample(file.name)));
+    }
+    state.samples.sort((a, b) => a.rpm - b.rpm);
+    resetSamplePreview();
+    renderSamples();
+}
+$("sampleFiles").addEventListener("change", (e) => { addSamples([...e.target.files]); e.target.value = ""; });
+$("soundUseSamples").addEventListener("change", resetSamplePreview);
 
 function fillSound(params) {
     for (const [key, id] of Object.entries(SND)) $(id).value = params[key];
@@ -572,7 +639,7 @@ function soundValid(params) {
 
 function soundChanged() {
     const params = readSound();
-    if (preview.synth && soundValid(params)) preview.synth.setParams(Object.assign({}, OpenRacer.engineSoundDefaults, params));
+    if (preview.realSynth && soundValid(params)) preview.realSynth.setParams(Object.assign({}, OpenRacer.engineSoundDefaults, params));
 }
 
 async function playSound() {
@@ -583,6 +650,29 @@ async function playSound() {
         $("soundPlay").textContent = "Play";
         return;
     }
+    if (state.samples.length && $("soundUseSamples").checked) {
+        // the recordings
+        if (!preview.ctx) preview.ctx = new AudioContext();
+        if (preview.ctx.state === "suspended") await preview.ctx.resume();
+        if (!preview.sampler) {
+            try {
+                const base = state.existingId ? "../cars/" + state.existingId + "/" : "";
+                preview.sampler = await OpenRacer.EngineSampler.load(preview.ctx, base, state.samples.map((s) => ({ file: s.file, rpm: s.rpm, load: s.load, blob: s.blob })));
+                preview.sampler.connect(preview.ctx.destination);
+            } catch (error) {
+                status("Could not play the recordings: " + (error.message || error), "error");
+                return;
+            }
+        }
+        preview.synth = preview.sampler;
+        preview.playing = true;
+        preview.synth.setSilent(false);
+        preview.synth.setInside($("soundInside").checked);
+        soundSliders();
+        $("soundPlay").textContent = "Stop";
+        return;
+    }
+    preview.synth = preview.realSynth;
     if (!window.AudioWorkletNode) { status("This browser cannot play the engine sound (AudioWorklet).", "error"); return; }
     if (!preview.ctx) preview.ctx = new AudioContext();
     if (preview.ctx.state === "suspended") await preview.ctx.resume();
@@ -590,7 +680,7 @@ async function playSound() {
         try {
             await OpenRacer.EngineSynth.load(preview.ctx, "../js/EngineSoundWorklet.js");
             const params = readSound();
-            preview.synth = new OpenRacer.EngineSynth(preview.ctx, Object.assign({}, OpenRacer.engineSoundDefaults, soundValid(params) ? params : {}));
+            preview.synth = preview.realSynth = new OpenRacer.EngineSynth(preview.ctx, Object.assign({}, OpenRacer.engineSoundDefaults, soundValid(params) ? params : {}));
             preview.synth.connect(preview.ctx.destination);
         } catch (error) {
             status("Could not start the engine sound: " + error.message, "error");
@@ -814,6 +904,10 @@ function buildConfig(id) {
         sound: readSound()
     };
     if (!soundValid(config.sound)) throw new Error("Every field of the engine sound needs a number (and the muffler at least one length).");
+    if (state.samples.length) {
+        if (state.samples.some((s) => !(s.rpm > 0))) throw new Error("Give the engine speed of every recording.");
+        config.sound.samples = state.samples.map((s) => ({ file: s.file, rpm: s.rpm, load: s.load }));
+    }
     const camNumbers = [config.cameras.chase.distance, config.cameras.chase.height, config.cameras.chase.fov, config.cameras.follow.distance,
         config.cameras.follow.height, config.cameras.follow.look_height, config.cameras.follow.smoothing, config.cameras.follow.fov_standing,
         config.cameras.follow.fov_fast, config.cameras.follow.fov_full_speed, config.cameras.follow.dolly, config.cameras.cockpit.fov, ...config.cameras.cockpit.position];
@@ -887,12 +981,29 @@ async function save() {
         // the model that is replaced is removed from the folder of the car when it has another name
         const oldFile = state.replacedModel && state.replacedModel.type === "gltf" ? state.replacedModel.file : null;
 
+        // the recordings of the engine
+        for (const sample of state.samples) {
+            if (sample.blob) uploads.push([sample.file, sample.blob]);
+            else if (state.existingId && id !== state.existingId) {
+                const blob = await (await fetch("../cars/" + state.existingId + "/" + encodeURIComponent(sample.file))).blob();
+                uploads.push([sample.file, blob]);
+            }
+        }
+
         status("Saving…");
         for (const [fileName, file] of uploads) await put("/api/cars/" + id + "/" + encodeURIComponent(fileName), file);
         await put("/api/cars/" + id + "/car.json", JSON.stringify(config, null, 2) + "\n");
         if (oldFile && config.model.type === "gltf" && oldFile !== config.model.file && oldFile.startsWith("cars/" + id + "/")) {
             await fetch("/api/cars/" + id + "/" + encodeURIComponent(oldFile.split("/").pop()), { method: "DELETE" });
         }
+        // recordings that are not used any more are removed from the folder of the car
+        if (id === state.existingId) {
+            for (const file of state.removedSamples) {
+                if (!state.samples.some((s) => s.file === file)) await fetch("/api/cars/" + id + "/" + encodeURIComponent(file), { method: "DELETE" });
+            }
+        }
+        state.removedSamples = [];
+        state.samples.forEach((s) => { s.blob = null; });
         state.replacedModel = null;
         state.existingId = id;
         state.existingModel = config.model;
@@ -990,6 +1101,10 @@ function fill(car) {
     set("brakeFront", car.brakes.front); set("brakeRear", car.brakes.rear);
     fillCameras(OpenRacer.cameraSettings(car));
     fillSound(OpenRacer.engineSoundParams(car));
+    state.samples = ((car.sound && car.sound.samples) || []).map((s) => ({ file: s.file, rpm: s.rpm, load: s.load === "off" ? "off" : "on", blob: null }));
+    state.removedSamples = [];
+    resetSamplePreview();
+    renderSamples();
     soundChanged();
     renderCurve();
 }
@@ -1038,6 +1153,10 @@ function loadExisting() {
 }
 
 function newCar() {
+    state.samples = [];
+    state.removedSamples = [];
+    resetSamplePreview();
+    renderSamples();
     state.existingId = null;
     state.existingModel = null;
     state.existingCar = null;

@@ -14,6 +14,8 @@ var EngineSound = (function() {
     var loading = false;
     var failed = null;           // why the sound does not work, if it does not
     var params = OpenRacer.engineSoundParams(null);
+    var sampleList = [];         // the recordings of the engine of the car, if it has them
+    var sampleBase = "";
     var muted = false;
     var paused = false;          // silent while the game is paused
     var volume = 1;
@@ -186,8 +188,16 @@ var EngineSound = (function() {
         if(ctx.state === "suspended") ctx.resume();
         if(!synth && !loading) {
             loading = true;
-            OpenRacer.EngineSynth.load(ctx, "js/EngineSoundWorklet.js").then(function() {
-                synth = new OpenRacer.EngineSynth(ctx, params);
+            var makeSynth = function() {
+                return OpenRacer.EngineSynth.load(ctx, "js/EngineSoundWorklet.js").then(function() { return new OpenRacer.EngineSynth(ctx, params); });
+            };
+            // recordings of the engine, if the car has them (see EngineSampler.js), else the sound that is made
+            var made = sampleList.length ? OpenRacer.EngineSampler.load(ctx, sampleBase, sampleList).catch(function(error) {
+                console.error("Engine recordings: " + error.message + ", using the made sound");
+                return makeSynth();
+            }) : makeSynth();
+            made.then(function(voice) {
+                synth = voice;
                 synth.connect(output);
                 synth.setInside(inside);
                 loading = false;
@@ -245,6 +255,8 @@ var EngineSound = (function() {
         // the sound parameters of a car (its configuration, "sound"); also while the engine runs, for tuning
         setCar: function(config) {
             params = OpenRacer.engineSoundParams(config);
+            sampleList = (config && config.sound && Array.isArray(config.sound.samples)) ? config.sound.samples.filter(function(sample) { return sample && sample.file && sample.rpm > 0; }) : [];
+            sampleBase = config && config.id ? "cars/" + config.id + "/" : "";
             if(synth) synth.setParams(params);
         },
         setParams: function(newParams) {

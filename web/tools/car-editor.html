@@ -244,6 +244,14 @@
     <div class="sub">The sound is calculated from a model of the engine: every cylinder has pipes for the intake and the exhaust in which the pressure
         wave of the burn travels up and down and is partly reflected, and the exhausts come together in a pipe, a muffler and the outlet
         (after the engine sound generator of Antonio-R1). Press Play and change the values while you listen.</div>
+    <label><b>Recordings</b> (optional)</label>
+    <div class="sub">Instead of the calculated sound the car can play recordings of its engine, the way most games do it: loops of the engine at a steady speed that
+        are played at a pitch that follows the engine speed and fade into each other. Take a few seamless loops (for example at idle, at 2500, at 4500 and at the
+        rev limit) and say at which engine speed each was recorded, and whether the throttle was open (on) or closed (off). One kind (on) is enough.
+        Without recordings the sound below is used.</div>
+    <input type="file" id="sampleFiles" multiple accept=".ogg,.mp3,.wav,.flac,.m4a,audio/*">
+    <div id="samples"></div>
+    <label style="display:inline-block"><input type="checkbox" id="soundUseSamples" checked> Play the recordings in the preview</label>
     <div class="row">
         <div><label>Preset</label><select id="soundPreset"></select></div>
         <div style="flex:none; align-self:flex-end"><button id="soundPlay" class="primary" style="padding:6px 18px">Play</button></div>
@@ -310,6 +318,7 @@
 <script src="../js/MaterialOverrides.js"></script>
 <script src="../js/CarDefaults.js"></script>
 <script src="../js/EngineSynth.js"></script>
+<script src="../js/EngineSampler.js"></script>
 <script type="module" src="car-editor.js"></script>
 </body>
 </html>

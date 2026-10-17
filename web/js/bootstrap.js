@@ -47,6 +47,7 @@ var scripts = [
     "js/Vehicle.js",
     "js/Telemetry.js",
     "js/EngineSynth.js",
+    "js/EngineSampler.js",
     "js/EngineSound.js",
     "js/WheelControls.js",
     "js/Settings.js",
