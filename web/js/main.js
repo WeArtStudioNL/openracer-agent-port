@@ -1,36 +1,44 @@
 /*
  * main.js
  *
- * Starts the game: sets up the scene and the materials, loads the track and, once that is done, creates the car.
+ * Starts the game. Without a choice in the address (?car=<id>&track=<id>) the main menu is shown; with a choice the
+ * scene and the materials are set up, the track is loaded and, once that is done, the car is created.
  */
 
 var lastFrameTime = performance.now();
+var s;
+var telemetry;
+var car;
+var carConfig;
 
 // the engine sound follows the option of the settings menu
 Settings.onOptionChange(function(name, value) {
     if(name === "sound") EngineSound.setMuted(!value);
 });
 EngineSound.setMuted(!Settings.option("sound"));
-var s = new RACER.Scene();
-var telemetry;
 
-s.init();
-initialiseMaterials();
-
-var car;
-function trackLoaded() {
-    car = new OpenRacer.Car({
-        wheelbase: 3.3,
-        front_track: 1.8,
-        rear_track: 1.8,
-        tire_diameter: 0.67564,
-        mass: 1476,
-        weight_distribution: 0.593,
-        width: 1.86,
-        height: 1.295,
-        length: 4.813
+function startGame(carId, trackId) {
+    Promise.all([Catalog.load("cars"), Catalog.load("tracks")]).then(function(result) {
+        var carFound = result[0].filter(function(item) { return item.id === carId; })[0];
+        var trackFound = result[1].filter(function(item) { return item.id === trackId; })[0];
+        if(!carFound || !trackFound) {
+            // the choice is not available (any more): back to the menu
+            window.location.href = window.location.pathname;
+            return;
+        }
+        carConfig = carFound;
+        s = new RACER.Scene();
+        s.init();
+        initialiseMaterials();
+        loadTrack(trackFound, trackLoaded);
+    }).catch(function(error) {
+        console.error(error);
+        window.location.href = window.location.pathname;
     });
+}
 
+function trackLoaded() {
+    car = new OpenRacer.Car(carConfig);
     telemetry = new OpenRacer.Telemetry({car: car, domElement: document.getElementById("telemetry")});
 }
 
@@ -52,4 +60,9 @@ function onEnterFrame() {
 var dash_tc = document.getElementById("dash-tc");
 var dash_abs = document.getElementById("dash-abs");
 
-loadTrack(trackLoaded);
+var query = new URLSearchParams(window.location.search);
+if(query.get("car") && query.get("track")) {
+    startGame(query.get("car"), query.get("track"));
+} else {
+    MainMenu.show();
+}

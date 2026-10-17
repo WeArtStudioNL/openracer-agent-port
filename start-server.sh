@@ -22,16 +22,6 @@ fi
 
 echo "Serving $ROOT at $URL (Ctrl+C to stop)"
 echo "Files are read from disk on every request and never cached: after a git pull, just refresh the page."
-cd "$ROOT"
-# Plain http.server, but telling the browser never to cache, so a normal refresh shows new code
-exec python3 -c '
-import sys
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-
-class NoCacheHandler(SimpleHTTPRequestHandler):
-    def end_headers(self):
-        self.send_header("Cache-Control", "no-store")
-        super().end_headers()
-
-ThreadingHTTPServer(("", int(sys.argv[1])), NoCacheHandler).serve_forever()
-' "$PORT"
+echo "Car editor: $URL/tools/car-editor.html"
+# A plain static server that tells the browser never to cache, plus the API for the car and track lists and the car editor
+exec python3 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/tools/serve.py" "$PORT"

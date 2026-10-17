@@ -17,11 +17,28 @@ Chris Barnard.
 
 
 ## Running locally
-OpenRacer is a static web app. Serve the `web` folder with any local web server (opening `index.html` directly does not work, because the track and car models are loaded with XMLHttpRequest):
+OpenRacer is a static web app with a small helper for the lists of cars and tracks. Run it with
 
     ./start-server.sh        # optionally pass a port, default 8000
 
-This serves the `web` folder and opens http://localhost:8000 in your browser (WebGL required). The server does not cache, so after a `git pull` a normal page refresh is enough and the server never needs a restart. Without the script: `cd web && python3 -m http.server 8000`. With Node instead: `npx http-server web -c-1 -o` (`-c-1` disables caching).
+This serves the `web` folder (`tools/serve.py`) and opens http://localhost:8000 in your browser (WebGL required). Nothing is cached, so after a `git pull` a normal page refresh is enough and the server never needs a restart. Opening `index.html` directly does not work, because the game loads its files. A plain web server (`cd web && python3 -m http.server 8000`) works too, but then the car editor cannot save, and new cars and tracks are only found when they are in `web/cars/index.json` and `web/tracks/index.json`.
+
+## Main menu, cars and tracks
+The game starts with a main menu to choose a car and a track (**Esc** in the game has a button to come back to it). Both lists are made by looking at the folders: every `web/cars/<id>/car.json` is a car and every `web/tracks/<id>/track.json` is a track, so a new folder shows up at the next refresh (or with *Look for new cars and tracks*). The choice is in the address (`index.html?car=<id>&track=<id>`).
+
+A track folder has `track.json` (name, the track geometry and scene files, the folder of the textures, `start` with x, z and heading, and the names of the road pieces that make a lap) and the files it names. `web/tracks/circuit` is the track of the demo.
+
+## Making a car
+`web/cars/<id>/car.json` describes a car: the model, the size, the chassis (mass, wheelbase, tracks, weight distribution, height of the centre of gravity, tyre diameter, drag, steering lock), the drivetrain (rear or front wheel drive, gear ratios, reverse, final drive), the engine (idle, rev limit, inertia, torque curve in `[rpm, Nm]`) and the brakes. `web/cars/mustang` is the car of the demo, with its original models.
+
+The **car editor** at http://localhost:8000/tools/car-editor.html makes such a car from a glTF or glb file, for example from Blender (it needs `start-server.sh`, which writes the files):
+
+1. Pick the `.glb` (or the `.gltf` with its `.bin` and textures). The editor shows the model, the arrow is the front of the car. Turn it if it faces another way, and press *Fit*: the origin of the model has to be at the height of the wheel axles, in the middle between the axles.
+2. The wheels have to be separate parts of the model, because they steer and spin. Select the parts of each wheel (*Find the wheels* does this by their names and places), or choose the wheel of the demo car. The wheelbase, the tracks, the tyre diameter and the size can be taken from the model.
+3. Set the mass, the gears, the engine (a torque table with a chart, or generate a typical curve from the peak power), and the brakes.
+4. *Save the car*: it is written to `web/cars/<id>/` and is in the main menu. Existing cars can be edited, copied (save under another id) and deleted from the same page.
+
+In Blender a car that looks towards -Y (the front view) exports as it should; the model needs a name per part for the wheels to be found. glTF files with Draco or Meshopt compression are not supported.
 
 ## Driving model
 The car is simulated as a chain of connected parts (`web/js/Vehicle.js`, with no 3D dependencies): engine (with inertia, idle, rev limiter and stalling) → friction clutch → gearbox → differential → rear wheels → tyres. The clutch can only transmit a limited torque, so it grips, slips or slides depending on the pedal and the load. Each wheel is an inertia whose speed follows from the engine, brakes and tyre; the slip between the tyre and the road decides how much force it makes (peak grip, then sliding), so wheels can spin or lock up. Gravity pulls the car down the slope of the road, and load moves between the wheels while accelerating, braking and cornering.

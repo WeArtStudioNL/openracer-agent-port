@@ -61,6 +61,10 @@ var Settings = (function() {
         { id: "gear1", wheelOnly: true, group: "Gearbox", label: "H-shifter: gear 2", wheel: { profile: "gear1", steps: ["gear1"] }, defaults: [] },
         { id: "gear2", wheelOnly: true, group: "Gearbox", label: "H-shifter: gear 3", wheel: { profile: "gear2", steps: ["gear2"] }, defaults: [] },
         { id: "gear3", wheelOnly: true, group: "Gearbox", label: "H-shifter: gear 4", wheel: { profile: "gear3", steps: ["gear3"] }, defaults: [] },
+        { id: "gear4", wheelOnly: true, group: "Gearbox", label: "H-shifter: gear 5", wheel: { profile: "gear4", steps: ["gear4"] }, defaults: [] },
+        { id: "gear5", wheelOnly: true, group: "Gearbox", label: "H-shifter: gear 6", wheel: { profile: "gear5", steps: ["gear5"] }, defaults: [] },
+        { id: "gear6", wheelOnly: true, group: "Gearbox", label: "H-shifter: gear 7", wheel: { profile: "gear6", steps: ["gear6"] }, defaults: [] },
+        { id: "gear7", wheelOnly: true, group: "Gearbox", label: "H-shifter: gear 8", wheel: { profile: "gear7", steps: ["gear7"] }, defaults: [] },
         { id: "reverseGear", wheelOnly: true, group: "Gearbox", label: "H-shifter: reverse", wheel: { profile: "reverseGear", steps: ["reverse"] }, defaults: [] },
         { id: "resetCar", group: "Other", label: "Back to the start", defaults: [key("KeyR"), padButton(3)] },
         { id: "cameraLeft", group: "Other", label: "Camera left", defaults: [key("BracketLeft")] },
@@ -426,6 +430,12 @@ var Settings = (function() {
         hint("");
     }
 
+    // the gears of the shifter that the car does not have are not shown
+    function visible(action) {
+        var m = /^gear([0-9]+)$/.exec(action.id);
+        return !m || !window.car || parseInt(m[1], 10) < window.car.gear_ratios.length;
+    }
+
     function renderRow(action) {
         var row = document.createElement("div");
         row.className = "row";
@@ -522,11 +532,19 @@ var Settings = (function() {
         var title = document.createElement("div");
         title.innerHTML = "<h1>Settings</h1><div class=\"sub\">The game is paused. Esc closes this menu.</div>";
         top.appendChild(title);
+        var buttons = document.createElement("div");
         var resume = document.createElement("button");
         resume.className = "big";
         resume.textContent = "Resume";
         resume.onclick = closeMenu;
-        top.appendChild(resume);
+        buttons.appendChild(resume);
+        var mainMenu = document.createElement("button");
+        mainMenu.className = "big";
+        mainMenu.style.cssText = "background: #3b424c; margin-left: 8px;";
+        mainMenu.textContent = "Main menu";
+        mainMenu.onclick = function() { window.location.href = window.location.pathname; };
+        buttons.appendChild(mainMenu);
+        top.appendChild(buttons);
         panel.appendChild(top);
 
         var h = document.createElement("h2");
@@ -560,7 +578,7 @@ var Settings = (function() {
             var gh = document.createElement("h2");
             gh.textContent = group;
             panel.appendChild(gh);
-            ACTIONS.forEach(function(a) { if(a.group === group) panel.appendChild(renderRow(a)); });
+            ACTIONS.forEach(function(a) { if(a.group === group && visible(a)) panel.appendChild(renderRow(a)); });
         });
 
         var hintElement = document.createElement("div");

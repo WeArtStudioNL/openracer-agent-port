@@ -65,9 +65,12 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.frontWheelRate = 29000;      // suspension stiffness at the wheel (N/m), for body pitch and roll
     this.rearWheelRate = 27000;
 
-    this.engine = new OpenRacer.Engine();
-    this.driveEfficiency = 0.92;
-    this.clutchCapacity = 850;        // the most torque the clutch can transmit when fully engaged (Nm)
+    this.engine = new OpenRacer.Engine(parameters.engine);
+    this.driveEfficiency = parameters.efficiency || 0.92;
+    this.reverseRatio = parameters.reverse_ratio || parameters.gear_ratios[0];
+    // the clutch is made for the engine: it holds a good deal more than the peak torque
+    this.clutchCapacity = 1.5 * this.engine.getPeakTorque(); // the most torque the clutch can transmit when fully engaged (Nm)
+    this.frontDriven = parameters.drive === "fwd";           // front wheel drive, or (default) rear wheel drive
     this.clutchSlipSpeed = 1.5;       // slip speed (rad/s) at which the clutch reaches its full capacity
     this.clutchEngagement = 1;        // how hard the clutch is clamped (0..1)
     this.lockTorque = 150;            // limited slip differential: preload (Nm)
@@ -115,13 +118,15 @@ OpenRacer.Vehicle = function (parameters, input) {
 
     // Wheels: 0 front right, 1 front left, 2 rear left, 3 rear right (see Car.js for the display order)
     var diameter = parameters.tire_diameter;
+    this.brakeFront = parameters.brake_front || 1700;  // largest brake torque per wheel (Nm)
+    this.brakeRear = parameters.brake_rear || 900;
     var frontMass = parameters.mass * this.weight_distribution / 2;
     var rearMass = parameters.mass * (1 - this.weight_distribution) / 2;
     var defs = [
-        { name: "FR", right: true,  front: true,  driven: false, mass: frontMass, brake: 1700, a: this.af,  b:  this.front_track / 2 },
-        { name: "FL", right: false, front: true,  driven: false, mass: frontMass, brake: 1700, a: this.af,  b: -this.front_track / 2 },
-        { name: "RL", right: false, front: false, driven: true,  mass: rearMass,  brake: 900,  a: -this.ar, b: -this.rear_track / 2 },
-        { name: "RR", right: true,  front: false, driven: true,  mass: rearMass,  brake: 900,  a: -this.ar, b:  this.rear_track / 2 }
+        { name: "FR", right: true,  front: true,  driven: this.frontDriven, mass: frontMass, brake: this.brakeFront, a: this.af,  b:  this.front_track / 2 },
+        { name: "FL", right: false, front: true,  driven: this.frontDriven, mass: frontMass, brake: this.brakeFront, a: this.af,  b: -this.front_track / 2 },
+        { name: "RL", right: false, front: false, driven: !this.frontDriven, mass: rearMass,  brake: this.brakeRear, a: -this.ar, b: -this.rear_track / 2 },
+        { name: "RR", right: true,  front: false, driven: !this.frontDriven, mass: rearMass,  brake: this.brakeRear, a: -this.ar, b:  this.rear_track / 2 }
     ];
     this.wheels = [];
     for(var i = 0; i < 4; i++) {
@@ -180,9 +185,13 @@ OpenRacer.Vehicle = function (parameters, input) {
         var inp = this.input;
         if(inp.neutral) return 0;
         var ratio = this.final_drive;
-        if(inp.reverse) return -this.gear_ratios[0] * ratio;
+        if(inp.reverse) return -this.reverseRatio * ratio;
         return this.gear_ratios[inp.current_gear] * ratio;
     };
+
+    // the driven wheels: left and right
+    this.drivenA = function () { return this.wheels[this.frontDriven ? 1 : 2]; };
+    this.drivenB = function () { return this.wheels[this.frontDriven ? 0 : 3]; };
 
     this.getSpeed = function () {
         return this.u;
@@ -211,7 +220,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         this.timeSinceShift += delta;
 
         // engine speed implied by the wheels in the current gear (the engine speed itself while slipping the clutch is no guide)
-        var rearOmega = (this.wheels[2].omega + this.wheels[3].omega) / 2;
+        var rearOmega = (this.drivenA().omega + this.drivenB().omega) / 2;
         this.drivelineRPM = Math.abs(rearOmega) * ratio * 30 / Math.PI;
 
         // automatic gearbox
@@ -219,15 +228,16 @@ OpenRacer.Vehicle = function (parameters, input) {
             var g = inp.current_gear;
             var thr = inp.throttle;
             // the engine speed the road speed asks for in this gear: spinning wheels must not cause a shift
-            var rpm = Math.max(0, this.u) / this.wheels[3].radius * ratio * 30 / Math.PI;
+            var rpm = Math.max(0, this.u) / this.drivenA().radius * ratio * 30 / Math.PI;
             if(this.timeSinceShift > 0.6) {
-                var upRPM = 3000 + 2800 * thr;
-                var downRPM = 1500 + 1100 * thr;
+                var limit = this.engine.limiterRPM;
+                var upRPM = limit * (0.45 + 0.42 * thr);
+                var downRPM = limit * (0.23 + 0.17 * thr);
                 var nextRatio = g < gears - 1 ? this.gear_ratios[g + 1] / this.gear_ratios[g] : 1;
                 var prevRatio = g > 0 ? this.gear_ratios[g - 1] / this.gear_ratios[g] : 1;
-                if(g < gears - 1 && rpm > upRPM && rpm * nextRatio > 2300 && this.u > 1) {
+                if(g < gears - 1 && rpm > upRPM && rpm * nextRatio > 0.35 * limit && this.u > 1) {
                     inp.current_gear++;
-                } else if(g > 0 && (rpm < downRPM && rpm * prevRatio < 5700 || (this.u < 1.5 && thr < 0.1))) {
+                } else if(g > 0 && (rpm < downRPM && rpm * prevRatio < 0.86 * limit || (this.u < 1.5 && thr < 0.1))) {
                     inp.current_gear--;
                 }
             }
@@ -416,15 +426,16 @@ OpenRacer.Vehicle = function (parameters, input) {
         var slipError = maxDrivenSlip - 0.18;
         if(self.tcEnabled && slipError > 0) {
             self.tcFactor = Math.max(0.12, self.tcFactor - dt * (2 + 20 * slipError));
-            wheels[2].tc = wheels[3].tc = true;
+            self.drivenA().tc = self.drivenB().tc = true;
         } else {
             self.tcFactor = Math.min(1, self.tcFactor + dt * (slipError < -0.08 ? 2 : 0.3));
-            if(self.tcFactor > 0.98 || !self.tcEnabled) wheels[2].tc = wheels[3].tc = false;
+            if(self.tcFactor > 0.98 || !self.tcEnabled) self.drivenA().tc = self.drivenB().tc = false;
         }
 
         // ---- engine and clutch
         var gs = self.getGearRatio();
-        var rl = wheels[2], rr_ = wheels[3];
+        var iA = self.frontDriven ? 1 : 2, iB = self.frontDriven ? 0 : 3; // the driven wheels: left and right
+        var rl = wheels[iA], rr_ = wheels[iB];
         var throttle = inp.throttle * self.tcFactor;
         // the gearbox takes the power off while it shifts
         if(self.shiftTimer > 0) throttle *= 0.15;
@@ -446,8 +457,8 @@ OpenRacer.Vehicle = function (parameters, input) {
         self.clutchEngagement = engagement;
 
         // brake torque as it is felt by the wheel at its current speed, for the clutch solution below
-        var extL = tyreTorque[2] - brakeTorque[2] * Math.tanh(rl.omega / 0.5);
-        var extR = tyreTorque[3] - brakeTorque[3] * Math.tanh(rr_.omega / 0.5);
+        var extL = tyreTorque[iA] - brakeTorque[iA] * Math.tanh(rl.omega / 0.5);
+        var extR = tyreTorque[iB] - brakeTorque[iB] * Math.tanh(rr_.omega / 0.5);
         var Je = engine.inertia;
         var Tc = 0;
         if(gs !== 0) {
@@ -476,8 +487,8 @@ OpenRacer.Vehicle = function (parameters, input) {
         for(var j = 0; j < 4; j++) {
             var wj = wheels[j];
             var T = tyreTorque[j];
-            if(j === 2) T += driveTorque - lock;
-            if(j === 3) T += driveTorque + lock;
+            if(j === iA) T += driveTorque - lock;
+            if(j === iB) T += driveTorque + lock;
             var omegaFree = wj.omega + dt * T / wj.inertia;
             var bt2 = brakeTorque[j];
             if(bt2 > 0) {

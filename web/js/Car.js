@@ -25,27 +25,30 @@
  *        follow some sort of style guide and restructure coherently.
  */
 
-OpenRacer.Car = function( parameters, domElement ) {
-    this.bodyMeshFile = parameters.body;
-    this.wheelMeshFile = parameters.wheel;
+// Builds a car from its configuration: the contents of cars/<id>/car.json (see the car editor in tools/car-editor.html).
+OpenRacer.Car = function( config, domElement ) {
+    var chassis = config.chassis;
+    var drivetrain = config.drivetrain;
+    this.config = config;
     this.wheels = [];
-    this.wheelsLoaded = false; // set once the wheel model has loaded and all four wheels exist
+    this.wheelsLoaded = false; // set once the model has loaded and all four wheels exist
     this.bodyLoaded = false;   // set once the body model has loaded
     this.loadError = null;     // description of a failed model load, if any
-    this.wheelbase = parameters.wheelbase;
-    this.front_track = parameters.front_track;
-    this.rear_track = parameters.rear_track;
-    this.weight_distribution = parameters.weight_distribution;
-    this.tire_diameter = parameters.tire_diameter;
+    this.wheelbase = chassis.wheelbase;
+    this.front_track = chassis.front_track;
+    this.rear_track = chassis.rear_track;
+    this.weight_distribution = chassis.weight_distribution;
+    this.tire_diameter = chassis.tire_diameter;
     this.body = new THREE.Object3D();
-    this.mass = parameters.mass;
+    this.bodyLift = 2;         // how far the origin of the body is above the road, in tyre radii (set by the model)
+    this.mass = chassis.mass;
     this.throttle = 0;
     this.brakePedal = 0;
-    this.width = parameters.width;
-    this.height = parameters.height;
-    this.length = parameters.length;
+    this.width = config.dimensions.width;
+    this.height = config.dimensions.height;
+    this.length = config.dimensions.length;
     this.frontal_area = this.width * this.height * 0.85;
-    this.Cd = 0.4;
+    this.Cd = chassis.drag_coefficient;
     this.Cdrag = 0.5 * this.Cd * this.frontal_area * air_density;
     this.reset = false;
     this.cameraAngle = 0;
@@ -53,25 +56,23 @@ OpenRacer.Car = function( parameters, domElement ) {
     this.lapsCompleted = 0;
     this.lapStartTime;
     this.laps = [];
-    this.checkPointsCompleted = [false, false, false, false, false, false, false, false, false, false];
+    this.checkPointsCompleted = trackCheckPoints.map(function() { return false; });
     this.currentCheckPoint = "";
     
-    // Where the car starts (and returns to with the R key), heading along +x
-    var startX = -130.38620930679173;
-    var startZ = 1.5269260973467418;
-    var startHeading = 0;
+    // Where the car starts (and returns to with the reset key): from the track
+    var startX = currentTrack.start.x;
+    var startZ = currentTrack.start.z;
+    var startHeading = currentTrack.start.heading || 0;
 
-    //this.gear_ratios = [ 2.99, 1.75, 1 ]; // Standard Mach 1 351 transmission, code RAT-AM (3.03)
-    //this.gear_ratios = [ 2.78, 1.93, 1.36, 1 ]; // Toploader four speed, wide-ratio 351 RUG-E3
-    this.gear_ratios = [ 2.32, 1.69, 1.29, 1 ]; // Toploader close-ratio, 351 RUG-AG
-    this.final_drive = 3.5; // 3.25, 3.5 or 4.3
+    this.gear_ratios = drivetrain.gear_ratios;
+    this.final_drive = drivetrain.final_drive;
     this.current_gear = 0;
     this.manualGearbox = false;     // true while a wheel with a shifter selects the gear
     this.neutral = false;           // no drive while in neutral
     this.clutch = 0;                // clutch pedal: 0 = engaged, 1 = fully pressed
     this.clutchPedalPresent = false; // a real clutch pedal is available; otherwise the clutch is automatic
     this.handbrake = false;
-    this.engineRPM = 900;           // engine speed, for the dashboard and the engine sound
+    this.engineRPM = (config.engine && config.engine.idle_rpm) || 900; // engine speed, for the dashboard and the engine sound
 
     this.accelerate = false;
     this.brake = false;
@@ -79,7 +80,7 @@ OpenRacer.Car = function( parameters, domElement ) {
     this.turnLeft = false;
     this.turnRight = false;
     this.turnDir = 0;
-    this.maxTurn = Math.PI / 6;
+    this.maxTurn = (chassis.max_steer_deg || 30) * Math.PI / 180;
     this.turnLimit = this.maxTurn;
     this.turnSpeed = 2; // radians per second
     this.turnAngle = 0;
@@ -96,13 +97,20 @@ OpenRacer.Car = function( parameters, domElement ) {
         front_track: this.front_track,
         rear_track: this.rear_track,
         weight_distribution: this.weight_distribution,
+        cgHeight: chassis.cg_height,
         tire_diameter: this.tire_diameter,
         width: this.width,
         length: this.length,
         height: this.height,
         Cdrag: this.Cdrag,
         gear_ratios: this.gear_ratios,
+        reverse_ratio: drivetrain.reverse_ratio,
         final_drive: this.final_drive,
+        efficiency: drivetrain.efficiency,
+        drive: drivetrain.drive,
+        engine: config.engine,
+        brake_front: config.brakes && config.brakes.front,
+        brake_rear: config.brakes && config.brakes.rear,
         getSurface: getSurface
     }, this);
     this.vehicle.collision = collisionWorld;
@@ -110,97 +118,27 @@ OpenRacer.Car = function( parameters, domElement ) {
     this.wheels = this.vehicle.wheels;
     var placed = false; // set once the car has been put on the road
 
-    function bodyLoaded(geometry) {
-        // one material for every part of the body model, in the order of the model
-        var material = [
-            mlib["Black metal"], /* windows */
-            new THREE.MeshLambertMaterial ( { color: 0x000000 } ), /* front grille */
-            mlib["Black metal"], /* rear lights */
-            mlib["Chrome"], /* bumpers */
-            mlib.body["Orange"], /* car body */
-            mlib["Chrome"], /* chrome trim */
-            new THREE.MeshBasicMaterial ( { color: 0x0000ff } )
-        ];
-
-        var mesh = new THREE.Mesh( geometry, material );
-        mesh.scale.set(0.5, 0.5, 0.5);
-        mesh.castShadow = true;
-        mesh.receiveShadow = false;
-        tobj.body.add(mesh);
-        //carBody.position.x = -36.77731522287426;
-        //carBody.position.y = -14.842332522928999;
-        //carBody.position.z = 430.97136850461845;
-
+    // The model: the body (it pitches and rolls) and the four wheels, see CarLoader.js
+    OpenRacer.loadCarModel(config, function(model) {
+        tobj.bodyLift = model.bodyLift;
+        tobj.body.add(model.tilt);
         scene.add(tobj.body);
-
         shadowLight.target = tobj.body;
         tobj.bodyLoaded = true;
-    }
-    
-    function wheelLoaded(geometry) {
-        var material = [
-            new THREE.MeshPhongMaterial ( { color: 0x878787 } ), /* brakes */
-            mlib["Chrome"], /* alloys */
-            new THREE.MeshBasicMaterial ( { color: 0x000000 } ) /* tyre */
-        ];
-        var mesh = new THREE.Mesh( geometry, material );
-        mesh.castShadow = true;
-        mesh.scale.set(0.5, 0.5, 0.5);
-
-        // Every wheel is a chain of objects: the wheel (position and orientation), the steering
-        // (children[0], turns around the vertical axis) and the spin (children[0].children[0]).
         for(var i = 0; i < tobj.wheels.length; i++) {
-            var wheel = tobj.wheels[i];
-            var spin = new THREE.Object3D();
-            spin.add(mesh.clone());
-            // the wheel model has to face outwards on both sides of the car
-            if(!wheel.right) spin.rotation.z = Math.PI;
-            var steer = new THREE.Object3D();
-            steer.add(spin);
-            var object = new THREE.Object3D();
-            object.add(steer);
-            wheel.object = object;
-            scene.add(object);
+            tobj.wheels[i].object = model.wheels[i];
+            scene.add(model.wheels[i]);
         }
         tobj.wheelsLoaded = true;
-    }
-
-    // Loads a model and reports failures explicitly (the old JSON models have no loader any more).
-    function loadModel(url, onLoad) {
-        var request = new XMLHttpRequest();
-        request.onreadystatechange = function() {
-            if(request.readyState !== 4) return;
-            if(request.status !== 200 && request.status !== 0) {
-                modelFailed(url, "HTTP " + request.status);
-                return;
-            }
-            try {
-                onLoad(parseLegacyModel(JSON.parse(request.responseText)));
-            } catch(e) {
-                modelFailed(url, e);
-            }
-        };
-        request.open("GET", url, true);
-        request.send();
-    }
-
-    function modelFailed(url, reason) {
-        tobj.loadError = "Could not load " + url + " (" + reason + ")";
-        console.error(tobj.loadError);
+    }, function(message) {
+        tobj.loadError = message;
+        console.error(message);
         var banner = document.createElement("div");
         banner.style.cssText = "position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1001; " +
             "padding: 10px 20px; background: rgba(160, 0, 0, 0.85); color: #ffffff; font-family: Arial;";
-        banner.textContent = tobj.loadError;
+        banner.textContent = message;
         document.body.appendChild(banner);
-    }
-
-    // The car is only simulated once everything it needs has loaded.
-    this.isReady = function() {
-        return !this.loadError && this.bodyLoaded && this.wheelsLoaded && this.wheels.length === 4;
-    };
-
-    loadModel("models/mustang_wheel.json", wheelLoaded);
-    loadModel("models/mustang.json", bodyLoaded);
+    });
 
     // ---- ground
 
@@ -279,8 +217,8 @@ OpenRacer.Car = function( parameters, domElement ) {
         var cz = v.z + sinP * offset;
 
         var avgCompression = (w[0].compression + w[1].compression + w[2].compression + w[3].compression) / 4;
-        // the origin of the body model is one wheel radius above the axles
-        this.body.position.set(cx, avgGround + 2 * w[0].radius - avgCompression, cz);
+        // the origin of the body model: see CarLoader.js
+        this.body.position.set(cx, avgGround + this.bodyLift * w[0].radius - avgCompression, cz);
         this.body.rotation.set(0, yaw, 0);
         if(this.body.children[0]) {
             this.body.children[0].rotation.x = -groundPitch + v.pitchVisual;
@@ -419,6 +357,7 @@ OpenRacer.Car = function( parameters, domElement ) {
     };
 
     this.updateLaps = function(showDebug) {
+        if(trackCheckPoints.length === 0) return;
         if(lastTerrain !== this.currentCheckPoint) {
             this.currentCheckPoint = lastTerrain;
             if(lastTerrain === trackCheckPoints[0]) {

@@ -29,19 +29,24 @@
  */
 
 var xmlhttp = new XMLHttpRequest();
-var url = "scene/circuit.json";
 var circuitObjects;
 //var trackObjects = [];
 //var groundObjects = [];
 //var otherObjects = [];
 var trackObjects = { track: [], grass: [], ground: [], other: [] };
 var searchOrder = ["track", "grass", "ground", "other"];
-var trackCheckPoints = ["r9","r8","r7","r6","r5","r4","r3","r2","r1","r0"];
+var trackCheckPoints = [];   // names of the road pieces that make a lap, from the track
+var currentTrack = null;     // the track that is loaded (see tracks/<id>/track.json)
+var trackBase = "";          // the folder of the track
 
 var trackLoadedCallback;
 var textureLoader = new THREE.TextureLoader();
 
-function loadTrack(tlCallback) {
+// Loads a track from its configuration (the contents of tracks/<id>/track.json, with its id)
+function loadTrack(track, tlCallback) {
+    currentTrack = track;
+    trackBase = "tracks/" + track.id + "/";
+    trackCheckPoints = track.checkpoints || [];
     trackLoadedCallback = tlCallback;
     xmlhttp.onreadystatechange = function() {
         if (xmlhttp.readyState == 4 && xmlhttp.status == 200) {
@@ -51,13 +56,13 @@ function loadTrack(tlCallback) {
             loadScene();
         }
     }
-    xmlhttp.open("GET", url, true);
+    xmlhttp.open("GET", trackBase + track.geometry, true);
     xmlhttp.send();
 }
 
 function loadScene() {
     var xmlhttp = new XMLHttpRequest();
-    var url = "scene/circuitScene.json";
+    var url = trackBase + currentTrack.scene;
 
     xmlhttp.onreadystatechange = function() {
         if (xmlhttp.readyState == 4 && xmlhttp.status == 200) {
@@ -106,7 +111,6 @@ function loadScene() {
                                 if(myArr[obj][oIndex].renderer) {
                                     var matName = myArr[obj][oIndex].renderer;
                                     var textureName = myArr.materials[matName].colorTexture;
-                                    console.log(textureName);
                                     var textureType = myArr.materials[matName].type;
                                     var shine = myArr.materials[matName].shininess;
                                     var specIntensity = myArr.materials[matName].specularIntensity;
@@ -116,7 +120,7 @@ function loadScene() {
                                     //console.log("            material name: " + matName);
                                     //console.log("            texture name: " + textureName);
                                     //console.log("            texture file: " + textureFile);
-                                    var texture = textureLoader.load( "images/" + textureFile );
+                                    var texture = textureLoader.load( trackBase + currentTrack.textures + textureFile );
                                     texture.colorSpace = THREE.SRGBColorSpace;
                                     var bumpTexture;
                                     if(textureName === "road") {
@@ -126,7 +130,7 @@ function loadScene() {
                                     }
                                     if(myArr.textures[textureName + "-bump"]) {
                                         //console.log("BUMP: " + myArr.textures[textureName + "-bump"].file);
-                                        bumpTexture = textureLoader.load( "images/" + myArr.textures[textureName + "-bump"].file );
+                                        bumpTexture = textureLoader.load( trackBase + currentTrack.textures + myArr.textures[textureName + "-bump"].file );
                                     }
                                     //console.log("            textureTile: " + textureTile);
                                     if(textureTile) {

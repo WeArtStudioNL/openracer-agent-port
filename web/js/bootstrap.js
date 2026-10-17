@@ -10,6 +10,7 @@ import * as THREE_MODULE from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { ColorCorrectionShader } from "three/addons/shaders/ColorCorrectionShader.js";
 import { VignetteShader } from "three/addons/shaders/VignetteShader.js";
@@ -19,6 +20,7 @@ window.THREE = Object.assign({}, THREE_MODULE, {
     EffectComposer: EffectComposer,
     RenderPass: RenderPass,
     ShaderPass: ShaderPass,
+    GLTFLoader: GLTFLoader,
     OutputPass: OutputPass,
     ColorCorrectionShader: ColorCorrectionShader,
     VignetteShader: VignetteShader
@@ -26,6 +28,9 @@ window.THREE = Object.assign({}, THREE_MODULE, {
 
 var scripts = [
     "js/Helpers.js",
+    "js/Catalog.js",
+    "js/MainMenu.js",
+    "js/CarLoader.js",
     "js/MaterialLibrary.js",
     "js/TrackLoader.js",
     "js/Scene.js",

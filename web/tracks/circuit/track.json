@@ -1,0 +1,9 @@
+{
+  "name": "Circuit",
+  "description": "The track of the first OpenRacer demo",
+  "geometry": "circuit.json",
+  "scene": "circuitScene.json",
+  "textures": "images/",
+  "start": { "x": -130.38620930679173, "z": 1.5269260973467418, "heading": 0 },
+  "checkpoints": ["r9", "r8", "r7", "r6", "r5", "r4", "r3", "r2", "r1", "r0"]
+}

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<!--
+    OpenRacer,
+    Copyright (C) 2015 Chris Barnard
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+-->
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>OpenRacer car editor</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; font-size: 14px; color: #e6e9ee; background: #14181f; height: 100vh; display: flex; overflow: hidden; }
+        #side { width: 430px; flex: none; overflow-y: auto; padding: 14px 16px 40px; background: #1c2129; border-right: 1px solid #2c3541; }
+        #view { flex: 1; position: relative; min-width: 0; }
+        #view canvas { display: block; width: 100%; height: 100%; }
+        #hud { position: absolute; left: 12px; top: 10px; color: #aab6c6; font-size: 13px; pointer-events: none; white-space: pre-line; text-shadow: 0 0 4px #000; }
+        h1 { font-size: 20px; margin: 0 0 2px; }
+        h2 { font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; color: #8fa3bd; margin: 22px 0 8px; border-bottom: 1px solid #2c3541; padding-bottom: 4px; }
+        .sub { color: #8895a7; margin-bottom: 8px; font-size: 13px; line-height: 1.45; }
+        label { display: block; margin: 7px 0 2px; color: #b6c0ce; }
+        .row { display: flex; gap: 8px; }
+        .row > * { flex: 1; min-width: 0; }
+        .row3 > * { flex: 1; }
+        input, select, textarea, button { font: inherit; color: inherit; }
+        input[type=text], input[type=number], select, textarea { width: 100%; background: #12161c; border: 1px solid #323c4a; border-radius: 4px; padding: 5px 7px; }
+        select[multiple] { height: 92px; }
+        input[type=file] { width: 100%; }
+        button { background: #36404e; border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; }
+        button:hover { background: #4a586b; }
+        button.primary { background: #2e9a5c; font-size: 15px; padding: 9px 20px; }
+        button.primary:hover { background: #38b56e; }
+        button.danger { background: #8a3a34; }
+        button.small { padding: 2px 8px; font-size: 12px; }
+        .buttons { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+        table { width: 100%; border-collapse: collapse; }
+        td, th { padding: 2px 3px; text-align: left; font-weight: normal; color: #8fa3bd; }
+        td input { padding: 3px 5px; }
+        #status { margin-top: 12px; padding: 8px 10px; border-radius: 4px; background: #232b36; min-height: 20px; white-space: pre-line; }
+        #status.error { background: #5a2823; }
+        #status.ok { background: #1f4a33; }
+        canvas#chart { width: 100%; height: 150px; background: #12161c; border: 1px solid #323c4a; border-radius: 4px; margin-top: 6px; }
+        .hint { color: #8895a7; font-size: 12px; margin-top: 3px; }
+        a { color: #7fb8ff; }
+        .legend span { display: inline-block; margin-right: 10px; }
+        .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
+    </style>
+    <script type="importmap">
+        { "imports": { "three": "../js/three/build/three.module.js", "three/addons/": "../js/three/examples/jsm/" } }
+    </script>
+</head>
+<body>
+<div id="side">
+    <h1>Car editor</h1>
+    <div class="sub">Make a car for OpenRacer from a glTF or glb model (for example from Blender), set it up and save it. It shows up in the main menu of the game. <a href="../index.html">Back to the game</a></div>
+
+    <h2>Car</h2>
+    <label>Existing cars</label>
+    <div class="row">
+        <select id="existing"></select>
+        <button id="loadExisting" style="flex: none">Edit</button>
+        <button id="newCar" style="flex: none">New</button>
+    </div>
+    <label>Name</label>
+    <input type="text" id="name" placeholder="My car">
+    <label>Id (the folder name: lower case letters, digits, - and _)</label>
+    <input type="text" id="id" placeholder="my-car">
+    <label>Description</label>
+    <input type="text" id="description" placeholder="Short description for the menu">
+
+    <h2>Model</h2>
+    <div class="sub">Pick a <b>.glb</b> file, or a <b>.gltf</b> together with its <b>.bin</b> and texture files (select them all at once).
+        The model has to face <b>forward</b> along the blue arrow, <b>up</b> is y. Blender exports a car that looks towards -Y (the front view) correctly;
+        otherwise turn it here.</div>
+    <input type="file" id="files" multiple accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2">
+    <div class="hint" id="modelInfo">No model loaded.</div>
+    <div id="modelControls">
+        <div class="row3 row">
+            <div><label>Turn (degrees)</label><input type="number" id="rotation" value="0" step="90"></div>
+            <div><label>Scale</label><input type="number" id="scale" value="1" step="0.01" min="0.0001"></div>
+        </div>
+        <div class="buttons">
+            <button class="small" data-turn="90">Turn 90°</button>
+            <button class="small" data-turn="180">Turn 180°</button>
+            <button class="small" data-turn="270">Turn 270°</button>
+        </div>
+        <label>Offset x / y / z (metres)</label>
+        <div class="row row3">
+            <input type="number" id="offsetX" value="0" step="0.01">
+            <input type="number" id="offsetY" value="0" step="0.01">
+            <input type="number" id="offsetZ" value="0" step="0.01">
+        </div>
+        <div class="hint">The origin of the model, after turning, scaling and the offset, has to be at the height of the wheel axles, in the middle between the axles. “Fit” does that.</div>
+        <div class="buttons"><button id="fit">Fit to the wheels / the floor</button></div>
+    </div>
+
+    <h2>Wheels</h2>
+    <div class="sub">The wheels steer and spin, so they have to be separate parts of the model. Select, for each wheel, the part or parts (tyre, rim, brake disc…) that belong to it. Hold Ctrl or Cmd to select more.</div>
+    <label><input type="radio" name="wheelMode" value="model" checked> The wheels are parts of the model</label>
+    <label><input type="radio" name="wheelMode" value="default"> The model has no separate wheels: use the wheel of the demo car</label>
+    <div id="wheelSelects">
+        <div class="row"><div><label><span style="color:#ff6b6b">■</span> Front right</label><select multiple id="wFR"></select></div>
+            <div><label><span style="color:#5ec8ff">■</span> Front left</label><select multiple id="wFL"></select></div></div>
+        <div class="row"><div><label><span style="color:#ffd04d">■</span> Rear right</label><select multiple id="wRR"></select></div>
+            <div><label><span style="color:#8ee26b">■</span> Rear left</label><select multiple id="wRL"></select></div></div>
+        <div class="buttons"><button id="guessWheels">Find the wheels by their names and places</button></div>
+        <div class="hint" id="wheelInfo"></div>
+    </div>
+
+    <h2>Size and chassis</h2>
+    <div class="row3 row">
+        <div><label>Length (m)</label><input type="number" id="length" step="0.01" value="4.5"></div>
+        <div><label>Width (m)</label><input type="number" id="width" step="0.01" value="1.8"></div>
+        <div><label>Height (m)</label><input type="number" id="height" step="0.01" value="1.35"></div>
+    </div>
+    <div class="buttons"><button class="small" id="sizeFromModel">Take the size from the model</button></div>
+    <div class="row3 row">
+        <div><label>Mass (kg)</label><input type="number" id="mass" step="10" value="1400"></div>
+        <div><label>Front weight (%)</label><input type="number" id="front" step="0.5" value="55"></div>
+        <div><label>CG height (m)</label><input type="number" id="cgHeight" step="0.01" value="0.5"></div>
+    </div>
+    <div class="row3 row">
+        <div><label>Wheelbase (m)</label><input type="number" id="wheelbase" step="0.01" value="2.7"></div>
+        <div><label>Front track (m)</label><input type="number" id="frontTrack" step="0.01" value="1.55"></div>
+        <div><label>Rear track (m)</label><input type="number" id="rearTrack" step="0.01" value="1.55"></div>
+    </div>
+    <div class="row3 row">
+        <div><label>Tyre diameter (m)</label><input type="number" id="tyre" step="0.005" value="0.65"></div>
+        <div><label>Drag coefficient</label><input type="number" id="drag" step="0.01" value="0.32"></div>
+        <div><label>Steering lock (°)</label><input type="number" id="steer" step="1" value="30"></div>
+    </div>
+    <div class="buttons"><button class="small" id="chassisFromWheels">Take wheelbase, track and tyre from the wheels</button></div>
+
+    <h2>Drivetrain</h2>
+    <div class="row">
+        <div><label>Drive</label><select id="drive"><option value="rwd">Rear wheel drive</option><option value="fwd">Front wheel drive</option></select></div>
+        <div><label>Final drive</label><input type="number" id="finalDrive" step="0.05" value="3.5"></div>
+    </div>
+    <label>Gear ratios (1st, 2nd, … separated by commas)</label>
+    <input type="text" id="gears" value="3.6, 2.1, 1.4, 1.0, 0.8">
+    <div class="row">
+        <div><label>Reverse ratio</label><input type="number" id="reverse" step="0.05" value="3.4"></div>
+        <div><label>Efficiency</label><input type="number" id="efficiency" step="0.01" min="0.5" max="1" value="0.92"></div>
+    </div>
+    <div class="hint" id="speedInfo"></div>
+
+    <h2>Engine</h2>
+    <div class="row3 row">
+        <div><label>Idle (rpm)</label><input type="number" id="idle" step="50" value="850"></div>
+        <div><label>Rev limit (rpm)</label><input type="number" id="limiter" step="100" value="6800"></div>
+        <div><label>Inertia (kg m²)</label><input type="number" id="inertia" step="0.05" value="0.3"></div>
+    </div>
+    <label>Torque at full throttle</label>
+    <table id="curve"><thead><tr><th>rpm</th><th>Nm</th><th>hp</th><th></th></tr></thead><tbody></tbody></table>
+    <div class="buttons"><button class="small" id="addPoint">Add a point</button></div>
+    <canvas id="chart" width="800" height="300"></canvas>
+    <div class="legend hint"><span><i style="background:#ff9f43"></i>torque</span><span><i style="background:#54a0ff"></i>power</span> <span id="peakInfo"></span></div>
+    <label>Make a typical curve from the peak power</label>
+    <div class="row3 row">
+        <div><input type="number" id="genPower" value="250" step="5" title="peak power (hp)"><div class="hint">peak power (hp)</div></div>
+        <div><input type="number" id="genRpm" value="5500" step="100" title="at (rpm)"><div class="hint">at (rpm)</div></div>
+        <div><button id="generate" style="width:100%">Generate</button></div>
+    </div>
+
+    <h2>Brakes</h2>
+    <div class="row">
+        <div><label>Front, per wheel (Nm)</label><input type="number" id="brakeFront" step="50" value="1600"></div>
+        <div><label>Rear, per wheel (Nm)</label><input type="number" id="brakeRear" step="50" value="900"></div>
+    </div>
+
+    <div class="buttons" style="margin-top: 22px">
+        <button class="primary" id="save">Save the car</button>
+        <button class="danger" id="delete" style="display:none">Delete this car</button>
+    </div>
+    <div id="status"></div>
+</div>
+<div id="view"><div id="hud"></div></div>
+<script type="module" src="car-editor.js"></script>
+</body>
+</html>
