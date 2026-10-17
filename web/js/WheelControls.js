@@ -42,7 +42,8 @@ var WheelControls = (function() {
     var LAST_KEY = "~last";    // the calibration of the wheel that was calibrated last
 
     var DEAD_ZONE = 0.03;      // ignore tiny pedal movements
-    var STEER_DEAD_ZONE = 0.03; // the wheel counts as centred within this part of its range
+    var STEER_DEAD_ZONE = 0.01; // the wheel counts as centred within this part of its range (about 4 degrees of a 900 degree wheel); the steering
+                                // starts from zero at its edge, so there is no jump
     var SETTLE_MS = 500;       // the device must be quiet this long before resting values are read
     var MAX_SETTLE_MS = 4000;  // give up waiting for a quiet device (noisy axes) after this long
     var QUIET_DELTA = 0.02;    // axis changes below this count as quiet
@@ -688,7 +689,9 @@ var WheelControls = (function() {
         if(Math.abs(steer) > STEER_DEAD_ZONE || ownsSteer) {
             if(Math.abs(steer) > STEER_DEAD_ZONE) {
                 var range = Settings.option("wheelRange") || 1;
-                car.turnAngle = car.maxTurn * clamp(steer / range, -1, 1);
+                // the dead zone is taken off, so that the steering starts from zero and does not jump when the wheel leaves it
+                var eased = (Math.abs(steer) - STEER_DEAD_ZONE) / (1 - STEER_DEAD_ZONE) * (steer < 0 ? -1 : 1);
+                car.turnAngle = car.maxTurn * clamp(eased / range, -1, 1);
                 ownsSteer = true;
             } else {
                 // back in the middle: straight ahead, not the last small angle that was above the dead zone
