@@ -130,6 +130,7 @@ OpenRacer.Car = function( config, domElement ) {
     }, this);
     this.vehicle.collision = collisionWorld;
     this.vehicle.ground = groundWorld;
+    var tyreSmoke = new OpenRacer.TyreSmoke(scene);
     this.engine = this.vehicle.engine;
     EngineSound.setCar(config); // the engine sound of this car
     this.wheels = this.vehicle.wheels;
@@ -161,6 +162,7 @@ OpenRacer.Car = function( config, domElement ) {
     this.place = function(x, z, heading) {
         var v = this.vehicle;
         v.reset(x, z, heading);
+        tyreSmoke.clear();
         lastGateX = null; // a jump of the car is no crossing of a gate
         this.throttle = 0;
         this.brakePedal = 0;
@@ -212,6 +214,7 @@ OpenRacer.Car = function( config, domElement ) {
         var rear = w[2];
         if(trackGates.length === 0 && rear.hasContact && rear.normal) lastTerrain = rear.normal.mesh;
 
+        tyreSmoke.update(delta, v, camera);
         this.updateCamera(delta, cx, cz, v.groundLevel, yaw, this.body.quaternion);
 
         shadowLight.position.copy(this.body.position).add(sunDirection);
@@ -373,6 +376,7 @@ OpenRacer.Car = function( config, domElement ) {
         this.engineRPM = this.engine.getRPM();
         // the rev limiter cuts the fuel: the engine sounds like it too
         EngineSound.update(this.engineRPM, this.throttle * this.engine.throttleCut);
+        EngineSound.setTyres(v.squeal, Math.abs(v.u));
 
         this.updateVisuals(delta);
 

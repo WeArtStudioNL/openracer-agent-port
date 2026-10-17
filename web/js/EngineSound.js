@@ -21,6 +21,45 @@ var EngineSound = (function() {
     var enabledByUser = false;
     var rpm = 0, throttle = 0;
 
+    // The squeal of the tyres: noise through a narrow filter (the howl) and a thin raw tone, that rise in pitch with the speed of the car and
+    // are louder the harder the tyres slide. It is not heard on soft ground.
+    var squeal = null;
+    var squealLevel = 0, squealSpeed = 0;
+
+    function makeSqueal() {
+        var length = ctx.sampleRate * 2;
+        var buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        var data = buffer.getChannelData(0);
+        for(var i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
+        var noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+        noise.loop = true;
+        var band = ctx.createBiquadFilter();
+        band.type = "bandpass";
+        band.Q.value = 9;
+        band.frequency.value = 1700;
+        var tone = ctx.createOscillator();
+        tone.type = "sawtooth";
+        tone.frequency.value = 1100;
+        var toneBand = ctx.createBiquadFilter();
+        toneBand.type = "bandpass";
+        toneBand.Q.value = 14;
+        toneBand.frequency.value = 2100;
+        var gain = ctx.createGain();
+        gain.gain.value = 0;
+        var toneGain = ctx.createGain();
+        toneGain.gain.value = 0.22;
+        noise.connect(band);
+        band.connect(gain);
+        tone.connect(toneBand);
+        toneBand.connect(toneGain);
+        toneGain.connect(gain);
+        gain.connect(output);
+        noise.start();
+        tone.start();
+        return { gain: gain, band: band, tone: tone, toneBand: toneBand };
+    }
+
     function level() {
         return (muted || paused) ? 0 : volume;
     }
@@ -38,6 +77,7 @@ var EngineSound = (function() {
             output = ctx.createGain();
             output.gain.value = level();
             output.connect(ctx.destination);
+            squeal = makeSqueal();
         }
         if(ctx.state === "suspended") ctx.resume();
         if(!synth && !loading) {
@@ -58,10 +98,24 @@ var EngineSound = (function() {
     function update(newRpm, newThrottle) {
         rpm = newRpm;
         throttle = newThrottle;
+        if(squeal && ctx.state === "running" && (paused || muted)) squeal.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
         if(!ctx || !synth || ctx.state !== "running") return;
         output.gain.setTargetAtTime(level(), ctx.currentTime, 0.05);
         synth.setRpm(rpm);
         synth.setThrottle(throttle);
+    }
+
+    // Called every frame with how hard the tyres slide (0..1) and the speed of the car (m/s)
+    function setTyres(amount, speed) {
+        squealLevel = amount;
+        squealSpeed = speed;
+        if(!ctx || !squeal || ctx.state !== "running") return;
+        var pitch = 1 + Math.min(1, speed / 40) * 0.5 + amount * 0.15;
+        var now = ctx.currentTime;
+        squeal.gain.gain.setTargetAtTime((muted || paused ? 0 : volume) * (inside ? 0.12 : 0.3) * Math.pow(amount, 1.3), now, 0.05);
+        squeal.band.frequency.setTargetAtTime(1500 * pitch, now, 0.08);
+        squeal.toneBand.frequency.setTargetAtTime(1900 * pitch, now, 0.08);
+        squeal.tone.frequency.setTargetAtTime(1000 * pitch, now, 0.08);
     }
 
     function status() {
@@ -84,6 +138,7 @@ var EngineSound = (function() {
 
     return {
         update: update,
+        setTyres: setTyres,
         status: status,
         setMuted: function(value) { muted = value; },
         setPaused: function(value) { paused = value; },

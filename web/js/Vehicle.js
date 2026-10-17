@@ -168,6 +168,9 @@ OpenRacer.Vehicle = function (parameters, input) {
         w.contact = { x: 0, y: 0, z: 0 };   // where it touches the road
         w.suspensionLength = 0;
         w.hasContact = false;
+        w.heat = 0;                         // how hot the tyre is from sliding (0..1)
+        w.smoke = 0;                        // how much smoke it makes (0..1)
+        w.squeal = 0;                       // how loud it squeals (0..1)
         w.normalForce = 0;
         this.wheels.push(w);
     }
@@ -312,6 +315,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             w.omega = 0;
             w.slipRatio = w.slipTan = 0;
             w.absFactor = 1;
+            w.heat = w.smoke = w.squeal = 0;
             w.velocity.set(0, 0, 0);
             w.lastCompression = undefined;
         }
@@ -702,6 +706,14 @@ OpenRacer.Vehicle = function (parameters, input) {
 
                 var surface = self.getSurface(wheel.surface);
                 wheel.tyreForce(wheel.slipRatio, wheel.slipTan, fz, surface);
+                // Smoke and squeal: the tyre slides (s is above 1 past the peak of the grip) at some speed over the road. The heat builds
+                // up the longer it slides, so the smoke gets thicker, and goes away slowly when it grips again.
+                var slideSpeed = Math.sqrt((wheel.omega * wheel.radius - vl) * (wheel.omega * wheel.radius - vl) + vt * vt);
+                var sliding = smoothstep(1.2, 2.2, wheel.s) * smoothstep(1.5, 6, slideSpeed);
+                wheel.heat = Math.max(0, Math.min(1, wheel.heat + (sliding > 0 ? sliding * dt / 1.8 : -dt / 2.5)));
+                wheel.smoke = fz > 200 ? Math.min(1, 0.15 * sliding + wheel.heat * Math.min(1, sliding * 2 + 0.2)) : 0;
+                wheel.squeal = (wheel.surface === "road" || wheel.surface === "track01") && fz > 200
+                    ? smoothstep(0.85, 1.5, wheel.s) * (1 - 0.4 * smoothstep(2.5, 4, wheel.s)) * smoothstep(0.4, 2.5, slideSpeed) : 0;
                 fxW = wheel.fx;
                 fyW = wheel.fy;
                 // a little damping on the slip speed keeps a nearly stationary wheel from ringing
@@ -726,6 +738,9 @@ OpenRacer.Vehicle = function (parameters, input) {
                 wheel.forwardSpeed = 0;
                 wheel.slipRatio *= 0.98;
                 wheel.slipTan *= 0.98;
+                wheel.heat = Math.max(0, wheel.heat - dt / 2.5);
+                wheel.smoke = 0;
+                wheel.squeal = 0;
             }
 
             // brakes, with ABS
@@ -927,6 +942,8 @@ OpenRacer.Vehicle = function (parameters, input) {
         var steps = Math.max(1, Math.ceil(delta / 0.003));
         var dt = delta / steps;
         for(var s = 0; s < steps; s++) step(dt);
+        this.squeal = 0;
+        for(var q = 0; q < 4; q++) this.squeal = Math.max(this.squeal, this.wheels[q].squeal);
         this.updateOutputs();
         this.measureWheels();
     };
