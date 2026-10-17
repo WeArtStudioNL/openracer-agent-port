@@ -63,6 +63,8 @@ const pivot = new THREE.Group(); // holds the model with the turn, scale and off
 scene.add(pivot);
 const helpers = new THREE.Group();
 scene.add(helpers);
+const cameraMarkers = new THREE.Group(); // where the cameras of the game are
+scene.add(cameraMarkers);
 
 function resize() {
     const w = view.clientWidth, h = view.clientHeight;
@@ -163,6 +165,7 @@ function setModel(root, isNew) {
         if (wheelCenters()) fit();
         sizeFromModel();
         if (wheelCenters()) chassisFromWheels();
+        defaultCameras();
         frameModel();
     } else {
         applyTransform();
@@ -403,6 +406,65 @@ function renderMaterials() {
     });
 }
 
+// ---- cameras
+
+const CAM_FIELDS = {
+    camChaseDist: (c) => c.chase.distance, camChaseHeight: (c) => c.chase.height, camChaseFov: (c) => c.chase.fov,
+    camFolDist: (c) => c.follow.distance, camFolHeight: (c) => c.follow.height, camFolLook: (c) => c.follow.look_height,
+    camFolSmooth: (c) => c.follow.smoothing, camFolFovStand: (c) => c.follow.fov_standing, camFolFovFast: (c) => c.follow.fov_fast,
+    camFolSpeed: (c) => Math.round(c.follow.fov_full_speed * 3.6),
+    camCockX: (c) => c.cockpit.position[0], camCockY: (c) => c.cockpit.position[1], camCockZ: (c) => c.cockpit.position[2], camCockFov: (c) => c.cockpit.fov
+};
+
+function currentSizes() {
+    return { dimensions: { length: num("length") || 4.5, width: num("width") || 1.8, height: num("height") || 1.35 }, chassis: { tire_diameter: num("tyre") || 0.65 } };
+}
+
+function fillCameras(cameras) {
+    for (const [id, get] of Object.entries(CAM_FIELDS)) $(id).value = get(cameras);
+    updateCameraMarkers();
+}
+
+function defaultCameras() {
+    fillCameras(OpenRacer.cameraSettings(currentSizes()));
+}
+
+function readCameras() {
+    const n = (id) => num(id);
+    return {
+        chase: { distance: n("camChaseDist"), height: n("camChaseHeight"), fov: n("camChaseFov") },
+        follow: { distance: n("camFolDist"), height: n("camFolHeight"), look_height: n("camFolLook"), smoothing: n("camFolSmooth"),
+            fov_standing: n("camFolFovStand"), fov_fast: n("camFolFovFast"), fov_full_speed: n("camFolSpeed") / 3.6 },
+        cockpit: { position: [n("camCockX"), n("camCockY"), n("camCockZ")], fov: n("camCockFov") }
+    };
+}
+
+function updateCameraMarkers() {
+    cameraMarkers.clear();
+    const c = readCameras();
+    const r = (num("tyre") || 0.65) / 2;
+    const dot = (color, x, y, z) => {
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 12), new THREE.MeshBasicMaterial({ color }));
+        mesh.position.set(x, y, z);
+        cameraMarkers.add(mesh);
+        return mesh.position;
+    };
+    const line = (color, a, b) => {
+        cameraMarkers.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), new THREE.LineBasicMaterial({ color })));
+    };
+    // the road is r below the origin of the model; the cameras behind the car look at the middle of it
+    if (Number.isFinite(c.chase.distance) && Number.isFinite(c.chase.height)) {
+        line(0x4d8dff, dot(0x4d8dff, 0, c.chase.height - r, -c.chase.distance), new THREE.Vector3(0, 0, 0));
+    }
+    if (Number.isFinite(c.follow.distance) && Number.isFinite(c.follow.height)) {
+        line(0x37d67a, dot(0x37d67a, 0, c.follow.height - r, -c.follow.distance), new THREE.Vector3(0, (c.follow.look_height || 0) - r, 0));
+    }
+    const p = c.cockpit.position;
+    if (p.every(Number.isFinite)) {
+        line(0xff9f43, dot(0xff9f43, p[0], p[1], p[2]), new THREE.Vector3(p[0], p[1], p[2] + 2));
+    }
+}
+
 // ---- the engine
 
 function power(rpm, nm) {
@@ -553,8 +615,13 @@ function buildConfig(id) {
             inertia: need("inertia", "The inertia"),
             torque_curve: curve
         },
-        brakes: { front: need("brakeFront", "The front brakes"), rear: need("brakeRear", "The rear brakes") }
+        brakes: { front: need("brakeFront", "The front brakes"), rear: need("brakeRear", "The rear brakes") },
+        cameras: readCameras()
     };
+    const camNumbers = [config.cameras.chase.distance, config.cameras.chase.height, config.cameras.chase.fov, config.cameras.follow.distance,
+        config.cameras.follow.height, config.cameras.follow.look_height, config.cameras.follow.smoothing, config.cameras.follow.fov_standing,
+        config.cameras.follow.fov_fast, config.cameras.follow.fov_full_speed, config.cameras.cockpit.fov, ...config.cameras.cockpit.position];
+    if (!camNumbers.every(Number.isFinite)) throw new Error("Every field of the cameras needs a number.");
     if (!config.name) throw new Error("Give the car a name.");
     if (wheelMode() === "model") {
         config.wheels.nodes = {};
@@ -648,7 +715,7 @@ async function refreshList(select) {
         state.cars = [];
     }
     const el = $("existing");
-    el.innerHTML = "";
+    el.innerHTML = "<option value=''>Choose a car to change…</option>";
     state.cars.forEach((car) => {
         const option = document.createElement("option");
         option.value = car.id;
@@ -676,6 +743,7 @@ function fill(car) {
     set("idle", e.idle_rpm); set("limiter", e.limiter_rpm); set("inertia", e.inertia);
     state.curve = e.torque_curve.map((p) => [p[0], p[1]]);
     set("brakeFront", car.brakes.front); set("brakeRear", car.brakes.rear);
+    fillCameras(OpenRacer.cameraSettings(car));
     renderCurve();
 }
 
@@ -697,6 +765,7 @@ function loadExisting() {
         $("offsetX").value = o[0]; $("offsetY").value = o[1]; $("offsetZ").value = o[2];
         const wheels = car.wheels || { mode: "default" };
         document.querySelector("input[name=wheelMode][value=" + wheels.mode + "]").checked = true;
+        $("wheelSelects").style.display = wheels.mode === "model" ? "" : "none";
         loadFromUrl("../" + m.file, m.file);
         // the parts are known once the model is loaded
         const wait = setInterval(() => {
@@ -710,8 +779,12 @@ function loadExisting() {
         }, 100);
         $("modelInfo").textContent = "Loading " + m.file + "…";
     } else {
+        // the model of the original demo has its own wheels
+        document.querySelector("input[name=wheelMode][value=default]").checked = true;
+        $("wheelSelects").style.display = "none";
         $("modelInfo").textContent = "This car uses the model of the original demo. It cannot be changed here, but everything else can.";
     }
+    $("editing").textContent = "Editing " + (car.name || car.id) + " (cars/" + car.id + "). Saving overwrites it; change the id to save a copy.";
     status("Loaded " + (car.name || car.id) + ".");
 }
 
@@ -732,6 +805,7 @@ function newCar() {
     $("modelInfo").textContent = "No model loaded.";
     $("files").value = "";
     $("delete").style.display = "none";
+    $("editing").textContent = "Choose a car to change it, or make a new one below. Saving a car that was chosen here overwrites it.";
     helpers.clear();
     status("");
 }
@@ -763,11 +837,15 @@ for (const id of ["limiter", "idle"]) $(id).addEventListener("input", () => { dr
 for (const id of ["gears", "finalDrive", "tyre"]) $(id).addEventListener("input", updateSpeedInfo);
 $("name").addEventListener("input", () => { if (!state.idEdited) $("id").value = slug($("name").value); });
 $("id").addEventListener("input", () => { state.idEdited = true; });
-$("loadExisting").addEventListener("click", loadExisting);
-$("newCar").addEventListener("click", () => { newCar(); });
+$("existing").addEventListener("change", loadExisting);
+$("camDefaults").addEventListener("click", defaultCameras);
+document.querySelectorAll(".cam").forEach((el) => el.addEventListener("input", updateCameraMarkers));
+for (const id of ["length", "width", "height", "tyre"]) $(id).addEventListener("input", updateCameraMarkers);
+$("newCar").addEventListener("click", () => { newCar(); $("existing").value = ""; });
 $("save").addEventListener("click", save);
 $("delete").addEventListener("click", deleteCar);
 
 renderCurve();
 updateSpeedInfo();
+defaultCameras();
 refreshList();

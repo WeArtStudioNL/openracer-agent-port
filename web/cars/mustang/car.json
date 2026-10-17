@@ -1,8 +1,16 @@
 {
   "name": "Mustang Mach 1",
   "description": "A 1971 Mustang Mach 1 with a 351 V8 and a close-ratio four-speed gearbox",
-  "model": { "type": "legacy", "body": "models/mustang.json", "wheel": "models/mustang_wheel.json" },
-  "dimensions": { "length": 4.813, "width": 1.86, "height": 1.295 },
+  "model": {
+    "type": "legacy",
+    "body": "models/mustang.json",
+    "wheel": "models/mustang_wheel.json"
+  },
+  "dimensions": {
+    "length": 4.813,
+    "width": 1.86,
+    "height": 1.295
+  },
   "chassis": {
     "mass": 1476,
     "wheelbase": 3.3,
@@ -16,7 +24,12 @@
   },
   "drivetrain": {
     "drive": "rwd",
-    "gear_ratios": [2.32, 1.69, 1.29, 1],
+    "gear_ratios": [
+      2.32,
+      1.69,
+      1.29,
+      1
+    ],
     "reverse_ratio": 2.32,
     "final_drive": 3.5,
     "efficiency": 0.92
@@ -25,7 +38,99 @@
     "idle_rpm": 900,
     "limiter_rpm": 6600,
     "inertia": 0.4,
-    "torque_curve": [[0, 0], [300, 110], [800, 250], [1500, 400], [2000, 480], [2500, 530], [3000, 563.7], [3500, 569.6], [4000, 582], [4500, 569.7], [5000, 526.9], [5300, 509], [5500, 485.5], [6000, 415.4], [6500, 330], [7500, 150]]
+    "torque_curve": [
+      [
+        0,
+        0
+      ],
+      [
+        300,
+        110
+      ],
+      [
+        800,
+        250
+      ],
+      [
+        1500,
+        400
+      ],
+      [
+        2000,
+        480
+      ],
+      [
+        2500,
+        530
+      ],
+      [
+        3000,
+        563.7
+      ],
+      [
+        3500,
+        569.6
+      ],
+      [
+        4000,
+        582
+      ],
+      [
+        4500,
+        569.7
+      ],
+      [
+        5000,
+        526.9
+      ],
+      [
+        5300,
+        509
+      ],
+      [
+        5500,
+        485.5
+      ],
+      [
+        6000,
+        415.4
+      ],
+      [
+        6500,
+        330
+      ],
+      [
+        7500,
+        150
+      ]
+    ]
   },
-  "brakes": { "front": 1700, "rear": 900 }
+  "brakes": {
+    "front": 1700,
+    "rear": 900
+  },
+  "cameras": {
+    "chase": {
+      "distance": 10,
+      "height": 2.34,
+      "fov": 35
+    },
+    "follow": {
+      "distance": 7.5,
+      "height": 2.1,
+      "look_height": 0.8,
+      "smoothing": 3.5,
+      "fov_standing": 62,
+      "fov_fast": 30,
+      "fov_full_speed": 70
+    },
+    "cockpit": {
+      "position": [
+        0.37,
+        0.35,
+        0.1
+      ],
+      "fov": 75
+    }
+  }
 }

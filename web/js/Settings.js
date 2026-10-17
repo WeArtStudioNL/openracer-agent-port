@@ -76,6 +76,8 @@ var Settings = (function() {
         { id: "cameraReset", group: "Other", label: "Camera behind the car", defaults: [key("Backquote")] },
         { id: "hudToggle", group: "Other", label: "HUD on/off", defaults: [key("KeyH")] },
         { id: "debugToggle", group: "Other", label: "Debug text on/off", defaults: [key("F3")] },
+        { id: "cameraSwitch", group: "Other", label: "Switch camera (fixed, follow, cockpit)", defaults: [key("KeyV")] },
+        { id: "toggleESC", group: "Other", label: "ESC (stability control) on/off", defaults: [key("KeyN")] },
         { id: "toggleTC", group: "Other", label: "Traction control on/off", defaults: [key("KeyC")] },
         { id: "toggleABS", group: "Other", label: "ABS on/off", defaults: [key("KeyB")] },
         { id: "startEngine", group: "Other", label: "Start the engine", defaults: [key("KeyI")] },
@@ -88,7 +90,7 @@ var Settings = (function() {
     var actionsById = {};
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
-    var DEFAULT_OPTIONS = { tc: true, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, toneMapping: "none", hud: true, units: "metric", debug: false };
+    var DEFAULT_OPTIONS = { tc: true, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 1 };
 
     var bindings = {};      // action id -> list of inputs
     var options = {};
@@ -568,6 +570,9 @@ var Settings = (function() {
         h.textContent = "Car";
         panel.appendChild(h);
         panel.appendChild(optionRow("Traction control", options.tc ? "On" : "Off", function() { setOption("tc", !options.tc); }));
+        panel.appendChild(optionRow("ESC (stability control)", options.esc ? "On" : "Off", function() { setOption("esc", !options.esc); }));
+        var cameraNames = ["1 Fixed behind the car", "2 Follow (smooth, FOV with speed)", "3 Cockpit"];
+        panel.appendChild(optionRow("Camera", cameraNames[options.camera - 1] || "1", function() { setOption("camera", options.camera % 3 + 1); }));
         panel.appendChild(optionRow("ABS", options.abs ? "On" : "Off", function() { setOption("abs", !options.abs); }));
         var gearboxNames = { automatic: "Automatic (P R N D)", sequential: "Sequential (paddles)", manual: "Manual (H-shifter, clutch)" };
         panel.appendChild(optionRow("Gearbox", gearboxNames[options.gearbox] || options.gearbox, function() { cycleGearbox(); }));
@@ -661,6 +666,8 @@ var Settings = (function() {
     handlers.toggleTC = function() { setOption("tc", !options.tc); };
     handlers.toggleABS = function() { setOption("abs", !options.abs); };
     handlers.gearboxMode = function() { cycleGearbox(); };
+    handlers.toggleESC = function() { setOption("esc", !options.esc); };
+    handlers.cameraSwitch = function() { setOption("camera", options.camera % 3 + 1); };
     handlers.hudToggle = function() { setOption("hud", !options.hud); };
     handlers.debugToggle = function() { setOption("debug", !options.debug); };
     handlers.mute = function() { setOption("sound", !options.sound); };

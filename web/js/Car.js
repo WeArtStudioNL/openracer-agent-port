@@ -54,7 +54,7 @@ OpenRacer.Car = function( config, domElement ) {
     this.cameraAngle = 0;
     
     this.lapsCompleted = 0;
-    this.lapStartTime;
+    this.lapStartTime = 0;    // the time (of the clock below) that the lap that is going started
     this.laps = [];
     this.lapTimes = [];       // the times of the laps that are done, in seconds
     this.clock = 0;           // the time that the car has been driven (not while the game is paused), in seconds
@@ -243,15 +243,88 @@ OpenRacer.Car = function( config, domElement ) {
             }
         }
 
-        // chase camera
-        camera.position.set(cx, avgGround + w[0].radius, cz);
-        camera.rotation.set(0, yaw + Math.PI + this.cameraAngle, 0);
-        camera.translateZ(10);
-        camera.translateY(2);
+        var tilt = this.body.children[0];
+        this.updateCamera(delta, cx, cz, avgGround, yaw, tilt ? tilt.rotation.x : 0, tilt ? tilt.rotation.z : 0);
 
         shadowLight.position.x = this.body.position.x + 40;
         shadowLight.position.y = this.body.position.y + 70;
         shadowLight.position.z = this.body.position.z + 40;
+    };
+
+    // ---- the cameras: 1 is the fixed camera behind the car, 2 follows the direction of the car smoothly and
+    // narrows its field of view with the speed, 3 is in the car. Their places are set per car (see CarDefaults.js).
+    this.cameraSettings = OpenRacer.cameraSettings(config);
+    this.cameraMode = 1;
+    var followYaw = null;       // the direction that the following camera looks in
+    var cameraFov = null;
+    var cameraNear = 1;
+    var qBody = new THREE.Quaternion();
+    var qLook = new THREE.Quaternion();
+    var qFlip = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+    var eulerTilt = new THREE.Euler();
+    var cockpitOffset = new THREE.Vector3();
+
+    function wrapPi(a) {
+        while(a > Math.PI) a -= 2 * Math.PI;
+        while(a < -Math.PI) a += 2 * Math.PI;
+        return a;
+    }
+
+    function setLens(fov, near) {
+        if(Math.abs(camera.fov - fov) > 0.01 || camera.near !== near) {
+            camera.fov = fov;
+            camera.near = near;
+            camera.updateProjectionMatrix();
+        }
+    }
+
+    this.setCameraMode = function(mode) {
+        this.cameraMode = mode;
+        followYaw = null;
+        cameraFov = null;
+    };
+
+    this.updateCamera = function(delta, cx, cz, avgGround, yaw, tiltX, tiltZ) {
+        var cs = this.cameraSettings;
+        var radius = this.wheels[0].radius;
+        var speed = Math.abs(this.vehicle.u);
+
+        if(this.cameraMode === 3) {
+            // in the car: the camera goes with the body, with the pitch and the roll
+            eulerTilt.set(tiltX, 0, tiltZ, "XYZ");
+            qBody.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+            qBody.multiply(new THREE.Quaternion().setFromEuler(eulerTilt));
+            var p = cs.cockpit.position;
+            cockpitOffset.set(p[0], p[1], p[2]).applyQuaternion(qBody).add(this.body.position);
+            camera.position.copy(cockpitOffset);
+            qLook.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.cameraAngle);
+            camera.quaternion.copy(qBody).multiply(qLook).multiply(qFlip);
+            setLens(cs.cockpit.fov, 0.1);
+            return;
+        }
+
+        if(this.cameraMode === 2) {
+            var f = cs.follow;
+            if(followYaw === null) followYaw = yaw;
+            followYaw += wrapPi(yaw - followYaw) * (1 - Math.exp(-f.smoothing * Math.min(delta, 0.1)));
+            camera.position.set(cx, avgGround + radius, cz);
+            camera.rotation.set(0, followYaw + Math.PI + this.cameraAngle, 0);
+            camera.translateZ(f.distance);
+            camera.position.y = avgGround + f.height;
+            camera.lookAt(cx, avgGround + f.look_height, cz);
+            // the faster, the smaller the field of view
+            var target = f.fov_standing + (f.fov_fast - f.fov_standing) * Math.min(1, speed / f.fov_full_speed);
+            cameraFov = cameraFov === null ? target : cameraFov + (target - cameraFov) * (1 - Math.exp(-4 * Math.min(delta, 0.1)));
+            setLens(cameraFov, 1);
+            return;
+        }
+
+        // the fixed camera behind the car
+        camera.position.set(cx, avgGround + radius, cz);
+        camera.rotation.set(0, yaw + Math.PI + this.cameraAngle, 0);
+        camera.translateZ(cs.chase.distance);
+        camera.translateY(cs.chase.height - radius);
+        setLens(cs.chase.fov, 1);
     };
 
     this.startEngine = function() {
@@ -342,7 +415,7 @@ OpenRacer.Car = function( config, domElement ) {
                 (this.clutchPedalPresent ? ", clutch pedal" : "") + ") | RPM: " + Math.round(this.engineRPM) +
                 (this.engine.running ? "" : " (STALLED: " + (this.clutchPedalPresent ? "clutch + throttle or I to start" : "starting") + ")") +
                 " | Throttle: " + this.throttle.toFixed(2) + " | Brake: " + this.brakePedal.toFixed(2) +
-                " | Clutch: " + v.clutchEngagement.toFixed(2) + " | TC: " + (v.tcEnabled ? "on" : "off") + " | ABS: " + (v.absEnabled ? "on" : "off"));
+                " | Clutch: " + v.clutchEngagement.toFixed(2) + " | TC: " + (v.tcEnabled ? "on" : "off") + " | ESC: " + (v.escEnabled ? "on" : "off") + " | ABS: " + (v.absEnabled ? "on" : "off"));
         }
 
         this.updateLaps(showDebug);
@@ -524,10 +597,14 @@ OpenRacer.Car = function( config, domElement ) {
     var applyOption = function(name, value) {
         if(name === "tc") tobj.vehicle.tcEnabled = value;
         else if(name === "abs") tobj.vehicle.absEnabled = value;
+        else if(name === "esc") tobj.vehicle.escEnabled = value;
         else if(name === "gearbox") tobj.setGearboxMode(value);
+        else if(name === "camera") tobj.setCameraMode(value);
     };
     applyOption("tc", Settings.option("tc"));
     applyOption("abs", Settings.option("abs"));
+    applyOption("esc", Settings.option("esc"));
+    applyOption("camera", Settings.option("camera"));
     applyOption("gearbox", Settings.option("gearbox"));
     Settings.onOptionChange(applyOption);
 

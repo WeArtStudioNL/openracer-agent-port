@@ -76,7 +76,8 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.lockTorque = 150;            // limited slip differential: preload (Nm)
     this.lockStiffness = 60;          // and how fast it builds up with the speed difference (Nm per rad/s)
 
-    this.tcEnabled = false;
+    this.tcEnabled = false;           // traction control: takes power off when the driven wheels spin
+    this.escEnabled = false;          // stability control (see step())
     this.absEnabled = true;
     this.tcFactor = 1;
     this.escLevel = 0;                // how hard the stability control works (0..1)
@@ -330,43 +331,42 @@ OpenRacer.Vehicle = function (parameters, input) {
 
         var u = self.u, v = self.v, r = self.r;
 
-        // ---- stability control (with the traction control switched on)
-        // It looks at what the car does against what the driver asks for. The steering angle is limited to what the grip can
-        // use (more only makes the car push on and slide); a car that turns more than the steering asks for (oversteer) gets the
-        // outer front wheel braked, one that turns less (understeer) the inner rear wheel, and both take power off.
-        // It can only do so much, so a sudden steer from left to right at high speed can still make the car slide.
+        // ---- ESC, the electronic stability control
+        // Sensors tell it what the driver asks for (the steering angle gives the direction that the car should turn to, at
+        // this speed) and what the car does (its yaw rate). When these differ, it steps in: a car that turns more than
+        // asked (oversteer) gets a short brake on the outer front wheel, which pulls the nose back out; a car that turns
+        // less (understeer) gets the inner rear wheel braked, which turns it in. Both also take power off the engine. The
+        // steering itself is not touched. It can only do so much, so a sudden steer from left to right at speed can still
+        // make the car slide.
         var escBrake = [0, 0, 0, 0];
         var escCut = 0;
-        if(self.tcEnabled && !inp.handbrake && Math.abs(u) > 4) {
-            var speedAbs = Math.abs(u);
-            var gripMu = (self.getSurface(wheels[0].surface).static + self.getSurface(wheels[1].surface).static) / 2;
-            var lock = 1.25 * 0.95 * gripMu * G * (L + self.understeerGradient * speedAbs * speedAbs) / (speedAbs * speedAbs);
-            if(delta > lock) delta = lock;
-            else if(delta < -lock) delta = -lock;
+        if(self.escEnabled && !inp.handbrake && u > 5) {
+            var steady = u * delta / (L + self.understeerGradient * u * u); // the yaw rate that goes with the steering
+            // the car follows a steering movement with a delay: a car that is only just starting to turn is not understeering
+            self.yawWanted += (steady - self.yawWanted) * Math.min(1, dt / 0.25);
+            var wanted = self.yawWanted;
+            var error = r - wanted;
+            var amount = Math.min(1, Math.max(0, (Math.abs(error) - 0.1) / 0.3));
             var magnitude = 0;
-            if(u > 5) {
-                var steady = u * delta / (L + self.understeerGradient * u * u); // the yaw rate that goes with the steering
-                // the car follows a steering movement with a delay: a car that is only just starting to turn is not understeering
-                self.yawWanted += (steady - self.yawWanted) * Math.min(1, dt / 0.25);
-                var wanted = self.yawWanted;
-                var error = r - wanted;
-                var amount = Math.min(1, Math.max(0, (Math.abs(error) - 0.1) / 0.35));
-                if(Math.abs(r) > Math.abs(wanted) && r * error > 0) {
-                    escBrake[r > 0 ? 1 : 0] = 1;          // oversteer: the outer front wheel
-                    magnitude = amount;
-                } else if(Math.abs(r) < Math.abs(wanted) && wanted * error < 0) {
-                    escBrake[wanted > 0 ? 3 : 2] = 0.6;   // understeer: the inner rear wheel
-                    magnitude = amount * 0.6;
-                }
+            // the direction the car moves in against the way it points (the slip angle of the car): a rear end that
+            // slides out is seen at once, also when the car does not turn faster than the steering asks
+            var slipAngle = Math.atan2(self.v, u);
+            var rearOut = Math.min(1, Math.max(0, (-Math.sign(r) * slipAngle - 0.05) / 0.12)) * Math.min(1, Math.abs(r) / 0.15);
+            if((Math.abs(r) > Math.abs(wanted) && r * error > 0) || rearOut > 0) {
+                escBrake[r > 0 ? 1 : 0] = 1;          // oversteer: the outer front wheel
+                magnitude = Math.max(amount, rearOut);
+            } else if(Math.abs(r) < Math.abs(wanted) && wanted * error < 0) {
+                escBrake[wanted > 0 ? 3 : 2] = 0.7;   // understeer: the inner rear wheel
+                magnitude = amount * 0.7;
             }
             self.escLevel += (magnitude - self.escLevel) * Math.min(1, dt / 0.04);
             escCut = self.escLevel;
-            for(var k = 0; k < 4; k++) escBrake[k] *= self.escLevel * (k < 2 ? self.brakeFront : self.brakeRear) * 0.8;
+            for(var k = 0; k < 4; k++) escBrake[k] *= self.escLevel * (k < 2 ? self.brakeFront : self.brakeRear);
         } else {
             self.escLevel = 0;
             self.yawWanted = r;
         }
-        self.steerApplied = delta;
+        self.steerApplied = delta; // the steering of the driver is used as it is
         var cosD = Math.cos(delta);
         var sinD = Math.sin(delta);
 
@@ -462,20 +462,19 @@ OpenRacer.Vehicle = function (parameters, input) {
             sumFx += fxB;
             sumFy += fyB;
             sumMz += w.a * fyB - w.b * fxB;
-            if(w.driven) maxDrivenSlip = Math.max(maxDrivenSlip, w.s);
+            if(w.driven) maxDrivenSlip = Math.max(maxDrivenSlip, (w.omega * w.radius - vl) / (1 + 0.12 * Math.abs(vl)));
         }
 
         // ---- traction control
-        // Keeps the driven wheels from going past the peak grip of the tyre by taking torque off the engine, down to a
-        // small fraction if that is what it takes. The slip is that of the tyre as a whole (driving and cornering together),
-        // so power does not take the grip the car needs to turn. The torque comes back slowly once the wheels have grip
-        // again, or they would start spinning again.
-        var slipError = maxDrivenSlip - 0.8;
+        // Traction control only looks at the wheels: when a driven wheel turns faster than the road under it (it spins),
+        // power is taken off the engine until it grips again, and given back slowly. A little wheel speed is allowed: one
+        // metre per second and 12% of the speed, which is about where a tyre has the most grip.
+        var slipError = maxDrivenSlip - 1;
         if(self.tcEnabled && slipError > 0) {
-            self.tcFactor = Math.max(0.12, self.tcFactor - dt * (3 + 25 * slipError));
+            self.tcFactor = Math.max(0.12, self.tcFactor - dt * (3 + 5 * slipError));
             self.drivenA().tc = self.drivenB().tc = true;
         } else {
-            self.tcFactor = Math.min(1, self.tcFactor + dt * (slipError < -0.2 ? 2 : 0.4));
+            self.tcFactor = Math.min(1, self.tcFactor + dt * (slipError < -0.5 ? 2 : 0.4));
             if(self.tcFactor > 0.98 || !self.tcEnabled) self.drivenA().tc = self.drivenB().tc = false;
         }
 

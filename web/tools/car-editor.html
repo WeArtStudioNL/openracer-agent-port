@@ -78,9 +78,9 @@
     <label>Existing cars</label>
     <div class="row">
         <select id="existing"></select>
-        <button id="loadExisting" style="flex: none">Edit</button>
-        <button id="newCar" style="flex: none">New</button>
+        <button id="newCar" style="flex: none">New car</button>
     </div>
+    <div class="hint" id="editing">Choose a car to change it, or make a new one below. Saving a car that was chosen here overwrites it.</div>
     <label>Name</label>
     <input type="text" id="name" placeholder="My car">
     <label>Id (the folder name: lower case letters, digits, - and _)</label>
@@ -188,6 +188,38 @@
         <div><button id="generate" style="width:100%">Generate</button></div>
     </div>
 
+    <h2>Cameras</h2>
+    <div class="sub">The cameras of the game, per car: 1 is the fixed camera behind the car, 2 follows the direction of the car smoothly and
+        narrows its field of view with the speed, 3 is in the car. The dots in the view show where the cameras are (heights are above the road,
+        the cockpit is from the origin of the model: x to the left, y up, z forward). Fields of view are the vertical angle in degrees.</div>
+    <div class="legend hint"><span><i style="background:#4d8dff"></i>1 fixed</span><span><i style="background:#37d67a"></i>2 follow</span><span><i style="background:#ff9f43"></i>3 cockpit</span></div>
+    <label><b>1 Fixed behind the car</b></label>
+    <div class="row3 row">
+        <div><input type="number" class="cam" id="camChaseDist" step="0.1"><div class="hint">distance (m)</div></div>
+        <div><input type="number" class="cam" id="camChaseHeight" step="0.05"><div class="hint">height (m)</div></div>
+        <div><input type="number" class="cam" id="camChaseFov" step="1"><div class="hint">field of view</div></div>
+    </div>
+    <label><b>2 Follow</b></label>
+    <div class="row3 row">
+        <div><input type="number" class="cam" id="camFolDist" step="0.1"><div class="hint">distance (m)</div></div>
+        <div><input type="number" class="cam" id="camFolHeight" step="0.05"><div class="hint">height (m)</div></div>
+        <div><input type="number" class="cam" id="camFolLook" step="0.05"><div class="hint">looks at height (m)</div></div>
+    </div>
+    <div class="row3 row">
+        <div><input type="number" class="cam" id="camFolSmooth" step="0.1"><div class="hint">follow speed (1/s)</div></div>
+        <div><input type="number" class="cam" id="camFolFovStand" step="1"><div class="hint">FOV standing</div></div>
+        <div><input type="number" class="cam" id="camFolFovFast" step="1"><div class="hint">FOV at full speed</div></div>
+    </div>
+    <div class="row"><div><input type="number" class="cam" id="camFolSpeed" step="10"><div class="hint">full speed (km/h): the faster the car, the smaller the FOV, up to here</div></div></div>
+    <label><b>3 Cockpit</b></label>
+    <div class="row3 row">
+        <div><input type="number" class="cam" id="camCockX" step="0.01"><div class="hint">x (m, left)</div></div>
+        <div><input type="number" class="cam" id="camCockY" step="0.01"><div class="hint">y (m, up)</div></div>
+        <div><input type="number" class="cam" id="camCockZ" step="0.01"><div class="hint">z (m, forward)</div></div>
+    </div>
+    <div class="row"><div><input type="number" class="cam" id="camCockFov" step="1"><div class="hint">field of view</div></div></div>
+    <div class="buttons"><button class="small" id="camDefaults">Set the cameras to the defaults for the size of the car</button></div>
+
     <h2>Brakes</h2>
     <div class="row">
         <div><label>Front, per wheel (Nm)</label><input type="number" id="brakeFront" step="50" value="1600"></div>
@@ -203,6 +235,7 @@
 <div id="view"><div id="hud"></div></div>
 <script>var OpenRacer = {};</script>
 <script src="../js/MaterialOverrides.js"></script>
+<script src="../js/CarDefaults.js"></script>
 <script type="module" src="car-editor.js"></script>
 </body>
 </html>

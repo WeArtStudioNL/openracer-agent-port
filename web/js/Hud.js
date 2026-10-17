@@ -74,7 +74,7 @@ var Hud = (function() {
         container.id = "hud";
         var pillColumn = document.createElement("div");
         pillColumn.className = "pills";
-        ["TC", "ABS", "P"].forEach(function(name) {
+        ["TC", "ESC", "ABS", "P"].forEach(function(name) {
             var pill = document.createElement("div");
             pill.className = "pill off";
             pill.textContent = name;
@@ -259,10 +259,11 @@ var Hud = (function() {
         var absWorking = false, tcWorking = false;
         for(var i = 0; i < car.wheels.length; i++) {
             if(car.wheels[i].abs) absWorking = true;
-            if(car.wheels[i].tc || car.wheels[i].esc) tcWorking = true;
+            if(car.wheels[i].tc) tcWorking = true;
         }
         setPill("ABS", !v.absEnabled ? "off" : (absWorking ? "active" : "on"));
         setPill("TC", !v.tcEnabled ? "off" : (tcWorking ? "active" : "on"));
+        setPill("ESC", !v.escEnabled ? "off" : (v.escLevel > 0.05 ? "active" : "on"));
         pills.P.style.display = car.parkingLock ? "" : "none";
         setPill("P", "park");
         var wanted = Math.round(Math.max(210, Math.min(330, Math.min(window.innerWidth, window.innerHeight) * 0.36)));
