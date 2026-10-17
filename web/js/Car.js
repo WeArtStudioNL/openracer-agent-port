@@ -140,6 +140,7 @@ OpenRacer.Car = function( config, domElement ) {
     OpenRacer.loadCarModel(config, function(model) {
         tobj.bodyLift = model.bodyLift;
         tobj.steeringWheel = model.steeringWheel || null;
+        tobj.followModelWheels(model.measured);
         tobj.body.add(model.tilt);
         scene.add(tobj.body);
         shadowLight.target = tobj.body;
@@ -158,6 +159,28 @@ OpenRacer.Car = function( config, domElement ) {
         banner.textContent = message;
         document.body.appendChild(banner);
     });
+
+    // The wheels of a glTF model say where the wheels are: the physics takes the wheelbase, the tracks and the tyre from them, and the body
+    // is placed so that its wheel arches are over the wheels (whatever the origin of the model is), so the game shows the car the way
+    // the car editor does.
+    var modelMid = null; // the middle between the wheels of the model, in the space of the model
+    this.followModelWheels = function(measured) {
+        if(!measured) return;
+        var c = measured.centres;
+        var wheelbase = (c.FR.z + c.FL.z) / 2 - (c.RL.z + c.RR.z) / 2;
+        var frontTrack = Math.abs(c.FR.x - c.FL.x);
+        var rearTrack = Math.abs(c.RR.x - c.RL.x);
+        var diameter = measured.diameter;
+        if(!(wheelbase > 1.2 && wheelbase < 5 && frontTrack > 0.6 && frontTrack < 3 && rearTrack > 0.6 && rearTrack < 3 && diameter > 0.3 && diameter < 1.5)) {
+            console.warn("Car: the wheels of the model give no sensible wheelbase/track/tyre (" + wheelbase.toFixed(2) + ", " + frontTrack.toFixed(2) + ", " + rearTrack.toFixed(2) + ", " + diameter.toFixed(2) + "), using car.json");
+            return;
+        }
+        var differs = Math.abs(wheelbase - this.wheelbase) > 0.02 || Math.abs(frontTrack - this.front_track) > 0.02 || Math.abs(rearTrack - this.rear_track) > 0.02 || Math.abs(diameter - this.tire_diameter) > 0.02;
+        if(differs) console.log("Car: the wheels of the model differ from car.json (wheelbase " + wheelbase.toFixed(3) + ", tracks " + frontTrack.toFixed(3) + "/" + rearTrack.toFixed(3) + ", tyre " + diameter.toFixed(3) + "): the model wins");
+        this.wheelbase = wheelbase; this.front_track = frontTrack; this.rear_track = rearTrack; this.tire_diameter = diameter;
+        this.vehicle.retune({ wheelbase: wheelbase, front_track: frontTrack, rear_track: rearTrack, tire_diameter: diameter });
+        modelMid = new THREE.Vector3((c.FR.x + c.FL.x + c.RL.x + c.RR.x) / 4, (c.FR.y + c.FL.y + c.RL.y + c.RR.y) / 4, (c.FR.z + c.FL.z + c.RL.z + c.RR.z) / 4);
+    };
 
     // Puts the car on the road at a position, standing still
     this.place = function(x, z, heading) {
@@ -196,8 +219,14 @@ OpenRacer.Car = function( config, domElement ) {
         v.getBodyPose(bodyPosition, bodyQuaternion);
         this.body.quaternion.set(bodyQuaternion.x, bodyQuaternion.y, bodyQuaternion.z, bodyQuaternion.w);
         bodyUp.set(0, 1, 0).applyQuaternion(this.body.quaternion);
-        var lift = (this.bodyLift - 1) * w[0].radius;
-        this.body.position.set(bodyPosition.x + bodyUp.x * lift, bodyPosition.y + bodyUp.y * lift, bodyPosition.z + bodyUp.z * lift);
+        if(modelMid) {
+            // the middle between the wheels of the model goes where the physics has the middle between the axles
+            bodyUp.copy(modelMid).applyQuaternion(this.body.quaternion);
+            this.body.position.set(bodyPosition.x - bodyUp.x, bodyPosition.y - bodyUp.y, bodyPosition.z - bodyUp.z);
+        } else {
+            var lift = (this.bodyLift - 1) * w[0].radius;
+            this.body.position.set(bodyPosition.x + bodyUp.x * lift, bodyPosition.y + bodyUp.y * lift, bodyPosition.z + bodyUp.z * lift);
+        }
         if(this.body.children[0]) this.body.children[0].rotation.set(0, 0, 0);
 
         // the wheels hang on their springs

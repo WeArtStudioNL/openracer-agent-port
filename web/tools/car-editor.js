@@ -358,7 +358,7 @@ function guessWheels() {
     const size = all.getSize(new THREE.Vector3());
     let candidates = [];
     state.root.traverse((o) => {
-        if (o === state.root || !o.name || !WHEEL_NAME.test(o.name)) return;
+        if (o === state.root || !o.name || !WHEEL_NAME.test(o.name) || /steer|stuur|lenk|volant/i.test(o.name)) return; // not the steering wheel
         const box = new THREE.Box3().setFromObject(o);
         if (box.isEmpty()) return;
         const s = box.getSize(new THREE.Vector3());
@@ -367,7 +367,21 @@ function guessWheels() {
     });
     candidates = candidates.filter((a) => !candidates.some((b) => b !== a && isInside(a.o, b.o)));
     const picked = { FR: [], FL: [], RL: [], RR: [] };
+    // a name that says which wheel it is wins over the place (the model may still have to be turned)
+    const byName = (name) => {
+        const n = name.toLowerCase().replace(/[^a-z]/g, " ");
+        const m = n.match(/\b(fr|fl|rl|rr|lf|rf|lr|rb|lb|rr)\b/) || n.match(/\b(front|rear|back)\b.*\b(left|right)\b/) || n.match(/\b(left|right)\b.*\b(front|rear|back)\b/);
+        if (!m) return null;
+        if (m[2]) {
+            const front = /front/.test(m[0]), left = /left/.test(m[0]);
+            return (front ? "F" : "R") + (left ? "L" : "R");
+        }
+        const code = m[1];
+        return { fr: "FR", fl: "FL", rl: "RL", rr: "RR", lf: "FL", rf: "FR", lr: "RL", rb: "RR", lb: "RL" }[code] || null;
+    };
     candidates.forEach(({ o, c }) => {
+        const named = byName(o.name);
+        if (named) { picked[named].push(o.name); return; }
         const front = c.z > centre.z;
         const left = c.x > centre.x; // facing +z, the left of the car is +x
         picked[(front ? "F" : "R") + (left ? "L" : "R")].push(o.name);
@@ -1030,6 +1044,21 @@ function buildConfig(id) {
     if (!camNumbers.every(Number.isFinite)) throw new Error("Every field of the cameras needs a number.");
     if (!config.name) throw new Error("Give the car a name.");
     if (wheelMode() === "model") {
+        // the physics of the game takes the wheelbase, the tracks and the tyre from the wheels of the model: car.json says the same
+        const c = wheelCenters();
+        if (c) {
+            const wb = (c.FR.c.z + c.FL.c.z) / 2 - (c.RL.c.z + c.RR.c.z) / 2;
+            const ft = Math.abs(c.FR.c.x - c.FL.c.x), rt = Math.abs(c.RR.c.x - c.RL.c.x);
+            const d = (c.FR.size.y + c.FL.size.y + c.RL.size.y + c.RR.size.y) / 4;
+            if (wb > 1.2 && wb < 5 && ft > 0.6 && rt > 0.6 && d > 0.3 && d < 1.5) {
+                config.chassis.wheelbase = Math.round(wb * 1000) / 1000;
+                config.chassis.front_track = Math.round(ft * 1000) / 1000;
+                config.chassis.rear_track = Math.round(rt * 1000) / 1000;
+                config.chassis.tire_diameter = Math.round(d * 1000) / 1000;
+            } else {
+                throw new Error("The wheels of the model do not make a car: the front wheels have to be in front (turn the model) and the wheels have to be between 0.3 and 1.5 m. Check the wheel parts.");
+            }
+        }
         config.wheels.nodes = {};
         for (const slot of SLOTS) {
             const names = [...$("w" + slot).selectedOptions].map((o) => o.value);

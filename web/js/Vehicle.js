@@ -251,6 +251,12 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.spring_rear !== undefined) this.rearWheelRate = t.spring_rear;
         if(t.damping_front !== undefined) this.frontDamping = t.damping_front;
         if(t.damping_rear !== undefined) this.rearDamping = t.damping_rear;
+        if(t.wheelbase !== undefined) this.wheelbase = t.wheelbase;
+        if(t.front_track !== undefined) this.front_track = t.front_track;
+        if(t.rear_track !== undefined) this.rear_track = t.rear_track;
+        if(t.tire_diameter !== undefined) {
+            for(var ti = 0; ti < 4; ti++) { this.wheels[ti].diameter = t.tire_diameter; this.wheels[ti].radius = this.wheels[ti].diameterOver2 = t.tire_diameter / 2; }
+        }
         if(t.drive !== undefined) { this.driveType = t.drive === "fwd" || t.drive === "awd" ? t.drive : "rwd"; this.frontDriven = this.driveType === "fwd"; }
         if(t.diff !== undefined) this.diffType = t.diff === "open" || t.diff === "welded" ? t.diff : "lsd";
         if(t.center_diff !== undefined) this.centerType = t.center_diff === "open" || t.center_diff === "locked" ? t.center_diff : "lsd";

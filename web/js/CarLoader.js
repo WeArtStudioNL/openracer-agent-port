@@ -158,7 +158,9 @@ OpenRacer.loadCarModel = function (config, onLoad, onError) {
         // of the wheel: the direction in which it is flattest (found from its shape), or "steering_wheel.axis" of the car (in the space of the model).
         var steering = findSteeringWheel(root, space);
 
+        var measured = null; // the centres and the size of the wheels of the model, in the space of the body
         if(complete) {
+            measured = { centres: {}, diameter: 0 };
             SLOTS.forEach(function (slot) {
                 var parts = nodes[slot].map(function (name) { return root.getObjectByName(name); }).filter(Boolean);
                 // a part that is inside another part goes with it
@@ -167,6 +169,8 @@ OpenRacer.loadCarModel = function (config, onLoad, onError) {
                 });
                 var box = new THREE.Box3();
                 parts.forEach(function (part) { box.expandByObject(part); });
+                measured.centres[slot] = box.getCenter(new THREE.Vector3());
+                measured.diameter += box.getSize(new THREE.Vector3()).y / 4;
                 var chain = wheelChain(new THREE.Object3D(), false);
                 chain.spin.remove(chain.spin.children[0]);
                 chain.object.position.copy(box.getCenter(new THREE.Vector3()));
@@ -195,7 +199,7 @@ OpenRacer.loadCarModel = function (config, onLoad, onError) {
             });
             // the changes to the materials that were made in the car editor
             OpenRacer.applyMaterialOverrides(THREE, [tilt].concat(wheelObjects), config.materials);
-            onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1, steeringWheel: steering });
+            onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1, steeringWheel: steering, measured: measured });
         }
     }
 
