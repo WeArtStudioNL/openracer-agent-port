@@ -48,7 +48,11 @@ In Blender a car that looks towards -Y (the front view) exports as it should; th
 The car is simulated as a chain of connected parts (`web/js/Vehicle.js`, with no 3D dependencies): engine (with inertia, idle, rev limiter and stalling) → friction clutch → gearbox → differential → rear wheels → tyres. The clutch can only transmit a limited torque, so it grips, slips or slides depending on the pedal and the load. Each wheel is an inertia whose speed follows from the engine, brakes and tyre; the slip between the tyre and the road decides how much force it makes (peak grip, then sliding), so wheels can spin or lock up. Gravity pulls the car down the slope of the road, and load moves between the wheels while accelerating, braking and cornering.
 
 * Without a clutch pedal the car works the clutch itself (it engages with the engine speed and opens while shifting), so it does not stall. With a clutch pedal on a calibrated wheel the clutch is yours: release it too quickly and the engine stalls (clutch + throttle, or **I**, starts it again), dump it at high revs and the tyres spin.
-* Traction control and ABS are on by default (the dashboard lights show when they act) and can be switched in the settings menu or with **C** and **B**. Traction control takes torque off the engine until the driven wheels hook up again. **Space** is the handbrake, **R** puts the car back at the start, **X** and **Z** shift up and down (this switches to the manual gearbox).
+* **Gearbox modes** (*Gearbox* in the settings menu, or the gearbox mode key, **G** by default; every mode has its own gear display):
+  * *Automatic* (P R N D): the gears and the clutch are automatic. The shift buttons (**X**/**Z**, paddles) move the selector up and down (P, R, N, D; P and R only while standing still), **.** is reverse while it is held. In P the wheels are locked. The display shows D and the gear it is in.
+  * *Sequential* (1, 2, … with N and R below 1): the shift buttons change the gear, the clutch is automatic, no clutch pedal needed.
+  * *Manual*: the H-pattern shifter selects the gear and the clutch pedal is used; the paddles still shift, with the automatic clutch. What was used last decides the clutch: after the paddles (or a key) the clutch is automatic, after the H-pattern shifter or the clutch pedal it is the clutch pedal. Without a clutch pedal the clutch is always automatic.
+* **Traction control** (*C*, on by default; the dashboard light shows when it acts) keeps the driven wheels from going past the grip of the tyre, driving and cornering together, so power does not take the grip the car needs to turn. It also is a stability control: the steering angle is limited to what the grip can use at the speed, a car that turns more than the steering asks for gets the outer front wheel braked (understeer: the inner rear wheel) and power taken off. It has a limit, so a sudden steer from left to right at high speed can still make the car slide; with the control off the car slides when it asks for more than the tyres have. ABS (**B**) is on by default. **Space** is the handbrake, **R** puts the car back at the start.
 
 * The car collides with walls, fences, buildings and steep embankments (`web/js/Collision.js`): the steep triangles of the track are kept as outlines in a grid, and the car is a rectangle that is pushed out of them. A hit stops the car, makes it bounce a little and spins it when it hits with a corner. Things lower than 30 cm (kerbs) are driven over.
 
@@ -70,7 +74,7 @@ The wheel steers the car over its whole calibrated range (a 900 degree wheel giv
 
 With both an H-pattern shifter and paddles mapped, the most recent action decides: moving the shifter into a gear gives control to the shifter, pulling a paddle gives control to the paddles.
 
-With a shifter mapped, the gearbox becomes manual: sequential paddles shift up/down (shifting down from first gear at standstill selects reverse), and an H-pattern shifter selects gears directly, with neutral when no gear is engaged. Without a shifter the automatic gearbox is used.
+What the shift buttons and the H-pattern shifter of the wheel do depends on the gearbox mode (see above): the paddles shift in every mode and the H-pattern shifter selects the gears in the manual mode.
 
 The pedals must be reported by the same device as the wheel, and each pedal needs its own axis.
 

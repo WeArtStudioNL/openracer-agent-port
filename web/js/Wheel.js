@@ -59,6 +59,8 @@ OpenRacer.Wheel = function (parameters) {
     this.slip = false;              // is the tyre sliding?
     this.tc = false;                // is traction control cutting power for this wheel?
     this.abs = false;               // is ABS releasing this wheel's brake?
+    this.esc = false;               // is the stability control braking this wheel?
+    this.s = 0;                     // how far the tyre is towards its limit: 1 is the peak grip, from the slip ratio and the slip angle together
     this.absFactor = 1;
     this.fx = 0;                    // tyre force along the wheel (N)
     this.fy = 0;                    // tyre force across the wheel (N)
@@ -68,7 +70,7 @@ OpenRacer.Wheel = function (parameters) {
     // Tyre model parameters
     this.relaxation = 0.35;     // relaxation length: the tyre needs this much rolling to build up slip (m)
     this.slipPeak = 0.14;       // slip ratio with the most grip
-    this.anglePeak = 0.17;      // tan of the slip angle with the most grip
+    this.anglePeak = 0.15;      // tan of the slip angle with the most grip
     this.rollingResistance = 0.015;
     this.loadSensitivity = 0.00004; // grip coefficient lost per extra Newton of load above the nominal load
     this.nominalLoad = 3500;
@@ -101,6 +103,7 @@ OpenRacer.Wheel = function (parameters) {
         var sx = kappa / this.slipPeak;
         var sy = tanAlpha / this.anglePeak;
         var s = Math.sqrt(sx * sx + sy * sy);
+        this.s = s;
         if(s < 1e-6) {
             this.fx = 0;
             this.fy = 0;

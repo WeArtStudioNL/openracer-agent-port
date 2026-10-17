@@ -583,40 +583,31 @@ var WheelControls = (function() {
     // Switches the car back to its automatic gearbox and keyboard/mouse reverse.
     function release(car) {
         if(!wasActive) return;
-        car.manualGearbox = false;
-        car.neutral = false;
         car.clutch = 0;
-        car.clutchPedalPresent = false;
+        car.clutchAvailable = false;
         // a disconnected wheel must not leave the pedals it was holding pressed
         if(ownsThrottle) car.throttle = 0;
         if(ownsBrake) car.brakePedal = 0;
         ownsSteer = ownsThrottle = ownsBrake = false;
         shiftSource = null;
         lastStatus = "";
-        if(reverseFromWheel) {
-            car.reverse = false;
-            reverseFromWheel = false;
-        }
         wasActive = false;
     }
 
+    // The shift buttons and the H-pattern shifter of the wheel. What they do depends on the gearbox mode of the car (see Car.js):
+    // the paddles shift in every mode, the H-pattern shifter selects the gear in the manual mode.
     function applyShifter(car, pad, profile) {
         var gears = profile.gears || {};
         var hasHShifter = Object.keys(gears).length > 0 || profile.reverseGear !== undefined;
-        var sequential = profile.shiftUp !== undefined || profile.shiftDown !== undefined;
-
-        if(!hasHShifter && !sequential) {
-            car.manualGearbox = false;
-            car.neutral = false;
-            return;
-        }
-        car.manualGearbox = true;
 
         var up = profile.shiftUp !== undefined && isPressed(pad, profile.shiftUp) && !lastButtons[profile.shiftUp];
         var down = profile.shiftDown !== undefined && isPressed(pad, profile.shiftDown) && !lastButtons[profile.shiftDown];
+        if(up) car.shiftUp();
+        if(down) car.shiftDown();
+        if(!hasHShifter) return;
 
-        // With both an H-pattern shifter and paddles mapped, the most recent action decides which
-        // one selects the gear: moving the shifter into a gear, or pulling a paddle.
+        // With both an H-pattern shifter and paddles, the most recent action decides which one selects the gear:
+        // moving the shifter into a gear, or pulling a paddle.
         var hMoved = false;
         var hButtons = [];
         for(var h = 0; h < car.gear_ratios.length; h++) {
@@ -626,9 +617,7 @@ var WheelControls = (function() {
         for(var hb = 0; hb < hButtons.length; hb++) {
             if(isPressed(pad, hButtons[hb]) && !lastButtons[hButtons[hb]]) hMoved = true;
         }
-        if(!hasHShifter) shiftSource = "sequential";
-        else if(!sequential) shiftSource = "h";
-        else if(up || down) shiftSource = "sequential";
+        if(up || down) shiftSource = "sequential";
         else if(hMoved || shiftSource === null) shiftSource = "h";
 
         if(shiftSource === "h") {
@@ -638,27 +627,7 @@ var WheelControls = (function() {
                 if(gears[g] !== undefined && isPressed(pad, gears[g])) gear = g;
             }
             var reverse = profile.reverseGear !== undefined && isPressed(pad, profile.reverseGear);
-            car.reverse = reverse;
-            reverseFromWheel = true;
-            car.neutral = !reverse && gear < 0;
-            if(gear >= 0) car.current_gear = gear;
-        } else {
-            car.neutral = false;
-            if(up) {
-                if(car.reverse) {
-                    car.reverse = false;
-                    car.current_gear = 0;
-                } else if(car.current_gear < car.gear_ratios.length - 1) {
-                    car.current_gear++;
-                }
-            } else if(down) {
-                if(car.current_gear > 0 && !car.reverse) {
-                    car.current_gear--;
-                } else if(Math.abs(car.wheels[3].forwardMPH) < REVERSE_MAX_MPH) {
-                    car.reverse = true;
-                    reverseFromWheel = true;
-                }
-            }
+            car.hShifter(gear, reverse);
         }
     }
 
@@ -710,8 +679,8 @@ var WheelControls = (function() {
         var throttle = readPedal(pad, profile.throttle);
         var brake = readPedal(pad, profile.brake);
         car.clutch = profile.clutch ? readPedal(pad, profile.clutch) : 0;
-        // without a clutch pedal the car works the clutch itself
-        car.clutchPedalPresent = !!profile.clutch;
+        // (Car.js decides whether the pedal works the clutch: only in the manual mode)
+        car.clutchAvailable = !!profile.clutch;
 
         // Only override an input while the wheel is using it (and once more when it is released).
         // The wheel turns the front wheels over its whole calibrated range (a 900 degree wheel gives full

@@ -67,10 +67,10 @@ OpenRacer.Car = function( config, domElement ) {
     this.gear_ratios = drivetrain.gear_ratios;
     this.final_drive = drivetrain.final_drive;
     this.current_gear = 0;
-    this.manualGearbox = false;     // true while a wheel with a shifter selects the gear
+    this.manualGearbox = false;     // the driver selects the gears (sequential and manual): no automatic shifting
     this.neutral = false;           // no drive while in neutral
     this.clutch = 0;                // clutch pedal: 0 = engaged, 1 = fully pressed
-    this.clutchPedalPresent = false; // a real clutch pedal is available; otherwise the clutch is automatic
+    this.clutchPedalPresent = false; // the clutch pedal works the clutch (manual mode, used last); otherwise the clutch is automatic
     this.handbrake = false;
     this.engineRPM = (config.engine && config.engine.idle_rpm) || 900; // engine speed, for the dashboard and the engine sound
 
@@ -236,7 +236,7 @@ OpenRacer.Car = function( config, domElement ) {
             if(wheel.object) {
                 wheel.object.position.copy(wheel.position);
                 wheel.object.quaternion.copy(qYaw);
-                if(i < 2) wheel.turn(this.turnAngle);
+                if(i < 2) wheel.turn(this.vehicle.steerApplied);
                 wheel.object.children[0].children[0].rotation.x = wheel.spin;
             }
         }
@@ -266,8 +266,9 @@ OpenRacer.Car = function( config, domElement ) {
         }
         this.pollInput();
         gamepadUpdate();
-        // with the manual gearbox chosen in the menu the gears stay where the driver put them
-        if(this.manualOption) this.manualGearbox = true;
+        // the clutch pedal works the clutch in the manual mode, once it is used or the shifter was moved
+        if(this.clutchAvailable && this.gearboxMode === "manual" && this.clutch > 0.08) this.manualClutch = true;
+        this.clutchPedalPresent = this.clutchAvailable && this.gearboxMode === "manual" && this.manualClutch;
         var v = this.vehicle;
 
         if(this.reset) {
@@ -334,7 +335,7 @@ OpenRacer.Car = function( config, domElement ) {
         var tcOn = false;
         var absOn = false;
         for(var i = 0; i < this.wheels.length; i++) {
-            if(this.wheels[i].tc) tcOn = true;
+            if(this.wheels[i].tc || this.wheels[i].esc) tcOn = true;
             if(this.wheels[i].abs) absOn = true;
         }
         dash_tc.className = tcOn ? "dash-tc-on" : "dash-tc-off";
@@ -342,8 +343,8 @@ OpenRacer.Car = function( config, domElement ) {
 
         if(showDebug) {
             debugOut("Esc: settings and controls");
-            var gear = this.reverse ? "R" : (this.neutral ? "N" : this.current_gear + 1);
-            debugOut(Math.round(v.u * 2.2369362920544) + " mph | Gear: " + gear + " | RPM: " + Math.round(this.engineRPM) +
+            debugOut(Math.round(v.u * 2.2369362920544) + " mph | Gear: " + this.gearLabel() + " (" + this.gearboxMode +
+                (this.clutchPedalPresent ? ", clutch pedal" : "") + ") | RPM: " + Math.round(this.engineRPM) +
                 (this.engine.running ? "" : " (STALLED: " + (this.clutchPedalPresent ? "clutch + throttle or I to start" : "starting") + ")") +
                 " | Throttle: " + this.throttle.toFixed(2) + " | Brake: " + this.brakePedal.toFixed(2) +
                 " | Clutch: " + v.clutchEngagement.toFixed(2) + " | TC: " + (v.tcEnabled ? "on" : "off") + " | ABS: " + (v.absEnabled ? "on" : "off"));
@@ -426,20 +427,66 @@ OpenRacer.Car = function( config, domElement ) {
         if(heldBrake && !this.brake) this.brakePedal = 0;
         heldAccelerate = this.accelerate;
         heldBrake = this.brake;
-        // reverse is also set by the shifter of a wheel, so only a change of the key counts
         var reverseKey = Settings.isDown("reverse");
-        if(reverseKey !== heldReverse) {
+        if(this.gearboxMode === "automatic") {
+            // while the key is held it is the R of the selector
+            this.reverse = reverseKey || this.selector === "R";
+            this.neutral = (this.selector === "N" || this.selector === "P") && !reverseKey;
+            this.parkingLock = this.selector === "P" && !reverseKey;
+        } else if(reverseKey !== heldReverse) {
+            // reverse is also set by the shifter of a wheel, so only a change of the key counts
             this.reverse = reverseKey;
-            heldReverse = reverseKey;
+            if(reverseKey) this.neutral = false;
         }
+        heldReverse = reverseKey;
     };
 
-    // Sequential shifting with a key or a button. Shifting down from first gear at a standstill selects reverse.
+    // ---- the gearbox
+    //
+    // Three modes (the gearbox key and the settings menu change them):
+    //   automatic:  the selector P, R, N, D; the gears and the clutch are automatic. The shift buttons move the selector.
+    //   sequential: the gears are 1, 2, ... with N and R below 1; the shift buttons (paddles) change the gear. The clutch is automatic.
+    //   manual:     the H-pattern shifter selects the gear and the clutch pedal is used; the paddles still shift, with the
+    //               automatic clutch. What was used last decides the clutch: after the paddles (or a key) the automatic clutch,
+    //               after the shifter or the clutch pedal the clutch pedal.
+    this.gearboxMode = "automatic";
+    this.selector = "D";             // automatic: P, R, N or D
+    this.clutchAvailable = false;    // a clutch pedal is connected (set by WheelControls)
+    this.manualClutch = false;       // the clutch pedal was the last way of working the clutch
+    this.parkingLock = false;        // automatic: P, the wheels are locked
+
+    this.setGearboxMode = function(mode) {
+        var was = this.gearboxMode;
+        this.gearboxMode = mode;
+        this.manualGearbox = mode !== "automatic";
+        if(mode === "automatic" && was !== "automatic") {
+            this.selector = this.reverse ? "R" : (this.neutral ? "N" : "D");
+        } else if(mode !== "automatic" && was === "automatic") {
+            // the selector becomes a gear that the driver can shift from
+            this.neutral = this.selector === "N" || this.selector === "P";
+            this.reverse = this.selector === "R";
+            this.parkingLock = false;
+        }
+        this.manualClutch = false;
+    };
+
+    // The shift buttons: the selector in automatic, the gears in sequential and manual. A button is the automatic
+    // clutch in the manual mode.
     this.shiftUp = function() {
-        Settings.setOption("transmission", "manual");
-        this.neutral = false;
+        this.manualClutch = false;
+        var standing = Math.abs(this.vehicle.u) < 1.5;
+        if(this.gearboxMode === "automatic") {
+            var order = ["P", "R", "N", "D"];
+            var next = order[Math.min(3, order.indexOf(this.selector) + 1)];
+            if(next === "R" && !standing) return;
+            this.selector = next;
+            return;
+        }
         if(this.reverse) {
             this.reverse = false;
+            this.neutral = true;
+        } else if(this.neutral) {
+            this.neutral = false;
             this.current_gear = 0;
         } else if(this.current_gear < this.gear_ratios.length - 1) {
             this.current_gear++;
@@ -447,29 +494,58 @@ OpenRacer.Car = function( config, domElement ) {
     };
 
     this.shiftDown = function() {
-        Settings.setOption("transmission", "manual");
-        this.neutral = false;
-        if(this.current_gear > 0 && !this.reverse) {
-            this.current_gear--;
-        } else if(Math.abs(this.vehicle.u) < 1.5) {
-            this.reverse = true;
+        this.manualClutch = false;
+        var standing = Math.abs(this.vehicle.u) < 1.5;
+        if(this.gearboxMode === "automatic") {
+            var order = ["P", "R", "N", "D"];
+            var previous = order[Math.max(0, order.indexOf(this.selector) - 1)];
+            if((previous === "R" || previous === "P") && !standing) return;
+            this.selector = previous;
+            return;
         }
+        if(this.reverse) {
+            return;
+        } else if(this.neutral) {
+            if(standing) {
+                this.neutral = false;
+                this.reverse = true;
+            }
+        } else if(this.current_gear > 0) {
+            this.current_gear--;
+        } else {
+            this.neutral = true;
+        }
+    };
+
+    // The H-pattern shifter: gear is the gear it is in (0 is first gear), -1 for neutral; or reverse. Only in the manual mode.
+    this.hShifter = function(gear, reverse) {
+        if(this.gearboxMode !== "manual") return;
+        if(reverse !== this.reverse || (gear >= 0 && gear !== this.current_gear) || (gear < 0 && !reverse && !this.neutral)) {
+            this.manualClutch = true; // the clutch pedal goes with the shifter
+        }
+        this.reverse = reverse;
+        this.neutral = !reverse && gear < 0;
+        if(gear >= 0 && !reverse) this.current_gear = gear;
+    };
+
+    // The gear as it is shown: P R N D (and the gear of the automatic) in automatic, 1, 2, ... N R otherwise
+    this.gearLabel = function() {
+        if(this.gearboxMode === "automatic") {
+            if(this.selector === "D" && !this.reverse) return "D" + (this.current_gear + 1);
+            return this.reverse ? "R" : this.selector;
+        }
+        return this.reverse ? "R" : (this.neutral ? "N" : String(this.current_gear + 1));
     };
 
     // The options of the settings menu
     var applyOption = function(name, value) {
         if(name === "tc") tobj.vehicle.tcEnabled = value;
         else if(name === "abs") tobj.vehicle.absEnabled = value;
-        else if(name === "transmission") {
-            tobj.manualOption = value === "manual";
-            tobj.manualGearbox = tobj.manualOption;
-            if(!tobj.manualOption) tobj.reverse = false;
-        }
+        else if(name === "gearbox") tobj.setGearboxMode(value);
     };
-    this.manualOption = false;
     applyOption("tc", Settings.option("tc"));
     applyOption("abs", Settings.option("abs"));
-    applyOption("transmission", Settings.option("transmission"));
+    applyOption("gearbox", Settings.option("gearbox"));
     Settings.onOptionChange(applyOption);
 
 };

@@ -58,6 +58,7 @@ var Settings = (function() {
         { id: "clutch", wheelOnly: true, group: "Driving", label: "Clutch", wheel: { profile: "clutch", steps: ["clutch"] }, defaults: [] },
         { id: "handbrake", group: "Driving", label: "Handbrake", defaults: [key("Space"), padButton(0)] },
         { id: "reverse", group: "Driving", label: "Reverse (hold)", defaults: [key("Period")] },
+        { id: "gearboxMode", group: "Gearbox", label: "Gearbox mode", defaults: [key("KeyG")] },
         { id: "shiftUp", group: "Gearbox", label: "Shift up", wheel: { profile: "shiftUp", steps: ["shiftUp"] }, defaults: [key("KeyX"), padButton(5)] },
         { id: "shiftDown", group: "Gearbox", label: "Shift down", wheel: { profile: "shiftDown", steps: ["shiftDown"] }, defaults: [key("KeyZ"), padButton(4)] },
         { id: "gear0", wheelOnly: true, group: "Gearbox", label: "H-shifter: gear 1", wheel: { profile: "gear0", steps: ["gear0"] }, defaults: [] },
@@ -85,7 +86,7 @@ var Settings = (function() {
     var actionsById = {};
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
-    var DEFAULT_OPTIONS = { tc: true, abs: true, transmission: "auto", sound: true, wheelRange: 1, toneMapping: "none" };
+    var DEFAULT_OPTIONS = { tc: true, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, toneMapping: "none" };
 
     var bindings = {};      // action id -> list of inputs
     var options = {};
@@ -117,6 +118,8 @@ var Settings = (function() {
                 });
             }
             if(stored && stored.options) {
+                // an earlier version had auto and manual, where manual is what is sequential now
+                if(stored.options.transmission && !stored.options.gearbox) stored.options.gearbox = stored.options.transmission === "manual" ? "sequential" : "automatic";
                 for(var name in DEFAULT_OPTIONS) {
                     if(stored.options[name] !== undefined) options[name] = stored.options[name];
                 }
@@ -258,6 +261,11 @@ var Settings = (function() {
     }, false);
 
     // ---- options
+
+    var GEARBOX_MODES = ["automatic", "sequential", "manual"];
+    function cycleGearbox() {
+        setOption("gearbox", GEARBOX_MODES[(GEARBOX_MODES.indexOf(options.gearbox) + 1) % GEARBOX_MODES.length]);
+    }
 
     function setOption(name, value) {
         options[name] = value;
@@ -559,8 +567,8 @@ var Settings = (function() {
         panel.appendChild(h);
         panel.appendChild(optionRow("Traction control", options.tc ? "On" : "Off", function() { setOption("tc", !options.tc); }));
         panel.appendChild(optionRow("ABS", options.abs ? "On" : "Off", function() { setOption("abs", !options.abs); }));
-        panel.appendChild(optionRow("Gearbox", options.transmission === "auto" ? "Automatic" : "Manual",
-            function() { setOption("transmission", options.transmission === "auto" ? "manual" : "auto"); }));
+        var gearboxNames = { automatic: "Automatic (P R N D)", sequential: "Sequential (paddles)", manual: "Manual (H-shifter, clutch)" };
+        panel.appendChild(optionRow("Gearbox", gearboxNames[options.gearbox] || options.gearbox, function() { cycleGearbox(); }));
         panel.appendChild(optionRow("Wheel steering range", Math.round(options.wheelRange * 100) + "%",
             function() { setOption("wheelRange", options.wheelRange > 0.9 ? 0.75 : (options.wheelRange > 0.6 ? 0.5 : 1)); }));
         var toneNames = { none: "Off", neutral: "Neutral", agx: "AgX", aces: "ACES" };
@@ -646,6 +654,7 @@ var Settings = (function() {
 
     handlers.toggleTC = function() { setOption("tc", !options.tc); };
     handlers.toggleABS = function() { setOption("abs", !options.abs); };
+    handlers.gearboxMode = function() { cycleGearbox(); };
     handlers.mute = function() { setOption("sound", !options.sound); };
     handlers.calibrate = function() { WheelControls.startCalibration(window.car); };
     handlers.wheelToggle = function() { WheelControls.toggle(); };
