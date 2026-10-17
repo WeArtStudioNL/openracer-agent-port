@@ -198,6 +198,7 @@ OpenRacer.Car = function( config, domElement ) {
     // ---- display: the 3D objects follow the physics
 
     var bodyPosition = { x: 0, y: 0, z: 0 };
+    var cameraBaseY = null;   // the height that the cameras behind the car stand on
     var bodyQuaternion = { x: 0, y: 0, z: 0, w: 1 };
     var bodyUp = new THREE.Vector3();
 
@@ -251,7 +252,11 @@ OpenRacer.Car = function( config, domElement ) {
         if(trackGates.length === 0 && rear.hasContact && rear.normal) lastTerrain = rear.normal.mesh;
 
         tyreSmoke.update(delta, v, camera);
-        this.updateCamera(delta, cx, cz, v.groundLevel, yaw, this.body.quaternion);
+        // the cameras behind the car follow its height (a jump, a hill), not the road under it; the small movements of the springs are smoothed out
+        var baseY = bodyPosition.y - w[0].radius;
+        if(cameraBaseY === null || Math.abs(baseY - cameraBaseY) > 3) cameraBaseY = baseY;
+        cameraBaseY += (baseY - cameraBaseY) * Math.min(1, delta / 0.08);
+        this.updateCamera(delta, cx, cz, cameraBaseY, yaw, this.body.quaternion);
 
         shadowLight.position.copy(this.body.position).add(sunDirection);
     };
