@@ -86,6 +86,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.clutchEngagement = 1;        // how hard the clutch is clamped (0..1)
     this.lockTorque = 150;            // limited slip differential: preload (Nm)
     this.lockStiffness = 60;          // and how fast it builds up with the speed difference (Nm per rad/s)
+    this.lockPower = 0.3;             // and how much it adds with the torque that is driven (a limited slip differential locks harder under power)
 
     this.tcAllowance = 1;             // tuning: how much wheel spin the traction control allows, as a factor
     this.escGain = 1;                 // tuning: how hard the stability control steps in, as a factor
@@ -263,6 +264,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         else if(t.power !== undefined) this.clutchCapacity = 1.5 * engine.getPeakTorque() * engine.torqueScale;
         if(t.diff_preload !== undefined) this.lockTorque = t.diff_preload;
         if(t.diff_lock !== undefined) this.lockStiffness = t.diff_lock;
+        if(t.diff_power !== undefined) this.lockPower = t.diff_power;
         if(t.drag !== undefined) this.Cdrag = t.drag;
         if(t.tc_allowance !== undefined) this.tcAllowance = t.tc_allowance;
         if(t.esc_gain !== undefined) this.escGain = t.esc_gain;
@@ -777,7 +779,9 @@ OpenRacer.Vehicle = function (parameters, input) {
         var driveTorque = Tc * gs * self.driveEfficiency / 2; // to each of the two driven wheels
 
         // ---- differential: open, with a preload and some locking
-        var lock = Math.max(-self.lockTorque, Math.min(self.lockTorque, self.lockStiffness * (rl.omega - rr_.omega)));
+        // the extra locking under power is for getting going and for tight turns: at speed the car stays calm (see the stability at 150 km/h)
+        var lockMax = self.lockTorque + self.lockPower * (1 - smoothstep(8, 25, Math.abs(u))) * Math.abs(driveTorque);
+        var lock = Math.max(-lockMax, Math.min(lockMax, self.lockStiffness * (rl.omega - rr_.omega)));
 
         // ---- wheel speeds
         for(var j = 0; j < 4; j++) {
