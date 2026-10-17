@@ -25,6 +25,9 @@
  *        follow some sort of style guide and restructure coherently.
  */
 
+// Lowest wheel load, as a fraction of its static load
+var MIN_WHEEL_LOAD = 0.2;
+
 OpenRacer.Car = function( parameters, domElement ) {
     this.bodyMeshFile = parameters.body;
     this.wheelMeshFile = parameters.wheel;
@@ -363,8 +366,9 @@ OpenRacer.Car = function( parameters, domElement ) {
                     //console.log(this.getWheelTorque(1500));
                     this.wheels[i].applyForce((this.getWheelTorque(eRPM) / 2) / this.wheels[i].diameter);
                 } else {
-                    // engine braking (rough calculation of 10% of the vehicles weight, split over both rear wheels)
-                    this.wheels[i].applyBrakingForce(0.1 * this.mass * gravity * 0.5 * this.getEngagement());
+                    // engine braking (rough calculation of 10% of the vehicles weight, split over both rear wheels),
+                    // added to the force of the rear brakes instead of replacing it
+                    this.wheels[i].applyBrakingForce(this.wheels[i].brakingForce + 0.1 * this.mass * gravity * 0.5 * this.getEngagement());
                 }
             }
             this.wheels[i].update( delta );
@@ -401,10 +405,15 @@ OpenRacer.Car = function( parameters, domElement ) {
         var rAxleWeight = ((1 - this.weight_distribution) * this.mass * gravity) + wTransfer;
         var fTransfer = sA * ((this.height * 0.3) / this.front_track) * (fAxleWeight / gravity);
         var rTransfer = sA * ((this.height * 0.3) / this.rear_track) * (rAxleWeight / gravity);
-        this.wheels[0].weight = (fAxleWeight / 2) + fTransfer;
-        this.wheels[1].weight = (fAxleWeight / 2) - fTransfer;
-        this.wheels[2].weight = (rAxleWeight / 2) + rTransfer;
-        this.wheels[3].weight = (rAxleWeight / 2) - rTransfer;
+        // Weight transfer can spike when the speed changes abruptly (for example when the brakes stop the
+        // car). Keep every wheel loaded: a wheel with a (near) zero or negative weight has no grip, which
+        // made the ABS cut the brakes completely.
+        var staticFront = (this.weight_distribution * this.mass * gravity) / 2;
+        var staticRear = ((1 - this.weight_distribution) * this.mass * gravity) / 2;
+        this.wheels[0].weight = Math.max((fAxleWeight / 2) + fTransfer, MIN_WHEEL_LOAD * staticFront);
+        this.wheels[1].weight = Math.max((fAxleWeight / 2) - fTransfer, MIN_WHEEL_LOAD * staticFront);
+        this.wheels[2].weight = Math.max((rAxleWeight / 2) + rTransfer, MIN_WHEEL_LOAD * staticRear);
+        this.wheels[3].weight = Math.max((rAxleWeight / 2) - rTransfer, MIN_WHEEL_LOAD * staticRear);
         
         //for(var i = 0; i < this.wheels.length; i++) {
         //    debugOut(this.wheels[i].name + ": " + this.wheels[i].weight + " " + (this.wheels[i].mass * gravity));
