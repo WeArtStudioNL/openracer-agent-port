@@ -21,7 +21,7 @@ OpenRacer is a static web app. Serve the `web` folder with any local web server 
 
     ./start-server.sh        # optionally pass a port, default 8000
 
-This serves the `web` folder and opens http://localhost:8000 in your browser (WebGL required). Without the script: `cd web && python3 -m http.server 8000`.
+This serves the `web` folder and opens http://localhost:8000 in your browser (WebGL required). The server does not cache, so after a `git pull` a normal page refresh is enough and the server never needs a restart. Without the script: `cd web && python3 -m http.server 8000`. With Node instead: `npx http-server web -c-1 -o` (`-c-1` disables caching).
 
 ## Racing wheel support
 Wheels with pedals and a shifter are supported through the browser's Gamepad API.
