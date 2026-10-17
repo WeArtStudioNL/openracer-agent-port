@@ -6,6 +6,8 @@
   PUT    /api/cars/<id>/<file>          writes a file of a car (car.json, the model, textures); local connections only
   DELETE /api/cars/<id>                 removes a car; local connections only
   DELETE /api/cars/<id>/<file>          removes one file of a car (the old model when it is replaced); local connections only
+  PUT    /api/tracks/<id>/<file>        the same for a track (track.json, the model, textures; <file> may be images/<name>)
+  DELETE /api/tracks/<id>[/<file>]      removes a track, or one file of it
 
 New cars and tracks are found by looking at the folders, so a folder with a car.json or track.json that is put in
 web/cars or web/tracks shows up in the game at once. The lists are also written to cars/index.json and
@@ -89,22 +91,30 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(scan("tracks", "track.json"))
         return super().do_GET()
 
-    def car_path(self, parts):
-        """web/cars/<id>[/<file>] for the parts of an API path, or None if they are not valid."""
-        if len(parts) < 3 or not ID_PATTERN.match(parts[2]):
+    def item_path(self, parts):
+        """web/<cars|tracks>/<id>[/<file>] for the parts of an API path, or None if they are not valid.
+        A file of a track may be in the folder images/ of the track."""
+        if len(parts) < 3 or parts[1] not in ("cars", "tracks") or not ID_PATTERN.match(parts[2]):
             return None
-        if len(parts) == 3:
-            return os.path.join(ROOT, "cars", parts[2])
-        if len(parts) == 4 and FILE_PATTERN.match(parts[3]) and not parts[3].startswith("."):
-            return os.path.join(ROOT, "cars", parts[2], parts[3])
-        return None
+        base = os.path.join(ROOT, parts[1], parts[2])
+        names = parts[3:]
+        if not names:
+            return base
+        if len(names) > (2 if parts[1] == "tracks" else 1):
+            return None
+        if len(names) == 2 and names[0] != "images":
+            return None
+        for name in names[-1:]:
+            if not FILE_PATTERN.match(name) or name.startswith("."):
+                return None
+        return os.path.join(base, *names)
 
     def do_PUT(self):
         parts = unquote(urlparse(self.path).path).strip("/").split("/")
-        if parts[:2] != ["api", "cars"] or not self.is_local():
+        if parts[:1] != ["api"] or not self.is_local():
             return self.send_json({"error": "not allowed"}, 403)
-        target = self.car_path(parts)
-        if target is None or len(parts) != 4:
+        target = self.item_path(parts)
+        if target is None or len(parts) < 4:
             return self.send_json({"error": "bad path"}, 400)
         length = int(self.headers.get("Content-Length", "0"))
         if length > MAX_UPLOAD:
@@ -113,23 +123,23 @@ class Handler(SimpleHTTPRequestHandler):
         os.makedirs(os.path.dirname(target), exist_ok=True)
         with open(target, "wb") as f:
             f.write(data)
-        if parts[3] == "car.json":
+        if parts[-1] in ("car.json", "track.json") and len(parts) == 4:
             write_indexes()
         self.send_json({"ok": True, "bytes": len(data)})
 
     def do_DELETE(self):
         parts = unquote(urlparse(self.path).path).strip("/").split("/")
-        if parts[:2] != ["api", "cars"] or not self.is_local():
+        if parts[:1] != ["api"] or not self.is_local():
             return self.send_json({"error": "not allowed"}, 403)
-        target = self.car_path(parts)
-        if target is not None and len(parts) == 4:
-            # one file; car.json itself is only removed with the whole car
-            if parts[3] == "car.json" or not os.path.isfile(target):
+        target = self.item_path(parts)
+        if target is not None and len(parts) >= 4:
+            # one file; the configuration itself is only removed with the whole car or track
+            if parts[-1] in ("car.json", "track.json") or not os.path.isfile(target):
                 return self.send_json({"error": "no such file"}, 404)
             os.remove(target)
             return self.send_json({"ok": True})
         if target is None or len(parts) != 3 or not os.path.isdir(target):
-            return self.send_json({"error": "no such car"}, 404)
+            return self.send_json({"error": "no such " + parts[1][:-1]}, 404)
         shutil.rmtree(target)
         write_indexes()
         self.send_json({"ok": True})

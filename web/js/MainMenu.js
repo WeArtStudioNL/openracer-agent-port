@@ -137,11 +137,17 @@ var MainMenu = (function() {
         editor.onclick = function() { window.location.href = "tools/car-editor.html"; };
         wrap.appendChild(editor);
 
+        var trackEditor = document.createElement("button");
+        trackEditor.className = "secondary";
+        trackEditor.textContent = "Track editor";
+        trackEditor.onclick = function() { window.location.href = "tools/track-editor.html"; };
+        wrap.appendChild(trackEditor);
+
         var foot = document.createElement("div");
         foot.className = "foot";
         foot.innerHTML = "Cars are in <code>web/cars</code> and tracks in <code>web/tracks</code>: a folder with a <code>car.json</code> or " +
             "<code>track.json</code> is found by itself. Make a car from a glTF/glb model (for example from Blender) with the " +
-            "<a href=\"tools/car-editor.html\">car editor</a>. ";
+            "<a href=\"tools/car-editor.html\">car editor</a>, and a track from a glTF/glb model with the <a href=\"tools/track-editor.html\">track editor</a>. ";
         var rescan = document.createElement("button");
         rescan.textContent = "Look for new cars and tracks";
         rescan.onclick = load;

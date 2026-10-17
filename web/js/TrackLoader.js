@@ -35,6 +35,7 @@ var circuitObjects;
 //var otherObjects = [];
 var trackObjects = { track: [], grass: [], ground: [], other: [] };
 var searchOrder = ["track", "grass", "ground", "other"];
+var trackGates = [];         // lines across the road { x, z, heading, width } that make a lap, in order; the first is the finish line
 var trackCheckPoints = [];   // names of the road pieces that make a lap, from the track
 var currentTrack = null;     // the track that is loaded (see tracks/<id>/track.json)
 var trackBase = "";          // the folder of the track
@@ -46,8 +47,13 @@ var textureLoader = new THREE.TextureLoader();
 function loadTrack(track, tlCallback) {
     currentTrack = track;
     trackBase = "tracks/" + track.id + "/";
-    trackCheckPoints = track.checkpoints || [];
+    trackGates = track.gates || [];
+    trackCheckPoints = trackGates.length ? trackGates.map(function(gate, i) { return "g" + i; }) : (track.checkpoints || []);
     trackLoadedCallback = tlCallback;
+    if(track.model) {
+        loadGltfTrack(track);
+        return;
+    }
     xmlhttp.onreadystatechange = function() {
         if (xmlhttp.readyState == 4 && xmlhttp.status == 200) {
             console.log("circuit loaded");
@@ -215,7 +221,7 @@ function loadScene() {
 // What the car can drive into: the steep triangles of the track objects, see Collision.js
 var collisionWorld;
 // objects that are only a backdrop (sky, horizon, trees on a picture) or too thin to matter
-var collisionIgnoredTextures = { "m_sky_blue": true, "horizon": true, "alpha": true, "grasst": true };
+var collisionIgnoredTextures = { "m_sky_blue": true, "horizon": true, "alpha": true, "grasst": true, "decor": true };
 var collisionSteepness = 0.5; // a triangle is a wall when its normal points up less than this
 
 function buildCollisionWorld() {
@@ -226,7 +232,7 @@ function buildCollisionWorld() {
         var meshes = trackObjects[searchOrder[k]];
         for(var m = 0; m < meshes.length; m++) {
             var mesh = meshes[m];
-            if(collisionIgnoredTextures[mesh.material.map.name]) continue;
+            if(collisionIgnoredTextures[meshSurface(mesh)]) continue;
             var position = mesh.geometry.attributes.position;
             var index = mesh.geometry.index;
             var offset = mesh.position;
@@ -259,7 +265,7 @@ function buildGroundWorld() {
         var meshes = trackObjects[searchOrder[k]];
         for(var m = 0; m < meshes.length; m++) {
             var mesh = meshes[m];
-            var texture = mesh.material.map.name;
+            var texture = meshSurface(mesh);
             if(!drivableTextures[texture]) continue;
             var position = mesh.geometry.attributes.position;
             var index = mesh.geometry.index;
@@ -273,4 +279,73 @@ function buildGroundWorld() {
         }
     }
     console.log("ground triangles: " + groundWorld.count());
+}
+
+// What a piece of the track is made of: for a glTF track the role that the track editor gave it, for the old format the name of its texture.
+function meshSurface(mesh) {
+    if(mesh.userData.surface) return mesh.userData.surface;
+    return mesh.material && mesh.material.map ? mesh.material.map.name : "";
+}
+
+// ---- tracks from a glTF/glb model (made with the track editor, see tools/track-editor.html)
+//
+// track.json has "model" (the file in the folder of the track) and "surfaces": { "meshes": { <name of a part>: <role> }, "materials": { <name of a
+// material>: <role> } }. The roles are road, track01, grass and ground (the car can drive on them, each with its own grip), scenery (visible,
+// the car drives into its steep parts), decor (only to look at) and, for what is not mentioned, scenery. The model is made in metres, y up.
+var trackRoles = { road: "track", track01: "ground", grass: "grass", ground: "ground" };
+
+function trackRole(mesh, surfaces) {
+    var meshes = surfaces.meshes || {};
+    var materials = surfaces.materials || {};
+    for(var node = mesh; node; node = node.parent) {
+        if(node.name && meshes[node.name]) return meshes[node.name];
+    }
+    var material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+    if(material && material.name && materials[material.name]) return materials[material.name];
+    return "scenery";
+}
+
+function loadGltfTrack(track) {
+    var loader = new THREE.GLTFLoader();
+    loader.load(trackBase + track.model, function(gltf) {
+        gltf.scene.updateMatrixWorld(true);
+        var surfaces = track.surfaces || {};
+        var pieces = [];
+        gltf.scene.traverse(function(object) { if(object.isMesh) pieces.push(object); });
+        var maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+        pieces.forEach(function(piece) {
+            var role = trackRole(piece, surfaces);
+            // the transform of the part is baked into the geometry: the rest of the game wants the track in world coordinates
+            var geometry = piece.geometry.clone();
+            geometry.applyMatrix4(piece.matrixWorld);
+            if(!geometry.index) {
+                var count = geometry.attributes.position.count;
+                var indices = new Uint32Array(count);
+                for(var i = 0; i < count; i++) indices[i] = i;
+                geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+            }
+            geometry.computeBoundingSphere();
+            var mesh = new THREE.Mesh(geometry, piece.material);
+            mesh.name = piece.name;
+            mesh.userData.surface = role;
+            mesh.castShadow = false;
+            mesh.receiveShadow = true;
+            [].concat(mesh.material).forEach(function(material) {
+                if(material.map) material.map.anisotropy = maxAnisotropy;
+            });
+            var category = trackRoles[role];
+            if(category === "track") trackObjects["track"].push(mesh);
+            else if(category === "grass") trackObjects["grass"].push(mesh);
+            else if(category === "ground") trackObjects["ground"].push(mesh);
+            else trackObjects["other"].push(mesh);
+            scene.add(mesh);
+        });
+        buildCollisionWorld();
+        buildGroundWorld();
+        console.log("track loaded: " + track.model + ", " + pieces.length + " parts");
+        trackLoadedCallback();
+    }, undefined, function(error) {
+        console.error(error);
+        alert("The track could not be loaded: " + (error.message || error));
+    });
 }

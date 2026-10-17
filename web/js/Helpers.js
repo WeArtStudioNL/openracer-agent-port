@@ -72,7 +72,7 @@ function getGroundAt(x, z, hintY) {
             if(meshes.length === 0) continue;
             var hits = groundRay.intersectObjects(meshes, false);
             for(var h = 0; h < hits.length; h++) {
-                var texture = hits[h].object.material.map.name;
+                var texture = meshSurface(hits[h].object);
                 if(drivableTextures[texture]) {
                     return { y: hits[h].point.y, surface: texture, mesh: hits[h].object.name };
                 }

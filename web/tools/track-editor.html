@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<!--
+    OpenRacer,
+    Copyright (C) 2015 Chris Barnard
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+-->
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>OpenRacer track editor</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; font-size: 14px; color: #e6e9ee; background: #14181f; height: 100vh; display: flex; overflow: hidden; }
+        #side { width: 430px; flex: none; overflow-y: auto; padding: 14px 16px 40px; background: #1c2129; border-right: 1px solid #2c3541; }
+        #view { flex: 1; position: relative; min-width: 0; }
+        #view canvas { display: block; width: 100%; height: 100%; }
+        #hud { position: absolute; left: 12px; top: 10px; color: #aab6c6; font-size: 13px; pointer-events: none; white-space: pre-line; text-shadow: 0 0 4px #000; }
+        h1 { font-size: 20px; margin: 0 0 2px; }
+        h2 { font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; color: #8fa3bd; margin: 22px 0 8px; border-bottom: 1px solid #2c3541; padding-bottom: 4px; }
+        .sub { color: #8895a7; margin-bottom: 8px; font-size: 13px; line-height: 1.45; }
+        label { display: block; margin: 7px 0 2px; color: #b6c0ce; }
+        .row { display: flex; gap: 8px; }
+        .row > * { flex: 1; min-width: 0; }
+        .row3 > * { flex: 1; }
+        input, select, textarea, button { font: inherit; color: inherit; }
+        input[type=text], input[type=number], select, textarea { width: 100%; background: #12161c; border: 1px solid #323c4a; border-radius: 4px; padding: 5px 7px; }
+        select[multiple] { height: 92px; }
+        input[type=file] { width: 100%; }
+        button { background: #36404e; border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; }
+        button:hover { background: #4a586b; }
+        button.primary { background: #2e9a5c; font-size: 15px; padding: 9px 20px; }
+        button.primary:hover { background: #38b56e; }
+        button.danger { background: #8a3a34; }
+        button.small { padding: 2px 8px; font-size: 12px; }
+        .buttons { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+        table { width: 100%; border-collapse: collapse; }
+        td, th { padding: 2px 3px; text-align: left; font-weight: normal; color: #8fa3bd; }
+        td input { padding: 3px 5px; }
+        #status { margin-top: 12px; padding: 8px 10px; border-radius: 4px; background: #232b36; min-height: 20px; white-space: pre-line; }
+        #status.error { background: #5a2823; }
+        #status.ok { background: #1f4a33; }
+        canvas#chart { width: 100%; height: 150px; background: #12161c; border: 1px solid #323c4a; border-radius: 4px; margin-top: 6px; }
+        .material { border-bottom: 1px solid #2c3541; padding: 6px 0 8px; }
+        .material .head { display: flex; gap: 6px; align-items: center; }
+        .material .head b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: normal; }
+        .material .head select { width: 120px; }
+        .material .fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 8px; margin-top: 5px; }
+        .material .fields label { margin: 0; font-size: 11px; color: #8895a7; }
+        .material input[type=color] { width: 100%; height: 26px; padding: 0; background: none; border: 1px solid #323c4a; }
+        .material.changed .head b { color: #ffd04d; }
+        .hint { color: #8895a7; font-size: 12px; margin-top: 3px; }
+        a { color: #7fb8ff; }
+        .legend span { display: inline-block; margin-right: 10px; }
+        .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
+    </style>
+    <style>
+        #parts { max-height: 320px; overflow-y: auto; border: 1px solid #2c3541; border-radius: 4px; }
+        #parts .part { display: flex; gap: 6px; align-items: center; padding: 2px 6px; border-bottom: 1px solid #232b36; cursor: pointer; }
+        #parts .part.selected { background: #2b3a52; }
+        #parts .part b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: normal; }
+        #parts .part select { width: 105px; padding: 2px 4px; }
+        .gate { display: flex; gap: 6px; align-items: center; padding: 3px 0; }
+        .gate span { flex: 1; }
+        button.active { background: #2e6fbf; }
+        #modes button { flex: 1; }
+    </style>
+    <script type="importmap">
+        { "imports": { "three": "../js/three/build/three.module.js", "three/addons/": "../js/three/examples/jsm/" } }
+    </script>
+</head>
+<body>
+<div id="side">
+    <h1>Track editor</h1>
+    <div class="sub">Make a track for OpenRacer from a glTF or glb model (for example from Blender): say what every part is made of, put the start and the lap gates on the road and save it. It shows up in the main menu of the game. <a href="../index.html">Back to the game</a></div>
+
+    <h2>Track</h2>
+    <label>Existing tracks</label>
+    <div class="row">
+        <select id="existing"></select>
+        <button id="newTrack" style="flex: none">New track</button>
+    </div>
+    <div class="hint" id="editing">Choose a track to change its start, gates and name (a track of the old format can be changed this way too), or import a model below. Saving a track that was chosen here overwrites it.</div>
+    <label>Name</label>
+    <input type="text" id="name" placeholder="My track">
+    <label>Id (the folder name: lower case letters, digits, - and _)</label>
+    <input type="text" id="id" placeholder="my-track">
+    <label>Description</label>
+    <input type="text" id="description" placeholder="Short description for the menu">
+
+    <h2>Model</h2>
+    <div class="sub">Pick a <b>.glb</b> file, or a <b>.gltf</b> together with its <b>.bin</b> and texture files (select them all at once). Make the track in metres, <b>y is up</b> (Blender’s glTF export does this). Importing a model in a track that exists replaces its model.</div>
+    <input type="file" id="files" multiple accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2">
+    <div class="hint" id="modelInfo">No model loaded.</div>
+
+    <h2>Surfaces</h2>
+    <div class="sub">Say what every part is made of. <b>Road</b>, <b>pit lane</b>, <b>grass</b> and <b>ground</b> can be driven on (each with its own grip), <b>scenery</b> is something the car drives into (walls, buildings), <b>decor</b> is only to look at (sky, trees, flags). Click a part in the 3D view to find it in the list.</div>
+    <div class="row">
+        <input type="text" id="filter" placeholder="Filter by name">
+        <select id="bulkRole" style="flex: none; width: 120px"></select>
+        <button id="bulkApply" style="flex: none">Set all shown</button>
+    </div>
+    <div class="buttons" style="margin: 6px 0">
+        <label style="margin:0"><input type="checkbox" id="colour" checked> Show the surfaces in colour</label>
+    </div>
+    <div class="legend hint" id="legend"></div>
+    <div id="parts"></div>
+    <div class="hint" id="partsNote"></div>
+
+    <h2>Start and lap gates</h2>
+    <div class="sub">Choose a tool, then <b>click on the road</b> and <b>drag</b> in the direction that the car drives. The car starts at the start; a lap is counted when it drives through all the gates in order. The first gate is the finish line: put it just in front of the start.</div>
+    <div class="row" id="modes">
+        <button data-mode="view" class="active">Look</button>
+        <button data-mode="start">Place start</button>
+        <button data-mode="gate">Add gate</button>
+    </div>
+    <div class="buttons"><button class="small" id="topView">View from above</button><button class="small" id="gateAtStart">Gate 1 at the start</button></div>
+    <label>Start x / z / heading (degrees, 0 = towards +x, 90 = towards +z)</label>
+    <div class="row row3">
+        <input type="number" id="startX" step="0.1">
+        <input type="number" id="startZ" step="0.1">
+        <input type="number" id="startHeading" step="1" value="0">
+    </div>
+    <label>Width of new gates (metres)</label>
+    <input type="number" id="gateWidth" value="24" min="2" step="1">
+    <div id="gates"></div>
+    <div class="hint" id="gateNote"></div>
+
+    <div class="buttons" style="margin-top: 22px">
+        <button class="primary" id="save">Save the track</button>
+        <button class="danger" id="delete" style="display:none">Delete this track</button>
+    </div>
+    <div id="status"></div>
+</div>
+<div id="view"><div id="hud"></div></div>
+<script type="module" src="track-editor.js"></script>
+</body>
+</html>

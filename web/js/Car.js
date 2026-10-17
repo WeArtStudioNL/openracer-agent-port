@@ -154,6 +154,7 @@ OpenRacer.Car = function( config, domElement ) {
     this.place = function(x, z, heading) {
         var v = this.vehicle;
         v.reset(x, z, heading);
+        lastGateX = null; // a jump of the car is no crossing of a gate
         this.throttle = 0;
         this.brakePedal = 0;
         this.turnAngle = 0;
@@ -202,7 +203,7 @@ OpenRacer.Car = function( config, domElement ) {
         }
         // the checkpoint of the road under the rear wheel
         var rear = w[2];
-        if(rear.hasContact && rear.normal) lastTerrain = rear.normal.mesh;
+        if(trackGates.length === 0 && rear.hasContact && rear.normal) lastTerrain = rear.normal.mesh;
 
         this.updateCamera(delta, cx, cz, v.groundLevel, yaw, this.body.quaternion);
 
@@ -388,8 +389,32 @@ OpenRacer.Car = function( config, domElement ) {
         }
     };
 
+    // A track with gates (lines across the road, see the track editor): a gate is passed when the car crosses its line in the direction of
+    // the gate. It is then handled like a piece of road that is a checkpoint.
+    var lastGateX = null, lastGateZ = null;
+    function checkGates(v) {
+        if(lastGateX !== null) {
+            for(var g = 0; g < trackGates.length; g++) {
+                var gate = trackGates[g];
+                var dx = Math.cos(gate.heading), dz = Math.sin(gate.heading);
+                // position relative to the gate: along the direction of the gate (a) and across it (b)
+                var a0 = (lastGateX - gate.x) * dx + (lastGateZ - gate.z) * dz;
+                var a1 = (v.x - gate.x) * dx + (v.z - gate.z) * dz;
+                if(a0 < 0 && a1 >= 0) {
+                    var t = a0 / (a0 - a1);
+                    var px = lastGateX + (v.x - lastGateX) * t - gate.x, pz = lastGateZ + (v.z - lastGateZ) * t - gate.z;
+                    var b = -px * dz + pz * dx;
+                    if(Math.abs(b) <= (gate.width || 30) / 2) lastTerrain = "g" + g;
+                }
+            }
+        }
+        lastGateX = v.x;
+        lastGateZ = v.z;
+    }
+
     this.updateLaps = function(showDebug) {
         if(trackCheckPoints.length === 0) return;
+        if(trackGates.length) checkGates(this.vehicle);
         if(lastTerrain !== this.currentCheckPoint) {
             this.currentCheckPoint = lastTerrain;
             if(lastTerrain === trackCheckPoints[0]) {
