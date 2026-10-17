@@ -421,6 +421,7 @@ export function createDesign(api) {
             // the gizmo of a node: only up and down (dragging the node itself moves it over the ground)
             gizmo.attach(nodeGroup.children[design.selectedNode]);
             gizmo.setMode("translate");
+            gizmo.space = "world";
             gizmo.showX = gizmo.showZ = false;
             gizmo.showY = true;
             gizmo.enabled = true;
@@ -492,18 +493,35 @@ export function createDesign(api) {
     const rowGroup = new THREE.Group();      // the markers of the points of a selected row
     scene.add(rowGroup);
 
-    // the height of the ground (the road, the terrain or another prefab) under a point
-    function surfaceHeight(x, z, exclude) {
+    // the ground (the road, the terrain or another prefab) under a point: its height and the direction it faces
+    function surfaceAt(x, z, exclude) {
         raycaster.set(new THREE.Vector3(x, 1000, z), new THREE.Vector3(0, -1, 0));
         const targets = roadGroup.children.concat(prefabGroup.children.filter((g) => g !== exclude));
         const hits = raycaster.intersectObjects(targets, true);
-        return hits.length ? hits[0].point.y : 0;
+        if (!hits.length) return { y: 0, normal: UP.clone() };
+        const hit = hits[0];
+        const normal = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize() : UP.clone();
+        if (normal.y < 0) normal.negate();
+        return { y: hit.point.y, normal };
+    }
+    function surfaceHeight(x, z, exclude) { return surfaceAt(x, z, exclude).y; }
+
+    // a prefab stands on the surface: its up is the normal of the ground, and it is turned by its rotation around that
+    function orient(object, normal, yaw) {
+        const tilt = new THREE.Quaternion().setFromUnitVectors(UP, normal || UP);
+        object.quaternion.copy(tilt).multiply(new THREE.Quaternion().setFromAxisAngle(UP, yaw || 0));
+        object.userData.tilt = tilt;
+    }
+    function yawOf(object) {
+        const tilt = object.userData.tilt || new THREE.Quaternion();
+        const q = tilt.clone().invert().multiply(object.quaternion);
+        return new THREE.Euler().setFromQuaternion(q, "YXZ").y;
     }
 
-    function instance(def, p, x, y, z, rotation, scale, name) {
+    function instance(def, p, x, y, z, rotation, scale, name, normal) {
         const g = def.make();
         g.position.set(x, y, z);
-        g.rotation.y = rotation || 0;
+        orient(g, normal, rotation);
         g.scale.setScalar(scale || 1);
         g.traverse((m) => { if (m.isMesh) { m.name = name; m.userData.role = def.role; } });
         return g;
@@ -515,7 +533,7 @@ export function createDesign(api) {
         return new THREE.CatmullRomCurve3(pts, false, "centripetal", 0.5);
     }
 
-    function makePrefab(p, index) {
+    function makePrefab(p, index, exclude) {
         const def = PREFABS[p.type] || PREFABS.wall;
         const name = "prefab_" + p.type + "_" + (index + 1);
         const g = new THREE.Group();
@@ -533,10 +551,12 @@ export function createDesign(api) {
                     const u = count > 1 ? (k * spacing) / length : 0;
                     const pos = curve.getPointAt(Math.min(1, u));
                     const t = curve.getTangentAt(Math.min(1, u));
-                    copies.push(instance(def, p, pos.x, pos.y, pos.z, Math.atan2(-t.z, t.x), p.scale, name));
+                    const ground = surfaceAt(pos.x, pos.z, exclude);   // every copy stands on the ground under it
+                    copies.push(instance(def, p, pos.x, ground.y, pos.z, Math.atan2(-t.z, t.x), p.scale, name, ground.normal));
                 }
             } else {
-                copies.push(instance(def, p, p.points[0].x, p.points[0].y || 0, p.points[0].z, 0, p.scale, name));
+                const ground = surfaceAt(p.points[0].x, p.points[0].z, exclude);
+                copies.push(instance(def, p, p.points[0].x, ground.y, p.points[0].z, 0, p.scale, name, ground.normal));
             }
             const byColour = new Map();
             copies.forEach((c) => {
@@ -559,7 +579,15 @@ export function createDesign(api) {
                 g.add(m);
             });
         } else {
-            g.add(instance(def, p, p.x, p.y, p.z, p.rotation, p.scale, name));
+            // a single prefab: the group itself is placed and turned, so the ring of the gizmo is around it
+            const ground = surfaceAt(p.x, p.z, exclude);
+            p.y = round(ground.y);
+            g.position.set(p.x, p.y, p.z);
+            orient(g, ground.normal, p.rotation);
+            g.scale.setScalar(p.scale || 1);
+            const body = def.make();
+            body.traverse((m) => { if (m.isMesh) { m.name = name; m.userData.role = def.role; } });
+            g.add(body);
         }
         return g;
     }
@@ -573,7 +601,7 @@ export function createDesign(api) {
         prefabGroup.children.slice().forEach((g) => { prefabGroup.remove(g); state.parts.delete(g.name); });
         if (!design.data) return;
         design.data.prefabs.forEach((p, i) => {
-            const g = makePrefab(p, i);
+            const g = makePrefab(p, i, null);
             prefabGroup.add(g);
             g.traverse((m) => { if (m.isMesh) registerMesh(m, m.userData.role); });
             state.roles[g.name] = (PREFABS[p.type] || PREFABS.wall).role;
@@ -590,8 +618,8 @@ export function createDesign(api) {
     function refreshPrefab(i) {
         const old = prefabGroup.children[i];
         if (!old) { rebuildPrefabs(); return; }
-        const g = makePrefab(design.data.prefabs[i], i);
         prefabGroup.remove(old);
+        const g = makePrefab(design.data.prefabs[i], i, null);
         prefabGroup.children.splice(i, 0, g);
         g.parent = prefabGroup;
         g.traverse((m) => { if (m.isMesh) { m.userData.original = m.material; if (!$("colour").checked) return; m.material = roleMaterials[m.userData.role] || m.material; } });
@@ -634,6 +662,7 @@ export function createDesign(api) {
             // a ring to turn it; moving is by dragging the prefab itself
             gizmo.attach(g);
             gizmo.setMode("rotate");
+            gizmo.space = "local";
             gizmo.showX = gizmo.showZ = false;
             gizmo.showY = true;
             gizmo.enabled = true;
@@ -823,8 +852,7 @@ export function createDesign(api) {
                 p.points.forEach((q, i) => { q.x = round(drag.origin[i].x + dx); q.z = round(drag.origin[i].z + dz); });
                 snapRow(p, own);
             } else {
-                p.x = round(pp.x + drag.offset.x); p.z = round(pp.z + drag.offset.z);
-                p.y = round(surfaceHeight(p.x, p.z, own)); // snaps to the ground, the road or what it is put on
+                p.x = round(pp.x + drag.offset.x); p.z = round(pp.z + drag.offset.z); // the height follows the ground when it is built
             }
             refreshPrefab(drag.index);
         } else if (drag.kind === "draw") {
@@ -897,7 +925,7 @@ export function createDesign(api) {
             scheduleRebuild();
         } else if (o.userData.prefab) {
             const p = o.userData.prefab;
-            p.rotation = round(o.rotation.y);
+            p.rotation = round(yawOf(o));
             fillPrefabFields();
         }
     });
