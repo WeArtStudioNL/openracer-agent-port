@@ -5,6 +5,12 @@
  */
 
 var lastFrameTime = performance.now();
+
+// the engine sound follows the option of the settings menu
+Settings.onOptionChange(function(name, value) {
+    if(name === "sound") EngineSound.setMuted(!value);
+});
+EngineSound.setMuted(!Settings.option("sound"));
 var s = new RACER.Scene();
 var telemetry;
 
@@ -29,7 +35,12 @@ function trackLoaded() {
 }
 
 function onEnterFrame() {
-    if(car) {
+    Settings.update();
+    EngineSound.setPaused(Settings.isPaused());
+    if(car && Settings.isPaused()) {
+        EngineSound.update(car.engineRPM, 0);
+    }
+    if(car && !Settings.isPaused()) {
         var now = performance.now();
         var d = (now - lastFrameTime) / 1000;
         lastFrameTime = now;

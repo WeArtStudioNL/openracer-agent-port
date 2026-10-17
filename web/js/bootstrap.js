@@ -36,6 +36,7 @@ var scripts = [
     "js/Telemetry.js",
     "js/EngineSound.js",
     "js/WheelControls.js",
+    "js/Settings.js",
     "js/controls.js",
     "js/main.js"
 ];

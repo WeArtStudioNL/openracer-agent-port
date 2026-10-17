@@ -345,13 +345,16 @@ OpenRacer.Vehicle = function (parameters, input) {
         }
 
         // ---- traction control
-        // (keeps the slip of the driven wheels near the peak of the tyre by taking some torque off the engine)
-        if(self.tcEnabled && maxDrivenSlip > 0.22) {
-            self.tcFactor = Math.max(0.35, self.tcFactor - dt * 3 * (maxDrivenSlip - 0.2) * 4);
+        // Keeps the slip of the driven wheels near the peak of the tyre by taking torque off the engine,
+        // down to a small fraction if that is what it takes.
+        // The torque comes back slowly once the wheels hook up again, or it would start spinning again.
+        var slipError = maxDrivenSlip - 0.18;
+        if(self.tcEnabled && slipError > 0) {
+            self.tcFactor = Math.max(0.12, self.tcFactor - dt * (2 + 20 * slipError));
             wheels[2].tc = wheels[3].tc = true;
         } else {
-            self.tcFactor = Math.min(1, self.tcFactor + 1.5 * dt);
-            if(self.tcFactor > 0.98) wheels[2].tc = wheels[3].tc = false;
+            self.tcFactor = Math.min(1, self.tcFactor + dt * (slipError < -0.08 ? 2 : 0.3));
+            if(self.tcFactor > 0.98 || !self.tcEnabled) wheels[2].tc = wheels[3].tc = false;
         }
 
         // ---- engine and clutch

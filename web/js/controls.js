@@ -7,6 +7,8 @@ var mY = 0;
 var mLocation;
 
 window.onmousedown = function(e) {
+    // a click in the settings menu is not driving
+    if(Settings.isPaused()) return;
     mouseDown = true;
     //console.log("mouseDown " + e.screenX + ", " + e.screenY);
     mdX = e.screenX;
@@ -21,6 +23,7 @@ window.onmousedown = function(e) {
 };
 
 window.onmouseup = function() {
+    if(!mouseDown) return;
     mouseDown = false;
     car.throttle = 0;
     car.brakePedal = 0;
@@ -63,20 +66,21 @@ function gamepadUpdate() {
         return;
     }
 
-    var gpads = navigator.getGamepads ? navigator.getGamepads() : [];
-    var gpad = gpads[0];
-    // Only use pads with the standard layout this code expects. Other devices (such as
-    // racing wheels) are handled by WheelControls after calibration; reading them here
-    // would hold the throttle at zero and block the keyboard.
-    var usable = gpad && gpad.connected && gpad.mapping === "standard" && gpad.buttons.length > 7 && gpad.axes.length > 0;
-    var steer = usable ? (gpad.axes[0] || 0) : 0;
-    var active = usable && (gpad.buttons[7].value > 0.05 || gpad.buttons[6].value > 0.05 || Math.abs(steer) > 0.1);
+    // The controller is read through the bindings of the settings menu (by default the left stick steers,
+    // and the right and left trigger are the throttle and the brake). Racing wheels are handled by
+    // WheelControls after calibration; they are not a controller here.
+    var gpad = Settings.controllerPad();
+    var usable = !!gpad;
+    var steer = usable ? Settings.controllerAnalog("steerRight") - Settings.controllerAnalog("steerLeft") : 0;
+    var throttle = usable ? Settings.controllerAnalog("throttle") : 0;
+    var brake = usable ? Settings.controllerAnalog("brake") : 0;
+    var active = usable && (throttle > 0.05 || brake > 0.05 || Math.abs(steer) > 0.1);
 
     // An idle gamepad leaves the keyboard and mouse in control
     if(active || (usable && gamepadOwnsPedals)) {
         car.turnAngle -= (car.turnAngle - (car.maxTurn * Math.pow(steer, 4) * getSign(steer))) / 3;
-        car.throttle = gpad.buttons[7].value;
-        car.brakePedal = gpad.buttons[6].value;
+        car.throttle = throttle;
+        car.brakePedal = brake;
         gamepadOwnsPedals = active;
         usingGamepad = true;
     } else {

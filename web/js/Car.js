@@ -106,8 +106,6 @@ OpenRacer.Car = function( parameters, domElement ) {
     }, this);
     this.engine = this.vehicle.engine;
     this.wheels = this.vehicle.wheels;
-    this.vehicle.tcEnabled = true;
-    this.vehicle.absEnabled = true;
     var placed = false; // set once the car has been put on the road
 
     function bodyLoaded(geometry) {
@@ -326,7 +324,10 @@ OpenRacer.Car = function( parameters, domElement ) {
             placed = true;
             this.place(startX, startZ, startHeading);
         }
+        this.pollInput();
         gamepadUpdate();
+        // with the manual gearbox chosen in the menu the gears stay where the driver put them
+        if(this.manualOption) this.manualGearbox = true;
         var v = this.vehicle;
 
         if(this.reset) {
@@ -400,11 +401,12 @@ OpenRacer.Car = function( parameters, domElement ) {
         dash_abs.className = absOn ? "dash-abs-on" : "dash-abs-off";
 
         if(showDebug) {
+            debugOut("Esc: settings and controls");
             var gear = this.reverse ? "R" : (this.neutral ? "N" : this.current_gear + 1);
             debugOut(Math.round(v.u * 2.2369362920544) + " mph | Gear: " + gear + " | RPM: " + Math.round(this.engineRPM) +
                 (this.engine.running ? "" : " (STALLED: " + (this.clutchPedalPresent ? "clutch + throttle or I to start" : "starting") + ")") +
                 " | Throttle: " + this.throttle.toFixed(2) + " | Brake: " + this.brakePedal.toFixed(2) +
-                " | Clutch: " + v.clutchEngagement.toFixed(2) + " | TC [C]: " + (v.tcEnabled ? "on" : "off") + " | ABS [B]: " + (v.absEnabled ? "on" : "off"));
+                " | Clutch: " + v.clutchEngagement.toFixed(2) + " | TC: " + (v.tcEnabled ? "on" : "off") + " | ABS: " + (v.absEnabled ? "on" : "off"));
         }
 
         this.updateLaps(showDebug);
@@ -463,88 +465,70 @@ OpenRacer.Car = function( parameters, domElement ) {
         return !this.loadError && this.bodyLoaded && this.wheelsLoaded && this.wheels.length === 4;
     };
 
-    this.onKeyDown = function ( event ) {
+    // ---- input
 
-        //event.preventDefault();
+    var heldAccelerate = false;
+    var heldBrake = false;
+    var heldReverse = false;
 
-        switch ( event.keyCode ) {
-
-            case 32: /*space*/ this.handbrake = true; break;
-
-            case 38: /*up*/
-            case 87: /*W*/ this.accelerate = true; break;
-
-            case 37: /*left*/
-            case 65: /*A*/ this.turnLeft = true; break;
-
-            case 40: /*down*/
-            case 83: /*S*/ this.brake = true; break;
-            
-            case 190: /*.*/ this.reverse = true; break;
-
-            case 39: /*right*/
-            case 68: /*D*/ this.turnRight = true; break;
-
-            case 82: /*R*/ this.reset = true; break;
-            case 70: /*F*/ this.moveDown = true; break;
-
-            case 219: /*[*/ this.cameraLeft = true; break;
-            case 221: /*]*/ this.cameraRight = true; break;
-            case 192: /*@*/ this.cameraAngle = 0; break;
-            
-            case 84: /*t*/ if(telemetry) telemetry.setVisible(!telemetry.visible); break;
-
-            case 67: /*C*/ this.vehicle.tcEnabled = !this.vehicle.tcEnabled; break;
-            case 66: /*B*/ this.vehicle.absEnabled = !this.vehicle.absEnabled; break;
-            case 73: /*I*/ this.startEngine(); break;
-
-            default: console.log(event.keyCode + " pressed."); break;
-
+    // Reads the keys and buttons that are held (the inputs are set in the settings menu, see Settings.js)
+    this.pollInput = function() {
+        this.accelerate = Settings.isDown("throttle");
+        this.brake = Settings.isDown("brake");
+        this.turnLeft = Settings.isDown("steerLeft");
+        this.turnRight = Settings.isDown("steerRight");
+        this.handbrake = Settings.isDown("handbrake");
+        this.cameraLeft = Settings.isDown("cameraLeft");
+        this.cameraRight = Settings.isDown("cameraRight");
+        // letting go of the key lets go of the pedal at once
+        if(heldAccelerate && !this.accelerate) this.throttle = 0;
+        if(heldBrake && !this.brake) this.brakePedal = 0;
+        heldAccelerate = this.accelerate;
+        heldBrake = this.brake;
+        // reverse is also set by the shifter of a wheel, so only a change of the key counts
+        var reverseKey = Settings.isDown("reverse");
+        if(reverseKey !== heldReverse) {
+            this.reverse = reverseKey;
+            heldReverse = reverseKey;
         }
-
     };
 
-    this.onKeyUp = function ( event ) {
-
-        switch( event.keyCode ) {
-
-            case 32: /*space*/ this.handbrake = false; break;
-
-            case 38: /*up*/
-            case 87: /*W*/ this.accelerate = false; this.throttle = 0; break;
-
-            case 37: /*left*/
-            case 65: /*A*/ this.turnLeft = false; break;
-
-            case 40: /*down*/
-            case 83: /*S*/ this.brake = false; this.brakePedal = 0; break;
-            
-            case 190: /*.*/ this.reverse = false; break;
-
-            case 39: /*right*/
-            case 68: /*D*/ this.turnRight = false; break;
-
-            case 82: /*R*/ this.reset = false; break;
-            case 70: /*F*/ this.moveDown = false; break;
-
-            case 219: /*[*/ this.cameraLeft = false; break;
-            case 221: /*]*/ this.cameraRight = false; break;
+    // Sequential shifting with a key or a button. Shifting down from first gear at a standstill selects reverse.
+    this.shiftUp = function() {
+        Settings.setOption("transmission", "manual");
+        this.neutral = false;
+        if(this.reverse) {
+            this.reverse = false;
+            this.current_gear = 0;
+        } else if(this.current_gear < this.gear_ratios.length - 1) {
+            this.current_gear++;
         }
-
     };
 
-    
-    window.addEventListener( 'keydown', bind( this, this.onKeyDown ), false );
-    window.addEventListener( 'keyup', bind( this, this.onKeyUp ), false );
-
-    function bind( scope, fn ) {
-
-            return function () {
-
-                    fn.apply( scope, arguments );
-
-            };
-
+    this.shiftDown = function() {
+        Settings.setOption("transmission", "manual");
+        this.neutral = false;
+        if(this.current_gear > 0 && !this.reverse) {
+            this.current_gear--;
+        } else if(Math.abs(this.vehicle.u) < 1.5) {
+            this.reverse = true;
+        }
     };
+
+    // The options of the settings menu
+    var applyOption = function(name, value) {
+        if(name === "tc") tobj.vehicle.tcEnabled = value;
+        else if(name === "abs") tobj.vehicle.absEnabled = value;
+        else if(name === "transmission") {
+            tobj.manualOption = value === "manual";
+            tobj.manualGearbox = tobj.manualOption;
+            if(!tobj.manualOption) tobj.reverse = false;
+        }
+    };
+    this.manualOption = false;
+    applyOption("tc", Settings.option("tc"));
+    applyOption("abs", Settings.option("abs"));
+    applyOption("transmission", Settings.option("transmission"));
+    Settings.onOptionChange(applyOption);
 
 };

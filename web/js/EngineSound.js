@@ -21,7 +21,7 @@
  * Description: Synthesised V8 engine sound driven by the engine RPM and throttle,
  *              using the Web Audio API (no audio files needed).
  * Notes: Browsers only start audio after a key press or click, so the sound starts
- *        on the first such interaction. Press E to mute or unmute.
+ *        on the first such interaction. The sound can be switched off in the settings menu (Esc).
  */
 
 var EngineSound = (function() {
@@ -33,6 +33,7 @@ var EngineSound = (function() {
     var filter = null;
     var oscillators = [];     // { osc, ratio }: oscillator and its frequency relative to the firing frequency
     var muted = false;
+    var paused = false;       // silent while the game is paused
     var enabledByUser = false;
 
     function start() {
@@ -83,23 +84,19 @@ var EngineSound = (function() {
         }
         // Opening the throttle makes the engine louder and brighter
         filter.frequency.setTargetAtTime(300 + rpm * 0.35 + throttle * 700, now, TARGET_SMOOTHING);
-        var volume = muted ? 0 : 0.08 + 0.12 * Math.min(rpm / 6000, 1) + 0.15 * throttle;
+        var volume = (muted || paused) ? 0 : 0.08 + 0.12 * Math.min(rpm / 6000, 1) + 0.15 * throttle;
         master.gain.setTargetAtTime(volume, now, TARGET_SMOOTHING);
     }
 
     function status() {
-        if(muted) return "Engine sound: muted (press E)";
-        if(!enabledByUser || !ctx || ctx.state !== "running") return "Engine sound: press any key or click to enable (E mutes)";
+        if(muted) return "Engine sound: muted";
+        if(!enabledByUser || !ctx || ctx.state !== "running") return "Engine sound: press any key or click to enable";
         return "";
     }
 
     ["keydown", "mousedown", "touchstart"].forEach(function(name) {
         window.addEventListener(name, start, false);
     });
-
-    window.addEventListener("keydown", function(event) {
-        if(event.key && event.key.toLowerCase() === "e") muted = !muted;
-    }, false);
 
     // Silence the engine while the page is in the background, where no frames are updating it
     document.addEventListener("visibilitychange", function() {
@@ -110,6 +107,8 @@ var EngineSound = (function() {
 
     return {
         update: update,
-        status: status
+        status: status,
+        setMuted: function(value) { muted = value; },
+        setPaused: function(value) { paused = value; }
     };
 })();

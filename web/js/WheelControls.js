@@ -184,17 +184,17 @@ var WheelControls = (function() {
         return steps;
     }
 
-    function startCalibration(car) {
-        var pad = findCalibrationPad();
+    function startCalibration(car, partial) {
+        var pad = partial ? partial.pad : findCalibrationPad();
         if(!car || !pad) {
             showMessage("No wheel found. Connect it and press a button on it first.", 4000);
             return;
         }
         calibration = {
             padIndex: pad.index,
-            steps: buildSteps(car),
+            steps: partial ? partial.steps : buildSteps(car),
             step: 0,
-            profile: { gears: {} },
+            profile: partial ? partial.profile : { gears: {} },
             usedAxes: [],
             usedButtons: [],
             baseline: [],
@@ -209,6 +209,16 @@ var WheelControls = (function() {
             detect: null,
             stepStart: Date.now()
         };
+        if(partial) {
+            // inputs that are not measured again keep their axes and buttons
+            var redone = partial.steps.map(function(step) { return step.id; });
+            var keep = partial.profile;
+            ["throttle", "brake", "clutch", "steer"].forEach(function(name) {
+                var skipped = name === "steer" ? redone.indexOf("steerLeft") >= 0 : redone.indexOf(name) >= 0;
+                if(keep[name] && !skipped && calibration.usedAxes.indexOf(keep[name].axis) < 0 && name !== "steer") calibration.usedAxes.push(keep[name].axis);
+                if(keep[name] && !skipped && name === "steer") calibration.usedAxes.push(keep[name].axis);
+            });
+        }
         showStep();
     }
 
@@ -434,15 +444,8 @@ var WheelControls = (function() {
     }
 
     window.addEventListener("keydown", function(event) {
+        if(!calibration) return;
         var key = event.key ? event.key.toLowerCase() : "";
-        if(!calibration) {
-            if(key === "k") startCalibration(window.car);
-            else if(key === "m") {
-                enabled = !enabled;
-                showMessage(enabled ? "Wheel input on." : "Wheel input off (keyboard only). Press M to turn it on.", 3000);
-            }
-            return;
-        }
         var step = calibration.steps[calibration.step];
         if(key === "escape") {
             cancelCalibration("Wheel calibration cancelled.");
@@ -453,6 +456,52 @@ var WheelControls = (function() {
             nextStep(false);
         }
     }, false);
+
+    function toggle() {
+        enabled = !enabled;
+        showMessage(enabled ? "Wheel input on." : "Wheel input off (keyboard only).", 3000);
+    }
+
+    // Text about what an action of the wheel is set to (axis or button), or null if it is not set
+    function describe(name) {
+        var pad = findWheel();
+        var profile = pad ? loadProfile(pad.id) : null;
+        if(!profile) return null;
+        if(name === "steer" || name === "throttle" || name === "brake" || name === "clutch") {
+            return profile[name] ? "Axis " + profile[name].axis : null;
+        }
+        if(name === "reverseGear") return profile.reverseGear !== undefined ? "Button " + profile.reverseGear : null;
+        if(/^gear[0-9]+$/.test(name)) {
+            var g = parseInt(name.substring(4), 10);
+            return profile.gears && profile.gears[g] !== undefined ? "Button " + profile.gears[g] : null;
+        }
+        return profile[name] !== undefined ? "Button " + profile[name] : null;
+    }
+
+    // Forgets what the wheel is set to for an action
+    function clear(name) {
+        var pad = findWheel();
+        var profile = pad ? loadProfile(pad.id) : null;
+        if(!profile) return;
+        if(/^gear[0-9]+$/.test(name)) delete profile.gears[parseInt(name.substring(4), 10)];
+        else delete profile[name];
+        saveProfile(pad.id, profile);
+    }
+
+    // Measures only some of the inputs of the wheel again (the calibration steps with these ids)
+    function recalibrate(stepIds) {
+        var car = window.car;
+        var pad = findWheel();
+        if(!car || !pad) {
+            showMessage("No wheel found. Connect it and press a button on it first.", 4000);
+            return;
+        }
+        var existing = loadProfile(pad.id) || { gears: {} };
+        var steps = buildSteps(car).filter(function(step) { return stepIds.indexOf(step.id) >= 0; });
+        // a single step can always be skipped, to leave the input as it was
+        steps.forEach(function(step) { step.optional = true; step.hshifter = false; });
+        startCalibration(car, { steps: steps, profile: JSON.parse(JSON.stringify(existing)), pad: pad });
+    }
 
     // Driving
 
@@ -570,7 +619,7 @@ var WheelControls = (function() {
         if(!profile) {
             if(!hinted[pad.id]) {
                 hinted[pad.id] = true;
-                showMessage("Wheel or controller detected. Press K to calibrate it.", 10000);
+                showMessage("Wheel or controller detected. Open the settings menu (Esc) to set it up.", 10000);
             }
             release(car);
             return false;
@@ -630,8 +679,14 @@ var WheelControls = (function() {
     }
 
     return {
-        status: function() { return enabled ? lastStatus : "Wheel input off (press M)"; },
+        status: function() { return enabled ? lastStatus : "Wheel input off"; },
         update: update,
-        startCalibration: startCalibration
+        startCalibration: function(car) { startCalibration(car); },
+        recalibrate: recalibrate,
+        describe: describe,
+        clear: clear,
+        toggle: toggle,
+        findWheel: findWheel,
+        isCalibrating: function() { return !!calibration; }
     };
 })();
