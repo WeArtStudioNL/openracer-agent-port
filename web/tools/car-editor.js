@@ -790,6 +790,12 @@ function buildConfig(id) {
         },
         drivetrain: {
             drive: $("drive").value,
+            diff: $("diff").value,
+            diff_preload: Math.max(0, num("diffPreload") || 0),
+            diff_power: Math.min(1, Math.max(0, (num("diffPower") || 0) / 100)),
+            diff_coast: Math.min(1, Math.max(0, (num("diffCoast") || 0) / 100)),
+            center_diff: $("centerDiff").value,
+            center_split: Math.min(1, Math.max(0, (isFinite(num("centerSplit")) ? num("centerSplit") : 40) / 100)),
             gear_ratios: gears,
             reverse_ratio: need("reverse", "The reverse ratio"),
             final_drive: need("finalDrive", "The final drive"),
@@ -908,6 +914,24 @@ async function deleteCar() {
     refreshList();
 }
 
+// ---- the differentials
+
+const DIFF_INFO = {
+    open: "Open: the same torque to both wheels, so the wheel with the least grip decides how much there is. Spins the inner wheel in a corner under power; the easiest to drive straight, the worst for traction.",
+    lsd: "Limited slip: locks the wheels together more the harder it is driven (preload, and a share of the torque under power and off the throttle). Gives traction out of corners; a high lock makes the car push or slide with the power.",
+    welded: "Welded: both wheels always turn at the same speed. Best traction in a straight line and for drifting; it scrubs and pushes in slow corners, and a car is touchy on the throttle at the limit."
+};
+
+function updateDiffFields() {
+    const drive = $("drive").value, diff = $("diff").value;
+    $("lsdBox").style.display = diff === "lsd" ? "" : "none";
+    $("centerBox").style.display = drive === "awd" ? "" : "none";
+    $("splitBox").style.display = drive === "awd" ? "" : "none";
+    $("diffInfo").textContent = DIFF_INFO[diff] + (drive === "awd" ? " Centre differential: " + ({ open: "open gives the axles the share above all the time", lsd: "a limited slip one moves torque to the axle that turns slower", locked: "a locked one turns both axles at the same speed" })[$("centerDiff").value] + "." : "");
+}
+["drive", "diff", "centerDiff"].forEach((id) => $(id).addEventListener("change", updateDiffFields));
+updateDiffFields();
+
 // ---- cars that exist
 
 async function refreshList(select) {
@@ -940,7 +964,13 @@ function fill(car) {
     set("wheelbase", c.wheelbase); set("frontTrack", c.front_track); set("rearTrack", c.rear_track);
     set("tyre", c.tire_diameter); set("drag", c.drag_coefficient); set("steer", c.max_steer_deg);
     const d = car.drivetrain;
-    set("drive", d.drive); set("finalDrive", d.final_drive); set("gears", d.gear_ratios.join(", "));
+    set("drive", d.drive); set("diff", d.diff || "lsd"); set("centerDiff", d.center_diff || "lsd");
+    set("diffPreload", d.diff_preload !== undefined ? d.diff_preload : 150);
+    set("diffPower", Math.round((d.diff_power !== undefined ? d.diff_power : 0.3) * 100));
+    set("diffCoast", Math.round((d.diff_coast !== undefined ? d.diff_coast : 0.1) * 100));
+    set("centerSplit", Math.round((d.center_split !== undefined ? d.center_split : 0.4) * 100));
+    updateDiffFields();
+    set("finalDrive", d.final_drive); set("gears", d.gear_ratios.join(", "));
     set("reverse", d.reverse_ratio); set("efficiency", d.efficiency);
     const e = car.engine;
     set("idle", e.idle_rpm); set("limiter", e.limiter_rpm); set("inertia", e.inertia);

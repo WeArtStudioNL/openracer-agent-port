@@ -81,12 +81,26 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.reverseRatio = parameters.reverse_ratio || parameters.gear_ratios[0];
     // the clutch is made for the engine: it holds a good deal more than the peak torque
     this.clutchCapacity = 1.5 * this.engine.getPeakTorque(); // the most torque the clutch can transmit when fully engaged (Nm)
-    this.frontDriven = parameters.drive === "fwd";           // front wheel drive, or (default) rear wheel drive
+    this.driveType = parameters.drive === "fwd" || parameters.drive === "awd" ? parameters.drive : "rwd"; // which wheels get the engine torque
+    this.frontDriven = this.driveType === "fwd";             // (the front wheels are the only driven ones)
+    this.diffType = parameters.diff === "open" || parameters.diff === "welded" ? parameters.diff : "lsd"; // the differential(s) between the wheels of an axle
+    this.centerType = parameters.center_diff === "open" || parameters.center_diff === "locked" ? parameters.center_diff : "lsd"; // between the axles, when all wheels are driven
+    this.centerSplit = parameters.center_split !== undefined ? parameters.center_split : 0.4; // the share of the torque to the front axle
     this.clutchSlipSpeed = 1.5;       // slip speed (rad/s) at which the clutch reaches its full capacity
     this.clutchEngagement = 1;        // how hard the clutch is clamped (0..1)
-    this.lockTorque = 150;            // limited slip differential: preload (Nm)
-    this.lockStiffness = 60;          // and how fast it builds up with the speed difference (Nm per rad/s)
-    this.lockPower = 0.3;             // and how much it adds with the torque that is driven (a limited slip differential locks harder under power)
+    // The differential between the two wheels of an axle: "open" sends the same torque to both wheels, so the wheel with the least grip decides how much
+    // there is; "lsd" (limited slip) locks: a preload, a part of the torque that is driven (under power, and less on the throttle off) and
+    // how fast it builds up with the speed difference; "welded" turns both wheels at the same speed (as a locked axle does).
+    this.lockTorque = parameters.diff_preload !== undefined ? parameters.diff_preload : 150;  // preload (Nm)
+    this.lockStiffness = parameters.diff_lock !== undefined ? parameters.diff_lock : 60;      // how fast it builds up (Nm per rad/s)
+    this.lockPower = parameters.diff_power !== undefined ? parameters.diff_power : 0.3;       // locks harder under power (share of the torque)
+    this.lockCoast = parameters.diff_coast !== undefined ? parameters.diff_coast : 0.1;       // and a little when the throttle is off
+    this.centerPreload = 100;         // the same for the differential between the axles (all wheel drive)
+    this.centerStiffness = 150;
+    this.centerPower = 0.3;
+    this.isDriven = function (front) {
+        return this.driveType === "awd" || (this.driveType === "fwd") === front;
+    };
 
     this.tcAllowance = 1;             // tuning: how much wheel spin the traction control allows, as a factor
     this.escGain = 1;                 // tuning: how hard the stability control steps in, as a factor
@@ -144,7 +158,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     for(var i = 0; i < 4; i++) {
         var w = new OpenRacer.Wheel({
             name: defs[i].name, diameter: diameter, right: defs[i].right, front: defs[i].front,
-            driven: defs[i].front === this.frontDriven, mass: 0, maxBrakeTorque: defs[i].front ? this.brakeFront : this.brakeRear
+            driven: this.isDriven(defs[i].front), mass: 0, maxBrakeTorque: defs[i].front ? this.brakeFront : this.brakeRear
         });
         // A car that understeers at the limit is stable: the front tyres give up before the rear tyres. The rear tyres are
         // a little stiffer against the slip angle, as the whole car is (a rear that is too weak spins from a small steering movement).
@@ -234,12 +248,15 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.spring_rear !== undefined) this.rearWheelRate = t.spring_rear;
         if(t.damping_front !== undefined) this.frontDamping = t.damping_front;
         if(t.damping_rear !== undefined) this.rearDamping = t.damping_rear;
-        if(t.drive !== undefined) this.frontDriven = t.drive === "fwd";
+        if(t.drive !== undefined) { this.driveType = t.drive === "fwd" || t.drive === "awd" ? t.drive : "rwd"; this.frontDriven = this.driveType === "fwd"; }
+        if(t.diff !== undefined) this.diffType = t.diff === "open" || t.diff === "welded" ? t.diff : "lsd";
+        if(t.center_diff !== undefined) this.centerType = t.center_diff === "open" || t.center_diff === "locked" ? t.center_diff : "lsd";
+        if(t.center_split !== undefined) this.centerSplit = t.center_split;
         if(t.downforce !== undefined) this.downforce = t.downforce;
         this.layout();
         for(i = 0; i < 4; i++) {
             w = this.wheels[i];
-            w.driven = w.front === this.frontDriven;
+            w.driven = this.isDriven(w.front);
             if(t.grip !== undefined) w.gripScale = t.grip;
             if(t.cornering !== undefined) w.anglePeak = this.baseAnglePeak / (t.cornering * w.stiffnessBias);
             if(t.rolling_resistance !== undefined) w.rollingResistance = t.rolling_resistance;
@@ -265,6 +282,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.diff_preload !== undefined) this.lockTorque = t.diff_preload;
         if(t.diff_lock !== undefined) this.lockStiffness = t.diff_lock;
         if(t.diff_power !== undefined) this.lockPower = t.diff_power;
+        if(t.diff_coast !== undefined) this.lockCoast = t.diff_coast;
         if(t.drag !== undefined) this.Cdrag = t.drag;
         if(t.tc_allowance !== undefined) this.tcAllowance = t.tc_allowance;
         if(t.esc_gain !== undefined) this.escGain = t.esc_gain;
@@ -316,8 +334,17 @@ OpenRacer.Vehicle = function (parameters, input) {
     };
 
     // the driven wheels: left and right
-    this.drivenA = function () { return this.wheels[this.frontDriven ? 1 : 2]; };
-    this.drivenB = function () { return this.wheels[this.frontDriven ? 0 : 3]; };
+    this.drivenA = function () { return this.wheels[this.driveType === "fwd" ? 1 : 2]; };
+    this.drivenB = function () { return this.wheels[this.driveType === "fwd" ? 0 : 3]; };
+
+    // the share of the engine torque that every wheel gets (in the order of the wheels) when the differentials are open
+    this.torqueShares = function () {
+        if(this.driveType === "awd") {
+            var f = Math.max(0, Math.min(1, this.centerSplit));
+            return [f / 2, f / 2, (1 - f) / 2, (1 - f) / 2];
+        }
+        return this.driveType === "fwd" ? [0.5, 0.5, 0, 0] : [0, 0, 0.5, 0.5];
+    };
 
     this.getSpeed = function () {
         return this.u;
@@ -353,7 +380,9 @@ OpenRacer.Vehicle = function (parameters, input) {
         this.timeSinceShift += delta;
 
         // engine speed implied by the wheels in the current gear (the engine speed itself while slipping the clutch is no guide)
-        var drivenOmega = (this.drivenA().omega + this.drivenB().omega) / 2;
+        var shares0 = this.torqueShares();
+        var drivenOmega = 0;
+        for(var di = 0; di < 4; di++) drivenOmega += shares0[di] * this.wheels[di].omega;
         this.drivelineRPM = Math.abs(drivenOmega) * ratio * 30 / Math.PI;
 
         // automatic gearbox
@@ -361,7 +390,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             var g = inp.current_gear;
             var thr = inp.throttle;
             // the engine speed the road speed asks for in this gear: spinning wheels must not cause a shift
-            var rpm = Math.max(0, this.u) / this.drivenA().radius * ratio * 30 / Math.PI;
+            var rpm = Math.max(0, this.u) / this.wheels[0].radius * ratio * 30 / Math.PI;
             if(this.timeSinceShift > 0.6) {
                 var limit = this.engine.limiterRPM;
                 var upRPM = limit * (0.45 + 0.42 * thr);
@@ -724,16 +753,15 @@ OpenRacer.Vehicle = function (parameters, input) {
         var slipError = maxDrivenSlip - 1;
         if(self.tcEnabled && slipError > 0) {
             self.tcFactor = Math.max(0.12, self.tcFactor - dt * (3 + 5 * slipError));
-            self.drivenA().tc = self.drivenB().tc = true;
+            for(var ti = 0; ti < 4; ti++) if(wheels[ti].driven) wheels[ti].tc = true;
         } else {
             self.tcFactor = Math.min(1, self.tcFactor + dt * (slipError < -0.5 ? 2 : 0.4));
-            if(self.tcFactor > 0.98 || !self.tcEnabled) self.drivenA().tc = self.drivenB().tc = false;
+            if(self.tcFactor > 0.98 || !self.tcEnabled) for(var tj = 0; tj < 4; tj++) wheels[tj].tc = false;
         }
 
         // ---- engine and clutch
         var gs = self.getGearRatio();
-        var iA = self.frontDriven ? 1 : 2, iB = self.frontDriven ? 0 : 3; // the driven wheels: left and right
-        var rl = wheels[iA], rr_ = wheels[iB];
+        var shares = self.torqueShares(); // the share of the torque of every wheel with open differentials
         var throttle = inp.throttle * self.tcFactor * (1 - 0.85 * escCut);
         // the gearbox takes the power off while it shifts
         if(self.shiftTimer > 0) throttle *= 0.15;
@@ -755,16 +783,21 @@ OpenRacer.Vehicle = function (parameters, input) {
         self.clutchEngagement = engagement;
 
         // brake torque as it is felt by the wheel at its current speed, for the clutch solution below
-        var extL = tyreTorque[iA] - brakeTorque[iA] * Math.tanh(rl.omega / 0.5);
-        var extR = tyreTorque[iB] - brakeTorque[iB] * Math.tanh(rr_.omega / 0.5);
         var Je = engine.inertia;
         var Tc = 0;
         if(gs !== 0) {
             var cap = self.clutchCapacity * engagement;
-            var omegaS = gs * (rl.omega + rr_.omega) / 2;
+            var omegaS = 0, invJd = 0, aExt = 0;
+            for(var k2 = 0; k2 < 4; k2++) {
+                var sh = shares[k2];
+                if(sh === 0) continue;
+                var wk = wheels[k2];
+                var ext = tyreTorque[k2] - brakeTorque[k2] * Math.tanh(wk.omega / 0.5);
+                omegaS += gs * sh * wk.omega;
+                invJd += gs * gs * sh * sh / wk.inertia;
+                aExt += gs * sh * ext / wk.inertia;
+            }
             var dOmega = engine.omega - omegaS;
-            var invJd = gs * gs / 4 * (1 / rl.inertia + 1 / rr_.inertia);
-            var aExt = gs / 2 * (extL / rl.inertia + extR / rr_.inertia);
             var kClutch = cap / self.clutchSlipSpeed;
             // Implicit solution of the slip between engine and driveline: it can be stiff (a locked
             // clutch), and this stays stable. Beyond the capacity the clutch slips with a fixed torque.
@@ -776,19 +809,38 @@ OpenRacer.Vehicle = function (parameters, input) {
         engine.omega += dt * (Te - Tc) / Je;
         if(engine.omega < 0) engine.omega = 0;
         if(engine.omega > engine.maxRPM * Math.PI / 30) engine.omega = engine.maxRPM * Math.PI / 30;
-        var driveTorque = Tc * gs * self.driveEfficiency / 2; // to each of the two driven wheels
+        var driveTotal = Tc * gs * self.driveEfficiency; // the torque to all driven wheels together
+        var wheelDrive = [driveTotal * shares[0], driveTotal * shares[1], driveTotal * shares[2], driveTotal * shares[3]];
 
-        // ---- differential: open, with a preload and some locking
-        // the extra locking under power is for getting going and for tight turns: at speed the car stays calm (see the stability at 150 km/h)
-        var lockMax = self.lockTorque + self.lockPower * (1 - smoothstep(8, 25, Math.abs(u))) * Math.abs(driveTorque);
-        var lock = Math.max(-lockMax, Math.min(lockMax, self.lockStiffness * (rl.omega - rr_.omega)));
+        // ---- differentials
+        // Between the axles (all wheel drive, "lsd"): the axle that turns faster than the other gets torque taken off and the slower one gets it. "open" gives
+        // every axle the same share all the time; "locked" makes both axles turn at the same speed (see below).
+        if(self.driveType === "awd" && self.centerType === "lsd") {
+            var axleF = (wheels[0].omega + wheels[1].omega) / 2, axleR = (wheels[2].omega + wheels[3].omega) / 2;
+            var cMax = self.centerPreload + self.centerPower * Math.abs(driveTotal);
+            var cLock = Math.max(-cMax, Math.min(cMax, self.centerStiffness * (axleF - axleR)));
+            wheelDrive[0] -= cLock / 2; wheelDrive[1] -= cLock / 2; wheelDrive[2] += cLock / 2; wheelDrive[3] += cLock / 2;
+        }
+        // Between the wheels of an axle. Left and right are given by the order of the wheels: 1 and 0 (front), 2 and 3 (rear).
+        if(self.diffType === "lsd") {
+            // the extra locking under power is for getting going and for tight turns: at speed the car stays calm (see the stability at 150 km/h)
+            var calm = 1 - smoothstep(8, 25, Math.abs(u));
+            for(var ax = 0; ax < 2; ax++) {
+                var iL = ax === 0 ? 1 : 2, iR = ax === 0 ? 0 : 3;
+                if(shares[iL] === 0) continue;
+                var axleTorque = wheelDrive[iL] + wheelDrive[iR];
+                var factor = axleTorque >= 0 ? self.lockPower * calm : self.lockCoast * calm;
+                var lockMax = self.lockTorque + factor * Math.abs(axleTorque) / 2;
+                var lock = Math.max(-lockMax, Math.min(lockMax, self.lockStiffness * (wheels[iL].omega - wheels[iR].omega)));
+                wheelDrive[iL] -= lock; wheelDrive[iR] += lock;
+            }
+        }
 
         // ---- wheel speeds
         for(var j = 0; j < 4; j++) {
             var wj = wheels[j];
             var T = tyreTorque[j];
-            if(j === iA) T += driveTorque - lock;
-            if(j === iB) T += driveTorque + lock;
+            T += wheelDrive[j];
             var omegaFree = wj.omega + dt * T / wj.inertia;
             var bt2 = brakeTorque[j];
             if(bt2 > 0) {
@@ -797,8 +849,26 @@ OpenRacer.Vehicle = function (parameters, input) {
                 else omegaFree -= dw * (omegaFree > 0 ? 1 : -1);
             }
             wj.omega = omegaFree;
-            wj.spin += wj.omega * dt;
         }
+
+        // ---- locked: the wheels of an axle (welded), or the axles (locked centre) turn at the same speed. The speed they get keeps the angular momentum.
+        if(self.diffType === "welded") {
+            for(var ax2 = 0; ax2 < 2; ax2++) {
+                var wl = wheels[ax2 === 0 ? 1 : 2], wr = wheels[ax2 === 0 ? 0 : 3];
+                if(!wl.driven) continue;
+                var common = (wl.inertia * wl.omega + wr.inertia * wr.omega) / (wl.inertia + wr.inertia);
+                wl.omega = wr.omega = common;
+            }
+        }
+        if(self.driveType === "awd" && self.centerType === "locked") {
+            var iF = wheels[0].inertia + wheels[1].inertia, iR2 = wheels[2].inertia + wheels[3].inertia;
+            var oF = (wheels[0].inertia * wheels[0].omega + wheels[1].inertia * wheels[1].omega) / iF;
+            var oR = (wheels[2].inertia * wheels[2].omega + wheels[3].inertia * wheels[3].omega) / iR2;
+            var oC = (iF * oF + iR2 * oR) / (iF + iR2);
+            wheels[0].omega += oC - oF; wheels[1].omega += oC - oF;
+            wheels[2].omega += oC - oR; wheels[3].omega += oC - oR;
+        }
+        for(var js = 0; js < 4; js++) wheels[js].spin += wheels[js].omega * dt;
 
         // ---- the forces on the car that are not at the wheels: the air (drag, and downforce)
         var speed = Math.sqrt(self.vx * self.vx + self.vy * self.vy + self.vz * self.vz);

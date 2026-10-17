@@ -53,8 +53,13 @@ var Tuning = (function() {
             ["gears", "Gears", "", 0, 0, 0],
             ["reverse_ratio", "Reverse", "", 1.0, 6.0, 0.05],
             ["clutch", "Clutch capacity (x peak torque)", "", 1.0, 3.5, 0.05],
-            ["diff_preload", "Differential preload", "Nm", 0, 800, 10],
-            ["diff_lock", "Differential locking", "Nm/(rad/s)", 0, 400, 5]
+            ["diff", "Differential", "", 0, 0, 0],
+            ["diff_preload", "Limited slip: preload", "Nm", 0, 800, 10],
+            ["diff_power", "Limited slip: lock under power", "%", 0, 100, 1],
+            ["diff_coast", "Limited slip: lock off the throttle", "%", 0, 100, 1],
+            ["diff_lock", "Limited slip: build-up", "Nm/(rad/s)", 0, 400, 5],
+            ["center_diff", "Centre differential (all wheel drive)", "", 0, 0, 0],
+            ["center_split", "Torque to the front (all wheel drive)", "%", 0, 100, 1]
         ] },
         { name: "Brakes", items: [
             ["brake_front", "Front brakes (per wheel)", "Nm", 300, 4000, 50],
@@ -113,6 +118,11 @@ var Tuning = (function() {
             final_drive: dt.final_drive,
             reverse_ratio: dt.reverse_ratio || dt.gear_ratios[0],
             clutch: dt.clutch !== undefined ? dt.clutch : 1.5,
+            diff: dt.diff || "lsd",
+            diff_power: (dt.diff_power !== undefined ? dt.diff_power : 0.3) * 100,
+            diff_coast: (dt.diff_coast !== undefined ? dt.diff_coast : 0.1) * 100,
+            center_diff: dt.center_diff || "lsd",
+            center_split: (dt.center_split !== undefined ? dt.center_split : 0.4) * 100,
             diff_preload: dt.diff_preload !== undefined ? dt.diff_preload : 150,
             diff_lock: dt.diff_lock !== undefined ? dt.diff_lock : 60,
             brake_front: (c.brakes && c.brakes.front) || 1700,
@@ -159,6 +169,11 @@ var Tuning = (function() {
             gear_ratios: gears,
             reverse_ratio: v.reverse_ratio,
             clutch: v.clutch,
+            diff: v.diff,
+            center_diff: v.center_diff,
+            center_split: v.center_split / 100,
+            diff_power: v.diff_power / 100,
+            diff_coast: v.diff_coast / 100,
             diff_preload: v.diff_preload,
             diff_lock: v.diff_lock,
             brake_front: v.brake_front,
@@ -352,19 +367,25 @@ var Tuning = (function() {
         return item;
     }
 
-    function driveRow() {
+    var SELECTS = {
+        drive: ["Drive", [["rwd", "Rear wheels"], ["fwd", "Front wheels"], ["awd", "All wheels"]]],
+        diff: ["Differential", [["open", "Open"], ["lsd", "Limited slip"], ["welded", "Welded (locked)"]]],
+        center_diff: ["Centre differential", [["open", "Open"], ["lsd", "Limited slip"], ["locked", "Locked"]]]
+    };
+
+    function selectRow(key) {
         var item = document.createElement("div");
         item.className = "item";
         var line = document.createElement("div");
         line.className = "line";
-        line.innerHTML = "<span class=\"label\">Drive</span>";
+        line.innerHTML = "<span class=\"label\">" + SELECTS[key][0] + "</span>";
         var select = document.createElement("select");
-        select.innerHTML = "<option value=\"rwd\">Rear wheels</option><option value=\"fwd\">Front wheels</option>";
+        select.innerHTML = SELECTS[key][1].map(function(o) { return "<option value=\"" + o[0] + "\">" + o[1] + "</option>"; }).join("");
         select.style.width = "130px";
-        select.addEventListener("change", function() { set("drive", select.value); select.blur(); });
+        select.addEventListener("change", function() { set(key, select.value); select.blur(); });
         line.appendChild(select);
         item.appendChild(line);
-        controls.push({ key: "drive", select: select, line: line });
+        controls.push({ key: key, select: select, line: line });
         return item;
     }
 
@@ -430,7 +451,7 @@ var Tuning = (function() {
             summary.textContent = group.name;
             details.appendChild(summary);
             group.items.forEach(function(def) {
-                if(def[0] === "drive") details.appendChild(driveRow());
+                if(SELECTS[def[0]]) details.appendChild(selectRow(def[0]));
                 else if(def[0] === "gears") details.appendChild(gearsRow());
                 else details.appendChild(slider(def));
                 if(def[0] === "snd_muffler_action") details.appendChild(mufflerRow());
@@ -454,8 +475,8 @@ var Tuning = (function() {
                 if(document.activeElement !== c.input) c.input.value = Number(values[c.key]).toFixed(2);
                 c.input.style.color = changed(c.key) ? "#ffd04d" : "";
             } else if(c.select) {
-                c.select.value = values.drive;
-                c.line.classList.toggle("changed", changed("drive"));
+                c.select.value = values[c.key];
+                c.line.classList.toggle("changed", changed(c.key));
             } else if(c.text) {
                 if(document.activeElement !== c.text) c.text.value = values.snd_muffler.join(", ");
                 c.line.classList.toggle("changed", changed("snd_muffler"));
@@ -489,6 +510,11 @@ var Tuning = (function() {
         c.drivetrain.final_drive = v.final_drive;
         c.drivetrain.reverse_ratio = v.reverse_ratio;
         c.drivetrain.clutch = v.clutch;
+        c.drivetrain.diff = v.diff;
+        c.drivetrain.center_diff = v.center_diff;
+        c.drivetrain.center_split = v.center_split / 100;
+        c.drivetrain.diff_power = v.diff_power / 100;
+        c.drivetrain.diff_coast = v.diff_coast / 100;
         c.drivetrain.diff_preload = v.diff_preload;
         c.drivetrain.diff_lock = v.diff_lock;
         c.drivetrain.gear_ratios = c.drivetrain.gear_ratios.map(function(r, i) { return v["gear" + i]; });
