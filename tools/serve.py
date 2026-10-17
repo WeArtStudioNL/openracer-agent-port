@@ -26,7 +26,7 @@ from urllib.parse import unquote, urlparse
 ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 FILE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$")
-MAX_UPLOAD = 300 * 1024 * 1024
+MAX_UPLOAD = 8 * 1024 * 1024 * 1024  # 8 GB: a file is streamed to disk in pieces, so its size costs no memory
 
 
 def scan(kind, config_name):
@@ -119,13 +119,18 @@ class Handler(SimpleHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         if length > MAX_UPLOAD:
             return self.send_json({"error": "file too large"}, 413)
-        data = self.rfile.read(length)
         os.makedirs(os.path.dirname(target), exist_ok=True)
+        written = 0
         with open(target, "wb") as f:
-            f.write(data)
+            while written < length:
+                chunk = self.rfile.read(min(1024 * 1024, length - written))
+                if not chunk:
+                    break
+                f.write(chunk)
+                written += len(chunk)
         if parts[-1] in ("car.json", "track.json") and len(parts) == 4:
             write_indexes()
-        self.send_json({"ok": True, "bytes": len(data)})
+        self.send_json({"ok": True, "bytes": written})
 
     def do_DELETE(self):
         parts = unquote(urlparse(self.path).path).strip("/").split("/")
