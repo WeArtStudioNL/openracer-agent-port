@@ -65,13 +65,19 @@ function gamepadUpdate() {
 
     var gpads = navigator.getGamepads ? navigator.getGamepads() : [];
     var gpad = gpads[0];
-    // only use pads with the layout this code expects (an axis and at least 8 buttons)
-    if(gpad && gpad.connected && gpad.axes.length > 0 && gpad.buttons.length > 7) {
-        var steer = gpad.axes[0] || 0;
+    // Only use pads with the standard layout this code expects. Other devices (such as
+    // racing wheels) are handled by WheelControls after calibration; reading them here
+    // would hold the throttle at zero and block the keyboard.
+    var usable = gpad && gpad.connected && gpad.mapping === "standard" && gpad.buttons.length > 7 && gpad.axes.length > 0;
+    var steer = usable ? (gpad.axes[0] || 0) : 0;
+    var active = usable && (gpad.buttons[7].value > 0.05 || gpad.buttons[6].value > 0.05 || Math.abs(steer) > 0.1);
+
+    // An idle gamepad leaves the keyboard and mouse in control
+    if(active || (usable && gamepadOwnsPedals)) {
         car.turnAngle -= (car.turnAngle - (car.maxTurn * Math.pow(steer, 4) * getSign(steer))) / 3;
         car.throttle = gpad.buttons[7].value;
         car.brakePedal = gpad.buttons[6].value;
-        gamepadOwnsPedals = true;
+        gamepadOwnsPedals = active;
         usingGamepad = true;
     } else {
         // release the pedals if the gamepad that held them has gone away

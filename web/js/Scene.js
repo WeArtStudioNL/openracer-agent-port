@@ -244,13 +244,23 @@ function render() {
             //console.log("cub");
             cubeCamera.position.copy(car.body.position);
 
+            // Hide everything that samples the cube map while it is being rendered. Modern
+            // browsers reject drawing with a texture that is also the framebuffer
+            // ("feedback loop"), which corrupts the whole frame. The wheels use the same
+            // reflective materials as the body.
             car.body.visible = false;
+            for(var w = 0; w < car.wheels.length; w++) {
+                car.wheels[w].object.visible = false;
+            }
 
             //renderer.autoClear = true;
             cubeCamera.updateCubeMap( renderer, scene );
             //renderer.autoClear = false;
 
             car.body.visible = true;
+            for(var w = 0; w < car.wheels.length; w++) {
+                car.wheels[w].object.visible = true;
+            }
             cubeCount = 0;
         }
         cubeCount++;

@@ -36,7 +36,7 @@
  */
 
 var WheelControls = (function() {
-    // Ids of non-standard gamepads that look like racing wheels.
+    // Ids of wheels that are recognised even when the browser reports a standard layout.
     var KNOWN_WHEELS = /wheel|g25|g27|g29|g920|g923|driving force|thrustmaster|t300|t150|tmx|fanatec|moza|simagic|simucube/i;
     var STORAGE_PREFIX = "openracer.wheel.";
 
@@ -99,7 +99,7 @@ var WheelControls = (function() {
             if(pads[i] && pads[i].connected && loadProfile(pads[i].id)) return pads[i];
         }
         for(i = 0; i < pads.length; i++) {
-            if(pads[i] && pads[i].connected && pads[i].mapping !== "standard" && KNOWN_WHEELS.test(pads[i].id)) return pads[i];
+            if(pads[i] && pads[i].connected && (pads[i].mapping !== "standard" || KNOWN_WHEELS.test(pads[i].id))) return pads[i];
         }
         return null;
     }
@@ -432,7 +432,7 @@ var WheelControls = (function() {
         if(!profile) {
             if(!hinted[pad.id]) {
                 hinted[pad.id] = true;
-                showMessage("Racing wheel detected. Press K to calibrate it.", 6000);
+                showMessage("Wheel or controller detected. Press K to calibrate it.", 10000);
             }
             release(car);
             return false;
