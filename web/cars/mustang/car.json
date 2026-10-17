@@ -120,9 +120,10 @@
       "height": 2.1,
       "look_height": 0.8,
       "smoothing": 3.5,
-      "fov_standing": 62,
-      "fov_fast": 30,
-      "fov_full_speed": 70
+      "fov_standing": 45,
+      "fov_fast": 75,
+      "fov_full_speed": 70,
+      "dolly": 1
     },
     "cockpit": {
       "position": [

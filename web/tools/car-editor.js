@@ -484,7 +484,7 @@ const CAM_FIELDS = {
     camChaseDist: (c) => c.chase.distance, camChaseHeight: (c) => c.chase.height, camChaseFov: (c) => c.chase.fov,
     camFolDist: (c) => c.follow.distance, camFolHeight: (c) => c.follow.height, camFolLook: (c) => c.follow.look_height,
     camFolSmooth: (c) => c.follow.smoothing, camFolFovStand: (c) => c.follow.fov_standing, camFolFovFast: (c) => c.follow.fov_fast,
-    camFolSpeed: (c) => Math.round(c.follow.fov_full_speed * 3.6),
+    camFolSpeed: (c) => Math.round(c.follow.fov_full_speed * 3.6), camFolDolly: (c) => c.follow.dolly,
     camCockX: (c) => c.cockpit.position[0], camCockY: (c) => c.cockpit.position[1], camCockZ: (c) => c.cockpit.position[2], camCockFov: (c) => c.cockpit.fov
 };
 
@@ -506,7 +506,7 @@ function readCameras() {
     return {
         chase: { distance: n("camChaseDist"), height: n("camChaseHeight"), fov: n("camChaseFov") },
         follow: { distance: n("camFolDist"), height: n("camFolHeight"), look_height: n("camFolLook"), smoothing: n("camFolSmooth"),
-            fov_standing: n("camFolFovStand"), fov_fast: n("camFolFovFast"), fov_full_speed: n("camFolSpeed") / 3.6 },
+            fov_standing: n("camFolFovStand"), fov_fast: n("camFolFovFast"), fov_full_speed: n("camFolSpeed") / 3.6, dolly: n("camFolDolly") },
         cockpit: { position: [n("camCockX"), n("camCockY"), n("camCockZ")], fov: n("camCockFov") }
     };
 }
@@ -530,6 +530,12 @@ function updateCameraMarkers() {
     }
     if (Number.isFinite(c.follow.distance) && Number.isFinite(c.follow.height)) {
         line(0x37d67a, dot(0x37d67a, 0, c.follow.height - r, -c.follow.distance), new THREE.Vector3(0, (c.follow.look_height || 0) - r, 0));
+        // where the camera is at full speed: closer, in the measure that the field of view is wider
+        const k = 1 + c.follow.dolly * (Math.tan(c.follow.fov_standing * Math.PI / 360) / Math.tan(c.follow.fov_fast * Math.PI / 360) - 1);
+        if (Number.isFinite(k)) {
+            const look = c.follow.look_height || 0;
+            dot(0x9be8b8, 0, look + (c.follow.height - look) * k - r, -c.follow.distance * k);
+        }
     }
     const p = c.cockpit.position;
     if (p.every(Number.isFinite)) {
@@ -802,7 +808,7 @@ function buildConfig(id) {
     if (!soundValid(config.sound)) throw new Error("Every field of the engine sound needs a number (and the muffler at least one length).");
     const camNumbers = [config.cameras.chase.distance, config.cameras.chase.height, config.cameras.chase.fov, config.cameras.follow.distance,
         config.cameras.follow.height, config.cameras.follow.look_height, config.cameras.follow.smoothing, config.cameras.follow.fov_standing,
-        config.cameras.follow.fov_fast, config.cameras.follow.fov_full_speed, config.cameras.cockpit.fov, ...config.cameras.cockpit.position];
+        config.cameras.follow.fov_fast, config.cameras.follow.fov_full_speed, config.cameras.follow.dolly, config.cameras.cockpit.fov, ...config.cameras.cockpit.position];
     if (!camNumbers.every(Number.isFinite)) throw new Error("Every field of the cameras needs a number.");
     if (!config.name) throw new Error("Give the car a name.");
     if (wheelMode() === "model") {

@@ -253,7 +253,7 @@ OpenRacer.Car = function( config, domElement ) {
     };
 
     // ---- the cameras: 1 is the fixed camera behind the car, 2 follows the direction of the car smoothly and
-    // narrows its field of view with the speed, 3 is in the car. Their places are set per car (see CarDefaults.js).
+    // widens its field of view with the speed (and comes closer, so the car keeps its size), 3 is in the car. Their places are set per car (see CarDefaults.js).
     this.cameraSettings = OpenRacer.cameraSettings(config);
     this.cameraMode = 1;
     var followYaw = null;       // the direction that the following camera looks in
@@ -309,14 +309,18 @@ OpenRacer.Car = function( config, domElement ) {
             var f = cs.follow;
             if(followYaw === null) followYaw = yaw;
             followYaw += wrapPi(yaw - followYaw) * (1 - Math.exp(-f.smoothing * Math.min(delta, 0.1)));
-            camera.position.set(cx, avgGround + radius, cz);
-            camera.rotation.set(0, followYaw + Math.PI + this.cameraAngle, 0);
-            camera.translateZ(f.distance);
-            camera.position.y = avgGround + f.height;
-            camera.lookAt(cx, avgGround + f.look_height, cz);
-            // the faster, the smaller the field of view
+            // the faster, the wider the field of view
             var target = f.fov_standing + (f.fov_fast - f.fov_standing) * Math.min(1, speed / f.fov_full_speed);
             cameraFov = cameraFov === null ? target : cameraFov + (target - cameraFov) * (1 - Math.exp(-4 * Math.min(delta, 0.1)));
+            // ... and the camera comes closer in the same measure, so that the car stays the same size in the picture: only
+            // the field of view seems to change (a dolly zoom). The distance and the height are those at a standstill; dolly
+            // is how far this goes: 1 keeps the car the same size, 0 leaves the camera where it is.
+            var scale = 1 + f.dolly * (Math.tan(f.fov_standing * Math.PI / 360) / Math.tan(cameraFov * Math.PI / 360) - 1);
+            camera.position.set(cx, avgGround + radius, cz);
+            camera.rotation.set(0, followYaw + Math.PI + this.cameraAngle, 0);
+            camera.translateZ(f.distance * scale);
+            camera.position.y = avgGround + f.look_height + (f.height - f.look_height) * scale;
+            camera.lookAt(cx, avgGround + f.look_height, cz);
             setLens(cameraFov, 1);
             return;
         }
