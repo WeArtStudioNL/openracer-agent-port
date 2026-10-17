@@ -232,7 +232,7 @@ var Hud = (function() {
     }
 
     function updateLaps(car) {
-        var html = "<div class=\"lap\">LAP " + (car.lapsCompleted + 1) + "</div>";
+        var html = "<div class=\"lap\">LAP " + (car.lapsCompleted + 1) + (car.raceCount > 1 ? " &nbsp;·&nbsp; P" + car.racePosition + "/" + car.raceCount : "") + "</div>";
         var current = car.lapStartTime !== undefined ? car.clock - car.lapStartTime : 0;
         html += "<div class=\"time\">" + formatTime(Math.max(0, current)) + "</div>";
         var times = car.lapTimes;
@@ -243,6 +243,8 @@ var Hud = (function() {
                 html += "<div class=\"last\">" + (i + 1) + ". " + (times[i] === best ? "<b>" + text + "</b>" : text) + "</div>";
             }
         }
+        var best = car.ghost ? car.ghost.bestTime() : null;
+        if(best) html += "<div class=\"last\">best " + formatTime(best) + (car.newRecord ? " <b>new record</b>" : "") + "</div>";
         html += "<div class=\"keys\">Esc: settings and controls</div>";
         if(lapPanel.innerHTML !== html) lapPanel.innerHTML = html;
     }

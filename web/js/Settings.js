@@ -672,6 +672,25 @@ var Settings = (function() {
         page.appendChild(optionRow("Debug text", options.debug ? "On" : "Off", function() { setOption("debug", !options.debug); }));
         var tuningRow = optionRow("Tuning menu", "Open", function() { closeMenu(); Tuning.toggle(); });
         page.appendChild(tuningRow);
+        // the racing line and the records of this track (see main.js, Records.js)
+        if(typeof race !== "undefined" && window.car && typeof currentTrack !== "undefined") {
+            page.appendChild(optionRow("Racing line of this track", "Save my best lap as the line", function() {
+                var ghost = race.ghost && race.ghost.best;
+                if(!ghost) { hint("No best lap yet: drive a lap first."); return; }
+                var line = ghost.samples.filter(function(s, i) { return i % 3 === 0; }).map(function(s) { return { x: Math.round(s.x * 100) / 100, y: Math.round(s.y * 100) / 100, z: Math.round(s.z * 100) / 100 }; });
+                var config = JSON.parse(JSON.stringify(currentTrack));
+                delete config.id;
+                config.racing_line = line;
+                fetch("/api/tracks/" + currentTrack.id + "/track.json", { method: "PUT", body: JSON.stringify(config, null, 2) + "\n" }).then(function(response) {
+                    hint(response.ok ? "The line is saved with the track (" + line.length + " points): the AI drives it from the next start." : "Could not save (" + response.status + "): start the game with start-server.sh.");
+                }).catch(function() { hint("Could not save: start the game with start-server.sh."); });
+            }));
+            page.appendChild(optionRow("Records of this track", "Forget them", function() {
+                OpenRacer.Records.forget(currentTrack.id);
+                if(race.ghost) race.ghost.best = null;
+                hint("The records and the ghost of this track are forgotten.");
+            }));
+        }
         page.appendChild(optionRow("Surroundings for Blender", "Save as HDR", function() {
             if(typeof EnvironmentExport !== "undefined" && window.car) EnvironmentExport.download();
         }));

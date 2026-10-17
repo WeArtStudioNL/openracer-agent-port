@@ -59,6 +59,10 @@ OpenRacer.Car = function( config, domElement ) {
     this.lapTimes = [];       // the times of the laps that are done, in seconds
     this.clock = 0;           // the time that the car has been driven (not while the game is paused), in seconds
     this.checkPointsCompleted = trackCheckPoints.map(function() { return false; });
+    this.ghost = null;        // the ghost of the best lap (Ghost.js), set by the game
+    this.racePosition = 0;    // in a race: the place, and how many cars there are
+    this.raceCount = 0;
+    this.newRecord = false;   // the last lap was a record
     this.currentCheckPoint = "";
     
     // Where the car starts (and returns to with the reset key): from the track
@@ -188,6 +192,7 @@ OpenRacer.Car = function( config, domElement ) {
         v.reset(x, z, heading);
         tyreSmoke.clear();
         lastGateX = null; // a jump of the car is no crossing of a gate
+        this.lapStarted = false;
         this.throttle = 0;
         this.brakePedal = 0;
         this.turnAngle = 0;
@@ -445,6 +450,7 @@ OpenRacer.Car = function( config, domElement ) {
     // the gate. It is then handled like a piece of road that is a checkpoint.
     var lastGateX = null, lastGateZ = null;
     function checkGates(v) {
+        var crossed = null;
         if(lastGateX !== null) {
             for(var g = 0; g < trackGates.length; g++) {
                 var gate = trackGates[g];
@@ -456,43 +462,54 @@ OpenRacer.Car = function( config, domElement ) {
                     var t = a0 / (a0 - a1);
                     var px = lastGateX + (v.x - lastGateX) * t - gate.x, pz = lastGateZ + (v.z - lastGateZ) * t - gate.z;
                     var b = -px * dz + pz * dx;
-                    if(Math.abs(b) <= (gate.width || 30) / 2) lastTerrain = "g" + g;
+                    if(Math.abs(b) <= (gate.width || 30) / 2) crossed = g;
                 }
             }
         }
         lastGateX = v.x;
         lastGateZ = v.z;
+        return crossed;
     }
 
+    this.lapStarted = false; // the finish line was passed once: the laps are timed from there
     this.updateLaps = function(showDebug) {
         if(trackCheckPoints.length === 0) return;
-        if(trackGates.length) checkGates(this.vehicle);
-        if(lastTerrain !== this.currentCheckPoint) {
+        var name;
+        if(trackGates.length) {
+            var crossed = checkGates(this.vehicle);
+            if(crossed === null) return;
+            name = "g" + crossed;
+        } else {
+            if(lastTerrain === this.currentCheckPoint) return;
             this.currentCheckPoint = lastTerrain;
-            if(lastTerrain === trackCheckPoints[0]) {
-                this.checkPointsCompleted[0] = true;
-                var checkpointsPassed = true;
-                for(var i = 1; i < this.checkPointsCompleted.length; i++) {
-                    if(checkpointsPassed) checkpointsPassed = this.checkPointsCompleted[i];
-                    this.checkPointsCompleted[i] = false;
-                }
-                if(checkpointsPassed) {
-                    // we passed all checkpoints
-                    if(this.lapStartTime !== undefined) {
-                        var lapTime = this.clock - this.lapStartTime;
-                        this.lapTimes.push(lapTime);
-                        this.laps.push(Hud.formatTime(lapTime));
-                        console.log("lap time: " + this.laps[this.laps.length - 1]);
-                    }
-                    this.lapsCompleted++;
-                }
-                this.lapStartTime = this.clock;
-            } else {
-                for(var i = 1; i < this.checkPointsCompleted.length; i++) {
-                    if(lastTerrain === trackCheckPoints[i]) {
-                        this.checkPointsCompleted[i] = true;
-                        break;
-                    }
+            name = lastTerrain;
+        }
+        if(name === trackCheckPoints[0]) {
+            // the finish line; a lap of less than twenty seconds is no lap (back and forth over the line)
+            if(this.lapStarted && this.clock - this.lapStartTime < 20) return;
+            this.checkPointsCompleted[0] = true;
+            var checkpointsPassed = this.lapStarted;
+            for(var i = 1; i < this.checkPointsCompleted.length; i++) {
+                if(checkpointsPassed) checkpointsPassed = this.checkPointsCompleted[i];
+                this.checkPointsCompleted[i] = false;
+            }
+            if(checkpointsPassed) {
+                // we passed all checkpoints
+                var lapTime = this.clock - this.lapStartTime;
+                this.lapTimes.push(lapTime);
+                this.laps.push(Hud.formatTime(lapTime));
+                this.newRecord = !!(this.ghost && this.ghost.lapDone(lapTime));
+                console.log("lap time: " + this.laps[this.laps.length - 1]);
+                this.lapsCompleted++;
+            }
+            this.lapStarted = true;
+            this.lapStartTime = this.clock;
+            if(this.ghost) this.ghost.startLap();
+        } else {
+            for(var k = 1; k < this.checkPointsCompleted.length; k++) {
+                if(name === trackCheckPoints[k]) {
+                    this.checkPointsCompleted[k] = true;
+                    break;
                 }
             }
         }

@@ -8,6 +8,10 @@
 
 var MainMenu = (function() {
     var STORAGE_KEY = "openracer.lastChoice";
+    var RACE_KEY = "openracer.raceOptions";
+    var raceOptions = { ai: 0, difficulty: "normal", ghost: true, records: true };
+    try { raceOptions = Object.assign(raceOptions, JSON.parse(window.localStorage.getItem(RACE_KEY)) || {}); } catch(e) { /* no storage */ }
+    function rememberRace() { try { window.localStorage.setItem(RACE_KEY, JSON.stringify(raceOptions)); } catch(e) { /* no storage */ } }
     var element = null;
     var choice = { car: null, track: null };
     var cars = [];
@@ -52,7 +56,12 @@ var MainMenu = (function() {
             "#mainMenu .foot { margin-top: 30px; color: #7e90a6; font-size: 14px; line-height: 1.6; }" +
             "#mainMenu .foot a { color: #7fb8ff; }" +
             "#mainMenu .foot button { background: #2c3541; color: #fff; border: 0; border-radius: 4px; padding: 4px 10px; cursor: pointer; }" +
-            "#mainMenu .error { color: #ff9a8a; }";
+            "#mainMenu .error { color: #ff9a8a; }" +
+            "#mainMenu .option { display: flex; align-items: center; justify-content: space-between; background: #1d232c; border: 2px solid #2c3541; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; }" +
+            "#mainMenu .option .label { color: #cfd8e3; }" +
+            "#mainMenu .option button { background: #2c3541; color: #fff; border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; min-width: 120px; }" +
+            "#mainMenu .option button:hover { background: #3a4656; }" +
+            "#mainMenu .record { color: #9aa8ba; font-size: 14px; margin: 6px 0 14px; }";
         document.head.appendChild(style);
     }
 
@@ -93,7 +102,8 @@ var MainMenu = (function() {
     function start() {
         if(!choice.car || !choice.track) return;
         remember();
-        window.location.href = window.location.pathname + "?car=" + encodeURIComponent(choice.car) + "&track=" + encodeURIComponent(choice.track);
+        window.location.href = window.location.pathname + "?car=" + encodeURIComponent(choice.car) + "&track=" + encodeURIComponent(choice.track) +
+            "&ai=" + raceOptions.ai + "&difficulty=" + raceOptions.difficulty + "&ghost=" + (raceOptions.ghost ? 1 : 0) + "&records=" + (raceOptions.records ? 1 : 0);
     }
 
     function render(error) {
@@ -115,6 +125,40 @@ var MainMenu = (function() {
         trackColumn.innerHTML = "<h2>Track</h2>";
         tracks.forEach(function(track) { trackColumn.appendChild(card(track, "track", "")); });
         columns.appendChild(trackColumn);
+
+        // the race: AI cars, the ghost and the records (see main.js)
+        var raceColumn = document.createElement("div");
+        raceColumn.className = "column";
+        raceColumn.innerHTML = "<h2>Race</h2>";
+        var option = function(label, text, onClick) {
+            var row = document.createElement("div");
+            row.className = "option";
+            var l = document.createElement("span");
+            l.className = "label";
+            l.textContent = label;
+            var b = document.createElement("button");
+            b.textContent = text;
+            b.onclick = function() { onClick(); rememberRace(); render(); };
+            row.appendChild(l);
+            row.appendChild(b);
+            return row;
+        };
+        var counts = [0, 1, 2, 3, 5, 7];
+        raceColumn.appendChild(option("AI opponents", raceOptions.ai === 0 ? "None" : String(raceOptions.ai), function() { raceOptions.ai = counts[(counts.indexOf(raceOptions.ai) + 1) % counts.length]; }));
+        var levels = ["easy", "normal", "hard"], levelNames = { easy: "Easy", normal: "Normal", hard: "Hard" };
+        raceColumn.appendChild(option("Difficulty", levelNames[raceOptions.difficulty] || "Normal", function() { raceOptions.difficulty = levels[(levels.indexOf(raceOptions.difficulty) + 1) % levels.length]; }));
+        raceColumn.appendChild(option("Ghost of your best lap", raceOptions.ghost ? "On" : "Off", function() { raceOptions.ghost = !raceOptions.ghost; }));
+        raceColumn.appendChild(option("Save lap records", raceOptions.records ? "On" : "Off", function() { raceOptions.records = !raceOptions.records; }));
+        var record = document.createElement("div");
+        record.className = "record";
+        var best = choice.track && choice.car && typeof OpenRacer !== "undefined" && OpenRacer.Records ? OpenRacer.Records.best(choice.track, choice.car) : null;
+        var trackChosen = tracks.filter(function(t) { return t.id === choice.track; })[0];
+        var hasLine = trackChosen && ((trackChosen.design && trackChosen.design.nodes) || (trackChosen.racing_line && trackChosen.racing_line.length > 10) ||
+            (OpenRacer.Records && OpenRacer.Records.anyGhost(choice.track)));
+        record.innerHTML = (best ? "Best lap with this car: <b>" + OpenRacer.Records.format(best) + "</b>" : "No lap record with this car here yet.") +
+            (raceOptions.ai > 0 ? "<br>" + (hasLine ? "The AI drives the racing line of this track." : "The AI needs a racing line: drive one lap here first, or draw the track in the track editor.") : "");
+        raceColumn.appendChild(record);
+        columns.appendChild(raceColumn);
         wrap.appendChild(columns);
 
         if(error) {
