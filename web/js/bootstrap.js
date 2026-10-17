@@ -49,6 +49,7 @@ var scripts = [
     "js/EngineSim.js",
     "js/EngineSound.js",
     "js/WheelControls.js",
+    "js/ForceFeedback.js",
     "js/Settings.js",
     "js/Hud.js",
     "js/Tuning.js",

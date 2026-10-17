@@ -91,7 +91,7 @@ var Settings = (function() {
     var actionsById = {};
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
-    var DEFAULT_OPTIONS = { tc: true, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, wheelDeadzone: 1, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 1, volume: 0.8 };
+    var DEFAULT_OPTIONS = { tc: true, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.2, ffbRoad: 0.5, ffbInvert: false, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 1, volume: 0.8 };
 
     var bindings = {};      // action id -> list of inputs
     var options = {};
@@ -586,6 +586,32 @@ var Settings = (function() {
         var deadzones = [0, 0.5, 1, 2, 3, 5];
         panel.appendChild(optionRow("Wheel dead zone", options.wheelDeadzone + "%" + (options.wheelDeadzone === 0 ? " (none)" : ""),
             function() { setOption("wheelDeadzone", deadzones[(deadzones.indexOf(options.wheelDeadzone) + 1) % deadzones.length]); }));
+        // force feedback (see ForceFeedback.js)
+        if(typeof ForceFeedback !== "undefined") {
+            var ffbTitle = document.createElement("h2");
+            ffbTitle.textContent = "Force feedback";
+            panel.appendChild(ffbTitle);
+            var deviceText = ForceFeedback.isConnected() ? ForceFeedback.deviceName() : (ForceFeedback.canConnect() ? "Connect a wheel…" : "Needs Chrome or Edge (WebHID)");
+            panel.appendChild(optionRow("Wheel with force feedback", deviceText, function() {
+                if(!ForceFeedback.canConnect()) { hint("Force feedback on the wheel itself needs WebHID, which Chrome and Edge have. Other browsers get rumble only."); return; }
+                if(ForceFeedback.isConnected()) {
+                    ForceFeedback.forget().then(function() { renderMenu(); });
+                } else {
+                    hint("Choose your wheel in the window of the browser. If it has several entries, take the one of the wheel itself.");
+                    ForceFeedback.connect().then(function() { renderMenu(); hint(ForceFeedback.status()); });
+                }
+            }));
+            var percent = function(v) { return Math.round(v * 100) + "%"; };
+            var cycle = function(name, steps) { return function() { var v = options[name]; var next = steps.find(function(s) { return s > v + 0.001; }); setOption(name, next === undefined ? steps[0] : next); }; };
+            panel.appendChild(optionRow("Force feedback", options.ffb ? "On" : "Off", function() { setOption("ffb", !options.ffb); }));
+            panel.appendChild(optionRow("Strength", percent(options.ffbStrength), cycle("ffbStrength", [0.2, 0.4, 0.6, 0.8, 1, 1.25, 1.5])));
+            panel.appendChild(optionRow("Centring spring", percent(options.ffbSpring), cycle("ffbSpring", [0, 0.1, 0.15, 0.25, 0.4, 0.6, 1])));
+            panel.appendChild(optionRow("Damping", percent(options.ffbDamping), cycle("ffbDamping", [0, 0.1, 0.2, 0.35, 0.5, 0.75, 1])));
+            panel.appendChild(optionRow("Road detail (bumps, grass, slip, ABS)", percent(options.ffbRoad), cycle("ffbRoad", [0, 0.25, 0.5, 0.75, 1])));
+            panel.appendChild(optionRow("Direction", options.ffbInvert ? "Inverted" : "Normal", function() { setOption("ffbInvert", !options.ffbInvert); }));
+            panel.appendChild(optionRow("Test", "Shake the wheel for two seconds", function() { ForceFeedback.test(); hint(ForceFeedback.status()); }));
+            panel.appendChild(document.createElement("div"));
+        }
         panel.appendChild(optionRow("HUD", options.hud ? "On" : "Off", function() { setOption("hud", !options.hud); }));
         panel.appendChild(optionRow("Units", options.units === "imperial" ? "Imperial (mph)" : "Metric (km/h)",
             function() { setOption("units", options.units === "imperial" ? "metric" : "imperial"); }));

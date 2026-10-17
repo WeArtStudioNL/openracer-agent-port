@@ -930,6 +930,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             wheels[q].RPM = wheels[q].omega * 30 / Math.PI;
             wheels[q].forwardMPH = Math.round(wheels[q].forwardSpeed * 2.2369362920544);
             wheels[q].compression = comp[q];
+            wheels[q].compressionVelocity = compVelocity[q]; // how fast the spring is pushed in (m/s), for the force feedback
             wheels[q].onGround = wheels[q].hasContact;
         }
         void fAcross;

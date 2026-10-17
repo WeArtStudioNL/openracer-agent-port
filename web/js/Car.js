@@ -342,6 +342,7 @@ OpenRacer.Car = function( config, domElement ) {
         if(showDebug) {
             var wheelStatus = WheelControls.status();
             if(wheelStatus) debugOut(wheelStatus);
+            if(typeof ForceFeedback !== "undefined") debugOut(ForceFeedback.status());
             var soundStatus = EngineSound.status();
             if(soundStatus) debugOut(soundStatus);
         }
@@ -386,6 +387,7 @@ OpenRacer.Car = function( config, domElement ) {
         EngineSound.setTyres(v.squeal, Math.abs(v.u));
 
         this.updateVisuals(delta);
+        if(typeof ForceFeedback !== "undefined") ForceFeedback.update(this, delta);
 
         Hud.update(this);
 

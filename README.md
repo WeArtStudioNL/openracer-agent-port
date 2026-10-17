@@ -107,6 +107,15 @@ What the shift buttons and the H-pattern shifter of the wheel do depends on the 
 
 The pedals must be reported by the same device as the wheel, and each pedal needs its own axis.
 
+## Force feedback
+A racing wheel with force feedback gets the torque that the driver would feel, calculated from the physics every frame (`web/js/ForceFeedback.js`): the aligning torque of the front tyres (their lateral force on the trail of the steering, which collapses as they slide, so the wheel goes light in understeer), the bumps of the road (the speed of the front springs), the rumble of grass and gravel, the judder of sliding front tyres, the pulses of the ABS, the jolt of a hit and a little shake of the engine at idle. It reaches the wheel in one of three ways:
+
+* **HID PID** (the standard for force feedback devices: PXN, Thrustmaster, Fanatec, Moza, Simagic, the Logitech G920/G923 in their native mode and most others) through WebHID: a constant force effect that is updated up to 120 times a second, with a centring spring and a damper that the wheel does itself. The reports are read from the descriptor of the wheel, so no list of wheels is needed.
+* **Logitech classic protocol** (G25, G27, G29, Driving Force GT/Pro) through WebHID: the constant force of its first slot and its own centring spring. A G29 has to be in its PC (native) mode.
+* **Rumble** through the Gamepad API for a gamepad, or a wheel without the above: the bumps and the slip shake it; there is no torque.
+
+WebHID exists in Chrome and Edge. The wheel is chosen once with *Wheel with force feedback → Connect a wheel…* in the settings menu (the browser shows a window with the devices; take the entry of the wheel itself); after that the game opens it again by itself. The settings menu also has *Force feedback* on/off, *Strength*, *Centring spring*, *Damping*, *Road detail* (bumps, grass, slip, ABS), *Direction* (inverted if the wheel pulls the wrong way) and *Test* (shakes the wheel for two seconds). A PXN wheel has to be in its DirectInput mode (in XInput mode it only centres itself). The debug text shows what is connected and why not.
+
 ## Blender: render settings that look like the game
 The game and Blender light a car differently, so a car never looks exactly the same, but it can come close. What matters:
 
