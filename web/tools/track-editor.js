@@ -78,10 +78,18 @@ resize();
     renderer.render(scene, camera);
 })();
 
+let toastTimer = 0;
 function status(text, kind) {
     const el = $("status");
     el.textContent = text;
     el.className = kind || "";
+    // the same message in the view: the one in the side bar is at the bottom of a long page
+    const toast = $("toast");
+    clearTimeout(toastTimer);
+    toast.textContent = text;
+    toast.className = kind || "";
+    toast.style.display = text ? "block" : "none";
+    if (text && kind) toastTimer = setTimeout(() => { toast.style.display = "none"; }, 7000);
 }
 
 function slug(text) {
@@ -279,12 +287,14 @@ function loadFromFiles(list) {
         const name = decodeURIComponent(url.split("?")[0].split("/").pop());
         return urls.has(name) ? urls.get(name) : url;
     });
-    status("Loading " + main + "…");
+    status("Loading " + main + " (" + (state.files.get(main).size / 1048576).toFixed(1) + " MB)…");
+    // a part of the new model that has the name of a part of the old one keeps its surface
+    const kept = state.parts.size && !state.legacy ? Object.assign({}, state.roles) : null;
     new GLTFLoader(manager).load(urls.get(main), (gltf) => {
         state.legacy = false;
-        setModel(gltf.scene, null);
+        setModel(gltf.scene, kept);
         $("modelInfo").textContent = main + " (" + (state.files.get(main).size / 1048576).toFixed(1) + " MB), " + state.parts.size + " named parts";
-        status("Model loaded. Check the surfaces, then put the start and the gates on the road.", "ok");
+        status("Model loaded: " + state.parts.size + " parts. " + (kept ? "Parts with the name of an old part keep their surface; check the new ones. " : "") + "Save the track to keep it.", "ok");
         updateMarkers();
     }, undefined, (error) => status("Could not read the model: " + (error.message || error), "error"));
 }

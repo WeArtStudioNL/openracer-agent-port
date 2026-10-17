@@ -71,6 +71,9 @@
         #parts .part.selected { background: #2b3a52; }
         #parts .part b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: normal; }
         #parts .part select { width: 105px; padding: 2px 4px; }
+        #toast { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); max-width: 80%; padding: 9px 16px; border-radius: 6px; background: #232b36; border: 1px solid #3a4658; box-shadow: 0 2px 12px #0008; display: none; white-space: pre-line; pointer-events: none; }
+        #toast.error { background: #5a2823; border-color: #8a3a34; }
+        #toast.ok { background: #1f4a33; border-color: #2e7a52; }
         .gate { display: flex; gap: 6px; align-items: center; padding: 3px 0; }
         .gate span { flex: 1; }
         button.active { background: #2e6fbf; }
@@ -174,7 +177,7 @@
     </div>
     <div id="status"></div>
 </div>
-<div id="view"><div id="hud"></div></div>
+<div id="view"><div id="hud"></div><div id="toast"></div></div>
 <script>var OpenRacer = {};</script>
 <script src="../js/TrackEnvironment.js"></script>
 <script type="module" src="track-editor.js"></script>
