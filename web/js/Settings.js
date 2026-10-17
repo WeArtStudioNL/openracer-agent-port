@@ -588,6 +588,9 @@ var Settings = (function() {
         panel.appendChild(optionRow("Debug text", options.debug ? "On" : "Off", function() { setOption("debug", !options.debug); }));
         var tuningRow = optionRow("Tuning menu", "Open", function() { closeMenu(); Tuning.toggle(); });
         panel.appendChild(tuningRow);
+        panel.appendChild(optionRow("Surroundings for Blender", "Save as HDR", function() {
+            if(typeof EnvironmentExport !== "undefined" && window.car) EnvironmentExport.download();
+        }));
         var toneNames = { none: "Off", neutral: "Neutral", agx: "AgX", aces: "ACES" };
         var toneOrder = ["none", "neutral", "agx", "aces"];
         panel.appendChild(optionRow("Tone mapping", toneNames[options.toneMapping] || "Off",

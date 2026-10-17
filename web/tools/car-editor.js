@@ -25,6 +25,8 @@ const state = {
     existingId: null,       // the id of the car that is being edited
     existingModel: null,    // the model block of that car
     existingCar: null,      // the configuration of that car as it was loaded
+    replacedModel: null,    // the model block that a new model replaces
+    replaceNotes: [],
     materials: [],          // the materials of the model
     overrides: {},          // changes to the materials: material name -> { field: value }
     nodes: [],              // the named nodes of the model
@@ -103,6 +105,9 @@ function loadFromFiles(list) {
         return;
     }
     state.mainFile = main;
+    // a car that exists keeps its model block until it is saved: its transform and the way it is set up are kept
+    const replacing = !!state.existingId;
+    state.replacedModel = state.existingModel;
     state.existingModel = null;
     const urls = new Map();
     for (const [name, file] of state.files) urls.set(name, URL.createObjectURL(file));
@@ -113,9 +118,9 @@ function loadFromFiles(list) {
     });
     status("Loading " + main + "…");
     new GLTFLoader(manager).load(urls.get(main), (gltf) => {
-        setModel(gltf.scene, true);
+        setModel(gltf.scene, !replacing, replacing);
         $("modelInfo").textContent = main + " (" + (state.files.get(main).size / 1048576).toFixed(1) + " MB), " + state.nodes.length + " named parts";
-        status("Model loaded.", "ok");
+        if (!replacing) status("Model loaded.", "ok");
     }, undefined, (error) => status("Could not read the model: " + (error.message || error), "error"));
 }
 
@@ -126,12 +131,23 @@ function loadFromUrl(url, label) {
     }, undefined, (error) => status("Could not load the model of this car: " + (error.message || error), "error"));
 }
 
-function setModel(root, isNew) {
+function setModel(root, isNew, replace) {
     if (state.root) pivot.remove(state.root);
     state.root = root;
     pivot.add(root);
     state.materials = OpenRacer.prepareMaterials(THREE, root);
-    if (isNew || state.autoGlass) {
+    if (replace) {
+        // the materials that the new model still has keep their changes; the others are dropped
+        const names = new Set(state.materials.map((m) => m.name));
+        const dropped = Object.keys(state.overrides).filter((n) => !names.has(n));
+        dropped.forEach((n) => delete state.overrides[n]);
+        state.replaceNotes = dropped.length ? ["Material changes dropped, the new model has no material of that name: " + dropped.join(", ")] : [];
+        state.materials.forEach((m) => {
+            if (!state.overrides[m.name] && /glass|window|windscreen|windshield|ruit/i.test(m.name) && !m.map && !m.transparent && m.opacity === 1) {
+                state.overrides[m.name] = Object.assign({}, OpenRacer.materialPresets["Glass"]);
+            }
+        });
+    } else if (isNew || state.autoGlass) {
         // glass that the exporter did not understand arrives as an opaque white metal: start with glass that is see-through
         if (isNew) state.overrides = {};
         state.materials.forEach((m) => {
@@ -157,7 +173,9 @@ function setModel(root, isNew) {
             select.appendChild(option);
         });
     }
-    if (isNew) {
+    if (replace) {
+        replaceModel();
+    } else if (isNew) {
         $("rotation").value = 0;
         $("scale").value = 1;
         $("offsetX").value = $("offsetY").value = $("offsetZ").value = 0;
@@ -173,6 +191,59 @@ function setModel(root, isNew) {
         updateHelpers();
         frameModel();
     }
+}
+
+// A new model for a car that exists: the transform, the wheels (by the names of their parts) and the changes to the materials
+// are kept where the new model still fits them; the chassis, the cameras, the engine and the sound are not touched.
+function replaceModel() {
+    const previous = state.replacedModel;
+    const notes = state.replaceNotes || [];
+    const legacy = !previous || previous.type !== "gltf";
+    if (legacy) {
+        // the old model was the model of the demo: there is no transform to keep
+        $("rotation").value = 0;
+        $("scale").value = 1;
+        $("offsetX").value = $("offsetY").value = $("offsetZ").value = 0;
+    }
+    applyTransform();
+
+    // the wheels
+    const wanted = state.existingCar && state.existingCar.wheels && state.existingCar.wheels.nodes;
+    const names = new Set(state.nodes.map((n) => n.name));
+    let kept = false;
+    if (!legacy && wanted && SLOTS.every((slot) => wanted[slot] && wanted[slot].some((n) => names.has(n)))) {
+        for (const slot of SLOTS) {
+            [...$("w" + slot).options].forEach((o) => { o.selected = wanted[slot].includes(o.value); });
+        }
+        document.querySelector("input[name=wheelMode][value=model]").checked = true;
+        $("wheelSelects").style.display = "";
+        updateHelpers();
+        kept = true;
+        notes.push("The wheels were found again by the names of their parts.");
+    } else {
+        document.querySelector("input[name=wheelMode][value=model]").checked = true;
+        $("wheelSelects").style.display = "";
+        guessWheels();
+        notes.push(wheelCenters() ? "The wheels were looked for by their names and places: check them." : "The parts of the wheels were not found: select them, or use the wheel of the demo car.");
+    }
+    if (legacy && wheelCenters()) fit();
+
+    // does the new model fit the chassis of the car?
+    const centres = wheelCenters();
+    if (centres) {
+        const wheelbase = ((centres.FR.c.z + centres.FL.c.z) / 2) - ((centres.RR.c.z + centres.RL.c.z) / 2);
+        const track = Math.abs(centres.FL.c.x - centres.FR.c.x);
+        const diameter = SLOTS.reduce((sum, s) => sum + centres[s].size.y, 0) / 4;
+        const off = [];
+        if (Math.abs(wheelbase - num("wheelbase")) > 0.03) off.push("wheelbase " + wheelbase.toFixed(2) + " m (car: " + num("wheelbase") + ")");
+        if (Math.abs(track - num("frontTrack")) > 0.03) off.push("front track " + track.toFixed(2) + " m (car: " + num("frontTrack") + ")");
+        if (Math.abs(diameter - num("tyre")) > 0.02) off.push("tyre " + diameter.toFixed(2) + " m (car: " + num("tyre") + ")");
+        if (off.length) notes.push("The new model measures " + off.join(", ") + ". \"Take wheelbase, track and tyre from the wheels\" sets the car to it; the car was left as it is.");
+    }
+    $("modelNote").textContent = "";
+    status("The model is replaced, it is saved with “Save the car”.\n" + notes.join("\n"), "ok");
+    frameModel();
+    return kept;
 }
 
 function frameModel() {
@@ -799,9 +870,16 @@ async function save() {
             for (const section of ["tyres", "assists"]) if (old[section] && !config[section]) config[section] = old[section];
         }
 
+        // the model that is replaced is removed from the folder of the car when it has another name
+        const oldFile = state.replacedModel && state.replacedModel.type === "gltf" ? state.replacedModel.file : null;
+
         status("Saving…");
         for (const [fileName, file] of uploads) await put("/api/cars/" + id + "/" + encodeURIComponent(fileName), file);
         await put("/api/cars/" + id + "/car.json", JSON.stringify(config, null, 2) + "\n");
+        if (oldFile && config.model.type === "gltf" && oldFile !== config.model.file && oldFile.startsWith("cars/" + id + "/")) {
+            await fetch("/api/cars/" + id + "/" + encodeURIComponent(oldFile.split("/").pop()), { method: "DELETE" });
+        }
+        state.replacedModel = null;
         state.existingId = id;
         state.existingModel = config.model;
         state.existingCar = Object.assign({}, config, { id });
@@ -907,6 +985,7 @@ function loadExisting() {
         $("modelInfo").textContent = "This car uses the model of the original demo. It cannot be changed here, but everything else can.";
     }
     $("editing").textContent = "Editing " + (car.name || car.id) + " (cars/" + car.id + "). Saving overwrites it; change the id to save a copy.";
+    $("modelNote").textContent = "To update the model of this car pick a new .glb here: the rest of the car is kept (the transform, the wheels and the material changes where the new model still fits them).";
     status("Loaded " + (car.name || car.id) + ".");
 }
 
@@ -926,6 +1005,7 @@ function newCar() {
     renderMaterials();
     for (const slot of SLOTS) $("w" + slot).innerHTML = "";
     $("modelInfo").textContent = "No model loaded.";
+    $("modelNote").textContent = "";
     $("files").value = "";
     $("delete").style.display = "none";
     $("editing").textContent = "Choose a car to change it, or make a new one below. Saving a car that was chosen here overwrites it.";

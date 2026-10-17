@@ -8,7 +8,7 @@ function initialiseMaterials() {
     // the reflections of the car: a cube map of the surroundings that is refreshed while driving
     cubeTarget = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType });
     environmentGenerator = new THREE.PMREMGenerator(renderer);
-    cubeCamera = new THREE.CubeCamera(1, 10000, cubeTarget);
+    cubeCamera = new THREE.CubeCamera(0.1, 10000, cubeTarget); // near: the road is only a few decimetres below the car
     var envMap = cubeTarget.texture;
 
     mlib = {

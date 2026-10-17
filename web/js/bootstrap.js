@@ -36,6 +36,7 @@ var scripts = [
     "js/MaterialLibrary.js",
     "js/TrackLoader.js",
     "js/Scene.js",
+    "js/EnvironmentExport.js",
     "js/Car.js",
     "js/Engine.js",
     "js/Wheel.js",

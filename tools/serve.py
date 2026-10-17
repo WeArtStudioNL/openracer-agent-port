@@ -5,6 +5,7 @@
   GET    /api/tracks                    the tracks: every web/tracks/<id>/track.json, with its id
   PUT    /api/cars/<id>/<file>          writes a file of a car (car.json, the model, textures); local connections only
   DELETE /api/cars/<id>                 removes a car; local connections only
+  DELETE /api/cars/<id>/<file>          removes one file of a car (the old model when it is replaced); local connections only
 
 New cars and tracks are found by looking at the folders, so a folder with a car.json or track.json that is put in
 web/cars or web/tracks shows up in the game at once. The lists are also written to cars/index.json and
@@ -121,6 +122,12 @@ class Handler(SimpleHTTPRequestHandler):
         if parts[:2] != ["api", "cars"] or not self.is_local():
             return self.send_json({"error": "not allowed"}, 403)
         target = self.car_path(parts)
+        if target is not None and len(parts) == 4:
+            # one file; car.json itself is only removed with the whole car
+            if parts[3] == "car.json" or not os.path.isfile(target):
+                return self.send_json({"error": "no such file"}, 404)
+            os.remove(target)
+            return self.send_json({"ok": True})
         if target is None or len(parts) != 3 or not os.path.isdir(target):
             return self.send_json({"error": "no such car"}, 404)
         shutil.rmtree(target)
