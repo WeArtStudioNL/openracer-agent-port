@@ -91,7 +91,10 @@ OpenRacer.Car = function( parameters, domElement ) {
     this.gear_ratios = [ 2.32, 1.69, 1.29, 1 ]; // Toploader close-ratio, 351 RUG-AG
     this.final_drive = 3.5; // 3.25, 3.5 or 4.3
     this.current_gear = 0;
-    
+    this.manualGearbox = false; // true while a wheel with a shifter selects the gear
+    this.neutral = false;       // no drive while in neutral
+    this.clutch = 0;            // 0 = engaged, 1 = fully pressed
+
     this.accelerate = false;
     this.brake = false;
     this.reverse = false;
@@ -222,11 +225,17 @@ OpenRacer.Car = function( parameters, domElement ) {
     }
     
     this.getWheelTorque = function (engineRPM) {
+        var torque = this.engine.getTorque(engineRPM) * this.throttle * this.getEngagement();
         if(this.reverse) {
-            return this.engine.getTorque(engineRPM) * this.throttle * -this.gear_ratios[0] * this.final_drive;
+            return torque * -this.gear_ratios[0] * this.final_drive;
         } else {
-            return this.engine.getTorque(engineRPM) * this.throttle * this.gear_ratios[this.current_gear] * this.final_drive;
+            return torque * this.gear_ratios[this.current_gear] * this.final_drive;
         }
+    };
+
+    // How much of the engine is connected to the wheels (0 in neutral or with the clutch pressed)
+    this.getEngagement = function () {
+        return this.neutral ? 0 : 1 - this.clutch;
     };
         
     this.update = function( delta, showDebug ) {
@@ -312,13 +321,16 @@ OpenRacer.Car = function( parameters, domElement ) {
             if(i > 1) {
                 var eRPM = Math.round(this.wheels[i].RPM * this.gear_ratios[this.current_gear] * this.final_drive);
                 if(eRPM < 0) eRPM = 0;
-                if(i === 3 && showDebug) debugOut(this.wheels[i].forwardMPH + " mph | Gear: " + (this.current_gear + 1) + " | RPM: " + eRPM + " | Throttle: " + this.throttle.toFixed(2) + " | Brake: " + this.brakePedal.toFixed(2));
+                if(i === 3 && showDebug) debugOut(this.wheels[i].forwardMPH + " mph | Gear: " + (this.reverse ? "R" : (this.neutral ? "N" : this.current_gear + 1)) + " | RPM: " + eRPM + " | Throttle: " + this.throttle.toFixed(2) + " | Brake: " + this.brakePedal.toFixed(2));
 
                 if(eRPM < 1000) eRPM = 1000;
-                if(eRPM > 6000 && this.current_gear < this.gear_ratios.length - 1) {
-                    this.current_gear++;
-                } else if(eRPM < 2000 && this.current_gear > 0) {
-                    this.current_gear--;
+                // automatic shifting, unless the driver selects gears with a shifter
+                if(!this.manualGearbox) {
+                    if(eRPM > 6000 && this.current_gear < this.gear_ratios.length - 1) {
+                        this.current_gear++;
+                    } else if(eRPM < 2000 && this.current_gear > 0) {
+                        this.current_gear--;
+                    }
                 }
 
                 if(this.throttle > 0) {
@@ -326,7 +338,7 @@ OpenRacer.Car = function( parameters, domElement ) {
                     this.wheels[i].applyForce((this.getWheelTorque(eRPM) / 2) / this.wheels[i].diameter);
                 } else {
                     // engine braking (rough calculation of 10% of the vehicles weight, split over both rear wheels)
-                    this.wheels[i].applyBrakingForce(0.1 * this.mass * gravity * 0.5);
+                    this.wheels[i].applyBrakingForce(0.1 * this.mass * gravity * 0.5 * this.getEngagement());
                 }
             }
             this.wheels[i].update( delta );

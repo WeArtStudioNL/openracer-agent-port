@@ -14,3 +14,23 @@ Note that I'm being very 'open' with my code - a lot of this is currently a HUGE
 With regards to coding conventions - I will be putting together my own set of guidelines as to how this should be coded up, however it'll be based on a standard style guide. My only caveat is that sometimes, in my opinion, OOP and bleeding-edge-get-every-last-drop-out-of-the-CPU efficiency don't go together so well. I fully intend to break OOP conventions in some places, but only when *absolutely* necessary.
 
 Chris Barnard.
+
+
+## Running locally
+OpenRacer is a static web app. Serve the `web` folder with any local web server (opening `index.html` directly does not work, because the track and car models are loaded with XMLHttpRequest):
+
+    cd web
+    python3 -m http.server 8000
+
+Then open http://localhost:8000 in a browser with WebGL.
+
+## Racing wheel support
+Wheels with pedals and a shifter are supported through the browser's Gamepad API.
+
+1. Connect the wheel and press a button on it, so the browser exposes it.
+2. Press **K** in the game to start the calibration. Follow the on-screen steps: steering left/right, throttle, brake, and optionally clutch, shift up/down buttons and an H-pattern shifter (gears and reverse).
+3. The mapping is stored per device in the browser's localStorage. Press **K** again to recalibrate.
+
+With a shifter mapped, the gearbox becomes manual: sequential paddles shift up/down (shifting down from first gear at standstill selects reverse), and an H-pattern shifter selects gears directly, with neutral when no gear is engaged. Without a shifter the automatic gearbox is used.
+
+The pedals must be reported by the same device as the wheel, and each pedal needs its own axis.

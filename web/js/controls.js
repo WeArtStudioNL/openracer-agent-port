@@ -53,9 +53,15 @@ window.onmousemove = function(e) {
 };
 
 function gamepadUpdate() {
+    // a racing wheel (with pedals and shifter) takes priority over a regular gamepad
+    if(WheelControls.update(car)) {
+        usingGamepad = true;
+        return;
+    }
+
     var gpad = navigator.getGamepads()[0];
     //console.log(gpad);
-    if(gpad) {
+    if(gpad && gpad.buttons.length > 7 && gpad.axes.length > 0) {
         var stickMovement = Math.abs(gpad.axes[0]);
         if(stickMovement > 0.1) {
             stickMovement = (stickMovement - 0.1) * (1 / 0.9);
