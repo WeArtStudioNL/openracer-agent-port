@@ -382,7 +382,7 @@ OpenRacer.Car = function( config, domElement ) {
         v.update(delta);
         this.engineRPM = this.engine.getRPM();
         // the rev limiter cuts the fuel: the engine sounds like it too
-        EngineSound.update(this.engineRPM, this.throttle * this.engine.throttleCut);
+        EngineSound.update(this.engineRPM, this.throttle * this.engine.throttleCut, this.engine.throttleCut > 0.5);
         EngineSound.setTyres(v.squeal, Math.abs(v.u));
 
         this.updateVisuals(delta);

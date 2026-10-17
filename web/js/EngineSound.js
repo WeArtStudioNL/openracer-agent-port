@@ -14,6 +14,8 @@ var EngineSound = (function() {
     var loading = false;
     var failed = null;           // why the sound does not work, if it does not
     var params = OpenRacer.engineSoundParams(null);
+    var model = "pipes";         // "pipes" (EngineSynth.js) or "engine-sim" (EngineSim.js): how the sound is calculated
+    var simParams = OpenRacer.engineSimParams(null);
     var sampleList = [];         // the recordings of the engine of the car, if it has them
     var sampleBase = "";
     var muted = false;
@@ -29,6 +31,8 @@ var EngineSound = (function() {
     // some grit of the rubber and a low rumble. A filtered noise only gives a hiss, like a vacuum cleaner.
     var squeal = null;
     var squealLevel = 0, squealSpeed = 0;
+    var analyser = null;         // to measure the level of the sound (the debug display, tests)
+    var analyserData = null;
     var squealSample = null;     // the decoded recording, if there is one
 
     function noiseBuffer(seconds) {
@@ -182,6 +186,9 @@ var EngineSound = (function() {
             output = ctx.createGain();
             output.gain.value = level();
             output.connect(ctx.destination);
+            analyser = ctx.createAnalyser();
+            analyser.fftSize = 1024;
+            output.connect(analyser);
             squeal = makeSqueal();
             loadSquealSample();
         }
@@ -189,6 +196,17 @@ var EngineSound = (function() {
         if(!synth && !loading) {
             loading = true;
             var makeSynth = function() {
+                if(model === "engine-sim") {
+                    // the combustion model, with the impulse response of its exhaust (without it the sound is dry)
+                    return OpenRacer.EngineSimSynth.load(ctx, "js/EngineSimWorklet.js").then(function() {
+                        return OpenRacer.EngineSimSynth.loadImpulseResponse(ctx, "sounds/ir/", simParams.impulse_response).catch(function(error) {
+                            console.error("Impulse response: " + error.message);
+                            return null;
+                        });
+                    }).then(function(ir) {
+                        return new OpenRacer.EngineSimSynth(ctx, simParams, ir && ir.buffer);
+                    });
+                }
                 return OpenRacer.EngineSynth.load(ctx, "js/EngineSoundWorklet.js").then(function() { return new OpenRacer.EngineSynth(ctx, params); });
             };
             // recordings of the engine, if the car has them (see EngineSampler.js), else the sound that is made
@@ -209,9 +227,10 @@ var EngineSound = (function() {
     }
 
     // Called every frame with the engine speed and the throttle position (0..1)
-    function update(newRpm, newThrottle) {
+    function update(newRpm, newThrottle, ignition) {
         rpm = newRpm;
         throttle = newThrottle;
+        if(synth && synth.setIgnition && ctx && ctx.state === "running") synth.setIgnition(ignition !== false);
         if(squeal && ctx.state === "running" && (paused || muted)) squeal.mute(ctx.currentTime);
         if(!ctx || !synth || ctx.state !== "running") return;
         output.gain.setTargetAtTime(level(), ctx.currentTime, 0.05);
@@ -245,8 +264,20 @@ var EngineSound = (function() {
         else if(enabledByUser) ctx.resume();
     }, false);
 
+    // The level of the sound that is played (RMS, 0..1), for the debug display and tests
+    function measureLevel() {
+        if(!analyser) return 0;
+        if(!analyserData) analyserData = new Float32Array(analyser.fftSize);
+        analyser.getFloatTimeDomainData(analyserData);
+        var sum = 0;
+        for(var i = 0; i < analyserData.length; i++) sum += analyserData[i] * analyserData[i];
+        return Math.sqrt(sum / analyserData.length);
+    }
+
     return {
         update: update,
+        level: measureLevel,
+        model: function() { return model; },
         setTyres: setTyres,
         status: status,
         setMuted: function(value) { muted = value; },
@@ -255,13 +286,26 @@ var EngineSound = (function() {
         // the sound parameters of a car (its configuration, "sound"); also while the engine runs, for tuning
         setCar: function(config) {
             params = OpenRacer.engineSoundParams(config);
+            model = config && config.sound && config.sound.model === "engine-sim" ? "engine-sim" : "pipes";
+            simParams = OpenRacer.engineSimParams(config);
+            if(synth && synth.setImpulseResponse) {
+                // the engine-sim synth follows the car (the tuning menu changes it while it runs)
+                synth.setParams(simParams);
+                if(synth.impulseResponseName !== simParams.impulse_response && ctx) {
+                    OpenRacer.EngineSimSynth.loadImpulseResponse(ctx, "sounds/ir/", simParams.impulse_response).then(function(ir) {
+                        if(synth && synth.setImpulseResponse) synth.setImpulseResponse(ir.buffer, ir.name);
+                    }).catch(function(error) { console.error("Impulse response: " + error.message); });
+                }
+                return;
+            }
             sampleList = (config && config.sound && Array.isArray(config.sound.samples)) ? config.sound.samples.filter(function(sample) { return sample && sample.file && sample.rpm > 0; }) : [];
             sampleBase = config && config.id ? "cars/" + config.id + "/" : "";
             if(synth) synth.setParams(params);
         },
+        // the parameters of the pipes model (the tuning menu)
         setParams: function(newParams) {
-            params = Object.assign({}, newParams);
-            if(synth) synth.setParams(params);
+            params = Object.assign({}, params, newParams);
+            if(synth && !synth.setImpulseResponse) synth.setParams(params);
         },
         getParams: function() { return Object.assign({}, params); },
         // the sound is heard inside the car (cockpit camera): the outlet is far away, the engine close

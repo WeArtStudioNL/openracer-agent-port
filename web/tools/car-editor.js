@@ -552,7 +552,7 @@ const SND = {
     intake_open: "sndIntakeOpen", intake_closed: "sndIntakeClosed", outlet_reflection: "sndOutletRefl", exhaust_open: "sndExhaustOpen",
     exhaust_closed: "sndExhaustClosed", muffler_action: "sndMufflerAction", mix_intake: "sndMixIntake", mix_block: "sndMixBlock", mix_outlet: "sndMixOutlet"
 };
-const preview = { ctx: null, synth: null, realSynth: null, sampler: null, playing: false, loading: false, sweep: null };
+const preview = { ctx: null, synth: null, realSynth: null, sampler: null, es: null, esLoaded: false, playing: false, loading: false, sweep: null };
 
 // ---- the recordings of the engine
 
@@ -567,14 +567,117 @@ function guessSample(name) {
     return { rpm, load };
 }
 
-function resetSamplePreview() {
+function stopPreview() {
     if (preview.playing) {
         preview.playing = false;
         if (preview.synth && preview.synth.setSilent) preview.synth.setSilent(true);
         $("soundPlay").textContent = "Play";
     }
+}
+
+function resetSamplePreview() {
+    stopPreview();
     if (preview.sampler) { preview.sampler.disconnect(); preview.sampler = null; }
     preview.synth = preview.realSynth;
+}
+
+// ---- the combustion model (engine-sim)
+
+function soundModel() {
+    return $("soundModel").value === "engine-sim" ? "engine-sim" : "pipes";
+}
+
+function updateSoundModel() {
+    const es = soundModel() === "engine-sim";
+    $("esBlock").style.display = es ? "" : "none";
+    $("pipesBlock").style.display = es ? "none" : "";
+    stopPreview();
+}
+
+function fillEngineSim(p) {
+    for (const el of document.querySelectorAll(".es")) {
+        const key = el.dataset.key;
+        if (key === "timing") el.value = p.timing.map((t) => t[0] + ":" + t[1]).join(", ");
+        else el.value = p[key];
+    }
+}
+
+function readEngineSim() {
+    const p = {};
+    for (const el of document.querySelectorAll(".es")) {
+        const key = el.dataset.key;
+        if (key === "timing") {
+            p.timing = el.value.split(",").map((t) => t.split(":").map(parseFloat)).filter((t) => t.length === 2 && t.every(Number.isFinite)).sort((a, b) => a[0] - b[0]);
+        } else if (el.tagName === "SELECT") {
+            p[key] = key === "exhaust_systems" ? parseInt(el.value, 10) : el.value;
+        } else {
+            p[key] = parseFloat(el.value);
+        }
+    }
+    return p;
+}
+
+function engineSimValid(p) {
+    return Object.entries(p).every(([key, v]) => key === "timing" ? v.length > 0 : (typeof v === "string" ? v.length > 0 : Number.isFinite(v)));
+}
+
+async function engineSimChanged() {
+    const p = readEngineSim();
+    if (!preview.es || !engineSimValid(p)) return;
+    preview.es.setParams(p);
+    if (preview.es.impulseResponseName !== p.impulse_response) {
+        try {
+            const ir = await OpenRacer.EngineSimSynth.loadImpulseResponse(preview.ctx, "../sounds/ir/", p.impulse_response);
+            preview.es.setImpulseResponse(ir.buffer, ir.name);
+        } catch (error) {
+            status("Could not load the impulse response: " + error.message, "error");
+        }
+    }
+}
+
+async function playEngineSim() {
+    if (!window.AudioWorkletNode) { status("This browser cannot play the engine sound (AudioWorklet).", "error"); return; }
+    if (!preview.ctx) preview.ctx = new AudioContext();
+    if (preview.ctx.state === "suspended") await preview.ctx.resume();
+    const p = readEngineSim();
+    if (!engineSimValid(p)) { status("Every field of the combustion model needs a value.", "error"); return; }
+    if (!preview.es) {
+        try {
+            if (!preview.esLoaded) { await OpenRacer.EngineSimSynth.load(preview.ctx, "../js/EngineSimWorklet.js"); preview.esLoaded = true; }
+            let ir = null;
+            try { ir = await OpenRacer.EngineSimSynth.loadImpulseResponse(preview.ctx, "../sounds/ir/", p.impulse_response); }
+            catch (error) { status("Could not load the impulse response: " + error.message, "error"); }
+            preview.es = new OpenRacer.EngineSimSynth(preview.ctx, p, ir && ir.buffer);
+            if (ir) preview.es.impulseResponseName = ir.name;
+            preview.es.connect(preview.ctx.destination);
+        } catch (error) {
+            status("Could not start the combustion model: " + error.message, "error");
+            return;
+        }
+    }
+    preview.synth = preview.es;
+    preview.playing = true;
+    preview.synth.setSilent(false);
+    preview.synth.setInside($("soundInside").checked);
+    soundSliders();
+    $("soundPlay").textContent = "Stop";
+}
+
+function initEngineSim() {
+    $("esLayout").innerHTML = Object.entries(OpenRacer.engineSimLayouts).map(([id, l]) => "<option value='" + id + "'>" + l.label + "</option>").join("");
+    $("esIr").innerHTML = OpenRacer.engineSimImpulseResponses.map((ir) => "<option value='" + ir.id + "'>" + ir.label + "</option>").join("");
+    const presets = $("esPreset");
+    presets.innerHTML = "<option value=''>Choose a preset…</option>" + Object.keys(OpenRacer.engineSimPresets).map((n) => "<option>" + n + "</option>").join("");
+    presets.addEventListener("change", () => {
+        if (!presets.value) return;
+        fillEngineSim(Object.assign({}, OpenRacer.engineSimParams({ sound: { engine_sim: readEngineSim() } }), OpenRacer.engineSimPresets[presets.value]));
+        presets.value = "";
+        engineSimChanged();
+    });
+    document.querySelectorAll(".es").forEach((el) => el.addEventListener(el.tagName === "SELECT" ? "change" : "input", engineSimChanged));
+    $("soundModel").addEventListener("change", updateSoundModel);
+    fillEngineSim(OpenRacer.engineSimParams(null));
+    updateSoundModel();
 }
 
 function renderSamples() {
@@ -650,6 +753,7 @@ async function playSound() {
         $("soundPlay").textContent = "Play";
         return;
     }
+    if (soundModel() === "engine-sim") { await playEngineSim(); return; }
     if (state.samples.length && $("soundUseSamples").checked) {
         // the recordings
         if (!preview.ctx) preview.ctx = new AudioContext();
@@ -904,6 +1008,14 @@ function buildConfig(id) {
         sound: readSound()
     };
     if (!soundValid(config.sound)) throw new Error("Every field of the engine sound needs a number (and the muffler at least one length).");
+    config.sound.model = soundModel();
+    if (config.sound.model === "engine-sim") {
+        const es = readEngineSim();
+        if (!engineSimValid(es)) throw new Error("Every field of the combustion model needs a value.");
+        config.sound.engine_sim = es;
+    } else if (state.existingCar && state.existingCar.sound && state.existingCar.sound.engine_sim) {
+        config.sound.engine_sim = state.existingCar.sound.engine_sim; // kept for when the model is switched back
+    }
     if (state.samples.length) {
         if (state.samples.some((s) => !(s.rpm > 0))) throw new Error("Give the engine speed of every recording.");
         config.sound.samples = state.samples.map((s) => ({ file: s.file, rpm: s.rpm, load: s.load }));
@@ -1101,6 +1213,10 @@ function fill(car) {
     set("brakeFront", car.brakes.front); set("brakeRear", car.brakes.rear);
     fillCameras(OpenRacer.cameraSettings(car));
     fillSound(OpenRacer.engineSoundParams(car));
+    $("soundModel").value = car.sound && car.sound.model === "engine-sim" ? "engine-sim" : "pipes";
+    fillEngineSim(OpenRacer.engineSimParams(car));
+    updateSoundModel();
+    engineSimChanged();
     state.samples = ((car.sound && car.sound.samples) || []).map((s) => ({ file: s.file, rpm: s.rpm, load: s.load === "off" ? "off" : "on", blob: null }));
     state.removedSamples = [];
     resetSamplePreview();
@@ -1153,6 +1269,9 @@ function loadExisting() {
 }
 
 function newCar() {
+    $("soundModel").value = "pipes";
+    fillEngineSim(OpenRacer.engineSimParams(null));
+    updateSoundModel();
     state.samples = [];
     state.removedSamples = [];
     resetSamplePreview();
@@ -1217,6 +1336,7 @@ $("save").addEventListener("click", save);
 $("delete").addEventListener("click", deleteCar);
 
 initSound();
+initEngineSim();
 renderCurve();
 updateSpeedInfo();
 defaultCameras();

@@ -522,7 +522,7 @@ var Tuning = (function() {
         c.assists = { tc_allowance: v.tc_allowance / 100, esc_gain: v.esc_gain / 100 };
         var sound = {};
         Object.keys(v).forEach(function(key) { if(key.indexOf("snd_") === 0) sound[key.substring(4)] = v[key]; });
-        c.sound = sound;
+        c.sound = Object.assign({}, c.sound, sound); // the recordings, the model and the engine-sim settings stay
         delete c.id;
         return c;
     }
