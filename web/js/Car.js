@@ -262,6 +262,10 @@ OpenRacer.Car = function( parameters, domElement ) {
             this.cameraAngle -= 2 * delta;
         }
         if(showDebug) { debugClear(); }
+        if(showDebug) {
+            var wheelStatus = WheelControls.status();
+            if(wheelStatus) debugOut(wheelStatus);
+        }
         if(this.accelerate) {
             this.throttle += (1 - this.throttle) * delta * 4;
         }

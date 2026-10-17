@@ -28,7 +28,8 @@ Wheels with pedals and a shifter are supported through the browser's Gamepad API
 
 1. Connect the wheel and press a button on it, so the browser exposes it.
 2. Press **K** in the game to start the calibration. Follow the on-screen steps: steering left/right, throttle, brake, and optionally clutch, shift up/down buttons and an H-pattern shifter (gears and reverse).
-3. The mapping is stored per device in the browser's localStorage. Press **K** again to recalibrate.
+3. The mapping is stored per device in the browser's localStorage. Press **K** again to recalibrate (finish all steps; **Esc** cancels and keeps the previous mapping). Every optional step, including each gear of an H-pattern shifter, can be skipped with **N**.
+4. Press **M** to switch the wheel off (keyboard only) and on again. The debug line at the top shows the live wheel values.
 
 With a shifter mapped, the gearbox becomes manual: sequential paddles shift up/down (shifting down from first gear at standstill selects reverse), and an H-pattern shifter selects gears directly, with neutral when no gear is engaged. Without a shifter the automatic gearbox is used.
 

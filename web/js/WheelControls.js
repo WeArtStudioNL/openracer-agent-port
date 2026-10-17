@@ -59,6 +59,12 @@ var WheelControls = (function() {
     var lastButtons = [];
     var wasActive = false;
     var reverseFromWheel = false;
+    var enabled = true;            // toggled with M, to fall back to the keyboard
+    var zeroed = {};               // pads whose pedal rest values were verified this session
+    var ownsSteer = false;         // the wheel only overrides an input while it is being used,
+    var ownsThrottle = false;      // so the keyboard keeps working when the wheel is idle
+    var ownsBrake = false;
+    var lastStatus = "";
 
     function clamp(x, min, max) {
         return Math.max(min, Math.min(max, x));
@@ -171,7 +177,7 @@ var WheelControls = (function() {
             { id: "hshifter", kind: "confirm", text: "Do you have an H-pattern shifter?" }
         ];
         for(var g = 0; g < car.gear_ratios.length; g++) {
-            steps.push({ id: "gear" + g, gear: g, kind: "button", hshifter: true, text: "Put the shifter in gear " + (g + 1) });
+            steps.push({ id: "gear" + g, gear: g, kind: "button", hshifter: true, optional: true, text: "Put the shifter in gear " + (g + 1) });
         }
         steps.push({ id: "reverse", kind: "button", hshifter: true, optional: true, text: "Put the shifter in REVERSE" });
         return steps;
@@ -252,7 +258,20 @@ var WheelControls = (function() {
 
     function finishCalibration() {
         var pad = getPads()[calibration.padIndex];
-        if(pad) saveProfile(pad.id, calibration.profile);
+        if(pad) {
+            // Some pedals only report their real resting value after they have been pressed once.
+            // The pedals are released now, so correct a rest value that lies on the pressed side.
+            var names = ["throttle", "brake", "clutch"];
+            for(var n = 0; n < names.length; n++) {
+                var b = calibration.profile[names[n]];
+                var raw = b ? pad.axes[b.axis] : undefined;
+                if(b && raw !== undefined && Math.abs(raw - b.rest) > 0.3 && (raw - b.rest) * (b.full - b.rest) <= 0) {
+                    b.rest = raw;
+                }
+            }
+            saveProfile(pad.id, calibration.profile);
+            zeroed[pad.id] = true;
+        }
         calibration = null;
         showMessage("Wheel calibrated and saved.", 3000);
     }
@@ -417,6 +436,10 @@ var WheelControls = (function() {
         var key = event.key ? event.key.toLowerCase() : "";
         if(!calibration) {
             if(key === "k") startCalibration(window.car);
+            else if(key === "m") {
+                enabled = !enabled;
+                showMessage(enabled ? "Wheel input on." : "Wheel input off (keyboard only). Press M to turn it on.", 3000);
+            }
             return;
         }
         var step = calibration.steps[calibration.step];
@@ -438,9 +461,11 @@ var WheelControls = (function() {
         car.manualGearbox = false;
         car.neutral = false;
         car.clutch = 0;
-        // the wheel owned the pedals, so a disconnected wheel must not leave them pressed
-        car.throttle = 0;
-        car.brakePedal = 0;
+        // a disconnected wheel must not leave the pedals it was holding pressed
+        if(ownsThrottle) car.throttle = 0;
+        if(ownsBrake) car.brakePedal = 0;
+        ownsSteer = ownsThrottle = ownsBrake = false;
+        lastStatus = "";
         if(reverseFromWheel) {
             car.reverse = false;
             reverseFromWheel = false;
@@ -510,6 +535,11 @@ var WheelControls = (function() {
             }
         }
 
+        if(!enabled) {
+            release(car);
+            return false;
+        }
+
         var pad = findWheel();
         if(!pad) {
             release(car);
@@ -526,20 +556,59 @@ var WheelControls = (function() {
             return false;
         }
 
+        if(!zeroed[pad.id]) {
+            zeroed[pad.id] = true;
+            verifyRestValues(pad, profile);
+        }
+
         wasActive = true;
-        car.turnAngle = car.maxTurn * clamp(readSteering(pad, profile.steer) / STEER_RATIO, -1, 1);
-        car.throttle = readPedal(pad, profile.throttle);
-        car.brakePedal = readPedal(pad, profile.brake);
+        var steer = readSteering(pad, profile.steer);
+        var throttle = readPedal(pad, profile.throttle);
+        var brake = readPedal(pad, profile.brake);
         car.clutch = profile.clutch ? readPedal(pad, profile.clutch) : 0;
+
+        // Only override an input while the wheel is using it (and once more when it is released)
+        if(Math.abs(steer) > 0.03 || ownsSteer) {
+            car.turnAngle = car.maxTurn * clamp(steer / STEER_RATIO, -1, 1);
+            ownsSteer = Math.abs(steer) > 0.03;
+        }
+        if(throttle > 0 || ownsThrottle) {
+            car.throttle = throttle;
+            ownsThrottle = throttle > 0;
+        }
+        if(brake > 0 || ownsBrake) {
+            car.brakePedal = brake;
+            ownsBrake = brake > 0;
+        }
+        lastStatus = "Wheel: steer " + steer.toFixed(2) + " | throttle " + throttle.toFixed(2) + " | brake " + brake.toFixed(2) +
+            " | clutch " + car.clutch.toFixed(2) + " | axes " + Array.prototype.map.call(pad.axes, function(v, i) { return i + ":" + v.toFixed(2); }).join(" ");
         applyShifter(car, pad, profile);
 
         for(var i = 0; i < pad.buttons.length; i++) {
             lastButtons[i] = isPressed(pad, i);
         }
-        return true;
+        // report the wheel as in control only while it overrides something, so the car's own
+        // steering return and the keyboard behave normally when the wheel is idle
+        return ownsSteer || ownsThrottle || ownsBrake;
+    }
+
+    // A pedal that reads as pressed the first time the profile is used (before the driver has
+    // touched anything) has a wrong stored rest value; use the current reading as rest instead.
+    function verifyRestValues(pad, profile) {
+        var names = ["throttle", "brake", "clutch"];
+        for(var n = 0; n < names.length; n++) {
+            var b = profile[names[n]];
+            if(!b) continue;
+            var raw = pad.axes[b.axis];
+            if(raw !== undefined && readPedal(pad, b) > 0.5 && Math.abs(b.full - raw) > 0.3) {
+                console.warn("WheelControls: " + names[n] + " reads pressed at start, using " + raw + " as its rest value");
+                b.rest = raw;
+            }
+        }
     }
 
     return {
+        status: function() { return enabled ? lastStatus : "Wheel input off (press M)"; },
         update: update,
         startCalibration: startCalibration
     };
