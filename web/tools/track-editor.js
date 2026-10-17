@@ -10,6 +10,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { createDesign } from "./track-design.js";
 
 const $ = (id) => document.getElementById(id);
 const ROLES = [["road", "Road"], ["track01", "Pit lane"], ["grass", "Grass"], ["ground", "Ground"], ["scenery", "Scenery"], ["decor", "Decor"]];
@@ -280,6 +281,7 @@ function loadFromFiles(list) {
         return;
     }
     state.mainFile = main;
+    stopDesign();
     const urls = new Map();
     for (const [name, file] of state.files) urls.set(name, URL.createObjectURL(file));
     const manager = new THREE.LoadingManager();
@@ -432,12 +434,29 @@ function readStartFields() {
 }
 ["startX", "startZ", "startHeading"].forEach((id) => $(id).addEventListener("change", readStartFields));
 
+// the design of a track without a model: nodes, heights, widths and prefabs (see track-design.js)
+const design = createDesign({
+    scene, trackGroup, camera, renderer, controls, state, registerMesh, applyColours, renderParts, updateMarkers, frameTrack, status, $,
+    setMode, getMode: () => state.mode
+});
+function startDesign(data) {
+    clearTrack();
+    design.enable(data);
+    $("modes").classList.add("design");
+    setMode("node");
+}
+function stopDesign() {
+    design.disable();
+    $("modes").classList.remove("design");
+    if (state.mode === "node" || state.mode === "prefab") setMode("view");
+}
+
 function setMode(mode) {
     state.mode = mode;
     for (const button of document.querySelectorAll("#modes button")) button.classList.toggle("active", button.dataset.mode === mode);
-    $("hud").textContent = mode === "start" ? "Place start: click on the road and drag in the direction that the car drives."
+    $("hud").textContent = (design && design.hudText(mode)) || (mode === "start" ? "Place start: click on the road and drag in the direction that the car drives."
         : mode === "gate" ? "Add gate: click on the road and drag in the direction that the car drives through the gate."
-        : "Look: drag to turn, right mouse button to move, scroll to zoom. Click a part to find it in the list.";
+        : "Look: drag to turn, right mouse button to move, scroll to zoom. Click a part to find it in the list.");
 }
 document.querySelectorAll("#modes button").forEach((b) => b.onclick = () => setMode(b.dataset.mode));
 setMode("view");
@@ -459,7 +478,7 @@ let drag = null;
 renderer.domElement.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
     drag = { x: event.clientX, y: event.clientY, hit: null, moved: false };
-    if (state.mode !== "view") {
+    if (state.mode === "start" || state.mode === "gate") {
         const hit = roadHit(event);
         if (hit) {
             drag.hit = hit;
@@ -507,7 +526,7 @@ renderer.domElement.addEventListener("pointerup", (event) => {
         else if (!d.added && state.mode === "gate") place(d, false);
         return;
     }
-    if (state.mode === "view" && !d.moved) {
+    if (state.mode === "view" && !d.moved && !(design && design.active())) {
         const hit = pointerRay(event).intersectObjects(trackGroup.children, true)[0];
         if (hit) selectPart(hit.object.name || "", true);
     }
@@ -652,8 +671,9 @@ async function loadExisting() {
     $("editing").textContent = "Changing the track “" + id + "”. Saving overwrites it.";
     status("Loading…");
     try {
-        if (track.model) await loadGltfTrack(track);
-        else await loadLegacyTrack(track);
+        if (track.design && track.design.nodes) { startDesign(JSON.parse(JSON.stringify(track.design))); setMode("view"); }
+        else if (track.model) { stopDesign(); await loadGltfTrack(track); }
+        else { stopDesign(); await loadLegacyTrack(track); }
         // the heights of the start and the gates come from the road
         if (state.start) state.start.y = groundY(state.start.x, state.start.z);
         state.gates = (track.gates || []).map((g) => ({ x: g.x, y: groundY(g.x, g.z), z: g.z, heading: g.heading, width: g.width || 24 }));
@@ -691,6 +711,8 @@ function newTrack() {
     $("delete").style.display = "none";
     $("editing").textContent = "Choose a track to change it, or import a model below.";
     status("");
+    startDesign(null);
+    status("A new track: draw it with nodes in the view, or import a model.", "ok");
 }
 
 // ---- saving
@@ -709,7 +731,7 @@ async function save() {
         if (!name) throw new Error("Give the track a name.");
         if (!ID_PATTERN.test(id)) throw new Error("The id may only have lower case letters, digits, - and _.");
         if (!state.start) throw new Error("Place the start of the track on the road.");
-        if (!state.root) throw new Error("Import a model first.");
+        if (!state.root && !design.active()) throw new Error("Import a model first, or draw the track with nodes.");
         if (state.tracks.some((t) => t.id === id) && id !== state.existingId &&
             !confirm("There already is a track with the id “" + id + "”. Replace it?")) return;
 
@@ -728,7 +750,18 @@ async function save() {
 
         const uploads = [];
         let oldModel = null;
-        if (state.mainFile && state.files.size) {
+        if (design.active()) {
+            if (design.toJSON().nodes.length < 3) throw new Error("A track needs at least three nodes.");
+            status("Making the model of the track…");
+            const buffer = await design.exportGlb();
+            const fileName = id + ".glb";
+            uploads.push([fileName, new Blob([buffer], { type: "model/gltf-binary" })]);
+            oldModel = old && old.model && id === state.existingId && old.model !== fileName ? old.model : null;
+            config.model = fileName;
+            config.design = design.toJSON();
+            delete config.geometry; delete config.scene; delete config.textures;
+        } else if (state.mainFile && state.files.size) {
+            delete config.design;
             for (const [fileName, file] of state.files) {
                 if (!FILE_PATTERN.test(fileName)) throw new Error("The file name “" + fileName + "” has characters that are not allowed. Use letters, digits, - _ . and spaces.");
                 uploads.push([fileName, file]);

@@ -138,6 +138,39 @@
         <button data-mode="view" class="active">Look</button>
         <button data-mode="start">Place start</button>
         <button data-mode="gate">Add gate</button>
+        <button data-mode="node" class="design-only">Add node</button>
+        <button data-mode="prefab" class="design-only">Place prefab</button>
+    </div>
+    <div id="drawer" style="display:none">
+        <div class="head">
+            <div class="tabs"><button class="tab active" data-tab="track">Track</button><button class="tab" data-tab="prefabs">Prefabs</button></div>
+            <span class="hint" id="dsNodeInfo"></span>
+            <button class="small ghost" id="drawerToggle" title="Fold">▾</button>
+        </div>
+        <div class="page" data-page="track">
+            <div class="row">
+                <div class="fixed"><label>Width of all (m)</label><input type="number" id="dsWidth" value="12" min="3" step="1" style="width:90px"></div>
+                <div class="fixed"><label>&nbsp;</label><label class="check"><input type="checkbox" id="dsClosed" checked> closed loop</label></div>
+                <div class="fixed buttons" style="align-self:flex-end"><button class="small accent" id="dsAddNode">Add nodes</button><button class="small ghost" id="dsFlatten">Flatten</button></div>
+                <div id="dsNodeBox" class="fixed row" style="display:none">
+                    <div class="fixed"><label>Height (m)</label><input type="number" id="dsHeight" step="0.5" style="width:90px"></div>
+                    <div class="fixed"><label>Width here (m)</label><input type="number" id="dsNodeWidth" step="1" min="3" style="width:90px"></div>
+                    <div class="fixed" style="align-self:flex-end"><button class="small danger" id="dsDeleteNode">Delete node</button></div>
+                </div>
+            </div>
+            <p class="hint">Click <b>Add nodes</b>, then click on the ground to draw the track; a node is added after the selected one. Drag a node with the arrows (also up, for hills). The road is smooth through the nodes.</p>
+        </div>
+        <div class="page" data-page="prefabs" style="display:none">
+            <div id="dsPalette" class="palette"></div>
+            <div id="dsPrefabBox" class="row" style="display:none">
+                <div class="fixed"><label>Selected</label><div id="dsPrefabName" style="height:32px; line-height:32px"></div></div>
+                <div class="fixed"><label>Rotation (°)</label><input type="number" id="dsPrefabRotation" step="15" style="width:90px"></div>
+                <div class="fixed"><label>Scale</label><input type="number" id="dsPrefabScale" step="0.1" min="0.1" style="width:80px"></div>
+                <div class="fixed"><label>&nbsp;</label><label class="check"><input type="checkbox" id="dsRotate"> rotate with the gizmo (R)</label></div>
+                <div class="fixed buttons" style="align-self:flex-end"><button class="small ghost" id="dsDuplicate">Duplicate</button><button class="small danger" id="dsDeletePrefab">Delete</button></div>
+            </div>
+            <p class="hint">Pick a prefab and click on the ground to put it down. Click one to select it; the arrows move it, Delete removes it.</p>
+        </div>
     </div>
     <div class="float top-right">
         <label><input type="checkbox" id="colour" checked> colours of the surfaces</label>

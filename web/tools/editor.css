@@ -179,3 +179,20 @@ canvas#chart { width: 100%; height: 170px; background: #12161c; border: 1px soli
 #thumb canvas { display: block; width: 100%; height: auto; }
 #thumb .label { font-size: 11.5px; color: var(--muted); padding: 6px 8px; }
 #layers > .hint { margin: 0 12px 12px; }
+
+/* ---- the design drawer at the bottom of the view (track editor) */
+#drawer { position: absolute; left: 12px; right: 12px; bottom: 64px; background: #171b22ee; border: 1px solid #2f3845; border-radius: 12px; box-shadow: 0 6px 24px #0008; backdrop-filter: blur(8px); max-height: 46%; display: flex; flex-direction: column; }
+#drawer .head { display: flex; align-items: center; gap: 12px; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+#drawer .head .hint { flex: 1; margin: 0; text-align: right; }
+#drawer .tabs { display: flex; gap: 4px; }
+#drawer .tab { background: transparent; border-color: transparent; color: var(--muted); height: 28px; padding: 3px 12px; }
+#drawer .tab.active { background: #2d333b; color: var(--text); }
+#drawer .page { padding: 10px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+#drawer .page .row { flex-wrap: wrap; align-items: flex-end; }
+#drawer.collapsed .page { display: none !important; }
+#drawer.collapsed { max-height: none; }
+#drawer .palette { display: flex; flex-wrap: wrap; gap: 6px; }
+#drawer .palette button .icon { display: inline-block; width: 18px; text-align: center; color: var(--accent); }
+#drawer .palette button.active .icon { color: #fff; }
+#modes .design-only { display: none; }
+#modes.design .design-only { display: inline-block; }
