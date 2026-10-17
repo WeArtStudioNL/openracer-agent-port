@@ -21,43 +21,146 @@ var EngineSound = (function() {
     var enabledByUser = false;
     var rpm = 0, throttle = 0;
 
-    // The squeal of the tyres: noise through a narrow filter (the howl) and a thin raw tone, that rise in pitch with the speed of the car and
-    // are louder the harder the tyres slide. It is not heard on soft ground.
+    // The squeal of the tyres. Other games play recordings of it (a loop of a squeal and one of a skid, mixed by how hard the tyre slides and
+    // changed in pitch with the speed). If there is a recording in web/sounds/ (tyre-squeal.ogg, .mp3 or .wav) that is what is used here too;
+    // without it the sound is made: the tone that a tyre makes when it sticks and slips again (a few raw tones, a bit inharmonic, that wobble),
+    // some grit of the rubber and a low rumble. A filtered noise only gives a hiss, like a vacuum cleaner.
     var squeal = null;
     var squealLevel = 0, squealSpeed = 0;
+    var squealSample = null;     // the decoded recording, if there is one
 
-    function makeSqueal() {
-        var length = ctx.sampleRate * 2;
+    function noiseBuffer(seconds) {
+        var length = Math.floor(ctx.sampleRate * seconds);
         var buffer = ctx.createBuffer(1, length, ctx.sampleRate);
         var data = buffer.getChannelData(0);
         for(var i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
-        var noise = ctx.createBufferSource();
-        noise.buffer = buffer;
-        noise.loop = true;
-        var band = ctx.createBiquadFilter();
-        band.type = "bandpass";
-        band.Q.value = 9;
-        band.frequency.value = 1700;
-        var tone = ctx.createOscillator();
-        tone.type = "sawtooth";
-        tone.frequency.value = 1100;
-        var toneBand = ctx.createBiquadFilter();
-        toneBand.type = "bandpass";
-        toneBand.Q.value = 14;
-        toneBand.frequency.value = 2100;
-        var gain = ctx.createGain();
-        gain.gain.value = 0;
-        var toneGain = ctx.createGain();
-        toneGain.gain.value = 0.22;
-        noise.connect(band);
-        band.connect(gain);
-        tone.connect(toneBand);
-        toneBand.connect(toneGain);
-        toneGain.connect(gain);
-        gain.connect(output);
-        noise.start();
-        tone.start();
-        return { gain: gain, band: band, tone: tone, toneBand: toneBand };
+        return buffer;
+    }
+
+    function loadSquealSample() {
+        var names = ["sounds/tyre-squeal.ogg", "sounds/tyre-squeal.mp3", "sounds/tyre-squeal.wav"];
+        var tryNext = function(i) {
+            if(i >= names.length) return;
+            fetch(names[i]).then(function(response) {
+                if(!response.ok) throw new Error("none");
+                return response.arrayBuffer();
+            }).then(function(data) { return ctx.decodeAudioData(data); }).then(function(buffer) {
+                squealSample = buffer;
+                if(squeal) squeal.useSample(buffer);
+            }).catch(function() { tryNext(i + 1); });
+        };
+        tryNext(0);
+    }
+
+    function makeSqueal() {
+        var out = ctx.createGain();
+        out.gain.value = 0;
+        out.connect(output);
+
+        // the tone: raw oscillators that wobble a little, the way the stick and slip of the rubber does
+        var tone = ctx.createGain();
+        tone.gain.value = 0.5;
+        var oscillators = [[ "sawtooth", 1, 0.5 ], [ "sawtooth", 1.012, 0.35 ], [ "square", 1.51, 0.12 ], [ "triangle", 0.5, 0.3 ]].map(function(def) {
+            var o = ctx.createOscillator();
+            o.type = def[0];
+            o.frequency.value = 800 * def[1];
+            var g = ctx.createGain();
+            g.gain.value = def[2];
+            o.connect(g);
+            g.connect(tone);
+            o.start();
+            return { osc: o, ratio: def[1] };
+        });
+        // the wobble: a fast one and a slow one that drifts
+        var lfos = [[9, 0.025], [1.3, 0.05]].map(function(def) {
+            var l = ctx.createOscillator();
+            l.frequency.value = def[0];
+            var depth = ctx.createGain();
+            depth.gain.value = 800 * def[1];
+            l.connect(depth);
+            oscillators.forEach(function(o) { depth.connect(o.osc.frequency); });
+            l.start();
+            return { depth: depth, relative: def[1] };
+        });
+        var formant = ctx.createBiquadFilter();
+        formant.type = "bandpass";
+        formant.Q.value = 1.1;
+        formant.frequency.value = 2300;
+        tone.connect(formant);
+        formant.connect(out);
+
+        // the grit: noise at the top that rattles at the speed of the stick and slip
+        var grit = ctx.createBufferSource();
+        grit.buffer = noiseBuffer(2);
+        grit.loop = true;
+        var gritHigh = ctx.createBiquadFilter();
+        gritHigh.type = "highpass";
+        gritHigh.frequency.value = 2500;
+        var gritGain = ctx.createGain();
+        gritGain.gain.value = 0.1;
+        var rattle = ctx.createOscillator();
+        rattle.frequency.value = 38;
+        var rattleDepth = ctx.createGain();
+        rattleDepth.gain.value = 0.08;
+        rattle.connect(rattleDepth);
+        rattleDepth.connect(gritGain.gain);
+        grit.connect(gritHigh);
+        gritHigh.connect(gritGain);
+        gritGain.connect(out);
+        grit.start();
+        rattle.start();
+
+        // the rumble of rubber that is dragged over the road
+        var rumble = ctx.createBufferSource();
+        rumble.buffer = noiseBuffer(2);
+        rumble.loop = true;
+        var rumbleLow = ctx.createBiquadFilter();
+        rumbleLow.type = "lowpass";
+        rumbleLow.frequency.value = 280;
+        var rumbleGain = ctx.createGain();
+        rumbleGain.gain.value = 0.5;
+        rumble.connect(rumbleLow);
+        rumbleLow.connect(rumbleGain);
+        rumbleGain.connect(out);
+        rumble.start();
+
+        // a recording, if there is one: it replaces all of the above
+        var sampleSource = null;
+        var sampleGain = ctx.createGain();
+        sampleGain.gain.value = 0;
+        sampleGain.connect(output);
+
+        return {
+            gain: out,
+            useSample: function(buffer) {
+                if(sampleSource) return;
+                sampleSource = ctx.createBufferSource();
+                sampleSource.buffer = buffer;
+                sampleSource.loop = true;
+                sampleSource.connect(sampleGain);
+                sampleSource.start();
+                out.gain.cancelScheduledValues(0);
+                out.gain.value = 0;
+            },
+            // amount 0..1 (how hard the tyres slide), speed in m/s
+            set: function(amount, speed, loudness, now) {
+                var base = 640 + Math.min(1, speed / 40) * 420 + amount * 90;
+                oscillators.forEach(function(o) { o.osc.frequency.setTargetAtTime(base * o.ratio, now, 0.08); });
+                lfos.forEach(function(l) { l.depth.gain.setTargetAtTime(base * l.relative, now, 0.1); });
+                formant.frequency.setTargetAtTime(base * 2.8, now, 0.1);
+                rumbleGain.gain.setTargetAtTime(0.2 + 0.6 * amount, now, 0.1);
+                if(sampleSource) {
+                    sampleSource.playbackRate.setTargetAtTime(0.85 + Math.min(1, speed / 40) * 0.4 + amount * 0.1, now, 0.1);
+                    sampleGain.gain.setTargetAtTime(loudness * Math.pow(amount, 1.3), now, 0.05);
+                } else {
+                    out.gain.setTargetAtTime(loudness * Math.pow(amount, 1.3), now, 0.05);
+                }
+            },
+            mute: function(now) {
+                out.gain.setTargetAtTime(0, now, 0.05);
+                sampleGain.gain.setTargetAtTime(0, now, 0.05);
+            }
+        };
     }
 
     function level() {
@@ -78,6 +181,7 @@ var EngineSound = (function() {
             output.gain.value = level();
             output.connect(ctx.destination);
             squeal = makeSqueal();
+            loadSquealSample();
         }
         if(ctx.state === "suspended") ctx.resume();
         if(!synth && !loading) {
@@ -98,7 +202,7 @@ var EngineSound = (function() {
     function update(newRpm, newThrottle) {
         rpm = newRpm;
         throttle = newThrottle;
-        if(squeal && ctx.state === "running" && (paused || muted)) squeal.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
+        if(squeal && ctx.state === "running" && (paused || muted)) squeal.mute(ctx.currentTime);
         if(!ctx || !synth || ctx.state !== "running") return;
         output.gain.setTargetAtTime(level(), ctx.currentTime, 0.05);
         synth.setRpm(rpm);
@@ -110,12 +214,7 @@ var EngineSound = (function() {
         squealLevel = amount;
         squealSpeed = speed;
         if(!ctx || !squeal || ctx.state !== "running") return;
-        var pitch = 1 + Math.min(1, speed / 40) * 0.5 + amount * 0.15;
-        var now = ctx.currentTime;
-        squeal.gain.gain.setTargetAtTime((muted || paused ? 0 : volume) * (inside ? 0.12 : 0.3) * Math.pow(amount, 1.3), now, 0.05);
-        squeal.band.frequency.setTargetAtTime(1500 * pitch, now, 0.08);
-        squeal.toneBand.frequency.setTargetAtTime(1900 * pitch, now, 0.08);
-        squeal.tone.frequency.setTargetAtTime(1000 * pitch, now, 0.08);
+        squeal.set(amount, speed, (muted || paused ? 0 : volume) * (inside ? 0.12 : 0.3), ctx.currentTime);
     }
 
     function status() {
