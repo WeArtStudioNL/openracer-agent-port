@@ -30,13 +30,16 @@
  *     { d: "key", code: "KeyW" }
  *     { d: "pad", t: "b", i: 7 }              button 7 of the controller
  *     { d: "pad", t: "a", i: 0, s: -1 }       axis 0 of the controller, to the negative side
- *     { d: "wheel", t: "b", i: 4 }            button 4 of the racing wheel (axes: see WheelControls.js)
+ *     { d: "wheel", t: "b", i: 4 }            button 4 of the racing wheel (the pedals and the steering: see WheelControls.js)
+ *     { d: "wheel", t: "a", i: 0, s: 1 }      an axis of the wheel pushed to a side, for example a paddle
+ *     { d: "wheel", t: "v", i: 9, v: -0.43 }  a position of a hat switch (D-pad) that is one axis with a value per direction
  */
 
 var Settings = (function() {
     var STORAGE_KEY = "openracer.settings";
     var AXIS_DEAD_ZONE = 0.1;
     var DIGITAL_LEVEL = 0.5;       // a button or axis counts as pressed beyond this value
+    var HAT_TOLERANCE = 0.12;      // how close an axis has to be to the value of a hat position
     var CAPTURE_AXIS_DELTA = 0.6;  // how far an axis has to move to be taken as the new input
 
     function key(code) { return { d: "key", code: code }; }
@@ -158,6 +161,10 @@ var Settings = (function() {
         if(input.t === "b") {
             var b = pad.buttons[input.i];
             return b ? b.value : 0;
+        }
+        if(input.t === "v") {
+            // a position of a hat switch that reports its directions as values of one axis
+            return Math.abs((pad.axes[input.i] || 0) - input.v) < HAT_TOLERANCE ? 1 : 0;
         }
         var v = (pad.axes[input.i] || 0) * input.s;
         if(v < AXIS_DEAD_ZONE) return 0;
@@ -303,10 +310,13 @@ var Settings = (function() {
             var base = capture.baseline[p];
             if(!base) continue;
             for(var a = 0; a < pad.axes.length; a++) {
-                var delta = pad.axes[a] - (base.axes[a] || 0);
-                // a wheel's axes are handled by its calibration; a single axis capture is for controllers
-                if(Math.abs(delta) > CAPTURE_AXIS_DELTA && Math.abs(pad.axes[a]) <= 1.05) {
-                    finishCapture({ d: device, t: "a", i: a, s: delta > 0 ? 1 : -1 });
+                var rest = base.axes[a] || 0;
+                var delta = pad.axes[a] - rest;
+                if(Math.abs(delta) > CAPTURE_AXIS_DELTA) {
+                    // A hat switch (the D-pad of many wheels) is one axis with a value per direction, and a rest value
+                    // outside of -1..1. Then the value that the axis has now is the input; otherwise it is the direction.
+                    if(Math.abs(rest) > 1.05) finishCapture({ d: device, t: "v", i: a, v: Math.round(pad.axes[a] * 100) / 100 });
+                    else finishCapture({ d: device, t: "a", i: a, s: delta > 0 ? 1 : -1 });
                     return;
                 }
             }
@@ -318,6 +328,7 @@ var Settings = (function() {
     function inputLabel(input) {
         if(input.d === "key") return keyLabel(input.code);
         if(input.t === "b") return "Button " + input.i;
+        if(input.t === "v") return "Hat " + input.i + " (" + input.v + ")";
         return "Axis " + input.i + (input.s < 0 ? " −" : " +");
     }
 
@@ -405,16 +416,12 @@ var Settings = (function() {
     // A new input for an action: a key or a button/axis of a controller is added to the list (replacing the
     // one that was edited); a wheel input of an action with a calibration is measured by the calibration.
     function same(a, b) {
-        return a.d === b.d && a.t === b.t && a.i === b.i && a.s === b.s && a.code === b.code;
+        return a.d === b.d && a.t === b.t && a.i === b.i && a.s === b.s && a.v === b.v && a.code === b.code;
     }
 
     function addInput(action, input, replaceIndex) {
         if(input.d === "wheel" && action.wheel) {
             calibrateWheel(action);
-            return;
-        }
-        if(input.d === "wheel" && input.t === "a") {
-            hint("An axis of the wheel can only be used for the pedals and the steering.");
             return;
         }
         // an input belongs to one action: take it from the others
