@@ -16,6 +16,8 @@ With regards to coding conventions - I will be putting together my own set of gu
 Chris Barnard.
 
 
+The version of the game is `OpenRacer.VERSION` in `web/js/Version.js` (shown in the main menu and at the bottom of the settings menu). Raise it when a car or a track made with the game would not work the same on an older version.
+
 ## Running locally
 OpenRacer is a static web app with a small helper for the lists of cars and tracks. Run it with
 

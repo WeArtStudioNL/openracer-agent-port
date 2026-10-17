@@ -153,6 +153,11 @@ var MainMenu = (function() {
         rescan.onclick = load;
         foot.appendChild(rescan);
         wrap.appendChild(foot);
+        var version = document.createElement("div");
+        version.className = "foot";
+        version.style.cssText = "text-align: right; opacity: 0.6;";
+        version.textContent = "OpenRacer " + OpenRacer.VERSION;
+        wrap.appendChild(version);
         element.appendChild(wrap);
     }
 

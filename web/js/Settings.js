@@ -374,6 +374,7 @@ var Settings = (function() {
             "#settingsMenu .chip button:hover { background: #566070; }" +
             "#settingsMenu .add { padding: 3px 10px; }" +
             "#settingsMenu .top { display: flex; justify-content: space-between; align-items: flex-start; }" +
+            "#settingsMenu .version { text-align: right; color: #667; font-size: 12px; margin-top: 18px; }" +
             "#settingsMenu .big { font-size: 16px; padding: 8px 18px; background: #2e7d46; }" +
             "#settingsMenu .big:hover { background: #3a9a58; }" +
             "#settingsMenu .none { color: #667; font-style: italic; }" +
@@ -686,6 +687,10 @@ var Settings = (function() {
         };
         bottom.appendChild(wheelButton);
         panel.appendChild(bottom);
+        var version = document.createElement("div");
+        version.className = "version";
+        version.textContent = "OpenRacer " + OpenRacer.VERSION;
+        panel.appendChild(version);
     }
 
     function openMenu() {

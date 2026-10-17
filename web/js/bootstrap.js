@@ -28,6 +28,7 @@ window.THREE = Object.assign({}, THREE_MODULE, {
 
 var scripts = [
     "js/Helpers.js",
+    "js/Version.js",
     "js/Catalog.js",
     "js/MainMenu.js",
     "js/MaterialOverrides.js",
