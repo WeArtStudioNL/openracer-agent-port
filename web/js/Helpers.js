@@ -40,298 +40,59 @@ function endsWith(str, suffix) {
     return str.indexOf(suffix, str.length - suffix.length) !== -1;
 }
 
-function checkOnGround(object, offsetHeight, returnMaterial) {
-    //debugOut(offsetHeight);
-    var foundGround = false;
-    var ray = new THREE.Raycaster();
-    ray.set(object.position, new THREE.Vector3(0, -1, 0));
-    var objs = ray.intersectObjects(trackObjects, true);
-    //console.log(objs);
-    //var meshName = objs[0].object.name;
-    //var matName = objs[0].object.material.name;
-    if(objs.length > 0) {
-        var textName = objs[0].object.material.map.name;
-        //console.log("mesh: " + meshName + " matName: " + matName + " texture: " + textName);
-        debugOut(object.name + " is above \"" + textName + "\".");
-        if(textName === "road" || textName === "grass" || textName === "ground" || textName === "track01") {
-            var dist = objs[0].distance;
-            var correctedDistance = offsetHeight - dist;
-            foundGround = true;
-            object.position.y += correctedDistance;
-            if(returnMaterial) {
-                return objs[0].object.name;
-            } else {
-                return textName;
-            }
-        } else {
-            console.log("unknown texture - " + textName);
-        }
-    }
-    if(!foundGround) {
-        // we haven't found the ground! make sure we're not underneath it
-        var position = new THREE.Vector3(object.position.x, object.position.y + 20, object.position.z);
-        ray.set(position, new THREE.Vector3(0, -1, 0));
-        var objs = ray.intersectObjects(trackObjects, true);
-        //console.log(objs);
-        if(objs.length > 0) {
-            //console.log(objs);
-            for(var i = 0; i < objs.length; i++) {
-                var textName = objs[i].object.material.map.name;
-                debugOut(object.name + " is below \"" + textName + "\".");
-                if(textName === "road" || textName === "grass" || textName === "ground" || textName === "track01") {
-                    var dist = objs[i].distance;
-                    var correctedDistance = offsetHeight - (dist - 20);
-                    object.position.y += correctedDistance;
-                    if(returnMaterial) {
-                        return objs[i].object.name;
-                    } else {
-                        return textName;
-                    }
-                }
-            }
-        }
-    }
-}
+// Textures that can be driven on
+var drivableTextures = { "road": true, "grass": true, "ground": true, "track01": true };
 
-var lastGround;
+var groundRay = new THREE.Raycaster();
+var groundDown = new THREE.Vector3(0, -1, 0);
+var groundOrigin = new THREE.Vector3();
 
-/*
-function checkUnderGround(object, offsetHeight) {
-    //debugOut(offsetHeight);
-    var foundGround = false;
-    var ray = new THREE.Raycaster();
-    var pos = new THREE.Vector3(object.position.x, object.position.y - offsetHeight, object.position.z);
-    ray.set(pos, new THREE.Vector3(0, -1, 0));
-    var objs = ray.intersectObjects(trackObjects, true);
-    var bestGuess;
-    var guessName;
-    //console.log(objs);
-    //var meshName = objs[0].object.name;
-    //var matName = objs[0].object.material.name;
-    
-    
-    if(objs.length > 0) {
-        var textName = objs[0].object.material.map.name;
-        //console.log("mesh: " + meshName + " matName: " + matName + " texture: " + textName);
-        //debugOut(object.name + " is above \"" + textName + "\".");
-        if(textName === "road" || textName === "grass" || textName === "ground" || textName === "track01") {
-            //var dist = objs[0].distance;
-            //var correctedDistance = offsetHeight - dist;
-            //foundGround = true;
-            //object.position.y += correctedDistance;
-            //if(returnMaterial) {
-            //    return objs[0].object.name;
-            //} else {
-            //    return textName;
-            //}
-            lastTerrain = objs[0].object.name;
-            return false;
-        } else {
-            debugOut("unknown texture - " + textName);
-        }
-    }
-    
-    var searchDist = 1;
-    while(searchDist < 2000) {
-        // we haven't found the ground! make sure we're not underneath it
-        var position = new THREE.Vector3(object.position.x, object.position.y + searchDist, object.position.z);
-        ray.set(position, new THREE.Vector3(0, -1, 0));
-        var objs = ray.intersectObjects(trackObjects, true);
-        //console.log(objs);
-        if(objs.length > 0) {
-            //console.log(objs);
-            //for(var i = objs.length - 1; i > -1; i--) {
-            for(var i = 0; i < objs.length; i++) {
-                var textName = objs[i].object.material.map.name;
-                //debugOut(object.name + " is below \"" + textName + "\".");
-                if(textName === "road" || textName === "grass" || textName === "ground" || textName === "track01") {
-                    var dist = objs[i].distance;
-                    var correctedDistance = offsetHeight - (dist - searchDist);
-                    object.position.y += correctedDistance;
-                    //if(returnMaterial) {
-                    //    return objs[i].object.name;
-                    //} else {
-                    //    return textName;
-                    //}
-                    lastTerrain = objs[i].object.name;
-                    lastGround = textName;
-                    //foundGround = true;
-                    return true;
-                } else {
-                    if(!bestGuess) {
-                        bestGuess = offsetHeight - (objs[i].distance - searchDist);
-                        guessName = objs[i].object.material.map.name;
-                    }
-                }
-            }
-        }
-        //debugOut("can't find ground!");
-        searchDist *= 2;
-    }
-    
-    if(bestGuess) {
-        //debugOut("using best guess - " + bestGuess);
-        debugOut("WARNING: using best guess for ground! (" + guessName + ")");
-        object.position.y += bestGuess;
-        return true;
-    }
-    
-    debugOut("WARNING: can't find ground!");
-    return false;
-}
-*/
-
-function checkUnderGround(object, offsetHeight) {
-    var ret;// = checkUnderSurface(object, offsetHeight, trackObjects);
-    //return ret;
-    if(object.lastFoundAt > 0) {
-        ret = checkUnderSurface(object, offsetHeight, trackObjects[searchOrder[object.lastFoundAt]]);
-        //debugOut("last found at " + object.lastFoundAt + " (" + trackObjects[searchOrder[object.lastFoundAt]].length + ")");
-        if(ret !== null)
-            return ret;
-    }
-    for(var i = 0; i < searchOrder.length; i++) {
-//        if(i !== object.lastFoundAt) {
-            ret = checkUnderSurface(object, offsetHeight, trackObjects[searchOrder[i]]);
-            if(ret !== null) {
-                object.lastFoundAt = i;
-                return ret;
-            }
-//        }
-    }
-    //var ret = checkUnderSurface(object, offsetHeight, trackObjects);
-    //if(ret === null) {
-    //    ret = checkUnderSurface(object, offsetHeight, groundObjects);
-    //    if(ret === null) {
-    //        ret = cheSckUnderSurface(object, offsetHeight, otherObjects);
-    //    }
-    //}
-    return ret;
-}
-
-var collisionDetected = false;
-
-function checkUnderSurface(object, offsetHeight, objArray) {
-    collisionDetected = false;
-    //debugOut(offsetHeight);
-    var oArr = [];
+// The meshes of a group of track objects whose bounding sphere is above (x, z)
+function meshesAbove(x, z, objArray) {
+    var found = [];
     for(var i = 0; i < objArray.length; i++) {
-        if(object.position.x >= objArray[i].position.x - objArray[i].geometry.boundingSphere.radius && object.position.x <= objArray[i].position.x + objArray[i].geometry.boundingSphere.radius) {
-            if(object.position.z >= objArray[i].position.z - objArray[i].geometry.boundingSphere.radius && object.position.z <= objArray[i].position.z + objArray[i].geometry.boundingSphere.radius) {
-                oArr.push(objArray[i]);
-            }
-        }
+        var sphere = objArray[i].geometry.boundingSphere;
+        var dx = x - (objArray[i].position.x + sphere.center.x);
+        var dz = z - (objArray[i].position.z + sphere.center.z);
+        if(dx * dx + dz * dz <= sphere.radius * sphere.radius) found.push(objArray[i]);
     }
-    
-    var foundGround = false;
-    var ray = new THREE.Raycaster();
-    var pos = new THREE.Vector3(object.position.x, object.position.y - offsetHeight, object.position.z);
-    ray.set(pos, new THREE.Vector3(0, -1, 0));
-    var objs = ray.intersectObjects(oArr, false);
-    var bestGuess;
-    var guessName;
-    //console.log(objs);
-    //var meshName = objs[0].object.name;
-    //var matName = objs[0].object.material.name;
-    
-    
-    if(objs.length > 0) {
-        var textName = objs[0].object.material.map.name;
-        //console.log("mesh: " + meshName + " matName: " + matName + " texture: " + textName);
-        //debugOut(object.name + " is above \"" + textName + "\".");
-        if(textName === "road" || textName === "grass" || textName === "ground" || textName === "track01") {
-            //var dist = objs[0].distance;
-            //var correctedDistance = offsetHeight - dist;
-            //foundGround = true;
-            //object.position.y += correctedDistance;
-            //if(returnMaterial) {
-            //    return objs[0].object.name;
-            //} else {
-            //    return textName;
-            //}
-            lastTerrain = objs[0].object.name;
-            return false;
-        } else {
-            debugOut("unknown texture - " + textName);
-        }
-    }
-    
-    var searchDist = 1;
-    while(searchDist < 2000) {
-        // we haven't found the ground! make sure we're not underneath it
-        var position = new THREE.Vector3(object.position.x, object.position.y + searchDist, object.position.z);
-        ray.set(position, new THREE.Vector3(0, -1, 0));
-        var objs = ray.intersectObjects(oArr, false);
-        //console.log(objs);
-        if(objs.length > 0) {
-            //console.log(objs);
-            //for(var i = objs.length - 1; i > -1; i--) {
-            for(var i = 0; i < objs.length; i++) {
-                var textName = objs[i].object.material.map.name;
-                //debugOut(object.name + " is below \"" + textName + "\".");
-                if(textName === "road" || textName === "grass" || textName === "ground" || textName === "track01") {
-                    var dist = objs[i].distance;
-                    var correctedDistance = offsetHeight - (dist - searchDist);
-                    
-                    //if(object.position.y < car.body.position.y) {
-                    //    console.log("Possible collision?");
-                    //}
+    return found;
+}
 
-                    //var newY = object.position.y + correctedDistance;
-                    ////debugOut(newY - object.prevY);
-                    //if(newY - object.prevY > offsetHeight / 2) {
-                    //    //console.log("Possible collision?");
-                    //    collisionDetected = true;
-                    //    object.position.x = object.prevX;
-                    //    object.position.y = object.prevY;
-                    //    object.position.z = object.prevZ;
-                    //} else {
-                    object.position.y += correctedDistance;
-                    //}
-                    //object.prevX = object.position.x;
-                    //object.prevY = object.position.y;
-                    //object.prevZ = object.position.z;
-
-                    //if(returnMaterial) {
-                    //    return objs[i].object.name;
-                    //} else {
-                    //    return textName;
-                    //}
-                    lastTerrain = objs[i].object.name;
-                    lastGround = textName;
-                    //foundGround = true;
-                    return true;
-                } else {
-                    if(!bestGuess) {
-                        bestGuess = offsetHeight - (objs[i].distance - searchDist);
-                        guessName = objs[i].object.material.map.name;
-                    }
+// Finds the road under (x, z): its height, the texture it is made of and the name of the mesh.
+// hintY is roughly where the car is; the road is looked for from just above it, and then from
+// higher up in case the car has ended up under the road. Returns null if there is no road there.
+function getGroundAt(x, z, hintY) {
+    var starts = [hintY + 3, hintY + 60, hintY + 2000];
+    for(var s = 0; s < starts.length; s++) {
+        groundOrigin.set(x, starts[s], z);
+        groundRay.set(groundOrigin, groundDown);
+        for(var i = 0; i < searchOrder.length; i++) {
+            var meshes = meshesAbove(x, z, trackObjects[searchOrder[i]]);
+            if(meshes.length === 0) continue;
+            var hits = groundRay.intersectObjects(meshes, false);
+            for(var h = 0; h < hits.length; h++) {
+                var texture = hits[h].object.material.map.name;
+                if(drivableTextures[texture]) {
+                    return { y: hits[h].point.y, surface: texture, mesh: hits[h].object.name };
                 }
             }
         }
-        //debugOut("can't find ground!");
-        searchDist *= 2;
     }
-    
-    if(bestGuess) {
-        //debugOut("using best guess - " + bestGuess);
-        debugOut("WARNING: using best guess for ground! (" + guessName + ")");
-        object.position.y += bestGuess;
-        return true;
-    }
-    
-    //debugOut("WARNING: can't find ground!");
     return null;
 }
 
-
+// Friction of the surfaces: the grip at the peak of the tyre curve (static) and while sliding (kinetic).
 var uCoeff = {
-    "road": { static: 0.9, kinetic: 0.68 },
-    "track01": { static: 0.8, kinetic: 0.67 },
-    "grass": { static: 0.35, kinetic: 0.3, bumpStatic: 0.5, bumpKinetic: 0.4, bumpChance: 0.1 },
-    "ground": { static: 0.35, kinetic: 0.3 }
+    "road": { static: 1.05, kinetic: 0.88 },
+    "track01": { static: 0.9, kinetic: 0.78 },
+    "grass": { static: 0.4, kinetic: 0.33 },
+    "ground": { static: 0.5, kinetic: 0.42 }
 };
 
+function getSurface(name) {
+    return uCoeff[name] || uCoeff["track01"];
+}
 
 var dO = document.getElementById("debugOut");
 var debugText = "";
@@ -352,91 +113,4 @@ function debugClear() {
     //var dO = document.getElementById("debugOut");
     //dO.innerText = "";
     debugText = "";
-}
-
-
-function hackMaterials( materials ) {
-
-        for ( var i = 0; i < materials.length; i ++ ) {
-
-                var m = materials[ i ];
-
-                if ( m.name.indexOf( "Body" ) !== -1 ) {
-
-                        var mm = new THREE.MeshPhongMaterial( { map: m.map } );
-
-                        //mm.envMap = textureCube;
-                        mm.combine = THREE.MixOperation;
-                        mm.reflectivity = 0.75;
-
-                        materials[ i ] = mm;
-
-                } else if ( m.name.indexOf( "mirror" ) !== -1 ) {
-
-                        var mm = new THREE.MeshPhongMaterial( { map: m.map } );
-
-                        //mm.envMap = textureCube;
-                        mm.combine = THREE.MultiplyOperation;
-
-                        materials[ i ] = mm;
-
-                } else if ( m.name.indexOf( "glass" ) !== -1 ) {
-
-                        var mm = new THREE.MeshPhongMaterial( { map: m.map } );
-
-                        //mm.envMap = textureCube;
-                        mm.color.copy( m.color );
-                        mm.combine = THREE.MixOperation;
-                        mm.reflectivity = 0.25;
-                        mm.opacity = m.opacity;
-                        mm.transparent = true;
-
-                        materials[ i ] = mm;
-
-                } else if ( m.name.indexOf( "Material.001" ) !== -1 ) {
-
-                        var mm = new THREE.MeshPhongMaterial( { map: m.map } );
-
-                        mm.shininess = 30;
-                        mm.color.setHex( 0x404040 );
-                        mm.metal = true;
-
-                        materials[ i ] = mm;
-
-                }
-
-                materials[ i ].side = THREE.DoubleSide;
-
-        }
-
-}
-
-function loadCTM(filename) {
-    loaderCTM = new THREE.CTMLoader( true );
-    document.body.appendChild( loaderCTM.statusDomElement );
-
-    var position = new THREE.Vector3( -130.38620930679173, 5.1395574378241913, 11 );
-    var scale = new THREE.Vector3( 1, 1, 1 );
-
-    loaderCTM.loadParts( filename, function( geometries, materials ) {
-
-            hackMaterials( materials );
-
-            for ( var i = 0; i < geometries.length; i ++ ) {
-            //var i = ;
-//console.log(geometries[i].name);
-                    var mesh = new THREE.Mesh( geometries[ i ], materials[ i ] );
-                    mesh.position = position;
-                    mesh.scale = scale;
-                    scene.add( mesh );
-
-            }
-
-            loaderCTM.statusDomElement.style.display = "none";
-
-            //var end = Date.now();
-
-            //console.log( "load time:", end - start, "ms" );
-
-    }, { useWorker: true } );
 }

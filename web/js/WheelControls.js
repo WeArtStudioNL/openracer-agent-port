@@ -462,6 +462,7 @@ var WheelControls = (function() {
         car.manualGearbox = false;
         car.neutral = false;
         car.clutch = 0;
+        car.clutchPedalPresent = false;
         // a disconnected wheel must not leave the pedals it was holding pressed
         if(ownsThrottle) car.throttle = 0;
         if(ownsBrake) car.brakePedal = 0;
@@ -585,6 +586,8 @@ var WheelControls = (function() {
         var throttle = readPedal(pad, profile.throttle);
         var brake = readPedal(pad, profile.brake);
         car.clutch = profile.clutch ? readPedal(pad, profile.clutch) : 0;
+        // without a clutch pedal the car works the clutch itself
+        car.clutchPedalPresent = !!profile.clutch;
 
         // Only override an input while the wheel is using it (and once more when it is released)
         if(Math.abs(steer) > 0.03 || ownsSteer) {

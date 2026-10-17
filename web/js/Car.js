@@ -25,9 +25,6 @@
  *        follow some sort of style guide and restructure coherently.
  */
 
-// Lowest wheel load, as a fraction of its static load
-var MIN_WHEEL_LOAD = 0.2;
-
 OpenRacer.Car = function( parameters, domElement ) {
     this.bodyMeshFile = parameters.body;
     this.wheelMeshFile = parameters.wheel;
@@ -39,18 +36,11 @@ OpenRacer.Car = function( parameters, domElement ) {
     this.front_track = parameters.front_track;
     this.rear_track = parameters.rear_track;
     this.weight_distribution = parameters.weight_distribution;
-    //console.log(this.weight_distribution);
     this.tire_diameter = parameters.tire_diameter;
-    this.position = new THREE.Vector3(camera.position.x, camera.position.y, camera.position.z - 10);
     this.body = new THREE.Object3D();
-    this.carCentre = new THREE.Object3D();
-    this.carCentre.position.x = camera.position.x;
-    this.carCentre.position.y = camera.position.y;
-    this.carCentre.position.z = camera.position.z - 10;
     this.mass = parameters.mass;
     this.throttle = 0;
     this.brakePedal = 0;
-    this.velocity = new THREE.Vector3( 0, 0, 0 );
     this.width = parameters.width;
     this.height = parameters.height;
     this.length = parameters.length;
@@ -66,42 +56,22 @@ OpenRacer.Car = function( parameters, domElement ) {
     this.checkPointsCompleted = [false, false, false, false, false, false, false, false, false, false];
     this.currentCheckPoint = "";
     
-    var frontSpring = {
-        type: "coilover",
-        //wire_diameter: 0.015494,
-        wire_diameter: 0.0142875, // OEM springs
-        outer_diameter: 0.127,
-        free_length: 0.428625,
-        active_coils: 7,
-        //shear_modulus: 79241245136.187 // music wire ASTM A228
-        shear_modulus: 68599221789.883, // stainless steel 302 A313
-        dist_to_balljoint: 0.2413, // control arm pivot point to balljoint
-        dist_to_spring: 0.17, // control arm pivot point to centre of spring
-        spring_angle: Math.PI / 2
-    };
-    
-    var rearSpring = {
-        type: "leaf",
-        shear_modulus: 68599221789.883, // stainless steel 302 A313
-        leaves: 5,
-        leaf_length: 1.3462,
-        leaf_thickness: 0.008,
-        leaf_width: 0.0635,
-        perch_distance: 1.08585 //distance from centre of left leaf to centre of right leaf
-    };
-    
-    this.engine = new OpenRacer.Engine();
-    
+    // Where the car starts (and returns to with the R key), heading along +x
+    var startX = -130.38620930679173;
+    var startZ = 1.5269260973467418;
+    var startHeading = 0;
+
     //this.gear_ratios = [ 2.99, 1.75, 1 ]; // Standard Mach 1 351 transmission, code RAT-AM (3.03)
     //this.gear_ratios = [ 2.78, 1.93, 1.36, 1 ]; // Toploader four speed, wide-ratio 351 RUG-E3
     this.gear_ratios = [ 2.32, 1.69, 1.29, 1 ]; // Toploader close-ratio, 351 RUG-AG
     this.final_drive = 3.5; // 3.25, 3.5 or 4.3
     this.current_gear = 0;
-    this.manualGearbox = false; // true while a wheel with a shifter selects the gear
-    this.neutral = false;       // no drive while in neutral
-    this.clutch = 0;            // 0 = engaged, 1 = fully pressed
-    this.engineRPM = 1000;      // smoothed engine speed, used for the dashboard and the engine sound
-    this.wheelDrivenRPM = 1000; // engine speed implied by the rear wheels in the current gear
+    this.manualGearbox = false;     // true while a wheel with a shifter selects the gear
+    this.neutral = false;           // no drive while in neutral
+    this.clutch = 0;                // clutch pedal: 0 = engaged, 1 = fully pressed
+    this.clutchPedalPresent = false; // a real clutch pedal is available; otherwise the clutch is automatic
+    this.handbrake = false;
+    this.engineRPM = 900;           // engine speed, for the dashboard and the engine sound
 
     this.accelerate = false;
     this.brake = false;
@@ -115,33 +85,31 @@ OpenRacer.Car = function( parameters, domElement ) {
     this.turnAngle = 0;
     this.turnAmt = 0;
 
-    
-    this.carAngle = 0;
+    this.carAngle = startHeading; // heading of the car, from +x towards +z
     
     var tobj = this;
-    
-    
-    
-    var material = new THREE.MeshBasicMaterial({
-            color: 0xff0000
-    });
-    
-    var radius = 0.2;
-    var segments = 32;
 
-    /*
-    var circleGeometry = new THREE.CircleGeometry( radius, segments );				
-    this.circle = new THREE.Mesh( circleGeometry, material );
-    scene.add( this.circle );
-    this.circle1 = new THREE.Mesh( circleGeometry, material );
-    scene.add( this.circle1 );
-    this.circle2 = new THREE.Mesh( circleGeometry, material );
-    scene.add( this.circle2 );
-    this.circle3 = new THREE.Mesh( circleGeometry, material );
-    scene.add( this.circle3 );
-    */
+    // The physics of the car (see Vehicle.js); the car reads its controls from this object
+    this.vehicle = new OpenRacer.Vehicle({
+        mass: this.mass,
+        wheelbase: this.wheelbase,
+        front_track: this.front_track,
+        rear_track: this.rear_track,
+        weight_distribution: this.weight_distribution,
+        tire_diameter: this.tire_diameter,
+        width: this.width,
+        length: this.length,
+        Cdrag: this.Cdrag,
+        gear_ratios: this.gear_ratios,
+        final_drive: this.final_drive,
+        getSurface: getSurface
+    }, this);
+    this.engine = this.vehicle.engine;
+    this.wheels = this.vehicle.wheels;
+    this.vehicle.tcEnabled = true;
+    this.vehicle.absEnabled = true;
+    var placed = false; // set once the car has been put on the road
 
-    
     function bodyLoaded(geometry) {
         geometry.computeFaceNormals();
         geometry.computeVertexNormals();
@@ -171,7 +139,6 @@ OpenRacer.Car = function( parameters, domElement ) {
     }
     
     function wheelLoaded(geometry) {
-        console.log("wheel loaded " + tobj.wheels);
         geometry.computeFaceNormals();
         geometry.computeVertexNormals();
 
@@ -183,312 +150,24 @@ OpenRacer.Car = function( parameters, domElement ) {
         mesh.castShadow = true;
         mesh.scale.set(0.5, 0.5, 0.5);
 
-        var wFrontLeft = new THREE.Object3D();
-        var wFrontRight = new THREE.Object3D();
-        var wRearLeft = new THREE.Object3D();
-        var wRearRight = new THREE.Object3D();
-        
-        var frontMass = tobj.mass * tobj.weight_distribution;
-        var rearMass = tobj.mass * (1 - tobj.weight_distribution);
-        
-        console.log("front mass: " + frontMass);
-        console.log("rear mass: " + rearMass);
-        console.log("wD: " + this.weight_distribution);
-        
-        var wFrontL = new THREE.Object3D();
-        //wFrontL.rotation.x = -Math.PI / 2;
-        wFrontL.add(mesh.clone());
-        wFrontLeft.add(wFrontL);
-        var wFL = new THREE.Object3D();
-        wFL.add(wFrontLeft);
-        tobj.wheels.push(new OpenRacer.Wheel({ name: "FL", object: wFL, diameter: tobj.tire_diameter, car: tobj, mass: frontMass / 2, spring: frontSpring }));
-
-        var wFrontR = new THREE.Object3D();
-        wFrontR.add(mesh.clone());
-        //wFrontR.rotation.x = -Math.PI / 2;
-        wFrontRight.add(wFrontR);
-        var wFR = new THREE.Object3D();
-        wFR.add(wFrontRight);
-        tobj.wheels.push(new OpenRacer.Wheel({ name: "FR", object: wFR, diameter: tobj.tire_diameter, right: true, car: tobj, mass: frontMass / 2, spring: frontSpring }));
-
-        // NOTE: This appears to the be the rear-right wheel?
-        wRearLeft.add(mesh.clone());
-        //wRearLeft.children[0].rotation.y = -Math.PI;
-        var wRL = new THREE.Object3D();
-        wRL.add(wRearLeft);
-        tobj.wheels.push(new OpenRacer.Wheel({ name: "RL", object: wRL, diameter: tobj.tire_diameter, car: tobj, mass: rearMass / 2, spring: rearSpring }));
-
-        wRearRight.add(mesh);
-        var wRR = new THREE.Object3D();
-        wRR.add(wRearRight);
-        tobj.wheels.push(new OpenRacer.Wheel({ name: "RR", object: wRR, diameter: tobj.tire_diameter, right: true, car: tobj, mass: rearMass / 2, spring: rearSpring }));
+        // Every wheel is a chain of objects: the wheel (position and orientation), the steering
+        // (children[0], turns around the vertical axis) and the spin (children[0].children[0]).
+        for(var i = 0; i < tobj.wheels.length; i++) {
+            var wheel = tobj.wheels[i];
+            var spin = new THREE.Object3D();
+            spin.add(mesh.clone());
+            // the wheel model has to face outwards on both sides of the car
+            if(!wheel.right) spin.rotation.z = Math.PI;
+            var steer = new THREE.Object3D();
+            steer.add(spin);
+            var object = new THREE.Object3D();
+            object.add(steer);
+            wheel.object = object;
+            scene.add(object);
+        }
         tobj.wheelsLoaded = true;
-
-        scene.add( wFL );
-        scene.add( wFR );
-        scene.add( wRL );
-        scene.add( wRR );
-
-        console.log("wheel loaded " + tobj.wheels);
-        
-        tobj.checkWheels();
     }
-    
-    this.getWheelTorque = function (engineRPM) {
-        var torque = this.engine.getTorque(engineRPM) * this.throttle * this.getEngagement();
-        if(this.reverse) {
-            return torque * -this.gear_ratios[0] * this.final_drive;
-        } else {
-            return torque * this.gear_ratios[this.current_gear] * this.final_drive;
-        }
-    };
 
-    // The engine speed follows the wheels while the clutch is engaged, and revs freely with the
-    // throttle when the engine is disconnected (neutral or clutch pressed).
-    this.updateEngineRPM = function (delta) {
-        var engagement = this.getEngagement();
-        var freeRPM = 1000 + this.throttle * 5500;
-        var target = freeRPM + (this.wheelDrivenRPM - freeRPM) * engagement;
-        this.engineRPM += (target - this.engineRPM) * Math.min(1, delta * 10);
-        this.engineRPM = Math.max(800, Math.min(6800, this.engineRPM));
-        EngineSound.update(this.engineRPM, this.throttle);
-    };
-
-    // How much of the engine is connected to the wheels (0 in neutral or with the clutch pressed)
-    this.getEngagement = function () {
-        return this.neutral ? 0 : 1 - this.clutch;
-    };
-        
-    this.update = function( delta, showDebug ) {
-        if(!this.isReady()) return;
-        gamepadUpdate();
-        
-        if(this.reset) {
-            for(var i = 0; i < this.wheels.length; i++) {
-                this.wheels[i].position.x = -36.77731522287426;
-                this.wheels[i].position.y = -14.842332522928999;
-                this.wheels[i].position.z = 430.97136850461845;
-            }
-        }
-        
-        if(this.cameraLeft) {
-            this.cameraAngle += 2  * delta;
-        }
-        if(this.cameraRight) {
-            this.cameraAngle -= 2 * delta;
-        }
-        if(showDebug) { debugClear(); }
-        if(showDebug) {
-            var wheelStatus = WheelControls.status();
-            if(wheelStatus) debugOut(wheelStatus);
-            var soundStatus = EngineSound.status();
-            if(soundStatus) debugOut(soundStatus);
-        }
-        if(this.accelerate) {
-            this.throttle += (1 - this.throttle) * delta * 4;
-        }
-        if(this.throttle > 1) this.throttle = 1;
-        if(this.brake) {
-            this.brakePedal += (1 - this.brakePedal) * delta * 6;
-        }
-        if(delta > 0.1) {
-            if(showDebug) { debugOut("DELTA WARN - " + delta); }
-            delta = 0.1;
-        }
-        this.turnDir = 0;
-        if(this.turnLeft) this.turnDir = -1;
-        if(this.turnRight) this.turnDir = 1;
-        if(this.turnLeft && this.turnRight) this.turnDir = 0;
-        //this.checkWheels();
-        var mult = 1 - (this.wheels[3].forwardMPH / 120);
-        if(mult < 0.3) mult = 0.3;
-        var tSpeed = this.turnSpeed * 0.3;
-        //debugOut(mult);
-        
-        //this.turnAmt += (this.turnDir - this.turnAmt) * (delta / 0.5) * mult;
-        //debugOut("turn: " + Math.pow(this.turnAmt, 2));
-        
-        if(this.turnDir === 0) {
-            //this.turnAmt -= this.turnAmt * (delta / 0.5);
-            if(!mouseDown && !usingGamepad)
-                this.turnAngle -= this.turnAngle * 0.25;
-        } else if(this.turnDir < 0 && this.turnAngle > 0) {
-            this.turnAngle += this.turnDir * ((tSpeed * 3) / Math.max(this.wheels[0].getWheelVelocity() / 4, 1)) * delta;
-        } else if(this.turnDir > 0 && this.turnAngle < 0) {
-            this.turnAngle += this.turnDir * ((tSpeed * 3) / Math.max(this.wheels[0].getWheelVelocity() / 4, 1)) * delta;
-        } else {
-            this.turnAngle += this.turnDir * (tSpeed / Math.max(this.wheels[0].getWheelVelocity() / 4, 1)) * delta;
-            var mTurn = this.maxTurn;
-            if(this.turnLimit < mTurn) {
-                mTurn = this.turnLimit;
-            }
-            if(Math.abs(this.turnAngle) > this.turnLimit) {
-                this.turnAngle = this.turnDir * this.turnLimit;
-            }
-        }
-        
-        //if(!mouseDown) {
-        //    this.turnAngle = Math.pow(this.turnAmt, 2) * this.turnLimit * getSign(this.turnAmt);
-        //}
-        
-        for(var i = 0; i < this.wheels.length; i++) {
-            if(this.brakePedal > 0) {
-                //console.log("brake");
-                if(i > 1) {
-                    this.wheels[i].applyBrakingForce(3000 * this.brakePedal);
-                } else {
-                    this.wheels[i].applyBrakingForce(7500 * this.brakePedal);
-                }
-            } else {
-                //this.wheels[i].brakingForce = 0;
-            }
-            if(i < 2) {
-                this.wheels[i].turn(this.turnAngle);
-            }
-            //var eRPM = Math.round(this.wheels[i].RPM * (this.gear_ratios[this.current_gear] / this.final_drive));
-            if(i > 1) {
-                var eRPM = Math.round(this.wheels[i].RPM * this.gear_ratios[this.current_gear] * this.final_drive);
-                if(eRPM < 0) eRPM = 0;
-                if(i === 3 && showDebug) debugOut(this.wheels[i].forwardMPH + " mph | Gear: " + (this.reverse ? "R" : (this.neutral ? "N" : this.current_gear + 1)) + " | RPM: " + Math.round(this.engineRPM) + " | Throttle: " + this.throttle.toFixed(2) + " | Brake: " + this.brakePedal.toFixed(2));
-
-                if(eRPM < 1000) eRPM = 1000;
-                this.wheelDrivenRPM = eRPM;
-                // automatic shifting, unless the driver selects gears with a shifter
-                if(!this.manualGearbox) {
-                    if(eRPM > 6000 && this.current_gear < this.gear_ratios.length - 1) {
-                        this.current_gear++;
-                    } else if(eRPM < 2000 && this.current_gear > 0) {
-                        this.current_gear--;
-                    }
-                }
-
-                if(this.throttle > 0) {
-                    //console.log(this.getWheelTorque(1500));
-                    this.wheels[i].applyForce((this.getWheelTorque(eRPM) / 2) / this.wheels[i].diameter);
-                } else {
-                    // engine braking (rough calculation of 10% of the vehicles weight, split over both rear wheels),
-                    // added to the force of the rear brakes instead of replacing it
-                    this.wheels[i].applyBrakingForce(this.wheels[i].brakingForce + 0.1 * this.mass * gravity * 0.5 * this.getEngagement());
-                }
-            }
-            this.wheels[i].update( delta );
-            //this.wheels[i].updatePosition( delta );
-        }
-        
-        //this.checkWheels(delta);
-        this.updateEngineRPM(delta);
-        this.checkWheels2(delta);
-        
-        //this.balanceWheelVelocity(delta);
-        
-        this.wheels[0].incline = this.wheels[2].incline = Math.tan((this.wheels[0].position.y - this.wheels[2].position.y) / this.wheelbase) + (piOver2);
-        this.wheels[1].incline = this.wheels[3].incline = Math.tan((this.wheels[1].position.y - this.wheels[3].position.y) / this.wheelbase) + (piOver2);
-        
-        // get the car's velocity for air resistance
-        var avgDirX = (this.wheels[0].velocity.x + this.wheels[1].velocity.x + this.wheels[2].velocity.x + this.wheels[3].velocity.x) / 4;
-        var avgDirY = (this.wheels[0].velocity.y + this.wheels[1].velocity.y + this.wheels[2].velocity.y + this.wheels[3].velocity.y) / 4;
-        var avgDirZ = (this.wheels[0].velocity.z + this.wheels[1].velocity.z + this.wheels[2].velocity.z + this.wheels[3].velocity.z) / 4;
-        var spd = Math.sqrt(Math.pow(avgDirX, 2) + Math.pow(avgDirZ, 2));
-        var fDragX = -this.Cdrag * avgDirX * spd * 0.25; // multiply by 0.25 to get force per wheel
-        var fDragZ = -this.Cdrag * avgDirZ * spd * 0.25; // multiply by 0.25 to get force per wheel
-        //debugOut("wind resistance: " + fDragX + ", " + fDragZ);
-        for(var i = 0; i < this.wheels.length; i++) {
-            this.wheels[i].applyRigidForce(fDragX, 0, fDragZ);
-        }
-        var accX = (avgDirX - this.velocity.x) / delta;
-        var accZ = (avgDirZ - this.velocity.z) / delta;
-        var fA = (accX * Math.cos(-this.carAngle)) - (accZ * Math.sin(-this.carAngle));
-        var sA = (accX * Math.sin(-this.carAngle)) + (accZ * Math.cos(-this.carAngle));
-        //debugOut("forward acceleration: " + fA);
-        var wTransfer = fA * ((this.height * 0.3) / this.wheelbase) * this.mass;
-        var fAxleWeight = (this.weight_distribution * this.mass * gravity) - wTransfer;
-        var rAxleWeight = ((1 - this.weight_distribution) * this.mass * gravity) + wTransfer;
-        var fTransfer = sA * ((this.height * 0.3) / this.front_track) * (fAxleWeight / gravity);
-        var rTransfer = sA * ((this.height * 0.3) / this.rear_track) * (rAxleWeight / gravity);
-        // Weight transfer can spike when the speed changes abruptly (for example when the brakes stop the
-        // car). Keep every wheel loaded: a wheel with a (near) zero or negative weight has no grip, which
-        // made the ABS cut the brakes completely.
-        var staticFront = (this.weight_distribution * this.mass * gravity) / 2;
-        var staticRear = ((1 - this.weight_distribution) * this.mass * gravity) / 2;
-        this.wheels[0].weight = Math.max((fAxleWeight / 2) + fTransfer, MIN_WHEEL_LOAD * staticFront);
-        this.wheels[1].weight = Math.max((fAxleWeight / 2) - fTransfer, MIN_WHEEL_LOAD * staticFront);
-        this.wheels[2].weight = Math.max((rAxleWeight / 2) + rTransfer, MIN_WHEEL_LOAD * staticRear);
-        this.wheels[3].weight = Math.max((rAxleWeight / 2) - rTransfer, MIN_WHEEL_LOAD * staticRear);
-        
-        //for(var i = 0; i < this.wheels.length; i++) {
-        //    debugOut(this.wheels[i].name + ": " + this.wheels[i].weight + " " + (this.wheels[i].mass * gravity));
-        //}
-        
-        //debugOut("front axle: " + fAxleWeight);
-        //debugOut("rear axle: " + rAxleWeight);
-        
-        this.velocity.set(avgDirX, avgDirY, avgDirZ);
-        
-        shadowLight.position.x = this.body.position.x + 40;
-        shadowLight.position.y = this.body.position.y + 70;
-        shadowLight.position.z = this.body.position.z + 40;
-        
-        /*
-        for(var i = 0; i < this.wheels.length; i++) {
-            for(var obj in this.wheels[i]) {
-                if(this.wheels[i].hasOwnProperty(obj)) {
-                    if(typeof this.wheels[i][obj] != "function" && typeof this.wheels[i][obj] != "object") {
-                        debugOut(obj + ": " + this.wheels[i][obj]);
-                    }
-                }
-            }
-        }
-        */
-       
-        if(lastTerrain !== this.currentCheckPoint) {
-            this.currentCheckPoint = lastTerrain;
-            if(lastTerrain === trackCheckPoints[0]) {
-                this.checkPointsCompleted[0] = true;
-                var checkpointsPassed = true;
-                for(var i = 1; i < this.checkPointsCompleted.length; i++) {
-                    if(checkpointsPassed) checkpointsPassed = this.checkPointsCompleted[i];
-                    this.checkPointsCompleted[i] = false;
-                }
-                if(checkpointsPassed) {
-                    // we passed all checkpoints
-                    if(this.lapStartTime > 0) {
-                        var elapsedTime = Date.now() - this.lapStartTime;
-                        var min = (elapsedTime / 1000 / 60) << 0;
-                        var sec = (elapsedTime / 1000) % 60;
-                        var milli = elapsedTime % 1000;
-                        this.laps.push(min + ":" + sec + "." + milli.toFixed(3));
-                        console.log("lap time: " + this.laps[this.laps.length - 1]);
-                    }
-                    this.lapsCompleted++;
-                }
-                this.lapStartTime = Date.now();
-            } else {
-                for(var i = 1; i < this.checkPointsCompleted.length; i++) {
-                    if(lastTerrain === trackCheckPoints[i]) {
-                        this.checkPointsCompleted[i] = true;
-                        break;
-                    }
-                }
-            }
-        }
-        //console.log("Checkpoints: " + this.checkPointsCompleted);
-        if(showDebug) { debugOut("Laps: " + this.lapsCompleted); }
-        var lCount = 0;
-        for(var i = this.laps.length - 1; i >= 0; i--) {
-            if(showDebug) { debugOut("[" + this.laps[i] + "]"); }
-            
-            lCount++;
-            if(lCount === 3) {
-                break;
-            }
-        }
-        
-        if(telemetry) {
-            telemetry.update();
-        }
-    };
-
-    
     // Loads a model and reports failures explicitly (THREE.JSONLoader.load has no error callback).
     function loadModel(url, onLoad) {
         var request = new XMLHttpRequest();
@@ -525,552 +204,268 @@ OpenRacer.Car = function( parameters, domElement ) {
 
     loadModel("models/mustang_wheel.json", wheelLoaded);
     loadModel("models/mustang.json", bodyLoaded);
-    
-    /*
-    var modelLoader = new XMLHttpRequest();
-    var url = "models/vanq.json";
 
-    modelLoader.onreadystatechange = function() {
-        if (modelLoader.readyState == 4 && modelLoader.status == 200) {
-            var obj = JSON.parse(modelLoader.responseText);
-            for(var i = 0; i < obj.objects.length; i++) {
-                console.log(obj.objects[i].name);
-                var l = new THREE.JSONLoader();
-                console.log(obj.objects[i]);
-                var geom = l.parse(obj.objects[i]).geometry;
-                var mesh = new THREE.Mesh( geom, mlib.body["Orange"] );
-                mesh.position.x = -130.38620930679173;
-                mesh.position.y = 2.1395574378241913;
-                mesh.position.z = 11;
-                scene.add(mesh);
+    // ---- ground
+
+    // Samples the road under the wheels and gives it to the physics. The first time it also puts the car on the road.
+    this.sampleGround = function() {
+        var v = this.vehicle;
+        var cosP = Math.cos(v.psi);
+        var sinP = Math.sin(v.psi);
+        var heights = [];
+        var surfaces = [];
+        for(var i = 0; i < 4; i++) {
+            var w = this.wheels[i];
+            var x = v.x + cosP * w.a - sinP * w.b;
+            var z = v.z + sinP * w.a + cosP * w.b;
+            var ground = getGroundAt(x, z, w.groundY);
+            if(ground) {
+                heights.push(ground.y);
+                surfaces.push(ground.surface);
+                w.onGround = true;
+                if(i === 2) lastTerrain = ground.mesh;
+            } else {
+                // off the map: stay at the last known height
+                heights.push(w.groundY);
+                surfaces.push(w.surface);
+                w.onGround = false;
             }
         }
+        v.setGround(heights, surfaces);
     };
-    modelLoader.open("GET", url, true);
-    modelLoader.send();
-    */
-    
-    this.checkWheels = function( delta ) {
-        var avgX = (this.wheels[0].position.x + this.wheels[1].position.x + this.wheels[2].position.x + this.wheels[3].position.x) / 4;
-        var avgY = (this.wheels[0].position.y + this.wheels[1].position.y + this.wheels[2].position.y + this.wheels[3].position.y) / 4;
-        var avgZ = (this.wheels[0].position.z + this.wheels[1].position.z + this.wheels[2].position.z + this.wheels[3].position.z) / 4;
-        
-        this.carAngle = Math.atan2( this.wheels[0].position.z - this.wheels[2].position.z , this.wheels[0].position.x - this.wheels[2].position.x );
-        
-        var position = new THREE.Vector3 ( avgX, avgY, avgZ );
 
-        this.phi = this.wheels[0].incline;// piOver2;//(this.wheels[0].incline);// + this.wheels[1].incline) / 2;
-        //this.theta = this.carAngle;
+    // Puts the car on the road at a position, standing still
+    this.place = function(x, z, heading) {
+        var v = this.vehicle;
+        // the road meshes only have their world matrices after a render; the ground queries need them now
+        scene.updateMatrixWorld(true);
+        for(var i = 0; i < 4; i++) this.wheels[i].groundY = 5;
+        v.reset(x, z, heading);
+        this.sampleGround();
+        this.sampleGround(); // the second time with the road height as the starting point of the search
+        this.throttle = 0;
+        this.brakePedal = 0;
+        this.turnAngle = 0;
+        this.current_gear = 0;
+        this.updateVisuals(0);
+    };
 
-        var targetPosition = new THREE.Vector3 (0, 0, 0);
-        targetPosition.x = this.position.x + (100 * Math.cos( this.carAngle ));
-        targetPosition.y = this.position.y;// + (100 * Math.cos( this.phi ));
-        targetPosition.z = this.position.z + (100 * Math.sin( this.carAngle ));
+    // ---- display: the 3D objects follow the physics
 
-        this.carCentre.lookAt(targetPosition);
-        
-        this.body.position.set (position.x, position.y, position.z);
-        
-        var avgSpringLength = (this.wheels[0].springLength() + this.wheels[1].springLength() + this.wheels[2].springLength() + this.wheels[3].springLength()) / 4;
-        this.body.position.y += avgSpringLength + (this.wheels[0].diameter / 2);
-        //debugOut(avgSpringLength);
-        
-        //this.body.position.y += this.wheels[0].spring.free_length;
-        
-        // angle front-to-back
-        var heightDiffLeft = (this.wheels[1].position.y) - (this.wheels[2].position.y);
-        var springDiffLeft = this.wheels[1].springLength() - this.wheels[2].springLength();
-        
-        var heightDiffRight = (this.wheels[0].position.y) - (this.wheels[3].position.y);
-        var springDiffRight = this.wheels[0].springLength() - this.wheels[3].springLength();
-        
-        var heightDiff = (heightDiffLeft + heightDiffRight) / 2;
-        var springDiff = (springDiffLeft + springDiffRight) / 2;
+    var qYaw = new THREE.Quaternion();
+    var qPitch = new THREE.Quaternion();
+    var qRoll = new THREE.Quaternion();
+    var axisX = new THREE.Vector3(1, 0, 0);
+    var axisY = new THREE.Vector3(0, 1, 0);
+    var axisZ = new THREE.Vector3(0, 0, 1);
 
-        //var heightDiffRight = (this.wheels[1].position.y - this.wheels[1].springLength()) - (this.wheels[3].position.y - this.wheels[3].springLength());
-        //var distLeft = this.wheels[0].position.z - this.wheels[2].position.z;
-        //if(isNaN(heightDiff)) console.log("warning heightDiff");
-        var carPitch = -Math.asin(heightDiff / this.wheelbase);
-        /*if(isNaN(carPitch)) {
-            console.log("warning carPitch 2");
-            console.log(heightDiff);
-            console.log(heightDiff / this.wheelbase);
-            console.log("0: " + this.wheels[0].position.y + ", 1: "+ this.wheels[1].position.y + ", 2: "+ this.wheels[2].position.y + ", 3: "+ this.wheels[3].position.y)
-            carPitch = 0;
-        }*/
-        var springPitch = Math.asin(springDiff / this.wheelbase);
-        //if(isNaN(this.wheelbase)) console.log("warning wheelbase");
-        
-        var heightDiffFront = (this.wheels[0].position.y) - (this.wheels[1].position.y);
-        var heightDiffRear = (this.wheels[0].position.y) - (this.wheels[1].position.y);
-        var springDiffFront = this.wheels[0].springLength() - this.wheels[1].springLength();
-        var springDiffRear = this.wheels[2].springLength() - this.wheels[3].springLength();
-        var heightDiff2 = (heightDiffFront + heightDiffRear) / 2;
-        var springDiff2 = (springDiffFront + springDiffRear) / 2;
-        
-        //if(isNaN(heightDiff2)) console.log("warning heightDiff2");
-        var carRoll = -Math.asin(heightDiff2 / ((this.front_track + this.rear_track) / 2));
-        /*if(isNaN(carRoll)) {
-            console.log("warning carRoll 2");
-            console.log(heightDiff2);
-            console.log(heightDiff2 / ((this.front_track + this.rear_track) / 2));
-            console.log("0: " + this.wheels[0].position.y + ", 1: "+ this.wheels[1].position.y + ", 2: "+ this.wheels[2].position.y + ", 3: "+ this.wheels[3].position.y)
-            console.log("0: " + this.wheels[0].onGround + ", 1: "+ this.wheels[1].onGround + ", 2: "+ this.wheels[2].onGround + ", 3: "+ this.wheels[3].onGround)
-            carRoll = 0;
-        }*/
-        var springRoll = -Math.asin(springDiff2 / ((this.front_track + this.rear_track) / 2));
-        //var carRoll = -Math.asin((heightDiffLeft - heightDiffRight) + ((this.front_track + this.rear_track) / 2));
-        
-        //var carPitch = -Math.atan( (((this.wheels[0].position.y - this.wheels[0].springLength()) - (this.wheels[2].position.y - this.wheels[2].springLength())) + ((this.wheels[1].position.y - this.wheels[1].springLength()) - (this.wheels[3].position.y - this.wheels[3].springLength()))) / 2, ((this.wheels[0].position.z - this.wheels[2].position.z) + (this.wheels[1].position.z - this.wheels[3].position.z)) / 2 ) / 2;
-        //var carRoll = -Math.atan( (((this.wheels[0].position.y + this.wheels[0].springLength()) - (this.wheels[1].position.y + this.wheels[1].springLength())) + ((this.wheels[2].position.y + this.wheels[2].springLength()) - (this.wheels[3].position.y + this.wheels[3].springLength()))) / 2, ((this.wheels[0].position.z - this.wheels[1].position.z) + (this.wheels[2].position.z - this.wheels[3].position.z)) / 2 ) / 2;
+    this.updateVisuals = function(delta) {
+        var v = this.vehicle;
+        var w = this.wheels;
+        this.carAngle = v.psi;
+        var cosP = Math.cos(v.psi);
+        var sinP = Math.sin(v.psi);
+
+        // slope of the road under the car, from the heights under the wheels
+        var front = (w[0].groundY + w[1].groundY) / 2;
+        var rear = (w[2].groundY + w[3].groundY) / 2;
+        var left = (w[1].groundY + w[2].groundY) / 2;
+        var right = (w[0].groundY + w[3].groundY) / 2;
+        var groundPitch = Math.atan2(front - rear, this.wheelbase);              // positive = nose up
+        var groundRoll = Math.atan2(left - right, (this.front_track + this.rear_track) / 2); // positive = left side up
+        var avgGround = (front + rear) / 2;
+        var yaw = piOver2 - v.psi; // the model faces +z
+
+        // the middle between the axles, which is the centre of the body model
+        var offset = (v.af - v.ar) / 2;
+        var cx = v.x + cosP * offset;
+        var cz = v.z + sinP * offset;
+
+        var avgCompression = (w[0].compression + w[1].compression + w[2].compression + w[3].compression) / 4;
+        // the origin of the body model is one wheel radius above the axles
+        this.body.position.set(cx, avgGround + 2 * w[0].radius - avgCompression, cz);
+        this.body.rotation.set(0, yaw, 0);
         if(this.body.children[0]) {
-            this.body.children[0].rotation.x = carPitch + springPitch;
-            this.body.children[0].rotation.z = carRoll + springRoll;
-            //this.body.children[0].rotation.x += (carPitch - this.body.children[0].rotation.x) * 0.25;
-            //this.body.children[0].rotation.z += (carRoll - this.body.children[0].rotation.z) * 0.25;
+            this.body.children[0].rotation.x = -groundPitch + v.pitchVisual;
+            this.body.children[0].rotation.z = groundRoll + v.rollVisual;
         }
-        
-        camera.position.x = position.x;
-        camera.position.y = position.y;
-        camera.position.z = position.z;
-        camera.rotation.x = this.carCentre.rotation.x;
-        
-        if(this.carAngle < 0) {
-            //camera.rotation.y += Math.PI;// - (Math.PI / 2);
-            camera.rotation.y = this.carCentre.rotation.y + Math.PI - this.cameraAngle;
-        } else {
-            camera.rotation.y = this.carCentre.rotation.y + Math.PI + this.cameraAngle;
+
+        // wheels sit on the road, tilted with it
+        qYaw.setFromAxisAngle(axisY, yaw);
+        qPitch.setFromAxisAngle(axisX, -groundPitch);
+        qRoll.setFromAxisAngle(axisZ, groundRoll);
+        qYaw.multiply(qPitch).multiply(qRoll);
+        for(var i = 0; i < 4; i++) {
+            var wheel = w[i];
+            wheel.position.set(v.x + cosP * wheel.a - sinP * wheel.b, wheel.groundY + wheel.radius, v.z + sinP * wheel.a + cosP * wheel.b);
+            if(wheel.object) {
+                wheel.object.position.copy(wheel.position);
+                wheel.object.quaternion.copy(qYaw);
+                if(i < 2) wheel.turn(this.turnAngle);
+                wheel.object.children[0].children[0].rotation.x = wheel.spin;
+            }
         }
-        //debugOut(this.carAngle);
-        camera.rotation.z = this.carCentre.rotation.z;
+
+        // chase camera
+        camera.position.set(cx, avgGround + w[0].radius, cz);
+        camera.rotation.set(0, yaw + Math.PI + this.cameraAngle, 0);
         camera.translateZ(10);
         camera.translateY(2);
-        
-        this.body.rotation.x = this.carCentre.rotation.x;
-        this.body.rotation.y = this.carCentre.rotation.y;
-        this.body.rotation.z = this.carCentre.rotation.z;
 
-        //var oWheel = new THREE.Vector3();
-        //oWheel.copy(this.wheels[0].position);
-
-        var oX = [this.wheels[0].position.x, this.wheels[1].position.x, this.wheels[2].position.x, this.wheels[3].position.x];
-        var oY = [this.wheels[0].position.y, this.wheels[1].position.y, this.wheels[2].position.y, this.wheels[3].position.y];
-        var oZ = [this.wheels[0].position.z, this.wheels[1].position.z, this.wheels[2].position.z, this.wheels[3].position.z];
-        
-        this.wheels[0].setRotation(this.carCentre.rotation);
-        this.wheels[1].setRotation(this.carCentre.rotation);
-        this.wheels[2].setRotation(this.carCentre.rotation);
-        this.wheels[3].setRotation(this.carCentre.rotation);
-
-        //this.setWheelPositionOldMethod(position);
-        this.setWheelPosition(position, carPitch, springPitch, carRoll, springRoll);
-        
-        
-        //this.wheels[0].object.visible = false;
-        
-        //this.setWheelPosition(position, carPitch, springPitch, carRoll, springRoll);
-        
-        var aX = [this.wheels[0].position.x, this.wheels[1].position.x, this.wheels[2].position.x, this.wheels[3].position.x];
-        var aY = [this.wheels[0].position.y, this.wheels[1].position.y, this.wheels[2].position.y, this.wheels[3].position.y];
-        var aZ = [this.wheels[0].position.z, this.wheels[1].position.z, this.wheels[2].position.z, this.wheels[3].position.z];
-        
-        //this.wheels[0].position.x = ((Math.cos(-this.carAngle) * (-this.front_track / 2)) - (Math.sin(-this.carAngle) * (this.wheelbase / 2))) + position.x;
-        //this.wheels[0].position.z = (Math.sin(-this.carAngle) * (-this.front_track / 2)) + (Math.cos(-this.carAngle) * (this.wheelbase / 2)) + position.z;
-        
-        // Treat car like a rigid body - after the car has moved, it will want
-        // to bring all the wheels back to their correct positions under the
-        // wheel arches. The code above moves them, now we can calculate how
-        // much force was required to 'hold' them where they are, and we can
-        // apply this force to the wheel to use it in the next render loop.
-        dash_tc.className = "dash-tc-off";
-        dash_abs.className = "dash-abs-off";
-        for(var i = 0; i < this.wheels.length; i++) {
-            //debugOut((oX[i] - aX[i]) + ", " + (oZ[i] - aZ[i]));
-            var accX = (((oX[i] - aX[i]) / delta) / 2) / delta;// / delta;
-            var accY = (((oY[i] - aY[i]) / delta) / 2) / delta;// / delta;
-            var accZ = (((oZ[i] - aZ[i]) / delta) / 2) / delta;// / delta;
-            var fX = accX * this.wheels[i].apparentMass;
-            var fY = accY * this.wheels[i].apparentMass;
-            var fZ = accZ * this.wheels[i].apparentMass;
-            //debugOut(fX + ", " + fZ);
-            //if(isNaN(fX)) fX = 0;
-            //if(isNaN(fY)) fY = 0;
-            //if(isNaN(fZ)) fZ = 0;
-            if(!isNaN(fX) && !isNaN(fZ) && !isNaN(fY)) {
-                this.wheels[i].applyRigidForce(-fX, -fY, -fZ);
-            }
-            //debugOut(this.wheels[i].name + ": " + Math.round(fX) + ", " + Math.round(fY) + ", " + Math.round(fZ) + " - " + accY);
-            //debugOut((oX[i] - aX[i]) + ", " + (oY[i] - aY[i]) + ", " + (oZ[i] - aZ[i]));
-            //debugOut(this.wheels[i].name + " slip: " + this.wheels[i].slip + " | TC: " + this.wheels[i].tc);
-            if(this.wheels[i].tc) {
-                dash_tc.className = "dash-tc-on";
-            }
-            if(this.wheels[i].abs) {
-                dash_abs.className = "dash-abs-on";
-            }
-        }
+        shadowLight.position.x = this.body.position.x + 40;
+        shadowLight.position.y = this.body.position.y + 70;
+        shadowLight.position.z = this.body.position.z + 40;
     };
 
-    this.checkWheels2 = function( delta ) {
-        var avgX = (this.wheels[0].position.x + this.wheels[1].position.x + this.wheels[2].position.x + this.wheels[3].position.x) / 4;
-        var avgY = (this.wheels[0].position.y + this.wheels[1].position.y + this.wheels[2].position.y + this.wheels[3].position.y) / 4;
-        var avgZ = (this.wheels[0].position.z + this.wheels[1].position.z + this.wheels[2].position.z + this.wheels[3].position.z) / 4;
-        
-        this.carAngle = Math.atan2( this.wheels[0].position.z - this.wheels[2].position.z , this.wheels[0].position.x - this.wheels[2].position.x );
-        
-        var position = new THREE.Vector3 ( avgX, avgY, avgZ );
+    this.startEngine = function() {
+        this.vehicle.startEngine();
+    };
 
-        this.phi = this.wheels[0].incline;// piOver2;//(this.wheels[0].incline);// + this.wheels[1].incline) / 2;
-        //this.theta = this.carAngle;
+    // ---- main loop
 
-        var targetPosition = new THREE.Vector3 (0, 0, 0);
-        targetPosition.x = this.position.x + (100 * Math.cos( this.carAngle ));
-        targetPosition.y = this.position.y;// + (100 * Math.cos( this.phi ));
-        targetPosition.z = this.position.z + (100 * Math.sin( this.carAngle ));
-
-        this.carCentre.lookAt(targetPosition);
-        
-        this.body.position.set (position.x, position.y, position.z);
-        
-        var avgSpringLength = (this.wheels[0].springLength() + this.wheels[1].springLength() + this.wheels[2].springLength() + this.wheels[3].springLength()) / 4;
-        this.body.position.y += avgSpringLength + (this.wheels[0].diameter / 2);
-
-        // angle front-to-back
-        var heightDiffLeft = (this.wheels[1].position.y) - (this.wheels[2].position.y);
-        var springDiffLeft = this.wheels[1].springLength() - this.wheels[2].springLength();
-        
-        var heightDiffRight = (this.wheels[0].position.y) - (this.wheels[3].position.y);
-        var springDiffRight = this.wheels[0].springLength() - this.wheels[3].springLength();
-        
-        var heightDiff = (heightDiffLeft + heightDiffRight) / 2;
-        var springDiff = (springDiffLeft + springDiffRight) / 2;
-
-        var carPitch = -Math.asin(heightDiff / this.wheelbase);
-        var springPitch = Math.asin(springDiff / this.wheelbase);
-        
-        var heightDiffFront = (this.wheels[0].position.y) - (this.wheels[1].position.y);
-        var heightDiffRear = (this.wheels[0].position.y) - (this.wheels[1].position.y);
-        var springDiffFront = this.wheels[0].springLength() - this.wheels[1].springLength();
-        var springDiffRear = this.wheels[2].springLength() - this.wheels[3].springLength();
-        var heightDiff2 = (heightDiffFront + heightDiffRear) / 2;
-        var springDiff2 = (springDiffFront + springDiffRear) / 2;
-        
-        var carRoll = -Math.asin(heightDiff2 / ((this.front_track + this.rear_track) / 2));
-        var springRoll = -Math.asin(springDiff2 / ((this.front_track + this.rear_track) / 2));
-
-        if(this.body.children[0]) {
-            this.body.children[0].rotation.x = carPitch + springPitch;
-            this.body.children[0].rotation.z = carRoll + springRoll;
+    this.update = function( delta, showDebug ) {
+        if(!this.isReady()) return;
+        if(!placed) {
+            placed = true;
+            this.place(startX, startZ, startHeading);
         }
-        
-        camera.position.x = position.x;
-        camera.position.y = position.y;
-        camera.position.z = position.z;
-        camera.rotation.x = this.carCentre.rotation.x;
-        
-        if(this.carAngle < 0) {
-            camera.rotation.y = this.carCentre.rotation.y + Math.PI - this.cameraAngle;
+        gamepadUpdate();
+        var v = this.vehicle;
+
+        if(this.reset) {
+            // one reset per key press
+            this.reset = false;
+            this.place(startX, startZ, startHeading);
+            return;
+        }
+
+        if(this.cameraLeft) {
+            this.cameraAngle += 2  * delta;
+        }
+        if(this.cameraRight) {
+            this.cameraAngle -= 2 * delta;
+        }
+        if(showDebug) { debugClear(); }
+        if(showDebug) {
+            var wheelStatus = WheelControls.status();
+            if(wheelStatus) debugOut(wheelStatus);
+            var soundStatus = EngineSound.status();
+            if(soundStatus) debugOut(soundStatus);
+        }
+        if(this.accelerate) {
+            this.throttle += (1 - this.throttle) * delta * 4;
+        }
+        if(this.throttle > 1) this.throttle = 1;
+        if(this.brake) {
+            this.brakePedal += (1 - this.brakePedal) * delta * 6;
+        }
+        if(delta > 0.1) {
+            if(showDebug) { debugOut("DELTA WARN - " + delta); }
+            delta = 0.1;
+        }
+
+        // steering with the keyboard: slower at speed, and the wheels centre themselves
+        this.turnDir = 0;
+        if(this.turnLeft) this.turnDir = -1;
+        if(this.turnRight) this.turnDir = 1;
+        if(this.turnLeft && this.turnRight) this.turnDir = 0;
+        var tSpeed = this.turnSpeed * 0.3;
+        var speedFactor = Math.max(Math.abs(v.u) / 4, 1);
+        if(this.turnDir === 0) {
+            if(!mouseDown && !usingGamepad)
+                this.turnAngle *= Math.pow(0.75, delta * 60);
+        } else if(this.turnDir < 0 && this.turnAngle > 0) {
+            this.turnAngle += this.turnDir * ((tSpeed * 3) / speedFactor) * delta;
+        } else if(this.turnDir > 0 && this.turnAngle < 0) {
+            this.turnAngle += this.turnDir * ((tSpeed * 3) / speedFactor) * delta;
         } else {
-            camera.rotation.y = this.carCentre.rotation.y + Math.PI + this.cameraAngle;
+            this.turnAngle += this.turnDir * (tSpeed / speedFactor) * delta;
+            if(Math.abs(this.turnAngle) > this.turnLimit) {
+                this.turnAngle = this.turnDir * this.turnLimit;
+            }
         }
-        camera.rotation.z = this.carCentre.rotation.z;
-        camera.translateZ(10);
-        camera.translateY(2);
-        
-        this.body.rotation.x = this.carCentre.rotation.x;
-        this.body.rotation.y = this.carCentre.rotation.y;
-        this.body.rotation.z = this.carCentre.rotation.z;
 
-        //var oWheel = new THREE.Vector3();
-        //oWheel.copy(this.wheels[0].position);
+        v.update(delta);
+        this.engineRPM = this.engine.getRPM();
+        EngineSound.update(this.engineRPM, this.throttle);
 
-        var oX = [this.wheels[0].position.x, this.wheels[1].position.x, this.wheels[2].position.x, this.wheels[3].position.x];
-        var oY = [this.wheels[0].position.y, this.wheels[1].position.y, this.wheels[2].position.y, this.wheels[3].position.y];
-        var oZ = [this.wheels[0].position.z, this.wheels[1].position.z, this.wheels[2].position.z, this.wheels[3].position.z];
-        
-        this.wheels[0].setRotation(this.carCentre.rotation);
-        this.wheels[1].setRotation(this.carCentre.rotation);
-        this.wheels[2].setRotation(this.carCentre.rotation);
-        this.wheels[3].setRotation(this.carCentre.rotation);
+        this.sampleGround();
+        this.updateVisuals(delta);
 
-        //this.setWheelPositionOldMethod(position);
-        //this.setWheelPosition(position, carPitch, springPitch, carRoll, springRoll);
-        var newWheelPos = this.getWheelPosition(position, carPitch, springPitch, carRoll, springRoll);
-        
-        
-        //this.wheels[0].object.visible = false;
-        
-        //this.setWheelPosition(position, carPitch, springPitch, carRoll, springRoll);
-        
-        var aX = [this.wheels[0].position.x, this.wheels[1].position.x, this.wheels[2].position.x, this.wheels[3].position.x];
-        var aY = [this.wheels[0].position.y, this.wheels[1].position.y, this.wheels[2].position.y, this.wheels[3].position.y];
-        var aZ = [this.wheels[0].position.z, this.wheels[1].position.z, this.wheels[2].position.z, this.wheels[3].position.z];
-        
-        //this.wheels[0].position.x = ((Math.cos(-this.carAngle) * (-this.front_track / 2)) - (Math.sin(-this.carAngle) * (this.wheelbase / 2))) + position.x;
-        //this.wheels[0].position.z = (Math.sin(-this.carAngle) * (-this.front_track / 2)) + (Math.cos(-this.carAngle) * (this.wheelbase / 2)) + position.z;
-        
-        // Treat car like a rigid body - after the car has moved, it will want
-        // to bring all the wheels back to their correct positions under the
-        // wheel arches. The code above moves them, now we can calculate how
-        // much force was required to 'hold' them where they are, and we can
-        // apply this force to the wheel to use it in the next render loop.
-        dash_tc.className = "dash-tc-off";
-        dash_abs.className = "dash-abs-off";
+        // dashboard lights: traction control and ABS while they are working
+        var tcOn = false;
+        var absOn = false;
         for(var i = 0; i < this.wheels.length; i++) {
-            //debugOut((oX[i] - aX[i]) + ", " + (oZ[i] - aZ[i]));
-            var accX = (((oX[i] - newWheelPos[i].x) / delta) / 2) / delta;// / delta;
-            var accY = (((oY[i] - newWheelPos[i].y) / delta) / 2) / delta;// / delta;
-            var accZ = (((oZ[i] - newWheelPos[i].z) / delta) / 2) / delta;// / delta;
-            var fX = accX * this.wheels[i].apparentMass;
-            var fY = accY * this.wheels[i].apparentMass;
-            var fZ = accZ * this.wheels[i].apparentMass;
-            
-            //debugOut(fX + ", " + fZ);
-            //if(isNaN(fX)) fX = 0;
-            //if(isNaN(fY)) fY = 0;
-            //if(isNaN(fZ)) fZ = 0;
-            if(!isNaN(fX) && !isNaN(fZ) && !isNaN(fY)) {
-                //this.wheels[i].applyRigidForce(-fX, -fY, -fZ);
-                var acc = new THREE.Vector3(-accX, -accY, -accZ);
-                this.wheels[i].updatePosition(delta, acc, true);
-            }
-            //debugOut(this.wheels[i].name + ": " + Math.round(fX) + ", " + Math.round(fY) + ", " + Math.round(fZ) + " - " + accY);
-            //debugOut((oX[i] - aX[i]) + ", " + (oY[i] - aY[i]) + ", " + (oZ[i] - aZ[i]));
-            //debugOut(this.wheels[i].name + " slip: " + this.wheels[i].slip + " | TC: " + this.wheels[i].tc);
-            if(this.wheels[i].tc) {
-                dash_tc.className = "dash-tc-on";
-            }
-            if(this.wheels[i].abs) {
-                dash_abs.className = "dash-abs-on";
-            }
-            
-            this.wheels[i].position.copy(newWheelPos[i]);
-            
-            //this.wheels[i].object.position.x = newWheelPos[i].x;
-            //this.wheels[i].object.position.y = newWheelPos[i].y;
-            //this.wheels[i].object.position.z = newWheelPos[i].z;
+            if(this.wheels[i].tc) tcOn = true;
+            if(this.wheels[i].abs) absOn = true;
         }
-        
-        var carX = (this.wheels[0].position.x + this.wheels[1].position.x + this.wheels[2].position.x + this.wheels[3].position.x) / 4;
-        var carY = (this.wheels[0].position.y + this.wheels[1].position.y + this.wheels[2].position.y + this.wheels[3].position.y) / 4;
-        var carZ = (this.wheels[0].position.z + this.wheels[1].position.z + this.wheels[2].position.z + this.wheels[3].position.z) / 4;
+        dash_tc.className = tcOn ? "dash-tc-on" : "dash-tc-off";
+        dash_abs.className = absOn ? "dash-abs-on" : "dash-abs-off";
 
-        //this.body.position.set(carX, carY, carZ);
-        //this.body.position.y += avgSpringLength + (this.wheels[0].diameter / 2);
+        if(showDebug) {
+            var gear = this.reverse ? "R" : (this.neutral ? "N" : this.current_gear + 1);
+            debugOut(Math.round(v.u * 2.2369362920544) + " mph | Gear: " + gear + " | RPM: " + Math.round(this.engineRPM) +
+                (this.engine.running ? "" : " (STALLED: " + (this.clutchPedalPresent ? "clutch + throttle or I to start" : "starting") + ")") +
+                " | Throttle: " + this.throttle.toFixed(2) + " | Brake: " + this.brakePedal.toFixed(2) +
+                " | Clutch: " + v.clutchEngagement.toFixed(2) + " | TC [C]: " + (v.tcEnabled ? "on" : "off") + " | ABS [B]: " + (v.absEnabled ? "on" : "off"));
+        }
+
+        this.updateLaps(showDebug);
+
+        if(telemetry) {
+            telemetry.update();
+        }
     };
-    
-    this.setWheelPositionOldMethod = function(position) {
-        this.wheels[0].position.x = position.x;// + (this.front_track / 2) * Math.sin( this.phi ) * Math.cos( this.theta );
-        //this.wheels[0].position.y = position.y;
-        //this.wheels[0].object.rotation.y = this.wheels[0].incline;
-        this.wheels[0].position.z = position.z;// + (this.wheelbase / 2) * Math.sin( this.phi ) * Math.sin( this.theta );
-        //this.wheels[0].position.x += (-this.front_track / 2) * Math.sin(this.phi) * Math.cos(this.theta);
-        //this.wheels[0].position.y += (-this.front_track / 2) * Math.cos(this.phi);
-        //this.wheels[0].position.z += (-this.front_track / 2) * Math.sin(this.phi) * Math.sin(this.theta);
-        //this.wheels[0].position.y = position.y;
 
-        this.wheels[1].position.x = position.x;// + 3 * Math.sin( this.phi ) * Math.cos( this.theta );
-        //this.wheels[1].position.y = position.y;
-        this.wheels[1].position.z = position.z;// + 3 * Math.sin( this.phi ) * Math.sin( this.theta );
-
-        this.wheels[2].position.x = position.x;// + 3 * Math.sin( this.phi ) * Math.cos( this.theta );
-        //this.wheels[2].position.y = position.y;
-        this.wheels[2].position.z = position.z;// + 3 * Math.sin( this.phi ) * Math.sin( this.theta );
-
-        this.wheels[3].position.x = position.x;// + 3 * Math.sin( this.phi ) * Math.cos( this.theta );
-        //this.wheels[3].position.y = position.y;
-        this.wheels[3].position.z = position.z;// + 3 * Math.sin( this.phi ) * Math.sin( this.theta );        
-        
-        //this.wheels[0].setWheelAngle(this.carAngle);
-        //this.wheels[1].setWheelAngle(this.carAngle);
-        //this.wheels[2].setWheelAngle(this.carAngle);
-        //this.wheels[3].setWheelAngle(this.carAngle);
-
-        this.wheels[0].translateX ( -this.front_track / 2 );
-        //this.wheels[0].translateY ((this.wheelbase / 2) * Math.sin(this.wheels[0].incline));
-        this.wheels[0].translateZ ( this.wheelbase / 2 );
-        this.wheels[1].translateX ( this.front_track / 2 );
-        //this.wheels[1].translateY ((this.wheelbase / 2) * Math.sin(this.wheels[1].incline));
-        this.wheels[1].translateZ ( this.wheelbase / 2 );
-        this.wheels[2].translateX ( -this.rear_track / 2 );
-        //this.wheels[2].translateY ((this.wheelbase / 2) * Math.sin(-this.wheels[2].incline));
-        this.wheels[2].translateZ ( -this.wheelbase / 2 );
-        this.wheels[3].translateX ( this.rear_track / 2 );
-        //this.wheels[3].translateY ((this.wheelbase / 2) * Math.sin(-this.wheels[3].incline));
-        this.wheels[3].translateZ ( -this.wheelbase / 2 );
-    };
-    
-    this.setWheelPosition = function(position, carPitch, springPitch, carRoll, springRoll) {
-        var pitch = carPitch + springPitch;
-        var roll = carRoll + springRoll;
-        //if(isNaN(position.x)) console.log("warning setWheelPosition position x");
-        //if(isNaN(position.y)) console.log("warning setWheelPosition position y");
-        //if(isNaN(position.z)) console.log("warning setWheelPosition position z");
-        
-        //if(isNaN(carRoll)) console.log("warning carRoll");
-        //if(isNaN(springRoll)) console.log("warning springRoll");
-        //if(isNaN(carPitch)) console.log("warning carPitch");
-        //if(isNaN(springPitch)) console.log("warning springPitch");
-        //if(isNaN(this.theta)) console.log("warning theta");
-        //if(isNaN(roll)) console.log("warning roll");
-        //if(isNaN(pitch)) console.log("warning pitch");
-        
-        this.wheels[0].position.x = position.x + ((this.wheelbase / 2) * Math.sin(pitch + piOver2) * Math.cos(this.carAngle));
-        this.wheels[0].position.y = position.y + ((this.wheelbase / 2) * Math.cos(pitch + piOver2));
-        this.wheels[0].position.z = position.z + ((this.wheelbase / 2) * Math.sin(pitch + piOver2) * Math.sin(this.carAngle));// * (-this.front_track / 2) * Math.sin(this.wheels[0].incline) * Math.cos(this.theta);
-        //if(isNaN(this.wheels[0].position.x)) console.log("warning setWheelPosition wheels 0 position x");
-        
-        this.wheels[0].position.x += ((this.front_track / 2) * Math.sin(-roll + piOver2) * Math.cos(this.carAngle + piOver2));
-        this.wheels[0].position.y += ((this.front_track / 2) * Math.cos(-roll + piOver2));
-        this.wheels[0].position.z += ((this.front_track / 2) * Math.sin(-roll + piOver2)  * Math.sin(this.carAngle + piOver2));
-
-
-        this.wheels[1].position.x = position.x + ((this.wheelbase / 2) * Math.sin(pitch + piOver2) * Math.cos(this.carAngle));
-        this.wheels[1].position.y = position.y + ((this.wheelbase / 2) * Math.cos(pitch + piOver2));
-        this.wheels[1].position.z = position.z + ((this.wheelbase / 2) * Math.sin(pitch + piOver2) * Math.sin(this.carAngle));// * (-this.front_track / 2) * Math.sin(this.wheels[0].incline) * Math.cos(this.theta);
-        
-        this.wheels[1].position.x += ((this.front_track / 2) * Math.sin(-roll + piOver2) * Math.cos(this.carAngle - piOver2));
-        this.wheels[1].position.y += ((this.front_track / 2) * Math.cos(-roll + piOver2));
-        this.wheels[1].position.z += ((this.front_track / 2) * Math.sin(-roll + piOver2)  * Math.sin(this.carAngle - piOver2));
-
-
-        this.wheels[3].position.x = position.x + ((this.wheelbase / 2) * Math.sin(pitch - piOver2) * Math.cos(this.carAngle));
-        this.wheels[3].position.y = position.y + ((this.wheelbase / 2) * Math.cos(pitch - piOver2));
-        this.wheels[3].position.z = position.z + ((this.wheelbase / 2) * Math.sin(pitch - piOver2) * Math.sin(this.carAngle));// * (-this.front_track / 2) * Math.sin(this.wheels[0].incline) * Math.cos(this.theta);
-        
-        this.wheels[3].position.x += ((this.rear_track / 2) * Math.sin(roll - piOver2) * Math.cos(this.carAngle + piOver2));
-        this.wheels[3].position.y += ((this.rear_track / 2) * Math.cos(roll - piOver2));
-        this.wheels[3].position.z += ((this.rear_track / 2) * Math.sin(roll - piOver2)  * Math.sin(this.carAngle + piOver2));
-
-        this.wheels[2].position.x = position.x + ((this.wheelbase / 2) * Math.sin(pitch - piOver2) * Math.cos(this.carAngle));
-        this.wheels[2].position.y = position.y + ((this.wheelbase / 2) * Math.cos(pitch - piOver2));
-        this.wheels[2].position.z = position.z + ((this.wheelbase / 2) * Math.sin(pitch - piOver2) * Math.sin(this.carAngle));// * (-this.front_track / 2) * Math.sin(this.wheels[0].incline) * Math.cos(this.theta);
-        
-        this.wheels[2].position.x += ((this.rear_track / 2) * Math.sin(roll - piOver2) * Math.cos(this.carAngle - piOver2));
-        this.wheels[2].position.y += ((this.rear_track / 2) * Math.cos(roll - piOver2));
-        this.wheels[2].position.z += ((this.rear_track / 2) * Math.sin(roll - piOver2)  * Math.sin(this.carAngle - piOver2));
-        
-        for(var i = 0; i < this.wheels.length; i++) {
-            //this.wheels[i].position.y -= this.wheels[i].springExtension;
-            //this.wheels[i].position.x += -this.wheels[i].springExtension * Math.sin(pitch) * Math.cos(this.theta);// * Math.cos(carPitch + springPitch - (Math.PI / 2)));
-            this.wheels[i].position.y += -this.wheels[i].springExtension * Math.cos(pitch);
-            
-            if(i < 2) {
-                this.wheels[i].position.x += this.wheels[i].springExtension * Math.sin(pitch) * Math.cos(this.carAngle);// * Math.cos(carPitch + springPitch - (Math.PI / 2)));
-                this.wheels[i].position.z += this.wheels[i].springExtension * Math.sin(pitch) * Math.sin(this.carAngle);// * Math.sin(carPitch + springPitch - (Math.PI / 2)));
+    this.updateLaps = function(showDebug) {
+        if(lastTerrain !== this.currentCheckPoint) {
+            this.currentCheckPoint = lastTerrain;
+            if(lastTerrain === trackCheckPoints[0]) {
+                this.checkPointsCompleted[0] = true;
+                var checkpointsPassed = true;
+                for(var i = 1; i < this.checkPointsCompleted.length; i++) {
+                    if(checkpointsPassed) checkpointsPassed = this.checkPointsCompleted[i];
+                    this.checkPointsCompleted[i] = false;
+                }
+                if(checkpointsPassed) {
+                    // we passed all checkpoints
+                    if(this.lapStartTime > 0) {
+                        var elapsedTime = Date.now() - this.lapStartTime;
+                        var min = (elapsedTime / 1000 / 60) << 0;
+                        var sec = (elapsedTime / 1000) % 60;
+                        var milli = elapsedTime % 1000;
+                        this.laps.push(min + ":" + sec + "." + milli.toFixed(3));
+                        console.log("lap time: " + this.laps[this.laps.length - 1]);
+                    }
+                    this.lapsCompleted++;
+                }
+                this.lapStartTime = Date.now();
             } else {
-                this.wheels[i].position.x -= this.wheels[i].springExtension * Math.sin(pitch) * Math.cos(this.carAngle);// * Math.cos(carPitch + springPitch - (Math.PI / 2)));
-                this.wheels[i].position.z -= this.wheels[i].springExtension * Math.sin(pitch) * Math.sin(this.carAngle);// * Math.sin(carPitch + springPitch - (Math.PI / 2)));                
+                for(var i = 1; i < this.checkPointsCompleted.length; i++) {
+                    if(lastTerrain === trackCheckPoints[i]) {
+                        this.checkPointsCompleted[i] = true;
+                        break;
+                    }
+                }
             }
-            //this.wheels[i].position.z += -this.wheels[i].springExtension * Math.sin(pitch) * Math.sin(this.theta);// * Math.sin(carPitch + springPitch - (Math.PI / 2)));
         }
-        
-    };
-    
-    this.getWheelPosition = function(position, carPitch, springPitch, carRoll, springRoll) {
-        var pitch = carPitch + springPitch;
-        var roll = carRoll + springRoll;
-        
-        var wheels = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
-        
-        wheels[0].x = position.x + ((this.wheelbase / 2) * Math.sin(pitch + piOver2) * Math.cos(this.carAngle));
-        wheels[0].y = position.y + ((this.wheelbase / 2) * Math.cos(pitch + piOver2));
-        wheels[0].z = position.z + ((this.wheelbase / 2) * Math.sin(pitch + piOver2) * Math.sin(this.carAngle));// * (-this.front_track / 2) * Math.sin(this.wheels[0].incline) * Math.cos(this.theta);
-        
-        wheels[0].x += ((this.front_track / 2) * Math.sin(-roll + piOver2) * Math.cos(this.carAngle + piOver2));
-        wheels[0].y += ((this.front_track / 2) * Math.cos(-roll + piOver2));
-        wheels[0].z += ((this.front_track / 2) * Math.sin(-roll + piOver2)  * Math.sin(this.carAngle + piOver2));
-
-        wheels[1].x = position.x + ((this.wheelbase / 2) * Math.sin(pitch + piOver2) * Math.cos(this.carAngle));
-        wheels[1].y = position.y + ((this.wheelbase / 2) * Math.cos(pitch + piOver2));
-        wheels[1].z = position.z + ((this.wheelbase / 2) * Math.sin(pitch + piOver2) * Math.sin(this.carAngle));// * (-this.front_track / 2) * Math.sin(this.wheels[0].incline) * Math.cos(this.theta);
-        
-        wheels[1].x += ((this.front_track / 2) * Math.sin(-roll + piOver2) * Math.cos(this.carAngle - piOver2));
-        wheels[1].y += ((this.front_track / 2) * Math.cos(-roll + piOver2));
-        wheels[1].z += ((this.front_track / 2) * Math.sin(-roll + piOver2)  * Math.sin(this.carAngle - piOver2));
-
-        wheels[3].x = position.x + ((this.wheelbase / 2) * Math.sin(pitch - piOver2) * Math.cos(this.carAngle));
-        wheels[3].y = position.y + ((this.wheelbase / 2) * Math.cos(pitch - piOver2));
-        wheels[3].z = position.z + ((this.wheelbase / 2) * Math.sin(pitch - piOver2) * Math.sin(this.carAngle));// * (-this.front_track / 2) * Math.sin(this.wheels[0].incline) * Math.cos(this.theta);
-        
-        wheels[3].x += ((this.rear_track / 2) * Math.sin(roll - piOver2) * Math.cos(this.carAngle + piOver2));
-        wheels[3].y += ((this.rear_track / 2) * Math.cos(roll - piOver2));
-        wheels[3].z += ((this.rear_track / 2) * Math.sin(roll - piOver2)  * Math.sin(this.carAngle + piOver2));
-
-        wheels[2].x = position.x + ((this.wheelbase / 2) * Math.sin(pitch - piOver2) * Math.cos(this.carAngle));
-        wheels[2].y = position.y + ((this.wheelbase / 2) * Math.cos(pitch - piOver2));
-        wheels[2].z = position.z + ((this.wheelbase / 2) * Math.sin(pitch - piOver2) * Math.sin(this.carAngle));// * (-this.front_track / 2) * Math.sin(this.wheels[0].incline) * Math.cos(this.theta);
-        
-        wheels[2].x += ((this.rear_track / 2) * Math.sin(roll - piOver2) * Math.cos(this.carAngle - piOver2));
-        wheels[2].y += ((this.rear_track / 2) * Math.cos(roll - piOver2));
-        wheels[2].z += ((this.rear_track / 2) * Math.sin(roll - piOver2)  * Math.sin(this.carAngle - piOver2));
-        
-        for(var i = 0; i < wheels.length; i++) {
-            //this.wheels[i].position.y -= this.wheels[i].springExtension;
-            //this.wheels[i].position.x += -this.wheels[i].springExtension * Math.sin(pitch) * Math.cos(this.theta);// * Math.cos(carPitch + springPitch - (Math.PI / 2)));
-            wheels[i].y += -this.wheels[i].springExtension * Math.cos(pitch);
+        if(showDebug) { debugOut("Laps: " + this.lapsCompleted); }
+        var lCount = 0;
+        for(var i = this.laps.length - 1; i >= 0; i--) {
+            if(showDebug) { debugOut("[" + this.laps[i] + "]"); }
             
-            if(i < 2) {
-                wheels[i].x += this.wheels[i].springExtension * Math.sin(pitch) * Math.cos(this.carAngle);// * Math.cos(carPitch + springPitch - (Math.PI / 2)));
-                wheels[i].z += this.wheels[i].springExtension * Math.sin(pitch) * Math.sin(this.carAngle);// * Math.sin(carPitch + springPitch - (Math.PI / 2)));
-            } else {
-                wheels[i].x -= this.wheels[i].springExtension * Math.sin(pitch) * Math.cos(this.carAngle);// * Math.cos(carPitch + springPitch - (Math.PI / 2)));
-                wheels[i].z -= this.wheels[i].springExtension * Math.sin(pitch) * Math.sin(this.carAngle);// * Math.sin(carPitch + springPitch - (Math.PI / 2)));                
+            lCount++;
+            if(lCount === 3) {
+                break;
             }
-            //this.wheels[i].position.z += -this.wheels[i].springExtension * Math.sin(pitch) * Math.sin(this.theta);// * Math.sin(carPitch + springPitch - (Math.PI / 2)));
         }
-
-        return wheels;
     };
 
-    
-    this.balanceWheelVelocity = function (delta) {
-        
-        var avgDirX = (this.wheels[0].velocity.x + this.wheels[1].velocity.x + this.wheels[2].velocity.x + this.wheels[3].velocity.x) / 4;
-        var avgDirY = (this.wheels[0].velocity.y + this.wheels[1].velocity.y + this.wheels[2].velocity.y + this.wheels[3].velocity.y) / 4;
-        var avgDirZ = (this.wheels[0].velocity.z + this.wheels[1].velocity.z + this.wheels[2].velocity.z + this.wheels[3].velocity.z) / 4;
-        
-        for(var i = 0; i < this.wheels.length; i++) {
-            this.wheels[i].velocity.x += (avgDirX - this.wheels[i].velocity.x) * delta * 4;
-            this.wheels[i].velocity.y += (avgDirY - this.wheels[i].velocity.y) * delta * 4;
-            this.wheels[i].velocity.z += (avgDirZ - this.wheels[i].velocity.z) * delta * 4;
-        }
-        
-        
-        /*
-        // the avgDir is the new velocity for the car - we know the previous velocity, so we can work out how the car's acceleration
-        var aX = (avgDirX - this.velocity.x) / delta;
-        var aY = (avgDirY - this.velocity.y) / delta;
-        var aZ = (avgDirZ - this.velocity.z) / delta;
-        
-        // now we can work out the forces to apply to each wheel
-        var fX = (this.mass * aX) / 4;
-        var fY = (this.mass * aY) / 4;
-        var fZ = (this.mass * aZ) / 4;
-        
-        for(var i = 0; i < this.wheels.length; i++) {
-            this.wheels[i].applyInertia(new THREE.Vector3(fX, fY, fZ));
-        }
-        
-        this.velocity.set(avgDirX, avgDirY, avgDirZ);
-        */
-        /*
-        var maxVel = 0;
-        var avgVel = 0;
-        for(var i = 0; i < this.wheels.length; i++) {
-            var wheelVel = this.wheels[i].getWheelVelocity();
-            avgVel += wheelVel;
-            if(wheelVel > maxVel) maxVel = wheelVel;
-        }
-        avgVel *= 0.25;
-       
-        for(var i = 0; i < this.wheels.length; i++) {
-            //this.wheels[i].speed = avgSpeed;
-            this.wheels[i].setWheelVelocity(avgVel);
-        }
-        */
+    // The car is only simulated once everything it needs has loaded.
+    this.isReady = function() {
+        return !this.loadError && this.bodyLoaded && this.wheelsLoaded && this.wheels.length === 4;
     };
-    
+
     this.onKeyDown = function ( event ) {
 
         //event.preventDefault();
@@ -1101,6 +496,10 @@ OpenRacer.Car = function( parameters, domElement ) {
             case 192: /*@*/ this.cameraAngle = 0; break;
             
             case 84: /*t*/ if(telemetry) telemetry.setVisible(!telemetry.visible); break;
+
+            case 67: /*C*/ this.vehicle.tcEnabled = !this.vehicle.tcEnabled; break;
+            case 66: /*B*/ this.vehicle.absEnabled = !this.vehicle.absEnabled; break;
+            case 73: /*I*/ this.startEngine(); break;
 
             default: console.log(event.keyCode + " pressed."); break;
 
