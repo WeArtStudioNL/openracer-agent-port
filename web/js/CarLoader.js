@@ -153,6 +153,11 @@ OpenRacer.loadCarModel = function (config, onLoad, onError) {
             return nodes[slot] && nodes[slot].some(function (name) { return root.getObjectByName(name); });
         });
 
+
+        // The steering wheel: a part called "steeringwheel" turns with the steering. It turns around its own middle, about the axis
+        // of the wheel: the direction in which it is flattest (found from its shape), or "steering_wheel.axis" of the car (in the space of the model).
+        var steering = findSteeringWheel(root, space);
+
         if(complete) {
             SLOTS.forEach(function (slot) {
                 var parts = nodes[slot].map(function (name) { return root.getObjectByName(name); }).filter(Boolean);
@@ -179,6 +184,7 @@ OpenRacer.loadCarModel = function (config, onLoad, onError) {
         }
 
         function finish(wheelObjects) {
+            if(steering) tilt.add(steering.object);
             tilt.add(pivot);
             // glTF models are made of physically based materials: they are lit by and reflect the surroundings of the
             // scene (scene.environment, see MaterialLibrary.js)
@@ -189,8 +195,100 @@ OpenRacer.loadCarModel = function (config, onLoad, onError) {
             });
             // the changes to the materials that were made in the car editor
             OpenRacer.applyMaterialOverrides(THREE, [tilt].concat(wheelObjects), config.materials);
-            onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1 });
+            onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1, steeringWheel: steering });
         }
+    }
+
+    function findSteeringWheel(root, space) {
+        var settings = config.steering_wheel || {};
+        var wanted = String(settings.name || "steeringwheel").toLowerCase().replace(/[^a-z0-9]/g, "");
+        var node = null;
+        root.traverse(function (child) {
+            if(node) return;
+            var name = (child.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            if(name.indexOf(wanted) !== -1 || (wanted === "steeringwheel" && name.indexOf("steerwheel") !== -1)) node = child;
+        });
+        if(!node) return null;
+        space.updateMatrixWorld(true);
+
+        // the vertices of the part in the space of the body, for its middle and its shape
+        var points = [];
+        var v = new THREE.Vector3();
+        node.traverse(function (child) {
+            if(!child.isMesh || !child.geometry.attributes.position) return;
+            var position = child.geometry.attributes.position;
+            var step = Math.max(1, Math.floor(position.count / 4000));
+            for(var i = 0; i < position.count; i += step) {
+                v.fromBufferAttribute(position, i).applyMatrix4(child.matrixWorld);
+                points.push(v.x, v.y, v.z);
+            }
+        });
+        if(points.length < 9) return null;
+        var box = new THREE.Box3();
+        for(var p = 0; p < points.length; p += 3) box.expandByPoint(v.set(points[p], points[p + 1], points[p + 2]));
+        var centre = box.getCenter(new THREE.Vector3());
+
+        var axis;
+        if(settings.axis && settings.axis.length === 3) {
+            axis = new THREE.Vector3(settings.axis[0], settings.axis[1], settings.axis[2]).normalize();
+        } else {
+            axis = flattestDirection(points, centre);
+        }
+        // the axis points to the driver (to the rear of the car), so that a turn to the right is a turn clockwise as the driver sees it
+        if(axis.z > 0) axis.negate();
+
+        var object = new THREE.Object3D();
+        object.name = "steeringwheel-pivot";
+        object.position.copy(centre);
+        space.add(object);
+        object.updateMatrixWorld(true);
+        object.attach(node); // keeps the place of the part
+        space.remove(object);
+        return { object: object, axis: axis, degrees: settings.degrees > 0 ? settings.degrees : 450 };
+    }
+
+    // The direction in which a cloud of points is the flattest: the axis of the covariance matrix with the smallest value (for a ring and
+    // its spokes, the line through the middle at a right angle to the wheel)
+    function flattestDirection(points, centre) {
+        var c = [0, 0, 0, 0, 0, 0]; // xx, xy, xz, yy, yz, zz
+        var n = points.length / 3;
+        for(var i = 0; i < points.length; i += 3) {
+            var x = points[i] - centre.x, y = points[i + 1] - centre.y, z = points[i + 2] - centre.z;
+            c[0] += x * x; c[1] += x * y; c[2] += x * z; c[3] += y * y; c[4] += y * z; c[5] += z * z;
+        }
+        var a = [[c[0] / n, c[1] / n, c[2] / n], [c[1] / n, c[3] / n, c[4] / n], [c[2] / n, c[4] / n, c[5] / n]];
+        var e = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]; // the eigenvectors, as the columns
+        for(var sweep = 0; sweep < 30; sweep++) { // Jacobi
+            var changed = false;
+            for(var p = 0; p < 2; p++) {
+                for(var q = p + 1; q < 3; q++) {
+                    if(Math.abs(a[p][q]) < 1e-14) continue;
+                    changed = true;
+                    var theta = (a[q][q] - a[p][p]) / (2 * a[p][q]);
+                    var t = Math.sign(theta || 1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
+                    var cs = 1 / Math.sqrt(t * t + 1), sn = t * cs;
+                    for(var k = 0; k < 3; k++) {
+                        var akp = a[k][p], akq = a[k][q];
+                        a[k][p] = cs * akp - sn * akq;
+                        a[k][q] = sn * akp + cs * akq;
+                    }
+                    for(var k2 = 0; k2 < 3; k2++) {
+                        var apk = a[p][k2], aqk = a[q][k2];
+                        a[p][k2] = cs * apk - sn * aqk;
+                        a[q][k2] = sn * apk + cs * aqk;
+                    }
+                    for(var k3 = 0; k3 < 3; k3++) {
+                        var ekp = e[k3][p], ekq = e[k3][q];
+                        e[k3][p] = cs * ekp - sn * ekq;
+                        e[k3][q] = sn * ekp + cs * ekq;
+                    }
+                }
+            }
+            if(!changed) break;
+        }
+        var smallest = 0;
+        for(var m = 1; m < 3; m++) if(a[m][m] < a[smallest][smallest]) smallest = m;
+        return new THREE.Vector3(e[0][smallest], e[1][smallest], e[2][smallest]).normalize();
     }
 
     function isInside(part, other) {

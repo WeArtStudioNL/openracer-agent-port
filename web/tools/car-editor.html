@@ -115,6 +115,12 @@
         <div class="buttons"><button id="fit">Fit to the wheels / the floor</button></div>
     </div>
 
+    <h2>Steering wheel</h2>
+    <div class="sub">A part of the model called <b>steeringwheel</b> turns with the steering, around its own middle. The axis is found from the shape of the part (the direction in which it is flat).</div>
+    <div class="hint" id="steeringInfo">No model loaded.</div>
+    <label>Turn of the steering wheel at full lock (degrees, each way)</label>
+    <input type="number" id="steeringDegrees" min="30" max="1000" step="10" value="450">
+
     <h2>Wheels</h2>
     <div class="sub">The wheels steer and spin, so they have to be separate parts of the model. Select, for each wheel, the part or parts (tyre, rim, brake disc…) that belong to it. Hold Ctrl or Cmd to select more.</div>
     <label><input type="radio" name="wheelMode" value="model" checked> The wheels are parts of the model</label>

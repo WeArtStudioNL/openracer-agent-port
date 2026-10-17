@@ -55,6 +55,8 @@ The materials of a glTF model are used as they are (physically based: base colou
 
 A model does not always arrive the way it looked in Blender: a shader that the glTF exporter does not know, such as the glass of many models, ends up as a plain opaque white metal. The *Materials* part of the car editor lists the materials of the model and sets them right with a preset (glass, car paint, chrome, rubber, plastic, brushed metal) or by hand (colour, metalness, roughness, opacity, clear coat, reflection), with a live preview. The changes are saved with the car (`materials` in `car.json`). Glass that arrives opaque is set to see-through glass as a suggestion.
 
+A part of the model called `steeringwheel` turns with the steering (about its own middle, around the axis that is found from its shape: the direction in which the part is flat; `steering_wheel.degrees` in `car.json`, 450 by default, is the turn at full lock each way, set in the car editor). Parts in the same part are turned with it, so keep the wheel, its spokes and its hub together in it.
+
 In Blender a car that looks towards -Y (the front view) exports as it should; the model needs a name per part for the wheels to be found. glTF files with Draco or Meshopt compression are not supported.
 
 ## Driving model

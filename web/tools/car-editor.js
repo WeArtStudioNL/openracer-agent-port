@@ -163,6 +163,7 @@ function setModel(root, isNew, replace) {
         object.children.forEach((child) => walk(child, depth + 1));
     };
     walk(root, 0);
+    updateSteeringInfo();
     for (const slot of SLOTS) {
         const select = $("w" + slot);
         select.innerHTML = "";
@@ -809,6 +810,7 @@ function buildConfig(id) {
         },
         brakes: { front: need("brakeFront", "The front brakes"), rear: need("brakeRear", "The rear brakes") },
         cameras: readCameras(),
+        steering_wheel: { degrees: Math.min(1000, Math.max(30, num("steeringDegrees") || 450)) },
         sound: readSound()
     };
     if (!soundValid(config.sound)) throw new Error("Every field of the engine sound needs a number (and the muffler at least one length).");
@@ -914,6 +916,15 @@ async function deleteCar() {
     refreshList();
 }
 
+// ---- the steering wheel
+
+function updateSteeringInfo() {
+    const found = state.nodes.find((n) => /steeringwheel|steerwheel/i.test(n.name.replace(/[^a-z0-9]/gi, "")));
+    $("steeringInfo").textContent = !state.nodes.length ? "No model loaded."
+        : found ? "Found the part “" + found.name + "”: it turns with the steering in the game."
+        : "No part called steeringwheel in this model: the steering wheel does not turn. Name it that way in Blender to make it turn.";
+}
+
 // ---- the differentials
 
 const DIFF_INFO = {
@@ -964,6 +975,7 @@ function fill(car) {
     set("wheelbase", c.wheelbase); set("frontTrack", c.front_track); set("rearTrack", c.rear_track);
     set("tyre", c.tire_diameter); set("drag", c.drag_coefficient); set("steer", c.max_steer_deg);
     const d = car.drivetrain;
+    set("steeringDegrees", (car.steering_wheel && car.steering_wheel.degrees) || 450);
     set("drive", d.drive); set("diff", d.diff || "lsd"); set("centerDiff", d.center_diff || "lsd");
     set("diffPreload", d.diff_preload !== undefined ? d.diff_preload : 150);
     set("diffPower", Math.round((d.diff_power !== undefined ? d.diff_power : 0.3) * 100));
@@ -1035,6 +1047,7 @@ function newCar() {
     if (state.root) pivot.remove(state.root);
     state.root = null;
     state.nodes = [];
+    updateSteeringInfo();
     state.materials = [];
     state.overrides = {};
     state.autoGlass = false;

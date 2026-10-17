@@ -139,6 +139,7 @@ OpenRacer.Car = function( config, domElement ) {
     // The model: the body (it pitches and rolls) and the four wheels, see CarLoader.js
     OpenRacer.loadCarModel(config, function(model) {
         tobj.bodyLift = model.bodyLift;
+        tobj.steeringWheel = model.steeringWheel || null;
         tobj.body.add(model.tilt);
         scene.add(tobj.body);
         shadowLight.target = tobj.body;
@@ -209,6 +210,12 @@ OpenRacer.Car = function( config, domElement ) {
                 if(i < 2) wheel.turn(this.vehicle.steerApplied);
                 wheel.object.children[0].children[0].rotation.x = wheel.spin;
             }
+        }
+        // the steering wheel of the model turns with the steering
+        if(this.steeringWheel) {
+            var sw = this.steeringWheel;
+            var ratio = (sw.degrees * Math.PI / 180) / this.maxTurn;
+            sw.object.quaternion.setFromAxisAngle(sw.axis, -v.steerApplied * ratio);
         }
         // the checkpoint of the road under the rear wheel
         var rear = w[2];
