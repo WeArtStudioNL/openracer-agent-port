@@ -35,6 +35,8 @@ var ForceFeedback = (function() {
     var noiseValue = 0;
     var impactLeft = 0;
     var lastSteer = 0;
+    var steerRateFiltered = 0;
+    var currentSpeed = 0;
     var testUntil = 0;
 
     function clamp(x, min, max) { return Math.max(min, Math.min(max, x)); }
@@ -532,16 +534,21 @@ var ForceFeedback = (function() {
         var result = compute(car.vehicle, delta, opts);
         var torque = result.torque;
         if(performance.now() < testUntil) torque = 0.6 * Math.sin(performance.now() / 1000 * 2 * Math.PI * 1.5);
-        // damping and a centring spring, when the wheel cannot do them itself
+        // a centring spring when the wheel cannot do it itself, and damping: the wheel of the game sends its torque with a delay
+        // (the frame, the USB) and a wheel that is let go at speed would swing to and fro on the aligning torque, as a car with a
+        // worn damper does. The damping grows with the speed, both in the wheel itself (its damper effect) and here.
         var steer = car.turnAngle / (car.maxTurn || 0.5);
+        var speed = Math.abs(car.vehicle.u);
+        currentSpeed = speed;
+        var speedFactor = 0.4 + 0.6 * clamp(speed / 25, 0, 1);
         var softSpring = !(device && (driver === "logitech" || (pid && pid.hasSpring)));
-        var softDamper = !(device && pid && pid.hasDamper);
         if(softSpring) torque -= option("ffbSpring", 0.15) * steer;
         var steerRate = delta > 0 ? (steer - lastSteer) / delta : 0;
         lastSteer = steer;
-        if(softDamper) torque -= option("ffbDamping", 0.2) * clamp(steerRate * 0.15, -1, 1);
+        steerRateFiltered += (steerRate - steerRateFiltered) * Math.min(1, delta / 0.02);
+        torque -= option("ffbDamping", 0.35) * speedFactor * clamp(steerRateFiltered * 0.12, -0.7, 0.7);
         if(option("ffbInvert", false)) torque = -torque;
-        output += (torque - output) * Math.min(1, delta / 0.03);
+        output += (torque - output) * Math.min(1, delta / (0.03 + 0.03 * clamp(speed / 30, 0, 1)));
         send(clamp(output, -1, 1));
         if(!device) rumble(result.vibration);
     }
@@ -550,14 +557,16 @@ var ForceFeedback = (function() {
         if(!device || !driver) return;
         var now = performance.now();
         if(now - lastSendTime < 8) return; // at most 120 times a second
-        var spring = option("ffbSpring", 0.15), damper = option("ffbDamping", 0.2);
+        var spring = option("ffbSpring", 0.15);
+        // the damper of the wheel itself, more at speed (sent when it changes)
+        var damper = Math.round(option("ffbDamping", 0.35) * (0.4 + 0.6 * clamp(currentSpeed / 25, 0, 1)) * 20) / 20;
         if(driver === "pid") {
             if(Math.abs(value - lastSent) > 0.004 || now - lastSendTime > 200) {
                 lastSent = value; lastSendTime = now;
                 later(function() { return sendConstant(value); });
             }
             if(pid.hasSpring && spring !== lastSpring) { lastSpring = spring; later(function() { return sendCondition(blocks.spring, spring, 1); }); }
-            if(pid.hasDamper && damper !== lastDamper) { lastDamper = damper; later(function() { return sendCondition(blocks.damper, damper * 0.6, 1); }); }
+            if(pid.hasDamper && damper !== lastDamper) { lastDamper = damper; later(function() { return sendCondition(blocks.damper, damper, 1); }); }
         } else {
             if(Math.abs(value - lastSent) > 0.004 || now - lastSendTime > 200) {
                 lastSent = value; lastSendTime = now;
