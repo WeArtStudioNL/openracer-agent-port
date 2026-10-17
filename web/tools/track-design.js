@@ -409,13 +409,31 @@ export function createDesign(api) {
         renderPrefabList();
     }
 
+    // A new node goes between the two nodes it is nearest to (the segment of the loop that is closest to the click), with the height and
+    // the width in between those two.
     function addNode(x, z) {
         const data = design.data;
-        const y = design.selectedNode >= 0 ? data.nodes[design.selectedNode].y : 0;
-        const width = design.selectedNode >= 0 ? data.nodes[design.selectedNode].width : parseFloat($("dsWidth").value) || 12;
-        const node = { x: round(x), y, z: round(z), width };
-        const at = design.selectedNode >= 0 ? design.selectedNode + 1 : data.nodes.length;
-        data.nodes.splice(at, 0, node);
+        const nodes = data.nodes;
+        let node, at;
+        if (nodes.length < 2) {
+            node = { x: round(x), y: 0, z: round(z), width: parseFloat($("dsWidth").value) || 12 };
+            at = nodes.length;
+        } else {
+            let best = Infinity, bestI = nodes.length - 1, bestT = 0;
+            const segments = data.closed ? nodes.length : nodes.length - 1;
+            for (let i = 0; i < segments; i++) {
+                const a = nodes[i], b = nodes[(i + 1) % nodes.length];
+                const dx = b.x - a.x, dz = b.z - a.z;
+                const len2 = dx * dx + dz * dz || 1;
+                const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / len2));
+                const d = Math.hypot(a.x + dx * t - x, a.z + dz * t - z);
+                if (d < best) { best = d; bestI = i; bestT = t; }
+            }
+            const a = nodes[bestI], b = nodes[(bestI + 1) % nodes.length];
+            node = { x: round(x), y: round(a.y + (b.y - a.y) * bestT), z: round(z), width: round(a.width + (b.width - a.width) * bestT) };
+            at = bestI + 1;
+        }
+        nodes.splice(at, 0, node);
         design.selectedNode = at;
         rebuild();
         selectNode(at);
@@ -640,7 +658,7 @@ export function createDesign(api) {
         enable, disable, toJSON, exportGlb,
         active: () => !!design.data,
         roles: () => { const r = {}; roadGroup.children.forEach((m) => { r[m.name] = m.userData.role; }); prefabGroup.children.forEach((g) => { r[g.name] = state.roles[g.name]; }); return r; },
-        hudText: (mode) => mode === "node" ? "Add node: click on the ground to add a node after the selected one; drag the arrows to move a node. Delete removes it."
+        hudText: (mode) => mode === "node" ? "Add node: click on the ground to add a node between the two nearest nodes; drag the arrows to move a node. Delete removes it."
             : mode === "prefab" ? "Place prefab: click on the ground to put down a " + (PREFABS[design.prefabType] || PREFABS.wall).label.toLowerCase() + "; drag the arrows to move it, R turns the gizmo to rotation, Delete removes it."
             : null
     };
