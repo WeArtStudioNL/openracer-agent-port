@@ -32,6 +32,7 @@ var scripts = [
     "js/MainMenu.js",
     "js/MaterialOverrides.js",
     "js/CarDefaults.js",
+    "js/TrackEnvironment.js",
     "js/CarLoader.js",
     "js/MaterialLibrary.js",
     "js/TrackLoader.js",

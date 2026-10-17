@@ -210,6 +210,7 @@ function loadScene() {
             
             buildCollisionWorld();
             buildGroundWorld();
+            applyTrackEnvironment(currentTrack);
             console.log("track loaded");
             trackLoadedCallback();
         }
@@ -342,10 +343,39 @@ function loadGltfTrack(track) {
         });
         buildCollisionWorld();
         buildGroundWorld();
+        applyTrackEnvironment(track);
         console.log("track loaded: " + track.model + ", " + pieces.length + " parts");
         trackLoadedCallback();
     }, undefined, function(error) {
         console.error(error);
         alert("The track could not be loaded: " + (error.message || error));
     });
+}
+
+// The sky and the light of the track (see TrackEnvironment.js). A glTF track always gets them (a sky of colours if it says nothing),
+// a track of the old format only if it has an environment: its sky is a part of its model.
+function applyTrackEnvironment(track) {
+    if(!track.model && !track.environment) return;
+    var env = OpenRacer.environmentOf(track);
+    var texture = env.sky_image ? textureLoader.load(trackBase + env.sky_image) : null;
+    scene.add(OpenRacer.makeSky(THREE, env, texture));
+
+    var sun = OpenRacer.sunVector(env, 1000);
+    sunLight.position.set(sun.x, sun.y, sun.z);
+    sunLight.color.set(env.sun.color);
+    sunLight.intensity = 0.7 * Math.PI * env.sun.intensity;
+    shadowLight.color.set(env.sun.color);
+    shadowLight.intensity = 0.5 * Math.PI * env.sun.intensity;
+    var shadow = OpenRacer.sunVector(env, 91);
+    sunDirection.set(shadow.x, shadow.y, shadow.z);
+    ambientLight.color.set(env.ambient.color);
+    ambientLight.intensity = Math.PI * env.ambient.intensity;
+
+    if(env.fog.enabled) {
+        scene.fog = new THREE.Fog(env.fog.color, env.fog.near, env.fog.far);
+        renderer.setClearColor(env.fog.color, 1);
+    } else {
+        scene.fog = null;
+        renderer.setClearColor(env.sky_horizon, 1);
+    }
 }

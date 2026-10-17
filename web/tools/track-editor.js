@@ -32,6 +32,11 @@ const state = {
     gates: [],            // [{ x, y, z, heading, width }]
     mode: "view",
     markerScale: 1,
+    env: OpenRacer.environmentDefaults(),
+    envOn: true,
+    skyFile: null,        // a sky picture that was picked
+    skyName: "",          // the sky picture of the track (in its folder)
+    oldSkyName: "",
     legacy: false,        // the track is of the old format
     idEdited: false
 };
@@ -48,10 +53,12 @@ const camera = new THREE.PerspectiveCamera(45, 1, 0.5, 20000);
 camera.position.set(0, 120, 160);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.update();
-scene.add(new THREE.HemisphereLight(0xffffff, 0x556070, 1.1));
+const hemi = new THREE.HemisphereLight(0xffffff, 0x556070, 1.1);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffffff, 1.4);
 sun.position.set(50, 120, 80);
 scene.add(sun);
+let sky = null;
 const trackGroup = new THREE.Group();
 scene.add(trackGroup);
 const markers = new THREE.Group(); // the start and the gates
@@ -216,6 +223,7 @@ function frameTrack() {
     const span = Math.max(size.x, size.z, 10);
     state.markerScale = Math.max(1, span / 250); // markers stay visible on a big track
     camera.far = span * 30;
+    state.far = camera.far;
     camera.near = Math.max(0.5, span / 5000);
     camera.updateProjectionMatrix();
     camera.position.set(centre.x + span * 0.35, centre.y + span * 0.6, centre.z + span * 0.55);
@@ -250,6 +258,7 @@ function setModel(root, roles) {
     });
     trackGroup.add(root);
     frameTrack();
+    applyEnv();
     applyColours();
     renderParts();
 }
@@ -517,6 +526,80 @@ $("bulkApply").onclick = () => {
     renderParts();
 };
 
+
+// ---- the sky and the light
+
+function readEnv() {
+    const e = OpenRacer.environmentDefaults();
+    e.sky_top = $("skyTop").value;
+    e.sky_horizon = $("skyHorizon").value;
+    e.sky_image = state.skyFile ? state.skyFile.name : state.skyName;
+    e.fog = { enabled: $("fogOn").checked, color: $("fogColor").value, near: parseFloat($("fogNear").value) || 0, far: Math.max(10, parseFloat($("fogFar").value) || 1000) };
+    e.sun = { azimuth: parseFloat($("sunAz").value) || 0, elevation: Math.min(90, Math.max(2, parseFloat($("sunEl").value) || 45)), intensity: Math.max(0, parseFloat($("sunInt").value)), color: $("sunColor").value };
+    if (!isFinite(e.sun.intensity)) e.sun.intensity = 1;
+    e.ambient = { color: $("ambColor").value, intensity: Math.max(0, parseFloat($("ambInt").value)) };
+    if (!isFinite(e.ambient.intensity)) e.ambient.intensity = 1;
+    return e;
+}
+
+function fillEnv(e) {
+    state.env = e;
+    $("skyTop").value = e.sky_top;
+    $("skyHorizon").value = e.sky_horizon;
+    $("fogOn").checked = e.fog.enabled;
+    $("fogColor").value = e.fog.color;
+    $("fogNear").value = e.fog.near;
+    $("fogFar").value = e.fog.far;
+    $("sunAz").value = e.sun.azimuth;
+    $("sunEl").value = e.sun.elevation;
+    $("sunInt").value = e.sun.intensity;
+    $("sunColor").value = e.sun.color;
+    $("ambColor").value = e.ambient.color;
+    $("ambInt").value = e.ambient.intensity;
+    $("skyImageName").textContent = state.skyFile ? state.skyFile.name : (state.skyName || "");
+}
+
+// shows the sky and the light in the view
+function applyEnv() {
+    state.envOn = $("envOn").checked;
+    $("envFields").style.opacity = state.envOn ? 1 : 0.45;
+    if (sky) { scene.remove(sky); sky = null; }
+    if (!state.envOn) {
+        scene.background = new THREE.Color(0x20262f);
+        scene.fog = null;
+        hemi.color.set(0xffffff); hemi.groundColor.set(0x556070); hemi.intensity = 1.1;
+        sun.color.set(0xffffff); sun.intensity = 1.4; sun.position.set(50, 120, 80);
+        return;
+    }
+    const e = state.env = readEnv();
+    const v = OpenRacer.sunVector(e, 500);
+    sun.position.set(v.x, v.y, v.z);
+    sun.color.set(e.sun.color);
+    sun.intensity = 1.8 * e.sun.intensity;
+    hemi.color.set(e.sky_top); hemi.groundColor.set(e.ambient.color); hemi.intensity = 0.9 * e.ambient.intensity + 0.2;
+    const build = (texture) => {
+        if (sky) scene.remove(sky);
+        sky = OpenRacer.makeSky(THREE, e, texture);
+        sky.scale.setScalar(Math.min(1, (state.far || 3500) * 0.9 / 3000));
+        scene.add(sky);
+    };
+    if (state.skyFile) build(new THREE.TextureLoader().load(URL.createObjectURL(state.skyFile)));
+    else if (state.skyName && state.existingId) build(new THREE.TextureLoader().load("../tracks/" + state.existingId + "/" + state.skyName));
+    else build(null);
+    // the fog is not shown here: seen from above the whole track would disappear in it
+    scene.background = new THREE.Color(e.sky_horizon);
+    scene.fog = null;
+}
+
+for (const id of ["envOn", "skyTop", "skyHorizon", "fogOn", "fogColor", "fogNear", "fogFar", "sunAz", "sunEl", "sunInt", "sunColor", "ambColor", "ambInt"]) {
+    $(id).addEventListener("input", applyEnv);
+}
+$("skyImage").addEventListener("change", (e) => {
+    if (e.target.files.length) { state.skyFile = e.target.files[0]; $("skyImageName").textContent = state.skyFile.name; applyEnv(); }
+});
+$("skyImageClear").onclick = () => { state.skyFile = null; state.skyName = ""; $("skyImage").value = ""; $("skyImageName").textContent = ""; applyEnv(); };
+$("envDefaults").onclick = () => { state.skyFile = null; state.skyName = ""; $("skyImage").value = ""; fillEnv(OpenRacer.environmentDefaults()); applyEnv(); };
+
 // ---- tracks that exist
 
 async function refreshList(select) {
@@ -546,6 +629,13 @@ async function loadExisting() {
     $("id").disabled = false;
     $("description").value = track.description || "";
     state.idEdited = true;
+    state.skyFile = null;
+    state.skyName = (track.environment && track.environment.sky_image) || "";
+    state.oldSkyName = state.skyName;
+    $("skyImage").value = "";
+    fillEnv(OpenRacer.environmentOf(track));
+    $("envOn").checked = !!(track.model || track.environment);
+    applyEnv();
     state.start = track.start ? { x: track.start.x, y: 0, z: track.start.z, heading: track.start.heading || 0 } : null;
     state.gates = [];
     $("delete").style.display = "";
@@ -577,6 +667,11 @@ function newTrack() {
     renderParts();
     updateMarkers();
     markers.clear();
+    state.skyFile = null; state.skyName = ""; state.oldSkyName = "";
+    $("skyImage").value = "";
+    fillEnv(OpenRacer.environmentDefaults());
+    $("envOn").checked = true;
+    applyEnv();
     $("existing").value = "";
     $("files").value = "";
     $("name").value = "";
@@ -638,6 +733,26 @@ async function save() {
             if (!/\.glb$/i.test(old.model)) throw new Error("To save this track under another id, import its model files again.");
             uploads.push([old.model, blob]);
         }
+        let oldSky = null;
+        if (state.envOn) {
+            const e = readEnv();
+            if (state.skyFile) {
+                if (!FILE_PATTERN.test(state.skyFile.name)) throw new Error("The file name of the sky picture has characters that are not allowed.");
+                uploads.push([state.skyFile.name, state.skyFile]);
+                if (state.oldSkyName && state.oldSkyName !== state.skyFile.name && id === state.existingId) oldSky = state.oldSkyName;
+            } else if (state.skyName && id !== state.existingId && state.existingId) {
+                const blob = await (await fetch("../tracks/" + state.existingId + "/" + state.skyName)).blob();
+                uploads.push([state.skyName, blob]);
+            } else if (!state.skyName && state.oldSkyName && id === state.existingId) {
+                oldSky = state.oldSkyName;
+            }
+            e.sky_image = state.skyFile ? state.skyFile.name : state.skyName;
+            if (!e.sky_image) delete e.sky_image;
+            config.environment = e;
+        } else {
+            delete config.environment;
+            if (state.oldSkyName && id === state.existingId) oldSky = state.oldSkyName;
+        }
         if (!state.legacy) {
             const meshes = {};
             for (const [partName, role] of Object.entries(state.roles)) if (role !== "scenery" && partName) meshes[partName] = role;
@@ -647,11 +762,15 @@ async function save() {
         status("Saving…");
         for (const [fileName, file] of uploads) await put("/api/tracks/" + id + "/" + encodeURIComponent(fileName), file);
         await put("/api/tracks/" + id + "/track.json", JSON.stringify(config, null, 2) + "\n");
+        if (oldSky) await fetch("/api/tracks/" + id + "/" + encodeURIComponent(oldSky), { method: "DELETE" });
         if (oldModel) await fetch("/api/tracks/" + id + "/" + encodeURIComponent(oldModel), { method: "DELETE" });
         state.existingId = id;
         state.existingTrack = Object.assign({}, config, { id });
         state.files = new Map();
         state.mainFile = null;
+        state.skyName = config.environment && config.environment.sky_image || "";
+        state.oldSkyName = state.skyName;
+        state.skyFile = null;
         await refreshList(id);
         $("delete").style.display = "";
         status("Saved as tracks/" + id + ". It is in the main menu of the game now.", "ok");
@@ -681,4 +800,6 @@ $("name").addEventListener("input", () => { if (!state.idEdited && !state.existi
 
 renderLegend();
 renderParts();
+fillEnv(OpenRacer.environmentDefaults());
+applyEnv();
 refreshList();

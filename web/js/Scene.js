@@ -41,6 +41,9 @@ function applyToneMapping(name) {
     renderer.toneMapping = TONE_MAPPINGS[name] !== undefined ? TONE_MAPPINGS[name] : THREE.NoToneMapping;
 }
 var shadowLight;
+var sunLight;          // the main light, see applyTrackEnvironment in TrackLoader.js
+var ambientLight;
+var sunDirection = new THREE.Vector3(40, 70, 40); // from the car to the sun that casts its shadow
 var SCREEN_WIDTH = window.innerWidth;
 var SCREEN_HEIGHT = window.innerHeight;
 
@@ -98,6 +101,7 @@ RACER.Scene = function (parameters, domElement) {
         light.position.set( 350, 75, 250 );
         light.target.position.copy( scene.position );
         scene.add( light );
+        sunLight = light;
 
         light = new THREE.PointLight( 0xffffff, Math.PI, 0, 0 );
         light.position.set( 500, 1000, 0 );
@@ -105,6 +109,7 @@ RACER.Scene = function (parameters, domElement) {
         
         light = new THREE.AmbientLight( 0x576777, Math.PI );
         scene.add(light);
+        ambientLight = light;
 
         // The sun that casts the shadow of the car. It follows the car (see Car.js), and its
         // shadow map only covers the surroundings of the car.

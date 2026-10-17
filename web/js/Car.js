@@ -207,9 +207,7 @@ OpenRacer.Car = function( config, domElement ) {
 
         this.updateCamera(delta, cx, cz, v.groundLevel, yaw, this.body.quaternion);
 
-        shadowLight.position.x = this.body.position.x + 40;
-        shadowLight.position.y = this.body.position.y + 70;
-        shadowLight.position.z = this.body.position.z + 40;
+        shadowLight.position.copy(this.body.position).add(sunDirection);
     };
 
     // ---- the cameras: 1 is the fixed camera behind the car, 2 follows the direction of the car smoothly and
