@@ -232,7 +232,8 @@ var Hud = (function() {
     }
 
     function updateLaps(car) {
-        var html = "<div class=\"lap\">LAP " + (car.lapsCompleted + 1) + (car.raceCount > 1 ? " &nbsp;·&nbsp; P" + car.racePosition + "/" + car.raceCount : "") + "</div>";
+        var lap = car.raceLaps ? (car.lapsCompleted >= car.raceLaps ? "FINISHED" : car.lapsCompleted + 1 === car.raceLaps ? "FINAL LAP" : "LAP " + (car.lapsCompleted + 1) + "/" + car.raceLaps) : "LAP " + (car.lapsCompleted + 1);
+        var html = "<div class=\"lap\">" + lap + (car.raceCount > 1 ? " &nbsp;·&nbsp; P" + car.racePosition + "/" + car.raceCount : "") + "</div>";
         var current = car.lapStartTime !== undefined ? car.clock - car.lapStartTime : 0;
         html += "<div class=\"time\">" + formatTime(Math.max(0, current)) + "</div>";
         var times = car.lapTimes;

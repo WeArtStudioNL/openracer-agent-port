@@ -54,6 +54,8 @@ OpenRacer.Car = function( config, domElement ) {
     this.cameraAngle = 0;
     
     this.lapsCompleted = 0;
+    this.raceLaps = 0;        // the laps of the race (0: practice, no end), shown by the HUD
+    this.held = false;        // held on the grid (the countdown of a race, see main.js)
     this.lapStartTime = 0;    // the time (of the clock below) that the lap that is going started
     this.laps = [];
     this.lapTimes = [];       // the times of the laps that are done, in seconds
@@ -359,6 +361,8 @@ OpenRacer.Car = function( config, domElement ) {
         }
         this.pollInput();
         gamepadUpdate();
+        // on the grid before the start of a race: the brakes are on, the engine can be revved
+        if(this.held) { this.brakePedal = 1; this.handbrake = true; this.accelerate = false; this.throttle = Math.min(this.throttle, 0.6); }
         // the clutch pedal works the clutch in the manual mode, once it is used or the shifter was moved
         if(this.clutchAvailable && this.gearboxMode === "manual" && this.clutch > 0.08) this.manualClutch = true;
         this.clutchPedalPresent = this.clutchAvailable && this.gearboxMode === "manual" && this.manualClutch;

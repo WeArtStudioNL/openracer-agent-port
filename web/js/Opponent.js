@@ -57,6 +57,8 @@ OpenRacer.Opponent = function (config, line, options) {
     this.lapTimes = [];
     this.clock = 0;
     this.lapStart = 0;
+    this.held = false;           // on the grid, before the start (the race holds it)
+    this.finished = false;       // the race is done: it slows down and pulls aside
     var lastFraction = 0;
     var maxFraction = 0;
 
@@ -115,6 +117,7 @@ OpenRacer.Opponent = function (config, line, options) {
     this.drive = function (delta, others) {
         var v = this.vehicle;
         if (!line || !speeds) { this.throttle = 0; this.brakePedal = 1; return; }
+        if (this.held) { this.throttle = 0; this.brakePedal = 1; this.turnAngle = 0; this.stuck = 0; return; }
         var speed = Math.max(0, v.u);
         this.lineIndex = line.nearest(v.x, v.z, this.lineIndex);
         var n = line.count();
@@ -137,6 +140,7 @@ OpenRacer.Opponent = function (config, line, options) {
             var gap = ahead.along - 4.5;
             if (gap < 2 + speed * 0.15 && ahead.u < speed + 1) holdBack = Math.max(0.2, gap / (2 + speed * 0.15));
         }
+        if (this.finished) asideTarget = -3; // done: to the right, out of the way
         aside += (asideTarget - aside) * Math.min(1, delta / 0.7);
 
         // the point to steer at: ahead on the line, further the faster
@@ -160,10 +164,12 @@ OpenRacer.Opponent = function (config, line, options) {
         var allowed = Infinity;
         for (var j = 0; j <= 4; j++) allowed = Math.min(allowed, speeds[((this.lineIndex + j) % n + n) % n]);
         allowed *= holdBack;
+        if (this.finished) allowed = 0; // slows down and stops
         var error = allowed - speed;
         if (error > 0.5) { this.throttle = Math.min(1, 0.3 + error * 0.25); this.brakePedal = 0; }
         else if (error < -0.5) { this.throttle = 0; this.brakePedal = Math.min(1, -error * 0.18); }
         else { this.throttle = 0.15 + error * 0.2; this.brakePedal = 0; }
+        if (this.finished) { this.throttle = 0; this.brakePedal = Math.max(this.brakePedal, speed < 1 ? 1 : 0.2); return; }
         if (speed < 2 && v.clutchEngagement < 0.5) this.throttle = Math.max(this.throttle, 0.5);
         // stuck against something: back up a moment
         if (speed < 0.5 && this.throttle > 0.3) { this.stuck = (this.stuck || 0) + delta; } else this.stuck = 0;

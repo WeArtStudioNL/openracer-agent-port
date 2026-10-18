@@ -9,7 +9,7 @@
 var MainMenu = (function() {
     var STORAGE_KEY = "openracer.lastChoice";
     var RACE_KEY = "openracer.raceOptions";
-    var raceOptions = { ai: 0, difficulty: "normal", ghost: true, records: true };
+    var raceOptions = { ai: 0, difficulty: "normal", ghost: true, records: true, laps: 0 };
     try { raceOptions = Object.assign(raceOptions, JSON.parse(window.localStorage.getItem(RACE_KEY)) || {}); } catch(e) { /* no storage */ }
     function rememberRace() { try { window.localStorage.setItem(RACE_KEY, JSON.stringify(raceOptions)); } catch(e) { /* no storage */ } }
     var element = null;
@@ -103,7 +103,8 @@ var MainMenu = (function() {
         if(!choice.car || !choice.track) return;
         remember();
         window.location.href = window.location.pathname + "?car=" + encodeURIComponent(choice.car) + "&track=" + encodeURIComponent(choice.track) +
-            "&ai=" + raceOptions.ai + "&difficulty=" + raceOptions.difficulty + "&ghost=" + (raceOptions.ghost ? 1 : 0) + "&records=" + (raceOptions.records ? 1 : 0);
+            "&ai=" + raceOptions.ai + "&difficulty=" + raceOptions.difficulty + "&ghost=" + (raceOptions.ghost ? 1 : 0) + "&records=" + (raceOptions.records ? 1 : 0) +
+            "&laps=" + (raceOptions.laps || 0);
     }
 
     function render(error) {
@@ -143,6 +144,8 @@ var MainMenu = (function() {
             row.appendChild(b);
             return row;
         };
+        var lapCounts = [0, 3, 5, 10];
+        raceColumn.appendChild(option("Race", raceOptions.laps ? raceOptions.laps + " laps" : "Practice", function() { raceOptions.laps = lapCounts[(lapCounts.indexOf(raceOptions.laps || 0) + 1) % lapCounts.length]; }));
         var counts = [0, 1, 2, 3, 5, 7];
         raceColumn.appendChild(option("AI opponents", raceOptions.ai === 0 ? "None" : String(raceOptions.ai), function() { raceOptions.ai = counts[(counts.indexOf(raceOptions.ai) + 1) % counts.length]; }));
         var levels = ["easy", "normal", "hard"], levelNames = { easy: "Easy", normal: "Normal", hard: "Hard" };
@@ -155,7 +158,8 @@ var MainMenu = (function() {
         var trackChosen = tracks.filter(function(t) { return t.id === choice.track; })[0];
         var hasLine = trackChosen && ((trackChosen.design && trackChosen.design.nodes) || (trackChosen.racing_line && trackChosen.racing_line.length > 10) ||
             (OpenRacer.Records && OpenRacer.Records.anyGhost(choice.track)));
-        record.innerHTML = (best ? "Best lap with this car: <b>" + OpenRacer.Records.format(best) + "</b>" : "No lap record with this car here yet.") +
+        record.innerHTML = (raceOptions.laps ? "A race of " + raceOptions.laps + " laps from a standing start, with a countdown; practice has no end.<br>" : "") +
+            (best ? "Best lap with this car: <b>" + OpenRacer.Records.format(best) + "</b>" : "No lap record with this car here yet.") +
             (raceOptions.ai > 0 ? "<br>" + (hasLine ? "The AI drives the racing line of this track." : "The AI needs a racing line: drive one lap here first, or draw the track in the track editor.") : "");
         raceColumn.appendChild(record);
         columns.appendChild(raceColumn);

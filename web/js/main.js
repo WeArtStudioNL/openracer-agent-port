@@ -49,7 +49,8 @@ function raceOptionsFromQuery(query) {
         ai: Math.max(0, Math.min(7, parseInt(query.get("ai") || "0", 10) || 0)),
         difficulty: query.get("difficulty") || "normal",
         ghost: query.get("ghost") !== "0",
-        records: query.get("records") !== "0"
+        records: query.get("records") !== "0",
+        laps: Math.max(0, Math.min(99, parseInt(query.get("laps") || "0", 10) || 0)) // 0: practice, no end
     };
 }
 
@@ -117,6 +118,110 @@ function setupRace() {
         }
         car.raceCount = race.opponents.length + 1;
     }
+    if(options.laps > 0) startRace(options.laps);
+}
+
+// A race: a standing start with a countdown (everyone is held on the grid), a number of laps, and the results once the cars
+// come in. The AI counts its laps along the line, the player's laps are counted by the gates (Car.js).
+function startRace(laps) {
+    race.laps = laps;
+    race.state = "countdown";
+    race.countdown = 4;          // 3, 2, 1 and GO (a second each)
+    race.results = [];
+    race.winnerTime = null;
+    car.raceLaps = laps;
+    car.held = true;
+    race.opponents.forEach(function(o) { o.held = true; });
+    var overlay = document.createElement("div");
+    overlay.id = "raceOverlay";
+    overlay.style.cssText = "position: absolute; top: 18%; left: 50%; transform: translateX(-50%); z-index: 1001; font: bold 96px Arial; " +
+        "color: #ffffff; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7); pointer-events: none;";
+    document.body.appendChild(overlay);
+    race.overlay = overlay;
+}
+
+function updateRaceFlow(delta) {
+    if(race.state === "countdown") {
+        race.countdown -= delta;
+        var n = Math.ceil(race.countdown - 1);
+        race.overlay.textContent = n > 0 ? String(n) : "GO!";
+        race.overlay.style.color = n > 0 ? (n === 1 ? "#ffd04d" : "#ffffff") : "#5be07a";
+        if(race.countdown <= 1 && car.held) {
+            // GO: the clocks of the race start here
+            car.held = false;
+            race.opponents.forEach(function(o) { o.held = false; o.goClock = o.clock; });
+            race.goClock = car.clock;
+        }
+        if(race.countdown <= 0) { race.state = "racing"; race.overlay.remove(); }
+        return;
+    }
+    if(race.state !== "racing" && race.state !== "finished") return;
+    // the cars that come in
+    race.opponents.forEach(function(o) {
+        if(!o.finished && o.lapsCompleted >= race.laps) {
+            o.finished = true;
+            o.finishTime = o.clock - (o.goClock || 0);
+            if(race.winnerTime === null) race.winnerTime = o.finishTime;
+        }
+    });
+    if(!race.playerFinished && car.lapsCompleted >= race.laps) {
+        race.playerFinished = true;
+        race.playerTime = car.clock - (race.goClock || 0);
+        if(race.winnerTime === null) race.winnerTime = race.playerTime;
+        race.state = "finished";
+        car.racePosition = standings().map(function(r) { return r.player; }).indexOf(true) + 1; // the place stays the one of the finish
+        showResults();
+    }
+    if(race.state === "finished") renderResults();
+}
+
+// The results: the cars that are in, by their time; the others by how far they are, still running
+function standings() {
+    var rows = race.opponents.map(function(o) {
+        return { name: o.name, time: o.finished ? o.finishTime : null, progress: o.progress, best: o.lapTimes.length ? Math.min.apply(null, o.lapTimes) : null, player: false };
+    });
+    rows.push({ name: "You (" + (carConfig.name || carConfig.id) + ")", time: race.playerFinished ? race.playerTime : null, progress: playerLineLaps + playerLastFraction,
+        best: car.lapTimes.length ? Math.min.apply(null, car.lapTimes) : null, player: true });
+    rows.sort(function(a, b) {
+        if(a.time !== null && b.time !== null) return a.time - b.time;
+        if(a.time !== null) return -1;
+        if(b.time !== null) return 1;
+        return b.progress - a.progress;
+    });
+    return rows;
+}
+
+var resultsPanel = null, resultsHtml = "";
+function showResults() {
+    if(resultsPanel) return;
+    resultsPanel = document.createElement("div");
+    resultsPanel.id = "raceResults";
+    resultsPanel.style.cssText = "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1002; min-width: 420px; padding: 22px 28px; " +
+        "background: rgba(20, 24, 31, 0.92); color: #ffffff; font-family: Arial; border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);";
+    document.body.appendChild(resultsPanel);
+    renderResults();
+}
+
+function renderResults() {
+    var rows = standings();
+    var position = rows.map(function(r) { return r.player; }).indexOf(true) + 1;
+    var html = "<div style=\"font-size: 26px; font-weight: bold; margin-bottom: 4px;\">" + (position === 1 ? "You won!" : "Finished P" + position) + "</div>" +
+        "<div style=\"color: #9fb0c4; margin-bottom: 14px;\">" + race.laps + " laps · " + (currentTrack.name || currentTrack.id) + "</div>" +
+        "<table style=\"border-collapse: collapse; width: 100%; font-size: 15px;\">" +
+        "<tr style=\"color: #9fb0c4; text-align: left;\"><th style=\"padding: 4px 10px 4px 0;\">#</th><th>Car</th><th style=\"text-align: right;\">Best lap</th><th style=\"text-align: right;\">Time</th></tr>";
+    rows.forEach(function(r, i) {
+        var time = r.time === null ? "running" : (i === 0 ? Hud.formatTime(r.time) : "+" + Hud.formatTime(r.time - rows[0].time));
+        html += "<tr style=\"" + (r.player ? "color: #ffd04d; font-weight: bold;" : "") + "\"><td style=\"padding: 5px 10px 5px 0;\">" + (i + 1) + "</td><td>" + r.name + "</td>" +
+            "<td style=\"text-align: right; padding-left: 16px;\">" + (r.best === null ? "–" : Hud.formatTime(r.best)) + "</td><td style=\"text-align: right; padding-left: 16px;\">" + time + "</td></tr>";
+    });
+    html += "</table><div style=\"margin-top: 18px; text-align: right;\">" +
+        "<button id=\"raceAgain\" style=\"padding: 9px 18px; margin-right: 8px; font: bold 15px Arial; background: #3d7bd9; color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Race again</button>" +
+        "<button id=\"raceMenu\" style=\"padding: 9px 18px; font: bold 15px Arial; background: #3b424c; color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Main menu</button></div>";
+    if(html === resultsHtml) return;
+    resultsHtml = html;
+    resultsPanel.innerHTML = html;
+    document.getElementById("raceAgain").onclick = function() { window.location.reload(); };
+    document.getElementById("raceMenu").onclick = function() { window.location.href = window.location.pathname; };
 }
 
 // Recording the racing line for the track editor ("Record AI racing line"): the player drives calm laps, every lap replaces the
@@ -173,7 +278,7 @@ function updateRace(delta) {
     race.opponents.forEach(function(o) { o.update(delta, vehicles); });
     if(race.opponents.length) OpenRacer.collideCars(vehicles);
     race.ghost.update(car, delta);
-    if(race.opponents.length && race.line) {
+    if(race.opponents.length && race.line && !race.playerFinished) {
         // the place: how far along the line everyone is, counted the same way for the player as for the AI (laps of the line)
         playerLineIndex = race.line.nearest(car.vehicle.x, car.vehicle.z, playerLineIndex);
         var fraction = race.line.fractionOf(playerLineIndex);
@@ -186,6 +291,7 @@ function updateRace(delta) {
         race.opponents.forEach(function(o) { if(o.loaded && o.progress > mine) position++; });
         car.racePosition = position;
     }
+    if(race.state) updateRaceFlow(delta);
 }
 
 function onEnterFrame() {
@@ -198,6 +304,7 @@ function onEnterFrame() {
         var now = performance.now();
         var d = (now - lastFrameTime) / 1000;
         lastFrameTime = now;
+        if(d > 0.1) d = 0.1; // after a pause of the browser (another tab, no focus) the game goes on from here, it does not catch up
         car.update(d, true);
         updateRace(d);
     }
