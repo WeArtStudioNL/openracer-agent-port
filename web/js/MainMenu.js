@@ -78,7 +78,27 @@ var MainMenu = (function() {
             "#mainMenu .option .label { color: #cfd8e3; }" +
             "#mainMenu .option button { background: #2c3541; color: #fff; border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; min-width: 120px; }" +
             "#mainMenu .option button:hover { background: #3a4656; }" +
-            "#mainMenu .record { color: #9aa8ba; font-size: 14px; margin: 6px 0 14px; }";
+            "#mainMenu .record { color: #9aa8ba; font-size: 14px; margin: 6px 0 14px; }" +
+            // the badge of a car or track that is not of the server: the garage of this browser or a folder on the PC (Garage.js)
+            "#mainMenu .badge { display: inline-block; font-size: 11px; font-weight: normal; letter-spacing: 1px; text-transform: uppercase; vertical-align: middle; " +
+            "margin-left: 8px; padding: 2px 7px; border-radius: 10px; background: #3b5b8a; color: #dbe7f7; }" +
+            "#mainMenu .badge.folder { background: #6b5a2b; color: #f3e6c4; }" +
+            // the garage dialog
+            "#garageDialog { position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 3100; background: rgba(0, 0, 0, 0.65); display: flex; align-items: center; justify-content: center; }" +
+            "#garageDialog .box { width: 720px; max-width: calc(100% - 40px); max-height: calc(100% - 40px); overflow-y: auto; background: #1d232c; border: 2px solid #2c3541; border-radius: 10px; padding: 20px 24px; color: #fff; font-family: Arial, sans-serif; }" +
+            "#garageDialog h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: 1px; }" +
+            "#garageDialog .note { color: #9aa8ba; font-size: 14px; line-height: 1.5; margin: 0 0 14px; }" +
+            "#garageDialog h3 { font-size: 13px; letter-spacing: 2px; color: #9ab; text-transform: uppercase; margin: 16px 0 6px; }" +
+            "#garageDialog .row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid #2c3541; border-radius: 6px; margin-bottom: 6px; }" +
+            "#garageDialog .row .name { flex: 1; }" +
+            "#garageDialog .row .meta { color: #7e90a6; font-size: 13px; }" +
+            "#garageDialog button { background: #2c3541; color: #fff; border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; }" +
+            "#garageDialog button:hover { background: #3a4656; }" +
+            "#garageDialog button.danger:hover { background: #8a3a32; }" +
+            "#garageDialog .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }" +
+            "#garageDialog .status { color: #ffd04d; font-size: 14px; min-height: 18px; margin-top: 10px; }" +
+            "#garageDialog .status.error { color: #ff9a8a; }" +
+            "#garageDialog .close { float: right; }";
         document.head.appendChild(style);
     }
 
@@ -205,6 +225,7 @@ var MainMenu = (function() {
         var name = document.createElement("div");
         name.className = "name";
         name.textContent = car.name || car.id;
+        addBadge(name, car);
         over.appendChild(name);
         if(car.description) {
             var info = document.createElement("div");
@@ -237,6 +258,7 @@ var MainMenu = (function() {
         var name = document.createElement("div");
         name.className = "name";
         name.textContent = item.name || item.id;
+        addBadge(name, item);
         div.appendChild(name);
         if(item.description) {
             var info = document.createElement("div");
@@ -253,6 +275,188 @@ var MainMenu = (function() {
         div.onclick = function() { choice[key] = item.id; remember(); render(); };
         div.ondblclick = start;
         return div;
+    }
+
+    // "my garage" or "folder" after the name of a car or track that is not of the server (see Garage.js)
+    function addBadge(name, item) {
+        var source = OpenRacer.Garage ? OpenRacer.Garage.sourceOf(item) : null;
+        if(!source) return;
+        var badge = document.createElement("span");
+        badge.className = "badge " + source;
+        badge.textContent = source === "folder" ? "folder" : "my garage";
+        badge.title = source === "folder" ? "From the folder on your PC that is linked in the garage" : "In the garage of this browser";
+        name.appendChild(badge);
+    }
+
+    function formatSize(bytes) {
+        if(bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + " GB";
+        if(bytes >= 1048576) return (bytes / 1048576).toFixed(1) + " MB";
+        return Math.max(1, Math.round(bytes / 1024)) + " kB";
+    }
+
+    // The garage dialog: the cars and tracks of this browser (delete, export as a zip), import a zip, and a folder on the PC
+    function showGarage() {
+        var Garage = OpenRacer.Garage;
+        var old = document.getElementById("garageDialog");
+        if(old) old.remove();
+        var overlay = document.createElement("div");
+        overlay.id = "garageDialog";
+        var box = document.createElement("div");
+        box.className = "box";
+        overlay.appendChild(box);
+        overlay.onclick = function(event) { if(event.target === overlay) close(); };
+        function close() { overlay.remove(); load(); }
+        var status = null;
+        function say(text, error) { if(status) { status.textContent = text || ""; status.className = "status" + (error ? " error" : ""); } }
+
+        function build() {
+            box.innerHTML = "";
+            var closeButton = document.createElement("button");
+            closeButton.className = "close";
+            closeButton.textContent = "Close";
+            closeButton.onclick = close;
+            box.appendChild(closeButton);
+            box.insertAdjacentHTML("beforeend", "<h2>My garage</h2><p class=\"note\">Your own cars and tracks live here, in this browser, next to the ones that come with the game: " +
+                "what you save in the car editor and the track editor, what you import from a zip, and the tuning you save to a car. Nothing is sent to the server. " +
+                "Export a car or track as a zip to pass it on or to keep it, and import a zip someone gave you.</p>");
+            status = document.createElement("div");
+            status.className = "status";
+
+            Promise.all([Garage.list("cars"), Garage.list("tracks"), Garage.usage()]).then(function(result) {
+                [["cars", "Cars", result[0]], ["tracks", "Tracks", result[1]]].forEach(function(section) {
+                    var kind = section[0], records = section[2];
+                    box.insertAdjacentHTML("beforeend", "<h3>" + section[1] + " in the garage</h3>");
+                    if(!records.length) {
+                        box.insertAdjacentHTML("beforeend", "<div class=\"note\">None yet.</div>");
+                        return;
+                    }
+                    records.forEach(function(record) {
+                        var row = document.createElement("div");
+                        row.className = "row";
+                        var name = document.createElement("div");
+                        name.className = "name";
+                        var files = Object.keys(record.files || {});
+                        name.innerHTML = "<b></b> <span class=\"meta\"></span>";
+                        name.querySelector("b").textContent = record.json.name || record.id;
+                        name.querySelector(".meta").textContent = record.id + " · " + (files.length ? files.length + " file" + (files.length === 1 ? "" : "s") + ", " + formatSize(Garage.sizeOf(record)) :
+                            "settings only, the files of the server are used");
+                        row.appendChild(name);
+                        var exportButton = document.createElement("button");
+                        exportButton.textContent = "Export zip";
+                        exportButton.onclick = function() {
+                            say("Making the zip…");
+                            Garage.exportZip(kind, record.id).then(function(zip) {
+                                var a = document.createElement("a");
+                                a.href = URL.createObjectURL(zip.blob);
+                                a.download = zip.name;
+                                document.body.appendChild(a);
+                                a.click();
+                                a.remove();
+                                setTimeout(function() { URL.revokeObjectURL(a.href); }, 60000);
+                                say("Exported " + zip.name + " (" + formatSize(zip.blob.size) + ").");
+                            }).catch(function(error) { say("Could not export: " + error.message, true); });
+                        };
+                        row.appendChild(exportButton);
+                        var deleteButton = document.createElement("button");
+                        deleteButton.className = "danger";
+                        deleteButton.textContent = "Delete";
+                        deleteButton.onclick = function() {
+                            if(!window.confirm("Delete " + (record.json.name || record.id) + " from the garage of this browser?")) return;
+                            Garage.remove(kind, record.id).then(build).catch(function(error) { say("Could not delete: " + error.message, true); });
+                        };
+                        row.appendChild(deleteButton);
+                        box.appendChild(row);
+                    });
+                });
+
+                box.insertAdjacentHTML("beforeend", "<h3>Import</h3>");
+                var actions = document.createElement("div");
+                actions.className = "actions";
+                var importInput = document.createElement("input");
+                importInput.type = "file";
+                importInput.accept = ".zip,application/zip";
+                importInput.multiple = true;
+                importInput.style.display = "none";
+                importInput.onchange = function() {
+                    var files = Array.prototype.slice.call(importInput.files);
+                    if(!files.length) return;
+                    say("Importing…");
+                    files.reduce(function(chain, file) {
+                        return chain.then(function(done) {
+                            return Garage.importZip(file).then(function(item) { return done.concat([item.kind.slice(0, -1) + " " + item.id]); });
+                        });
+                    }, Promise.resolve([])).then(function(done) {
+                        build();
+                        say("Imported " + done.join(", ") + ".");
+                    }).catch(function(error) { say("Could not import: " + error.message, true); });
+                };
+                var importButton = document.createElement("button");
+                importButton.textContent = "Import a zip…";
+                importButton.onclick = function() { importInput.click(); };
+                actions.appendChild(importButton);
+                actions.appendChild(importInput);
+                box.appendChild(actions);
+                box.insertAdjacentHTML("beforeend", "<div class=\"note\" style=\"margin-top: 8px;\">A zip with car.json or track.json and the files of the model (an exported one, or a zipped folder from web/cars or web/tracks).</div>");
+
+                // the folder on the PC
+                box.insertAdjacentHTML("beforeend", "<h3>Folder on your PC</h3>");
+                var folderActions = document.createElement("div");
+                folderActions.className = "actions";
+                if(!Garage.folderSupported()) {
+                    box.insertAdjacentHTML("beforeend", "<div class=\"note\">This browser cannot read a folder on your PC (Chrome and Edge can). Import a zip instead.</div>");
+                } else {
+                    var info = Garage.folderInfo();
+                    var folderNote = document.createElement("div");
+                    folderNote.className = "note";
+                    if(info.name) {
+                        folderNote.textContent = "Linked: " + info.name + (info.permission === "granted" ? "" : " (allow the browser to read it)") +
+                            ". Its cars/<id>/car.json and tracks/<id>/track.json are in the menu (or the folder itself when it holds cars directly).";
+                        if(info.permission !== "granted") {
+                            var allow = document.createElement("button");
+                            allow.textContent = "Allow reading " + info.name;
+                            allow.onclick = function() {
+                                Garage.folderPermission(true).then(function(state) {
+                                    if(state === "granted") { say("The folder is read."); build(); } else say("The browser did not allow it.", true);
+                                });
+                            };
+                            folderActions.appendChild(allow);
+                        }
+                        var unlink = document.createElement("button");
+                        unlink.textContent = "Unlink the folder";
+                        unlink.onclick = function() { Garage.unlinkFolder().then(build); };
+                        folderActions.appendChild(unlink);
+                    } else {
+                        folderNote.textContent = "Link a folder on your PC with cars and tracks in it (cars/<id>/car.json and tracks/<id>/track.json, like web/cars and web/tracks): " +
+                            "they are read from there every time the menu opens, nothing is copied.";
+                        var link = document.createElement("button");
+                        link.textContent = "Link a folder…";
+                        link.onclick = function() {
+                            Garage.linkFolder().then(function() { say("The folder is linked."); build(); }).catch(function(error) {
+                                if(error && error.name !== "AbortError") say("Could not link the folder: " + error.message, true);
+                            });
+                        };
+                        folderActions.appendChild(link);
+                    }
+                    box.appendChild(folderNote);
+                }
+                box.appendChild(folderActions);
+
+                var usage = result[2];
+                var foot = document.createElement("div");
+                foot.className = "note";
+                foot.style.marginTop = "14px";
+                foot.textContent = usage && usage.quota ? "This browser lets the site keep up to " + formatSize(usage.quota) + "; it uses " + formatSize(usage.used) + " now." : "";
+                if(/^((?!chrome|android).)*safari/i.test(navigator.userAgent)) foot.textContent += " Safari forgets what a site keeps after seven days without a visit: export what you want to keep.";
+                box.appendChild(foot);
+                box.appendChild(status);
+            }).catch(function(error) {
+                status.textContent = "The garage could not be opened: " + error.message;
+                status.className = "status error";
+                box.appendChild(status);
+            });
+        }
+        build();
+        document.body.appendChild(overlay);
     }
 
     function start() {
@@ -354,6 +558,16 @@ var MainMenu = (function() {
         trackEditor.onclick = function() { window.location.href = "tools/track-editor.html"; };
         wrap.appendChild(trackEditor);
 
+        // the garage: the player's own cars and tracks in this browser (Garage.js)
+        if(OpenRacer.Garage && OpenRacer.Garage.available()) {
+            var garage = document.createElement("button");
+            garage.className = "secondary";
+            garage.textContent = "My garage";
+            garage.title = "Your own cars and tracks in this browser: import or export a zip, link a folder on your PC";
+            garage.onclick = showGarage;
+            wrap.appendChild(garage);
+        }
+
         // the skidpad: the chosen car drives round the circle by itself until it lets go (main.js, startSkidpad)
         if(tracks.some(function(t) { return t.id === "skidpad"; })) {
             var skidpad = document.createElement("button");
@@ -372,7 +586,8 @@ var MainMenu = (function() {
         foot.className = "foot";
         foot.innerHTML = "Cars are in <code>web/cars</code> and tracks in <code>web/tracks</code>: a folder with a <code>car.json</code> or " +
             "<code>track.json</code> is found by itself. Make a car from a glTF/glb model (for example from Blender) with the " +
-            "<a href=\"tools/car-editor.html\">car editor</a>, and a track from a glTF/glb model with the <a href=\"tools/track-editor.html\">track editor</a>. ";
+            "<a href=\"tools/car-editor.html\">car editor</a>, and a track from a glTF/glb model with the <a href=\"tools/track-editor.html\">track editor</a>. " +
+            "Without the server of start-server.sh they are kept in <i>My garage</i>, in this browser. ";
         var rescan = document.createElement("button");
         rescan.textContent = "Look for new cars and tracks";
         rescan.onclick = load;

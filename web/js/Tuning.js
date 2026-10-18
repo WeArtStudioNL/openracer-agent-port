@@ -4,7 +4,8 @@
  * Description: The tuning menu: sliders and fields to change the car while it drives (mass and weight distribution, grip of the
  *              tyres, engine, gears, brakes, aerodynamics, assists and the engine sound). The menu is shown or hidden with
  *              a key (U by default, it can be changed in the settings menu). The tuning of a car is kept in this browser;
- *              "Save to the car" writes it to the car (cars/<id>/car.json), "Reset" goes back to the car as it was made.
+ *              "Save to the car" writes it to the car (cars/<id>/car.json with start-server.sh, otherwise the garage of this
+ *              browser, see Garage.js), "Reset" goes back to the car as it was made.
  *
  *              The values that are not in the configuration of a car have a default (the factory values of this game); they
  *              are added to car.json when the tuning is saved: chassis.roll_front, chassis.spring_front/spring_rear,
@@ -321,10 +322,11 @@ var Tuning = (function() {
     function tunedConfig() { return OpenRacer.CarTuning.toConfig(config, values); }
 
     function saveToCar() {
-        if(!window.confirm("Write this tuning to the car (cars/" + config.id + "/car.json)? The car as it was made is overwritten.")) return;
+        if(!window.confirm("Write this tuning to the car (cars/" + config.id + "/car.json)? The car as it was made is overwritten. " +
+            "Without the server of start-server.sh it goes to the garage of this browser instead.")) return;
         var tuned = tunedConfig();
-        fetch("api/cars/" + encodeURIComponent(config.id) + "/car.json", { method: "PUT", body: JSON.stringify(tuned, null, 2) + "\n" }).then(function(response) {
-            if(!response.ok) throw new Error("HTTP " + response.status + " (start the game with start-server.sh to be able to save)");
+        // the server when it is there (serve.py), otherwise the garage of this browser (Garage.js)
+        OpenRacer.Garage.store("cars", config.id, tuned, {}, {}).then(function(result) {
             // the car is the way it is tuned now
             tuned.id = config.id;
             config = tuned;
@@ -332,7 +334,7 @@ var Tuning = (function() {
             values = clone(base);
             store();
             refresh();
-            message("Saved to cars/" + config.id + ".");
+            message(result.where === "server" ? "Saved to cars/" + config.id + "." : "Saved to your garage in this browser (the server does not save).");
         }).catch(function(error) {
             message("Could not save: " + error.message);
         });

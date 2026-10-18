@@ -60,9 +60,12 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
                 onError("Could not load " + url + " (" + e + ")");
             }
         };
-        request.open("GET", url, true);
+        request.open("GET", fileUrl(url), true);
         request.send();
     }
+
+    // a file of the car: a car of the garage or of a folder on the PC has its files as blob URLs (Garage.js)
+    function fileUrl(url) { return OpenRacer.Garage ? OpenRacer.Garage.resolve(config, url) : url; }
 
     function wheelChain(content, flip) {
         var spin = new THREE.Object3D();
@@ -121,8 +124,8 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
     }
 
     function gltf() {
-        var loader = new THREE.GLTFLoader();
-        loader.load(model.file, function (loaded) {
+        var loader = new THREE.GLTFLoader(OpenRacer.Garage ? OpenRacer.Garage.manager(config) : undefined);
+        loader.load(fileUrl(model.file), function (loaded) {
             try {
                 build(loaded.scene);
             } catch(e) {

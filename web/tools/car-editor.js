@@ -154,8 +154,9 @@ function loadFromFiles(list) {
     }, undefined, (error) => status("Could not read the model: " + (error.message || error), "error"));
 }
 
-function loadFromUrl(url, label) {
-    new GLTFLoader().load(url, (gltf) => {
+// the model of a car that exists; a car of the garage or of a folder on the PC has its files as blob URLs (Garage.js)
+function loadFromUrl(url, label, car) {
+    new GLTFLoader(OpenRacer.Garage.manager(car, THREE)).load(OpenRacer.Garage.resolve(car, url), (gltf) => {
         setModel(gltf.scene, false);
         $("modelInfo").textContent = label + ", " + state.nodes.length + " named parts";
     }, undefined, (error) => status("Could not load the model of this car: " + (error.message || error), "error"));
@@ -1079,13 +1080,6 @@ function buildConfig(id) {
     return config;
 }
 
-async function put(url, body) {
-    const response = await fetch(url, { method: "PUT", body });
-    if (!response.ok) {
-        throw new Error("The server did not accept " + url + " (" + response.status + "). Start the game with start-server.sh, which has the part that saves.");
-    }
-}
-
 async function save() {
     try {
         const name = $("name").value.trim();
@@ -1107,7 +1101,7 @@ async function save() {
             config.model = JSON.parse(JSON.stringify(state.existingModel));
             if (config.model.type === "gltf" && id !== state.existingId) {
                 if (!/\.glb$/i.test(config.model.file)) throw new Error("To save this car under another id, load its model files again.");
-                const blob = await (await fetch("../" + config.model.file)).blob();
+                const blob = await (await fetch(OpenRacer.Garage.resolve(state.existingCar, "../" + config.model.file))).blob();
                 const fileName = config.model.file.split("/").pop();
                 uploads.push([fileName, blob]);
                 config.model.file = "cars/" + id + "/" + fileName;
@@ -1137,11 +1131,11 @@ async function save() {
         const oldFile = state.replacedModel && state.replacedModel.type === "gltf" ? state.replacedModel.file : null;
 
         status("Saving…");
-        for (const [fileName, file] of uploads) await put("/api/cars/" + id + "/" + encodeURIComponent(fileName), file);
-        await put("/api/cars/" + id + "/car.json", JSON.stringify(config, null, 2) + "\n");
-        if (oldFile && config.model.type === "gltf" && oldFile !== config.model.file && oldFile.startsWith("cars/" + id + "/")) {
-            await fetch("/api/cars/" + id + "/" + encodeURIComponent(oldFile.split("/").pop()), { method: "DELETE" });
-        }
+        // the server when it is there (serve.py), otherwise the garage of this browser (Garage.js)
+        const files = {};
+        for (const [fileName, file] of uploads) files[fileName] = file;
+        const remove = oldFile && config.model.type === "gltf" && oldFile !== config.model.file && oldFile.startsWith("cars/" + id + "/") ? [oldFile.split("/").pop()] : [];
+        const saved = await OpenRacer.Garage.store("cars", id, config, files, { base: "../", remove });
         state.replacedModel = null;
         state.existingId = id;
         state.existingModel = config.model;
@@ -1150,7 +1144,8 @@ async function save() {
         state.mainFile = null;
         await refreshList(id);
         $("delete").style.display = "";
-        status("Saved as cars/" + id + ". It is in the main menu of the game now.", "ok");
+        status(saved.where === "server" ? "Saved as cars/" + id + ". It is in the main menu of the game now."
+            : "Saved in your garage, in this browser (the server does not save). It is in the main menu of the game now.", "ok");
     } catch (error) {
         status(error.message, "error");
     }
@@ -1158,9 +1153,13 @@ async function save() {
 
 async function deleteCar() {
     if (!state.existingId || !confirm("Delete the car “" + state.existingId + "” with all its files?")) return;
-    const response = await fetch("/api/cars/" + state.existingId, { method: "DELETE" });
-    if (!response.ok) { status("The car could not be deleted (" + response.status + ").", "error"); return; }
-    status("Deleted.", "ok");
+    try {
+        const result = await OpenRacer.Garage.discard("cars", state.existingId, { base: "../" });
+        status(result.where === "server" ? "Deleted." : "Deleted from your garage.", "ok");
+    } catch (error) {
+        status("The car could not be deleted (" + error.message + ").", "error");
+        return;
+    }
     newCar();
     refreshList();
 }
@@ -1196,8 +1195,8 @@ updateDiffFields();
 
 async function refreshList(select) {
     try {
-        const response = await fetch("/api/cars");
-        state.cars = await response.json();
+        // the cars of the server, of the garage of this browser and of a linked folder (Catalog.js)
+        state.cars = await Catalog.load("cars", "../");
     } catch (e) {
         state.cars = [];
     }
@@ -1206,7 +1205,8 @@ async function refreshList(select) {
     state.cars.forEach((car) => {
         const option = document.createElement("option");
         option.value = car.id;
-        option.textContent = (car.name || car.id) + " (" + car.id + ")";
+        const source = OpenRacer.Garage.sourceOf(car);
+        option.textContent = (car.name || car.id) + " (" + car.id + ")" + (source === "garage" ? " · my garage" : source === "folder" ? " · folder" : "");
         el.appendChild(option);
     });
     if (select) el.value = select;
@@ -1266,7 +1266,7 @@ function loadExisting() {
         const wheels = car.wheels || { mode: "default" };
         document.querySelector("input[name=wheelMode][value=" + wheels.mode + "]").checked = true;
         $("wheelSelects").style.display = wheels.mode === "model" ? "" : "none";
-        loadFromUrl("../" + m.file, m.file);
+        loadFromUrl("../" + m.file, m.file, car);
         // the parts are known once the model is loaded
         const wait = setInterval(() => {
             if (!state.root) return;

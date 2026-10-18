@@ -43,6 +43,12 @@ var trackBase = "";          // the folder of the track
 var trackLoadedCallback;
 var textureLoader = new THREE.TextureLoader();
 
+// a file of the track (model, textures, sky picture): a track of the garage or of a folder on the PC has its files as blob URLs (Garage.js)
+function trackFile(name) {
+    var url = trackBase + name;
+    return OpenRacer.Garage ? OpenRacer.Garage.resolve(currentTrack, url) : url;
+}
+
 // Loads a track from its configuration (the contents of tracks/<id>/track.json, with its id)
 function loadTrack(track, tlCallback) {
     currentTrack = track;
@@ -62,13 +68,13 @@ function loadTrack(track, tlCallback) {
             loadScene();
         }
     }
-    xmlhttp.open("GET", trackBase + track.geometry, true);
+    xmlhttp.open("GET", trackFile(track.geometry), true);
     xmlhttp.send();
 }
 
 function loadScene() {
     var xmlhttp = new XMLHttpRequest();
-    var url = trackBase + currentTrack.scene;
+    var url = trackFile(currentTrack.scene);
 
     xmlhttp.onreadystatechange = function() {
         if (xmlhttp.readyState == 4 && xmlhttp.status == 200) {
@@ -126,7 +132,7 @@ function loadScene() {
                                     //console.log("            material name: " + matName);
                                     //console.log("            texture name: " + textureName);
                                     //console.log("            texture file: " + textureFile);
-                                    var texture = textureLoader.load( trackBase + currentTrack.textures + textureFile );
+                                    var texture = textureLoader.load( trackFile(currentTrack.textures + textureFile) );
                                     texture.colorSpace = THREE.SRGBColorSpace;
                                     var bumpTexture;
                                     if(textureName === "road") {
@@ -136,7 +142,7 @@ function loadScene() {
                                     }
                                     if(myArr.textures[textureName + "-bump"]) {
                                         //console.log("BUMP: " + myArr.textures[textureName + "-bump"].file);
-                                        bumpTexture = textureLoader.load( trackBase + currentTrack.textures + myArr.textures[textureName + "-bump"].file );
+                                        bumpTexture = textureLoader.load( trackFile(currentTrack.textures + myArr.textures[textureName + "-bump"].file) );
                                     }
                                     //console.log("            textureTile: " + textureTile);
                                     if(textureTile) {
@@ -307,8 +313,8 @@ function trackRole(mesh, surfaces) {
 }
 
 function loadGltfTrack(track) {
-    var loader = new THREE.GLTFLoader();
-    loader.load(trackBase + track.model, function(gltf) {
+    var loader = new THREE.GLTFLoader(OpenRacer.Garage ? OpenRacer.Garage.manager(track) : undefined);
+    loader.load(trackFile(track.model), function(gltf) {
         gltf.scene.updateMatrixWorld(true);
         var surfaces = track.surfaces || {};
         var pieces = [];
@@ -357,7 +363,7 @@ function loadGltfTrack(track) {
 function applyTrackEnvironment(track) {
     if(!track.model && !track.environment) return;
     var env = OpenRacer.environmentOf(track);
-    var texture = env.sky_image ? textureLoader.load(trackBase + env.sky_image) : null;
+    var texture = env.sky_image ? textureLoader.load(trackFile(env.sky_image)) : null;
     scene.add(OpenRacer.makeSky(THREE, env, texture));
 
     var sun = OpenRacer.sunVector(env, 1000);

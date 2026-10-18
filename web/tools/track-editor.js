@@ -301,8 +301,11 @@ function loadFromFiles(list) {
     }, undefined, (error) => status("Could not read the model: " + (error.message || error), "error"));
 }
 
+// a track of the garage or of a folder on the PC has its files as blob URLs (Garage.js)
+function trackFile(track, name) { return OpenRacer.Garage.resolve(track, "../tracks/" + track.id + "/" + name); }
+
 function loadGltfTrack(track) {
-    return new Promise((resolve, reject) => new GLTFLoader().load("../tracks/" + track.id + "/" + track.model, (gltf) => {
+    return new Promise((resolve, reject) => new GLTFLoader(OpenRacer.Garage.manager(track, THREE)).load(trackFile(track, track.model), (gltf) => {
         state.legacy = false;
         setModel(gltf.scene, (track.surfaces && track.surfaces.meshes) || {});
         // what is not mentioned in the file is scenery
@@ -319,10 +322,9 @@ function loadGltfTrack(track) {
 
 // A track of the old format: the vertices of every object in one file and the places and materials in another
 async function loadLegacyTrack(track) {
-    const base = "../tracks/" + track.id + "/";
     const [geometry, sceneData] = await Promise.all([
-        fetch(base + track.geometry).then((r) => r.json()),
-        fetch(base + track.scene).then((r) => r.json())
+        fetch(trackFile(track, track.geometry)).then((r) => r.json()),
+        fetch(trackFile(track, track.scene)).then((r) => r.json())
     ]);
     const root = new THREE.Group();
     const roles = {};
@@ -614,7 +616,7 @@ function applyEnv() {
         scene.add(sky);
     };
     if (state.skyFile) build(new THREE.TextureLoader().load(URL.createObjectURL(state.skyFile)));
-    else if (state.skyName && state.existingId) build(new THREE.TextureLoader().load("../tracks/" + state.existingId + "/" + state.skyName));
+    else if (state.skyName && state.existingTrack) build(new THREE.TextureLoader().load(trackFile(state.existingTrack, state.skyName)));
     else build(null);
     // the fog is not shown here: seen from above the whole track would disappear in it
     scene.background = new THREE.Color(e.sky_horizon);
@@ -634,14 +636,16 @@ $("envDefaults").onclick = () => { state.skyFile = null; state.skyName = ""; $("
 
 async function refreshList(select) {
     try {
-        const response = await fetch("/api/tracks");
-        if (!response.ok) throw new Error("HTTP " + response.status);
-        state.tracks = await response.json();
+        // the tracks of the server, of the garage of this browser and of a linked folder (Catalog.js)
+        state.tracks = await Catalog.load("tracks", "../");
     } catch (error) {
         state.tracks = [];
     }
     const el = $("existing");
-    el.innerHTML = '<option value="">—</option>' + state.tracks.map((t) => '<option value="' + t.id + '">' + (t.name || t.id) + " (" + t.id + ")</option>").join("");
+    el.innerHTML = '<option value="">—</option>' + state.tracks.map((t) => {
+        const source = OpenRacer.Garage.sourceOf(t);
+        return '<option value="' + t.id + '">' + (t.name || t.id) + " (" + t.id + ")" + (source === "garage" ? " · my garage" : source === "folder" ? " · folder" : "") + "</option>";
+    }).join("");
     el.value = select || "";
 }
 
@@ -720,11 +724,9 @@ function newTrack() {
 
 // ---- saving
 
-async function put(url, body) {
-    const response = await fetch(url, { method: "PUT", body });
-    if (!response.ok) {
-        throw new Error("The server did not accept " + url + " (" + response.status + "). Start the game with start-server.sh, which has the part that saves.");
-    }
+// Writes track.json (and files) through the server when it is there (serve.py), otherwise to the garage of this browser (Garage.js)
+async function store(id, config, files, remove) {
+    return OpenRacer.Garage.store("tracks", id, config, files || {}, { base: "../", remove: remove || [] });
 }
 
 async function save() {
@@ -775,7 +777,7 @@ async function save() {
         } else if (state.legacy) {
             if (id !== state.existingId) throw new Error("A track of the old format can only be saved under its own id. Import a glb to make a new track.");
         } else if (old && old.model && id !== state.existingId) {
-            const blob = await (await fetch("../tracks/" + old.id + "/" + old.model)).blob();
+            const blob = await (await fetch(trackFile(old, old.model))).blob();
             if (!/\.glb$/i.test(old.model)) throw new Error("To save this track under another id, import its model files again.");
             uploads.push([old.model, blob]);
         }
@@ -787,7 +789,7 @@ async function save() {
                 uploads.push([state.skyFile.name, state.skyFile]);
                 if (state.oldSkyName && state.oldSkyName !== state.skyFile.name && id === state.existingId) oldSky = state.oldSkyName;
             } else if (state.skyName && id !== state.existingId && state.existingId) {
-                const blob = await (await fetch("../tracks/" + state.existingId + "/" + state.skyName)).blob();
+                const blob = await (await fetch(trackFile(state.existingTrack, state.skyName))).blob();
                 uploads.push([state.skyName, blob]);
             } else if (!state.skyName && state.oldSkyName && id === state.existingId) {
                 oldSky = state.oldSkyName;
@@ -806,10 +808,9 @@ async function save() {
         }
 
         status("Saving…");
-        for (const [fileName, file] of uploads) await put("/api/tracks/" + id + "/" + encodeURIComponent(fileName), file);
-        await put("/api/tracks/" + id + "/track.json", JSON.stringify(config, null, 2) + "\n");
-        if (oldSky) await fetch("/api/tracks/" + id + "/" + encodeURIComponent(oldSky), { method: "DELETE" });
-        if (oldModel) await fetch("/api/tracks/" + id + "/" + encodeURIComponent(oldModel), { method: "DELETE" });
+        const files = {};
+        for (const [fileName, file] of uploads) files[fileName] = file;
+        const saved = await store(id, config, files, [oldSky, oldModel].filter(Boolean));
         state.existingId = id;
         state.existingTrack = Object.assign({}, config, { id });
         state.files = new Map();
@@ -820,7 +821,8 @@ async function save() {
         await refreshList(id);
         $("delete").style.display = "";
         updateLineNote();
-        status("Saved as tracks/" + id + ". It is in the main menu of the game now.", "ok");
+        status(saved.where === "server" ? "Saved as tracks/" + id + ". It is in the main menu of the game now."
+            : "Saved in your garage, in this browser (the server does not save). It is in the main menu of the game now.", "ok");
     } catch (error) {
         status(error.message, "error");
     }
@@ -828,11 +830,16 @@ async function save() {
 
 async function deleteTrack() {
     if (!state.existingId || !confirm("Delete the track “" + state.existingId + "” with all its files?")) return;
-    const response = await fetch("/api/tracks/" + state.existingId, { method: "DELETE" });
-    if (!response.ok) { status("The track could not be deleted (" + response.status + ").", "error"); return; }
+    let result;
+    try {
+        result = await OpenRacer.Garage.discard("tracks", state.existingId, { base: "../" });
+    } catch (error) {
+        status("The track could not be deleted (" + error.message + ").", "error");
+        return;
+    }
     newTrack();
     await refreshList();
-    status("Deleted.", "ok");
+    status(result.where === "server" ? "Deleted." : "Deleted from your garage.", "ok");
 }
 
 // ---- the AI racing line: recorded by driving in the game (main.js, ?recordline=1), which comes back here with ?track=<id>&line=<result>
@@ -854,7 +861,7 @@ $("recordLine").onclick = async () => {
     let car = null;
     try { car = (JSON.parse(localStorage.getItem("openracer.lastChoice")) || {}).car; } catch (e) { /* no storage */ }
     if (!car) {
-        try { const cars = await (await fetch("/api/cars")).json(); car = cars.length ? cars[0].id : null; } catch (e) { /* no server */ }
+        try { const cars = await Catalog.load("cars", "../"); car = cars.length ? cars[0].id : null; } catch (e) { /* nothing to drive */ }
     }
     if (!car) { status("No car to drive with.", "error"); return; }
     window.location.href = "../index.html?car=" + encodeURIComponent(car) + "&track=" + encodeURIComponent(state.existingId) + "&recordline=1&ai=0&ghost=0&records=0";
@@ -867,7 +874,7 @@ $("clearLine").onclick = async () => {
     delete config.id;
     delete config.racing_line;
     try {
-        await put("/api/tracks/" + track.id + "/track.json", JSON.stringify(config, null, 2) + "\n");
+        await store(track.id, config);
         delete track.racing_line;
         updateLineNote();
         status("The line is forgotten.", "ok");
