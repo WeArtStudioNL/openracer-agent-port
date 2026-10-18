@@ -354,6 +354,20 @@ var MainMenu = (function() {
         trackEditor.onclick = function() { window.location.href = "tools/track-editor.html"; };
         wrap.appendChild(trackEditor);
 
+        // the skidpad: the chosen car drives round the circle by itself until it lets go (main.js, startSkidpad)
+        if(tracks.some(function(t) { return t.id === "skidpad"; })) {
+            var skidpad = document.createElement("button");
+            skidpad.className = "secondary";
+            skidpad.textContent = "Skidpad";
+            skidpad.title = "The chosen car drives round a circle of 50 m faster and faster until it lets go: how much lateral g does it hold?";
+            skidpad.disabled = !choice.car;
+            skidpad.onclick = function() {
+                remember();
+                window.location.href = window.location.pathname + "?car=" + encodeURIComponent(choice.car) + "&track=skidpad&mode=skidpad&ai=0&ghost=0&records=0&wear=0";
+            };
+            wrap.appendChild(skidpad);
+        }
+
         var foot = document.createElement("div");
         foot.className = "foot";
         foot.innerHTML = "Cars are in <code>web/cars</code> and tracks in <code>web/tracks</code>: a folder with a <code>car.json</code> or " +

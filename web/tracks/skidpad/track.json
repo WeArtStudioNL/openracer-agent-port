@@ -1,0 +1,42 @@
+{
+  "name": "Skidpad",
+  "description": "A round pad with a circle of 50 m radius: how much lateral g does the car hold?",
+  "start": {
+    "x": 50.0,
+    "z": 0,
+    "heading": 1.5707963267948966
+  },
+  "model": "skidpad.glb",
+  "skidpad": {
+    "radius": 50.0,
+    "inner_radius": 20
+  },
+  "environment": {
+    "sky_top": "#4a82c4",
+    "sky_horizon": "#d3e4f4",
+    "fog": {
+      "enabled": false,
+      "color": "#cfdbe8",
+      "near": 300,
+      "far": 2500
+    },
+    "sun": {
+      "azimuth": 40,
+      "elevation": 50,
+      "intensity": 1,
+      "color": "#ffffff"
+    },
+    "ambient": {
+      "color": "#576777",
+      "intensity": 1
+    }
+  },
+  "surfaces": {
+    "meshes": {
+      "pad": "road",
+      "circle": "road",
+      "circle_inner": "road",
+      "field": "grass"
+    }
+  }
+}

@@ -75,6 +75,7 @@ function setupRace() {
     var options = race.options = raceOptionsFromQuery(new URLSearchParams(window.location.search));
     var track = currentTrack;
     if(new URLSearchParams(window.location.search).get("recordline") === "1") { recordLine(); return; }
+    if(new URLSearchParams(window.location.search).get("mode") === "skidpad") { startSkidpad(); return; }
     // the racing line: a line saved with the track (recorded for it), the middle of a designed track, or the best lap that was driven here
     race.line = (track.racing_line && track.racing_line.length > 10 && new OpenRacer.RacingLine(track.racing_line, true)) ||
         (track.design && OpenRacer.RacingLine.fromDesign(track.design)) || null;
@@ -281,6 +282,89 @@ function recordLine() {
         });
     } };
     stop.onclick = function() { race.recording.stop(); };
+}
+
+// The skidpad (?mode=skidpad on the skidpad track): the car drives round the painted circle by itself, a little faster every
+// second, until it lets go: the lateral acceleration it held is the result. Reset starts again (with the tuning as it is now),
+// Tune opens the tuning menu, and Back to the menu goes there.
+function startSkidpad() {
+    var pad = currentTrack.skidpad || { radius: 50 };
+    var R = pad.radius;
+    var sp = race.skidpad = { radius: R, speed: 0, best: 0, bestSpeed: 0, running: true, panel: null, overlay: null, settled: 0 };
+    race.ghost = new OpenRacer.Ghost(carConfig, currentTrack.id);
+    race.ghost.enabled = false; race.ghost.saving = false;
+    car.ghost = race.ghost;
+    car.vehicle.wearEnabled = false;
+    var overlay = document.createElement("div");
+    overlay.style.cssText = "position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1001; padding: 10px 20px; " +
+        "background: rgba(20, 24, 31, 0.85); color: #ffffff; font-family: Arial; border-radius: 6px; text-align: center; line-height: 1.4; min-width: 320px;";
+    document.body.appendChild(overlay);
+    sp.overlay = overlay;
+    // the car's keys and pads do nothing: the skidpad drives
+    var targetSpeed = 3, radiusIndex = 0;
+    car.pollInput = function() {
+        var v = this.vehicle;
+        this.handbrake = false; this.reverse = false; this.neutral = false; this.parkingLock = false;
+        this.turnLeft = this.turnRight = false;
+        if(!sp.running) { this.accelerate = false; this.brake = true; this.throttle = 0; return; }
+        // the circle: the radius from the middle of the pad, and the direction along it (anticlockwise seen from above: the car
+        // goes round to the left, so it steers left)
+        var r = Math.hypot(v.x, v.z);
+        var speed = Math.max(0, v.u);
+        // the steering that the circle needs (the wheelbase over the radius), plus a correction to stay on the painted line
+        var base = Math.atan(v.wheelbase / R);
+        var tangentHeading = Math.atan2(v.x, -v.z); // the direction along the circle, anticlockwise (from +x towards +z)
+        var headingError = tangentHeading - v.psi;
+        while(headingError > Math.PI) headingError -= 2 * Math.PI;
+        while(headingError < -Math.PI) headingError += 2 * Math.PI;
+        // a positive steering angle turns the car towards a bigger heading (the way the circle goes); too wide (r above R) and a
+        // nose that points outside the tangent both ask for more of it
+        var wanted = base + 0.08 * (r - R) + 0.6 * headingError;
+        wanted = Math.max(-this.turnLimit, Math.min(this.turnLimit, wanted));
+        this.turnAngle += (wanted - this.turnAngle) * 0.3;
+        // the speed: up by a quarter of a metre per second every second
+        targetSpeed += 0.25 / 60;
+        var error = targetSpeed - speed;
+        this.accelerate = error > 0.3; this.brake = error < -1.5;
+        if(!this.accelerate) this.throttle = 0; if(!this.brake) this.brakePedal = 0;
+        // the result: the most lateral acceleration while the car still follows the circle
+        var slip = Math.atan2(v.v, v.u);
+        var ay = Math.abs(v.ay);
+        var onLine = Math.abs(r - R) < 4 && Math.abs(slip) < 0.14;
+        if(onLine && ay > sp.best) { sp.best = ay; sp.bestSpeed = speed; }
+        if(Math.abs(r - R) > 6 || Math.abs(slip) > 0.25) skidpadDone();
+        overlay.innerHTML = "<b>Skidpad</b> · circle of " + R + " m<br>" + (ay / 9.81).toFixed(2) + " g at " + Math.round(speed * 3.6) + " km/h · best " + (sp.best / 9.81).toFixed(2) + " g";
+    };
+    car.vehicle.tcEnabled = Settings.option("tc"); car.vehicle.escEnabled = false;
+
+    function skidpadDone() {
+        sp.running = false;
+        var g = sp.best / 9.81;
+        var panel = document.createElement("div");
+        panel.style.cssText = "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1002; min-width: 380px; padding: 22px 28px; " +
+            "background: rgba(20, 24, 31, 0.92); color: #ffffff; font-family: Arial; border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); text-align: center;";
+        var verdict = g > 1.1 ? "a racing car on slicks" : g > 0.95 ? "a sports car" : g > 0.85 ? "a good road car" : g > 0.75 ? "an ordinary road car" : "a van";
+        panel.innerHTML = "<div style=\"font-size: 15px; color: #9fb0c4; letter-spacing: 2px;\">SKIDPAD · " + (carConfig.name || carConfig.id) + "</div>" +
+            "<div style=\"font-size: 54px; font-weight: bold; margin: 6px 0 2px;\">" + g.toFixed(2) + " g</div>" +
+            "<div style=\"color: #cfd8e3; margin-bottom: 18px;\">held at " + Math.round(sp.bestSpeed * 3.6) + " km/h on the circle of " + R + " m · like " + verdict + "</div>" +
+            "<button id=\"skidReset\" style=\"padding: 9px 18px; margin: 0 4px; font: bold 15px Arial; background: #3d7bd9; color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Reset</button>" +
+            "<button id=\"skidTune\" style=\"padding: 9px 18px; margin: 0 4px; font: bold 15px Arial; background: #3b424c; color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Tune</button>" +
+            "<button id=\"skidMenu\" style=\"padding: 9px 18px; margin: 0 4px; font: bold 15px Arial; background: #3b424c; color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Back to the menu</button>";
+        document.body.appendChild(panel);
+        sp.panel = panel;
+        document.getElementById("skidReset").onclick = skidpadReset;
+        document.getElementById("skidTune").onclick = function() { Tuning.toggle(); };
+        document.getElementById("skidMenu").onclick = function() { window.location.href = window.location.pathname; };
+    }
+
+    function skidpadReset() {
+        if(sp.panel) { sp.panel.remove(); sp.panel = null; }
+        sp.best = 0; sp.bestSpeed = 0; targetSpeed = 3; sp.running = true;
+        car.turnAngle = 0;
+        car.place(R, 0, Math.PI / 2);
+        car.vehicle.freshTyres(85);
+    }
+    race.skidpadReset = skidpadReset;
 }
 
 var playerLineIndex = null, playerLineLaps = 0, playerLastFraction = 0, playerMaxFraction = 0;
