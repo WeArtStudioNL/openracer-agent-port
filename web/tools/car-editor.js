@@ -1520,8 +1520,8 @@ function runScript(dt) {
             const rpm = v.engine.getRPM();
             if (rpm >= v.engine.limiterRPM - 250) sc.limiterT += dt;
             inp.throttle = sc.limiterT < 1 ? 1 : 0;
-            if (sc.limiterT >= 1 && rpm < v.engine.idleRPM + 500) { next("shake", "1000 kg on every corner, twice round"); bench.shake = { t: 0, kg: 1000, push: 0.5, pace: 1.0 }; }
-            if (sc.t > 12) { next("shake", "1000 kg on every corner, twice round"); bench.shake = { t: 0, kg: 1000, push: 0.5, pace: 1.0 }; }
+            if (sc.limiterT >= 1 && rpm < v.engine.idleRPM + 500) { next("shake", $("testShakeKg").value + " kg on every corner, twice round"); bench.shake = shakeFromSliders(); }
+            if (sc.t > 12) { next("shake", $("testShakeKg").value + " kg on every corner, twice round"); bench.shake = shakeFromSliders(); }
             break;
         }
         case "shake":
@@ -1560,11 +1560,16 @@ function runScript(dt) {
     }
 }
 
+// the shake as the sliders have it (the full test uses the same, so the two shakes look the same)
+function shakeFromSliders() {
+    return { t: 0, kg: parseFloat($("testShakeKg").value), push: parseFloat($("testShakePush").value), pace: parseFloat($("testShakePace").value) };
+}
+
 async function shakeTest() {
     try {
         if (!bench.vehicle) await startBench();
         bench.script = null;
-        bench.shake = { t: 0, kg: parseFloat($("testShakeKg").value), push: parseFloat($("testShakePush").value), pace: parseFloat($("testShakePace").value) };
+        bench.shake = shakeFromSliders();
     } catch (error) { status(error.message, "error"); }
 }
 
