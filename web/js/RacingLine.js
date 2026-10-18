@@ -154,3 +154,19 @@ OpenRacer.RacingLine.fromLap = function (samples) {
     if (!samples || samples.length < 10) return null;
     return new OpenRacer.RacingLine(samples.map(function (s) { return { x: s.x, y: s.y, z: s.z }; }), true);
 };
+
+// Saves a lap that was driven as "racing_line" of a track (track.json, through the server of start-server.sh): every third sample,
+// rounded to centimetres. Gives a promise of the number of points; it fails when the server cannot save.
+OpenRacer.RacingLine.save = function (track, samples) {
+    var line = samples.filter(function (s, i) { return i % 3 === 0; }).map(function (s) {
+        return { x: Math.round(s.x * 100) / 100, y: Math.round(s.y * 100) / 100, z: Math.round(s.z * 100) / 100 };
+    });
+    var config = JSON.parse(JSON.stringify(track));
+    delete config.id;
+    config.racing_line = line;
+    return fetch("/api/tracks/" + track.id + "/track.json", { method: "PUT", body: JSON.stringify(config, null, 2) + "\n" }).then(function (response) {
+        if (!response.ok) throw new Error("The server did not accept the track (" + response.status + "): start the game with start-server.sh.");
+        track.racing_line = line;
+        return line.length;
+    });
+};

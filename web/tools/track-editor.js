@@ -678,6 +678,7 @@ async function loadExisting() {
         if (state.start) state.start.y = groundY(state.start.x, state.start.z);
         state.gates = (track.gates || []).map((g) => ({ x: g.x, y: groundY(g.x, g.z), z: g.z, heading: g.heading, width: g.width || 24 }));
         updateMarkers();
+        updateLineNote();
         status("", "");
     } catch (error) {
         status("Could not load the track: " + error.message, "error");
@@ -711,6 +712,7 @@ function newTrack() {
     $("delete").style.display = "none";
     $("editing").textContent = "Choose a track to change it, or import a model below.";
     status("");
+    updateLineNote();
     startDesign(null);
     status("A new track: draw it with nodes in the view, or import a model.", "ok");
 }
@@ -816,6 +818,7 @@ async function save() {
         state.skyFile = null;
         await refreshList(id);
         $("delete").style.display = "";
+        updateLineNote();
         status("Saved as tracks/" + id + ". It is in the main menu of the game now.", "ok");
     } catch (error) {
         status(error.message, "error");
@@ -829,6 +832,61 @@ async function deleteTrack() {
     newTrack();
     await refreshList();
     status("Deleted.", "ok");
+}
+
+// ---- the AI racing line: recorded by driving in the game (main.js, ?recordline=1), which comes back here with ?track=<id>&line=<result>
+
+function updateLineNote() {
+    const track = state.existingTrack;
+    const line = track && track.racing_line;
+    $("lineNote").textContent = !track ? "save the track first"
+        : line && line.length > 10 ? "recorded, " + line.length + " points"
+        : (track.design && track.design.nodes ? "the middle of the road (not recorded)" : "none: the AI cannot race here");
+    $("recordLine").disabled = !track;
+    $("clearLine").style.display = line && line.length ? "" : "none";
+}
+
+$("recordLine").onclick = async () => {
+    if (!state.existingId) { status("Save the track first: the line is recorded on the saved track.", "error"); return; }
+    if (!state.gates.length && !(state.existingTrack.checkpoints || []).length) { status("Place a gate at the start first: a lap is counted through the gates.", "error"); return; }
+    // the car: the one chosen last in the main menu, or else the first one
+    let car = null;
+    try { car = (JSON.parse(localStorage.getItem("openracer.lastChoice")) || {}).car; } catch (e) { /* no storage */ }
+    if (!car) {
+        try { const cars = await (await fetch("/api/cars")).json(); car = cars.length ? cars[0].id : null; } catch (e) { /* no server */ }
+    }
+    if (!car) { status("No car to drive with.", "error"); return; }
+    window.location.href = "../index.html?car=" + encodeURIComponent(car) + "&track=" + encodeURIComponent(state.existingId) + "&recordline=1&ai=0&ghost=0&records=0";
+};
+
+$("clearLine").onclick = async () => {
+    const track = state.existingTrack;
+    if (!track || !track.racing_line) return;
+    const config = JSON.parse(JSON.stringify(track));
+    delete config.id;
+    delete config.racing_line;
+    try {
+        await put("/api/tracks/" + track.id + "/track.json", JSON.stringify(config, null, 2) + "\n");
+        delete track.racing_line;
+        updateLineNote();
+        status("The line is forgotten.", "ok");
+    } catch (error) {
+        status(error.message, "error");
+    }
+};
+
+// back from recording: the track is selected again and the result is shown
+async function openFromAddress() {
+    const query = new URLSearchParams(window.location.search);
+    const id = query.get("track");
+    await refreshList(id);
+    if (!id || !state.tracks.some((t) => t.id === id)) return;
+    await loadExisting();
+    const line = query.get("line");
+    if (line === "none") status("No lap was finished: the line is as it was. Drive through all the gates and over the finish line to record one.", "error");
+    else if (line === "failed") status("The line could not be saved.", "error");
+    else if (line) status("The line is recorded (" + line + " points): the AI drives it from the next start.", "ok");
+    if (line) history.replaceState(null, "", window.location.pathname + "?track=" + encodeURIComponent(id));
 }
 
 // ---- the form
@@ -845,4 +903,5 @@ renderLegend();
 renderParts();
 fillEnv(OpenRacer.environmentDefaults());
 applyEnv();
-refreshList();
+updateLineNote();
+openFromAddress();

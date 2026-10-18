@@ -72,9 +72,10 @@ function trackLoaded() {
 function setupRace() {
     var options = race.options = raceOptionsFromQuery(new URLSearchParams(window.location.search));
     var track = currentTrack;
-    // the racing line: the middle of a designed track, a line saved with the track, or the best lap that was driven here
-    race.line = (track.design && OpenRacer.RacingLine.fromDesign(track.design)) ||
-        (track.racing_line && track.racing_line.length > 10 && new OpenRacer.RacingLine(track.racing_line, true)) || null;
+    if(new URLSearchParams(window.location.search).get("recordline") === "1") { recordLine(); return; }
+    // the racing line: a line saved with the track (recorded for it), the middle of a designed track, or the best lap that was driven here
+    race.line = (track.racing_line && track.racing_line.length > 10 && new OpenRacer.RacingLine(track.racing_line, true)) ||
+        (track.design && OpenRacer.RacingLine.fromDesign(track.design)) || null;
     if(!race.line) {
         var lap = OpenRacer.Records.anyGhost(track.id);
         if(lap) race.line = OpenRacer.RacingLine.fromLap(lap.samples);
@@ -116,6 +117,53 @@ function setupRace() {
         }
         car.raceCount = race.opponents.length + 1;
     }
+}
+
+// Recording the racing line for the track editor ("Record AI racing line"): the player drives calm laps, every lap replaces the
+// line; Escape or the Stop button saves the last lap as the line of the track and goes back to the editor.
+function recordLine() {
+    var track = currentTrack;
+    var ghost = race.ghost = new OpenRacer.Ghost(carConfig, track.id);
+    ghost.enabled = false;
+    ghost.saving = false; // a calm lap is no record
+    car.ghost = ghost;
+    var lap = null, laps = 0;
+    var note = document.createElement("div");
+    note.style.cssText = "position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1001; padding: 10px 20px; " +
+        "background: rgba(20, 24, 31, 0.85); color: #ffffff; font-family: Arial; border-radius: 6px; text-align: center; line-height: 1.4;";
+    var stop = document.createElement("button");
+    stop.textContent = "Stop";
+    stop.style.cssText = "position: absolute; right: 20px; bottom: 60px; z-index: 1001; padding: 10px 26px; font: bold 16px Arial; " +
+        "background: #d94a3d; color: #ffffff; border: 0; border-radius: 6px; cursor: pointer;";
+    document.body.appendChild(note);
+    document.body.appendChild(stop);
+    function show() {
+        note.innerHTML = "<b>Recording the AI racing line</b><br>Drive a calm lap through all the gates: every lap you finish replaces the line. " +
+            (laps ? "Laps driven: " + laps + " (the last one is the line). " : "") + "Esc or Stop saves the last lap as the line and goes back to the editor.";
+    }
+    show();
+    ghost.onLap = function(samples) {
+        lap = samples;
+        laps++;
+        show();
+    };
+    var done = false;
+    race.recording = { stop: function() {
+        if(done) return;
+        done = true;
+        var back = "tools/track-editor.html?track=" + encodeURIComponent(track.id);
+        if(!lap) { window.location.href = back + "&line=none"; return; }
+        note.textContent = "Saving the line…";
+        OpenRacer.RacingLine.save(track, lap).then(function(count) {
+            window.location.href = back + "&line=" + count;
+        }).catch(function(error) {
+            note.textContent = error.message;
+            stop.textContent = "Back to the editor";
+            stop.onclick = function() { window.location.href = back + "&line=failed"; };
+            done = false;
+        });
+    } };
+    stop.onclick = function() { race.recording.stop(); };
 }
 
 var playerLineIndex = null, playerLineLaps = 0, playerLastFraction = 0, playerMaxFraction = 0;

@@ -249,8 +249,10 @@ var Settings = (function() {
             return;
         }
         if(event.code === "Escape") {
-            // Escape cancels a wheel calibration first
-            if(!WheelControls.isCalibrating()) toggleMenu();
+            // Escape cancels a wheel calibration first; while the racing line is recorded for the track editor it ends that (main.js)
+            if(WheelControls.isCalibrating()) return;
+            if(typeof race !== "undefined" && race.recording && !menu) { race.recording.stop(); return; }
+            toggleMenu();
             return;
         }
         // a key that is typed in a field of the tuning menu is not a key of the game
@@ -677,13 +679,9 @@ var Settings = (function() {
             page.appendChild(optionRow("Racing line of this track", "Save my best lap as the line", function() {
                 var ghost = race.ghost && race.ghost.best;
                 if(!ghost) { hint("No best lap yet: drive a lap first."); return; }
-                var line = ghost.samples.filter(function(s, i) { return i % 3 === 0; }).map(function(s) { return { x: Math.round(s.x * 100) / 100, y: Math.round(s.y * 100) / 100, z: Math.round(s.z * 100) / 100 }; });
-                var config = JSON.parse(JSON.stringify(currentTrack));
-                delete config.id;
-                config.racing_line = line;
-                fetch("/api/tracks/" + currentTrack.id + "/track.json", { method: "PUT", body: JSON.stringify(config, null, 2) + "\n" }).then(function(response) {
-                    hint(response.ok ? "The line is saved with the track (" + line.length + " points): the AI drives it from the next start." : "Could not save (" + response.status + "): start the game with start-server.sh.");
-                }).catch(function() { hint("Could not save: start the game with start-server.sh."); });
+                OpenRacer.RacingLine.save(currentTrack, ghost.samples).then(function(count) {
+                    hint("The line is saved with the track (" + count + " points): the AI drives it from the next start.");
+                }).catch(function(error) { hint("Could not save: " + error.message); });
             }));
             page.appendChild(optionRow("Records of this track", "Forget them", function() {
                 OpenRacer.Records.forget(currentTrack.id);

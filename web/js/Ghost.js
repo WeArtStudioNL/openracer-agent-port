@@ -106,11 +106,14 @@ OpenRacer.Ghost = function (config, trackId) {
         wheels.forEach(function (w) { w.visible = v; });
     }
 
+    this.onLap = null;             // called with (samples, lapTime) for every lap that is done, whether it is the best or not
+
     // Called when a lap is done: keeps it when it is the best (and saving is on)
     this.lapDone = function (lapTime) {
         var recording = this.recording;
         this.recording = [];
         since = 1;
+        if (this.onLap && recording && recording.length >= 10) this.onLap(recording, lapTime);
         if (!this.saving || !recording || recording.length < 10) return false;
         if (!OpenRacer.Records.lap(trackId, config.id, lapTime)) return false;
         this.best = { time: lapTime, samples: recording };
