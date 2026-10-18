@@ -52,6 +52,21 @@ OpenRacer.Engine = function( parameters ) {
     this.starting = false;
     this.throttleCut = 1; // 0..1 factor from the rev limiter, for the dashboard
     this.noFuel = false;  // the tank is empty: the engine dies and does not start (Vehicle.js sets it)
+    // A turbo: a share of the torque of the curve only comes with boost, which builds up with the throttle open above a
+    // threshold speed over the spool time (the lag) and falls away fast when the throttle is shut. "turbo" in the engine of
+    // car.json: { share: 0..1, spool: s, threshold_rpm }. Without it the engine is naturally aspirated.
+    var turbo = parameters.turbo || null;
+    this.turboShare = turbo ? Math.max(0, Math.min(0.9, turbo.share !== undefined ? turbo.share : 0.5)) : 0;
+    this.turboSpool = turbo ? (turbo.spool || 0.4) : 0.4;
+    this.turboThreshold = turbo ? (turbo.threshold_rpm || 2500) : 2500;
+    this.boost = 0;       // 0..1, how much of the boost is there
+    this.updateBoost = function (throttle, dt) {
+        if(this.turboShare <= 0) { this.boost = 0; return; }
+        var rpm = this.getRPM();
+        var wanted = this.running ? Math.max(0, Math.min(1, throttle)) * Math.max(0, Math.min(1, (rpm - this.turboThreshold) / 2000)) : 0;
+        var tau = wanted > this.boost ? this.turboSpool : this.turboSpool * 0.35;
+        this.boost += (wanted - this.boost) * Math.min(1, dt / tau);
+    };
 
     this.getPeakTorque = function() {
         var peak = 0;
@@ -124,6 +139,7 @@ OpenRacer.Engine = function( parameters ) {
         }
         thr *= this.throttleCut;
 
-        return this.getTorque(rpm) * this.torqueScale * thr - (1 - thr) * this.getMotoringTorque(rpm);
+        var boosted = 1 - this.turboShare * (1 - this.boost); // the torque without boost is the share that is not from the turbo
+        return this.getTorque(rpm) * this.torqueScale * boosted * thr - (1 - thr) * this.getMotoringTorque(rpm);
     };
 };

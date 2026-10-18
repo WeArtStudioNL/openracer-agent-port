@@ -56,11 +56,15 @@ var Tuning = (function() {
             ["idle_rpm", "Idle speed", "rpm", 500, 2000, 50],
             ["limiter_rpm", "Rev limit", "rpm", 3000, 13000, 100],
             ["engine_inertia", "Inertia of the engine", "kg m²", 0.05, 1.5, 0.01],
-            ["engine_braking", "Engine braking", "%", 20, 300, 5]
+            ["engine_braking", "Engine braking", "%", 20, 300, 5],
+            ["turbo_share", "Turbo: share of the torque that is boost (0: no turbo)", "%", 0, 90, 5],
+            ["turbo_spool", "Turbo: spool time (the lag)", "s", 0.05, 2, 0.05],
+            ["turbo_threshold", "Turbo: from", "rpm", 1000, 6000, 100]
         ] },
         { name: "Transmission", items: [
             ["drive", "Drive", "", 0, 0, 0],
             ["final_drive", "Final drive", "", 1.5, 6.5, 0.05],
+            ["shift_time", "Shift time (without a clutch pedal)", "s", 0.05, 1.5, 0.01],
             ["gears", "Gears", "", 0, 0, 0],
             ["reverse_ratio", "Reverse", "", 1.0, 6.0, 0.05],
             ["clutch", "Clutch capacity (x peak torque)", "", 1.0, 3.5, 0.05],
@@ -141,6 +145,10 @@ var Tuning = (function() {
             diff_lock: dt.diff_lock !== undefined ? dt.diff_lock : 60,
             brake_front: (c.brakes && c.brakes.front) || 1700,
             brake_rear: (c.brakes && c.brakes.rear) || 900,
+            turbo_share: (en.turbo && en.turbo.share !== undefined ? en.turbo.share : (en.turbo ? 0.5 : 0)) * 100,
+            turbo_spool: en.turbo && en.turbo.spool ? en.turbo.spool : 0.4,
+            turbo_threshold: en.turbo && en.turbo.threshold_rpm ? en.turbo.threshold_rpm : 2500,
+            shift_time: dt.shift_time || 0.32,
             roll_center_front: (ch.roll_center_front !== undefined ? ch.roll_center_front : 0.06) * 100,
             roll_center_rear: (ch.roll_center_rear !== undefined ? ch.roll_center_rear : 0.12) * 100,
             camber_front: ch.camber_front || 0,
@@ -207,6 +215,10 @@ var Tuning = (function() {
             downforce_front: v.downforce_front / V100,
             downforce_rear: v.downforce_rear / V100,
             ackermann: v.ackermann / 100,
+            shift_time: v.shift_time,
+            turbo_share: v.turbo_share / 100,
+            turbo_spool: v.turbo_spool,
+            turbo_threshold: v.turbo_threshold,
             roll_center_front: v.roll_center_front / 100,
             roll_center_rear: v.roll_center_rear / 100,
             camber_front: v.camber_front,
@@ -525,6 +537,9 @@ var Tuning = (function() {
         c.engine.idle_rpm = v.idle_rpm;
         c.engine.limiter_rpm = v.limiter_rpm;
         c.engine.inertia = v.engine_inertia;
+        if(v.turbo_share > 0) c.engine.turbo = { share: v.turbo_share / 100, spool: v.turbo_spool, threshold_rpm: v.turbo_threshold };
+        else delete c.engine.turbo;
+        c.drivetrain.shift_time = v.shift_time;
         c.drivetrain.drive = v.drive;
         c.drivetrain.final_drive = v.final_drive;
         c.drivetrain.reverse_ratio = v.reverse_ratio;

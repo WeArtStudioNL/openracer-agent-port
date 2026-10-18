@@ -135,7 +135,8 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.escLevel = 0;                // how hard the stability control works (0..1)
     this.yawWanted = 0;               // the yaw rate the steering asks for, as the car can follow it (it needs a moment to turn)
     this.steerApplied = 0;            // the angle of the front wheels
-    this.understeerGradient = 0.0008; // (rad s^2/m) of the car, to know what the car does at a steering angle
+    this.understeerGradient = 0.0008; // (rad s^2/m) of the car, to know what the car does at a steering angle; set by layout() from the car
+    this.shiftTime = parameters.shift_time || 0.32; // how long a shift of the gearbox takes without a clutch pedal (s)
     this.shiftTimer = 0;
     this.lastGearKey = null;
     this.timeSinceShift = 10;
@@ -299,6 +300,22 @@ OpenRacer.Vehicle = function (parameters, input) {
         inertiaY = m * (this.width * this.width + this.length * this.length) / 12;
         inertiaZ = m * (this.width * this.width + this.bodyHeight * this.bodyHeight) / 12;
         this.yawInertia = inertiaY;
+        // The understeer gradient of the car, for the stability control: what the steering asks for at a speed depends on how
+        // much each axle has to slip for its share of the weight. K = Wf / Cf - Wr / Cr, with the cornering stiffness of an axle
+        // from the slope of its tyres' curve at zero slip (on the road). Positive: the car understeers, the front slips more.
+        var road = this.getSurface ? this.getSurface("road") : { static: 1.2, kinetic: 1.06 };
+        var C = 2 - (2 / Math.PI) * Math.asin(Math.min(0.98, road.kinetic / road.static));
+        var peak = Math.tan(Math.PI / (2 * C));
+        var stiffness = [0, 0], weight = [0, 0];
+        for(var k = 0; k < 4; k++) {
+            var wk = this.wheels[k], axle = wk.front ? 0 : 1;
+            // the grip per Newton falls with the load (the load sensitivity): the heavier axle slips more for its share
+            var mu = Math.max(0.2, road.static * wk.gripScale - wk.loadSensitivity * (wk.staticLoad - wk.nominalLoad));
+            stiffness[axle] += mu * wk.staticLoad * wk.lateralGrip * C * peak / wk.anglePeak;
+            weight[axle] += wk.staticLoad;
+        }
+        // the slope at zero slip overstates what the car does at a real lateral acceleration (the bench measures about half)
+        if(stiffness[0] > 0 && stiffness[1] > 0) this.understeerGradient = Math.max(-0.003, Math.min(0.01, 0.45 * (weight[0] / stiffness[0] - weight[1] / stiffness[1])));
     };
     this.layout();
 
@@ -358,6 +375,10 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.downforce_front !== undefined) this.downforceFront = t.downforce_front;
         if(t.downforce_rear !== undefined) this.downforceRear = t.downforce_rear;
         if(t.ackermann !== undefined) this.ackermann = t.ackermann;
+        if(t.shift_time !== undefined) this.shiftTime = t.shift_time;
+        if(t.turbo_share !== undefined) this.engine.turboShare = Math.max(0, Math.min(0.9, t.turbo_share));
+        if(t.turbo_spool !== undefined) this.engine.turboSpool = Math.max(0.05, t.turbo_spool);
+        if(t.turbo_threshold !== undefined) this.engine.turboThreshold = t.turbo_threshold;
         if(t.unsprung_mass !== undefined) this.unsprungMass = t.unsprung_mass;
         if(t.tyre_rate !== undefined) this.tyreRate = t.tyre_rate;
         if(t.roll_center_front !== undefined) this.rollCentreFront = t.roll_center_front;
@@ -525,7 +546,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         var key = inp.neutral ? -1 : (inp.reverse ? -2 : inp.current_gear);
         if(this.lastGearKey !== null && key !== this.lastGearKey) {
             this.timeSinceShift = 0;
-            if(!inp.clutchPedalPresent) this.shiftTimer = 0.32;
+            if(!inp.clutchPedalPresent) this.shiftTimer = this.shiftTime;
         }
         this.lastGearKey = key;
         if(this.shiftTimer > 0) this.shiftTimer -= delta;
@@ -978,6 +999,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         var throttle = inp.throttle * self.tcFactor * (1 - 0.85 * escCut);
         // the gearbox takes the power off while it shifts
         if(self.shiftTimer > 0) throttle *= 0.15;
+        engine.updateBoost(throttle, dt);
         var Te = engine.getNetTorque(throttle);
         var rpm = engine.getRPM();
         self.fuelStep(dt, Te, engine.omega);

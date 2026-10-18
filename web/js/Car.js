@@ -129,6 +129,7 @@ OpenRacer.Car = function( config, domElement ) {
         reverse_ratio: drivetrain.reverse_ratio,
         final_drive: this.final_drive,
         efficiency: drivetrain.efficiency,
+        shift_time: drivetrain.shift_time,
         drive: drivetrain.drive,
         diff: drivetrain.diff,
         diff_preload: drivetrain.diff_preload,
