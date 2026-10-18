@@ -34,6 +34,8 @@ var Tuning = (function() {
             ["spring_rear", "Rear springs (wheel rate)", "N/mm", 10, 90, 1],
             ["damping_front", "Front dampers", "%", 10, 100, 1],
             ["damping_rear", "Rear dampers", "%", 10, 100, 1],
+            ["ride_front", "Ride height at the front (from the car as made)", "mm", -60, 80, 5],
+            ["ride_rear", "Ride height at the rear", "mm", -60, 80, 5],
             ["roll_center_front", "Roll centre at the front", "cm", -5, 40, 1],
             ["roll_center_rear", "Roll centre at the rear", "cm", -5, 40, 1],
             ["camber_front", "Camber at the front (negative: top in)", "°", -6, 3, 0.1],
@@ -151,6 +153,8 @@ var Tuning = (function() {
             turbo_spool: en.turbo && en.turbo.spool ? en.turbo.spool : 0.4,
             turbo_threshold: en.turbo && en.turbo.threshold_rpm ? en.turbo.threshold_rpm : 2500,
             shift_time: dt.shift_time || 0.32,
+            ride_front: Math.round((ch.ride_front || 0) * 1000),
+            ride_rear: Math.round((ch.ride_rear || 0) * 1000),
             roll_center_front: (ch.roll_center_front !== undefined ? ch.roll_center_front : 0.06) * 100,
             roll_center_rear: (ch.roll_center_rear !== undefined ? ch.roll_center_rear : 0.12) * 100,
             camber_front: ch.camber_front || 0,
@@ -222,6 +226,8 @@ var Tuning = (function() {
             turbo_share: v.turbo_share / 100,
             turbo_spool: v.turbo_spool,
             turbo_threshold: v.turbo_threshold,
+            ride_front: v.ride_front / 1000,
+            ride_rear: v.ride_rear / 1000,
             roll_center_front: v.roll_center_front / 100,
             roll_center_rear: v.roll_center_rear / 100,
             camber_front: v.camber_front,
@@ -527,6 +533,8 @@ var Tuning = (function() {
         c.chassis.downforce_rear = v.downforce_rear / V100;
         delete c.chassis.downforce;
         c.chassis.ackermann = v.ackermann / 100;
+        c.chassis.ride_front = v.ride_front / 1000;
+        c.chassis.ride_rear = v.ride_rear / 1000;
         c.chassis.roll_center_front = v.roll_center_front / 100;
         c.chassis.roll_center_rear = v.roll_center_rear / 100;
         c.chassis.camber_front = v.camber_front;

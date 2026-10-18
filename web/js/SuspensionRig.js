@@ -116,7 +116,8 @@ OpenRacer.SuspensionRig = (function () {
     // the travel of a wheel upwards from its rest position (m), from the quarter car
     function travelOf(vehicle, wheel) {
         var w = vehicle.wheels[wheel];
-        return vehicle.restLength - (w.susLength !== undefined ? w.susLength : vehicle.restLength);
+        var rest = w.restLengthWheel !== undefined ? w.restLengthWheel : vehicle.restLength;
+        return rest - (w.susLength !== undefined ? w.susLength : rest);
     }
 
     function update(rig, vehicle) {

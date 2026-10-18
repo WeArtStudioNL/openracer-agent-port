@@ -97,6 +97,10 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.rearDamping = parameters.damping_rear || 0.35;
     this.reboundFactor = 1.7;
     this.restLength = 0.28;           // from the mount to the middle of the wheel, at rest (m)
+    // the ride height per axle: how much further out (positive) or in the wheels of an axle sit at rest than that (m); it raises or
+    // lowers the body there, with its centre of gravity, and gives it rake when the two differ
+    this.rideFront = parameters.ride_front || 0;
+    this.rideRear = parameters.ride_rear || 0;
     this.bumpTravel = 0.09;           // how much further the spring can go in before the bump stop (m)
     this.groundClearance = 0.13;      // of the underside of the body at rest (m)
 
@@ -282,8 +286,9 @@ OpenRacer.Vehicle = function (parameters, input) {
             w.rate = w.front ? this.frontWheelRate : this.rearWheelRate;
             w.staticLoad = w.mass * G;
             // free length: the spring is pushed in by the weight at rest, to the rest length
-            w.freeLength = this.restLength + w.staticLoad / w.rate;
-            w.minLength = this.restLength - this.bumpTravel;
+            w.restLengthWheel = this.restLength + (w.front ? this.rideFront : this.rideRear); // where the wheel sits at rest
+            w.freeLength = w.restLengthWheel + w.staticLoad / w.rate;
+            w.minLength = w.restLengthWheel - this.bumpTravel;
             // the mount of the spring on the body (x to the left, y up, z forward) from the centre of gravity
             w.mount = { x: -w.b, y: (radius - this.cgHeight) + this.restLength, z: w.a };
         }
@@ -376,6 +381,8 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.downforce_rear !== undefined) this.downforceRear = t.downforce_rear;
         if(t.ackermann !== undefined) this.ackermann = t.ackermann;
         if(t.shift_time !== undefined) this.shiftTime = t.shift_time;
+        if(t.ride_front !== undefined) this.rideFront = t.ride_front;
+        if(t.ride_rear !== undefined) this.rideRear = t.ride_rear;
         if(t.turbo_share !== undefined) this.engine.turboShare = Math.max(0, Math.min(0.9, t.turbo_share));
         if(t.turbo_spool !== undefined) this.engine.turboSpool = Math.max(0.05, t.turbo_spool);
         if(t.turbo_threshold !== undefined) this.engine.turboThreshold = t.turbo_threshold;
@@ -435,7 +442,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         // the heading psi, from +x towards +z, is a turn around the y axis of the body of (pi / 2 - psi)
         var angle = Math.PI / 2 - psi;
         this.qx = 0; this.qy = Math.sin(angle / 2); this.qz = 0; this.qw = Math.cos(angle / 2);
-        this.px = x; this.py = height + this.cgHeight; this.pz = z;
+        this.px = x; this.py = height + this.cgHeight + (this.rideFront + this.rideRear) / 2; this.pz = z; // the ride height lifts the body
         this.vx = this.vy = this.vz = 0;
         this.wx = this.wy = this.wz = 0;
         this.ax = this.ay = 0;
@@ -448,7 +455,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             w.heat = w.smoke = w.squeal = 0;
             w.velocity.set(0, 0, 0);
             w.lastCompression = undefined;
-            w.susLength = this.restLength;   // the wheel where it is at rest on the spring
+            w.susLength = w.restLengthWheel !== undefined ? w.restLengthWheel : this.restLength;   // the wheel where it is at rest on the spring
             w.susVel = 0;
         }
         lastBodyAccDown = 0;
