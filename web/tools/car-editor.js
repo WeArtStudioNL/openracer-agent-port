@@ -104,8 +104,9 @@ function resize() {
 window.addEventListener("resize", resize);
 new ResizeObserver(resize).observe(view);
 resize();
-(function loop() {
+(function loop(now) {
     requestAnimationFrame(loop);
+    if (window.benchFrame) window.benchFrame(now || performance.now()); // the test bench, once the module has made it (below)
     renderer.render(scene, camera);
     renderThumbnail();
 })();
@@ -1346,3 +1347,127 @@ renderCurve();
 updateSpeedInfo();
 defaultCameras();
 refreshList();
+
+// ---- the test bench: the car on the floor of the editor with the physics of the game (Vehicle.js), to see the suspension work.
+// "Drop car" lets it fall from a height, "Shake test" presses on its four corners in turn. The model is built the way the game
+// builds it (CarLoader.js: the wheels taken out, the suspension rig found), from the model and the settings as they are now.
+window.THREE = Object.assign({}, THREE, { GLTFLoader });
+const PHYSICS_SCRIPTS = ["Engine.js", "Wheel.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "CarLoader.js"];
+let physicsLoading = null;
+function loadPhysics() {
+    if (!physicsLoading) {
+        physicsLoading = PHYSICS_SCRIPTS.reduce((chain, file) => chain.then(() => new Promise((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = "../js/" + file;
+            script.onload = resolve;
+            script.onerror = () => reject(new Error("Could not load " + file));
+            document.head.appendChild(script);
+        })), Promise.resolve());
+    }
+    return physicsLoading;
+}
+const bench = { vehicle: null, model: null, body: null, objects: [], last: 0, shake: null, modelMid: null };
+const flatRoad = { query: () => ({ y: grid.position.y, nx: 0, ny: 1, nz: 0, surface: "road", mesh: "" }) };
+const roadGrip = () => ({ static: 1.2, kinetic: 1.06 });
+
+async function startBench() {
+    if (!state.root) throw new Error("Load a model first.");
+    if (wheelMode() !== "model") throw new Error("The test needs the wheels of the model: select the parts of every wheel.");
+    await loadPhysics();
+    const config = buildConfig("test");
+    config.id = "test";
+    config.model = { type: "gltf", file: "", rotation_y: num("rotation") || 0, scale: num("scale") > 0 ? num("scale") : 1, offset: [num("offsetX") || 0, num("offsetY") || 0, num("offsetZ") || 0] };
+    config.materials = state.overrides;
+    stopBench();
+    const model = await new Promise((resolve, reject) => OpenRacer.loadCarModel(config, resolve, (message) => reject(new Error(message)), state.root));
+    const input = { throttle: 0, brakePedal: 1, clutch: 0, clutchPedalPresent: false, handbrake: true, turnAngle: 0, neutral: true, reverse: false, manualGearbox: false, current_gear: 0, parkingLock: true };
+    const v = new OpenRacer.Vehicle(OpenRacer.vehicleParams(config, roadGrip), input);
+    v.ground = flatRoad;
+    bench.modelMid = null;
+    if (model.measured) {
+        // the physics takes the wheelbase, the tracks and the tyre from the wheels of the model, as the game does
+        const c = model.measured.centres;
+        v.retune({ wheelbase: (c.FR.z + c.FL.z) / 2 - (c.RL.z + c.RR.z) / 2, front_track: Math.abs(c.FR.x - c.FL.x), rear_track: Math.abs(c.RR.x - c.RL.x), tire_diameter: model.measured.diameter });
+        bench.modelMid = new THREE.Vector3((c.FR.x + c.FL.x + c.RL.x + c.RR.x) / 4, (c.FR.y + c.FL.y + c.RL.y + c.RR.y) / 4, (c.FR.z + c.FL.z + c.RL.z + c.RR.z) / 4);
+    }
+    v.reset(0, 0, Math.PI / 2); // facing +z, the way the editor shows the car
+    bench.body = new THREE.Object3D();
+    bench.body.add(model.tilt);
+    scene.add(bench.body);
+    model.wheels.forEach((w) => scene.add(w));
+    bench.objects = [bench.body, ...model.wheels];
+    bench.vehicle = v; bench.model = model; bench.input = input; bench.last = performance.now();
+    pivot.visible = false; helpers.visible = false;
+    $("testStop").style.display = "";
+    status("Test: the car with the physics of the game" + (model.rig ? ", " + model.rig.count + " moving parts of the suspension" : "") + ". Stop test goes back to the model.", "ok");
+    return v;
+}
+
+function stopBench() {
+    bench.objects.forEach((o) => scene.remove(o));
+    bench.objects = []; bench.vehicle = null; bench.model = null; bench.shake = null;
+    pivot.visible = true; helpers.visible = true;
+    $("testStop").style.display = "none";
+}
+
+const benchPose = { x: 0, y: 0, z: 0 }, benchQuat = { x: 0, y: 0, z: 0, w: 1 }, benchUp = new THREE.Vector3();
+function benchFrame(now) {
+    const v = bench.vehicle;
+    if (!v) return;
+    const dt = Math.min(0.05, Math.max(0.001, (now - bench.last) / 1000));
+    bench.last = now;
+    if (bench.shake) {
+        // the four corners in turn: front left, front right, rear right, rear left, a push of 0.3 s and a pause of 0.2 s, two rounds
+        const s = bench.shake;
+        s.t += dt;
+        const step = Math.floor(s.t / 0.5);
+        if (step >= 8) bench.shake = null;
+        else if (s.t - step * 0.5 < 0.3) {
+            const w = v.wheels[[1, 0, 3, 2][step % 4]];
+            v.pushDown(w.mount.x, w.mount.y, w.mount.z, s.kg * 9.81);
+        }
+    }
+    v.update(dt);
+    v.getBodyPose(benchPose, benchQuat);
+    const body = bench.body;
+    body.quaternion.set(benchQuat.x, benchQuat.y, benchQuat.z, benchQuat.w);
+    if (bench.modelMid) {
+        benchUp.copy(bench.modelMid).applyQuaternion(body.quaternion);
+        body.position.set(benchPose.x - benchUp.x, benchPose.y - benchUp.y, benchPose.z - benchUp.z);
+    } else {
+        benchUp.set(0, 1, 0).applyQuaternion(body.quaternion);
+        const lift = ((bench.model.bodyLift || 1) - 1) * v.wheels[0].radius;
+        body.position.set(benchPose.x + benchUp.x * lift, benchPose.y + benchUp.y * lift, benchPose.z + benchUp.z * lift);
+    }
+    bench.model.wheels.forEach((object, i) => {
+        const w = v.wheels[i];
+        object.position.set(w.center.x, w.center.y, w.center.z);
+        object.quaternion.copy(body.quaternion);
+        if (object.children[0] && object.children[0].children[0]) object.children[0].children[0].rotation.x = w.spin;
+    });
+    if (bench.model.rig) bench.model.rig.update(v);
+}
+
+async function dropCar() {
+    try {
+        const v = bench.vehicle || await startBench();
+        v.reset(0, 0, Math.PI / 2);
+        v.py += parseFloat($("testDropHeight").value);
+        bench.shake = null;
+    } catch (error) { status(error.message, "error"); }
+}
+
+async function shakeTest() {
+    try {
+        if (!bench.vehicle) await startBench();
+        bench.shake = { t: 0, kg: parseFloat($("testShakeKg").value) };
+    } catch (error) { status(error.message, "error"); }
+}
+
+$("testDrop").addEventListener("click", dropCar);
+$("testShake").addEventListener("click", shakeTest);
+$("testStop").addEventListener("click", stopBench);
+$("testDropHeight").addEventListener("input", () => { $("testDropLabel").textContent = parseFloat($("testDropHeight").value).toFixed(1) + " m"; });
+$("testShakeKg").addEventListener("input", () => { $("testShakeLabel").textContent = $("testShakeKg").value + " kg"; });
+window.benchFrame = benchFrame; // the render loop at the top calls it from here on
+window.benchState = bench; // for a look from the console

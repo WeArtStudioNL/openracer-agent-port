@@ -1127,6 +1127,15 @@ OpenRacer.Vehicle = function (parameters, input) {
             torque.x += pitch * axisX.x; torque.y += pitch * axisX.y; torque.z += pitch * axisX.z;
         }
 
+        // ---- pushes from outside (the shake test), straight down at a point of the body
+        for(var pi = 0; pi < self.pushes.length; pi++) {
+            var push = self.pushes[pi];
+            rotate(self.qx, self.qy, self.qz, self.qw, push.x, push.y, push.z, Rv);
+            force.y -= push.n;
+            torque.x += Rv.y * 0 - Rv.z * -push.n;   // r x F with F = (0, -n, 0)
+            torque.z += Rv.x * -push.n - Rv.y * 0;
+        }
+
         // ---- the body on the road, for a landing or a car that has turned over
         bodyCorners(force, torque);
 
@@ -1174,12 +1183,18 @@ OpenRacer.Vehicle = function (parameters, input) {
     }
 
     // Moves the physics forward by delta seconds, in small steps. The 3D side of the car is left to Car.js.
+    // A push on the body from outside (the shake test of the car editor): a force in newtons straight down in the world, at a point
+    // of the body (x to the left, y up, z forward from the centre of gravity). It lasts until the next frame.
+    this.pushes = [];
+    this.pushDown = function (bx, by, bz, newtons) { this.pushes.push({ x: bx, y: by, z: bz, n: newtons }); };
+
     this.update = function (delta) {
         this.updateControls(delta);
         this.impactTime += delta;
         var steps = Math.max(1, Math.ceil(delta / 0.003));
         var dt = delta / steps;
         for(var s = 0; s < steps; s++) step(dt);
+        this.pushes.length = 0;
         this.squeal = 0;
         for(var q = 0; q < 4; q++) this.squeal = Math.max(this.squeal, this.wheels[q].squeal);
         this.updateOutputs();

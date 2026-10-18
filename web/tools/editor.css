@@ -108,7 +108,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 #hud { position: absolute; left: 14px; top: 12px; max-width: 55%; color: #c3cdd9; font-size: 12px; pointer-events: none; white-space: pre-line; text-shadow: 0 1px 3px #000c; }
 .float { position: absolute; background: #171b22e6; border: 1px solid #2f3845; border-radius: 12px; box-shadow: 0 6px 24px #0008; backdrop-filter: blur(8px); padding: 8px 10px; display: flex; gap: 8px; align-items: center; }
 .float.top-right { top: 12px; right: 12px; }
-.float.bottom { bottom: 14px; left: 50%; transform: translateX(-50%); }
+.float.bottom { bottom: 14px; left: 50%; transform: translateX(-50%); flex-wrap: wrap; justify-content: center; max-width: calc(100% - 24px); }
 .float.bottom-right { bottom: 14px; right: 12px; }
 .float.column { flex-direction: column; align-items: stretch; }
 .float label { margin: 0; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; }

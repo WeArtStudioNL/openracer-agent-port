@@ -37,7 +37,8 @@
  *   (children[0], turns around the vertical axis) and the spin (children[0].children[0]).
  */
 
-OpenRacer.loadCarModel = function (config, onLoad, onError) {
+// loadedRoot (optional): a glTF scene that is already loaded (the car editor has one); it is copied and built like a loaded file
+OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
     var model = config.model || {};
     var tireDiameter = config.chassis.tire_diameter;
     var SLOTS = ["FR", "FL", "RL", "RR"];
@@ -311,6 +312,8 @@ OpenRacer.loadCarModel = function (config, onLoad, onError) {
         return false;
     }
 
-    if(model.type === "gltf") gltf();
+    if(loadedRoot) {
+        try { build(loadedRoot.clone(true)); } catch(e) { console.error(e); onError("Could not use the model (" + e + ")"); }
+    } else if(model.type === "gltf") gltf();
     else legacy();
 };
