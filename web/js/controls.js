@@ -102,6 +102,9 @@ function gamepadUpdate(delta) {
         }
         var slow = Settings.option("padSlow");
         var rate = 6 / (1 + (slow === undefined ? 1.5 : slow) * speed / 10);   // rad/s
+        // back towards the middle the wheels go fast at any speed (the tyres straighten themselves): only steering out is slowed
+        var towardsCentre = Math.abs(target) < Math.abs(car.turnAngle) && target * car.turnAngle >= 0;
+        if(towardsCentre || target * car.turnAngle < 0) rate = Math.max(rate, 5);
         var step = rate * delta;
         if(Math.abs(target - car.turnAngle) <= step) car.turnAngle = target;
         else car.turnAngle += Math.sign(target - car.turnAngle) * step;
