@@ -33,7 +33,12 @@ var Tuning = (function() {
             ["spring_front", "Front springs (wheel rate)", "N/mm", 10, 90, 1],
             ["spring_rear", "Rear springs (wheel rate)", "N/mm", 10, 90, 1],
             ["damping_front", "Front dampers", "%", 10, 100, 1],
-            ["damping_rear", "Rear dampers", "%", 10, 100, 1]
+            ["damping_rear", "Rear dampers", "%", 10, 100, 1],
+            ["roll_center_front", "Roll centre at the front", "cm", -5, 40, 1],
+            ["roll_center_rear", "Roll centre at the rear", "cm", -5, 40, 1],
+            ["camber_front", "Camber at the front (negative: top in)", "°", -6, 3, 0.1],
+            ["camber_rear", "Camber at the rear", "°", -6, 3, 0.1],
+            ["roll_camber", "Camber lost in roll", "%", 0, 100, 5]
         ] },
         { name: "Tyres", items: [
             ["grip", "Grip", "%", 50, 160, 1],
@@ -136,6 +141,11 @@ var Tuning = (function() {
             diff_lock: dt.diff_lock !== undefined ? dt.diff_lock : 60,
             brake_front: (c.brakes && c.brakes.front) || 1700,
             brake_rear: (c.brakes && c.brakes.rear) || 900,
+            roll_center_front: (ch.roll_center_front !== undefined ? ch.roll_center_front : 0.06) * 100,
+            roll_center_rear: (ch.roll_center_rear !== undefined ? ch.roll_center_rear : 0.12) * 100,
+            camber_front: ch.camber_front || 0,
+            camber_rear: ch.camber_rear || 0,
+            roll_camber: (ch.roll_camber !== undefined ? ch.roll_camber : 0.6) * 100,
             drag_coefficient: ch.drag_coefficient,
             downforce_front: Math.round((ch.downforce_front !== undefined ? ch.downforce_front : (ch.downforce || 0) * ch.weight_distribution) * V100),
             downforce_rear: Math.round((ch.downforce_rear !== undefined ? ch.downforce_rear : (ch.downforce || 0) * (1 - ch.weight_distribution)) * V100),
@@ -197,6 +207,11 @@ var Tuning = (function() {
             downforce_front: v.downforce_front / V100,
             downforce_rear: v.downforce_rear / V100,
             ackermann: v.ackermann / 100,
+            roll_center_front: v.roll_center_front / 100,
+            roll_center_rear: v.roll_center_rear / 100,
+            camber_front: v.camber_front,
+            camber_rear: v.camber_rear,
+            roll_camber: v.roll_camber / 100,
             tc_allowance: v.tc_allowance / 100,
             esc_gain: v.esc_gain / 100
         });
@@ -497,6 +512,11 @@ var Tuning = (function() {
         c.chassis.downforce_rear = v.downforce_rear / V100;
         delete c.chassis.downforce;
         c.chassis.ackermann = v.ackermann / 100;
+        c.chassis.roll_center_front = v.roll_center_front / 100;
+        c.chassis.roll_center_rear = v.roll_center_rear / 100;
+        c.chassis.camber_front = v.camber_front;
+        c.chassis.camber_rear = v.camber_rear;
+        c.chassis.roll_camber = v.roll_camber / 100;
         c.tyres = { grip: v.grip / 100, cornering: v.cornering / 100, rolling_resistance: v.rolling_resistance, heating: v.tyre_heating / 100, life: v.tyre_life / 100 };
         c.fuel = { tank: v.tank, use: v.fuel_use / 100 };
         c.engine = c.engine || {};

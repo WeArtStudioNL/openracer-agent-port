@@ -62,6 +62,18 @@ OpenRacer.Vehicle = function (parameters, input) {
     // Ackermann: in a bend the inner front wheel steers more than the outer one, so both roll around the same point (1: the
     // full geometry, 0: parallel; a racing car has some of it)
     this.ackermann = parameters.ackermann !== undefined ? parameters.ackermann : 0.6;
+    // The roll centres: the height (m above the road) at which the suspension of an axle passes the lateral force of its tyres
+    // to the body. The part of the load transfer below it goes through the linkage at once (geometric), only the rest rolls the
+    // body on its springs. A higher roll centre: less roll, quicker response, a little jacking.
+    this.rollCentreFront = parameters.roll_center_front !== undefined ? parameters.roll_center_front : 0.06;
+    this.rollCentreRear = parameters.roll_center_rear !== undefined ? parameters.roll_center_rear : 0.12;
+    // Camber: the lean of the wheels (degrees; negative is the top in, as it is set on a car that corners), and how much the
+    // wheels lean with the body when it rolls (1: like a live axle keeps them upright... no: 0 keeps them upright, 1 leans them fully)
+    this.camberFront = parameters.camber_front || 0;
+    this.camberRear = parameters.camber_rear || 0;
+    this.rollCamber = parameters.roll_camber !== undefined ? parameters.roll_camber : 0.6;
+    this.camberGain = 0.5;            // a degree of lean is worth this many degrees of slip angle (camber thrust)
+    var axleFy = [0, 0];              // the lateral force of each axle in the last step, for the geometric load transfer
     this.gear_ratios = parameters.gear_ratios;
     this.final_drive = parameters.final_drive;
     this.getSurface = parameters.getSurface;
@@ -339,6 +351,11 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.downforce_front !== undefined) this.downforceFront = t.downforce_front;
         if(t.downforce_rear !== undefined) this.downforceRear = t.downforce_rear;
         if(t.ackermann !== undefined) this.ackermann = t.ackermann;
+        if(t.roll_center_front !== undefined) this.rollCentreFront = t.roll_center_front;
+        if(t.roll_center_rear !== undefined) this.rollCentreRear = t.roll_center_rear;
+        if(t.camber_front !== undefined) this.camberFront = t.camber_front;
+        if(t.camber_rear !== undefined) this.camberRear = t.camber_rear;
+        if(t.roll_camber !== undefined) this.rollCamber = t.roll_camber;
         this.layout();
         for(i = 0; i < 4; i++) {
             w = this.wheels[i];
@@ -748,6 +765,10 @@ OpenRacer.Vehicle = function (parameters, input) {
         var brakePedal = inp.brakePedal;
         var handbrake = inp.handbrake ? 1 : 0;
         var sumFx = 0, sumFy = 0;
+        // the roll of the body (positive: leaning to the right), for the camber of the wheels
+        rotateInverse(self.qx, self.qy, self.qz, self.qw, 0, 1, 0, tmpA);
+        var rollRight = Math.asin(Math.max(-1, Math.min(1, tmpA.x)));
+        var newAxleFy = [0, 0];
 
         for(var iw = 0; iw < 4; iw++) {
             var wheel = wheels[iw];
@@ -796,8 +817,19 @@ OpenRacer.Vehicle = function (parameters, input) {
                 wheel.slipRatio += (kappa - wheel.slipRatio) * a;
                 wheel.slipTan += (tanA - wheel.slipTan) * a;
 
+                // the geometric load transfer: the lateral force of the axle, passed to the body at the roll centre, presses the outer
+                // wheel down and lifts the inner one at once (it does not wait for the springs)
+                var axle = wheel.front ? 0 : 1;
+                var rollCentre = wheel.front ? self.rollCentreFront : self.rollCentreRear;
+                var trackWidth = wheel.front ? self.front_track : self.rear_track;
+                var geometric = (wheel.right ? 1 : -1) * axleFy[axle] * rollCentre / trackWidth;
+                var fzGrip = Math.max(0, fz + geometric);
+                // camber: the lean of the wheel to the left (its static camber, and the lean of the body in roll); a wheel that
+                // leans pushes towards the side it leans to, as if it had a slip angle
+                var camber = (wheel.front ? self.camberFront : self.camberRear) * Math.PI / 180;
+                var leanLeft = (wheel.right ? -camber : camber) - rollRight * self.rollCamber;
                 var surface = self.getSurface(wheel.surface);
-                wheel.tyreForce(wheel.slipRatio, wheel.slipTan, fz, surface);
+                wheel.tyreForce(wheel.slipRatio, wheel.slipTan - self.camberGain * leanLeft * wheel.anglePeak / 0.15, fzGrip, surface);
                 // Smoke and squeal: the tyre slides (s is above 1 past the peak of the grip) at some speed over the road. The heat builds
                 // up the longer it slides, so the smoke gets thicker, and goes away slowly when it grips again.
                 var slideSpeed = Math.sqrt((wheel.omega * wheel.radius - vl) * (wheel.omega * wheel.radius - vl) + vt * vt);
@@ -818,15 +850,21 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var rr = wheel.rollingResistance * (surface.static < 0.8 ? 4 : 1) * fz * Math.tanh(vl / 0.3);
                 fxW -= rr;
 
-                // the forces on the car, at the point of contact: the load along the normal, and the forces of the tyre along the road
-                var fxx = fz * nx + fxW * fpx + fyW * lx;
-                var fyy = fz * ny + fxW * fpy + fyW * ly;
-                var fzz = fz * nz + fxW * fpz + fyW * lz;
-                force.x += fxx; force.y += fyy; force.z += fzz;
+                // the forces on the car: the load along the normal and the force along the wheel at the point of contact, the force
+                // across the wheel at the roll centre above it (the linkage passes it to the body there, so the body rolls less)
+                var fxx = fz * nx + fxW * fpx;
+                var fyy = fz * ny + fxW * fpy;
+                var fzz = fz * nz + fxW * fpz;
+                force.x += fxx + fyW * lx; force.y += fyy + fyW * ly; force.z += fzz + fyW * lz;
                 torque.x += Cv.y * fzz - Cv.z * fyy;
                 torque.y += Cv.z * fxx - Cv.x * fzz;
                 torque.z += Cv.x * fyy - Cv.y * fxx;
+                var rcx = Cv.x + axisY.x * rollCentre, rcy = Cv.y + axisY.y * rollCentre, rcz = Cv.z + axisY.z * rollCentre;
+                torque.x += rcy * fyW * lz - rcz * fyW * ly;
+                torque.y += rcz * fyW * lx - rcx * fyW * lz;
+                torque.z += rcx * fyW * ly - rcy * fyW * lx;
                 sumFx += fxW; sumFy += fyW;
+                newAxleFy[axle] += fyW;
             } else {
                 wheel.weight = 0;
                 wheel.forwardSpeed = 0;
@@ -855,6 +893,8 @@ OpenRacer.Vehicle = function (parameters, input) {
             wheel.brakeTorque = bt;
             if(wheel.driven && wheel.hasContact) maxDrivenSlip = Math.max(maxDrivenSlip, (wheel.omega * wheel.radius - vl) / (self.tcAllowance * (1 + 0.12 * Math.abs(vl))));
         }
+
+        axleFy[0] = newAxleFy[0]; axleFy[1] = newAxleFy[1];
 
         // ---- traction control
         // Traction control only looks at the wheels: when a driven wheel turns faster than the road under it (it spins),

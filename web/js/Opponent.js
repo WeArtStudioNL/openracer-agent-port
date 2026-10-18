@@ -15,6 +15,7 @@ OpenRacer.vehicleParams = function (config, getSurface) {
         weight_distribution: chassis.weight_distribution, cgHeight: chassis.cg_height, roll_front: chassis.roll_front,
         spring_front: chassis.spring_front, spring_rear: chassis.spring_rear, damping_front: chassis.damping_front, damping_rear: chassis.damping_rear,
         downforce: chassis.downforce, downforce_front: chassis.downforce_front, downforce_rear: chassis.downforce_rear, ackermann: chassis.ackermann,
+        roll_center_front: chassis.roll_center_front, roll_center_rear: chassis.roll_center_rear, camber_front: chassis.camber_front, camber_rear: chassis.camber_rear, roll_camber: chassis.roll_camber,
         tire_diameter: chassis.tire_diameter, width: dimensions.width, length: dimensions.length, height: dimensions.height,
         Cdrag: 0.5 * chassis.drag_coefficient * dimensions.width * dimensions.height * 0.85 * 1.29,
         gear_ratios: drivetrain.gear_ratios.slice(), reverse_ratio: drivetrain.reverse_ratio, final_drive: drivetrain.final_drive, efficiency: drivetrain.efficiency,

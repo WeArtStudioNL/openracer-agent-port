@@ -135,13 +135,15 @@ function skidpad(config) {
     car.v.tcEnabled = true;
     const L = config.chassis.wheelbase;
     const delta = L / 50;
+    // the lateral acceleration is taken from the tyre forces (v.ay, filtered), and only while the car still follows the circle:
+    // a car that has let go slides with a big slip angle, and a yaw transient on its way out is not grip
     let best = 0, bestSpeed = 0;
     run(car, 240, (t, v, input) => {
         input.turnAngle = delta;
         speedControl(input, v, 5 + t * 0.25);
-        const ay = Math.abs(v.u * v.r);
-        if (ay > best) { best = ay; bestSpeed = v.u; }
-    }, (t, v) => t > 5 && (Math.abs(Math.atan2(v.v, v.u)) > 0.35 || Math.abs(v.u * v.r) < best * 0.7));
+        const ay = Math.abs(v.ay);
+        if (Math.abs(Math.atan2(v.v, v.u)) < 0.12 && ay > best) { best = ay; bestSpeed = v.u; }
+    }, (t, v) => t > 5 && (Math.abs(Math.atan2(v.v, v.u)) > 0.2 || Math.abs(v.ay) < best * 0.7));
     return { g: best / G, speed: bestSpeed };
 }
 

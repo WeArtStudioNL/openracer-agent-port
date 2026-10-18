@@ -103,6 +103,10 @@ OpenRacer.Wheel = function (parameters) {
     // slip of the tyre, and E bends the curve. The force on the tyre is not the two together: the tyre has only a grip to
     // spend, a friction circle (here an ellipse, for a tyre that grips a little more across than along). When the two forces
     // together are more than the grip, both are scaled back, so a tyre that brakes hard has less to corner with.
+    //
+    // The two slips are taken together as one slip vector (each measured against the slip where its force peaks), the magic
+    // formula gives the size of the force for the length of that vector, and the force points against the slip. So a tyre that
+    // brakes hard has less left to corner with, and past the peak both forces fall away together: the way a sliding tyre lets go.
     this.tyreForce = function (kappa, tanAlpha, load, surface) {
         var grip = surface.static * this.gripScale * (this.condition || 1); // condition: the temperature and the wear of the tyre (Vehicle.js)
         var mu = Math.min(1.4 * grip, Math.max(0.2 * grip, grip - this.loadSensitivity * (load - this.nominalLoad)));
@@ -110,25 +114,18 @@ OpenRacer.Wheel = function (parameters) {
         var C = 2 - (2 / Math.PI) * Math.asin(slidingRatio);
         var peak = Math.tan(Math.PI / (2 * C)); // B x at the peak of the curve
 
-        var Dx = mu * load;
-        var Dy = mu * load * this.lateralGrip;
-        var Bx = peak / this.slipPeak, By = peak / this.anglePeak;
-        var bk = Bx * kappa, ba = By * tanAlpha;
-        var fx = Dx * Math.sin(C * Math.atan(bk - this.shapeX * (bk - Math.atan(bk))));
-        var fy = -Dy * Math.sin(C * Math.atan(ba - this.shapeY * (ba - Math.atan(ba))));
-
-        // how far the tyre is towards its limit, for the traction control, ABS and slide detection
+        // the slip vector, in units of the slip at the peak
         var sx = kappa / this.slipPeak, sy = tanAlpha / this.anglePeak;
-        this.s = Math.sqrt(sx * sx + sy * sy);
-
-        var ex = fx / Dx, ey = fy / Dy;
-        var used = Math.sqrt(ex * ex + ey * ey);
-        if(used > 1) {
-            fx /= used;
-            fy /= used;
-        }
-        this.fx = fx;
-        this.fy = fy;
-        this.slip = this.s > 1.15;
+        var s = Math.sqrt(sx * sx + sy * sy);
+        this.s = s;   // how far the tyre is towards its limit (1 is the peak), for the traction control, ABS and slide detection
+        var b = peak * s;
+        var shape = s > 1e-9 ? (this.shapeX * sx * sx + this.shapeY * sy * sy) / (s * s) : 0;
+        var f = Math.sin(C * Math.atan(b - shape * (b - Math.atan(b))));   // 0..1: the share of the peak force
+        // the direction: against the slip; across the tyre the grip is a little more (lateralGrip)
+        var dirX = s > 1e-9 ? sx / s : 0, dirY = s > 1e-9 ? sy / s : 0;
+        var D = mu * load;
+        this.fx = D * f * dirX;
+        this.fy = -D * this.lateralGrip * f * dirY;
+        this.slip = s > 1.15;
     };
 };
