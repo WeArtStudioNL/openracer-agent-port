@@ -62,6 +62,7 @@ var scripts = [
     "js/ForceFeedback.js",
     "js/Settings.js",
     "js/Hud.js",
+    "js/CarTuning.js",
     "js/Tuning.js",
     "js/controls.js",
     "js/main.js"

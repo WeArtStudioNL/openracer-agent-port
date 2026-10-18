@@ -1047,6 +1047,12 @@ function buildConfig(id) {
         config.cameras.follow.fov_fast, config.cameras.follow.fov_full_speed, config.cameras.follow.dolly, config.cameras.cockpit.fov, ...config.cameras.cockpit.position];
     if (!camNumbers.every(Number.isFinite)) throw new Error("Every field of the cameras needs a number.");
     if (!config.name) throw new Error("Give the car a name.");
+    // the settings of the Tuning card (the rest of the tuning menu) go into the configuration too
+    const withTuning = OpenRacer.CarTuning.toConfig(config, tuningValues(config));
+    ["tyres", "fuel", "assists"].forEach((k) => { config[k] = withTuning[k]; });
+    Object.assign(config.chassis, withTuning.chassis);
+    Object.assign(config.engine, withTuning.engine);
+    Object.assign(config.drivetrain, withTuning.drivetrain);
     if (wheelMode() === "model") {
         // the physics of the game takes the wheelbase, the tracks and the tyre from the wheels of the model: car.json says the same
         const c = wheelCenters();
@@ -1218,6 +1224,7 @@ function fill(car) {
     set("travel", Math.round((c.suspension_travel || 0.09) * 100)); $("travelLabel").textContent = $("travel").value + " cm";
     set("wheelbase", c.wheelbase); set("frontTrack", c.front_track); set("rearTrack", c.rear_track);
     set("tyre", c.tire_diameter); set("drag", c.drag_coefficient); set("steer", c.max_steer_deg);
+    tuningFromCar(car);
     const d = car.drivetrain;
     set("steeringDegrees", (car.steering_wheel && car.steering_wheel.degrees) || 450);
     set("drive", d.drive); set("diff", d.diff || "lsd"); set("centerDiff", d.center_diff || "lsd");
@@ -1284,6 +1291,7 @@ function loadExisting() {
 
 function newCar() {
     fillEngineSim(OpenRacer.engineSimParams(null));
+    tuningFromCar(null);
     stopPreview();
     state.existingId = null;
     state.existingModel = null;
@@ -1350,6 +1358,70 @@ updateSpeedInfo();
 defaultCameras();
 refreshList();
 
+
+// ---- the Tuning card: everything of the tuning menu of the game that the form does not have, from the shared table (CarTuning.js)
+const EDITOR_HAS = new Set(["mass", "front_weight", "cg_height", "drag_coefficient", "max_steer_deg", "idle_rpm", "limiter_rpm", "engine_inertia",
+    "final_drive", "reverse_ratio", "brake_front", "brake_rear", "diff_preload", "diff_power", "diff_coast", "center_split", "suspension_travel"]);
+const TUNING_KEYS = OpenRacer.CarTuning.keys().filter((k) => !EDITOR_HAS.has(k));
+let tuning = {};
+const DEFAULT_CAR = { chassis: { mass: 1400, weight_distribution: 0.55, drag_coefficient: 0.35 }, drivetrain: { gear_ratios: [3, 2, 1.4, 1], final_drive: 3.5 }, engine: {} };
+
+function tuningFromCar(car) {
+    const all = OpenRacer.CarTuning.fromConfig(car || DEFAULT_CAR);
+    tuning = {};
+    TUNING_KEYS.forEach((k) => { tuning[k] = all[k]; });
+    renderTuningCard();
+}
+
+function renderTuningCard() {
+    const box = $("tuningFields");
+    box.innerHTML = "";
+    OpenRacer.CarTuning.GROUPS.forEach((group) => {
+        const items = group.items.filter((item) => TUNING_KEYS.includes(item[0]));
+        if (!items.length) return;
+        const head = document.createElement("div");
+        head.className = "group";
+        head.textContent = group.name;
+        box.appendChild(head);
+        for (let i = 0; i < items.length; i += 3) {
+            const row = document.createElement("div");
+            row.className = "row";
+            items.slice(i, i + 3).forEach((item) => {
+                const [key, label, unit, min, max, step] = item;
+                const cell = document.createElement("div");
+                const input = document.createElement("input");
+                input.type = "number"; input.min = min; input.max = max; input.step = step; input.value = tuning[key];
+                input.id = "tune_" + key;
+                input.addEventListener("input", () => { tuning[key] = parseFloat(input.value); tuningChanged(); });
+                const hint = document.createElement("div");
+                hint.className = "hint";
+                hint.textContent = label + (unit ? " (" + unit + ")" : "");
+                cell.appendChild(input); cell.appendChild(hint);
+                row.appendChild(cell);
+            });
+            box.appendChild(row);
+        }
+    });
+    $("tuningInfo").textContent = TUNING_KEYS.length + " settings";
+}
+
+// a change goes to the car of the test bench at once
+function tuningChanged() {
+    if (!bench.vehicle || !bench.config) return;
+    try {
+        const config = OpenRacer.CarTuning.toConfig(bench.config, tuningValues(bench.config));
+        const area = config.dimensions.width * config.dimensions.height * 0.85;
+        bench.vehicle.retune(OpenRacer.CarTuning.toRetune(OpenRacer.CarTuning.fromConfig(config), area, 1.29));
+    } catch (error) { console.warn(error); }
+}
+
+// all the values of the table for a configuration from the form: the form's own, with the card's on top
+function tuningValues(config) {
+    const values = OpenRacer.CarTuning.fromConfig(config);
+    TUNING_KEYS.forEach((k) => { if (Number.isFinite(tuning[k])) values[k] = tuning[k]; });
+    return values;
+}
+
 // ---- the test bench: the car on the floor of the editor with the physics of the game (Vehicle.js), to see the suspension work.
 // "Drop car" lets it fall from a height, "Shake test" presses on its four corners in turn. The model is built the way the game
 // builds it (CarLoader.js: the wheels taken out, the suspension rig found), from the model and the settings as they are now.
@@ -1410,6 +1482,7 @@ async function startBench() {
 function stopBench() {
     bench.objects.forEach((o) => scene.remove(o));
     if (bench.script && preview.playing) stopPreview();
+    if (bench.driving) stopDriving();
     bench.objects = []; bench.vehicle = null; bench.model = null; bench.shake = null; bench.script = null;
     pivot.visible = true; helpers.visible = true;
     $("testStop").style.display = "none";
@@ -1422,6 +1495,7 @@ function benchFrame(now) {
     const dt = Math.min(0.05, Math.max(0.001, (now - bench.last) / 1000));
     bench.last = now;
     if (bench.script) runScript(dt);
+    if (bench.driving) driveFrame(dt);
     if (bench.shake) {
         // the four corners in turn: front left, front right, rear right, rear left, a sharp push of 0.15 s and 0.45 s to see it
         // bounce back, two rounds
@@ -1593,3 +1667,79 @@ $("testShakePush").addEventListener("input", () => { $("testShakePushLabel").tex
 $("testShakePace").addEventListener("input", () => { $("testShakePaceLabel").textContent = "every " + parseFloat($("testShakePace").value).toFixed(1) + " s"; });
 window.benchFrame = benchFrame; // the render loop at the top calls it from here on
 window.benchState = bench; // for a look from the console
+
+// ---- driving on the test bench: the keyboard drives the car over the floor (arrows or WASD, space the handbrake, R back to the start)
+const keys = {};
+const bigGrid = new THREE.GridHelper(400, 100, 0x3e4756, 0x2a313c);
+bigGrid.visible = false;
+scene.add(bigGrid);
+window.addEventListener("keydown", (e) => {
+    if (!bench.driving || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+    keys[e.code] = true;
+    if (e.code === "KeyR") resetCar();
+    if (/^(Arrow|Space)/.test(e.code)) e.preventDefault();
+});
+window.addEventListener("keyup", (e) => { keys[e.code] = false; });
+
+async function toggleDrive() {
+    try {
+        if (bench.driving) { stopDriving(); return; }
+        const v = bench.vehicle || await startBench();
+        bench.script = null; bench.shake = null;
+        bench.driving = { throttle: 0, brake: 0, turn: 0 };
+        bench.input.parkingLock = false; bench.input.neutral = false; bench.input.reverse = false; bench.input.current_gear = 0;
+        bigGrid.visible = true; bigGrid.position.y = grid.position.y - 0.001;
+        $("testDrive").textContent = "Stop driving"; $("testReset").style.display = "";
+        status("Drive: arrows or WASD, space is the handbrake, R puts the car back at the start.", "ok");
+        if (!preview.playing) await playSound();
+    } catch (error) { status(error.message, "error"); }
+}
+
+function stopDriving() {
+    bench.driving = null;
+    bigGrid.visible = false;
+    $("testDrive").textContent = "Drive"; $("testReset").style.display = "none";
+    if (bench.input) { bench.input.throttle = 0; bench.input.brakePedal = 0; bench.input.turnAngle = 0; bench.input.parkingLock = true; bench.input.neutral = true; bench.input.handbrake = false; }
+    if (preview.playing) stopPreview();
+}
+
+function resetCar() {
+    const v = bench.vehicle;
+    if (!v) return;
+    v.reset(0, 0, Math.PI / 2);
+    if (bench.driving) { bench.driving.throttle = bench.driving.brake = bench.driving.turn = 0; }
+    controls.target.set(0, 0.4, 0);
+    camera.position.set(-5, 3, 6);
+    controls.update();
+}
+
+// the keys to the pedals and the steering, the way Car.js does it for the keyboard; the camera keeps the car in view
+function driveFrame(dt) {
+    const d = bench.driving, inp = bench.input, v = bench.vehicle;
+    if (!d || !v) return;
+    const up = keys.ArrowUp || keys.KeyW, down = keys.ArrowDown || keys.KeyS, left = keys.ArrowLeft || keys.KeyA, right = keys.ArrowRight || keys.KeyD;
+    d.throttle = up ? Math.min(1, d.throttle + (1 - d.throttle) * dt * 4) : 0;
+    d.brake = down ? Math.min(1, d.brake + (1 - d.brake) * dt * 6) : 0;
+    // backwards: the brake key with the car at a standstill is reverse
+    if (down && Math.abs(v.u) < 0.3 && !up) { inp.reverse = true; inp.throttle = 0.5; inp.brakePedal = 0; }
+    else if (inp.reverse && down && v.u <= 0.3) { inp.throttle = d.brake * 0.6; inp.brakePedal = 0; }
+    else { inp.reverse = false; inp.throttle = d.throttle; inp.brakePedal = d.brake; }
+    inp.neutral = false; inp.parkingLock = false; inp.handbrake = !!keys.Space;
+    const lock = (bench.config.chassis.max_steer_deg || 30) * Math.PI / 180;
+    const speedFactor = Math.max(Math.abs(v.u) / 4, 1), rate = 0.6 / speedFactor;
+    const dir = (right ? 1 : 0) - (left ? 1 : 0);
+    if (dir === 0) d.turn *= Math.pow(0.75, dt * 60);
+    else if (dir * d.turn < 0) d.turn += dir * rate * 3 * dt;
+    else d.turn = Math.max(-lock, Math.min(lock, d.turn + dir * rate * dt));
+    inp.turnAngle = d.turn;
+    if (preview.playing) { $("soundRpm").value = Math.round(v.engine.getRPM()); $("soundThrottle").value = Math.round(inp.throttle * 100); soundSliders(); }
+    // the camera follows: its target is the car, and it keeps its distance
+    const offset = camera.position.clone().sub(controls.target);
+    controls.target.set(v.x, grid.position.y + 0.6, v.z);
+    camera.position.copy(controls.target).add(offset);
+    controls.update();
+}
+
+$("testDrive").addEventListener("click", toggleDrive);
+$("testReset").addEventListener("click", resetCar);
+tuningFromCar(null); // the Tuning card for a new car
