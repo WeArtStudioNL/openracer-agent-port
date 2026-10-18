@@ -171,10 +171,16 @@ for corner, side in (("FL", 1), ("FR", -1)):
     part("steer_tierod_" + corner, (side * 0.45, 0.04, FRONT + 0.22), bar((0, 0, 0), (side * 0.24, 0, -0.1), 0.025), "steer")
 part("steer_rack", (0, 0.04, FRONT + 0.22), box((0.9, 0.05, 0.05)), "steer")
 
-# ---- the rear: a live axle with a spring on each side
+# ---- the rear: a live axle, located by two trailing arms and a Panhard rod, with a spring and a damper on each side
 part("susp_axle_rear", (0, 0, REAR), merge(box((TRACK - 0.1, 0.09, 0.09)), box((0.3, 0.26, 0.26))), "arm")
 for corner, side in (("RL", 1), ("RR", -1)):
     part("susp_spring_" + corner, (side * 0.55, 0.52, REAR), bar((0, 0, 0), (0, -0.47, 0), 0.09), "spring")
+    # the damper: from a mount on the tower, slanted, down to the axle
+    part("susp_damper_" + corner, (side * 0.42, 0.5, REAR + 0.12), bar((0, 0, 0), (side * 0.2, -0.45, -0.1), 0.05), "spring")
+    # the trailing arm: the pivot at the bracket on the frame ahead of the axle, the free end on the axle
+    part("susp_trailingarm_" + corner, (side * 0.4, -0.02, REAR + 0.9), bar((0, 0, 0), (0, 0, -0.85), 0.04), "arm")
+# the Panhard rod: from a bracket on the frame on the left, across to the right end of the axle
+part("susp_panhard_rear", (0.45, 0.12, REAR - 0.12), bar((0, 0, 0), (-1.05, -0.12, 0), 0.03), "steer")
 
 # ---- the wheels: tyre and rim as one part each, the pivot at the middle (set them as the wheel parts in the car editor)
 for corner, x, z in (("FL", HALF_TRACK, FRONT), ("FR", -HALF_TRACK, FRONT), ("RL", HALF_TRACK, REAR), ("RR", -HALF_TRACK, REAR)):

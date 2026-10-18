@@ -663,7 +663,7 @@ function renderLayers() {
         if (l.id === "steering") { const has = state.nodes.some((n) => /steeringwheel|steerwheel/i.test(n.name.replace(/[^a-z0-9]/gi, ""))); if (!has) row.classList.add("dim"); meta.textContent = has ? "" : "none"; }
         if (l.id === "rig") {
             // the moving parts of the suspension and the steering (SuspensionRig.js in the game): susp_<kind>_<corner>, steer_rack, steer_tierod_<corner>
-            const count = state.nodes.filter((n) => /^(susp(upperarm|lowerarm|arm|wishbone|link|upright|hub|knuckle|spring|damper|strut|shock|coilover)[a-z]*(fl|fr|rl|rr)|steertierod[a-z]*(fl|fr|rl|rr)|steerrack|susprack|suspaxle(rear|front|back))$/i.test(n.name.replace(/[^a-z0-9]/gi, ""))).length;
+            const count = state.nodes.filter((n) => /^(susp(upperarm|lowerarm|arm|wishbone|link|trailingarm|trailing|upright|hub|knuckle|spring|damper|strut|shock|coilover|driveshaft|halfshaft|shaft)[a-z]*(fl|fr|rl|rr)|steertierod[a-z]*(fl|fr|rl|rr)|steerrack|susprack|susp(axle|panhard|watt)[a-z]*(rear|front|back)?)$/i.test(n.name.replace(/[^a-z0-9]/gi, ""))).length;
             if (!count) row.classList.add("dim");
             meta.textContent = count ? count + " parts" : "none";
             row.title = "Parts named susp_lowerarm_FL, susp_upperarm_FL, susp_upright_FL, susp_spring_FL, susp_damper_FL, steer_rack, steer_tierod_FL or susp_axle_rear move with the suspension and the steering in the game";

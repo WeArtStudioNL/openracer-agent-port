@@ -26,7 +26,7 @@
 
 OpenRacer.SuspensionRig = (function () {
     var CORNERS = { fl: 1, fr: 0, rl: 2, rr: 3 }; // the index of the wheel in Vehicle.js (FR, FL, RL, RR)
-    var UP = new THREE.Vector3(0, 1, 0), FORWARD = new THREE.Vector3(0, 0, 1), Y = new THREE.Vector3(0, 1, 0);
+    var UP = new THREE.Vector3(0, 1, 0), FORWARD = new THREE.Vector3(0, 0, 1), LEFT = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0);
 
     function clean(name) { return String(name || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
 
@@ -38,7 +38,10 @@ OpenRacer.SuspensionRig = (function () {
         var corner = n.slice(-2);
         var wheel = CORNERS[corner];
         if(n.indexOf("axle") !== -1) return { kind: "axle", rear: n.indexOf("rear") !== -1 || n.indexOf("back") !== -1 };
+        if(n.indexOf("panhard") !== -1 || n.indexOf("watt") !== -1) return { kind: "panhard", rear: n.indexOf("front") === -1 };
         if(wheel === undefined) return null;
+        if(n.indexOf("trailing") !== -1) return { kind: "trailing", wheel: wheel };
+        if(n.indexOf("driveshaft") !== -1 || n.indexOf("halfshaft") !== -1 || n.indexOf("shaft") !== -1) return { kind: "shaft", wheel: wheel };
         if(n.indexOf("arm") !== -1 || n.indexOf("wishbone") !== -1 || n.indexOf("link") !== -1) return { kind: "arm", wheel: wheel };
         if(n.indexOf("upright") !== -1 || n.indexOf("hub") !== -1 || n.indexOf("knuckle") !== -1) return { kind: "upright", wheel: wheel };
         if(n.indexOf("spring") !== -1 || n.indexOf("damper") !== -1 || n.indexOf("strut") !== -1 || n.indexOf("shock") !== -1 || n.indexOf("coilover") !== -1) return { kind: "spring", wheel: wheel };
@@ -86,7 +89,12 @@ OpenRacer.SuspensionRig = (function () {
             var entry = { kind: p.what.kind, wheel: p.what.wheel, rear: p.what.rear, origin: origin.clone(), holder: new THREE.Object3D() };
             entry.holder.name = "rig-" + p.node.name;
             entry.holder.position.copy(origin);
-            if(entry.kind === "spring" || entry.kind === "tierod") {
+            if(entry.kind === "trailing") {
+                // a trailing arm swings about the axis across the car: its length is along the car
+                entry.far = farEnd(p.node, origin);
+                entry.armLength = Math.max(0.05, Math.abs(entry.far.z - origin.z));
+                entry.ahead = entry.far.z >= origin.z ? 1 : -1; // the free end ahead of (+z) or behind the hinge
+            } else if(entry.kind === "spring" || entry.kind === "tierod" || entry.kind === "panhard" || entry.kind === "shaft") {
                 // the holder's Y axis runs along the part, from its origin to its far end, so that scale.y makes it longer or shorter
                 entry.far = farEnd(p.node, origin);
                 entry.restDir = entry.far.clone().sub(origin);
@@ -156,6 +164,28 @@ OpenRacer.SuspensionRig = (function () {
                 tmp.y += travelOf(vehicle, p.wheel);
                 h.position.set(p.origin.x + (p.wheel < 2 ? rackShift : 0), p.origin.y, p.origin.z);
                 tmp.sub(h.position);
+                h.quaternion.setFromUnitVectors(Y, tmp2.copy(tmp).normalize());
+                h.scale.y = Math.max(0.2, tmp.length() / p.restLength);
+            } else if(p.kind === "trailing") {
+                // swings about the axis across the car: the free end goes up with the wheel
+                var tTravel = travelOf(vehicle, p.wheel);
+                q.setFromAxisAngle(LEFT, -p.ahead * Math.asin(Math.max(-1, Math.min(1, tTravel / p.armLength))));
+                h.quaternion.copy(q).multiply(p.restQuaternion);
+            } else if(p.kind === "shaft") {
+                // from the differential (on the body) to the middle of the wheel: it goes up and down with the wheel and gets longer and shorter
+                var hub = rig.uprights[p.wheel];
+                tmp.copy(hub ? hub.origin : p.far);
+                tmp.y += travelOf(vehicle, p.wheel);
+                tmp.sub(p.origin);
+                h.quaternion.setFromUnitVectors(Y, tmp2.copy(tmp).normalize());
+                h.scale.y = Math.max(0.2, tmp.length() / p.restLength);
+            } else if(p.kind === "panhard") {
+                // from the body to the axle: the end on the axle goes up with the axle there (its travel, and its roll at that distance from the middle)
+                var pl = travelOf(vehicle, p.rear ? 2 : 1), pr = travelOf(vehicle, p.rear ? 3 : 0);
+                var pTrack = (p.rear ? vehicle.rear_track : vehicle.front_track) || 1.5;
+                tmp.copy(p.far);
+                tmp.y += (pl + pr) / 2 + (pl - pr) / pTrack * p.far.x;
+                tmp.sub(p.origin);
                 h.quaternion.setFromUnitVectors(Y, tmp2.copy(tmp).normalize());
                 h.scale.y = Math.max(0.2, tmp.length() / p.restLength);
             } else if(p.kind === "axle") {
