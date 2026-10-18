@@ -63,6 +63,7 @@ function updateScreenSize() {
 }
 
 window.onresize = function() {
+    if(!camera) return; // the game is not running (the main menu has a renderer of its own)
     updateScreenSize();
 
     renderer.setSize( SCREEN_WIDTH, SCREEN_HEIGHT );

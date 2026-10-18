@@ -48,6 +48,21 @@ var MainMenu = (function() {
             "#mainMenu .card .name { font-size: 19px; font-weight: bold; }" +
             "#mainMenu .card .info { color: #9aa8ba; font-size: 14px; margin-top: 4px; }" +
             "#mainMenu .card .specs { color: #7e90a6; font-size: 13px; margin-top: 6px; }" +
+            // the cars: square tiles with the turning model of the car on a dark radial gradient, the text over it
+            "#mainMenu .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }" +
+            "#mainMenu .tile { position: relative; aspect-ratio: 1; border: 2px solid #2c3541; border-radius: 10px; overflow: hidden; cursor: pointer; " +
+            "background: radial-gradient(circle at 50% 58%, #62676e 0%, #2b2f36 48%, #000000 100%); }" +
+            "#mainMenu .tile:hover { border-color: #4a5a70; }" +
+            "#mainMenu .tile.selected { border-color: #3aa86a; box-shadow: 0 0 0 1px #3aa86a inset, 0 0 18px rgba(58, 168, 106, 0.35); }" +
+            "#mainMenu .tile canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }" +
+            "#mainMenu .tile .over { position: absolute; left: 0; top: 0; right: 0; bottom: 0; padding: 12px 14px; pointer-events: none; display: flex; flex-direction: column; " +
+            "text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9); background: linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0) 38%, rgba(0, 0, 0, 0) 70%, rgba(0, 0, 0, 0.55) 100%); }" +
+            "#mainMenu .tile .name { font-size: 19px; font-weight: bold; }" +
+            "#mainMenu .tile .info { color: #c9d3df; font-size: 13px; margin-top: 2px; line-height: 1.3; }" +
+            "#mainMenu .tile .bottom { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; }" +
+            "#mainMenu .tile .hp { font-size: 26px; font-weight: bold; line-height: 1; white-space: nowrap; }" +
+            "#mainMenu .tile .hp small { font-size: 12px; font-weight: normal; color: #9fb0c4; letter-spacing: 1px; margin-left: 4px; }" +
+            "#mainMenu .tile .specs { color: #9fb0c4; font-size: 12px; line-height: 1.3; }" +
             "#mainMenu .start { margin-top: 18px; font-size: 22px; padding: 14px 44px; border: 0; border-radius: 8px; background: #2e9a5c; color: #fff; cursor: pointer; }" +
             "#mainMenu .start:hover { background: #38b56e; }" +
             "#mainMenu .secondary { margin-top: 18px; margin-left: 12px; font-size: 22px; padding: 14px 30px; border: 0; border-radius: 8px; background: #36404e; color: #fff; cursor: pointer; }" +
@@ -65,14 +80,152 @@ var MainMenu = (function() {
         document.head.appendChild(style);
     }
 
-    function carSpecs(car) {
+    function carPower(car) {
         var curve = (car.engine && car.engine.torque_curve) || [];
         var peak = 0;
         curve.forEach(function(point) { peak = Math.max(peak, point[1] * point[0] * Math.PI / 30 / 745.7); });
+        return Math.round(peak);
+    }
+
+    function carSpecs(car) {
         var drive = (car.drivetrain && car.drivetrain.drive || "rwd").toUpperCase();
         var gears = car.drivetrain && car.drivetrain.gear_ratios ? car.drivetrain.gear_ratios.length : "?";
-        return (peak ? Math.round(peak) + " hp · " : "") + Math.round(car.chassis.mass) + " kg · " + drive + " · " + gears + " gears" +
-            (car.model && car.model.type === "gltf" ? " · glTF model" : "");
+        return Math.round(car.chassis.mass) + " kg · " + drive + " · " + gears + " gears";
+    }
+
+    // The showcase: the 3D model of every car turns slowly on its tile. One hidden WebGL renderer draws the cars one by one into
+    // the canvas of each tile (a browser allows only a few WebGL contexts). The models are loaded once and kept.
+    var showcase = (function() {
+        var ready = false, tiles = [], models = {}, group = null, cam = null, size = 360, clock = 0, last = 0, running = false;
+        function init() {
+            if(ready) return;
+            ready = true;
+            // the renderer and the scene are the globals of the game (Scene.js); the game itself starts on another page
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+            renderer.setSize(size, size, false);
+            renderer.setClearColor(0x000000, 0);
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            scene = new THREE.Scene();
+            var pmrem = new THREE.PMREMGenerator(renderer);
+            scene.environment = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04).texture;
+            scene.add(new THREE.HemisphereLight(0xffffff, 0x303030, 0.9));
+            var sun = new THREE.DirectionalLight(0xffffff, 1.6);
+            sun.position.set(4, 7, 5);
+            scene.add(sun);
+            var floor = new THREE.Mesh(new THREE.CircleGeometry(4, 48), new THREE.ShadowMaterial({ opacity: 0.35 }));
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+            renderer.shadowMap.enabled = true;
+            sun.castShadow = true;
+            sun.shadow.mapSize.set(1024, 1024);
+            sun.shadow.camera.left = sun.shadow.camera.bottom = -4; sun.shadow.camera.right = sun.shadow.camera.top = 4;
+            group = new THREE.Group();
+            scene.add(group);
+            cam = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
+            if(typeof initialiseMaterials === "function" && typeof mlib === "undefined") {
+                // the materials of the old models reflect a cube map: a grey room, taken once
+                initialiseMaterials();
+                scene.background = new THREE.Color(0x9a9ea6);
+                cubeCamera.update(renderer, scene);
+                scene.background = null;
+            }
+        }
+
+        function modelOf(car) {
+            if(models[car.id]) return models[car.id];
+            var entry = models[car.id] = { object: null, radius: car.chassis.tire_diameter / 2, length: (car.dimensions && car.dimensions.length) || 4.5 };
+            OpenRacer.loadCarModel(car, function(model) {
+                var object = new THREE.Group();
+                var r = entry.radius;
+                model.tilt.position.y = ((model.bodyLift || 1) - 1) * r;
+                object.add(model.tilt);
+                var c = model.measured && model.measured.centres;
+                var wb = car.chassis.wheelbase, ft = car.chassis.front_track, rt = car.chassis.rear_track;
+                var places = c ? [c.FR, c.FL, c.RL, c.RR] : [{ x: -ft / 2, y: 0, z: wb / 2 }, { x: ft / 2, y: 0, z: wb / 2 }, { x: rt / 2, y: 0, z: -wb / 2 }, { x: -rt / 2, y: 0, z: -wb / 2 }];
+                model.wheels.forEach(function(w, i) { w.position.set(places[i].x, places[i].y, places[i].z); object.add(w); });
+                object.position.y = r; // the wheels on the floor
+                object.traverse(function(child) { if(child.isMesh) child.castShadow = true; });
+                // the camera is placed by the size of the model as it is, not by the figures of the configuration
+                var box = new THREE.Box3().setFromObject(object);
+                var size = box.getSize(new THREE.Vector3());
+                if(size.x > 1 && size.z > 1) entry.length = Math.max(size.x, size.z);
+                object.visible = false;
+                group.add(object);
+                entry.object = object;
+            }, function(message) { console.warn("Showcase: " + message); });
+            return entry;
+        }
+
+        // a tile for a car: its canvas is drawn every frame
+        function add(car, canvas) {
+            init();
+            tiles.push({ car: car, canvas: canvas, context: canvas.getContext("2d"), model: modelOf(car), phase: tiles.length * 1.3 });
+            if(!running) { running = true; last = performance.now(); requestAnimationFrame(frame); }
+        }
+        function clear() { tiles = []; }
+
+        function frame(now) {
+            if(!document.getElementById("mainMenu")) { running = false; return; }
+            requestAnimationFrame(frame);
+            var dt = Math.min(0.1, (now - last) / 1000);
+            last = now;
+            clock += dt;
+            tiles.forEach(function(tile) {
+                var m = tile.model;
+                if(!m.object) return;
+                var w = tile.canvas.clientWidth, h = tile.canvas.clientHeight;
+                if(!w || !h) return;
+                var px = Math.min(2, window.devicePixelRatio || 1);
+                if(tile.canvas.width !== Math.round(w * px) || tile.canvas.height !== Math.round(h * px)) { tile.canvas.width = Math.round(w * px); tile.canvas.height = Math.round(h * px); }
+                group.children.forEach(function(o) { o.visible = o === m.object; });
+                m.object.rotation.y = clock * 0.35 + tile.phase;
+                var d = m.length * 1.75;
+                cam.position.set(Math.sin(0.6) * d, m.length * 0.4, Math.cos(0.6) * d);
+                cam.lookAt(0, m.radius * 1.3, 0);
+                renderer.render(scene, cam);
+                tile.context.clearRect(0, 0, tile.canvas.width, tile.canvas.height);
+                tile.context.drawImage(renderer.domElement, 0, 0, tile.canvas.width, tile.canvas.height);
+            });
+        }
+        return { add: add, clear: clear };
+    })();
+
+    function carTile(car) {
+        var div = document.createElement("div");
+        div.className = "tile" + (choice.car === car.id ? " selected" : "");
+        var canvas = document.createElement("canvas");
+        div.appendChild(canvas);
+        var over = document.createElement("div");
+        over.className = "over";
+        var name = document.createElement("div");
+        name.className = "name";
+        name.textContent = car.name || car.id;
+        over.appendChild(name);
+        if(car.description) {
+            var info = document.createElement("div");
+            info.className = "info";
+            info.textContent = car.description;
+            over.appendChild(info);
+        }
+        var bottom = document.createElement("div");
+        bottom.className = "bottom";
+        var specs = document.createElement("div");
+        specs.className = "specs";
+        specs.textContent = carSpecs(car);
+        bottom.appendChild(specs);
+        var power = carPower(car);
+        var hp = document.createElement("div");
+        hp.className = "hp";
+        hp.innerHTML = (power || "?") + "<small>HP</small>";
+        bottom.appendChild(hp);
+        over.appendChild(bottom);
+        div.appendChild(over);
+        div.onclick = function() { choice.car = car.id; remember(); render(); };
+        div.ondblclick = start;
+        showcase.add(car, canvas);
+        return div;
     }
 
     function card(item, key, lines) {
@@ -118,7 +271,11 @@ var MainMenu = (function() {
         var carColumn = document.createElement("div");
         carColumn.className = "column";
         carColumn.innerHTML = "<h2>Car</h2>";
-        cars.forEach(function(car) { carColumn.appendChild(card(car, "car", carSpecs(car))); });
+        var tiles = document.createElement("div");
+        tiles.className = "tiles";
+        showcase.clear();
+        cars.forEach(function(car) { tiles.appendChild(carTile(car)); });
+        carColumn.appendChild(tiles);
         columns.appendChild(carColumn);
 
         var trackColumn = document.createElement("div");

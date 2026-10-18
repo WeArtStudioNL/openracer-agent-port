@@ -14,6 +14,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { ColorCorrectionShader } from "three/addons/shaders/ColorCorrectionShader.js";
 import { VignetteShader } from "three/addons/shaders/VignetteShader.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
 // the module namespace of three.js is read-only; copy it to be able to add the add-ons
 window.THREE = Object.assign({}, THREE_MODULE, {
@@ -23,7 +24,8 @@ window.THREE = Object.assign({}, THREE_MODULE, {
     GLTFLoader: GLTFLoader,
     OutputPass: OutputPass,
     ColorCorrectionShader: ColorCorrectionShader,
-    VignetteShader: VignetteShader
+    VignetteShader: VignetteShader,
+    RoomEnvironment: RoomEnvironment
 });
 
 var scripts = [
