@@ -1400,7 +1400,7 @@ async function startBench() {
     scene.add(bench.body);
     model.wheels.forEach((w) => scene.add(w));
     bench.objects = [bench.body, ...model.wheels];
-    bench.vehicle = v; bench.model = model; bench.input = input; bench.last = performance.now();
+    bench.vehicle = v; bench.model = model; bench.input = input; bench.config = config; bench.script = null; bench.last = performance.now();
     pivot.visible = false; helpers.visible = false;
     $("testStop").style.display = "";
     status("Test: the car with the physics of the game" + (model.rig ? ", " + model.rig.count + " moving parts of the suspension" : "") + ". Stop test goes back to the model.", "ok");
@@ -1409,7 +1409,7 @@ async function startBench() {
 
 function stopBench() {
     bench.objects.forEach((o) => scene.remove(o));
-    bench.objects = []; bench.vehicle = null; bench.model = null; bench.shake = null;
+    bench.objects = []; bench.vehicle = null; bench.model = null; bench.shake = null; bench.script = null;
     pivot.visible = true; helpers.visible = true;
     $("testStop").style.display = "none";
 }
@@ -1420,6 +1420,7 @@ function benchFrame(now) {
     if (!v) return;
     const dt = Math.min(0.05, Math.max(0.001, (now - bench.last) / 1000));
     bench.last = now;
+    if (bench.script) runScript(dt);
     if (bench.shake) {
         // the four corners in turn: front left, front right, rear right, rear left, a sharp push of 0.15 s and 0.45 s to see it
         // bounce back, two rounds
@@ -1453,13 +1454,11 @@ function benchFrame(now) {
     if (bench.model.rig) bench.model.rig.update(v);
 }
 
-async function dropCar() {
-    try {
-        const v = bench.vehicle || await startBench();
+function placeForDrop(v, height, tiltDegrees) {
         v.reset(0, 0, Math.PI / 2);
-        v.py += parseFloat($("testDropHeight").value);
+        v.py += height;
         // tilted, so that it does not land on all four wheels at once: rolled to the left by the angle, and a little nose down
-        const tilt = parseFloat($("testTilt").value) * Math.PI / 180;
+        const tilt = tiltDegrees * Math.PI / 180;
         if (tilt > 0) {
             const q = new THREE.Quaternion(v.qx, v.qy, v.qz, v.qw);
             const roll = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), tilt);        // about the car's forward axis
@@ -1468,19 +1467,93 @@ async function dropCar() {
             v.qx = q.x; v.qy = q.y; v.qz = q.z; v.qw = q.w;
             v.py += Math.sin(tilt) * (v.front_track || 1.5) / 2; // the low wheel is not pushed into the floor
         }
-        bench.shake = null;
+}
+
+async function dropCar() {
+    try {
+        const v = bench.vehicle || await startBench();
+        placeForDrop(v, parseFloat($("testDropHeight").value), parseFloat($("testTilt").value));
+        bench.shake = null; bench.script = null;
     } catch (error) { status(error.message, "error"); }
+}
+
+// The full test, one thing after the other: a drop from 1 m at 5 degrees; two seconds later the engine in neutral to the rev
+// limiter and a second on it; every corner pressed with 1000 kg for half a second, twice round; a metre forwards and a metre
+// back; the steering to the left lock and to the right lock.
+async function fullTest() {
+    try {
+        const v = bench.vehicle || await startBench();
+        placeForDrop(v, 1, 5);
+        bench.shake = null;
+        bench.script = { stage: "drop", t: 0, limiterT: 0 };
+        status("Full test: the drop…", "ok");
+    } catch (error) { status(error.message, "error"); }
+}
+
+function runScript(dt) {
+    const sc = bench.script, v = bench.vehicle, inp = bench.input;
+    if (!sc || !v) return;
+    sc.t += dt;
+    const lock = (bench.config && bench.config.chassis.max_steer_deg || 30) * Math.PI / 180;
+    const next = (stage, message) => { sc.stage = stage; sc.t = 0; if (message) status("Full test: " + message, "ok"); };
+    const settle = () => { inp.throttle = 0; inp.brakePedal = 0; inp.neutral = true; inp.parkingLock = true; inp.reverse = false; inp.turnAngle = 0; };
+    switch (sc.stage) {
+        case "drop":
+            settle();
+            if (sc.t > 2) next("rev", "the engine to the rev limiter in neutral");
+            break;
+        case "rev": {
+            inp.neutral = true; inp.parkingLock = true; inp.throttle = 1;
+            const rpm = v.engine.getRPM();
+            $("soundRpm").value = Math.round(rpm); $("soundRpmLabel").textContent = Math.round(rpm) + " rpm";
+            if (rpm >= v.engine.limiterRPM - 250) sc.limiterT += dt;
+            if (sc.limiterT >= 1) { inp.throttle = 0; next("shake", "1000 kg on every corner, twice round"); bench.shake = { t: 0, kg: 1000, push: 0.5, pace: 1.0 }; }
+            break;
+        }
+        case "shake":
+            settle();
+            if (!bench.shake) next("forward", "a metre forwards");
+            break;
+        case "forward":
+            inp.parkingLock = false; inp.neutral = false; inp.reverse = false; inp.current_gear = 0;
+            inp.throttle = v.u < 1 ? 0.25 : 0; inp.brakePedal = 0;
+            if (v.z >= 1) { inp.throttle = 0; inp.brakePedal = 1; if (Math.abs(v.u) < 0.05) next("pause1"); }
+            if (sc.t > 8) next("pause1");
+            break;
+        case "pause1":
+            inp.throttle = 0; inp.brakePedal = 1;
+            if (sc.t > 0.6) next("back", "a metre back");
+            break;
+        case "back":
+            inp.parkingLock = false; inp.neutral = false; inp.reverse = true;
+            inp.throttle = v.u > -1 ? 0.25 : 0; inp.brakePedal = 0;
+            if (v.z <= 0) { inp.throttle = 0; inp.brakePedal = 1; if (Math.abs(v.u) < 0.05) next("steer", "the steering to both locks"); }
+            if (sc.t > 8) next("steer", "the steering to both locks");
+            break;
+        case "steer": {
+            inp.throttle = 0; inp.brakePedal = 1; inp.reverse = false; inp.neutral = true; inp.parkingLock = true;
+            // to the left in a second, hold, to the right in two, hold, back to the middle in one
+            const t = sc.t;
+            let a;
+            if (t < 1) a = -t; else if (t < 1.5) a = -1; else if (t < 3.5) a = -1 + (t - 1.5); else if (t < 4) a = 1; else if (t < 5) a = 1 - (t - 4); else a = 0;
+            inp.turnAngle = a * lock;
+            if (t > 5.2) { inp.turnAngle = 0; bench.script = null; status("Full test done.", "ok"); }
+            break;
+        }
+    }
 }
 
 async function shakeTest() {
     try {
         if (!bench.vehicle) await startBench();
+        bench.script = null;
         bench.shake = { t: 0, kg: parseFloat($("testShakeKg").value), push: parseFloat($("testShakePush").value), pace: parseFloat($("testShakePace").value) };
     } catch (error) { status(error.message, "error"); }
 }
 
 $("testDrop").addEventListener("click", dropCar);
 $("testShake").addEventListener("click", shakeTest);
+$("testFull").addEventListener("click", fullTest);
 $("testStop").addEventListener("click", stopBench);
 $("testDropHeight").addEventListener("input", () => { $("testDropLabel").textContent = parseFloat($("testDropHeight").value).toFixed(1) + " m"; });
 $("testShakeKg").addEventListener("input", () => { $("testShakeLabel").textContent = $("testShakeKg").value + " kg"; });
