@@ -9,7 +9,7 @@
 var MainMenu = (function() {
     var STORAGE_KEY = "openracer.lastChoice";
     var RACE_KEY = "openracer.raceOptions";
-    var raceOptions = { ai: 0, difficulty: "normal", ghost: true, records: true, laps: 0 };
+    var raceOptions = { ai: 0, difficulty: "normal", ghost: true, records: true, laps: 0, wear: 1 };
     try { raceOptions = Object.assign(raceOptions, JSON.parse(window.localStorage.getItem(RACE_KEY)) || {}); } catch(e) { /* no storage */ }
     function rememberRace() { try { window.localStorage.setItem(RACE_KEY, JSON.stringify(raceOptions)); } catch(e) { /* no storage */ } }
     var element = null;
@@ -104,7 +104,7 @@ var MainMenu = (function() {
         remember();
         window.location.href = window.location.pathname + "?car=" + encodeURIComponent(choice.car) + "&track=" + encodeURIComponent(choice.track) +
             "&ai=" + raceOptions.ai + "&difficulty=" + raceOptions.difficulty + "&ghost=" + (raceOptions.ghost ? 1 : 0) + "&records=" + (raceOptions.records ? 1 : 0) +
-            "&laps=" + (raceOptions.laps || 0);
+            "&laps=" + (raceOptions.laps || 0) + "&wear=" + (raceOptions.wear === undefined ? 1 : raceOptions.wear);
     }
 
     function render(error) {
@@ -150,6 +150,8 @@ var MainMenu = (function() {
         raceColumn.appendChild(option("AI opponents", raceOptions.ai === 0 ? "None" : String(raceOptions.ai), function() { raceOptions.ai = counts[(counts.indexOf(raceOptions.ai) + 1) % counts.length]; }));
         var levels = ["easy", "normal", "hard"], levelNames = { easy: "Easy", normal: "Normal", hard: "Hard" };
         raceColumn.appendChild(option("Difficulty", levelNames[raceOptions.difficulty] || "Normal", function() { raceOptions.difficulty = levels[(levels.indexOf(raceOptions.difficulty) + 1) % levels.length]; }));
+        var wears = [0, 1, 3], wearNames = { 0: "Off", 1: "On", 3: "Fast (short races)" };
+        raceColumn.appendChild(option("Tyre wear and fuel", wearNames[raceOptions.wear] || "On", function() { raceOptions.wear = wears[(wears.indexOf(raceOptions.wear === undefined ? 1 : raceOptions.wear) + 1) % wears.length]; }));
         raceColumn.appendChild(option("Ghost of your best lap", raceOptions.ghost ? "On" : "Off", function() { raceOptions.ghost = !raceOptions.ghost; }));
         raceColumn.appendChild(option("Save lap records", raceOptions.records ? "On" : "Off", function() { raceOptions.records = !raceOptions.records; }));
         var record = document.createElement("div");

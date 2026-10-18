@@ -19,7 +19,8 @@ OpenRacer.vehicleParams = function (config, getSurface) {
         gear_ratios: drivetrain.gear_ratios.slice(), reverse_ratio: drivetrain.reverse_ratio, final_drive: drivetrain.final_drive, efficiency: drivetrain.efficiency,
         drive: drivetrain.drive, diff: drivetrain.diff, diff_preload: drivetrain.diff_preload, diff_lock: drivetrain.diff_lock, diff_power: drivetrain.diff_power,
         diff_coast: drivetrain.diff_coast, center_diff: drivetrain.center_diff, center_split: drivetrain.center_split,
-        engine: config.engine, brake_front: config.brakes && config.brakes.front, brake_rear: config.brakes && config.brakes.rear, getSurface: getSurface
+        engine: config.engine, brake_front: config.brakes && config.brakes.front, brake_rear: config.brakes && config.brakes.rear,
+        tank: config.fuel && config.fuel.tank, getSurface: getSurface
     };
 };
 
@@ -59,6 +60,12 @@ OpenRacer.Opponent = function (config, line, options) {
     this.lapStart = 0;
     this.held = false;           // on the grid, before the start (the race holds it)
     this.finished = false;       // the race is done: it slows down and pulls aside
+    this.raceLaps = 0;           // the laps of the race (0: no end), for the decision to pit
+    this.pitLane = null;         // the pit lane of the track (Pit.js), when it has one
+    this.pit = new OpenRacer.PitStop(this.vehicle);
+    this.pitting = false;        // on its way through the pit lane
+    this.pitStops = 0;
+    var fuelAtLapStart = null, fuelPerLap = null;
     var lastFraction = 0;
     var maxFraction = 0;
 
@@ -141,12 +148,37 @@ OpenRacer.Opponent = function (config, line, options) {
             if (gap < 2 + speed * 0.15 && ahead.u < speed + 1) holdBack = Math.max(0.2, gap / (2 + speed * 0.15));
         }
         if (this.finished) asideTarget = -3; // done: to the right, out of the way
+
+        // the pit: in when the tyres are worn or the fuel will not last, through the lane at a walking pace, a stop in the middle
+        var lane = this.pitLane, inLane = false, atStop = false;
+        if (lane && v.wearEnabled) {
+            var lapsLeft = this.raceLaps ? this.raceLaps - this.lapsCompleted : 99;
+            var fuelNeeded = fuelPerLap !== null ? fuelPerLap * (lapsLeft + 0.4) : v.tank * 0.12;
+            var need = !this.finished && lapsLeft >= 1 && ((v.maxWear() > 0.75 && lapsLeft >= 2) || v.fuel < fuelNeeded);
+            var toEntry = ((lane.entry - this.lineIndex) % n + n) % n * line.step;
+            if (!this.pitting && need && toEntry < 60) this.pitting = true;
+            if (this.pitting) {
+                inLane = lane.covers(this.lineIndex) || toEntry < 60;
+                if (!inLane) { this.pitting = false; this.pitStops++; }
+                else {
+                    asideTarget = 0;
+                    var stopIndex = lane.points[lane.stop].index;
+                    var span = ((lane.exit - lane.entry) % n + n) % n, at = ((this.lineIndex - lane.entry) % n + n) % n, stopAt = ((stopIndex - lane.entry) % n + n) % n;
+                    if (at <= span && at >= stopAt - 1 && at <= stopAt + 2 && !this.pit.done) atStop = true;
+                }
+            }
+        }
         aside += (asideTarget - aside) * Math.min(1, delta / 0.7);
 
         // the point to steer at: ahead on the line, further the faster
         var look = Math.max(7, Math.min(35, 3 + speed * 0.75));
         var target = line.point(this.lineIndex + Math.round(look / line.step));
         var next = line.point(this.lineIndex + Math.round(look / line.step) + 1);
+        if (inLane) {
+            look = Math.max(5, Math.min(14, 3 + speed * 0.6));
+            target = lane.pointAt(this.lineIndex + Math.round(look / line.step));
+            next = lane.pointAt(this.lineIndex + Math.round(look / line.step) + 1);
+        }
         var tx = next.x - target.x, tz = next.z - target.z, tl = Math.hypot(tx, tz) || 1;
         var ax = target.x - (tz / tl) * aside, az = target.z + (tx / tl) * aside; // to the left of the line
         var dxT = ax - v.x, dzT = az - v.z;
@@ -164,12 +196,14 @@ OpenRacer.Opponent = function (config, line, options) {
         var allowed = Infinity;
         for (var j = 0; j <= 4; j++) allowed = Math.min(allowed, speeds[((this.lineIndex + j) % n + n) % n]);
         allowed *= holdBack;
+        if (inLane) allowed = Math.min(allowed, 16);        // the pit lane: slowly
+        if (atStop) allowed = 0;                            // at the box, until the stop is done
         if (this.finished) allowed = 0; // slows down and stops
         var error = allowed - speed;
         if (error > 0.5) { this.throttle = Math.min(1, 0.3 + error * 0.25); this.brakePedal = 0; }
         else if (error < -0.5) { this.throttle = 0; this.brakePedal = Math.min(1, -error * 0.18); }
         else { this.throttle = 0.15 + error * 0.2; this.brakePedal = 0; }
-        if (this.finished) { this.throttle = 0; this.brakePedal = Math.max(this.brakePedal, speed < 1 ? 1 : 0.2); return; }
+        if (this.finished || atStop) { this.throttle = 0; this.brakePedal = Math.max(this.brakePedal, speed < 1 ? 1 : 0.2); this.stuck = 0; return; }
         if (speed < 2 && v.clutchEngagement < 0.5) this.throttle = Math.max(this.throttle, 0.5);
         // stuck against something: back up a moment
         if (speed < 0.5 && this.throttle > 0.3) { this.stuck = (this.stuck || 0) + delta; } else this.stuck = 0;
@@ -183,7 +217,7 @@ OpenRacer.Opponent = function (config, line, options) {
         this.drive(delta, others);
         this.vehicle.updateControls(delta);
         this.vehicle.update(delta);
-        // laps: the fraction of the line wraps around
+        this.pit.update(delta);
         // laps: the fraction of the line wraps around, after the car went round (not when it dithers at the line)
         var fraction = line ? line.fractionOf(this.lineIndex) : 0;
         if (fraction < 0.2 && lastFraction > 0.8 && maxFraction > 0.5) {
@@ -191,12 +225,17 @@ OpenRacer.Opponent = function (config, line, options) {
             this.lapTimes.push(this.clock - this.lapStart);
             this.lapStart = this.clock;
             maxFraction = 0;
+            // the fuel a lap takes, for the decision to pit (a lap with a stop in it does not count)
+            if (fuelAtLapStart !== null && !this.pittedThisLap) fuelPerLap = Math.max(fuelPerLap || 0, fuelAtLapStart - this.vehicle.fuel);
+            fuelAtLapStart = this.vehicle.fuel;
+            this.pittedThisLap = false;
         } else if (fraction > 0.8 && lastFraction < 0.2 && this.lapsCompleted > 0 && maxFraction < 0.2) {
             this.lapsCompleted--; // went back over the line
             maxFraction = 1;
         }
         if (fraction < 0.8) maxFraction = Math.max(maxFraction, fraction);
         lastFraction = fraction;
+        if (this.pit.active) this.pittedThisLap = true;
         this.progress = this.lapsCompleted + fraction;
         this.updateVisuals();
     };

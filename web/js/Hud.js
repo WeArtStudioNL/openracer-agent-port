@@ -64,7 +64,19 @@ var Hud = (function() {
             "#hudLaps .last b { color: #7ee7a0; font-weight: bold; }" +
             "#hudLaps .keys { margin-top: 6px; font-size: 11px; color: #7f90a5; }" +
             "#hudHint { position: fixed; left: 16px; bottom: 14px; z-index: 900; pointer-events: none; font-family: Arial, sans-serif; font-size: 14px; color: #ffe08a; " +
-            "text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); }";
+            "text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); }" +
+            "#hudCar { position: fixed; left: 16px; top: 150px; z-index: 900; pointer-events: none; font-family: Arial, sans-serif; color: #fff; width: 190px; " +
+            "background: rgba(14, 18, 24, 0.62); border-radius: 10px; padding: 9px 14px 10px; font-size: 12px; display: none; }" +
+            "#hudCar .row { display: flex; align-items: center; gap: 10px; }" +
+            "#hudCar .tyres { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; width: 84px; }" +
+            "#hudCar .tyre { height: 26px; border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.25); position: relative; font-size: 10px; text-align: center; line-height: 26px; font-variant-numeric: tabular-nums; }" +
+            "#hudCar .tyre i { position: absolute; left: 0; bottom: 0; width: 100%; background: rgba(0, 0, 0, 0.55); border-radius: 0 0 4px 4px; }" +
+            "#hudCar .tyre span { position: relative; }" +
+            "#hudCar .fuel { flex: 1; }" +
+            "#hudCar .bar { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.15); overflow: hidden; margin-top: 3px; }" +
+            "#hudCar .bar i { display: block; height: 100%; background: #5fb3ff; }" +
+            "#hudCar .label { color: #9fb0c4; letter-spacing: 1px; font-size: 11px; }" +
+            "#hudCar .pit { margin-top: 6px; font-weight: bold; color: #ffd04d; }";
         document.head.appendChild(style);
     }
 
@@ -94,7 +106,39 @@ var Hud = (function() {
         hintBar = document.createElement("div");
         hintBar.id = "hudHint";
         document.body.appendChild(hintBar);
+        carPanel = document.createElement("div");
+        carPanel.id = "hudCar";
+        document.body.appendChild(carPanel);
         applyOptions();
+    }
+
+    // the tyres (the temperature as the colour, the wear as the dark part) and the fuel, when the race has them (Vehicle.js, Pit.js)
+    var carPanel = null, carHtml = "";
+    function tyreColour(temp) {
+        // blue when cold, green in the window, red when hot
+        if(temp < 70) { var c = Math.max(0, Math.min(1, (temp - 25) / 45)); return "rgb(" + Math.round(60 + 20 * c) + ", " + Math.round(120 + 70 * c) + ", " + Math.round(220 - 90 * c) + ")"; }
+        if(temp <= 100) return "rgb(70, 190, 110)";
+        var h = Math.max(0, Math.min(1, (temp - 100) / 40));
+        return "rgb(" + Math.round(90 + 150 * h) + ", " + Math.round(190 - 130 * h) + ", " + Math.round(110 - 70 * h) + ")";
+    }
+    function updateCar(car) {
+        var v = car.vehicle;
+        if(!v.wearEnabled) { if(carPanel.style.display !== "none") carPanel.style.display = "none"; return; }
+        if(carPanel.style.display !== "block" && Settings.option("hud")) carPanel.style.display = "block";
+        var order = [1, 0, 2, 3]; // FL FR / RL RR
+        var html = "<div class=\"row\"><div class=\"tyres\">";
+        order.forEach(function(i) {
+            var w = v.wheels[i];
+            html += "<div class=\"tyre\" style=\"background: " + tyreColour(w.temp) + "\"><i style=\"height: " + Math.round(Math.min(1, w.wear) * 100) + "%\"></i><span>" + Math.round(w.temp) + "°</span></div>";
+        });
+        html += "</div><div class=\"fuel\"><div class=\"label\">FUEL " + v.fuel.toFixed(1) + " L</div><div class=\"bar\"><i style=\"width: " + Math.round(v.fuel / v.tank * 100) + "%\"></i></div>" +
+            "<div class=\"label\" style=\"margin-top: 4px;\">TYRES " + Math.round((1 - Math.min(1, v.maxWear())) * 100) + "%</div></div></div>";
+        var pit = car.pit;
+        if(pit && pit.active) html += "<div class=\"pit\">PIT STOP " + pit.remaining().toFixed(1) + " s" + (pit.plan && pit.plan.tyres > 0 ? " · tyres" : "") + (pit.plan && pit.plan.fuel > 0 ? " · fuel" : "") + "</div>";
+        else if(pit && pit.done) html += "<div class=\"pit\" style=\"color: #7ee7a0;\">PIT STOP DONE · go</div>";
+        else if(v.fuel <= 0) html += "<div class=\"pit\" style=\"color: #ff6b62;\">OUT OF FUEL</div>";
+        else if(v.maxWear() > 0.8 || v.fuel < v.tank * 0.12) html += "<div class=\"pit\"" + (flash ? "" : " style=\"opacity: 0.4\"") + ">PIT · " + (v.maxWear() > 0.8 ? "tyres" : "fuel") + "</div>";
+        if(html !== carHtml) { carHtml = html; carPanel.innerHTML = html; }
     }
 
     // the HUD and the debug text follow the options of the settings menu
@@ -103,6 +147,7 @@ var Hud = (function() {
         container.style.display = visible;
         lapPanel.style.display = visible;
         hintBar.style.display = visible;
+        if(visible === "none") carPanel.style.display = "none";
         var debug = document.getElementById("debugOut");
         if(debug) debug.style.display = Settings.option("debug") ? "" : "none";
     }
@@ -273,6 +318,7 @@ var Hud = (function() {
         if(wanted !== size) resize();
         drawGauge(car);
         updateLaps(car);
+        updateCar(car);
         var hint = EngineSound.status();
         if(hintBar.textContent !== hint) hintBar.textContent = hint;
     }

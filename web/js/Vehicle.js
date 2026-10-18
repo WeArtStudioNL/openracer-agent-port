@@ -172,9 +172,68 @@ OpenRacer.Vehicle = function (parameters, input) {
         w.smoke = 0;                        // how much smoke it makes (0..1)
         w.squeal = 0;                       // how loud it squeals (0..1)
         w.normalForce = 0;
+        w.temp = 25;                        // the temperature of the tyre (°C), see wearStep
+        w.wear = 0;                         // how worn it is (0: new, 1: gone)
+        w.condition = 1;                    // the grip that is left from the temperature and the wear, as a factor
         this.wheels.push(w);
     }
     this.baseAnglePeak = this.wheels[0].anglePeak;
+
+    // ---- the tyres and the fuel over a race (off unless the race switches it on: wearEnabled)
+    //
+    // A tyre has a working window: cold it grips less, overheated too. It warms from sliding (the power that the slip burns) and
+    // from flexing under its load, and cools with the air that passes. It wears with the sliding, faster when it is overheated; a
+    // worn tyre grips less. The fuel burns with the power of the engine and makes the car lighter as it goes; an empty tank
+    // stops the engine. tyreHeating, tyreLife and fuelUse are factors for the tuning; wearScale is the option of the race (1: as it
+    // is, 3: three times as fast, for a short race).
+    this.wearEnabled = false;
+    this.wearScale = 1;
+    this.tyreHeating = 1;
+    this.tyreLife = 1;
+    this.fuelUse = 1;
+    this.ambient = 25;
+    this.tank = parameters.tank || 60;              // litres
+    this.fuel = this.tank;
+    this.fuelFlow = 0;                              // litres per second, for the dashboard
+    this.baseMass = this.mass;                      // the mass without the fuel
+    this.wearLaps = 0;
+    var fuelMassTimer = 0;
+    var OPTIMUM = 85, WINDOW = 15, COLD = 45;       // °C: the best temperature, the width of the window, how far out the grip is at its least
+
+    function conditionOf(w) {
+        var off = Math.max(0, Math.abs(w.temp - OPTIMUM) - WINDOW) / COLD;
+        var byTemp = 1 - 0.22 * Math.min(1, off);
+        var byWear = 1 - 0.2 * Math.pow(Math.min(1, w.wear), 1.5) - (w.wear >= 1 ? 0.15 : 0);
+        return byTemp * byWear;
+    }
+
+    // called every step for a wheel: slidePower is the power the slip burns (W), fz the load (N), v the speed over the road (m/s)
+    this.wearStep = function (w, dt, slidePower, fz, v, contact) {
+        if(!this.wearEnabled) { w.temp = OPTIMUM; w.wear = Math.min(w.wear, 1); w.condition = 1; return; }
+        var heatIn = (slidePower * 1.8 + (contact ? fz * Math.abs(v) * 0.025 : 0)) * this.tyreHeating;
+        var cooling = (15 + 1.5 * Math.abs(v)) * (w.temp - this.ambient);
+        w.temp += (heatIn - cooling) / 4000 * dt;
+        var overheated = Math.max(0, (w.temp - (OPTIMUM + WINDOW)) / 30);
+        w.wear += slidePower * (1 + 2 * overheated) * dt / (2.2e6 * this.tyreLife) * this.wearScale;
+        w.condition = conditionOf(w);
+    };
+
+    this.fuelStep = function (dt, engineTorque, engineOmega) {
+        if(!this.wearEnabled) { this.engine.noFuel = false; return; }
+        var power = Math.max(0, engineTorque) * engineOmega;           // W
+        // a racing engine burns about four times what the energy alone says (rich mixture, the throttle open and shut all the time)
+        this.fuelFlow = (0.0003 + power / (0.25 * 34e6) * 4) * this.fuelUse * this.wearScale;
+        this.fuel = Math.max(0, this.fuel - this.fuelFlow * dt);
+        this.engine.noFuel = this.fuel <= 0;
+        fuelMassTimer += dt;
+        if(fuelMassTimer > 1) { fuelMassTimer = 0; this.mass = this.baseMass + this.fuel * 0.75; this.layout(); }
+    };
+
+    // new tyres (at the temperature of the blankets) and the fuel that is asked for: a pit stop (Pit.js), or the start of a race
+    this.freshTyres = function (temp) {
+        for(var i = 0; i < 4; i++) { var w = this.wheels[i]; w.wear = 0; w.temp = temp === undefined ? 60 : temp; w.condition = conditionOf(w); }
+    };
+    this.maxWear = function () { var m = 0; for(var i = 0; i < 4; i++) m = Math.max(m, this.wheels[i].wear); return m; };
 
     // ---- geometry that follows from the mass, the weight distribution and the springs
     var arbFront = 0, arbRear = 0;    // anti-roll bars: the force at a wheel per metre that the wheels are pushed in differently
@@ -243,7 +302,11 @@ OpenRacer.Vehicle = function (parameters, input) {
     // "fwd"), brake_front, brake_rear (Nm), drag (Cdrag), tc_allowance, esc_gain, downforce.
     this.retune = function (t) {
         var i, w;
-        if(t.mass !== undefined) this.mass = t.mass;
+        if(t.mass !== undefined) { this.baseMass = t.mass; this.mass = t.mass + (this.wearEnabled ? this.fuel * 0.75 : 0); }
+        if(t.tyre_heating !== undefined) this.tyreHeating = t.tyre_heating;
+        if(t.tyre_life !== undefined) this.tyreLife = t.tyre_life;
+        if(t.fuel_use !== undefined) this.fuelUse = t.fuel_use;
+        if(t.tank !== undefined) { this.fuel = Math.min(this.fuel, t.tank) + (t.tank > this.tank ? t.tank - this.tank : 0); this.tank = t.tank; }
         if(t.weight_distribution !== undefined) this.weight_distribution = t.weight_distribution;
         if(t.cg_height !== undefined) this.cgHeight = t.cg_height;
         if(t.roll_front !== undefined) this.rollFrontShare = t.roll_front;
@@ -722,6 +785,8 @@ OpenRacer.Vehicle = function (parameters, input) {
                     ? smoothstep(0.85, 1.5, wheel.s) * (1 - 0.4 * smoothstep(2.5, 4, wheel.s)) * smoothstep(0.4, 2.5, slideSpeed) : 0;
                 fxW = wheel.fx;
                 fyW = wheel.fy;
+                // the temperature and the wear: the power that the slip burns
+                self.wearStep(wheel, dt, Math.abs(fxW * (wheel.omega * wheel.radius - vl)) + Math.abs(fyW * vt), fz, vl, true);
                 // a little damping on the slip speed keeps a nearly stationary wheel from ringing
                 fxW += 400 * Math.max(-0.3, Math.min(0.3, wheel.omega * wheel.radius - vl));
                 tyreTorque[iw] = -fxW * wheel.radius;
@@ -747,6 +812,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 wheel.heat = Math.max(0, wheel.heat - dt / 2.5);
                 wheel.smoke = 0;
                 wheel.squeal = 0;
+                self.wearStep(wheel, dt, 0, 0, self.u, false);
             }
 
             // brakes, with ABS
@@ -788,6 +854,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(self.shiftTimer > 0) throttle *= 0.15;
         var Te = engine.getNetTorque(throttle);
         var rpm = engine.getRPM();
+        self.fuelStep(dt, Te, engine.omega);
 
         // How hard the clutch is clamped: from the clutch pedal, or by an automatic clutch that
         // engages with the engine speed (so the engine does not stall) and opens while shifting.

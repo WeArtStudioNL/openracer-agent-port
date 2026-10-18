@@ -44,6 +44,7 @@ var scripts = [
     "js/Records.js",
     "js/Ghost.js",
     "js/Opponent.js",
+    "js/Pit.js",
     "js/Engine.js",
     "js/Wheel.js",
     "js/Collision.js",

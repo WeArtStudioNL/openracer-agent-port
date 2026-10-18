@@ -73,6 +73,18 @@ OpenRacer.GroundWorld = function (cellSize) {
         return tri.length / 14;
     };
 
+    // The middles of the triangles of a surface (the pit lane, for the line the AI drives through it), as { x, y, z }
+    this.centroidsOf = function (surface) {
+        var index = surfaces.indexOf(surface);
+        var out = [];
+        if(index < 0) return out;
+        for(var t = 0; t < tri.length; t += 14) {
+            if(tri[t + 13] !== index) continue;
+            out.push({ x: (tri[t] + tri[t + 2] + tri[t + 4]) / 3, y: (tri[t + 6] + tri[t + 7] + tri[t + 8]) / 3, z: (tri[t + 1] + tri[t + 3] + tri[t + 5]) / 3 });
+        }
+        return out;
+    };
+
     // The surface under (x, z): the highest one that is not more than 'above' above hintY (the car is above the road, or under it
     // after a hit; a bridge above the car is not the road). Returns { y, nx, ny, nz, surface, mesh } or null. Where several
     // surfaces are at about the same height (a road over grass) the one with the lowest priority is taken.

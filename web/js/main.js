@@ -50,7 +50,8 @@ function raceOptionsFromQuery(query) {
         difficulty: query.get("difficulty") || "normal",
         ghost: query.get("ghost") !== "0",
         records: query.get("records") !== "0",
-        laps: Math.max(0, Math.min(99, parseInt(query.get("laps") || "0", 10) || 0)) // 0: practice, no end
+        laps: Math.max(0, Math.min(99, parseInt(query.get("laps") || "0", 10) || 0)), // 0: practice, no end
+        wear: Math.max(0, Math.min(5, parseFloat(query.get("wear") === null ? "1" : query.get("wear")) || 0)) // tyre wear and fuel: 0 off, 1 as it is, 3 fast
     };
 }
 
@@ -92,6 +93,12 @@ function setupRace() {
     race.ghost.enabled = options.ghost;
     race.ghost.saving = options.records;
     car.ghost = race.ghost;
+    // the tyres and the fuel (Vehicle.js, Pit.js): the pit lane of the track is found for the AI
+    car.vehicle.wearEnabled = options.wear > 0;
+    car.vehicle.wearScale = options.wear || 1;
+    if(options.wear > 0) car.vehicle.freshTyres(60);
+    race.pitLane = race.line ? OpenRacer.PitLane.build(groundWorld, race.line) : null;
+    if(options.wear > 0 && !race.pitLane) banner(race.line ? "This track has no pit lane: no pit stops here, mind the tyres and the fuel." : "No racing line: the AI cannot find the pit lane.");
     if(options.ghost && !race.ghost.best) banner("No best lap yet with this car on this track: the ghost appears from the next start, after a lap.");
 
     if(options.ai > 0) {
@@ -108,6 +115,11 @@ function setupRace() {
         for(var i = 0; i < options.ai; i++) {
             var config = cars[i % cars.length];
             var opponent = new OpenRacer.Opponent(config, race.line, { skill: skill * (1 - 0.04 * (i % 3)), color: colours[i % colours.length], name: (config.name || config.id) + " " + (i + 1) });
+            opponent.vehicle.wearEnabled = options.wear > 0;
+            opponent.vehicle.wearScale = options.wear || 1;
+            if(options.wear > 0) opponent.vehicle.freshTyres(60);
+            opponent.pitLane = race.pitLane;
+            opponent.raceLaps = options.laps;
             // on the grid ahead of the player, two by two
             var index = startIndex + Math.round((7 * (i + 1) + 4) / race.line.step);
             var p = race.line.point(index), next = race.line.point(index + 1);

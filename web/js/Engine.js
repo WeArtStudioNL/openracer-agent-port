@@ -51,6 +51,7 @@ OpenRacer.Engine = function( parameters ) {
     this.running = true;
     this.starting = false;
     this.throttleCut = 1; // 0..1 factor from the rev limiter, for the dashboard
+    this.noFuel = false;  // the tank is empty: the engine dies and does not start (Vehicle.js sets it)
 
     this.getPeakTorque = function() {
         var peak = 0;
@@ -90,6 +91,7 @@ OpenRacer.Engine = function( parameters ) {
     this.getNetTorque = function( throttle ) {
         var rpm = this.getRPM();
 
+        if(this.noFuel) { this.running = false; this.starting = false; }
         if(!this.running) {
             // no combustion: only the losses (and the starter motor when it is cranking)
             var t = -this.getMotoringTorque(rpm);

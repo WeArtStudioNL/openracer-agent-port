@@ -103,7 +103,7 @@ OpenRacer.Wheel = function (parameters) {
     // spend, a friction circle (here an ellipse, for a tyre that grips a little more across than along). When the two forces
     // together are more than the grip, both are scaled back, so a tyre that brakes hard has less to corner with.
     this.tyreForce = function (kappa, tanAlpha, load, surface) {
-        var grip = surface.static * this.gripScale;
+        var grip = surface.static * this.gripScale * (this.condition || 1); // condition: the temperature and the wear of the tyre (Vehicle.js)
         var mu = Math.min(1.4 * grip, Math.max(0.2 * grip, grip - this.loadSensitivity * (load - this.nominalLoad)));
         var slidingRatio = Math.min(0.98, surface.kinetic / surface.static);
         var C = 2 - (2 / Math.PI) * Math.asin(slidingRatio);

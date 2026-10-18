@@ -132,10 +132,12 @@ OpenRacer.Car = function( config, domElement ) {
         engine: config.engine,
         brake_front: config.brakes && config.brakes.front,
         brake_rear: config.brakes && config.brakes.rear,
+        tank: config.fuel && config.fuel.tank,
         getSurface: getSurface
     }, this);
     this.vehicle.collision = collisionWorld;
     this.vehicle.ground = groundWorld;
+    this.pit = new OpenRacer.PitStop(this.vehicle); // the pit stop on the pit lane (Pit.js), when the race has wear and fuel
     var tyreSmoke = new OpenRacer.TyreSmoke(scene);
     this.engine = this.vehicle.engine;
     EngineSound.setCar(config); // the engine sound of this car
@@ -424,6 +426,7 @@ OpenRacer.Car = function( config, domElement ) {
         }
 
         v.update(delta);
+        this.pit.update(delta);
         this.engineRPM = this.engine.getRPM();
         // the rev limiter cuts the fuel: the engine sounds like it too
         EngineSound.update(this.engineRPM, this.throttle * this.engine.throttleCut, this.engine.throttleCut > 0.5);

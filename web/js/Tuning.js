@@ -38,7 +38,13 @@ var Tuning = (function() {
         { name: "Tyres", items: [
             ["grip", "Grip", "%", 50, 160, 1],
             ["cornering", "Stiffness against the slip angle", "%", 50, 160, 1],
-            ["rolling_resistance", "Rolling resistance", "", 0.005, 0.05, 0.001]
+            ["rolling_resistance", "Rolling resistance", "", 0.005, 0.05, 0.001],
+            ["tyre_heating", "Heating up (wear and fuel on)", "%", 20, 400, 5],
+            ["tyre_life", "Life of the tyres", "%", 20, 500, 5]
+        ] },
+        { name: "Fuel", items: [
+            ["tank", "Tank", "L", 10, 200, 1],
+            ["fuel_use", "Fuel use", "%", 20, 500, 5]
         ] },
         { name: "Engine", items: [
             ["power", "Power", "%", 30, 250, 1],
@@ -103,6 +109,10 @@ var Tuning = (function() {
             damping_rear: (ch.damping_rear !== undefined ? ch.damping_rear : 0.35) * 100,
             grip: (tyres.grip !== undefined ? tyres.grip : 1) * 100,
             cornering: (tyres.cornering !== undefined ? tyres.cornering : 1) * 100,
+            tyre_heating: (tyres.heating !== undefined ? tyres.heating : 1) * 100,
+            tyre_life: (tyres.life !== undefined ? tyres.life : 1) * 100,
+            tank: (c.fuel && c.fuel.tank) || 60,
+            fuel_use: (c.fuel && c.fuel.use !== undefined ? c.fuel.use : 1) * 100,
             rolling_resistance: tyres.rolling_resistance !== undefined ? tyres.rolling_resistance : 0.015,
             power: (en.power_scale !== undefined ? en.power_scale : 1) * 100,
             idle_rpm: en.idle_rpm || 900,
@@ -153,6 +163,10 @@ var Tuning = (function() {
             grip: v.grip / 100,
             cornering: v.cornering / 100,
             rolling_resistance: v.rolling_resistance,
+            tyre_heating: v.tyre_heating / 100,
+            tyre_life: v.tyre_life / 100,
+            tank: v.tank,
+            fuel_use: v.fuel_use / 100,
             power: v.power / 100,
             idle_rpm: v.idle_rpm,
             limiter_rpm: v.limiter_rpm,
@@ -469,7 +483,8 @@ var Tuning = (function() {
         c.chassis.damping_rear = v.damping_rear / 100;
         c.chassis.drag_coefficient = v.drag_coefficient;
         c.chassis.max_steer_deg = v.max_steer_deg;
-        c.tyres = { grip: v.grip / 100, cornering: v.cornering / 100, rolling_resistance: v.rolling_resistance };
+        c.tyres = { grip: v.grip / 100, cornering: v.cornering / 100, rolling_resistance: v.rolling_resistance, heating: v.tyre_heating / 100, life: v.tyre_life / 100 };
+        c.fuel = { tank: v.tank, use: v.fuel_use / 100 };
         c.engine = c.engine || {};
         c.engine.power_scale = v.power / 100;
         c.engine.braking_scale = v.engine_braking / 100;
