@@ -1380,7 +1380,9 @@ async function startBench() {
     config.materials = state.overrides;
     stopBench();
     const model = await new Promise((resolve, reject) => OpenRacer.loadCarModel(config, resolve, (message) => reject(new Error(message)), state.root));
-    const input = { throttle: 0, brakePedal: 1, clutch: 0, clutchPedalPresent: false, handbrake: true, turnAngle: 0, neutral: true, reverse: false, manualGearbox: false, current_gear: 0, parkingLock: true };
+    // the parking lock holds the wheels; not the brake pedal: a car that stands on its brakes is held still by the physics (its speed
+    // is set to zero when it is nearly still), which would also hold it against the pushes of the shake test
+    const input = { throttle: 0, brakePedal: 0, clutch: 0, clutchPedalPresent: false, handbrake: false, turnAngle: 0, neutral: true, reverse: false, manualGearbox: false, current_gear: 0, parkingLock: true };
     const v = new OpenRacer.Vehicle(OpenRacer.vehicleParams(config, roadGrip), input);
     v.ground = flatRoad;
     bench.modelMid = null;
@@ -1417,12 +1419,13 @@ function benchFrame(now) {
     const dt = Math.min(0.05, Math.max(0.001, (now - bench.last) / 1000));
     bench.last = now;
     if (bench.shake) {
-        // the four corners in turn: front left, front right, rear right, rear left, a push of 0.3 s and a pause of 0.2 s, two rounds
+        // the four corners in turn: front left, front right, rear right, rear left, a sharp push of 0.15 s and 0.45 s to see it
+        // bounce back, two rounds
         const s = bench.shake;
         s.t += dt;
-        const step = Math.floor(s.t / 0.5);
+        const step = Math.floor(s.t / 0.6);
         if (step >= 8) bench.shake = null;
-        else if (s.t - step * 0.5 < 0.3) {
+        else if (s.t - step * 0.6 < 0.15) {
             const w = v.wheels[[1, 0, 3, 2][step % 4]];
             v.pushDown(w.mount.x, w.mount.y, w.mount.z, s.kg * 9.81);
         }
@@ -1453,6 +1456,16 @@ async function dropCar() {
         const v = bench.vehicle || await startBench();
         v.reset(0, 0, Math.PI / 2);
         v.py += parseFloat($("testDropHeight").value);
+        // tilted, so that it does not land on all four wheels at once: rolled to the left by the angle, and a little nose down
+        const tilt = parseFloat($("testTilt").value) * Math.PI / 180;
+        if (tilt > 0) {
+            const q = new THREE.Quaternion(v.qx, v.qy, v.qz, v.qw);
+            const roll = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), tilt);        // about the car's forward axis
+            const pitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), tilt * 0.35); // about the car's left axis
+            q.multiply(roll).multiply(pitch);
+            v.qx = q.x; v.qy = q.y; v.qz = q.z; v.qw = q.w;
+            v.py += Math.sin(tilt) * (v.front_track || 1.5) / 2; // the low wheel is not pushed into the floor
+        }
         bench.shake = null;
     } catch (error) { status(error.message, "error"); }
 }
@@ -1469,5 +1482,6 @@ $("testShake").addEventListener("click", shakeTest);
 $("testStop").addEventListener("click", stopBench);
 $("testDropHeight").addEventListener("input", () => { $("testDropLabel").textContent = parseFloat($("testDropHeight").value).toFixed(1) + " m"; });
 $("testShakeKg").addEventListener("input", () => { $("testShakeLabel").textContent = $("testShakeKg").value + " kg"; });
+$("testTilt").addEventListener("input", () => { $("testTiltLabel").textContent = $("testTilt").value + "°"; });
 window.benchFrame = benchFrame; // the render loop at the top calls it from here on
 window.benchState = bench; // for a look from the console
