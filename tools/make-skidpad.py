@@ -61,7 +61,7 @@ def ring(name, r_in, r_out, y, material, segments=128):
             normals += [0, 1, 0]
     for i in range(segments):
         a, b = i * 2, ((i + 1) % segments) * 2
-        indices += [a, a + 1, b, b, a + 1, b + 1]   # counter-clockwise seen from above
+        indices += [a, b, a + 1, a + 1, b, b + 1]   # counter-clockwise seen from above (the angle runs from +x towards +z, which is clockwise from above)
     add_mesh(name, positions, normals, indices, material)
 
 
@@ -75,7 +75,7 @@ gltf = {
     "scene": 0, "scenes": [{"name": "skidpad", "nodes": list(range(len(nodes)))}],
     "nodes": nodes, "meshes": meshes, "accessors": accessors, "bufferViews": views,
     "buffers": [{"byteLength": len(blob)}],
-    "materials": [{"name": n, "pbrMetallicRoughness": {"baseColorFactor": c, "metallicFactor": 0, "roughnessFactor": 0.95}} for n, c in MATERIALS.items()]
+    "materials": [{"name": n, "doubleSided": True, "pbrMetallicRoughness": {"baseColorFactor": c, "metallicFactor": 0, "roughnessFactor": 0.95}} for n, c in MATERIALS.items()]
 }
 while len(blob) % 4:
     blob.append(0)
