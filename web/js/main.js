@@ -324,9 +324,11 @@ function startSkidpad() {
         this.turnAngle += (wanted - this.turnAngle) * 0.3;
         // the speed: up by a quarter of a metre per second every second
         targetSpeed += 0.25 / 60;
+        // the throttle is set, not tapped: a little more than it takes to hold the speed, in the measure that the car is behind
         var error = targetSpeed - speed;
-        this.accelerate = error > 0.3; this.brake = error < -1.5;
-        if(!this.accelerate) this.throttle = 0; if(!this.brake) this.brakePedal = 0;
+        this.accelerate = this.brake = false;
+        this.throttle = Math.max(0, Math.min(0.7, 0.12 + error * 0.25));
+        this.brakePedal = error < -1.5 ? Math.min(0.4, (-error - 1.5) * 0.2) : 0;
         // the result: the most lateral acceleration while the car still follows the circle
         // the slip angle of the car means nothing until it moves (at a standstill it is the angle of noise)
         var slip = speed > 2 ? Math.atan2(v.v, v.u) : 0;
