@@ -62,6 +62,11 @@ OpenRacer.Vehicle = function (parameters, input) {
     // Ackermann: in a bend the inner front wheel steers more than the outer one, so both roll around the same point (1: the
     // full geometry, 0: parallel; a racing car has some of it)
     this.ackermann = parameters.ackermann !== undefined ? parameters.ackermann : 0.6;
+    // the wheel with its tyre, brake and hub is a mass of its own on the spring (kg per wheel), standing on the tyre, which is a
+    // stiff spring (N/m) with a little damping (Ns/m): this is what takes the edge off a kerb
+    this.unsprungMass = parameters.unsprung_mass || 35;
+    this.tyreRate = parameters.tyre_rate || 220000;
+    this.tyreDamping = parameters.tyre_damping || 300;
     // The roll centres: the height (m above the road) at which the suspension of an axle passes the lateral force of its tyres
     // to the body. The part of the load transfer below it goes through the linkage at once (geometric), only the rest rolls the
     // body on its springs. A higher roll centre: less roll, quicker response, a little jacking.
@@ -186,6 +191,8 @@ OpenRacer.Vehicle = function (parameters, input) {
         w.center = { x: 0, y: 0, z: 0 };    // the middle of the wheel in the world
         w.contact = { x: 0, y: 0, z: 0 };   // where it touches the road
         w.suspensionLength = 0;
+        w.susLength = this.restLength;      // the place of the wheel along the suspension (the quarter car, see step)
+        w.susVel = 0;
         w.hasContact = false;
         w.heat = 0;                         // how hot the tyre is from sliding (0..1)
         w.smoke = 0;                        // how much smoke it makes (0..1)
@@ -351,6 +358,8 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.downforce_front !== undefined) this.downforceFront = t.downforce_front;
         if(t.downforce_rear !== undefined) this.downforceRear = t.downforce_rear;
         if(t.ackermann !== undefined) this.ackermann = t.ackermann;
+        if(t.unsprung_mass !== undefined) this.unsprungMass = t.unsprung_mass;
+        if(t.tyre_rate !== undefined) this.tyreRate = t.tyre_rate;
         if(t.roll_center_front !== undefined) this.rollCentreFront = t.roll_center_front;
         if(t.roll_center_rear !== undefined) this.rollCentreRear = t.roll_center_rear;
         if(t.camber_front !== undefined) this.camberFront = t.camber_front;
@@ -418,7 +427,10 @@ OpenRacer.Vehicle = function (parameters, input) {
             w.heat = w.smoke = w.squeal = 0;
             w.velocity.set(0, 0, 0);
             w.lastCompression = undefined;
+            w.susLength = this.restLength;   // the wheel where it is at rest on the spring
+            w.susVel = 0;
         }
+        lastBodyAccDown = 0;
         this.engine.omega = this.engine.idleRPM * Math.PI / 30;
         this.engine.running = true;
         this.engine.starting = false;
@@ -653,7 +665,9 @@ OpenRacer.Vehicle = function (parameters, input) {
     var Mv = { x: 0, y: 0, z: 0 }, Rv = { x: 0, y: 0, z: 0 }, Cv = { x: 0, y: 0, z: 0 };
     var force = { x: 0, y: 0, z: 0 }, torque = { x: 0, y: 0, z: 0 };
     var alpha = { x: 0, y: 0, z: 0 };
-    var comp = [0, 0, 0, 0], compVelocity = [0, 0, 0, 0], loadSpring = [0, 0, 0, 0];
+    var comp = [0, 0, 0, 0], compVelocity = [0, 0, 0, 0], tyreLoad = [0, 0, 0, 0], springForce = [0, 0, 0, 0];
+    var forceBody = { x: 0, y: 0, z: 0 };
+    var lastBodyAccDown = 0;
 
     function step(dt) {
         var inp = self.input;
@@ -720,36 +734,49 @@ OpenRacer.Vehicle = function (parameters, input) {
             var w = wheels[i];
             rotate(self.qx, self.qy, self.qz, self.qw, w.mount.x, w.mount.y, w.mount.z, Rv);
             var mx = self.px + Rv.x, my = self.py + Rv.y, mz = self.pz + Rv.z;
-            var road = roadAt(mx, mz, my, 0.3);
+            // The wheel is round: the road is sampled ahead of and behind the middle of the wheel, and the rim touches where it
+            // reaches the road first. So a kerb or an edge lifts the wheel gradually as it rolls on to it, instead of all at once
+            // when the middle passes it. The surface under the middle is the one that counts for the grip.
+            var road = null, t = Infinity, surfaceRoad = null;
+            for(var sk = -2; sk <= 2; sk++) {
+                var along = sk * 0.4 * w.radius;
+                var sample = roadAt(mx + axisZ.x * along, mz + axisZ.z * along, my, 0.3);
+                if(!sample) continue;
+                if(sk === 0) surfaceRoad = sample;
+                var ndS = sample.nx * axisY.x + sample.ny * axisY.y + sample.nz * axisY.z;
+                if(ndS < 0.3) ndS = 0.3;
+                var lift = w.radius - Math.sqrt(w.radius * w.radius - along * along); // the rim is this much higher there than at the bottom
+                var tS = ((my - (sample.y - lift)) * sample.ny) / ndS;
+                if(tS < t) { t = tS; road = sample; }
+            }
+            // The wheel is a mass of its own (the unsprung mass) that hangs on the spring and the damper and stands on the tyre, which
+            // is a stiff spring too. The road pushes the tyre in, the tyre pushes the wheel up, the wheel pushes the spring in, the
+            // spring pushes the body: a kerb is taken up by the tyre and the wheel first and reaches the body softened, as it does
+            // in a car. The place of the wheel along the suspension (susLength, from the mount) and its speed (susVel, positive
+            // when it goes out) are the state of that.
+            // how fast the mount moves towards the road, to know how fast the road comes at the tyre
+            var vmx = self.vx + (self.wy * Rv.z - self.wz * Rv.y);
+            var vmy = self.vy + (self.wz * Rv.x - self.wx * Rv.z);
+            var vmz = self.vz + (self.wx * Rv.y - self.wy * Rv.x);
+            var mountDown = vmx * down.x + vmy * down.y + vmz * down.z;
             w.hasContact = false;
-            comp[i] = 0;
-            loadSpring[i] = 0;
+            tyreLoad[i] = 0;
             if(road) {
-                // the ray from the mount along the suspension hits the road at distance t
-                var nd = road.nx * axisY.x + road.ny * axisY.y + road.nz * axisY.z;
-                if(nd < 0.3) nd = 0.3;
-                var t = ((my - road.y) * road.ny) / nd;
-                var length = t - w.radius;
-                if(length < w.freeLength) {
+                var pen = (w.susLength + w.radius) - t;      // how far the road pushes the tyre in
+                if(pen > 0) {
                     w.hasContact = true;
                     anyContact = true;
-                    w.suspensionLength = Math.max(0.02, length);
-                    w.surface = road.surface;
+                    w.surface = (surfaceRoad || road).surface;
                     w.groundY = road.y;
                     w.normal = road;
                     w.contact.x = mx + down.x * t; w.contact.y = my + down.y * t; w.contact.z = mz + down.z * t;
-                    // how fast the spring is pushed in: the speed of the mount towards the road
-                    var vmx = self.vx + (self.wy * Rv.z - self.wz * Rv.y);
-                    var vmy = self.vy + (self.wz * Rv.x - self.wx * Rv.z);
-                    var vmz = self.vz + (self.wx * Rv.y - self.wy * Rv.x);
-                    compVelocity[i] = vmx * down.x + vmy * down.y + vmz * down.z;
-                    comp[i] = w.freeLength - length;
+                    var penRate = w.susVel + mountDown;
+                    tyreLoad[i] = Math.max(0, self.tyreRate * pen + self.tyreDamping * penRate);
                 }
             }
-            if(!w.hasContact) {
-                w.suspensionLength = w.freeLength;
-                compVelocity[i] = 0;
-            }
+            comp[i] = w.freeLength - w.susLength;
+            compVelocity[i] = -w.susVel;
+            w.suspensionLength = w.susLength;
         }
         self.airborne = !anyContact;
         // the anti-roll bars push the wheel that is pushed in more down, and the other up
@@ -757,7 +784,37 @@ OpenRacer.Vehicle = function (parameters, input) {
         var arbR = arbRear * (comp[2] - comp[3]);        // rear: left minus right
         var arbForce = [-arbF, arbF, arbR, -arbR];      // on FR, FL, RL, RR (in the order of the wheels)
 
-        force.x = 0; force.y = -m * G; force.z = 0;
+        // the spring, the damper, the bump stop and the anti-roll bar: the force between the body and the wheel (positive pushes
+        // the wheel out, away from the body), and the wheel moves on it against the tyre
+        var mBody = m - 4 * self.unsprungMass;
+        var gDown = G * axisY.y;                          // the pull of gravity on a wheel along the suspension, outwards
+        for(var si = 0; si < 4; si++) {
+            var ws = wheels[si];
+            var rateS = ws.rate;
+            var zetaS = ws.front ? self.frontDamping : self.rearDamping;
+            var cS = 2 * zetaS * Math.sqrt(rateS * ws.mass);
+            var xdotS = -ws.susVel;                        // positive while the spring is pushed in
+            // the damper is digressive: past a knee the force grows only slowly with the speed (the blow-off of a real damper), so a
+            // sharp hit of the wheel does not go through the damper into the body
+            var cUse = xdotS > 0 ? cS : cS * self.reboundFactor;
+            var knee = 0.3, mag = Math.abs(xdotS);
+            var damperS = (mag <= knee ? cUse * mag : cUse * (knee + 0.2 * (mag - knee))) * (xdotS > 0 ? 1 : -1);
+            var bumpS = ws.susLength < ws.minLength ? 12 * rateS * (ws.minLength - ws.susLength) : 0;
+            var droopS = ws.susLength > ws.freeLength ? -12 * rateS * (ws.susLength - ws.freeLength) : 0;  // the droop stop holds the wheel
+            var fs = rateS * comp[si] + damperS + bumpS + droopS + arbForce[si];
+            springForce[si] = fs;
+            // the wheel: the spring pushes it out, the tyre pushes it in, gravity pulls it along the axis, and it rides with the mount
+            var accel = (fs - tyreLoad[si]) / self.unsprungMass + gDown - lastBodyAccDown;
+            ws.susVel += accel * dt;
+            ws.susLength += ws.susVel * dt;
+            if(ws.susLength < 0.02) { ws.susLength = 0.02; if(ws.susVel < 0) ws.susVel = 0; }
+            if(ws.susLength > ws.freeLength + 0.06) { ws.susLength = ws.freeLength + 0.06; if(ws.susVel > 0) ws.susVel = 0; }
+        }
+
+        // two sums of forces: what acts on the body alone (gravity on it, the springs: it moves the sprung mass) and what acts on
+        // the whole car (the tyres along the road, the air, the walls: the wheels go with the body, so it moves everything)
+        force.x = 0; force.y = 0; force.z = 0;
+        forceBody.x = 0; forceBody.y = -mBody * G; forceBody.z = 0;
         torque.x = torque.y = torque.z = 0;
         var tyreTorque = [0, 0, 0, 0];
         var brakeTorque = [0, 0, 0, 0];
@@ -774,15 +831,17 @@ OpenRacer.Vehicle = function (parameters, input) {
             var wheel = wheels[iw];
             var fz = 0, fxW = 0, fyW = 0;
             var vl = 0;
+            // the spring pushes on the body at the mount, whether the tyre touches the road or not (a wheel in the air hangs on its droop stop)
+            rotate(self.qx, self.qy, self.qz, self.qw, wheel.mount.x, wheel.mount.y, wheel.mount.z, Rv);
+            var fsBody = -springForce[iw];                 // the reaction on the body, along the suspension axis (up when the spring is pushed in)
+            var fsx = axisY.x * -fsBody, fsy = axisY.y * -fsBody, fsz = axisY.z * -fsBody;
+            forceBody.x += fsx; forceBody.y += fsy; forceBody.z += fsz;
+            torque.x += Rv.y * fsz - Rv.z * fsy;
+            torque.y += Rv.z * fsx - Rv.x * fsz;
+            torque.z += Rv.x * fsy - Rv.y * fsx;
             if(wheel.hasContact) {
                 var road2 = wheel.normal;
-                var rate = wheel.rate;
-                var zeta = wheel.front ? self.frontDamping : self.rearDamping;
-                var cBump = 2 * zeta * Math.sqrt(rate * wheel.mass);
-                var xdot = compVelocity[iw];
-                var damper = (xdot > 0 ? cBump : cBump * self.reboundFactor) * xdot;
-                var bump = wheel.suspensionLength < wheel.minLength ? 12 * rate * (wheel.minLength - wheel.suspensionLength) : 0;
-                fz = Math.max(0, rate * comp[iw] + damper + bump + arbForce[iw]);
+                fz = tyreLoad[iw];                         // the load on the tyre, which is what it grips with
                 wheel.weight = fz;
 
                 var nx = road2.nx, ny = road2.ny, nz = road2.nz;
@@ -850,11 +909,12 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var rr = wheel.rollingResistance * (surface.static < 0.8 ? 4 : 1) * fz * Math.tanh(vl / 0.3);
                 fxW -= rr;
 
-                // the forces on the car: the load along the normal and the force along the wheel at the point of contact, the force
-                // across the wheel at the roll centre above it (the linkage passes it to the body there, so the body rolls less)
-                var fxx = fz * nx + fxW * fpx;
-                var fyy = fz * ny + fxW * fpy;
-                var fzz = fz * nz + fxW * fpz;
+                // the forces on the car: the force along the wheel at the point of contact, the force across the wheel at the roll
+                // centre above it (the linkage passes it to the body there, so the body rolls less). The load along the normal went
+                // to the wheel, which passes it to the body through the spring (above).
+                var fxx = fxW * fpx;
+                var fyy = fxW * fpy;
+                var fzz = fxW * fpz;
                 force.x += fxx + fyW * lx; force.y += fyy + fyW * ly; force.z += fzz + fyW * lz;
                 torque.x += Cv.y * fzz - Cv.z * fyy;
                 torque.y += Cv.z * fxx - Cv.x * fzz;
@@ -1039,7 +1099,10 @@ OpenRacer.Vehicle = function (parameters, input) {
         bodyCorners(force, torque);
 
         // ---- integrate: Newton for the movement, Euler for the rotation (with the gyroscopic term of a body that is not round)
-        self.vx += force.x / m * dt; self.vy += force.y / m * dt; self.vz += force.z / m * dt;
+        var accX = force.x / m + forceBody.x / mBody, accY = force.y / m + forceBody.y / mBody, accZ = force.z / m + forceBody.z / mBody;
+        self.vx += accX * dt; self.vy += accY * dt; self.vz += accZ * dt;
+        // the acceleration of the body along the suspension axis (outwards), for the wheels in the next step
+        lastBodyAccDown = -(accX * axisY.x + accY * axisY.y + accZ * axisY.z);
         rotateInverse(self.qx, self.qy, self.qz, self.qw, self.wx, self.wy, self.wz, tmpB);       // angular velocity in the body
         var gx = (inertiaZ - inertiaY) * tmpB.y * tmpB.z, gy = (inertiaX - inertiaZ) * tmpB.z * tmpB.x, gz = (inertiaY - inertiaX) * tmpB.x * tmpB.y;
         rotate(self.qx, self.qy, self.qz, self.qw, gx, gy, gz, Mv);
