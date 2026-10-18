@@ -1409,6 +1409,7 @@ async function startBench() {
 
 function stopBench() {
     bench.objects.forEach((o) => scene.remove(o));
+    if (bench.script && preview.playing) stopPreview();
     bench.objects = []; bench.vehicle = null; bench.model = null; bench.shake = null; bench.script = null;
     pivot.visible = true; helpers.visible = true;
     $("testStop").style.display = "none";
@@ -1449,7 +1450,10 @@ function benchFrame(now) {
         const w = v.wheels[i];
         object.position.set(w.center.x, w.center.y, w.center.z);
         object.quaternion.copy(body.quaternion);
-        if (object.children[0] && object.children[0].children[0]) object.children[0].children[0].rotation.x = w.spin;
+        if (object.children[0]) {
+            if (i < 2) object.children[0].rotation.y = -v.steerApplied; // the front wheels steer
+            if (object.children[0].children[0]) object.children[0].children[0].rotation.x = w.spin;
+        }
     });
     if (bench.model.rig) bench.model.rig.update(v);
 }
@@ -1485,8 +1489,9 @@ async function fullTest() {
         const v = bench.vehicle || await startBench();
         placeForDrop(v, 1, 5);
         bench.shake = null;
-        bench.script = { stage: "drop", t: 0, limiterT: 0 };
+        bench.script = { stage: "drop", t: 0, limiterT: 0, brake: 0 };
         status("Full test: the drop…", "ok");
+        if (!preview.playing) await playSound(); // the engine sound follows the engine of the bench during the test
     } catch (error) { status(error.message, "error"); }
 }
 
@@ -1495,19 +1500,28 @@ function runScript(dt) {
     if (!sc || !v) return;
     sc.t += dt;
     const lock = (bench.config && bench.config.chassis.max_steer_deg || 30) * Math.PI / 180;
-    const next = (stage, message) => { sc.stage = stage; sc.t = 0; if (message) status("Full test: " + message, "ok"); };
+    const next = (stage, message) => { sc.stage = stage; sc.t = 0; sc.brake = 0; if (message) status("Full test: " + message, "ok"); };
     const settle = () => { inp.throttle = 0; inp.brakePedal = 0; inp.neutral = true; inp.parkingLock = true; inp.reverse = false; inp.turnAngle = 0; };
+    // a gentle stop: the brake comes on over half a second, to a third, and holds
+    const brakeGently = () => { sc.brake = Math.min(0.35, sc.brake + dt * 0.7); inp.throttle = 0; inp.brakePedal = sc.brake; };
+    // the engine sound follows the engine of the bench
+    if (preview.playing) {
+        $("soundRpm").value = Math.round(v.engine.getRPM()); $("soundThrottle").value = Math.round(inp.throttle * 100);
+        soundSliders();
+    }
     switch (sc.stage) {
         case "drop":
             settle();
             if (sc.t > 2) next("rev", "the engine to the rev limiter in neutral");
             break;
         case "rev": {
-            inp.neutral = true; inp.parkingLock = true; inp.throttle = 1;
+            // the throttle open until the engine is at the limiter, a second on it, then the throttle shut and a moment for it to fall
+            inp.neutral = true; inp.parkingLock = true;
             const rpm = v.engine.getRPM();
-            $("soundRpm").value = Math.round(rpm); $("soundRpmLabel").textContent = Math.round(rpm) + " rpm";
             if (rpm >= v.engine.limiterRPM - 250) sc.limiterT += dt;
-            if (sc.limiterT >= 1) { inp.throttle = 0; next("shake", "1000 kg on every corner, twice round"); bench.shake = { t: 0, kg: 1000, push: 0.5, pace: 1.0 }; }
+            inp.throttle = sc.limiterT < 1 ? 1 : 0;
+            if (sc.limiterT >= 1 && rpm < v.engine.idleRPM + 500) { next("shake", "1000 kg on every corner, twice round"); bench.shake = { t: 0, kg: 1000, push: 0.5, pace: 1.0 }; }
+            if (sc.t > 12) { next("shake", "1000 kg on every corner, twice round"); bench.shake = { t: 0, kg: 1000, push: 0.5, pace: 1.0 }; }
             break;
         }
         case "shake":
@@ -1515,20 +1529,23 @@ function runScript(dt) {
             if (!bench.shake) next("forward", "a metre forwards");
             break;
         case "forward":
+            // gently away, off the throttle a little before the metre, a gentle brake to a stop
             inp.parkingLock = false; inp.neutral = false; inp.reverse = false; inp.current_gear = 0;
-            inp.throttle = v.u < 1 ? 0.25 : 0; inp.brakePedal = 0;
-            if (v.z >= 1) { inp.throttle = 0; inp.brakePedal = 1; if (Math.abs(v.u) < 0.05) next("pause1"); }
-            if (sc.t > 8) next("pause1");
+            if (v.z < 0.5) { inp.throttle = Math.min(0.2, sc.t * 0.2); inp.brakePedal = 0; }
+            else if (v.z < 0.7) { inp.throttle = 0; inp.brakePedal = 0; }
+            else { brakeGently(); if (Math.abs(v.u) < 0.03) next("pause1"); }
+            if (sc.t > 10) next("pause1");
             break;
         case "pause1":
-            inp.throttle = 0; inp.brakePedal = 1;
-            if (sc.t > 0.6) next("back", "a metre back");
+            brakeGently();
+            if (sc.t > 0.8) next("back", "a metre back");
             break;
         case "back":
             inp.parkingLock = false; inp.neutral = false; inp.reverse = true;
-            inp.throttle = v.u > -1 ? 0.25 : 0; inp.brakePedal = 0;
-            if (v.z <= 0) { inp.throttle = 0; inp.brakePedal = 1; if (Math.abs(v.u) < 0.05) next("steer", "the steering to both locks"); }
-            if (sc.t > 8) next("steer", "the steering to both locks");
+            if (v.z > 0.55) { inp.throttle = Math.min(0.2, sc.t * 0.2); inp.brakePedal = 0; }
+            else if (v.z > 0.35) { inp.throttle = 0; inp.brakePedal = 0; }
+            else { brakeGently(); if (Math.abs(v.u) < 0.03) next("steer", "the steering to both locks"); }
+            if (sc.t > 10) next("steer", "the steering to both locks");
             break;
         case "steer": {
             inp.throttle = 0; inp.brakePedal = 1; inp.reverse = false; inp.neutral = true; inp.parkingLock = true;
@@ -1537,7 +1554,7 @@ function runScript(dt) {
             let a;
             if (t < 1) a = -t; else if (t < 1.5) a = -1; else if (t < 3.5) a = -1 + (t - 1.5); else if (t < 4) a = 1; else if (t < 5) a = 1 - (t - 4); else a = 0;
             inp.turnAngle = a * lock;
-            if (t > 5.2) { inp.turnAngle = 0; bench.script = null; status("Full test done.", "ok"); }
+            if (t > 5.2) { inp.turnAngle = 0; bench.script = null; status("Full test done.", "ok"); if (preview.playing) stopPreview(); }
             break;
         }
     }
