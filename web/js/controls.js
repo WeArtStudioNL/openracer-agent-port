@@ -93,7 +93,8 @@ function gamepadUpdate(delta) {
         var speed = v ? Math.abs(v.u) : 0;
         // The steering assist: when the rear steps out, the front tyres want to point where the car goes (the way a car with a
         // lot of caster steers itself into a slide), so the steering gets a counter-steer added before the slide is a spin.
-        if(Settings.option("padAssist") && v && speed > 3) {
+        // (only driving forwards: in reverse the slip angle of the car is near 180 degrees and the counter-steer would flip from side to side)
+        if(Settings.option("padAssist") && v && v.u > 3) {
             var beta = Math.atan2(v.v, v.u);                 // the slip angle of the car: positive when it moves to the right of where it points
             var dead = 0.035;                                  // two degrees of slip are normal cornering
             var counter = Math.sign(beta) * Math.max(0, Math.abs(beta) - dead) * 1.1;
