@@ -66,7 +66,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     // stiff spring (N/m) with a little damping (Ns/m): this is what takes the edge off a kerb
     this.unsprungMass = parameters.unsprung_mass || 35;
     this.tyreRate = parameters.tyre_rate || 220000;
-    this.tyreDamping = parameters.tyre_damping || 1500;
+    this.tyreDamping = parameters.tyre_damping || 3000;
     // The roll centres: the height (m above the road) at which the suspension of an axle passes the lateral force of its tyres
     // to the body. The part of the load transfer below it goes through the linkage at once (geometric), only the rest rolls the
     // body on its springs. A higher roll centre: less roll, quicker response, a little jacking.
@@ -663,7 +663,9 @@ OpenRacer.Vehicle = function (parameters, input) {
         var yBottom = -self.cgHeight + self.groundClearance;
         var yTop = yBottom + self.bodyHeight;
         var zCentre = (self.af - self.ar) / 2;
-        var kc = 60 * self.mass, cc = 0.25 * Math.sqrt(kc * self.mass);
+        // a stiff contact that is well damped: the underside of a car that bottoms out scrapes and deforms, it does not bounce
+        // (with a quarter of the critical damping the body came back up from a landing as if from a trampoline)
+        var kc = 30 * self.mass, cc = 1.0 * Math.sqrt(kc * self.mass);
         for(var k = 0; k < 8; k++) {
             local.x = (k & 1 ? 1 : -1) * self.halfWidth;
             local.y = (k & 2 ? yTop : yBottom);
@@ -829,7 +831,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             var knee = 0.3, mag = Math.abs(xdotS);
             var damperS = (mag <= knee ? cUse * mag : cUse * (knee + 0.35 * (mag - knee))) * (xdotS > 0 ? 1 : -1);
             // the bump stop and the droop stop: stiff, and damped (a wheel that lands on an undamped stop rings on it at 16 Hz)
-            var stopRate = 12 * rateS, stopDamping = 1.2 * Math.sqrt(stopRate * self.unsprungMass);
+            var stopRate = 12 * rateS, stopDamping = 2.5 * Math.sqrt(stopRate * self.unsprungMass);
             var bumpS = ws.susLength < ws.minLength ? stopRate * (ws.minLength - ws.susLength) + Math.max(0, stopDamping * xdotS) : 0;
             var droopS = ws.susLength > ws.freeLength ? -stopRate * (ws.susLength - ws.freeLength) - Math.max(0, stopDamping * ws.susVel) : 0;
             var fs = rateS * comp[si] + damperS + bumpS + droopS + arbForce[si];

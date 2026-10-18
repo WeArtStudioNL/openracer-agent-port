@@ -135,6 +135,7 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
     }
 
     function build(root) {
+        calipersRoot = root;
         var pivot = new THREE.Group();
         pivot.add(root);
         pivot.rotation.y = (model.rotation_y || 0) * Math.PI / 180;
@@ -179,6 +180,9 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
                 chain.object.updateMatrixWorld(true);
                 // attach keeps the place of a part in the world: it ends up around the middle of the wheel
                 parts.forEach(function (part) { chain.spin.attach(part); });
+                // the brake caliper of this wheel (a part called brake_caliper_FL or the like, not a wheel part): it goes with the
+                // wheel and steers with it, but it does not spin, so it hangs on the steering link of the chain
+                calipersOf(slot).forEach(function (part) { chain.object.children[0].attach(part); });
                 space.remove(chain.object);
                 wheels.push(chain.object);
             });
@@ -211,6 +215,20 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
             OpenRacer.applyMaterialOverrides(THREE, [tilt].concat(wheelObjects), config.materials);
             onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1, steeringWheel: steering, measured: measured, rig: rig });
         }
+    }
+
+    // the parts of a brake caliper of a wheel, by their name: brake_caliper_FL, caliper_FL, susp_caliper_FL, brake_FL
+    var calipersRoot = null;
+    function calipersOf(slot) {
+        var found = [];
+        if(!calipersRoot) return found;
+        var corner = slot.toLowerCase();
+        calipersRoot.traverse(function (child) {
+            var name = (child.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            if(/(caliper|brake)/.test(name) && name.slice(-2) === corner && !/disc|disk|rotor/.test(name)) found.push(child);
+        });
+        // a part inside another found part goes with it
+        return found.filter(function (part) { return !found.some(function (other) { return other !== part && isInside(part, other); }); });
     }
 
     function findSteeringWheel(root, space) {
