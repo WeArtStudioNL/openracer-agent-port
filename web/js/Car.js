@@ -116,6 +116,8 @@ OpenRacer.Car = function( config, domElement ) {
         downforce_rear: chassis.downforce_rear,
         ackermann: chassis.ackermann,
         suspension_travel: chassis.suspension_travel,
+        pressure_front: config.tyres && config.tyres.pressure_front, pressure_rear: config.tyres && config.tyres.pressure_rear,
+        toe_front: chassis.toe_front, toe_rear: chassis.toe_rear,
         ride_front: chassis.ride_front,
         ride_rear: chassis.ride_rear,
         roll_center_front: chassis.roll_center_front,

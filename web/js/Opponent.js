@@ -15,7 +15,8 @@ OpenRacer.vehicleParams = function (config, getSurface) {
         weight_distribution: chassis.weight_distribution, cgHeight: chassis.cg_height, roll_front: chassis.roll_front,
         spring_front: chassis.spring_front, spring_rear: chassis.spring_rear, damping_front: chassis.damping_front, damping_rear: chassis.damping_rear,
         downforce: chassis.downforce, downforce_front: chassis.downforce_front, downforce_rear: chassis.downforce_rear, ackermann: chassis.ackermann,
-        suspension_travel: chassis.suspension_travel, ride_front: chassis.ride_front, ride_rear: chassis.ride_rear, roll_center_front: chassis.roll_center_front, roll_center_rear: chassis.roll_center_rear, camber_front: chassis.camber_front, camber_rear: chassis.camber_rear, roll_camber: chassis.roll_camber,
+        suspension_travel: chassis.suspension_travel, ride_front: chassis.ride_front, ride_rear: chassis.ride_rear, toe_front: chassis.toe_front, toe_rear: chassis.toe_rear,
+        pressure_front: config.tyres && config.tyres.pressure_front, pressure_rear: config.tyres && config.tyres.pressure_rear, roll_center_front: chassis.roll_center_front, roll_center_rear: chassis.roll_center_rear, camber_front: chassis.camber_front, camber_rear: chassis.camber_rear, roll_camber: chassis.roll_camber,
         tire_diameter: chassis.tire_diameter, width: dimensions.width, length: dimensions.length, height: dimensions.height,
         Cdrag: 0.5 * chassis.drag_coefficient * dimensions.width * dimensions.height * 0.85 * 1.29,
         gear_ratios: drivetrain.gear_ratios.slice(), reverse_ratio: drivetrain.reverse_ratio, final_drive: drivetrain.final_drive, efficiency: drivetrain.efficiency,
@@ -47,6 +48,7 @@ OpenRacer.Opponent = function (config, line, options) {
     this.vehicle.retune({
         grip: tyres.grip !== undefined ? tyres.grip : 1, grip_balance: tyres.grip_balance !== undefined ? tyres.grip_balance : 1,
         cornering: tyres.cornering !== undefined ? tyres.cornering : 1, rolling_resistance: tyres.rolling_resistance !== undefined ? tyres.rolling_resistance : 0.015,
+        pressure_front: tyres.pressure_front || 2.2, pressure_rear: tyres.pressure_rear || 2.2,
         power: engineConfig.power_scale !== undefined ? engineConfig.power_scale : 1, engine_braking: engineConfig.braking_scale !== undefined ? engineConfig.braking_scale : 1,
         clutch: config.drivetrain.clutch !== undefined ? config.drivetrain.clutch : 1.5,
         tc_allowance: assists.tc_allowance !== undefined ? assists.tc_allowance : 1, esc_gain: assists.esc_gain !== undefined ? assists.esc_gain : 1

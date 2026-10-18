@@ -63,6 +63,8 @@ function makeCar(config) {
     v.retune({
         grip: tyres.grip !== undefined ? tyres.grip : 1,
         grip_balance: tyres.grip_balance !== undefined ? tyres.grip_balance : 1,
+        pressure_front: tyres.pressure_front || 2.2, pressure_rear: tyres.pressure_rear || 2.2,
+        toe_front: config.chassis.toe_front || 0, toe_rear: config.chassis.toe_rear || 0,
         cornering: tyres.cornering !== undefined ? tyres.cornering : 1,
         rolling_resistance: tyres.rolling_resistance !== undefined ? tyres.rolling_resistance : 0.015,
         power: engine.power_scale !== undefined ? engine.power_scale : 1,

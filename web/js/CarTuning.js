@@ -23,6 +23,8 @@ OpenRacer.CarTuning = (function () {
             ["ride_rear", "Ride height at the rear", "mm", -60, 80, 5],
             ["roll_center_front", "Roll centre at the front", "cm", -5, 40, 1],
             ["roll_center_rear", "Roll centre at the rear", "cm", -5, 40, 1],
+            ["toe_front", "Toe at the front (positive: toe-in)", "°", -1.5, 1.5, 0.05],
+            ["toe_rear", "Toe at the rear", "°", -1.5, 1.5, 0.05],
             ["camber_front", "Camber at the front (negative: top in)", "°", -6, 3, 0.1],
             ["camber_rear", "Camber at the rear", "°", -6, 3, 0.1],
             ["roll_camber", "Camber lost in roll", "%", 0, 100, 5]
@@ -31,6 +33,8 @@ OpenRacer.CarTuning = (function () {
             ["grip", "Grip", "%", 50, 160, 1],
             ["grip_balance", "Grip of the rear tyres (as a share of the front)", "%", 60, 140, 1],
             ["cornering", "Stiffness against the slip angle", "%", 50, 160, 1],
+            ["pressure_front", "Tyre pressure at the front", "bar", 1.2, 3.5, 0.1],
+            ["pressure_rear", "Tyre pressure at the rear", "bar", 1.2, 3.5, 0.1],
             ["rolling_resistance", "Rolling resistance", "", 0.005, 0.05, 0.001],
             ["tyre_heating", "Heating up (wear and fuel on)", "%", 20, 400, 5],
             ["tyre_life", "Life of the tyres", "%", 20, 500, 5]
@@ -65,8 +69,8 @@ OpenRacer.CarTuning = (function () {
             ["center_split", "Torque to the front (all wheel drive)", "%", 0, 100, 1]
         ] },
         { name: "Brakes", items: [
-            ["brake_front", "Front brakes (per wheel)", "Nm", 300, 4000, 50],
-            ["brake_rear", "Rear brakes (per wheel)", "Nm", 150, 3000, 50]
+            ["brake_total", "Brakes: front and rear together (per side)", "Nm", 500, 7000, 50],
+            ["brake_bias", "Brake bias: the share of the front", "%", 40, 85, 1]
         ] },
         { name: "Aerodynamics and steering", items: [
             ["drag_coefficient", "Drag coefficient", "", 0.15, 1.2, 0.01],
@@ -110,6 +114,8 @@ OpenRacer.CarTuning = (function () {
             grip: (tyres.grip !== undefined ? tyres.grip : 1) * 100,
             grip_balance: (tyres.grip_balance !== undefined ? tyres.grip_balance : 1) * 100,
             cornering: (tyres.cornering !== undefined ? tyres.cornering : 1) * 100,
+            pressure_front: tyres.pressure_front || 2.2,
+            pressure_rear: tyres.pressure_rear || 2.2,
             tyre_heating: (tyres.heating !== undefined ? tyres.heating : 1) * 100,
             tyre_life: (tyres.life !== undefined ? tyres.life : 1) * 100,
             tank: (c.fuel && c.fuel.tank) || 60,
@@ -131,8 +137,8 @@ OpenRacer.CarTuning = (function () {
             center_split: (dt.center_split !== undefined ? dt.center_split : 0.4) * 100,
             diff_preload: dt.diff_preload !== undefined ? dt.diff_preload : 150,
             diff_lock: dt.diff_lock !== undefined ? dt.diff_lock : 60,
-            brake_front: (c.brakes && c.brakes.front) || 1700,
-            brake_rear: (c.brakes && c.brakes.rear) || 900,
+            brake_total: ((c.brakes && c.brakes.front) || 1700) + ((c.brakes && c.brakes.rear) || 900),
+            brake_bias: Math.round(((c.brakes && c.brakes.front) || 1700) / (((c.brakes && c.brakes.front) || 1700) + ((c.brakes && c.brakes.rear) || 900)) * 1000) / 10,
             turbo_share: (en.turbo && en.turbo.share !== undefined ? en.turbo.share : (en.turbo ? 0.5 : 0)) * 100,
             turbo_spool: en.turbo && en.turbo.spool ? en.turbo.spool : 0.4,
             turbo_threshold: en.turbo && en.turbo.threshold_rpm ? en.turbo.threshold_rpm : 2500,
@@ -142,6 +148,8 @@ OpenRacer.CarTuning = (function () {
             ride_rear: Math.round((ch.ride_rear || 0) * 1000),
             roll_center_front: (ch.roll_center_front !== undefined ? ch.roll_center_front : 0.06) * 100,
             roll_center_rear: (ch.roll_center_rear !== undefined ? ch.roll_center_rear : 0.12) * 100,
+            toe_front: ch.toe_front || 0,
+            toe_rear: ch.toe_rear || 0,
             camber_front: ch.camber_front || 0,
             camber_rear: ch.camber_rear || 0,
             roll_camber: (ch.roll_camber !== undefined ? ch.roll_camber : 0.6) * 100,
@@ -177,6 +185,10 @@ OpenRacer.CarTuning = (function () {
             grip: v.grip / 100,
             grip_balance: v.grip_balance / 100,
             cornering: v.cornering / 100,
+            pressure_front: v.pressure_front,
+            pressure_rear: v.pressure_rear,
+            toe_front: v.toe_front,
+            toe_rear: v.toe_rear,
             rolling_resistance: v.rolling_resistance,
             tyre_heating: v.tyre_heating / 100,
             tyre_life: v.tyre_life / 100,
@@ -199,8 +211,8 @@ OpenRacer.CarTuning = (function () {
             diff_coast: v.diff_coast / 100,
             diff_preload: v.diff_preload,
             diff_lock: v.diff_lock,
-            brake_front: v.brake_front,
-            brake_rear: v.brake_rear,
+            brake_front: v.brake_total * v.brake_bias / 100,
+            brake_rear: v.brake_total * (1 - v.brake_bias / 100),
             drag: 0.5 * v.drag_coefficient * frontalArea * airDensity,
             downforce_front: v.downforce_front / V100,
             downforce_rear: v.downforce_rear / V100,
@@ -244,10 +256,13 @@ OpenRacer.CarTuning = (function () {
         c.chassis.ride_rear = v.ride_rear / 1000;
         c.chassis.roll_center_front = v.roll_center_front / 100;
         c.chassis.roll_center_rear = v.roll_center_rear / 100;
+        c.chassis.toe_front = v.toe_front;
+        c.chassis.toe_rear = v.toe_rear;
         c.chassis.camber_front = v.camber_front;
         c.chassis.camber_rear = v.camber_rear;
         c.chassis.roll_camber = v.roll_camber / 100;
-        c.tyres = { grip: v.grip / 100, grip_balance: v.grip_balance / 100, cornering: v.cornering / 100, rolling_resistance: v.rolling_resistance, heating: v.tyre_heating / 100, life: v.tyre_life / 100 };
+        c.tyres = { grip: v.grip / 100, grip_balance: v.grip_balance / 100, cornering: v.cornering / 100, rolling_resistance: v.rolling_resistance, heating: v.tyre_heating / 100, life: v.tyre_life / 100,
+            pressure_front: v.pressure_front, pressure_rear: v.pressure_rear };
         c.fuel = { tank: v.tank, use: v.fuel_use / 100 };
         c.engine = c.engine || {};
         c.engine.power_scale = v.power / 100;
@@ -270,7 +285,7 @@ OpenRacer.CarTuning = (function () {
         c.drivetrain.diff_preload = v.diff_preload;
         c.drivetrain.diff_lock = v.diff_lock;
         c.drivetrain.gear_ratios = c.drivetrain.gear_ratios.map(function(r, i) { return v["gear" + i]; });
-        c.brakes = { front: v.brake_front, rear: v.brake_rear };
+        c.brakes = { front: Math.round(v.brake_total * v.brake_bias / 100), rear: Math.round(v.brake_total * (1 - v.brake_bias / 100)) };
         c.assists = { tc_allowance: v.tc_allowance / 100, esc_gain: v.esc_gain / 100 };
         var sound = {};
         Object.keys(v).forEach(function(key) { if(key.indexOf("es_") === 0) sound[key.substring(3)] = v[key]; });

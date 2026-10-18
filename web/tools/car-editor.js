@@ -1361,7 +1361,7 @@ refreshList();
 
 // ---- the Tuning card: everything of the tuning menu of the game that the form does not have, from the shared table (CarTuning.js)
 const EDITOR_HAS = new Set(["mass", "front_weight", "cg_height", "drag_coefficient", "max_steer_deg", "idle_rpm", "limiter_rpm", "engine_inertia",
-    "final_drive", "reverse_ratio", "brake_front", "brake_rear", "diff_preload", "diff_power", "diff_coast", "center_split", "suspension_travel"]);
+    "final_drive", "reverse_ratio", "brake_total", "brake_bias", "diff_preload", "diff_power", "diff_coast", "center_split", "suspension_travel"]);
 const TUNING_KEYS = OpenRacer.CarTuning.keys().filter((k) => !EDITOR_HAS.has(k));
 let tuning = {};
 const DEFAULT_CAR = { chassis: { mass: 1400, weight_distribution: 0.55, drag_coefficient: 0.35 }, drivetrain: { gear_ratios: [3, 2, 1.4, 1], final_drive: 3.5 }, engine: {} };
