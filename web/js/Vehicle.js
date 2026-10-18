@@ -593,7 +593,11 @@ OpenRacer.Vehicle = function (parameters, input) {
             var w = this.wheels[i];
             rotate(this.qx, this.qy, this.qz, this.qw, w.mount.x, w.mount.y, w.mount.z, tmp);
             var mx = this.px + tmp.x, my = this.py + tmp.y, mz = this.pz + tmp.z;
-            var length = w.hasContact ? w.suspensionLength : w.freeLength;
+            // The wheel is drawn on the road, not pushed into it: the tyre's squash beyond what it has at rest (a landing, a kerb)
+            // lifts the drawn wheel, because the mesh of the tyre does not flatten. The parts of the suspension rig follow the same place.
+            var squash = Math.max(0, (w.tyreDeflection || 0) - w.staticLoad / this.tyreRate);
+            w.visualLength = (w.hasContact ? w.suspensionLength : w.freeLength) - squash;
+            var length = w.visualLength;
             w.center.x = mx - axisY.x * length;
             w.center.y = my - axisY.y * length;
             w.center.z = mz - axisY.z * length;
@@ -803,8 +807,10 @@ OpenRacer.Vehicle = function (parameters, input) {
                     w.contact.x = mx + down.x * t; w.contact.y = my + down.y * t; w.contact.z = mz + down.z * t;
                     var penRate = w.susVel + mountDown;
                     tyreLoad[i] = Math.max(0, self.tyreRate * pen + self.tyreDamping * penRate);
+                    w.tyreDeflection = pen;  // how far the road pushes the tyre in (m)
                 }
             }
+            if(!w.hasContact) w.tyreDeflection = 0;
             comp[i] = w.freeLength - w.susLength;
             compVelocity[i] = -w.susVel;
             w.suspensionLength = w.susLength;

@@ -126,7 +126,8 @@ OpenRacer.SuspensionRig = (function () {
     // upright still on the wheel, instead of the parts staying where they were modelled while the wheel moves away from them.
     function travelOf(vehicle, wheel) {
         var w = vehicle.wheels[wheel];
-        return vehicle.restLength - (w.susLength !== undefined ? w.susLength : vehicle.restLength);
+        var length = w.visualLength !== undefined ? w.visualLength : (w.susLength !== undefined ? w.susLength : vehicle.restLength);
+        return vehicle.restLength - length;
     }
 
     function update(rig, vehicle) {
