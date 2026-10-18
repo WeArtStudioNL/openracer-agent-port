@@ -328,11 +328,16 @@ function startSkidpad() {
         this.accelerate = error > 0.3; this.brake = error < -1.5;
         if(!this.accelerate) this.throttle = 0; if(!this.brake) this.brakePedal = 0;
         // the result: the most lateral acceleration while the car still follows the circle
-        var slip = Math.atan2(v.v, v.u);
+        // the slip angle of the car means nothing until it moves (at a standstill it is the angle of noise)
+        var slip = speed > 2 ? Math.atan2(v.v, v.u) : 0;
         var ay = Math.abs(v.ay);
         var onLine = Math.abs(r - R) < 4 && Math.abs(slip) < 0.14;
         if(onLine && ay > sp.best) { sp.best = ay; sp.bestSpeed = speed; }
-        if(Math.abs(r - R) > 6 || Math.abs(slip) > 0.25) skidpadDone();
+        if(speed > 2 && (Math.abs(r - R) > 6 || Math.abs(slip) > 0.25)) skidpadDone();
+        // a car that understeers wide does not let go: it just cannot go faster; when the speed stays three metres per second
+        // behind what is asked for three seconds, that is the limit too
+        sp.stalled = targetSpeed - speed > 3 ? (sp.stalled || 0) + 1 / 60 : 0;
+        if(sp.stalled > 3) skidpadDone();
         overlay.innerHTML = "<b>Skidpad</b> · circle of " + R + " m<br>" + (ay / 9.81).toFixed(2) + " g at " + Math.round(speed * 3.6) + " km/h · best " + (sp.best / 9.81).toFixed(2) + " g";
     };
     car.vehicle.tcEnabled = Settings.option("tc"); car.vehicle.escEnabled = false;
@@ -359,7 +364,7 @@ function startSkidpad() {
 
     function skidpadReset() {
         if(sp.panel) { sp.panel.remove(); sp.panel = null; }
-        sp.best = 0; sp.bestSpeed = 0; targetSpeed = 3; sp.running = true;
+        sp.best = 0; sp.bestSpeed = 0; sp.stalled = 0; targetSpeed = 3; sp.running = true;
         car.turnAngle = 0;
         car.place(R, 0, Math.PI / 2);
         car.vehicle.freshTyres(85);
