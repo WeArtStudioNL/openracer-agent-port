@@ -1423,9 +1423,9 @@ function benchFrame(now) {
         // bounce back, two rounds
         const s = bench.shake;
         s.t += dt;
-        const step = Math.floor(s.t / 0.6);
+        const step = Math.floor(s.t / s.pace);
         if (step >= 8) bench.shake = null;
-        else if (s.t - step * 0.6 < 0.15) {
+        else if (s.t - step * s.pace < Math.min(s.push, s.pace)) {
             const w = v.wheels[[1, 0, 3, 2][step % 4]];
             v.pushDown(w.mount.x, w.mount.y, w.mount.z, s.kg * 9.81);
         }
@@ -1473,7 +1473,7 @@ async function dropCar() {
 async function shakeTest() {
     try {
         if (!bench.vehicle) await startBench();
-        bench.shake = { t: 0, kg: parseFloat($("testShakeKg").value) };
+        bench.shake = { t: 0, kg: parseFloat($("testShakeKg").value), push: parseFloat($("testShakePush").value), pace: parseFloat($("testShakePace").value) };
     } catch (error) { status(error.message, "error"); }
 }
 
@@ -1483,5 +1483,7 @@ $("testStop").addEventListener("click", stopBench);
 $("testDropHeight").addEventListener("input", () => { $("testDropLabel").textContent = parseFloat($("testDropHeight").value).toFixed(1) + " m"; });
 $("testShakeKg").addEventListener("input", () => { $("testShakeLabel").textContent = $("testShakeKg").value + " kg"; });
 $("testTilt").addEventListener("input", () => { $("testTiltLabel").textContent = $("testTilt").value + "°"; });
+$("testShakePush").addEventListener("input", () => { $("testShakePushLabel").textContent = parseFloat($("testShakePush").value).toFixed(2) + " s"; });
+$("testShakePace").addEventListener("input", () => { $("testShakePaceLabel").textContent = "every " + parseFloat($("testShakePace").value).toFixed(1) + " s"; });
 window.benchFrame = benchFrame; // the render loop at the top calls it from here on
 window.benchState = bench; // for a look from the console

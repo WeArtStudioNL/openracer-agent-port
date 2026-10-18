@@ -66,7 +66,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     // stiff spring (N/m) with a little damping (Ns/m): this is what takes the edge off a kerb
     this.unsprungMass = parameters.unsprung_mass || 35;
     this.tyreRate = parameters.tyre_rate || 220000;
-    this.tyreDamping = parameters.tyre_damping || 300;
+    this.tyreDamping = parameters.tyre_damping || 1500;
     // The roll centres: the height (m above the road) at which the suspension of an axle passes the lateral force of its tyres
     // to the body. The part of the load transfer below it goes through the linkage at once (geometric), only the rest rolls the
     // body on its springs. A higher roll centre: less roll, quicker response, a little jacking.
@@ -826,9 +826,11 @@ OpenRacer.Vehicle = function (parameters, input) {
             // sharp hit of the wheel does not go through the damper into the body
             var cUse = xdotS > 0 ? cS : cS * self.reboundFactor;
             var knee = 0.3, mag = Math.abs(xdotS);
-            var damperS = (mag <= knee ? cUse * mag : cUse * (knee + 0.2 * (mag - knee))) * (xdotS > 0 ? 1 : -1);
-            var bumpS = ws.susLength < ws.minLength ? 12 * rateS * (ws.minLength - ws.susLength) : 0;
-            var droopS = ws.susLength > ws.freeLength ? -12 * rateS * (ws.susLength - ws.freeLength) : 0;  // the droop stop holds the wheel
+            var damperS = (mag <= knee ? cUse * mag : cUse * (knee + 0.35 * (mag - knee))) * (xdotS > 0 ? 1 : -1);
+            // the bump stop and the droop stop: stiff, and damped (a wheel that lands on an undamped stop rings on it at 16 Hz)
+            var stopRate = 12 * rateS, stopDamping = 1.2 * Math.sqrt(stopRate * self.unsprungMass);
+            var bumpS = ws.susLength < ws.minLength ? stopRate * (ws.minLength - ws.susLength) + Math.max(0, stopDamping * xdotS) : 0;
+            var droopS = ws.susLength > ws.freeLength ? -stopRate * (ws.susLength - ws.freeLength) - Math.max(0, stopDamping * ws.susVel) : 0;
             var fs = rateS * comp[si] + damperS + bumpS + droopS + arbForce[si];
             springForce[si] = fs;
             // the wheel: the spring pushes it out, the tyre pushes it in, gravity pulls it along the axis, and it rides with the mount
