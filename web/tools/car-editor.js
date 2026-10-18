@@ -1012,6 +1012,7 @@ function buildConfig(id) {
             rear_track: need("rearTrack", "The rear track"),
             weight_distribution: Math.min(0.9, Math.max(0.1, need("front", "The front weight") / 100)),
             cg_height: need("cgHeight", "The height of the centre of gravity"),
+            suspension_travel: Math.max(0.01, (parseFloat($("travel").value) || 9) / 100),
             tire_diameter: need("tyre", "The tyre diameter"),
             drag_coefficient: need("drag", "The drag coefficient"),
             max_steer_deg: need("steer", "The steering lock")
@@ -1214,6 +1215,7 @@ function fill(car) {
     set("length", car.dimensions.length); set("width", car.dimensions.width); set("height", car.dimensions.height);
     const c = car.chassis;
     set("mass", c.mass); set("front", +(c.weight_distribution * 100).toFixed(2)); set("cgHeight", c.cg_height);
+    set("travel", Math.round((c.suspension_travel || 0.09) * 100)); $("travelLabel").textContent = $("travel").value + " cm";
     set("wheelbase", c.wheelbase); set("frontTrack", c.front_track); set("rearTrack", c.rear_track);
     set("tyre", c.tire_diameter); set("drag", c.drag_coefficient); set("steer", c.max_steer_deg);
     const d = car.drivetrain;
@@ -1483,6 +1485,11 @@ $("testStop").addEventListener("click", stopBench);
 $("testDropHeight").addEventListener("input", () => { $("testDropLabel").textContent = parseFloat($("testDropHeight").value).toFixed(1) + " m"; });
 $("testShakeKg").addEventListener("input", () => { $("testShakeLabel").textContent = $("testShakeKg").value + " kg"; });
 $("testTilt").addEventListener("input", () => { $("testTiltLabel").textContent = $("testTilt").value + "°"; });
+// the travel of the suspension: shown, and put on the car of the test bench at once
+$("travel").addEventListener("input", () => {
+    $("travelLabel").textContent = $("travel").value + " cm";
+    if (bench.vehicle) bench.vehicle.retune({ suspension_travel: parseFloat($("travel").value) / 100 });
+});
 $("testShakePush").addEventListener("input", () => { $("testShakePushLabel").textContent = parseFloat($("testShakePush").value).toFixed(2) + " s"; });
 $("testShakePace").addEventListener("input", () => { $("testShakePaceLabel").textContent = "every " + parseFloat($("testShakePace").value).toFixed(1) + " s"; });
 window.benchFrame = benchFrame; // the render loop at the top calls it from here on

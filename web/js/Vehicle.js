@@ -101,7 +101,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     // lowers the body there, with its centre of gravity, and gives it rake when the two differ
     this.rideFront = parameters.ride_front || 0;
     this.rideRear = parameters.ride_rear || 0;
-    this.bumpTravel = 0.09;           // how much further the spring can go in before the bump stop (m)
+    this.bumpTravel = parameters.suspension_travel || 0.09; // how much further the spring can go in before the bump stop (m)
     this.groundClearance = 0.13;      // of the underside of the body at rest (m)
 
     this.engine = new OpenRacer.Engine(parameters.engine);
@@ -381,6 +381,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.downforce_rear !== undefined) this.downforceRear = t.downforce_rear;
         if(t.ackermann !== undefined) this.ackermann = t.ackermann;
         if(t.shift_time !== undefined) this.shiftTime = t.shift_time;
+        if(t.suspension_travel !== undefined) this.bumpTravel = Math.max(0.01, t.suspension_travel);
         if(t.ride_front !== undefined) this.rideFront = t.ride_front;
         if(t.ride_rear !== undefined) this.rideRear = t.ride_rear;
         if(t.turbo_share !== undefined) this.engine.turboShare = Math.max(0, Math.min(0.9, t.turbo_share));
