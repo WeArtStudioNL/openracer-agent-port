@@ -5,4 +5,4 @@
  *              game would not work the same on an older version (the physics, the fields of car.json or track.json, the engine sound).
  */
 
-OpenRacer.VERSION = "1.0.0";
+OpenRacer.VERSION = "2.0.0";

@@ -1,20 +1,15 @@
 # OpenRacer
-OpenRacer is an open-source initiative to build a high-quality racing simulation running in-browser.
 
-*Sorry! I know I said on the website that all the code is here, but I'm doing a fair amount of housekeeping with the code as I go, and it's taking longer than I thought. There's a lot to read through! It'll all be online as soon as possible.*
+A racing simulator that runs in the browser. It simulates the whole car (a body on quarter-car suspension, tyres with load, pressure, camber, heat and wear, a clutch, a gearbox and differentials), races you against AI cars, works with a keyboard, a gamepad or a racing wheel with force feedback, and has a car editor, a track editor and a tuning menu to make your own cars and tracks.
 
-It is released under the GPLv3 License.
+**Play it and read the docs: [openracer.eu](https://openracer.eu)** (the game is at [openracer.eu/game](https://openracer.eu/game/), the documentation at [openracer.eu/docs.html](https://openracer.eu/docs.html)). The source of the site is in `site/`.
 
-I'm just starting to upload the source code now - this may take a little while as I'm making some modifications as I go through each file.
+Released under the GPLv3 License.
 
-The files should include everything you need to open this as a project in NetBeans.
+## About this fork
+This is a fork of [digi-chris/OpenRacer](https://github.com/digi-chris/OpenRacer) by Chris Barnard, the open-source initiative that began the game: the demo Mustang, its first track and the first version of the driving model. This fork takes it much further: the vehicle physics, the race format, the input (including racing wheels with force feedback), the editors, the engine sound and the local garage were built here.
 
-Note that I'm being very 'open' with my code - a lot of this is currently a HUGE hack-job, as I never wrote it with the intention of giving out publicly. Therefore, the first major task is going to be reformatting everything for a style guide, taking out any hard-coded elements and restructuring.
-
-With regards to coding conventions - I will be putting together my own set of guidelines as to how this should be coded up, however it'll be based on a standard style guide. My only caveat is that sometimes, in my opinion, OOP and bleeding-edge-get-every-last-drop-out-of-the-CPU efficiency don't go together so well. I fully intend to break OOP conventions in some places, but only when *absolutely* necessary.
-
-Chris Barnard.
-
+The fork was developed with AI, in Claude Code, together with **Claude Fable** and **Claude Sonnet 5.5** from Anthropic. The commit log shows how it grew, step by step, and the commits made by the models say so.
 
 The version of the game is `OpenRacer.VERSION` in `web/js/Version.js` (shown in the main menu and at the bottom of the settings menu). Raise it when a car or a track made with the game would not work the same on an older version.
 
