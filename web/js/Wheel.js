@@ -73,8 +73,9 @@ OpenRacer.Wheel = function (parameters) {
     this.anglePeak = 0.15;      // tan of the slip angle with the most grip
     this.rollingResistance = 0.015;
     this.gripScale = 1;         // tuning: the grip of the tyre, as a factor
-    this.loadSensitivity = 0.00012; // grip coefficient lost per extra Newton of load above the nominal load (a tyre grips less
-                                    // per Newton the more it is loaded: the axle that gets the most load transfer loses the most grip)
+    this.loadSensitivity = 0.00007; // grip coefficient lost per extra Newton of load above the nominal load (a tyre grips less
+                                    // per Newton the more it is loaded: the axle that gets the most load transfer loses the most grip).
+                                    // 0.00007 loses a fifth of the grip when the load doubles, as a road tyre does (tools/physics-bench.js)
     this.lateralGrip = 1.05;    // the grip across the tyre as a factor of the grip along it
     this.shapeX = 0;            // the E of the magic formula along the tyre
     this.shapeY = 0;            // and across it

@@ -19,7 +19,7 @@
     "weight_distribution": 0.593,
     "cg_height": 0.55,
     "tire_diameter": 0.67564,
-    "drag_coefficient": 0.4,
+    "drag_coefficient": 0.45,
     "max_steer_deg": 30
   },
   "drivetrain": {
@@ -31,12 +31,12 @@
       1
     ],
     "reverse_ratio": 2.32,
-    "final_drive": 3.5,
+    "final_drive": 3.91,
     "efficiency": 0.92
   },
   "engine": {
     "idle_rpm": 900,
-    "limiter_rpm": 6600,
+    "limiter_rpm": 6000,
     "inertia": 0.4,
     "torque_curve": [
       [
@@ -103,11 +103,17 @@
         7500,
         150
       ]
-    ]
+    ],
+    "power_scale": 0.76
   },
   "brakes": {
     "front": 1700,
     "rear": 900
+  },
+  "tyres": {
+    "grip": 0.84,
+    "cornering": 1,
+    "rolling_resistance": 0.015
   },
   "cameras": {
     "chase": {
