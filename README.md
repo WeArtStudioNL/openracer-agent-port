@@ -61,6 +61,19 @@ A model does not always arrive the way it looked in Blender: a shader that the g
 
 A part of the model called `steeringwheel` turns with the steering (about its own middle, around the axis that is found from its shape: the direction in which the part is flat; `steering_wheel.degrees` in `car.json`, 450 by default, is the turn at full lock each way, set in the car editor). Parts in the same part are turned with it, so keep the wheel, its spokes and its hub together in it.
 
+**Moving suspension and steering** (`SuspensionRig.js`, optional: a model without these parts is shown as before, and the physics does not change). Parts of the model with these names move with the suspension and the steering of the physics (the travel of every wheel from the quarter car, the steering angle). The corner is `FL`, `FR`, `RL` or `RR` at the end of the name; case and other characters do not matter. Model the car at rest on its springs, and keep every part a child of the body (not of a wheel): the part moves from where it is modelled, and its **origin is its pivot**.
+
+| Name | What it is | Origin (pivot) | What it does |
+|---|---|---|---|
+| `susp_upperarm_FL`, `susp_lowerarm_FL` | a wishbone, a link | at the hinge on the chassis (between the two inboard bushings) | swings about the axis along the car with the travel of the wheel; its free end reaches the wheel |
+| `susp_upright_FL` | the upright, hub carrier, knuckle | at the middle of the wheel | goes up and down with the wheel and turns with the steering (it does not spin, so do not make it a wheel part) |
+| `susp_spring_FL`, `susp_damper_FL`, `susp_strut_FL` | a spring, a damper, a strut | at the end on the body (the top mount) | points to its other end and gets shorter and longer with the travel |
+| `steer_rack` | the steering rack | anywhere on it | slides across the car with the steering (`steering.rack_travel` in `car.json`, m per radian of the front wheels, 0.1 by default; negative slides it the other way) |
+| `steer_tierod_FL` | a tie rod | at the end on the rack | its other end sits on the upright and follows it, so it swings and stretches |
+| `susp_axle_rear` (or `_front`) | a live axle | at its middle | goes up and down with its two wheels and rolls with the difference |
+
+A test car needs no more than a frame, four wheels (as wheel parts, set in the car editor) and these parts; the car editor's Layers panel shows how many rig parts a model has. In Blender: set the origin of each part to its pivot (*Set Origin → 3D Cursor* with the cursor at the hinge), keep the parts separate objects under the body, apply the rotation and the scale, and export with +Y up and the car facing +Z as usual.
+
 In Blender a car that looks towards -Y (the front view) exports as it should; the model needs a name per part for the wheels to be found. glTF files with Draco or Meshopt compression are not supported.
 
 ## Driving model

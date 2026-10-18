@@ -157,6 +157,7 @@ OpenRacer.Car = function( config, domElement ) {
     OpenRacer.loadCarModel(config, function(model) {
         tobj.bodyLift = model.bodyLift;
         tobj.steeringWheel = model.steeringWheel || null;
+        tobj.rig = model.rig || null; // the moving parts of the suspension and the steering of the model, when it has them
         tobj.followModelWheels(model.measured);
         tobj.body.add(model.tilt);
         scene.add(tobj.body);
@@ -259,6 +260,7 @@ OpenRacer.Car = function( config, domElement ) {
                 wheel.object.children[0].children[0].rotation.x = wheel.spin;
             }
         }
+        if(this.rig) this.rig.update(this.vehicle);
         // the steering wheel of the model turns with the steering
         if(this.steeringWheel) {
             var sw = this.steeringWheel;

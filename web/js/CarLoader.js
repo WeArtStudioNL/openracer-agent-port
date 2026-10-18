@@ -190,6 +190,15 @@ OpenRacer.loadCarModel = function (config, onLoad, onError) {
         function finish(wheelObjects) {
             if(steering) tilt.add(steering.object);
             tilt.add(pivot);
+            // the moving parts of the suspension and the steering, when the model has them (SuspensionRig.js)
+            var rig = null;
+            if(OpenRacer.SuspensionRig) {
+                space.add(tilt);
+                space.updateMatrixWorld(true);
+                rig = OpenRacer.SuspensionRig.find(root, space, tilt, config);
+                space.remove(tilt);
+                if(rig) console.log("CarLoader: suspension rig with " + rig.count + " parts");
+            }
             // glTF models are made of physically based materials: they are lit by and reflect the surroundings of the
             // scene (scene.environment, see MaterialLibrary.js)
             [tilt].concat(wheelObjects).forEach(function (object) {
@@ -199,7 +208,7 @@ OpenRacer.loadCarModel = function (config, onLoad, onError) {
             });
             // the changes to the materials that were made in the car editor
             OpenRacer.applyMaterialOverrides(THREE, [tilt].concat(wheelObjects), config.materials);
-            onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1, steeringWheel: steering, measured: measured });
+            onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1, steeringWheel: steering, measured: measured, rig: rig });
         }
     }
 

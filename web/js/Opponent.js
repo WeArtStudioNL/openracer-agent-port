@@ -76,6 +76,7 @@ OpenRacer.Opponent = function (config, line, options) {
         self.body.add(model.tilt);
         scene.add(self.body);
         self.steeringWheel = model.steeringWheel || null;
+        self.rig = model.rig || null;
         for (var i = 0; i < 4; i++) {
             self.wheels[i].object = model.wheels[i];
             scene.add(model.wheels[i]);
@@ -264,6 +265,7 @@ OpenRacer.Opponent = function (config, line, options) {
             if (i < 2) wheel.turn(v.steerApplied);
             wheel.object.children[0].children[0].rotation.x = wheel.spin;
         }
+        if (this.rig) this.rig.update(v);
         if (this.steeringWheel) {
             var sw = this.steeringWheel;
             sw.object.quaternion.setFromAxisAngle(sw.axis, -v.steerApplied * (sw.degrees * Math.PI / 180) / this.maxTurn);
