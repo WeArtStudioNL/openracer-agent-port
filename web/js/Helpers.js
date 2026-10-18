@@ -86,8 +86,8 @@ function getGroundAt(x, z, hintY) {
 var uCoeff = {
     "road": { static: 1.2, kinetic: 1.06 },
     "track01": { static: 1.03, kinetic: 0.93 },
-    "grass": { static: 0.44, kinetic: 0.36 },
-    "ground": { static: 0.55, kinetic: 0.46 }
+    "grass": { static: 0.62, kinetic: 0.52 },     // about half the road: the car slows and slides, but it can be driven back
+    "ground": { static: 0.7, kinetic: 0.58 }
 };
 
 function getSurface(name) {

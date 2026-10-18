@@ -210,11 +210,15 @@ OpenRacer.Vehicle = function (parameters, input) {
     // called every step for a wheel: slidePower is the power the slip burns (W), fz the load (N), v the speed over the road (m/s)
     this.wearStep = function (w, dt, slidePower, fz, v, contact) {
         if(!this.wearEnabled) { w.temp = OPTIMUM; w.wear = Math.min(w.wear, 1); w.condition = 1; return; }
-        var heatIn = (slidePower * 1.8 + (contact ? fz * Math.abs(v) * 0.025 : 0)) * this.tyreHeating;
-        var cooling = (15 + 1.5 * Math.abs(v)) * (w.temp - this.ambient);
-        w.temp += (heatIn - cooling) / 4000 * dt;
-        var overheated = Math.max(0, (w.temp - (OPTIMUM + WINDOW)) / 30);
-        w.wear += slidePower * (1 + 2 * overheated) * dt / (2.2e6 * this.tyreLife) * this.wearScale;
+        // the power of the slip (tens of kW in a bend at the limit) and the flexing under the load heat the tyre; the air cools
+        // it (W/K, more the faster); the tread has a heat capacity of about 20 kJ/K, so it takes a minute or two to come up
+        var heatIn = (slidePower + (contact ? fz * Math.abs(v) * 0.025 : 0)) * this.tyreHeating;
+        var cooling = (40 + 3 * Math.abs(v)) * (w.temp - this.ambient);
+        w.temp += (heatIn - cooling) / 20000 * dt;
+        var overheated = Math.min(2, Math.max(0, (w.temp - (OPTIMUM + WINDOW)) / 30));
+        // a powerful car spins its wheels a lot: the slip when driving off counts less than a slide through a bend
+        var counted = Math.abs(v) < 8 ? slidePower * 0.35 : slidePower;
+        w.wear += counted * (1 + 2 * overheated) * dt / (6e6 * this.tyreLife) * this.wearScale;
         w.condition = conditionOf(w);
     };
 
@@ -792,7 +796,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 tyreTorque[iw] = -fxW * wheel.radius;
 
                 // rolling resistance (more on soft ground), not a torque on the wheel
-                var rr = wheel.rollingResistance * (surface.static < 0.5 ? 4 : 1) * fz * Math.tanh(vl / 0.3);
+                var rr = wheel.rollingResistance * (surface.static < 0.8 ? 4 : 1) * fz * Math.tanh(vl / 0.3);
                 fxW -= rr;
 
                 // the forces on the car, at the point of contact: the load along the normal, and the forces of the tyre along the road
