@@ -870,8 +870,11 @@ OpenRacer.Vehicle = function (parameters, input) {
 
                 // slip, with a relaxation length: the tyre needs to roll a bit before the slip builds up
                 var vref = Math.max(Math.abs(vl), 1.5);
-                var kappa = Math.max(-1.5, Math.min(1.5, (wheel.omega * wheel.radius - vl) / vref));
-                var tanA = Math.max(-1.5, Math.min(1.5, vt / vref));
+                // the slips are not cut off at the slip angle of a drift: a wheel that spins and slides sideways at the same time has to keep
+                // the direction of its slip (a cut at 1.5 made the rear of a car in a donut lose its sideways hold past 56 degrees, so
+                // the yaw ran away, the car spun round and started again: a stutter instead of a donut)
+                var kappa = Math.max(-12, Math.min(12, (wheel.omega * wheel.radius - vl) / vref));
+                var tanA = Math.max(-12, Math.min(12, vt / vref));
                 var a = 1 - Math.exp(-dt * vref / wheel.relaxation);
                 wheel.slipRatio += (kappa - wheel.slipRatio) * a;
                 wheel.slipTan += (tanA - wheel.slipTan) * a;
