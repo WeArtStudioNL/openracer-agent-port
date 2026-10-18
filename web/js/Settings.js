@@ -91,7 +91,8 @@ var Settings = (function() {
     var actionsById = {};
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
-    var DEFAULT_OPTIONS = { tc: true, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 1, volume: 0.8 };
+    var DEFAULT_OPTIONS = { tc: true, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 1, volume: 0.8,
+        padSlow: 1.5, padAssist: true };
 
     var bindings = {};      // action id -> list of inputs
     var options = {};
@@ -553,6 +554,57 @@ var Settings = (function() {
         return row;
     }
 
+    // a row with a slider: the value is shown next to it, formatted by text(value)
+    function sliderRow(label, name, min, max, step, text) {
+        var row = document.createElement("div");
+        row.className = "row";
+        var l = document.createElement("div");
+        l.className = "label";
+        l.textContent = label;
+        row.appendChild(l);
+        var inputs = document.createElement("div");
+        inputs.className = "inputs";
+        var input = document.createElement("input");
+        input.type = "range";
+        input.min = min; input.max = max; input.step = step;
+        input.value = options[name];
+        input.style.cssText = "width: 160px; vertical-align: middle;";
+        var value = document.createElement("span");
+        value.style.cssText = "display: inline-block; min-width: 150px; margin-left: 10px; color: #cfd8e3;";
+        value.textContent = text(options[name]);
+        input.oninput = function() { setOption(name, parseFloat(input.value)); value.textContent = text(options[name]); };
+        inputs.appendChild(input);
+        inputs.appendChild(value);
+        row.appendChild(inputs);
+        return row;
+    }
+
+    // a row with a check box
+    function checkRow(label, name, note) {
+        var row = document.createElement("div");
+        row.className = "row";
+        var l = document.createElement("div");
+        l.className = "label";
+        l.textContent = label;
+        row.appendChild(l);
+        var inputs = document.createElement("div");
+        inputs.className = "inputs";
+        var box = document.createElement("input");
+        box.type = "checkbox";
+        box.checked = !!options[name];
+        box.style.cssText = "width: 18px; height: 18px; vertical-align: middle; cursor: pointer;";
+        box.onchange = function() { setOption(name, box.checked); };
+        inputs.appendChild(box);
+        if(note) {
+            var span = document.createElement("span");
+            span.style.cssText = "margin-left: 10px; color: #9fb0c4; font-size: 13px;";
+            span.textContent = note;
+            inputs.appendChild(span);
+        }
+        row.appendChild(inputs);
+        return row;
+    }
+
     function renderMenu() {
         if(!menu) return;
         menu.innerHTML = "";
@@ -616,6 +668,16 @@ var Settings = (function() {
         page.appendChild(optionRow("ABS", options.abs ? "On" : "Off", function() { setOption("abs", !options.abs); }));
         var gearboxNames = { automatic: "Automatic (P R N D)", sequential: "Sequential (paddles)", manual: "Manual (H-shifter, clutch)" };
         page.appendChild(optionRow("Gearbox", gearboxNames[options.gearbox] || options.gearbox, function() { cycleGearbox(); }));
+        page = tabPage("Gamepad");
+        var padNote = document.createElement("div");
+        padNote.className = "sub";
+        padNote.textContent = "The stick is the steering one to one at a standstill. The faster the car goes, the slower the steering follows the stick, as with the keyboard: a flick at speed is a small movement of the wheels.";
+        page.appendChild(padNote);
+        page.appendChild(sliderRow("Slower at speed", "padSlow", 0, 4, 0.25, function(v) {
+            var at100 = 1 + v * (100 / 3.6) / 10;
+            return v === 0 ? "off: one to one at every speed" : at100.toFixed(1) + "× slower at 100 km/h";
+        }));
+        page.appendChild(checkRow("Steering assist", "padAssist", "when the rear steps out the front tyres steer into the slide by themselves, so it does not become a spin"));
         page = tabPage("Wheel");
         page.appendChild(optionRow("Wheel steering range", Math.round(options.wheelRange * 100) + "%",
             function() { setOption("wheelRange", options.wheelRange > 0.9 ? 0.75 : (options.wheelRange > 0.6 ? 0.5 : 1)); }));

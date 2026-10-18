@@ -373,7 +373,7 @@ OpenRacer.Car = function( config, domElement ) {
             this.place(startX, startZ, startHeading);
         }
         this.pollInput();
-        gamepadUpdate();
+        gamepadUpdate(delta);
         // on the grid before the start of a race: the brakes are on, the engine can be revved
         if(this.held) { this.brakePedal = 1; this.handbrake = true; this.accelerate = false; this.throttle = Math.min(this.throttle, 0.6); }
         // the clutch pedal works the clutch in the manual mode, once it is used or the shifter was moved

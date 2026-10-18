@@ -59,7 +59,8 @@ window.onmousemove = function(e) {
 // true while the regular gamepad is driving the throttle and brake
 var gamepadOwnsPedals = false;
 
-function gamepadUpdate() {
+function gamepadUpdate(delta) {
+    delta = delta || 1 / 60;
     // a racing wheel (with pedals and shifter) takes priority over a regular gamepad
     if(WheelControls.update(car)) {
         gamepadOwnsPedals = false;
@@ -79,7 +80,26 @@ function gamepadUpdate() {
 
     // An idle gamepad leaves the keyboard and mouse in control
     if(active || (usable && gamepadOwnsPedals)) {
-        car.turnAngle -= (car.turnAngle - (car.maxTurn * Math.pow(steer, 4) * getSign(steer))) / 3;
+        // The stick is the steering one to one at a standstill; the faster the car goes, the slower the steering follows the stick
+        // (like the keyboard), so a small movement at speed is a small movement of the wheels. "Slower at speed" of the gamepad
+        // options says how much: the rate is divided by 1 + slow * speed / 10 m/s.
+        var target = car.maxTurn * steer;
+        var v = car.vehicle;
+        var speed = v ? Math.abs(v.u) : 0;
+        // The steering assist: when the rear steps out, the front tyres want to point where the car goes (the way a car with a
+        // lot of caster steers itself into a slide), so the steering gets a counter-steer added before the slide is a spin.
+        if(Settings.option("padAssist") && v && speed > 3) {
+            var beta = Math.atan2(v.v, v.u);                 // the slip angle of the car: positive when it moves to the right of where it points
+            var dead = 0.035;                                  // two degrees of slip are normal cornering
+            var counter = Math.sign(beta) * Math.max(0, Math.abs(beta) - dead) * 1.1;
+            target += Math.max(-0.6 * car.maxTurn, Math.min(0.6 * car.maxTurn, counter));
+            target = Math.max(-car.maxTurn, Math.min(car.maxTurn, target));
+        }
+        var slow = Settings.option("padSlow");
+        var rate = 6 / (1 + (slow === undefined ? 1.5 : slow) * speed / 10);   // rad/s
+        var step = rate * delta;
+        if(Math.abs(target - car.turnAngle) <= step) car.turnAngle = target;
+        else car.turnAngle += Math.sign(target - car.turnAngle) * step;
         car.throttle = throttle;
         car.brakePedal = brake;
         gamepadOwnsPedals = active;
