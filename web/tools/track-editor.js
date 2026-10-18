@@ -441,6 +441,7 @@ const design = createDesign({
 });
 function startDesign(data) {
     clearTrack();
+    $("colour").checked = false; // a designed track is shown with its textures; the colours of the surfaces can be switched on
     design.enable(data);
     $("modes").classList.add("design");
     setMode("node");

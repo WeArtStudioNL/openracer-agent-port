@@ -15,43 +15,140 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 const UP = new THREE.Vector3(0, 1, 0);
 
-// ---- the prefabs: a function that makes the object (y = 0 is the ground), and the surface of its parts in the game
+// ---- the tileable textures (web/textures, made by tools/make-textures.py): the file, how many metres one tile covers, and the
+// roughness of the surface. The UVs of everything are in metres divided by the size, so a texture repeats seamlessly over a road of
+// any length and a wall of any size, and it goes into the glb with the track.
+const TEXTURE_PATH = "../textures/";
+const TEXTURES = {
+    asphalt: { label: "Asphalt", size: 4, roughness: 0.9 },
+    "asphalt-light": { label: "Light asphalt", size: 4, roughness: 0.9 },
+    concrete: { label: "Concrete", size: 3, roughness: 0.85 },
+    gravel: { label: "Gravel", size: 3, roughness: 1 },
+    grass: { label: "Grass", size: 6, roughness: 1 },
+    "grass-dry": { label: "Dry grass", size: 6, roughness: 1 },
+    dirt: { label: "Dirt", size: 6, roughness: 1 },
+    sand: { label: "Sand", size: 6, roughness: 1 },
+    brick: { label: "Brick", size: 2, roughness: 0.85 },
+    plaster: { label: "Plaster", size: 3, roughness: 0.8 },
+    roof: { label: "Roof tiles", size: 2.5, roughness: 0.8 },
+    wood: { label: "Wood", size: 2, roughness: 0.75 },
+    metal: { label: "Metal", size: 1.5, roughness: 0.45 },
+    rubber: { label: "Rubber", size: 0.5, roughness: 0.9 },
+    leaves: { label: "Leaves", size: 2, roughness: 1 },
+    bark: { label: "Bark", size: 1, roughness: 1 }
+};
+// the textures to choose from for the road, the shoulders, the ground and the prefabs that have a choice
+const TEXTURE_CHOICES = {
+    road: ["asphalt", "asphalt-light", "concrete", "gravel", "dirt"],
+    shoulder: ["grass", "grass-dry", "dirt", "gravel", "sand"],
+    ground: ["grass", "grass-dry", "dirt", "sand", "gravel"],
+    wall: ["concrete", "brick", "plaster", "wood", "metal"],
+    house: ["plaster", "brick", "wood", "concrete"],
+    grandstand: ["concrete", "metal", "wood"],
+    barrier: ["metal", "wood", "concrete"]
+};
+const DEFAULT_TEXTURES = { road: "asphalt", shoulder: "grass", ground: "grass" };
+
+const textureCache = new Map(), materialCache = new Map();
+let maxAnisotropy = 1;
+function texture(name) {
+    if (!textureCache.has(name)) {
+        const t = new THREE.TextureLoader().load(TEXTURE_PATH + name + ".jpg");
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.anisotropy = maxAnisotropy;
+        t.name = name;
+        t.userData.mimeType = "image/jpeg"; // the exporter keeps it a jpeg in the glb (a png would be six times the size)
+        textureCache.set(name, t);
+    }
+    return textureCache.get(name);
+}
+// a material with a texture (and a tint, white by default): one per texture and tint, so merged rows and the glb share them
+function textured(name, tint, side) {
+    const key = name + ":" + (tint === undefined ? "ffffff" : tint.toString(16)) + ":" + (side || 0);
+    if (!materialCache.has(key)) {
+        const def = TEXTURES[name];
+        const m = new THREE.MeshStandardMaterial({ map: texture(name), color: tint === undefined ? 0xffffff : tint, roughness: def.roughness, metalness: name === "metal" ? 0.3 : 0, side: side || THREE.FrontSide });
+        m.name = name;
+        materialCache.set(key, m);
+    }
+    return materialCache.get(key);
+}
+function material(color) { return typeof color === "string" ? textured(color) : new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0 }); }
+
+// UVs in metres from the position, on the axis that the face looks along (exact for a box: every face is tiled by its size)
+function worldUVs(geometry, size) {
+    const position = geometry.attributes.position, normal = geometry.attributes.normal, uv = geometry.attributes.uv;
+    for (let i = 0; i < position.count; i++) {
+        const nx = Math.abs(normal.getX(i)), ny = Math.abs(normal.getY(i)), nz = Math.abs(normal.getZ(i));
+        const x = position.getX(i), y = position.getY(i), z = position.getZ(i);
+        if (ny >= nx && ny >= nz) uv.setXY(i, x / size, z / size);
+        else if (nx >= nz) uv.setXY(i, z / size, y / size);
+        else uv.setXY(i, x / size, y / size);
+    }
+    uv.needsUpdate = true;
+    return geometry;
+}
+function scaleUVs(geometry, su, sv) {
+    const uv = geometry.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv);
+    return geometry;
+}
+function sizeOf(tex) { return typeof tex === "string" ? TEXTURES[tex].size : 1; }
+function box(w, h, d, tex, x, y, z) {
+    const g = new THREE.BoxGeometry(w, h, d);
+    if (typeof tex === "string") worldUVs(g, sizeOf(tex));
+    const m = new THREE.Mesh(g, material(tex)); m.position.set(x, y, z); return m;
+}
+function cylinder(r, h, tex, x, y, z) {
+    const g = new THREE.CylinderGeometry(r, r, h, 16);
+    if (typeof tex === "string") scaleUVs(g, 2 * Math.PI * r / sizeOf(tex), h / sizeOf(tex));
+    const m = new THREE.Mesh(g, material(tex)); m.position.set(x, y, z); return m;
+}
+function cone(r, h, segments, tex) {
+    const g = new THREE.ConeGeometry(r, h, segments);
+    if (typeof tex === "string") scaleUVs(g, Math.PI * r / sizeOf(tex), Math.hypot(r, h) / sizeOf(tex));
+    return new THREE.Mesh(g, material(tex));
+}
+
+// ---- the prefabs: a function that makes the object (y = 0 is the ground; t is the chosen texture of the prefabs that have a
+// choice, see TEXTURE_CHOICES), and the surface of its parts in the game
 const PREFABS = {
-    wall: { label: "Wall", icon: "▬", role: "scenery", make: () => {
+    wall: { label: "Wall", icon: "▬", role: "scenery", make: (t) => {
         const g = new THREE.Group();
-        g.add(box(4, 1, 0.3, 0xd8d8d2, 0, 0.5, 0));
+        g.add(box(4, 1, 0.3, t || "concrete", 0, 0.5, 0));
         return g;
     } },
-    barrier: { label: "Barrier", icon: "═", role: "scenery", make: () => {
+    barrier: { label: "Barrier", icon: "═", role: "scenery", make: (t) => {
         const g = new THREE.Group();
-        g.add(box(4, 0.35, 0.08, 0xb9bec6, 0, 0.6, 0));
-        g.add(box(0.1, 0.75, 0.1, 0x6a6f78, -1.9, 0.375, 0));
-        g.add(box(0.1, 0.75, 0.1, 0x6a6f78, 1.9, 0.375, 0));
+        g.add(box(4, 0.35, 0.08, t || "metal", 0, 0.6, 0));
+        g.add(box(0.1, 0.75, 0.1, "metal", -1.9, 0.375, 0));
+        g.add(box(0.1, 0.75, 0.1, "metal", 1.9, 0.375, 0));
         return g;
     } },
     tyres: { label: "Tyre stack", icon: "◎", role: "scenery", make: () => {
         const g = new THREE.Group();
-        for (let i = 0; i < 4; i++) g.add(cylinder(0.36, 0.22, i === 3 ? 0xc53b32 : 0x1e2024, 0, 0.11 + i * 0.22, 0));
+        for (let i = 0; i < 4; i++) g.add(cylinder(0.36, 0.22, i === 3 ? 0xc53b32 : "rubber", 0, 0.11 + i * 0.22, 0));
         return g;
     } },
     tyrewall: { label: "Tyre wall", icon: "◎◎◎", role: "scenery", make: () => {
         const g = new THREE.Group();
-        for (let s = -1; s <= 1; s++) for (let i = 0; i < 3; i++) g.add(cylinder(0.36, 0.22, (i + s) % 2 ? 0x1e2024 : 0xe8e8e0, s * 0.75, 0.11 + i * 0.22, 0));
+        for (let s = -1; s <= 1; s++) for (let i = 0; i < 3; i++) g.add(cylinder(0.36, 0.22, (i + s) % 2 ? "rubber" : 0xe8e8e0, s * 0.75, 0.11 + i * 0.22, 0));
         return g;
     } },
     cone: { label: "Cone", icon: "▲", role: "decor", make: () => {
         const g = new THREE.Group();
-        const c = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.7, 12), material(0xf26b1d));
+        const c = cone(0.2, 0.7, 12, 0xf26b1d);
         c.position.y = 0.35;
         g.add(c);
-        g.add(box(0.45, 0.03, 0.45, 0x222222, 0, 0.015, 0));
+        g.add(box(0.45, 0.03, 0.45, "rubber", 0, 0.015, 0));
         return g;
     } },
     tree: { label: "Tree", icon: "♣", role: "scenery", make: () => {
         const g = new THREE.Group();
-        g.add(cylinder(0.18, 2.2, 0x6b4a2b, 0, 1.1, 0));
+        g.add(cylinder(0.18, 2.2, "bark", 0, 1.1, 0));
         for (let i = 0; i < 3; i++) {
-            const c = new THREE.Mesh(new THREE.ConeGeometry(1.8 - i * 0.4, 2.2, 10), material(i % 2 ? 0x2f7a35 : 0x3a8f3f));
+            const c = cone(1.8 - i * 0.4, 2.2, 10, "leaves");
             c.position.y = 2.6 + i * 1.3;
             g.add(c);
         }
@@ -59,49 +156,45 @@ const PREFABS = {
     } },
     bush: { label: "Bush", icon: "●", role: "decor", make: () => {
         const g = new THREE.Group();
-        const b = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 9), material(0x3f8a3c));
+        const b = new THREE.Mesh(scaleUVs(new THREE.SphereGeometry(0.9, 12, 9), 2 * Math.PI * 0.9 / 2, Math.PI * 0.9 / 2), material("leaves"));
         b.scale.set(1.2, 0.8, 1);
         b.position.y = 0.6;
         g.add(b);
         return g;
     } },
-    house: { label: "House", icon: "⌂", role: "scenery", make: () => {
+    house: { label: "House", icon: "⌂", role: "scenery", make: (t) => {
         const g = new THREE.Group();
-        g.add(box(8, 3.2, 6, 0xd9c7a8, 0, 1.6, 0));
-        const roof = new THREE.Mesh(new THREE.ConeGeometry(5.6, 2.4, 4), material(0x9a3b32));
+        g.add(box(8, 3.2, 6, t || "plaster", 0, 1.6, 0));
+        const roof = cone(5.6, 2.4, 4, "roof");
         roof.position.y = 4.4;
         roof.rotation.y = Math.PI / 4;
         roof.scale.set(1, 1, 0.75);
         g.add(roof);
-        g.add(box(1, 2.1, 0.1, 0x4a3a2a, 0, 1.05, 3.05));
+        g.add(box(1, 2.1, 0.1, "wood", 0, 1.05, 3.05));
         return g;
     } },
-    grandstand: { label: "Grandstand", icon: "▤", role: "scenery", make: () => {
+    grandstand: { label: "Grandstand", icon: "▤", role: "scenery", make: (t) => {
         const g = new THREE.Group();
-        for (let i = 0; i < 5; i++) g.add(box(16, 0.6, 1.4, i % 2 ? 0x6c7484 : 0x7b8596, 0, 0.3 + i * 0.6, -i * 1.4));
-        g.add(box(16, 0.2, 7, 0x3c4350, 0, 4.2, -2.8));
-        for (const x of [-7.5, 7.5]) for (const z of [0.2, -5.8]) g.add(box(0.2, 4.2, 0.2, 0x3c4350, x, 2.1, z));
+        for (let i = 0; i < 5; i++) g.add(box(16, 0.6, 1.4, t || "concrete", 0, 0.3 + i * 0.6, -i * 1.4));
+        g.add(box(16, 0.2, 7, "metal", 0, 4.2, -2.8));
+        for (const x of [-7.5, 7.5]) for (const z of [0.2, -5.8]) g.add(box(0.2, 4.2, 0.2, "metal", x, 2.1, z));
         return g;
     } },
     lamp: { label: "Lamp post", icon: "¡", role: "scenery", make: () => {
         const g = new THREE.Group();
-        g.add(cylinder(0.08, 7, 0x8a9099, 0, 3.5, 0));
-        g.add(box(1.2, 0.15, 0.3, 0x8a9099, 0.5, 7, 0));
+        g.add(cylinder(0.08, 7, "metal", 0, 3.5, 0));
+        g.add(box(1.2, 0.15, 0.3, "metal", 0.5, 7, 0));
         g.add(box(0.5, 0.1, 0.25, 0xfff2b0, 0.95, 6.9, 0));
         return g;
     } },
     sign: { label: "Sign board", icon: "▭", role: "decor", make: () => {
         const g = new THREE.Group();
         g.add(box(6, 1.2, 0.08, 0x2d5fbf, 0, 1.8, 0));
-        g.add(box(0.1, 1.2, 0.1, 0x8a9099, -2.8, 0.6, 0));
-        g.add(box(0.1, 1.2, 0.1, 0x8a9099, 2.8, 0.6, 0));
+        g.add(box(0.1, 1.2, 0.1, "metal", -2.8, 0.6, 0));
+        g.add(box(0.1, 1.2, 0.1, "metal", 2.8, 0.6, 0));
         return g;
     } }
 };
-
-function material(color) { return new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0 }); }
-function box(w, h, d, color, x, y, z) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material(color)); m.position.set(x, y, z); return m; }
-function cylinder(r, h, color, x, y, z) { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 16), material(color)); m.position.set(x, y, z); return m; }
 
 function defaultDesign() {
     // an oval to start from
@@ -110,7 +203,7 @@ function defaultDesign() {
         const a = i / 8 * Math.PI * 2;
         nodes.push({ x: Math.round(Math.cos(a) * 120), y: 0, z: Math.round(Math.sin(a) * 70), width: 12 });
     }
-    return { nodes, closed: true, prefabs: [] };
+    return { nodes, closed: true, prefabs: [], textures: Object.assign({}, DEFAULT_TEXTURES) };
 }
 
 export function createDesign(api) {
@@ -166,14 +259,17 @@ export function createDesign(api) {
         return data.nodes[n - 1].width;
     }
 
-    function strip(name, left, right, color, role, roughness) {
-        // a ribbon between two rows of points, closed or not
+    function strip(name, left, right, tex, role, along) {
+        // a ribbon between two rows of points, closed or not; the texture is tiled in metres: across by the width of the ribbon
+        // there, along by the distance along the road (along[i])
         const count = left.length;
         const closed = design.data.closed;
+        const size = TEXTURES[tex].size;
         const positions = [], uvs = [], indices = [];
         for (let i = 0; i < count; i++) {
             positions.push(left[i].x, left[i].y, left[i].z, right[i].x, right[i].y, right[i].z);
-            uvs.push(0, i * 0.1, 1, i * 0.1);
+            const v = along[i] / size;
+            uvs.push(0, v, left[i].distanceTo(right[i]) / size, v);
         }
         const segments = closed ? count : count - 1;
         for (let i = 0; i < segments; i++) {
@@ -185,10 +281,15 @@ export function createDesign(api) {
         geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
         geometry.setIndex(indices);
         geometry.computeVertexNormals();
-        const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color, roughness: roughness || 0.95, metalness: 0, side: THREE.DoubleSide }));
+        const mesh = new THREE.Mesh(geometry, textured(tex, undefined, THREE.DoubleSide));
         mesh.name = name;
         mesh.userData.role = role;
         return mesh;
+    }
+
+    function textureOf(what) {
+        const chosen = design.data.textures && design.data.textures[what];
+        return TEXTURES[chosen] ? chosen : DEFAULT_TEXTURES[what];
     }
 
     let lastTerrain = null;
@@ -208,8 +309,10 @@ export function createDesign(api) {
         let minY = Infinity;
         const bounds = new THREE.Box2();
         const centreLine = []; // { x, z, y, reach }: the road and its shoulders, for the terrain
+        const along = [];      // the distance along the road at every sample, for the textures
         for (let i = 0; i < count; i++) {
             const u = data.closed ? i / samples : i / samples;
+            along.push(Math.min(1, u) * length);
             const p = curve.getPointAt(Math.min(1, u));
             const tangent = curve.getTangentAt(Math.min(1, u)).setY(0).normalize();
             const side = new THREE.Vector3().crossVectors(UP, tangent).normalize();
@@ -226,9 +329,9 @@ export function createDesign(api) {
             bounds.expandByPoint(new THREE.Vector2(p.x, p.z));
             centreLine.push({ x: p.x, z: p.z, y: p.y, reach: w + 14 });
         }
-        const road = strip("road", left, right, 0x40444b, "road", 0.9);
-        const shoulderLeft = strip("shoulder_left", shoulderL, left, 0x4e8a3e, "grass");
-        const shoulderRight = strip("shoulder_right", right, shoulderR, 0x4e8a3e, "grass");
+        const road = strip("road", left, right, textureOf("road"), "road", along);
+        const shoulderLeft = strip("shoulder_left", shoulderL, left, textureOf("shoulder"), "grass", along);
+        const shoulderRight = strip("shoulder_right", right, shoulderR, textureOf("shoulder"), "grass", along);
         // the kerbs: red and white every 4 metres
         const kerbs = [];
         const step = Math.max(1, Math.round(4 / (length / count)));
@@ -293,10 +396,14 @@ export function createDesign(api) {
             return v;
         };
         const positions = new Float32Array(nx * nz * 3);
-        let n = 0;
+        const uvs = new Float32Array(nx * nz * 2);
+        const tex = textureOf("ground");
+        const texSize = TEXTURES[tex].size;
+        let n = 0, nuv = 0;
         for (let j = 0; j < nz; j++) {
             for (let i = 0; i < nx; i++) {
                 const x = minX + i * cell, z = minZ + j * cell;
+                uvs[nuv++] = x / texSize; uvs[nuv++] = z / texSize;
                 let weightSum = 0, heightSum = 0, nearest = Infinity, under = Infinity;
                 const bx = Math.floor(x / bucket), bz = Math.floor(z / bucket);
                 for (let dx = -cells; dx <= cells; dx++) {
@@ -340,9 +447,10 @@ export function createDesign(api) {
         }
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
         geometry.setIndex(indices);
         geometry.computeVertexNormals();
-        const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0x7f6f4a, roughness: 1 }));
+        const mesh = new THREE.Mesh(geometry, textured(tex));
         mesh.name = "ground";
         mesh.userData.role = "ground";
         return mesh;
@@ -519,7 +627,7 @@ export function createDesign(api) {
     }
 
     function instance(def, p, x, y, z, rotation, scale, name, normal) {
-        const g = def.make();
+        const g = def.make(TEXTURES[p.texture] ? p.texture : undefined);
         g.position.set(x, y, z);
         orient(g, normal, rotation);
         g.scale.setScalar(scale || 1);
@@ -563,10 +671,11 @@ export function createDesign(api) {
                 c.updateMatrixWorld(true);
                 c.traverse((m) => {
                     if (!m.isMesh) return;
-                    const key = m.material.color.getHex();
-                    if (!byColour.has(key)) byColour.set(key, { material: m.material, geometries: [] });
+                    const key = m.material.uuid; // the textured materials are shared, a colour is one per mesh
+                    const colourKey = m.material.map ? key : "c" + m.material.color.getHex();
+                    if (!byColour.has(colourKey)) byColour.set(colourKey, { material: m.material, geometries: [] });
                     const geometry = m.geometry.clone().applyMatrix4(m.matrixWorld);
-                    byColour.get(key).geometries.push(geometry);
+                    byColour.get(colourKey).geometries.push(geometry);
                 });
             });
             byColour.forEach((entry) => {
@@ -585,7 +694,7 @@ export function createDesign(api) {
             g.position.set(p.x, p.y, p.z);
             orient(g, ground.normal, p.rotation);
             g.scale.setScalar(p.scale || 1);
-            const body = def.make();
+            const body = def.make(TEXTURES[p.texture] ? p.texture : undefined);
             body.traverse((m) => { if (m.isMesh) { m.name = name; m.userData.role = def.role; } });
             g.add(body);
         }
@@ -707,6 +816,19 @@ export function createDesign(api) {
         $("dsPrefabRotation").value = Math.round((p.rotation || 0) * 180 / Math.PI);
         $("dsPrefabSpacing").value = p.spacing || SPACING[p.type] || 4;
         $("dsPrefabScale").value = p.scale || 1;
+        // the texture, for the prefabs that have a choice
+        const choices = TEXTURE_CHOICES[p.type];
+        $("dsPrefabTextureBox").style.display = choices ? "" : "none";
+        if (choices) fillTextureSelect($("dsPrefabTexture"), choices, TEXTURES[p.texture] ? p.texture : choices[0]);
+    }
+
+    function fillTextureSelect(select, choices, value) {
+        select.innerHTML = choices.map((name) => '<option value="' + name + '">' + TEXTURES[name].label + "</option>").join("");
+        select.value = value;
+    }
+
+    function fillTextureFields() {
+        ["road", "shoulder", "ground"].forEach((what) => fillTextureSelect($("dsTex" + what), TEXTURE_CHOICES[what], textureOf(what)));
     }
 
     function renderRowPoints() {
@@ -951,6 +1073,10 @@ export function createDesign(api) {
     $("dsNodeWidth").addEventListener("input", () => { if (design.selectedNode >= 0) { design.data.nodes[design.selectedNode].width = Math.max(3, parseFloat($("dsNodeWidth").value) || 12); scheduleRebuild(); commitSoon(); } });
     $("dsWidth").addEventListener("change", () => { if (!design.data) return; const w = Math.max(3, parseFloat($("dsWidth").value) || 12); design.data.nodes.forEach((n) => { n.width = w; }); rebuild(); fillNodeFields(); commit(); });
     $("dsClosed").addEventListener("change", () => { if (design.data) { design.data.closed = $("dsClosed").checked; rebuild(); commit(); } });
+    ["road", "shoulder", "ground"].forEach((what) => {
+        $("dsTex" + what).addEventListener("change", () => { if (design.data) { design.data.textures[what] = $("dsTex" + what).value; rebuild(what === "ground"); commit(); } });
+    });
+    $("dsPrefabTexture").addEventListener("change", () => { const p = design.data.prefabs[design.selectedPrefab]; if (p) { p.texture = $("dsPrefabTexture").value; refreshPrefab(design.selectedPrefab); commit(); } });
     $("dsFlatten").onclick = () => { if (design.data) { design.data.nodes.forEach((n) => { n.y = 0; }); rebuild(); fillNodeFields(); commit(); } };
     $("dsDeleteNode").onclick = deleteNode;
     $("dsAddNode").onclick = () => api.setMode("node");
@@ -971,8 +1097,11 @@ export function createDesign(api) {
     // ---- enable, disable, save, load
     function enable(data) {
         design.data = data || defaultDesign();
+        if (!design.data.textures) design.data.textures = Object.assign({}, DEFAULT_TEXTURES);
+        maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
         design.selectedNode = -1;
         design.selectedPrefab = null;
+        fillTextureFields();
         if (!trackGroup.children.includes(roadGroup)) trackGroup.add(roadGroup);
         if (!trackGroup.children.includes(prefabGroup)) trackGroup.add(prefabGroup);
         state.legacy = false;
