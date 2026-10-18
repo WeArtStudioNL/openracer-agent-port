@@ -1,6 +1,6 @@
 {
   "name": "Drift Mustang",
-  "description": "The Mach 1 built to go sideways: 480 hp, a welded diff, 55 degrees of lock, a soft front and hard rear tyres that let go first",
+  "description": "The Mach 1 built to go sideways: 380 hp, a welded diff, 55 degrees of lock, a soft front and hard rear tyres that let go first",
   "model": {
     "type": "legacy",
     "body": "models/mustang.json",

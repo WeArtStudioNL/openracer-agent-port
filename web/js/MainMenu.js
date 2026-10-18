@@ -86,7 +86,8 @@ var MainMenu = (function() {
         var curve = (car.engine && car.engine.torque_curve) || [];
         var peak = 0;
         curve.forEach(function(point) { peak = Math.max(peak, point[1] * point[0] * Math.PI / 30 / 745.7); });
-        return Math.round(peak);
+        var scale = car.engine && car.engine.power_scale !== undefined ? car.engine.power_scale : 1; // the tuning that is in the car
+        return Math.round(peak * scale);
     }
 
     function carSpecs(car) {
