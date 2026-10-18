@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OpenRacer: a racing simulator in your browser</title>
+    <meta name="description" content="OpenRacer is an open-source racing simulator that runs in the browser, with a physics model of the whole car, a car editor, a track editor and racing wheel support.">
+    <link rel="stylesheet" href="site.css">
+</head>
+<body>
+<header class="top">
+    <div class="in">
+        <a class="brand" href="./"><i></i>OpenRacer</a>
+        <nav>
+            <a class="on" href="./">Home</a>
+            <a href="docs.html">Docs</a>
+            <a class="hide-s" href="https://github.com/WeArtStudioNL/openracer-agent-port">Fork</a>
+            <a class="play" href="game/">Play</a>
+        </nav>
+    </div>
+</header>
+
+<main>
+<section class="hero">
+    <div class="wrap">
+        <div class="kicker">Open source · GPLv3 · runs in the browser</div>
+        <h1>A racing simulator<br>that lives in <span>a tab</span>.</h1>
+        <p class="lead">OpenRacer simulates the whole car: a body on springs, four tyres that heat up and wear out, a clutch, a gearbox and differentials. You can drive it with the keyboard, a gamepad or a racing wheel with force feedback, race against AI cars, and build your own cars and tracks.</p>
+        <div class="row">
+            <a class="btn primary" href="game/">Play the game</a>
+            <a class="btn" href="docs.html">Read the docs</a>
+            <a class="btn" href="https://github.com/WeArtStudioNL/openracer-agent-port">The fork on GitHub</a>
+        </div>
+    </div>
+</section>
+
+<section class="block" id="about">
+    <div class="wrap">
+        <h2>About the project</h2>
+        <p class="intro">OpenRacer started as an open-source initiative by Chris Barnard to build a high-quality racing simulation that runs in the browser. This site is about a fork of it, in which the driving model, the racing and the tools have been taken a long way further. The game needs no installation: it is a static web app that uses WebGL, so any recent browser will do.</p>
+        <div class="grid">
+            <div class="card"><span class="tag">Physics</span><h3>A car, not a sprite</h3><p>A rigid body with a quarter-car suspension at every corner, a combined-slip tyre model with load, pressure, camber, toe, heat and wear, and a driveline with clutch, gearbox and differentials.</p></div>
+            <div class="card"><span class="tag">Racing</span><h3>Races with a result</h3><p>Standing starts with a countdown, laps, AI opponents on a racing line, a ghost of your best lap, lap records, fuel, tyre wear and pit stops.</p></div>
+            <div class="card"><span class="tag">Controls</span><h3>Keyboard to racing wheel</h3><p>Every action can have a key, a gamepad button and a wheel input at once. Wheels with force feedback work through WebHID, with the torque worked out from the physics.</p></div>
+            <div class="card"><span class="tag">Tools</span><h3>Make your own</h3><p>A car editor with a live test bench, a track editor that can also draw a track from nothing, and a tuning menu that changes everything while you drive.</p></div>
+            <div class="card"><span class="tag">Sound</span><h3>Calculated engine sound</h3><p>The sound comes from the gas in the cylinders and the exhaust, a port of parts of engine-sim to an AudioWorklet, not from a loop.</p></div>
+            <div class="card"><span class="tag">Garage</span><h3>Yours stays yours</h3><p>Cars and tracks you make or import live in your own browser or in a folder on your PC. Nothing is uploaded to the server.</p></div>
+        </div>
+    </div>
+</section>
+
+<section class="block" id="repos">
+    <div class="wrap">
+        <h2>The original and the fork</h2>
+        <p class="intro">Both are on GitHub and both are GPLv3. The original is the project that Chris Barnard began. The fork is where the work shown on this site has been done.</p>
+        <div class="two">
+            <a class="card repo" href="https://github.com/digi-chris/OpenRacer">
+                <span class="tag">The original</span>
+                <h3>digi-chris/OpenRacer</h3>
+                <p>The open-source racing simulation by Chris Barnard (digi-chris), with the demo Mustang and its first track.</p>
+                <span class="url">github.com/digi-chris/OpenRacer</span>
+            </a>
+            <a class="card repo" href="https://github.com/WeArtStudioNL/openracer-agent-port">
+                <span class="tag">The fork</span>
+                <h3>WeArtStudioNL/openracer-agent-port</h3>
+                <p>The fork with the new physics, racing, editors, wheel support, garage and the rest of what the docs describe.</p>
+                <span class="url">github.com/WeArtStudioNL/openracer-agent-port</span>
+            </a>
+        </div>
+    </div>
+</section>
+
+<section class="block" id="fork">
+    <div class="wrap">
+        <h2>What the fork adds</h2>
+        <div class="grid">
+            <div class="card"><h3>Vehicle physics</h3><p>Quarter-car suspension, Ackermann, aero per axle, roll centres, camber, toe, tyre pressure, a combined-slip tyre, turbo, ESC and traction control. A bench runs the road tests of every car.</p></div>
+            <div class="card"><h3>Race format</h3><p>Laps, a 3-2-1 start, results, AI difficulty levels, ghost laps, records, fuel, tyre temperature and wear, pit lane stops.</p></div>
+            <div class="card"><h3>Input</h3><p>Steering that slows with speed on keyboard and gamepad, a gamepad steering assist, racing wheels with calibration, an H-pattern shifter and force feedback.</p></div>
+            <div class="card"><h3>Car editor</h3><p>Import a glb, find the wheels, set cameras and materials, tune everything, and test it on a bench with a drop, a shake and a full test.</p></div>
+            <div class="card"><h3>Track editor</h3><p>Import a model or draw a loop of nodes, add tileable textures and prefabs, place gates, set the sky and sun, and record the AI racing line.</p></div>
+            <div class="card"><h3>Suspension rig</h3><p>Name the parts of a model (wishbones, springs, tie rods, a live axle) and they move with the real suspension and steering.</p></div>
+            <div class="card"><h3>Skidpad</h3><p>A round pad that drives your car round by itself until it lets go and tells you the g it held.</p></div>
+            <div class="card"><h3>Local garage</h3><p>The game ships a standard set. Players keep their own cars and tracks in the browser or in a folder, and pass them on as zip files.</p></div>
+        </div>
+    </div>
+</section>
+
+<section class="block" id="ai">
+    <div class="wrap">
+        <h2>Built with Claude</h2>
+        <p class="intro">The fork was developed together with AI. The code, the physics, the editors and the documentation of the fork were written in conversation with these Claude models from Anthropic:</p>
+        <div class="models">
+            <span class="pill">Claude Fable</span>
+            <span class="pill">Claude Sonnet 5.5</span>
+        </div>
+        <p class="intro">The work was done in Claude Code, step by step: an idea, a change, a test in the browser or in the physics bench, and a commit. Glenn Hofman set the direction, drove the result and decided what was good, and the models wrote and tested most of the code. The original project and its first code are the work of Chris Barnard.</p>
+        <div class="note">The history of how it was built is in the commit log of the fork, and every commit by the models says so in its message.</div>
+    </div>
+</section>
+
+<section class="block" id="run">
+    <div class="wrap">
+        <h2>Run it yourself</h2>
+        <p class="intro">The game here is hosted as plain files. To make cars and tracks with the editors on your own machine, run the small helper server from a checkout of the fork:</p>
+<pre><code>git clone https://github.com/WeArtStudioNL/openracer-agent-port.git
+cd openracer-agent-port
+./start-server.sh        # opens http://localhost:8000</code></pre>
+        <p>More in the <a href="docs.html#running">docs</a>.</p>
+    </div>
+</section>
+</main>
+
+<footer class="site">
+    <div class="wrap">
+        <span>OpenRacer is released under the GPLv3 license.</span>
+        <span><a href="https://github.com/digi-chris/OpenRacer">Original</a> · <a href="https://github.com/WeArtStudioNL/openracer-agent-port">Fork</a> · <a href="docs.html">Docs</a></span>
+    </div>
+</footer>
+</body>
+</html>
