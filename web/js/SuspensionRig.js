@@ -113,11 +113,12 @@ OpenRacer.SuspensionRig = (function () {
 
     var q = new THREE.Quaternion(), tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 
-    // the travel of a wheel upwards from its rest position (m), from the quarter car
+    // the travel of a wheel upwards from where the model has it (m), from the quarter car. The model is the car as made, so a ride
+    // height that is set in the tuning shows as the wheels sitting further out (longer springs, arms swung down), with the
+    // upright still on the wheel, instead of the parts staying where they were modelled while the wheel moves away from them.
     function travelOf(vehicle, wheel) {
         var w = vehicle.wheels[wheel];
-        var rest = w.restLengthWheel !== undefined ? w.restLengthWheel : vehicle.restLength;
-        return rest - (w.susLength !== undefined ? w.susLength : rest);
+        return vehicle.restLength - (w.susLength !== undefined ? w.susLength : vehicle.restLength);
     }
 
     function update(rig, vehicle) {
