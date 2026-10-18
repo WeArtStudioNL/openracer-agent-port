@@ -58,6 +58,9 @@ window.onmousemove = function(e) {
 
 // true while the regular gamepad is driving the throttle and brake
 var gamepadOwnsPedals = false;
+// true once the gamepad has been used, until a key of the keyboard steers or drives: the steering (and its assist) then follows
+// the pad every frame, also with the stick centred and the throttle off (a car that coasts into a slide needs the assist too)
+var gamepadOwnsSteering = false;
 
 function gamepadUpdate(delta) {
     delta = delta || 1 / 60;
@@ -77,9 +80,11 @@ function gamepadUpdate(delta) {
     var throttle = usable ? Settings.controllerAnalog("throttle") : 0;
     var brake = usable ? Settings.controllerAnalog("brake") : 0;
     var active = usable && (throttle > 0.05 || brake > 0.05 || Math.abs(steer) > 0.1);
+    if(active) gamepadOwnsSteering = true;
+    if(!usable || car.turnLeft || car.turnRight || car.accelerate || car.brake) gamepadOwnsSteering = false; // the keyboard takes over
 
     // An idle gamepad leaves the keyboard and mouse in control
-    if(active || (usable && gamepadOwnsPedals)) {
+    if(active || (usable && (gamepadOwnsPedals || gamepadOwnsSteering))) {
         // The stick is the steering one to one at a standstill; the faster the car goes, the slower the steering follows the stick
         // (like the keyboard), so a small movement at speed is a small movement of the wheels. "Slower at speed" of the gamepad
         // options says how much: the rate is divided by 1 + slow * speed / 10 m/s.
@@ -100,8 +105,11 @@ function gamepadUpdate(delta) {
         var step = rate * delta;
         if(Math.abs(target - car.turnAngle) <= step) car.turnAngle = target;
         else car.turnAngle += Math.sign(target - car.turnAngle) * step;
-        car.throttle = throttle;
-        car.brakePedal = brake;
+        // the pedals only while the pad drives (or just stopped driving), so that a pad that rests does not hold them at zero
+        if(active || gamepadOwnsPedals) {
+            car.throttle = throttle;
+            car.brakePedal = brake;
+        }
         gamepadOwnsPedals = active;
         usingGamepad = true;
     } else {
