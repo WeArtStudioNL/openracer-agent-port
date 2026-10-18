@@ -222,6 +222,8 @@ OpenRacer.Opponent = function (config, line, options) {
         this.vehicle.updateControls(delta);
         this.vehicle.update(delta);
         this.pit.update(delta);
+        var marks = OpenRacer.skidMarks && OpenRacer.skidMarks();
+        if (marks) marks.update(this.vehicle);
         // laps: the fraction of the line wraps around, after the car went round (not when it dithers at the line)
         var fraction = line ? line.fractionOf(this.lineIndex) : 0;
         if (fraction < 0.2 && lastFraction > 0.8 && maxFraction > 0.5) {
