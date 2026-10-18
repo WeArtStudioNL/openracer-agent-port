@@ -36,7 +36,7 @@ var MainMenu = (function() {
         style.textContent =
             "#mainMenu { position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 3000; overflow-y: auto; color: #fff; " +
             "font-family: Arial, sans-serif; background: linear-gradient(180deg, #14181f 0%, #25303f 100%); }" +
-            "#mainMenu .wrap { max-width: 1000px; margin: 0 auto; padding: 36px 28px 60px; }" +
+            "#mainMenu .wrap { max-width: 1240px; margin: 0 auto; padding: 36px 28px 60px; }" +
             "#mainMenu h1 { font-size: 44px; margin: 0; letter-spacing: 2px; }" +
             "#mainMenu .tag { color: #8fa3bd; margin: 4px 0 28px; }" +
             "#mainMenu .columns { display: flex; gap: 32px; flex-wrap: wrap; }" +
@@ -49,7 +49,9 @@ var MainMenu = (function() {
             "#mainMenu .card .info { color: #9aa8ba; font-size: 14px; margin-top: 4px; }" +
             "#mainMenu .card .specs { color: #7e90a6; font-size: 13px; margin-top: 6px; }" +
             // the cars: square tiles with the turning model of the car on a dark radial gradient, the text over it
-            "#mainMenu .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }" +
+            "#mainMenu .cars { margin-bottom: 30px; }" +
+            "#mainMenu .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }" +
+            "@media (max-width: 900px) { #mainMenu .tiles { grid-template-columns: repeat(2, 1fr); } }" +
             "#mainMenu .tile { position: relative; aspect-ratio: 1; border: 2px solid #2c3541; border-radius: 10px; overflow: hidden; cursor: pointer; " +
             "background: radial-gradient(circle at 50% 58%, #62676e 0%, #2b2f36 48%, #000000 100%); }" +
             "#mainMenu .tile:hover { border-color: #4a5a70; }" +
@@ -58,7 +60,7 @@ var MainMenu = (function() {
             "#mainMenu .tile .over { position: absolute; left: 0; top: 0; right: 0; bottom: 0; padding: 12px 14px; pointer-events: none; display: flex; flex-direction: column; " +
             "text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9); background: linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0) 38%, rgba(0, 0, 0, 0) 70%, rgba(0, 0, 0, 0.55) 100%); }" +
             "#mainMenu .tile .name { font-size: 19px; font-weight: bold; }" +
-            "#mainMenu .tile .info { color: #c9d3df; font-size: 13px; margin-top: 2px; line-height: 1.3; }" +
+            "#mainMenu .tile .info { color: #c9d3df; font-size: 13px; margin-top: 2px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }" +
             "#mainMenu .tile .bottom { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; }" +
             "#mainMenu .tile .hp { font-size: 26px; font-weight: bold; line-height: 1; white-space: nowrap; }" +
             "#mainMenu .tile .hp small { font-size: 12px; font-weight: normal; color: #9fb0c4; letter-spacing: 1px; margin-left: 4px; }" +
@@ -265,18 +267,19 @@ var MainMenu = (function() {
         var wrap = document.createElement("div");
         wrap.className = "wrap";
         wrap.innerHTML = "<h1>OpenRacer</h1><div class=\"tag\">Choose a car and a track</div>";
-        var columns = document.createElement("div");
-        columns.className = "columns";
-
-        var carColumn = document.createElement("div");
-        carColumn.className = "column";
-        carColumn.innerHTML = "<h2>Car</h2>";
+        // the cars: a row of tiles over the whole width, four across
+        var carRow = document.createElement("div");
+        carRow.className = "cars";
+        carRow.innerHTML = "<h2>Car</h2>";
         var tiles = document.createElement("div");
         tiles.className = "tiles";
         showcase.clear();
         cars.forEach(function(car) { tiles.appendChild(carTile(car)); });
-        carColumn.appendChild(tiles);
-        columns.appendChild(carColumn);
+        carRow.appendChild(tiles);
+        wrap.appendChild(carRow);
+
+        var columns = document.createElement("div");
+        columns.className = "columns";
 
         var trackColumn = document.createElement("div");
         trackColumn.className = "column";
