@@ -1677,6 +1677,8 @@ window.addEventListener("keydown", (e) => {
     if (!bench.driving || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
     keys[e.code] = true;
     if (e.code === "KeyR") resetCar();
+    if (e.code === "KeyX" || e.code === "KeyE" || e.code === "PageUp") shiftBench(1);
+    if (e.code === "KeyZ" || e.code === "KeyQ" || e.code === "PageDown") shiftBench(-1);
     if (/^(Arrow|Space)/.test(e.code)) e.preventDefault();
 });
 window.addEventListener("keyup", (e) => { keys[e.code] = false; });
@@ -1686,20 +1688,39 @@ async function toggleDrive() {
         if (bench.driving) { stopDriving(); return; }
         const v = bench.vehicle || await startBench();
         bench.script = null; bench.shake = null;
-        bench.driving = { throttle: 0, brake: 0, turn: 0 };
-        bench.input.parkingLock = false; bench.input.neutral = false; bench.input.reverse = false; bench.input.current_gear = 0;
+        bench.driving = { throttle: 0, brake: 0, turn: 0, sequential: false };
+        bench.input.parkingLock = false; bench.input.neutral = false; bench.input.reverse = false; bench.input.current_gear = 0; bench.input.manualGearbox = false;
         bigGrid.visible = true; bigGrid.position.y = grid.position.y - 0.001;
         $("testDrive").textContent = "Stop driving"; $("testReset").style.display = "";
-        status("Drive: arrows or WASD, space is the handbrake, R puts the car back at the start.", "ok");
+        status("Drive: arrows or WASD, space is the handbrake, R puts the car back at the start. Automatic; X/E and Z/Q shift and make it sequential.", "ok");
         if (!preview.playing) await playSound();
     } catch (error) { status(error.message, "error"); }
+}
+
+// a shift while driving: the gearbox is automatic until the first shift, then sequential (X or E up, Z or Q down, as in the game);
+// down from first at a standstill is reverse, up from reverse is first
+function shiftBench(direction) {
+    const d = bench.driving, inp = bench.input, v = bench.vehicle;
+    if (!d || !v) return;
+    const gears = bench.config.drivetrain.gear_ratios.length;
+    const standing = Math.abs(v.u) < 1.5;
+    if (!inp.manualGearbox) { inp.manualGearbox = true; d.sequential = true; }
+    if (direction > 0) {
+        if (inp.reverse) { if (standing) { inp.reverse = false; inp.current_gear = 0; } }
+        else inp.current_gear = Math.min(gears - 1, inp.current_gear + 1);
+    } else {
+        if (inp.reverse) return;
+        if (inp.current_gear > 0) inp.current_gear--;
+        else if (standing) inp.reverse = true;
+    }
+    status("Drive, sequential: " + (inp.reverse ? "reverse" : "gear " + (inp.current_gear + 1)) + " · X/E up, Z/Q down · space handbrake · R reset", "ok");
 }
 
 function stopDriving() {
     bench.driving = null;
     bigGrid.visible = false;
     $("testDrive").textContent = "Drive"; $("testReset").style.display = "none";
-    if (bench.input) { bench.input.throttle = 0; bench.input.brakePedal = 0; bench.input.turnAngle = 0; bench.input.parkingLock = true; bench.input.neutral = true; bench.input.handbrake = false; }
+    if (bench.input) { bench.input.throttle = 0; bench.input.brakePedal = 0; bench.input.turnAngle = 0; bench.input.parkingLock = true; bench.input.neutral = true; bench.input.handbrake = false; bench.input.manualGearbox = false; bench.input.reverse = false; bench.input.current_gear = 0; }
     if (preview.playing) stopPreview();
 }
 
@@ -1721,7 +1742,8 @@ function driveFrame(dt) {
     d.throttle = up ? Math.min(1, d.throttle + (1 - d.throttle) * dt * 4) : 0;
     d.brake = down ? Math.min(1, d.brake + (1 - d.brake) * dt * 6) : 0;
     // backwards: the brake key with the car at a standstill is reverse
-    if (down && Math.abs(v.u) < 0.3 && !up) { inp.reverse = true; inp.throttle = 0.5; inp.brakePedal = 0; }
+    if (d.sequential) { inp.throttle = d.throttle; inp.brakePedal = d.brake; }   // the gears are the driver's
+    else if (down && Math.abs(v.u) < 0.3 && !up) { inp.reverse = true; inp.throttle = 0.5; inp.brakePedal = 0; }
     else if (inp.reverse && down && v.u <= 0.3) { inp.throttle = d.brake * 0.6; inp.brakePedal = 0; }
     else { inp.reverse = false; inp.throttle = d.throttle; inp.brakePedal = d.brake; }
     inp.neutral = false; inp.parkingLock = false; inp.handbrake = !!keys.Space;
