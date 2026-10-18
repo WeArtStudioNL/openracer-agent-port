@@ -1554,7 +1554,11 @@ function runScript(dt) {
             let a;
             if (t < 1) a = -t; else if (t < 1.5) a = -1; else if (t < 3.5) a = -1 + (t - 1.5); else if (t < 4) a = 1; else if (t < 5) a = 1 - (t - 4); else a = 0;
             inp.turnAngle = a * lock;
-            if (t > 5.2) { inp.turnAngle = 0; bench.script = null; status("Full test done.", "ok"); if (preview.playing) stopPreview(); }
+            if (t > 5.2) {
+                // done: a moment with the wheels straight, then back to the model by itself
+                inp.turnAngle = 0;
+                if (t > 6) { bench.script = null; if (preview.playing) stopPreview(); stopBench(); status("Full test done.", "ok"); }
+            }
             break;
         }
     }
