@@ -1,0 +1,185 @@
+{
+  "name": "Drift Mustang",
+  "description": "The Mach 1 built to go sideways: 480 hp, a welded diff, 55 degrees of lock, a soft front and hard rear tyres that let go first",
+  "model": {
+    "type": "legacy",
+    "body": "models/mustang.json",
+    "wheel": "models/mustang_wheel.json"
+  },
+  "dimensions": {
+    "length": 4.813,
+    "width": 1.86,
+    "height": 1.295
+  },
+  "chassis": {
+    "mass": 1476,
+    "wheelbase": 3.3,
+    "front_track": 1.8,
+    "rear_track": 1.8,
+    "weight_distribution": 0.56,
+    "cg_height": 0.5,
+    "tire_diameter": 0.67564,
+    "drag_coefficient": 0.45,
+    "max_steer_deg": 55,
+    "ackermann": 0.2,
+    "roll_front": 0.42,
+    "spring_front": 24000,
+    "spring_rear": 34000,
+    "damping_front": 0.3,
+    "damping_rear": 0.4,
+    "camber_front": -3.5,
+    "camber_rear": -0.5,
+    "roll_center_front": 0.04,
+    "roll_center_rear": 0.14
+  },
+  "drivetrain": {
+    "drive": "rwd",
+    "gear_ratios": [
+      2.66,
+      1.78,
+      1.3,
+      1.0,
+      0.8
+    ],
+    "reverse_ratio": 2.32,
+    "final_drive": 4.1,
+    "efficiency": 0.92,
+    "diff": "welded",
+    "clutch": 2.0,
+    "shift_time": 0.2
+  },
+  "engine": {
+    "idle_rpm": 900,
+    "limiter_rpm": 6800,
+    "inertia": 0.25,
+    "torque_curve": [
+      [
+        0,
+        0
+      ],
+      [
+        300,
+        110
+      ],
+      [
+        800,
+        250
+      ],
+      [
+        1500,
+        400
+      ],
+      [
+        2000,
+        480
+      ],
+      [
+        2500,
+        530
+      ],
+      [
+        3000,
+        563.7
+      ],
+      [
+        3500,
+        569.6
+      ],
+      [
+        4000,
+        582
+      ],
+      [
+        4500,
+        569.7
+      ],
+      [
+        5000,
+        526.9
+      ],
+      [
+        5300,
+        509
+      ],
+      [
+        5500,
+        485.5
+      ],
+      [
+        6000,
+        415.4
+      ],
+      [
+        6500,
+        330
+      ],
+      [
+        7500,
+        150
+      ]
+    ],
+    "power_scale": 1.0
+  },
+  "brakes": {
+    "front": 1700,
+    "rear": 1400
+  },
+  "tyres": {
+    "grip": 0.95,
+    "grip_balance": 0.82,
+    "cornering": 1.1,
+    "rolling_resistance": 0.015
+  },
+  "cameras": {
+    "chase": {
+      "distance": 10,
+      "height": 2.34,
+      "fov": 35
+    },
+    "follow": {
+      "distance": 7.5,
+      "height": 2.1,
+      "look_height": 0.8,
+      "smoothing": 3.5,
+      "fov_standing": 45,
+      "fov_fast": 75,
+      "fov_full_speed": 70,
+      "dolly": 1
+    },
+    "cockpit": {
+      "position": [
+        0.37,
+        0.35,
+        0.1
+      ],
+      "fov": 75
+    }
+  },
+  "sound": {
+    "engine_sim": {
+      "layout": "v8-crossplane",
+      "bore": 101.6,
+      "stroke": 88.4,
+      "rod": 146,
+      "compression_ratio": 9.5,
+      "intake_duration": 232,
+      "exhaust_duration": 232,
+      "intake_lift": 12,
+      "exhaust_lift": 12,
+      "intake_lobe_centre": 110,
+      "exhaust_lobe_centre": 110,
+      "intake_flow": 260,
+      "exhaust_flow": 210,
+      "primary_length": 0.5,
+      "primary_flow": 220,
+      "exhaust_length": 2.8,
+      "outlet_flow": 650,
+      "exhaust_systems": 2,
+      "impulse_response": "smooth_39"
+    }
+  },
+  "assists": {
+    "tc_allowance": 2.5,
+    "esc_gain": 0.5
+  }
+}

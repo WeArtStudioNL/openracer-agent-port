@@ -390,7 +390,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         for(i = 0; i < 4; i++) {
             w = this.wheels[i];
             w.driven = this.isDriven(w.front);
-            if(t.grip !== undefined) w.gripScale = t.grip;
+            if(t.grip !== undefined) w.gripScale = t.grip * (!w.front && t.grip_balance !== undefined ? t.grip_balance : 1); // grip_balance: the rear tyres as a factor of the front
             if(t.cornering !== undefined) w.anglePeak = this.baseAnglePeak / (t.cornering * w.stiffnessBias);
             if(t.rolling_resistance !== undefined) w.rollingResistance = t.rolling_resistance;
             if(t.brake_front !== undefined && w.front) w.maxBrakeTorque = t.brake_front;

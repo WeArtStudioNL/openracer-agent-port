@@ -62,6 +62,7 @@ function makeCar(config) {
     const tyres = config.tyres || {}, engine = config.engine || {}, assists = config.assists || {};
     v.retune({
         grip: tyres.grip !== undefined ? tyres.grip : 1,
+        grip_balance: tyres.grip_balance !== undefined ? tyres.grip_balance : 1,
         cornering: tyres.cornering !== undefined ? tyres.cornering : 1,
         rolling_resistance: tyres.rolling_resistance !== undefined ? tyres.rolling_resistance : 0.015,
         power: engine.power_scale !== undefined ? engine.power_scale : 1,

@@ -42,6 +42,15 @@ OpenRacer.Opponent = function (config, line, options) {
     this.maxTurn = (config.chassis.max_steer_deg || 30) * Math.PI / 180;
 
     this.vehicle = new OpenRacer.Vehicle(OpenRacer.vehicleParams(config, getSurface), this);
+    // the tyres, the power and the clutch as car.json has them (the player's car gets these through the tuning menu)
+    var tyres = config.tyres || {}, engineConfig = config.engine || {}, assists = config.assists || {};
+    this.vehicle.retune({
+        grip: tyres.grip !== undefined ? tyres.grip : 1, grip_balance: tyres.grip_balance !== undefined ? tyres.grip_balance : 1,
+        cornering: tyres.cornering !== undefined ? tyres.cornering : 1, rolling_resistance: tyres.rolling_resistance !== undefined ? tyres.rolling_resistance : 0.015,
+        power: engineConfig.power_scale !== undefined ? engineConfig.power_scale : 1, engine_braking: engineConfig.braking_scale !== undefined ? engineConfig.braking_scale : 1,
+        clutch: config.drivetrain.clutch !== undefined ? config.drivetrain.clutch : 1.5,
+        tc_allowance: assists.tc_allowance !== undefined ? assists.tc_allowance : 1, esc_gain: assists.esc_gain !== undefined ? assists.esc_gain : 1
+    });
     this.vehicle.collision = collisionWorld;
     this.vehicle.ground = groundWorld;
     this.vehicle.tcEnabled = true;
