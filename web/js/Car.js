@@ -424,7 +424,7 @@ OpenRacer.Car = function( config, domElement ) {
         if(this.turnLeft) this.turnDir = -1;
         if(this.turnRight) this.turnDir = 1;
         if(this.turnLeft && this.turnRight) this.turnDir = 0;
-        var tSpeed = this.turnSpeed * 0.3;
+        var tSpeed = this.turnSpeed * 0.3 * (Settings.option("keySteer") || 1); // the steering speed of the keyboard (settings menu)
         var speedFactor = Math.max(Math.abs(v.u) / 4, 1);
         if(this.turnDir === 0) {
             if(!mouseDown && !usingGamepad)

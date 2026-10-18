@@ -92,7 +92,7 @@ var Settings = (function() {
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
     var DEFAULT_OPTIONS = { tc: true, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 1, volume: 0.8,
-        padSlow: 1.5, padAssist: true };
+        padSlow: 1.5, padAssist: true, keySteer: 1 };
 
     var bindings = {};      // action id -> list of inputs
     var options = {};
@@ -668,6 +668,12 @@ var Settings = (function() {
         page.appendChild(optionRow("ABS", options.abs ? "On" : "Off", function() { setOption("abs", !options.abs); }));
         var gearboxNames = { automatic: "Automatic (P R N D)", sequential: "Sequential (paddles)", manual: "Manual (H-shifter, clutch)" };
         page.appendChild(optionRow("Gearbox", gearboxNames[options.gearbox] || options.gearbox, function() { cycleGearbox(); }));
+        page = tabPage("Keyboard");
+        var keyNote = document.createElement("div");
+        keyNote.className = "sub";
+        keyNote.textContent = "The steering keys turn the wheels at a rate: fast at a standstill, slower the faster the car goes; the wheels come back to the middle by themselves when the keys are let go.";
+        page.appendChild(keyNote);
+        page.appendChild(sliderRow("Steering speed", "keySteer", 0.5, 3, 0.1, function(v) { return Math.round(v * 100) + "%" + (Math.abs(v - 1) < 0.01 ? " (as it was)" : ""); }));
         page = tabPage("Gamepad");
         var padNote = document.createElement("div");
         padNote.className = "sub";

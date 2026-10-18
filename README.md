@@ -125,6 +125,9 @@ Press **Esc** for the settings menu (the game pauses). It has options for tracti
 ## three.js
 The game uses three.js r186 (`web/js/three`, vendored: the build and the few add-ons for post-processing). three.js is an ES module, so `web/js/bootstrap.js` imports it, exposes it as the global `THREE` and then loads the other scripts in order. The old JSON car models are converted to `BufferGeometry` by `parseLegacyModel` in `Helpers.js`.
 
+## Keyboard
+The steering keys turn the wheels at a rate: fast at a standstill, slower the faster the car goes, and the wheels come back to the middle by themselves when the keys are let go. *Esc → Keyboard → Steering speed* scales that rate (50–300 %).
+
 ## Gamepad
 A gamepad steers with the left stick and drives with the triggers (the bindings are in the settings menu). The stick is the steering one to one at a standstill; the faster the car goes, the slower the steering follows the stick, as with the keyboard, so a flick at speed is a small movement of the wheels. *Esc → Gamepad* has a slider for how much slower (off: one to one at every speed) and the check box *Steering assist*: when the rear steps out, the front tyres steer into the slide by themselves (the way a car with a lot of caster does), so it does not become a spin.
 
