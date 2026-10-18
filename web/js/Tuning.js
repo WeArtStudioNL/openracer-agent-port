@@ -73,7 +73,10 @@ var Tuning = (function() {
         ] },
         { name: "Aerodynamics and steering", items: [
             ["drag_coefficient", "Drag coefficient", "", 0.15, 1.2, 0.01],
-            ["max_steer_deg", "Steering lock", "°", 10, 50, 1]
+            ["downforce_front", "Downforce at the front axle at 100 km/h (negative: lift)", "N", -2000, 8000, 50],
+            ["downforce_rear", "Downforce at the rear axle at 100 km/h", "N", -2000, 8000, 50],
+            ["max_steer_deg", "Steering lock", "°", 10, 50, 1],
+            ["ackermann", "Ackermann (the inner wheel steers more)", "%", 0, 100, 5]
         ] },
         { name: "Assists", items: [
             ["tc_allowance", "Traction control: wheel spin allowed", "%", 30, 400, 5],
@@ -93,6 +96,7 @@ var Tuning = (function() {
     ];
 
     function clone(x) { return JSON.parse(JSON.stringify(x)); }
+    var V100 = (100 / 3.6) * (100 / 3.6); // (m/s)^2 at 100 km/h: the downforce in the menu is the force at that speed
 
     // ---- the values of a car configuration, in the units of the menu
 
@@ -133,7 +137,10 @@ var Tuning = (function() {
             brake_front: (c.brakes && c.brakes.front) || 1700,
             brake_rear: (c.brakes && c.brakes.rear) || 900,
             drag_coefficient: ch.drag_coefficient,
+            downforce_front: Math.round((ch.downforce_front !== undefined ? ch.downforce_front : (ch.downforce || 0) * ch.weight_distribution) * V100),
+            downforce_rear: Math.round((ch.downforce_rear !== undefined ? ch.downforce_rear : (ch.downforce || 0) * (1 - ch.weight_distribution)) * V100),
             max_steer_deg: ch.max_steer_deg || 30,
+            ackermann: (ch.ackermann !== undefined ? ch.ackermann : 0.6) * 100,
             tc_allowance: (assists.tc_allowance !== undefined ? assists.tc_allowance : 1) * 100,
             esc_gain: (assists.esc_gain !== undefined ? assists.esc_gain : 1) * 100
         };
@@ -187,6 +194,9 @@ var Tuning = (function() {
             brake_front: v.brake_front,
             brake_rear: v.brake_rear,
             drag: 0.5 * v.drag_coefficient * car.frontal_area * air_density,
+            downforce_front: v.downforce_front / V100,
+            downforce_rear: v.downforce_rear / V100,
+            ackermann: v.ackermann / 100,
             tc_allowance: v.tc_allowance / 100,
             esc_gain: v.esc_gain / 100
         });
@@ -483,6 +493,10 @@ var Tuning = (function() {
         c.chassis.damping_rear = v.damping_rear / 100;
         c.chassis.drag_coefficient = v.drag_coefficient;
         c.chassis.max_steer_deg = v.max_steer_deg;
+        c.chassis.downforce_front = v.downforce_front / V100;
+        c.chassis.downforce_rear = v.downforce_rear / V100;
+        delete c.chassis.downforce;
+        c.chassis.ackermann = v.ackermann / 100;
         c.tyres = { grip: v.grip / 100, cornering: v.cornering / 100, rolling_resistance: v.rolling_resistance, heating: v.tyre_heating / 100, life: v.tyre_life / 100 };
         c.fuel = { tank: v.tank, use: v.fuel_use / 100 };
         c.engine = c.engine || {};

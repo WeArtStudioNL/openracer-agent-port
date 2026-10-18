@@ -54,7 +54,14 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.rear_track = parameters.rear_track;
     this.weight_distribution = parameters.weight_distribution;
     this.Cdrag = parameters.Cdrag;
-    this.downforce = parameters.downforce || 0;   // N per (m/s)^2, pushing the car on the road
+    // the air on the body: downforce per axle in N per (m/s)^2 (negative is lift, as a road car has); "downforce" alone is split by the
+    // weight distribution. The balance changes with the speed: a car with more downforce at the rear understeers more the faster it goes.
+    this.downforce = parameters.downforce || 0;
+    this.downforceFront = parameters.downforce_front !== undefined ? parameters.downforce_front : this.downforce * (parameters.weight_distribution || 0.5);
+    this.downforceRear = parameters.downforce_rear !== undefined ? parameters.downforce_rear : this.downforce * (1 - (parameters.weight_distribution || 0.5));
+    // Ackermann: in a bend the inner front wheel steers more than the outer one, so both roll around the same point (1: the
+    // full geometry, 0: parallel; a racing car has some of it)
+    this.ackermann = parameters.ackermann !== undefined ? parameters.ackermann : 0.6;
     this.gear_ratios = parameters.gear_ratios;
     this.final_drive = parameters.final_drive;
     this.getSurface = parameters.getSurface;
@@ -328,7 +335,10 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.diff !== undefined) this.diffType = t.diff === "open" || t.diff === "welded" ? t.diff : "lsd";
         if(t.center_diff !== undefined) this.centerType = t.center_diff === "open" || t.center_diff === "locked" ? t.center_diff : "lsd";
         if(t.center_split !== undefined) this.centerSplit = t.center_split;
-        if(t.downforce !== undefined) this.downforce = t.downforce;
+        if(t.downforce !== undefined) { this.downforce = t.downforce; this.downforceFront = t.downforce * this.weight_distribution; this.downforceRear = t.downforce * (1 - this.weight_distribution); }
+        if(t.downforce_front !== undefined) this.downforceFront = t.downforce_front;
+        if(t.downforce_rear !== undefined) this.downforceRear = t.downforce_rear;
+        if(t.ackermann !== undefined) this.ackermann = t.ackermann;
         this.layout();
         for(i = 0; i < 4; i++) {
             w = this.wheels[i];
@@ -675,8 +685,16 @@ OpenRacer.Vehicle = function (parameters, input) {
             self.yawWanted = r;
         }
         self.steerApplied = delta; // the steering of the driver is used as it is
-        var cosD = Math.cos(delta);
-        var sinD = Math.sin(delta);
+        // Ackermann: the angle of each front wheel. With the full geometry the inner wheel turns around the same point as the
+        // outer one: tan(inner) = L / (R - t/2), tan(outer) = L / (R + t/2) with R = L / tan(delta). Positive delta is to the right.
+        var steerOf = [delta, delta]; // front right, front left
+        if(Math.abs(delta) > 1e-4 && self.ackermann > 0) {
+            var R = L / Math.tan(Math.abs(delta)), half = self.front_track / 2;
+            var inner = Math.atan(L / Math.max(0.3, R - half)), outer = Math.atan(L / (R + half));
+            var dInner = Math.abs(delta) + (inner - Math.abs(delta)) * self.ackermann, dOuter = Math.abs(delta) + (outer - Math.abs(delta)) * self.ackermann;
+            var sign = delta > 0 ? 1 : -1;
+            steerOf = delta > 0 ? [sign * dInner, sign * dOuter] : [sign * dOuter, sign * dInner];
+        }
 
         // ---- the springs: how far every wheel is pushed in, and the force that makes
         var down = { x: -axisY.x, y: -axisY.y, z: -axisY.z };
@@ -755,6 +773,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 // the direction of the wheel on the road: forward along the wheel (turned by the steering), and to the left of it
                 var fbx, fby, fbz;
                 if(wheel.front) {
+                    var cosD = Math.cos(steerOf[iw]), sinD = Math.sin(steerOf[iw]);
                     fbx = axisZ.x * cosD - axisX.x * sinD; fby = axisZ.y * cosD - axisX.y * sinD; fbz = axisZ.z * cosD - axisX.z * sinD;
                 } else {
                     fbx = axisZ.x; fby = axisZ.y; fbz = axisZ.z;
@@ -965,7 +984,16 @@ OpenRacer.Vehicle = function (parameters, input) {
         // ---- the forces on the car that are not at the wheels: the air (drag, and downforce)
         var speed = Math.sqrt(self.vx * self.vx + self.vy * self.vy + self.vz * self.vz);
         var dragX = -self.Cdrag * speed * self.vx, dragY = -self.Cdrag * speed * self.vy, dragZ = -self.Cdrag * speed * self.vz;
-        force.x += dragX; force.y += dragY - self.downforce * speed * speed; force.z += dragZ;
+        force.x += dragX; force.y += dragY; force.z += dragZ;
+        // the downforce (or lift) of each axle presses along the up axis of the body, at the axle: it also pitches the car
+        var u2 = u * u;
+        if(u2 > 1 && (self.downforceFront || self.downforceRear)) {
+            var dfF = -self.downforceFront * u2, dfR = -self.downforceRear * u2;
+            force.x += axisY.x * (dfF + dfR); force.y += axisY.y * (dfF + dfR); force.z += axisY.z * (dfF + dfR);
+            // r x F with r = a * axisZ (the axle ahead of or behind the centre of gravity) and F along axisY: a * F * (axisZ x axisY) = -a * F * axisX
+            var pitch = -(self.af * dfF - self.ar * dfR);
+            torque.x += pitch * axisX.x; torque.y += pitch * axisX.y; torque.z += pitch * axisX.z;
+        }
 
         // ---- the body on the road, for a landing or a car that has turned over
         bodyCorners(force, torque);
@@ -996,11 +1024,9 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(self.collision) resolveCollisions();
 
         // accelerations along and across the car, for the display (the tyre forces and the air, without gravity)
-        var fAlong = (force.x * axisZ.x + force.y * axisZ.y + force.z * axisZ.z);
-        var fAcross = -(force.x * axisX.x + force.y * axisX.y + force.z * axisX.z);
         var aT = Math.min(1, dt / 0.1);
-        self.ax += ((fAlong + m * G * axisZ.y * -1 * -1) / m - self.ax) * aT * 0 + (sumFx / m - self.ax) * aT;
-        self.ay += (sumFy / m * -1 - self.ay) * aT;
+        self.ax += (sumFx / m - self.ax) * aT;
+        self.ay += (-sumFy / m - self.ay) * aT;
 
         for(var q = 0; q < 4; q++) {
             wheels[q].velocity.set(self.vx, self.vy, self.vz);
@@ -1010,7 +1036,6 @@ OpenRacer.Vehicle = function (parameters, input) {
             wheels[q].compressionVelocity = compVelocity[q]; // how fast the spring is pushed in (m/s), for the force feedback
             wheels[q].onGround = wheels[q].hasContact;
         }
-        void fAcross;
     }
 
     // Moves the physics forward by delta seconds, in small steps. The 3D side of the car is left to Car.js.
