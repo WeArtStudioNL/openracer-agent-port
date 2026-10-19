@@ -267,3 +267,15 @@ The floor of the test was a square of 600 m (300 m each way from the start), and
 ### Adding deformation nodes: the other objects fade and are clicked through
 
 While nodes are added to a part, every other object (the body, the other parts, the engine, the wheels) gets a see-through copy of its material (10% opacity, no depth write), so the part can be seen, and a click goes through all of them and only hits the part that is open (a click on another object does nothing but say so). The own materials come back when the mode stops (Esc, the button, or closing the window). On a copy of the Mustang: with the hood open, a click on the door left the nodes at 182, a click on the hood made it 183; after Esc the faded copies were gone.
+
+### Hinge part or breakable only
+
+The part window offers two ways to make a part: **Hinge part** (pin points, nodes of its own, opens and breaks off, as before) and **Breakable only** (`"mode": "detachable"`): a mirror, a headlight, a plate. A breakable part has no pins and no nodes of its own: it **bends with the body** and, when the load on it passes **Breaks off at** (kN, default 3), it comes off and falls as a free object that hits the car, the road and the walls. It goes on bending for a **delay** (`break_delay`, seconds, 0.15 by default, a field in the window) after the force has been passed, and only then comes off, so the dent is made first (measured: the timer started and the part was free 154 ms later). A breakable part sits in `car.json` as `{ "object", "mode": "detachable", "mass", "break_force", "break_delay" }`.
+
+### The outline: one at a time, and none left behind
+
+The outline that shows an object could stay on an object that was no longer selected (when the test bench started or stopped, the outlines of the old copy of the model were not switched off). There is one outline at a time now: the object under the mouse, or, when the mouse is on nothing or leaves the view, the part that is open; every outline that was made is in a list and all but the wanted one are switched off, and when the bench stops none is left. Checked: hood open, hover on the door, on the headlight, leave the view (back to the hood), select the door, stop test: one outline at a time, 0 after the stop.
+
+### The camera does not jump when the crash test starts
+
+When the bars go the view gets wider (510 to 1200 px) and the picture was centred again, so the car jumped on the screen. The camera now shows a part of a wider picture (`camera.setViewOffset`) that is centred on the middle of the view as it was (`viewLock`), so what was on the screen stays where it is: the car stayed on the same horizontal place on the screen (689 px) when the test started, and `setViewOffset` is cleared when the test stops. The vertical place changed by 24 px (the car is put at its ride height at the start of the test).

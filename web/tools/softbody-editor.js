@@ -1100,15 +1100,15 @@ export function initSoftBody(api) {
         }
         return found;
     }
-    // the orange outline: the edges of the meshes of the object
+    // the orange outline: the edges of the meshes of the object. There is one at a time: the object under the mouse, or else the part that is open.
+    // Every outline that was made is kept in a list, and all but the one that is wanted are switched off, so none stays behind (on an old copy of
+    // the model, or on an object that was left).
     const outlines = new WeakMap();
+    const allOutlines = new Set();
     let outlined = null;
     function outline(object) {
-        if (outlined === object) return;
-        if (outlined && outlines.has(outlined)) outlines.get(outlined).forEach((l) => { l.visible = false; });
         outlined = object;
-        if (!object) return;
-        if (!outlines.has(object)) {
+        if (object && !outlines.has(object)) {
             const lines = [];
             object.traverse((m) => {
                 if (!m.isMesh || !m.geometry) return;
@@ -1118,9 +1118,12 @@ export function initSoftBody(api) {
                 lines.push(line);
             });
             outlines.set(object, lines);
+            allOutlines.add(lines);
         }
-        outlines.get(object).forEach((l) => { l.visible = true; });
+        const wanted = object ? outlines.get(object) : null;
+        allOutlines.forEach((lines) => lines.forEach((l) => { l.visible = lines === wanted; }));
     }
+    const selectedObject = () => (sb.partWin ? partObj() : null);
     let hoverBusy = false;
     renderer.domElement.addEventListener("pointermove", (e) => {
         if (hoverBusy || lasso || sb.pushMode || sb.pick || tc.dragging || rc.dragging || sb.dragging) return;
@@ -1129,11 +1132,14 @@ export function initSoftBody(api) {
             hoverBusy = false;
             const rect = renderer.domElement.getBoundingClientRect();
             const hit = surfaceAt(e.clientX - rect.left, e.clientY - rect.top, rect);
-            // in the pin and node modes the part that is open is the one that counts
-            if (sb.partMode === "nodes" && sb.partWin) { outline(hit && within(hit.object, partObj()) ? partObj() : null); return; }
-            outline(hit ? looseOf(hit.object) : null);
+            // in the node mode the part that is open is the one that counts; else the object under the mouse, and with none the part that is open
+            if (sb.partMode === "nodes" && sb.partWin) { outline(selectedObject()); return; }
+            const under = hit ? looseOf(hit.object) : null;
+            outline(under || selectedObject());
         });
     });
+    renderer.domElement.addEventListener("pointerleave", () => { if (!lasso) outline(selectedObject()); });
+    // (the name of the object of the open part, in the model that is in the view now)
     // the object of the open part in the model that is in the view now (the bench makes a new copy of the model for every test)
     function partObj() { const m = viewModel(); return m && sb.partWin ? m.getObjectByName(sb.partWin.name) : null; }
     function ancestorOf(object, ancestor) { for (let o = object; o; o = o.parent) if (o === ancestor) return true; return false; }
@@ -1242,6 +1248,7 @@ export function initSoftBody(api) {
         ensureWindow().style.display = "";
         renderPartWin();
         drawPartGizmos();
+        outline(selectedObject());
     }
     function closePartWindow() {
         if (sb.partMode === "nodes") { fadeOthers(false); sb.deferRestart = false; sb.partMode = null; changed(true); rebuildSoon(); }
@@ -1267,9 +1274,14 @@ export function initSoftBody(api) {
         body.innerHTML = "";
         const add = (html) => { const d = document.createElement("div"); d.innerHTML = html; body.appendChild(d); return d; };
         if (!part) {
-            const d = add('<p class="hint">Part not added to loose parts</p><button class="small accent" data-a="add">Add</button>');
-            d.querySelector('[data-a="add"]').addEventListener("click", () => {
+            const d = add('<p class="hint">Part not added to loose parts</p><div class="row"><button class="small accent" data-a="hinge" title="A part that swings on pin points (a door, the hood) and can fall off">Hinge part</button><button class="small" data-a="breakable" title="A part that bends with the body and falls off at a force (a mirror, a headlight, a plate)">Breakable only</button></div>');
+            d.querySelector('[data-a="hinge"]').addEventListener("click", () => {
                 w.part = { object: w.name, mode: "hinge", mass: 10, hinge: {}, mounts: [] };
+                sb.parts.push(w.part);
+                partChanged();
+            });
+            d.querySelector('[data-a="breakable"]').addEventListener("click", () => {
+                w.part = { object: w.name, mode: "detachable", mass: 2, break_force: 3000 };
                 sb.parts.push(w.part);
                 partChanged();
             });
@@ -1285,6 +1297,15 @@ export function initSoftBody(api) {
             w.part = null; sb.pinSel = -1;
             partChanged();
         });
+        // a part that is only breakable: no pins and no nodes of its own, it bends with the body and falls off at a force
+        if (part.mode === "detachable") {
+            const bf = add('<div class="row"><div><label title="1 kN is about 102 kg of force">Breaks off at (kN)</label><input type="number" data-a="breakforce" min="0" step="0.5"></div><div><label title="After the load has passed the force it goes on bending with the body for this long, then it comes off">Delay (s)</label><input type="number" data-a="breakdelay" min="0" step="0.05" placeholder="0.15"></div></div><p class="hint">It bends with the body, and when the load on it passes this force it comes off and falls as a free object (it hits the car, the road and the walls).</p>');
+            bf.querySelector('[data-a="breakforce"]').value = part.break_force ? part.break_force / 1000 : "";
+            bf.querySelector('[data-a="breakdelay"]').value = part.break_delay !== undefined ? part.break_delay : "";
+            bf.querySelector('[data-a="breakdelay"]').addEventListener("change", (e) => { const v = parseFloat(e.target.value); if (v >= 0) part.break_delay = v; else delete part.break_delay; partChanged(); });
+            bf.querySelector('[data-a="breakforce"]').addEventListener("change", (e) => { const v = parseFloat(e.target.value); if (v > 0) part.break_force = v * 1000; else delete part.break_force; partChanged(); });
+            return;
+        }
         // pin points
         const head = add('<div class="pw-section"><b>Pin points</b> <button class="small" data-a="addpin">+ add</button></div>');
         head.querySelector('[data-a="addpin"]').addEventListener("click", () => {
@@ -1555,7 +1576,9 @@ export function initSoftBody(api) {
     function crashUi(on) {
         const bar = $("testBar"), stop = $("crashBar");
         // during the crash test only the car, the wall and the stop button are to be seen: no bars, no text, no nodes and beams, no markers
-        document.body.classList.toggle("crashing", on);
+        // the view gets wider when the bars go: the picture stays where it is on the screen (no jump of the camera)
+        if (on) { const was = api.viewCenterX(); document.body.classList.add("crashing"); api.lockView(was); }
+        else { api.lockView(null); document.body.classList.remove("crashing"); }
         bench.grip = on ? bench.gripBoost : 1;                      // the tyres have much more grip for the run: the car holds its line at speed (back to 1 afterwards)
         if (sb.group) sb.group.visible = !on;
         if (sb.partGroup) sb.partGroup.visible = !on;
@@ -1649,6 +1672,7 @@ export function initSoftBody(api) {
 
     // the bench stops: the shell and the wall go
     function onStop() {
+        outline(null);                                    // none stays behind on the model of the bench or of the editor
         if (OpenRacer.SoftBodyMesh && api.root()) OpenRacer.SoftBodyMesh.restore(api.root());      // the model of the editor is not bent by the shell of the bench any more
         if (!sb.restarting) { sb.edit = false; $("sbEdit").textContent = "Edit nodes"; $("sbEdit").classList.remove("accent"); $("sbEditBox").style.display = "none"; sb.sel.nodes.clear(); sb.sel.beam = null; }
         stopCrash();

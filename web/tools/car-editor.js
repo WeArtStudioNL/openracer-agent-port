@@ -97,10 +97,21 @@ gizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !even
 gizmo.addEventListener("objectChange", () => gizmoMoved());
 scene.add(typeof gizmo.getHelper === "function" ? gizmo.getHelper() : gizmo);
 
+// While the crash test runs the bars are away and the view is wider. The camera must not jump: viewLock = { cx } is the middle (in the page) of the
+// view as it was, and the picture is kept where it was on the screen: the view shows a part of a wider picture that is centred on that middle.
+let viewLock = null;
 function resize() {
     const w = view.clientWidth, h = view.clientHeight;
     renderer.setSize(w, h, false);
-    camera.aspect = w / h;
+    if (viewLock) {
+        const c = viewLock.cx - view.getBoundingClientRect().left;       // the old middle, in this view
+        const half = Math.max(c, w - c), full = 2 * half;
+        camera.aspect = full / h;
+        camera.setViewOffset(full, h, half - c, 0, w, h);
+    } else {
+        camera.clearViewOffset();
+        camera.aspect = w / h;
+    }
     camera.updateProjectionMatrix();
 }
 window.addEventListener("resize", resize);
@@ -1797,6 +1808,8 @@ softBodyEditor = initSoftBody({
     root: () => state.root,
     // saves the car that is open, as the Save button does (the part panel saves after every change)
     // the helpers of the view (the cameras, the axes and the arrow of the model) are hidden while the crash test runs
+    viewCenterX: () => { const r = view.getBoundingClientRect(); return r.left + r.width / 2; },
+    lockView: (cx) => { viewLock = cx === null ? null : { cx }; resize(); },
     hideChrome: (on) => { cameraMarkers.visible = !on; axes.visible = !on; arrow.visible = !on; grid.visible = !on; bigGrid.visible = bigGrid.visible && !on; },
     canSave: () => !!state.existingId && !!state.root,
     save: () => save(),

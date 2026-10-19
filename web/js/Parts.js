@@ -202,6 +202,7 @@ OpenRacer.Parts = (function () {
                     latch: hinge.latch_force !== undefined ? hinge.latch_force : (mountList.some(function (m) { return m.activate_force > 0; }) ? Infinity : mass * 9.81 * 3), breakForce: hinge.break_force || 0
                 },
                 breakForce: spec.break_force !== undefined ? spec.break_force : 0,
+                breakDelay: spec.break_delay !== undefined ? spec.break_delay : 0.15, breakTimer: null,
                 // the points where the part is hinged to the body: nodes of the shell, each with the force at which it tears off
                 mounts: mountList.map(function (m) {
                     return { node: m.node, breakForce: m.break_force || 0, activate: m.activate_force || 0, alive: true, beam: m.beam, point: m.point || sb.restPosition(m.node, new THREE.Vector3()), pin: m.pin, axes: m.axes, rot: m.rot, min: m.min, max: m.max };
@@ -411,7 +412,15 @@ OpenRacer.Parts = (function () {
                 if (part.state === "held") {
                     if (part.hinge) {
                         if (!part.hinge.latch || part.load > part.hinge.latch || torn) startMoving(part, "hinge");
-                    } else if (torn || (part.breakForce > 0 && part.load > part.breakForce)) startMoving(part, "free");
+                    } else if (part.breakTimer === null || part.breakTimer === undefined) {
+                        // a breakable part: when the load passes its force it goes on bending with the body for a moment, and then it comes off
+                        if (torn || (part.breakForce > 0 && part.load > part.breakForce)) {
+                            if (part.breakDelay > 0) part.breakTimer = part.breakDelay; else startMoving(part, "free");
+                        }
+                    } else {
+                        part.breakTimer -= dt;
+                        if (part.breakTimer <= 0) { part.breakTimer = null; startMoving(part, "free"); }
+                    }
                 } else if (part.state === "hinged") {
                     if (part.mounts.length) tearMounts(part);
                     if (part.state === "hinged" && (torn || (part.hinge.breakForce > 0 && part.load > part.hinge.breakForce))) startMoving(part, "free");
@@ -484,7 +493,7 @@ OpenRacer.Parts = (function () {
                     p.object.traverse(function (m) { if (m.userData && m.userData.sbDeform) m.userData.sbDeform.value = 1; });
                 }
                 p.mounts.forEach(function (m) { m.alive = true; });
-                p.detachTimer = 0;
+                p.detachTimer = 0; p.breakTimer = null;
                 p.state = "held"; p.hasVel = false; p.grace = 0; p.region = null;
             }
         }
