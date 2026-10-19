@@ -1507,7 +1507,7 @@ function stopBench() {
     bench.objects.forEach((o) => scene.remove(o));
     if (bench.script && preview.playing) stopPreview();
     if (bench.driving) stopDriving();
-    bench.objects = []; bench.vehicle = null; bench.model = null; bench.shake = null; bench.script = null; bench.obj = null; bench.paused = false;
+    bench.objects = []; bench.vehicle = null; bench.model = null; bench.shake = null; bench.script = null; bench.obj = null;
     if (softBodyEditor) softBodyEditor.onStop();
     pivot.visible = true; helpers.visible = true;
     $("testStop").style.display = "none";
@@ -1519,10 +1519,9 @@ function benchFrame(now) {
     if (!v) return;
     const dt = Math.min(0.05, Math.max(0.001, (now - bench.last) / 1000));
     bench.last = now;
-    const paused = !!bench.paused;                    // the simulation is stopped for a moment (Repair): the car is shown, nothing moves
-    if (!paused && bench.script) runScript(dt);
-    if (!paused && bench.driving) driveFrame(dt);
-    if (!paused && bench.shake) {
+    if (bench.script) runScript(dt);
+    if (bench.driving) driveFrame(dt);
+    if (bench.shake) {
         // the four corners in turn: front left, front right, rear right, rear left, a sharp push of 0.15 s and 0.45 s to see it
         // bounce back, two rounds
         const s = bench.shake;
@@ -1534,7 +1533,7 @@ function benchFrame(now) {
             v.pushDown(w.mount.x, w.mount.y, w.mount.z, s.kg * 9.81);
         }
     }
-    if (!paused) v.update(dt);
+    v.update(dt);
     v.getBodyPose(benchPose, benchQuat);
     const body = bench.body;
     body.quaternion.set(benchQuat.x, benchQuat.y, benchQuat.z, benchQuat.w);
