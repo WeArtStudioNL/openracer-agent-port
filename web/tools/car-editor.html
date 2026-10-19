@@ -254,16 +254,6 @@
                     </div>
                     <p class="hint">A click on the model puts a node on its surface; it is held by beams to its nearest neighbours. A click on a node selects it (Shift adds), the middle mouse button and a drag draws a lasso round many. The nodes are also what the car hits the road and the walls with.</p>
                 </div>
-                <div class="group">Part points</div>
-                <div class="row">
-                    <div><select id="sbPartSel"></select></div>
-                    <div class="fixed"><button class="small" id="sbPartA" title="The selected node is the first hinge point of the part">A = node</button> <button class="small" id="sbPartB" title="The selected node is the second hinge point; the hinge is the line from A to B">B = node</button> <button class="small" id="sbPartHeld" title="The selected nodes hold the part shut">Held by</button></div>
-                </div>
-                <div class="row">
-                    <button class="small" id="sbPartNodes" title="The selected nodes become the nodes of the part: they join each other, the part dents with them, and it is held to the body by its hinge points">Part nodes = selection</button>
-                    <button class="small ghost" id="sbPartNodesClear" title="The part has no nodes of its own again">Clear</button>
-                </div>
-                <div class="hint" id="sbPartInfo">Make a part in “Parts…”, select a node of the body in the view, and use the buttons. The hinge is the line between A and B; each has a force at which it tears off.</div>
                 <div class="group">Crash test</div>
                 <div class="row">
                     <div><label>Speed <b id="sbSpeedLabel">50 km/h</b></label><input type="range" id="sbSpeed" min="10" max="150" value="50" step="5"></div>

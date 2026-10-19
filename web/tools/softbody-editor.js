@@ -187,10 +187,6 @@ export function initSoftBody(api) {
         box.innerHTML = "";
         if (!sb.parts.length) box.innerHTML = '<p class="hint">No parts: the whole model dents with the shell.</p>';
         sb.parts.forEach((part, i) => box.appendChild(partRow(part, i)));
-        const choice = $("sbPartSel"), kept = choice.selectedIndex;
-        choice.innerHTML = "";
-        sb.parts.forEach((p, i) => { const o = document.createElement("option"); o.value = i; o.textContent = (p.object || "(no object)") + (p.mode === "hinge" ? " – hinge" : " – loose"); choice.appendChild(o); });
-        choice.selectedIndex = Math.min(Math.max(kept, 0), sb.parts.length - 1);
         const names = $("sbObjectNames");
         names.innerHTML = "";
         api.nodeNames().forEach((name) => { const o = document.createElement("option"); o.value = name; names.appendChild(o); });
@@ -268,62 +264,14 @@ export function initSoftBody(api) {
         }
     }
 
-    // ---- the points of a part, from the nodes that are selected in the view
-    function chosenPart() {
-        const part = sb.parts[parseInt($("sbPartSel").value, 10)];
-        if (!part) status("Make a part in “Parts…” first.", "error");
-        return part;
-    }
-    function mountFromSelection(which) {
-        const part = chosenPart();
-        if (!part) return;
-        if (sb.sel.nodes.size !== 1) { status("Select one node of the body for the hinge point.", "error"); return; }
-        if (part.mode !== "hinge") part.mode = "hinge";
-        if (!part.hinge) part.hinge = {};
-        part.mounts = part.mounts || [];
-        const node = [...sb.sel.nodes][0];
-        const keep = part.mounts[which] ? part.mounts[which].break_force : undefined;
-        part.mounts[which] = keep ? { node, break_force: keep } : { node };
-        part.mounts = part.mounts.filter(Boolean);
-        partsChanged(part.object + ": hinge point " + "AB"[which] + " is node " + node + ".");
-    }
-    $("sbPartA").addEventListener("click", () => mountFromSelection(0));
-    $("sbPartB").addEventListener("click", () => mountFromSelection(1));
-    $("sbPartHeld").addEventListener("click", () => {
-        const part = chosenPart();
-        if (!part) return;
-        if (!sb.sel.nodes.size) { status("Select the nodes that hold the part in the view.", "error"); return; }
-        part.nodes = [...sb.sel.nodes];
-        partsChanged(part.object + " is held by " + part.nodes.length + " node" + (part.nodes.length > 1 ? "s" : "") + ".");
-    });
     // the nodes of a part: the selected nodes get its name in the layout (the nodes of a part are joined to each other, and to the body by the links of its hinge points)
     function assignPartNodes(part) {
         const s = softBody();
         freeze(s);
         sb.layout.forEach((n) => { if (n.part === part.object) delete n.part; });
         sb.sel.nodes.forEach((k) => { if (sb.layout[k]) sb.layout[k].part = part.object; });
-        $("sbPartInfo").textContent = part.object + " has " + sb.sel.nodes.size + " nodes of its own. The hinge points A and B are joined to its nearest nodes by link beams.";
         changed(true);
         renderParts();
-    }
-    $("sbPartNodes").addEventListener("click", () => {
-        const part = chosenPart(), s = softBody();
-        if (!part || !s) return;
-        if (!sb.sel.nodes.size) { status("Select the nodes of the part in the view first (a click, or a lasso with the middle mouse button).", "error"); return; }
-        assignPartNodes(part);
-    });
-    $("sbPartNodesClear").addEventListener("click", () => {
-        const part = chosenPart();
-        if (!part || !sb.layout) return;
-        sb.layout.forEach((n) => { if (n.part === part.object) delete n.part; });
-        $("sbPartInfo").textContent = part.object + " has no nodes of its own.";
-        changed(true);
-    });
-    function partsChanged(message) {
-        renderParts();
-        drawHinges();
-        $("sbPartInfo").textContent = message + " Set the forces in “Parts…”.";
-        changed();
     }
 
     // ---- what is saved
