@@ -413,6 +413,7 @@ export function initSoftBody(api) {
         const o = bench.obj, v = bench.vehicle;
         if (!o || !v) return;
         if (o.softBodyMesh) o.softBodyMesh.update();
+        if (bench.paused) { if (sb.group) updateShell(); placePartGroup(); return; }      // stopped for a moment: only what is shown follows
         if (o.parts) o.parts.update(dt);
         if (sb.crash) crashFrame(dt);
         if (sb.pushMode) pushReading();
@@ -1474,7 +1475,7 @@ export function initSoftBody(api) {
         const v = bench.vehicle;
         stopCrash();
         releaseForce();
-        if (v) { sb.savedGround = null; if (sb.pushMode) ensureGround3D(); v.reset(0, 0, Math.PI / 2); }
+        if (v) { sb.savedGround = null; if (sb.pushMode) ensureGround3D(); pauseForReset(); v.reset(0, 0, Math.PI / 2); }
         restoreCamera();
         $("sbResult").textContent = "Crash test stopped.";
     });
@@ -1546,12 +1547,20 @@ export function initSoftBody(api) {
         releaseForce();
         sb.savedGround = null;
         if (sb.pushMode) ensureGround3D();                          // the push mode needs the 3D ground
+        pauseForReset();
         v.reset(0, 0, Math.PI / 2);
         $("sbResult").textContent = "Repaired.";
     });
+    // Repair stops the simulation, puts everything back, and starts it again a moment later (the car settles from rest, not from a jump)
+    function pauseForReset() {
+        bench.paused = true;
+        clearTimeout(sb.resumeTimer);
+        sb.resumeTimer = setTimeout(() => { bench.paused = false; bench.last = performance.now(); }, 600);
+    }
 
     // the bench stops: the shell and the wall go
     function onStop() {
+        clearTimeout(sb.resumeTimer);
         if (OpenRacer.SoftBodyMesh && api.root()) OpenRacer.SoftBodyMesh.restore(api.root());      // the model of the editor is not bent by the shell of the bench any more
         if (!sb.restarting) { sb.edit = false; $("sbEdit").textContent = "Edit nodes"; $("sbEdit").classList.remove("accent"); $("sbEditBox").style.display = "none"; sb.sel.nodes.clear(); sb.sel.beam = null; }
         stopCrash();
