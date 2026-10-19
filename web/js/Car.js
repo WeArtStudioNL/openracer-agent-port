@@ -268,6 +268,7 @@ OpenRacer.Car = function( config, domElement ) {
             }
         }
         if(this.rig) this.rig.update(this.vehicle);
+        if(this.softBodyMesh) this.softBodyMesh.update();
         // the steering wheel of the model turns with the steering
         if(this.steeringWheel) {
             var sw = this.steeringWheel;

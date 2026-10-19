@@ -52,7 +52,7 @@ OpenRacer.CollisionProxy = (function () {
         }
         if(!spheres || spheres.length < 8) return null;
         // the wheels stick out of the body: a sphere on each, smaller than the wheel, so the road is felt by the suspension and not by this
-        if(wheels) wheels.forEach(function (w) { spheres.push({ x: w.x, y: w.y, z: w.z, r: Math.max(0.12, 0.55 * w.radius) }); });
+        if(wheels) wheels.forEach(function (w) { spheres.push({ x: w.x, y: w.y, z: w.z, r: Math.max(0.12, 0.55 * w.radius), wheel: true }); });
         return spheres;
     }
 
@@ -106,6 +106,13 @@ OpenRacer.CollisionProxy = (function () {
         if(spheres) {
             v.collisionSpheres = spheres;
             console.log("collision proxy: " + spheres.length + " spheres from the model");
+            // the shell of the car that dents (SoftBody.js), and its model (SoftBodyMesh.js); car.json "softbody": { "enabled": false } leaves it out
+            var cfg = (object.config && object.config.softbody) || {};
+            if(cfg.enabled !== false && OpenRacer.SoftBody) {
+                v.softBody = new OpenRacer.SoftBody(v, spheres, cfg);
+                try { object.softBodyMesh = OpenRacer.SoftBodyMesh.attach(model.tilt, v.softBody, toVehicle); } catch(e) { console.warn("SoftBodyMesh: " + e.message); }
+                console.log("soft body: " + v.softBody.count + " nodes, " + v.softBody.beamCount + " beams");
+            }
         }
         return spheres;
     }

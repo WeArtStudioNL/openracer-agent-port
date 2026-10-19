@@ -473,6 +473,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         this.px = x; this.py = height + this.cgHeight + (this.rideFront + this.rideRear) / 2; this.pz = z; // the ride height lifts the body
         this.vx = this.vy = this.vz = 0;
         this.wx = this.wy = this.wz = 0;
+        if(this.softBody) this.softBody.repair();
         this.ax = this.ay = 0;
         this.suspensionHistory = null;
         for(var i = 0; i < 4; i++) {
@@ -756,7 +757,14 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(candRadius === R && dx * dx + dy * dy + dz * dz < 0.8 * 0.8) return;
         candX = self.px; candY = self.py; candZ = self.pz; candRadius = R;
         self.ground.nearby(self.px, self.py, self.pz, R + 0.8, candidates);
+        // the triangles that can be a wall for the shell: not the ones that lie flat (the road under the car)
+        wallCandidates.length = 0;
+        for(var c = 0; c < candidates.length; c++) {
+            self.ground.normalOf(candidates[c], triNormal);
+            if(Math.abs(triNormal.y) < 0.5) wallCandidates.push(candidates[c]);
+        }
     }
+    var wallCandidates = [];
 
     // The contacts of the spheres with the triangles: the soft ones (wantSoft) or the walls, into contacts3 (contactCount of them)
     function scanContacts(wantSoft) {
@@ -771,6 +779,13 @@ OpenRacer.Vehicle = function (parameters, input) {
         for(var i = 0; i < spheres.length; i++) {
             var sp = spheres[i];
             rotate(self.qx, self.qy, self.qz, self.qw, sp.x, sp.y, sp.z, sphereAt);
+            var node = self.softBody ? self.softBody.nodeOfSphere[i] : -1;
+            if(node >= 0) {
+                // a sphere that is a node of the shell: where the node is now (it can be bent); the walls are the business of the shell
+                if(!wantSoft && self.softBody.alive(node)) continue;
+                self.softBody.position(node, nodePos);
+                rotate(self.qx, self.qy, self.qz, self.qw, nodePos.x, nodePos.y, nodePos.z, sphereAt);
+            }
             var cx = self.px + sphereAt.x, cy = self.py + sphereAt.y, cz = self.pz + sphereAt.z, r = sp.r;
             for(var k = 0; k < candidates.length; k++) {
                 var t = candidates[k];
@@ -815,6 +830,96 @@ OpenRacer.Vehicle = function (parameters, input) {
             }
         }
         return contactCount;
+    }
+
+    // ---- the shell (SoftBody.js): the walls act on its nodes, and the car feels them through the anchors
+    this.softBody = null;
+    var Rm = new Float64Array(9);                     // the turn of the car as a matrix: world = Rm * frame
+    var shellForce = { x: 0, y: 0, z: 0 }, nodePos = { x: 0, y: 0, z: 0 }, nodeVel = { x: 0, y: 0, z: 0 };
+
+    function setTurn() {
+        var x = self.qx, y = self.qy, z = self.qz, wq = self.qw;
+        Rm[0] = 1 - 2 * (y * y + z * z); Rm[1] = 2 * (x * y - z * wq); Rm[2] = 2 * (x * z + y * wq);
+        Rm[3] = 2 * (x * y + z * wq); Rm[4] = 1 - 2 * (x * x + z * z); Rm[5] = 2 * (y * z - x * wq);
+        Rm[6] = 2 * (x * z - y * wq); Rm[7] = 2 * (y * z + x * wq); Rm[8] = 1 - 2 * (x * x + y * y);
+    }
+
+    // The forces of the walls on the nodes (a stiff spring with a damper and friction, at the place where the node is now, bent or not)
+    function nodeContacts(h) {
+        var sb = self.softBody, ground = self.ground;
+        var P = sb.params;
+        var upX = Rm[1], upY = Rm[4], upZ = Rm[7];
+        var list = upY > 0.2 ? wallCandidates : candidates;     // a car that is not upright (on its side, on its roof) can also hit the flat triangles
+        if(!list.length) return;
+        var yUnder = -self.cgHeight + self.groundClearance;
+        var ux = self.px + upX * yUnder, uy = self.py + upY * yUnder, uz = self.pz + upZ * yUnder;
+        for(var k = 0; k < sb.count; k++) {
+            if(!sb.alive(k)) continue;
+            sb.position(k, nodePos);
+            var rx = Rm[0] * nodePos.x + Rm[1] * nodePos.y + Rm[2] * nodePos.z, ry = Rm[3] * nodePos.x + Rm[4] * nodePos.y + Rm[5] * nodePos.z, rz = Rm[6] * nodePos.x + Rm[7] * nodePos.y + Rm[8] * nodePos.z;
+            var cx = self.px + rx, cy = self.py + ry, cz = self.pz + rz, r = sb.radiusOf(k);
+            var fx = 0, fy = 0, fz = 0;
+            for(var i = 0; i < list.length; i++) {
+                var t = list[i];
+                if(!ground.boxNear(t, cx, cy, cz, r)) continue;
+                var d2 = ground.closest(t, cx, cy, cz, nearest);
+                if(d2 >= r * r) continue;
+                var dist = Math.sqrt(d2);
+                var nx, ny, nz;
+                if(dist > 1e-5) { nx = (cx - nearest.x) / dist; ny = (cy - nearest.y) / dist; nz = (cz - nearest.z) / dist; }
+                else { ground.normalOf(t, triNormal); nx = triNormal.x; ny = triNormal.y; nz = triNormal.z; dist = 0; }
+                var depth = r - dist;
+                if(depth < 1e-4) continue;
+                if(nearest.region !== 0) {
+                    ground.normalOf(t, triNormal);
+                    var along = nx * triNormal.x + ny * triNormal.y + nz * triNormal.z;
+                    if(along < 0) along = -along;
+                    if(along < 0.85) continue;
+                }
+                var nUp = nx * upX + ny * upY + nz * upZ;
+                if(ny >= 0.5 || nUp >= 0.5) continue;           // a surface that the car rides on: the springs of the body (bodyContacts3D)
+                if(ground.lineRange(t, nearest.x, nearest.y, nearest.z, upX, upY, upZ, wallRange)) {
+                    var top = (nearest.x - ux) * upX + (nearest.y - uy) * upY + (nearest.z - uz) * upZ + wallRange[1];
+                    if(top < self.kerbHeight) continue;          // lower than the kerb height: driven over
+                }
+                // the speed of the node against the wall
+                sb.velocity(k, nodeVel);
+                var vx = self.vx + (self.wy * rz - self.wz * ry) + Rm[0] * nodeVel.x + Rm[1] * nodeVel.y + Rm[2] * nodeVel.z;
+                var vy = self.vy + (self.wz * rx - self.wx * rz) + Rm[3] * nodeVel.x + Rm[4] * nodeVel.y + Rm[5] * nodeVel.z;
+                var vz = self.vz + (self.wx * ry - self.wy * rx) + Rm[6] * nodeVel.x + Rm[7] * nodeVel.y + Rm[8] * nodeVel.z;
+                var vn = vx * nx + vy * ny + vz * nz;
+                var cc = 2 * P.contactDamping * Math.sqrt(P.contactK * sb.massOf(k));
+                var fn = Math.max(0, P.contactK * depth - cc * vn);
+                var tx = vx - vn * nx, ty = vy - vn * ny, tz = vz - vn * nz;
+                var tl = Math.sqrt(tx * tx + ty * ty + tz * tz);
+                var ft = tl > 1e-6 ? Math.min(P.friction * fn, tl * sb.massOf(k) / h) : 0;
+                fx += fn * nx - (tl > 1e-6 ? ft * tx / tl : 0); fy += fn * ny - (tl > 1e-6 ? ft * ty / tl : 0); fz += fn * nz - (tl > 1e-6 ? ft * tz / tl : 0);
+                if(fn > 0 && self.shellHit < fn) self.shellHit = fn;
+            }
+            if(fx !== 0 || fy !== 0 || fz !== 0) {
+                // into the frame of the car
+                var o = 3 * k;
+                sb.force[o] += Rm[0] * fx + Rm[3] * fy + Rm[6] * fz;
+                sb.force[o + 1] += Rm[1] * fx + Rm[4] * fy + Rm[7] * fz;
+                sb.force[o + 2] += Rm[2] * fx + Rm[5] * fy + Rm[8] * fz;
+            }
+        }
+    }
+    this.shellHit = 0;                                // the biggest force of a wall on a node, for the debugging
+
+    // One step of the shell, and the force and the torque of its anchors on the car
+    function shellStep(dt, force, torque) {
+        var sb = self.softBody;
+        ensureProxy();
+        refreshCandidates();
+        setTurn();
+        if(sb.quiet && !wallCandidates.length && Rm[4] > 0.2) return;      // nothing to hit and nothing moving
+        sb.step(dt, nodeContacts);
+        var rc = sb.reaction;
+        var fx = Rm[0] * rc[0] + Rm[1] * rc[1] + Rm[2] * rc[2], fy = Rm[3] * rc[0] + Rm[4] * rc[1] + Rm[5] * rc[2], fz = Rm[6] * rc[0] + Rm[7] * rc[1] + Rm[8] * rc[2];
+        var tx = Rm[0] * rc[3] + Rm[1] * rc[4] + Rm[2] * rc[5], ty = Rm[3] * rc[3] + Rm[4] * rc[4] + Rm[5] * rc[5], tz = Rm[6] * rc[3] + Rm[7] * rc[4] + Rm[8] * rc[5];
+        force.x += fx; force.y += fy; force.z += fz;
+        torque.x += tx; torque.y += ty; torque.z += tz;
     }
 
     // soft contacts: a damped spring along the normal of the surface and friction along it, at the point of contact
@@ -1379,7 +1484,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         }
 
         // ---- the body on the road, for a landing or a car that has turned over
-        if(ground3D) bodyContacts3D(force, torque); else bodyCorners(force, torque);
+        if(ground3D) { bodyContacts3D(force, torque); if(self.softBody) shellStep(dt, force, torque); } else bodyCorners(force, torque);
 
         // ---- integrate: Newton for the movement, Euler for the rotation (with the gyroscopic term of a body that is not round)
         var accX = force.x / m + forceBody.x / mBody, accY = force.y / m + forceBody.y / mBody, accZ = force.z / m + forceBody.z / mBody;
