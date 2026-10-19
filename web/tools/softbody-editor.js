@@ -1441,7 +1441,7 @@ export function initSoftBody(api) {
     // ---- the crash test: the car at a speed into a wall
     $("sbSpeed").addEventListener("input", () => { $("sbSpeedLabel").textContent = $("sbSpeed").value + " km/h"; });
     $("sbAngle").addEventListener("input", () => { $("sbAngleLabel").textContent = $("sbAngle").value + "°"; });
-    const WALL_Z = 40;
+    let WALL_Z = 40;                                              // where the wall is: ahead of the car, set by the crash test
     // the floor and the wall as the triangles of a 3D ground (Ground.js), which the physics of the shell needs
     function crashGround(floorY, angleDeg) {
         const g = new OpenRacer.GroundWorld(5);
@@ -1473,13 +1473,13 @@ export function initSoftBody(api) {
             const speed = parseFloat($("sbSpeed").value) / 3.6, angle = parseFloat($("sbAngle").value);
             const floorY = api.floorY();
             stopCrash();
-            cameraToCar();
+            // the car stays where it is and drives straight ahead; only the wall is new (a few metres in front of its nose), and the camera is left alone
+            WALL_Z = 2.6 + 4;
             sb.wall = wallMesh(floorY, angle);
             scene.add(sb.wall);
             sb.savedGround = sb.savedGround || v.ground;
             v.ground = crashGround(floorY, angle);
             v.reset(0, 0, Math.PI / 2);
-            v.pz = WALL_Z - 1.5 - 2.2 - speed * 0.9;
             v.vz = speed;
             v.wheels.forEach((w) => { w.omega = speed / w.radius; });
             Object.assign(bench.input, { parkingLock: false, neutral: true, throttle: 0, brakePedal: 0, handbrake: false });     // it rolls: no brake before the wall
@@ -1495,10 +1495,6 @@ export function initSoftBody(api) {
         const u = v.vz;
         c.peakG = Math.max(c.peakG, Math.abs(u - c.lastU) / Math.max(dt, 1e-3) / 9.81);
         c.lastU = u;
-        // the camera follows the car
-        const dx = v.px - controls.target.x, dy = v.py - controls.target.y, dz = v.pz - controls.target.z;
-        controls.target.x += dx * 0.08; controls.target.y += dy * 0.08; controls.target.z += dz * 0.08;
-        camera.position.x += dx * 0.08; camera.position.y += dy * 0.08; camera.position.z += dz * 0.08;
         const st = s.stats();
         const events = bench.obj.parts ? bench.obj.parts.events.length : 0;
         $("sbResult").textContent = "Peak " + c.peakG.toFixed(0) + " g · bend " + (st.maxBend * 100).toFixed(0) + " cm · took up " + (st.absorbed / 1000).toFixed(0) + " kJ of " +
@@ -1511,14 +1507,6 @@ export function initSoftBody(api) {
         if (sb.wall) { scene.remove(sb.wall); sb.wall = null; }
         if (bench.vehicle && sb.savedGround) { bench.vehicle.ground = sb.savedGround; }
     }
-    // the camera back on the car in the middle of the view, from the side and a little above
-    function cameraToCar() {
-        const target = new THREE.Vector3(0, api.floorY() + 0.7, 0);
-        const distance = Math.min(12, Math.max(5, camera.position.distanceTo(controls.target)));
-        controls.target.copy(target);
-        camera.position.set(target.x - distance * 0.7, target.y + distance * 0.4, target.z + distance * 0.7);
-        controls.update();
-    }
     $("sbCrash").addEventListener("click", crash);
     $("sbRepair").addEventListener("click", () => {
         const v = bench.vehicle;
@@ -1528,7 +1516,6 @@ export function initSoftBody(api) {
         sb.savedGround = null;
         if (sb.pushMode) ensureGround3D();                          // the push mode needs the 3D ground
         v.reset(0, 0, Math.PI / 2);
-        cameraToCar();
         $("sbResult").textContent = "Repaired.";
     });
 

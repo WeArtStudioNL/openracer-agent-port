@@ -90,7 +90,7 @@ The "Soft body" card of the car editor (`web/tools/softbody-editor.js`, hooked i
 * **Show the shell**: starts the test bench, makes the shell from the model as the game does, and draws the nodes and beams over it. A node is green when whole, yellow at its yield bend, red above it, grey when its anchor is torn.
 * **Selection**: click a node or a beam in the view; set its yield and break force (kN) or put it back to the default. Saved as `softbody.nodes` (`{ i, yield_force, break_force }`) and `softbody.beams` (`{ a, b, ... }`). The numbers belong to the nodes as they are made from the model: change the model and they may point elsewhere.
 * **Parts…**: a list of the objects of the model with a behaviour (hinge or loose) and every number of `parts`; the hinges are drawn as orange arrows in the view.
-* **Crash test**: a speed (10 to 150 km/h) and an angle of the wall; the car rolls into a wall on a 3D ground, the camera follows, and the card shows the peak deceleration, the bend, the energy that the shell took up, the torn anchors and beams and the part events. **Repair** puts everything back.
+* **Crash test**: a speed (10 to 150 km/h) and an angle of the wall; the car drives straight ahead from its start point into a wall on a 3D ground (only the wall is added, 6.6 m ahead of the middle of the car: the car is not moved to the wall, and the camera is not touched), and the card shows the peak deceleration, the bend, the energy that the shell took up, the torn anchors and beams and the part events. **Repair** puts everything back.
 * Edits of strengths in the view act on the bench at once; the other settings make the shell again (a moment after the last change).
 
 ### Editing the nodes, the lasso and the folding bars
@@ -190,3 +190,7 @@ Every pin point has two forces (kN; 1 kN is about 102 kg of force):
 The load on a pin is the largest of: the force in the link beam of the pin (a part with nodes of its own: the hits on its deformation nodes come through that beam), the force of the shell on the node of the body that the pin hangs on, and the inertia of the part (mass times acceleration) shared over the pins that hold. So a door that is hit on its side nodes opens at the force that gets to the pin, and an object that is only shaken opens at its mass times the acceleration. The **deformation nodes** (the nodes of the part) bend and tear at their own strength, set for all of them with one number.
 
 Tested with a door of 10 kg: at 30 and 60 km/h against a wall it stayed shut with the pin at 20 kN; at 130 km/h it opened and hung on its hinge (breaks off at 200 kN); with opens at 1 kN and breaks off at 5 kN it opened, the pin tore, and it flew off as a free body that came to rest on the road with collision with the car on. Note that a door of 10 kg only loads a pin with about 18 kN at 130 km/h on its own inertia: use lower forces for the pin, or hit the door on the side.
+
+### The crash test does not move the camera
+
+The crash test used to put the car far from the wall for a run-up and let the camera follow it. Now the car starts at its start point and drives straight ahead at the chosen speed; only the wall is added, a few metres in front of its nose. The camera stays where you put it (Repair does not move it either).
