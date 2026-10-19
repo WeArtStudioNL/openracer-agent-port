@@ -151,3 +151,7 @@ The "Parts…" panel is not modal any more: it stays beside the view, so nodes c
 * **Pick on the model** (object): click the part on the model; the name of the group around the mesh is used (the chain from mesh to root is in the status line, and the field can be edited).
 * **Set = selected node** (hinge point A and B), **Set = selected nodes** (held by, own nodes of the part), **Clear** (own nodes).
 * **Origin**: **Node** (the place of the selected node) or **Pick point** (click a point on the model surface). **Axis**: **A→B** (from the two hinge points) or **X**, **Y**, **Z**.
+
+### Repair and the latch
+
+A hinge part **without** `latch_force` used to start open: after Repair it swung on its hinge point at once (and with a hinge point far from the part it hung and swung away from its place, which looked like a part that was not repaired). A hinge now has a **default latch of 3 g of the part** (`mass * 9.81 * 3` N): it sits shut in driving and opens in a crash. `latch_force: 0` is a hinge that is open from the start. After Repair every part is back in its place, shut.

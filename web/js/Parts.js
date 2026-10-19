@@ -159,7 +159,7 @@ OpenRacer.Parts = (function () {
                     axis: new THREE.Vector3().fromArray(hinge.axis || [0, 1, 0]).normalize(),
                     min: (hinge.min !== undefined ? hinge.min : -90) * DEG, max: (hinge.max !== undefined ? hinge.max : 90) * DEG,
                     rest: (hinge.rest || 0) * DEG, spring: hinge.spring || 0, damper: hinge.damper || 0,
-                    latch: hinge.latch_force || 0, breakForce: hinge.break_force || 0
+                    latch: hinge.latch_force !== undefined ? hinge.latch_force : mass * 9.81 * 3, breakForce: hinge.break_force || 0
                 },
                 breakForce: spec.break_force !== undefined ? spec.break_force : 0,
                 // the points where the part is hinged to the body: nodes of the shell, each with the force at which it tears off

@@ -106,7 +106,7 @@ export function initSoftBody(api) {
             '<div><label>Rest angle (°)</label><input type="number" data-f="rest" step="5" placeholder="0"></div></div>' +
             '<div class="row"><div><label>Spring (N·m/rad)</label><input type="number" data-f="spring" step="1" min="0" placeholder="0"></div>' +
             '<div><label>Damper (N·m·s/rad)</label><input type="number" data-f="damper" step="0.5" min="0" placeholder="0"></div>' +
-            '<div><label>Latch force (kN)</label><input type="number" data-f="latch" step="0.5" min="0" placeholder="0: not latched"></div>' +
+            '<div><label>Latch force (kN)</label><input type="number" data-f="latch" step="0.5" min="0" placeholder="3 g of the part; 0: open"></div>' +
             '<div><label>Tears off at (kN)</label><input type="number" data-f="hinge_break" step="1" min="0" placeholder="0: never"></div></div></div>';
         const q = (f) => row.querySelector('[data-f="' + f + '"]');
         q("object").value = part.object || "";
@@ -153,7 +153,7 @@ export function initSoftBody(api) {
             if (origin) hinge.origin = origin;
             if (axis) hinge.axis = axis;
             ["min", "max", "rest", "spring", "damper"].forEach((f) => { if (n(f) !== undefined) hinge[f] = n(f); });
-            if (n("latch")) hinge.latch_force = n("latch") * 1000;
+            if (n("latch") !== undefined) hinge.latch_force = n("latch") * 1000;
             if (n("hinge_break")) hinge.break_force = n("hinge_break") * 1000;
             part.hinge = hinge;
             const mounts = [];
