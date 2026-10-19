@@ -53,6 +53,14 @@ OpenRacer.Parts = (function () {
         if (!spec || !spec.object || spec.mode === "fixed" || !spec.mode) return null;
         var a = new THREE.Vector3();
         var object = ctx.root.getObjectByName(spec.object);
+        // the car editor uses the same model again and again: a part that an earlier test has thrown out of it comes back to its place first
+        if (object) {
+            var home = object.userData.partHome;
+            if (!home) home = object.userData.partHome = { parent: object.parent, matrix: object.matrix.clone(), autoUpdate: object.matrixAutoUpdate };
+            else if (object.parent !== home.parent || !object.matrix.equals(home.matrix)) {
+                home.parent.add(object); object.matrix.copy(home.matrix); object.matrixAutoUpdate = home.autoUpdate; object.matrixWorldNeedsUpdate = true;
+            }
+        }
         if (!object) { console.warn("Parts: no object '" + spec.object + "' in the model"); return null; }
         object.updateMatrixWorld(true);                      // as CollisionProxy.js: the frame of the model, not of the world
         // the points of the shape: the vertices of its meshes in the frame of the car
@@ -144,7 +152,21 @@ OpenRacer.Parts = (function () {
             var group = [];
             if (sb && sb.partOf) for (var gk = 0; gk < sb.count; gk++) if (sb.partOf[gk] === spec.object) group.push(gk);
             if (group.length && !spec.nodes) nodes = group.slice();
-            var mountList = hinge && sb ? (spec.mounts || []).filter(function (m) { return m && m.node >= 0 && m.node < sb.count; }).slice(0, 2) : [];
+            // a mount is a node of the shell or a point (in the frame of the car): a point is held by the nearest node of the body
+            var mountList = hinge && sb ? (spec.mounts || []).filter(function (m) { return m && ((m.node >= 0 && m.node < sb.count) || (Array.isArray(m.point) && m.point.length === 3)); }).slice(0, 2).map(function (m) {
+                var out = { node: m.node, break_force: m.break_force, point: Array.isArray(m.point) ? new THREE.Vector3().fromArray(m.point) : null };
+                if (out.point) {
+                    var best = 1e9;
+                    out.node = 0;
+                    for (var bk = 0; bk < sb.count; bk++) {
+                        if (sb.partOf && sb.partOf[bk] === spec.object) continue;
+                        sb.restPosition(bk, c);
+                        var dist = out.point.distanceToSquared(c);
+                        if (dist < best) { best = dist; out.node = bk; }
+                    }
+                }
+                return out;
+            }) : [];
             mountList.forEach(function (m) {
                 if (!group.length) return;
                 sb.restPosition(m.node, a);
@@ -164,12 +186,12 @@ OpenRacer.Parts = (function () {
                 breakForce: spec.break_force !== undefined ? spec.break_force : 0,
                 // the points where the part is hinged to the body: nodes of the shell, each with the force at which it tears off
                 mounts: mountList.map(function (m) {
-                    return { node: m.node, breakForce: m.break_force || 0, alive: true, beam: m.beam, point: sb.restPosition(m.node, new THREE.Vector3()) };
+                    return { node: m.node, breakForce: m.break_force || 0, alive: true, beam: m.beam, point: m.point || sb.restPosition(m.node, new THREE.Vector3()) };
                 }),
                 group: group.length ? spec.object : null,
                 // held: sits on the car; hinged: swings on the joint; free: loose
                 state: "held", joint: null, kept: null, grace: 0, lastVel: new THREE.Vector3(), load: 0, hasVel: false,
-                parent: object.parent, matrix: object.matrix.clone(), autoUpdate: object.matrixAutoUpdate
+                parent: object.userData.partHome.parent, matrix: object.userData.partHome.matrix.clone(), autoUpdate: object.userData.partHome.autoUpdate
             });
         });
         if (!parts.length) return null;
@@ -397,6 +419,8 @@ OpenRacer.Parts = (function () {
 
         return {
             world: world, parts: parts, events: events, update: update, repair: repair,
+            // the car is taken out of the scene (the car editor makes a new one for every test): the parts that were thrown out of it go with it
+            dispose: function () { parts.forEach(function (p) { if (p.state !== "held" && p.object.parent) p.object.parent.remove(p.object); }); },
             states: function () { return parts.map(function (p) { return p.name + ":" + p.state; }).join(" "); }
         };
     }

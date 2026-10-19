@@ -1496,6 +1496,7 @@ async function startBench() {
 }
 
 function stopBench() {
+    if (bench.obj && bench.obj.parts && bench.obj.parts.dispose) bench.obj.parts.dispose();   // a door that was thrown off does not stay on the floor
     bench.objects.forEach((o) => scene.remove(o));
     if (bench.script && preview.playing) stopPreview();
     if (bench.driving) stopDriving();

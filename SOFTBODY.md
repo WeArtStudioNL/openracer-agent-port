@@ -155,3 +155,11 @@ The "Parts…" panel is not modal any more: it stays beside the view, so nodes c
 ### Repair and the latch
 
 A hinge part **without** `latch_force` used to start open: after Repair it swung on its hinge point at once (and with a hinge point far from the part it hung and swung away from its place, which looked like a part that was not repaired). A hinge now has a **default latch of 3 g of the part** (`mass * 9.81 * 3` N): it sits shut in driving and opens in a crash. `latch_force: 0` is a hinge that is open from the start. After Repair every part is back in its place, shut.
+
+### Pin points on the surface
+
+A hinge point (`mounts`) can be a **point on the surface** instead of a node: `{ "point": [x, y, z], "break_force": N }`, in the frame of the car. The hinge goes through the exact points; the hold on the body (the link beam of a part with nodes of its own, the shell load on the mount) is taken by the nearest node of the body. In the editor the hinge point fields have **Pick point** (click the model) next to **Set = selected node**; the axis button **A→B** works with both. A point wins over a node when both are filled in.
+
+### The editor leaves nothing behind
+
+The car editor makes a new car for every test. A part that a test has thrown off stays in the scene, so after a few tests a door lay on the floor (also after Repair, which only puts back the parts of the car of the current test). `Parts.dispose()` takes the thrown parts out of the scene when a test ends, and a model that is used again gets its parts back in their place before they are measured (`userData.partHome`).

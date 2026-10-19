@@ -99,6 +99,8 @@ export function initSoftBody(api) {
             '<div class="row"><div><label>Own nodes of the part ' + set("partNodes", "Set = selected nodes") + set("partNodesClear", "Clear") + '</label><div class="hint" data-f="partNodesInfo"></div></div></div>' +
             '<div class="hinge"><div class="row"><div><label>Hinge point A (node) ' + set("mA", "Set = selected node") + '</label><input type="number" data-f="mA" step="1" min="0"></div><div><label>tears off at (kN)</label><input type="number" data-f="mAf" step="1" min="0" placeholder="0: never"></div>' +
             '<div><label>Hinge point B (node) ' + set("mB", "Set = selected node") + '</label><input type="number" data-f="mB" step="1" min="0"></div><div><label>tears off at (kN)</label><input type="number" data-f="mBf" step="1" min="0" placeholder="0: never"></div></div>' +
+            '<div class="row"><div><label>Point A on the surface (x, y, z) ' + set("mAPick", "Pick point") + '</label><input type="text" data-f="mApt" placeholder="instead of a node"></div>' +
+            '<div><label>Point B on the surface (x, y, z) ' + set("mBPick", "Pick point") + '</label><input type="text" data-f="mBpt" placeholder="instead of a node"></div></div>' +
             '<div class="row"><div><label>Origin x, y, z (m) ' + set("originNode", "Node") + set("originPick", "Pick point") + '</label><input type="text" data-f="origin" placeholder="the middle of the part"></div>' +
             '<div><label>Axis ' + set("axisAB", "A→B") + set("axisX", "X") + set("axisY", "Y") + set("axisZ", "Z") + '</label><input type="text" data-f="axis" placeholder="0, 1, 0"></div></div>' +
             '<div class="row"><div><label>Lowest angle (°)</label><input type="number" data-f="min" step="5" placeholder="-90"></div>' +
@@ -117,8 +119,8 @@ export function initSoftBody(api) {
         q("axis").value = h.axis ? vec(h.axis) : "";
         ["min", "max", "rest", "spring", "damper"].forEach((f) => { q(f).value = h[f] !== undefined ? h[f] : ""; });
         const m = part.mounts || [];
-        q("mA").value = m[0] ? m[0].node : ""; q("mAf").value = m[0] && m[0].break_force ? m[0].break_force / 1000 : "";
-        q("mB").value = m[1] ? m[1].node : ""; q("mBf").value = m[1] && m[1].break_force ? m[1].break_force / 1000 : "";
+        q("mA").value = m[0] && m[0].node !== undefined ? m[0].node : ""; q("mApt").value = m[0] && m[0].point ? vec(m[0].point) : ""; q("mAf").value = m[0] && m[0].break_force ? m[0].break_force / 1000 : "";
+        q("mB").value = m[1] && m[1].node !== undefined ? m[1].node : ""; q("mBpt").value = m[1] && m[1].point ? vec(m[1].point) : ""; q("mBf").value = m[1] && m[1].break_force ? m[1].break_force / 1000 : "";
         q("heldBy").value = (part.nodes || []).join(", ");
         q("latch").value = h.latch_force !== undefined ? h.latch_force / 1000 : "";
         q("hinge_break").value = h.break_force !== undefined ? h.break_force / 1000 : "";
@@ -157,9 +159,12 @@ export function initSoftBody(api) {
             if (n("hinge_break")) hinge.break_force = n("hinge_break") * 1000;
             part.hinge = hinge;
             const mounts = [];
-            [["mA", "mAf"], ["mB", "mBf"]].forEach(([nf, ff]) => {
-                if (n(nf) === undefined || n(nf) < 0) return;
-                const mount = { node: n(nf) };
+            [["mA", "mAf", "mApt"], ["mB", "mBf", "mBpt"]].forEach(([nf, ff, pf]) => {
+                const point = numbers(q(pf).value);
+                let mount;
+                if (point) mount = { point };                                       // a point on the surface wins over a node
+                else if (n(nf) !== undefined && n(nf) >= 0) mount = { node: n(nf) };
+                else return;
                 if (n(ff)) mount.break_force = n(ff) * 1000;
                 mounts.push(mount);
             });
@@ -198,17 +203,24 @@ export function initSoftBody(api) {
         const one = () => { if (sb.sel.nodes.size !== 1) { fail("Select one node in the view (a click on it)."); return null; } return [...sb.sel.nodes][0]; };
         const rest = new THREE.Vector3();
         switch (what) {
-            case "mA": case "mB": { const k = one(); if (k !== null) { put(what, k); status("Node " + k + " is the hinge point " + what.slice(1) + ".", "ok"); } break; }
+            case "mA": case "mB": { const k = one(); if (k !== null) { q(what + "pt").value = ""; put(what, k); status("Node " + k + " is the hinge point " + what.slice(1) + ".", "ok"); } break; }
             case "heldBy":
                 if (!sb.sel.nodes.size) { fail("Select the nodes that hold the part in the view."); break; }
                 put("heldBy", [...sb.sel.nodes].join(", ")); break;
             case "originNode": { const k = one(); if (k !== null) { s.restPosition(k, rest); put("origin", [rest.x, rest.y, rest.z].map((x) => x.toFixed(3)).join(", ")); } break; }
+            case "mAPick": case "mBPick": sb.pick = { type: "mount", part, row, field: what.slice(0, 2) + "pt", node: what.slice(0, 2) }; status("Click the model where the pin point is.", "ok"); break;
             case "originPick": sb.pick = { type: "origin", part, row }; status("Click the model where the hinge is.", "ok"); break;
             case "object": sb.pick = { type: "object", part, row }; status("Click the part on the model.", "ok"); break;
             case "axisAB": {
-                const a = parseInt(q("mA").value, 10), b = parseInt(q("mB").value, 10);
-                if (!(a >= 0 && b >= 0 && a < s.count && b < s.count && a !== b)) { fail("Set the hinge points A and B first."); break; }
-                const p1 = s.restPosition(a, new THREE.Vector3()), p2 = s.restPosition(b, new THREE.Vector3()).sub(p1).normalize();
+                const place = (f, nf) => {
+                    const pt = numbers(q(f).value);
+                    if (pt) return new THREE.Vector3(...pt);
+                    const k = parseInt(q(nf).value, 10);
+                    return k >= 0 && k < s.count ? s.restPosition(k, new THREE.Vector3()) : null;
+                };
+                const p1 = place("mApt", "mA"), p2 = place("mBpt", "mB");
+                if (!p1 || !p2 || p1.distanceTo(p2) < 1e-4) { fail("Set the hinge points A and B first (a node or a point on the surface)."); break; }
+                p2.sub(p1).normalize();
                 put("axis", [p2.x, p2.y, p2.z].map((x) => x.toFixed(3)).join(", ")); break;
             }
             case "axisX": put("axis", "1, 0, 0"); break;
@@ -230,7 +242,12 @@ export function initSoftBody(api) {
         sb.pick = null;
         const field = (f) => pick.row.querySelector('[data-f="' + f + '"]');
         const put = (f, value) => { field(f).value = value; field(f).dispatchEvent(new Event("change", { bubbles: true })); };
-        if (pick.type === "origin") {
+        if (pick.type === "mount") {
+            const local = sb.group.worldToLocal(hit.point.clone());
+            pick.row.querySelector('[data-f="' + pick.node + '"]').value = "";
+            put(pick.field, [local.x, local.y, local.z].map((x) => x.toFixed(3)).join(", "));
+            status("The pin point is on the surface where you clicked. The hinge goes through the points A and B.", "ok");
+        } else if (pick.type === "origin") {
             const local = sb.group.worldToLocal(hit.point.clone());
             put("origin", [local.x, local.y, local.z].map((x) => x.toFixed(3)).join(", "));
             status("The hinge origin is on the surface where you clicked.", "ok");
@@ -390,15 +407,16 @@ export function initSoftBody(api) {
         const pos = sb.mountLines.geometry.attributes.position, p = new THREE.Vector3(), q = new THREE.Vector3();
         let n = 0;
         sb.parts.forEach((part) => {
-            const m = (part.mounts || []).filter((x) => x.node < s.count);
+            const m = (part.mounts || []).filter((x) => x.point || x.node < s.count);
+            const at = (mount, out) => (mount.point ? out.set(mount.point[0], mount.point[1], mount.point[2]) : s.position(mount.node, out));
             if (m.length >= 2 && n < 38) {
-                s.position(m[0].node, p); s.position(m[1].node, q);
+                at(m[0], p); at(m[1], q);
                 pos.setXYZ(2 * n, p.x, p.y, p.z); pos.setXYZ(2 * n + 1, q.x, q.y, q.z); n++;
             }
             if (m.length >= 1) {
                 (part.nodes || []).forEach((k) => {
                     if (k >= s.count || n >= 39) return;
-                    s.position(m[0].node, p); s.position(k, q);
+                    at(m[0], p); s.position(k, q);
                     pos.setXYZ(2 * n, p.x, p.y, p.z); pos.setXYZ(2 * n + 1, q.x, q.y, q.z); n++;
                 });
             }
