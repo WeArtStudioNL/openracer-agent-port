@@ -12,6 +12,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { initSoftBody } from "./softbody-editor.js";
 
 const $ = (id) => document.getElementById(id);
 const SLOTS = ["FR", "FL", "RL", "RR"];
@@ -20,6 +21,7 @@ const WHEEL_NAME = /wheel|tyre|tire|rim|felg|wiel|rueda|roue|ruota|velg|alloy/i;
 const ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const FILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/;
 
+let softBodyEditor = null; // the Soft body card (softbody-editor.js), made at the end
 const state = {
     files: new Map(),       // name -> File, the files that were picked
     mainFile: null,         // name of the glb or gltf among them
@@ -1077,6 +1079,11 @@ function buildConfig(id) {
             config.wheels.nodes[slot] = names;
         }
     }
+    if (softBodyEditor) {
+        const soft = softBodyEditor.read();
+        if (soft.softbody) config.softbody = soft.softbody;
+        if (soft.parts) config.parts = soft.parts;
+    }
     return config;
 }
 
@@ -1240,6 +1247,7 @@ function fill(car) {
     state.curve = e.torque_curve.map((p) => [p[0], p[1]]);
     set("brakeFront", car.brakes.front); set("brakeRear", car.brakes.rear);
     fillCameras(OpenRacer.cameraSettings(car));
+    if (softBodyEditor) softBodyEditor.fill(car);
     fillEngineSim(OpenRacer.engineSimParams(car));
     stopPreview();
     engineSimChanged();
@@ -1290,6 +1298,7 @@ function loadExisting() {
 }
 
 function newCar() {
+    if (softBodyEditor) softBodyEditor.fill({});
     fillEngineSim(OpenRacer.engineSimParams(null));
     tuningFromCar(null);
     stopPreview();
@@ -1426,7 +1435,7 @@ function tuningValues(config) {
 // "Drop car" lets it fall from a height, "Shake test" presses on its four corners in turn. The model is built the way the game
 // builds it (CarLoader.js: the wheels taken out, the suspension rig found), from the model and the settings as they are now.
 window.THREE = Object.assign({}, THREE, { GLTFLoader });
-const PHYSICS_SCRIPTS = ["Engine.js", "Wheel.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "CarLoader.js"];
+const PHYSICS_SCRIPTS = ["Engine.js", "Wheel.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "CarLoader.js", "Ground.js", "CollisionProxy.js", "SoftBody.js", "SoftBodyMesh.js", "Parts.js"];
 let physicsLoading = null;
 function loadPhysics() {
     if (!physicsLoading) {
@@ -1472,6 +1481,9 @@ async function startBench() {
     scene.add(bench.body);
     model.wheels.forEach((w) => scene.add(w));
     bench.objects = [bench.body, ...model.wheels];
+    // the shell and the parts of the car, as the game makes them when it has loaded the model (CollisionProxy.js)
+    bench.obj = { vehicle: v, wheels: v.wheels, config, bodyLift: null };
+    try { OpenRacer.CollisionProxy.apply(bench.obj, model, bench.modelMid); } catch (e) { console.warn("soft body: " + e.message); }
     bench.vehicle = v; bench.model = model; bench.input = input; bench.config = config; bench.script = null; bench.last = performance.now();
     pivot.visible = false; helpers.visible = false;
     $("testStop").style.display = "";
@@ -1483,7 +1495,8 @@ function stopBench() {
     bench.objects.forEach((o) => scene.remove(o));
     if (bench.script && preview.playing) stopPreview();
     if (bench.driving) stopDriving();
-    bench.objects = []; bench.vehicle = null; bench.model = null; bench.shake = null; bench.script = null;
+    bench.objects = []; bench.vehicle = null; bench.model = null; bench.shake = null; bench.script = null; bench.obj = null;
+    if (softBodyEditor) softBodyEditor.onStop();
     pivot.visible = true; helpers.visible = true;
     $("testStop").style.display = "none";
 }
@@ -1530,6 +1543,7 @@ function benchFrame(now) {
         }
     });
     if (bench.model.rig) bench.model.rig.update(v);
+    if (softBodyEditor) softBodyEditor.frame(dt);
 }
 
 function placeForDrop(v, height, tiltDegrees) {
@@ -1667,6 +1681,7 @@ $("testShakePush").addEventListener("input", () => { $("testShakePushLabel").tex
 $("testShakePace").addEventListener("input", () => { $("testShakePaceLabel").textContent = "every " + parseFloat($("testShakePace").value).toFixed(1) + " s"; });
 window.benchFrame = benchFrame; // the render loop at the top calls it from here on
 window.benchState = bench; // for a look from the console
+window.softBodyEditor = () => softBodyEditor;
 
 // ---- driving on the test bench: the keyboard drives the car over the floor (arrows or WASD, space the handbrake, R back to the start)
 const keys = {};
@@ -1765,3 +1780,9 @@ function driveFrame(dt) {
 $("testDrive").addEventListener("click", toggleDrive);
 $("testReset").addEventListener("click", resetCar);
 tuningFromCar(null); // the Tuning card for a new car
+
+softBodyEditor = initSoftBody({
+    $, THREE, scene, camera, renderer, controls, bench, status, startBench, stopBench,
+    nodeNames: () => state.nodes.map((n) => n.name),
+    floorY: () => grid.position.y
+});

@@ -221,6 +221,36 @@
         </details>
 
         <details class="card">
+            <summary>Soft body<span class="meta" id="sbInfo"></span></summary>
+            <div class="body">
+                <p class="sub">The shell of the car: nodes and beams made from the model that dent, with a yield force and a break force, and parts that swing on a hinge or come loose. Show the shell, click a node or a beam in the view and set what it can take.</p>
+                <label class="check"><input type="checkbox" id="sbEnabled" checked> The car dents</label>
+                <div class="row">
+                    <button class="small accent" id="sbShow">Show the shell</button>
+                    <button class="small" data-open="dlgSoftBody">Material and strengths…</button>
+                    <button class="small" data-open="dlgParts">Parts…</button>
+                </div>
+                <div class="group">Selection</div>
+                <div class="hint" id="sbSelection">Show the shell, then click a node or a beam in the view.</div>
+                <div class="row" id="sbSelFields" style="display:none">
+                    <div><input type="number" id="sbSelYield" step="1" min="0"><div class="hint">yield (kN)</div></div>
+                    <div><input type="number" id="sbSelBreak" step="1" min="0"><div class="hint">break (kN)</div></div>
+                    <div class="fixed"><button class="small" id="sbSelSet">Set</button> <button class="small ghost" id="sbSelClear">Default</button></div>
+                </div>
+                <div class="group">Crash test</div>
+                <div class="row">
+                    <div><label>Speed <b id="sbSpeedLabel">50 km/h</b></label><input type="range" id="sbSpeed" min="10" max="150" value="50" step="5"></div>
+                    <div><label>Angle <b id="sbAngleLabel">0°</b></label><input type="range" id="sbAngle" min="0" max="60" value="0" step="5"></div>
+                </div>
+                <div class="row">
+                    <button class="small accent" id="sbCrash">Crash into the wall</button>
+                    <button class="small ghost" id="sbRepair">Repair</button>
+                </div>
+                <div class="hint" id="sbResult"></div>
+            </div>
+        </details>
+
+        <details class="card">
             <summary>Materials</summary>
             <div class="body">
                 <div class="modal-link">
@@ -327,6 +357,57 @@
             <div></div><div></div>
         </div>
         <div class="buttons"><button class="small ghost" id="camDefaults">Defaults for the size of the car</button></div>
+    </div>
+</dialog>
+
+<dialog id="dlgSoftBody">
+    <div class="head"><h3>Soft body: material and strengths</h3><button class="close" data-close>×</button></div>
+    <div class="content">
+        <p class="sub">What the shell is made of. An empty field is the default (shown grey). A hit pushes a node: it springs back up to the <b>yield</b> force, bends for good above it (the energy is gone) and tears off at the <b>break</b> force. A node is held to the car by its <b>anchor</b>, and to its neighbours by <b>beams</b>. Single nodes and beams are set in the view.</p>
+        <div class="row">
+            <div><label>Material preset</label><select id="sbPreset"></select></div>
+            <div><label>Shell mass (kg)</label><input type="number" class="sb" data-key="shell_mass" step="10" placeholder="20% of the car"></div>
+            <div><label>Hardening</label><input type="number" class="sb" data-key="hardening" step="0.05" placeholder="0.2"></div>
+        </div>
+        <div class="group">Anchor: node to the car</div>
+        <div class="row">
+            <div><input type="number" class="sb" data-key="anchor.stiffness" step="0.1" placeholder="0.8"><div class="hint">stiffness (kN/mm)</div></div>
+            <div><input type="number" class="sb" data-key="anchor.yield_force" step="5" placeholder="80"><div class="hint">yield (kN)</div></div>
+            <div><input type="number" class="sb" data-key="anchor.break_force" step="10" placeholder="250"><div class="hint">break (kN)</div></div>
+            <div><input type="number" class="sb" data-key="anchor.damping" step="0.05" placeholder="0.6"><div class="hint">damping</div></div>
+        </div>
+        <div class="group">Beams: node to node</div>
+        <div class="row">
+            <div><input type="number" class="sb" data-key="beam.stiffness" step="0.1" placeholder="0.4"><div class="hint">stiffness (kN/mm)</div></div>
+            <div><input type="number" class="sb" data-key="beam.yield_force" step="5" placeholder="40"><div class="hint">yield (kN)</div></div>
+            <div><input type="number" class="sb" data-key="beam.break_force" step="10" placeholder="120"><div class="hint">break (kN)</div></div>
+            <div><input type="number" class="sb" data-key="beam.damping" step="0.05" placeholder="0.15"><div class="hint">damping</div></div>
+        </div>
+        <div class="group">Contact with the road and walls</div>
+        <div class="row">
+            <div><input type="number" class="sb" data-key="contact.stiffness" step="0.1" placeholder="1.5"><div class="hint">stiffness (kN/mm)</div></div>
+            <div><input type="number" class="sb" data-key="contact.damping" step="0.05" placeholder="0.7"><div class="hint">damping</div></div>
+            <div><input type="number" class="sb" data-key="contact.friction" step="0.05" placeholder="0.5"><div class="hint">friction</div></div>
+            <div></div>
+        </div>
+        <div class="group">Shape of the skeleton</div>
+        <div class="row">
+            <div><input type="number" class="sb" data-key="neighbours" step="1" min="2" max="8" placeholder="5"><div class="hint">beams per node</div></div>
+            <div><input type="number" class="sb" data-key="reach" step="0.1" placeholder="1.1"><div class="hint">longest beam (m)</div></div>
+            <div></div><div></div>
+        </div>
+        <div class="buttons"><button class="small ghost" id="sbDefaults">Back to the defaults</button></div>
+        <p class="hint">The nodes are numbered from the model. Strengths set on single nodes and beams belong to those numbers: when you change the model, check them.</p>
+    </div>
+</dialog>
+
+<dialog id="dlgParts">
+    <div class="head"><h3>Parts that swing or come loose</h3><button class="close" data-close>×</button></div>
+    <div class="content">
+        <p class="sub">A part is an object of the model (a door, the hood, a mirror, a wing). <b>Hinge</b>: it turns about an axis, between two angles, with a spring that brings it back to its rest angle and a damper. With a <b>latch force</b> it sits shut until the load on it passes that force, with a <b>break force</b> it tears off then. <b>Loose</b>: it sits on the car until the load passes the break force, and then it is a free object that falls and slides. The load is the mass times the acceleration of its place, or the force of the shell on the nodes it hangs on, whichever is more. The origin and the axis are in the frame of the car: x to the left, y up, z forward, from the centre of gravity; with the shell shown, the arrows in the view are the hinges.</p>
+        <div id="sbParts"></div>
+        <div class="buttons"><button class="small accent" id="sbAddPart">Add a part</button></div>
+        <datalist id="sbObjectNames"></datalist>
     </div>
 </dialog>
 

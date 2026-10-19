@@ -1,6 +1,6 @@
 # Soft body, parts and hinges: design
 
-Branch `claude/soft-body`. Status: M1 and M2 built (M2 with the first test parts); M3 and M4 to do. Nothing here is released.
+Branch `claude/soft-body`. Status: M1, M2 and M3 built; M4 to do. Nothing here is released.
 
 ## What the game has now
 
@@ -56,7 +56,7 @@ The car editor gets a **Soft body** card:
 
 * **M1** the shell: nodes, beams, yield and break, the coupling with the body and the contacts, the deformation of the model, strengths in `car.json`, a crash test. *(now)*
 * **M2** parts with the rigid-body engine: hinges, detaching. *(built: `js/Parts.js`; props of a track still to do)*
-* **M3** the editor card.
+* **M3** the editor card. *(built: `web/tools/softbody-editor.js`)*
 * **M4** replay (the displacements and the parts are recorded), AI cars, the saved file.
 
 ## Not in scope
@@ -81,3 +81,14 @@ A solver that makes the whole car out of beams (BeamNG): the driving would have 
 * A hinge with `latch_force` sits shut until the load passes it; without, it is free to swing from the start. A hinge with `break_force`, and a detachable part, become a free body.
 * What was tested: a plate that comes loose at an abrupt stop, flies on, lands on the road and sleeps; a hinged plate that unlatches; `repair()` puts both back. Not yet: a real door or hood (no car has one), a loose part that hits the car, and the replay of parts (M4).
 * Known limits: no force goes back from a part to the car; the collision spheres of a part that has come loose stay on the car.
+
+## The editor card (M3)
+
+The "Soft body" card of the car editor (`web/tools/softbody-editor.js`, hooked into `car-editor.js`):
+
+* **The car dents** (on/off), **Material and strengths…**: a preset (steel, aluminium, plastic, foam and rubber, race cage) and every number of `softbody` (shell mass, hardening, anchor, beam and contact: stiffness in kN/mm, forces in kN, damping, friction, beams per node and their reach). An empty field is the default and is not written to `car.json`.
+* **Show the shell**: starts the test bench, makes the shell from the model as the game does, and draws the nodes and beams over it. A node is green when whole, yellow at its yield bend, red above it, grey when its anchor is torn.
+* **Selection**: click a node or a beam in the view; set its yield and break force (kN) or put it back to the default. Saved as `softbody.nodes` (`{ i, yield_force, break_force }`) and `softbody.beams` (`{ a, b, ... }`). The numbers belong to the nodes as they are made from the model: change the model and they may point elsewhere.
+* **Parts…**: a list of the objects of the model with a behaviour (hinge or loose) and every number of `parts`; the hinges are drawn as orange arrows in the view.
+* **Crash test**: a speed (10 to 150 km/h) and an angle of the wall; the car rolls into a wall on a 3D ground, the camera follows, and the card shows the peak deceleration, the bend, the energy that the shell took up, the torn anchors and beams and the part events. **Repair** puts everything back.
+* Edits of strengths in the view act on the bench at once; the other settings make the shell again (a moment after the last change).
