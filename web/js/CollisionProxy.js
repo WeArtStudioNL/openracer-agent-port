@@ -113,6 +113,13 @@ OpenRacer.CollisionProxy = (function () {
                 try { object.softBodyMesh = OpenRacer.SoftBodyMesh.attach(model.tilt, v.softBody, toVehicle); } catch(e) { console.warn("SoftBodyMesh: " + e.message); }
                 console.log("soft body: " + v.softBody.count + " nodes, " + v.softBody.beamCount + " beams");
             }
+            // loose and hinged parts (Parts.js); car.json "parts": [{ object, mode, ... }]
+            if(OpenRacer.Parts && object.config && object.config.parts && object.config.parts.length) {
+                OpenRacer.Parts.create({
+                    vehicle: v, softBody: v.softBody, softBodyMesh: object.softBodyMesh, spheres: spheres, specs: object.config.parts,
+                    root: model.tilt, toVehicle: toVehicle
+                }).then(function (parts) { if(parts) { object.parts = parts; v.parts = parts; console.log("parts: " + parts.parts.length); } });
+            }
         }
         return spheres;
     }

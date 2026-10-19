@@ -52,6 +52,8 @@ OpenRacer.SoftBodyMesh = (function () {
             }
             geometry.setAttribute("aNodes", new THREE.BufferAttribute(aNodes, 4));
             geometry.setAttribute("aWeights", new THREE.BufferAttribute(aWeights, 4));
+            var deform = { value: 1 };                              // 0 for a part that has come loose: it keeps its shape
+            mesh.userData.sbDeform = deform;
             // a vector of the frame of the car in the space of this mesh
             var toLocal = new THREE.Matrix3().setFromMatrix4(mesh.matrixWorld).invert();
             var list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -60,9 +62,10 @@ OpenRacer.SoftBodyMesh = (function () {
                 copy.onBeforeCompile = function (shader) {
                     shader.uniforms.uNodeD = uniform;
                     shader.uniforms.uToLocal = { value: toLocal };
+                    shader.uniforms.uDeform = deform;
                     shader.vertexShader = shader.vertexShader
-                        .replace("#include <common>", "#include <common>\nattribute vec4 aNodes;\nattribute vec4 aWeights;\nuniform vec3 uNodeD[" + MAX_NODES + "];\nuniform mat3 uToLocal;")
-                        .replace("#include <begin_vertex>", "#include <begin_vertex>\nvec3 sbD = uNodeD[int(aNodes.x + 0.5)] * aWeights.x + uNodeD[int(aNodes.y + 0.5)] * aWeights.y + uNodeD[int(aNodes.z + 0.5)] * aWeights.z + uNodeD[int(aNodes.w + 0.5)] * aWeights.w;\ntransformed += uToLocal * sbD;");
+                        .replace("#include <common>", "#include <common>\nattribute vec4 aNodes;\nattribute vec4 aWeights;\nuniform vec3 uNodeD[" + MAX_NODES + "];\nuniform mat3 uToLocal;\nuniform float uDeform;")
+                        .replace("#include <begin_vertex>", "#include <begin_vertex>\nvec3 sbD = uNodeD[int(aNodes.x + 0.5)] * aWeights.x + uNodeD[int(aNodes.y + 0.5)] * aWeights.y + uNodeD[int(aNodes.z + 0.5)] * aWeights.z + uNodeD[int(aNodes.w + 0.5)] * aWeights.w;\ntransformed += uDeform * (uToLocal * sbD);");
                 };
                 copy.customProgramCacheKey = function () { return "softbody" + MAX_NODES; };
                 materials.push(copy);
@@ -74,6 +77,10 @@ OpenRacer.SoftBodyMesh = (function () {
 
         return {
             materials: materials,
+            // a part that comes loose (Parts.js) stops bending with the shell
+            release: function (object) {
+                object.traverse(function (m) { if (m.userData && m.userData.sbDeform) m.userData.sbDeform.value = 0; });
+            },
             // once per frame: the displacements to the graphics card, when something moved
             update: function () {
                 if (softBody.version === seen) return;

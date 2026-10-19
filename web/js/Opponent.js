@@ -281,6 +281,7 @@ OpenRacer.Opponent = function (config, line, options) {
         }
         if (this.rig) this.rig.update(v);
         if(this.softBodyMesh) this.softBodyMesh.update();
+        if(this.parts) this.parts.update(delta);
         if (this.steeringWheel) {
             var sw = this.steeringWheel;
             sw.object.quaternion.setFromAxisAngle(sw.axis, -v.steerApplied * (sw.degrees * Math.PI / 180) / this.maxTurn);

@@ -1,6 +1,6 @@
 # Soft body, parts and hinges: design
 
-Branch `claude/soft-body`. Status: M1 in progress. Nothing here is released.
+Branch `claude/soft-body`. Status: M1 and M2 built (M2 with the first test parts); M3 and M4 to do. Nothing here is released.
 
 ## What the game has now
 
@@ -55,10 +55,29 @@ The car editor gets a **Soft body** card:
 ## Milestones
 
 * **M1** the shell: nodes, beams, yield and break, the coupling with the body and the contacts, the deformation of the model, strengths in `car.json`, a crash test. *(now)*
-* **M2** parts and props with the rigid-body engine: hinges, detaching, props.
+* **M2** parts with the rigid-body engine: hinges, detaching. *(built: `js/Parts.js`; props of a track still to do)*
 * **M3** the editor card.
 * **M4** replay (the displacements and the parts are recorded), AI cars, the saved file.
 
 ## Not in scope
 
 A solver that makes the whole car out of beams (BeamNG): the driving would have to be tuned again. The tyres stay our model. Fluid, fire, glass shards.
+
+## `car.json`: parts (M2)
+
+```json
+"parts": [
+  { "object": "hood", "mode": "hinge", "mass": 14,
+    "hinge": { "origin": [0, 0.7, 1.1], "axis": [1, 0, 0], "min": -70, "max": 5, "rest": 0, "spring": 20, "damper": 2,
+               "latch_force": 6000, "break_force": 40000 } },
+  { "object": "licenseplate", "mode": "detachable", "mass": 1.2, "break_force": 2500, "nodes": [44, 46, 43] }
+]
+```
+
+* `object`: the name of an object in the glTF model. `mode`: `fixed` (default, nothing happens), `detachable` or `hinge`. `mass` in kg.
+* `origin` and `axis` are in the frame of the car (x left, y up, z forward, from the centre of gravity), `min`, `max` and `rest` in degrees.
+* `nodes`: the nodes of the shell it hangs on; default the three nearest to its middle. A part comes loose at once when the anchor of one of them tears.
+* The load on a part is the larger of mass times the acceleration of its place and the force of the shell on its nodes (displacement times stiffness).
+* A hinge with `latch_force` sits shut until the load passes it; without, it is free to swing from the start. A hinge with `break_force`, and a detachable part, become a free body.
+* What was tested: a plate that comes loose at an abrupt stop, flies on, lands on the road and sleeps; a hinged plate that unlatches; `repair()` puts both back. Not yet: a real door or hood (no car has one), a loose part that hits the car, and the replay of parts (M4).
+* Known limits: no force goes back from a part to the car; the collision spheres of a part that has come loose stay on the car.

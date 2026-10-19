@@ -474,6 +474,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         this.vx = this.vy = this.vz = 0;
         this.wx = this.wy = this.wz = 0;
         if(this.softBody) this.softBody.repair();
+        if(this.parts) this.parts.repair();
         this.ax = this.ay = 0;
         this.suspensionHistory = null;
         for(var i = 0; i < 4; i++) {

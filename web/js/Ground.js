@@ -178,6 +178,15 @@ OpenRacer.GroundWorld = function (cellSize) {
         }
     };
 
+    // The corners of triangle t of the 3D side into out (nine numbers)
+    this.vertices = function (t, out) {
+        var o = t * 12;
+        out[0] = data3[o]; out[1] = data3[o + 1]; out[2] = data3[o + 2];
+        out[3] = data3[o] + data3[o + 3]; out[4] = data3[o + 1] + data3[o + 4]; out[5] = data3[o + 2] + data3[o + 5];
+        out[6] = data3[o] + data3[o + 6]; out[7] = data3[o + 1] + data3[o + 7]; out[8] = data3[o + 2] + data3[o + 8];
+        return out;
+    };
+
     this.count3D = function () { return count3; };
     this.isDrivable = function (t) { return (meta3[t * 3 + 2] & (1 << 20)) !== 0; };
     this.surfaceOf = function (t) { return surfaces[meta3[t * 3]]; };
