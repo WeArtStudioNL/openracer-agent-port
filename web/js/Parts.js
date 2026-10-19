@@ -146,10 +146,11 @@ OpenRacer.Parts = (function () {
             if (!shape) return;
             var object = shape.object, centre = shape.centre, local = shape.local, lo = shape.lo, hi = shape.hi;
             var mass = spec.mass !== undefined ? spec.mass : 15;
-            var body = world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased());
+            // continuous collision detection: a part that leaves the car at its speed would go through a thin wall or the road between two steps
+            var body = world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setCcdEnabled(true));
             var collider = null;
             // a hull of the points; a flat part (a plate) has none, so then a box of its size
-            [R.ColliderDesc.convexHull(local), R.ColliderDesc.cuboid(Math.max(0.02, (hi[0] - lo[0]) / 2), Math.max(0.02, (hi[1] - lo[1]) / 2), Math.max(0.02, (hi[2] - lo[2]) / 2))].forEach(function (desc) {
+            [R.ColliderDesc.convexHull(local), R.ColliderDesc.cuboid(Math.max(0.04, (hi[0] - lo[0]) / 2), Math.max(0.04, (hi[1] - lo[1]) / 2), Math.max(0.04, (hi[2] - lo[2]) / 2))].forEach(function (desc) {
                 if (collider || !desc) return;
                 try { collider = world.createCollider(desc.setMass(mass).setFriction(0.6).setRestitution(0.25).setCollisionGroups(groups(PART_HELD, GROUND)), body); } catch (e) { collider = null; }
             });
@@ -421,7 +422,9 @@ OpenRacer.Parts = (function () {
             }
             if (!moving) return;
             refreshTrack();
-            world.timestep = dt;
+            // two steps of half the time: a part that flies at 30 m/s hits the wall in the middle of a frame, not after it
+            world.timestep = dt / 2;
+            world.step();
             world.step();
             for (var j = 0; j < parts.length; j++) {
                 var p = parts[j];

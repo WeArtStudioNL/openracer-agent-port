@@ -229,3 +229,11 @@ A pin with several axes (a ball) keeps the old drawing; its angles are not enfor
 ### The Crash test tab has two rows; no Repair button
 
 The **Crash test** tab of the test buttons has two rows: the crash test (speed, angle, **Crash into the wall**) and, under it, **Apply force** (push in kg, mass and side of the cube, the button). The Soft body card only keeps the line with the results of the crash test and of the cube. The **Repair** button is gone: **Stop crash test** (the Stop test button) goes back to the model, and the next test starts with a new car.
+
+### Parts that fall off hit the wall and the ground
+
+A part that comes loose is a rigid body in the engine that hits the track (the road and the walls: the triangles of the 3D ground near it, also the wall of the crash test) and the car. It went through the wall in the crash test: a thin plate that leaves the car at 28 m/s moves half a metre between two steps and was behind the wall before the engine saw it. Now every part has **continuous collision detection** (`setCcdEnabled`), its box is at least 8 cm thick when its model is flat (the hull of a flat plate does not exist), and the engine takes **two steps of half the time** per frame. Tested with the front licence plate at a crash on 100 km/h: it broke off at the wall and stayed in front of it (3 m before the wall, on the road).
+
+### Stop test is an icon
+
+**Stop test** is a small button with a turning-back arrow (↺) at the top right of the test buttons, in both tabs (it shows when the test bench runs).
