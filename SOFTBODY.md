@@ -163,3 +163,15 @@ A hinge point (`mounts`) can be a **point on the surface** instead of a node: `{
 ### The editor leaves nothing behind
 
 The car editor makes a new car for every test. A part that a test has thrown off stays in the scene, so after a few tests a door lay on the floor (also after Repair, which only puts back the parts of the car of the current test). `Parts.dispose()` takes the thrown parts out of the scene when a test ends, and a model that is used again gets its parts back in their place before they are measured (`userData.partHome`).
+
+### The part window (the way to make a part)
+
+The editor opens with the car of last time loaded (`localStorage` "editor-last-car", else the first car of the list). Making a part needs no card and no node numbers:
+
+1. **Hover a loose object** in the view: it gets an orange outline. Loose is a named object that is not (a part of) the body, a wheel or the steering wheel; the body is the object with most of the triangles (40% or more), so what hangs in it (a plate) and beside it (a door, the hood) is loose.
+2. **Click it**: a window opens that can be moved by its title (and closed with the cross). "Part not added to loose parts" with **Add**.
+3. **Pin points** (**+ add**, then click the surface): the point is added to the list, and is also the origin of the hinge. Each pin point has toggles **X Y Z** (the axes of the car that it may turn about; by default only X), sliders for the **minimum and maximum angle**, and a **breaking force** (kN; empty: never). The gizmo in the view follows: a line for every free axis and a fan for the angles that it may turn through, from the rest place (the white line is angle 0), live while a slider moves. One axis is a hinge between the two angles, two or three axes make a ball joint (the angles are not enforced), none is a rigid pin. A pin that breaks is gone; with none left the part is free. With more pins the first one that holds is the joint, the others add to the hold (put them on one line, so that they do not fight).
+4. **Nodes** (**Add nodes**): a click on the surface of the object puts a node there (only on that object; up to 200 nodes for the whole car, instead of 120); **Stop adding nodes** or Esc ends it, and the bench is made again then. The nodes are in a list with a cross each, and one field sets the **strength of all of them** (kN: they bend at that force and tear at two and a half times).
+5. **Every change is saved** (after a moment) into the car that is open: `parts` (with `mounts`: `{ point, axes, min, max, break_force }`) and `softbody.layout`.
+
+The next crash test starts from what the window changed. The older "Parts…" panel and the "Part points" card stay, for numbers; they keep the pin points of the window.

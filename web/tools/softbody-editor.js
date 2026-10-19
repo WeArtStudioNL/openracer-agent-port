@@ -32,7 +32,7 @@ const SCALE = { "anchor.stiffness": 1e6, "anchor.yield_force": 1e3, "anchor.brea
 
 export function initSoftBody(api) {
     const { $, THREE, scene, camera, renderer, controls, bench, status } = api;
-    const sb = { nodeEdits: new Map(), beamEdits: new Map(), parts: [], shown: false, group: null, points: null, lines: null, hinges: [], sel: { nodes: new Set(), beam: null }, layout: null, edit: false, keepSelection: null, crash: null, wall: null };
+    const sb = { nodeEdits: new Map(), beamEdits: new Map(), parts: [], shown: false, group: null, points: null, lines: null, hinges: [], sel: { nodes: new Set(), beam: null }, layout: null, edit: false, keepSelection: null, crash: null, wall: null, dirty: false, partWin: null, partMode: null, pinSel: -1, win: null, partGroup: null, deferRestart: false };
 
     // ---- the settings
     const fields = [...document.querySelectorAll("input.sb")];
@@ -77,7 +77,10 @@ export function initSoftBody(api) {
     // the shell is made again from the new settings when the bench runs
     let restartTimer = 0;
     function changed(keep) {
+        sb.dirty = true;                                  // the bench has to be made again before the next test
+        scheduleSave();
         clearTimeout(restartTimer);
+        if (sb.deferRestart) return;                      // nodes are being added: the bench is made again when that stops
         if (bench.vehicle && (sb.shown || sb.crash)) restartTimer = setTimeout(async () => { sb.crash = null; sb.restarting = true; await show(true); sb.restarting = false; }, keep === true ? 150 : 400);
     }
 
@@ -168,6 +171,10 @@ export function initSoftBody(api) {
                 if (n(ff)) mount.break_force = n(ff) * 1000;
                 mounts.push(mount);
             });
+            // the pin points of the part window have more than the fields here (axes, angles, more than two): they are kept
+            const prev = part.mounts || [];
+            mounts.forEach((m, i) => { const old = prev[i]; if (old && old.axes && JSON.stringify(old.point || null) === JSON.stringify(m.point || null) && old.node === m.node) { m.axes = old.axes; m.min = old.min; m.max = old.max; } });
+            if (prev.length > 2) prev.slice(2).forEach((m) => mounts.push(m));
             if (mounts.length) part.mounts = mounts; else delete part.mounts;
             delete part.break_force;
         } else {
@@ -357,7 +364,7 @@ export function initSoftBody(api) {
 
     async function show(restart) {
         try {
-            if (restart || !bench.vehicle) await api.startBench();
+            if (restart || !bench.vehicle) { await api.startBench(); sb.dirty = false; }
             const s = softBody();
             if (!s) throw new Error($("sbEnabled").checked ? "The model gave no shell (it has too little in it)." : "The car does not dent: tick “The car dents”.");
             drawShell(s);
@@ -462,6 +469,7 @@ export function initSoftBody(api) {
         if (sb.crash) crashFrame(dt);
         if (sb.pushMode) pushReading();
         if (sb.group) updateShell();
+        placePartGroup();
     }
     function updateShell() {
         const s = softBody(), v = bench.vehicle;
@@ -581,6 +589,7 @@ export function initSoftBody(api) {
     let down = null, lasso = null;
     const savedMiddle = controls.mouseButtons.MIDDLE;
     renderer.domElement.addEventListener("pointerdown", (e) => {
+        if (e.button === 0 && !tc.axis) down = { x: e.clientX, y: e.clientY };           // a press on the gizmo is no click on the model
         if (!sb.shown || !softBody()) return;
         if (e.button === 1) {
             e.preventDefault();
@@ -588,7 +597,7 @@ export function initSoftBody(api) {
             lasso = { points: [[e.clientX - rect.left, e.clientY - rect.top]], add: e.shiftKey || e.ctrlKey };
             controls.mouseButtons.MIDDLE = -1;                      // the middle button is not the dolly of the orbit controls now
             try { renderer.domElement.setPointerCapture(e.pointerId); } catch (error) { /* a synthetic event */ }
-        } else if (e.button === 0 && !tc.axis) down = { x: e.clientX, y: e.clientY };      // a press on the gizmo is no click on the model
+        }
     });
     renderer.domElement.addEventListener("pointermove", (e) => {
         if (!lasso) return;
@@ -603,10 +612,13 @@ export function initSoftBody(api) {
             if (l.points.length > 2) lassoSelect(l);
             return;
         }
-        if (!down || !sb.shown || !softBody() || e.button !== 0) return;
+        if (!down || e.button !== 0) return;
         const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
         down = null;
-        if (moved <= 4) click(e);
+        if (moved > 4) return;
+        if (partClick(e)) return;                                   // the part window: a pin point, a node of the part, or the window of a loose object
+        if (!sb.shown || !softBody()) return;
+        click(e);
     });
     renderer.domElement.addEventListener("auxclick", (e) => { if (e.button === 1) e.preventDefault(); });
     function drawLasso() {
@@ -754,7 +766,7 @@ export function initSoftBody(api) {
         const hits = caster.intersectObject(bench.model.tilt, true).filter((h) => h.object.isMesh && h.object.visible);
         if (!hits.length) return false;
         freeze(s);
-        if (sb.layout.length >= 120) { status("A car can have 120 nodes at most.", "error"); return true; }
+        if (sb.layout.length >= 200) { status("A car can have 200 nodes at most.", "error"); return true; }
         const local = sb.group.worldToLocal(hits[0].point.clone());
         const r = parseFloat($("sbRadius").value) || 0.2;
         sb.layout.push({ x: +local.x.toFixed(4), y: +local.y.toFixed(4), z: +local.z.toFixed(4), r });
@@ -766,10 +778,12 @@ export function initSoftBody(api) {
         return true;
     }
     function deleteSelected() {
+        if (sb.sel.nodes.size) removeNodes(new Set(sb.sel.nodes));
+    }
+    function removeNodes(gone) {
         const s = softBody();
-        if (!s || !sb.sel.nodes.size) return;
+        if (!s || !gone.size) return;
         freeze(s);
-        const gone = new Set(sb.sel.nodes);
         if (sb.layout.length - gone.size < 3) { status("A car needs at least 3 nodes.", "error"); return; }
         // the numbers of the nodes behind a removed one go down: the strengths that were set follow them
         const map = new Map();
@@ -1003,9 +1017,10 @@ export function initSoftBody(api) {
     scene.add(hover);
     // the point of the model under the mouse, and its outer normal, in the world
     function surfaceAt(mx, my, rect) {
-        if (!bench.model) return null;
+        const model = viewModel();
+        if (!model) return null;
         caster.setFromCamera(new THREE.Vector2(mx / rect.width * 2 - 1, -(my / rect.height) * 2 + 1), camera);
-        const hit = caster.intersectObject(bench.model.tilt, true).filter((h) => h.object.isMesh && h.object.visible && h.face)[0];
+        const hit = caster.intersectObject(model, true).filter((h) => h.object.isMesh && h.object.visible && h.face)[0];
         if (!hit) return null;
         const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
         if (n.dot(caster.ray.direction) > 0) n.negate();                  // the side that the ray comes from is the outside
@@ -1074,6 +1089,357 @@ export function initSoftBody(api) {
         if (!s.plate && sb.pushArrow) { sb.group.remove(sb.pushArrow); sb.pushArrow = null; }       // the cube is gone
     }
 
+    // ---- the part window: hover a loose object (orange outline), click it, and a window that can be moved opens: pin points, nodes
+    let saveTimer = 0, saving = false;
+    // every change is saved after a moment, as when the Save button is pressed
+    function scheduleSave() {
+        if (!api.canSave || !api.canSave()) return;
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(async () => {
+            if (saving) { scheduleSave(); return; }
+            saving = true;
+            try { await api.save(); } finally { saving = false; }
+        }, 900);
+    }
+    // the model that is in the view: the one of the test bench when it runs, else the one of the editor
+    function viewModel() { return bench.model ? bench.model.tilt : api.root(); }
+    // a point of the world in the frame of the car (the car of the bench is at rest while the parts are made)
+    const frameM = new THREE.Matrix4(), frameQ = new THREE.Quaternion(), frameP = new THREE.Vector3(), unitS = new THREE.Vector3(1, 1, 1);
+    function toVeh(point) {
+        const v = bench.vehicle;
+        if (!v) return null;
+        frameM.compose(frameP.set(v.px, v.py, v.pz), frameQ.set(v.qx, v.qy, v.qz, v.qw), unitS).invert();
+        return point.clone().applyMatrix4(frameM);
+    }
+    async function rebuild() {
+        const wasShown = sb.shown;
+        sb.restarting = true;
+        try { if (wasShown) await show(true); else await api.startBench(); } finally { sb.restarting = false; }
+        sb.dirty = false;
+    }
+
+    // which objects are loose: a named object that is not (a part of) the body, the wheels or the steering wheel. The body is the object with
+    // most of the triangles; what hangs in it (the plates) and beside it (a door, the hood) is loose.
+    const triCache = new WeakMap();
+    function triangles(o) {
+        if (triCache.has(o)) return triCache.get(o);
+        let n = 0;
+        o.traverse((m) => { if (m.isMesh && m.geometry) n += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3; });
+        triCache.set(o, n);
+        return n;
+    }
+    function looseOf(hitObject) {
+        const root = viewModel();
+        if (!root) return null;
+        const total = triangles(root) || 1;
+        let found = null;
+        for (let o = hitObject; o && o !== root; o = o.parent) {
+            if (!o.name || triangles(o) / total >= 0.4) continue;          // no name, or the body (or the scene that holds all)
+            if (/wheel|tyre|tire|steer/i.test(o.name)) return null;
+            found = o;
+        }
+        return found;
+    }
+    // the orange outline: the edges of the meshes of the object
+    const outlines = new WeakMap();
+    let outlined = null;
+    function outline(object) {
+        if (outlined === object) return;
+        if (outlined && outlines.has(outlined)) outlines.get(outlined).forEach((l) => { l.visible = false; });
+        outlined = object;
+        if (!object) return;
+        if (!outlines.has(object)) {
+            const lines = [];
+            object.traverse((m) => {
+                if (!m.isMesh || !m.geometry) return;
+                const line = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 25), new THREE.LineBasicMaterial({ color: 0xff9f43, depthTest: false, transparent: true, opacity: 0.95 }));
+                line.renderOrder = 14; line.raycast = () => {};            // the outline is not picked
+                m.add(line);
+                lines.push(line);
+            });
+            outlines.set(object, lines);
+        }
+        outlines.get(object).forEach((l) => { l.visible = true; });
+    }
+    let hoverBusy = false;
+    renderer.domElement.addEventListener("pointermove", (e) => {
+        if (hoverBusy || lasso || sb.pushMode || sb.pick || tc.dragging || sb.dragging) return;
+        hoverBusy = true;
+        requestAnimationFrame(() => {
+            hoverBusy = false;
+            const rect = renderer.domElement.getBoundingClientRect();
+            const hit = surfaceAt(e.clientX - rect.left, e.clientY - rect.top, rect);
+            // in the pin and node modes the part that is open is the one that counts
+            if (sb.partMode === "nodes" && sb.partWin) { outline(hit && within(hit.object, partObj()) ? partObj() : null); return; }
+            outline(hit ? looseOf(hit.object) : null);
+        });
+    });
+    // the object of the open part in the model that is in the view now (the bench makes a new copy of the model for every test)
+    function partObj() { const m = viewModel(); return m && sb.partWin ? m.getObjectByName(sb.partWin.name) : null; }
+    function ancestorOf(object, ancestor) { for (let o = object; o; o = o.parent) if (o === ancestor) return true; return false; }
+    function within(object, ancestor) { return ancestorOf(object, ancestor); }
+
+    // a click, when it is for the part window: true when it was
+    function partClick(e) {
+        if (sb.pick || sb.pushMode || sb.edit) return false;
+        const rect = renderer.domElement.getBoundingClientRect();
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        const hit = surfaceAt(mx, my, rect);
+        if (sb.partWin && sb.partMode === "pin") {
+            if (!hit) return true;
+            const local = toVeh(hit.point);
+            const part = sb.partWin.part;
+            const pin = { point: [+local.x.toFixed(3), +local.y.toFixed(3), +local.z.toFixed(3)], axes: { x: true, y: false, z: false }, min: -90, max: 90 };
+            part.mounts = (part.mounts || []).concat([pin]);
+            part.hinge = part.hinge || {};
+            part.hinge.origin = pin.point.slice();                      // the pin point is also the origin of the hinge
+            sb.pinSel = part.mounts.length - 1;
+            sb.partMode = null;
+            partChanged();
+            return true;
+        }
+        if (sb.partWin && sb.partMode === "nodes") {
+            if (!hit || !within(hit.object, partObj())) { status("Click on the surface of " + sb.partWin.name + " to put a node there.", ""); return true; }
+            addPartNode(toVeh(hit.point));
+            return true;
+        }
+        if (!hit) return false;
+        // with the shell shown a click near a node is a selection of that node
+        if (sb.shown && softBody()) {
+            sb.group.updateMatrixWorld(true);
+            const s = softBody();
+            for (let k = 0; k < s.count; k++) { const [x, y] = screenOf(s, k, rect); if (Math.hypot(x - mx, y - my) < 14) return false; }
+        }
+        const loose = looseOf(hit.object);
+        if (!loose) return false;
+        openPartWindow(loose);
+        return true;
+    }
+    window.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        if (sb.partMode) { endPartMode(); e.preventDefault(); }
+    });
+    function endPartMode() {
+        const was = sb.partMode;
+        sb.partMode = null;
+        sb.deferRestart = false;
+        if (was === "nodes") { changed(true); rebuildSoon(); }
+        renderPartWin();
+    }
+    function rebuildSoon() { clearTimeout(restartTimer); restartTimer = setTimeout(() => { if (bench.vehicle) rebuild(); }, 200); }
+
+    // ---- the window
+    function ensureWindow() {
+        if (sb.win) return sb.win;
+        const el = document.createElement("div");
+        el.className = "partwin";
+        el.innerHTML = '<div class="pw-head"><span class="pw-title"></span><button class="pw-close" title="Close">×</button></div><div class="pw-body"></div>';
+        document.querySelector("#view").appendChild(el);
+        // it moves like a window: drag the title
+        const head = el.querySelector(".pw-head");
+        head.addEventListener("pointerdown", (e) => {
+            if (e.target.closest("button")) return;
+            const r = el.getBoundingClientRect(), v = el.parentElement.getBoundingClientRect();
+            const dx = e.clientX - r.left, dy = e.clientY - r.top;
+            head.setPointerCapture(e.pointerId);
+            const move = (m) => { el.style.left = Math.max(0, Math.min(v.width - 60, m.clientX - v.left - dx)) + "px"; el.style.top = Math.max(0, Math.min(v.height - 40, m.clientY - v.top - dy)) + "px"; el.style.right = "auto"; };
+            const up = () => { head.removeEventListener("pointermove", move); head.removeEventListener("pointerup", up); };
+            head.addEventListener("pointermove", move); head.addEventListener("pointerup", up);
+        });
+        el.querySelector(".pw-close").addEventListener("click", closePartWindow);
+        sb.win = el;
+        return el;
+    }
+    async function openPartWindow(object) {
+        try {
+            if (!bench.vehicle) await api.startBench();                // the pin points are in the frame of the car, which the bench has
+        } catch (error) { status(error.message, "error"); return; }
+        const existing = sb.parts.find((p) => p.object === object.name);
+        sb.partWin = { object: viewModel().getObjectByName(object.name) || object, name: object.name, part: existing || null };
+        sb.partMode = null;
+        sb.pinSel = existing && existing.mounts && existing.mounts.length ? 0 : -1;
+        ensureWindow().style.display = "";
+        renderPartWin();
+        drawPartGizmos();
+    }
+    function closePartWindow() {
+        if (sb.partMode === "nodes") { sb.deferRestart = false; sb.partMode = null; changed(true); rebuildSoon(); }
+        sb.partMode = null;
+        if (sb.win) sb.win.style.display = "none";
+        sb.partWin = null;
+        drawPartGizmos();
+        outline(null);
+    }
+    function partChanged() {
+        changed();
+        renderPartWin();
+        drawPartGizmos();
+        renderParts();                                                // the list of the Parts panel
+    }
+    const AXES = ["x", "y", "z"], AXIS_COLOURS = { x: 0xff5555, y: 0x55dd77, z: 0x5599ff };
+    function renderPartWin() {
+        const w = sb.partWin;
+        if (!w || !sb.win) return;
+        const part = w.part;
+        sb.win.querySelector(".pw-title").textContent = "Part: " + w.name;
+        const body = sb.win.querySelector(".pw-body");
+        body.innerHTML = "";
+        const add = (html) => { const d = document.createElement("div"); d.innerHTML = html; body.appendChild(d); return d; };
+        if (!part) {
+            const d = add('<p class="hint">Part not added to loose parts</p><button class="small accent" data-a="add">Add</button>');
+            d.querySelector('[data-a="add"]').addEventListener("click", () => {
+                w.part = { object: w.name, mode: "hinge", mass: 10, hinge: {}, mounts: [] };
+                sb.parts.push(w.part);
+                partChanged();
+            });
+            return;
+        }
+        // mass and remove
+        const top = add('<div class="row"><div><label>Mass (kg)</label><input type="number" data-a="mass" min="0.1" step="0.5"></div><div class="fixed"><label>&nbsp;</label><button class="small ghost" data-a="remove">Remove from loose parts</button></div></div>');
+        top.querySelector('[data-a="mass"]').value = part.mass !== undefined ? part.mass : 10;
+        top.querySelector('[data-a="mass"]').addEventListener("change", (e) => { part.mass = parseFloat(e.target.value) || 10; partChanged(); });
+        top.querySelector('[data-a="remove"]').addEventListener("click", () => {
+            sb.parts.splice(sb.parts.indexOf(part), 1);
+            if (sb.layout) sb.layout.forEach((n) => { if (n.part === w.name) delete n.part; });
+            w.part = null; sb.pinSel = -1;
+            partChanged();
+        });
+        // pin points
+        const head = add('<div class="pw-section"><b>Pin points</b> <button class="small" data-a="addpin">+ add</button></div>');
+        head.querySelector('[data-a="addpin"]').addEventListener("click", () => {
+            sb.partMode = sb.partMode === "pin" ? null : "pin";
+            renderPartWin();
+        });
+        if (sb.partMode === "pin") add('<p class="hint">Click on the surface where the pin point goes (Esc cancels).</p>');
+        const pins = part.mounts || [];
+        if (!pins.length && sb.partMode !== "pin") add('<p class="hint">No pin points yet.</p>');
+        pins.forEach((pin, i) => {
+            if (!pin.point) return;
+            const axes = pin.axes || { x: true, y: false, z: false };
+            const d = add('<div class="pw-pin' + (i === sb.pinSel ? " sel" : "") + '"><div class="pw-pinhead"><b>Pin ' + (i + 1) + '</b> <span class="hint">' + pin.point.map((x) => x.toFixed(2)).join(", ") + '</span>' +
+                ' <span class="pw-axes">' + AXES.map((a) => '<button class="small ' + (axes[a] ? "accent" : "ghost") + '" data-axis="' + a + '">' + a.toUpperCase() + "</button>").join("") + '</span> <button class="small ghost" data-a="del" title="Remove this pin point">✕</button></div>' +
+                '<div class="row"><div><label>Min <b data-v="min"></b>°</label><input type="range" data-a="min" min="-180" max="0" step="1"></div><div><label>Max <b data-v="max"></b>°</label><input type="range" data-a="max" min="0" max="180" step="1"></div></div>' +
+                '<div class="row"><div><label>Breaking force (kN)</label><input type="number" data-a="force" min="0" step="10" placeholder="0: never"></div></div></div>');
+            const pinEl = d.querySelector(".pw-pin");
+            const q = (a) => d.querySelector('[data-a="' + a + '"]');
+            const min = pin.min !== undefined ? pin.min : -90, max = pin.max !== undefined ? pin.max : 90;
+            q("min").value = min; q("max").value = max;
+            d.querySelector('[data-v="min"]').textContent = min; d.querySelector('[data-v="max"]').textContent = max;
+            q("force").value = pin.break_force ? pin.break_force / 1000 : "";
+            pinEl.addEventListener("pointerdown", () => { if (sb.pinSel !== i) { sb.pinSel = i; drawPartGizmos(); pinEl.parentElement.parentElement.querySelectorAll(".pw-pin").forEach((x) => x.classList.toggle("sel", x === pinEl)); } });
+            d.querySelectorAll("[data-axis]").forEach((b) => b.addEventListener("click", () => {
+                pin.axes = Object.assign({ x: false, y: false, z: false }, pin.axes || { x: true });
+                pin.axes[b.dataset.axis] = !pin.axes[b.dataset.axis];
+                sb.pinSel = i;
+                partChanged();
+            }));
+            // the sliders show on the gizmo while they move
+            ["min", "max"].forEach((k) => {
+                q(k).addEventListener("input", () => { pin[k] = parseFloat(q(k).value); d.querySelector('[data-v="' + k + '"]').textContent = pin[k]; sb.pinSel = i; drawPartGizmos(); });
+                q(k).addEventListener("change", () => partChanged());
+            });
+            q("force").addEventListener("change", () => { const v = parseFloat(q("force").value); if (v > 0) pin.break_force = v * 1000; else delete pin.break_force; partChanged(); });
+            q("del").addEventListener("click", () => { part.mounts.splice(i, 1); sb.pinSel = part.mounts.length ? Math.min(sb.pinSel, part.mounts.length - 1) : -1; partChanged(); });
+        });
+        // nodes of the part
+        const own = [];
+        if (sb.layout) sb.layout.forEach((n, k) => { if (n.part === w.name) own.push(k); });
+        const nh = add('<div class="pw-section"><b>Nodes</b> <button class="small ' + (sb.partMode === "nodes" ? "accent" : "") + '" data-a="nodes">' + (sb.partMode === "nodes" ? "Stop adding nodes" : "Add nodes") + "</button></div>");
+        nh.querySelector('[data-a="nodes"]').addEventListener("click", async () => {
+            if (sb.partMode === "nodes") { endPartMode(); return; }
+            const s = softBody();
+            if (!s) { status("The car does not dent: tick “The car dents” first.", "error"); return; }
+            freeze(s);
+            sb.partMode = "nodes"; sb.deferRestart = true;
+            renderPartWin();
+        });
+        if (sb.partMode === "nodes") add('<p class="hint">Click on the surface of ' + w.name + ' to add nodes. Esc or the button stops.</p>');
+        if (!own.length) add('<p class="hint">No nodes added yet.</p>');
+        else {
+            const st = add('<div class="row"><div><label>Strength of all nodes (kN)</label><input type="number" data-a="strength" min="0" step="10"></div></div>');
+            const first = sb.nodeEdits.get(own[0]);
+            st.querySelector('[data-a="strength"]').value = first && own.every((k) => sb.nodeEdits.has(k) && sb.nodeEdits.get(k).yield_force === first.yield_force) ? first.yield_force / 1000 : "";
+            st.querySelector('[data-a="strength"]').addEventListener("change", (e) => {
+                const v = parseFloat(e.target.value);
+                if (!(v > 0)) return;
+                // the node bends at the strength and tears at two and a half times
+                own.forEach((k) => sb.nodeEdits.set(k, { yield_force: v * 1000, break_force: v * 2500 }));
+                partChanged();
+            });
+            const list = add('<div class="pw-nodes">' + own.map((k) => '<div class="pw-node"><span class="hint">node ' + k + "</span> <button class=\"small ghost\" data-del=\"" + k + '">✕</button></div>').join("") + "</div>");
+            list.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", () => { removeNodes(new Set([parseInt(b.dataset.del, 10)])); renderPartWin(); drawPartGizmos(); }));
+        }
+    }
+    function addPartNode(local) {
+        const w = sb.partWin;
+        if (!w || !sb.layout) return;
+        const r = 0.1;
+        sb.layout.push({ x: +local.x.toFixed(4), y: +local.y.toFixed(4), z: +local.z.toFixed(4), r, part: w.name });
+        if (sb.layout.length > 200) { sb.layout.pop(); status("A car can have 200 nodes at most.", "error"); return; }
+        changed();
+        renderPartWin();
+        drawPartGizmos();
+    }
+
+    // what the window shows in the view: the pin points, the gizmo of the pin that is chosen, the nodes of the part
+    function drawPartGizmos() {
+        if (!sb.partGroup) { sb.partGroup = new THREE.Group(); scene.add(sb.partGroup); }
+        const g = sb.partGroup;
+        while (g.children.length) { const c = g.children.pop(); c.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
+        const w = sb.partWin;
+        if (!w) return;
+        const part = w.part;
+        const mark = (color) => new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true });
+        (part && part.mounts || []).forEach((pin, i) => {
+            if (!pin.point) return;
+            const ball = new THREE.Mesh(new THREE.SphereGeometry(i === sb.pinSel ? 0.04 : 0.028, 14, 10), mark(0xff9f43));
+            ball.position.set(...pin.point); ball.renderOrder = 15;
+            g.add(ball);
+            if (i !== sb.pinSel) return;
+            // the gizmo: every axis that is free, and the angles that it may turn through (from the rest place, towards min and max)
+            const axes = pin.axes || { x: true, y: false, z: false };
+            const min = (pin.min !== undefined ? pin.min : -90) * Math.PI / 180, max = (pin.max !== undefined ? pin.max : 90) * Math.PI / 180;
+            AXES.forEach((a) => {
+                if (!axes[a]) return;
+                const axis = new THREE.Vector3(a === "x" ? 1 : 0, a === "y" ? 1 : 0, a === "z" ? 1 : 0);
+                const u = new THREE.Vector3(a === "x" ? 0 : a === "y" ? 0 : 1, a === "x" ? 1 : 0, a === "x" ? 0 : a === "y" ? 1 : 0);
+                const v = new THREE.Vector3().crossVectors(axis, u);
+                const centre = new THREE.Vector3(...pin.point);
+                const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([centre.clone().addScaledVector(axis, -0.35), centre.clone().addScaledVector(axis, 0.35)]), new THREE.LineBasicMaterial({ color: AXIS_COLOURS[a], depthTest: false }));
+                line.renderOrder = 15; g.add(line);
+                const radius = 0.3, steps = Math.max(2, Math.ceil((max - min) / (Math.PI / 36)));
+                const arc = [];
+                for (let k = 0; k <= steps; k++) { const t = min + (max - min) * k / steps; arc.push(centre.clone().addScaledVector(u, Math.cos(t) * radius).addScaledVector(v, Math.sin(t) * radius)); }
+                const verts = [];
+                for (let k = 0; k < arc.length - 1; k++) verts.push(centre.x, centre.y, centre.z, arc[k].x, arc[k].y, arc[k].z, arc[k + 1].x, arc[k + 1].y, arc[k + 1].z);
+                const fan = new THREE.Mesh(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(verts, 3)), new THREE.MeshBasicMaterial({ color: AXIS_COLOURS[a], transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthTest: false }));
+                fan.renderOrder = 15; g.add(fan);
+                const rim = new THREE.Line(new THREE.BufferGeometry().setFromPoints([centre, ...arc, centre]), new THREE.LineBasicMaterial({ color: AXIS_COLOURS[a], depthTest: false }));
+                rim.renderOrder = 15; g.add(rim);
+                // the rest place: where the angle is 0
+                const zero = new THREE.Line(new THREE.BufferGeometry().setFromPoints([centre, centre.clone().addScaledVector(u, radius * 1.1)]), new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false }));
+                zero.renderOrder = 15; g.add(zero);
+            });
+        });
+        // the nodes of the part
+        if (sb.layout) {
+            const pts = [];
+            sb.layout.forEach((n) => { if (n.part === w.name) pts.push(n.x, n.y, n.z); });
+            if (pts.length) {
+                const geo = new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+                const points = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffb040, size: 9, sizeAttenuation: false, depthTest: false, transparent: true }));
+                points.renderOrder = 15; g.add(points);
+            }
+        }
+        placePartGroup();
+    }
+    function placePartGroup() {
+        const v = bench.vehicle;
+        if (!sb.partGroup || !v) return;
+        sb.partGroup.position.set(v.px, v.py, v.pz);
+        sb.partGroup.quaternion.set(v.qx, v.qy, v.qz, v.qw);
+    }
+
     // ---- the crash test: the car at a speed into a wall
     $("sbSpeed").addEventListener("input", () => { $("sbSpeedLabel").textContent = $("sbSpeed").value + " km/h"; });
     $("sbAngle").addEventListener("input", () => { $("sbAngleLabel").textContent = $("sbAngle").value + "°"; });
@@ -1103,6 +1469,7 @@ export function initSoftBody(api) {
     async function crash() {
         try {
             if (!bench.vehicle || !softBody()) await api.startBench();
+            else if (sb.dirty) await rebuild();                        // what was changed in the part window is in the test
             const s = softBody(), v = bench.vehicle;
             if (!s) throw new Error("The car does not dent: tick “The car dents” first.");
             const speed = parseFloat($("sbSpeed").value) / 3.6, angle = parseFloat($("sbAngle").value);

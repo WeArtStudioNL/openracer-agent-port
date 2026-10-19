@@ -1261,6 +1261,7 @@ function fill(car) {
 function loadExisting() {
     const car = state.cars.find((c) => c.id === $("existing").value);
     if (!car) return;
+    try { localStorage.setItem("editor-last-car", car.id); } catch (e) { /* no storage */ }
     newCar();
     state.existingId = car.id;
     state.existingModel = car.model;
@@ -1369,7 +1370,13 @@ initEngineSim();
 renderCurve();
 updateSpeedInfo();
 defaultCameras();
-refreshList();
+// the car that was open last time is open again: no choosing in the list first
+refreshList().then(() => {
+    let last = null;
+    try { last = localStorage.getItem("editor-last-car"); } catch (e) { /* no storage */ }
+    const id = state.cars.some((c) => c.id === last) ? last : (state.cars[0] && state.cars[0].id);      // the one of last time, else the first of the list
+    if (id && !$("existing").value) { $("existing").value = id; loadExisting(); }
+});
 
 
 // ---- the Tuning card: everything of the tuning menu of the game that the form does not have, from the shared table (CarTuning.js)
@@ -1791,5 +1798,8 @@ softBodyEditor = initSoftBody({
     nodeNames: () => state.nodes.map((n) => n.name),
     floorY: () => grid.position.y,
     root: () => state.root,
+    // saves the car that is open, as the Save button does (the part panel saves after every change)
+    canSave: () => !!state.existingId && !!state.root,
+    save: () => save(),
     frameModel
 });

@@ -30,6 +30,13 @@ OpenRacer.Parts = (function () {
     var GRACE = 0.35;                                               // s after coming loose in which a part does not hit the car (it is inside it)
     var DEG = Math.PI / 180;
 
+    // "axes" of a pin point: { x, y, z } of booleans, or a list like ["x"]; one axis is a hinge, more is a ball, none is a rigid pin
+    function pinAxes(axes) {
+        if (Array.isArray(axes)) { var o = { x: false, y: false, z: false }; axes.forEach(function (k) { o[String(k).toLowerCase()] = true; }); return o; }
+        if (axes && typeof axes === "object") return { x: !!axes.x, y: !!axes.y, z: !!axes.z };
+        return { x: true, y: false, z: false };
+    }
+
     function groups(membership, filter) { return ((membership << 16) | filter) >>> 0; }
 
     // Loads the engine (once) and makes the parts of a car. ctx: see build(). Gives a promise of the controller, or null
@@ -154,7 +161,8 @@ OpenRacer.Parts = (function () {
             if (group.length && !spec.nodes) nodes = group.slice();
             // a mount is a node of the shell or a point (in the frame of the car): a point is held by the nearest node of the body
             var mountList = hinge && sb ? (spec.mounts || []).filter(function (m) { return m && ((m.node >= 0 && m.node < sb.count) || (Array.isArray(m.point) && m.point.length === 3)); }).slice(0, 2).map(function (m) {
-                var out = { node: m.node, break_force: m.break_force, point: Array.isArray(m.point) ? new THREE.Vector3().fromArray(m.point) : null };
+                var out = { node: m.node, break_force: m.break_force, point: Array.isArray(m.point) ? new THREE.Vector3().fromArray(m.point) : null,
+                    pin: m.axes !== undefined, axes: pinAxes(m.axes), min: (m.min !== undefined ? m.min : -90) * DEG, max: (m.max !== undefined ? m.max : 90) * DEG };
                 if (out.point) {
                     var best = 1e9;
                     out.node = 0;
@@ -186,7 +194,7 @@ OpenRacer.Parts = (function () {
                 breakForce: spec.break_force !== undefined ? spec.break_force : 0,
                 // the points where the part is hinged to the body: nodes of the shell, each with the force at which it tears off
                 mounts: mountList.map(function (m) {
-                    return { node: m.node, breakForce: m.break_force || 0, alive: true, beam: m.beam, point: m.point || sb.restPosition(m.node, new THREE.Vector3()) };
+                    return { node: m.node, breakForce: m.break_force || 0, alive: true, beam: m.beam, point: m.point || sb.restPosition(m.node, new THREE.Vector3()), pin: m.pin, axes: m.axes, min: m.min, max: m.max };
                 }),
                 group: group.length ? spec.object : null,
                 // held: sits on the car; hinged: swings on the joint; free: loose
@@ -245,6 +253,23 @@ OpenRacer.Parts = (function () {
             var origin = h.origin, axis = h.axis;
             if (part.mounts.length) {
                 if (alive.length === 0) return false;
+                // pin points with axes (the part panel of the car editor): the first pin that holds is the joint; the others add to the hold
+                var pin = alive.filter(function (m) { return m.pin; })[0];
+                if (pin) {
+                    var pa = { x: pin.point.x, y: pin.point.y, z: pin.point.z };
+                    var pl = { x: pin.point.x - part.centre.x, y: pin.point.y - part.centre.y, z: pin.point.z - part.centre.z };
+                    var on = ["x", "y", "z"].filter(function (k) { return pin.axes[k]; });
+                    var ident = { x: 0, y: 0, z: 0, w: 1 };
+                    if (on.length === 0) part.joint = world.createImpulseJoint(R.JointData.fixed(pa, ident, pl, ident), chassis, part.body, true);
+                    else if (on.length > 1) part.joint = world.createImpulseJoint(R.JointData.spherical(pa, pl), chassis, part.body, true);
+                    else {
+                        part.joint = world.createImpulseJoint(R.JointData.revolute(pa, pl, { x: on[0] === "x" ? 1 : 0, y: on[0] === "y" ? 1 : 0, z: on[0] === "z" ? 1 : 0 }), chassis, part.body, true);
+                        part.joint.setLimits(pin.min, pin.max);
+                        if (h.spring > 0) part.joint.configureMotorPosition(h.rest, h.spring, h.damper);
+                        else if (h.damper > 0) part.joint.configureMotorVelocity(0, h.damper);
+                    }
+                    return true;
+                }
                 origin = alive[0].point;
                 if (alive.length >= 2) axis = new THREE.Vector3().subVectors(alive[1].point, alive[0].point).normalize();
             }
@@ -321,7 +346,7 @@ OpenRacer.Parts = (function () {
                 if (sb) {
                     for (var k = 0; k < part.nodes.length; k++) {
                         var node = part.nodes[k];
-                        if (!sb.alive(node)) torn = true;
+                        if (!sb.alive(node) && part.state === "held") torn = true;      // (the nodes of a part that has come loose are gone on purpose)
                         sb.position(node, a); sb.restPosition(node, c);
                         shell = Math.max(shell, a.distanceTo(c) * sb.params.anchorK);
                     }

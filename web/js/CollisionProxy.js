@@ -118,7 +118,7 @@ OpenRacer.CollisionProxy = (function () {
         // car.json "softbody": { "layout": [{ x, y, z, r }] }: the nodes as the maker of the car set them in the editor, instead of the ones made from the model
         var layout = object.config && object.config.softbody && object.config.softbody.layout;
         if(spheres && layout && layout.length) {
-            var own = layout.slice(0, 120).filter(function (n) { return isFinite(n.x) && isFinite(n.y) && isFinite(n.z) && n.r > 0; })
+            var own = layout.slice(0, 200).filter(function (n) { return isFinite(n.x) && isFinite(n.y) && isFinite(n.z) && n.r > 0; })
                 .map(function (n) { return { x: n.x, y: n.y, z: n.z, r: Math.min(0.6, Math.max(0.05, n.r)), part: typeof n.part === "string" ? n.part : null }; });
             if(own.length >= 3) spheres = own.concat(spheres.filter(function (sp) { return sp.wheel; }));
         }

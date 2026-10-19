@@ -9,7 +9,7 @@
  */
 
 OpenRacer.SoftBodyMesh = (function () {
-    var MAX_NODES = 128;
+    var MAX_NODES = 200;
 
     // root: the model of the body (THREE.Object3D); toVehicle(p): its points into the frame of the car, in place (as in CollisionProxy.js).
     // Gives { update() } to call every frame, or null when this is not possible
