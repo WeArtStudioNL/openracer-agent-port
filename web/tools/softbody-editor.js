@@ -357,6 +357,7 @@ export function initSoftBody(api) {
         if (o.softBodyMesh) o.softBodyMesh.update();
         if (o.parts) o.parts.update(dt);
         if (sb.crash) crashFrame(dt);
+        if (sb.pushMode) pushReading();
         if (sb.group) updateShell();
     }
     function updateShell() {
@@ -547,6 +548,7 @@ export function initSoftBody(api) {
         const s = softBody(), rect = renderer.domElement.getBoundingClientRect();
         const mx = e.clientX - rect.left, my = e.clientY - rect.top;
         sb.group.updateMatrixWorld(true);
+        if (sb.pushMode) { applyForceAt(mx, my, rect); return; }
         const p = new THREE.Vector3(), p2 = new THREE.Vector3();
         let node = -1, bestD = 14;
         for (let k = 0; k < s.count; k++) {
@@ -889,6 +891,74 @@ export function initSoftBody(api) {
         } catch (error) { status(error.message, "error"); }
     });
 
+    // ---- apply force: an arrow on the surface under the mouse, and a click presses a flat invisible plate on the car with that force
+    const hover = new THREE.ArrowHelper(new THREE.Vector3(0, -1, 0), new THREE.Vector3(), 0.8, 0xff9f43, 0.3, 0.18);
+    hover.visible = false;
+    hover.traverse((o) => { if (o.material) { o.material.depthTest = false; o.renderOrder = 13; } });
+    scene.add(hover);
+    // the point of the model under the mouse, and its outer normal, in the world
+    function surfaceAt(mx, my, rect) {
+        if (!bench.model) return null;
+        caster.setFromCamera(new THREE.Vector2(mx / rect.width * 2 - 1, -(my / rect.height) * 2 + 1), camera);
+        const hit = caster.intersectObject(bench.model.tilt, true).filter((h) => h.object.isMesh && h.object.visible && h.face)[0];
+        if (!hit) return null;
+        const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+        if (n.dot(caster.ray.direction) > 0) n.negate();                  // the side that the ray comes from is the outside
+        return { point: hit.point, normal: n };
+    }
+    renderer.domElement.addEventListener("pointermove", (e) => {
+        if (!sb.pushMode || lasso) return;
+        const rect = renderer.domElement.getBoundingClientRect();
+        const hit = surfaceAt(e.clientX - rect.left, e.clientY - rect.top, rect);
+        hover.visible = !!hit;
+        if (!hit) return;
+        hover.setDirection(hit.normal.clone().negate());
+        hover.position.copy(hit.point).addScaledVector(hit.normal, 0.8);
+    });
+    function applyForceAt(mx, my, rect) {
+        const s = softBody();
+        const hit = surfaceAt(mx, my, rect);
+        if (!s || !hit) return;
+        const kg = parseFloat($("sbForceKg").value) || 1000, side = parseFloat($("sbPlate").value) || 0.6;
+        const local = sb.group.worldToLocal(hit.point.clone());
+        const normal = hit.normal.clone().applyQuaternion(sb.group.quaternion.clone().invert());
+        releaseForce();
+        s.pushPlate([local.x, local.y, local.z], [normal.x, normal.y, normal.z], kg * 9.81, side);
+        // the arrow stays on the car while it is pushed
+        const arrow = new THREE.ArrowHelper(normal.clone().negate(), local.clone().addScaledVector(normal, 0.8), 0.8, 0xff5555, 0.3, 0.18);
+        arrow.traverse((o) => { if (o.material) { o.material.depthTest = false; o.renderOrder = 13; } });
+        sb.group.add(arrow);
+        sb.pushArrow = arrow;
+        sb.pushStart = { kg };
+        hover.visible = false;
+        status("Pushing with " + kg + " kg. Click again to push somewhere else.", "ok");
+    }
+    function releaseForce() {
+        const s = softBody();
+        if (s) s.releasePlate();
+        if (sb.pushArrow && sb.group) sb.group.remove(sb.pushArrow);
+        sb.pushArrow = null; sb.pushStart = null;
+    }
+    $("sbPush").addEventListener("click", async () => {
+        if (!sb.pushMode && !sb.shown) await show(false);
+        if (!softBody()) return;
+        sb.pushMode = !sb.pushMode;
+        // the shell is only worked out on a 3D ground (the plain floor of the bench has none)
+        if (sb.pushMode && !bench.vehicle.ground.use3D) { sb.savedGround = sb.savedGround || bench.vehicle.ground; bench.vehicle.ground = crashGround(api.floorY(), 0); }
+        if (!sb.pushMode) { releaseForce(); hover.visible = false; }
+        $("sbPush").textContent = sb.pushMode ? "Release" : "Apply force";
+        $("sbPush").classList.toggle("ghost", sb.pushMode);
+        if (sb.pushMode) status("Point at the car: the arrow shows where and which way the plate pushes. Click to push.", "ok");
+    });
+    // the reading while it pushes
+    function pushReading() {
+        const s = softBody(), pl = s && s.plate;
+        if (!pl || !sb.pushStart) return;
+        const st = s.stats();
+        $("sbResult").textContent = "Pushing " + sb.pushStart.kg + " kg: the plate is " + (Math.max(0, (pl.contact !== undefined ? pl.contact : pl.w) - pl.w) * 100).toFixed(1) + " cm into the shell, the car holds it with " +
+            (pl.held / 9.81).toFixed(0) + " kg · bend " + (st.maxBend * 100).toFixed(1) + " cm · took up " + (st.absorbed / 1000).toFixed(1) + " kJ · " + st.brokenAnchors + " anchors and " + st.brokenBeams + " beams torn";
+    }
+
     // ---- the crash test: the car at a speed into a wall
     $("sbSpeed").addEventListener("input", () => { $("sbSpeedLabel").textContent = $("sbSpeed").value + " km/h"; });
     $("sbAngle").addEventListener("input", () => { $("sbAngleLabel").textContent = $("sbAngle").value + "°"; });
@@ -910,7 +980,7 @@ export function initSoftBody(api) {
         return g;
     }
     function wallMesh(floorY, angleDeg) {
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(80, 6, 0.3), new THREE.MeshStandardMaterial({ color: 0x59636f, roughness: 0.9 }));
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(80, 6, 0.3), new THREE.MeshStandardMaterial({ color: 0x59636f, roughness: 0.9, transparent: true, opacity: 0.1, depthWrite: false }));   // 10%: the car is seen through it
         mesh.position.set(0, floorY + 3, WALL_Z + 0.15);
         mesh.rotation.y = -angleDeg * Math.PI / 180;
         return mesh;
@@ -974,6 +1044,7 @@ export function initSoftBody(api) {
         const v = bench.vehicle;
         if (!v) return;
         stopCrash();
+        releaseForce();
         sb.savedGround = null;
         v.reset(0, 0, Math.PI / 2);
         cameraToCar();
@@ -986,6 +1057,7 @@ export function initSoftBody(api) {
         if (!sb.restarting) { sb.edit = false; $("sbEdit").textContent = "Edit nodes"; $("sbEdit").classList.remove("accent"); $("sbEditBox").style.display = "none"; sb.sel.nodes.clear(); sb.sel.beam = null; }
         stopCrash();
         sb.savedGround = null;
+        sb.pushMode = false; sb.pushArrow = null; $("sbPush").textContent = "Apply force"; $("sbPush").classList.remove("ghost");
         hide();
         $("sbInfo").textContent = "";
         $("sbResult").textContent = "";

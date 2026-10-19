@@ -133,6 +133,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
             beamRest[j] = Math.hypot(rest[3 * a] - rest[3 * b], rest[3 * a + 1] - rest[3 * b + 1], rest[3 * a + 2] - rest[3 * b + 2]);
         }
         this.absorbed = 0;
+        this.plate = null; this.pinned = false;
         this.displacement.fill(0);
         this.version++;
     };
@@ -153,6 +154,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         for (var s = 0; s < steps; s++) {
             // the forces of the hits (the callback fills this.force), then the anchors and the beams
             if (contacts) contacts(h);
+            if (this.plate) pushPlate(this.plate, h);
             for (var k = 0; k < N; k++) {
                 if (!anchorAlive[k]) continue;
                 var ix = 3 * k;
@@ -216,7 +218,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
                 f[o] = 0; f[o + 1] = 0; f[o + 2] = 0;
             }
         }
-        this.quiet = !moved && maxMove < 1e-4 && maxMove2 < 1e-6;
+        this.quiet = !moved && maxMove < 1e-4 && maxMove2 < 1e-6 && !this.plate;
         // the displacement for the model, when something moved
         var any = moved;
         if (!any) for (var m = 0; m < 3 * N; m++) { if (Math.abs(u[m]) > 1e-4) { any = true; break; } }
@@ -225,6 +227,55 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
             this.version++;
         }
     };
+
+
+    // A flat plate that is pushed on the car with a force (the car editor, "Apply force"): an invisible wall in the frame of the car. It starts
+    // a little outside the surface at 'point' (the outer normal is 'normal') and is pushed inwards with 'newtons' by a mass of its own; the
+    // nodes under its square (side 'side' m) push back, and the plate stops where the two balance. The nodes feel it as a hit on them, so the
+    // anchors and the beams yield and tear as in a crash.
+    this.plate = null;
+    this.pinned = false;                              // the reaction of the anchors does not go to the car (the plate is a test of the shell on a car that is clamped)
+    this.pushPlate = function (point, normal, newtons, side) {
+        var nl = Math.hypot(normal[0], normal[1], normal[2]) || 1;
+        var n = [normal[0] / nl, normal[1] / nl, normal[2] / nl];
+        // two directions in the plane of the plate
+        var t1 = Math.abs(n[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+        var e1 = [n[1] * t1[2] - n[2] * t1[1], n[2] * t1[0] - n[0] * t1[2], n[0] * t1[1] - n[1] * t1[0]];
+        var l1 = Math.hypot(e1[0], e1[1], e1[2]);
+        e1 = [e1[0] / l1, e1[1] / l1, e1[2] / l1];
+        var e2 = [n[1] * e1[2] - n[2] * e1[1], n[2] * e1[0] - n[0] * e1[2], n[0] * e1[1] - n[1] * e1[0]];
+        var surface = n[0] * point[0] + n[1] * point[1] + n[2] * point[2];
+        this.plate = { n: n, e1: e1, e2: e2, p: point.slice(), force: newtons, half: Math.max(0.05, side / 2), mass: 60, surface: surface, w: surface + 0.4, vw: 0, held: 0 };
+        this.pinned = true;
+        this.quiet = false;
+    };
+    this.releasePlate = function () { this.plate = null; this.pinned = false; };
+
+    function pushPlate(pl, h) {
+        var n = pl.n, total = 0;
+        for (var k = 0; k < N; k++) {
+            if (!anchorAlive[k]) continue;
+            var ix = 3 * k;
+            var x = rest[ix] + u[ix] + q[ix], y = rest[ix + 1] + u[ix + 1] + q[ix + 1], z = rest[ix + 2] + u[ix + 2] + q[ix + 2];
+            var dx = x - pl.p[0], dy = y - pl.p[1], dz = z - pl.p[2];
+            var r = radius[k];
+            if (Math.abs(dx * pl.e1[0] + dy * pl.e1[1] + dz * pl.e1[2]) > pl.half + r || Math.abs(dx * pl.e2[0] + dy * pl.e2[1] + dz * pl.e2[2]) > pl.half + r) continue;
+            var depth = n[0] * x + n[1] * y + n[2] * z + r - pl.w;
+            if (depth <= 0) continue;
+            var vn = n[0] * w[ix] + n[1] * w[ix + 1] + n[2] * w[ix + 2] - pl.vw;     // positive: the node comes at the plate
+            var c = 2 * P.contactDamping * Math.sqrt(P.contactK * mass[k]);
+            var fn = P.contactK * depth + c * vn;
+            if (fn <= 0) continue;
+            f[ix] -= fn * n[0]; f[ix + 1] -= fn * n[1]; f[ix + 2] -= fn * n[2];
+            total += fn;
+        }
+        pl.held = total;
+        if (total > 0 && pl.contact === undefined) pl.contact = pl.w;      // where it first touched a node
+        pl.vw += (-pl.force + total) / pl.mass * h;
+        pl.w += pl.vw * h;
+        var floor = pl.surface - 1.2;                       // it does not go through the whole car
+        if (pl.w < floor) { pl.w = floor; if (pl.vw < 0) pl.vw = 0; }
+    }
 
     this.repair();
 };

@@ -914,11 +914,12 @@ OpenRacer.Vehicle = function (parameters, input) {
         ensureProxy();
         refreshCandidates();
         setTurn();
-        if(sb.quiet && !wallCandidates.length && Rm[4] > 0.2) return;      // nothing to hit and nothing moving
+        if(sb.quiet && !sb.plate && !wallCandidates.length && Rm[4] > 0.2) return;      // nothing to hit and nothing moving
         sb.step(dt, nodeContacts);
         var rc = sb.reaction;
         var fx = Rm[0] * rc[0] + Rm[1] * rc[1] + Rm[2] * rc[2], fy = Rm[3] * rc[0] + Rm[4] * rc[1] + Rm[5] * rc[2], fz = Rm[6] * rc[0] + Rm[7] * rc[1] + Rm[8] * rc[2];
         var tx = Rm[0] * rc[3] + Rm[1] * rc[4] + Rm[2] * rc[5], ty = Rm[3] * rc[3] + Rm[4] * rc[4] + Rm[5] * rc[5], tz = Rm[6] * rc[3] + Rm[7] * rc[4] + Rm[8] * rc[5];
+        if(sb.pinned) return;                         // the car is clamped (the car editor pushes a plate on it): the anchors do not move the car
         force.x += fx; force.y += fy; force.z += fz;
         torque.x += tx; torque.y += ty; torque.z += tz;
     }

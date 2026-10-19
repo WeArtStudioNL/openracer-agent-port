@@ -126,3 +126,9 @@ A hinged part (a hood, a door) can hang on **two nodes of the body**, each with 
 * `nodes`: the nodes that hold the part shut (and the displacement of which is the load on it); with `hinge.latch_force` it opens when the load passes it.
 * In the editor: select a node of the body in the view, pick the part in the card ("Part points") and use **A = node**, **B = node** and **Held by**; the forces are in "Parts…". The hinge is drawn as an orange line between its points (the lines to the nodes that hold it shut start at A).
 * Not yet: beams inside a part, so that the part itself dents. A part is a rigid body in the engine; while it sits on the car it bends with the shell, like the rest of the model.
+
+### Apply force (the plate)
+
+* **Apply force** (the card, next to the crash test): point at the car and an arrow shows the surface under the mouse and the way the plate will push (against the outer normal of the surface). A click presses a **flat invisible plate** on the car there, with the force in **kg** (kg times 9.81 N) and a square of the chosen size. The plate has a mass of its own, starts 0.4 m outside the surface and is pushed inwards; the nodes under it push back as in a crash (`SoftBody.pushPlate`), so anchors and beams yield and tear, and the plate stops where the force of the car and the force of the plate balance. The card shows how far the plate has gone into the shell, how many kg the car holds it with, the bend, the energy and the torn anchors and beams. Click again to push somewhere else; **Release** (or Repair) lets go.
+* The car is clamped while the plate pushes (`softBody.pinned`): the anchors do not move the rigid body, or a big force would carry the car away. The dent is what is tested.
+* The wall of the crash test is 10% opaque, so the car is seen through it when the camera is behind it.
