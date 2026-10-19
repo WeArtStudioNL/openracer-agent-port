@@ -1533,6 +1533,7 @@ export function initSoftBody(api) {
     function stopCrash() {
         sb.crash = null;
         crashUi(false);
+        restoreCamera();                                  // however the test ends (stop, repair, a restart of the bench, a new test), the camera goes back
         if (sb.wall) { scene.remove(sb.wall); sb.wall = null; }
         if (bench.vehicle && sb.savedGround) { bench.vehicle.ground = sb.savedGround; }
     }
@@ -1562,5 +1563,5 @@ export function initSoftBody(api) {
         if (!sb.restarting && api.frameModel) api.frameModel();
     }
 
-    return { read, fill, frame, onStop, changed, debug: { sb, tc, showSelection } };
+    return { read, fill, frame, onStop, changed, debug: { sb, tc, rc, camera, controls, showSelection } };
 }

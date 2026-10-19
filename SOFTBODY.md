@@ -194,3 +194,5 @@ Tested with a door of 10 kg: at 30 and 60 km/h against a wall it stayed shut wit
 ### The crash test: the camera follows, the test buttons make room
 
 The car drives straight ahead from its start point and only the wall is added (6.6 m ahead of the middle of the car). The **camera follows the car** during the test, and is **put back where it was** when the test is stopped or the car is repaired. While the test runs the **test buttons are hidden** and a **Stop crash test** button sits in their place: it takes the wall away, puts the car back at its start and brings the test buttons back (also after Repair or when the bench stops).
+
+The camera is put back by `stopCrash()` itself, so it goes back however the test ends: Stop crash test, Repair, a restart of the bench (a change in the part window) or a new test.
