@@ -1470,14 +1470,8 @@ export function initSoftBody(api) {
         if (on) { if (stop.style.display === "none") sb.testBarShown = bar.style.display; bar.style.display = "none"; stop.style.display = ""; }
         else if (stop.style.display !== "none") { stop.style.display = "none"; bar.style.display = sb.testBarShown === undefined ? "" : sb.testBarShown; }
     }
-    $("crashStop").addEventListener("click", () => {
-        const v = bench.vehicle;
-        stopCrash();
-        releaseForce();
-        if (v) { sb.savedGround = null; if (sb.pushMode) ensureGround3D(); v.reset(0, 0, Math.PI / 2); }
-        restoreCamera();
-        $("sbResult").textContent = "Crash test stopped.";
-    });
+    // "Stop crash test" is the "Stop test" button of the test buttons: the test bench stops and the editor goes back to the model as it is
+    $("crashStop").addEventListener("click", () => { stopCrash(); $("testStop").click(); });
     async function crash() {
         try {
             if (!bench.vehicle || !softBody()) await api.startBench();
