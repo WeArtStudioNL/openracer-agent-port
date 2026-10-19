@@ -26,7 +26,10 @@
         <aside class="side" id="side" aria-label="Documentation sections">
             <h4>Start</h4>
             <a href="#intro">Introduction</a>
-            <a href="#running">Running it</a>
+            <a href="#getting-started">Getting started</a>
+            <a href="#play">Playing in the browser</a>
+            <a href="#local">Running your own copy</a>
+            <a href="#which">Web or local?</a>
             <a href="#menu">Main menu and address</a>
             <h4>Driving</h4>
             <a href="#keyboard">Keyboard</a>
@@ -78,12 +81,40 @@
             <p>The game version is shown in the main menu and at the bottom of the settings menu. It is raised when a car or track made with the game would not work the same on an older version.</p>
         </section>
 
-        <section id="running">
-            <h2>Running it</h2>
-            <p>OpenRacer is a static web app with a small helper for the lists of cars and tracks. A browser with WebGL is all you need to play it, as on this site. To <i>make</i> cars and tracks with the editors, and have them written to disk, run the helper server from a checkout:</p>
-            <pre><code>./start-server.sh        # optionally pass a port, default 8000</code></pre>
-            <p>This serves the <code>web</code> folder and opens <code>http://localhost:8000</code>. Nothing is cached, so after a <code>git pull</code> a refresh is enough. Opening <code>index.html</code> directly does not work, because the game loads its files.</p>
-            <p>A plain web server (<code>cd web &amp;&amp; python3 -m http.server 8000</code>) works too. The cars and tracks that come with the game are then the ones in <code>cars/index.json</code> and <code>tracks/index.json</code>, and what a player makes or imports goes to the <a href="#garage">garage</a> of their browser.</p>
+        <section id="getting-started">
+            <h2>Getting started</h2>
+            <h3 id="play">Playing in the browser</h3>
+            <p>Open <a href="game/">openracer.eu/game</a>. There is nothing to install: the game is a set of plain files that your browser runs. Any recent browser with WebGL works. Chrome or Edge is the best choice, because only they have WebHID (force feedback on a racing wheel) and the option to link a folder of cars and tracks.</p>
+            <ol>
+                <li>Choose a car and a track in the main menu, and set the <b>Race</b> column: practice or a race of some laps, AI opponents, the ghost, lap records, tyre wear.</li>
+                <li>Press <b>Start</b>. The engine sound starts at your first key press or click, because browsers want that.</li>
+                <li>Drive with the arrows or <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>, or plug in a gamepad or a wheel and press a button so the browser sees it. <kbd>Esc</kbd> opens the settings, where you can remap every input and calibrate a wheel. See <a href="#keyboard">Keyboard</a>, <a href="#gamepad">Gamepad</a> and <a href="#wheel">Racing wheel</a>.</li>
+                <li>Press <kbd>U</kbd> to tune the car while you drive, and try the <b>Skidpad</b> button to see how much grip a car has.</li>
+            </ol>
+            <p>Your settings, key bindings, lap records and tuning are kept in your own browser, not on a server. The same goes for what you make or import: <b>My garage</b> in the main menu keeps your own cars and tracks in the browser, and exports them as zip files (see <a href="#garage">Your own cars and tracks</a>). Even the car editor and the track editor work on the web version, and save to the garage.</p>
+
+            <h3 id="local">Running your own copy</h3>
+            <p>OpenRacer is a static web app with a small helper server. You need <code>git</code> and <code>python3</code>, and no build step:</p>
+            <pre><code>git clone https://github.com/WeArtStudioNL/openracer-agent-port.git
+cd openracer-agent-port
+./start-server.sh        # optionally pass a port, default 8000</code></pre>
+            <p>This serves the <code>web</code> folder (<code>tools/serve.py</code>) and opens <code>http://localhost:8000</code>. Nothing is cached, so after a <code>git pull</code> or an edit a refresh is enough and the server never needs a restart. Opening <code>index.html</code> straight from the disk does not work, because the game loads its files.</p>
+            <p>Any plain web server works too (<code>cd web &amp;&amp; python3 -m http.server 8000</code>). The game then behaves like the version on this site, with the cars and tracks listed in <code>cars/index.json</code> and <code>tracks/index.json</code>.</p>
+
+            <h3 id="which">Which one do you need?</h3>
+            <table>
+                <tr><th>You want to…</th><th>Web version</th><th>Local version</th></tr>
+                <tr><td>Play, race, tune a car, use a wheel or gamepad</td><td>Enough</td><td>Same</td></tr>
+                <tr><td>Keep your own cars and tracks, pass them on as zip files</td><td>Enough, in My garage</td><td>Same, or as folders</td></tr>
+                <tr><td>Try the car editor or the track editor</td><td>Works, saves to the garage of your browser</td><td>Saves as real files in <code>web/cars</code> and <code>web/tracks</code></td></tr>
+                <tr><td>Put a car or track in the standard set of a game you host</td><td>No: the server of the web version is read only</td><td>Yes, the files are in the folders you deploy</td></tr>
+                <tr><td>Keep cars and tracks in git, or send a pull request</td><td>No</td><td>Yes</td></tr>
+                <tr><td>Use <i>Save to the car</i> on a standard car, or record an AI racing line into a track's files</td><td>Saved in the garage, as a copy with the same id</td><td>Written to <code>car.json</code> and <code>track.json</code></td></tr>
+                <tr><td>Change the code or the physics</td><td>No</td><td>Yes: edit and refresh</td></tr>
+                <tr><td>Run the physics bench, the texture and track tools, or the Blender script</td><td>No</td><td>Yes: they are in <code>tools/</code> and need Node, Python or Blender</td></tr>
+                <tr><td>Host the game yourself</td><td>Not needed</td><td>Upload the <code>web</code> folder to any static host</td></tr>
+            </table>
+            <p>In short: the web version is enough to <i>play</i> and to make things for yourself. Run it locally when the files themselves matter, to test a change, to develop the game further, or to share a car or track with the project.</p>
         </section>
 
         <section id="menu">
@@ -323,7 +354,7 @@
 
         <section id="car-editor">
             <h2>Car editor</h2>
-            <p>At <code>tools/car-editor.html</code>, a button in the main menu. It needs the helper server or saves to the garage.</p>
+            <p>At <code>tools/car-editor.html</code>, a button in the main menu. With the helper server it writes the files to disk, without it it saves to the garage.</p>
             <ol>
                 <li><b>Pick the glb.</b> The arrow is the front of the car. Turn the model if needed and press <i>Fit</i>: the origin has to be at the height of the wheel axles, in the middle between the axles.</li>
                 <li><b>Wheels.</b> The wheels have to be separate parts, because they steer and spin. <i>Find the wheels</i> does this by their names and places. The wheelbase, tracks and tyre size are taken from the model, so the car looks in the game as it looks in the editor.</li>
