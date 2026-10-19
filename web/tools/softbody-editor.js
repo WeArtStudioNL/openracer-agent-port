@@ -1569,10 +1569,15 @@ export function initSoftBody(api) {
         if (!c.hit) steerAhead(v, inp); else inp.turnAngle = 0;
         c.peakG = Math.max(c.peakG, c.hit ? Math.abs(u - c.lastU) / Math.max(dt, 1e-3) / 9.81 : 0);
         c.lastU = u;
-        // the camera follows the car
-        const dx = v.px - controls.target.x, dy = v.py - controls.target.y, dz = v.pz - controls.target.z;
-        controls.target.x += dx * 0.08; controls.target.y += dy * 0.08; controls.target.z += dz * 0.08;
-        camera.position.x += dx * 0.08; camera.position.y += dy * 0.08; camera.position.z += dz * 0.08;
+        // the camera is fixed to the car, with no smoothing: it moves exactly as the car moves, until the car hits the wall; then it lets go and stays
+        if (!c.hit) {
+            if (c.last) {
+                const dx = v.px - c.last.x, dy = v.py - c.last.y, dz = v.pz - c.last.z;
+                controls.target.x += dx; controls.target.y += dy; controls.target.z += dz;
+                camera.position.x += dx; camera.position.y += dy; camera.position.z += dz;
+            }
+            c.last = { x: v.px, y: v.py, z: v.pz };
+        }
         const st = s.stats();
         const events = bench.obj.parts ? bench.obj.parts.events.length : 0;
         $("sbResult").textContent = "Peak " + c.peakG.toFixed(0) + " g · bend " + (st.maxBend * 100).toFixed(0) + " cm · took up " + (st.absorbed / 1000).toFixed(0) + " kJ of " +

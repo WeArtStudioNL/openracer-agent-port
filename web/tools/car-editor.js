@@ -1653,9 +1653,15 @@ function runScript(dt) {
             inp.throttle = sc.hit ? 0 : 1;
             inp.brakePedal = sc.hit ? 1 : 0;                       // after the hit it is held, it does not roll back
             if (sc.hit) inp.turnAngle = 0; else softBodyEditor.steerAhead(v, inp);      // and until then it is steered at the wall
-            const fx = v.px - controls.target.x, fy = v.py - controls.target.y, fz = v.pz - controls.target.z;
-            controls.target.x += fx * 0.08; controls.target.y += fy * 0.08; controls.target.z += fz * 0.08;
-            camera.position.x += fx * 0.08; camera.position.y += fy * 0.08; camera.position.z += fz * 0.08;
+            // the camera is fixed to the car until it hits the wall, then it stays
+            if (!sc.hit) {
+                if (sc.last) {
+                    const fx = v.px - sc.last.x, fy = v.py - sc.last.y, fz = v.pz - sc.last.z;
+                    controls.target.x += fx; controls.target.y += fy; controls.target.z += fz;
+                    camera.position.x += fx; camera.position.y += fy; camera.position.z += fz;
+                }
+                sc.last = { x: v.px, y: v.py, z: v.pz };
+            }
             if (sc.hit && Math.abs(v.u) < 0.3) sc.still += dt; else sc.still = 0;
             if (sc.still > 1.5 || sc.t > 60) {
                 softBodyEditor.removeWall();

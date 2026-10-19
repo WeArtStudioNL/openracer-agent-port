@@ -237,3 +237,7 @@ A part that comes loose is a rigid body in the engine that hits the track (the r
 ### Stop test is an icon
 
 **Stop test** is a small button with a turning-back arrow (↺) at the top right of the test buttons, in both tabs (it shows when the test bench runs).
+
+### The camera of the crash test is fixed to the car
+
+The camera no longer follows with smoothing: it moves by exactly the movement of the car (so it keeps its distance and its angle) until the car hits the wall; then it lets go and stays where it is. The full test does the same in its wall stage. Measured at 60 km/h: the offset between camera and car stayed 7.31 m / -7.32 m (z / x) for the whole drive, and after the hit the camera stayed at z = 63.1 while the car bounced back.
