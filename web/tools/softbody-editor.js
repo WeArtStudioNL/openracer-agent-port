@@ -210,6 +210,24 @@ export function initSoftBody(api) {
         part.nodes = [...sb.sel.nodes];
         partsChanged(part.object + " is held by " + part.nodes.length + " node" + (part.nodes.length > 1 ? "s" : "") + ".");
     });
+    // the nodes of a part: the selected nodes get its name in the layout (the nodes of a part are joined to each other, and to the body by the links of its hinge points)
+    $("sbPartNodes").addEventListener("click", () => {
+        const part = chosenPart(), s = softBody();
+        if (!part || !s) return;
+        if (!sb.sel.nodes.size) { status("Select the nodes of the part in the view first (a click, or a lasso with the middle mouse button).", "error"); return; }
+        freeze(s);
+        sb.layout.forEach((n) => { if (n.part === part.object) delete n.part; });
+        sb.sel.nodes.forEach((k) => { if (sb.layout[k]) sb.layout[k].part = part.object; });
+        $("sbPartInfo").textContent = part.object + " has " + sb.sel.nodes.size + " nodes of its own. The hinge points A and B are joined to its nearest nodes by link beams.";
+        changed(true);
+    });
+    $("sbPartNodesClear").addEventListener("click", () => {
+        const part = chosenPart();
+        if (!part || !sb.layout) return;
+        sb.layout.forEach((n) => { if (n.part === part.object) delete n.part; });
+        $("sbPartInfo").textContent = part.object + " has no nodes of its own.";
+        changed(true);
+    });
     function partsChanged(message) {
         renderParts();
         drawHinges();
@@ -379,6 +397,7 @@ export function initSoftBody(api) {
                 tint.setHSL(0.33 * Math.max(0, 1 - strain * 0.5), 0.9, 0.55);
             }
             if (sb.layout && sb.layout[k] && sb.layout[k].inner && s.alive(k)) tint.setRGB(0.35, 0.6, 1);
+            if (sb.layout && sb.layout[k] && sb.layout[k].part && s.alive(k)) tint.setRGB(1, 0.62, 0.26);
             if (sb.sel.nodes.has(k)) tint.setRGB(1, 1, 1);
             col.setXYZ(k, tint.r, tint.g, tint.b);
         }
@@ -440,7 +459,7 @@ export function initSoftBody(api) {
         const pos = sb.points.geometry.attributes.position, col = sb.points.geometry.attributes.color;
         for (let k = 0; k < N; k++) {
             pos.setXYZ(k, list[k].x, list[k].y, list[k].z);
-            if (sb.sel.nodes.has(k)) tint.setRGB(1, 1, 1); else if (list[k].inner) tint.setRGB(0.35, 0.6, 1); else tint.setRGB(0.3, 0.85, 0.35);
+            if (sb.sel.nodes.has(k)) tint.setRGB(1, 1, 1); else if (list[k].part) tint.setRGB(1, 0.62, 0.26); else if (list[k].inner) tint.setRGB(0.35, 0.6, 1); else tint.setRGB(0.3, 0.85, 0.35);
             col.setXYZ(k, tint.r, tint.g, tint.b);
         }
         pos.needsUpdate = true; col.needsUpdate = true;
@@ -450,7 +469,7 @@ export function initSoftBody(api) {
         for (let a = 0; a < N && n < 1200; a++) {
             const close = [];
             for (let b = 0; b < N; b++) {
-                if (a === b) continue;
+                if (a === b || (list[a].part || null) !== (list[b].part || null)) continue;
                 const d = Math.hypot(list[a].x - list[b].x, list[a].y - list[b].y, list[a].z - list[b].z);
                 if (d < reach && d > 0.02) close.push([d, b]);
             }

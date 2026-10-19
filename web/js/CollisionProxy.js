@@ -88,6 +88,16 @@ OpenRacer.CollisionProxy = (function () {
         return out;
     }
 
+    // The part of car.json "parts" that a mesh of the model belongs to (by the object that the part names), or null: for SoftBodyMesh.js
+    function partGroups(object, model) {
+        var map = new Map();
+        ((object.config && object.config.parts) || []).forEach(function (spec) {
+            var holder = spec && spec.object ? model.tilt.getObjectByName(spec.object) : null;
+            if(holder) holder.traverse(function (m) { map.set(m, spec.object); });
+        });
+        return function (mesh) { return map.get(mesh) || null; };
+    }
+
     // For a Car or an Opponent that has loaded its model: sets the collision shape of its vehicle
     // (model: what OpenRacer.loadCarModel gave, modelMid: the middle between the wheels of the model, or null)
     function apply(object, model, modelMid) {
@@ -109,7 +119,7 @@ OpenRacer.CollisionProxy = (function () {
         var layout = object.config && object.config.softbody && object.config.softbody.layout;
         if(spheres && layout && layout.length) {
             var own = layout.slice(0, 120).filter(function (n) { return isFinite(n.x) && isFinite(n.y) && isFinite(n.z) && n.r > 0; })
-                .map(function (n) { return { x: n.x, y: n.y, z: n.z, r: Math.min(0.6, Math.max(0.05, n.r)) }; });
+                .map(function (n) { return { x: n.x, y: n.y, z: n.z, r: Math.min(0.6, Math.max(0.05, n.r)), part: typeof n.part === "string" ? n.part : null }; });
             if(own.length >= 3) spheres = own.concat(spheres.filter(function (sp) { return sp.wheel; }));
         }
         if(spheres) {
@@ -119,7 +129,7 @@ OpenRacer.CollisionProxy = (function () {
             var cfg = (object.config && object.config.softbody) || {};
             if(cfg.enabled !== false && OpenRacer.SoftBody) {
                 v.softBody = new OpenRacer.SoftBody(v, spheres, cfg);
-                try { object.softBodyMesh = OpenRacer.SoftBodyMesh.attach(model.tilt, v.softBody, toVehicle); } catch(e) { console.warn("SoftBodyMesh: " + e.message); }
+                try { object.softBodyMesh = OpenRacer.SoftBodyMesh.attach(model.tilt, v.softBody, toVehicle, partGroups(object, model)); } catch(e) { console.warn("SoftBodyMesh: " + e.message); }
                 console.log("soft body: " + v.softBody.count + " nodes, " + v.softBody.beamCount + " beams");
             }
             // loose and hinged parts (Parts.js); car.json "parts": [{ object, mode, ... }]

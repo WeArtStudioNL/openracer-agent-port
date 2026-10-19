@@ -132,3 +132,13 @@ A hinged part (a hood, a door) can hang on **two nodes of the body**, each with 
 * **Apply force** (the card, next to the crash test): point at the car and an arrow shows the surface under the mouse and the way the plate will push (against the outer normal of the surface). A click presses a **flat invisible plate** on the car there, with the force in **kg** (kg times 9.81 N) and a square of the chosen size. The plate has a mass of its own, starts 0.4 m outside the surface and is pushed inwards; the nodes under it push back as in a crash (`SoftBody.pushPlate`), so anchors and beams yield and tear, and the plate stops where the force of the car and the force of the plate balance. The card shows how far the plate has gone into the shell, how many kg the car holds it with, the bend, the energy and the torn anchors and beams. Click again to push somewhere else; **Release** (or Repair) lets go.
 * The car is clamped while the plate pushes (`softBody.pinned`): the anchors do not move the rigid body, or a big force would carry the car away. The dent is what is tested.
 * The wall of the crash test is 10% opaque, so the car is seen through it when the camera is behind it.
+
+### Nodes and beams of a part
+
+A part can have **nodes of its own**, so that it dents by itself and its hold on the body is made of beams:
+
+* In the editor: select the nodes of the part in the view (a click, a lasso with the middle mouse button), pick the part in the card and press **Part nodes = selection**. The nodes get `"part": "<object name>"` in `softbody.layout` (orange in the view). Delete, move and set strengths on them as on any node.
+* The nodes of a part are joined to each other by beams (the nearest neighbours, as always) and **not** to the body. The body is joined to the part by **link beams**: every hinge point (`mounts`, a node of the body) gets a beam to the nearest node of the part, with the break force of the mount. The strengths of those beams can be set in the view like any beam.
+* The model of the part (the meshes of the object that the part names) bends with the nodes of the part only, and the model of the body with the nodes that belong to no part.
+* When a link beam tears, that mount is gone and the part opens on the other one; with none left it is free. When the part comes loose its nodes leave the shell (they are not simulated, they do not hit the road), and **the part keeps its dents**: its model keeps the bend that it had.
+* Without nodes of its own a part is a rigid piece that bends with the shell while it sits on the car, as before.

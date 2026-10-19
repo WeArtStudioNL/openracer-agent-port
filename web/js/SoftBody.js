@@ -46,6 +46,10 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
     this.sphereOf = sphereOf;
     this.nodeOfSphere = spheres.map(function () { return -1; });
     sphereOf.forEach(function (s, k) { self.nodeOfSphere[s] = k; });
+    // the nodes of a part (a hood, a door) belong to its group: they are joined to each other, and to the body only by the links of its mounts
+    var partOf = sphereOf.map(function (si) { return spheres[si].part || null; });
+    this.partOf = partOf;
+    var gone = new Uint8Array(N);                      // nodes of a part that has come loose: not simulated any more
     var rest = new Float64Array(3 * N);               // where the node is when the car is whole
     var radius = new Float64Array(N);
     sphereOf.forEach(function (s, k) { rest[3 * k] = spheres[s].x; rest[3 * k + 1] = spheres[s].y; rest[3 * k + 2] = spheres[s].z; radius[k] = spheres[s].r; });
@@ -68,7 +72,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
     for (var a = 0; a < N; a++) {
         var near = [];
         for (var b = 0; b < N; b++) {
-            if (a === b) continue;
+            if (a === b || partOf[a] !== partOf[b]) continue;
             var dx = rest[3 * a] - rest[3 * b], dy = rest[3 * a + 1] - rest[3 * b + 1], dz = rest[3 * a + 2] - rest[3 * b + 2];
             var d = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (d < P.reach && d > 0.02) near.push([d, b]);
@@ -93,6 +97,22 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
             }
         }
     });
+    // A beam that is added afterwards (the link of a mount of a part): its index
+    this.addBeam = function (a, b, params) {
+        params = params || {};
+        for (var i = 0; i < beamA.length; i++) if ((beamA[i] === a && beamB[i] === b) || (beamA[i] === b && beamB[i] === a)) return i;
+        var d = Math.hypot(rest[3 * a] - rest[3 * b], rest[3 * a + 1] - rest[3 * b + 1], rest[3 * a + 2] - rest[3 * b + 2]);
+        beamA.push(Math.min(a, b)); beamB.push(Math.max(a, b)); beamRest.push(d);
+        beamK.push(params.stiffness || P.beamK); beamYield.push(params.yield_force || P.beamYield); beamBreak.push(params.break_force || P.beamBreak); beamAlive.push(1);
+        B = beamA.length;
+        self.beamCount = B;
+        return B - 1;
+    };
+    // The nodes of a part come loose with it: their anchors and beams are gone (they are not tested against the road any more)
+    this.detachGroup = function (name) {
+        for (var k = 0; k < N; k++) if (partOf[k] === name) { gone[k] = 1; anchorAlive[k] = 0; w[3 * k] = w[3 * k + 1] = w[3 * k + 2] = 0; }      // its bend stays as it was: the model of the part keeps its dents
+        self.version++;
+    };
     this.beamA = beamA; this.beamB = beamB; this.beamAlive = beamAlive; this.beamYield = beamYield; this.beamBreak = beamBreak; this.beamK = beamK;
 
     // ---- what the rest of the game reads
@@ -116,7 +136,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         for (var k = 0; k < N; k++) {
             maxQ = Math.max(maxQ, Math.hypot(q[3 * k], q[3 * k + 1], q[3 * k + 2]));
             maxU = Math.max(maxU, Math.hypot(u[3 * k], u[3 * k + 1], u[3 * k + 2]));
-            if (!anchorAlive[k]) brokenAnchors++;
+            if (!anchorAlive[k] && !gone[k]) brokenAnchors++;
         }
         for (var i = 0; i < B; i++) if (!beamAlive[i]) brokenBeams++;
         return { nodes: N, beams: B, maxBend: maxQ, maxDisplacement: maxU, brokenAnchors: brokenAnchors, brokenBeams: brokenBeams, absorbed: this.absorbed };
@@ -125,7 +145,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
     // The car is whole again
     this.repair = function () {
         u.fill(0); w.fill(0); q.fill(0); f.fill(0);
-        for (var k = 0; k < N; k++) anchorAlive[k] = 1;
+        for (var k = 0; k < N; k++) { anchorAlive[k] = 1; gone[k] = 0; }
         for (var i = 0; i < B; i++) { beamAlive[i] = 1; }
         // the lengths of the beams as made
         for (var j = 0; j < B; j++) {
@@ -182,7 +202,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
                 reaction[3] += (py * fz - pz * fy) * h / dt; reaction[4] += (pz * fx - px * fz) * h / dt; reaction[5] += (px * fy - py * fx) * h / dt;
             }
             for (var i = 0; i < B; i++) {
-                if (!beamAlive[i]) continue;
+                if (!beamAlive[i] || gone[beamA[i]] || gone[beamB[i]]) continue;
                 var a = beamA[i] * 3, b = beamB[i] * 3;
                 var ex = rest[b] + u[b] + q[b] - rest[a] - u[a] - q[a], ey = rest[b + 1] + u[b + 1] + q[b + 1] - rest[a + 1] - u[a + 1] - q[a + 1], ez = rest[b + 2] + u[b + 2] + q[b + 2] - rest[a + 2] - u[a + 2] - q[a + 2];
                 var len = Math.sqrt(ex * ex + ey * ey + ez * ez);
@@ -209,6 +229,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
             }
             // integrate: semi-implicit Euler
             for (var j = 0; j < N; j++) {
+                if (gone[j]) { f[3 * j] = f[3 * j + 1] = f[3 * j + 2] = 0; continue; }
                 var o = 3 * j;
                 var im = 1 / mass[j];
                 w[o] += f[o] * im * h; w[o + 1] += f[o + 1] * im * h; w[o + 2] += f[o + 2] * im * h;

@@ -13,7 +13,9 @@ OpenRacer.SoftBodyMesh = (function () {
 
     // root: the model of the body (THREE.Object3D); toVehicle(p): its points into the frame of the car, in place (as in CollisionProxy.js).
     // Gives { update() } to call every frame, or null when this is not possible
-    function attach(root, softBody, toVehicle) {
+    // groupOf(mesh) (optional): the name of the part that a mesh belongs to, or null for the body. The vertices of a part are tied to the nodes of
+    // that part (so a hood dents by itself), the vertices of the body to the nodes that belong to no part.
+    function attach(root, softBody, toVehicle, groupOf) {
         if (!softBody || softBody.count < 1 || softBody.count > MAX_NODES) return null;
         root.updateMatrixWorld(true);
         var N = softBody.count;
@@ -34,13 +36,18 @@ OpenRacer.SoftBodyMesh = (function () {
             done.add(geometry);
             var position = geometry.attributes.position;
             var count = position.count;
+            var group = groupOf ? groupOf(mesh) : null;
+            var allowed = [];
+            for (var gn = 0; gn < N; gn++) if ((softBody.partOf ? softBody.partOf[gn] : null) === group) allowed.push(gn);
+            if (!allowed.length) { group = null; allowed = []; for (var g2 = 0; g2 < N; g2++) allowed.push(g2); }
             var aNodes = new Float32Array(4 * count), aWeights = new Float32Array(4 * count);
             var best = [0, 0, 0, 0], bestD = [1e9, 1e9, 1e9, 1e9];
             for (var v = 0; v < count; v++) {
                 p.fromBufferAttribute(position, v).applyMatrix4(mesh.matrixWorld);
                 toVehicle(p);
                 best[0] = best[1] = best[2] = best[3] = 0; bestD[0] = bestD[1] = bestD[2] = bestD[3] = 1e9;
-                for (var n = 0; n < N; n++) {
+                for (var ai = 0; ai < allowed.length; ai++) {
+                    var n = allowed[ai];
                     var dx = p.x - nodes[3 * n], dy = p.y - nodes[3 * n + 1], dz = p.z - nodes[3 * n + 2];
                     var d = dx * dx + dy * dy + dz * dz;
                     if (d >= bestD[3]) continue;
