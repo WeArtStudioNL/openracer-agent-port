@@ -238,6 +238,12 @@
                     <div class="fixed"><button class="small" id="sbSelSet">Set</button> <button class="small ghost" id="sbSelClear">Default</button></div>
                 </div>
                 <div class="row">
+                    <div><input type="number" id="sbMaxNodes" min="10" max="120" step="5" placeholder="auto"><div class="hint">most nodes to make</div></div>
+                    <div class="fixed"><button class="small accent" id="sbScan" title="Casts rays at the model from all round the car and puts the nodes on what they hit">Scan with rays</button></div>
+                    <div class="fixed"><button class="small" id="sbInside" title="Adds nodes inside the shell">Fill the inside</button></div>
+                </div>
+                <label class="check"><input type="checkbox" id="sbScanInside" checked> The scan also fills the inside</label>
+                <div class="row">
                     <button class="small" id="sbEdit" title="Click the model to put a node on it, select nodes and remove them">Edit nodes</button>
                     <button class="small danger" id="sbDelete" disabled title="Removes the selected nodes (Delete key)">Delete selected</button>
                 </div>

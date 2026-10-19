@@ -18,7 +18,8 @@ OpenRacer.CollisionProxy = (function () {
     // root: the model of the body (a THREE.Object3D, without the wheels); toVehicle(p): puts a point of the model (a THREE.Vector3, in the
     // space of the body) in the frame of the car, in place; wheels: [{ x, y, z, radius }], the middles of the wheels in that frame.
     // Gives the spheres, or null when the model has too little in it.
-    function fromModel(root, toVehicle, wheels) {
+    function fromModel(root, toVehicle, wheels, maxSpheres) {
+        var limit = Math.max(8, Math.min(120, maxSpheres || MAX_SPHERES));
         root.updateMatrixWorld(true);
         var points = [];                  // x, y, z of the sampled surface in the frame of the car
         var a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), p = new THREE.Vector3();
@@ -46,9 +47,9 @@ OpenRacer.CollisionProxy = (function () {
         if (points.length < 30) return null;
 
         var spheres = null;
-        for(var cell = 0.5; cell <= 1.2; cell += 0.1) {
+        for(var cell = 0.5; cell <= 3; cell += 0.1) {
             spheres = columns(points, cell);
-            if(spheres.length + (wheels ? wheels.length : 0) <= MAX_SPHERES) break;
+            if(spheres.length + (wheels ? wheels.length : 0) <= limit || (!maxSpheres && cell >= 1.2)) break;
         }
         if(!spheres || spheres.length < 8) return null;
         // the wheels stick out of the body: a sphere on each, smaller than the wheel, so the road is felt by the suspension and not by this
@@ -102,7 +103,8 @@ OpenRacer.CollisionProxy = (function () {
             return { x: w.mount.x, y: w.radius - v.cgHeight, z: w.mount.z, radius: w.radius };   // the axle is one radius above the road at rest
         });
         var spheres = null;
-        try { spheres = fromModel(model.tilt, toVehicle, wheels); } catch (e) { console.warn("CollisionProxy: " + e.message); }
+        var maxNodes = object.config && object.config.softbody && object.config.softbody.max_nodes;    // car.json "softbody": { "max_nodes": 60 }
+        try { spheres = fromModel(model.tilt, toVehicle, wheels, maxNodes); } catch (e) { console.warn("CollisionProxy: " + e.message); }
         // car.json "softbody": { "layout": [{ x, y, z, r }] }: the nodes as the maker of the car set them in the editor, instead of the ones made from the model
         var layout = object.config && object.config.softbody && object.config.softbody.layout;
         if(spheres && layout && layout.length) {

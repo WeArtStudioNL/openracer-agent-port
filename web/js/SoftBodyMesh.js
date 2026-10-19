@@ -25,10 +25,13 @@ OpenRacer.SoftBodyMesh = (function () {
         var p = new THREE.Vector3();
         var seen = -1;
 
+        restore(root);                                              // a model that was made with other nodes before (the car editor) starts again
+        var done = new Set();
         root.traverse(function (mesh) {
             if (!mesh.isMesh || !mesh.geometry || !mesh.geometry.attributes.position) return;
             var geometry = mesh.geometry;
-            if (geometry.attributes.aNodes) return;                 // a geometry that two meshes share is done once
+            if (done.has(geometry)) return;                          // a geometry that two meshes share is done once
+            done.add(geometry);
             var position = geometry.attributes.position;
             var count = position.count;
             var aNodes = new Float32Array(4 * count), aWeights = new Float32Array(4 * count);
@@ -56,6 +59,7 @@ OpenRacer.SoftBodyMesh = (function () {
             mesh.userData.sbDeform = deform;
             // a vector of the frame of the car in the space of this mesh
             var toLocal = new THREE.Matrix3().setFromMatrix4(mesh.matrixWorld).invert();
+            mesh.userData.sbOriginal = mesh.material;
             var list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
             var copies = list.map(function (material) {
                 var copy = material.clone();
@@ -91,5 +95,15 @@ OpenRacer.SoftBodyMesh = (function () {
         };
     }
 
-    return { attach: attach };
+    // The model as it was before attach: its own materials, without the weights
+    function restore(root) {
+        root.traverse(function (mesh) {
+            if (!mesh.isMesh) return;
+            if (mesh.userData && mesh.userData.sbOriginal) { mesh.material = mesh.userData.sbOriginal; delete mesh.userData.sbOriginal; }
+            if (mesh.geometry && mesh.geometry.attributes.aNodes) { mesh.geometry.deleteAttribute("aNodes"); mesh.geometry.deleteAttribute("aWeights"); }
+            if (mesh.userData) delete mesh.userData.sbDeform;
+        });
+    }
+
+    return { attach: attach, restore: restore };
 })();
