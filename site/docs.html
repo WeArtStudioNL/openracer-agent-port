@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>OpenRacer docs</title>
     <meta name="description" content="How OpenRacer works: controls, racing, the physics of the car, the tuning menu, the car editor, the track editor and the garage.">
-    <link rel="stylesheet" href="site.css?v=4">
+    <link rel="stylesheet" href="site.css?v=5">
     <script src="theme.js?v=3"></script>
 </head>
 <body>
@@ -74,6 +74,7 @@
             <a href="#blender">Blender settings</a>
             <h4>Technical</h4>
             <a href="#tech">Code and licence</a>
+            <a href="#changelog">Changelog</a>
         </aside>
     </div>
 
@@ -515,6 +516,26 @@ cd openracer-agent-port
             <h2>Code and licence</h2>
             <p>The game uses three.js r186, vendored in <code>web/js/three</code>. It is an ES module, so <code>web/js/bootstrap.js</code> imports it, exposes it as <code>THREE</code> and loads the other scripts in order. The old JSON car models are converted by <code>parseLegacyModel</code>. The editors are ES modules with an import map.</p>
             <p>OpenRacer is released under the GPLv3 licence. The original project is by Chris Barnard (<a href="https://github.com/digi-chris/OpenRacer">digi-chris/OpenRacer</a>); this fork, developed with the AI models Claude Fable and Claude Sonnet 5.5, is at <a href="https://github.com/WeArtStudioNL/openracer-agent-port">WeArtStudioNL/openracer-agent-port</a>. The engine sound is a port of parts of <a href="https://github.com/ange-yaghi/engine-sim">engine-sim</a> (MIT).</p>
+        </section>
+<section id="changelog">
+            <h2>Changelog</h2>
+            <h3 id="v210">2.1.0 <small>(19 October 2026)</small></h3>
+            <ul>
+                <li><b>Replay:</b> everything is recorded from the start, and Esc, Replay plays it back with a slider, rewind, pause, play and speeds from 0.1× to 5×. See <a href="#replay">Replay</a>.</li>
+                <li><b>Cameras in the replay:</b> Fixed, Follow, Cockpit and a Free camera with smoothing, mouse look, zoom, aim at the car and fix to the car.</li>
+                <li><b>Save and share:</b> a replay is saved as a file and opened from the main menu; nothing goes to a server.</li>
+                <li><b>Fixes:</b> the end and the sides of a ramp were walls for a car above them; the sky trembled; an error while a game was loading.</li>
+            </ul>
+            <h3 id="v201">2.0.1 <small>(19 October 2026)</small></h3>
+            <ul>
+                <li><b>Touch controls</b> for phones and tablets, and a phone no longer runs out of memory.</li>
+                <li>A new version reaches the player at once, and the helper server, the names in the menus and the site have been made safer.</li>
+            </ul>
+            <h3 id="v200">2.0.0 <small>(19 October 2026)</small></h3>
+            <ul>
+                <li>The fork as a new version: the driving model, races with AI, ghost and records, wheels with force feedback, the car and track editors, the tuning menu, the skidpad and the local garage.</li>
+            </ul>
+            <p>The full list is in <a href="https://github.com/WeArtStudioNL/openracer-agent-port/blob/master/CHANGELOG.md">CHANGELOG.md</a> on GitHub.</p>
         </section>
     </article>
 </div>

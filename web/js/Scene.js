@@ -202,7 +202,7 @@ function render() {
     var timeStart = Date.now();
     onEnterFrame();
     var afterCalc = Date.now();
-    if(enableCubeCamera && car) {
+    if(enableCubeCamera && car && car.isReady()) {   // the reflections wait until the car and its wheels have loaded
         if(cubeCount > cubeUpdate) {
             //console.log("cub");
             cubeCamera.position.copy(car.body.position);
@@ -213,7 +213,7 @@ function render() {
             // reflective materials as the body.
             car.body.visible = false;
             for(var w = 0; w < car.wheels.length; w++) {
-                car.wheels[w].object.visible = false;
+                if(car.wheels[w].object) car.wheels[w].object.visible = false;
             }
 
             //renderer.autoClear = true;
@@ -222,7 +222,7 @@ function render() {
 
             car.body.visible = true;
             for(var w = 0; w < car.wheels.length; w++) {
-                car.wheels[w].object.visible = true;
+                if(car.wheels[w].object) car.wheels[w].object.visible = true;
             }
             cubeCount = 0;
             if(environmentCount++ % ENVIRONMENT_EVERY === 0) updateEnvironment();

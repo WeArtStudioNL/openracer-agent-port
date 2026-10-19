@@ -13,7 +13,7 @@ This is a fork of [digi-chris/OpenRacer](https://github.com/digi-chris/OpenRacer
 
 The fork was developed with AI, in Claude Code, together with **Claude Fable** and **Claude Sonnet 5.5** from Anthropic. The commit log shows how it grew, step by step, and the commits made by the models say so.
 
-The version of the game is `OpenRacer.VERSION` in `web/js/Version.js` (shown in the main menu and at the bottom of the settings menu). Raise it when a car or a track made with the game would not work the same on an older version.
+What is new in every version is in [CHANGELOG.md](CHANGELOG.md). The version of the game is `OpenRacer.VERSION` in `web/js/Version.js` (shown in the main menu and at the bottom of the settings menu). Raise it when a car or a track made with the game would not work the same on an older version.
 
 ## Running locally
 OpenRacer is a static web app with a small helper for the lists of cars and tracks. Run it with
