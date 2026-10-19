@@ -1524,6 +1524,7 @@ export function initSoftBody(api) {
         const bar = $("testBar"), stop = $("crashBar");
         // during the crash test only the car, the wall and the stop button are to be seen: no bars, no text, no nodes and beams, no markers
         document.body.classList.toggle("crashing", on);
+        bench.grip = on ? bench.gripBoost : 1;                      // the tyres have much more grip for the run: the car holds its line at speed (back to 1 afterwards)
         if (sb.group) sb.group.visible = !on;
         if (sb.partGroup) sb.partGroup.visible = !on;
         if (api.hideChrome) api.hideChrome(on);

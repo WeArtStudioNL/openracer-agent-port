@@ -1460,9 +1460,9 @@ function loadPhysics() {
     }
     return physicsLoading;
 }
-const bench = { vehicle: null, model: null, body: null, objects: [], last: 0, modelMid: null };
+const bench = { vehicle: null, model: null, body: null, objects: [], last: 0, modelMid: null, grip: 1, gripBoost: 3 };      // grip: a factor on the grip of the road (1, but the crash test sets gripBoost for its run)
 const flatRoad = { query: () => ({ y: grid.position.y, nx: 0, ny: 1, nz: 0, surface: "road", mesh: "" }) };
-const roadGrip = () => ({ static: 1.2, kinetic: 1.06 });
+const roadGrip = () => ({ static: 1.2 * bench.grip, kinetic: 1.06 * bench.grip });
 
 async function startBench() {
     if (!state.root) throw new Error("Load a model first.");
@@ -1507,7 +1507,7 @@ function stopBench() {
     bench.objects.forEach((o) => scene.remove(o));
     if (bench.script && preview.playing) stopPreview();
     if (bench.driving) stopDriving();
-    bench.objects = []; bench.vehicle = null; bench.model = null; bench.script = null; bench.obj = null;
+    bench.objects = []; bench.vehicle = null; bench.model = null; bench.script = null; bench.obj = null; bench.grip = 1;
     if (softBodyEditor) softBodyEditor.onStop();
     pivot.visible = true; helpers.visible = true;
     $("testStop").style.display = "none";
@@ -1647,7 +1647,7 @@ function runScript(dt) {
         }
         case "wall": {
             // a wall 100 m ahead, and full throttle until the car hits it and is still; the camera follows
-            if (!sc.walled) { sc.walled = true; sc.hit = false; sc.still = 0; softBodyEditor.addWall(v.pz + 100); }
+            if (!sc.walled) { sc.walled = true; sc.hit = false; sc.still = 0; bench.grip = bench.gripBoost; softBodyEditor.addWall(v.pz + 100); }
             inp.parkingLock = false; inp.neutral = false; inp.reverse = false; inp.current_gear = 0;
             if (!sc.hit && softBodyEditor.wallHit()) sc.hit = true;
             inp.throttle = sc.hit ? 0 : 1;
