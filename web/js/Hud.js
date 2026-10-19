@@ -291,7 +291,7 @@ var Hud = (function() {
         }
         var best = car.ghost ? car.ghost.bestTime() : null;
         if(best) html += "<div class=\"last\">best " + formatTime(best) + (car.newRecord ? " <b>new record</b>" : "") + "</div>";
-        html += "<div class=\"keys\">Esc: settings and controls</div>";
+        html += "<div class=\"keys\">" + (typeof TouchControls !== "undefined" && TouchControls.enabled() ? "☰: settings and controls" : "Esc: settings and controls") + "</div>";
         if(lapPanel.innerHTML !== html) lapPanel.innerHTML = html;
     }
 

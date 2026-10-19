@@ -66,6 +66,7 @@ var scripts = [
     "js/Hud.js",
     "js/CarTuning.js",
     "js/Tuning.js",
+    "js/TouchControls.js",
     "js/controls.js",
     "js/main.js"
 ];

@@ -97,6 +97,7 @@ var Settings = (function() {
     var bindings = {};      // action id -> list of inputs
     var options = {};
     var keysDown = {};      // key code -> true
+    var virtualDown = {};   // action id -> held by an on-screen button (TouchControls.js)
     var down = {};          // action id -> pressed now
     var wasDown = {};
     var handlers = {};      // action id -> function that runs when the action is pressed
@@ -208,6 +209,7 @@ var Settings = (function() {
             for(var i = 0; i < list.length; i++) {
                 if(inputValue(list[i], pads) >= DIGITAL_LEVEL) { isDown = true; break; }
             }
+            if(virtualDown[id]) isDown = true;
             down[id] = isDown;
             if(isDown && !wasDown[id] && !paused) runHandler(id);
             wasDown[id] = isDown;
@@ -870,6 +872,7 @@ var Settings = (function() {
         option: function(name) { return options[name]; },
         setOption: setOption,
         onOptionChange: function(fn) { optionListeners.push(fn); },
+        setVirtual: function(id, held) { virtualDown[id] = !!held; },
         isPaused: function() { return paused; },
         toggleMenu: toggleMenu,
         bindings: function(id) { return bindings[id]; }

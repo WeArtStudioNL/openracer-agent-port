@@ -7,6 +7,8 @@ var mY = 0;
 var mLocation;
 
 window.onmousedown = function(e) {
+    // on a touch screen the touch controls drive (the mouse events that a tap makes are not a drag)
+    if(typeof TouchControls !== "undefined" && TouchControls.enabled()) return;
     // a click in the settings menu is not driving
     if(Settings.isPaused()) return;
     if(e.target && e.target.closest && e.target.closest("#tuning")) return; // the tuning menu
@@ -79,6 +81,12 @@ function gamepadUpdate(delta) {
     var steer = usable ? Settings.controllerAnalog("steerRight") - Settings.controllerAnalog("steerLeft") : 0;
     var throttle = usable ? Settings.controllerAnalog("throttle") : 0;
     var brake = usable ? Settings.controllerAnalog("brake") : 0;
+    // The touch controls (a phone or a tablet) are read like a gamepad: the same steering, slower with the speed, and the same assist
+    if(typeof TouchControls !== "undefined" && TouchControls.enabled()) {
+        var touch = TouchControls.update(delta);
+        usable = true;
+        if(touch.engaged) { steer = touch.steer; throttle = touch.throttle; brake = touch.brake; }
+    }
     var active = usable && (throttle > 0.05 || brake > 0.05 || Math.abs(steer) > 0.1);
     if(active) gamepadOwnsSteering = true;
     if(!usable || car.turnLeft || car.turnRight || car.accelerate || car.brake) gamepadOwnsSteering = false; // the keyboard takes over

@@ -35,6 +35,7 @@
             <a href="#menu">Main menu and address</a>
             <h4>Driving</h4>
             <a href="#keyboard">Keyboard</a>
+            <a href="#touch">Touch screen</a>
             <a href="#gamepad">Gamepad</a>
             <a href="#wheel">Racing wheel</a>
             <a href="#ffb">Force feedback</a>
@@ -90,7 +91,7 @@
             <ol>
                 <li>Choose a car and a track in the main menu, and set the <b>Race</b> column: practice or a race of some laps, AI opponents, the ghost, lap records, tyre wear.</li>
                 <li>Press <b>Start</b>. The engine sound starts at your first key press or click, because browsers want that.</li>
-                <li>Drive with the arrows or <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>, or plug in a gamepad or a wheel and press a button so the browser sees it. <kbd>Esc</kbd> opens the settings, where you can remap every input and calibrate a wheel. See <a href="#keyboard">Keyboard</a>, <a href="#gamepad">Gamepad</a> and <a href="#wheel">Racing wheel</a>.</li>
+                <li>Drive with the arrows or <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>, or use the touch controls on a phone, or plug in a gamepad or a wheel and press a button so the browser sees it. <kbd>Esc</kbd> opens the settings, where you can remap every input and calibrate a wheel. See <a href="#keyboard">Keyboard</a>, <a href="#gamepad">Gamepad</a> and <a href="#wheel">Racing wheel</a>.</li>
                 <li>Press <kbd>U</kbd> to tune the car while you drive, and try the <b>Skidpad</b> button to see how much grip a car has.</li>
             </ol>
             <p>Your settings, key bindings, lap records and tuning are kept in your own browser, not on a server. The same goes for what you make or import: <b>My garage</b> in the main menu keeps your own cars and tracks in the browser, and exports them as zip files (see <a href="#garage">Your own cars and tracks</a>). Even the car editor and the track editor work on the web version, and save to the garage.</p>
@@ -155,6 +156,17 @@ cd openracer-agent-port
                 <tr><td><kbd>I</kbd></td><td>start the engine after a stall</td></tr>
             </table>
             <p>All of these can be remapped, see <a href="#settings">Settings and controls</a>.</p>
+        </section>
+
+        <section id="touch">
+            <h2>Touch screen</h2>
+            <p>On a phone or tablet the game draws touch controls over the picture. They appear by themselves on a touch screen (and with <code>?touch=1</code> in the address; <code>?touch=0</code> switches them off), so a desktop never sees them. Turn the phone sideways for the most room.</p>
+            <ul>
+                <li><b>Steering.</b> Put a finger anywhere on the left half of the screen and a stick appears under it. Move it left or right to steer. The stick follows your finger when it goes far, so your hand never runs out of room. Let go and the wheels come back to the middle.</li>
+                <li><b>Pedals.</b> <b>GAS</b> and <b>BRAKE</b> are on the right, each for a thumb. They build up smoothly, like a pedal and not a switch.</li>
+                <li><b>Buttons.</b> <b>HB</b> is the handbrake, the two arrows shift up and down (in the automatic they move the selector) and <b>REV</b> is reverse while you hold it. At the top are <b>↺</b> (back to the start), the camera, and <b>☰</b>, which opens the settings, where Resume brings you back.</li>
+            </ul>
+            <p>Every finger is its own, so you can steer, brake and hold the handbrake at the same time. The steering and the pedals work like a gamepad: the steering gets slower with speed, and the <a href="#gamepad">steering assist</a> and its slider in the gamepad options apply. To keep the game running smoothly the picture on a touch screen is limited to about two million pixels, and the anti-aliasing is lighter.</p>
         </section>
 
         <section id="gamepad">

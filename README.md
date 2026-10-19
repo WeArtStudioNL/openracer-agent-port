@@ -135,6 +135,9 @@ The game uses three.js r186 (`web/js/three`, vendored: the build and the few add
 ## Keyboard
 The steering keys turn the wheels at a rate: fast at a standstill, slower the faster the car goes, and the wheels come back to the middle by themselves when the keys are let go. *Esc → Keyboard → Steering speed* scales that rate (50–300 %).
 
+## Touch screen
+On a phone or tablet (a coarse pointer, or `?touch=1` in the address; `?touch=0` switches it off) `web/js/TouchControls.js` draws the controls over the game: the left half of the screen steers with a floating stick under the finger (it follows a finger that goes far), **GAS** and **BRAKE** are pedals on the right that build up smoothly, and buttons give the handbrake, shift up and down, reverse (held), back to the start, the camera and the settings menu (**☰**). Each finger is its own pointer, so one can steer while another brakes. The steering and the pedals go through the same path as a gamepad (`gamepadUpdate` in `controls.js`), so the steering is slower with the speed and has the steering assist; the buttons are actions of the settings (`Settings.setVirtual`). On a touch device the picture is limited to about two million pixels and the anti-aliasing is 2x (`pickPixelRatio` in `Scene.js`); the desktop is not changed.
+
 ## Gamepad
 A gamepad steers with the left stick and drives with the triggers (the bindings are in the settings menu). The stick is the steering one to one at a standstill; the faster the car goes, the slower the steering follows the stick, as with the keyboard, so a flick at speed is a small movement of the wheels. *Esc → Gamepad* has a slider for how much slower (off: one to one at every speed) and the check box *Steering assist*: when the rear steps out, the front tyres steer into the slide by themselves (the way a car with a lot of caster does), so it does not become a spin.
 
