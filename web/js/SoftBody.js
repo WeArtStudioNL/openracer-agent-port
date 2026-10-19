@@ -174,7 +174,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         for (var s = 0; s < steps; s++) {
             // the forces of the hits (the callback fills this.force), then the anchors and the beams
             if (contacts) contacts(h);
-            if (this.plate) pushPlate(this.plate, h);
+            if (this.plate) { pushPlate(this.plate, h); if (this.plate.done) { this.lastPlate = this.plate; this.plate = null; this.pinned = false; } }
             for (var k = 0; k < N; k++) {
                 if (!anchorAlive[k]) continue;
                 var ix = 3 * k;
@@ -256,7 +256,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
     // anchors and the beams yield and tear as in a crash.
     this.plate = null;
     this.pinned = false;                              // the reaction of the anchors does not go to the car (the plate is a test of the shell on a car that is clamped)
-    this.pushPlate = function (point, normal, newtons, side) {
+    this.pushPlate = function (point, normal, newtons, side, cubeMass, pushTime) {
         var nl = Math.hypot(normal[0], normal[1], normal[2]) || 1;
         var n = [normal[0] / nl, normal[1] / nl, normal[2] / nl];
         // two directions in the plane of the plate
@@ -266,11 +266,12 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         e1 = [e1[0] / l1, e1[1] / l1, e1[2] / l1];
         var e2 = [n[1] * e1[2] - n[2] * e1[1], n[2] * e1[0] - n[0] * e1[2], n[0] * e1[1] - n[1] * e1[0]];
         var surface = n[0] * point[0] + n[1] * point[1] + n[2] * point[2];
-        this.plate = { n: n, e1: e1, e2: e2, p: point.slice(), force: newtons, half: Math.max(0.05, side / 2), mass: 60, surface: surface, w: surface + 0.4, vw: 0, held: 0 };
+        this.plate = { n: n, e1: e1, e2: e2, p: point.slice(), force: newtons, pushT: pushTime || 0.03, half: Math.max(0.05, side / 2), mass: Math.max(1, cubeMass || 100), surface: surface, w: surface + 0.4, vw: 0, held: 0, peak: 0, travelled: 0, hit: false, done: false };
         this.pinned = true;
         this.quiet = false;
     };
-    this.releasePlate = function () { this.plate = null; this.pinned = false; };
+    this.lastPlate = null;                             // the cube that has just been and gone: its peak force and speed
+    this.releasePlate = function () { this.plate = null; this.lastPlate = null; this.pinned = false; };
 
     function pushPlate(pl, h) {
         var n = pl.n, total = 0;
@@ -292,8 +293,17 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         }
         pl.held = total;
         if (total > 0 && pl.contact === undefined) pl.contact = pl.w;      // where it first touched a node
-        pl.vw += (-pl.force + total) / pl.mass * h;
+        // a short push gets the cube going (its force for 'pushT' seconds), then it flies free: it hits, and it rebounds
+        var push = 0;
+        if (pl.pushT > 0) { push = pl.force; pl.pushT -= h; }
+        pl.vw += (-push + total) / pl.mass * h;
+        if (total > pl.peak) pl.peak = total;
+        if (pl.contact !== undefined) pl.maxIn = Math.max(pl.maxIn || 0, pl.contact - pl.w);       // how far it got into the shell
+        if (total > 0) pl.hit = true;
+        // after the hit, and away from the car again: the cube is gone and the car is let go
+        if (pl.hit && pl.vw > 0 && pl.w > (pl.contact !== undefined ? pl.contact : pl.surface) + 0.5) pl.done = true;
         pl.w += pl.vw * h;
+        if (!pl.hit && pl.pushT <= 0 && pl.vw >= 0) pl.done = true;     // it never reached the car
         var floor = pl.surface - 1.2;                       // it does not go through the whole car
         if (pl.w < floor) { pl.w = floor; if (pl.vw < 0) pl.vw = 0; }
     }

@@ -942,15 +942,16 @@ export function initSoftBody(api) {
         const local = sb.group.worldToLocal(hit.point.clone());
         const normal = hit.normal.clone().applyQuaternion(sb.group.quaternion.clone().invert());
         releaseForce();
-        s.pushPlate([local.x, local.y, local.z], [normal.x, normal.y, normal.z], kg * 9.81, side);
+        const cubeMass = parseFloat($("sbCubeMass").value) || 100;
+        s.pushPlate([local.x, local.y, local.z], [normal.x, normal.y, normal.z], kg * 9.81, side, cubeMass, 0.03);
         // the arrow stays on the car while it is pushed
         const arrow = new THREE.ArrowHelper(normal.clone().negate(), local.clone().addScaledVector(normal, 0.8), 0.8, 0xff5555, 0.3, 0.18);
         arrow.traverse((o) => { if (o.material) { o.material.depthTest = false; o.renderOrder = 13; } });
         sb.group.add(arrow);
         sb.pushArrow = arrow;
-        sb.pushStart = { kg };
+        sb.pushStart = { kg, speed: kg * 9.81 * 0.03 / cubeMass };
         hover.visible = false;
-        status("Pushing with " + kg + " kg. Click again to push somewhere else.", "ok");
+        status("Cube of " + cubeMass + " kg fired with a push of " + kg + " kg (" + (kg * 9.81 * 0.03 / cubeMass * 3.6).toFixed(0) + " km/h). Click again to fire another.", "ok");
     }
     function releaseForce() {
         const s = softBody();
@@ -958,24 +959,33 @@ export function initSoftBody(api) {
         if (sb.pushArrow && sb.group) sb.group.remove(sb.pushArrow);
         sb.pushArrow = null; sb.pushStart = null;
     }
+    function ensureGround3D() {
+        const v = bench.vehicle;
+        if (v && !v.ground.use3D) { sb.savedGround = sb.savedGround || v.ground; v.ground = crashGround(api.floorY(), 0); }
+    }
     $("sbPush").addEventListener("click", async () => {
         if (!sb.pushMode && !sb.shown) await show(false);
         if (!softBody()) return;
         sb.pushMode = !sb.pushMode;
         // the shell is only worked out on a 3D ground (the plain floor of the bench has none)
-        if (sb.pushMode && !bench.vehicle.ground.use3D) { sb.savedGround = sb.savedGround || bench.vehicle.ground; bench.vehicle.ground = crashGround(api.floorY(), 0); }
+        if (sb.pushMode) ensureGround3D();
         if (!sb.pushMode) { releaseForce(); hover.visible = false; }
         $("sbPush").textContent = sb.pushMode ? "Release" : "Apply force";
         $("sbPush").classList.toggle("ghost", sb.pushMode);
         if (sb.pushMode) status("Point at the car: the arrow shows where and which way the plate pushes. Click to push.", "ok");
     });
-    // the reading while it pushes
+    // the reading: while the cube is at the car, and what it did when it has gone
     function pushReading() {
-        const s = softBody(), pl = s && s.plate;
-        if (!pl || !sb.pushStart) return;
+        const s = softBody();
+        if (!s || !sb.pushStart) return;
+        const pl = s.plate || s.lastPlate;
+        if (!pl) return;
         const st = s.stats();
-        $("sbResult").textContent = "Pushing " + sb.pushStart.kg + " kg: the plate is " + (Math.max(0, (pl.contact !== undefined ? pl.contact : pl.w) - pl.w) * 100).toFixed(1) + " cm into the shell, the car holds it with " +
-            (pl.held / 9.81).toFixed(0) + " kg · bend " + (st.maxBend * 100).toFixed(1) + " cm · took up " + (st.absorbed / 1000).toFixed(1) + " kJ · " + st.brokenAnchors + " anchors and " + st.brokenBeams + " beams torn";
+        const kg = (x) => (x / 9.81).toFixed(0);
+        $("sbResult").textContent = (s.plate ? "Cube at " + (sb.pushStart.speed * 3.6).toFixed(0) + " km/h: " : "Hit with " + (sb.pushStart.speed * 3.6).toFixed(0) + " km/h: ") +
+            "peak " + kg(pl.peak) + " kg of force, " + ((pl.maxIn || 0) * 100).toFixed(1) + " cm into the shell" +
+            " · bend " + (st.maxBend * 100).toFixed(1) + " cm · took up " + (st.absorbed / 1000).toFixed(1) + " kJ · " + st.brokenAnchors + " anchors and " + st.brokenBeams + " beams torn";
+        if (!s.plate && sb.pushArrow) { sb.group.remove(sb.pushArrow); sb.pushArrow = null; }       // the cube is gone
     }
 
     // ---- the crash test: the car at a speed into a wall
@@ -1065,6 +1075,7 @@ export function initSoftBody(api) {
         stopCrash();
         releaseForce();
         sb.savedGround = null;
+        if (sb.pushMode) ensureGround3D();                          // the push mode needs the 3D ground
         v.reset(0, 0, Math.PI / 2);
         cameraToCar();
         $("sbResult").textContent = "Repaired.";
