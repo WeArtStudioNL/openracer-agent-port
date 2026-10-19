@@ -119,7 +119,14 @@ OpenRacer.CollisionProxy = (function () {
         var layout = object.config && object.config.softbody && object.config.softbody.layout;
         if(spheres && layout && layout.length) {
             var own = layout.slice(0, 200).filter(function (n) { return isFinite(n.x) && isFinite(n.y) && isFinite(n.z) && n.r > 0; })
-                .map(function (n) { return { x: n.x, y: n.y, z: n.z, r: Math.min(0.6, Math.max(0.05, n.r)), part: typeof n.part === "string" ? n.part : null }; });
+                .map(function (n) {
+                    // a node must not reach below the underside of the car (the ground clearance): a big node low in the car would stand on the road with
+                    // the wheels (the car rode on its nodes, and hovered over bumps with its wheels barely loaded), so its radius is cut to what is above that
+                    var r = Math.min(0.6, Math.max(0.05, n.r));
+                    var floor = -v.cgHeight + (v.groundClearance || 0);
+                    if(n.y - r < floor) r = Math.max(0.05, n.y - floor);
+                    return { x: n.x, y: n.y, z: n.z, r: r, part: typeof n.part === "string" ? n.part : null };
+                });
             if(own.length >= 3) spheres = own.concat(spheres.filter(function (sp) { return sp.wheel; }));
         }
         if(spheres) {
