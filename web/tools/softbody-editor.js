@@ -992,7 +992,10 @@ export function initSoftBody(api) {
         const normal = hit.normal.clone().applyQuaternion(sb.group.quaternion.clone().invert());
         releaseForce();
         const cubeMass = parseFloat($("sbCubeMass").value) || 100;
-        s.pushPlate([local.x, local.y, local.z], [normal.x, normal.y, normal.z], kg * 9.81, side, cubeMass, 0.03);
+        // a part with nodes of its own is hit on those nodes alone (the door dents, not what is behind it); anything else on the nodes of the body
+        const loose = looseOf(hit.object);
+        const group = loose && sb.layout && sb.layout.some((n) => n.part === loose.name) ? loose.name : null;
+        s.pushPlate([local.x, local.y, local.z], [normal.x, normal.y, normal.z], kg * 9.81, side, cubeMass, 0.03, group);
         // the arrow stays on the car while it is pushed
         const arrow = new THREE.ArrowHelper(normal.clone().negate(), local.clone().addScaledVector(normal, 0.8), 0.8, 0xff5555, 0.3, 0.18);
         arrow.traverse((o) => { if (o.material) { o.material.depthTest = false; o.renderOrder = 13; } });
@@ -1573,5 +1576,5 @@ export function initSoftBody(api) {
         if (!sb.restarting && api.frameModel) api.frameModel();
     }
 
-    return { read, fill, frame, onStop, changed, debug: { sb, tc, rc, camera, controls, showSelection } };
+    return { read, fill, frame, onStop, changed, debug: { sb, tc, rc, camera, controls, showSelection, surfaceAt, looseOf, renderer } };
 }

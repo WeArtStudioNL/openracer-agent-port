@@ -55,6 +55,15 @@ OpenRacer.Parts = (function () {
         return loadEngine().then(function (R) { return build(R, ctx, shapes); }).catch(function (e) { console.warn("Parts: " + e.message + (e.stack ? "\n" + e.stack : "")); return null; });
     }
 
+    // An object back at its place in the model: its parent, and its position, turn and size (three.js makes its matrix from these when it updates
+    // by itself, so the matrix alone is not enough: attach() has changed them when the object was moved to the scene)
+    function restoreHome(object, home) {
+        object.position.copy(home.position); object.quaternion.copy(home.quaternion); object.scale.copy(home.scale);
+        object.matrixAutoUpdate = home.autoUpdate;
+        object.updateMatrix();
+        object.matrixWorldNeedsUpdate = true;
+    }
+
     // The shape of the part of a spec in the frame of the car (ctx.root is the model, in the frame that CollisionProxy.js used), or null
     function shapeOf(spec, ctx) {
         if (!spec || !spec.object || spec.mode === "fixed" || !spec.mode) return null;
@@ -63,9 +72,9 @@ OpenRacer.Parts = (function () {
         // the car editor uses the same model again and again: a part that an earlier test has thrown out of it comes back to its place first
         if (object) {
             var home = object.userData.partHome;
-            if (!home) home = object.userData.partHome = { parent: object.parent, matrix: object.matrix.clone(), autoUpdate: object.matrixAutoUpdate };
+            if (!home) home = object.userData.partHome = { parent: object.parent, matrix: object.matrix.clone(), autoUpdate: object.matrixAutoUpdate, position: object.position.clone(), quaternion: object.quaternion.clone(), scale: object.scale.clone() };
             else if (object.parent !== home.parent || !object.matrix.equals(home.matrix)) {
-                home.parent.add(object); object.matrix.copy(home.matrix); object.matrixAutoUpdate = home.autoUpdate; object.matrixWorldNeedsUpdate = true;
+                home.parent.add(object); restoreHome(object, home);
             }
         }
         if (!object) { console.warn("Parts: no object '" + spec.object + "' in the model"); return null; }
@@ -460,9 +469,7 @@ OpenRacer.Parts = (function () {
                     p.body.setBodyType(R.RigidBodyType.KinematicPositionBased, true);
                     setGroups(p, false);
                     p.parent.add(p.object);
-                    p.object.matrix.copy(p.matrix);
-                    p.object.matrixAutoUpdate = p.autoUpdate;
-                    p.object.matrixWorldNeedsUpdate = true;
+                    restoreHome(p.object, p.object.userData.partHome);
                     p.object.traverse(function (m) { if (m.userData && m.userData.sbDeform) m.userData.sbDeform.value = 1; });
                 }
                 p.mounts.forEach(function (m) { m.alive = true; });
