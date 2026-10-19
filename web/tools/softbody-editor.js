@@ -10,6 +10,8 @@
  *              car is saved and fill() when a car is loaded.
  */
 
+import { TransformControls } from "three/addons/controls/TransformControls.js";
+
 const DEFAULTS = {
     shell_mass: null, hardening: 0.2,
     "anchor.stiffness": 0.8, "anchor.yield_force": 80, "anchor.break_force": 250, "anchor.damping": 0.6,
@@ -208,6 +210,7 @@ export function initSoftBody(api) {
     }
     function hide() {
         sb.shown = false;
+        tc.detach();
         if (sb.group) { scene.remove(sb.group); sb.group = null; }
         $("sbShow").textContent = "Show the shell";
     }
@@ -223,13 +226,17 @@ export function initSoftBody(api) {
         sb.points = new THREE.Points(pointGeo, new THREE.PointsMaterial({ size: 8, sizeAttenuation: false, vertexColors: true, depthTest: false, transparent: true }));
         sb.points.renderOrder = 10; sb.points.frustumCulled = false;
         const lineGeo = new THREE.BufferGeometry();
-        lineGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6 * B), 3));
-        lineGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(6 * B), 3));
+        const room = Math.max(B, 1200);                  // while a node is dragged the beams are made again and may be more
+        lineGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6 * room), 3));
+        lineGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(6 * room), 3));
+        lineGeo.setDrawRange(0, 2 * B);
         sb.lines = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false, transparent: true, opacity: 0.8 }));
         sb.lines.renderOrder = 9; sb.lines.frustumCulled = false;
         group.add(sb.lines, sb.points);
         sb.group = group;
         scene.add(group);
+        sb.pivot = new THREE.Object3D();
+        group.add(sb.pivot);
         drawHinges();
         updateShell();
         showSelection();
@@ -267,6 +274,7 @@ export function initSoftBody(api) {
         if (!s || !sb.group) return;
         sb.group.position.set(v.px, v.py, v.pz);
         sb.group.quaternion.set(v.qx, v.qy, v.qz, v.qw);
+        if (sb.dragging) { dragPreview(s); return; }
         const pos = sb.points.geometry.attributes.position, col = sb.points.geometry.attributes.color;
         const lp = sb.lines.geometry.attributes.position, lc = sb.lines.geometry.attributes.color;
         const rest = new THREE.Vector3();
@@ -294,6 +302,80 @@ export function initSoftBody(api) {
             lc.setXYZ(2 * i, tint.r, tint.g, tint.b); lc.setXYZ(2 * i + 1, tint.r, tint.g, tint.b);
         }
         lp.needsUpdate = true; lc.needsUpdate = true;
+        sb.lines.geometry.setDrawRange(0, 2 * s.beamCount);
+    }
+
+    // ---- the gizmo: the selected nodes can be moved; the beams are made again from the nearest neighbours while they move
+    const tc = new TransformControls(camera, renderer.domElement);
+    tc.setSize(0.7);
+    scene.add(typeof tc.getHelper === "function" ? tc.getHelper() : tc);
+    let lastPivot = new THREE.Vector3();
+    tc.addEventListener("dragging-changed", (event) => {
+        controls.enabled = !event.value;
+        const s = softBody();
+        if (event.value) {
+            if (!s) return;
+            freeze(s);                                          // the nodes are a list of the car from the first move on
+            sb.dragging = true;
+            lastPivot.copy(sb.pivot.position);
+        } else if (sb.dragging) {
+            sb.dragging = false;
+            changed(true);                                      // the shell is made again from the new places
+        }
+    });
+    tc.addEventListener("objectChange", () => {
+        if (!sb.dragging || !sb.layout) return;
+        const dx = sb.pivot.position.x - lastPivot.x, dy = sb.pivot.position.y - lastPivot.y, dz = sb.pivot.position.z - lastPivot.z;
+        lastPivot.copy(sb.pivot.position);
+        sb.sel.nodes.forEach((k) => { const n = sb.layout[k]; if (n) { n.x += dx; n.y += dy; n.z += dz; } });
+    });
+    // the gizmo sits on the middle of the selected nodes
+    function attachGizmo() {
+        const s = softBody();
+        if (!s || !sb.group || !sb.pivot || !sb.shown || !sb.sel.nodes.size || sb.dragging) { if (!sb.dragging) tc.detach(); return; }
+        const mid = new THREE.Vector3(), p = new THREE.Vector3();
+        sb.sel.nodes.forEach((k) => { if (sb.layout && sb.layout[k]) p.set(sb.layout[k].x, sb.layout[k].y, sb.layout[k].z); else s.restPosition(k, p); mid.add(p); });
+        mid.multiplyScalar(1 / sb.sel.nodes.size);
+        sb.pivot.position.copy(mid);
+        sb.pivot.quaternion.identity();
+        tc.attach(sb.pivot);
+    }
+    // while a node is dragged: the points from the list of the car, and the beams from the nearest neighbours (as SoftBody.js makes them)
+    function dragPreview(s) {
+        const list = sb.layout, N = list.length;
+        const near = parseInt((document.querySelector('input.sb[data-key="neighbours"]') || {}).value, 10) || DEFAULTS.neighbours;
+        const reach = parseFloat((document.querySelector('input.sb[data-key="reach"]') || {}).value) || DEFAULTS.reach;
+        const pos = sb.points.geometry.attributes.position, col = sb.points.geometry.attributes.color;
+        for (let k = 0; k < N; k++) {
+            pos.setXYZ(k, list[k].x, list[k].y, list[k].z);
+            if (sb.sel.nodes.has(k)) tint.setRGB(1, 1, 1); else if (list[k].inner) tint.setRGB(0.35, 0.6, 1); else tint.setRGB(0.3, 0.85, 0.35);
+            col.setXYZ(k, tint.r, tint.g, tint.b);
+        }
+        pos.needsUpdate = true; col.needsUpdate = true;
+        const lp = sb.lines.geometry.attributes.position, lc = sb.lines.geometry.attributes.color;
+        const seen = new Set();
+        let n = 0;
+        for (let a = 0; a < N && n < 1200; a++) {
+            const close = [];
+            for (let b = 0; b < N; b++) {
+                if (a === b) continue;
+                const d = Math.hypot(list[a].x - list[b].x, list[a].y - list[b].y, list[a].z - list[b].z);
+                if (d < reach && d > 0.02) close.push([d, b]);
+            }
+            close.sort((x, y) => x[0] - y[0]);
+            for (let m = 0; m < Math.min(near, close.length) && n < 1200; m++) {
+                const lo = Math.min(a, close[m][1]), hi = Math.max(a, close[m][1]), key = lo * 4096 + hi;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                lp.setXYZ(2 * n, list[lo].x, list[lo].y, list[lo].z); lp.setXYZ(2 * n + 1, list[hi].x, list[hi].y, list[hi].z);
+                const moving = sb.sel.nodes.has(lo) || sb.sel.nodes.has(hi);
+                tint.setRGB(moving ? 1 : 0.3, moving ? 1 : 0.55, moving ? 1 : 0.9);
+                lc.setXYZ(2 * n, tint.r, tint.g, tint.b); lc.setXYZ(2 * n + 1, tint.r, tint.g, tint.b);
+                n++;
+            }
+        }
+        sb.lines.geometry.setDrawRange(0, 2 * n);
+        lp.needsUpdate = true; lc.needsUpdate = true;
     }
 
     // ---- selecting nodes and beams: a click, Shift and a click to add, and a lasso with the middle mouse button
@@ -310,7 +392,7 @@ export function initSoftBody(api) {
             lasso = { points: [[e.clientX - rect.left, e.clientY - rect.top]], add: e.shiftKey || e.ctrlKey };
             controls.mouseButtons.MIDDLE = -1;                      // the middle button is not the dolly of the orbit controls now
             try { renderer.domElement.setPointerCapture(e.pointerId); } catch (error) { /* a synthetic event */ }
-        } else if (e.button === 0) down = { x: e.clientX, y: e.clientY };
+        } else if (e.button === 0 && !tc.axis) down = { x: e.clientX, y: e.clientY };      // a press on the gizmo is no click on the model
     });
     renderer.domElement.addEventListener("pointermove", (e) => {
         if (!lasso) return;
@@ -406,6 +488,7 @@ export function initSoftBody(api) {
         showSelection();
     }
     function showSelection() {
+        attachGizmo();
         const s = softBody(), box = $("sbSelFields"), text = $("sbSelection");
         const nodes = [...sb.sel.nodes], beam = sb.sel.beam;
         $("sbDelete").disabled = !nodes.length || !sb.edit;
@@ -818,5 +901,5 @@ export function initSoftBody(api) {
         if (!sb.restarting && api.frameModel) api.frameModel();
     }
 
-    return { read, fill, frame, onStop, changed };
+    return { read, fill, frame, onStop, changed, debug: { sb, tc, showSelection } };
 }

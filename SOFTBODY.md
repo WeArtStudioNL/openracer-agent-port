@@ -106,3 +106,7 @@ The "Soft body" card of the car editor (`web/tools/softbody-editor.js`, hooked i
 * **The inside**: a point of a 20 cm grid is inside the model when at least five of six rays from it hit the back of a surface first (the car is open at the windows and the wheel arches). Of those points the ones farthest from the nodes that there are become nodes inside (radius 12 cm, `"inner": true` in the layout, blue in the view), up to the most nodes; the scan takes 70% of the most for the surface when it also fills the inside. "Fill the inside" does it for the nodes that there are.
 * Fixed: after nodes were made, removed or scanned again, the model did not bend in the next crash test: `SoftBodyMesh.attach` kept the weights and the materials of the first shell. It starts from the original materials now (`SoftBodyMesh.restore`), and the model of the editor is back to itself when the test stops.
 * The camera of the crash test goes back to the car in the middle of the view with Repair, with a new crash and when the test stops.
+
+### The gizmo
+
+A selected node (or the middle of several selected nodes) gets a move gizmo in the view. While it is dragged the beams are made again from the nearest neighbours (the same rule as `SoftBody.js`, with the "beams per node" and "longest beam" of the settings) and drawn live, the moving ones in white; on release the shell is made again from the new places. The first move turns the nodes into a list of the car (`softbody.layout`).
