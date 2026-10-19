@@ -196,3 +196,7 @@ Tested with a door of 10 kg: at 30 and 60 km/h against a wall it stayed shut wit
 The car drives straight ahead from its start point and only the wall is added (19.8 m ahead of the middle of the car). The **camera follows the car** during the test, and is **put back where it was** when the test is stopped or the car is repaired. While the test runs the **test buttons are hidden** and a **Stop crash test** button sits in their place: it does what the **Stop test** button of the test buttons does: the wall goes, the test bench stops and the editor is back at the model as it is, with the test buttons back (they also come back after Repair).
 
 The camera is put back by `stopCrash()` itself, so it goes back however the test ends: Stop crash test, Repair, a restart of the bench (a change in the part window) or a new test.
+
+### The car accelerates with its own throttle
+
+The car in the crash test no longer starts at the speed of the test: it starts from rest and accelerates with the throttle of the normal physics (full throttle until near the speed, then just enough to hold it; off at the hit). The wall is far enough for that: `max(19.8 m, 2.6 m + v² / 5)` ahead of the middle of the car (55 m for 60 km/h, 260 m for 130 km/h). The card says "Accelerating to …" and the peak g counts from the hit on.

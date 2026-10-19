@@ -1483,19 +1483,18 @@ export function initSoftBody(api) {
             stopCrash();
             crashUi(true);
             if (!sb.camSaved) sb.camSaved = { position: camera.position.clone(), target: controls.target.clone() };      // where the camera was, to put it back
-            // the car stays where it is and drives straight ahead; only the wall is new (a few metres in front of its nose), and the camera is left alone
-            WALL_Z = 3 * (2.6 + 4);                                  // 19.8 m: three times as far as it was (6.6 m)
+            // the car stays where it is and drives straight ahead on its own throttle (the normal physics: it accelerates as it does in the game);
+            // only the wall is new, far enough for the car to get to the speed (about 2.5 m/s² on average), and at least 19.8 m
+            WALL_Z = Math.max(3 * (2.6 + 4), 2.6 + speed * speed / 5);
             sb.wall = wallMesh(floorY, angle);
             scene.add(sb.wall);
             sb.savedGround = sb.savedGround || v.ground;
             v.ground = crashGround(floorY, angle);
             v.reset(0, 0, Math.PI / 2);
-            v.vz = speed;
-            v.wheels.forEach((w) => { w.omega = speed / w.radius; });
-            Object.assign(bench.input, { parkingLock: false, neutral: true, throttle: 0, brakePedal: 0, handbrake: false });     // it rolls: no brake before the wall
+            Object.assign(bench.input, { parkingLock: false, neutral: false, reverse: false, throttle: 0, brakePedal: 0, handbrake: false, turnAngle: 0 });
             bench.shake = null; bench.script = null;
-            sb.crash = { t: 0, speed, energy: 0.5 * v.mass * speed * speed, startZ: v.pz, peakG: 0, lastU: speed, stopped: 0 };
-            $("sbResult").textContent = "Driving at " + (speed * 3.6).toFixed(0) + " km/h…";
+            sb.crash = { t: 0, speed, energy: 0.5 * v.mass * speed * speed, startZ: v.pz, peakG: 0, lastU: 0, stopped: 0, hit: false };
+            $("sbResult").textContent = "Accelerating to " + (speed * 3.6).toFixed(0) + " km/h…";
             if (!sb.shown) await show(false);
         } catch (error) { status(error.message, "error"); }
     }
@@ -1503,7 +1502,12 @@ export function initSoftBody(api) {
         const c = sb.crash, v = bench.vehicle, s = softBody();
         c.t += dt;
         const u = v.vz;
-        c.peakG = Math.max(c.peakG, Math.abs(u - c.lastU) / Math.max(dt, 1e-3) / 9.81);
+        const st0 = s.stats();
+        if (!c.hit && st0.absorbed > 10) c.hit = true;                // the shell has taken a hit
+        // the throttle: full until near the speed, then just enough to hold it; off after the hit
+        const inp = bench.input;
+        inp.throttle = c.hit ? 0 : Math.min(1, Math.max(0, (c.speed - Math.max(0, v.u || 0)) / 4));
+        c.peakG = Math.max(c.peakG, c.hit ? Math.abs(u - c.lastU) / Math.max(dt, 1e-3) / 9.81 : 0);
         c.lastU = u;
         // the camera follows the car
         const dx = v.px - controls.target.x, dy = v.py - controls.target.y, dz = v.pz - controls.target.z;
@@ -1513,8 +1517,8 @@ export function initSoftBody(api) {
         const events = bench.obj.parts ? bench.obj.parts.events.length : 0;
         $("sbResult").textContent = "Peak " + c.peakG.toFixed(0) + " g · bend " + (st.maxBend * 100).toFixed(0) + " cm · took up " + (st.absorbed / 1000).toFixed(0) + " kJ of " +
             (c.energy / 1000).toFixed(0) + " kJ · " + st.brokenAnchors + " anchors and " + st.brokenBeams + " beams torn" + (events ? " · " + events + " part events" : "");
-        if (Math.abs(u) < 0.3 && c.t > 1) { c.stopped += dt; if (c.stopped > 1.5) sb.crash = null; }
-        if (c.t > 25) sb.crash = null;
+        if (c.hit && Math.abs(u) < 0.3 && c.t > 1) { c.stopped += dt; if (c.stopped > 1.5) { sb.crash = null; bench.input.throttle = 0; } }
+        if (c.t > 80) { sb.crash = null; bench.input.throttle = 0; }
     }
     // the camera back where it was before the crash test, which it followed the car in
     function restoreCamera() {
@@ -1526,6 +1530,7 @@ export function initSoftBody(api) {
     }
     function stopCrash() {
         sb.crash = null;
+        if (bench.input) bench.input.throttle = 0;
         crashUi(false);
         restoreCamera();                                  // however the test ends (stop, repair, a restart of the bench, a new test), the camera goes back
         if (sb.wall) { scene.remove(sb.wall); sb.wall = null; }
