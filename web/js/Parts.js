@@ -162,7 +162,7 @@ OpenRacer.Parts = (function () {
             // a mount is a node of the shell or a point (in the frame of the car): a point is held by the nearest node of the body
             var mountList = hinge && sb ? (spec.mounts || []).filter(function (m) { return m && ((m.node >= 0 && m.node < sb.count) || (Array.isArray(m.point) && m.point.length === 3)); }).slice(0, 2).map(function (m) {
                 var out = { node: m.node, break_force: m.break_force, point: Array.isArray(m.point) ? new THREE.Vector3().fromArray(m.point) : null,
-                    pin: m.axes !== undefined, axes: pinAxes(m.axes), min: (m.min !== undefined ? m.min : -90) * DEG, max: (m.max !== undefined ? m.max : 90) * DEG };
+                    pin: m.axes !== undefined, axes: pinAxes(m.axes), rot: Array.isArray(m.rot) && m.rot.length === 4 ? new THREE.Quaternion(m.rot[0], m.rot[1], m.rot[2], m.rot[3]).normalize() : null, min: (m.min !== undefined ? m.min : -90) * DEG, max: (m.max !== undefined ? m.max : 90) * DEG };
                 if (out.point) {
                     var best = 1e9;
                     out.node = 0;
@@ -194,7 +194,7 @@ OpenRacer.Parts = (function () {
                 breakForce: spec.break_force !== undefined ? spec.break_force : 0,
                 // the points where the part is hinged to the body: nodes of the shell, each with the force at which it tears off
                 mounts: mountList.map(function (m) {
-                    return { node: m.node, breakForce: m.break_force || 0, alive: true, beam: m.beam, point: m.point || sb.restPosition(m.node, new THREE.Vector3()), pin: m.pin, axes: m.axes, min: m.min, max: m.max };
+                    return { node: m.node, breakForce: m.break_force || 0, alive: true, beam: m.beam, point: m.point || sb.restPosition(m.node, new THREE.Vector3()), pin: m.pin, axes: m.axes, rot: m.rot, min: m.min, max: m.max };
                 }),
                 group: group.length ? spec.object : null,
                 // held: sits on the car; hinged: swings on the joint; free: loose
@@ -263,7 +263,10 @@ OpenRacer.Parts = (function () {
                     if (on.length === 0) part.joint = world.createImpulseJoint(R.JointData.fixed(pa, ident, pl, ident), chassis, part.body, true);
                     else if (on.length > 1) part.joint = world.createImpulseJoint(R.JointData.spherical(pa, pl), chassis, part.body, true);
                     else {
-                        part.joint = world.createImpulseJoint(R.JointData.revolute(pa, pl, { x: on[0] === "x" ? 1 : 0, y: on[0] === "y" ? 1 : 0, z: on[0] === "z" ? 1 : 0 }), chassis, part.body, true);
+                        // the axes of a pin can be turned (the editor): the axis is the one of the car, turned by the rotation of the pin
+                        var ax = new THREE.Vector3(on[0] === "x" ? 1 : 0, on[0] === "y" ? 1 : 0, on[0] === "z" ? 1 : 0);
+                        if (pin.rot) ax.applyQuaternion(pin.rot);
+                        part.joint = world.createImpulseJoint(R.JointData.revolute(pa, pl, { x: ax.x, y: ax.y, z: ax.z }), chassis, part.body, true);
                         part.joint.setLimits(pin.min, pin.max);
                         if (h.spring > 0) part.joint.configureMotorPosition(h.rest, h.spring, h.damper);
                         else if (h.damper > 0) part.joint.configureMotorVelocity(0, h.damper);

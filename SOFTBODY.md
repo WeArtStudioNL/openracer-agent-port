@@ -175,3 +175,7 @@ The editor opens with the car of last time loaded (`localStorage` "editor-last-c
 5. **Every change is saved** (after a moment) into the car that is open: `parts` (with `mounts`: `{ point, axes, min, max, break_force }`) and `softbody.layout`.
 
 The next crash test starts from what the window changed. The older "Parts…" panel and the "Part points" card stay, for numbers; they keep the pin points of the window.
+
+### Turning a pin
+
+A pin point can be turned, so that its axes are not the axes of the car: a **rotate gizmo** (three rings) sits on the chosen pin in the view, and three fields (**Rotation of the pin**, degrees, X then Y then Z) do the same by number; **Reset** puts it straight again. The gizmo with the angle fan turns with it. Saved as `rot` (a quaternion `[x, y, z, w]`) in the pin point; `Parts.js` turns the axis of the hinge by it (the angles are measured from the rest place of the part). Without `rot` nothing changes.

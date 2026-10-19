@@ -173,7 +173,7 @@ export function initSoftBody(api) {
             });
             // the pin points of the part window have more than the fields here (axes, angles, more than two): they are kept
             const prev = part.mounts || [];
-            mounts.forEach((m, i) => { const old = prev[i]; if (old && old.axes && JSON.stringify(old.point || null) === JSON.stringify(m.point || null) && old.node === m.node) { m.axes = old.axes; m.min = old.min; m.max = old.max; } });
+            mounts.forEach((m, i) => { const old = prev[i]; if (old && old.axes && JSON.stringify(old.point || null) === JSON.stringify(m.point || null) && old.node === m.node) { m.axes = old.axes; m.min = old.min; m.max = old.max; if (old.rot) m.rot = old.rot; } });
             if (prev.length > 2) prev.slice(2).forEach((m) => mounts.push(m));
             if (mounts.length) part.mounts = mounts; else delete part.mounts;
             delete part.break_force;
@@ -589,7 +589,7 @@ export function initSoftBody(api) {
     let down = null, lasso = null;
     const savedMiddle = controls.mouseButtons.MIDDLE;
     renderer.domElement.addEventListener("pointerdown", (e) => {
-        if (e.button === 0 && !tc.axis) down = { x: e.clientX, y: e.clientY };           // a press on the gizmo is no click on the model
+        if (e.button === 0 && !tc.axis && !rc.axis) down = { x: e.clientX, y: e.clientY };           // a press on a gizmo is no click on the model
         if (!sb.shown || !softBody()) return;
         if (e.button === 1) {
             e.preventDefault();
@@ -1163,7 +1163,7 @@ export function initSoftBody(api) {
     }
     let hoverBusy = false;
     renderer.domElement.addEventListener("pointermove", (e) => {
-        if (hoverBusy || lasso || sb.pushMode || sb.pick || tc.dragging || sb.dragging) return;
+        if (hoverBusy || lasso || sb.pushMode || sb.pick || tc.dragging || rc.dragging || sb.dragging) return;
         hoverBusy = true;
         requestAnimationFrame(() => {
             hoverBusy = false;
@@ -1319,6 +1319,7 @@ export function initSoftBody(api) {
             const d = add('<div class="pw-pin' + (i === sb.pinSel ? " sel" : "") + '"><div class="pw-pinhead"><b>Pin ' + (i + 1) + '</b> <span class="hint">' + pin.point.map((x) => x.toFixed(2)).join(", ") + '</span>' +
                 ' <span class="pw-axes">' + AXES.map((a) => '<button class="small ' + (axes[a] ? "accent" : "ghost") + '" data-axis="' + a + '">' + a.toUpperCase() + "</button>").join("") + '</span> <button class="small ghost" data-a="del" title="Remove this pin point">✕</button></div>' +
                 '<div class="row"><div><label>Min <b data-v="min"></b>°</label><input type="range" data-a="min" min="-180" max="0" step="1"></div><div><label>Max <b data-v="max"></b>°</label><input type="range" data-a="max" min="0" max="180" step="1"></div></div>' +
+                '<div class="row"><div><label>Rotation of the pin (°) <button class="small ghost set" data-a="rot0">Reset</button></label><div class="row"><input type="number" data-a="rx" step="5"><input type="number" data-a="ry" step="5"><input type="number" data-a="rz" step="5"></div></div></div>' +
                 '<div class="row"><div><label>Breaking force (kN)</label><input type="number" data-a="force" min="0" step="10" placeholder="0: never"></div></div></div>');
             const pinEl = d.querySelector(".pw-pin");
             const q = (a) => d.querySelector('[data-a="' + a + '"]');
@@ -1326,6 +1327,16 @@ export function initSoftBody(api) {
             q("min").value = min; q("max").value = max;
             d.querySelector('[data-v="min"]').textContent = min; d.querySelector('[data-v="max"]').textContent = max;
             q("force").value = pin.break_force ? pin.break_force / 1000 : "";
+            const eul = eulerOf(pin);
+            q("rx").value = eul[0]; q("ry").value = eul[1]; q("rz").value = eul[2];
+            // the numbers turn the pin too (X, then Y, then Z); the gizmo in the view does the same by hand
+            ["rx", "ry", "rz"].forEach((f) => q(f).addEventListener("change", () => {
+                const rad = ["rx", "ry", "rz"].map((k) => (parseFloat(q(k).value) || 0) * Math.PI / 180);
+                const qn = new THREE.Quaternion().setFromEuler(new THREE.Euler(rad[0], rad[1], rad[2], "XYZ"));
+                pin.rot = [+qn.x.toFixed(5), +qn.y.toFixed(5), +qn.z.toFixed(5), +qn.w.toFixed(5)];
+                sb.pinSel = i; partChanged();
+            }));
+            q("rot0").addEventListener("click", () => { delete pin.rot; sb.pinSel = i; partChanged(); });
             pinEl.addEventListener("pointerdown", () => { if (sb.pinSel !== i) { sb.pinSel = i; drawPartGizmos(); pinEl.parentElement.parentElement.querySelectorAll(".pw-pin").forEach((x) => x.classList.toggle("sel", x === pinEl)); } });
             d.querySelectorAll("[data-axis]").forEach((b) => b.addEventListener("click", () => {
                 pin.axes = Object.assign({ x: false, y: false, z: false }, pin.axes || { x: true });
@@ -1381,13 +1392,33 @@ export function initSoftBody(api) {
         drawPartGizmos();
     }
 
+    // the rotate gizmo of the chosen pin: its axes can be turned, for the most freedom
+    const rc = new TransformControls(camera, renderer.domElement);
+    rc.setMode("rotate"); rc.setSpace("local"); rc.setSize(0.6);
+    scene.add(typeof rc.getHelper === "function" ? rc.getHelper() : rc);
+    rc.addEventListener("dragging-changed", (event) => {
+        controls.enabled = !event.value;
+        if (!event.value && sb.partWin && sb.partWin.part) { renderPartWin(); changed(); renderParts(); }      // let go: saved
+    });
+    rc.addEventListener("objectChange", () => {
+        const part = sb.partWin && sb.partWin.part, pin = part && part.mounts && part.mounts[sb.pinSel];
+        if (!pin || !sb.pinPivot) return;
+        const q = sb.pinPivot.quaternion;
+        pin.rot = [+q.x.toFixed(5), +q.y.toFixed(5), +q.z.toFixed(5), +q.w.toFixed(5)];
+        drawPartGizmos();
+    });
+    function eulerOf(pin) {
+        const e = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(...(pin.rot || [0, 0, 0, 1])), "XYZ");
+        return [e.x, e.y, e.z].map((r) => Math.round(r * 180 / Math.PI * 10) / 10);
+    }
+
     // what the window shows in the view: the pin points, the gizmo of the pin that is chosen, the nodes of the part
     function drawPartGizmos() {
         if (!sb.partGroup) { sb.partGroup = new THREE.Group(); scene.add(sb.partGroup); }
         const g = sb.partGroup;
         while (g.children.length) { const c = g.children.pop(); c.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
         const w = sb.partWin;
-        if (!w) return;
+        if (!w) { if (rc.object) rc.detach(); return; }
         const part = w.part;
         const mark = (color) => new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true });
         (part && part.mounts || []).forEach((pin, i) => {
@@ -1399,26 +1430,30 @@ export function initSoftBody(api) {
             // the gizmo: every axis that is free, and the angles that it may turn through (from the rest place, towards min and max)
             const axes = pin.axes || { x: true, y: false, z: false };
             const min = (pin.min !== undefined ? pin.min : -90) * Math.PI / 180, max = (pin.max !== undefined ? pin.max : 90) * Math.PI / 180;
+            const holder = new THREE.Group();                            // at the pin, turned as the pin is turned
+            holder.position.set(...pin.point);
+            if (pin.rot) holder.quaternion.set(...pin.rot);
+            g.add(holder);
             AXES.forEach((a) => {
                 if (!axes[a]) return;
                 const axis = new THREE.Vector3(a === "x" ? 1 : 0, a === "y" ? 1 : 0, a === "z" ? 1 : 0);
                 const u = new THREE.Vector3(a === "x" ? 0 : a === "y" ? 0 : 1, a === "x" ? 1 : 0, a === "x" ? 0 : a === "y" ? 1 : 0);
                 const v = new THREE.Vector3().crossVectors(axis, u);
-                const centre = new THREE.Vector3(...pin.point);
+                const centre = new THREE.Vector3();
                 const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([centre.clone().addScaledVector(axis, -0.35), centre.clone().addScaledVector(axis, 0.35)]), new THREE.LineBasicMaterial({ color: AXIS_COLOURS[a], depthTest: false }));
-                line.renderOrder = 15; g.add(line);
+                line.renderOrder = 15; holder.add(line);
                 const radius = 0.3, steps = Math.max(2, Math.ceil((max - min) / (Math.PI / 36)));
                 const arc = [];
                 for (let k = 0; k <= steps; k++) { const t = min + (max - min) * k / steps; arc.push(centre.clone().addScaledVector(u, Math.cos(t) * radius).addScaledVector(v, Math.sin(t) * radius)); }
                 const verts = [];
                 for (let k = 0; k < arc.length - 1; k++) verts.push(centre.x, centre.y, centre.z, arc[k].x, arc[k].y, arc[k].z, arc[k + 1].x, arc[k + 1].y, arc[k + 1].z);
                 const fan = new THREE.Mesh(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(verts, 3)), new THREE.MeshBasicMaterial({ color: AXIS_COLOURS[a], transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthTest: false }));
-                fan.renderOrder = 15; g.add(fan);
+                fan.renderOrder = 15; holder.add(fan);
                 const rim = new THREE.Line(new THREE.BufferGeometry().setFromPoints([centre, ...arc, centre]), new THREE.LineBasicMaterial({ color: AXIS_COLOURS[a], depthTest: false }));
-                rim.renderOrder = 15; g.add(rim);
+                rim.renderOrder = 15; holder.add(rim);
                 // the rest place: where the angle is 0
                 const zero = new THREE.Line(new THREE.BufferGeometry().setFromPoints([centre, centre.clone().addScaledVector(u, radius * 1.1)]), new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false }));
-                zero.renderOrder = 15; g.add(zero);
+                zero.renderOrder = 15; holder.add(zero);
             });
         });
         // the nodes of the part
@@ -1431,6 +1466,14 @@ export function initSoftBody(api) {
                 points.renderOrder = 15; g.add(points);
             }
         }
+        // the pivot that the rotate gizmo holds: at the chosen pin, turned as it is
+        const pinNow = part && part.mounts && part.mounts[sb.pinSel];
+        if (pinNow && pinNow.point) {
+            if (!sb.pinPivot) sb.pinPivot = new THREE.Object3D();
+            g.add(sb.pinPivot);
+            if (!rc.dragging) { sb.pinPivot.position.set(...pinNow.point); sb.pinPivot.quaternion.set(...(pinNow.rot || [0, 0, 0, 1])); }
+            if (rc.object !== sb.pinPivot) rc.attach(sb.pinPivot);
+        } else if (rc.object) rc.detach();
         placePartGroup();
     }
     function placePartGroup() {
