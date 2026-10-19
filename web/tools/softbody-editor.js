@@ -1385,6 +1385,10 @@ export function initSoftBody(api) {
             // the gizmo: every axis that is free, and the angles that it may turn through (from the rest place, towards min and max)
             const axes = pin.axes || { x: true, y: false, z: false };
             const min = (pin.min !== undefined ? pin.min : -90) * Math.PI / 180, max = (pin.max !== undefined ? pin.max : 90) * Math.PI / 180;
+            // the middle of the part, in the frame of the car
+            let partCentre = null;
+            const po = partObj();
+            if (po && bench.vehicle) { const mid = new THREE.Box3().setFromObject(po).getCenter(new THREE.Vector3()); partCentre = toVeh(mid); }
             const holder = new THREE.Group();                            // at the pin, turned as the pin is turned
             holder.position.set(...pin.point);
             if (pin.rot) holder.quaternion.set(...pin.rot);
@@ -1392,7 +1396,14 @@ export function initSoftBody(api) {
             AXES.forEach((a) => {
                 if (!axes[a]) return;
                 const axis = new THREE.Vector3(a === "x" ? 1 : 0, a === "y" ? 1 : 0, a === "z" ? 1 : 0);
-                const u = new THREE.Vector3(a === "x" ? 0 : a === "y" ? 0 : 1, a === "x" ? 1 : 0, a === "x" ? 0 : a === "y" ? 1 : 0);
+                let u = new THREE.Vector3(a === "x" ? 0 : a === "y" ? 0 : 1, a === "x" ? 1 : 0, a === "x" ? 0 : a === "y" ? 1 : 0);
+                // the fan is swept from the direction in which the part itself lies from the pin (not from a fixed axis of the car), so it
+                // shows where the part goes: the angle is right-handed about the axis, as the joint of the engine has it
+                if (partCentre) {
+                    const d = partCentre.clone().sub(new THREE.Vector3(...pin.point)).applyQuaternion(holder.quaternion.clone().invert());
+                    d.addScaledVector(axis, -d.dot(axis));
+                    if (d.length() > 0.02) u = d.normalize();
+                }
                 const v = new THREE.Vector3().crossVectors(axis, u);
                 const centre = new THREE.Vector3();
                 const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([centre.clone().addScaledVector(axis, -0.35), centre.clone().addScaledVector(axis, 0.35)]), new THREE.LineBasicMaterial({ color: AXIS_COLOURS[a], depthTest: false }));

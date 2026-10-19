@@ -200,3 +200,7 @@ The camera is put back by `stopCrash()` itself, so it goes back however the test
 ### The car accelerates with its own throttle
 
 The car in the crash test no longer starts at the speed of the test: it starts from rest and accelerates with the throttle of the normal physics (full throttle until near the speed, then just enough to hold it; off at the hit). The wall is far enough for that: `max(19.8 m, 2.6 m + v² / 5)` ahead of the middle of the car (55 m for 60 km/h, 260 m for 130 km/h). The card says "Accelerating to …" and the peak g counts from the hit on.
+
+### The angle fan shows where the part goes
+
+The fan of the pin gizmo is swept from the direction in which the part itself lies from the pin (the middle of the part, projected on the plane of the axis), and not from a fixed axis of the car: it used to start from a fixed direction, so for a door that lay on the other side of the hinge it showed the mirror image of how the door moves. The angle is **right-handed about the axis** (checked against the joint of the engine: a part that lies along +x from a pin with the axis +Y goes towards -z at a positive angle), the white line is the rest place (angle 0). So a negative angle is the other way round than a positive one: with the thumb along the axis, positive is the way the fingers curl.
