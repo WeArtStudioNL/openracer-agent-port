@@ -11,6 +11,10 @@
  *              bottom has a slider over the whole recording, rewind (backwards), pause, play, jumps of ten seconds, and the speed from
  *              0.1x to 5x. Escape (or the button) goes back to the game, which goes on where it was left.
  *
+ *              A replay can be saved as a file (Save replay in the bar) and opened by someone else (Open a replay in the main menu): the
+ *              file holds the recording and the ids of the track and the cars, not their models, so the other one needs the same cars and
+ *              track (the standard ones, or the ones of a zip of the garage). Nothing goes to a server.
+ *
  *              Keys in the replay: Space pause/play, left and right arrow 5 seconds back and forward, Home and End the start and the end,
  *              T the camera.
  */
@@ -33,7 +37,7 @@ OpenRacer.Replay = (function() {
     var accumulated = 0;
     var gearLabels = [""];
 
-    var api = { active: false };
+    var api = { active: false, viewer: false };   // viewer: a replay that was opened from a file, there is no game behind it
 
     // ---- recording
 
@@ -108,7 +112,7 @@ OpenRacer.Replay = (function() {
 
     // Once per frame of the game, with the time of the frame
     api.record = function(delta) {
-        if(api.active) return;
+        if(api.active || api.viewer) return;
         if(!cars.length && !init()) return;
         accumulated += delta;
         var n = 0;
@@ -233,7 +237,15 @@ OpenRacer.Replay = (function() {
         var left = el(head, "div", "row");
         el(left, "span", "tag", "REPLAY");
         var timeLabel = el(left, "span", "time", "");
-        var exit = button(head, "Back to the game", "Escape", function() { api.stop(); });
+        var right = el(head, "div", "row");
+        var save = button(right, "Save replay", "Save the replay as a file to keep or to share", function() {
+            save.textContent = "Saving…";
+            api.save().then(function(info) {
+                save.textContent = "Saved (" + (info.bytes < 1048576 ? Math.max(1, Math.round(info.bytes / 1024)) + " KB" : (info.bytes / 1048576).toFixed(1) + " MB") + ")";
+            }).catch(function(error) { save.textContent = "Could not save"; console.error(error); });
+            setTimeout(function() { save.textContent = "Save replay"; }, 4000);
+        });
+        var exit = button(right, api.viewer ? "Main menu" : "Back to the game", "Escape", function() { api.stop(); });
         exit.className = "exit";
 
         var slider = el(bar, "input");
@@ -311,7 +323,7 @@ OpenRacer.Replay = (function() {
     // ---- start and stop
 
     api.start = function() {
-        if(api.active || !api.available()) return false;
+        if(api.active || (!api.viewer && !api.available())) return false;
         snapshot = cars.map(function(entry, i) { var s = new Float32Array(STRIDE); write(s, 0, entry); return s; });
         api.active = true;
         document.body.classList.add("replaying");
@@ -327,6 +339,8 @@ OpenRacer.Replay = (function() {
 
     api.stop = function() {
         if(!api.active) return;
+        // a replay from a file has no game behind it: back to the main menu
+        if(api.viewer) { window.location.href = window.location.pathname; return; }
         api.active = false;
         // the cars are put back where the game left them
         for(var i = 0; i < cars.length; i++) {
@@ -356,6 +370,177 @@ OpenRacer.Replay = (function() {
             if(live) EngineSound.update(player.rpm, player.throttle, false);
         }
         updateUi();
+    };
+
+    // ---- a file: save and open
+
+    var MAGIC = [0x4f, 0x52, 0x52, 0x50];          // "ORRP"
+    var FORMAT = "openracer-replay", FILE_VERSION = 1;
+    var MAX_FILE = 300 * 1024 * 1024, MAX_CARS = 12, MAX_SAMPLES = 108000;   // an hour
+    var ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
+
+    function pack() {
+        var per = perSample(), n = total - first();
+        var data = new Float32Array(n * per);
+        var pos = 0;
+        for(var c = 0; c < chunks.length; c++) {
+            var count = c === chunks.length - 1 ? fill : CHUNK;
+            data.set(chunks[c].subarray(0, count * per), pos);
+            pos += count * per;
+        }
+        var header = {
+            format: FORMAT, version: FILE_VERSION, game: (OpenRacer.VERSION || ""), created: new Date().toISOString(),
+            rate: RATE, stride: STRIDE, samples: n,
+            track: { id: currentTrack.id, name: currentTrack.name || currentTrack.id },
+            cars: cars.map(function(entry) {
+                var o = entry.object;
+                return { id: o.config.id, name: String(o.name || o.config.name || o.config.id), color: typeof o.color === "number" ? o.color : null, player: entry.player };
+            }),
+            gears: gearLabels
+        };
+        var text = new TextEncoder().encode(JSON.stringify(header));
+        var padded = Math.ceil((text.length + 8) / 4) * 4 - 8;      // the numbers start on a multiple of four
+        var out = new Uint8Array(8 + padded + data.byteLength);
+        out.set(MAGIC, 0);
+        new DataView(out.buffer).setUint32(4, padded, true);
+        out.fill(0x20, 8, 8 + padded);
+        out.set(text, 8);
+        out.set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength), 8 + padded);
+        return out;
+    }
+
+    function gzip(bytes) {
+        if(typeof CompressionStream === "undefined") return Promise.resolve(bytes);
+        var stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"));
+        return new Response(stream).arrayBuffer().then(function(buffer) { return new Uint8Array(buffer); });
+    }
+
+    function gunzip(bytes) {
+        if(typeof DecompressionStream === "undefined") return Promise.reject(new Error("This browser cannot open a compressed replay. Use a recent Chrome, Edge, Safari or Firefox."));
+        var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+        return new Response(stream).arrayBuffer().then(function(buffer) { return new Uint8Array(buffer); }, function() { throw new Error("This replay file is damaged."); });
+    }
+
+    // Saves the recording as a file for the user to keep or to share; gives a promise of { name, bytes }
+    api.save = function() {
+        if(!cars.length || total < 2) return Promise.reject(new Error("Nothing is recorded yet."));
+        var raw = pack();
+        return gzip(raw).then(function(bytes) {
+            var stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13);
+            var name = "replay-" + String(currentTrack.id).replace(/[^A-Za-z0-9_-]/g, "") + "-" + stamp + ".openracer-replay";
+            var url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
+            var link = document.createElement("a");
+            link.href = url;
+            link.download = name;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(function() { URL.revokeObjectURL(url); }, 30000);
+            return { name: name, bytes: bytes.length };
+        });
+    };
+
+    // What is in a file, checked: { header, data } or an error with a message for the person
+    function parse(buffer) {
+        var bytes = new Uint8Array(buffer);
+        if(bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) return gunzip(bytes).then(unpack);
+        return Promise.resolve(unpack(bytes));
+    }
+
+    function unpack(bytes) {
+        var bad = function(text) { return new Error(text); };
+        if(bytes.length < 16 || MAGIC.some(function(b, i) { return bytes[i] !== b; })) throw bad("This is not an OpenRacer replay.");
+        var headerLength = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(4, true);
+        if(headerLength > 1048576 || 8 + headerLength > bytes.length) throw bad("This replay file is damaged.");
+        var header;
+        try { header = JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + headerLength))); } catch(e) { throw bad("This replay file is damaged."); }
+        if(!header || header.format !== FORMAT) throw bad("This is not an OpenRacer replay.");
+        if(header.version !== FILE_VERSION || header.stride !== STRIDE || header.rate !== RATE) throw bad("This replay was made with another version of OpenRacer (" + String(header.game || "?").slice(0, 20) + ") and cannot be opened by this one.");
+        if(!header.track || !ID_PATTERN.test(String(header.track.id)) || !Array.isArray(header.cars) || header.cars.length < 1 || header.cars.length > MAX_CARS) throw bad("This replay file is damaged.");
+        for(var i = 0; i < header.cars.length; i++) {
+            var c = header.cars[i];
+            if(!c || typeof c.id !== "string" || !ID_PATTERN.test(c.id)) throw bad("This replay file is damaged.");
+            c.name = String(c.name || c.id).slice(0, 80);
+            c.color = typeof c.color === "number" && c.color >= 0 && c.color <= 0xffffff ? c.color : null;
+        }
+        if(!header.cars[0].player) throw bad("This replay file is damaged.");
+        var samples = header.samples;
+        if(!(samples >= 2 && samples <= MAX_SAMPLES && samples === Math.floor(samples))) throw bad("This replay file is damaged.");
+        var start = 8 + headerLength;
+        var wanted = samples * header.cars.length * STRIDE * 4;
+        if(start % 4 !== 0 || bytes.length - start !== wanted) throw bad("This replay file is damaged.");
+        var data = new Float32Array(bytes.buffer.slice(bytes.byteOffset + start, bytes.byteOffset + start + wanted));
+        for(var k = 0; k < data.length; k++) if(!isFinite(data[k])) throw bad("This replay file is damaged.");
+        header.gears = Array.isArray(header.gears) ? header.gears.map(function(g) { return String(g).slice(0, 8); }) : [""];
+        return { header: header, data: data };
+    }
+
+    // From the main menu: reads a file, checks that this game has the track and the cars, keeps it for the game that is started to show it.
+    // Gives a promise of { car, track } (the ids that the address of the game needs), or fails with a message
+    api.openFile = function(file, carList, trackList) {
+        if(file.size > MAX_FILE) return Promise.reject(new Error("This file is too large to be a replay."));
+        return file.arrayBuffer().then(parse).then(function(parsed) {
+            var h = parsed.header;
+            var has = function(list, id) { return list.some(function(item) { return item.id === id; }); };
+            var missingCars = h.cars.filter(function(c) { return !has(carList, c.id); });
+            var missingTrack = !has(trackList, h.track.id);
+            if(missingCars.length || missingTrack) {
+                var parts = [];
+                if(missingTrack) parts.push("the track " + String(h.track.name).slice(0, 60) + " (" + h.track.id + ")");
+                var seen = {};
+                missingCars.forEach(function(c) { if(!seen[c.id]) { seen[c.id] = true; parts.push("the car " + c.name + " (" + c.id + ")"); } });
+                throw new Error("This replay needs " + parts.join(", ") + ", which this game does not have. Ask the sender for them as a zip and import it in My garage.");
+            }
+            return stash(parsed).then(function() { return { car: h.cars[0].id, track: h.track.id }; });
+        });
+    };
+
+    // The file waits in the database of the browser, because the game that shows it is a new page
+    function database() {
+        return new Promise(function(resolve, reject) {
+            var request = indexedDB.open("openracer-replay", 1);
+            request.onupgradeneeded = function() { request.result.createObjectStore("files"); };
+            request.onsuccess = function() { resolve(request.result); };
+            request.onerror = function() { reject(request.error); };
+        });
+    }
+    function stash(parsed) {
+        return database().then(function(db) {
+            return new Promise(function(resolve, reject) {
+                var tx = db.transaction("files", "readwrite");
+                tx.objectStore("files").put(parsed, "pending");
+                tx.oncomplete = function() { db.close(); resolve(); };
+                tx.onerror = function() { reject(tx.error); };
+            });
+        });
+    }
+    // The file that was kept for this game (once): { header, data } or null
+    api.takeStash = function() {
+        return database().then(function(db) {
+            return new Promise(function(resolve, reject) {
+                var tx = db.transaction("files", "readwrite");
+                var get = tx.objectStore("files").get("pending");
+                tx.objectStore("files").delete("pending");
+                tx.oncomplete = function() { db.close(); resolve(get.result || null); };
+                tx.onerror = function() { reject(tx.error); };
+            });
+        });
+    };
+
+    // Puts a file in place of the recording: the cars (the player's first, then the others as the file has them)
+    api.load = function(parsed, objects) {
+        var per = objects.length * STRIDE, n = parsed.header.samples;
+        cars = objects.map(function(object, i) { return { object: object, player: i === 0 }; });
+        gearLabels = parsed.header.gears;
+        chunks = [];
+        for(var s = 0; s < n; s += CHUNK) {
+            var count = Math.min(CHUNK, n - s);
+            chunks.push(parsed.data.subarray(s * per, (s + count) * per));
+            fill = count;
+        }
+        dropped = 0;
+        total = n;
+        api.viewer = true;
     };
 
     api.info = function() { return { seconds: total * DT, cars: cars.length, blocks: chunks.length, megabytes: chunks.length * CHUNK * perSample() * 4 / 1048576 }; };

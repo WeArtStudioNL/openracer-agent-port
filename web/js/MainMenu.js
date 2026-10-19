@@ -582,6 +582,25 @@ var MainMenu = (function() {
             wrap.appendChild(skidpad);
         }
 
+        // a replay that someone saved (Replay.js): it needs the same track and cars as the one who made it
+        var replayInput = document.createElement("input");
+        replayInput.type = "file";
+        replayInput.style.display = "none";
+        replayInput.onchange = function() {
+            var file = replayInput.files && replayInput.files[0];
+            if(!file) return;
+            OpenRacer.Replay.openFile(file, cars, tracks).then(function(ids) {
+                window.location.href = window.location.pathname + "?car=" + encodeURIComponent(ids.car) + "&track=" + encodeURIComponent(ids.track) + "&replay=1";
+            }).catch(function(problem) { render(problem.message || "This file could not be opened."); });
+        };
+        wrap.appendChild(replayInput);
+        var openReplay = document.createElement("button");
+        openReplay.className = "secondary";
+        openReplay.textContent = "Open a replay";
+        openReplay.title = "Watch a replay that was saved from the game (a .openracer-replay file)";
+        openReplay.onclick = function() { replayInput.click(); };
+        wrap.appendChild(openReplay);
+
         var foot = document.createElement("div");
         foot.className = "foot";
         foot.innerHTML = "Cars are in <code>web/cars</code> and tracks in <code>web/tracks</code>: a folder with a <code>car.json</code> or " +

@@ -79,6 +79,7 @@ function trackLoaded() {
 function setupRace() {
     var options = race.options = raceOptionsFromQuery(new URLSearchParams(window.location.search));
     var track = currentTrack;
+    if(new URLSearchParams(window.location.search).get("replay") === "1") { setupReplayViewer(); return; }
     if(new URLSearchParams(window.location.search).get("recordline") === "1") { recordLine(); return; }
     if(new URLSearchParams(window.location.search).get("mode") === "skidpad") { startSkidpad(); return; }
     // the racing line: a line saved with the track (recorded for it), the middle of a designed track, or the best lap that was driven here
@@ -137,6 +138,23 @@ function setupRace() {
         car.raceCount = race.opponents.length + 1;
     }
     if(options.laps > 0) startRace(options.laps);
+}
+
+// A replay that was opened from a file (Replay.js, "Open a replay" in the main menu): the cars of the file are made without a driver and the
+// recording is shown as soon as their models have loaded. There is no race behind it: Escape goes back to the main menu.
+function setupReplayViewer() {
+    race.options = { ai: 0, ghost: false, records: false, laps: 0, wear: 0 };
+    OpenRacer.Replay.takeStash().then(function(parsed) {
+        var back = function(text) { banner(text); setTimeout(function() { window.location.href = window.location.pathname; }, 3500); };
+        if(!parsed) { back("The replay is no longer there: open the file again from the main menu."); return; }
+        for(var i = 1; i < parsed.header.cars.length; i++) {
+            var entry = parsed.header.cars[i];
+            var config = race.allCars.filter(function(c) { return c.id === entry.id; })[0];
+            if(!config) { back("This replay needs the car " + entry.id + ", which this game does not have."); return; }
+            race.opponents.push(new OpenRacer.Opponent(config, null, { skill: 1, color: entry.color, name: entry.name }));
+        }
+        race.viewer = parsed;
+    }).catch(function(error) { console.error(error); banner("The replay could not be opened."); });
 }
 
 // A race: a standing start with a countdown (everyone is held on the grid), a number of laps, and the results once the cars
@@ -404,6 +422,14 @@ function updateRace(delta) {
 
 function onEnterFrame() {
     Settings.update();
+    // a replay from a file: once the cars have loaded it is shown, and the game itself never runs
+    if(race.viewer && car && car.isReady() && race.opponents.every(function(o) { return o.loaded; })) {
+        OpenRacer.Replay.load(race.viewer, [car].concat(race.opponents));
+        race.viewer = null;
+        OpenRacer.Replay.start();
+        lastFrameTime = performance.now();
+    }
+    if(race.viewer) return;
     // the replay (Replay.js): the game stands still and the recording is shown
     if(OpenRacer.Replay && OpenRacer.Replay.active) {
         var replayNow = performance.now();

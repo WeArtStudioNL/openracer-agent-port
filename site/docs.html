@@ -238,6 +238,9 @@ cd openracer-agent-port
                 <li><b>Speed.</b> 0.1×, 0.25×, 0.5×, 1×, 2×, 3× and 5×, forwards and backwards.</li>
                 <li><b>Keys.</b> <kbd>Space</kbd> pauses and plays, the left and right arrows jump five seconds, <kbd>Home</kbd> and <kbd>End</kbd> go to the start and the end, <kbd>T</kbd> switches the camera. <kbd>Esc</kbd> or <b>Back to the game</b> returns to the game, which goes on exactly where you left it.</li>
             </ul>
+            <h3 id="replay-share">Saving and sharing a replay</h3>
+            <p><b>Save replay</b> in the bar saves the recording as one file (<code>.openracer-replay</code>, compressed). Send it to anyone you like: nothing goes to a server. Someone else opens it with <b>Open a replay</b> in the main menu and gets the same bar, with the slider and the speeds, but they cannot drive in it.</p>
+            <p>The file holds the recording and the ids of the track and the cars, not their models, so the other one needs the same track and cars. The standard ones of the game are enough. For a car or a track of your own, send them as a zip (<i>My garage</i> exports one) to import in <i>My garage</i>. If something is missing, the game says exactly what. A file from another version of the game is refused with a message, and a damaged one never starts a game. A recording of ten minutes with four cars is about eight megabytes.</p>
             <p>The recording is kept in memory, about 4 KB a second for every car, and the last half hour is kept. It is gone when the page is reloaded or you go back to the main menu. Skid marks and smoke are not recorded: they stay as they were drawn.</p>
         </section>
 
