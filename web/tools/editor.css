@@ -228,3 +228,7 @@ button.set { height: 19px; padding: 0 7px; font-size: 11px; margin-left: 5px; ve
 #testBar { flex-direction: column; align-items: stretch; gap: 6px; }
 #testBar .tabs { display: flex; gap: 6px; justify-content: center; }
 #testBar .tabpane { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
+#testBar .tabpane[data-pane="crash"] { flex-direction: column; }
+#testBar .crashrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; justify-content: center; }
+#testBar .slider.numberfield { width: 110px; }
+#testBar .slider.numberfield input { width: 100%; box-sizing: border-box; }

@@ -1597,17 +1597,6 @@ export function initSoftBody(api) {
         if (bench.vehicle && sb.savedGround) { bench.vehicle.ground = sb.savedGround; }
     }
     $("sbCrash").addEventListener("click", crash);
-    $("sbRepair").addEventListener("click", () => {
-        const v = bench.vehicle;
-        if (!v) return;
-        stopCrash();
-        restoreCamera();
-        releaseForce();
-        sb.savedGround = null;
-        if (sb.pushMode) ensureGround3D();                          // the push mode needs the 3D ground
-        v.reset(0, 0, Math.PI / 2);
-        $("sbResult").textContent = "Repaired.";
-    });
 
     // the bench stops: the shell and the wall go
     function onStop() {

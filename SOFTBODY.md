@@ -225,3 +225,7 @@ A door with many nodes close together dented by itself a few metres before the w
 Turning a pin about the axis of its hinge changed nothing in the view (the fan was swept from the direction of the part, so it always started at the part). Now the rotation of a pin is split in a **swing** (the tilt of the axis) and a **twist** (the turn about the axis): the swing is what turns the axis, the twist moves the **zero of the angles** against the part. The fan starts at the zero of the pin (the white line), the part lies where it lies (the yellow line), and the range of the hinge in the engine is `[min + twist, max + twist]` measured from the rest place of the part (`Parts.js`: `tau = 2 * atan2(q·axis, q.w)`). So the fan, the arcs and the real movement of the door agree, and turning the pin about its axis shifts the range. The window warns when the closed part lies outside min and max (it would be pushed into the range at the start). **Reset** (no rotation) is the old way: zero at the part.
 
 A pin with several axes (a ball) keeps the old drawing; its angles are not enforced anyway.
+
+### The Crash test tab has two rows; no Repair button
+
+The **Crash test** tab of the test buttons has two rows: the crash test (speed, angle, **Crash into the wall**) and, under it, **Apply force** (push in kg, mass and side of the cube, the button). The Soft body card only keeps the line with the results of the crash test and of the cube. The **Repair** button is gone: **Stop crash test** (the Stop test button) goes back to the model, and the next test starts with a new car.
