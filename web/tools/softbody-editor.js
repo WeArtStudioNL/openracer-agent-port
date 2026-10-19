@@ -1484,7 +1484,7 @@ export function initSoftBody(api) {
             crashUi(true);
             if (!sb.camSaved) sb.camSaved = { position: camera.position.clone(), target: controls.target.clone() };      // where the camera was, to put it back
             // the car stays where it is and drives straight ahead; only the wall is new (a few metres in front of its nose), and the camera is left alone
-            WALL_Z = 2.6 + 4;
+            WALL_Z = 3 * (2.6 + 4);                                  // 19.8 m: three times as far as it was (6.6 m)
             sb.wall = wallMesh(floorY, angle);
             scene.add(sb.wall);
             sb.savedGround = sb.savedGround || v.ground;

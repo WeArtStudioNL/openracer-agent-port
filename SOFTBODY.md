@@ -90,7 +90,7 @@ The "Soft body" card of the car editor (`web/tools/softbody-editor.js`, hooked i
 * **Show the shell**: starts the test bench, makes the shell from the model as the game does, and draws the nodes and beams over it. A node is green when whole, yellow at its yield bend, red above it, grey when its anchor is torn.
 * **Selection**: click a node or a beam in the view; set its yield and break force (kN) or put it back to the default. Saved as `softbody.nodes` (`{ i, yield_force, break_force }`) and `softbody.beams` (`{ a, b, ... }`). The numbers belong to the nodes as they are made from the model: change the model and they may point elsewhere.
 * **Parts…**: a list of the objects of the model with a behaviour (hinge or loose) and every number of `parts`; the hinges are drawn as orange arrows in the view.
-* **Crash test**: a speed (10 to 150 km/h) and an angle of the wall; the car drives straight ahead from its start point into a wall on a 3D ground (only the wall is added, 6.6 m ahead of the middle of the car), the camera follows, and the card shows the peak deceleration, the bend, the energy that the shell took up, the torn anchors and beams and the part events. **Repair** puts everything back.
+* **Crash test**: a speed (10 to 150 km/h) and an angle of the wall; the car drives straight ahead from its start point into a wall on a 3D ground (only the wall is added, 19.8 m ahead of the middle of the car), the camera follows, and the card shows the peak deceleration, the bend, the energy that the shell took up, the torn anchors and beams and the part events. **Repair** puts everything back.
 * Edits of strengths in the view act on the bench at once; the other settings make the shell again (a moment after the last change).
 
 ### Editing the nodes, the lasso and the folding bars
@@ -193,6 +193,6 @@ Tested with a door of 10 kg: at 30 and 60 km/h against a wall it stayed shut wit
 
 ### The crash test: the camera follows, the test buttons make room
 
-The car drives straight ahead from its start point and only the wall is added (6.6 m ahead of the middle of the car). The **camera follows the car** during the test, and is **put back where it was** when the test is stopped or the car is repaired. While the test runs the **test buttons are hidden** and a **Stop crash test** button sits in their place: it does what the **Stop test** button of the test buttons does: the wall goes, the test bench stops and the editor is back at the model as it is, with the test buttons back (they also come back after Repair).
+The car drives straight ahead from its start point and only the wall is added (19.8 m ahead of the middle of the car). The **camera follows the car** during the test, and is **put back where it was** when the test is stopped or the car is repaired. While the test runs the **test buttons are hidden** and a **Stop crash test** button sits in their place: it does what the **Stop test** button of the test buttons does: the wall goes, the test bench stops and the editor is back at the model as it is, with the test buttons back (they also come back after Repair).
 
 The camera is put back by `stopCrash()` itself, so it goes back however the test ends: Stop crash test, Repair, a restart of the bench (a change in the part window) or a new test.
