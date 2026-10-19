@@ -249,3 +249,9 @@ While the crash test runs the whole interface is hidden but the **Stop crash tes
 ### The nodes of a part that opens stay for 0.3 s
 
 When a part with nodes of its own opened (it was loaded past its "opens at"), its nodes left the shell at once. A car whose nose is made of the nodes of the hood, the bumper and the licence plate (opens at 20, 5 and 5 kN) therefore hit the wall with nothing to take the hit: the nodes were gone before they had moved, the shell did not bend (0.001 m, 0 J taken up) and the car bounced off the wall as a rigid body. Now the nodes of a part go on 0.3 s after it opens (`part.detachTimer`), so they take the hit and bend, and then they go with the part, with the dents they have. Mustang at 60 km/h after the change: the body 7.9 cm, the bumper 1.9 cm, 15 kJ taken up, the hood, the bumper and the plate open.
+
+### Selecting parts: nothing, the body, and the right objects
+
+* **A click on nothing (or on the body) lets go of the part**: the part window closes and the outline goes (not while a pin or the nodes are being added).
+* **What is loose is told by the footprint**, not by the number of triangles. The test was "this object has less than 40% of the triangles of the model", and in a model where the engine has 550 000 triangles and the body 6 800 that was wrong: once the test bench had started (its model has no wheels, so its totals are different) the scene that holds all counted as loose, and a click on the plate or the bumper selected "Scene". Now an object whose width times length is 45% or more of that of the model (the body, and the scene) is not loose, and what the suspension rig moves (`rig-…`, `susp_…`, `brake_caliper…`), the wheels and the steering wheel are not either.
+* **No gizmo of the pin while nodes are added**: the rings and the fan of the pin are away in that mode (they were in the way) and come back when it stops.

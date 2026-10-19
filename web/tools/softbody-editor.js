@@ -1072,22 +1072,27 @@ export function initSoftBody(api) {
 
     // which objects are loose: a named object that is not (a part of) the body, the wheels or the steering wheel. The body is the object with
     // most of the triangles; what hangs in it (the plates) and beside it (a door, the hood) is loose.
-    const triCache = new WeakMap();
-    function triangles(o) {
-        if (triCache.has(o)) return triCache.get(o);
-        let n = 0;
-        o.traverse((m) => { if (m.isMesh && m.geometry) n += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3; });
-        triCache.set(o, n);
-        return n;
+    // The footprint of an object (its width times its length, seen from above) against that of the whole model: the body, and the scene that holds
+    // everything, cover most of it; a hood, a door, a plate cover a little. (The number of triangles says nothing: the body can have few and the
+    // engine a million.)
+    const footCache = new WeakMap();
+    const footBox = new THREE.Box3(), footSize = new THREE.Vector3(), rootSize = new THREE.Vector3();
+    function footprint(o, root) {
+        if (footCache.has(o)) return footCache.get(o);
+        root.updateMatrixWorld(true);
+        footBox.setFromObject(root); footBox.getSize(rootSize);
+        footBox.setFromObject(o); footBox.getSize(footSize);
+        const share = (footSize.x * footSize.z) / Math.max(1e-6, rootSize.x * rootSize.z);
+        footCache.set(o, share);
+        return share;
     }
     function looseOf(hitObject) {
         const root = viewModel();
         if (!root) return null;
-        const total = triangles(root) || 1;
         let found = null;
         for (let o = hitObject; o && o !== root; o = o.parent) {
-            if (!o.name || triangles(o) / total >= 0.4) continue;          // no name, or the body (or the scene that holds all)
-            if (/wheel|tyre|tire|steer/i.test(o.name)) return null;
+            if (!o.name || footprint(o, root) >= 0.45) continue;           // no name, or the body (or the scene that holds all)
+            if (/wheel|tyre|tire|steer|^rig-|^susp_|brake_caliper/i.test(o.name)) return null;       // not the wheels and the parts of the suspension that the rig moves
             found = o;
         }
         return found;
@@ -1155,7 +1160,7 @@ export function initSoftBody(api) {
             addPartNode(toVeh(hit.point));
             return true;
         }
-        if (!hit) return false;
+        if (!hit) { if (sb.partWin && !sb.partMode) closePartWindow(); return false; }          // a click on nothing lets go of the part
         // with the shell shown a click near a node is a selection of that node
         if (sb.shown && softBody()) {
             sb.group.updateMatrixWorld(true);
@@ -1163,7 +1168,7 @@ export function initSoftBody(api) {
             for (let k = 0; k < s.count; k++) { const [x, y] = screenOf(s, k, rect); if (Math.hypot(x - mx, y - my) < 14) return false; }
         }
         const loose = looseOf(hit.object);
-        if (!loose) return false;
+        if (!loose) { if (sb.partWin && !sb.partMode) closePartWindow(); return false; }      // so does a click on the body
         openPartWindow(loose);
         return true;
     }
@@ -1176,7 +1181,7 @@ export function initSoftBody(api) {
         sb.partMode = null;
         sb.deferRestart = false;
         if (was === "nodes") { changed(true); rebuildSoon(); }
-        renderPartWin();
+        renderPartWin(); drawPartGizmos();
     }
     function rebuildSoon() { clearTimeout(restartTimer); restartTimer = setTimeout(() => { if (bench.vehicle) rebuild(); }, 200); }
 
@@ -1328,7 +1333,7 @@ export function initSoftBody(api) {
             if (!s) { status("The car does not dent: tick “The car dents” first.", "error"); return; }
             freeze(s);
             sb.partMode = "nodes"; sb.deferRestart = true;
-            renderPartWin();
+            renderPartWin(); drawPartGizmos();
         });
         if (sb.partMode === "nodes") add('<p class="hint">Click on the surface of ' + w.name + ' to add nodes: the part bends with them. Esc or the button stops.</p>');
         if (!own.length) add('<p class="hint">No nodes added yet: the part does not bend, it is one stiff piece.</p>');
@@ -1401,7 +1406,7 @@ export function initSoftBody(api) {
             const ball = new THREE.Mesh(new THREE.SphereGeometry(i === sb.pinSel ? 0.04 : 0.028, 14, 10), mark(0xff9f43));
             ball.position.set(...pin.point); ball.renderOrder = 15;
             g.add(ball);
-            if (i !== sb.pinSel) return;
+            if (i !== sb.pinSel || sb.partMode === "nodes") return;                  // no gizmo of the pin while nodes are added: it is in the way
             // the gizmo: every axis that is free, and the angles that it may turn through (from the rest place, towards min and max)
             const axes = pin.axes || { x: true, y: false, z: false };
             const min = (pin.min !== undefined ? pin.min : -90) * Math.PI / 180, max = (pin.max !== undefined ? pin.max : 90) * Math.PI / 180;
@@ -1473,7 +1478,7 @@ export function initSoftBody(api) {
         }
         // the pivot that the rotate gizmo holds: at the chosen pin, turned as it is
         const pinNow = part && part.mounts && part.mounts[sb.pinSel];
-        if (pinNow && pinNow.point) {
+        if (pinNow && pinNow.point && sb.partMode !== "nodes") {
             if (!sb.pinPivot) sb.pinPivot = new THREE.Object3D();
             g.add(sb.pinPivot);
             if (!rc.dragging) { sb.pinPivot.position.set(...pinNow.point); sb.pinPivot.quaternion.set(...(pinNow.rot || [0, 0, 0, 1])); }
