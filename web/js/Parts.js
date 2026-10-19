@@ -314,7 +314,8 @@ OpenRacer.Parts = (function () {
                 part.body.setLinvel({ x: b.x, y: b.y, z: b.z }, true);
                 part.body.setAngvel({ x: v.wx, y: v.wy, z: v.wz }, true);
                 leaveModel(part);
-                if (part.group && sb) sb.detachGroup(part.group);
+                // the nodes of the part go with it, but not before the hit is over: while it is being hit they go on taking it (and deforming)
+                if (part.group && sb) part.detachTimer = 0.3;
             }
             if (how === "hinge") {
                 joinHinge(part);
@@ -368,6 +369,7 @@ OpenRacer.Parts = (function () {
             var moving = false;
             for (var i = 0; i < parts.length; i++) {
                 var part = parts[i];
+                if (part.detachTimer > 0) { part.detachTimer -= dt; if (part.detachTimer <= 0 && sb) sb.detachGroup(part.group); }
                 // the load: inertia of the part (mass times the acceleration of its place) and the shell on its nodes
                 pointVelocity(part.centre, b);
                 var inertia = 0;
@@ -482,6 +484,7 @@ OpenRacer.Parts = (function () {
                     p.object.traverse(function (m) { if (m.userData && m.userData.sbDeform) m.userData.sbDeform.value = 1; });
                 }
                 p.mounts.forEach(function (m) { m.alive = true; });
+                p.detachTimer = 0;
                 p.state = "held"; p.hasVel = false; p.grace = 0; p.region = null;
             }
         }

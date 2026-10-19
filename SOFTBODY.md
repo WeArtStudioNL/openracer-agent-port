@@ -245,3 +245,7 @@ The camera no longer follows with smoothing: it moves by exactly the movement of
 ### The crash test shows the car, the wall and the stop button, nothing else
 
 While the crash test runs the whole interface is hidden but the **Stop crash test** button: the side bars, the toggles, the text and the messages, the part window, the test buttons, the nodes and beams of the shell, the gizmos, the markers of the cameras, the axes, the arrow of the model and the floor grid of the editor. What is left is the car, the wall (10% opaque) and the button. Everything comes back when the test is stopped (`document.body.classList` "crashing", `crashUi`).
+
+### The nodes of a part that opens stay for 0.3 s
+
+When a part with nodes of its own opened (it was loaded past its "opens at"), its nodes left the shell at once. A car whose nose is made of the nodes of the hood, the bumper and the licence plate (opens at 20, 5 and 5 kN) therefore hit the wall with nothing to take the hit: the nodes were gone before they had moved, the shell did not bend (0.001 m, 0 J taken up) and the car bounced off the wall as a rigid body. Now the nodes of a part go on 0.3 s after it opens (`part.detachTimer`), so they take the hit and bend, and then they go with the part, with the dents they have. Mustang at 60 km/h after the change: the body 7.9 cm, the bumper 1.9 cm, 15 kJ taken up, the hood, the bumper and the plate open.
