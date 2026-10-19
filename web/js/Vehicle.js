@@ -846,12 +846,31 @@ OpenRacer.Vehicle = function (parameters, input) {
     }
 
     // The forces of the walls on the nodes (a stiff spring with a damper and friction, at the place where the node is now, bent or not)
+    // The triangles that a node can touch in this step of the physics, found once (the car does not move while the shell takes its small steps, and
+    // a node moves a few centimetres at most): the small steps only test these. Before, every small step (up to 14) went through all the triangles
+    // near the car for every node, which made the game stutter on a bump or a ramp, where there are many.
+    var nodeTris = [], nodeTriCount = 0, nodeTriMargin = 0.2;
+    function buildNodeTriangles() {
+        var sb = self.softBody, ground = self.ground;
+        var upY = Rm[4];
+        var list = upY > 0.2 ? wallCandidates : candidates;
+        nodeTriCount = 0;
+        if(!list.length) return;
+        for(var k = 0; k < sb.count; k++) {
+            var tris = nodeTris[k] || (nodeTris[k] = []);
+            tris.length = 0;
+            if(!sb.alive(k)) continue;
+            sb.position(k, nodePos);
+            var cx = self.px + Rm[0] * nodePos.x + Rm[1] * nodePos.y + Rm[2] * nodePos.z, cy = self.py + Rm[3] * nodePos.x + Rm[4] * nodePos.y + Rm[5] * nodePos.z, cz = self.pz + Rm[6] * nodePos.x + Rm[7] * nodePos.y + Rm[8] * nodePos.z;
+            var reach = sb.radiusOf(k) + nodeTriMargin;
+            for(var i = 0; i < list.length; i++) if(ground.boxNear(list[i], cx, cy, cz, reach)) { tris.push(list[i]); nodeTriCount++; }
+        }
+    }
     function nodeContacts(h) {
         var sb = self.softBody, ground = self.ground;
         var P = sb.params;
         var upX = Rm[1], upY = Rm[4], upZ = Rm[7];
-        var list = upY > 0.2 ? wallCandidates : candidates;     // a car that is not upright (on its side, on its roof) can also hit the flat triangles
-        if(!list.length) return;
+        if(!nodeTriCount) return;
         var yUnder = -self.cgHeight + self.groundClearance;
         var ux = self.px + upX * yUnder, uy = self.py + upY * yUnder, uz = self.pz + upZ * yUnder;
         for(var k = 0; k < sb.count; k++) {
@@ -860,9 +879,10 @@ OpenRacer.Vehicle = function (parameters, input) {
             var rx = Rm[0] * nodePos.x + Rm[1] * nodePos.y + Rm[2] * nodePos.z, ry = Rm[3] * nodePos.x + Rm[4] * nodePos.y + Rm[5] * nodePos.z, rz = Rm[6] * nodePos.x + Rm[7] * nodePos.y + Rm[8] * nodePos.z;
             var cx = self.px + rx, cy = self.py + ry, cz = self.pz + rz, r = sb.radiusOf(k);
             var fx = 0, fy = 0, fz = 0;
-            for(var i = 0; i < list.length; i++) {
-                var t = list[i];
-                if(!ground.boxNear(t, cx, cy, cz, r)) continue;
+            var mine = nodeTris[k];
+            if(!mine || !mine.length) continue;
+            for(var i = 0; i < mine.length; i++) {
+                var t = mine[i];
                 var d2 = ground.closest(t, cx, cy, cz, nearest);
                 if(d2 >= r * r) continue;
                 var dist = Math.sqrt(d2);
@@ -915,6 +935,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         refreshCandidates();
         setTurn();
         if(sb.quiet && !sb.plate && !wallCandidates.length && Rm[4] > 0.2) return;      // nothing to hit and nothing moving
+        buildNodeTriangles();
         sb.step(dt, nodeContacts);
         var rc = sb.reaction;
         var fx = Rm[0] * rc[0] + Rm[1] * rc[1] + Rm[2] * rc[2], fy = Rm[3] * rc[0] + Rm[4] * rc[1] + Rm[5] * rc[2], fz = Rm[6] * rc[0] + Rm[7] * rc[1] + Rm[8] * rc[2];

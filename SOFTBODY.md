@@ -299,3 +299,7 @@ A hinge that flew open at the speed of a crash, or a part that a hit threw, move
 * **a top speed** that is kept after every step of the engine (two a frame): a hinged part spins at 12 rad/s at most and a free part at 30 (`max_spin` in the spec), and its speed does not exceed that of the car plus 12 m/s (plus 20 m/s more for a free part).
 
 Mustang at 100 km/h (the car at 27.8 m/s): the hood on its hinge spun 2.8 rad/s at most, the plates and the headlights that flew off 12 to 27 rad/s, and no part went faster than 4 m/s against the car.
+
+### The game no longer stutters on a bump or a ramp
+
+On a bump, a jump or a ramp there are many triangles near the car that are not flat (the ramp itself), so the shell is worked out in full, and every one of its small steps (up to 14, see the step that follows the stiffest place) went through all those triangles for every node. `Vehicle.js` now finds, once per step of the physics, the triangles that each node can touch (`buildNodeTriangles`: within the radius of the node plus 0.2 m; the car does not move while the shell takes its small steps and a node moves a few centimetres at most), and the small steps only test those. On the test track with the Mustang of the example (195 nodes), driving up the ramp: the physics took 1.35 ms a step on average before (95% under 6.6 ms, at worst 13.4 ms) and 0.55 ms after (95% under 1.6 ms, at worst 2.4 ms). The crash test is the same as before (100 km/h: 38 cm of bend, 67 g, the parts come off).
