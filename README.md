@@ -4,6 +4,8 @@ A racing simulator that runs in the browser. It simulates the whole car (a body 
 
 **Play it and read the docs: [openracer.eu](https://openracer.eu)** (the game is at [openracer.eu/game](https://openracer.eu/game/), the documentation at [openracer.eu/docs.html](https://openracer.eu/docs.html)). The source of the site is in `site/`.
 
+**Join the community on [Discord](https://discord.gg/JFgHVFUagF)** to share setups, cars and tracks, ask for help and talk about development.
+
 Released under the GPLv3 License.
 
 ## About this fork
