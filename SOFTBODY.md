@@ -143,3 +143,11 @@ A part can have **nodes of its own**, so that it dents by itself and its hold on
 * The model of the part (the meshes of the object that the part names) bends with the nodes of the part only, and the model of the body with the nodes that belong to no part.
 * When a link beam tears, that mount is gone and the part opens on the other one; with none left it is free. When the part comes loose its nodes leave the shell (they are not simulated, they do not hit the road), and **the part keeps its dents**: its model keeps the bend that it had.
 * Without nodes of its own a part is a rigid piece that bends with the shell while it sits on the car, as before.
+
+### The Set buttons (parts panel)
+
+The "Parts…" panel is not modal any more: it stays beside the view, so nodes can be selected while it is open. Next to every value there is a button that takes it from the view, so no node numbers have to be known:
+
+* **Pick on the model** (object): click the part on the model; the name of the group around the mesh is used (the chain from mesh to root is in the status line, and the field can be edited).
+* **Set = selected node** (hinge point A and B), **Set = selected nodes** (held by, own nodes of the part), **Clear** (own nodes).
+* **Origin**: **Node** (the place of the selected node) or **Pick point** (click a point on the model surface). **Axis**: **A→B** (from the two hinge points) or **X**, **Y**, **Z**.

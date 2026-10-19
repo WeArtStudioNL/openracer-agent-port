@@ -228,7 +228,7 @@
                 <div class="row">
                     <button class="small accent" id="sbShow">Show the shell</button>
                     <button class="small" data-open="dlgSoftBody">Material and strengths…</button>
-                    <button class="small" data-open="dlgParts">Parts…</button>
+                    <button class="small" id="sbPartsOpen" title="The parts panel stays open next to the view, so you can select nodes while it is open">Parts…</button>
                 </div>
                 <div class="group">Selection</div>
                 <div class="hint" id="sbSelection">Show the shell, then click a node or a beam in the view.</div>
@@ -442,7 +442,8 @@
 <dialog id="dlgParts">
     <div class="head"><h3>Parts that swing or come loose</h3><button class="close" data-close>×</button></div>
     <div class="content">
-        <p class="sub">A part is an object of the model (a door, the hood, a mirror, a wing). <b>Hinge</b>: it turns about an axis, between two angles, with a spring that brings it back to its rest angle and a damper. With a <b>latch force</b> it sits shut until the load on it passes that force, with a <b>break force</b> it tears off then. <b>Loose</b>: it sits on the car until the load passes the break force, and then it is a free object that falls and slides. The load is the mass times the acceleration of its place, or the force of the shell on the nodes it hangs on, whichever is more. The origin and the axis are in the frame of the car: x to the left, y up, z forward, from the centre of gravity; with the shell shown, the arrows in the view are the hinges.</p>
+        <p class="sub">Keep this panel open: select nodes in the view (or click on the model) and use the <b>Set</b> buttons next to the fields.</p>
+        <details><summary class="hint" style="cursor:pointer">What the fields mean</summary><p class="sub">A part is an object of the model (a door, the hood, a mirror, a wing). <b>Hinge</b>: it turns about an axis, between two angles, with a spring that brings it back to its rest angle and a damper. With a <b>latch force</b> it sits shut until the load on it passes that force, with a <b>break force</b> it tears off then. <b>Loose</b>: it sits on the car until the load passes the break force, and then it is a free object that falls and slides. The load is the mass times the acceleration of its place, or the force of the shell on the nodes it hangs on, whichever is more. The origin and the axis are in the frame of the car: x to the left, y up, z forward, from the centre of gravity; with the shell shown, the arrows in the view are the hinges.</p></details>
         <div id="sbParts"></div>
         <div class="buttons"><button class="small accent" id="sbAddPart">Add a part</button></div>
         <datalist id="sbObjectNames"></datalist>

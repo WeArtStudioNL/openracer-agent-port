@@ -88,17 +88,19 @@ export function initSoftBody(api) {
         row.className = "material";
         const h = part.hinge || {};
         const vec = (v, d) => (v || d).join(", ");
+        const set = (f, label) => '<button type="button" class="small ghost set" data-set="' + f + '">' + label + "</button>";
         row.innerHTML =
-            '<div class="row"><div><label>Object of the model</label><input type="text" list="sbObjectNames" data-f="object"></div>' +
+            '<div class="row"><div><label>Object of the model ' + set("object", "Pick on the model") + '</label><input type="text" list="sbObjectNames" data-f="object"></div>' +
             '<div><label>Behaviour</label><select data-f="mode">' + MODES.map((m) => '<option value="' + m[0] + '">' + m[1] + "</option>").join("") + "</select></div>" +
             '<div><label>Mass (kg)</label><input type="number" data-f="mass" step="0.5" min="0.1"></div>' +
             '<div class="fixed"><label>&nbsp;</label><button class="small ghost" data-f="remove">Remove</button></div></div>' +
             '<div class="row loose"><div><label>Breaks loose at (kN)</label><input type="number" data-f="break_force" step="0.5" min="0"></div><div></div><div></div></div>' +
-            '<div class="row"><div><label>Held by nodes (numbers, comma)</label><input type="text" data-f="heldBy" placeholder="the 3 nearest"></div></div>' +
-            '<div class="hinge"><div class="row"><div><label>Hinge point A (node)</label><input type="number" data-f="mA" step="1" min="0"></div><div><label>tears off at (kN)</label><input type="number" data-f="mAf" step="1" min="0" placeholder="0: never"></div>' +
-            '<div><label>Hinge point B (node)</label><input type="number" data-f="mB" step="1" min="0"></div><div><label>tears off at (kN)</label><input type="number" data-f="mBf" step="1" min="0" placeholder="0: never"></div></div>' +
-            '<div class="row"><div><label>Origin x, y, z (m)</label><input type="text" data-f="origin" placeholder="the middle of the part"></div>' +
-            '<div><label>Axis x, y, z</label><input type="text" data-f="axis" placeholder="0, 1, 0"></div></div>' +
+            '<div class="row"><div><label>Held by nodes ' + set("heldBy", "Set = selected nodes") + '</label><input type="text" data-f="heldBy" placeholder="the 3 nearest"></div></div>' +
+            '<div class="row"><div><label>Own nodes of the part ' + set("partNodes", "Set = selected nodes") + set("partNodesClear", "Clear") + '</label><div class="hint" data-f="partNodesInfo"></div></div></div>' +
+            '<div class="hinge"><div class="row"><div><label>Hinge point A (node) ' + set("mA", "Set = selected node") + '</label><input type="number" data-f="mA" step="1" min="0"></div><div><label>tears off at (kN)</label><input type="number" data-f="mAf" step="1" min="0" placeholder="0: never"></div>' +
+            '<div><label>Hinge point B (node) ' + set("mB", "Set = selected node") + '</label><input type="number" data-f="mB" step="1" min="0"></div><div><label>tears off at (kN)</label><input type="number" data-f="mBf" step="1" min="0" placeholder="0: never"></div></div>' +
+            '<div class="row"><div><label>Origin x, y, z (m) ' + set("originNode", "Node") + set("originPick", "Pick point") + '</label><input type="text" data-f="origin" placeholder="the middle of the part"></div>' +
+            '<div><label>Axis ' + set("axisAB", "A→B") + set("axisX", "X") + set("axisY", "Y") + set("axisZ", "Z") + '</label><input type="text" data-f="axis" placeholder="0, 1, 0"></div></div>' +
             '<div class="row"><div><label>Lowest angle (°)</label><input type="number" data-f="min" step="5" placeholder="-90"></div>' +
             '<div><label>Highest angle (°)</label><input type="number" data-f="max" step="5" placeholder="90"></div>' +
             '<div><label>Rest angle (°)</label><input type="number" data-f="rest" step="5" placeholder="0"></div></div>' +
@@ -127,6 +129,9 @@ export function initSoftBody(api) {
         };
         showMode();
         row.addEventListener("change", () => { readRow(row, part); showMode(); changed(); drawHinges(); });
+        row.addEventListener("click", (e) => { const b = e.target.closest("[data-set]"); if (b) setField(row, part, b.dataset.set); });
+        const own = sb.layout ? sb.layout.filter((n) => n.part === part.object).length : 0;
+        q("partNodesInfo").textContent = own ? own + " nodes of its own (orange in the view)" : "none: the part is one rigid piece";
         q("remove").addEventListener("click", () => { sb.parts.splice(sb.parts.indexOf(part), 1); renderParts(); changed(); drawHinges(); });
         return row;
     }
@@ -179,8 +184,65 @@ export function initSoftBody(api) {
         api.nodeNames().forEach((name) => { const o = document.createElement("option"); o.value = name; names.appendChild(o); });
     }
     $("sbAddPart").addEventListener("click", () => { sb.parts.push({ object: "", mode: "hinge", mass: 10, hinge: {} }); renderParts(); });
-    document.querySelector('[data-open="dlgParts"]').addEventListener("click", renderParts);
+    // the panel is not modal: it stays beside the view, so nodes can be selected while it is open
+    $("sbPartsOpen").addEventListener("click", () => { const d = $("dlgParts"); if (d.open) d.close(); else { renderParts(); d.show(); } });
 
+
+    // The Set buttons of a part: the value comes from what is selected in the view, or from a click on the model
+    function setField(row, part, what) {
+        const s = softBody();
+        const q = (f) => row.querySelector('[data-f="' + f + '"]');
+        const put = (f, value) => { q(f).value = value; q(f).dispatchEvent(new Event("change", { bubbles: true })); };
+        const fail = (text) => status(text, "error");
+        if (!s || !sb.shown) { fail("Show the shell first (the Soft body card), then select nodes in the view."); return; }
+        const one = () => { if (sb.sel.nodes.size !== 1) { fail("Select one node in the view (a click on it)."); return null; } return [...sb.sel.nodes][0]; };
+        const rest = new THREE.Vector3();
+        switch (what) {
+            case "mA": case "mB": { const k = one(); if (k !== null) { put(what, k); status("Node " + k + " is the hinge point " + what.slice(1) + ".", "ok"); } break; }
+            case "heldBy":
+                if (!sb.sel.nodes.size) { fail("Select the nodes that hold the part in the view."); break; }
+                put("heldBy", [...sb.sel.nodes].join(", ")); break;
+            case "originNode": { const k = one(); if (k !== null) { s.restPosition(k, rest); put("origin", [rest.x, rest.y, rest.z].map((x) => x.toFixed(3)).join(", ")); } break; }
+            case "originPick": sb.pick = { type: "origin", part, row }; status("Click the model where the hinge is.", "ok"); break;
+            case "object": sb.pick = { type: "object", part, row }; status("Click the part on the model.", "ok"); break;
+            case "axisAB": {
+                const a = parseInt(q("mA").value, 10), b = parseInt(q("mB").value, 10);
+                if (!(a >= 0 && b >= 0 && a < s.count && b < s.count && a !== b)) { fail("Set the hinge points A and B first."); break; }
+                const p1 = s.restPosition(a, new THREE.Vector3()), p2 = s.restPosition(b, new THREE.Vector3()).sub(p1).normalize();
+                put("axis", [p2.x, p2.y, p2.z].map((x) => x.toFixed(3)).join(", ")); break;
+            }
+            case "axisX": put("axis", "1, 0, 0"); break;
+            case "axisY": put("axis", "0, 1, 0"); break;
+            case "axisZ": put("axis", "0, 0, 1"); break;
+            case "partNodes":
+                if (!sb.sel.nodes.size) { fail("Select the nodes of the part in the view first (a click, or a lasso with the middle mouse button)."); break; }
+                assignPartNodes(part); break;
+            case "partNodesClear":
+                if (sb.layout) { sb.layout.forEach((n) => { if (n.part === part.object) delete n.part; }); changed(true); renderParts(); }
+                break;
+        }
+    }
+    // a click on the model while a Set button waits for it
+    function handlePick(mx, my, rect) {
+        const pick = sb.pick;
+        const hit = surfaceAt(mx, my, rect);
+        if (!hit) return;
+        sb.pick = null;
+        const field = (f) => pick.row.querySelector('[data-f="' + f + '"]');
+        const put = (f, value) => { field(f).value = value; field(f).dispatchEvent(new Event("change", { bubbles: true })); };
+        if (pick.type === "origin") {
+            const local = sb.group.worldToLocal(hit.point.clone());
+            put("origin", [local.x, local.y, local.z].map((x) => x.toFixed(3)).join(", "));
+            status("The hinge origin is on the surface where you clicked.", "ok");
+        } else {
+            const names = [];
+            for (let o = hit.object; o && o !== bench.model.tilt; o = o.parent) if (o.name) names.push(o.name);
+            if (!names.length) { status("That object has no name in the model.", "error"); return; }
+            // the group around the mesh when there is one (a part is usually a group of meshes)
+            put("object", names.length > 1 ? names[1] : names[0]);
+            status("Object: " + names.join(" ← ") + ". Used: " + (names.length > 1 ? names[1] : names[0]) + " (type another name of the list if you mean another level).", "ok");
+        }
+    }
 
     // ---- the points of a part, from the nodes that are selected in the view
     function chosenPart() {
@@ -211,15 +273,20 @@ export function initSoftBody(api) {
         partsChanged(part.object + " is held by " + part.nodes.length + " node" + (part.nodes.length > 1 ? "s" : "") + ".");
     });
     // the nodes of a part: the selected nodes get its name in the layout (the nodes of a part are joined to each other, and to the body by the links of its hinge points)
-    $("sbPartNodes").addEventListener("click", () => {
-        const part = chosenPart(), s = softBody();
-        if (!part || !s) return;
-        if (!sb.sel.nodes.size) { status("Select the nodes of the part in the view first (a click, or a lasso with the middle mouse button).", "error"); return; }
+    function assignPartNodes(part) {
+        const s = softBody();
         freeze(s);
         sb.layout.forEach((n) => { if (n.part === part.object) delete n.part; });
         sb.sel.nodes.forEach((k) => { if (sb.layout[k]) sb.layout[k].part = part.object; });
         $("sbPartInfo").textContent = part.object + " has " + sb.sel.nodes.size + " nodes of its own. The hinge points A and B are joined to its nearest nodes by link beams.";
         changed(true);
+        renderParts();
+    }
+    $("sbPartNodes").addEventListener("click", () => {
+        const part = chosenPart(), s = softBody();
+        if (!part || !s) return;
+        if (!sb.sel.nodes.size) { status("Select the nodes of the part in the view first (a click, or a lasso with the middle mouse button).", "error"); return; }
+        assignPartNodes(part);
     });
     $("sbPartNodesClear").addEventListener("click", () => {
         const part = chosenPart();
@@ -567,6 +634,7 @@ export function initSoftBody(api) {
         const s = softBody(), rect = renderer.domElement.getBoundingClientRect();
         const mx = e.clientX - rect.left, my = e.clientY - rect.top;
         sb.group.updateMatrixWorld(true);
+        if (sb.pick) { handlePick(mx, my, rect); return; }
         if (sb.pushMode) { applyForceAt(mx, my, rect); return; }
         const p = new THREE.Vector3(), p2 = new THREE.Vector3();
         let node = -1, bestD = 14;
@@ -923,7 +991,7 @@ export function initSoftBody(api) {
         if (!hit) return null;
         const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
         if (n.dot(caster.ray.direction) > 0) n.negate();                  // the side that the ray comes from is the outside
-        return { point: hit.point, normal: n };
+        return { point: hit.point, normal: n, object: hit.object };
     }
     renderer.domElement.addEventListener("pointermove", (e) => {
         if (!sb.pushMode || lasso) return;
