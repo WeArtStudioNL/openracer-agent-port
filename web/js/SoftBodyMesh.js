@@ -71,7 +71,7 @@ OpenRacer.SoftBodyMesh = (function () {
             var copies = list.map(function (material) {
                 var copy = material.clone();
                 copy.onBeforeCompile = function (shader) {
-                    shader.uniforms.uNodeD = uniform;
+                    shader.uniforms.uNodeD = mesh.userData.sbUniform || uniform;          // the live bend of the shell, or the bend that a part took with it
                     shader.uniforms.uToLocal = { value: toLocal };
                     shader.uniforms.uDeform = deform;
                     shader.vertexShader = shader.vertexShader
@@ -90,7 +90,23 @@ OpenRacer.SoftBodyMesh = (function () {
             materials: materials,
             // a part that comes loose (Parts.js) stops bending with the shell
             release: function (object) {
-                object.traverse(function (m) { if (m.userData && m.userData.sbDeform) m.userData.sbDeform.value = 0; });
+                // the part comes off the car: it keeps the bend that it has at this moment (a copy of the displacements), and does not follow the shell
+                // any more; before, it went back to its own shape, so a headlight or a grille that came off looked as if it had not been hit
+                var frozen = { value: new Float32Array(3 * MAX_NODES) };
+                frozen.value.set(softBody.displacement);
+                object.traverse(function (m) {
+                    if (!m.isMesh || !m.userData || !m.userData.sbDeform) return;
+                    m.userData.sbUniform = frozen;
+                    (Array.isArray(m.material) ? m.material : [m.material]).forEach(function (mt) { mt.needsUpdate = true; });
+                });
+            },
+            // the part is back on the car (Repair): it follows the shell again
+            unfreeze: function (object) {
+                object.traverse(function (m) {
+                    if (!m.isMesh || !m.userData || !m.userData.sbUniform) return;
+                    delete m.userData.sbUniform;
+                    (Array.isArray(m.material) ? m.material : [m.material]).forEach(function (mt) { mt.needsUpdate = true; });
+                });
             },
             // once per frame: the displacements to the graphics card, when something moved
             update: function () {

@@ -279,3 +279,10 @@ The outline that shows an object could stay on an object that was no longer sele
 ### The camera does not jump when the crash test starts
 
 When the bars go the view gets wider (510 to 1200 px) and the picture was centred again, so the car jumped on the screen. The camera now shows a part of a wider picture (`camera.setViewOffset`) that is centred on the middle of the view as it was (`viewLock`), so what was on the screen stays where it is: the car stayed on the same horizontal place on the screen (689 px) when the test started, and `setViewOffset` is cleared when the test stops. The vertical place changed by 24 px (the car is put at its ride height at the start of the test).
+
+### A part that comes off keeps the dent it had
+
+The grille, the headlights and the plate fell off but were not bent: the moment a part without nodes of its own came off, its model went back to its own shape (`uDeform = 0`), so it flew off as good as new, and a part that opens at its first contact (a low "opens at") came off before the shell had bent at all. Now:
+
+* **It keeps the bend that it has.** `SoftBodyMesh.release` takes a copy of the displacements of the nodes at that moment and gives that to the meshes of the part (`userData.sbUniform`, the shader takes it instead of the live displacements); the part stays as bent as it was and does not follow the shell any more. Repair gives it the live displacements again (`unfreeze`). Measured at 60 km/h on a copy of the Mustang: the vertices of the right headlight moved up to 28 cm, the left one 30 cm, the grille 36 cm and the plate 33 cm in the copy that they took with them (before: 0).
+* **A hinge part also waits for its delay before it opens** (`openSoon`, the same `break_delay`, 0.15 s): it bends with the body for that moment and then swings, as a breakable part does before it comes off.

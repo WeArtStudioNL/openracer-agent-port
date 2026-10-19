@@ -363,6 +363,14 @@ OpenRacer.Parts = (function () {
             else joinHinge(part);
         }
 
+        // A part that is loaded past its force goes on bending with the body for a moment (its delay) and only then opens: what a hit makes of
+        // it (its dent) is then on it when it comes off
+        function openSoon(part) {
+            if (part.openTimer > 0) return;
+            if (!(part.breakDelay > 0)) { startMoving(part, "hinge"); return; }
+            part.openTimer = part.breakDelay;
+        }
+
         function update(dt) {
             dt = Math.min(Math.max(dt, 1e-4), 1 / 20);
             frame++;
@@ -370,6 +378,7 @@ OpenRacer.Parts = (function () {
             var moving = false;
             for (var i = 0; i < parts.length; i++) {
                 var part = parts[i];
+                if (part.openTimer > 0) { part.openTimer -= dt; if (part.openTimer <= 0) { part.openTimer = 0; if (part.state === "held") startMoving(part, "hinge"); } }
                 if (part.detachTimer > 0) { part.detachTimer -= dt; if (part.detachTimer <= 0 && sb) sb.detachGroup(part.group); }
                 // the load: inertia of the part (mass times the acceleration of its place) and the shell on its nodes
                 pointVelocity(part.centre, b);
@@ -399,7 +408,7 @@ OpenRacer.Parts = (function () {
                     });
                     if (broke) {
                         if (part.mounts.some(function (m) { return m.alive; })) startMoving(part, "hinge"); else startMoving(part, "free");
-                    } else if (activated && part.hinge) startMoving(part, "hinge");
+                    } else if (activated && part.hinge) openSoon(part);
                 }
                 if (part.state === "held" && sb && part.mounts.length) {
                     // a link beam of a mount tore (the hold of a part with nodes of its own): that mount is gone, the part opens on the others
@@ -411,7 +420,7 @@ OpenRacer.Parts = (function () {
                 }
                 if (part.state === "held") {
                     if (part.hinge) {
-                        if (!part.hinge.latch || part.load > part.hinge.latch || torn) startMoving(part, "hinge");
+                        if (!part.hinge.latch || part.load > part.hinge.latch || torn) openSoon(part);
                     } else if (part.breakTimer === null || part.breakTimer === undefined) {
                         // a breakable part: when the load passes its force it goes on bending with the body for a moment, and then it comes off
                         if (torn || (part.breakForce > 0 && part.load > part.breakForce)) {
@@ -491,9 +500,10 @@ OpenRacer.Parts = (function () {
                     p.parent.add(p.object);
                     restoreHome(p.object, p.object.userData.partHome);
                     p.object.traverse(function (m) { if (m.userData && m.userData.sbDeform) m.userData.sbDeform.value = 1; });
+                    if (ctx.softBodyMesh && ctx.softBodyMesh.unfreeze) ctx.softBodyMesh.unfreeze(p.object);
                 }
                 p.mounts.forEach(function (m) { m.alive = true; });
-                p.detachTimer = 0; p.breakTimer = null;
+                p.detachTimer = 0; p.breakTimer = null; p.openTimer = 0;
                 p.state = "held"; p.hasVel = false; p.grace = 0; p.region = null;
             }
         }
