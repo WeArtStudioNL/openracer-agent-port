@@ -15,8 +15,14 @@
  *              file holds the recording and the ids of the track and the cars, not their models, so the other one needs the same cars and
  *              track (the standard ones, or the ones of a zip of the garage). Nothing goes to a server.
  *
- *              Keys in the replay: Space pause/play, left and right arrow 5 seconds back and forward, Home and End the start and the end,
- *              T the camera.
+ *              Cameras: Fixed, Follow and Cockpit are those of the game; Free is a camera that is moved by hand: WASD or the arrows move it,
+ *              Shift and Control up and down, the mouse (click the scene) or the right stick looks around like a first person view, [ and ]
+ *              change the field of view. F aims the camera at the car (and the mouse look rests), L fixes the camera to the car, so that it
+ *              goes with it, Tab chooses another car. All movements, the look and the zoom are smoothed and damped; a slider (0.1 to 3)
+ *              sets how fast they are.
+ *
+ *              Keys in the replay: Space pause/play, left and right arrow 5 seconds back and forward (in Free they move the camera),
+ *              Home and End the start and the end, T the camera, H hides the bar and shows it again.
  */
 
 OpenRacer.Replay = (function() {
@@ -204,13 +210,15 @@ OpenRacer.Replay = (function() {
             "#replayBar .speeds { margin-left: auto; }" +
             "#replayBar .speeds span { color: #9fb0c4; margin-right: 2px; }" +
             "#replayBar .exit { background: #3d7bd9; border-color: #3d7bd9; }" +
+            "#replayBar .cameras, #replayBar .freecam { margin-top: 8px; } #replayBar .label { color: #9fb0c4; min-width: 56px; } #replayBar .hint { color: #8795a6; font-size: 12px; }" +
+            "#replayBar .freecam input[type=range] { width: 160px; margin: 0; height: 20px; }" +
             "#replayInfo { position: fixed; left: 16px; top: 14px; z-index: 1400; padding: 8px 12px; background: rgba(14, 18, 24, 0.78); color: #fff; " +
                 "border-radius: 10px; font-family: Arial, sans-serif; font-size: 15px; font-variant-numeric: tabular-nums; pointer-events: none; }" +
             "#replayInfo b { font-size: 22px; }" +
             "@media (max-width: 600px) { #replayBar { bottom: 6px; padding: 8px 8px 10px; } #replayBar button { padding: 6px 8px; min-width: 34px; } }" +
             // a phone on its side: a lower bar, so that the car stays in view
             "@media (max-height: 480px) { #replayBar { bottom: 4px; padding: 5px 10px 6px; } #replayBar .head { margin-bottom: 0; } #replayBar input[type=range] { height: 18px; margin: 2px 0 4px; } " +
-                "#replayBar button { padding: 4px 8px; font-size: 12px; min-width: 30px; } #replayBar .row { gap: 5px; } #replayBar .speeds span { display: none; } #replayInfo { top: 6px; left: 8px; font-size: 13px; padding: 5px 9px; } #replayInfo b { font-size: 17px; } }";
+                "#replayBar button { padding: 4px 8px; font-size: 12px; min-width: 30px; } #replayBar .row { gap: 5px; } #replayBar .speeds span { display: none; } #replayBar .hint { display: none; } #replayBar .cameras, #replayBar .freecam { margin-top: 3px; } #replayBar .label { min-width: 0; } #replayInfo { top: 6px; left: 8px; font-size: 13px; padding: 5px 9px; } #replayInfo b { font-size: 17px; } }";
         document.head.appendChild(style);
     }
 
@@ -273,6 +281,35 @@ OpenRacer.Replay = (function() {
             return button(speeds, s + "×", "Playback speed " + s + "×", function() { speed = s; sync(); });
         });
 
+        // the cameras: the three of the game and the free one
+        var cameraRow = el(bar, "div", "row cameras");
+        el(cameraRow, "span", "label", "Camera");
+        cameraButtons = [["Fixed", "The fixed camera behind the car"], ["Follow", "The camera that follows the car"], ["Cockpit", "In the car"], ["Free", "A camera that you move yourself"]].map(function(c, i) {
+            return button(cameraRow, c[0], c[1] + (i < 3 ? "" : " (WASD or arrows, Shift and Control up and down, mouse look, [ and ] zoom)"), function() {
+                if(i === 3) enterFree();
+                else { leaveFree(); Settings.setOption("camera", i + 1); }
+                updateCameraUi();
+            });
+        });
+        freeRow = el(bar, "div", "row freecam");
+        var speedLabel = el(freeRow, "span", "label", "Speed " + free.speed.toFixed(1) + "×");
+        var speedSlider = el(freeRow, "input");
+        speedSlider.type = "range"; speedSlider.min = "0.1"; speedSlider.max = "3"; speedSlider.step = "0.1"; speedSlider.value = String(free.speed);
+        speedSlider.title = "How fast the free camera moves, looks and zooms";
+        speedSlider.setAttribute("aria-label", "Speed of the free camera");
+        speedSlider.addEventListener("input", function() {
+            free.speed = parseFloat(speedSlider.value);
+            speedLabel.textContent = "Speed " + free.speed.toFixed(1) + "×";
+            try { localStorage.setItem("openracer.replay.freeSpeed", String(free.speed)); } catch(e) { /* no storage */ }
+        });
+        speedSlider.addEventListener("keydown", function(e) { if(/^Arrow/.test(e.code)) e.stopPropagation(); });
+        var aimButton = button(freeRow, "Aim at the car (F)", "The camera keeps looking at the car", function() { toggleAim(); });
+        var parentButton = button(freeRow, "Fixed to the car (L)", "The camera goes with the car, from where it is now", function() { toggleParent(); });
+        var targetButton = button(freeRow, "Car", "The next car (Tab)", function() { nextTarget(); });
+        var hint = el(freeRow, "span", "hint", "WASD or arrows move · Shift up · Control down · click the scene to look around · [ ] zoom");
+        freeInfo = { aim: aimButton, parent: parentButton, target: targetButton };
+        freeRow.style.display = "none";
+
         function sync() {
             rewind.className = playing && direction < 0 ? "on" : "";
             play.className = playing && direction > 0 ? "on" : "";
@@ -282,6 +319,7 @@ OpenRacer.Replay = (function() {
         var info = el(document.body, "div");
         info.id = "replayInfo";
         ui = { bar: bar, info: info, slider: slider, timeLabel: timeLabel, sync: sync };
+        updateCameraUi();
         slider.min = String(api.start_time());
         sync();
     }
@@ -307,6 +345,14 @@ OpenRacer.Replay = (function() {
         if(!api.active) return;
         var target = event.target;
         if(target && /^(TEXTAREA|SELECT)$/.test(target.tagName)) return;
+        keys[event.code] = true;
+        if(free.active) {
+            // the keys of the free camera (the arrows move it, so they do not jump in time then)
+            if(event.code === "KeyF" && !event.repeat) { toggleAim(); event.preventDefault(); return; }
+            if(event.code === "KeyL" && !event.repeat) { toggleParent(); event.preventDefault(); return; }
+            if(event.code === "Tab") { nextTarget(); event.preventDefault(); return; }
+            if(/^Arrow/.test(event.code) || /^(Bracket|Shift|Control)/.test(event.code)) { event.preventDefault(); return; }
+        }
         if(event.code === "Space") {
             if(target && target.tagName === "BUTTON") return;   // the space bar presses a button that has the focus
             event.preventDefault();
@@ -315,10 +361,207 @@ OpenRacer.Replay = (function() {
             ui.sync();
         } else if(event.code === "ArrowLeft" && !(target && target.tagName === "INPUT")) { jump(-5); event.preventDefault(); }
         else if(event.code === "ArrowRight" && !(target && target.tagName === "INPUT")) { jump(5); event.preventDefault(); }
+        else if(event.code === "KeyH" && !event.repeat) { ui.bar.style.display = ui.bar.style.display === "none" ? "" : "none"; event.preventDefault(); }
         else if(event.code === "Home") { jump(-1e9); event.preventDefault(); }
         else if(event.code === "End") { jump(1e9); event.preventDefault(); }
     }
     window.addEventListener("keydown", onKey, true);
+
+    // ---- the free camera
+
+    var V3 = function(x, y, z) { return new THREE.Vector3(x, y, z); };
+    var free = {
+        active: false, speed: 1,
+        pos: V3(0, 0, 0), vel: V3(0, 0, 0),            // in the frame of the camera: the world, or the car while the camera is fixed to it
+        yaw: 0, pitch: 0, yawT: 0, pitchT: 0,          // the way it looks, and where the mouse wants it to look
+        fov: 60, fovT: 60,
+        quat: new THREE.Quaternion(),                  // how it looks in the world, last frame
+        aim: false,                                    // F: aimed at the car
+        parent: false,                                 // L: fixed to the car
+        target: 0                                      // the car (Tab chooses)
+    };
+    try { var storedSpeed = parseFloat(localStorage.getItem("openracer.replay.freeSpeed")); if(storedSpeed >= 0.1 && storedSpeed <= 3) free.speed = storedSpeed; } catch(e) { /* no storage */ }
+    var keys = {};
+    var BASE_SPEED = 12, VERTICAL_SPEED = 8, FOV_RATE = 40, LOOK_SENSITIVITY = 0.0022, STICK_LOOK = 2.4;
+    var tmpQ = new THREE.Quaternion(), tmpQ2 = new THREE.Quaternion(), tmpV = V3(0, 0, 0), tmpV2 = V3(0, 0, 0), tmpE = new THREE.Euler(0, 0, 0, "YXZ"), tmpM = new THREE.Matrix4();
+    var pointerLocked = false;
+
+    function targetObject() { var entry = cars[Math.min(free.target, cars.length - 1)]; return entry ? entry.object.body : null; }
+
+    // yaw and pitch (in the frame of the camera) from how it looks in the world
+    function anglesFromWorld(qWorld) {
+        var body = free.parent ? targetObject() : null;
+        tmpQ.copy(qWorld);
+        if(body) tmpQ.premultiply(tmpQ2.copy(body.quaternion).invert());
+        tmpE.setFromQuaternion(tmpQ, "YXZ");
+        free.yaw = free.yawT = tmpE.y;
+        free.pitch = free.pitchT = tmpE.x;
+    }
+
+    function enterFree() {
+        if(free.active) return;
+        free.active = true;
+        free.pos.copy(camera.position);
+        free.vel.set(0, 0, 0);
+        free.quat.copy(camera.quaternion);
+        free.parent = false;
+        free.aim = false;
+        free.target = 0;
+        anglesFromWorld(free.quat);
+        free.fov = free.fovT = camera.fov;
+        updateCameraUi();
+    }
+
+    function leaveFree() {
+        if(!free.active) return;
+        free.active = false;
+        free.parent = false;
+        if(document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
+        updateCameraUi();
+    }
+
+    function toggleAim() {
+        free.aim = !free.aim;
+        if(!free.aim) anglesFromWorld(free.quat);     // the look goes on from where it points
+        updateCameraUi();
+    }
+
+    function toggleParent() {
+        var body = targetObject();
+        if(!body) return;
+        if(!free.parent) {
+            // the position and the movement of the camera become those in the frame of the car
+            tmpQ2.copy(body.quaternion).invert();
+            free.pos.sub(body.position).applyQuaternion(tmpQ2);
+            free.vel.applyQuaternion(tmpQ2);
+            free.parent = true;
+        } else {
+            free.pos.applyQuaternion(body.quaternion).add(body.position);
+            free.vel.applyQuaternion(body.quaternion);
+            free.parent = false;
+        }
+        anglesFromWorld(free.quat);
+        updateCameraUi();
+    }
+
+    function nextTarget() {
+        if(cars.length < 2) return;
+        var body = targetObject();
+        // the camera keeps its place in the world when it goes to another car
+        if(free.parent && body) toggleParent();
+        free.target = (free.target + 1) % cars.length;
+        updateCameraUi();
+    }
+
+    function stick(value) { return Math.abs(value) < 0.15 ? 0 : value; }
+
+    function updateFree(delta) {
+        delta = Math.min(delta, 0.1);
+        var scale = free.speed;
+        var body = targetObject();
+        var parented = free.parent && body;
+        // what is asked for, with the keys and the controller
+        var mx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+        var mz = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
+        var my = (keys.ShiftLeft || keys.ShiftRight ? 1 : 0) - (keys.ControlLeft || keys.ControlRight ? 1 : 0);
+        var zoom = (keys.BracketRight ? 1 : 0) - (keys.BracketLeft ? 1 : 0);
+        var pad = typeof Settings !== "undefined" && Settings.controllerPad ? Settings.controllerPad() : null;
+        if(pad) {
+            mx += stick(pad.axes[0] || 0);
+            mz -= stick(pad.axes[1] || 0);
+            if(pad.buttons[7]) my += pad.buttons[7].value;
+            if(pad.buttons[6]) my -= pad.buttons[6].value;
+            if(pad.buttons[5] && pad.buttons[5].pressed) zoom += 1;
+            if(pad.buttons[4] && pad.buttons[4].pressed) zoom -= 1;
+            if(!free.aim) {
+                free.yawT -= stick(pad.axes[2] || 0) * STICK_LOOK * delta * Math.max(0.5, scale);
+                free.pitchT -= stick(pad.axes[3] || 0) * STICK_LOOK * delta * Math.max(0.5, scale);
+            }
+        }
+        free.pitchT = Math.max(-1.5, Math.min(1.5, free.pitchT));
+
+        // the direction: along where the camera looks, level; the steps are in the world, and are put in the frame of the camera
+        tmpV.set(0, 0, -1).applyQuaternion(free.quat);
+        tmpV.y = 0;
+        if(tmpV.lengthSq() < 1e-6) tmpV.set(0, 0, -1); else tmpV.normalize();
+        tmpV2.set(-tmpV.z, 0, tmpV.x);                       // to the right
+        var wantX = (tmpV.x * mz + tmpV2.x * mx) * BASE_SPEED * scale;
+        var wantZ = (tmpV.z * mz + tmpV2.z * mx) * BASE_SPEED * scale;
+        var want = V3(wantX, my * VERTICAL_SPEED * scale, wantZ);
+        if(parented) want.applyQuaternion(tmpQ2.copy(body.quaternion).invert());
+        // smoothed: the speed follows what is asked for, it does not jump to it
+        free.vel.lerp(want, 1 - Math.exp(-5 * delta));
+        free.pos.addScaledVector(free.vel, delta);
+
+        // the look: the mouse decides where it wants to look, the camera follows smoothly
+        free.yaw += (free.yawT - free.yaw) * (1 - Math.exp(-20 * delta));
+        free.pitch += (free.pitchT - free.pitch) * (1 - Math.exp(-20 * delta));
+
+        // the field of view, smoothed too
+        free.fovT = Math.max(8, Math.min(110, free.fovT + zoom * FOV_RATE * scale * delta));
+        free.fov += (free.fovT - free.fov) * (1 - Math.exp(-8 * delta));
+
+        // the place in the world, and the way it looks
+        var world = tmpV.copy(free.pos);
+        if(parented) world.applyQuaternion(body.quaternion).add(body.position);
+        if(free.aim && body) {
+            tmpM.lookAt(world, tmpV2.copy(body.position).add(V3(0, 0.7, 0)), V3(0, 1, 0));
+            tmpQ.setFromRotationMatrix(tmpM);
+            free.quat.slerp(tmpQ, 1 - Math.exp(-10 * delta));
+        } else {
+            tmpE.set(free.pitch, free.yaw, 0, "YXZ");
+            free.quat.setFromEuler(tmpE);
+            if(parented) free.quat.premultiply(body.quaternion);
+        }
+        camera.position.copy(world);
+        camera.quaternion.copy(free.quat);
+        if(Math.abs(camera.fov - free.fov) > 0.01 || camera.near !== 0.3) {
+            camera.fov = free.fov;
+            camera.near = 0.3;
+            camera.updateProjectionMatrix();
+        }
+    }
+
+    // the mouse: click the scene and it looks around like a first person view (Escape lets go of the mouse)
+    document.addEventListener("mousedown", function(event) {
+        if(!api.active || !free.active || free.aim) return;
+        if(typeof renderer === "undefined" || event.target !== renderer.domElement) return;
+        if(renderer.domElement.requestPointerLock) renderer.domElement.requestPointerLock();
+    });
+    document.addEventListener("pointerlockchange", function() { pointerLocked = !!document.pointerLockElement; });
+    document.addEventListener("mousemove", function(event) {
+        if(!api.active || !free.active || free.aim || !pointerLocked) return;
+        free.yawT -= event.movementX * LOOK_SENSITIVITY;
+        free.pitchT = Math.max(-1.5, Math.min(1.5, free.pitchT - event.movementY * LOOK_SENSITIVITY));
+    });
+    // a finger on the scene looks around too
+    var touchLast = null;
+    document.addEventListener("touchstart", function(event) { touchLast = event.touches.length === 1 && typeof renderer !== "undefined" && event.target === renderer.domElement ? { x: event.touches[0].clientX, y: event.touches[0].clientY } : null; }, { passive: true });
+    document.addEventListener("touchmove", function(event) {
+        if(!touchLast || !api.active || !free.active || free.aim || event.touches.length !== 1) return;
+        var touch = event.touches[0];
+        free.yawT -= (touch.clientX - touchLast.x) * LOOK_SENSITIVITY * 1.6;
+        free.pitchT = Math.max(-1.5, Math.min(1.5, free.pitchT - (touch.clientY - touchLast.y) * LOOK_SENSITIVITY * 1.6));
+        touchLast = { x: touch.clientX, y: touch.clientY };
+    }, { passive: true });
+    window.addEventListener("keyup", function(event) { keys[event.code] = false; }, true);
+    window.addEventListener("blur", function() { keys = {}; });
+
+    var cameraButtons = null, freeRow = null, freeInfo = null;
+    function updateCameraUi() {
+        if(!ui || !cameraButtons) return;
+        var mode = Settings.option("camera");
+        cameraButtons.forEach(function(b, i) { b.className = (i === 3 ? free.active : (!free.active && mode === i + 1)) ? "on" : ""; });
+        freeRow.style.display = free.active ? "flex" : "none";
+        if(free.active) {
+            freeInfo.aim.className = free.aim ? "on" : "";
+            freeInfo.parent.className = free.parent ? "on" : "";
+            var entry = cars[Math.min(free.target, cars.length - 1)];
+            freeInfo.target.textContent = "Car: " + (entry ? String(entry.object.name || entry.object.config.name || entry.object.config.id).slice(0, 30) : "");
+            freeInfo.target.style.display = cars.length > 1 ? "" : "none";
+        }
+    }
+    Settings.onOptionChange(function(name) { if(name === "camera" && api.active) { if(free.active) leaveFree(); else updateCameraUi(); } });
 
     // ---- start and stop
 
@@ -350,6 +593,7 @@ OpenRacer.Replay = (function() {
             if(entry.player) entry.object.updateVisuals(0); else entry.object.updateVisuals();
         }
         snapshot = null;
+        leaveFree();
         if(ui) { ui.bar.remove(); ui.info.remove(); ui = null; }
         document.body.classList.remove("replaying");
         if(typeof lastFrameTime !== "undefined") lastFrameTime = performance.now();
@@ -364,6 +608,7 @@ OpenRacer.Replay = (function() {
             if(t <= api.start_time()) { t = api.start_time(); if(direction < 0) { playing = false; ui.sync(); } }
         }
         show(t, delta);
+        if(free.active) updateFree(delta);
         if(typeof EngineSound !== "undefined" && player) {
             var live = playing && !scrubbing && direction > 0;
             EngineSound.setPaused(!live);
