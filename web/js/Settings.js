@@ -195,6 +195,10 @@ var Settings = (function() {
 
     // ---- actions
 
+    // the actions that still work while a replay is shown (the others would act on the car of the game, which stands still)
+    var REPLAY_ACTIONS = { cameraSwitch: true, cameraReset: true, mute: true, hudToggle: false };
+    function replayOn() { return typeof OpenRacer !== "undefined" && OpenRacer.Replay && OpenRacer.Replay.active; }
+
     function runHandler(id) {
         if(handlers[id]) handlers[id]();
     }
@@ -211,7 +215,7 @@ var Settings = (function() {
             }
             if(virtualDown[id]) isDown = true;
             down[id] = isDown;
-            if(isDown && !wasDown[id] && !paused) runHandler(id);
+            if(isDown && !wasDown[id] && !paused && (!replayOn() || REPLAY_ACTIONS[id])) runHandler(id);
             wasDown[id] = isDown;
         }
     }
@@ -252,6 +256,8 @@ var Settings = (function() {
             return;
         }
         if(event.code === "Escape") {
+            // in a replay Escape goes back to the game
+            if(replayOn()) { OpenRacer.Replay.stop(); event.preventDefault(); return; }
             // Escape cancels a wheel calibration first; while the racing line is recorded for the track editor it ends that (main.js)
             if(WheelControls.isCalibrating()) return;
             if(typeof race !== "undefined" && race.recording && !menu) { race.recording.stop(); return; }
@@ -625,6 +631,16 @@ var Settings = (function() {
         resume.textContent = "Resume";
         resume.onclick = closeMenu;
         buttons.appendChild(resume);
+        var replay = document.createElement("button");
+        replay.className = "big";
+        replay.style.cssText = "background: #ff6a2b; margin-left: 8px;";
+        replay.textContent = "Replay";
+        var canReplay = typeof OpenRacer !== "undefined" && OpenRacer.Replay && OpenRacer.Replay.available();
+        replay.disabled = !canReplay;
+        replay.title = canReplay ? "Watch what was recorded since the start of the game" : "Nothing is recorded yet";
+        if(!canReplay) replay.style.opacity = "0.45";
+        replay.onclick = function() { closeMenu(); OpenRacer.Replay.start(); };
+        buttons.appendChild(replay);
         var mainMenu = document.createElement("button");
         mainMenu.className = "big";
         mainMenu.style.cssText = "background: #3b424c; margin-left: 8px;";

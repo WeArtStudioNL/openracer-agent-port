@@ -404,6 +404,14 @@ function updateRace(delta) {
 
 function onEnterFrame() {
     Settings.update();
+    // the replay (Replay.js): the game stands still and the recording is shown
+    if(OpenRacer.Replay && OpenRacer.Replay.active) {
+        var replayNow = performance.now();
+        var replayDelta = Math.min(0.1, (replayNow - lastFrameTime) / 1000);
+        lastFrameTime = replayNow;
+        OpenRacer.Replay.frame(replayDelta);
+        return;
+    }
     EngineSound.setPaused(Settings.isPaused());
     if(car && Settings.isPaused()) {
         EngineSound.update(car.engineRPM, 0);
@@ -415,6 +423,7 @@ function onEnterFrame() {
         if(d > 0.1) d = 0.1; // after a pause of the browser (another tab, no focus) the game goes on from here, it does not catch up
         car.update(d, true);
         updateRace(d);
+        if(OpenRacer.Replay) OpenRacer.Replay.record(d);   // everything is recorded from the start, for the replay
     }
 }
 

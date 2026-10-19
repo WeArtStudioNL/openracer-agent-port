@@ -276,9 +276,11 @@ OpenRacer.Car = function( config, domElement ) {
         var rear = w[2];
         if(trackGates.length === 0 && rear.hasContact && rear.normal) lastTerrain = rear.normal.mesh;
 
-        tyreSmoke.update(delta, v, camera);
-        var marks = OpenRacer.skidMarks && OpenRacer.skidMarks();
-        if(marks) marks.update(v); // the rubber a sliding tyre leaves on the road (SkidMarks.js)
+        if(!(OpenRacer.Replay && OpenRacer.Replay.active)) {   // a replay does not make new smoke and marks from the state of the physics
+            tyreSmoke.update(delta, v, camera);
+            var marks = OpenRacer.skidMarks && OpenRacer.skidMarks();
+            if(marks) marks.update(v); // the rubber a sliding tyre leaves on the road (SkidMarks.js)
+        }
         // the cameras behind the car follow its height (a jump, a hill), not the road under it; the small movements of the springs are smoothed out
         var baseY = bodyPosition.y - w[0].radius;
         if(cameraBaseY === null || Math.abs(baseY - cameraBaseY) > 3) cameraBaseY = baseY;

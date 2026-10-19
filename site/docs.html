@@ -44,6 +44,7 @@
             <a href="#cameras">Cameras</a>
             <h4>Racing</h4>
             <a href="#race">A race</a>
+            <a href="#replay">Replay</a>
             <a href="#ai">AI opponents</a>
             <a href="#ghost">Ghost and records</a>
             <a href="#wear">Tyres, fuel, pit stops</a>
@@ -226,6 +227,18 @@ cd openracer-agent-port
                 <li><b>Finish.</b> An AI car that has done its laps slows down and pulls to the right, out of the way. When you cross the line after your last lap the results come up: place, best lap and the time of every car with the gap to the winner (a car still on its way is <i>running</i>), with <i>Race again</i> and <i>Main menu</i>.</li>
                 <li><b>Practice</b> has no countdown and no end.</li>
             </ul>
+        </section>
+
+        <section id="replay">
+            <h2>Replay</h2>
+            <p>From the first frame of the game everything is recorded: all cars, thirty times a second, with their body, suspension, wheels and steering. Press <kbd>Esc</kbd> and choose <b>Replay</b> (on a phone: ☰, then Replay). The game stops where it is and the recording is played back with the same code that draws the cars in the game, so the suspension, the steering wheel and the cameras work as they do when you drive.</p>
+            <ul>
+                <li><b>Slider.</b> Drag it to go to any moment since the start of the game.</li>
+                <li><b>Buttons.</b> <b>Rewind</b> plays backwards, <b>Pause</b> stops, <b>Play</b> plays forwards, and −10 s and +10 s jump ten seconds. The first and last buttons go to the start and to the end.</li>
+                <li><b>Speed.</b> 0.1×, 0.25×, 0.5×, 1×, 2×, 3× and 5×, forwards and backwards.</li>
+                <li><b>Keys.</b> <kbd>Space</kbd> pauses and plays, the left and right arrows jump five seconds, <kbd>Home</kbd> and <kbd>End</kbd> go to the start and the end, <kbd>T</kbd> switches the camera. <kbd>Esc</kbd> or <b>Back to the game</b> returns to the game, which goes on exactly where you left it.</li>
+            </ul>
+            <p>The recording is kept in memory, about 4 KB a second for every car, and the last half hour is kept. It is gone when the page is reloaded or you go back to the main menu. Skid marks and smoke are not recorded: they stay as they were drawn.</p>
         </section>
 
         <section id="ai">
