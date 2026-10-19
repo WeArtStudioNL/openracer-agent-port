@@ -94,7 +94,10 @@ export function initSoftBody(api) {
             '<div><label>Mass (kg)</label><input type="number" data-f="mass" step="0.5" min="0.1"></div>' +
             '<div class="fixed"><label>&nbsp;</label><button class="small ghost" data-f="remove">Remove</button></div></div>' +
             '<div class="row loose"><div><label>Breaks loose at (kN)</label><input type="number" data-f="break_force" step="0.5" min="0"></div><div></div><div></div></div>' +
-            '<div class="hinge"><div class="row"><div><label>Origin x, y, z (m)</label><input type="text" data-f="origin" placeholder="the middle of the part"></div>' +
+            '<div class="row"><div><label>Held by nodes (numbers, comma)</label><input type="text" data-f="heldBy" placeholder="the 3 nearest"></div></div>' +
+            '<div class="hinge"><div class="row"><div><label>Hinge point A (node)</label><input type="number" data-f="mA" step="1" min="0"></div><div><label>tears off at (kN)</label><input type="number" data-f="mAf" step="1" min="0" placeholder="0: never"></div>' +
+            '<div><label>Hinge point B (node)</label><input type="number" data-f="mB" step="1" min="0"></div><div><label>tears off at (kN)</label><input type="number" data-f="mBf" step="1" min="0" placeholder="0: never"></div></div>' +
+            '<div class="row"><div><label>Origin x, y, z (m)</label><input type="text" data-f="origin" placeholder="the middle of the part"></div>' +
             '<div><label>Axis x, y, z</label><input type="text" data-f="axis" placeholder="0, 1, 0"></div></div>' +
             '<div class="row"><div><label>Lowest angle (°)</label><input type="number" data-f="min" step="5" placeholder="-90"></div>' +
             '<div><label>Highest angle (°)</label><input type="number" data-f="max" step="5" placeholder="90"></div>' +
@@ -111,6 +114,10 @@ export function initSoftBody(api) {
         q("origin").value = h.origin ? vec(h.origin) : "";
         q("axis").value = h.axis ? vec(h.axis) : "";
         ["min", "max", "rest", "spring", "damper"].forEach((f) => { q(f).value = h[f] !== undefined ? h[f] : ""; });
+        const m = part.mounts || [];
+        q("mA").value = m[0] ? m[0].node : ""; q("mAf").value = m[0] && m[0].break_force ? m[0].break_force / 1000 : "";
+        q("mB").value = m[1] ? m[1].node : ""; q("mBf").value = m[1] && m[1].break_force ? m[1].break_force / 1000 : "";
+        q("heldBy").value = (part.nodes || []).join(", ");
         q("latch").value = h.latch_force !== undefined ? h.latch_force / 1000 : "";
         q("hinge_break").value = h.break_force !== undefined ? h.break_force / 1000 : "";
         const showMode = () => {
@@ -133,6 +140,8 @@ export function initSoftBody(api) {
         part.object = q("object").value.trim();
         part.mode = q("mode").value;
         part.mass = n("mass") || 10;
+        const held = q("heldBy").value.split(/[\s,;]+/).filter(Boolean).map((x) => parseInt(x, 10)).filter((x) => x >= 0);
+        if (held.length) part.nodes = held; else delete part.nodes;
         if (part.mode === "hinge") {
             const hinge = {};
             const origin = numbers(q("origin").value), axis = numbers(q("axis").value);
@@ -142,10 +151,18 @@ export function initSoftBody(api) {
             if (n("latch")) hinge.latch_force = n("latch") * 1000;
             if (n("hinge_break")) hinge.break_force = n("hinge_break") * 1000;
             part.hinge = hinge;
+            const mounts = [];
+            [["mA", "mAf"], ["mB", "mBf"]].forEach(([nf, ff]) => {
+                if (n(nf) === undefined || n(nf) < 0) return;
+                const mount = { node: n(nf) };
+                if (n(ff)) mount.break_force = n(ff) * 1000;
+                mounts.push(mount);
+            });
+            if (mounts.length) part.mounts = mounts; else delete part.mounts;
             delete part.break_force;
         } else {
             if (n("break_force")) part.break_force = n("break_force") * 1000; else delete part.break_force;
-            delete part.hinge;
+            delete part.hinge; delete part.mounts;
         }
     }
     function renderParts() {
@@ -153,12 +170,52 @@ export function initSoftBody(api) {
         box.innerHTML = "";
         if (!sb.parts.length) box.innerHTML = '<p class="hint">No parts: the whole model dents with the shell.</p>';
         sb.parts.forEach((part, i) => box.appendChild(partRow(part, i)));
+        const choice = $("sbPartSel"), kept = choice.selectedIndex;
+        choice.innerHTML = "";
+        sb.parts.forEach((p, i) => { const o = document.createElement("option"); o.value = i; o.textContent = (p.object || "(no object)") + (p.mode === "hinge" ? " – hinge" : " – loose"); choice.appendChild(o); });
+        choice.selectedIndex = Math.min(Math.max(kept, 0), sb.parts.length - 1);
         const names = $("sbObjectNames");
         names.innerHTML = "";
         api.nodeNames().forEach((name) => { const o = document.createElement("option"); o.value = name; names.appendChild(o); });
     }
     $("sbAddPart").addEventListener("click", () => { sb.parts.push({ object: "", mode: "hinge", mass: 10, hinge: {} }); renderParts(); });
     document.querySelector('[data-open="dlgParts"]').addEventListener("click", renderParts);
+
+
+    // ---- the points of a part, from the nodes that are selected in the view
+    function chosenPart() {
+        const part = sb.parts[parseInt($("sbPartSel").value, 10)];
+        if (!part) status("Make a part in “Parts…” first.", "error");
+        return part;
+    }
+    function mountFromSelection(which) {
+        const part = chosenPart();
+        if (!part) return;
+        if (sb.sel.nodes.size !== 1) { status("Select one node of the body for the hinge point.", "error"); return; }
+        if (part.mode !== "hinge") part.mode = "hinge";
+        if (!part.hinge) part.hinge = {};
+        part.mounts = part.mounts || [];
+        const node = [...sb.sel.nodes][0];
+        const keep = part.mounts[which] ? part.mounts[which].break_force : undefined;
+        part.mounts[which] = keep ? { node, break_force: keep } : { node };
+        part.mounts = part.mounts.filter(Boolean);
+        partsChanged(part.object + ": hinge point " + "AB"[which] + " is node " + node + ".");
+    }
+    $("sbPartA").addEventListener("click", () => mountFromSelection(0));
+    $("sbPartB").addEventListener("click", () => mountFromSelection(1));
+    $("sbPartHeld").addEventListener("click", () => {
+        const part = chosenPart();
+        if (!part) return;
+        if (!sb.sel.nodes.size) { status("Select the nodes that hold the part in the view.", "error"); return; }
+        part.nodes = [...sb.sel.nodes];
+        partsChanged(part.object + " is held by " + part.nodes.length + " node" + (part.nodes.length > 1 ? "s" : "") + ".");
+    });
+    function partsChanged(message) {
+        renderParts();
+        drawHinges();
+        $("sbPartInfo").textContent = message + " Set the forces in “Parts…”.";
+        changed();
+    }
 
     // ---- what is saved
     function read() {
@@ -242,11 +299,44 @@ export function initSoftBody(api) {
         showSelection();
     }
 
+    // the lines of the hinges follow the nodes
+    function updateMounts(s) {
+        if (!sb.mountLines) return;
+        const pos = sb.mountLines.geometry.attributes.position, p = new THREE.Vector3(), q = new THREE.Vector3();
+        let n = 0;
+        sb.parts.forEach((part) => {
+            const m = (part.mounts || []).filter((x) => x.node < s.count);
+            if (m.length >= 2 && n < 38) {
+                s.position(m[0].node, p); s.position(m[1].node, q);
+                pos.setXYZ(2 * n, p.x, p.y, p.z); pos.setXYZ(2 * n + 1, q.x, q.y, q.z); n++;
+            }
+            if (m.length >= 1) {
+                (part.nodes || []).forEach((k) => {
+                    if (k >= s.count || n >= 39) return;
+                    s.position(m[0].node, p); s.position(k, q);
+                    pos.setXYZ(2 * n, p.x, p.y, p.z); pos.setXYZ(2 * n + 1, q.x, q.y, q.z); n++;
+                });
+            }
+        });
+        sb.mountLines.geometry.setDrawRange(0, 2 * n);
+        pos.needsUpdate = true;
+    }
+
     // the hinges as arrows: the origin and the axis of every part that has them
     function drawHinges() {
         if (!sb.group) return;
         sb.hinges.forEach((a) => sb.group.remove(a));
         sb.hinges = [];
+        if (sb.mountLines) { sb.group.remove(sb.mountLines); sb.mountLines = null; }
+        const withMounts = sb.parts.filter((p) => p.mounts && p.mounts.length);
+        if (withMounts.length) {
+            // the hinge as a line between its two points, and a line from each of them to the nodes that hold the part shut
+            const g = new THREE.BufferGeometry();
+            g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(3 * 2 * 40), 3));
+            sb.mountLines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xff9f43, depthTest: false, linewidth: 2 }));
+            sb.mountLines.renderOrder = 12; sb.mountLines.frustumCulled = false;
+            sb.group.add(sb.mountLines);
+        }
         sb.parts.forEach((part) => {
             const h = part.hinge;
             if (part.mode !== "hinge" || !h || !h.origin) return;
@@ -303,6 +393,7 @@ export function initSoftBody(api) {
         }
         lp.needsUpdate = true; lc.needsUpdate = true;
         sb.lines.geometry.setDrawRange(0, 2 * s.beamCount);
+        updateMounts(s);
     }
 
     // ---- the gizmo: the selected nodes can be moved; the beams are made again from the nearest neighbours while they move

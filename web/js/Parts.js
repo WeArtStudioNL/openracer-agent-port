@@ -8,7 +8,8 @@
  *                "fixed"      part of the shell, deformed with it (the default; nothing is done)
  *                "detachable" sits on the car until the load on it passes break_force (N), then it is a free rigid body that falls, bounces and
  *                             slides on the track (and hits the car)
- *                "hinge"      a revolute joint with an axis, an origin (both in the frame of the car), limits (degrees), a spring (a target angle
+ *                "hinge"      (with "mounts": [{ node, break_force }]: two nodes of the shell that it hangs on, the hinge is the line between them and a mount
+ *                             tears off at its force; with one mount left it swings about that point) a revolute joint with an axis, an origin (both in the frame of the car), limits (degrees), a spring (a target angle
  *                             and a stiffness) and a damper. With latch_force it sits shut until the load passes it, then it swings. With
  *                             break_force it tears off at that load and becomes a free part.
  *
@@ -149,6 +150,10 @@ OpenRacer.Parts = (function () {
                     latch: hinge.latch_force || 0, breakForce: hinge.break_force || 0
                 },
                 breakForce: spec.break_force !== undefined ? spec.break_force : 0,
+                // the points where the part is hinged to the body: nodes of the shell, each with the force at which it tears off
+                mounts: hinge && sb ? (spec.mounts || []).filter(function (m) { return m && m.node >= 0 && m.node < sb.count; }).slice(0, 2).map(function (m) {
+                    return { node: m.node, breakForce: m.break_force || 0, alive: true, point: sb.restPosition(m.node, new THREE.Vector3()) };
+                }) : [],
                 // held: sits on the car; hinged: swings on the joint; free: loose
                 state: "held", joint: null, kept: null, grace: 0, lastVel: new THREE.Vector3(), load: 0, hasVel: false,
                 parent: object.parent, matrix: object.matrix.clone(), autoUpdate: object.matrixAutoUpdate
@@ -197,6 +202,30 @@ OpenRacer.Parts = (function () {
             part.collider.setCollisionGroups(free ? groups(PART_FREE, GROUND | CHASSIS) : groups(PART_HELD, GROUND));
         }
 
+        // The joint of a hinged part. Two mounts that hold: a hinge about the line between them. One: it swings about that point. None
+        // (or a part without mounts): the hinge of the spec, about its origin and axis.
+        function joinHinge(part) {
+            if (part.joint) { world.removeImpulseJoint(part.joint, true); part.joint = null; }
+            var h = part.hinge, alive = part.mounts.filter(function (m) { return m.alive; });
+            var origin = h.origin, axis = h.axis;
+            if (part.mounts.length) {
+                if (alive.length === 0) return false;
+                origin = alive[0].point;
+                if (alive.length >= 2) axis = new THREE.Vector3().subVectors(alive[1].point, alive[0].point).normalize();
+            }
+            var anchor = { x: origin.x, y: origin.y, z: origin.z };
+            var local = { x: origin.x - part.centre.x, y: origin.y - part.centre.y, z: origin.z - part.centre.z };
+            if (part.mounts.length && alive.length === 1) {
+                part.joint = world.createImpulseJoint(R.JointData.spherical(anchor, local), chassis, part.body, true);
+                return true;
+            }
+            part.joint = world.createImpulseJoint(R.JointData.revolute(anchor, local, { x: axis.x, y: axis.y, z: axis.z }), chassis, part.body, true);
+            part.joint.setLimits(h.min, h.max);
+            if (h.spring > 0) part.joint.configureMotorPosition(h.rest, h.spring, h.damper);
+            else if (h.damper > 0) part.joint.configureMotorVelocity(0, h.damper);
+            return true;
+        }
+
         function startMoving(part, how) {
             var wasHeld = part.state === "held";
             if (wasHeld) {
@@ -208,14 +237,7 @@ OpenRacer.Parts = (function () {
                 leaveModel(part);
             }
             if (how === "hinge") {
-                var h = part.hinge;
-                var data = R.JointData.revolute({ x: h.origin.x, y: h.origin.y, z: h.origin.z },
-                    { x: h.origin.x - part.centre.x, y: h.origin.y - part.centre.y, z: h.origin.z - part.centre.z },
-                    { x: h.axis.x, y: h.axis.y, z: h.axis.z });
-                part.joint = world.createImpulseJoint(data, chassis, part.body, true);
-                part.joint.setLimits(h.min, h.max);
-                if (h.spring > 0) part.joint.configureMotorPosition(h.rest, h.spring, h.damper);
-                else if (h.damper > 0) part.joint.configureMotorVelocity(0, h.damper);
+                joinHinge(part);
                 part.state = "hinged";
                 setGroups(part, false);
                 emit("unlatched", part);
@@ -226,6 +248,25 @@ OpenRacer.Parts = (function () {
                 part.collider.setCollisionGroups(groups(PART_HELD, GROUND));      // not yet against the car, it is inside it
                 emit("detached", part);
             }
+        }
+
+        // A mount tears off when the load on it passes its force: the inertia of the part shared over the mounts that hold, or the force of
+        // the shell on its node. With one mount left the part swings about it, with none it is free.
+        function tearMounts(part) {
+            var alive = part.mounts.filter(function (m) { return m.alive; });
+            var changed = false;
+            alive.forEach(function (m) {
+                var shell = 0;
+                if (sb) {
+                    if (!sb.alive(m.node)) { m.alive = false; changed = true; return; }
+                    sb.position(m.node, a); sb.restPosition(m.node, c);
+                    shell = a.distanceTo(c) * sb.params.anchorK;
+                }
+                if (m.breakForce > 0 && Math.max(shell, (part.inertia || 0) / alive.length) > m.breakForce) { m.alive = false; changed = true; emit("mount torn", part); }
+            });
+            if (!changed) return;
+            if (!part.mounts.some(function (m) { return m.alive; })) startMoving(part, "free");
+            else joinHinge(part);
         }
 
         function update(dt) {
@@ -250,13 +291,15 @@ OpenRacer.Parts = (function () {
                     }
                 }
                 part.load = frame > 3 ? Math.max(inertia, shell) : 0;
+                part.inertia = frame > 3 ? inertia : 0;
 
                 if (part.state === "held") {
                     if (part.hinge) {
                         if (!part.hinge.latch || part.load > part.hinge.latch || torn) startMoving(part, "hinge");
                     } else if (torn || (part.breakForce > 0 && part.load > part.breakForce)) startMoving(part, "free");
                 } else if (part.state === "hinged") {
-                    if (torn || (part.hinge.breakForce > 0 && part.load > part.hinge.breakForce)) startMoving(part, "free");
+                    if (part.mounts.length) tearMounts(part);
+                    if (part.state === "hinged" && (torn || (part.hinge.breakForce > 0 && part.load > part.hinge.breakForce))) startMoving(part, "free");
                 }
                 if (part.state !== "held") moving = true;
                 if (part.grace > 0) {
@@ -325,6 +368,7 @@ OpenRacer.Parts = (function () {
                     p.object.matrixWorldNeedsUpdate = true;
                     p.object.traverse(function (m) { if (m.userData && m.userData.sbDeform) m.userData.sbDeform.value = 1; });
                 }
+                p.mounts.forEach(function (m) { m.alive = true; });
                 p.state = "held"; p.hasVel = false; p.grace = 0; p.region = null;
             }
         }

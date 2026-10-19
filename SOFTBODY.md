@@ -110,3 +110,19 @@ The "Soft body" card of the car editor (`web/tools/softbody-editor.js`, hooked i
 ### The gizmo
 
 A selected node (or the middle of several selected nodes) gets a move gizmo in the view. While it is dragged the beams are made again from the nearest neighbours (the same rule as `SoftBody.js`, with the "beams per node" and "longest beam" of the settings) and drawn live, the moving ones in white; on release the shell is made again from the new places. The first move turns the nodes into a list of the car (`softbody.layout`).
+
+### Hinge points on the body (mounts)
+
+A hinged part (a hood, a door) can hang on **two nodes of the body**, each with its own force:
+
+```json
+{ "object": "hood", "mode": "hinge", "mass": 14,
+  "mounts": [ { "node": 12, "break_force": 30000 }, { "node": 15, "break_force": 30000 } ],
+  "nodes": [20, 21],
+  "hinge": { "min": -70, "max": 5, "spring": 20, "damper": 2, "latch_force": 6000 } }
+```
+
+* `mounts` (at most two): the numbers of nodes of the shell. The hinge is the line from the first to the second; `origin` and `axis` are not needed then. A mount tears off at its `break_force` (the inertia of the part shared over the mounts that hold, or the force of the shell on its node, whichever is more), or when the anchor of its node tears. **With one mount left the part swings about that point** (a ball joint), with none it is free (a `detached` event). Events: `unlatched`, `mount torn`, `detached`.
+* `nodes`: the nodes that hold the part shut (and the displacement of which is the load on it); with `hinge.latch_force` it opens when the load passes it.
+* In the editor: select a node of the body in the view, pick the part in the card ("Part points") and use **A = node**, **B = node** and **Held by**; the forces are in "Parts…". The hinge is drawn as an orange line between its points (the lines to the nodes that hold it shut start at A).
+* Not yet: beams inside a part, so that the part itself dents. A part is a rigid body in the engine; while it sits on the car it bends with the shell, like the rest of the model.
