@@ -13,7 +13,7 @@
     <div class="in">
         <a class="brand" href="./"><i></i>OpenRacer</a>
         <nav>
-            <a class="on" href="./">Home</a>
+            <a class="on hide-s" href="./">Home</a>
             <a href="docs.html">Docs</a>
             <a class="hide-s" href="https://github.com/WeArtStudioNL/openracer-agent-port">Fork</a>
             <a class="play" href="game/">Play</a>
@@ -24,7 +24,8 @@
 
 <main>
 <section class="hero">
-    <div class="wrap">
+    <div class="wrap hero-grid">
+        <div>
         <div class="kicker">Open source · GPLv3 · runs in the browser</div>
         <h1>A racing simulator<br>that lives in <span>a tab</span>.</h1>
         <p class="lead">OpenRacer simulates the whole car: a body on springs, four tyres that heat up and wear out, a clutch, a gearbox and differentials. You can drive it with the keyboard, a gamepad or a racing wheel with force feedback, race against AI cars, and build your own cars and tracks.</p>
@@ -33,6 +34,10 @@
             <a class="btn" href="docs.html">Read the docs</a>
             <a class="btn" href="https://github.com/WeArtStudioNL/openracer-agent-port">The fork on GitHub</a>
         </div>
+        </div>
+        <figure class="shot">
+            <a href="img/race.webp"><img src="img/race.webp" width="1600" height="900" alt="The OpenRacer Mustang on the circuit at 125 km/h, with the gauge, the tyre temperatures and the fuel on the screen" fetchpriority="high"></a>
+        </figure>
     </div>
 </section>
 
@@ -47,6 +52,19 @@
             <div class="card"><span class="tag">Tools</span><h3>Make your own</h3><p>A car editor with a live test bench, a track editor that can also draw a track from nothing, and a tuning menu that changes everything while you drive.</p></div>
             <div class="card"><span class="tag">Sound</span><h3>Calculated engine sound</h3><p>The sound comes from the gas in the cylinders and the exhaust, a port of parts of engine-sim to an AudioWorklet, not from a loop.</p></div>
             <div class="card"><span class="tag">Garage</span><h3>Yours stays yours</h3><p>Cars and tracks you make or import live in your own browser or in a folder on your PC. Nothing is uploaded to the server.</p></div>
+        </div>
+    </div>
+</section>
+
+<section class="block" id="screens">
+    <div class="wrap">
+        <h2>In the game</h2>
+        <p class="intro">All of these are screenshots of the game itself, taken in the browser.</p>
+        <div class="gallery">
+            <figure class="shot"><a href="img/drift.webp"><img loading="lazy" src="img/drift.webp" width="1600" height="900" alt="A Mustang sliding sideways across the grass in a cloud of dust"></a><figcaption>Tyres that slide leave marks and make smoke, or dust on the grass.</figcaption></figure>
+            <figure class="shot"><a href="img/tuning.webp"><img loading="lazy" src="img/tuning.webp" width="1600" height="900" alt="The tuning menu open over the race, with sliders for the mass, the springs and the dampers"></a><figcaption>The tuning menu changes the car while you drive.</figcaption></figure>
+            <figure class="shot"><a href="img/car-editor.webp"><img loading="lazy" src="img/car-editor.webp" width="1600" height="900" alt="The car editor with a Mustang model, its cameras and the test bench"></a><figcaption>The car editor, with a test bench to drop, shake and drive the car.</figcaption></figure>
+            <figure class="shot"><a href="img/track-editor.webp"><img loading="lazy" src="img/track-editor.webp" width="1600" height="900" alt="The track editor showing a drawn track on a hill, with its nodes and gates"></a><figcaption>The track editor: draw a loop, add gates, prefabs and textures.</figcaption></figure>
         </div>
     </div>
 </section>

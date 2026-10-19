@@ -13,7 +13,7 @@
     <div class="in">
         <a class="brand" href="./"><i></i>OpenRacer</a>
         <nav>
-            <a href="./">Home</a>
+            <a class="hide-s" href="./">Home</a>
             <a class="on" href="docs.html">Docs</a>
             <a class="hide-s" href="https://github.com/WeArtStudioNL/openracer-agent-port">Fork</a>
             <a class="play" href="game/">Play</a>
@@ -123,6 +123,7 @@ cd openracer-agent-port
         <section id="menu">
             <h2>Main menu and address</h2>
             <p>The game starts with a main menu: a tile with a slowly turning 3D model for every car (with its name, description and power), the tracks, and the <b>Race</b> column. <kbd>Esc</kbd> in the game has a button to come back to the menu.</p>
+            <figure class="shot"><a href="img/menu.webp"><img loading="lazy" src="img/menu.webp" width="1600" height="900" alt="The main menu with a tile for every car, the tracks and the race options"></a><figcaption>The main menu: the cars with their power, the tracks and the Race column.</figcaption></figure>
             <p>Both lists are made by looking at folders. Every <code>cars/&lt;id&gt;/car.json</code> is a car and every <code>tracks/&lt;id&gt;/track.json</code> is a track, so a new folder shows up at the next refresh. Everything that the menu chooses is in the address, so a link starts a particular game:</p>
             <pre><code>index.html?car=mustang&amp;track=circuit&amp;laps=5&amp;ai=3&amp;difficulty=normal&amp;ghost=1&amp;records=1&amp;wear=1</code></pre>
             <table>
@@ -161,6 +162,7 @@ cd openracer-agent-port
         <section id="touch">
             <h2>Touch screen</h2>
             <p>On a phone or tablet the game draws touch controls over the picture. They appear by themselves on a touch screen (and with <code>?touch=1</code> in the address; <code>?touch=0</code> switches them off), so a desktop never sees them. Turn the phone sideways for the most room.</p>
+            <figure class="shot small"><a href="img/touch.webp"><img loading="lazy" src="img/touch.webp" width="844" height="390" alt="The touch controls over the game: a stick on the left, the pedals and buttons on the right"></a><figcaption>The touch controls: the stick under the finger on the left, the pedals and buttons on the right.</figcaption></figure>
             <ul>
                 <li><b>Steering.</b> Put a finger anywhere on the left half of the screen and a stick appears under it. Move it left or right to steer. The stick follows your finger when it goes far, so your hand never runs out of room. Let go and the wheels come back to the middle.</li>
                 <li><b>Pedals.</b> <b>GAS</b> and <b>BRAKE</b> are on the right, each for a thumb. They build up smoothly, like a pedal and not a switch.</li>
@@ -206,6 +208,7 @@ cd openracer-agent-port
         <section id="hud">
             <h2>The HUD</h2>
             <p>Bottom right is a round gauge. The ring is the engine speed with a red zone at the rev limit and a shift light that goes orange and flashes at the limiter. In the middle are the speed, the gear and the gearbox mode. The two small arcs are the throttle (green, left) and the brake (red, right). Next to it are the lights of traction control (TC) and ABS: red is off, green is on, yellow is working. A red P shows while the parking lock holds the car.</p>
+            <figure class="shot"><a href="img/race.webp"><img loading="lazy" src="img/race.webp" width="1600" height="900" alt="The Mustang on the circuit with the round gauge, the tyre temperatures and the fuel"></a><figcaption>The HUD in a race: the gauge bottom right, the lap time, the tyres and the fuel top left.</figcaption></figure>
             <p>Top left are the lap, the time of the lap that is going and the last laps, the best in green. In a race it shows the lap of the race (LAP 2/5, FINAL LAP) and your place. With wear on, a panel shows the four tyres (colour is temperature, the dark part is wear), the fuel and a PIT hint.</p>
         </section>
 
@@ -324,6 +327,7 @@ cd openracer-agent-port
         <section id="effects">
             <h2>Skid marks, smoke and collisions</h2>
             <p><b>Skid marks.</b> A tyre that slides past the peak of its grip at some speed leaves a strip of rubber along the path of its contact patch, darker the harder it slides (black on the road, lighter on grass and dirt), for the player and the AI alike. One mesh holds about a kilometre of marks in a ring; the oldest are drawn over when it is full.</p>
+            <figure class="shot"><a href="img/drift.webp"><img loading="lazy" src="img/drift.webp" width="1600" height="900" alt="A Mustang sliding on the grass in a cloud of dust"></a><figcaption>A slide on the grass: the dust comes from the physics of the tyres.</figcaption></figure>
             <p><b>Smoke and squeal.</b> A sliding tyre makes smoke, and the longer it slides the hotter it gets and the thicker the smoke. On grass it is dust. The squeal is made by the game and follows the car in pitch and volume; a recording in <code>sounds/tyre-squeal.ogg</code> replaces it. It comes from the physics, so it also shows with locked wheels, wheel spin and drifts.</p>
             <p><b>Collisions.</b> The car collides with walls, fences, buildings and steep embankments. The steep triangles of the track are kept as outlines in a grid and the car is a rectangle that is pushed out of them. A hit gives an impulse at the point that hit, so it stops the car, bounces it a little and spins it when it hits with a corner. Things lower than 30 cm, like kerbs, are driven over.</p>
         </section>
@@ -337,6 +341,7 @@ cd openracer-agent-port
         <section id="tuning">
             <h2>Tuning menu</h2>
             <p><kbd>U</kbd> shows or hides the tuning menu, with which the car is changed while it drives:</p>
+            <figure class="shot"><a href="img/tuning.webp"><img loading="lazy" src="img/tuning.webp" width="1600" height="900" alt="The tuning menu open next to the car"></a><figcaption>The tuning menu opens next to the car, which keeps driving.</figcaption></figure>
             <ul>
                 <li><b>Chassis:</b> mass, weight distribution, height of the centre of gravity, ride height, roll centres.</li>
                 <li><b>Suspension:</b> springs, dampers, roll stiffness, travel, camber, toe.</li>
@@ -353,6 +358,7 @@ cd openracer-agent-port
         <section id="skidpad">
             <h2>Skidpad</h2>
             <p><b>Skidpad</b> in the main menu takes the chosen car to a round pad with a painted circle of 50 m radius and drives it round by itself. The steering holds the painted line, a steady throttle raises the speed slowly, and the lateral acceleration is read from the tyre forces while the car still follows the circle. When it lets go, by going off the line or sliding, or when it understeers wide and cannot go faster, the result comes up: the g it held and the speed. Then you can press <i>Reset</i> to run again with the tuning as it is now, <i>Tune</i> to open the tuning menu, or <i>Back to the menu</i>. ESC is off for it.</p>
+            <figure class="shot"><a href="img/skidpad.webp"><img loading="lazy" src="img/skidpad.webp" width="1600" height="900" alt="The result of a skidpad run: 0.66 g held at 61 km/h"></a><figcaption>The result of a run: the g the car held, the speed, and the buttons to try again or tune.</figcaption></figure>
         </section>
 
         <section id="bench">
@@ -369,6 +375,7 @@ cd openracer-agent-port
         <section id="car-editor">
             <h2>Car editor</h2>
             <p>At <code>tools/car-editor.html</code>, a button in the main menu. With the helper server it writes the files to disk, without it it saves to the garage.</p>
+            <figure class="shot"><a href="img/car-editor.webp"><img loading="lazy" src="img/car-editor.webp" width="1600" height="900" alt="The car editor with a Mustang, the layers panel and the test bench at the bottom"></a><figcaption>The car editor with the test bench at the bottom of the view.</figcaption></figure>
             <ol>
                 <li><b>Pick the glb.</b> The arrow is the front of the car. Turn the model if needed and press <i>Fit</i>: the origin has to be at the height of the wheel axles, in the middle between the axles.</li>
                 <li><b>Wheels.</b> The wheels have to be separate parts, because they steer and spin. <i>Find the wheels</i> does this by their names and places. The wheelbase, tracks and tyre size are taken from the model, so the car looks in the game as it looks in the editor.</li>
@@ -424,6 +431,7 @@ cd openracer-agent-port
         <section id="track-editor">
             <h2>Track editor</h2>
             <p>At <code>tools/track-editor.html</code>, a button in the main menu.</p>
+            <figure class="shot"><a href="img/track-editor.webp"><img loading="lazy" src="img/track-editor.webp" width="1600" height="900" alt="The track editor with a drawn track"></a><figcaption>A drawn track in the track editor, with the drawer for the road and the prefabs.</figcaption></figure>
             <ol>
                 <li><b>Model.</b> Pick the glb. The parts are listed with a guess of their surface from their names. Click a part in the view to find it, change the surface per part or for all parts that match the filter. <i>Colours of the surfaces</i> shows what you set.</li>
                 <li><b>Start and gates.</b> <i>Place start</i>: click on the road and drag in the direction the car drives. <i>Add gate</i> works the same. <i>Gate 1 at the start</i> puts the finish line just in front of the start.</li>
