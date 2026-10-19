@@ -702,6 +702,178 @@ OpenRacer.Vehicle = function (parameters, input) {
         }
     }
 
+    // ---- the body in the 3D physics: a set of spheres (the collision proxy), against the triangles of the track
+    //
+    // The body is a cloud of spheres in the frame of the car (self.collisionSpheres, [{ x, y, z, r }], measured from the centre of gravity:
+    // x to the left, y up, z forward). It is made from the model of the car when that has loaded (CollisionProxy.js), else from the size of
+    // the car. A sphere that is pushed into a triangle gives a contact with the normal of the triangle on the side of the sphere. A contact
+    // with a surface that the car could be riding on (one that faces up in the world, or up for the car: the car can be on a wall or a
+    // loop) is soft: a damped spring, the underside that scrapes, the body that comes down after a landing. Any other is a wall: the car is
+    // pushed out and gets an impulse. A wall that is lower than the kerb height above the underside of the car is driven over.
+    var proxyKey = "", proxyRadius = 0;
+    var candidates = [], candX = 1e9, candY = 1e9, candZ = 1e9, candRadius = 0;
+    var sphereAt = { x: 0, y: 0, z: 0 }, nearest = { x: 0, y: 0, z: 0 }, wallRange = [0, 0], triNormal = { x: 0, y: 0, z: 0 };
+    var contacts3 = [], contactCount = 0;
+    var carUp = { x: 0, y: 1, z: 0 };
+
+    function defaultProxy() {
+        var r = Math.max(0.15, Math.min(0.3, self.bodyHeight / 3.5, self.halfWidth / 2.5));
+        var yBottom = -self.cgHeight + self.groundClearance, yTop = yBottom + self.bodyHeight;
+        var zCentre = (self.af - self.ar) / 2;
+        var xs = [-(self.halfWidth - r), 0, self.halfWidth - r];
+        var zFront = zCentre + self.halfLength - r, zBack = zCentre - self.halfLength + r;
+        var n = Math.max(2, Math.ceil((zFront - zBack) / 0.6));
+        var zs = []; for(var i = 0; i <= n; i++) zs.push(zBack + (zFront - zBack) * i / n);
+        var out = [];
+        for(var a = 0; a < zs.length; a++) for(var b = 0; b < xs.length; b++) out.push({ x: xs[b], y: yBottom + r, z: zs[a], r: r });          // the underside
+        var yMid = (yBottom + yTop) / 2;
+        for(var c = 0; c < zs.length; c++) { out.push({ x: xs[0], y: yMid, z: zs[c], r: r }); out.push({ x: xs[2], y: yMid, z: zs[c], r: r }); }     // the sides
+        out.push({ x: 0, y: yMid, z: zFront, r: r }); out.push({ x: 0, y: yMid, z: zBack, r: r });                                                   // the ends
+        for(var d = 0; d < 3; d++) out.push({ x: xs[0] * 0.55, y: yTop - r, z: zCentre - self.halfLength * (0.45 - d * 0.35), r: r }), out.push({ x: xs[2] * 0.55, y: yTop - r, z: zCentre - self.halfLength * (0.45 - d * 0.35), r: r }); // the roof
+        return out;
+    }
+
+    function ensureProxy() {
+        if(self.collisionSpheres) {
+            if(self.collisionSpheres !== self.proxyUsed) { self.proxyUsed = self.collisionSpheres; proxyKey = ""; self.proxy3 = self.collisionSpheres; computeProxyRadius(); }
+            return;
+        }
+        var key = [self.halfLength, self.halfWidth, self.bodyHeight, self.cgHeight, self.groundClearance, self.af, self.ar].join(",");
+        if(key !== proxyKey) { proxyKey = key; self.proxy3 = defaultProxy(); computeProxyRadius(); }
+    }
+    function computeProxyRadius() {
+        proxyRadius = 0;
+        self.proxy3.forEach(function(sp) { proxyRadius = Math.max(proxyRadius, Math.sqrt(sp.x * sp.x + sp.y * sp.y + sp.z * sp.z) + sp.r); });
+    }
+    this.proxy3 = null;
+    this.softContacts = 0;
+    this.bodyFriction = 0.3;          // the friction of the body that slides on a surface (the underside on the road)
+
+    // The triangles near the car, kept for a while (the car moves a few centimetres in a step)
+    function refreshCandidates() {
+        var R = proxyRadius + 1.5;
+        var dx = self.px - candX, dy = self.py - candY, dz = self.pz - candZ;
+        if(candRadius === R && dx * dx + dy * dy + dz * dz < 0.8 * 0.8) return;
+        candX = self.px; candY = self.py; candZ = self.pz; candRadius = R;
+        self.ground.nearby(self.px, self.py, self.pz, R + 0.8, candidates);
+    }
+
+    // The contacts of the spheres with the triangles: the soft ones (wantSoft) or the walls, into contacts3 (contactCount of them)
+    function scanContacts(wantSoft) {
+        ensureProxy();
+        refreshCandidates();
+        rotate(self.qx, self.qy, self.qz, self.qw, 0, 1, 0, carUp);
+        var yUnder = -self.cgHeight + self.groundClearance;
+        var ux = self.px + carUp.x * yUnder, uy = self.py + carUp.y * yUnder, uz = self.pz + carUp.z * yUnder;   // a point of the underside plane
+        var ground = self.ground;
+        contactCount = 0;
+        var spheres = self.proxy3;
+        for(var i = 0; i < spheres.length; i++) {
+            var sp = spheres[i];
+            rotate(self.qx, self.qy, self.qz, self.qw, sp.x, sp.y, sp.z, sphereAt);
+            var cx = self.px + sphereAt.x, cy = self.py + sphereAt.y, cz = self.pz + sphereAt.z, r = sp.r;
+            for(var k = 0; k < candidates.length; k++) {
+                var t = candidates[k];
+                if(!ground.boxNear(t, cx, cy, cz, r)) continue;
+                var d2 = ground.closest(t, cx, cy, cz, nearest);
+                if(d2 >= r * r) continue;
+                var dist = Math.sqrt(d2);
+                var nx, ny, nz;
+                if(dist > 1e-5) { nx = (cx - nearest.x) / dist; ny = (cy - nearest.y) / dist; nz = (cz - nearest.z) / dist; }
+                else { ground.normalOf(t, triNormal); nx = triNormal.x; ny = triNormal.y; nz = triNormal.z; dist = 0; }
+                var depth = r - dist;
+                if(depth < 1e-4) continue;
+                if(nearest.region !== 0) {
+                    // a contact with an edge or a corner of a triangle: when its direction is not that of the face, it is the seam between two
+                    // triangles of a surface (the neighbour has the contact), and it would push the car sideways along the surface
+                    ground.normalOf(t, triNormal);
+                    var along = nx * triNormal.x + ny * triNormal.y + nz * triNormal.z;
+                    if(along < 0) along = -along;
+                    if(along < 0.85) continue;
+                }
+                var nUp = nx * carUp.x + ny * carUp.y + nz * carUp.z;
+                var soft = ny >= 0.5 || nUp >= 0.5;
+                if(!soft) {
+                    // a wall that is lower than the kerb height above the underside is driven over: the top of the wall above this point
+                    if(ground.lineRange(t, nearest.x, nearest.y, nearest.z, carUp.x, carUp.y, carUp.z, wallRange)) {
+                        var top = (nearest.x - ux) * carUp.x + (nearest.y - uy) * carUp.y + (nearest.z - uz) * carUp.z + wallRange[1];
+                        if(top < self.kerbHeight) continue;
+                    }
+                    // only a car that goes into the wall is hit by it; one that scrapes along it, or is in it after a hit, is pushed out softly
+                    // (a hard push on something that does not come at it throws the car through the thin parts of a track)
+                    var wx = self.vx + (self.wy * sphereAt.z - self.wz * sphereAt.y);
+                    var wy = self.vy + (self.wz * sphereAt.x - self.wx * sphereAt.z);
+                    var wz = self.vz + (self.wx * sphereAt.y - self.wy * sphereAt.x);
+                    if(wx * nx + wy * ny + wz * nz > -0.3) soft = true;
+                }
+                if(soft !== wantSoft) continue;
+                var c = contacts3[contactCount];
+                if(!c) c = contacts3[contactCount] = { nx: 0, ny: 0, nz: 0, depth: 0, qx: 0, qy: 0, qz: 0, tri: 0, sphere: 0 };
+                c.tri = t; c.sphere = i;
+                c.nx = nx; c.ny = ny; c.nz = nz; c.depth = depth; c.qx = nearest.x; c.qy = nearest.y; c.qz = nearest.z;
+                contactCount++;
+            }
+        }
+        return contactCount;
+    }
+
+    // soft contacts: a damped spring along the normal of the surface and friction along it, at the point of contact
+    function bodyContacts3D(force, torque) {
+        self.softContacts = scanContacts(true);       // for the debugging
+        if(!self.softContacts) return;
+        var kc = 20 * self.mass, cc = 1.0 * Math.sqrt(kc * self.mass);
+        for(var i = 0; i < contactCount; i++) {
+            var c = contacts3[i];
+            var rx = c.qx - self.px, ry = c.qy - self.py, rz = c.qz - self.pz;
+            var cx = self.vx + (self.wy * rz - self.wz * ry);
+            var cy = self.vy + (self.wz * rx - self.wx * rz);
+            var cz = self.vz + (self.wx * ry - self.wy * rx);
+            var vn = cx * c.nx + cy * c.ny + cz * c.nz;
+            var fn = Math.max(0, kc * c.depth - cc * vn);
+            var tx = cx - vn * c.nx, ty = cy - vn * c.ny, tz = cz - vn * c.nz;
+            var tl = Math.sqrt(tx * tx + ty * ty + tz * tz);
+            var ft = Math.min(self.bodyFriction * fn, tl * 0.5 * self.mass / 4);    // the underside of a car slides on the road with about 0.3
+            var fx = fn * c.nx, fy = fn * c.ny, fz = fn * c.nz;
+            if(tl > 1e-6) { fx -= ft * tx / tl; fy -= ft * ty / tl; fz -= ft * tz / tl; }
+            force.x += fx; force.y += fy; force.z += fz;
+            torque.x += ry * fz - rz * fy; torque.y += rz * fx - rx * fz; torque.z += rx * fy - ry * fx;
+        }
+    }
+
+    // walls: the car is pushed out along the normal and gets an impulse, like the walls of the standard physics but in 3D
+    var impactSpeed3 = { value: 0 };
+    function resolveCollisions3D() {
+        for(var pass = 0; pass < 3; pass++) {
+            if(!scanContacts(false)) return;
+            var best = 0;
+            for(var i = 1; i < contactCount; i++) if(contacts3[i].depth > contacts3[best].depth) best = i;
+            var c = contacts3[best];
+            self.lastWall = { mesh: self.ground.meshOf(c.tri), surface: self.ground.surfaceOf(c.tri), n: [c.nx, c.ny, c.nz], depth: c.depth, at: [c.qx, c.qy, c.qz], sphere: c.sphere, v: [self.vx, self.vy, self.vz], t: self.impactTime };   // for the debugging
+            var rx = c.qx - self.px, ry = c.qy - self.py, rz = c.qz - self.pz;
+            if(self.debugWalls) self.debugWalls.push({ mesh: self.ground.meshOf(c.tri), tri: c.tri, n: [c.nx, c.ny, c.nz], depth: c.depth, sphere: c.sphere, p0: [self.px, self.py, self.pz], v: [self.vx, self.vy, self.vz], pass: pass, count: contactCount });
+            var push = Math.min(c.depth, 0.15);     // a big overlap is taken out in steps
+            self.px += c.nx * push; self.py += c.ny * push; self.pz += c.nz * push;
+            candX = 1e9;     // the car moved: look again for the triangles around it
+            var jn = impulseAt(rx, ry, rz, c.nx, c.ny, c.nz, self.wallRestitution, impactSpeed3);
+            if(jn === 0) continue;                                    // already moving away
+            // scraping along the wall: an impulse along the surface, at most a share of the impulse of the hit
+            var cx = self.vx + (self.wy * rz - self.wz * ry);
+            var cy = self.vy + (self.wz * rx - self.wx * rz);
+            var cz = self.vz + (self.wx * ry - self.wy * rx);
+            var vn = cx * c.nx + cy * c.ny + cz * c.nz;
+            var tx = cx - vn * c.nx, ty = cy - vn * c.ny, tz = cz - vn * c.nz;
+            var tl = Math.sqrt(tx * tx + ty * ty + tz * tz);
+            if(tl > 1e-6) {
+                var jt = Math.min(self.wallFriction * jn, tl * self.mass * 0.5);
+                self.vx -= jt * tx / tl / self.mass; self.vy -= jt * ty / tl / self.mass; self.vz -= jt * tz / tl / self.mass;
+            }
+            if(impactSpeed3.value > self.lastImpact || self.impactTime > 0.5) {
+                self.lastImpact = impactSpeed3.value;
+                self.impactTime = 0;
+            }
+        }
+    }
+
     // ---- the body on the road: the corners of the body touch it after a landing or when the car has turned over
     var corner = { x: 0, y: 0, z: 0 }, local = { x: 0, y: 0, z: 0 };
     var cornerForce = { x: 0, y: 0, z: 0 };
@@ -809,6 +981,7 @@ OpenRacer.Vehicle = function (parameters, input) {
 
         // ---- the springs: how far every wheel is pushed in, and the force that makes
         var down = { x: -axisY.x, y: -axisY.y, z: -axisY.z };
+        var ground3D = !!(self.ground && self.ground.use3D);
         var anyContact = false;
         for(var i = 0; i < 4; i++) {
             var w = wheels[i];
@@ -818,7 +991,20 @@ OpenRacer.Vehicle = function (parameters, input) {
             // reaches the road first. So a kerb or an edge lifts the wheel gradually as it rolls on to it, instead of all at once
             // when the middle passes it. The surface under the middle is the one that counts for the grip.
             var road = null, t = Infinity, surfaceRoad = null;
-            for(var sk = -2; sk <= 2; sk++) {
+            for(var sk = -2; sk <= 2 && ground3D; sk++) {
+                // the 3D physics: a ray along the axis of the suspension (down for the car, whichever way that is in the world), from a
+                // little above the mount, so a car on a wall or upside down feels the road under its wheels
+                var alongR = sk * 0.4 * w.radius;
+                var RISE = 0.3;
+                var hit = self.ground.ray(mx + axisZ.x * alongR + axisY.x * RISE, my + axisZ.y * alongR + axisY.y * RISE, mz + axisZ.z * alongR + axisY.z * RISE,
+                    down.x, down.y, down.z, RISE + w.freeLength + w.radius + 0.5, 0.17);
+                if(!hit) continue;
+                if(sk === 0) surfaceRoad = hit;
+                var liftR = w.radius - Math.sqrt(w.radius * w.radius - alongR * alongR);
+                var tR = hit.t - RISE + liftR;
+                if(tR < t) { t = tR; road = hit; }
+            }
+            for(var sk = -2; sk <= 2 && !ground3D; sk++) {
                 var along = sk * 0.4 * w.radius;
                 var sample = roadAt(mx + axisZ.x * along, mz + axisZ.z * along, my, 0.3);
                 if(!sample) continue;
@@ -1193,7 +1379,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         }
 
         // ---- the body on the road, for a landing or a car that has turned over
-        bodyCorners(force, torque);
+        if(ground3D) bodyContacts3D(force, torque); else bodyCorners(force, torque);
 
         // ---- integrate: Newton for the movement, Euler for the rotation (with the gyroscopic term of a body that is not round)
         var accX = force.x / m + forceBody.x / mBody, accY = force.y / m + forceBody.y / mBody, accZ = force.z / m + forceBody.z / mBody;
@@ -1221,7 +1407,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             self.wx = self.wy = self.wz = 0;
         }
 
-        if(self.collision) resolveCollisions();
+        if(ground3D) resolveCollisions3D(); else if(self.collision) resolveCollisions();
 
         // accelerations along and across the car, for the display (the tyre forces and the air, without gravity)
         var aT = Math.min(1, dt / 0.1);

@@ -2,6 +2,14 @@
 
 What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in `web/js/Version.js`.
 
+## Unreleased
+
+**3D physics**
+- The road is no longer one height per place. Every triangle of the track is in a 3D grid, the wheels feel the road with rays along their own axis, and the body is a cloud of spheres, so a loop, a road on a wall or a bridge works: a car with enough speed goes up the wall of a loop, over the top upside down and lands on the exit.
+- The collision shape of a car is made from its model when the car loads (about 40 to 90 spheres), instead of a box.
+- A wall counts where the car is lower than its top, measured along the car; the seams between triangles do not push the car; only a car that goes into a wall is hit hard.
+- It is the default for every track. A track can keep the old physics with `"physics": "2d"` in `track.json` (or `?physics=2d`).
+
 ## 2.1.0 (2026-10-19)
 
 **Replay**

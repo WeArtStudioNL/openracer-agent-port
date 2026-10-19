@@ -116,6 +116,7 @@ OpenRacer.Opponent = function (config, line, options) {
             }
         }
         self.bodyLift = model.bodyLift;
+        OpenRacer.CollisionProxy.apply(self, model, modelMid);
         self.loaded = true;
         if (self.pending) { self.place(self.pending.x, self.pending.z, self.pending.heading); self.pending = null; }
     }, function (message) { console.error("Opponent: " + message); });

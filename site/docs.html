@@ -57,6 +57,7 @@
             <a href="#driveline">Driveline</a>
             <a href="#gearbox">Gearbox modes</a>
             <a href="#assists">TC, ESC and ABS</a>
+            <a href="#physics3d">3D contact and collisions</a>
             <a href="#effects">Skid marks, smoke, collisions</a>
             <a href="#sound">Engine sound</a>
             <h4>Tuning and testing</h4>
@@ -355,6 +356,12 @@ cd openracer-agent-port
                 <li><b>ESC</b> compares what the driver asks for with what the car does. The steering angle gives the direction the car should turn at that speed; the yaw rate and the direction of movement show what it does. When it turns more than asked (oversteer) the outer front wheel gets a short brake. When it turns less (understeer) the inner rear wheel is braked. Both take power off. The steering itself is never changed. The understeer gradient is worked out from the weight on each axle and the tyre stiffness, so a nose-heavy car is not read as oversteering when it only turns the way it always does. With ESC off the car slides when it asks for more than the tyres have.</li>
                 <li><b>ABS</b> keeps the wheels from locking under braking. Brakes are set per axle, in the tuning menu as a total and a <b>brake bias</b>, the share to the front.</li>
             </ul>
+        </section>
+
+        <section id="physics3d">
+            <h2>3D contact and collisions</h2>
+            <p>Every triangle of a track is kept in a 3D grid. The wheels feel the road with rays along the axis of their suspension, so a car can drive up a wall, upside down, or over a bridge, as in a loop. The body of the car is a cloud of spheres, made from its model when the car is made, that is tested against the triangles: a surface that the car rides on is a damped spring, any other surface is a wall that the car is pushed out of. A wall that is lower than the kerb height above the underside of the car is driven over.</p>
+            <p>This is the default for every track. A track can keep the older physics (one height of the road per place) with <code>"physics": "2d"</code> in its <code>track.json</code>. The car deforming in a crash is the next step and is not made yet: the spheres of the collision shape are the start of a skeleton of nodes and beams for it.</p>
         </section>
 
         <section id="effects">

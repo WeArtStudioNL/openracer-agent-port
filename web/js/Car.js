@@ -173,6 +173,8 @@ OpenRacer.Car = function( config, domElement ) {
             scene.add(model.wheels[i]);
         }
         tobj.wheelsLoaded = true;
+        // the collision shape of the car, from its model (CollisionProxy.js), for the 3D physics
+        OpenRacer.CollisionProxy.apply(tobj, model, modelMid);
     }, function(message) {
         tobj.loadError = message;
         console.error(message);

@@ -265,15 +265,28 @@ function buildCollisionWorld() {
 // other (a road over grass) the order of searchOrder decides.
 var groundWorld;
 
+// The physics of a track: "3d", the default (the wheels feel the road along their own axis and the body is a set of spheres, so a loop or a car
+// on a wall is possible) or "2d" (one height of the road per place, the walls as outlines on the ground). A track says it with "physics" in track.json.
+function trackPhysics3D(track) {
+    var forced = new URLSearchParams(window.location.search).get("physics");     // ?physics=3d or 2d: to try a track with the other one
+    if(forced === "3d") return true;
+    if(forced === "2d") return false;
+    return !(track && track.physics === "2d");
+}
+
 function buildGroundWorld() {
+    var physics3D = trackPhysics3D(currentTrack);
     groundWorld = new OpenRacer.GroundWorld(5);
+    groundWorld.use3D = physics3D;
     var a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
     for(var k = 0; k < searchOrder.length; k++) {
         var meshes = trackObjects[searchOrder[k]];
         for(var m = 0; m < meshes.length; m++) {
             var mesh = meshes[m];
             var texture = meshSurface(mesh);
-            if(!drivableTextures[texture]) continue;
+            var drivable = !!drivableTextures[texture];
+            // the 3D side (loops, walls that are driven on): the drivable parts for the wheels, and the rest that the body can hit
+            if(!drivable && (!physics3D || collisionIgnoredTextures[texture])) continue;
             var position = mesh.geometry.attributes.position;
             var index = mesh.geometry.index;
             var offset = mesh.position;
@@ -281,11 +294,12 @@ function buildGroundWorld() {
                 a.fromBufferAttribute(position, index.getX(t)).add(offset);
                 b.fromBufferAttribute(position, index.getX(t + 1)).add(offset);
                 c.fromBufferAttribute(position, index.getX(t + 2)).add(offset);
-                groundWorld.addTriangle(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, texture, mesh.name, k);
+                if(drivable) groundWorld.addTriangle(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, texture, mesh.name, k);
+                if(physics3D) groundWorld.addTriangle3D(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, texture, mesh.name, k, drivable);
             }
         }
     }
-    console.log("ground triangles: " + groundWorld.count());
+    console.log("ground triangles: " + groundWorld.count() + (physics3D ? ", 3D: " + groundWorld.count3D() : ""));
 }
 
 // What a piece of the track is made of: for a glTF track the role that the track editor gave it, for the old format the name of its texture.

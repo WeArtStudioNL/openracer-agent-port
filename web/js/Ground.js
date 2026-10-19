@@ -22,6 +22,11 @@
  * Description: The road that the car drives on, for the suspension: the drivable triangles of the track in a grid on the ground
  *              plane. A query for a place (x, z) gives the surface under it: its height, its normal and what it is made of.
  *              Much faster than a ray against the meshes, so every wheel can ask in every step of the physics. No 3D dependencies.
+ *
+ *              That grid on the ground plane has one height per place, so it cannot hold a loop, a vertical wall that is driven on or a
+ *              road that overhangs. The 3D side of this world does: every triangle of the track (the drivable ones, and the rest that the
+ *              car can hit) is kept in a 3D grid, with rays (the wheels feel the road along their own axis, so a car can drive on a wall or
+ *              upside down) and with spheres (the body of the car, see Vehicle.js). It is built for a track with "physics": "3d".
  */
 
 OpenRacer.GroundWorld = function (cellSize) {
@@ -121,4 +126,225 @@ OpenRacer.GroundWorld = function (cellSize) {
         return { y: bestY, nx: tri[best + 9], ny: tri[best + 10], nz: tri[best + 11], surface: surfaces[tri[best + 13]], mesh: meshes[meshOf[bestMesh]] };
     };
     var bestMesh = 0;
+
+    // ---- the 3D side: all triangles in a 3D grid, for rays (the wheels) and spheres (the body)
+
+    this.use3D = false;           // the physics uses the rays and the spheres, and not the one height per place
+    var CELL3 = 4;
+    var data3 = new Float32Array(12 * 1024);   // per triangle: the corner v0, the edges e1 and e2, the unit normal
+    var box3 = new Float32Array(6 * 1024);     // the box around it
+    var meta3 = new Int32Array(3 * 1024);      // the surface, the mesh, the priority and whether it is drivable (flag in bit 20)
+    var count3 = 0;
+    var grid3 = new Map();
+    var stamp3 = new Int32Array(1024);
+    var stampValue = 0;
+
+    function cellKey(i, j, k) { return ((i + 4096) * 8192 + (j + 4096)) * 8192 + (k + 4096); }
+
+    function grow3() {
+        var capacity = stamp3.length * 2;
+        var d = new Float32Array(capacity * 12); d.set(data3); data3 = d;
+        var b = new Float32Array(capacity * 6); b.set(box3); box3 = b;
+        var m = new Int32Array(capacity * 3); m.set(meta3); meta3 = m;
+        var st = new Int32Array(capacity); st.set(stamp3); stamp3 = st;
+    }
+
+    // A triangle of the track, in world coordinates, for the 3D side. drivable: the wheels can drive on it (else it is only for the body).
+    this.addTriangle3D = function (x0, y0, z0, x1, y1, z1, x2, y2, z2, surface, mesh, priority, drivable) {
+        var e1x = x1 - x0, e1y = y1 - y0, e1z = z1 - z0, e2x = x2 - x0, e2y = y2 - y0, e2z = z2 - z0;
+        var nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
+        var length = Math.sqrt(nx * nx + ny * ny + nz * nz);
+        if(length < 1e-9) return;
+        var minX = Math.min(x0, x1, x2), maxX = Math.max(x0, x1, x2), minY = Math.min(y0, y1, y2), maxY = Math.max(y0, y1, y2), minZ = Math.min(z0, z1, z2), maxZ = Math.max(z0, z1, z2);
+        var i0 = Math.floor(minX / CELL3), i1 = Math.floor(maxX / CELL3), j0 = Math.floor(minY / CELL3), j1 = Math.floor(maxY / CELL3), k0 = Math.floor(minZ / CELL3), k1 = Math.floor(maxZ / CELL3);
+        if((i1 - i0 + 1) * (j1 - j0 + 1) * (k1 - k0 + 1) > 60000) return;     // a triangle as big as a country: not a part of a track
+        if(count3 >= stamp3.length) grow3();
+        var t = count3++;
+        var o = t * 12;
+        data3[o] = x0; data3[o + 1] = y0; data3[o + 2] = z0; data3[o + 3] = e1x; data3[o + 4] = e1y; data3[o + 5] = e1z;
+        data3[o + 6] = e2x; data3[o + 7] = e2y; data3[o + 8] = e2z; data3[o + 9] = nx / length; data3[o + 10] = ny / length; data3[o + 11] = nz / length;
+        var b = t * 6;
+        box3[b] = minX; box3[b + 1] = minY; box3[b + 2] = minZ; box3[b + 3] = maxX; box3[b + 4] = maxY; box3[b + 5] = maxZ;
+        meta3[t * 3] = surfaceIndex(surface); meta3[t * 3 + 1] = meshIndex(mesh); meta3[t * 3 + 2] = (priority || 0) | (drivable ? (1 << 20) : 0);
+        for(var i = i0; i <= i1; i++) {
+            for(var j = j0; j <= j1; j++) {
+                for(var k = k0; k <= k1; k++) {
+                    var key = cellKey(i, j, k);
+                    var list = grid3.get(key);
+                    if(!list) { list = []; grid3.set(key, list); }
+                    list.push(t);
+                }
+            }
+        }
+    };
+
+    this.count3D = function () { return count3; };
+    this.isDrivable = function (t) { return (meta3[t * 3 + 2] & (1 << 20)) !== 0; };
+    this.surfaceOf = function (t) { return surfaces[meta3[t * 3]]; };
+    this.meshOf = function (t) { return meshes[meta3[t * 3 + 1]]; };
+
+    // The nearest drivable surface along a ray (a direction of unit length), not further than maxT. The side of the triangle that faces the
+    // ray counts (a road is the same road from both sides); a hit that is nearly along the surface (the cosine between the ray and the
+    // normal is less than minFacing) is no road. Where several surfaces are at about the same distance (a road over grass) the one with
+    // the lowest priority is taken. Gives { t, x, y, z, nx, ny, nz, surface, mesh } (the normal faces the ray), or null.
+    this.ray = function (ox, oy, oz, dx, dy, dz, maxT, minFacing) {
+        if(!count3) return null;
+        minFacing = minFacing === undefined ? 0.17 : minFacing;
+        var ex = ox + dx * maxT, ey = oy + dy * maxT, ez = oz + dz * maxT;
+        var i0 = Math.floor(Math.min(ox, ex) / CELL3), i1 = Math.floor(Math.max(ox, ex) / CELL3);
+        var j0 = Math.floor(Math.min(oy, ey) / CELL3), j1 = Math.floor(Math.max(oy, ey) / CELL3);
+        var k0 = Math.floor(Math.min(oz, ez) / CELL3), k1 = Math.floor(Math.max(oz, ez) / CELL3);
+        stampValue++;
+        var best = -1, bestT = Infinity, bestPriority = 1e9;
+        for(var i = i0; i <= i1; i++) {
+            for(var j = j0; j <= j1; j++) {
+                for(var k = k0; k <= k1; k++) {
+                    var list = grid3.get(cellKey(i, j, k));
+                    if(!list) continue;
+                    for(var q = 0; q < list.length; q++) {
+                        var t = list[q];
+                        if(stamp3[t] === stampValue) continue;
+                        stamp3[t] = stampValue;
+                        var m = t * 3 + 2;
+                        if((meta3[m] & (1 << 20)) === 0) continue;
+                        var o = t * 12;
+                        var nx = data3[o + 9], ny = data3[o + 10], nz = data3[o + 11];
+                        var facing = -(nx * dx + ny * dy + nz * dz);
+                        if(facing < 0) facing = -facing;
+                        if(facing < minFacing) continue;
+                        // Moller-Trumbore, for the two sides
+                        var e1x = data3[o + 3], e1y = data3[o + 4], e1z = data3[o + 5], e2x = data3[o + 6], e2y = data3[o + 7], e2z = data3[o + 8];
+                        var px = dy * e2z - dz * e2y, py = dz * e2x - dx * e2z, pz = dx * e2y - dy * e2x;
+                        var det = e1x * px + e1y * py + e1z * pz;
+                        if(det > -1e-12 && det < 1e-12) continue;
+                        var inv = 1 / det;
+                        var tx = ox - data3[o], ty = oy - data3[o + 1], tz = oz - data3[o + 2];
+                        var u = (tx * px + ty * py + tz * pz) * inv;
+                        if(u < -1e-6 || u > 1 + 1e-6) continue;
+                        var qx = ty * e1z - tz * e1y, qy = tz * e1x - tx * e1z, qz = tx * e1y - ty * e1x;
+                        var v = (dx * qx + dy * qy + dz * qz) * inv;
+                        if(v < -1e-6 || u + v > 1 + 1e-6) continue;
+                        var hitT = (e2x * qx + e2y * qy + e2z * qz) * inv;
+                        if(hitT < 0 || hitT > maxT) continue;
+                        var priority = meta3[m] & 0xfffff;
+                        var better;
+                        if(best < 0) better = true;
+                        else if(Math.abs(hitT - bestT) <= 0.05) better = priority < bestPriority || (priority === bestPriority && hitT < bestT);
+                        else better = hitT < bestT;
+                        if(better) { best = t; bestT = hitT; bestPriority = priority; }
+                    }
+                }
+            }
+        }
+        if(best < 0) return null;
+        var ob = best * 12;
+        var bnx = data3[ob + 9], bny = data3[ob + 10], bnz = data3[ob + 11];
+        if(bnx * dx + bny * dy + bnz * dz > 0) { bnx = -bnx; bny = -bny; bnz = -bnz; }
+        return { t: bestT, x: ox + dx * bestT, y: oy + dy * bestT, z: oz + dz * bestT, nx: bnx, ny: bny, nz: bnz,
+            surface: surfaces[meta3[best * 3]], mesh: meshes[meta3[best * 3 + 1]] };
+    };
+
+    // The triangles (all, drivable or not) whose box touches a sphere, as a list of numbers in out
+    this.nearby = function (cx, cy, cz, radius, out) {
+        out.length = 0;
+        var i0 = Math.floor((cx - radius) / CELL3), i1 = Math.floor((cx + radius) / CELL3);
+        var j0 = Math.floor((cy - radius) / CELL3), j1 = Math.floor((cy + radius) / CELL3);
+        var k0 = Math.floor((cz - radius) / CELL3), k1 = Math.floor((cz + radius) / CELL3);
+        stampValue++;
+        for(var i = i0; i <= i1; i++) {
+            for(var j = j0; j <= j1; j++) {
+                for(var k = k0; k <= k1; k++) {
+                    var list = grid3.get(cellKey(i, j, k));
+                    if(!list) continue;
+                    for(var q = 0; q < list.length; q++) {
+                        var t = list[q];
+                        if(stamp3[t] === stampValue) continue;
+                        stamp3[t] = stampValue;
+                        var b = t * 6;
+                        if(box3[b] > cx + radius || box3[b + 3] < cx - radius || box3[b + 1] > cy + radius || box3[b + 4] < cy - radius || box3[b + 2] > cz + radius || box3[b + 5] < cz - radius) continue;
+                        out.push(t);
+                    }
+                }
+            }
+        }
+        return out;
+    };
+
+    // Is the sphere (c, r) near the box of triangle t? (a cheap test before the exact one)
+    this.boxNear = function (t, cx, cy, cz, r) {
+        var b = t * 6;
+        return !(box3[b] > cx + r || box3[b + 3] < cx - r || box3[b + 1] > cy + r || box3[b + 4] < cy - r || box3[b + 2] > cz + r || box3[b + 5] < cz - r);
+    };
+
+    // The point of triangle t that is nearest to p: into out as { x, y, z }; gives the squared distance
+    this.closest = function (t, px, py, pz, out) {
+        var o = t * 12;
+        var ax = data3[o], ay = data3[o + 1], az = data3[o + 2];
+        var abx = data3[o + 3], aby = data3[o + 4], abz = data3[o + 5], acx = data3[o + 6], acy = data3[o + 7], acz = data3[o + 8];
+        var apx = px - ax, apy = py - ay, apz = pz - az;
+        var d1 = abx * apx + aby * apy + abz * apz, d2 = acx * apx + acy * apy + acz * apz;
+        var rx, ry, rz, region = 2;
+        if(d1 <= 0 && d2 <= 0) { rx = ax; ry = ay; rz = az; }
+        else {
+            var bpx = apx - abx, bpy = apy - aby, bpz = apz - abz;
+            var d3 = abx * bpx + aby * bpy + abz * bpz, d4 = acx * bpx + acy * bpy + acz * bpz;
+            if(d3 >= 0 && d4 <= d3) { rx = ax + abx; ry = ay + aby; rz = az + abz; }
+            else {
+                var vc = d1 * d4 - d3 * d2;
+                if(vc <= 0 && d1 >= 0 && d3 <= 0) { var vv = d1 / (d1 - d3); rx = ax + abx * vv; ry = ay + aby * vv; rz = az + abz * vv; region = 1; }
+                else {
+                    var cpx = apx - acx, cpy = apy - acy, cpz = apz - acz;
+                    var d5 = abx * cpx + aby * cpy + abz * cpz, d6 = acx * cpx + acy * cpy + acz * cpz;
+                    if(d6 >= 0 && d5 <= d6) { rx = ax + acx; ry = ay + acy; rz = az + acz; }
+                    else {
+                        var vb = d5 * d2 - d1 * d6;
+                        if(vb <= 0 && d2 >= 0 && d6 <= 0) { var ww = d2 / (d2 - d6); rx = ax + acx * ww; ry = ay + acy * ww; rz = az + acz * ww; region = 1; }
+                        else {
+                            var va = d3 * d6 - d5 * d4;
+                            if(va <= 0 && (d4 - d3) >= 0 && (d5 - d6) >= 0) {
+                                var w2 = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+                                rx = ax + abx + (acx - abx) * w2; ry = ay + aby + (acy - aby) * w2; rz = az + abz + (acz - abz) * w2; region = 1;
+                            } else {
+                                var denom = 1 / (va + vb + vc), v2 = vb * denom, w3 = vc * denom;
+                                rx = ax + abx * v2 + acx * w3; ry = ay + aby * v2 + acy * w3; rz = az + abz * v2 + acz * w3; region = 0;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        out.x = rx; out.y = ry; out.z = rz; out.region = region;
+        var dx = px - rx, dy = py - ry, dz = pz - rz;
+        return dx * dx + dy * dy + dz * dz;
+    };
+
+    this.normalOf = function (t, out) { var o = t * 12; out.x = data3[o + 9]; out.y = data3[o + 10]; out.z = data3[o + 11]; };
+
+    // How far a line (through p, in the direction u of unit length) runs inside triangle t, as a range of distances along it: the top of a
+    // wall above a point of it is the upper end. Gives [low, high] in out, or false when the line misses the triangle.
+    this.lineRange = function (t, px, py, pz, ux, uy, uz, out) {
+        var o = t * 12;
+        var e1x = data3[o + 3], e1y = data3[o + 4], e1z = data3[o + 5], e2x = data3[o + 6], e2y = data3[o + 7], e2z = data3[o + 8];
+        var d00 = e1x * e1x + e1y * e1y + e1z * e1z, d01 = e1x * e2x + e1y * e2y + e1z * e2z, d11 = e2x * e2x + e2y * e2y + e2z * e2z;
+        var denom = d00 * d11 - d01 * d01;
+        if(denom < 1e-12) return false;
+        var wx = px - data3[o], wy = py - data3[o + 1], wz = pz - data3[o + 2];
+        var a20 = wx * e1x + wy * e1y + wz * e1z, a21 = wx * e2x + wy * e2y + wz * e2z;
+        var b20 = ux * e1x + uy * e1y + uz * e1z, b21 = ux * e2x + uy * e2y + uz * e2z;
+        // the two barycentric coordinates are linear in the distance s: l = a + b s
+        var l1a = (d11 * a20 - d01 * a21) / denom, l1b = (d11 * b20 - d01 * b21) / denom;
+        var l2a = (d00 * a21 - d01 * a20) / denom, l2b = (d00 * b21 - d01 * b20) / denom;
+        var low = -1e9, high = 1e9;
+        // l1 >= 0, l2 >= 0, 1 - l1 - l2 >= 0
+        var cons = [[l1a, l1b], [l2a, l2b], [1 - l1a - l2a, -l1b - l2b]];
+        for(var c = 0; c < 3; c++) {
+            var a = cons[c][0], b = cons[c][1];
+            if(Math.abs(b) < 1e-9) { if(a < 0) return false; }
+            else if(b > 0) low = Math.max(low, -a / b);
+            else high = Math.min(high, -a / b);
+        }
+        if(low > high) return false;
+        out[0] = low; out[1] = high;
+        return true;
+    };
 };
