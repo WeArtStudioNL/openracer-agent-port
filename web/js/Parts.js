@@ -321,11 +321,13 @@ OpenRacer.Parts = (function () {
             if (how === "hinge") {
                 joinHinge(part);
                 part.state = "hinged";
+                part.body.setAngularDamping(part.spec.damping !== undefined ? part.spec.damping : 2.0); part.body.setLinearDamping(0.2);
                 setGroups(part, false);
                 emit("unlatched", part);
             } else {
                 if (part.joint) { world.removeImpulseJoint(part.joint, true); part.joint = null; }
                 part.state = "free";
+                part.body.setAngularDamping(part.spec.damping !== undefined ? part.spec.damping : 0.4); part.body.setLinearDamping(0.05);
                 part.grace = GRACE;
                 part.collider.setCollisionGroups(groups(PART_HELD, GROUND));      // not yet against the car, it is inside it
                 emit("detached", part);
@@ -369,6 +371,21 @@ OpenRacer.Parts = (function () {
             if (part.openTimer > 0) return;
             if (!(part.breakDelay > 0)) { startMoving(part, "hinge"); return; }
             part.openTimer = part.breakDelay;
+        }
+
+        // A part that has come loose is damped and has a top speed (its spin, and its speed against the car): a hinge that flies open at the speed
+        // of a crash, or a part that a hit has thrown, moved so fast that the joint and the walls could not keep up and it jittered or flew
+        var MAX_SPIN_HINGED = 12, MAX_SPIN_FREE = 30, EXTRA_SPEED = 12;       // rad/s, rad/s, m/s on top of the speed of the car
+        function limitSpeeds() {
+            var carSpeed = Math.hypot(v.vx, v.vy, v.vz);
+            for (var i = 0; i < parts.length; i++) {
+                var p = parts[i];
+                if (p.state === "held") continue;
+                var spin = p.body.angvel(), s = Math.hypot(spin.x, spin.y, spin.z), maxSpin = p.spec.max_spin !== undefined ? p.spec.max_spin : (p.state === "hinged" ? MAX_SPIN_HINGED : MAX_SPIN_FREE);
+                if (s > maxSpin) p.body.setAngvel({ x: spin.x * maxSpin / s, y: spin.y * maxSpin / s, z: spin.z * maxSpin / s }, true);
+                var lin = p.body.linvel(), l = Math.hypot(lin.x, lin.y, lin.z), maxLin = carSpeed + EXTRA_SPEED + (p.state === "hinged" ? 0 : 20);
+                if (l > maxLin) p.body.setLinvel({ x: lin.x * maxLin / l, y: lin.y * maxLin / l, z: lin.z * maxLin / l }, true);
+            }
         }
 
         function update(dt) {
@@ -444,8 +461,8 @@ OpenRacer.Parts = (function () {
             refreshTrack();
             // two steps of half the time: a part that flies at 30 m/s hits the wall in the middle of a frame, not after it
             world.timestep = dt / 2;
-            world.step();
-            world.step();
+            world.step(); limitSpeeds();
+            world.step(); limitSpeeds();
             for (var j = 0; j < parts.length; j++) {
                 var p = parts[j];
                 if (p.state === "held") continue;

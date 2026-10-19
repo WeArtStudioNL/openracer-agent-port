@@ -290,3 +290,12 @@ The grille, the headlights and the plate fell off but were not bent: the moment 
 ### Nodes do not stand on the road with the wheels
 
 A layout made by the scan has nodes with a radius up to 0.3 m on the surface of the model, and a node low in the car (y = -0.25, radius 0.25) reached down to the level of the tyres (-0.499 m from the centre of gravity, where the road is). It was in soft contact with the road all the time (`softContacts` 1 at rest, 5 to 8 when standing against a wall), so the car rode on its nodes as well as on its wheels and could hover over bumps and crests with its wheels hardly loaded. `CollisionProxy.apply` now cuts the radius of a node of the layout to what lies above the underside of the car (the ground clearance, -0.37 m): the lowest node bottom is -0.37 m, and on the test track the car stands with `softContacts` 0 at rest. (Not reproduced as hovering in the air: standing on the road at the start, driving over the ramp and against the wall of the test track, the body stayed 0.5 m above the road and the four wheels on it.)
+
+### Damping and top speeds for loose parts
+
+A hinge that flew open at the speed of a crash, or a part that a hit threw, moved so fast that the joint and the walls could not keep up: it jittered or shot away. A part that has come loose now has:
+
+* **damping**: a hinged part an angular damping of 2.0 and a linear damping of 0.2, a free part 0.4 and 0.05 (`damping` in the spec of the part sets the angular damping);
+* **a top speed** that is kept after every step of the engine (two a frame): a hinged part spins at 12 rad/s at most and a free part at 30 (`max_spin` in the spec), and its speed does not exceed that of the car plus 12 m/s (plus 20 m/s more for a free part).
+
+Mustang at 100 km/h (the car at 27.8 m/s): the hood on its hinge spun 2.8 rad/s at most, the plates and the headlights that flew off 12 to 27 rad/s, and no part went faster than 4 m/s against the car.
