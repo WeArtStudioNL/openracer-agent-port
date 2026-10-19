@@ -1502,9 +1502,16 @@ export function initSoftBody(api) {
         const g = new OpenRacer.GroundWorld(5);
         g.use3D = true;
         const tri = (a, b, c, name, drivable) => g.addTriangle3D(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], drivable ? "road" : "wall", name, 0, drivable);
-        const R = 300;
-        tri([-R, floorY, -R], [-R, floorY, R], [R, floorY, -R], "floor", true);
-        tri([R, floorY, R], [R, floorY, -R], [-R, floorY, R], "floor", true);
+        // the floor in tiles of 100 m, from 150 m behind the car to 150 m behind the wall (one big triangle is more than the grid of the ground takes,
+        // and a floor of 300 m ended before a wall that is 350 m away at 150 km/h: the car drove off the edge)
+        const TILE = 100, zEnd = WALL_Z + 150;
+        for (let x0 = -150; x0 < 150; x0 += TILE) {
+            for (let z0 = -150; z0 < zEnd; z0 += TILE) {
+                const x1 = x0 + TILE, z1 = z0 + TILE;
+                tri([x0, floorY, z0], [x0, floorY, z1], [x1, floorY, z0], "floor", true);
+                tri([x1, floorY, z1], [x1, floorY, z0], [x0, floorY, z1], "floor", true);
+            }
+        }
         const turn = angleDeg * Math.PI / 180, cos = Math.cos(turn), sin = Math.sin(turn);
         const W = 40, H = 6;
         const at = (x, y) => [x * cos + WALL_Z * 0 - 0, floorY + y, WALL_Z + x * sin];      // the wall turned about its middle

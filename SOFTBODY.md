@@ -259,3 +259,7 @@ When a part with nodes of its own opened (it was loaded past its "opens at"), it
 ### More grip for the run of the crash test
 
 At a high speed the car slid sideways under the torque of its engine and missed the wall (at 140 km/h it ended 14.9 m off its line and never hit). For the run of the crash test (and the wall stage of the full test) the tyres have **three times the grip** of the road (`bench.gripBoost`, `bench.grip`: the grip function of the bench multiplies the road by it); it is put back to 1 when the test stops. With the steering that keeps the car on its line (`steerAhead`) the car now drives straight: at 140 km/h at most 1.47 m off its line and 0.16 m off the middle of the wall at the hit, 204 g, 45 cm of bend, 142 kJ taken up, 130 km/h in 3 s. The factor is a property of the bench (`benchState.gripBoost`), 1 gives the plain tyres back.
+
+### The floor of the crash test reaches past the wall
+
+The floor of the test was a square of 600 m (300 m each way from the start), and the wall is 350 m away at 150 km/h (`2.6 + v²/5`): the car drove off the edge of the floor just before the wall and fell. The floor is now made of tiles of 100 m (the grid of the ground refuses a triangle that is too big, so one big floor would not do) from 150 m behind the start to 150 m behind the wall, 300 m wide. Mustang at 150 km/h: the height stayed between 0.25 and 0.56 m the whole way, it hit the wall at 348.3 m (the wall at 349.8 m) with 252 g and 43 cm of bend.
