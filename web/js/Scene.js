@@ -62,6 +62,23 @@ function updateScreenSize() {
     }
 }
 
+// A phone or a tablet (a touch screen is the main pointer). The desktop is not touched by anything that depends on this.
+function isTouchDevice() {
+    try { return window.matchMedia("(pointer: coarse)").matches; } catch(e) { return false; }
+}
+
+// The pixel density of the picture. A desktop draws at the density of the screen. A phone has three device pixels per point, which is
+// 3.6 million pixels on an iPhone Plus, and the post-processing keeps several half-float buffers of that size (one of them
+// multisampled): Safari then ends the page for lack of memory. On a touch device the picture is limited to about two million pixels
+// (and a density of 2 at most), which still looks sharp on such a screen.
+var TOUCH_PIXEL_BUDGET = 2000000;
+function pickPixelRatio() {
+    var ratio = window.devicePixelRatio || 1;
+    if(!isTouchDevice()) return ratio;
+    var fit = Math.sqrt(TOUCH_PIXEL_BUDGET / Math.max(1, window.innerWidth * window.innerHeight));
+    return Math.max(1, Math.min(ratio, 2, fit));
+}
+
 window.onresize = function() {
     if(!camera) return; // the game is not running (the main menu has a renderer of its own)
     updateScreenSize();
@@ -83,7 +100,7 @@ RACER.Scene = function (parameters, domElement) {
 
         // with post-processing the anti-aliasing is done on the buffer of the composer
         renderer = new THREE.WebGLRenderer( { antialias: !useComposer } );
-        renderer.setPixelRatio( window.devicePixelRatio );
+        renderer.setPixelRatio( pickPixelRatio() );
         applyToneMapping(Settings.option("toneMapping"));
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -141,7 +158,7 @@ RACER.Scene = function (parameters, domElement) {
             var pixelRatio = renderer.getPixelRatio();
             var renderTarget = new THREE.WebGLRenderTarget(
                 Math.floor( SCREEN_WIDTH * pixelRatio ), Math.floor( SCREEN_HEIGHT * pixelRatio ),
-                { type: THREE.HalfFloatType, samples: 4 } );
+                { type: THREE.HalfFloatType, samples: isTouchDevice() ? 2 : 4 } );
             composer = new THREE.EffectComposer( renderer, renderTarget );
             
             composer.addPass( new THREE.RenderPass( scene, camera ) );
