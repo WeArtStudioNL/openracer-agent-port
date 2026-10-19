@@ -1,0 +1,7 @@
+# The pages, scripts and lists are checked with the server on every visit (a small request while nothing changed), so a new version
+# of the game reaches the player at once. The models, textures and sounds keep their cache.
+<IfModule mod_headers.c>
+    <FilesMatch "\.(html|js|json|css)$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
+</IfModule>

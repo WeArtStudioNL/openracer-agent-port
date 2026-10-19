@@ -71,10 +71,13 @@ var scripts = [
     "js/main.js"
 ];
 
+// the scripts get the same ?v=... as this file (see index.html), so a new version is not served from the cache of the browser
+var version = new URL(import.meta.url).search;
+
 function loadScript(src) {
     return new Promise(function (resolve, reject) {
         var element = document.createElement("script");
-        element.src = src;
+        element.src = src + version;
         element.async = false;
         element.onload = resolve;
         element.onerror = function () { reject(new Error("Could not load " + src)); };
