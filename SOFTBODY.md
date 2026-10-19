@@ -179,3 +179,14 @@ The next crash test starts from what the window changed. The older "Parts…" pa
 ### Turning a pin
 
 A pin point can be turned, so that its axes are not the axes of the car: a **rotate gizmo** (three rings) sits on the chosen pin in the view, and three fields (**Rotation of the pin**, degrees, X then Y then Z) do the same by number; **Reset** puts it straight again. The gizmo with the angle fan turns with it. Saved as `rot` (a quaternion `[x, y, z, w]`) in the pin point; `Parts.js` turns the axis of the hinge by it (the angles are measured from the rest place of the part). Without `rot` nothing changes.
+
+### A door: opens at one force, falls off at a higher one
+
+Every pin point has two forces (kN; 1 kN is about 102 kg of force):
+
+* **Opens at** (`activate_force`): the part sits shut until the load on this pin passes it, then it swings on the hinge of the pin (axis, rotation, angles). Without it the part opens at the default latch of 3 g of the part (`hinge.latch_force` still sets that for the whole part, and 0 is open from the start).
+* **Breaks off at** (`break_force`, higher): when the load on the pin passes it the pin is gone; with no pin left the whole object is a free rigid body, which falls, bounces and **hits the car and the road** (after 0.35 s, so that it does not start inside the car). The editor warns when this is not higher than "opens at".
+
+The load on a pin is the largest of: the force in the link beam of the pin (a part with nodes of its own: the hits on its deformation nodes come through that beam), the force of the shell on the node of the body that the pin hangs on, and the inertia of the part (mass times acceleration) shared over the pins that hold. So a door that is hit on its side nodes opens at the force that gets to the pin, and an object that is only shaken opens at its mass times the acceleration. The **deformation nodes** (the nodes of the part) bend and tear at their own strength, set for all of them with one number.
+
+Tested with a door of 10 kg: at 30 and 60 km/h against a wall it stayed shut with the pin at 20 kN; at 130 km/h it opened and hung on its hinge (breaks off at 200 kN); with opens at 1 kN and breaks off at 5 kN it opened, the pin tore, and it flew off as a free body that came to rest on the road with collision with the car on. Note that a door of 10 kg only loads a pin with about 18 kN at 130 km/h on its own inertia: use lower forces for the pin, or hit the door on the side.

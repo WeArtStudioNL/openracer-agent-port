@@ -161,7 +161,7 @@ OpenRacer.Parts = (function () {
             if (group.length && !spec.nodes) nodes = group.slice();
             // a mount is a node of the shell or a point (in the frame of the car): a point is held by the nearest node of the body
             var mountList = hinge && sb ? (spec.mounts || []).filter(function (m) { return m && ((m.node >= 0 && m.node < sb.count) || (Array.isArray(m.point) && m.point.length === 3)); }).slice(0, 2).map(function (m) {
-                var out = { node: m.node, break_force: m.break_force, point: Array.isArray(m.point) ? new THREE.Vector3().fromArray(m.point) : null,
+                var out = { node: m.node, break_force: m.break_force, activate_force: m.activate_force || 0, point: Array.isArray(m.point) ? new THREE.Vector3().fromArray(m.point) : null,
                     pin: m.axes !== undefined, axes: pinAxes(m.axes), rot: Array.isArray(m.rot) && m.rot.length === 4 ? new THREE.Quaternion(m.rot[0], m.rot[1], m.rot[2], m.rot[3]).normalize() : null, min: (m.min !== undefined ? m.min : -90) * DEG, max: (m.max !== undefined ? m.max : 90) * DEG };
                 if (out.point) {
                     var best = 1e9;
@@ -189,12 +189,12 @@ OpenRacer.Parts = (function () {
                     axis: new THREE.Vector3().fromArray(hinge.axis || [0, 1, 0]).normalize(),
                     min: (hinge.min !== undefined ? hinge.min : -90) * DEG, max: (hinge.max !== undefined ? hinge.max : 90) * DEG,
                     rest: (hinge.rest || 0) * DEG, spring: hinge.spring || 0, damper: hinge.damper || 0,
-                    latch: hinge.latch_force !== undefined ? hinge.latch_force : mass * 9.81 * 3, breakForce: hinge.break_force || 0
+                    latch: hinge.latch_force !== undefined ? hinge.latch_force : (mountList.some(function (m) { return m.activate_force > 0; }) ? Infinity : mass * 9.81 * 3), breakForce: hinge.break_force || 0
                 },
                 breakForce: spec.break_force !== undefined ? spec.break_force : 0,
                 // the points where the part is hinged to the body: nodes of the shell, each with the force at which it tears off
                 mounts: mountList.map(function (m) {
-                    return { node: m.node, breakForce: m.break_force || 0, alive: true, beam: m.beam, point: m.point || sb.restPosition(m.node, new THREE.Vector3()), pin: m.pin, axes: m.axes, rot: m.rot, min: m.min, max: m.max };
+                    return { node: m.node, breakForce: m.break_force || 0, activate: m.activate_force || 0, alive: true, beam: m.beam, point: m.point || sb.restPosition(m.node, new THREE.Vector3()), pin: m.pin, axes: m.axes, rot: m.rot, min: m.min, max: m.max };
                 }),
                 group: group.length ? spec.object : null,
                 // held: sits on the car; hinged: swings on the joint; free: loose
@@ -314,6 +314,18 @@ OpenRacer.Parts = (function () {
             }
         }
 
+        // The load on a pin (N): the force in its link beam (a part with nodes of its own), the force of the shell on its node of the body, or the
+        // inertia of the part shared over the pins that hold, whichever is more
+        function mountLoad(part, m, holding) {
+            var load = (part.inertia || 0) / Math.max(1, holding);
+            if (sb) {
+                sb.position(m.node, a); sb.restPosition(m.node, c);
+                load = Math.max(load, a.distanceTo(c) * sb.params.anchorK);
+                if (m.beam !== undefined) load = Math.max(load, Math.abs(sb.beamForce(m.beam)));
+            }
+            return load;
+        }
+
         // A mount tears off when the load on it passes its force: the inertia of the part shared over the mounts that hold, or the force of
         // the shell on its node. With one mount left the part swings about it, with none it is free.
         function tearMounts(part) {
@@ -357,6 +369,19 @@ OpenRacer.Parts = (function () {
                 part.load = frame > 3 ? Math.max(inertia, shell) : 0;
                 part.inertia = frame > 3 ? inertia : 0;
 
+                if (part.state === "held" && part.mounts.length) {
+                    // the pins: one that is loaded past its breaking force is gone; one that is loaded past its activation force lets the part open
+                    var holding = part.mounts.filter(function (m) { return m.alive; });
+                    var broke = false, activated = false;
+                    holding.forEach(function (m) {
+                        var pinLoad = frame > 3 ? mountLoad(part, m, holding.length) : 0;
+                        if (m.breakForce > 0 && pinLoad > m.breakForce) { m.alive = false; broke = true; emit("mount torn", part); }
+                        else if (m.pin && m.activate > 0 && pinLoad > m.activate) activated = true;
+                    });
+                    if (broke) {
+                        if (part.mounts.some(function (m) { return m.alive; })) startMoving(part, "hinge"); else startMoving(part, "free");
+                    } else if (activated && part.hinge) startMoving(part, "hinge");
+                }
                 if (part.state === "held" && sb && part.mounts.length) {
                     // a link beam of a mount tore (the hold of a part with nodes of its own): that mount is gone, the part opens on the others
                     var lost = false;

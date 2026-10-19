@@ -173,7 +173,7 @@ export function initSoftBody(api) {
             });
             // the pin points of the part window have more than the fields here (axes, angles, more than two): they are kept
             const prev = part.mounts || [];
-            mounts.forEach((m, i) => { const old = prev[i]; if (old && old.axes && JSON.stringify(old.point || null) === JSON.stringify(m.point || null) && old.node === m.node) { m.axes = old.axes; m.min = old.min; m.max = old.max; if (old.rot) m.rot = old.rot; } });
+            mounts.forEach((m, i) => { const old = prev[i]; if (old && old.axes && JSON.stringify(old.point || null) === JSON.stringify(m.point || null) && old.node === m.node) { m.axes = old.axes; m.min = old.min; m.max = old.max; if (old.rot) m.rot = old.rot; if (old.activate_force) m.activate_force = old.activate_force; } });
             if (prev.length > 2) prev.slice(2).forEach((m) => mounts.push(m));
             if (mounts.length) part.mounts = mounts; else delete part.mounts;
             delete part.break_force;
@@ -1320,13 +1320,20 @@ export function initSoftBody(api) {
                 ' <span class="pw-axes">' + AXES.map((a) => '<button class="small ' + (axes[a] ? "accent" : "ghost") + '" data-axis="' + a + '">' + a.toUpperCase() + "</button>").join("") + '</span> <button class="small ghost" data-a="del" title="Remove this pin point">✕</button></div>' +
                 '<div class="row"><div><label>Min <b data-v="min"></b>°</label><input type="range" data-a="min" min="-180" max="0" step="1"></div><div><label>Max <b data-v="max"></b>°</label><input type="range" data-a="max" min="0" max="180" step="1"></div></div>' +
                 '<div class="row"><div><label>Rotation of the pin (°) <button class="small ghost set" data-a="rot0">Reset</button></label><div class="row"><input type="number" data-a="rx" step="5"><input type="number" data-a="ry" step="5"><input type="number" data-a="rz" step="5"></div></div></div>' +
-                '<div class="row"><div><label>Breaking force (kN)</label><input type="number" data-a="force" min="0" step="10" placeholder="0: never"></div></div></div>');
+                '<div class="row"><div><label title="1 kN is about 102 kg of force">Opens at (kN)</label><input type="number" data-a="activate" min="0" step="1" placeholder="the part stays shut"></div>' +
+                '<div><label title="1 kN is about 102 kg of force">Breaks off at (kN)</label><input type="number" data-a="force" min="0" step="10" placeholder="0: never"></div></div>' +
+                '<div class="hint pw-warn"></div></div>');
             const pinEl = d.querySelector(".pw-pin");
             const q = (a) => d.querySelector('[data-a="' + a + '"]');
             const min = pin.min !== undefined ? pin.min : -90, max = pin.max !== undefined ? pin.max : 90;
             q("min").value = min; q("max").value = max;
             d.querySelector('[data-v="min"]').textContent = min; d.querySelector('[data-v="max"]').textContent = max;
             q("force").value = pin.break_force ? pin.break_force / 1000 : "";
+            q("activate").value = pin.activate_force ? pin.activate_force / 1000 : "";
+            const warn = d.querySelector(".pw-warn");
+            const checkForces = () => { warn.textContent = pin.activate_force && pin.break_force && pin.break_force <= pin.activate_force ? "Breaks off should be higher than opens at, or the part never swings: it falls off at once." : ""; };
+            checkForces();
+            q("activate").addEventListener("change", () => { const v = parseFloat(q("activate").value); if (v > 0) pin.activate_force = v * 1000; else delete pin.activate_force; checkForces(); partChanged(); });
             const eul = eulerOf(pin);
             q("rx").value = eul[0]; q("ry").value = eul[1]; q("rz").value = eul[2];
             // the numbers turn the pin too (X, then Y, then Z); the gizmo in the view does the same by hand
@@ -1349,13 +1356,13 @@ export function initSoftBody(api) {
                 q(k).addEventListener("input", () => { pin[k] = parseFloat(q(k).value); d.querySelector('[data-v="' + k + '"]').textContent = pin[k]; sb.pinSel = i; drawPartGizmos(); });
                 q(k).addEventListener("change", () => partChanged());
             });
-            q("force").addEventListener("change", () => { const v = parseFloat(q("force").value); if (v > 0) pin.break_force = v * 1000; else delete pin.break_force; partChanged(); });
+            q("force").addEventListener("change", () => { const v = parseFloat(q("force").value); if (v > 0) pin.break_force = v * 1000; else delete pin.break_force; checkForces(); partChanged(); });
             q("del").addEventListener("click", () => { part.mounts.splice(i, 1); sb.pinSel = part.mounts.length ? Math.min(sb.pinSel, part.mounts.length - 1) : -1; partChanged(); });
         });
         // nodes of the part
         const own = [];
         if (sb.layout) sb.layout.forEach((n, k) => { if (n.part === w.name) own.push(k); });
-        const nh = add('<div class="pw-section"><b>Nodes</b> <button class="small ' + (sb.partMode === "nodes" ? "accent" : "") + '" data-a="nodes">' + (sb.partMode === "nodes" ? "Stop adding nodes" : "Add nodes") + "</button></div>");
+        const nh = add('<div class="pw-section"><b>Deformation nodes</b> <button class="small ' + (sb.partMode === "nodes" ? "accent" : "") + '" data-a="nodes">' + (sb.partMode === "nodes" ? "Stop adding nodes" : "Add nodes") + "</button></div>");
         nh.querySelector('[data-a="nodes"]').addEventListener("click", async () => {
             if (sb.partMode === "nodes") { endPartMode(); return; }
             const s = softBody();
@@ -1364,10 +1371,10 @@ export function initSoftBody(api) {
             sb.partMode = "nodes"; sb.deferRestart = true;
             renderPartWin();
         });
-        if (sb.partMode === "nodes") add('<p class="hint">Click on the surface of ' + w.name + ' to add nodes. Esc or the button stops.</p>');
-        if (!own.length) add('<p class="hint">No nodes added yet.</p>');
+        if (sb.partMode === "nodes") add('<p class="hint">Click on the surface of ' + w.name + ' to add nodes: the part bends with them. Esc or the button stops.</p>');
+        if (!own.length) add('<p class="hint">No nodes added yet: the part does not bend, it is one stiff piece.</p>');
         else {
-            const st = add('<div class="row"><div><label>Strength of all nodes (kN)</label><input type="number" data-a="strength" min="0" step="10"></div></div>');
+            const st = add('<div class="row"><div><label>Strength of all nodes (kN): how much force they take before they bend</label><input type="number" data-a="strength" min="0" step="10"></div></div>');
             const first = sb.nodeEdits.get(own[0]);
             st.querySelector('[data-a="strength"]').value = first && own.every((k) => sb.nodeEdits.has(k) && sb.nodeEdits.get(k).yield_force === first.yield_force) ? first.yield_force / 1000 : "";
             st.querySelector('[data-a="strength"]').addEventListener("change", (e) => {

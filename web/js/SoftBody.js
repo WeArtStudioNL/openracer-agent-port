@@ -108,6 +108,13 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         self.beamCount = B;
         return B - 1;
     };
+    // The force in a beam now (N, along the beam: positive when it is stretched): for the load on a link of a part
+    this.beamForce = function (i) {
+        if (!beamAlive[i] || gone[beamA[i]] || gone[beamB[i]]) return 0;
+        var a = beamA[i] * 3, b = beamB[i] * 3;
+        var ex = rest[b] + u[b] + q[b] - rest[a] - u[a] - q[a], ey = rest[b + 1] + u[b + 1] + q[b + 1] - rest[a + 1] - u[a + 1] - q[a + 1], ez = rest[b + 2] + u[b + 2] + q[b + 2] - rest[a + 2] - u[a + 2] - q[a + 2];
+        return beamK[i] * (Math.sqrt(ex * ex + ey * ey + ez * ez) - beamRest[i]);
+    };
     // The nodes of a part come loose with it: their anchors and beams are gone (they are not tested against the road any more)
     this.detachGroup = function (name) {
         for (var k = 0; k < N; k++) if (partOf[k] === name) { gone[k] = 1; anchorAlive[k] = 0; w[3 * k] = w[3 * k + 1] = w[3 * k + 2] = 0; }      // its bend stays as it was: the model of the part keeps its dents
