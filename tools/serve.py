@@ -81,7 +81,18 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def is_local(self):
-        return self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+        """A request from this machine, to this machine's own name, from a page of this server: the API writes and deletes files, so a
+        web page of someone else (DNS rebinding makes a name of theirs point at 127.0.0.1) must not be able to use it."""
+        if self.client_address[0] not in ("127.0.0.1", "::1", "::ffff:127.0.0.1"):
+            return False
+        raw = self.headers.get("Host") or ""
+        host = raw[:raw.find("]") + 1] if raw.startswith("[") else raw.rsplit(":", 1)[0]
+        if host not in ("localhost", "127.0.0.1", "[::1]"):
+            return False
+        origin = self.headers.get("Origin")
+        if origin and (urlparse(origin).hostname or "") not in ("localhost", "127.0.0.1", "::1"):
+            return False
+        return True
 
     def do_GET(self):
         path = urlparse(self.path).path
@@ -116,7 +127,12 @@ class Handler(SimpleHTTPRequestHandler):
         target = self.item_path(parts)
         if target is None or len(parts) < 4:
             return self.send_json({"error": "bad path"}, 400)
-        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            return self.send_json({"error": "bad length"}, 400)
+        if length < 0:
+            return self.send_json({"error": "bad length"}, 400)
         if length > MAX_UPLOAD:
             return self.send_json({"error": "file too large"}, 413)
         os.makedirs(os.path.dirname(target), exist_ok=True)

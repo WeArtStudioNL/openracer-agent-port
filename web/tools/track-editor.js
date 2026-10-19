@@ -644,7 +644,8 @@ async function refreshList(select) {
     const el = $("existing");
     el.innerHTML = '<option value="">—</option>' + state.tracks.map((t) => {
         const source = OpenRacer.Garage.sourceOf(t);
-        return '<option value="' + t.id + '">' + (t.name || t.id) + " (" + t.id + ")" + (source === "garage" ? " · my garage" : source === "folder" ? " · folder" : "") + "</option>";
+        const esc = (text) => String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+        return '<option value="' + esc(t.id) + '">' + esc(t.name || t.id) + " (" + esc(t.id) + ")" + (source === "garage" ? " · my garage" : source === "folder" ? " · folder" : "") + "</option>";
     }).join("");
     el.value = select || "";
 }

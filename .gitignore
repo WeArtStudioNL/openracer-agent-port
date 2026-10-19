@@ -42,3 +42,7 @@ Network Trash Folder
 Temporary Items
 .apdisk
 /build/
+# tool output
+.playwright-mcp/
+tools/__pycache__/
+__pycache__/

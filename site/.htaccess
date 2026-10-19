@@ -12,3 +12,12 @@
         Header set Cache-Control "public, max-age=604800"
     </FilesMatch>
 </IfModule>
+
+# security headers for the site and the game
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+    Header set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+    Header set Strict-Transport-Security "max-age=15552000"
+</IfModule>

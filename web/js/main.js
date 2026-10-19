@@ -42,6 +42,11 @@ function startGame(carId, trackId) {
 }
 
 // The race: the AI cars, the ghost and the records (see Opponent.js, Ghost.js, Records.js). The options come from the main menu, in the address.
+// The names of cars come from car.json, which can be imported from someone else: text, never markup
+function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, function(c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; });
+}
+
 var race = { opponents: [], ghost: null, line: null, options: null, allCars: [] };
 
 function raceOptionsFromQuery(query) {
@@ -224,7 +229,7 @@ function renderResults() {
         "<tr style=\"color: #9fb0c4; text-align: left;\"><th style=\"padding: 4px 10px 4px 0;\">#</th><th>Car</th><th style=\"text-align: right;\">Best lap</th><th style=\"text-align: right;\">Time</th></tr>";
     rows.forEach(function(r, i) {
         var time = r.time === null ? "running" : (i === 0 ? Hud.formatTime(r.time) : "+" + Hud.formatTime(r.time - rows[0].time));
-        html += "<tr style=\"" + (r.player ? "color: #ffd04d; font-weight: bold;" : "") + "\"><td style=\"padding: 5px 10px 5px 0;\">" + (i + 1) + "</td><td>" + r.name + "</td>" +
+        html += "<tr style=\"" + (r.player ? "color: #ffd04d; font-weight: bold;" : "") + "\"><td style=\"padding: 5px 10px 5px 0;\">" + (i + 1) + "</td><td>" + escapeHtml(r.name) + "</td>" +
             "<td style=\"text-align: right; padding-left: 16px;\">" + (r.best === null ? "–" : Hud.formatTime(r.best)) + "</td><td style=\"text-align: right; padding-left: 16px;\">" + time + "</td></tr>";
     });
     html += "</table><div style=\"margin-top: 18px; text-align: right;\">" +
@@ -351,7 +356,7 @@ function startSkidpad() {
         panel.style.cssText = "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1002; min-width: 380px; padding: 22px 28px; " +
             "background: rgba(20, 24, 31, 0.92); color: #ffffff; font-family: Arial; border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); text-align: center;";
         var verdict = g > 1.1 ? "a racing car on slicks" : g > 0.95 ? "a sports car" : g > 0.85 ? "a good road car" : g > 0.75 ? "an ordinary road car" : "a van";
-        panel.innerHTML = "<div style=\"font-size: 15px; color: #9fb0c4; letter-spacing: 2px;\">SKIDPAD · " + (carConfig.name || carConfig.id) + "</div>" +
+        panel.innerHTML = "<div style=\"font-size: 15px; color: #9fb0c4; letter-spacing: 2px;\">SKIDPAD · " + escapeHtml(carConfig.name || carConfig.id) + "</div>" +
             "<div style=\"font-size: 54px; font-weight: bold; margin: 6px 0 2px;\">" + g.toFixed(2) + " g</div>" +
             "<div style=\"color: #cfd8e3; margin-bottom: 18px;\">held at " + Math.round(sp.bestSpeed * 3.6) + " km/h on the circle of " + R + " m · like " + verdict + "</div>" +
             "<button id=\"skidReset\" style=\"padding: 9px 18px; margin: 0 4px; font: bold 15px Arial; background: #3d7bd9; color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Reset</button>" +
