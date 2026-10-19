@@ -969,7 +969,10 @@ export function initSoftBody(api) {
         const model = viewModel();
         if (!model) return null;
         caster.setFromCamera(new THREE.Vector2(mx / rect.width * 2 - 1, -(my / rect.height) * 2 + 1), camera);
-        const hit = caster.intersectObject(model, true).filter((h) => h.object.isMesh && h.object.visible && h.face)[0];
+        let hits = caster.intersectObject(model, true).filter((h) => h.object.isMesh && h.object.visible && h.face);
+        // while nodes are added a click goes through everything but the part that is open
+        if (sb.partMode === "nodes" && sb.partWin) { const po = partObj(); hits = hits.filter((h) => po && within(h.object, po)); }
+        const hit = hits[0];
         if (!hit) return null;
         const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
         if (n.dot(caster.ray.direction) > 0) n.negate();                  // the side that the ray comes from is the outside
@@ -1176,8 +1179,29 @@ export function initSoftBody(api) {
         if (e.key !== "Escape") return;
         if (sb.partMode) { endPartMode(); e.preventDefault(); }
     });
+    // While nodes are added the other objects are almost see-through (10%), so the part can be seen and clicked: they get copies of their
+    // materials, and get their own back when it stops
+    function fadeOthers(on) {
+        const roots = [viewModel()].concat(bench.model && bench.model.wheels ? bench.model.wheels : []).filter(Boolean);
+        const part = partObj();
+        roots.forEach((root) => root.traverse((m) => {
+            if (!m.isMesh) return;
+            if (on) {
+                if (m.userData.sbFaded || (part && within(m, part))) return;
+                const own = m.material;
+                const copies = (Array.isArray(own) ? own : [own]).map((mt) => { const c = mt.clone(); c.transparent = true; c.opacity = 0.1; c.depthWrite = false; return c; });
+                m.userData.sbFaded = own;
+                m.material = Array.isArray(own) ? copies : copies[0];
+            } else if (m.userData.sbFaded) {
+                (Array.isArray(m.material) ? m.material : [m.material]).forEach((c) => c.dispose());
+                m.material = m.userData.sbFaded;
+                delete m.userData.sbFaded;
+            }
+        }));
+    }
     function endPartMode() {
         const was = sb.partMode;
+        if (was === "nodes") fadeOthers(false);
         sb.partMode = null;
         sb.deferRestart = false;
         if (was === "nodes") { changed(true); rebuildSoon(); }
@@ -1220,7 +1244,7 @@ export function initSoftBody(api) {
         drawPartGizmos();
     }
     function closePartWindow() {
-        if (sb.partMode === "nodes") { sb.deferRestart = false; sb.partMode = null; changed(true); rebuildSoon(); }
+        if (sb.partMode === "nodes") { fadeOthers(false); sb.deferRestart = false; sb.partMode = null; changed(true); rebuildSoon(); }
         sb.partMode = null;
         if (sb.win) sb.win.style.display = "none";
         sb.partWin = null;
@@ -1333,6 +1357,7 @@ export function initSoftBody(api) {
             if (!s) { status("The car does not dent: tick “The car dents” first.", "error"); return; }
             freeze(s);
             sb.partMode = "nodes"; sb.deferRestart = true;
+            fadeOthers(true);
             renderPartWin(); drawPartGizmos();
         });
         if (sb.partMode === "nodes") add('<p class="hint">Click on the surface of ' + w.name + ' to add nodes: the part bends with them. Esc or the button stops.</p>');

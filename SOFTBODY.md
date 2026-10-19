@@ -263,3 +263,7 @@ At a high speed the car slid sideways under the torque of its engine and missed 
 ### The floor of the crash test reaches past the wall
 
 The floor of the test was a square of 600 m (300 m each way from the start), and the wall is 350 m away at 150 km/h (`2.6 + v²/5`): the car drove off the edge of the floor just before the wall and fell. The floor is now made of tiles of 100 m (the grid of the ground refuses a triangle that is too big, so one big floor would not do) from 150 m behind the start to 150 m behind the wall, 300 m wide. Mustang at 150 km/h: the height stayed between 0.25 and 0.56 m the whole way, it hit the wall at 348.3 m (the wall at 349.8 m) with 252 g and 43 cm of bend.
+
+### Adding deformation nodes: the other objects fade and are clicked through
+
+While nodes are added to a part, every other object (the body, the other parts, the engine, the wheels) gets a see-through copy of its material (10% opacity, no depth write), so the part can be seen, and a click goes through all of them and only hits the part that is open (a click on another object does nothing but say so). The own materials come back when the mode stops (Esc, the button, or closing the window). On a copy of the Mustang: with the hood open, a click on the door left the nodes at 182, a click on the hood made it 183; after Esc the faded copies were gone.
