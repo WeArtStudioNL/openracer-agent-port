@@ -223,3 +223,8 @@ button.set { height: 19px; padding: 0 7px; font-size: 11px; margin-left: 5px; ve
 .partwin .pw-nodes { max-height: 120px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 4px; }
 .partwin .pw-node { display: inline-flex; align-items: center; gap: 2px; background: #1b212a; border-radius: 6px; padding: 0 2px 0 6px; }
 .partwin .pw-node button { height: 18px; padding: 0 5px; font-size: 11px; }
+
+/* the test buttons have tabs: the tests, and the crash test */
+#testBar { flex-direction: column; align-items: stretch; gap: 6px; }
+#testBar .tabs { display: flex; gap: 6px; justify-content: center; }
+#testBar .tabpane { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }

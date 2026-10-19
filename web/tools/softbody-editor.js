@@ -1512,6 +1512,15 @@ export function initSoftBody(api) {
             if (!sb.shown) await show(false);
         } catch (error) { status(error.message, "error"); }
     }
+    // Steers the car at the middle of the wall: a car at speed pulls to one side (the torque of the engine), so it is kept on its line by its
+    // steering, as a driver would. The steering angle (rad) follows how far the car heads off the line and how far it is off it.
+    function steerAhead(v, inp) {
+        const speed = Math.hypot(v.vx, v.vz);
+        const heading = speed > 2 ? Math.atan2(v.vx, v.vz) : 0;          // towards +x is to the left of a car that faces +z
+        const gain = 1 / (1 + speed / 25);                               // the faster, the gentler
+        const angle = (1.6 * heading + 0.05 * v.px) * gain;              // a car that is left of the line or heads left steers right (positive)
+        inp.turnAngle = Math.max(-0.2, Math.min(0.2, angle));
+    }
     function crashFrame(dt) {
         const c = sb.crash, v = bench.vehicle, s = softBody();
         c.t += dt;
@@ -1521,6 +1530,8 @@ export function initSoftBody(api) {
         // the throttle: full until near the speed, then just enough to hold it; off after the hit
         const inp = bench.input;
         inp.throttle = c.hit ? 0 : Math.min(1, Math.max(0, (c.speed - Math.max(0, v.u || 0)) / 4));
+        inp.brakePedal = c.hit ? 1 : 0;                                // after the hit the car is held, it does not roll back
+        if (!c.hit) steerAhead(v, inp); else inp.turnAngle = 0;
         c.peakG = Math.max(c.peakG, c.hit ? Math.abs(u - c.lastU) / Math.max(dt, 1e-3) / 9.81 : 0);
         c.lastU = u;
         // the camera follows the car
@@ -1576,5 +1587,30 @@ export function initSoftBody(api) {
         if (!sb.restarting && api.frameModel) api.frameModel();
     }
 
-    return { read, fill, frame, onStop, changed, debug: { sb, tc, rc, camera, controls, showSelection, surfaceAt, looseOf, renderer } };
+    // The wall of the full test (car-editor.js): the same wall and 3D ground as the crash test, but its own run
+    function addWall(distance) {
+        const v = bench.vehicle;
+        if (!v) return false;
+        stopCrash();
+        const floorY = api.floorY();
+        WALL_Z = distance;
+        sb.wall = wallMesh(floorY, 0);
+        scene.add(sb.wall);
+        sb.savedGround = sb.savedGround || v.ground;
+        v.ground = crashGround(floorY, 0);
+        sb.wallRun = { peak: 0 };
+        return true;
+    }
+    function removeWall() { sb.wallRun = null; stopCrash(); }
+    // has the car hit the wall: the shell has taken a hit, or the car has lost most of its speed
+    function wallHit() {
+        const v = bench.vehicle, s = softBody();
+        if (!v || !sb.wallRun) return false;
+        const speed = Math.abs(v.vz);
+        sb.wallRun.peak = Math.max(sb.wallRun.peak, speed);
+        if (s) { const st = s.stats(); if (st.absorbed > 10 || st.maxDisplacement > 0.004) return true; }
+        return sb.wallRun.peak > 3 && speed < 0.5 * sb.wallRun.peak;
+    }
+
+    return { read, fill, frame, addWall, removeWall, wallHit, steerAhead, onStop, changed, debug: { sb, tc, rc, camera, controls, showSelection, surfaceAt, looseOf, renderer } };
 }

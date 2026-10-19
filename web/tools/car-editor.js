@@ -1443,7 +1443,7 @@ function tuningValues(config) {
 }
 
 // ---- the test bench: the car on the floor of the editor with the physics of the game (Vehicle.js), to see the suspension work.
-// "Drop car" lets it fall from a height, "Shake test" presses on its four corners in turn. The model is built the way the game
+// "Drop car" lets it fall from a height, The model is built the way the game
 // builds it (CarLoader.js: the wheels taken out, the suspension rig found), from the model and the settings as they are now.
 window.THREE = Object.assign({}, THREE, { GLTFLoader });
 const PHYSICS_SCRIPTS = ["Engine.js", "Wheel.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "CarLoader.js", "Ground.js", "CollisionProxy.js", "SoftBody.js", "SoftBodyMesh.js", "Parts.js"];
@@ -1460,7 +1460,7 @@ function loadPhysics() {
     }
     return physicsLoading;
 }
-const bench = { vehicle: null, model: null, body: null, objects: [], last: 0, shake: null, modelMid: null };
+const bench = { vehicle: null, model: null, body: null, objects: [], last: 0, modelMid: null };
 const flatRoad = { query: () => ({ y: grid.position.y, nx: 0, ny: 1, nz: 0, surface: "road", mesh: "" }) };
 const roadGrip = () => ({ static: 1.2, kinetic: 1.06 });
 
@@ -1475,7 +1475,7 @@ async function startBench() {
     stopBench();
     const model = await new Promise((resolve, reject) => OpenRacer.loadCarModel(config, resolve, (message) => reject(new Error(message)), state.root));
     // the parking lock holds the wheels; not the brake pedal: a car that stands on its brakes is held still by the physics (its speed
-    // is set to zero when it is nearly still), which would also hold it against the pushes of the shake test
+    // is set to zero when it is nearly still)
     const input = { throttle: 0, brakePedal: 0, clutch: 0, clutchPedalPresent: false, handbrake: false, turnAngle: 0, neutral: true, reverse: false, manualGearbox: false, current_gear: 0, parkingLock: true };
     const v = new OpenRacer.Vehicle(OpenRacer.vehicleParams(config, roadGrip), input);
     v.ground = flatRoad;
@@ -1507,7 +1507,7 @@ function stopBench() {
     bench.objects.forEach((o) => scene.remove(o));
     if (bench.script && preview.playing) stopPreview();
     if (bench.driving) stopDriving();
-    bench.objects = []; bench.vehicle = null; bench.model = null; bench.shake = null; bench.script = null; bench.obj = null;
+    bench.objects = []; bench.vehicle = null; bench.model = null; bench.script = null; bench.obj = null;
     if (softBodyEditor) softBodyEditor.onStop();
     pivot.visible = true; helpers.visible = true;
     $("testStop").style.display = "none";
@@ -1520,19 +1520,8 @@ function benchFrame(now) {
     const dt = Math.min(0.05, Math.max(0.001, (now - bench.last) / 1000));
     bench.last = now;
     if (bench.script) runScript(dt);
+    if (!bench.vehicle) return;                       // the script has ended the test
     if (bench.driving) driveFrame(dt);
-    if (bench.shake) {
-        // the four corners in turn: front left, front right, rear right, rear left, a sharp push of 0.15 s and 0.45 s to see it
-        // bounce back, two rounds
-        const s = bench.shake;
-        s.t += dt;
-        const step = Math.floor(s.t / s.pace);
-        if (step >= 8) bench.shake = null;
-        else if (s.t - step * s.pace < Math.min(s.push, s.pace)) {
-            const w = v.wheels[[1, 0, 3, 2][step % 4]];
-            v.pushDown(w.mount.x, w.mount.y, w.mount.z, s.kg * 9.81);
-        }
-    }
     v.update(dt);
     v.getBodyPose(benchPose, benchQuat);
     const body = bench.body;
@@ -1577,18 +1566,17 @@ async function dropCar() {
     try {
         const v = bench.vehicle || await startBench();
         placeForDrop(v, parseFloat($("testDropHeight").value), parseFloat($("testTilt").value));
-        bench.shake = null; bench.script = null;
+        bench.script = null;
     } catch (error) { status(error.message, "error"); }
 }
 
 // The full test, one thing after the other: a drop from 1 m at 5 degrees; two seconds later the engine in neutral to the rev
-// limiter and a second on it; every corner pressed with 1000 kg for half a second, twice round; a metre forwards and a metre
-// back; the steering to the left lock and to the right lock.
+// limiter and a second on it; a metre forwards and a metre back; the steering to the left lock and to the right lock; and at the end a
+// wall far ahead, and full throttle into it (that is its own, and not the crash test of the Soft body card).
 async function fullTest() {
     try {
         const v = bench.vehicle || await startBench();
         placeForDrop(v, 1, 5);
-        bench.shake = null;
         bench.script = { stage: "drop", t: 0, limiterT: 0, brake: 0 };
         status("Full test: the drop…", "ok");
         if (!preview.playing) await playSound(); // the engine sound follows the engine of the bench during the test
@@ -1620,14 +1608,10 @@ function runScript(dt) {
             const rpm = v.engine.getRPM();
             if (rpm >= v.engine.limiterRPM - 250) sc.limiterT += dt;
             inp.throttle = sc.limiterT < 1 ? 1 : 0;
-            if (sc.limiterT >= 1 && rpm < v.engine.idleRPM + 500) { next("shake", $("testShakeKg").value + " kg on every corner, twice round"); bench.shake = shakeFromSliders(); }
-            if (sc.t > 12) { next("shake", $("testShakeKg").value + " kg on every corner, twice round"); bench.shake = shakeFromSliders(); }
+            if (sc.limiterT >= 1 && rpm < v.engine.idleRPM + 500) next("forward", "a metre forwards");
+            if (sc.t > 12) next("forward", "a metre forwards");
             break;
         }
-        case "shake":
-            settle();
-            if (!bench.shake) next("forward", "a metre forwards");
-            break;
         case "forward":
             // gently away, off the throttle a little before the metre, a gentle brake to a stop
             inp.parkingLock = false; inp.neutral = false; inp.reverse = false; inp.current_gear = 0;
@@ -1657,7 +1641,25 @@ function runScript(dt) {
             if (t > 5.2) {
                 // done: a moment with the wheels straight, then back to the model by itself
                 inp.turnAngle = 0;
-                if (t > 6) { bench.script = null; if (preview.playing) stopPreview(); stopBench(); status("Full test done.", "ok"); }
+                if (t > 6) next("wall", "a wall ahead: full throttle");
+            }
+            break;
+        }
+        case "wall": {
+            // a wall 100 m ahead, and full throttle until the car hits it and is still; the camera follows
+            if (!sc.walled) { sc.walled = true; sc.hit = false; sc.still = 0; softBodyEditor.addWall(v.pz + 100); }
+            inp.parkingLock = false; inp.neutral = false; inp.reverse = false; inp.current_gear = 0;
+            if (!sc.hit && softBodyEditor.wallHit()) sc.hit = true;
+            inp.throttle = sc.hit ? 0 : 1;
+            inp.brakePedal = sc.hit ? 1 : 0;                       // after the hit it is held, it does not roll back
+            if (sc.hit) inp.turnAngle = 0; else softBodyEditor.steerAhead(v, inp);      // and until then it is steered at the wall
+            const fx = v.px - controls.target.x, fy = v.py - controls.target.y, fz = v.pz - controls.target.z;
+            controls.target.x += fx * 0.08; controls.target.y += fy * 0.08; controls.target.z += fz * 0.08;
+            camera.position.x += fx * 0.08; camera.position.y += fy * 0.08; camera.position.z += fz * 0.08;
+            if (sc.hit && Math.abs(v.u) < 0.3) sc.still += dt; else sc.still = 0;
+            if (sc.still > 1.5 || sc.t > 60) {
+                softBodyEditor.removeWall();
+                bench.script = null; if (preview.playing) stopPreview(); stopBench(); status("Full test done.", "ok");
             }
             break;
         }
@@ -1665,32 +1667,21 @@ function runScript(dt) {
 }
 
 // the shake as the sliders have it (the full test uses the same, so the two shakes look the same)
-function shakeFromSliders() {
-    return { t: 0, kg: parseFloat($("testShakeKg").value), push: parseFloat($("testShakePush").value), pace: parseFloat($("testShakePace").value) };
-}
-
-async function shakeTest() {
-    try {
-        if (!bench.vehicle) await startBench();
-        bench.script = null;
-        bench.shake = shakeFromSliders();
-    } catch (error) { status(error.message, "error"); }
-}
-
 $("testDrop").addEventListener("click", dropCar);
-$("testShake").addEventListener("click", shakeTest);
 $("testFull").addEventListener("click", fullTest);
 $("testStop").addEventListener("click", stopBench);
 $("testDropHeight").addEventListener("input", () => { $("testDropLabel").textContent = parseFloat($("testDropHeight").value).toFixed(1) + " m"; });
-$("testShakeKg").addEventListener("input", () => { $("testShakeLabel").textContent = $("testShakeKg").value + " kg"; });
 $("testTilt").addEventListener("input", () => { $("testTiltLabel").textContent = $("testTilt").value + "°"; });
 // the travel of the suspension: shown, and put on the car of the test bench at once
 $("travel").addEventListener("input", () => {
     $("travelLabel").textContent = $("travel").value + " cm";
     if (bench.vehicle) bench.vehicle.retune({ suspension_travel: parseFloat($("travel").value) / 100 });
 });
-$("testShakePush").addEventListener("input", () => { $("testShakePushLabel").textContent = parseFloat($("testShakePush").value).toFixed(2) + " s"; });
-$("testShakePace").addEventListener("input", () => { $("testShakePaceLabel").textContent = "every " + parseFloat($("testShakePace").value).toFixed(1) + " s"; });
+// the tabs of the test buttons: the tests, and the crash test
+document.querySelectorAll("#testBar [data-tab]").forEach((tab) => tab.addEventListener("click", () => {
+    document.querySelectorAll("#testBar [data-tab]").forEach((t) => { t.classList.toggle("accent", t === tab); t.classList.toggle("ghost", t !== tab); });
+    document.querySelectorAll("#testBar [data-pane]").forEach((pane) => { pane.style.display = pane.dataset.pane === tab.dataset.tab ? "" : "none"; });
+}));
 window.benchFrame = benchFrame; // the render loop at the top calls it from here on
 window.benchState = bench; // for a look from the console
 window.softBodyEditor = () => softBodyEditor;
@@ -1714,7 +1705,7 @@ async function toggleDrive() {
     try {
         if (bench.driving) { stopDriving(); return; }
         const v = bench.vehicle || await startBench();
-        bench.script = null; bench.shake = null;
+        bench.script = null;
         bench.driving = { throttle: 0, brake: 0, turn: 0, sequential: false };
         bench.input.parkingLock = false; bench.input.neutral = false; bench.input.reverse = false; bench.input.current_gear = 0; bench.input.manualGearbox = false;
         bigGrid.visible = true; bigGrid.position.y = grid.position.y - 0.001;
