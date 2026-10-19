@@ -276,7 +276,13 @@ OpenRacer.Parts = (function () {
                         var ax = new THREE.Vector3(on[0] === "x" ? 1 : 0, on[0] === "y" ? 1 : 0, on[0] === "z" ? 1 : 0);
                         if (pin.rot) ax.applyQuaternion(pin.rot);
                         part.joint = world.createImpulseJoint(R.JointData.revolute(pa, pl, { x: ax.x, y: ax.y, z: ax.z }), chassis, part.body, true);
-                        part.joint.setLimits(pin.min, pin.max);
+                        // the zero of the angles is the pin's own: turning the pin about its axis (its twist) shifts the range against the rest place of the part
+                        var tau = 0;
+                        if (pin.rot) {
+                            tau = 2 * Math.atan2(pin.rot.x * (on[0] === "x" ? 1 : 0) + pin.rot.y * (on[0] === "y" ? 1 : 0) + pin.rot.z * (on[0] === "z" ? 1 : 0), pin.rot.w);
+                            if (tau > Math.PI) tau -= 2 * Math.PI; else if (tau < -Math.PI) tau += 2 * Math.PI;
+                        }
+                        part.joint.setLimits(pin.min + tau, pin.max + tau);
                         if (h.spring > 0) part.joint.configureMotorPosition(h.rest, h.spring, h.damper);
                         else if (h.damper > 0) part.joint.configureMotorVelocity(0, h.damper);
                     }

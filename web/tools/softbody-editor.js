@@ -1282,7 +1282,14 @@ export function initSoftBody(api) {
             q("force").value = pin.break_force ? pin.break_force / 1000 : "";
             q("activate").value = pin.activate_force ? pin.activate_force / 1000 : "";
             const warn = d.querySelector(".pw-warn");
-            const checkForces = () => { warn.textContent = pin.activate_force && pin.break_force && pin.break_force <= pin.activate_force ? "Breaks off should be higher than opens at, or the part never swings: it falls off at once." : ""; };
+            const checkForces = () => {
+                const msgs = [];
+                if (pin.activate_force && pin.break_force && pin.break_force <= pin.activate_force) msgs.push("Breaks off should be higher than opens at, or the part never swings: it falls off at once.");
+                // where the part lies now against the zero of the pin: it has to be inside min..max, or it is pushed there at the start
+                const lie = -twistOf(pin) * 180 / Math.PI, lo = pin.min !== undefined ? pin.min : -90, hi = pin.max !== undefined ? pin.max : 90;
+                if (pin.rot && (lie < lo - 0.5 || lie > hi + 0.5)) msgs.push("The part lies at " + lie.toFixed(0) + "° from the zero of the pin (the yellow line), outside min and max: it is pushed into the range at the start.");
+                warn.textContent = msgs.join(" ");
+            };
             checkForces();
             q("activate").addEventListener("change", () => { const v = parseFloat(q("activate").value); if (v > 0) pin.activate_force = v * 1000; else delete pin.activate_force; checkForces(); partChanged(); });
             const eul = eulerOf(pin);
@@ -1365,6 +1372,15 @@ export function initSoftBody(api) {
         pin.rot = [+q.x.toFixed(5), +q.y.toFixed(5), +q.z.toFixed(5), +q.w.toFixed(5)];
         drawPartGizmos();
     });
+    // the twist of a pin about its one axis (rad): turning the pin about its axis moves the zero of the angles
+    function twistOf(pin) {
+        const axes = pin.axes || { x: true, y: false, z: false }, on = AXES.filter((k) => axes[k]);
+        if (on.length !== 1 || !pin.rot) return 0;
+        const e = { x: on[0] === "x" ? 1 : 0, y: on[0] === "y" ? 1 : 0, z: on[0] === "z" ? 1 : 0 };
+        let t = 2 * Math.atan2(pin.rot[0] * e.x + pin.rot[1] * e.y + pin.rot[2] * e.z, pin.rot[3]);
+        if (t > Math.PI) t -= 2 * Math.PI; else if (t < -Math.PI) t += 2 * Math.PI;
+        return t;
+    }
     function eulerOf(pin) {
         const e = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(...(pin.rot || [0, 0, 0, 1])), "XYZ");
         return [e.x, e.y, e.z].map((r) => Math.round(r * 180 / Math.PI * 10) / 10);
@@ -1396,6 +1412,7 @@ export function initSoftBody(api) {
             holder.position.set(...pin.point);
             if (pin.rot) holder.quaternion.set(...pin.rot);
             g.add(holder);
+            const single = AXES.filter((k) => axes[k]).length === 1;
             AXES.forEach((a) => {
                 if (!axes[a]) return;
                 const axis = new THREE.Vector3(a === "x" ? 1 : 0, a === "y" ? 1 : 0, a === "z" ? 1 : 0);
@@ -1403,9 +1420,27 @@ export function initSoftBody(api) {
                 // the fan is swept from the direction in which the part itself lies from the pin (not from a fixed axis of the car), so it
                 // shows where the part goes: the angle is right-handed about the axis, as the joint of the engine has it
                 if (partCentre) {
-                    const d = partCentre.clone().sub(new THREE.Vector3(...pin.point)).applyQuaternion(holder.quaternion.clone().invert());
+                    const dWorld = partCentre.clone().sub(new THREE.Vector3(...pin.point));
+                    let d;
+                    if (single && pin.rot) {
+                        // swing and twist: the twist about the axis moves the zero of the angles against the part (it is not undone here), the swing
+                        // (the tilt of the axis) is, since the part lies where it lies
+                        const qr = holder.quaternion, dot = qr.x * axis.x + qr.y * axis.y + qr.z * axis.z;
+                        const twist = new THREE.Quaternion(axis.x * dot, axis.y * dot, axis.z * dot, qr.w).normalize();
+                        const swing = qr.clone().multiply(twist.clone().invert());
+                        d = dWorld.clone().applyQuaternion(swing.invert());
+                    } else d = dWorld.clone().applyQuaternion(holder.quaternion.clone().invert());
                     d.addScaledVector(axis, -d.dot(axis));
                     if (d.length() > 0.02) u = d.normalize();
+                    // where the part lies now (yellow): inside the fan when it can close
+                    if (single) {
+                        const lie = dWorld.clone().applyQuaternion(holder.quaternion.clone().invert());
+                        lie.addScaledVector(axis, -lie.dot(axis));
+                        if (lie.length() > 0.02) {
+                            const mark = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), lie.normalize().multiplyScalar(0.34)]), new THREE.LineBasicMaterial({ color: 0xffe14d, depthTest: false }));
+                            mark.renderOrder = 15; holder.add(mark);
+                        }
+                    }
                 }
                 const v = new THREE.Vector3().crossVectors(axis, u);
                 const centre = new THREE.Vector3();
