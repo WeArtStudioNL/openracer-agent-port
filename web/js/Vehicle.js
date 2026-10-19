@@ -655,13 +655,28 @@ OpenRacer.Vehicle = function (parameters, input) {
         return j;
     }
 
+    // The underside of the car as a plane (the car can be tilted, on a ramp for example): its height above a point of the ground plane, so that
+    // a wall is only a wall where the car is lower than its top. Without a car that is upright enough it is the road under the car.
+    var underside = { bottomAt: null, height: 0, kerb: 0 }, upAxis = { x: 0, y: 0, z: 0 };
+    function undersideOfCar() {
+        rotate(self.qx, self.qy, self.qz, self.qw, 0, 1, 0, upAxis);
+        var yUnder = -self.cgHeight + self.groundClearance;
+        var ox = self.px + upAxis.x * yUnder, oy = self.py + upAxis.y * yUnder, oz = self.pz + upAxis.z * yUnder;
+        var nx = upAxis.x, ny = upAxis.y, nz = upAxis.z;
+        if(ny > 0.35) underside.bottomAt = function(x, z) { return oy - (nx * (x - ox) + nz * (z - oz)) / ny; };
+        else { var level = self.groundLevel; underside.bottomAt = function() { return level; }; }
+        underside.height = self.bodyHeight;
+        underside.kerb = self.kerbHeight;
+        return underside;
+    }
+
     var impactSpeed = { value: 0 };
     function resolveCollisions() {
         var offset = (self.af - self.ar) / 2; // the rectangle of the car is centred between the axles
         for(var pass = 0; pass < 3; pass++) {
             var cosP = Math.cos(self.psi), sinP = Math.sin(self.psi);
             var contacts = self.collision.query(self.px + cosP * offset, self.pz + sinP * offset, self.psi,
-                self.halfLength, self.halfWidth, self.groundLevel + self.kerbHeight, self.groundLevel + self.bodyHeight);
+                self.halfLength, self.halfWidth, self.groundLevel + self.kerbHeight, self.groundLevel + self.bodyHeight, undersideOfCar());
             if(contacts.length === 0) return;
             var c = contacts[0];
 

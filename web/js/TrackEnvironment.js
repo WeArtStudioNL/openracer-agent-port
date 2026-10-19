@@ -70,6 +70,14 @@ OpenRacer.makeSky = function(THREE, env, texture) {
     sky.renderOrder = -1;
     sky.frustumCulled = false;
     sky.name = "sky";
-    sky.onBeforeRender = function(renderer, scene, camera) { sky.position.copy(camera.position); };
+    // The sky is centred on the camera that draws it, for every render (the main picture, and the cube map of the reflections that is
+    // drawn from the car): its matrix is set here, in onBeforeRender, because the matrix that three.js computes at the start of a render is
+    // the one of the render before. With that the sky stood a few metres beside the camera in some of the frames, and trembled.
+    sky.matrixAutoUpdate = false;
+    sky.matrixWorldAutoUpdate = false;
+    sky.onBeforeRender = function(renderer, scene, camera) {
+        sky.position.copy(camera.position);
+        sky.matrixWorld.makeTranslation(camera.position.x, camera.position.y, camera.position.z);
+    };
     return sky;
 };
