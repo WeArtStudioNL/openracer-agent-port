@@ -106,6 +106,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         beamK.push(params.stiffness || P.beamK); beamYield.push(params.yield_force || P.beamYield); beamBreak.push(params.break_force || P.beamBreak); beamAlive.push(1);
         B = beamA.length;
         self.beamCount = B;
+        safeStep();
         return B - 1;
     };
     // The force in a beam now (N, along the beam: positive when it is stretched): for the load on a link of a part
@@ -121,6 +122,29 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         self.version++;
     };
     this.beamA = beamA; this.beamB = beamB; this.beamAlive = beamAlive; this.beamYield = beamYield; this.beamBreak = beamBreak; this.beamK = beamK;
+
+
+    // The biggest step with which the nodes stay stable: explicit integration of springs and dampers blows up when the step is too long for
+    // the stiffest and the densest place (a part with many nodes close together). For every node: the stiffness of its anchor, its contacts and
+    // twice that of its beams (the worst mode of a network), and the same for the dampers; the step is a fraction of what each of them allows.
+    var hSafe = 0.001;
+    function safeStep() {
+        var kSum = new Float64Array(N), cSum = new Float64Array(N);
+        for (var k = 0; k < N; k++) {
+            kSum[k] = P.anchorK + P.contactK;
+            cSum[k] = 2 * P.anchorDamping * Math.sqrt(P.anchorK * mass[k]) + 2 * P.contactDamping * Math.sqrt(P.contactK * mass[k]);
+        }
+        for (var i = 0; i < beamA.length; i++) {
+            var a = beamA[i], b = beamB[i];
+            var cb = 2 * P.beamDamping * Math.sqrt(beamK[i] * Math.min(mass[a], mass[b]));
+            kSum[a] += 2 * beamK[i]; kSum[b] += 2 * beamK[i];
+            cSum[a] += 2 * cb; cSum[b] += 2 * cb;
+        }
+        var h = 1;
+        for (var j = 0; j < N; j++) h = Math.min(h, 0.9 / Math.sqrt(kSum[j] / mass[j]), 0.6 * mass[j] / cSum[j]);
+        hSafe = h;
+        self.safeH = h;
+    }
 
     // ---- what the rest of the game reads
     this.displacement = new Float32Array(3 * N);      // u + q, for the model (the vertex shader)
@@ -177,7 +201,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         var reaction = this.reaction;
         reaction.fill(0);
         var moved = false, maxMove = 0, maxMove2 = 0;
-        var steps = 3, h = dt / steps;
+        var steps = Math.max(3, Math.min(14, Math.ceil(dt / hSafe))), h = dt / steps;      // small enough for the stiffest and densest place (see safeStep)
         for (var s = 0; s < steps; s++) {
             // the forces of the hits (the callback fills this.force), then the anchors and the beams
             if (contacts) contacts(h);
@@ -315,5 +339,6 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         if (pl.w < floor) { pl.w = floor; if (pl.vw < 0) pl.vw = 0; }
     }
 
+    safeStep();
     this.repair();
 };

@@ -1514,7 +1514,7 @@ export function initSoftBody(api) {
         c.t += dt;
         const u = v.vz;
         const st0 = s.stats();
-        if (!c.hit && st0.absorbed > 10) c.hit = true;                // the shell has taken a hit
+        if (!c.hit && (st0.absorbed > 10 || st0.maxDisplacement > 0.004)) c.hit = true;                // the shell has taken a hit (a slow one only bends it a little: it springs back)
         // the throttle: full until near the speed, then just enough to hold it; off after the hit
         const inp = bench.input;
         inp.throttle = c.hit ? 0 : Math.min(1, Math.max(0, (c.speed - Math.max(0, v.u || 0)) / 4));
