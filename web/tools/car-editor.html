@@ -294,7 +294,7 @@
 <div id="view">
     <div id="hud"></div>
     <div id="toast"></div>
-    <div class="float bottom">
+    <div class="float bottom" id="testBar">
         <button id="soundPlay" class="accent">Play</button>
         <div class="slider"><span><b>Engine speed</b><i id="soundRpmLabel"></i></span><input type="range" id="soundRpm" min="0" max="7000" value="900" step="10"></div>
         <div class="slider"><span><b>Throttle</b><i id="soundThrottleLabel"></i></span><input type="range" id="soundThrottle" min="0" max="100" value="0"></div>
@@ -312,6 +312,9 @@
         <button id="testReset" class="small ghost" style="display:none" title="Puts the car back at the start">Reset car</button>
         <button id="testFull" class="small accent" title="A drop from 1 m at 5°, the engine to the rev limiter in neutral, every corner pressed with 1000 kg twice, a metre forwards and back, the steering to both locks">Full test</button>
         <button id="testStop" class="small ghost" style="display:none" title="Back to the model as it is">Stop test</button>
+    </div>
+    <div class="float bottom" id="crashBar" style="display:none">
+        <button id="crashStop" class="small danger" title="Takes the wall away and puts the car back at its start">Stop crash test</button>
     </div>
     <div class="float bottom-left" id="panelToggles">
         <button class="small ghost" id="toggleSide" title="Hide or show the left bar">◧ Left</button>

@@ -1464,6 +1464,20 @@ export function initSoftBody(api) {
         mesh.rotation.y = -angleDeg * Math.PI / 180;
         return mesh;
     }
+    // while a crash test runs the test buttons are away and "Stop crash test" is in their place
+    function crashUi(on) {
+        const bar = $("testBar"), stop = $("crashBar");
+        if (on) { if (stop.style.display === "none") sb.testBarShown = bar.style.display; bar.style.display = "none"; stop.style.display = ""; }
+        else if (stop.style.display !== "none") { stop.style.display = "none"; bar.style.display = sb.testBarShown === undefined ? "" : sb.testBarShown; }
+    }
+    $("crashStop").addEventListener("click", () => {
+        const v = bench.vehicle;
+        stopCrash();
+        releaseForce();
+        if (v) { sb.savedGround = null; if (sb.pushMode) ensureGround3D(); v.reset(0, 0, Math.PI / 2); }
+        restoreCamera();
+        $("sbResult").textContent = "Crash test stopped.";
+    });
     async function crash() {
         try {
             if (!bench.vehicle || !softBody()) await api.startBench();
@@ -1473,6 +1487,8 @@ export function initSoftBody(api) {
             const speed = parseFloat($("sbSpeed").value) / 3.6, angle = parseFloat($("sbAngle").value);
             const floorY = api.floorY();
             stopCrash();
+            crashUi(true);
+            if (!sb.camSaved) sb.camSaved = { position: camera.position.clone(), target: controls.target.clone() };      // where the camera was, to put it back
             // the car stays where it is and drives straight ahead; only the wall is new (a few metres in front of its nose), and the camera is left alone
             WALL_Z = 2.6 + 4;
             sb.wall = wallMesh(floorY, angle);
@@ -1495,6 +1511,10 @@ export function initSoftBody(api) {
         const u = v.vz;
         c.peakG = Math.max(c.peakG, Math.abs(u - c.lastU) / Math.max(dt, 1e-3) / 9.81);
         c.lastU = u;
+        // the camera follows the car
+        const dx = v.px - controls.target.x, dy = v.py - controls.target.y, dz = v.pz - controls.target.z;
+        controls.target.x += dx * 0.08; controls.target.y += dy * 0.08; controls.target.z += dz * 0.08;
+        camera.position.x += dx * 0.08; camera.position.y += dy * 0.08; camera.position.z += dz * 0.08;
         const st = s.stats();
         const events = bench.obj.parts ? bench.obj.parts.events.length : 0;
         $("sbResult").textContent = "Peak " + c.peakG.toFixed(0) + " g · bend " + (st.maxBend * 100).toFixed(0) + " cm · took up " + (st.absorbed / 1000).toFixed(0) + " kJ of " +
@@ -1502,8 +1522,17 @@ export function initSoftBody(api) {
         if (Math.abs(u) < 0.3 && c.t > 1) { c.stopped += dt; if (c.stopped > 1.5) sb.crash = null; }
         if (c.t > 25) sb.crash = null;
     }
+    // the camera back where it was before the crash test, which it followed the car in
+    function restoreCamera() {
+        if (!sb.camSaved) return;
+        camera.position.copy(sb.camSaved.position);
+        controls.target.copy(sb.camSaved.target);
+        controls.update();
+        sb.camSaved = null;
+    }
     function stopCrash() {
         sb.crash = null;
+        crashUi(false);
         if (sb.wall) { scene.remove(sb.wall); sb.wall = null; }
         if (bench.vehicle && sb.savedGround) { bench.vehicle.ground = sb.savedGround; }
     }
@@ -1512,6 +1541,7 @@ export function initSoftBody(api) {
         const v = bench.vehicle;
         if (!v) return;
         stopCrash();
+        restoreCamera();
         releaseForce();
         sb.savedGround = null;
         if (sb.pushMode) ensureGround3D();                          // the push mode needs the 3D ground
