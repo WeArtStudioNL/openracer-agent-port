@@ -1796,6 +1796,8 @@ softBodyEditor = initSoftBody({
     floorY: () => grid.position.y,
     root: () => state.root,
     // saves the car that is open, as the Save button does (the part panel saves after every change)
+    // the helpers of the view (the cameras, the axes and the arrow of the model) are hidden while the crash test runs
+    hideChrome: (on) => { cameraMarkers.visible = !on; axes.visible = !on; arrow.visible = !on; grid.visible = !on; bigGrid.visible = bigGrid.visible && !on; },
     canSave: () => !!state.existingId && !!state.root,
     save: () => save(),
     frameModel

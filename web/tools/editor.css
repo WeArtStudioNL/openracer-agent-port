@@ -234,3 +234,6 @@ button.set { height: 19px; padding: 0 7px; font-size: 11px; margin-left: 5px; ve
 #testBar .slider.numberfield input { width: 100%; box-sizing: border-box; }
 /* Stop test: a small button with a turning-back arrow at the top right of the test buttons, in every tab */
 #testBar #testStop { position: absolute; top: 6px; right: 8px; width: 30px; height: 27px; padding: 0; font-size: 17px; line-height: 1; }
+/* the crash test shows the car, the wall and the stop button, nothing else */
+body.crashing #side, body.crashing #layers, body.crashing #panelToggles, body.crashing #hud, body.crashing #toast,
+body.crashing .partwin, body.crashing #layersOpen, body.crashing #testBar { display: none !important; }

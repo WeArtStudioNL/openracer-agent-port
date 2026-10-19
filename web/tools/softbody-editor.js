@@ -348,6 +348,7 @@ export function initSoftBody(api) {
         sb.lines.renderOrder = 9; sb.lines.frustumCulled = false;
         group.add(sb.lines, sb.points);
         sb.group = group;
+        group.visible = !document.body.classList.contains("crashing");        // not while the crash test runs
         scene.add(group);
         sb.pivot = new THREE.Object3D();
         group.add(sb.pivot);
@@ -1516,6 +1517,11 @@ export function initSoftBody(api) {
     // while a crash test runs the test buttons are away and "Stop crash test" is in their place
     function crashUi(on) {
         const bar = $("testBar"), stop = $("crashBar");
+        // during the crash test only the car, the wall and the stop button are to be seen: no bars, no text, no nodes and beams, no markers
+        document.body.classList.toggle("crashing", on);
+        if (sb.group) sb.group.visible = !on;
+        if (sb.partGroup) sb.partGroup.visible = !on;
+        if (api.hideChrome) api.hideChrome(on);
         if (on) { if (stop.style.display === "none") sb.testBarShown = bar.style.display; bar.style.display = "none"; stop.style.display = ""; }
         else if (stop.style.display !== "none") { stop.style.display = "none"; bar.style.display = sb.testBarShown === undefined ? "" : sb.testBarShown; }
     }

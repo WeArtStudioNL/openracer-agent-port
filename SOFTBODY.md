@@ -241,3 +241,7 @@ A part that comes loose is a rigid body in the engine that hits the track (the r
 ### The camera of the crash test is fixed to the car
 
 The camera no longer follows with smoothing: it moves by exactly the movement of the car (so it keeps its distance and its angle) until the car hits the wall; then it lets go and stays where it is. The full test does the same in its wall stage. Measured at 60 km/h: the offset between camera and car stayed 7.31 m / -7.32 m (z / x) for the whole drive, and after the hit the camera stayed at z = 63.1 while the car bounced back.
+
+### The crash test shows the car, the wall and the stop button, nothing else
+
+While the crash test runs the whole interface is hidden but the **Stop crash test** button: the side bars, the toggles, the text and the messages, the part window, the test buttons, the nodes and beams of the shell, the gizmos, the markers of the cameras, the axes, the arrow of the model and the floor grid of the editor. What is left is the car, the wall (10% opaque) and the button. Everything comes back when the test is stopped (`document.body.classList` "crashing", `crashUi`).
