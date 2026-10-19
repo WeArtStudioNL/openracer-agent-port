@@ -1,0 +1,1 @@
+Rapier (dimforge/rapier.js, @dimforge/rapier3d-compat 0.14.0), Apache-2.0, see LICENSE. A rigid-body physics engine in WebAssembly, used for the loose parts, hinges and props (js/Parts.js). It is loaded only when a car has parts.
