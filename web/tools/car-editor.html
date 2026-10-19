@@ -237,6 +237,17 @@
                     <div><input type="number" id="sbSelBreak" step="1" min="0"><div class="hint">break (kN)</div></div>
                     <div class="fixed"><button class="small" id="sbSelSet">Set</button> <button class="small ghost" id="sbSelClear">Default</button></div>
                 </div>
+                <div class="row">
+                    <button class="small" id="sbEdit" title="Click the model to put a node on it, select nodes and remove them">Edit nodes</button>
+                    <button class="small danger" id="sbDelete" disabled title="Removes the selected nodes (Delete key)">Delete selected</button>
+                </div>
+                <div id="sbEditBox" style="display:none">
+                    <div class="row">
+                        <div><input type="number" id="sbRadius" value="0.2" step="0.05" min="0.05" max="0.6"><div class="hint">radius of a new node (m)</div></div>
+                        <div class="fixed"><button class="small ghost" id="sbResetNodes">Make the nodes from the model again</button></div>
+                    </div>
+                    <p class="hint">A click on the model puts a node on its surface; it is held by beams to its nearest neighbours. A click on a node selects it (Shift adds), the middle mouse button and a drag draws a lasso round many. The nodes are also what the car hits the road and the walls with.</p>
+                </div>
                 <div class="group">Crash test</div>
                 <div class="row">
                     <div><label>Speed <b id="sbSpeedLabel">50 km/h</b></label><input type="range" id="sbSpeed" min="10" max="150" value="50" step="5"></div>
@@ -289,6 +300,11 @@
         <button id="testReset" class="small ghost" style="display:none" title="Puts the car back at the start">Reset car</button>
         <button id="testFull" class="small accent" title="A drop from 1 m at 5°, the engine to the rev limiter in neutral, every corner pressed with 1000 kg twice, a metre forwards and back, the steering to both locks">Full test</button>
         <button id="testStop" class="small ghost" style="display:none" title="Back to the model as it is">Stop test</button>
+    </div>
+    <div class="float bottom-left" id="panelToggles">
+        <button class="small ghost" id="toggleSide" title="Hide or show the left bar">◧ Left</button>
+        <button class="small ghost" id="toggleTests" title="Hide or show the test buttons">Tests</button>
+        <button class="small ghost" id="toggleLayers" title="Hide or show the right bar">Right ◨</button>
     </div>
     <div class="float top-right" id="layersOpen" style="display:none"><button class="small ghost" id="layersShow">Layers</button></div>
 </div>

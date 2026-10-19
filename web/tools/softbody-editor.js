@@ -30,7 +30,7 @@ const SCALE = { "anchor.stiffness": 1e6, "anchor.yield_force": 1e3, "anchor.brea
 
 export function initSoftBody(api) {
     const { $, THREE, scene, camera, renderer, controls, bench, status } = api;
-    const sb = { nodeEdits: new Map(), beamEdits: new Map(), parts: [], shown: false, group: null, points: null, lines: null, hinges: [], selected: null, crash: null, wall: null };
+    const sb = { nodeEdits: new Map(), beamEdits: new Map(), parts: [], shown: false, group: null, points: null, lines: null, hinges: [], sel: { nodes: new Set(), beam: null }, layout: null, edit: false, keepSelection: null, crash: null, wall: null };
 
     // ---- the settings
     const fields = [...document.querySelectorAll("input.sb")];
@@ -73,9 +73,9 @@ export function initSoftBody(api) {
 
     // the shell is made again from the new settings when the bench runs
     let restartTimer = 0;
-    function changed() {
+    function changed(keep) {
         clearTimeout(restartTimer);
-        if (bench.vehicle && (sb.shown || sb.crash)) restartTimer = setTimeout(() => { sb.crash = null; show(true); }, 400);
+        if (bench.vehicle && (sb.shown || sb.crash)) restartTimer = setTimeout(async () => { sb.crash = null; sb.restarting = true; await show(true); sb.restarting = false; }, keep === true ? 150 : 400);
     }
 
     // ---- the parts
@@ -164,6 +164,7 @@ export function initSoftBody(api) {
         if ($("sbEnabled").checked === false) soft.enabled = false;
         const nodes = [...sb.nodeEdits].map(([i, e]) => Object.assign({ i }, e));
         const beams = [...sb.beamEdits.values()];
+        if (sb.layout) soft.layout = sb.layout;
         if (nodes.length) soft.nodes = nodes;
         if (beams.length) soft.beams = beams;
         if (Object.keys(soft).length) out.softbody = soft;
@@ -179,7 +180,8 @@ export function initSoftBody(api) {
         sb.nodeEdits = new Map((soft.nodes || []).map((n) => [n.i, { yield_force: n.yield_force, break_force: n.break_force }]));
         sb.beamEdits = new Map((soft.beams || []).map((b) => [Math.min(b.a, b.b) + "-" + Math.max(b.a, b.b), b]));
         sb.parts = JSON.parse(JSON.stringify(car.parts || []));
-        sb.selected = null;
+        sb.sel.nodes.clear(); sb.sel.beam = null;
+        sb.layout = Array.isArray(soft.layout) ? soft.layout.map((n) => Object.assign({}, n)) : null;
         showSelection();
         renderParts();
     }
@@ -224,10 +226,6 @@ export function initSoftBody(api) {
         group.add(sb.lines, sb.points);
         sb.group = group;
         scene.add(group);
-        // a ring round the selected node
-        sb.ring = new THREE.Mesh(new THREE.RingGeometry(0.06, 0.075, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, side: THREE.DoubleSide }));
-        sb.ring.renderOrder = 11; sb.ring.visible = false;
-        group.add(sb.ring);
         drawHinges();
         updateShell();
         showSelection();
@@ -277,6 +275,7 @@ export function initSoftBody(api) {
                 const strain = nodePos.distanceTo(rest) / Math.max(1e-6, s.nodeYield[k] / s.params.anchorK);
                 tint.setHSL(0.33 * Math.max(0, 1 - strain * 0.5), 0.9, 0.55);
             }
+            if (sb.sel.nodes.has(k)) tint.setRGB(1, 1, 1);
             col.setXYZ(k, tint.r, tint.g, tint.b);
         }
         pos.needsUpdate = true; col.needsUpdate = true;
@@ -285,104 +284,245 @@ export function initSoftBody(api) {
             const alive = s.beamAlive[i] === 1 && s.alive(s.beamA[i]) && s.alive(s.beamB[i]);
             s.position(s.beamA[i], a); s.position(s.beamB[i], b);
             lp.setXYZ(2 * i, a.x, a.y, a.z); lp.setXYZ(2 * i + 1, b.x, b.y, b.z);
-            const chosen = sb.selected && sb.selected.type === "beam" && sb.selected.index === i;
+            const chosen = sb.sel.beam === i;
             if (chosen) tint.setRGB(1, 1, 1); else if (alive) tint.setRGB(0.3, 0.55, 0.9); else tint.setRGB(0.25, 0.1, 0.1);
             lc.setXYZ(2 * i, tint.r, tint.g, tint.b); lc.setXYZ(2 * i + 1, tint.r, tint.g, tint.b);
         }
         lp.needsUpdate = true; lc.needsUpdate = true;
-        if (sb.selected && sb.selected.type === "node") {
-            s.position(sb.selected.index, nodePos);
-            sb.ring.position.copy(nodePos);
-            sb.ring.quaternion.copy(camera.quaternion).premultiply(sb.group.quaternion.clone().invert());
-            sb.ring.visible = true;
-        } else if (sb.ring) sb.ring.visible = false;
     }
 
-    // ---- selecting a node or a beam
-    let down = null;
-    renderer.domElement.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY }; });
+    // ---- selecting nodes and beams: a click, Shift and a click to add, and a lasso with the middle mouse button
+    const lassoCanvas = document.createElement("canvas");
+    lassoCanvas.style.cssText = "position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:5";
+    renderer.domElement.parentElement.appendChild(lassoCanvas);
+    let down = null, lasso = null;
+    const savedMiddle = controls.mouseButtons.MIDDLE;
+    renderer.domElement.addEventListener("pointerdown", (e) => {
+        if (!sb.shown || !softBody()) return;
+        if (e.button === 1) {
+            e.preventDefault();
+            const rect = renderer.domElement.getBoundingClientRect();
+            lasso = { points: [[e.clientX - rect.left, e.clientY - rect.top]], add: e.shiftKey || e.ctrlKey };
+            controls.mouseButtons.MIDDLE = -1;                      // the middle button is not the dolly of the orbit controls now
+            try { renderer.domElement.setPointerCapture(e.pointerId); } catch (error) { /* a synthetic event */ }
+        } else if (e.button === 0) down = { x: e.clientX, y: e.clientY };
+    });
+    renderer.domElement.addEventListener("pointermove", (e) => {
+        if (!lasso) return;
+        const rect = renderer.domElement.getBoundingClientRect();
+        lasso.points.push([e.clientX - rect.left, e.clientY - rect.top]);
+        drawLasso();
+    });
     renderer.domElement.addEventListener("pointerup", (e) => {
-        if (!down || !sb.shown || !softBody()) return;
+        if (lasso && e.button === 1) {
+            const l = lasso; lasso = null;
+            drawLasso();
+            if (l.points.length > 2) lassoSelect(l);
+            return;
+        }
+        if (!down || !sb.shown || !softBody() || e.button !== 0) return;
         const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
         down = null;
-        if (moved > 4) return;
-        pick(e);
+        if (moved <= 4) click(e);
     });
-    function pick(e) {
+    renderer.domElement.addEventListener("auxclick", (e) => { if (e.button === 1) e.preventDefault(); });
+    function drawLasso() {
+        const rect = renderer.domElement.getBoundingClientRect();
+        lassoCanvas.width = rect.width; lassoCanvas.height = rect.height;
+        const g = lassoCanvas.getContext("2d");
+        g.clearRect(0, 0, rect.width, rect.height);
+        if (!lasso) return;
+        g.beginPath();
+        lasso.points.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+        g.closePath();
+        g.fillStyle = "rgba(255,255,255,0.12)"; g.fill();
+        g.strokeStyle = "#ffffff"; g.setLineDash([5, 4]); g.lineWidth = 1.5; g.stroke();
+    }
+    function inside(polygon, x, y) {
+        let c = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+            const [xi, yi] = polygon[i], [xj, yj] = polygon[j];
+            if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+        }
+        return c;
+    }
+    // the screen place of a node (in pixels of the view)
+    const screenP = new THREE.Vector3();
+    function screenOf(s, k, rect) {
+        s.position(k, screenP);
+        screenP.applyMatrix4(sb.group.matrixWorld).project(camera);
+        return [(screenP.x + 1) / 2 * rect.width, (1 - screenP.y) / 2 * rect.height, screenP.z];
+    }
+    function lassoSelect(l) {
+        const s = softBody(), rect = renderer.domElement.getBoundingClientRect();
+        sb.group.updateMatrixWorld(true);
+        if (!l.add) sb.sel.nodes.clear();
+        sb.sel.beam = null;
+        for (let k = 0; k < s.count; k++) {
+            const [x, y, z] = screenOf(s, k, rect);
+            if (z < 1 && inside(l.points, x, y)) sb.sel.nodes.add(k);
+        }
+        showSelection();
+    }
+    const caster = new THREE.Raycaster();
+    function click(e) {
         const s = softBody(), rect = renderer.domElement.getBoundingClientRect();
         const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-        const screen = (local, out) => {
-            out.copy(local).applyMatrix4(sb.group.matrixWorld).project(camera);
-            return [(out.x + 1) / 2 * rect.width, (1 - out.y) / 2 * rect.height];
-        };
         sb.group.updateMatrixWorld(true);
         const p = new THREE.Vector3(), p2 = new THREE.Vector3();
-        let best = null, bestD = 14;
+        let node = -1, bestD = 14;
         for (let k = 0; k < s.count; k++) {
-            s.position(k, p);
-            const [x, y] = screen(p, p);
+            const [x, y] = screenOf(s, k, rect);
             const d = Math.hypot(x - mx, y - my);
-            if (d < bestD) { bestD = d; best = { type: "node", index: k }; }
+            if (d < bestD) { bestD = d; node = k; }
         }
-        if (!best) {
-            bestD = 8;
-            for (let i = 0; i < s.beamCount; i++) {
-                s.position(s.beamA[i], p); s.position(s.beamB[i], p2);
-                const [x1, y1] = screen(p, p), [x2, y2] = screen(p2, p2);
-                const dx = x2 - x1, dy = y2 - y1, len2 = dx * dx + dy * dy || 1;
-                const t = Math.max(0, Math.min(1, ((mx - x1) * dx + (my - y1) * dy) / len2));
-                const d = Math.hypot(x1 + t * dx - mx, y1 + t * dy - my);
-                if (d < bestD) { bestD = d; best = { type: "beam", index: i }; }
-            }
+        const additive = e.shiftKey || e.ctrlKey;
+        if (node >= 0) {
+            sb.sel.beam = null;
+            if (additive) { if (!sb.sel.nodes.delete(node)) sb.sel.nodes.add(node); }
+            else { sb.sel.nodes.clear(); sb.sel.nodes.add(node); }
+            showSelection();
+            return;
         }
-        sb.selected = best;
+        // in the edit mode a click on the model puts a node on its surface
+        if (sb.edit && addAt(mx, my, rect)) return;
+        // else a beam
+        let beam = -1;
+        bestD = 8;
+        for (let i = 0; i < s.beamCount; i++) {
+            const [x1, y1] = screenOf(s, s.beamA[i], rect), [x2, y2] = screenOf(s, s.beamB[i], rect);
+            const dx = x2 - x1, dy = y2 - y1, len2 = dx * dx + dy * dy || 1;
+            const t = Math.max(0, Math.min(1, ((mx - x1) * dx + (my - y1) * dy) / len2));
+            const d = Math.hypot(x1 + t * dx - mx, y1 + t * dy - my);
+            if (d < bestD) { bestD = d; beam = i; }
+        }
+        if (!additive) sb.sel.nodes.clear();
+        sb.sel.beam = beam >= 0 ? beam : null;
         showSelection();
     }
     function showSelection() {
-        const s = softBody(), fieldsBox = $("sbSelFields"), text = $("sbSelection");
-        const sel = sb.selected;
-        if (!sel || !s) {
-            fieldsBox.style.display = "none";
-            text.textContent = sb.shown ? "Click a node or a beam in the view." : "Show the shell, then click a node or a beam in the view.";
+        const s = softBody(), box = $("sbSelFields"), text = $("sbSelection");
+        const nodes = [...sb.sel.nodes], beam = sb.sel.beam;
+        $("sbDelete").disabled = !nodes.length || !sb.edit;
+        if (!s || (!nodes.length && beam === null)) {
+            box.style.display = "none";
+            text.textContent = !sb.shown ? "Show the shell, then click a node or a beam in the view."
+                : sb.edit ? "Click the model to put a node on it, a node to select it (Shift adds). Middle mouse button and drag: a lasso."
+                : "Click a node or a beam in the view (Shift adds). Middle mouse button and drag: a lasso.";
             return;
         }
-        fieldsBox.style.display = "";
-        if (sel.type === "node") {
-            const edited = sb.nodeEdits.has(sel.index);
-            text.textContent = "Node " + sel.index + (edited ? " (set by you)" : "") + ": the anchor that holds it to the car.";
-            $("sbSelYield").value = +(s.nodeYield[sel.index] / 1000).toPrecision(5);
-            $("sbSelBreak").value = +(s.nodeBreak[sel.index] / 1000).toPrecision(5);
+        box.style.display = "";
+        if (nodes.length) {
+            const edited = nodes.filter((k) => sb.nodeEdits.has(k)).length;
+            text.textContent = nodes.length === 1 ? "Node " + nodes[0] + (edited ? " (set by you)" : "") + ": the anchor that holds it to the car."
+                : nodes.length + " nodes selected" + (edited ? " (" + edited + " set by you)" : "") + ": what you set goes to all of them.";
+            const same = (arr) => arr.every((x) => x === arr[0]);
+            const ys = nodes.map((k) => s.nodeYield[k]), bs = nodes.map((k) => s.nodeBreak[k]);
+            $("sbSelYield").value = same(ys) ? +(ys[0] / 1000).toPrecision(5) : "";
+            $("sbSelBreak").value = same(bs) ? +(bs[0] / 1000).toPrecision(5) : "";
         } else {
-            const a = s.beamA[sel.index], b = s.beamB[sel.index];
+            const a = s.beamA[beam], b = s.beamB[beam];
             const edited = sb.beamEdits.has(Math.min(a, b) + "-" + Math.max(a, b));
             text.textContent = "Beam " + a + " – " + b + (edited ? " (set by you)" : "") + ".";
-            $("sbSelYield").value = +(s.beamYield[sel.index] / 1000).toPrecision(5);
-            $("sbSelBreak").value = +(s.beamBreak[sel.index] / 1000).toPrecision(5);
+            $("sbSelYield").value = +(s.beamYield[beam] / 1000).toPrecision(5);
+            $("sbSelBreak").value = +(s.beamBreak[beam] / 1000).toPrecision(5);
         }
     }
     $("sbSelSet").addEventListener("click", () => {
-        const s = softBody(), sel = sb.selected;
-        if (!s || !sel) return;
+        const s = softBody();
+        if (!s) return;
         const y = parseFloat($("sbSelYield").value) * 1000, b = parseFloat($("sbSelBreak").value) * 1000;
         if (!(y >= 0) || !(b >= 0)) { status("Give the yield and the break force as numbers.", "error"); return; }
         if (b < y) { status("The break force has to be at least the yield force.", "error"); return; }
-        if (sel.type === "node") { sb.nodeEdits.set(sel.index, { yield_force: y, break_force: b }); s.nodeYield[sel.index] = y; s.nodeBreak[sel.index] = b; }
-        else {
-            const a = s.beamA[sel.index], c = s.beamB[sel.index];
-            sb.beamEdits.set(Math.min(a, c) + "-" + Math.max(a, c), { a: Math.min(a, c), b: Math.max(a, c), yield_force: y, break_force: b });
-            s.beamYield[sel.index] = y; s.beamBreak[sel.index] = b;
+        if (sb.sel.nodes.size) {
+            sb.sel.nodes.forEach((k) => { sb.nodeEdits.set(k, { yield_force: y, break_force: b }); s.nodeYield[k] = y; s.nodeBreak[k] = b; });
+        } else if (sb.sel.beam !== null) {
+            const a = Math.min(s.beamA[sb.sel.beam], s.beamB[sb.sel.beam]), c = Math.max(s.beamA[sb.sel.beam], s.beamB[sb.sel.beam]);
+            sb.beamEdits.set(a + "-" + c, { a, b: c, yield_force: y, break_force: b });
+            s.beamYield[sb.sel.beam] = y; s.beamBreak[sb.sel.beam] = b;
         }
         showSelection();
         status("Set. Save the car to keep it.", "ok");
     });
     $("sbSelClear").addEventListener("click", () => {
-        const sel = sb.selected;
-        if (!sel) return;
         const s = softBody();
-        if (sel.type === "node") sb.nodeEdits.delete(sel.index);
-        else sb.beamEdits.delete(Math.min(s.beamA[sel.index], s.beamB[sel.index]) + "-" + Math.max(s.beamA[sel.index], s.beamB[sel.index]));
-        status("Back to the default after the next “Show the shell” or crash test.", "ok");
+        if (!s) return;
+        sb.sel.nodes.forEach((k) => sb.nodeEdits.delete(k));
+        if (sb.sel.beam !== null) sb.beamEdits.delete(Math.min(s.beamA[sb.sel.beam], s.beamB[sb.sel.beam]) + "-" + Math.max(s.beamA[sb.sel.beam], s.beamB[sb.sel.beam]));
+        status("Back to the default after the shell is made again (a moment).", "ok");
         changed();
+    });
+
+    // ---- editing the nodes: a click on the model puts one there, the selected ones can be removed
+    // The nodes are made from the model once; from the first edit on they are a list of the car (softbody.layout), which the game uses as it is.
+    function freeze(s) {
+        if (sb.layout) return;
+        const p = new THREE.Vector3();
+        sb.layout = [];
+        for (let k = 0; k < s.count; k++) { s.restPosition(k, p); sb.layout.push({ x: +p.x.toFixed(4), y: +p.y.toFixed(4), z: +p.z.toFixed(4), r: +s.radiusOf(k).toFixed(4) }); }
+    }
+    function addAt(mx, my, rect) {
+        const s = softBody();
+        if (!bench.model) return false;
+        caster.setFromCamera(new THREE.Vector2(mx / rect.width * 2 - 1, -(my / rect.height) * 2 + 1), camera);
+        const hits = caster.intersectObject(bench.model.tilt, true).filter((h) => h.object.isMesh && h.object.visible);
+        if (!hits.length) return false;
+        freeze(s);
+        if (sb.layout.length >= 120) { status("A car can have 120 nodes at most.", "error"); return true; }
+        const local = sb.group.worldToLocal(hits[0].point.clone());
+        const r = parseFloat($("sbRadius").value) || 0.2;
+        sb.layout.push({ x: +local.x.toFixed(4), y: +local.y.toFixed(4), z: +local.z.toFixed(4), r });
+        sb.sel.nodes.clear(); sb.sel.beam = null;
+        sb.sel.nodes.add(sb.layout.length - 1);       // the new node is the last one: it is selected when the shell is made again
+        sb.keepSelection = [sb.layout.length - 1];
+        status("Node " + (sb.layout.length - 1) + " added. It joins its nearest neighbours.", "ok");
+        changed(true);
+        return true;
+    }
+    function deleteSelected() {
+        const s = softBody();
+        if (!s || !sb.sel.nodes.size) return;
+        freeze(s);
+        const gone = new Set(sb.sel.nodes);
+        if (sb.layout.length - gone.size < 3) { status("A car needs at least 3 nodes.", "error"); return; }
+        // the numbers of the nodes behind a removed one go down: the strengths that were set follow them
+        const map = new Map();
+        let next = 0;
+        sb.layout.forEach((n, i) => { if (!gone.has(i)) map.set(i, next++); });
+        sb.layout = sb.layout.filter((n, i) => !gone.has(i));
+        sb.nodeEdits = new Map([...sb.nodeEdits].filter(([i]) => map.has(i)).map(([i, e]) => [map.get(i), e]));
+        const beams = new Map();
+        sb.beamEdits.forEach((b) => {
+            if (!map.has(b.a) || !map.has(b.b)) return;
+            const a = Math.min(map.get(b.a), map.get(b.b)), c = Math.max(map.get(b.a), map.get(b.b));
+            beams.set(a + "-" + c, Object.assign({}, b, { a, b: c }));
+        });
+        sb.beamEdits = beams;
+        sb.sel.nodes.clear(); sb.sel.beam = null;
+        status(gone.size + " node" + (gone.size > 1 ? "s" : "") + " removed.", "ok");
+        changed(true);
+    }
+    $("sbDelete").addEventListener("click", deleteSelected);
+    window.addEventListener("keydown", (e) => {
+        if (!sb.edit || (e.key !== "Delete" && e.key !== "Backspace")) return;
+        if (/input|textarea|select/i.test((document.activeElement || {}).tagName || "")) return;
+        e.preventDefault();
+        deleteSelected();
+    });
+    $("sbEdit").addEventListener("click", async () => {
+        if (!sb.edit && !sb.shown) await show(false);
+        if (!softBody()) return;
+        sb.edit = !sb.edit;
+        $("sbEdit").textContent = sb.edit ? "Stop editing nodes" : "Edit nodes";
+        $("sbEdit").classList.toggle("accent", sb.edit);
+        $("sbEditBox").style.display = sb.edit ? "" : "none";
+        showSelection();
+    });
+    $("sbResetNodes").addEventListener("click", () => {
+        if (!sb.layout) { status("The nodes are the ones made from the model already.", "ok"); return; }
+        if (!confirm("Throw away your nodes and make them again from the model? The strengths set on single nodes and beams go too.")) return;
+        sb.layout = null; sb.nodeEdits.clear(); sb.beamEdits.clear(); sb.sel.nodes.clear(); sb.sel.beam = null;
+        changed(true);
     });
 
     // ---- the crash test: the car at a speed into a wall
@@ -468,6 +608,7 @@ export function initSoftBody(api) {
 
     // the bench stops: the shell and the wall go
     function onStop() {
+        if (!sb.restarting) { sb.edit = false; $("sbEdit").textContent = "Edit nodes"; $("sbEdit").classList.remove("accent"); $("sbEditBox").style.display = "none"; sb.sel.nodes.clear(); sb.sel.beam = null; }
         stopCrash();
         sb.savedGround = null;
         hide();

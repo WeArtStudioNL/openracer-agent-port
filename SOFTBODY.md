@@ -92,3 +92,9 @@ The "Soft body" card of the car editor (`web/tools/softbody-editor.js`, hooked i
 * **Parts…**: a list of the objects of the model with a behaviour (hinge or loose) and every number of `parts`; the hinges are drawn as orange arrows in the view.
 * **Crash test**: a speed (10 to 150 km/h) and an angle of the wall; the car rolls into a wall on a 3D ground, the camera follows, and the card shows the peak deceleration, the bend, the energy that the shell took up, the torn anchors and beams and the part events. **Repair** puts everything back.
 * Edits of strengths in the view act on the bench at once; the other settings make the shell again (a moment after the last change).
+
+### Editing the nodes, the lasso and the folding bars
+
+* **Edit nodes** (in the card): a click on the model puts a node on its surface (radius from the field, 0.2 m by default); it is joined by beams to its nearest neighbours, as the nodes of the model are. A click on a node selects it (Shift or Ctrl adds), the **middle mouse button and a drag** draws a lasso round many nodes (also without the edit mode, to set strengths on all of them). **Delete selected** (or the Delete key) removes the selected nodes; the strengths that were set on the nodes behind them follow their new numbers. At least 3 and at most 120 nodes. "Make the nodes from the model again" throws the changes away.
+* From the first edit on the nodes are a list of the car: `softbody.layout`: `[{ "x", "y", "z", "r" }]` in the frame of the car, in the order of the numbers of the nodes. `CollisionProxy.apply` uses it instead of the nodes made from the model, so they are also the spheres that hit the road and the walls. Without `layout` nothing changes.
+* The editor has three buttons (top right of the view) that fold the left bar, the right bar (Layers) and the test buttons away.

@@ -109,6 +109,9 @@ button:disabled { opacity: 0.45; cursor: default; }
 .float { position: absolute; background: #171b22e6; border: 1px solid #2f3845; border-radius: 12px; box-shadow: 0 6px 24px #0008; backdrop-filter: blur(8px); padding: 8px 10px; display: flex; gap: 8px; align-items: center; }
 .float.top-right { top: 12px; right: 12px; }
 .float.bottom { bottom: 14px; left: 50%; transform: translateX(-50%); flex-wrap: wrap; justify-content: center; max-width: calc(100% - 24px); }
+.float.bottom-left { top: 12px; right: 12px; z-index: 6; padding: 5px 6px; gap: 5px; }
+#layersOpen { display: none !important; }   /* the Right button of the toggles does it */
+#side.collapsed { display: none; }
 .float.bottom-right { bottom: 14px; right: 12px; }
 .float.column { flex-direction: column; align-items: stretch; }
 .float label { margin: 0; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; }

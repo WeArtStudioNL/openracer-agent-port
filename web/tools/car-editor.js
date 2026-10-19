@@ -740,6 +740,10 @@ function renderThumbnail() {
 }
 
 // the panel: hide, show, and resize by dragging its edge
+// the bars and the test buttons can be folded away, to see more of the car
+$("toggleSide").addEventListener("click", () => { $("side").classList.toggle("collapsed"); });
+$("toggleTests").addEventListener("click", () => { const box = document.querySelector("#view .float.bottom"); box.style.display = box.style.display === "none" ? "" : "none"; });
+$("toggleLayers").addEventListener("click", () => { $($("layers").classList.contains("hidden") ? "layersShow" : "layersHide").click(); });
 $("layersHide").addEventListener("click", () => { $("layers").classList.add("hidden"); $("layersOpen").style.display = ""; });
 $("layersShow").addEventListener("click", () => { $("layers").classList.remove("hidden"); $("layersOpen").style.display = "none"; });
 (function () {
