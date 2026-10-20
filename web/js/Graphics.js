@@ -49,7 +49,27 @@ OpenRacer.Graphics = (function () {
             this.material = new THREE.MeshNormalMaterial();
             this.material.blending = THREE.NoBlending;
             this.hidden = [];
+            this.swapped = [];
             this.clearColor = new THREE.Color();
+        }
+        // the normal material of a mesh that the shell bends: made once for the mesh, with the same bend as its own material
+        normalFor(mesh) {
+            if (!mesh.geometry || !mesh.geometry.attributes.aNodes) return null;
+            var own = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+            if (!own || !own.onBeforeCompile) return null;
+            var normal = mesh.userData.sbNormal;
+            var uniform = mesh.userData.sbUniform || null;             // a part that has come off keeps the bend that it had (SoftBodyMesh.release)
+            if (!normal) {
+                normal = mesh.userData.sbNormal = new THREE.MeshNormalMaterial();
+                normal.blending = THREE.NoBlending;
+                normal.onBeforeCompile = own.onBeforeCompile;
+                normal.customProgramCacheKey = function () { return "softbodyNormal"; };
+                normal.userData.uniform = uniform;
+            } else if (normal.userData.uniform !== uniform) {
+                normal.userData.uniform = uniform;
+                normal.needsUpdate = true;
+            }
+            return normal;
         }
         setSize(width, height) { this.target.setSize(Math.max(1, Math.floor(width * this.scale)), Math.max(1, Math.floor(height * this.scale))); }
         dispose() { this.target.dispose(); this.material.dispose(); }
@@ -68,8 +88,19 @@ OpenRacer.Graphics = (function () {
             renderer.setClearColor(0x7777ff, 1);
             renderer.clear();
             this.scene.background = null;
-            this.scene.overrideMaterial = this.material;
+            this.scene.overrideMaterial = null;
+            // every mesh gets the normal material; one that the shell bends (SoftBodyMesh.js moves its vertices in the vertex shader) gets one that
+            // bends it the same way, or the normals and the depth, and the effects that read them (the occlusion), stay where the car was whole
+            var swapped = this.swapped;
+            swapped.length = 0;
+            var plain = this.material, self = this;
+            this.scene.traverse(function (o) {
+                if (!o.isMesh || !o.visible) return;
+                swapped.push(o, o.material);
+                o.material = self.normalFor(o) || plain;
+            });
             renderer.render(this.scene, this.camera);
+            for (var m = 0; m < swapped.length; m += 2) swapped[m].material = swapped[m + 1];
             this.scene.overrideMaterial = oldOverride;
             this.scene.background = oldBackground;
             renderer.setClearColor(this.clearColor, oldAlpha);
