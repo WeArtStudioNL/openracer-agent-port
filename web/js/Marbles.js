@@ -3,7 +3,7 @@
  *
  * Description: The marbles: small pellets of rubber that a tyre sheds when its surface is soft and hot (from about 150 to 180 degrees, before it
  *              smokes; Vehicle.js, wheel.surfT) and slides. They are thrown off a little backwards and to the side, fall, bounce once or twice and lie on
- *              the road, off the line where the tyres run, dark and a few centimetres across. One mesh holds all of them in a ring (the oldest are drawn
+ *              the road, off the line where the tyres run, dark and about a centimetre across (drawn a little bigger, so that they can be seen). One mesh holds all of them in a ring (the oldest are drawn
  *              over when it is full). Every car draws into the same one. Like the skid marks they stay (until the car is put back at the start).
  */
 
@@ -12,6 +12,7 @@ OpenRacer.Marbles = function (scene, capacity) {
     var positions = new Float32Array(capacity * 3);
     var sizes = new Float32Array(capacity);
     var rotations = new Float32Array(capacity);
+    var radii = new Float32Array(capacity), masses = new Float32Array(capacity);       // m and kg: 4 to 10 mm, 0.5 to 2.5 g
     var shades = new Float32Array(capacity);
     var vel = new Float32Array(capacity * 3);
     var flying = new Uint8Array(capacity);               // 1 while it is in the air
@@ -52,23 +53,30 @@ OpenRacer.Marbles = function (scene, capacity) {
     shades.fill(-1);                                     // not there yet
     attributes.iShade.needsUpdate = true;
 
+    var SEEN = 2.5;                                      // how much bigger they are drawn than they are
     var moving = 0;                                      // how many are in the air
-    var probe = { x: 0, y: 0, z: 0 };
+    var forward = { x: 0, z: 1 };
 
     function spawn(x, y, z, vx, vy, vz) {
         var i = next;
         next = (next + 1) % capacity;
         if (flying[i]) moving--;
-        positions[i * 3] = x; positions[i * 3 + 1] = y + 0.02; positions[i * 3 + 2] = z;
+        radii[i] = 0.004 + Math.random() * 0.006;
+        masses[i] = 0.0005 + (radii[i] - 0.004) / 0.006 * 0.002 * (0.7 + 0.6 * Math.random());
+        positions[i * 3] = x; positions[i * 3 + 1] = y + radii[i]; positions[i * 3 + 2] = z;
         vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz;
         flying[i] = 1; moving++;
-        sizes[i] = 0.02 + Math.random() * 0.04;
+        sizes[i] = 2 * radii[i] * SEEN;
         rotations[i] = Math.random() * 6.2832;
         shades[i] = 0.04 + Math.random() * 0.07;
     }
 
     // Called every frame for a vehicle: makes marbles at its wheels that slide with a soft hot surface, and lets the ones in the air fall.
     this.update = function (vehicle, delta) {
+        // the way the car points (level)
+        var qx = vehicle.qx, qy = vehicle.qy, qz = vehicle.qz, qw = vehicle.qw;
+        forward.x = 2 * (qx * qz + qw * qy); forward.z = 1 - 2 * (qx * qx + qy * qy);
+        var fl0 = Math.hypot(forward.x, forward.z) || 1; forward.x /= fl0; forward.z /= fl0;
         var wheels = vehicle.wheels, kind = vehicle.tyreKind ? vehicle.tyreKind() : null, off = kind ? kind.smoke : 0;
         for (var w = 0; w < 4; w++) {
             var wheel = wheels[w];
@@ -81,30 +89,42 @@ OpenRacer.Marbles = function (scene, capacity) {
             carry[w] += rate * delta;
             var count = Math.floor(carry[w]);
             carry[w] -= count;
-            // thrown the way the tyre drags it: backwards against how the tread slides, and to the side
-            var spin = Math.max(0, (wheel.omega || 0) * wheel.radius - (wheel.forwardSpeed || 0));
-            var fx = vehicle.vx, fz = vehicle.vz, fl = Math.hypot(fx, fz) || 1;
+            // They come off at the back of the patch of contact (a hand behind the middle of the tyre) with the speed of the tread, which runs
+            // backwards against the car (the speed of the wheel, omega times the radius), on top of the speed of the car: a tyre that rolls (the tread
+            // as fast as the car) lets them fall where they are, a spinning tyre throws them back, a locked one leaves them with the car. Into a cone:
+            // a little to the side and up.
+            var tangent = (wheel.omega || 0) * wheel.radius;
             for (var n = 0; n < count; n++) {
-                var side = (Math.random() - 0.5) * 3;
-                var back = 0.5 + Math.random() * (1.5 + Math.min(4, spin * 0.1));
-                spawn(wheel.contact.x + (Math.random() - 0.5) * 0.2, wheel.contact.y, wheel.contact.z + (Math.random() - 0.5) * 0.2,
-                    vehicle.vx * 0.6 - (fx / fl) * back + (fz / fl) * side, 0.5 + Math.random() * 1.2, vehicle.vz * 0.6 - (fz / fl) * back - (fx / fl) * side);
+                var spreadSide = (Math.random() - 0.5) * 0.25, spreadUp = Math.random() * 0.15;
+                var dx = -forward.x + forward.z * spreadSide, dz = -forward.z - forward.x * spreadSide, dy = spreadUp;   // backwards, with the cone (the side is to the left of the car)
+                var dl = Math.hypot(dx, dy, dz) || 1;
+                spawn(wheel.contact.x - forward.x * 0.1 + (Math.random() - 0.5) * 0.05, wheel.contact.y, wheel.contact.z - forward.z * 0.1 + (Math.random() - 0.5) * 0.05,
+                    vehicle.vx + dx / dl * tangent, vehicle.vy + dy / dl * tangent + Math.random() * 0.3, vehicle.vz + dz / dl * tangent);
             }
         }
         if (!moving) return;
         var ground = vehicle.ground;
+        var rolling = Math.pow(0.65, delta * 60);
         for (var i = 0; i < capacity; i++) {
             if (!flying[i]) continue;
-            vel[i * 3 + 1] -= 9.81 * delta;
-            var x = positions[i * 3] += vel[i * 3] * delta, y = positions[i * 3 + 1] += vel[i * 3 + 1] * delta, z = positions[i * 3 + 2] += vel[i * 3 + 2] * delta;
-            var road = ground && ground.query ? ground.query(x, z, y + 0.3, 0.6) : null;
-            var floor = road ? road.y : null;
-            if (floor === null) { if (y < vehicle.py - 3) { flying[i] = 0; moving--; shades[i] = -1; } continue; }
-            if (y <= floor + 0.01) {
-                positions[i * 3 + 1] = floor + 0.01;
-                if (vel[i * 3 + 1] < -1.2) { vel[i * 3 + 1] *= -0.3; vel[i * 3] *= 0.5; vel[i * 3 + 2] *= 0.5; }
-                else { flying[i] = 0; moving--; }
+            var vx = vel[i * 3], vy = vel[i * 3 + 1] - 9.81 * delta, vz = vel[i * 3 + 2];
+            // the drag of the air: half rho, Cd 0.7, the cross section of the marble, over its mass
+            var speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
+            if (speed > 1e-3) {
+                var slow = Math.min(0.9, 0.5 * 1.225 * 0.7 * Math.PI * radii[i] * radii[i] * speed / masses[i] * delta);      // (the share of the speed that it loses, kept below one)
+                vx -= vx * slow; vy -= vy * slow; vz -= vz * slow;
             }
+            var x = positions[i * 3] += vx * delta, y = positions[i * 3 + 1] += vy * delta, z = positions[i * 3 + 2] += vz * delta;
+            var road = ground && ground.query ? ground.query(x, z, y + 0.3, 0.6) : null;
+            if (!road) { vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz; if (y < vehicle.py - 3) { flying[i] = 0; moving--; shades[i] = -1; } continue; }
+            var floor = road.y + radii[i];
+            if (y <= floor) {
+                positions[i * 3 + 1] = floor;
+                vy *= -0.25;                                  // hot rubber does not bounce
+                vx *= rolling; vz *= rolling;                 // and it rolls only a little
+                if (Math.abs(vy) < 0.5 && vx * vx + vz * vz < 0.16) { flying[i] = 0; moving--; vx = vy = vz = 0; }
+            }
+            vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz;
         }
         attributes.iPos.needsUpdate = true; attributes.iSize.needsUpdate = true; attributes.iRot.needsUpdate = true; attributes.iShade.needsUpdate = true;
     };
