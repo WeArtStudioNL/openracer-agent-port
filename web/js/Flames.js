@@ -41,7 +41,7 @@ OpenRacer.ExhaustFlames = function (scene, car) {
 
     var sprites = [], age = new Float32Array(N).fill(1e9), life = new Float32Array(N).fill(1), size0 = new Float32Array(N), size1 = new Float32Array(N);
     var alpha0 = new Float32Array(N), own = new Float32Array(N), lengthF = new Float32Array(N), widthF = new Float32Array(N), vel = [], next = 0;
-    var view = new THREE.Vector3();
+    var view = new THREE.Vector3(), pos = [], toCamera = new THREE.Vector3();
     for (var i = 0; i < N; i++) {
         var material = new THREE.SpriteMaterial({ map: texture, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false });
         var sprite = new THREE.Sprite(material);
@@ -50,6 +50,7 @@ OpenRacer.ExhaustFlames = function (scene, car) {
         scene.add(sprite);
         sprites.push(sprite);
         vel.push(new THREE.Vector3());
+        pos.push(new THREE.Vector3());
     }
 
     var q = new THREE.Quaternion(), p = new THREE.Vector3(), dir = new THREE.Vector3(), carVel = new THREE.Vector3(), local = null;
@@ -96,7 +97,7 @@ OpenRacer.ExhaustFlames = function (scene, car) {
                 var i = next;
                 next = (next + 1) % N;
                 var sp = sprites[i];
-                sp.position.set(body.position.x + p.x + (Math.random() - 0.5) * list[k].diameter * 0.5, body.position.y + p.y + (Math.random() - 0.5) * list[k].diameter * 0.5, body.position.z + p.z + (Math.random() - 0.5) * list[k].diameter * 0.5).addScaledVector(dir, Math.random() * 0.15);
+                pos[i].set(body.position.x + p.x + (Math.random() - 0.5) * list[k].diameter * 0.5, body.position.y + p.y + (Math.random() - 0.5) * list[k].diameter * 0.5, body.position.z + p.z + (Math.random() - 0.5) * list[k].diameter * 0.5).addScaledVector(dir, Math.random() * 0.15);
                 vel[i].copy(dir).multiplyScalar(2.5 + Math.random() * 5 * s).addScaledVector(carVel, 0.95);
                 vel[i].x += (Math.random() - 0.5) * 0.8; vel[i].y += (Math.random() - 0.5) * 0.8 + 0.3; vel[i].z += (Math.random() - 0.5) * 0.8;
                 age[i] = 0;
@@ -131,16 +132,23 @@ OpenRacer.ExhaustFlames = function (scene, car) {
             age[i] += dt;
             var t = Math.min(1, age[i] / life[i]);
             var sp = sprites[i];
-            sp.position.addScaledVector(vel[i], dt);
+            pos[i].addScaledVector(vel[i], dt);
             vel[i].multiplyScalar(Math.exp(-5 * dt));
             var size = size0[i] + (size1[i] - size0[i]) * Math.sqrt(t);
-            // long in the way that it flies (as seen from the camera), the nozzle at the pipe; a picture is longer than the gradient
+            // The flame is drawn a little towards the camera, so that the body of the car does not hide the start of it (a pipe is at the surface or inside it).
+            sp.position.copy(pos[i]);
+            var side = 1;
             if (camera) {
+                toCamera.copy(camera.position).sub(pos[i]);
+                var distance = toCamera.length() || 1;
+                sp.position.addScaledVector(toCamera, Math.min(0.4, distance * 0.4) / distance);
+                // long in the way that it flies (as seen from the camera), the nozzle at the pipe; seen from the front or the back (in the way of the flame) it is a round puff
                 view.copy(vel[i]).transformDirection(camera.matrixWorldInverse);
                 sp.material.rotation = Math.atan2(view.y, view.x);
+                side = Math.min(1, Math.hypot(view.x, view.y) * 1.2);
             }
-            if (own[i] > 0) sp.scale.set(size * 2.2 * own[i] * lengthF[i], size * 1.1 * widthF[i], 1);
-            else sp.scale.set(size * 1.8 * lengthF[i], size * widthF[i], 1);
+            var along = own[i] > 0 ? 2.2 * own[i] * lengthF[i] : 1.8 * lengthF[i], across = own[i] > 0 ? 1.1 * widthF[i] : widthF[i];
+            sp.scale.set(size * (across * 1.2 + (along - across * 1.2) * side), size * across, 1);
             sp.material.opacity = alpha0[i] * Math.pow(1 - t, 1.5);
             sp.material.color.setRGB(1, 0.9 - 0.55 * t, 0.7 - 0.65 * t);       // pale at the start, orange at the end
         }
