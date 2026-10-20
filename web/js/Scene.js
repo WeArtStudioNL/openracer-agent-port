@@ -89,7 +89,7 @@ window.onresize = function() {
     
     // the buffers of the post-processing are sized in device pixels (the composer takes care of that)
     if(useComposer) {
-        composer.setSize( SCREEN_WIDTH, SCREEN_HEIGHT );
+        OpenRacer.Graphics.setSize( SCREEN_WIDTH, SCREEN_HEIGHT );
     }
 };
 
@@ -155,27 +155,17 @@ RACER.Scene = function (parameters, domElement) {
         container.appendChild( renderer.domElement );
         
         if(useComposer) {
-            var pixelRatio = renderer.getPixelRatio();
-            var renderTarget = new THREE.WebGLRenderTarget(
-                Math.floor( SCREEN_WIDTH * pixelRatio ), Math.floor( SCREEN_HEIGHT * pixelRatio ),
-                { type: THREE.HalfFloatType, samples: isTouchDevice() ? 2 : 4 } );
-            composer = new THREE.EffectComposer( renderer, renderTarget );
-            
-            composer.addPass( new THREE.RenderPass( scene, camera ) );
-            
-            var effectColor = new THREE.ShaderPass( THREE.ColorCorrectionShader );
-            effectColor.uniforms[ 'mulRGB' ].value.set( 1.2, 1.2, 1.2 );
-            effectColor.uniforms[ 'powRGB' ].value.set( 1.1, 1.1, 1.1 );
-            composer.addPass( effectColor );
-
-            var effectVignette = new THREE.ShaderPass( THREE.VignetteShader );
-            effectVignette.uniforms[ "darkness" ].value = 1.2;
-            composer.addPass( effectVignette );
-
-            // converts the picture to the colours of the screen
-            composer.addPass( new THREE.OutputPass() );
+            // the post-processing chain, made from the graphics options (Graphics.js): anti-aliasing, SSAO, SSGI, the vignette
+            OpenRacer.Graphics.init({
+                renderer: renderer, scene: scene, camera: camera, shadowLight: shadowLight,
+                size: function() { return { width: SCREEN_WIDTH, height: SCREEN_HEIGHT }; },
+                basePixelRatio: pickPixelRatio,
+                resize: function() { window.onresize(); },
+                reflections: function(every) { enableCubeCamera = every > 0; if(every > 0) cubeUpdate = every; },
+                onComposer: function(c) { composer = c; }
+            });
         }
-        
+
         animate();
     };
 };

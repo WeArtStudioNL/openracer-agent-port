@@ -92,7 +92,9 @@ var Settings = (function() {
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
     var DEFAULT_OPTIONS = { tc: true, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 1, volume: 0.8,
-        padSlow: 1.5, padAssist: true, keySteer: 1 };
+        padSlow: 1.5, padAssist: true, keySteer: 1,
+        // the graphics (Graphics.js): a preset is a set of these
+        gfxPreset: "high", gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true };
 
     var bindings = {};      // action id -> list of inputs
     var options = {};
@@ -756,6 +758,38 @@ var Settings = (function() {
         page.appendChild(optionRow("HUD", options.hud ? "On" : "Off", function() { setOption("hud", !options.hud); }));
         page.appendChild(optionRow("Units", options.units === "imperial" ? "Imperial (mph)" : "Metric (km/h)",
             function() { setOption("units", options.units === "imperial" ? "metric" : "imperial"); }));
+        page = tabPage("Graphics");
+        if(typeof OpenRacer !== "undefined" && OpenRacer.Graphics) {
+            var G = OpenRacer.Graphics;
+            var gfxNote = document.createElement("div");
+            gfxNote.className = "sub";
+            gfxNote.textContent = "A preset sets all of these at once; changing one of them makes it Custom. The screen space effects (SSAO, SSGI) draw the scene a second time to find the surfaces, so they cost frames: try them one by one.";
+            page.appendChild(gfxNote);
+            // the value of an option goes round a list of choices; any change makes the preset Custom
+            var gfxCycle = function(name, values) {
+                return function() {
+                    var next = values[(values.indexOf(options[name]) + 1) % values.length];
+                    setOption(name, next);
+                    if(G.currentPreset() !== options.gfxPreset) setOption("gfxPreset", G.currentPreset());
+                };
+            };
+            var presetNames = { low: "Low", medium: "Medium", high: "High", ultra: "Ultra", custom: "Custom" };
+            var presetOrder = ["low", "medium", "high", "ultra"];
+            page.appendChild(optionRow("Preset", presetNames[G.currentPreset()] || "Custom", function() {
+                var at = presetOrder.indexOf(G.currentPreset());
+                G.applyPreset(presetOrder[(at + 1) % presetOrder.length]);
+            }));
+            page.appendChild(optionRow("Resolution", Math.round(options.gfxScale * 100) + "% of the screen", gfxCycle("gfxScale", [0.5, 0.75, 1, 1.25, 1.5])));
+            page.appendChild(optionRow("Anti-aliasing", options.gfxAA ? options.gfxAA + "× MSAA" : "Off", gfxCycle("gfxAA", [0, 2, 4, 8])));
+            var shadowNames = ["Off", "Low", "Medium", "High", "Ultra"];
+            page.appendChild(optionRow("Shadows", shadowNames[options.gfxShadows] + (options.gfxShadows ? " (" + G.SHADOW_SIZES[options.gfxShadows] + ")" : ""), gfxCycle("gfxShadows", [0, 1, 2, 3, 4])));
+            var reflectionNames = ["Off (still)", "Low (slow)", "High"];
+            page.appendChild(optionRow("Reflections", reflectionNames[options.gfxReflections], gfxCycle("gfxReflections", [0, 1, 2])));
+            var effectNames = ["Off", "Low", "High"];
+            page.appendChild(optionRow("Ambient occlusion (SSAO)", effectNames[options.gfxAO], gfxCycle("gfxAO", [0, 1, 2])));
+            page.appendChild(optionRow("Global illumination (SSGI)", effectNames[options.gfxGI], gfxCycle("gfxGI", [0, 1, 2])));
+            page.appendChild(optionRow("Vignette", options.gfxVignette ? "On" : "Off", gfxCycle("gfxVignette", [false, true])));
+        }
         page = tabPage("Tools");
         page.appendChild(optionRow("Debug text", options.debug ? "On" : "Off", function() { setOption("debug", !options.debug); }));
         var tuningRow = optionRow("Tuning menu", "Open", function() { closeMenu(); Tuning.toggle(); });

@@ -12,6 +12,8 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { Pass, FullScreenQuad } from "three/addons/postprocessing/Pass.js";
+import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
 import { ColorCorrectionShader } from "three/addons/shaders/ColorCorrectionShader.js";
 import { VignetteShader } from "three/addons/shaders/VignetteShader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
@@ -23,6 +25,9 @@ window.THREE = Object.assign({}, THREE_MODULE, {
     ShaderPass: ShaderPass,
     GLTFLoader: GLTFLoader,
     OutputPass: OutputPass,
+    Pass: Pass,
+    FullScreenQuad: FullScreenQuad,
+    GTAOPass: GTAOPass,
     ColorCorrectionShader: ColorCorrectionShader,
     VignetteShader: VignetteShader,
     RoomEnvironment: RoomEnvironment
@@ -42,6 +47,7 @@ var scripts = [
     "js/CarLoader.js",
     "js/MaterialLibrary.js",
     "js/TrackLoader.js",
+    "js/Graphics.js",
     "js/Scene.js",
     "js/EnvironmentExport.js",
     "js/SoftBody.js",

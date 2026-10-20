@@ -16,6 +16,7 @@ Settings.onOptionChange(function(name, value) {
     if(name === "sound") EngineSound.setMuted(!value);
     else if(name === "volume") EngineSound.setVolume(value);
     else if(name === "toneMapping" && typeof renderer !== "undefined" && renderer) applyToneMapping(value);
+    else if(name.indexOf("gfx") === 0 && OpenRacer.Graphics) OpenRacer.Graphics.changed(name);
 });
 EngineSound.setMuted(!Settings.option("sound"));
 EngineSound.setVolume(Settings.option("volume"));
