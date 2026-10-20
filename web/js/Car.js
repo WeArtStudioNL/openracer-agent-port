@@ -86,6 +86,8 @@ OpenRacer.Car = function( config, domElement ) {
     this.brake = false;
     this.reverse = false;
     this.autoReverse = false;        // automatic: the car is in reverse because the brake key was held at a standstill
+    this.autoReversePedals = false;  // the same with analog pedals (a wheel, a pad, the touch pedals): the pedals are swapped for the physics
+    this.keyPedals = false;
     this.turnLeft = false;
     this.turnRight = false;
     this.turnDir = 0;
@@ -517,11 +519,31 @@ OpenRacer.Car = function( config, domElement ) {
         this.turnAngle = Math.max(-this.maxTurn, Math.min(this.maxTurn, this.turnAngle));
         this.lastWritten = this.turnAngle;
 
+        // The same reverse for analog pedals (a wheel, the triggers of a pad, the touch pedals): the brake pedal held at a standstill is the gas of the reverse,
+        // the gas pedal is the brake; for the physics the two values are swapped, and put back after it
+        var swapPedals = false;
+        if(usingGamepad && !this.keyPedals && !this.autoReverse && this.gearboxMode === "automatic" && this.selector === "D" && !this.parkingLock && Settings.option("autoReversePedals") &&
+           !this.vehicle.launchControlEnabled && !(OpenRacer.DragStrip && OpenRacer.DragStrip.holding)) {
+            var padUp = this.throttle > 0.1, padDown = this.brakePedal > 0.1, padAlong = v.u, padLimit = Math.max(0.3, Settings.option("autoReverseSpeed") / 3.6);
+            if(!this.autoReversePedals) {
+                if(padDown && !padUp && padAlong < padLimit) this.autoReversePedals = true;
+            } else if(padUp && !padDown && padAlong > -padLimit) this.autoReversePedals = false;
+            else if(!padUp && !padDown && padAlong > -0.3) this.autoReversePedals = false;
+        } else {
+            this.autoReversePedals = false;
+        }
+        if(this.autoReversePedals) {
+            this.reverse = true;
+            var swapped = this.throttle; this.throttle = this.brakePedal; this.brakePedal = swapped;
+            swapPedals = true;
+        }
+
         v.update(delta);
         this.pit.update(delta);
         this.engineRPM = this.engine.getRPM();
         // the rev limiter cuts the fuel: the engine sounds like it too
         EngineSound.update(this.engineRPM, this.throttle * this.engine.throttleCut, this.engine.throttleCut > 0.5);
+        if(swapPedals) { var back = this.throttle; this.throttle = this.brakePedal; this.brakePedal = back; }
         EngineSound.setTyres(v.squeal, Math.abs(v.u));
         // the bangs of the exhaust (pops, anti-lag): the sound, and the flames
         var bangs = this.engine.events;
@@ -641,6 +663,7 @@ OpenRacer.Car = function( config, domElement ) {
         // The automatic gearbox in D: holding the brake key at a standstill (or below a speed) puts the car in reverse while the key is held, as in
         // most games. In reverse the brake key is the gas and the gas key brakes; the gas key at a standstill is D again.
         var rawUp = this.accelerate, rawDown = this.brake;
+        this.keyPedals = rawUp || rawDown;
         if(this.gearboxMode === "automatic" && this.selector === "D" && !this.parkingLock && Settings.option("autoReverse") &&
            !this.vehicle.launchControlEnabled && !(OpenRacer.DragStrip && OpenRacer.DragStrip.holding)) {
             var along = this.vehicle.u, limit = Math.max(0.3, Settings.option("autoReverseSpeed") / 3.6);
