@@ -27,9 +27,12 @@ var TouchControls = (function() {
         var q = new URLSearchParams(window.location.search).get("touch");
         if(q === "1") return true;
         if(q === "0") return false;
-        try { return window.matchMedia("(pointer: coarse)").matches; } catch(e) { return false; }
+        // only on a device with a touch screen: a coarse pointer alone is not enough (a desktop can say so), and a mouse never drives the controls
+        try { return window.matchMedia("(pointer: coarse)").matches && (navigator.maxTouchPoints || 0) > 0; } catch(e) { return false; }
     }
     var enabled = wanted();
+    var forced = new URLSearchParams(window.location.search).get("touch") === "1";
+    function fromMouse(e) { return e.pointerType === "mouse" && !forced; }
 
     function css() {
         var style = document.createElement("style");
@@ -129,7 +132,7 @@ var TouchControls = (function() {
         hint = el(root, "div", "hint", "◀ ▶");
 
         zone.addEventListener("pointerdown", function(e) {
-            if(stick.id !== null) return;
+            if(stick.id !== null || fromMouse(e)) return;
             e.preventDefault();
             try { zone.setPointerCapture(e.pointerId); } catch(err) { /* not captured */ }
             stick.id = e.pointerId;
@@ -164,6 +167,7 @@ var TouchControls = (function() {
         }
         zone.addEventListener("pointerup", release);
         zone.addEventListener("pointercancel", release);
+        zone.addEventListener("lostpointercapture", release);
 
         var right = el(root, "div", "pedals");
         var grid = el(right, "div", "grid");
@@ -188,6 +192,8 @@ var TouchControls = (function() {
         Object.keys(virtualHeld).forEach(function(a) { Settings.setVirtual(a, false); delete virtualHeld[a]; });
         if(root) Array.prototype.forEach.call(root.querySelectorAll(".btn.down"), function(b) { b.classList.remove("down"); });
     }
+
+    window.addEventListener("blur", function() { if(enabled) releaseAll(); });
 
     // Once per frame (from gamepadUpdate): builds the controls when the game runs, hides them while the menu is open, builds up the pedals
     function update(delta) {
