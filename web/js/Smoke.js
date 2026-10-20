@@ -271,7 +271,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
         if(alive === 0 && made === 0) return;               // no smoke and none made: the whole ring of puffs is not looked at, and nothing goes to the graphics card
         made = 0;
         alive = 0;
-        var drag = Math.exp(-2.2 * delta), wisps = 0;
+        var drag = Math.exp(-2.2 * delta), wisps = 0, carSpeed = Math.hypot(vehicle.vx, vehicle.vz);
         quiet = true;
         for(var i = 0; i < capacity; i++) {
             if(age[i] >= life[i]) {
@@ -308,11 +308,18 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                     if(age[i] > PLUME_AGE && !wisp[i]) {
                         // A plume that has been in the air a while is not pushed by the car (it is a cloud, the car drives through it). What the car
                         // takes with it are small wisps: new puffs, short-lived, at the surface where it went in, with the speed of the car.
-                        if(time - touched[i] > 0.5 && wisps < 6) {
+                        // only when the car drives through it (not when it stands in it), and from the nose or the tail of the car, not from the roof
+                        if(carSpeed > 3 && time - touched[i] > 0.5 && wisps < 6) {
                             touched[i] = time;
+                            pLocal.set(ox - vehicle.px, oy - vehicle.py, oz - vehicle.pz).applyQuaternion(qInv);
+                            pLocal.z = pLocal.z > (box.z0 + box.z1) / 2 ? box.z1 + m : box.z0 - m;
+                            pLocal.x = Math.max(box.x0, Math.min(box.x1, pLocal.x));
+                            pLocal.y = Math.max(yLow, Math.min(box.y0 + 0.55 * (box.y1 - box.y0), pLocal.y));
+                            pLocal.applyQuaternion(qCar);
+                            var wx = vehicle.px + pLocal.x, wy = vehicle.py + pLocal.y, wz = vehicle.pz + pLocal.z;
                             for(var q = 0; q < 2; q++) {
                                 wisps++;
-                                spawn(px, py - 0.04, pz, vehicle.vx * 0.9, vehicle.vy * 0.9 + 0.2, vehicle.vz * 0.9, 0, false);
+                                spawn(wx, wy - 0.04, wz, vehicle.vx * 0.9, vehicle.vy * 0.9 + 0.2, vehicle.vz * 0.9, 0, false);
                                 var w = (next + capacity - 1) % capacity;
                                 wisp[w] = 1; bases[w] = bases[i];
                                 life[w] = 0.4 + Math.random() * 0.9;
