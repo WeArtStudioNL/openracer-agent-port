@@ -142,9 +142,9 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
         bases[i] = y;
         vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz;
         age[i] = 0;
-        life[i] = (dust ? 1.6 : 2.4) + Math.random() * 1.8 + heat * 1.0;
-        size0[i] = 0.9 + Math.random() * 0.5;
-        size1[i] = (dust ? 3.6 : 4.4) + Math.random() * 2.2 + heat * 3;
+        life[i] = (dust ? 1.4 : 2.0) + Math.random() * 1.4 + heat * 0.8;
+        size0[i] = 0.6 + Math.random() * 0.4;
+        size1[i] = (dust ? 2.4 : 2.8) + Math.random() * 1.4 + heat * 1.6;
         alpha0[i] = ((dust ? 0.3 : 0.4) + 0.32 * heat) * Math.max(0.5, Math.min(1.2, 0.5 + 0.5 * amount));
         rotations[i] = Math.random() * 6.2832;
         spin[i] = (Math.random() - 0.5) * 0.8;
@@ -206,8 +206,8 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                 var outward = wheel.right ? -1 : 1;
                 for(var n = 0; n < count; n++) {
                     var f = (n + Math.random()) / Math.max(1, count);
-                    var back = spun * (0.35 + Math.random() * 0.45) - locked * 0.1;
-                    var side = outward * spun * (0.12 + Math.random() * 0.2) + (Math.random() - 0.5) * (0.8 + 0.12 * spun);
+                    var back = Math.min(5, spun * (0.12 + Math.random() * 0.2)) - locked * 0.05;          // (at most 5 m/s: the air stops it within a few metres)
+                    var side = outward * Math.min(3, spun * (0.08 + Math.random() * 0.12)) + (Math.random() - 0.5) * (0.8 + 0.05 * Math.min(spun, 10));
                     spawn(from.x + (cx - from.x) * f, from.y + (cy - from.y) * f, from.z + (cz - from.z) * f,
                         carVel.x * 0.2 - fwd.x * back + left.x * side + (Math.random() - 0.5) * 0.5,
                         0.4 + Math.random() * 0.9 + Math.min(2, spun * 0.08),
@@ -219,7 +219,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                 last[w] = null;
             }
         }
-        var drag = Math.exp(-1.5 * delta);
+        var drag = Math.exp(-2.2 * delta);
         for(var i = 0; i < capacity; i++) {
             if(age[i] >= life[i]) {
                 if(alphas[i] !== 0) alphas[i] = 0;
