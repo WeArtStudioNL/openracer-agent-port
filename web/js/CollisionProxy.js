@@ -129,15 +129,34 @@ OpenRacer.CollisionProxy = (function () {
                 });
             if(own.length >= 3) spheres = own.concat(spheres.filter(function (sp) { return sp.wheel; }));
         }
+        var cfg = (object.config && object.config.softbody) || {};
+        if(spheres && cfg.enabled !== false && OpenRacer.SoftBody && cfg.wheel_hubs !== false) {
+            // the front wheels are nodes of the shell (the hub of the wheel), joined by beams to the shell around them: a hit on the wheel bends
+            // them, the toe, the camber and the place of the wheel follow from where the hub is (Vehicle.js, updateHubs), and when its anchor tears
+            // the wheel is off. (The rear wheels keep the damage as a number, wheel_strength.)
+            spheres = spheres.map(function (sp) {
+                var wheel = sp.wheel && object.wheels[sp.wheelIndex];
+                if(wheel && wheel.front) return { x: sp.x, y: sp.y, z: sp.z, r: sp.r, hub: true, wheelIndex: sp.wheelIndex };
+                return sp;
+            });
+        }
         if(spheres) {
             v.collisionSpheres = spheres;
             console.log("collision proxy: " + spheres.length + " spheres from the model");
             // the shell of the car that dents (SoftBody.js), and its model (SoftBodyMesh.js); car.json "softbody": { "enabled": false } leaves it out
-            var cfg = (object.config && object.config.softbody) || {};
             if(cfg.enabled !== false && OpenRacer.SoftBody) {
                 v.softBody = new OpenRacer.SoftBody(v, spheres, cfg);
                 try { object.softBodyMesh = OpenRacer.SoftBodyMesh.attach(model.tilt, v.softBody, toVehicle, partGroups(object, model)); } catch(e) { console.warn("SoftBodyMesh: " + e.message); }
                 console.log("soft body: " + v.softBody.count + " nodes, " + v.softBody.beamCount + " beams");
+                v.hubLimit = cfg.hub_limit !== undefined ? cfg.hub_limit : 0.3;
+                spheres.forEach(function (sp, si) {
+                    if(!sp.hub) return;
+                    var k = v.softBody.nodeOfSphere[si];
+                    if(k < 0) return;
+                    v.hubNode[sp.wheelIndex] = k; v.hubSphere[sp.wheelIndex] = si;
+                    // the strength of the suspension of a front wheel: the force at which the hub is bent for good (kN) and at which it tears off
+                    v.softBody.setNode(k, { yield: (cfg.hub_yield !== undefined ? cfg.hub_yield : 20) * 1000, break: (cfg.hub_break !== undefined ? cfg.hub_break : 100) * 1000, mass: 25 });
+                });
             }
             // the wheels: car.json "softbody": { "wheel_strength": 25 } is the hit (kN s) that tears a wheel off; 0 keeps them on
             v.wheelStrength = v.softBody ? (cfg.wheel_strength !== undefined ? Math.max(0, cfg.wheel_strength) : 25) * 1000 : 0;

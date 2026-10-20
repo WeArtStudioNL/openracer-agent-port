@@ -318,3 +318,37 @@ the suspension: the wheel points aside (toe 0.09 rad and camber 0.12 rad at 1) s
 is shown on the model). At 1 the wheel is torn off: `wheelLost`, no tyre force and no spring on that corner, and `Parts.js` makes the wheel a
 rigid body (a cylinder) that keeps the speed and the spin it had, rolls away, hits the road and the car, and is put back by Repair. In the crash
 test with the Mustang: 60 km/h at a wall of 40 degrees bends the front wheel by 27 %, 80 km/h by 80 %, 110 km/h tears it off.
+
+## The suspension as part of the beam network (design, and a first trial on the front wheels)
+
+**What a good model is.** The cars of BeamNG (and the node-beam engines like the one in the Unity video) have no rigid body under the shell: the whole
+car, the chassis, the arms, the hubs, the engine, is nodes and beams, and a hit goes through all of it. Ours has a rigid body (`Vehicle.js`, which
+does the driving) and a shell of nodes on springs (anchors) on it, so a hit bends the shell and the body feels the peak through the anchors. That is
+right for a dent and for the load on a part, but the suspension was outside it: a wheel that hit a wall got a damage number (`wheelStrength`).
+
+**The target.** The suspension and the steering in the network: per wheel a hub, a lower arm and an upper arm (two beams each, to the chassis), a tie
+rod to the rack (so the toe follows the steering), a spring-damper that is the real spring of `Vehicle.js`. A hit on the wheel then loads the
+beams: an arm yields (the camber and the toe change for good), the tie rod yields (toe), a mount tears off (the wheel hangs, or comes off). The
+alignment of the wheel (toe, camber, place) is worked out from where the nodes are, and the tyre force of `Wheel.js` uses that, so a car with a bent arm
+pulls to a side as the real one. A more stable solver (impulses, backward Euler for the stiff beams, as in the video) lets the beams of the
+suspension be as stiff as they are in the car, without the 14 steps of the explicit scheme.
+
+**The steps.**
+1. (done, below) A hub node per front wheel, in the shell: a hit bends it, its place gives the toe, the camber and the place of the wheel.
+2. Arms and tie rod: more nodes and beams around the hub, so the way it bends (an arm, the tie rod) decides the toe and the camber, not one factor.
+3. The rear wheels the same, and the springs and dampers as beams that carry the load of the body (the spring of `Vehicle.js` becomes a beam).
+4. A solver of impulses for the suspension beams (the stiff ones), the shell stays as it is.
+5. The rest: both cars dent in a crash between two (M4), replay of the shell and the parts.
+
+**The first trial (step 1).** The front wheels do not have a collision sphere of their own any more (the `wheel` sphere of `CollisionProxy.js`): the
+sphere is a node of the shell, the hub (`hub: true` in the list of spheres, nodes 195 and 196 on the Mustang), with an anchor (yield 20 kN, break
+100 kN, 25 kg, `softbody.hub_yield`, `hub_break`) and the beams to the shell around it that every node gets. `Vehicle.updateHubs()` reads where the hub is
+now against where it was made: the place of the wheel on the car shifts with it (`shiftX`, `shiftZ` on the mount), the toe is 0.5 rad per metre that
+the hub went back (at most 0.2) and the camber 1 rad per metre that it went in, with a loss of grip of up to 40%. A hub that has moved 0.3 m
+(`softbody.hub_limit`) has taken the wheel with it: the anchor is released, the wheel comes off as a rigid body (`Parts.js`, as before). The rear wheels keep
+the damage as a number (`wheel_strength`); `"wheel_hubs": false` keeps all of them so.
+
+In the crash test of the Mustang, against a wall of 40 degrees: 70 km/h puts the front-right hub back 4 cm (toe 1.3 degrees), 90 km/h 19 cm (toe 5
+degrees, 62% damage), 110 km/h tears the wheel off; head-on at 110 km/h the wheels are not touched (1 cm), as the wheels are behind the nose. What this
+does not do yet: the hub has no arms, so the bend is one displacement turned into toe and camber with factors, not what the arms do; and it is
+a node among the shell nodes, so the model of the car around the wheel arch is pulled along with it (the vertices tied to that node).

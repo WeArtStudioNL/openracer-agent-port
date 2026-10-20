@@ -109,6 +109,14 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         safeStep();
         return B - 1;
     };
+    // Strength and mass of a node afterwards (the hub of a wheel, CollisionProxy.js): { yield, break (N, of its anchor), mass (kg) }
+    this.setNode = function (k, o) {
+        if (o.yield !== undefined) anchorYield[k] = o.yield;
+        if (o.break !== undefined) anchorBreak[k] = o.break;
+        if (o.mass !== undefined) mass[k] = Math.max(0.5, o.mass);
+        if (o.release) anchorAlive[k] = 0;                 // its anchor is gone: it is held by its beams only
+        safeStep();
+    };
     // The force in a beam now (N, along the beam: positive when it is stretched): for the load on a link of a part
     this.beamForce = function (i) {
         if (!beamAlive[i] || gone[beamA[i]] || gone[beamB[i]]) return 0;

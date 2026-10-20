@@ -620,7 +620,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         var tmp = { x: 0, y: 0, z: 0 };
         for(var i = 0; i < 4; i++) {
             var w = this.wheels[i];
-            rotate(this.qx, this.qy, this.qz, this.qw, w.mount.x, w.mount.y, w.mount.z, tmp);
+            rotate(this.qx, this.qy, this.qz, this.qw, w.mount.x + (w.shiftX || 0), w.mount.y, w.mount.z + (w.shiftZ || 0), tmp);
             var mx = this.px + tmp.x, my = this.py + tmp.y, mz = this.pz + tmp.z;
             // The wheel is drawn on the road, not pushed into it: the tyre's squash beyond what it has at rest (a landing, a kerb)
             // lifts the drawn wheel, because the mesh of the tyre does not flatten. The parts of the suspension rig follow the same place.
@@ -779,6 +779,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         var spheres = self.proxy3;
         for(var i = 0; i < spheres.length; i++) {
             var sp = spheres[i];
+            if(sp.disabled) continue;
             rotate(self.qx, self.qy, self.qz, self.qw, sp.x, sp.y, sp.z, sphereAt);
             var node = self.softBody ? self.softBody.nodeOfSphere[i] : -1;
             if(node >= 0) {
@@ -839,6 +840,41 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.wheelDamage = [0, 0, 0, 0];                  // 0 whole, 1 torn off
     this.wheelLost = [false, false, false, false];
     this.wheelSpinAtLoss = [0, 0, 0, 0];              // rad/s, for the wheel that flies off
+    this.hubNode = [-1, -1, -1, -1];                  // the node of the shell that is the hub of a wheel (front wheels), CollisionProxy.js
+    this.hubSphere = [-1, -1, -1, -1];
+    this.hubLimit = 0.3;                               // m: a hub that has moved so far from its place has taken the wheel with it
+    function loseWheel(i) {
+        if(self.wheelLost[i]) return;
+        self.wheelLost[i] = true;
+        self.wheelDamage[i] = 1;
+        self.wheelSpinAtLoss[i] = self.wheels[i].omega;
+        if(self.hubSphere[i] >= 0 && self.proxy3 && self.proxy3[self.hubSphere[i]]) self.proxy3[self.hubSphere[i]].disabled = true;      // the hub is not in the way any more
+        if(self.onWheelLost) self.onWheelLost(i);
+    }
+    // The hub of a front wheel is a node of the shell: where it is now (the hit bent it) gives the place of the wheel on the car, its toe and its
+    // camber; when its anchor has torn the wheel is off. In the frame of the car: x to the left, z forward.
+    var hubPos = { x: 0, y: 0, z: 0 }, hubRest = { x: 0, y: 0, z: 0 };
+    function updateHubs() {
+        var sb = self.softBody;
+        if(!sb) return;
+        for(var i = 0; i < 4; i++) {
+            var k = self.hubNode[i];
+            if(k < 0 || self.wheelLost[i]) continue;
+            var wh = self.wheels[i];
+            if(!sb.alive(k)) { loseWheel(i); continue; }
+            sb.position(k, hubPos); sb.restPosition(k, hubRest);
+            var dx = hubPos.x - hubRest.x, dz = hubPos.z - hubRest.z, dy = hubPos.y - hubRest.y;
+            var moved = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if(moved > self.hubLimit) { sb.setNode(k, { release: true }); loseWheel(i); continue; }      // bent so far that the wheel is off
+            var dIn = wh.right ? dx : -dx;                // pushed in (towards the middle of the car)
+            var dBack = -dz;
+            wh.shiftX = dx; wh.shiftZ = dz;
+            var side = wh.right ? -1 : 1;
+            wh.toeBend = side * Math.max(-0.2, Math.min(0.2, dBack * 0.5));
+            wh.camberBend = side * Math.max(-0.25, Math.min(0.25, dIn * 1.0));
+            self.wheelDamage[i] = Math.min(0.99, moved / self.hubLimit);
+        }
+    }
     this.onWheelLost = null;
     function wheelHit(sphereIndex, impulse) {
         var sp = self.proxy3 && self.proxy3[sphereIndex];
@@ -854,7 +890,11 @@ OpenRacer.Vehicle = function (parameters, input) {
     }
     // the bend of a wheel (a bent suspension arm and tie rod): toe in or out and a lean, to the side that the hit pushed it
     this.repairWheels = function () {
-        for(var i = 0; i < 4; i++) { this.wheelDamage[i] = 0; this.wheelLost[i] = false; this.wheels[i].toeBend = 0; this.wheels[i].camberBend = 0; this.wheels[i].damageGrip = 1; }
+        for(var i = 0; i < 4; i++) {
+            this.wheelDamage[i] = 0; this.wheelLost[i] = false; this.wheels[i].toeBend = 0; this.wheels[i].camberBend = 0; this.wheels[i].damageGrip = 1;
+            this.wheels[i].shiftX = 0; this.wheels[i].shiftZ = 0;
+            if(this.hubSphere[i] >= 0 && this.proxy3 && this.proxy3[this.hubSphere[i]]) this.proxy3[this.hubSphere[i]].disabled = false;
+        }
     };
 
     // ---- the shell (SoftBody.js): the walls act on its nodes, and the car feels them through the anchors
@@ -1131,11 +1171,14 @@ OpenRacer.Vehicle = function (parameters, input) {
         // toe: a wheel on the right (x negative) points inwards with a turn to the left (a negative angle), one on the left with a turn to the right
         var toeF = self.toeFront * Math.PI / 180, toeR = self.toeRear * Math.PI / 180;
         var wheelAngle = [steerOf[0] - toeF, steerOf[1] + toeF, toeR, -toeR]; // FR, FL, RL, RR
+        updateHubs();
         // a bent suspension: a wheel that is damaged points a little to the side, and grips less
         for(var bi = 0; bi < 4; bi++) {
             var wb = wheels[bi], dmg = self.wheelDamage[bi];
-            wb.toeBend = dmg * 0.09 * (wb.right ? -1 : 1);
-            wb.camberBend = dmg * 0.12 * (wb.right ? -1 : 1);
+            if(self.hubNode[bi] < 0) {
+                wb.toeBend = dmg * 0.09 * (wb.right ? -1 : 1);
+                wb.camberBend = dmg * 0.12 * (wb.right ? -1 : 1);
+            }
             wb.damageGrip = 1 - 0.4 * dmg;
             wheelAngle[bi] += wb.toeBend;
             if(self.wheelLost[bi]) wb.omega = 0;
@@ -1147,7 +1190,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         var anyContact = false;
         for(var i = 0; i < 4; i++) {
             var w = wheels[i];
-            rotate(self.qx, self.qy, self.qz, self.qw, w.mount.x, w.mount.y, w.mount.z, Rv);
+            rotate(self.qx, self.qy, self.qz, self.qw, w.mount.x + (w.shiftX || 0), w.mount.y, w.mount.z + (w.shiftZ || 0), Rv);
             var mx = self.px + Rv.x, my = self.py + Rv.y, mz = self.pz + Rv.z;
             // The wheel is round: the road is sampled ahead of and behind the middle of the wheel, and the rim touches where it
             // reaches the road first. So a kerb or an edge lifts the wheel gradually as it rolls on to it, instead of all at once
@@ -1266,7 +1309,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             var fz = 0, fxW = 0, fyW = 0;
             var vl = 0;
             // the spring pushes on the body at the mount, whether the tyre touches the road or not (a wheel in the air hangs on its droop stop)
-            rotate(self.qx, self.qy, self.qz, self.qw, wheel.mount.x, wheel.mount.y, wheel.mount.z, Rv);
+            rotate(self.qx, self.qy, self.qz, self.qw, wheel.mount.x + (wheel.shiftX || 0), wheel.mount.y, wheel.mount.z + (wheel.shiftZ || 0), Rv);
             var fsBody = -springForce[iw];                 // the reaction on the body, along the suspension axis (up when the spring is pushed in)
             var fsx = axisY.x * -fsBody, fsy = axisY.y * -fsBody, fsz = axisY.z * -fsBody;
             // At a standstill the suspension arms hold the wheel lengthways and sideways, so the spring only pushes the body along the normal of the

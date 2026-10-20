@@ -111,7 +111,7 @@ OpenRacer.Parts = (function () {
         var world = new R.World({ x: 0, y: -9.81, z: 0 });
         var chassis = world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased());
         ctx.spheres.forEach(function (s) {
-            world.createCollider(R.ColliderDesc.ball(s.wheel ? s.r / 0.55 : s.r).setTranslation(s.x, s.y, s.z).setCollisionGroups(groups(CHASSIS, PART_FREE)), chassis);
+            world.createCollider(R.ColliderDesc.ball(s.wheel || s.hub ? s.r / 0.55 : s.r).setTranslation(s.x, s.y, s.z).setCollisionGroups(groups(CHASSIS, PART_FREE)), chassis);
         });
         var trackBody = world.createRigidBody(R.RigidBodyDesc.fixed());
         var trackCollider = null;
