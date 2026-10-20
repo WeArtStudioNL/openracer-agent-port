@@ -22,7 +22,7 @@
  *              sets how fast they are.
  *
  *              Keys in the replay: Space pause/play, left and right arrow 5 seconds back and forward (in Free they move the camera),
- *              Home and End the start and the end, T the camera, H hides the bar and shows it again.
+ *              Home and End the start and the end, T the camera, H hides the bar, the speed box and the debug text, and shows them again.
  */
 
 OpenRacer.Replay = (function() {
@@ -405,6 +405,7 @@ OpenRacer.Replay = (function() {
         var style = document.createElement("style");
         style.id = "replayStyle";
         style.textContent =
+            "body.replayClean #replayInfo, body.replayClean #debugOut { display: none !important; }" +
             "body.replaying #hud, body.replaying #hudLaps, body.replaying #hudCar, body.replaying #hudHint, body.replaying #touch, body.replaying #tuning { display: none !important; }" +
             "#replayBar { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(960px, calc(100% - 20px)); z-index: 1400; box-sizing: border-box; " +
                 "padding: 10px 14px 12px; background: rgba(14, 18, 24, 0.86); color: #fff; border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; " +
@@ -572,7 +573,7 @@ OpenRacer.Replay = (function() {
             ui.sync();
         } else if(event.code === "ArrowLeft" && !(target && target.tagName === "INPUT")) { jump(-5); event.preventDefault(); }
         else if(event.code === "ArrowRight" && !(target && target.tagName === "INPUT")) { jump(5); event.preventDefault(); }
-        else if(event.code === "KeyH" && !event.repeat) { ui.bar.style.display = ui.bar.style.display === "none" ? "" : "none"; event.preventDefault(); }
+        else if(event.code === "KeyH" && !event.repeat) { ui.bar.style.display = ui.bar.style.display === "none" ? "" : "none"; document.body.classList.toggle("replayClean", ui.bar.style.display === "none"); event.preventDefault(); }
         else if(event.code === "Home") { jump(-1e9); event.preventDefault(); }
         else if(event.code === "End") { jump(1e9); event.preventDefault(); }
     }
@@ -829,7 +830,7 @@ OpenRacer.Replay = (function() {
         });
         leaveFree();
         if(ui) { ui.bar.remove(); ui.info.remove(); ui = null; }
-        document.body.classList.remove("replaying");
+        document.body.classList.remove("replaying", "replayClean");
         if(typeof lastFrameTime !== "undefined") lastFrameTime = performance.now();
     };
 
