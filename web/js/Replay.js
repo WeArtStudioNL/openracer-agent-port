@@ -160,7 +160,7 @@ OpenRacer.Replay = (function() {
         if(!chunks.length || fill === CHUNK) {
             chunks.push(new Float32Array(CHUNK * perSample()));
             fill = 0;
-            if(chunks.length * CHUNK > MAX_SECONDS * RATE) { chunks.shift(); dropped++; trimSoft(); }
+            if(chunks.length * CHUNK > MAX_SECONDS * RATE) { chunks.shift(); dropped++; trimSoft(); trimEffects(); }
         }
         var chunk = chunks[chunks.length - 1];
         var base = fill * perSample();
@@ -189,6 +189,97 @@ OpenRacer.Replay = (function() {
         var rel = index - first();
         var chunk = chunks[(rel / CHUNK) | 0];
         return { array: chunk, offset: (rel % CHUNK) * perSample() + carIndex * STRIDE };
+    }
+
+    // ---- smoke and marbles
+    //
+    // They are not drawn from the samples: Smoke.js and Marbles.js tell the replay (a recorder) about every puff and every marble as it is made, with
+    // the time, and the marbles also where they come to rest. In the replay the same code moves them again: forward in small steps from what was
+    // recorded, and for a jump or a way back they are made as they were at that time (the smoke from the last seconds, the marbles from the whole
+    // recording, where what had come to rest by then lies where it came to rest). The ones of the game are kept at the start and put back at the end.
+    var effects = {};                  // name -> { object, rows, base, cursor, snapshot }
+    var effectTime = null, effectBuilt = 0;
+    var EFFECT_STEP = 1 / 30;
+
+    function now() { return Math.max(0, total - 1) * DT + accumulated; }
+
+    api.attach = function(name, object) {
+        var e = effects[name] = { object: object, rows: [], base: 0, cursor: 0, snapshot: null };
+        object.recorder = function(row) {
+            if(api.active || api.viewer || !cars.length) return -1;
+            row[0] = now();
+            e.rows.push(row);
+            return e.base + e.rows.length - 1;
+        };
+        if(name === "marbles") object.restRecorder = function(id, x, y, z, lost) {
+            var row = e.rows[id - e.base];
+            if(row) { row[11] = now(); row[12] = x; row[13] = y; row[14] = z; row[15] = lost ? 1 : 0; }
+        };
+    };
+
+    // what is older than the recording is not needed
+    function trimEffects() {
+        var from = api.start_time();
+        for(var name in effects) {
+            var e = effects[name], k = 0;
+            while(k < e.rows.length && e.rows[k][0] < from) k++;
+            if(k) { e.rows.splice(0, k); e.base += k; }
+        }
+    }
+
+    // the index of the first row that is later than a time
+    function firstAfter(rows, time) {
+        var lo = 0, hi = rows.length;
+        while(lo < hi) { var mid = (lo + hi) >> 1; if(rows[mid][0] <= time) lo = mid + 1; else hi = mid; }
+        return lo;
+    }
+
+    // moves the effects of one kind from one time to a later one, in small steps, making what was recorded in between
+    function advanceEffect(e, from, to, vehicle) {
+        for(var a = from; a < to - 1e-9;) {
+            var b = Math.min(to, a + EFFECT_STEP);
+            while(e.cursor < e.rows.length && e.rows[e.cursor][0] <= b) e.object.replayAdd(e.rows[e.cursor++]);
+            e.object.replayStep(b - a, vehicle);
+            a = b;
+        }
+    }
+
+    function buildEffects(time, vehicle) {
+        for(var name in effects) {
+            var e = effects[name];
+            if(e.object.replayRebuild) {
+                var end = firstAfter(e.rows, time);
+                e.object.replayRebuild(e.rows, end, time, vehicle);
+                e.cursor = end;
+            } else {
+                e.object.replayClear();
+                var start = Math.max(api.start_time(), time - e.object.replayLookback);
+                e.cursor = firstAfter(e.rows, start);
+                var step = 1 / 20;
+                for(var a = start; a < time - 1e-9;) {
+                    var b = Math.min(time, a + step);
+                    while(e.cursor < e.rows.length && e.rows[e.cursor][0] <= b) e.object.replayAdd(e.rows[e.cursor++]);
+                    e.object.replayStep(b - a, vehicle);
+                    a = b;
+                }
+            }
+        }
+    }
+
+    // once per frame of the replay: the effects go to the time of the replay
+    function showEffects(time) {
+        if(!cars.length) return;
+        var vehicle = cars[0].object.vehicle;
+        if(effectTime !== null && time >= effectTime && time - effectTime <= 0.25) {
+            if(time > effectTime) for(var name in effects) advanceEffect(effects[name], effectTime, time, vehicle);
+            effectTime = time;
+            return;
+        }
+        var real = performance.now();
+        if(effectTime !== null && real - effectBuilt < 80) return;       // a way back or a slider that is dragged: not more than ten times a second
+        effectBuilt = real;
+        buildEffects(time, vehicle);
+        effectTime = time;
     }
 
     // ---- playback
@@ -694,6 +785,12 @@ OpenRacer.Replay = (function() {
             if(entry.soft && v.softBody) { entry.live = { wheels: wheelFloats(v, new Float32Array(WHEEL_FLOATS)) }; entry.soft.shown = null; }
             if(entry.object.parts && entry.object.parts.replay) entry.object.parts.replay.replayBegin();
         });
+        for(var name in effects) {
+            var e = effects[name];
+            e.snapshot = api.viewer ? null : e.object.replaySnapshot();
+            e.cursor = firstAfter(e.rows, api.end_time());
+        }
+        effectTime = api.viewer ? null : api.end_time();
         api.active = true;
         document.body.classList.add("replaying");
         t = api.end_time();
@@ -719,6 +816,7 @@ OpenRacer.Replay = (function() {
             if(entry.player) entry.object.updateVisuals(0); else entry.object.updateVisuals();
         }
         snapshot = null;
+        for(var name in effects) { if(effects[name].snapshot) effects[name].object.replayRestore(effects[name].snapshot); effects[name].snapshot = null; }
         cars.forEach(function(entry) {
             var v = entry.object.vehicle;
             if(entry.object.parts && entry.object.parts.replay) entry.object.parts.replay.replayEnd();
@@ -747,6 +845,7 @@ OpenRacer.Replay = (function() {
             if(t <= api.start_time()) { t = api.start_time(); if(direction < 0) { playing = false; ui.sync(); } }
         }
         show(t, delta);
+        showEffects(t);
         if(free.active) updateFree(delta);
         if(typeof EngineSound !== "undefined" && player) {
             var live = playing && !scrubbing && direction > 0;
@@ -993,6 +1092,7 @@ OpenRacer.Replay = (function() {
         api.viewer = true;
     };
 
+    api.debugEffects = function() { return effects; };
     api.debugSoft = function() { return cars.map(function(e) { return e.soft ? e.soft.records.map(function(r) { var m = 0; for(var i = 0; i < r.disp.length; i++) m = Math.max(m, Math.abs(r.disp[i])); return r.index + ':' + (m / SOFT_SCALE).toFixed(3) + ':' + Array.prototype.join.call(r.parts.filter(function(x, i) { return i % PART_FLOATS === 0; }), ''); }) : null; }); };
     api.info = function() { return { seconds: total * DT, cars: cars.length, blocks: chunks.length, megabytes: chunks.length * CHUNK * perSample() * 4 / 1048576 }; };
     api.speeds = SPEEDS;

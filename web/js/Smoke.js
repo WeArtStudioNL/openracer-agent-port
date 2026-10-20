@@ -138,6 +138,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
 
     var PLUME_AGE = 1.5;                                 // s: from this age a plume is no longer pushed by the car (it makes wisps)
     var amount = 1;                                      // the smoke setting of the graphics menu (1 is 100%)
+    var self = this, quiet = false;                      // quiet: the puffs that are made while the smoke moves (wisps) are not recorded: the replay makes them again
     var alive = 0, made = 0;                             // how many puffs are alive after the last frame, and how many were made in this one: with none, nothing is done
 
     function spawn(x, y, z, vx, vy, vz, heat, dust) {
@@ -151,9 +152,9 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
         bases[i] = y;
         vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz;
         age[i] = 0;
-        life[i] = (dust ? 1.4 : 6.0) + Math.random() * 1.4 + heat * 0.8;
-        size0[i] = 0.6 + Math.random() * 0.4;
-        size1[i] = (dust ? 2.4 : 2.8) + Math.random() * 1.4 + heat * 1.6;
+        life[i] = (dust ? 1.4 : 10.0) + Math.random() * 1.4 + heat * 0.8;
+        size0[i] = 0.2 + Math.random() * 0.4;
+        size1[i] = (dust ? 2.4 : 6) + Math.random() * 1.4 + heat * 1.6;
         alpha0[i] = ((dust ? 0.3 : 0.4) + 0.32 * heat) * Math.max(0.5, Math.min(1.2, 0.5 + 0.5 * amount));
         rotations[i] = Math.random() * 6.2832;
         spin[i] = (Math.random() - 0.5) * 0.8;
@@ -161,6 +162,11 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
         var shade = 0.9 + Math.random() * 0.1;
         if(dust) { colours[i * 3] = 0.66 * shade; colours[i * 3 + 1] = 0.55 * shade; colours[i * 3 + 2] = 0.4 * shade; }
         else { colours[i * 3] = 0.9 * shade; colours[i * 3 + 1] = 0.91 * shade; colours[i * 3 + 2] = 0.94 * shade; }
+        if(self.recorder && !quiet) {
+            // for the replay (Replay.js): what this puff starts with
+            self.recorder(Float32Array.of(0, positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2], vel[i * 3], vel[i * 3 + 1], vel[i * 3 + 2], bases[i], life[i], size0[i], size1[i],
+                alpha0[i], rotations[i], spin[i], frames[i], colours[i * 3], colours[i * 3 + 1], colours[i * 3 + 2]));
+        }
     }
 
     // ---- the car is not a place for smoke: the body as a box in the frame of the car (from the collision spheres of the shell), that the puffs leave
@@ -183,7 +189,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
 
     // Moves the smoke and makes new smoke at the wheels along the path of the tyres. camera is not needed any more (the billboards face it in
     // the vertex shader) but it is still given.
-    this.update = function(delta, vehicle, camera) {
+    this.update = function(delta, vehicle, camera, replay) {
         time += delta;
         var setting = typeof Settings !== "undefined" ? Settings.option("gfxSmoke") : undefined;
         amount = setting === undefined ? 1 : Math.max(0, setting / 100);
@@ -196,7 +202,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
         left.set(fwd.z, 0, -fwd.x);
         carVel.set(vehicle.vx, vehicle.vy, vehicle.vz);
         var wheels = vehicle.wheels;
-        for(var w = 0; w < 4; w++) {
+        for(var w = 0; w < (replay ? 0 : 4); w++) {         // (a replay makes its smoke from what was recorded)
             var wheel = wheels[w];
             if(amount > 0 && wheel.smoke > 0.02 && wheel.hasContact) {
                 var dust = wheel.surface !== "road" && wheel.surface !== "track01";
@@ -237,6 +243,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
         made = 0;
         alive = 0;
         var drag = Math.exp(-2.2 * delta), wisps = 0;
+        quiet = true;
         for(var i = 0; i < capacity; i++) {
             if(age[i] >= life[i]) {
                 if(alphas[i] !== 0 || sizes[i] !== 0) { alphas[i] = 0; sizes[i] = 0; }      // (no size: a quad of metres that is not seen is still drawn, pixel by pixel, until the fragment shader throws it away)
@@ -301,12 +308,40 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
         }
         attributes.iPos.needsUpdate = true; attributes.iSize.needsUpdate = true; attributes.iAlpha.needsUpdate = true; attributes.iRot.needsUpdate = true;
         attributes.iTint.needsUpdate = true; attributes.iFrame.needsUpdate = true; attributes.iBase.needsUpdate = true;
+        quiet = false;
     };
 
     this.spawn = spawn;                                  // (for the tests)
+
+    // ---- for the replay (Replay.js): it records the puffs as they are made, and makes them again from the record
+    var state = [positions, vel, age, life, sizes, alphas, size0, size1, alpha0, rotations, spin, frames, colours, bases, wisp, touched];
+    this.recorder = null;                                // called with a row for every puff that is made
+    this.replayLookback = 8;                             // seconds: a puff has gone by then
+    this.replayAdd = function(row) {
+        made++;
+        var i = next;
+        next = (next + 1) % capacity;
+        positions[i * 3] = row[1]; positions[i * 3 + 1] = row[2]; positions[i * 3 + 2] = row[3];
+        vel[i * 3] = row[4]; vel[i * 3 + 1] = row[5]; vel[i * 3 + 2] = row[6];
+        bases[i] = row[7]; age[i] = 0; life[i] = row[8]; size0[i] = row[9]; size1[i] = row[10]; alpha0[i] = row[11];
+        rotations[i] = row[12]; spin[i] = row[13]; frames[i] = row[14];
+        colours[i * 3] = row[15]; colours[i * 3 + 1] = row[16]; colours[i * 3 + 2] = row[17];
+        wisp[i] = 0; touched[i] = -1e9;
+    };
+    this.replayStep = function(delta, vehicle) { this.update(delta, vehicle, null, true); };
+    this.replayClear = function() { this.clear(); };
+    this.replaySnapshot = function() { return { arrays: state.map(function(a) { return a.slice(); }), next: next, time: time }; };
+    if(typeof OpenRacer !== "undefined" && OpenRacer.Replay && OpenRacer.Replay.attach) OpenRacer.Replay.attach("smoke", this);
+    this.replayRestore = function(snap) {
+        for(var k = 0; k < state.length; k++) state[k].set(snap.arrays[k]);
+        next = snap.next; time = snap.time; made++; last = [null, null, null, null];
+    };
     this.clear = function() {
         age.fill(1e9);
         alphas.fill(0);
+        sizes.fill(0);
+        made++;
+        attributes.iSize.needsUpdate = true;
         last = [null, null, null, null];
         attributes.iAlpha.needsUpdate = true;
     };
