@@ -284,7 +284,7 @@ var Tuning = (function() {
 
         GROUPS.forEach(function(group, index) {
             var details = document.createElement("details");
-            details.open = index < 2;
+            details.open = false;                          // all the groups are folded when the menu opens
             var summary = document.createElement("summary");
             summary.textContent = group.name;
             details.appendChild(summary);
