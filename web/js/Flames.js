@@ -63,13 +63,15 @@ OpenRacer.ExhaustFlames = function (scene, car) {
             local = car.exhaust.map(function (e) {
                 var position = Array.isArray(e) ? e : e.position, rotation = Array.isArray(e) ? [0, 0, 0] : (e.rotation || [0, 0, 0]);
                 euler.set(rotation[0] * Math.PI / 180, rotation[1] * Math.PI / 180, rotation[2] * Math.PI / 180);
-                // the settings of the point (the car editor): the diameter of the pipe (m), the smoke, the length and the width of the flame, the brightness (factors)
-                var diameter = (!Array.isArray(e) && e.diameter) || 0.08;
+                // the settings of the point (the car editor): the diameter of the pipe (m), the smoke and the brightness (factors), the length and the width of the
+                // flame (cm, as the editor has them; the older form was a factor of 30 and of 12 cm)
+                var o = Array.isArray(e) ? {} : e;
+                var diameter = o.diameter || 0.08;
+                var length = o.flame_length_cm !== undefined ? o.flame_length_cm / 100 : (o.flame_length !== undefined ? o.flame_length * 0.3 : 0.3);
+                var width = o.flame_width_cm !== undefined ? o.flame_width_cm / 100 : (o.flame_width !== undefined ? o.flame_width * 0.12 * diameter / 0.08 : 0.12);
                 return { position: new THREE.Vector3(position[0], position[1], position[2]), direction: new THREE.Vector3(0, 0, -1).applyEuler(euler),
-                    diameter: diameter, smoke: !Array.isArray(e) && e.smoke !== undefined ? e.smoke : 1,
-                    length: !Array.isArray(e) && e.flame_length !== undefined ? e.flame_length : 1,
-                    width: (diameter / 0.08) * (!Array.isArray(e) && e.flame_width !== undefined ? e.flame_width : 1),
-                    brightness: !Array.isArray(e) && e.brightness !== undefined ? e.brightness : 1 };
+                    diameter: diameter, smoke: o.smoke !== undefined ? o.smoke : 1, length: Math.max(0.01, Math.min(0.8, length)), width: Math.max(0.01, Math.min(0.8, width)),
+                    brightness: o.brightness !== undefined ? o.brightness : 1 };
             });
             return local;
         }
@@ -78,7 +80,7 @@ OpenRacer.ExhaustFlames = function (scene, car) {
         var y = rear.y - 0.05;
         var backwards = new THREE.Vector3(0, -0.06, -1).normalize();
         local = (car.exhaustSystems >= 2 ? [car.width * 0.3, -car.width * 0.3] : [-car.width * 0.3]).map(function (x) {
-            return { position: new THREE.Vector3(x, y, z), direction: backwards.clone(), diameter: 0.08, smoke: 1, length: 1, width: 1, brightness: 1 };
+            return { position: new THREE.Vector3(x, y, z), direction: backwards.clone(), diameter: 0.08, smoke: 1, length: 0.3, width: 0.12, brightness: 1 };
         });
         return local;
     }
@@ -105,7 +107,9 @@ OpenRacer.ExhaustFlames = function (scene, car) {
                 size0[i] = 0.03 + Math.random() * 0.03;
                 size1[i] = (0.08 + 0.12 * Math.random()) * Math.min(2, 0.6 + s);
                 alpha0[i] = 0.9 * list[k].brightness;
-                lengthF[i] = list[k].length; widthF[i] = list[k].width;
+                // the length and the width are those of the flame at its largest (m), a little different for every one
+                lengthF[i] = list[k].length * Math.min(2, event.flame) * (0.75 + 0.25 * Math.min(1.5, event.strength)) * (0.8 + 0.4 * Math.random());
+                widthF[i] = list[k].width * Math.min(2, event.flame) * (0.85 + 0.3 * Math.random());
                 // a picture of your own, or the gradient
                 var picture = custom.length ? custom[(Math.random() * custom.length) | 0] : null;
                 sp.material.map = picture || texture;
@@ -147,8 +151,8 @@ OpenRacer.ExhaustFlames = function (scene, car) {
                 sp.material.rotation = Math.atan2(view.y, view.x);
                 side = Math.min(1, Math.hypot(view.x, view.y) * 1.2);
             }
-            var along = own[i] > 0 ? 2.2 * own[i] * lengthF[i] : 1.8 * lengthF[i], across = own[i] > 0 ? 1.1 * widthF[i] : widthF[i];
-            sp.scale.set(size * (across * 1.2 + (along - across * 1.2) * side), size * across, 1);
+            var grow = 0.35 + 0.65 * Math.sqrt(t), L = lengthF[i] * grow, W = widthF[i] * grow;
+            sp.scale.set(W * 1.2 + (L - W * 1.2) * side, W, 1);
             sp.material.opacity = alpha0[i] * Math.pow(1 - t, 1.5);
             sp.material.color.setRGB(1, 0.9 - 0.55 * t, 0.7 - 0.65 * t);       // pale at the start, orange at the end
         }

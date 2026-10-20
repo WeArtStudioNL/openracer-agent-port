@@ -110,7 +110,7 @@ rotGizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !e
 rotGizmo.addEventListener("objectChange", () => renderLayers());
 scene.add(typeof rotGizmo.getHelper === "function" ? rotGizmo.getHelper() : rotGizmo);
 
-const EXHAUST_DEFAULTS = { diameter: 0.08, smoke: 1, flame_length: 1, flame_width: 1, brightness: 1 };
+const EXHAUST_DEFAULTS = { diameter: 0.08, smoke: 1, flame_length_cm: 30, flame_width_cm: 12, brightness: 1 };
 
 function addExhaust(position, rotation, settings) {
     const target = new THREE.Object3D();
@@ -123,6 +123,10 @@ function addExhaust(position, rotation, settings) {
     const arrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, 0), 0.5, 0xffb070, 0.14, 0.09);
     target.add(pipe, arrow);
     const entry = { id: "ex" + (++exhaustCounter), target, pipe, s: Object.assign({}, EXHAUST_DEFAULTS, settings || {}) };
+    // the older form had the length and the width as a factor: of 30 cm, and of 12 cm for a pipe of 8 cm
+    if (settings && settings.flame_length !== undefined && settings.flame_length_cm === undefined) entry.s.flame_length_cm = Math.min(80, Math.max(1, Math.round(settings.flame_length * 30)));
+    if (settings && settings.flame_width !== undefined && settings.flame_width_cm === undefined) entry.s.flame_width_cm = Math.min(80, Math.max(1, Math.round(settings.flame_width * 12 * entry.s.diameter / 0.08)));
+    delete entry.s.flame_length; delete entry.s.flame_width;
     sizePipe(entry);
     pipe.userData.layer = entry.id;
     exhaust.push(entry);
@@ -165,7 +169,7 @@ function exhaustConfig() {
     const r = (v) => Math.round(v * 1000) / 1000, deg = 180 / Math.PI;
     return exhaust.map((e) => ({ position: [r(e.target.position.x), r(e.target.position.y), r(e.target.position.z)],
         rotation: [r(e.target.rotation.x * deg), r(e.target.rotation.y * deg), r(e.target.rotation.z * deg)],
-        diameter: r(e.s.diameter), smoke: r(e.s.smoke), flame_length: r(e.s.flame_length), flame_width: r(e.s.flame_width), brightness: r(e.s.brightness) }));
+        diameter: r(e.s.diameter), smoke: r(e.s.smoke), flame_length_cm: r(e.s.flame_length_cm), flame_width_cm: r(e.s.flame_width_cm), brightness: r(e.s.brightness) }));
 }
 
 // The settings of the exhaust point that is chosen, in a window over the view: the diameter of the pipe, the smoke after a bang, the length and the width of the
@@ -173,8 +177,8 @@ function exhaustConfig() {
 const EXHAUST_FIELDS = [
     ["diameter", "Diameter", "cm", 2, 20, 0.5, 100],
     ["smoke", "Smoke", "%", 0, 300, 10, 100],
-    ["flame_length", "Flame length", "%", 20, 400, 10, 100],
-    ["flame_width", "Flame width", "%", 20, 400, 10, 100],
+    ["flame_length_cm", "Flame length", "cm", 1, 80, 1, 1],
+    ["flame_width_cm", "Flame width", "cm", 1, 80, 1, 1],
     ["brightness", "Brightness", "%", 20, 300, 10, 100]
 ];
 const exhaustWindow = document.createElement("div");
@@ -216,7 +220,7 @@ function updateExhaustWindow() {
         const show = () => { const v = Math.round(entry.s[key] * scale * 10) / 10; number.value = v; range.value = v; };
         const set = (v) => {
             if (!Number.isFinite(v)) return;
-            entry.s[key] = Math.min(max * 2, Math.max(min / 2, v)) / scale;
+            entry.s[key] = Math.min(max, Math.max(min, v)) / scale;
             sizePipe(entry);
             show();
         };
