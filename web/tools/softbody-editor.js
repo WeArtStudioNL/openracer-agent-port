@@ -998,27 +998,27 @@ export function initSoftBody(api) {
         hover.setDirection(hit.normal.clone().negate());
         hover.position.copy(hit.point).addScaledVector(hit.normal, 0.8);
     });
+    const CUBE_SIDE = 1, CUBE_MASS = 1000;                // the cube that is fired: 1 m and a tonne; the speed is the setting
     function applyForceAt(mx, my, rect) {
         const s = softBody();
         const hit = surfaceAt(mx, my, rect);
         if (!s || !hit) return;
-        const kg = parseFloat($("sbForceKg").value) || 1000, side = parseFloat($("sbPlate").value) || 0.6;
+        const kmh = parseFloat($("sbForceKmh").value) || 50, side = CUBE_SIDE, cubeMass = CUBE_MASS, speed = kmh / 3.6;
         const local = sb.group.worldToLocal(hit.point.clone());
         const normal = hit.normal.clone().applyQuaternion(sb.group.quaternion.clone().invert());
         releaseForce();
-        const cubeMass = parseFloat($("sbCubeMass").value) || 100;
         // a part with nodes of its own is hit on those nodes alone (the door dents, not what is behind it); anything else on the nodes of the body
         const loose = looseOf(hit.object);
         const group = loose && sb.layout && sb.layout.some((n) => n.part === loose.name) ? loose.name : null;
-        s.pushPlate([local.x, local.y, local.z], [normal.x, normal.y, normal.z], kg * 9.81, side, cubeMass, 0.03, group);
+        s.pushPlate([local.x, local.y, local.z], [normal.x, normal.y, normal.z], cubeMass * speed / 0.03, side, cubeMass, 0.03, group);      // a push of 0.03 s that brings the cube to its speed
         // the arrow stays on the car while it is pushed
         const arrow = new THREE.ArrowHelper(normal.clone().negate(), local.clone().addScaledVector(normal, 0.8), 0.8, 0xff5555, 0.3, 0.18);
         arrow.traverse((o) => { if (o.material) { o.material.depthTest = false; o.renderOrder = 13; } });
         sb.group.add(arrow);
         sb.pushArrow = arrow;
-        sb.pushStart = { kg, speed: kg * 9.81 * 0.03 / cubeMass };
+        sb.pushStart = { kmh, speed };
         hover.visible = false;
-        status("Cube of " + cubeMass + " kg fired with a push of " + kg + " kg (" + (kg * 9.81 * 0.03 / cubeMass * 3.6).toFixed(0) + " km/h). Click again to fire another.", "ok");
+        status("Cube of " + side + " m and " + cubeMass + " kg fired at " + kmh.toFixed(0) + " km/h. Click again to fire another.", "ok");
     }
     function releaseForce() {
         const s = softBody();
