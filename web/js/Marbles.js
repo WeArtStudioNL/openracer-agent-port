@@ -86,7 +86,7 @@ OpenRacer.Marbles = function (scene, capacity) {
             // soft from 150 degrees, burning (the smoke takes it) from 230: marbles come in between; harder the slip burns more of the tread away
             var soft = Math.max(0, Math.min(1, (wheel.surfT - (150 + off)) / 30)) * (1 - 0.8 * Math.max(0, Math.min(1, (wheel.surfT - (220 + off)) / 40)));
             var slide = Math.hypot((wheel.omega || 0) * wheel.radius - (wheel.forwardSpeed || 0), (wheel.slipTan || 0) * Math.max(Math.abs(wheel.forwardSpeed || 0), 1.5));
-            var rate = 16 * soft * Math.max(0, Math.min(1, (slide - 1.5) / 5));
+            var rate = 32 * soft * Math.max(0, Math.min(1, (slide - 1.5) / 5));
             carry[w] += rate * delta;
             var count = Math.floor(carry[w]);
             carry[w] -= count;
