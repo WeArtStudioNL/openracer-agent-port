@@ -111,8 +111,7 @@ OpenRacer.Parts = (function () {
         var world = new R.World({ x: 0, y: -9.81, z: 0 });
         var chassis = world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased());
         ctx.spheres.forEach(function (s) {
-            if (s.wheel) return;
-            world.createCollider(R.ColliderDesc.ball(s.r).setTranslation(s.x, s.y, s.z).setCollisionGroups(groups(CHASSIS, PART_FREE)), chassis);
+            world.createCollider(R.ColliderDesc.ball(s.wheel ? s.r / 0.55 : s.r).setTranslation(s.x, s.y, s.z).setCollisionGroups(groups(CHASSIS, PART_FREE)), chassis);
         });
         var trackBody = world.createRigidBody(R.RigidBodyDesc.fixed());
         var trackCollider = null;
@@ -256,6 +255,19 @@ OpenRacer.Parts = (function () {
             part.collider.setCollisionGroups(free ? groups(PART_FREE, GROUND | CHASSIS) : groups(PART_HELD, GROUND));
         }
 
+        // A part that has come loose hits the car only when it is clear of it: a part that is inside the car (or touching it, like a door that
+        // is shut) when the contact starts is pushed out at a great speed (a bumper that flew off through the road)
+        var CLEAR_WAIT = 3;                                             // s after the grace in which it can become clear; then it stays a ghost to the car
+        function clearOfCar(part) {
+            var t = part.body.translation(), r = part.body.rotation();
+            return !world.intersectionWithShape(t, r, part.collider.shape, undefined, groups(PART_FREE, CHASSIS));
+        }
+        function waitForClear(part) {
+            part.grace = GRACE;
+            part.pending = true;
+            setGroups(part, false);
+        }
+
         // The joint of a hinged part. Two mounts that hold: a hinge about the line between them. One: it swings about that point. None
         // (or a part without mounts): the hinge of the spec, about its origin and axis.
         function joinHinge(part) {
@@ -322,14 +334,13 @@ OpenRacer.Parts = (function () {
                 joinHinge(part);
                 part.state = "hinged";
                 part.body.setAngularDamping(part.spec.damping !== undefined ? part.spec.damping : 2.0); part.body.setLinearDamping(0.2);
-                setGroups(part, false);
+                waitForClear(part);
                 emit("unlatched", part);
             } else {
                 if (part.joint) { world.removeImpulseJoint(part.joint, true); part.joint = null; }
                 part.state = "free";
                 part.body.setAngularDamping(part.spec.damping !== undefined ? part.spec.damping : 0.4); part.body.setLinearDamping(0.05);
-                part.grace = GRACE;
-                part.collider.setCollisionGroups(groups(PART_HELD, GROUND));      // not yet against the car, it is inside it
+                waitForClear(part);                                          // not yet against the car, it is inside it
                 emit("detached", part);
             }
         }
@@ -452,9 +463,12 @@ OpenRacer.Parts = (function () {
                     if (part.state === "hinged" && (torn || (part.hinge.breakForce > 0 && part.load > part.hinge.breakForce))) startMoving(part, "free");
                 }
                 if (part.state !== "held") moving = true;
-                if (part.grace > 0) {
+                if (part.pending) {
                     part.grace -= dt;
-                    if (part.grace <= 0) setGroups(part, true);
+                    if (part.grace <= 0) {
+                        if (clearOfCar(part)) { setGroups(part, true); part.pending = false; }
+                        else if (part.grace < -CLEAR_WAIT) part.pending = false;      // it never got clear: it goes through the car, but not through the road
+                    }
                 }
             }
             if (!moving) return;
@@ -521,7 +535,7 @@ OpenRacer.Parts = (function () {
                 }
                 p.mounts.forEach(function (m) { m.alive = true; });
                 p.detachTimer = 0; p.breakTimer = null; p.openTimer = 0;
-                p.state = "held"; p.hasVel = false; p.grace = 0; p.region = null;
+                p.state = "held"; p.hasVel = false; p.grace = 0; p.pending = false; p.region = null;
             }
         }
 
