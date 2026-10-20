@@ -27,6 +27,8 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
     var spin = new Float32Array(capacity);
     var age = new Float32Array(capacity).fill(1e9);
     var life = new Float32Array(capacity).fill(1);
+    var wisp = new Uint8Array(capacity);                 // 1 for a small puff that the car took out of a plume: it does not make others
+    var touched = new Float32Array(capacity);            // when the car last took a wisp from this puff
     var size0 = new Float32Array(capacity), size1 = new Float32Array(capacity), alpha0 = new Float32Array(capacity);
     var next = 0;
     var time = 0;
@@ -134,12 +136,14 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
     mesh.layers.set(1);                                 // its own layer: the camera draws it with the scene or after the screen space effects (Graphics.js)
     scene.add(mesh);
 
+    var PLUME_AGE = 1.5;                                 // s: from this age a plume is no longer pushed by the car (it makes wisps)
     var amount = 1;                                      // the smoke setting of the graphics menu (1 is 100%)
     var alive = 0, made = 0;                             // how many puffs are alive after the last frame, and how many were made in this one: with none, nothing is done
 
     function spawn(x, y, z, vx, vy, vz, heat, dust) {
         made++;
         var i = next;
+        wisp[i] = 0; touched[i] = -1e9;
         next = (next + 1) % capacity;
         positions[i * 3] = x + (Math.random() - 0.5) * 0.3;
         positions[i * 3 + 1] = y + 0.04;
@@ -147,7 +151,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
         bases[i] = y;
         vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz;
         age[i] = 0;
-        life[i] = (dust ? 1.4 : 2.0) + Math.random() * 1.4 + heat * 0.8;
+        life[i] = (dust ? 1.4 : 6.0) + Math.random() * 1.4 + heat * 0.8;
         size0[i] = 0.6 + Math.random() * 0.4;
         size1[i] = (dust ? 2.4 : 2.8) + Math.random() * 1.4 + heat * 1.6;
         alpha0[i] = ((dust ? 0.3 : 0.4) + 0.32 * heat) * Math.max(0.5, Math.min(1.2, 0.5 + 0.5 * amount));
@@ -232,7 +236,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
         if(alive === 0 && made === 0) return;               // no smoke and none made: the whole ring of puffs is not looked at, and nothing goes to the graphics card
         made = 0;
         alive = 0;
-        var drag = Math.exp(-2.2 * delta);
+        var drag = Math.exp(-2.2 * delta), wisps = 0;
         for(var i = 0; i < capacity; i++) {
             if(age[i] >= life[i]) {
                 if(alphas[i] !== 0 || sizes[i] !== 0) { alphas[i] = 0; sizes[i] = 0; }      // (no size: a quad of metres that is not seen is still drawn, pixel by pixel, until the fragment shader throws it away)
@@ -265,11 +269,29 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                     else if(least === dza) pLocal.z = box.z0 - m; else pLocal.z = box.z1 + m;
                     pLocal.applyQuaternion(qCar);
                     px = vehicle.px + pLocal.x; py = vehicle.py + pLocal.y; pz = vehicle.pz + pLocal.z;
-                    var pushed = Math.hypot(px - ox, py - oy, pz - oz) || 1e-6;
-                    var away = Math.min(1.5, pushed / Math.max(delta, 1e-3));            // m/s, along the way out
-                    vel[i * 3] = vel[i * 3] * 0.5 + (px - ox) / pushed * away;
-                    vel[i * 3 + 1] = vel[i * 3 + 1] * 0.5 + (py - oy) / pushed * away;
-                    vel[i * 3 + 2] = vel[i * 3 + 2] * 0.5 + (pz - oz) / pushed * away;
+                    if(age[i] > PLUME_AGE && !wisp[i]) {
+                        // A plume that has been in the air a while is not pushed by the car (it is a cloud, the car drives through it). What the car
+                        // takes with it are small wisps: new puffs, short-lived, at the surface where it went in, with the speed of the car.
+                        if(time - touched[i] > 0.5 && wisps < 6) {
+                            touched[i] = time;
+                            for(var q = 0; q < 2; q++) {
+                                wisps++;
+                                spawn(px, py - 0.04, pz, vehicle.vx * 0.9, vehicle.vy * 0.9 + 0.2, vehicle.vz * 0.9, 0, false);
+                                var w = (next + capacity - 1) % capacity;
+                                wisp[w] = 1; bases[w] = bases[i];
+                                life[w] = 0.8 + Math.random() * 0.9;
+                                size0[w] = 0.25 + Math.random() * 0.15; size1[w] = 0.9 + Math.random() * 0.6;
+                                alpha0[w] = alpha0[i] * 0.8;
+                            }
+                        }
+                        px = ox; py = oy; pz = oz;
+                    } else {
+                        var pushed = Math.hypot(px - ox, py - oy, pz - oz) || 1e-6;
+                        var away = Math.min(1.5, pushed / Math.max(delta, 1e-3));            // m/s, along the way out
+                        vel[i * 3] = vel[i * 3] * 0.5 + (px - ox) / pushed * away;
+                        vel[i * 3 + 1] = vel[i * 3 + 1] * 0.5 + (py - oy) / pushed * away;
+                        vel[i * 3 + 2] = vel[i * 3 + 2] * 0.5 + (pz - oz) / pushed * away;
+                    }
                 }
             }
             positions[i * 3] = px; positions[i * 3 + 1] = py; positions[i * 3 + 2] = pz;
@@ -281,6 +303,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
         attributes.iTint.needsUpdate = true; attributes.iFrame.needsUpdate = true; attributes.iBase.needsUpdate = true;
     };
 
+    this.spawn = spawn;                                  // (for the tests)
     this.clear = function() {
         age.fill(1e9);
         alphas.fill(0);
