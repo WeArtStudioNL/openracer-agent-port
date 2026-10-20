@@ -160,6 +160,8 @@ OpenRacer.Vehicle = function (parameters, input) {
     // Launch: the two-step key, the transbrake key and the launch control (an option). While the car is held for a launch the clutch is open and the
     // engine turns freely to its held speed (the lower limit, Engine.js: holdRPM); letting go engages the clutch fast, and the traction control (also
     // when it is off) keeps the wheels at the grip for the first part of the launch.
+    this.twoStepEnabled = false;       // the option: the clutch (or the two-step key) at a standstill holds the engine at the two-step speed
+    this.twoStepActive = false;
     this.launchControlEnabled = false; // the option: brake and full throttle at a standstill hold the engine speed, letting go of the brake launches
     this.lcArmed = false;              // the launch control holds the engine now
     this.transbrakeHeld = false;       // the transbrake key holds the car now
@@ -1453,7 +1455,12 @@ OpenRacer.Vehicle = function (parameters, input) {
             self.launching -= dt;
             if(self.u > 25 || inp.throttle < 0.3 || self.u < -0.5) self.launching = 0;
         }
-        engine.holdRPM = inp.twoStep ? engine.twoStepRPM : (self.lcArmed ? engine.launchRPM : 0);
+        // The two-step (an option, on a key): with the clutch pedal in (or the two-step key, for a keyboard) at a standstill the engine is held at its own
+        // lower limit, to launch from. Without a clutch pedal in use the clutch is opened too, and the launch is a ramp of the clutch when it is let go.
+        var wasTwoStep = self.twoStepActive;
+        self.twoStepActive = self.twoStepEnabled && Math.abs(self.u) < 3 && ((inp.clutchAvailable && inp.clutch > 0.7) || !!inp.twoStep);
+        if(wasTwoStep && !self.twoStepActive && inp.throttle > 0.3 && !inp.clutchPedalPresent) self.launchRelease = 0.15;
+        engine.holdRPM = self.twoStepActive ? engine.twoStepRPM : (self.lcArmed ? engine.launchRPM : 0);
         var newAxleFy = [0, 0];
 
         for(var iw = 0; iw < 4; iw++) {
@@ -1665,7 +1672,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 engagement = Math.min(engagement, ts > 0.14 ? 0 : 1 - smoothstep(0, 0.14, ts));
             }
         }
-        if(self.lcArmed || self.transbrakeHeld) engagement = 0;     // held for a launch: the engine turns free
+        if(self.lcArmed || self.transbrakeHeld || (self.twoStepActive && !inp.clutchPedalPresent)) engagement = 0;     // held for a launch: the engine turns free
         else if(self.launchRelease > 0) {
             engagement = Math.min(engagement, 1 - self.launchRelease / 0.15);
             self.launchRelease = Math.max(0, self.launchRelease - dt);

@@ -723,6 +723,7 @@ OpenRacer.Car = function( config, domElement ) {
     var applyOption = function(name, value) {
         if(name === "tc") tobj.vehicle.tcEnabled = value;
         else if(name === "launchControl") tobj.vehicle.launchControlEnabled = value;
+        else if(name === "twoStep") tobj.vehicle.twoStepEnabled = value;
         else if(name === "abs") tobj.vehicle.absEnabled = value;
         else if(name === "esc") tobj.vehicle.escEnabled = value;
         else if(name === "gearbox") tobj.setGearboxMode(value);
@@ -730,6 +731,7 @@ OpenRacer.Car = function( config, domElement ) {
     };
     applyOption("tc", Settings.option("tc"));
     applyOption("launchControl", Settings.option("launchControl"));
+    applyOption("twoStep", Settings.option("twoStep"));
     applyOption("abs", Settings.option("abs"));
     applyOption("esc", Settings.option("esc"));
     applyOption("camera", Settings.option("camera"));

@@ -58,7 +58,7 @@ var Settings = (function() {
         { id: "clutch", wheelOnly: true, group: "Driving", label: "Clutch", wheel: { profile: "clutch", steps: ["clutch"] }, defaults: [] },
         { id: "handbrake", group: "Driving", label: "Handbrake", defaults: [key("Space"), padButton(0)] },
         { id: "reverse", group: "Driving", label: "Reverse (hold)", defaults: [key("Period")] },
-        { id: "twoStep", group: "Driving", label: "Two-step: hold the engine at its launch speed (hold)", defaults: [key("KeyQ")] },
+        { id: "twoStep", group: "Driving", label: "Two-step: clutch in for a keyboard (hold; the two-step must be on)", defaults: [key("KeyQ")] },
         { id: "transbrake", group: "Driving", label: "Transbrake: hold the car with the engine free, let go to launch (hold)", defaults: [key("KeyF")] },
         { id: "gearboxMode", group: "Gearbox", label: "Gearbox mode", defaults: [key("KeyG")] },
         { id: "shiftUp", group: "Gearbox", label: "Shift up", wheel: { profile: "shiftUp", steps: ["shiftUp"] }, defaults: [key("KeyX"), padButton(5)] },
@@ -84,6 +84,7 @@ var Settings = (function() {
         { id: "toggleESC", group: "Other", label: "ESC (stability control) on/off", defaults: [key("KeyN")] },
         { id: "tuningMenu", group: "Other", label: "Tuning menu on/off", defaults: [key("KeyU")] },
         { id: "toggleTC", group: "Other", label: "Traction control on/off", defaults: [key("KeyC")] },
+        { id: "toggleTwoStep", group: "Other", label: "Two-step on/off", defaults: [key("KeyY")] },
         { id: "toggleLaunch", group: "Other", label: "Launch control on/off", defaults: [key("KeyJ")] },
         { id: "toggleABS", group: "Other", label: "ABS on/off", defaults: [key("KeyB")] },
         { id: "startEngine", group: "Other", label: "Start the engine", defaults: [key("KeyI")] },
@@ -96,7 +97,7 @@ var Settings = (function() {
     var actionsById = {};
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
-    var DEFAULT_OPTIONS = { tc: true, launchControl: false, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 1, volume: 0.8,
+    var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 1, volume: 0.8,
         padSlow: 1.5, padAssist: true, keySteer: 1, keyAssist: true,
         // the graphics (Graphics.js): a preset is a set of these
         gfxPreset: "high", gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100 };
@@ -689,6 +690,7 @@ var Settings = (function() {
 
         var page = tabPage("Car");
         page.appendChild(optionRow("Traction control", options.tc ? "On" : "Off", function() { setOption("tc", !options.tc); }));
+        page.appendChild(optionRow("Two-step (the clutch in at a standstill holds the engine at the two-step speed)", options.twoStep ? "On" : "Off", function() { setOption("twoStep", !options.twoStep); }));
         page.appendChild(optionRow("Launch control (brake and full throttle at a standstill, let go of the brake)", options.launchControl ? "On" : "Off", function() { setOption("launchControl", !options.launchControl); }));
         page.appendChild(optionRow("ESC (stability control)", options.esc ? "On" : "Off", function() { setOption("esc", !options.esc); }));
         var cameraNames = ["1 Fixed behind the car", "2 Follow (smooth, FOV with speed)", "3 Cockpit", "4 Free camera (buttons on the HUD, P looks at the car, O moves with it)"];
@@ -904,6 +906,7 @@ var Settings = (function() {
     // ---- actions without a car
 
     handlers.toggleTC = function() { setOption("tc", !options.tc); };
+    handlers.toggleTwoStep = function() { setOption("twoStep", !options.twoStep); };
     handlers.toggleLaunch = function() { setOption("launchControl", !options.launchControl); };
     handlers.toggleABS = function() { setOption("abs", !options.abs); };
     handlers.gearboxMode = function() { cycleGearbox(); };

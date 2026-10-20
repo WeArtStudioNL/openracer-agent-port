@@ -94,7 +94,7 @@ var Hud = (function() {
             pills[name] = pill;
         });
         pills.P.style.display = "none"; // only while the parking lock holds the car
-        pills["2S"].style.display = "none"; pills.TB.style.display = "none"; // only while the two-step key or the transbrake holds
+        pills.TB.style.display = "none"; // only while the transbrake holds
         container.appendChild(pillColumn);
         canvas = document.createElement("canvas");
         container.appendChild(canvas);
@@ -314,7 +314,7 @@ var Hud = (function() {
         setPill("TC", !v.tcEnabled ? "off" : (tcWorking ? "active" : "on"));
         setPill("ESC", !v.escEnabled ? "off" : (v.escLevel > 0.05 ? "active" : "on"));
         setPill("LC", !v.launchControlEnabled ? "off" : (v.lcArmed || v.launching > 0 ? "active" : "on"));
-        pills["2S"].style.display = car.twoStep ? "" : "none"; setPill("2S", "active");
+        setPill("2S", !v.twoStepEnabled ? "off" : (v.twoStepActive ? "active" : "on"));
         pills.TB.style.display = v.transbrakeHeld ? "" : "none"; setPill("TB", "active");
         pills.P.style.display = car.parkingLock ? "" : "none";
         setPill("P", "park");
