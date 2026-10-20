@@ -25,7 +25,7 @@ OpenRacer.DragStrip = (function () {
     function ready() { var v = Settings.option("dragReady"); return v > 0 ? v : 2; }
     function greenShown() { var v = Settings.option("dragGreen"); return v > 0 ? v : 1.5; }
     var strip = null, state = "idle", lines = null, hud = null, movableDone = false;
-    var slip = null;
+    var slip = null, topSpeed = 0, launchAids = [];
     var tReady = 0, tTree = 0, stagedS = 0, tGreen = 0, t0 = null, reaction = 0, results = [], prevT = 0, prevS = 0, prevV = 0, finishNote = "", lastHtml = "";
 
     function parse(ds) {
@@ -70,6 +70,13 @@ OpenRacer.DragStrip = (function () {
     }
 
 
+    // ---- layers that Escape closes, the last one opened first (the time slip, a list, a window); this script comes before the settings menu, so the key is ours first
+    var closers = [];
+    function onEscape(fn) { closers.push(fn); return function () { var i = closers.indexOf(fn); if (i >= 0) closers.splice(i, 1); }; }
+    window.addEventListener("keydown", function (e) {
+        if (e.code === "Escape" && closers.length) { var fn = closers.pop(); fn(); e.stopImmediatePropagation(); e.preventDefault(); }
+    }, true);
+
     // ---- the time slip
     function pad(label, value) {
         var dots = " ";
@@ -80,7 +87,7 @@ OpenRacer.DragStrip = (function () {
         if (slip) return;
         var style = document.createElement("style");
         style.textContent =
-            "#dragSlip { position: fixed; right: 22px; top: 14px; z-index: 1600; width: 330px; box-sizing: border-box; padding: 18px 18px 30px; color: #1b1b1b; background: #f4f1e8; " +
+            "#dragSlip { position: fixed; right: 22px; top: 14px; z-index: 3200; width: 330px; box-sizing: border-box; padding: 18px 18px 30px; color: #1b1b1b; background: #f4f1e8; " +
             "font-family: 'Courier New', Courier, monospace; font-size: 14px; line-height: 1.45; white-space: pre; box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55); " +
             "transform: translateY(-115%); transition: transform 0.9s cubic-bezier(0.2, 0.8, 0.25, 1); pointer-events: none; }" +
             "#dragSlip.open { transform: translateY(0); pointer-events: auto; }" +
@@ -93,41 +100,176 @@ OpenRacer.DragStrip = (function () {
         slip.id = "dragSlip";
         document.body.appendChild(slip);
     }
-    // Escape closes the slip, before the settings menu (that script comes later) sees the key
-    window.addEventListener("keydown", function (e) {
-        if (e.code === "Escape" && slip && slip.classList.contains("open")) { closeSlip(); e.stopImmediatePropagation(); e.preventDefault(); }
-    }, true);
-    function closeSlip() { if (slip) slip.classList.remove("open"); }
+    var slipOff = null;
+    function closeSlip() {
+        if (slip) slip.classList.remove("open");
+        if (slipOff) { var f = slipOff; slipOff = null; f(); }
+    }
     function plain(t) { return t < 1 ? t.toFixed(3).replace(/^0/, "") : t.toFixed(3); }
-    function showSlip(car) {
+    // a ticket of a run: { track, car, date, reaction, marks: [{ label, time, speed, finish }] }
+    function ticket(data) {
         build_slip();
         var metric = Settings.option("units") !== "imperial";
         var unit = metric ? "KM/H" : "MPH";
         var speed = function (v) { return (v * (metric ? 3.6 : 2.2369362920544)).toFixed(2); };
-        var now = new Date();
+        var now = new Date(data.date);
         var two = function (n) { return (n < 10 ? "0" : "") + n; };
         var hours = now.getHours() % 12 || 12;
-        var track = (typeof currentTrack !== "undefined" && currentTrack && currentTrack.name) || "";
-        var carName = (car.config && car.config.name) || "";
         var lines = [];
-        lines.push("<div class=\"centre\">WELCOME TO THE\n" + String(track).toUpperCase().slice(0, 28) + "\nDRAG STRIP\nHAVE A SAFE AND\nFUN DAY OF RACING!</div>", "");
+        lines.push("<div class=\"centre\">WELCOME TO THE\n" + String(data.track || "").toUpperCase().slice(0, 28) + "\nDRAG STRIP\nHAVE A SAFE AND\nFUN DAY OF RACING!</div>", "");
         lines.push(hours + ":" + two(now.getMinutes()) + (now.getHours() < 12 ? " AM" : " PM"), two(now.getMonth() + 1) + "/" + two(now.getDate()) + "/" + now.getFullYear(), "");
         lines.push("<div class=\"centre\">TIME SLIP</div>", "");
-        lines.push(pad("CAR", carName.toUpperCase().slice(0, 18)), "");
-        lines.push(pad("R/T", plain(reaction)));
-        results.forEach(function (r) {
-            if (r.time === null) return;
+        lines.push(pad("CAR", String(data.car || "").toUpperCase().slice(0, 18)), "");
+        lines.push(pad("R/T", plain(data.reaction)));
+        data.marks.forEach(function (r) {
             var name = r.label.toUpperCase().replace(" MILE", "").replace(" FT", "");
             lines.push(pad(name, plain(r.time)));
             if (r.finish || r.label === "1/8 mile") lines.push(pad(unit, speed(r.speed)));
         });
         lines.push("", "COMPLETED RUN");
-        slip.innerHTML = "<button class=\"close\" title=\"Close (Escape)\">\u00d7</button>" + lines.join("\n").replace(/<\/div>\n/g, "</div>") + "<div class=\"tear\"></div>";
+        slip.innerHTML = "<button class=\"close\" title=\"Close (Escape)\">×</button>" + lines.join("\n").replace(/<\/div>\n/g, "</div>") + "<div class=\"tear\"></div>";
         slip.querySelector(".close").addEventListener("click", closeSlip);
         // from above into the picture (a frame later, so that the transition runs)
         slip.classList.remove("open");
         void slip.offsetWidth;
         slip.classList.add("open");
+        if (slipOff) slipOff();
+        slipOff = onEscape(closeSlip);
+    }
+
+    // ---- what the run is kept with: the car and its tuning
+    function summary(car) {
+        var v = car.vehicle, e = v.engine, nmMax = 0, nmRpm = 0, kwMax = 0, kwRpm = 0;
+        e.torque_curve.forEach(function (p) {
+            var nm = p.nm * e.torqueScale, kw = nm * p.rpm * Math.PI / 30 / 1000;
+            if (nm > nmMax) { nmMax = nm; nmRpm = p.rpm; }
+            if (kw > kwMax) { kwMax = kw; kwRpm = p.rpm; }
+        });
+        var kind = v.tyreKind ? v.tyreKind() : null, x = e.extras || {};
+        return {
+            mass: Math.round(v.mass), front: Math.round(v.weight_distribution * 1000) / 10, drive: v.driveType, gearbox: car.gearboxMode,
+            kw: Math.round(kwMax), kwRpm: kwRpm, hp: Math.round(kwMax * 1.34102), nm: Math.round(nmMax), nmRpm: nmRpm,
+            limiter: Math.round(e.limiterRPM), twoStepRpm: Math.round(e.twoStepRPM), launchRpm: Math.round(e.launchRPM),
+            turbo: e.turboShare > 0 ? { share: Math.round(e.turboShare * 100), boost: x.boost_full || null, spool: e.turboSpool } : null,
+            gears: (car.gear_ratios || []).map(function (g) { return Math.round(g * 1000) / 1000; }), finalDrive: car.final_drive,
+            tyres: kind ? kind.name : "", pressure: [Math.round(v.pressureFront * 10) / 10, Math.round(v.pressureRear * 10) / 10],
+            tc: !!v.tcEnabled, abs: !!v.absEnabled, esc: !!v.escEnabled, shiftTime: v.shiftTime,
+            pops: !!x.pops_on, antilag: !!x.antilag_on
+        };
+    }
+    function runData(car) {
+        var marks = results.filter(function (r) { return r.time !== null; }).map(function (r) { return { label: r.label, metres: r.metres, time: r.time, speed: r.speed, finish: !!r.finish }; });
+        var at = function (m) { var r = marks.filter(function (x) { return Math.abs(x.metres - m) < 0.5; })[0]; return r ? r.time : null; };
+        var track = (typeof currentTrack !== "undefined" && currentTrack) || {};
+        return {
+            track: track.name || "", car: (car.config && car.config.name) || "", carId: (car.config && car.config.id) || "", date: new Date().toISOString(),
+            reaction: reaction, marks: marks, length: strip.length, time: marks[marks.length - 1].time, quarter: at(402.336), half: at(804.672),
+            topSpeed: topSpeed, aids: launchAids.slice(), info: summary(car)
+        };
+    }
+    // at the finish: the run is kept (when the records are on) and the slip comes
+    function finishRun(car) {
+        var data = runData(car);
+        var track = (typeof currentTrack !== "undefined" && currentTrack) || null;
+        var saving = !(typeof race !== "undefined" && race && race.options && race.options.records === false);
+        if (saving && track && track.id && OpenRacer.Records && OpenRacer.Records.dragRun) OpenRacer.Records.dragRun(track.id, data);
+        ticket(data);
+    }
+
+    // ---- the top 50 of a track (from the main menu) and the window of a car
+    var topStyle = false;
+    function modalStyle() {
+        if (topStyle) return;
+        topStyle = true;
+        var style = document.createElement("style");
+        style.textContent =
+            ".dragModal { position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 3150; background: rgba(0, 0, 0, 0.66); display: flex; align-items: center; justify-content: center; font-family: Arial, sans-serif; color: #fff; }" +
+            ".dragModal.over { z-index: 3160; }" +
+            ".dragModal .box { position: relative; width: 760px; max-width: calc(100% - 40px); max-height: calc(100% - 50px); overflow-y: auto; background: #1d232c; border: 2px solid #2c3541; border-radius: 10px; padding: 18px 22px 20px; }" +
+            ".dragModal .box.narrow { width: 460px; }" +
+            ".dragModal h2 { margin: 0 34px 2px 0; font-size: 22px; letter-spacing: 1px; } .dragModal .sub { color: #9aa8ba; font-size: 13px; margin-bottom: 12px; }" +
+            ".dragModal .x { position: absolute; right: 10px; top: 8px; width: 30px; height: 30px; border: 0; background: transparent; color: #cfd8e3; font-size: 24px; cursor: pointer; border-radius: 6px; } .dragModal .x:hover { background: #2c3541; }" +
+            ".dragModal table { width: 100%; border-collapse: collapse; font-size: 15px; font-variant-numeric: tabular-nums; }" +
+            ".dragModal th { text-align: right; color: #9ab; font-weight: normal; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; padding: 4px 8px; border-bottom: 1px solid #2c3541; }" +
+            ".dragModal td { text-align: right; padding: 6px 8px; border-bottom: 1px solid #262d37; } .dragModal th:first-child, .dragModal td:first-child { text-align: left; width: 34px; color: #7f90a5; }" +
+            ".dragModal th.l, .dragModal td.l { text-align: left; width: auto; color: #fff; }" +
+            ".dragModal a.car { color: #6db4ff; cursor: pointer; text-decoration: underline; } .dragModal a.car:hover { color: #a5d0ff; }" +
+            ".dragModal button.ticket { background: #3b424c; color: #fff; border: 0; border-radius: 5px; padding: 4px 12px; cursor: pointer; font-size: 13px; } .dragModal button.ticket:hover { background: #566070; }" +
+            ".dragModal .group { margin: 14px 0 4px; font-size: 12px; letter-spacing: 2px; color: #9ab; text-transform: uppercase; }" +
+            ".dragModal .kv { display: flex; justify-content: space-between; gap: 14px; padding: 4px 0; border-bottom: 1px solid #262d37; font-size: 14px; } .dragModal .kv span:first-child { color: #9aa8ba; } .dragModal .kv span:last-child { text-align: right; }" +
+            ".dragModal .empty { color: #9aa8ba; padding: 18px 0; }";
+        document.head.appendChild(style);
+    }
+    function modal(extra) {
+        modalStyle();
+        var overlay = document.createElement("div");
+        overlay.className = "dragModal" + (extra ? " " + extra : "");
+        var box = document.createElement("div");
+        box.className = "box" + (extra === "over" ? " narrow" : "");
+        var x = document.createElement("button");
+        x.className = "x"; x.textContent = "×"; x.title = "Close (Escape)";
+        box.appendChild(x);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+        var off = null;
+        var close = function () { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); if (off) { var f = off; off = null; f(); } };
+        x.addEventListener("click", close);
+        overlay.addEventListener("pointerdown", function (e) { if (e.target === overlay) close(); });
+        off = onEscape(close);
+        return { box: box, close: close };
+    }
+    function kv(label, value) { return "<div class=\"kv\"><span>" + label + "</span><span>" + value + "</span></div>"; }
+    function when(iso) { var d = new Date(iso); return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+
+    // the most important of the tuning and of the car of a run, in a window that scrolls
+    function showCar(run) {
+        var m = modal("over"), i = run.info || {}, metric = Settings.option("units") !== "imperial";
+        var drive = { rwd: "Rear wheels", fwd: "Front wheels", awd: "All wheels" }[i.drive] || i.drive || "";
+        var html = "<h2>" + run.car + "</h2><div class=\"sub\">" + when(run.date) + "</div>";
+        html += "<div class=\"group\">Car</div>" + kv("Mass", (i.mass || "?") + " kg") + kv("Weight on the front axle", (i.front || "?") + " %") + kv("Drive", drive) +
+            kv("Gearbox", i.gearbox || "") + kv("Tyres", (i.tyres || "") + (i.pressure ? " · " + i.pressure[0] + " / " + i.pressure[1] + " bar" : ""));
+        html += "<div class=\"group\">Engine</div>" + kv("Power", i.hp ? i.hp + " hp (" + i.kw + " kW) at " + i.kwRpm + " rpm" : "") + kv("Torque", i.nm ? i.nm + " Nm at " + i.nmRpm + " rpm" : "") +
+            kv("Rev limit", (i.limiter || "") + " rpm") + (i.turbo ? kv("Turbo", i.turbo.share + " % boost" + (i.turbo.boost ? ", " + i.turbo.boost + " bar" : "") + ", spool " + (i.turbo.spool || 0).toFixed(2) + " s") : kv("Turbo", "none"));
+        html += "<div class=\"group\">Transmission</div>" + kv("Final drive", i.finalDrive || "") + kv("Gears", (i.gears || []).join(" · ")) + kv("Shift time", (i.shiftTime || 0).toFixed(2) + " s");
+        html += "<div class=\"group\">Launch and extras</div>" + kv("Used on the start", (run.aids && run.aids.length) ? run.aids.join(", ") : "none") +
+            kv("Two-step speed", (i.twoStepRpm || "") + " rpm") + kv("Launch control speed", (i.launchRpm || "") + " rpm") +
+            kv("Pops and bangs", i.pops ? "on" : "off") + kv("Anti-lag", i.antilag ? "on" : "off") +
+            kv("Traction control / ABS / ESC", [i.tc, i.abs, i.esc].map(function (b) { return b ? "on" : "off"; }).join(" / "));
+        html += "<div class=\"group\">Run</div>" + kv("Reaction time", plain(run.reaction) + " s") + kv("Time", run.time.toFixed(3) + " s") + kv("Top speed", (run.topSpeed * (metric ? 3.6 : 2.2369362920544)).toFixed(1) + (metric ? " km/h" : " mph"));
+        var holder = document.createElement("div");
+        holder.innerHTML = html;
+        m.box.appendChild(holder);
+    }
+
+    function showTop(track) {
+        var ds = track && track.dragstrip;
+        if (!ds) return;
+        var metric = Settings.option("units") !== "imperial";
+        var length = ds.length || 402.336;
+        var named = MARKS.filter(function (x) { return Math.abs(x[1] - length) < 0.5; })[0];
+        var runs = OpenRacer.Records.dragRuns(track.id, length).slice(0, 50);
+        var m = modal();
+        var head = document.createElement("div");
+        head.innerHTML = "<h2>Top 50 · drag strip</h2><div class=\"sub\">" + (track.name || track.id) + " · " + (named ? named[0] : Math.round(length) + " m") + " · the best runs in this browser</div>";
+        m.box.appendChild(head);
+        if (!runs.length) { var empty = document.createElement("div"); empty.className = "empty"; empty.textContent = "No runs yet. Drive the strip and your runs are kept here."; m.box.appendChild(empty); return; }
+        var table = document.createElement("table");
+        table.innerHTML = "<tr><th>#</th><th class=\"l\">Car</th><th>1/4 mile</th><th>2/4 mile</th><th>Top speed</th><th></th></tr>";
+        runs.forEach(function (run, n) {
+            var tr = document.createElement("tr");
+            var t = function (v) { return v === null || v === undefined ? "–" : v.toFixed(3) + " s"; };
+            tr.innerHTML = "<td>" + (n + 1) + "</td><td class=\"l\"></td><td>" + t(run.quarter) + "</td><td>" + t(run.half) + "</td><td>" + Math.round(run.topSpeed * (metric ? 3.6 : 2.2369362920544)) + (metric ? " km/h" : " mph") + "</td><td></td>";
+            var link = document.createElement("a");
+            link.className = "car"; link.textContent = run.car || run.carId; link.title = "Car and tuning of this run";
+            link.addEventListener("click", function () { showCar(run); });
+            tr.children[1].appendChild(link);
+            var button = document.createElement("button");
+            button.className = "ticket"; button.textContent = "Ticket"; button.title = "The ticket of this run";
+            button.addEventListener("click", function () { ticket(run); });
+            tr.children[5].appendChild(button);
+            table.appendChild(tr);
+        });
+        m.box.appendChild(table);
     }
 
     // ---- the display
@@ -193,10 +335,15 @@ OpenRacer.DragStrip = (function () {
     function setState(next) {
         state = next;
         if (next === "approach" || next === "idle" || next === "void") {
-            closeSlip(); t0 = null; results.forEach(function (r) { r.time = null; r.speed = null; }); reaction = 0; }
+            closeSlip(); topSpeed = 0; launchAids = []; t0 = null; results.forEach(function (r) { r.time = null; r.speed = null; }); reaction = 0; }
     }
 
     function reset() { if (strip) setState("idle"); lastHtml = ""; }
+
+    // what holds the engine at the start (kept with the run)
+    function trackAids(v) {
+        [[v.twoStepActive, "Two-step"], [v.lcArmed, "Launch control"], [v.transbrakeHeld, "Transbrake"]].forEach(function (p) { if (p[0] && launchAids.indexOf(p[1]) < 0) launchAids.push(p[1]); });
+    }
 
     function update(car, clock) {
         var track = typeof currentTrack !== "undefined" ? currentTrack : null;
@@ -227,11 +374,13 @@ OpenRacer.DragStrip = (function () {
                 if (s >= STAGE_MIN && s <= STAGE_MAX && speed < 1.5 && aligned) { state = "ready"; tReady = clock; }
                 break;
             case "ready":
+                trackAids(v);
                 // standing still at the line: two seconds to get ready (the two-step on), then the lights; moving away cancels it
                 if (s < STAGE_MIN - 0.3 || s > STAGE_MAX + 0.3 || speed > 1.5 || !inLane) { state = "approach"; break; }
                 if (clock - tReady >= ready()) { state = "tree"; tTree = clock; stagedS = s; }
                 break;
             case "tree":
+                trackAids(v);
                 if (s > stagedS + ROLLOUT) { state = "false"; break; }                  // away before the green light
                 if (s < STAGE_MIN - 0.5 || !inLane) { state = "approach"; break; }       // back off: not staged
                 if (clock - tTree >= 3 * AMBER + AMBER) { state = "go"; tGreen = tTree + 4 * AMBER; t0 = null; results.forEach(function (r) { r.time = null; r.speed = null; }); prevT = clock; prevS = s; prevV = forwardSpeed; }
@@ -245,6 +394,7 @@ OpenRacer.DragStrip = (function () {
                     }
                 }
                 if (t0 !== null) {
+                    topSpeed = Math.max(topSpeed, speed);
                     for (var i = 0; i < results.length; i++) {
                         var r = results[i];
                         if (r.time === null && s >= r.metres) {
@@ -254,7 +404,7 @@ OpenRacer.DragStrip = (function () {
                             r.speed = prevV + (forwardSpeed - prevV) * k;
                         }
                     }
-                    if (s >= strip.length) { state = "finished"; showSlip(car); }
+                    if (s >= strip.length) { state = "finished"; finishRun(car); }
                     else if (s < stagedS - 1 || !inLane && Math.abs(side) > strip.width) setState("void");   // back, or off the strip: no run
                 }
                 break;
@@ -267,5 +417,5 @@ OpenRacer.DragStrip = (function () {
         render(s, clock);
     }
 
-    return { update: update, reset: reset, get state() { return state; } };
+    return { update: update, reset: reset, showTop: showTop, ticket: ticket, get state() { return state; } };
 })();

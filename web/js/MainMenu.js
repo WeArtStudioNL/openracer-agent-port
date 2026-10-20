@@ -528,6 +528,9 @@ var MainMenu = (function() {
         record.innerHTML = (raceOptions.laps ? "A race of " + raceOptions.laps + " laps from a standing start, with a countdown; practice has no end.<br>" : "") +
             (best ? "Best lap with this car: <b>" + OpenRacer.Records.format(best) + "</b>" : "No lap record with this car here yet.") +
             (raceOptions.ai > 0 ? "<br>" + (hasLine ? "The AI drives the racing line of this track." : "The AI needs a racing line: drive one lap here first, or draw the track in the track editor.") : "");
+        if(trackChosen && trackChosen.dragstrip && OpenRacer.DragStrip) {
+            raceColumn.appendChild(option("Drag strip", "Top 50", function() { OpenRacer.DragStrip.showTop(trackChosen); }));
+        }
         raceColumn.appendChild(record);
         columns.appendChild(raceColumn);
         wrap.appendChild(columns);

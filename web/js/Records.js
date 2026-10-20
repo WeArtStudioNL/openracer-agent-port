@@ -2,12 +2,15 @@
  * Records.js
  *
  * Description: The lap records: the best lap per track and car, kept in this browser (localStorage), and the recording of that lap
- *              for the ghost (see Ghost.js). Saving can be switched off when a race is started (the "records" option).
+ *              for the ghost (see Ghost.js). Saving can be switched off when a race is started (the "records" option). The runs of the
+ *              drag strip of a track (DragStrip.js) are kept too: the best 50 of a length, with what is needed for the ticket.
  */
 
 OpenRacer.Records = (function () {
     var PREFIX = "openracer.records.";
     var GHOST = "openracer.ghost.";
+    var DRAG = "openracer.drag.";
+    var DRAG_KEPT = 50;
 
     function read(key) {
         try { return JSON.parse(window.localStorage.getItem(key)); } catch (e) { return null; }
@@ -54,9 +57,27 @@ OpenRacer.Records = (function () {
         return bestCar ? ghost(trackId, bestCar) : null;
     }
 
+    // the runs of the drag strip of a track, the best first: of a length (metres), or all
+    function dragRuns(trackId, length) {
+        var all = read(DRAG + trackId) || [];
+        return all.filter(function (run) { return length === undefined || Math.abs(run.length - length) < 0.5; }).sort(function (a, b) { return a.time - b.time; });
+    }
+
+    // keeps a run; only the best 50 of its length stay. Gives the place of the run (1 is the best) or 0 when it is not among them
+    function dragRun(trackId, run) {
+        var all = read(DRAG + trackId) || [];
+        run.id = Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+        all.push(run);
+        var same = all.filter(function (r) { return Math.abs(r.length - run.length) < 0.5; }).sort(function (a, b) { return a.time - b.time; }).slice(0, DRAG_KEPT);
+        var kept = all.filter(function (r) { return Math.abs(r.length - run.length) >= 0.5; }).concat(same);
+        write(DRAG + trackId, kept);
+        return same.indexOf(run) + 1;
+    }
+
     function forget(trackId) {
         try {
             window.localStorage.removeItem(PREFIX + trackId);
+            window.localStorage.removeItem(DRAG + trackId);
             for (var i = window.localStorage.length - 1; i >= 0; i--) {
                 var key = window.localStorage.key(i);
                 if (key && key.indexOf(GHOST + trackId + ".") === 0) window.localStorage.removeItem(key);
@@ -70,5 +91,5 @@ OpenRacer.Records = (function () {
         return m + ":" + (s < 10 ? "0" : "") + s.toFixed(3);
     }
 
-    return { ofTrack: ofTrack, best: best, lap: lap, ghost: ghost, keepGhost: keepGhost, anyGhost: anyGhost, forget: forget, format: format };
+    return { ofTrack: ofTrack, best: best, lap: lap, ghost: ghost, keepGhost: keepGhost, anyGhost: anyGhost, dragRuns: dragRuns, dragRun: dragRun, forget: forget, format: format };
 })();

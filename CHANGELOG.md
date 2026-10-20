@@ -5,6 +5,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 ## Unreleased
 
 **Drag strip**
+- A Top 50 of the drag runs in the main menu (the car with its tuning, the 1/4 and 2/4 mile times, the top speed, and the ticket of the run); the drag strip is a layer in the track editor with a gizmo for its place and its direction.
 - A *Drag strip* tool in the track editor (a window for the distance and the width; the start line is where you click, the strip goes the way you drag), and in the game: the distance to the start line, the lights, false starts, and the times and speeds at the standard distances within the strip. At the finish a time slip slides in from the top at the right (a cross or Escape closes it).
 
 **Panels**
