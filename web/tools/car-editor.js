@@ -704,7 +704,7 @@ function renderLayers() {
             const eye = document.createElement("button");
             eye.className = "eye";
             const paint = () => { const on = node.object.visible; eye.textContent = on ? "👁" : "—"; eye.title = on ? "Hide" : "Show"; row.classList.toggle("dim", !on); };
-            eye.addEventListener("click", (e) => { e.stopPropagation(); node.object.visible = !node.object.visible; paint(); });
+            eye.addEventListener("click", (e) => { e.stopPropagation(); node.object.visible = !node.object.visible; syncBenchVisibility(); paint(); });
             paint();
             row.append(text, eye);
             list.appendChild(row);
@@ -1530,10 +1530,18 @@ async function startBench() {
     bench.obj = { vehicle: v, wheels: v.wheels, config, bodyLift: null };
     try { OpenRacer.CollisionProxy.apply(bench.obj, model, bench.modelMid); } catch (e) { console.warn("soft body: " + e.message); }
     bench.vehicle = v; bench.model = model; bench.input = input; bench.config = config; bench.script = null; bench.last = performance.now();
+    syncBenchVisibility();
     pivot.visible = false; helpers.visible = false;
     $("testStop").style.display = "";
     status("Test: the car with the physics of the game" + (model.rig ? ", " + model.rig.count + " moving parts of the suspension" : "") + ". Stop test goes back to the model.", "ok");
     return v;
+}
+
+// the test shows a copy of the model: the eyes of the Parts list (state.nodes) are followed by name
+function syncBenchVisibility() {
+    if (!bench.objects.length) return;
+    const hidden = new Map(state.nodes.map((n) => [n.name, n.object.visible]));
+    bench.objects.forEach((root) => root.traverse((o) => { if (o.name && hidden.has(o.name)) o.visible = hidden.get(o.name); }));
 }
 
 function stopBench() {
