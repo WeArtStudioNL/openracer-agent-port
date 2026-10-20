@@ -1459,7 +1459,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         // The two-step (an option, on a key): with the clutch pedal in (or the two-step key, for a keyboard) at a standstill the engine is held at its own
         // lower limit, to launch from. Without a clutch pedal in use the clutch is opened too, and the launch is a ramp of the clutch when it is let go.
         var wasTwoStep = self.twoStepActive;
-        self.twoStepActive = self.twoStepEnabled && Math.abs(self.u) < 3 && ((inp.clutchAvailable && inp.clutch > 0.7) || !!inp.twoStep);
+        self.twoStepActive = Math.abs(self.u) < 3 && ((self.twoStepEnabled && inp.clutchAvailable && inp.clutch > 0.7) || !!inp.twoStep);        // the key always works, the clutch pedal only when the option is on
         if(wasTwoStep && !self.twoStepActive && inp.throttle > 0.3 && !inp.clutchPedalPresent) self.launchRelease = 0.15;
         engine.holdRPM = self.twoStepActive ? engine.twoStepRPM : (self.lcArmed ? engine.launchRPM : 0);
         engine.holding = self.lcArmed || self.transbrakeHeld || self.twoStepActive;

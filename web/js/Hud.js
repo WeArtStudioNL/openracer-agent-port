@@ -377,7 +377,7 @@ var Hud = (function() {
         setPill("TC", !v.tcEnabled ? "off" : (tcWorking ? "active" : "on"));
         setPill("ESC", !v.escEnabled ? "off" : (v.escLevel > 0.05 ? "active" : "on"));
         setPill("LC", !v.launchControlEnabled ? "off" : (v.lcArmed || v.launching > 0 ? "active" : "on"));
-        setPill("2S", !v.twoStepEnabled ? "off" : (v.twoStepActive ? "active" : "on"));
+        setPill("2S", v.twoStepActive ? "active" : (!v.twoStepEnabled ? "off" : "on"));
         pills.TB.style.display = v.transbrakeHeld ? "" : "none"; setPill("TB", "active");
         pills.P.style.display = car.parkingLock ? "" : "none";
         setPill("P", "park");
