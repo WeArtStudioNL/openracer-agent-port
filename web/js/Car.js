@@ -428,6 +428,12 @@ OpenRacer.Car = function( config, domElement ) {
         }
         this.clock += delta;
 
+        // the steering assist of the keyboard: what it added last frame comes off first (the keys move the angle they made); when something else wrote the
+        // angle since (a wheel, a pad, the mouse), the assist is not ours to take off and it waits for the keys again
+        var assistWas = this.assistOffset || 0;
+        if(this.lastWritten !== undefined && this.turnAngle !== this.lastWritten) assistWas = 0; else this.turnAngle -= assistWas;
+        var foreign = this.lastWritten !== undefined && assistWas === 0 && this.turnAngle !== this.lastWritten;
+
         // steering with the keyboard: slower at speed, and the wheels centre themselves
         this.turnDir = 0;
         if(this.turnLeft) this.turnDir = -1;
@@ -451,6 +457,19 @@ OpenRacer.Car = function( config, domElement ) {
                 this.turnAngle = this.turnDir * lock;
             }
         }
+
+        // The assist: when the rear steps out, the front wheels are turned into the slide (as the pad does, controls.js), on top of what the keys
+        // made, and it fades with the slide. Only while the keyboard steers (not mouse, pad or a wheel that has the angle).
+        var assist = 0;
+        if(Settings.option("keyAssist") && !mouseDown && !usingGamepad && !foreign && v.u > 3) {
+            var beta = Math.atan2(v.v, v.u);                 // the slip angle of the car: positive when it moves to the right of where it points
+            var counter = Math.sign(beta) * Math.max(0, Math.abs(beta) - 0.035) * 1.1;
+            assist = Math.max(-0.6 * this.maxTurn, Math.min(0.6 * this.maxTurn, counter));
+        }
+        this.assistOffset = assistWas + (assist - assistWas) * Math.min(1, delta * 12);
+        this.turnAngle += this.assistOffset;
+        this.turnAngle = Math.max(-this.maxTurn, Math.min(this.maxTurn, this.turnAngle));
+        this.lastWritten = this.turnAngle;
 
         v.update(delta);
         this.pit.update(delta);
