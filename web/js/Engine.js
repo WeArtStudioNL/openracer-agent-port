@@ -51,6 +51,12 @@ OpenRacer.Engine = function( parameters ) {
     this.running = true;
     this.starting = false;
     this.throttleCut = 1; // 0..1 factor from the rev limiter, for the dashboard
+    // The rev limiter cuts the fuel completely when the limit is reached, and gives it back when the engine has dropped a band below it and the cut has
+    // lasted a minimum time: the engine bounces against the limit, it does not lean on it.
+    this.limiterBand = 250;      // rpm
+    this.limiterCutMin = 0.06;   // s
+    this.cutting = false;
+    this.cutTime = 0;
     this.noFuel = false;  // the tank is empty: the engine dies and does not start (Vehicle.js sets it)
     // A turbo: a share of the torque of the curve only comes with boost, which builds up with the throttle open above a
     // threshold speed over the spool time (the lag) and falls away fast when the throttle is shut. "turbo" in the engine of
@@ -61,6 +67,7 @@ OpenRacer.Engine = function( parameters ) {
     this.turboThreshold = turbo ? (turbo.threshold_rpm || 2500) : 2500;
     this.boost = 0;       // 0..1, how much of the boost is there
     this.updateBoost = function (throttle, dt) {
+        this.cutTime += dt;
         if(this.turboShare <= 0) { this.boost = 0; return; }
         var rpm = this.getRPM();
         var wanted = this.running ? Math.max(0, Math.min(1, throttle)) * Math.max(0, Math.min(1, (rpm - this.turboThreshold) / 2000)) : 0;
@@ -133,10 +140,12 @@ OpenRacer.Engine = function( parameters ) {
         var thr = Math.max(pedal, idleThrottle);
 
         // rev limiter: cut the fuel
-        this.throttleCut = 1;
-        if(rpm > this.limiterRPM - 200) {
-            this.throttleCut = Math.max(0, (this.limiterRPM - rpm) / 200);
+        if(rpm >= this.limiterRPM) {
+            if(!this.cutting) { this.cutting = true; this.cutTime = 0; }
+        } else if(this.cutting && rpm < this.limiterRPM - this.limiterBand && this.cutTime >= this.limiterCutMin) {
+            this.cutting = false;
         }
+        this.throttleCut = this.cutting ? 0 : 1;
         thr *= this.throttleCut;
 
         var boosted = 1 - this.turboShare * (1 - this.boost); // the torque without boost is the share that is not from the turbo
