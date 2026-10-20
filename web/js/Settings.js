@@ -810,6 +810,10 @@ var Settings = (function() {
         page.appendChild(optionRow("Debug text", options.debug ? "On" : "Off", function() { setOption("debug", !options.debug); }));
         var tuningRow = optionRow("Tuning menu", "Open", function() { closeMenu(); Tuning.toggle(); });
         page.appendChild(tuningRow);
+        // the runs of the drag strip of this track (DragStrip.js): the Top 50, with the tickets
+        if(typeof currentTrack !== "undefined" && currentTrack && currentTrack.dragstrip && OpenRacer.DragStrip) {
+            page.appendChild(optionRow("Drag strip of this track", "Top 50 and tickets", function() { OpenRacer.DragStrip.showTop(currentTrack); }));
+        }
         // the racing line and the records of this track (see main.js, Records.js)
         if(typeof race !== "undefined" && window.car && typeof currentTrack !== "undefined") {
             page.appendChild(optionRow("Racing line of this track", "Save my best lap as the line", function() {
