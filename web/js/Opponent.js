@@ -276,7 +276,7 @@ OpenRacer.Opponent = function (config, line, options) {
             if (!wheel.object) continue;
             wheel.object.position.set(wheel.center.x, wheel.center.y, wheel.center.z);
             wheel.object.quaternion.copy(this.body.quaternion);
-            if (i < 2) wheel.turn(v.steerApplied);
+            wheel.turn(i < 2 ? v.steerApplied : 0);
             wheel.object.children[0].children[0].rotation.x = wheel.spin;
         }
         if (this.rig) this.rig.update(v);

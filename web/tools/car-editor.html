@@ -244,6 +244,9 @@
                 </div>
                 <label class="check"><input type="checkbox" id="sbScanInside" checked> The scan also fills the inside</label>
                 <div class="row">
+                    <div><input type="number" id="sbWheelStrength" min="0" step="1" placeholder="25"><div class="hint">wheel strength (kN·s of a hit that tears it off, 0: never)</div></div>
+                </div>
+                <div class="row">
                     <button class="small" id="sbEdit" title="Click the model to put a node on it, select nodes and remove them">Edit nodes</button>
                     <button class="small danger" id="sbDelete" disabled title="Removes the selected nodes (Delete key)">Delete selected</button>
                 </div>

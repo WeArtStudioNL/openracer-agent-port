@@ -1583,7 +1583,8 @@ function benchFrame(now) {
         object.position.set(w.center.x, w.center.y, w.center.z);
         object.quaternion.copy(body.quaternion);
         if (object.children[0]) {
-            if (i < 2) object.children[0].rotation.y = -v.steerApplied; // the front wheels steer
+            object.children[0].rotation.y = -(i < 2 ? v.steerApplied : 0) - (w.toeBend || 0);   // the front wheels steer; a bent wheel points aside
+            object.children[0].rotation.z = w.camberBend || 0;
             if (object.children[0].children[0]) object.children[0].children[0].rotation.x = w.spin;
         }
     });

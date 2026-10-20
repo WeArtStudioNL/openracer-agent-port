@@ -50,8 +50,8 @@ OpenRacer.Parts = (function () {
     }
 
     function create(ctx) {
-        if (!ctx.specs || !ctx.specs.length) return Promise.resolve(null);
-        var shapes = ctx.specs.map(function (spec) { return shapeOf(spec, ctx); });      // now: the model is in the frame of the car only at this moment
+        if ((!ctx.specs || !ctx.specs.length) && !ctx.wheelObjects) return Promise.resolve(null);
+        var shapes = (ctx.specs || []).map(function (spec) { return shapeOf(spec, ctx); });      // now: the model is in the frame of the car only at this moment
         return loadEngine().then(function (R) { return build(R, ctx, shapes); }).catch(function (e) { console.warn("Parts: " + e.message + (e.stack ? "\n" + e.stack : "")); return null; });
     }
 
@@ -139,7 +139,7 @@ OpenRacer.Parts = (function () {
         }
 
         // ---- the parts
-        ctx.specs.forEach(function (spec, index) {
+        (ctx.specs || []).forEach(function (spec, index) {
             if (!spec || !spec.object || spec.mode === "fixed" || !spec.mode) return;
             var shape = shapes[index];
             if (!shape) return;
@@ -211,6 +211,18 @@ OpenRacer.Parts = (function () {
                 state: "held", joint: null, kept: null, grace: 0, lastVel: new THREE.Vector3(), load: 0, hasVel: false,
                 parent: object.userData.partHome.parent, matrix: object.userData.partHome.matrix.clone(), autoUpdate: object.userData.partHome.autoUpdate
             });
+        });
+        // the wheels: a wheel that a hit has torn off (Vehicle.js, wheelLost) becomes a body that rolls away
+        if (ctx.wheelObjects) ctx.wheelObjects.forEach(function (wheelObject, wi) {
+            var w = v.wheels[wi];
+            if (!wheelObject || !w) return;
+            var half = 0.12, box = new THREE.Box3().setFromObject(wheelObject);
+            if (!box.isEmpty()) { var sz = box.getSize(new THREE.Vector3()); half = Math.min(0.25, Math.max(0.07, Math.min(sz.x, sz.y, sz.z) / 2)); }
+            var wbody = world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setCcdEnabled(true));
+            var s2 = Math.SQRT1_2;
+            var wcollider = world.createCollider(R.ColliderDesc.cylinder(half, w.radius).setRotation({ x: 0, y: 0, z: s2, w: s2 }).setMass(w.mass || 20).setFriction(0.9).setRestitution(0.3).setCollisionGroups(groups(PART_HELD, GROUND)), wbody);
+            parts.push({ name: "wheel " + (w.name || wi), wheel: wi, object: wheelObject, body: wbody, collider: wcollider, centre: new THREE.Vector3(), mass: w.mass || 20, nodes: [], mounts: [], hinge: null,
+                breakForce: 0, state: "held", joint: null, grace: 0, lastVel: new THREE.Vector3(), load: 0, hasVel: false, spec: {} });
         });
         if (!parts.length) return null;
         function emit(name, part) {
@@ -318,6 +330,35 @@ OpenRacer.Parts = (function () {
             return true;
         }
 
+        // grace and clear: a part that has come loose hits the car when it is clear of it
+        function settle(part, dt) {
+            if (!part.pending) return;
+            part.grace -= dt;
+            if (part.grace > 0) return;
+            if (clearOfCar(part)) { setGroups(part, true); part.pending = false; }
+            else if (part.grace < -CLEAR_WAIT) part.pending = false;      // it never got clear: it goes through the car, but not through the road
+        }
+
+        // a wheel that was torn off: it keeps the place and the speed it had, and the spin of the wheel
+        function startWheel(part) {
+            var o = part.object, w = v.wheels[part.wheel];
+            o.updateWorldMatrix(true, false);
+            o.matrixWorld.decompose(a, qInv, c);
+            part.body.setTranslation({ x: a.x, y: a.y, z: a.z }, true);
+            part.body.setRotation({ x: qInv.x, y: qInv.y, z: qInv.z, w: qInv.w }, true);
+            part.body.setBodyType(R.RigidBodyType.Dynamic, true);
+            b.set(a.x - v.px, a.y - v.py, a.z - v.pz);
+            part.body.setLinvel({ x: v.vx + v.wy * b.z - v.wz * b.y, y: v.vy + v.wz * b.x - v.wx * b.z, z: v.vz + v.wx * b.y - v.wy * b.x }, true);
+            c.set(1, 0, 0).applyQuaternion(qInv);                       // the axle of the wheel in the world
+            var spin = v.wheelSpinAtLoss[part.wheel] || 0;
+            part.body.setAngvel({ x: v.wx + c.x * spin, y: v.wy + c.y * spin, z: v.wz + c.z * spin }, true);
+            leaveModel(part);
+            part.state = "free";
+            part.body.setAngularDamping(0.1); part.body.setLinearDamping(0.05);
+            waitForClear(part);
+            emit("wheel torn", part);
+        }
+
         function startMoving(part, how) {
             var wasHeld = part.state === "held";
             if (wasHeld) {
@@ -406,6 +447,11 @@ OpenRacer.Parts = (function () {
             var moving = false;
             for (var i = 0; i < parts.length; i++) {
                 var part = parts[i];
+                if (part.wheel !== undefined) {
+                    if (part.state === "held" && v.wheelLost && v.wheelLost[part.wheel]) startWheel(part);
+                    if (part.state !== "held") { moving = true; settle(part, dt); }
+                    continue;
+                }
                 if (part.openTimer > 0) { part.openTimer -= dt; if (part.openTimer <= 0) { part.openTimer = 0; if (part.state === "held") startMoving(part, "hinge"); } }
                 if (part.detachTimer > 0) { part.detachTimer -= dt; if (part.detachTimer <= 0 && sb) sb.detachGroup(part.group); }
                 // the load: inertia of the part (mass times the acceleration of its place) and the shell on its nodes
@@ -463,13 +509,7 @@ OpenRacer.Parts = (function () {
                     if (part.state === "hinged" && (torn || (part.hinge.breakForce > 0 && part.load > part.hinge.breakForce))) startMoving(part, "free");
                 }
                 if (part.state !== "held") moving = true;
-                if (part.pending) {
-                    part.grace -= dt;
-                    if (part.grace <= 0) {
-                        if (clearOfCar(part)) { setGroups(part, true); part.pending = false; }
-                        else if (part.grace < -CLEAR_WAIT) part.pending = false;      // it never got clear: it goes through the car, but not through the road
-                    }
-                }
+                settle(part, dt);
             }
             if (!moving) return;
             refreshTrack();
@@ -522,8 +562,13 @@ OpenRacer.Parts = (function () {
 
         // the car is repaired: every part is back on it
         function repair() {
+            if (v.repairWheels) v.repairWheels();
             for (var i = 0; i < parts.length; i++) {
                 var p = parts[i];
+                if (p.wheel !== undefined) {
+                    if (p.state !== "held") { p.body.setBodyType(R.RigidBodyType.KinematicPositionBased, true); setGroups(p, false); p.object.matrixAutoUpdate = true; p.state = "held"; p.pending = false; p.region = null; }
+                    continue;
+                }
                 if (p.joint) { world.removeImpulseJoint(p.joint, true); p.joint = null; }
                 if (p.state !== "held") {
                     p.body.setBodyType(R.RigidBodyType.KinematicPositionBased, true);

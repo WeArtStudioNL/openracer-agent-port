@@ -85,7 +85,8 @@ OpenRacer.Wheel = function (parameters) {
     // Brings the wheel to the position and rotation display state. Safe without a 3D object.
     this.turn = function (turnAngle) {
         this.turnAngle = turnAngle;
-        if(this.object) this.object.children[0].rotation.y = -turnAngle;
+        // (a damaged wheel is bent: toe and camber, see Vehicle.js)
+        if(this.object) { this.object.children[0].rotation.y = -turnAngle - (this.toeBend || 0); this.object.children[0].rotation.z = this.camberBend || 0; }
     };
 
     this.getWheelVelocity = function () {
@@ -108,7 +109,7 @@ OpenRacer.Wheel = function (parameters) {
     // formula gives the size of the force for the length of that vector, and the force points against the slip. So a tyre that
     // brakes hard has less left to corner with, and past the peak both forces fall away together: the way a sliding tyre lets go.
     this.tyreForce = function (kappa, tanAlpha, load, surface) {
-        var grip = surface.static * this.gripScale * (this.condition || 1); // condition: the temperature and the wear of the tyre (Vehicle.js)
+        var grip = surface.static * this.gripScale * (this.condition || 1) * (this.damageGrip === undefined ? 1 : this.damageGrip); // condition: the temperature and the wear of the tyre (Vehicle.js)
         var mu = Math.min(1.4 * grip, Math.max(0.2 * grip, grip - this.loadSensitivity * (load - this.nominalLoad)));
         var slidingRatio = Math.min(0.98, surface.kinetic / surface.static);
         var C = 2 - (2 / Math.PI) * Math.asin(slidingRatio);

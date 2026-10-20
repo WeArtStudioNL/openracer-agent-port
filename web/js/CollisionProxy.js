@@ -53,7 +53,7 @@ OpenRacer.CollisionProxy = (function () {
         }
         if(!spheres || spheres.length < 8) return null;
         // the wheels stick out of the body: a sphere on each, smaller than the wheel, so the road is felt by the suspension and not by this
-        if(wheels) wheels.forEach(function (w) { spheres.push({ x: w.x, y: w.y, z: w.z, r: Math.max(0.12, 0.55 * w.radius), wheel: true }); });
+        if(wheels) wheels.forEach(function (w, wi) { spheres.push({ x: w.x, y: w.y, z: w.z, r: Math.max(0.12, 0.55 * w.radius), wheel: true, wheelIndex: wi }); });
         return spheres;
     }
 
@@ -139,11 +139,14 @@ OpenRacer.CollisionProxy = (function () {
                 try { object.softBodyMesh = OpenRacer.SoftBodyMesh.attach(model.tilt, v.softBody, toVehicle, partGroups(object, model)); } catch(e) { console.warn("SoftBodyMesh: " + e.message); }
                 console.log("soft body: " + v.softBody.count + " nodes, " + v.softBody.beamCount + " beams");
             }
+            // the wheels: car.json "softbody": { "wheel_strength": 25 } is the hit (kN s) that tears a wheel off; 0 keeps them on
+            v.wheelStrength = v.softBody ? (cfg.wheel_strength !== undefined ? Math.max(0, cfg.wheel_strength) : 25) * 1000 : 0;
             // loose and hinged parts (Parts.js); car.json "parts": [{ object, mode, ... }]
-            if(OpenRacer.Parts && object.config && object.config.parts && object.config.parts.length) {
+            var partSpecs = (object.config && object.config.parts) || [];
+            if(OpenRacer.Parts && (partSpecs.length || v.wheelStrength > 0)) {
                 OpenRacer.Parts.create({
-                    vehicle: v, softBody: v.softBody, softBodyMesh: object.softBodyMesh, spheres: spheres, specs: object.config.parts,
-                    root: model.tilt, toVehicle: toVehicle
+                    vehicle: v, softBody: v.softBody, softBodyMesh: object.softBodyMesh, spheres: spheres, specs: partSpecs,
+                    root: model.tilt, toVehicle: toVehicle, wheelObjects: v.wheelStrength > 0 ? model.wheels : null
                 }).then(function (parts) { if(parts) { object.parts = parts; v.parts = parts; console.log("parts: " + parts.parts.length); } });
             }
         }

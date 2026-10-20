@@ -263,7 +263,7 @@ OpenRacer.Car = function( config, domElement ) {
             if(wheel.object) {
                 wheel.object.position.copy(wheel.position);
                 wheel.object.quaternion.copy(this.body.quaternion);
-                if(i < 2) wheel.turn(this.vehicle.steerApplied);
+                wheel.turn(i < 2 ? this.vehicle.steerApplied : 0);
                 wheel.object.children[0].children[0].rotation.x = wheel.spin;
             }
         }

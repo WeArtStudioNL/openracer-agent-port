@@ -303,3 +303,18 @@ Mustang at 100 km/h (the car at 27.8 m/s): the hood on its hinge spun 2.8 rad/s 
 ### The game no longer stutters on a bump or a ramp
 
 On a bump, a jump or a ramp there are many triangles near the car that are not flat (the ramp itself), so the shell is worked out in full, and every one of its small steps (up to 14, see the step that follows the stiffest place) went through all those triangles for every node. `Vehicle.js` now finds, once per step of the physics, the triangles that each node can touch (`buildNodeTriangles`: within the radius of the node plus 0.2 m; the car does not move while the shell takes its small steps and a node moves a few centimetres at most), and the small steps only test those. On the test track with the Mustang of the example (195 nodes), driving up the ramp: the physics took 1.35 ms a step on average before (95% under 6.6 ms, at worst 13.4 ms) and 0.55 ms after (95% under 1.6 ms, at worst 2.4 ms). The crash test is the same as before (100 km/h: 38 cm of bend, 67 g, the parts come off).
+
+## Loose parts and the car, and damage to the wheels
+
+**Loose parts hit the car when they are clear of it.** A part that comes loose (or a hinged part that opens) has no contact with the car for 0.35 s;
+after that it hits the car as soon as it does not overlap it (`clearOfCar` in `Parts.js`). A part that is inside the car, or touches it like a
+door that is shut, used to be pushed out at a great speed when the contact started (a bumper flew off through the road). Now it waits until it is
+clear (at most 3 s; then it stays a ghost to the car, but not to the road). The wheels are part of the car for the parts (balls of the size of the
+tyre), and a hinged part hits the car too.
+
+**Wheels.** A hit of a wheel on a wall (the hard contacts of the wheel spheres, `Vehicle.js`) adds damage: the impulse (N s) divided by
+`softbody.wheel_strength` (kN s, default 25, 0 = the wheels never break; the field "wheel strength" of the Soft body card). Damage 0..1 bends
+the suspension: the wheel points aside (toe 0.09 rad and camber 0.12 rad at 1) so the car pulls to a side, and it grips up to 40 % less (the bend
+is shown on the model). At 1 the wheel is torn off: `wheelLost`, no tyre force and no spring on that corner, and `Parts.js` makes the wheel a
+rigid body (a cylinder) that keeps the speed and the spin it had, rolls away, hits the road and the car, and is put back by Repair. In the crash
+test with the Mustang: 60 km/h at a wall of 40 degrees bends the front wheel by 27 %, 80 km/h by 80 %, 110 km/h tears it off.

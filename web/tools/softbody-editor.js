@@ -73,6 +73,7 @@ export function initSoftBody(api) {
     fields.forEach((i) => i.addEventListener("change", changed));
     $("sbEnabled").addEventListener("change", changed);
     $("sbMaxNodes").addEventListener("change", () => { if (!sb.layout) changed(); });
+    $("sbWheelStrength").addEventListener("change", () => changed(true));
 
     // the shell is made again from the new settings when the bench runs
     let restartTimer = 0;
@@ -283,6 +284,8 @@ export function initSoftBody(api) {
         const beams = [...sb.beamEdits.values()];
         const max = parseInt($("sbMaxNodes").value, 10);
         if (max >= 10) soft.max_nodes = Math.min(120, max);
+        const wheel = parseFloat($("sbWheelStrength").value);
+        if (wheel >= 0) soft.wheel_strength = wheel;
         if (sb.layout) soft.layout = sb.layout;
         if (nodes.length) soft.nodes = nodes;
         if (beams.length) soft.beams = beams;
@@ -297,6 +300,7 @@ export function initSoftBody(api) {
         presetSelect.selectedIndex = 0;
         $("sbEnabled").checked = soft.enabled !== false;
         $("sbMaxNodes").value = soft.max_nodes || "";
+        $("sbWheelStrength").value = soft.wheel_strength !== undefined ? soft.wheel_strength : "";
         sb.nodeEdits = new Map((soft.nodes || []).map((n) => [n.i, { yield_force: n.yield_force, break_force: n.break_force }]));
         sb.beamEdits = new Map((soft.beams || []).map((b) => [Math.min(b.a, b.b) + "-" + Math.max(b.a, b.b), b]));
         sb.parts = JSON.parse(JSON.stringify(car.parts || []));
