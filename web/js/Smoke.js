@@ -141,7 +141,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
     var self = this, quiet = false;                      // quiet: the puffs that are made while the smoke moves (wisps) are not recorded: the replay makes them again
     var alive = 0, made = 0;                             // how many puffs are alive after the last frame, and how many were made in this one: with none, nothing is done
 
-    function spawn(x, y, z, vx, vy, vz, heat, dust) {
+    function spawn(x, y, z, vx, vy, vz, heat, dust, fine) {
         made++;
         var i = next;
         wisp[i] = 0; touched[i] = -1e9;
@@ -156,6 +156,13 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
         size0[i] = 0.2 + Math.random() * 0.4;
         size1[i] = (dust ? 2.4 : 6) + Math.random() * 1.4 + heat * 1.6;
         alpha0[i] = ((dust ? 0.3 : 0.4) + 0.32 * heat) * Math.max(0.5, Math.min(1.2, 0.5 + 0.5 * amount));
+        if(fine) {
+            // the second layer: small dense puffs that hug the tyre and curl up behind it (not the wide plume), that are gone in a second or two
+            life[i] = 0.9 + Math.random() * 0.9;
+            size0[i] = 0.14 + Math.random() * 0.14;
+            size1[i] = 0.45 + Math.random() * 0.5 + heat * 0.3;
+            alpha0[i] = (0.5 + 0.3 * heat) * Math.max(0.5, Math.min(1.2, 0.5 + 0.5 * amount));
+        }
         rotations[i] = Math.random() * 6.2832;
         spin[i] = (Math.random() - 0.5) * 0.8;
         frames[i] = Math.floor(Math.random() * 4);
@@ -208,7 +215,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                 var dust = wheel.surface !== "road" && wheel.surface !== "track01";
                 var cx = wheel.contact.x, cy = wheel.contact.y, cz = wheel.contact.z;
                 var from = last[w];
-                if(!from || Math.hypot(cx - from.x, cz - from.z) > 6) from = { x: cx, y: cy, z: cz, carry: 0 };
+                if(!from || Math.hypot(cx - from.x, cz - from.z) > 6) from = { x: cx, y: cy, z: cz, carry: 0, fine: 0 };
                 // the number of puffs follows the time (the rate) and they are spread over the path since the last frame
                 from.carry += (dust ? 45 : 90) * wheel.smoke * delta * amount;
                 var count = Math.floor(from.carry);
@@ -232,6 +239,23 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                         carVel.x * 0.06 + fwd.x * along2 + left.x * side + (Math.random() - 0.5) * 0.5,
                         0.4 + Math.random() * 0.9 + Math.min(2, spun * 0.08),
                         carVel.z * 0.06 + fwd.z * along2 + left.z * side + (Math.random() - 0.5) * 0.5, wheel.heat, dust);
+                }
+                // the second layer: many small puffs close to the tyre, from the patch of contact up the back of it
+                from.fine += (dust ? 40 : 150) * wheel.smoke * delta * amount;
+                var fineCount = Math.floor(from.fine);
+                from.fine -= fineCount;
+                for(var q = 0; q < fineCount; q++) {
+                    var g = (q + Math.random()) / Math.max(1, fineCount);
+                    var curl = Math.random();                                                       // how far up the back of the tyre it starts (up to 30 cm)
+                    var behind = (0.04 + curl * 0.16 + (Math.random() - 0.5) * 0.08) * direction;  // (behind the patch of contact: where the tread goes up)
+                    var along3 = direction * Math.min(4, spun * (0.08 + Math.random() * 0.12));
+                    var side3 = outward * Math.min(0.6, spun * 0.02) + (Math.random() - 0.5) * 0.35;
+                    spawn(from.x + (cx - from.x) * g + fwd.x * behind + left.x * (Math.random() - 0.5) * 0.18,
+                        from.y + (cy - from.y) * g + curl * 0.3,
+                        from.z + (cz - from.z) * g + fwd.z * behind + left.z * (Math.random() - 0.5) * 0.18,
+                        carVel.x * 0.05 + fwd.x * along3 + left.x * side3 + (Math.random() - 0.5) * 0.3,
+                        0.5 + Math.random() * 1.1 + Math.min(1.2, spun * 0.05),
+                        carVel.z * 0.05 + fwd.z * along3 + left.z * side3 + (Math.random() - 0.5) * 0.3, wheel.heat, dust, true);
                 }
                 from.x = cx; from.y = cy; from.z = cz;
                 last[w] = from;
