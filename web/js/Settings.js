@@ -97,7 +97,7 @@ var Settings = (function() {
     var actionsById = {};
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
-    var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 1, volume: 0.8,
+    var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, dragReady: 2, dragGreen: 1.5, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 1, volume: 0.8,
         padSlow: 1.5, padAssist: true, keySteer: 1, keyAssist: true,
         // the graphics (Graphics.js): a preset is a set of these
         gfxPreset: "high", gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100 };
@@ -692,6 +692,8 @@ var Settings = (function() {
         page.appendChild(optionRow("Traction control", options.tc ? "On" : "Off", function() { setOption("tc", !options.tc); }));
         page.appendChild(optionRow("Two-step (the clutch in at a standstill holds the engine at the two-step speed)", options.twoStep ? "On" : "Off", function() { setOption("twoStep", !options.twoStep); }));
         page.appendChild(optionRow("Launch control (brake and full throttle at a standstill, let go of the brake)", options.launchControl ? "On" : "Off", function() { setOption("launchControl", !options.launchControl); }));
+        page.appendChild(sliderRow("Drag strip: \"Get ready\" before the lights", "dragReady", 0.5, 6, 0.5, function(v) { return v.toFixed(1) + " s"; }));
+        page.appendChild(sliderRow("Drag strip: lights stay after the green", "dragGreen", 0.5, 5, 0.5, function(v) { return v.toFixed(1) + " s"; }));
         page.appendChild(optionRow("ESC (stability control)", options.esc ? "On" : "Off", function() { setOption("esc", !options.esc); }));
         var cameraNames = ["1 Fixed behind the car", "2 Follow (smooth, FOV with speed)", "3 Cockpit", "4 Free camera (buttons on the HUD, P looks at the car, O moves with it)"];
         page.appendChild(optionRow("Camera", cameraNames[options.camera - 1] || "1", function() { setOption("camera", options.camera % cameraCount() + 1); }));

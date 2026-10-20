@@ -21,8 +21,9 @@ OpenRacer.DragStrip = (function () {
     var STAGE_MIN = -0.4, STAGE_MAX = 0.25;      // m: the front wheels at the line
     var ROLLOUT = 0.3;                           // m: the car has left the line
     var AMBER = 0.5;                             // s between the lights of the tree
-    var READY = 2.0;                             // s of "Get ready" before the tree
-    var GREEN_SHOWN = 1.5;                       // s that the tree stays after the green light
+    // "Get ready" before the tree (2 s) and how long the tree stays after the green light (1.5 s): the settings menu sets them
+    function ready() { var v = Settings.option("dragReady"); return v > 0 ? v : 2; }
+    function greenShown() { var v = Settings.option("dragGreen"); return v > 0 ? v : 1.5; }
     var strip = null, state = "idle", lines = null, hud = null, movableDone = false;
     var slip = null;
     var tReady = 0, tTree = 0, stagedS = 0, tGreen = 0, t0 = null, reaction = 0, results = [], prevT = 0, prevS = 0, prevV = 0, finishNote = "", lastHtml = "";
@@ -175,7 +176,7 @@ OpenRacer.DragStrip = (function () {
         if (state === "void") html += "<div class=\"note bad\">Drive back behind the line, then come up slowly</div>";
         if (state === "approach") html += "<div class=\"note\">" + (s > STAGE_MIN && s <= STAGE_MAX ? "Stand still at the line" : "Front wheels to the line, slowly") + "</div>";
         if (state === "ready") html += "<div class=\"distance\">Get ready…</div><div class=\"note\">Hold the car still at the line</div>";
-        var showTree = state === "tree" || state === "false" || (state === "go" && clock - tGreen < GREEN_SHOWN);
+        var showTree = state === "tree" || state === "false" || (state === "go" && clock - tGreen < greenShown());
         if (showTree) {
             var t = clock - tTree;
             var green = state === "go";
@@ -228,7 +229,7 @@ OpenRacer.DragStrip = (function () {
             case "ready":
                 // standing still at the line: two seconds to get ready (the two-step on), then the lights; moving away cancels it
                 if (s < STAGE_MIN - 0.3 || s > STAGE_MAX + 0.3 || speed > 1.5 || !inLane) { state = "approach"; break; }
-                if (clock - tReady >= READY) { state = "tree"; tTree = clock; stagedS = s; }
+                if (clock - tReady >= ready()) { state = "tree"; tTree = clock; stagedS = s; }
                 break;
             case "tree":
                 if (s > stagedS + ROLLOUT) { state = "false"; break; }                  // away before the green light
