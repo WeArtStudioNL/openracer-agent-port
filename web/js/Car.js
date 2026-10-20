@@ -496,6 +496,9 @@ OpenRacer.Car = function( config, domElement ) {
 
         if(showDebug) {
             var metric = Settings.option("units") !== "imperial";
+            // the surface of the tread of every tyre: grip below 180, gum from 180 (marbles from 150), smoke from 220, with the road under it
+            var phaseOf = function(t) { return t >= 220 ? "smoke" : (t >= 180 ? "gum" : (t >= 150 ? "marbles" : "grip")); };
+            debugOut("Tread surface: " + ["FR", "FL", "RL", "RR"].map(function(n, i) { var wh = v.wheels[i]; return n + " " + Math.round(wh.surfT) + "° " + phaseOf(wh.surfT) + " (road " + Math.round(wh.roadT) + "°)"; }).join(" | "));
             debugOut(Math.round(v.u * (metric ? 3.6 : 2.2369362920544)) + (metric ? " km/h" : " mph") + " | Gear: " + this.gearLabel() + " (" + this.gearboxMode +
                 (this.clutchPedalPresent ? ", clutch pedal" : "") + ") | RPM: " + Math.round(this.engineRPM) +
                 (this.engine.running ? "" : " (STALLED: " + (this.clutchPedalPresent ? "clutch + throttle or I to start" : "starting") + ")") +

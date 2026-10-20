@@ -222,6 +222,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         w.hasContact = false;
         w.heat = 0;                         // how hot the tyre is from sliding (0..1)
         w.smoke = 0;                        // how much smoke it makes (0..1)
+        w.roadT = 25;                       // the temperature of the strip of road under it (°C): it heats when the tyre stays on it (a burnout) and is replaced when the car moves (a lock-up)
         w.surfT = 25;                       // the temperature of the surface of the tread (°C): what the slip burns heats a thin layer, see the smoke below
         w.squeal = 0;                       // how loud it squeals (0..1)
         w.normalForce = 0;
@@ -263,6 +264,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     };
     this.tyreKind = function () { return tc; };
     this.setCompound(parameters.compound);
+    var ROAD_CAPACITY = 2500;                                            // J/K of the strip of road under the tyre that takes the heat
     var SURFACE_SHARE = 0.3, SURFACE_CAPACITY = 350, SURFACE_TAU = 6;    // the share of the burnt power that heats the rubber, the heat that the hot layer takes (J/K), how slowly it gives it away (s)
 
     function conditionOf(w) {
@@ -496,7 +498,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             w.omega = 0;
             w.slipRatio = w.slipTan = 0;
             w.absFactor = 1;
-            w.heat = w.smoke = w.squeal = 0; w.surfT = w.temp;
+            w.heat = w.smoke = w.squeal = 0; w.surfT = w.temp; w.roadT = this.ambient;
             w.velocity.set(0, 0, 0);
             w.lastCompression = undefined;
             w.susLength = w.restLengthWheel !== undefined ? w.restLengthWheel : this.restLength;   // the wheel where it is at rest on the spring
@@ -1506,15 +1508,24 @@ OpenRacer.Vehicle = function (parameters, input) {
                 // spins at a standstill, or one that spins a lot faster than the car goes, burns a lot of power and gets there in a few seconds; one that
                 // only slides a little, or only for a moment, does not. On dirt and grass there is dust, from the slide as before.
                 var burnt = Math.abs(wheel.fx * (wheel.omega * wheel.radius - vl)) + Math.abs(wheel.fy * vt);              // W
-                wheel.surfT += (SURFACE_SHARE * burnt / SURFACE_CAPACITY - (wheel.surfT - wheel.temp) / SURFACE_TAU) * dt;
-                wheel.surfT = Math.max(wheel.temp, Math.min(450, wheel.surfT));
+                // The road under the tyre: what the rubber does not take goes into it. A tyre that stays on the same strip (a burnout, the car at a
+                // standstill) heats it, and a hot road takes less: more of the heat stays in the rubber. A tyre that moves over the road meets new,
+                // cold road all the time (a lock-up: the heat is spread over the braking distance), so the share stays at what a cold road gives.
+                var strip = Math.abs(vl) / 0.15 + 0.15;                                  // 1/s: how fast the strip is replaced (the patch is about 15 cm long) or cools
+                wheel.roadT += (((1 - SURFACE_SHARE) * burnt / ROAD_CAPACITY) - (wheel.roadT - self.ambient) * strip) * dt;
+                wheel.roadT = Math.max(self.ambient, Math.min(300, wheel.roadT));
+                var share = SURFACE_SHARE + 0.3 * Math.min(1, (wheel.roadT - self.ambient) / 150);
+                wheel.surfT += (share * burnt / SURFACE_CAPACITY - (wheel.surfT - wheel.temp) / SURFACE_TAU) * dt;
+                wheel.surfT = Math.max(wheel.temp, Math.min(330, wheel.surfT));
                 if(wheel.surface === "road" || wheel.surface === "track01") {
                     // A spinning tyre throws a thick cloud (a burnout); one that is locked, or only slides sideways (a handbrake turn, a drift without
                     // power), is scrubbed along the road: it smokes, but thinner, and most of what it makes is the mark on the road.
                     var spinShare = Math.max(0, Math.min(1, Math.max(0, wheel.omega * wheel.radius - vl) / Math.max(2, slideSpeed)));
                     var density = 0.3 + 0.7 * spinShare;
-                    var smoking = smoothstep(175 + tc.smoke, 250 + tc.smoke, wheel.surfT);
-                    wheel.heat = smoothstep(175 + tc.smoke, 320 + tc.smoke, wheel.surfT) * (0.4 + 0.6 * spinShare);
+                    // from about 180 degrees the rubber turns to gum (a light haze, and the marbles of Marbles.js); from about 220 the smoke is a plume
+                    // (the particles of Smoke.js), full at 260 and more
+                    var smoking = 0.12 * smoothstep(180 + tc.smoke, 220 + tc.smoke, wheel.surfT) + 0.88 * smoothstep(220 + tc.smoke, 260 + tc.smoke, wheel.surfT);
+                    wheel.heat = smoothstep(200 + tc.smoke, 330 + tc.smoke, wheel.surfT) * (0.4 + 0.6 * spinShare);
                     wheel.smoke = fz > 200 ? smoking * (0.4 + 0.6 * Math.min(1, burnt / 40000)) * density : 0;
                 } else {
                     wheel.smoke = fz > 200 ? Math.min(1, 0.15 * sliding + wheel.heat * Math.min(1, sliding * 2 + 0.2)) : 0;
