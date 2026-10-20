@@ -235,7 +235,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
         var drag = Math.exp(-2.2 * delta);
         for(var i = 0; i < capacity; i++) {
             if(age[i] >= life[i]) {
-                if(alphas[i] !== 0) alphas[i] = 0;
+                if(alphas[i] !== 0 || sizes[i] !== 0) { alphas[i] = 0; sizes[i] = 0; }      // (no size: a quad of metres that is not seen is still drawn, pixel by pixel, until the fragment shader throws it away)
                 continue;
             }
             age[i] += delta;
