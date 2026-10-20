@@ -4,6 +4,9 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 ## Unreleased
 
+**Controls**
+- Automatic gearbox: holding the brake key at a standstill (or below a speed that can be set) puts the car in reverse while it is held; the gas key brakes in reverse and is D again at a standstill.
+
 **Camera**
 - The fixed and the follow camera no longer go through walls or over a crest: three rays from the car to the camera (and to a place beside it) against the triangles of the track bring the camera in front of what is in the way; it comes in at once and goes out again smoothly.
 

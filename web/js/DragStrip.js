@@ -25,7 +25,7 @@ OpenRacer.DragStrip = (function () {
     function ready() { var v = Settings.option("dragReady"); return v > 0 ? v : 2; }
     function greenShown() { var v = Settings.option("dragGreen"); return v > 0 ? v : 1.5; }
     var strip = null, state = "idle", lines = null, hud = null, movableDone = false;
-    var slip = null, topSpeed = 0, launchAids = [];
+    var slip = null, topSpeed = 0, launchAids = [], holding = false;
     var tReady = 0, tTree = 0, stagedS = 0, tGreen = 0, t0 = null, reaction = 0, results = [], prevT = 0, prevS = 0, prevV = 0, finishNote = "", lastHtml = "";
 
     function parse(ds) {
@@ -441,8 +441,10 @@ OpenRacer.DragStrip = (function () {
                 break;
         }
         prevT = clock; prevS = s; prevV = forwardSpeed;
+        // at the line the brake key holds the car for the start: the automatic gearbox must not turn it into reverse (Car.js)
+        holding = state === "ready" || state === "tree" || state === "go" || state === "false" || (state === "approach" && s > -2 && s < 1);
         render(s, clock);
     }
 
-    return { update: update, reset: reset, showTop: showTop, ticket: ticket, get state() { return state; } };
+    return { update: update, reset: reset, showTop: showTop, ticket: ticket, get state() { return state; }, get holding() { return holding; } };
 })();

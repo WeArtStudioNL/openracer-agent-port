@@ -85,6 +85,7 @@ OpenRacer.Car = function( config, domElement ) {
     this.accelerate = false;
     this.brake = false;
     this.reverse = false;
+    this.autoReverse = false;        // automatic: the car is in reverse because the brake key was held at a standstill
     this.turnLeft = false;
     this.turnRight = false;
     this.turnDir = 0;
@@ -637,6 +638,20 @@ OpenRacer.Car = function( config, domElement ) {
     this.pollInput = function() {
         this.accelerate = Settings.isDown("throttle");
         this.brake = Settings.isDown("brake");
+        // The automatic gearbox in D: holding the brake key at a standstill (or below a speed) puts the car in reverse while the key is held, as in
+        // most games. In reverse the brake key is the gas and the gas key brakes; the gas key at a standstill is D again.
+        var rawUp = this.accelerate, rawDown = this.brake;
+        if(this.gearboxMode === "automatic" && this.selector === "D" && !this.parkingLock && Settings.option("autoReverse") &&
+           !this.vehicle.launchControlEnabled && !(OpenRacer.DragStrip && OpenRacer.DragStrip.holding)) {
+            var along = this.vehicle.u, limit = Math.max(0.3, Settings.option("autoReverseSpeed") / 3.6);
+            if(!this.autoReverse) {
+                if(rawDown && !rawUp && along < limit) this.autoReverse = true;
+            } else if(rawUp && !rawDown && along > -limit) this.autoReverse = false;
+            else if(!rawUp && !rawDown && along > -0.3) this.autoReverse = false;
+        } else {
+            this.autoReverse = false;
+        }
+        if(this.autoReverse) { this.accelerate = rawDown; this.brake = rawUp; }
         this.turnLeft = Settings.isDown("steerLeft");
         this.turnRight = Settings.isDown("steerRight");
         this.handbrake = Settings.isDown("handbrake");
@@ -652,7 +667,7 @@ OpenRacer.Car = function( config, domElement ) {
         var reverseKey = Settings.isDown("reverse");
         if(this.gearboxMode === "automatic") {
             // while the key is held it is the R of the selector
-            this.reverse = reverseKey || this.selector === "R";
+            this.reverse = reverseKey || this.selector === "R" || this.autoReverse;
             this.neutral = (this.selector === "N" || this.selector === "P") && !reverseKey;
             this.parkingLock = this.selector === "P" && !reverseKey;
         } else if(reverseKey !== heldReverse) {
