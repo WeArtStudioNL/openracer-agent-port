@@ -217,7 +217,12 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                 var from = last[w];
                 if(!from || Math.hypot(cx - from.x, cz - from.z) > 6) from = { x: cx, y: cy, z: cz, carry: 0, fine: 0 };
                 // the number of puffs follows the time (the rate) and they are spread over the path since the last frame
-                from.carry += (dust ? 45 : 90) * wheel.smoke * delta * amount;
+                // The small layer begins first (from the first smoke of the tyre), the big plume comes later (when the tyre smokes hard), and when the
+                // wheel stands still (and the car too) the plume stops and only a few small puffs go on.
+                var turning = Math.min(1, Math.max(Math.abs((wheel.omega || 0) * wheel.radius), Math.abs(wheel.forwardSpeed || 0)) / 3);
+                var bigShare = dust ? 1 : Math.max(0, Math.min(1, (wheel.smoke - 0.25) / 0.45)) * turning;
+                var fineShare = Math.min(1, wheel.smoke * 4) * (0.12 + 0.88 * turning);
+                from.carry += (dust ? 45 : 90) * wheel.smoke * bigShare * delta * amount;
                 var count = Math.floor(from.carry);
                 from.carry -= count;
                 // The smoke is made where the tyre meets the road and has almost nothing of the speed of the car (it is left on the road, so when the car
@@ -241,7 +246,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                         carVel.z * 0.06 + fwd.z * along2 + left.z * side + (Math.random() - 0.5) * 0.5, wheel.heat, dust);
                 }
                 // the second layer: many small puffs close to the tyre, from the patch of contact up the back of it
-                from.fine += (dust ? 40 : 150) * wheel.smoke * delta * amount;
+                from.fine += (dust ? 40 : 150) * fineShare * delta * amount;
                 var fineCount = Math.floor(from.fine);
                 from.fine -= fineCount;
                 for(var q = 0; q < fineCount; q++) {
@@ -310,7 +315,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                                 spawn(px, py - 0.04, pz, vehicle.vx * 0.9, vehicle.vy * 0.9 + 0.2, vehicle.vz * 0.9, 0, false);
                                 var w = (next + capacity - 1) % capacity;
                                 wisp[w] = 1; bases[w] = bases[i];
-                                life[w] = 0.8 + Math.random() * 0.9;
+                                life[w] = 0.4 + Math.random() * 0.9;
                                 size0[w] = 0.25 + Math.random() * 0.15; size1[w] = 0.9 + Math.random() * 0.6;
                                 alpha0[w] = alpha0[i] * 0.8;
                             }
