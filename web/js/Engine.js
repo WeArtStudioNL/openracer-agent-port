@@ -51,12 +51,17 @@ OpenRacer.Engine = function( parameters ) {
     this.running = true;
     this.starting = false;
     this.throttleCut = 1; // 0..1 factor from the rev limiter, for the dashboard
-    // The rev limiter cuts the fuel completely when the limit is reached, and gives it back when the engine has dropped a band below it and the cut has
-    // lasted a minimum time: the engine bounces against the limit, it does not lean on it.
-    this.limiterBand = 250;      // rpm
-    this.limiterCutMin = 0.06;   // s
+    // The rev limiter cuts the fuel completely when the limit is reached, and gives it back after a time that makes the cuts come at a set rate
+    // (limiter_hz, cuts per second): the cut lasts for the rest of the period that the fuel was on for. The engine bounces against the limit.
+    // holdRPM is a lower limit that the car asks for (the two-step of the key, the launch control, Vehicle.js); 0 for none.
+    this.limiterHz = parameters.limiter_hz || 12;
+    this.twoStepRPM = parameters.two_step_rpm || Math.round(this.limiterRPM * 0.7 / 100) * 100;     // the lower limit of the two-step key
+    this.launchRPM = parameters.launch_rpm || Math.round(this.limiterRPM * 0.6 / 100) * 100;        // the engine speed that the launch control holds
+    this.holdRPM = 0;
     this.cutting = false;
     this.cutTime = 0;
+    this.onTime = 1;
+    this.cutLength = 0.05;
     this.noFuel = false;  // the tank is empty: the engine dies and does not start (Vehicle.js sets it)
     // A turbo: a share of the torque of the curve only comes with boost, which builds up with the throttle open above a
     // threshold speed over the spool time (the lag) and falls away fast when the throttle is shut. "turbo" in the engine of
@@ -67,7 +72,7 @@ OpenRacer.Engine = function( parameters ) {
     this.turboThreshold = turbo ? (turbo.threshold_rpm || 2500) : 2500;
     this.boost = 0;       // 0..1, how much of the boost is there
     this.updateBoost = function (throttle, dt) {
-        this.cutTime += dt;
+        this.cutTime += dt; this.onTime += dt;
         if(this.turboShare <= 0) { this.boost = 0; return; }
         var rpm = this.getRPM();
         var wanted = this.running ? Math.max(0, Math.min(1, throttle)) * Math.max(0, Math.min(1, (rpm - this.turboThreshold) / 2000)) : 0;
@@ -140,10 +145,13 @@ OpenRacer.Engine = function( parameters ) {
         var thr = Math.max(pedal, idleThrottle);
 
         // rev limiter: cut the fuel
-        if(rpm >= this.limiterRPM) {
-            if(!this.cutting) { this.cutting = true; this.cutTime = 0; }
-        } else if(this.cutting && rpm < this.limiterRPM - this.limiterBand && this.cutTime >= this.limiterCutMin) {
-            this.cutting = false;
+        var limit = this.holdRPM > 0 ? Math.min(this.holdRPM, this.limiterRPM) : this.limiterRPM;
+        if(this.cutting) {
+            if(this.cutTime >= this.cutLength) { this.cutting = false; this.onTime = 0; }
+        } else if(rpm >= limit) {
+            this.cutting = true;
+            this.cutTime = 0;
+            this.cutLength = Math.max(0.008, 1 / this.limiterHz - this.onTime);       // the period of the cuts: what is left after the time that the fuel was on
         }
         this.throttleCut = this.cutting ? 0 : 1;
         thr *= this.throttleCut;

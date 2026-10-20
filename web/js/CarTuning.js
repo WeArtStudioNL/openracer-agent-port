@@ -48,6 +48,9 @@ OpenRacer.CarTuning = (function () {
             ["power", "Power", "%", 30, 250, 1],
             ["idle_rpm", "Idle speed", "rpm", 500, 2000, 50],
             ["limiter_rpm", "Rev limit", "rpm", 3000, 13000, 100],
+            ["limiter_hz", "Rev limiter: cuts per second", "Hz", 2, 40, 1],
+            ["two_step_rpm", "Two-step: engine speed (key held)", "rpm", 2000, 13000, 100],
+            ["launch_rpm", "Launch control: engine speed", "rpm", 2000, 13000, 100],
             ["engine_inertia", "Inertia of the engine", "kg m²", 0.05, 1.5, 0.01],
             ["engine_braking", "Engine braking", "%", 20, 300, 5],
             ["turbo_share", "Turbo: share of the torque that is boost (0: no turbo)", "%", 0, 90, 5],
@@ -126,6 +129,9 @@ OpenRacer.CarTuning = (function () {
             power: (en.power_scale !== undefined ? en.power_scale : 1) * 100,
             idle_rpm: en.idle_rpm || 900,
             limiter_rpm: en.limiter_rpm || 6600,
+            limiter_hz: en.limiter_hz || 12,
+            two_step_rpm: en.two_step_rpm || Math.round((en.limiter_rpm || 6600) * 0.7 / 100) * 100,
+            launch_rpm: en.launch_rpm || Math.round((en.limiter_rpm || 6600) * 0.6 / 100) * 100,
             engine_inertia: en.inertia || 0.4,
             engine_braking: (en.braking_scale !== undefined ? en.braking_scale : 1) * 100,
             drive: dt.drive || "rwd",
@@ -200,6 +206,9 @@ OpenRacer.CarTuning = (function () {
             power: v.power / 100,
             idle_rpm: v.idle_rpm,
             limiter_rpm: v.limiter_rpm,
+            limiter_hz: v.limiter_hz,
+            two_step_rpm: v.two_step_rpm,
+            launch_rpm: v.launch_rpm,
             engine_inertia: v.engine_inertia,
             engine_braking: v.engine_braking / 100,
             drive: v.drive,
@@ -272,6 +281,9 @@ OpenRacer.CarTuning = (function () {
         c.engine.braking_scale = v.engine_braking / 100;
         c.engine.idle_rpm = v.idle_rpm;
         c.engine.limiter_rpm = v.limiter_rpm;
+        c.engine.limiter_hz = v.limiter_hz;
+        c.engine.two_step_rpm = v.two_step_rpm;
+        c.engine.launch_rpm = v.launch_rpm;
         c.engine.inertia = v.engine_inertia;
         if(v.turbo_share > 0) c.engine.turbo = { share: v.turbo_share / 100, spool: v.turbo_spool, threshold_rpm: v.turbo_threshold };
         else delete c.engine.turbo;

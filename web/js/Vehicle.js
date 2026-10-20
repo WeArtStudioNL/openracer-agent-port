@@ -157,6 +157,14 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.escEnabled = false;          // stability control (see step())
     this.absEnabled = true;
     this.tcFactor = 1;
+    // Launch: the two-step key, the transbrake key and the launch control (an option). While the car is held for a launch the clutch is open and the
+    // engine turns freely to its held speed (the lower limit, Engine.js: holdRPM); letting go engages the clutch fast, and the traction control (also
+    // when it is off) keeps the wheels at the grip for the first part of the launch.
+    this.launchControlEnabled = false; // the option: brake and full throttle at a standstill hold the engine speed, letting go of the brake launches
+    this.lcArmed = false;              // the launch control holds the engine now
+    this.transbrakeHeld = false;       // the transbrake key holds the car now
+    this.launchRelease = 0;            // s left of the ramp of the clutch after a launch
+    this.launching = 0;                // s left of the launch, with the traction control on
     this.escLevel = 0;                // how hard the stability control works (0..1)
     this.yawWanted = 0;               // the yaw rate the steering asks for, as the car can follow it (it needs a moment to turn)
     this.steerApplied = 0;            // the angle of the front wheels
@@ -454,6 +462,9 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.engine_braking !== undefined) engine.motoringFactor = t.engine_braking;
         if(t.idle_rpm !== undefined) { engine.idleRPM = t.idle_rpm; engine.stallRPM = t.idle_rpm * 0.4; }
         if(t.limiter_rpm !== undefined) { engine.limiterRPM = t.limiter_rpm; engine.maxRPM = t.limiter_rpm + 1000; }
+        if(t.limiter_hz !== undefined) engine.limiterHz = Math.max(1, t.limiter_hz);
+        if(t.two_step_rpm !== undefined) engine.twoStepRPM = t.two_step_rpm;
+        if(t.launch_rpm !== undefined) engine.launchRPM = t.launch_rpm;
         if(t.engine_inertia !== undefined) engine.inertia = t.engine_inertia;
         if(t.final_drive !== undefined) this.final_drive = t.final_drive;
         if(t.reverse_ratio !== undefined) this.reverseRatio = t.reverse_ratio;
@@ -1422,6 +1433,27 @@ OpenRacer.Vehicle = function (parameters, input) {
         var rollRight = Math.asin(Math.max(-1, Math.min(1, tmpA.x)));
         var speedNow = Math.sqrt(self.vx * self.vx + self.vy * self.vy + self.vz * self.vz);
         var restHold = 1 - smoothstep(0.5, 2, speedNow);   // 1 at a standstill
+
+        // ---- launch: the transbrake, the launch control and the two-step
+        var launchGear = self.getGearRatio();
+        var wasHeld = self.lcArmed || self.transbrakeHeld;
+        var wasLC = self.lcArmed;
+        self.transbrakeHeld = !!inp.transbrake && launchGear !== 0 && !self.airborne;
+        if(self.launchControlEnabled && launchGear > 0 && Math.abs(self.u) < 2) {
+            // armed with the brake and full throttle; it stays armed while the brake and most of the throttle stay (so the pedals can move a little)
+            self.lcArmed = self.lcArmed ? (inp.brakePedal > 0.15 && inp.throttle > 0.5) : (inp.brakePedal > 0.5 && inp.throttle > 0.7);
+        } else {
+            self.lcArmed = false;
+        }
+        if(wasHeld && !(self.lcArmed || self.transbrakeHeld) && inp.throttle > 0.3) {
+            self.launchRelease = 0.15;                       // the clutch takes up in this time: a launch
+            if(wasLC && !self.transbrakeHeld && launchGear > 0) self.launching = 6;
+        }
+        if(self.launching > 0) {
+            self.launching -= dt;
+            if(self.u > 25 || inp.throttle < 0.3 || self.u < -0.5) self.launching = 0;
+        }
+        engine.holdRPM = inp.twoStep ? engine.twoStepRPM : (self.lcArmed ? engine.launchRPM : 0);
         var newAxleFy = [0, 0];
 
         for(var iw = 0; iw < 4; iw++) {
@@ -1582,6 +1614,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             var bt = brakePedal * wheel.maxBrakeTorque * wheel.absFactor;
             if(!wheel.front) bt += handbrake * 1800;
             if(inp.parkingLock) bt = Math.max(bt, 4000); // P: the parking lock holds all wheels
+            if(self.transbrakeHeld && wheel.driven) bt = Math.max(bt, 4000); // the transbrake holds the driven wheels
             bt += escBrake[iw];
             wheel.esc = escBrake[iw] > 30;
             brakeTorque[iw] = bt;
@@ -1599,7 +1632,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         // the allowance (down) or below it (up), and is still at the allowance. A switch (fast down above it, slow up below it) made the power
         // saw-tooth at the edge, and the engine speed with it: the car stuttered under traction control instead of pulling in one stroke.
         var slipError = maxDrivenSlip - 1;
-        if(self.tcEnabled) {
+        if(self.tcEnabled || self.launching > 0) {
             var rate = slipError > 0 ? -(4 + 8 * slipError) * Math.min(1, slipError * 4) : Math.min(1, -slipError * 6) + 1.5 * Math.max(0, Math.min(1, (-slipError - 0.5) / 0.4));
             self.tcFactor = Math.max(0.2, Math.min(1, self.tcFactor + dt * rate));
             if(slipError > 0.05) for(var ti = 0; ti < 4; ti++) if(wheels[ti].driven) wheels[ti].tc = true;
@@ -1631,6 +1664,11 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var ts = self.shiftTimer;
                 engagement = Math.min(engagement, ts > 0.14 ? 0 : 1 - smoothstep(0, 0.14, ts));
             }
+        }
+        if(self.lcArmed || self.transbrakeHeld) engagement = 0;     // held for a launch: the engine turns free
+        else if(self.launchRelease > 0) {
+            engagement = Math.min(engagement, 1 - self.launchRelease / 0.15);
+            self.launchRelease = Math.max(0, self.launchRelease - dt);
         }
         self.clutchEngagement = engagement;
 

@@ -4,6 +4,10 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 ## Unreleased
 
+**Launch**
+- The rev limiter is a hard fuel cut with a set rate (*Cuts per second*), so the engine bounces against the limit.
+- **Two-step** (Q), **transbrake** (F) and **launch control** (J, an option) with their own engine speeds in the tuning menu and the car editor; the pills LC, 2S and TB show them.
+
 **3D physics**
 - The road is no longer one height per place. Every triangle of the track is in a 3D grid, the wheels feel the road with rays along their own axis, and the body is a cloud of spheres, so a loop, a road on a wall or a bridge works: a car with enough speed goes up the wall of a loop, over the top upside down and lands on the exit.
 - The collision shape of a car is made from its model when the car loads (about 40 to 90 spheres), instead of a box.

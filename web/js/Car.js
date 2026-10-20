@@ -600,6 +600,8 @@ OpenRacer.Car = function( config, domElement ) {
         this.turnLeft = Settings.isDown("steerLeft");
         this.turnRight = Settings.isDown("steerRight");
         this.handbrake = Settings.isDown("handbrake");
+        this.twoStep = Settings.isDown("twoStep");
+        this.transbrake = Settings.isDown("transbrake");
         this.cameraLeft = Settings.isDown("cameraLeft");
         this.cameraRight = Settings.isDown("cameraRight");
         // letting go of the key lets go of the pedal at once
@@ -720,12 +722,14 @@ OpenRacer.Car = function( config, domElement ) {
     // The options of the settings menu
     var applyOption = function(name, value) {
         if(name === "tc") tobj.vehicle.tcEnabled = value;
+        else if(name === "launchControl") tobj.vehicle.launchControlEnabled = value;
         else if(name === "abs") tobj.vehicle.absEnabled = value;
         else if(name === "esc") tobj.vehicle.escEnabled = value;
         else if(name === "gearbox") tobj.setGearboxMode(value);
         else if(name === "camera") tobj.setCameraMode(value);
     };
     applyOption("tc", Settings.option("tc"));
+    applyOption("launchControl", Settings.option("launchControl"));
     applyOption("abs", Settings.option("abs"));
     applyOption("esc", Settings.option("esc"));
     applyOption("camera", Settings.option("camera"));

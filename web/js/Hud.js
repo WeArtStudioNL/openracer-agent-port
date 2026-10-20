@@ -86,7 +86,7 @@ var Hud = (function() {
         container.id = "hud";
         var pillColumn = document.createElement("div");
         pillColumn.className = "pills";
-        ["TC", "ESC", "ABS", "P"].forEach(function(name) {
+        ["TC", "LC", "ESC", "ABS", "P", "2S", "TB"].forEach(function(name) {
             var pill = document.createElement("div");
             pill.className = "pill off";
             pill.textContent = name;
@@ -94,6 +94,7 @@ var Hud = (function() {
             pills[name] = pill;
         });
         pills.P.style.display = "none"; // only while the parking lock holds the car
+        pills["2S"].style.display = "none"; pills.TB.style.display = "none"; // only while the two-step key or the transbrake holds
         container.appendChild(pillColumn);
         canvas = document.createElement("canvas");
         container.appendChild(canvas);
@@ -312,6 +313,9 @@ var Hud = (function() {
         setPill("ABS", !v.absEnabled ? "off" : (absWorking ? "active" : "on"));
         setPill("TC", !v.tcEnabled ? "off" : (tcWorking ? "active" : "on"));
         setPill("ESC", !v.escEnabled ? "off" : (v.escLevel > 0.05 ? "active" : "on"));
+        setPill("LC", !v.launchControlEnabled ? "off" : (v.lcArmed || v.launching > 0 ? "active" : "on"));
+        pills["2S"].style.display = car.twoStep ? "" : "none"; setPill("2S", "active");
+        pills.TB.style.display = v.transbrakeHeld ? "" : "none"; setPill("TB", "active");
         pills.P.style.display = car.parkingLock ? "" : "none";
         setPill("P", "park");
         var wanted = Math.round(Math.max(210, Math.min(330, Math.min(window.innerWidth, window.innerHeight) * 0.36)));
