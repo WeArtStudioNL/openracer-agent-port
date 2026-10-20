@@ -3,7 +3,7 @@
  *
  * Description: The marbles: small pellets of rubber that a tyre sheds when its surface is soft and hot (from about 150 to 180 degrees, before it
  *              smokes; Vehicle.js, wheel.surfT) and slides. They are thrown off a little backwards and to the side, fall, bounce once or twice and lie on
- *              the road, off the line where the tyres run, dark and about a centimetre across (drawn a little bigger, so that they can be seen). One mesh holds all of them in a ring (the oldest are drawn
+ *              the road, off the line where the tyres run, dark octahedrons, smooth shaded, about a centimetre across (drawn a little bigger, so that they can be seen). One mesh holds all of them in a ring (the oldest are drawn
  *              over when it is full). Every car draws into the same one. Like the skid marks they stay (until the car is put back at the start).
  */
 
@@ -20,8 +20,9 @@ OpenRacer.Marbles = function (scene, capacity) {
     var carry = [0, 0, 0, 0];
 
     var geometry = new THREE.InstancedBufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array([-0.5, 0, -0.5, 0.5, 0, -0.5, -0.5, 0, 0.5, 0.5, 0, 0.5]), 3));
-    geometry.setIndex([0, 2, 1, 1, 2, 3]);
+    // an octahedron (six corners, eight faces) with a normal that points away from the middle, so that it is shaded smooth, like a lump of rubber
+    geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array([1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1]), 3));
+    geometry.setIndex([0, 2, 4, 2, 1, 4, 1, 3, 4, 3, 0, 4, 2, 0, 5, 1, 2, 5, 3, 1, 5, 0, 3, 5]);
     var attributes = {
         iPos: new THREE.InstancedBufferAttribute(positions, 3), iSize: new THREE.InstancedBufferAttribute(sizes, 1),
         iRot: new THREE.InstancedBufferAttribute(rotations, 1), iShade: new THREE.InstancedBufferAttribute(shades, 1)
@@ -29,26 +30,35 @@ OpenRacer.Marbles = function (scene, capacity) {
     for (var name in attributes) { attributes[name].setUsage(THREE.DynamicDrawUsage); geometry.setAttribute(name, attributes[name]); }
     geometry.instanceCount = capacity;
     var material = new THREE.ShaderMaterial({
-        vertexShader: "attribute vec3 iPos; attribute float iSize; attribute float iRot; attribute float iShade; varying vec2 vUv; varying float vShade;" +
+        vertexShader: "attribute vec3 iPos; attribute float iSize; attribute float iRot; attribute float iShade; varying vec3 vNormal; varying float vShade;" +
             "void main() {" +
-            "  vUv = position.xz + 0.5; vShade = iShade;" +
-            "  float c = cos(iRot), s = sin(iRot);" +
-            "  vec2 p = vec2(position.x * c - position.z * s, position.x * s + position.z * c) * iSize;" +
-            "  gl_Position = projectionMatrix * modelViewMatrix * vec4(iPos + vec3(p.x, 0.004, p.y), 1.0);" +
+            "  vShade = iShade;" +
+            "  if (iShade < 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }" +                // not there: outside of the picture
+            // a direction of its own for every one, from its number (the angles are the fractions of a hash)
+            "  vec3 a = fract(sin(iRot * vec3(12.9898, 78.233, 37.719)) * 43758.5453) * 6.2832;" +
+            "  vec3 c = cos(a), s = sin(a);" +
+            "  mat3 rx = mat3(1.0, 0.0, 0.0, 0.0, c.x, s.x, 0.0, -s.x, c.x);" +
+            "  mat3 ry = mat3(c.y, 0.0, -s.y, 0.0, 1.0, 0.0, s.y, 0.0, c.y);" +
+            "  mat3 rz = mat3(c.z, s.z, 0.0, -s.z, c.z, 0.0, 0.0, 0.0, 1.0);" +
+            "  vec3 n = rz * ry * rx * normalize(position);" +                                                 // (also the normal: smooth)
+            "  vNormal = n;" +
+            // it is drawn 2.5 times its size; its middle is lifted so that its lowest corner is not far into the road
+            "  float R = iSize * 0.5;" +
+            "  vec3 p = iPos + vec3(0.0, 0.2 * R, 0.0) + rz * ry * rx * position * R;" +
+            "  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);" +
             "}",
-        fragmentShader: "varying vec2 vUv; varying float vShade;" +
+        fragmentShader: "varying vec3 vNormal; varying float vShade;" +
             "void main() {" +
-            "  float d = length(vUv - 0.5) * 2.0;" +
-            "  float a = 1.0 - smoothstep(0.55, 1.0, d);" +
-            "  if (a < 0.05 || vShade < 0.0) discard;" +
-            "  gl_FragColor = vec4(vec3(vShade), a * 0.92);" +
-            "}",
-        transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4
+            "  vec3 n = normalize(vNormal);" +
+            "  float sun = max(dot(n, normalize(vec3(0.4, 0.8, 0.3))), 0.0);" +
+            "  float light = 0.45 + 0.75 * sun + 0.25 * n.y;" +
+            "  float shine = pow(sun, 24.0) * 0.12;" +
+            "  gl_FragColor = vec4(vec3(vShade * light + shine), 1.0);" +
+            "}"
     });
     var mesh = new THREE.Mesh(geometry, material);
     mesh.frustumCulled = false;
-    mesh.renderOrder = 2;
-    mesh.userData.noGBuffer = true;                      // a thin film on the road, not a surface for the screen space effects (Graphics.js)
+    mesh.userData.noGBuffer = true;                      // lumps of rubber too small to count for the screen space effects (Graphics.js)
     scene.add(mesh);
     shades.fill(-1);                                     // not there yet
     attributes.iShade.needsUpdate = true;

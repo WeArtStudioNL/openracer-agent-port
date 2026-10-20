@@ -27,7 +27,7 @@ OpenRacer.SkidMarks = function (scene, capacity) {
     mesh.renderOrder = 1;
     mesh.userData.noGBuffer = true;                    // a thin film on the road, not a surface for the screen space effects (Graphics.js): they drew a dark band round every mark, also over the smoke
     scene.add(mesh);
-    var next = 0;
+    var next = 0, self = this;
     var HALF_WIDTH = 0.1, STEP = 0.12, LIFT = 0.012;
     var last = new WeakMap();                          // wheel -> { x, y, z, sx, sy, sz, a }: where its mark ended, and the side vector there
     var side = new THREE.Vector3(), dir = new THREE.Vector3(), n = new THREE.Vector3();
@@ -60,6 +60,12 @@ OpenRacer.SkidMarks = function (scene, capacity) {
         // only the four corners that were written go to the graphics card (the buffers hold thousands of strips)
         geometry.attributes.position.addUpdateRange(base * 3, 12); geometry.attributes.position.needsUpdate = true;
         geometry.attributes.color.addUpdateRange(base * 4, 16); geometry.attributes.color.needsUpdate = true;
+        if(self.recorder) {
+            // for the replay (Replay.js): the strip, as it is in the buffers
+            var row = new Float32Array(29);
+            row.set(positions.subarray(base * 3, base * 3 + 12), 1); row.set(colors.subarray(base * 4, base * 4 + 16), 13);
+            self.recorder(row);
+        }
         next = (next + 1) % capacity;
         prev.x = px; prev.y = py; prev.z = pz; prev.sx = side.x; prev.sy = side.y; prev.sz = side.z; prev.a = alpha;
     };
@@ -82,6 +88,36 @@ OpenRacer.SkidMarks = function (scene, capacity) {
             this.mark(wheel, this.strengthOf(wheel), dust);
         }
     };
+
+    // ---- for the replay (Replay.js): it records the strips as they are made, and puts them again from the record
+    var state = [positions, colors];
+    this.recorder = null;
+    this.replayLookback = 0;
+    function put(row) {
+        var base = next * 4;
+        for (var k = 0; k < 12; k++) positions[base * 3 + k] = row[1 + k];
+        for (k = 0; k < 16; k++) colors[base * 4 + k] = row[13 + k];
+        next = (next + 1) % capacity;
+    }
+    this.replayAdd = function (row) {
+        put(row);
+        geometry.attributes.position.needsUpdate = true; geometry.attributes.color.needsUpdate = true;
+    };
+    this.replayStep = function () {};
+    this.replayClear = function () { this.clear(); next = 0; };
+    // the strips as they were at a time: the last of the ring that were made by then
+    this.replayRebuild = function (rows, end) {
+        colors.fill(0); next = 0;
+        for (var j = Math.max(0, end - capacity); j < end; j++) put(rows[j]);
+        geometry.attributes.position.needsUpdate = true; geometry.attributes.color.needsUpdate = true;
+    };
+    this.replaySnapshot = function () { return { arrays: state.map(function (a) { return a.slice(); }), next: next }; };
+    this.replayRestore = function (snap) {
+        for (var k = 0; k < state.length; k++) state[k].set(snap.arrays[k]);
+        next = snap.next;
+        geometry.attributes.position.needsUpdate = true; geometry.attributes.color.needsUpdate = true;
+    };
+    if (typeof OpenRacer !== "undefined" && OpenRacer.Replay && OpenRacer.Replay.attach) OpenRacer.Replay.attach("skid", this);
 
     this.clear = function () {
         colors.fill(0);
