@@ -494,7 +494,7 @@ OpenRacer.Car = function( config, domElement ) {
         var bangs = this.engine.events;
         for(var bi = 0; bi < bangs.length; bi++) { EngineSound.pop(bangs[bi].strength, bangs[bi].loud); flames.emit(v, bangs[bi]); }
         bangs.length = 0;
-        flames.update(delta);
+        flames.update(delta, camera);
 
         this.updateVisuals(delta);
         if(typeof ForceFeedback !== "undefined") ForceFeedback.update(this, delta);
