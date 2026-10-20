@@ -1,6 +1,6 @@
 # Soft body, parts and hinges: design
 
-Branch `claude/soft-body`. Status: M1, M2 and M3 built; M4 to do. Nothing here is released.
+Branch `claude/soft-body`. Status: M1 to M4 built (M4: cars that dent each other, replay of the shell, the parts and the wheels, in the saved file too). Nothing here is released.
 
 ## What the game has now
 
@@ -57,7 +57,7 @@ The car editor gets a **Soft body** card:
 * **M1** the shell: nodes, beams, yield and break, the coupling with the body and the contacts, the deformation of the model, strengths in `car.json`, a crash test. *(now)*
 * **M2** parts with the rigid-body engine: hinges, detaching. *(built: `js/Parts.js`; props of a track still to do)*
 * **M3** the editor card. *(built: `web/tools/softbody-editor.js`)*
-* **M4** replay (the displacements and the parts are recorded), AI cars, the saved file.
+* **M4** both cars dent in a crash between two, replay (the displacements, the parts and the wheels are recorded), the saved file. *(built, see the end)*
 
 ## Not in scope
 
@@ -378,5 +378,61 @@ noticeably with the 36 nodes and 98 beams of the four suspensions.
 
 **What is left of the design.** The spring and the damper are still the ones of `Vehicle.js` (a beam in the network would make the
 body feel the load of the road through the same beams, and that needs the solver below to be stable). The solver is still explicit with 3 to 14 steps: the
-suspension beams are stiff, and a solver of impulses (as the video says) would let them be as stiff as in the real car with fewer steps. Both cars dent in a
-crash between two (M4), and the replay of the shell and the parts, are not done.
+suspension beams are stiff, and a solver of impulses (as the video says) would let them be as stiff as in the real car with fewer steps. (Both cars dent in a
+crash between two, and the replay of the shell and the parts: done, see M4 below.)
+
+## M4: two cars that dent each other, and the replay of the soft body
+
+### Two cars (`Vehicle.js`, `Opponent.js`)
+
+* **How it works.** `OpenRacer.collideCars` (once a frame) gives every car that has a soft body the list of the other cars (`vehicle.otherCars`; a car without
+  a soft body gets an empty list and costs nothing). In its step (`shellStep`) a car looks at the others that are within the sum of their bounding radii
+  (+ 0.6 m): `buildCarPairs` takes the place and the speed of every collision sphere of those cars (`vehicle.sphereWorld(i, out, o)`: where the node of that
+  sphere is now, bent or not; a torn node or a wheel that is off is not there), puts them in a cache, and finds for every node of this car the spheres that it can
+  touch (once per step of the physics, like `buildNodeTriangles`). The small steps of the shell then only test those pairs (`carContactsOfNode`): a penalty
+  spring with a damper along the line between the centres, with friction from the relative speed, as the wall contact. A node has one contact stiffness: it is
+  shared over the spheres that it touches.
+* **Both cars do the same sum for their own nodes** against the spheres of the other, so the two forces are equal and opposite without one car handing a force to
+  the other (no latency, no order of the cars). The reaction goes to the body through the anchors, as for a wall, so the peak is limited by what yields and the
+  energy goes into the plastic work. Loose parts feel it through their nodes and the load on their mounts (a hood, a headlight, a plate comes off as in a wall crash).
+* **The discs of `collideCars`** (two per car) are kept as a backstop for a hit that goes through the shell, but only a smaller one (0.35 m less) when both cars
+  have a soft body and the 3D physics; before, they kept the cars a bumper apart and the shells never touched. A soft car against a car without a soft body, or
+  on a 2D track, is as before.
+* Debugging: `vehicle.carContacts` (pairs that touch in the last step) and `vehicle.carHit` (the biggest force on a node, N).
+* Also fixed: `Opponent.updateVisuals` used `delta` (the parts) without having it, so an AI car with parts threw an error in every frame.
+* **Tested** (Playwright, the game stepped by hand, two Mustangs on the test track): an AI car at 18 m/s into the rear of a car that rolls back at 2.5 m/s: the
+  front of the AI car bends 7.2 cm and takes up 20.6 kJ, the other car's rear gives 8 cm elastically (the peak force is 183 kN against 83 kN: the nose has more
+  nodes than the rear), the speeds after are 1.5 and 8.6 m/s, the hood opens and the lamps, grille and bumper come off; head-on at 19 m/s against a car that
+  stands: the AI car's shell goes 0.49 m in, the other 0.03 m, the car that stood is pushed back at 9 m/s. The physics step costs about 8 ms instead of 3.6 ms in
+  headless Chrome while the cars are in contact (cars more than a few metres apart cost nothing extra). Not done: a loose part of one car that hits the other car (the engine
+  of the parts only knows the car it belongs to), the wheels of the other car do not feel the hit (the spheres of a wheel push, they take nothing).
+
+### The replay (`Replay.js`, `Parts.js`, `SoftBody.js`)
+
+* **What is recorded.** Next to the samples (30 a second, as before) a car that has a soft body keeps a list of **records**, and a record is only made when
+  something in it changed, so a car that drives without a hit makes none (a car without a soft body makes no list at all). A record has: the sample number; the
+  displacements of the nodes of the shell that the model uses (`bodyCount`, 16 bits each, in 1/1024 m); for every part of `Parts.js` its state (0 held,
+  1 hinged, 2 free) and, when it is not held, the place of its object in the scene (position, turn, size: 11 numbers); for every wheel whether it is torn off and
+  its toe, camber and shift (rounded to 0.5 mm, or the bend of a wheel at rest would make a record in every sample). The oldest records go with the oldest
+  blocks of samples (`trimSoft`; one record before the start is kept as the state at the start).
+* **Playback.** `showSoft` looks up the record at the time (the last one at or before it) and interpolates to the next when that is at most two samples away
+  (the shell, and the parts that are loose in both: position, size and the turn along the shortest way); in between records the state is held. The shell
+  goes into `softBody.displacement` (the model reads it as in the game, `SoftBody.syncDisplacement()` puts the real ones back afterwards), the wheels get their
+  bend and `wheelLost`, and `Parts.replay.replayApply` puts every part where it was: a part that is loose in the record leaves the model (`awayFromModel`: into the
+  scene, with the dent that the shell had **when it came off**: `frozenShell` takes the first record of its loose run), a part that is held again (scrubbing back)
+  returns to its place on the model with `restoreHome` and follows the shell again. The engine of the parts (`Parts.update`) does not run while a replay is shown
+  (`replayBegin`, also for a car that is built while the replay is open: the viewer of a file), and `replayEnd` puts every part back where the game has it, so
+  that the game goes on where it was left.
+* **The file.** Version 2 (`FILE_VERSION`): the header has `soft` per car (`null`, or `{ nodes, parts: [names], count }`) and `softBytes`; the records follow the
+  numbers as a block of bytes (little endian: sample u32, displacements i16 padded to four bytes, the parts, the wheels). A version 1 file is still opened (no
+  soft body in it). The reader checks: the sizes against the header (the block must be exactly the size that the header says), the number of nodes (at most
+  400), of parts (at most 64) and of records, the order of the samples (rising, inside the recording), every number finite, and every state 0, 1 or 2; anything else
+  is "damaged". On playback a car whose number of nodes or names of parts are not those of the file (the car was changed) shows no soft body, and the rest of the
+  replay is as before.
+* **Tested** (Playwright, the game stepped by hand, a head-on crash of two Mustangs, 70 times compared): for every moment the displacement of the shell (within 4 mm), the
+  parts that are away and where the hood and a lamp are (the same to 0.01 m) are those of the live game, before and after the hit and when going back and forth;
+  after `stop` the live state is as it was (the same displacements, the same states of the parts); a wheel that is torn off and one that is bent come back in the replay
+  and are put back at the end; the saved file (98 KB, gzip) opened in the viewer (`?replay=1`) after being stashed shows no dent at 1 s, and at the end the dent,
+  and the parts that were loose, with at most 0.5 mm difference to the live shell. Not tested: a file that was made on purpose to be wrong (the checks are in the code
+  and follow the older ones), the editor's crash test in a full run (started in headless Chrome, which draws less than a frame a second).
+

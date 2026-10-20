@@ -919,7 +919,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     // The triangles that a node can touch in this step of the physics, found once (the car does not move while the shell takes its small steps, and
     // a node moves a few centimetres at most): the small steps only test these. Before, every small step (up to 14) went through all the triangles
     // near the car for every node, which made the game stutter on a bump or a ramp, where there are many.
-    var nodeTris = [], nodeTriCount = 0, nodeTriMargin = 0.2;
+    var nodeTris = [], nodeTriCount = 0, nodeTriMargin = 0.2, noTriangles = [], carForce = { x: 0, y: 0, z: 0 };
     function buildNodeTriangles() {
         var sb = self.softBody, ground = self.ground;
         var upY = Rm[4];
@@ -936,11 +936,105 @@ OpenRacer.Vehicle = function (parameters, input) {
             for(var i = 0; i < list.length; i++) if(ground.boxNear(list[i], cx, cy, cz, reach)) { tris.push(list[i]); nodeTriCount++; }
         }
     }
+    // ---- two cars that hit each other (M4): the nodes of this car against the collision spheres of the others, where those are now (bent or
+    // not). The other car does the same with its nodes against ours, so both cars dent and nobody has to hand a force over to the other. The
+    // others are put here by OpenRacer.collideCars (Opponent.js) once a frame. Found once per step of the physics, like the triangles: the cache
+    // holds where the spheres of the cars that are near are (world, with their speed) and every node the spheres that it can touch.
+    this.otherCars = [];
+    this.boundRadius = function () { ensureProxy(); return proxyRadius; };
+    var sphereTmp = { x: 0, y: 0, z: 0 }, sphereVel = { x: 0, y: 0, z: 0 }, sphereNode = { x: 0, y: 0, z: 0 };
+    // The sphere i of this car in the world: [x, y, z, r, vx, vy, vz] into out at offset o; false when it is gone (a torn node, a wheel that is off)
+    this.sphereWorld = function (i, out, o) {
+        ensureProxy();
+        var sp = self.proxy3[i];
+        if(!sp || sp.disabled) return false;
+        var sb = self.softBody, x = sp.x, y = sp.y, z = sp.z, r = sp.r, node = sb ? sb.nodeOfSphere[i] : -1;
+        if(node >= 0) {
+            if(!sb.alive(node)) return false;
+            sb.position(node, sphereNode); x = sphereNode.x; y = sphereNode.y; z = sphereNode.z; r = sb.radiusOf(node);
+            sb.velocity(node, sphereVel);
+        } else { sphereVel.x = 0; sphereVel.y = 0; sphereVel.z = 0; }
+        rotate(self.qx, self.qy, self.qz, self.qw, x, y, z, sphereTmp);
+        var rx = sphereTmp.x, ry = sphereTmp.y, rz = sphereTmp.z;
+        out[o] = self.px + rx; out[o + 1] = self.py + ry; out[o + 2] = self.pz + rz; out[o + 3] = r;
+        rotate(self.qx, self.qy, self.qz, self.qw, sphereVel.x, sphereVel.y, sphereVel.z, sphereTmp);
+        out[o + 4] = self.vx + (self.wy * rz - self.wz * ry) + sphereTmp.x;
+        out[o + 5] = self.vy + (self.wz * rx - self.wx * rz) + sphereTmp.y;
+        out[o + 6] = self.vz + (self.wx * ry - self.wy * rx) + sphereTmp.z;
+        return true;
+    };
+    var carCache = new Float64Array(7 * 512), carCacheCount = 0, carPairs = [], carPairCount = 0;
+    this.carContacts = 0;                              // for the debugging: the pairs of spheres that touch now
+    this.carHit = 0;                                   // the biggest force between two cars on a node
+    function buildCarPairs() {
+        carPairCount = 0; carCacheCount = 0;
+        var others = self.otherCars, sb = self.softBody;
+        if(!sb || !others.length || !self.ground || !self.ground.use3D) return;
+        ensureProxy();
+        for(var oi = 0; oi < others.length; oi++) {
+            var o = others[oi];
+            if(o === self) continue;
+            var dx = o.px - self.px, dy = o.py - self.py, dz = o.pz - self.pz, reach = proxyRadius + o.boundRadius() + 0.6;
+            if(dx * dx + dy * dy + dz * dz > reach * reach) continue;
+            var spheres = o.proxy3;
+            if(carCache.length < 7 * (carCacheCount + spheres.length)) { var bigger = new Float64Array(2 * carCache.length + 7 * spheres.length); bigger.set(carCache); carCache = bigger; }
+            for(var j = 0; j < spheres.length; j++) if(o.sphereWorld(j, carCache, 7 * carCacheCount)) carCacheCount++;
+        }
+        if(!carCacheCount) return;
+        for(var k = 0; k < sb.count; k++) {
+            var list = carPairs[k] || (carPairs[k] = []);
+            list.length = 0;
+            if(!sb.alive(k)) continue;
+            sb.position(k, nodePos);
+            var cx = self.px + Rm[0] * nodePos.x + Rm[1] * nodePos.y + Rm[2] * nodePos.z, cy = self.py + Rm[3] * nodePos.x + Rm[4] * nodePos.y + Rm[5] * nodePos.z, cz = self.pz + Rm[6] * nodePos.x + Rm[7] * nodePos.y + Rm[8] * nodePos.z;
+            var rk = sb.radiusOf(k) + 0.25;                      // a node moves a few centimetres in a step; the other car too
+            for(var g = 0; g < carCacheCount; g++) {
+                var ex = cx - carCache[7 * g], ey = cy - carCache[7 * g + 1], ez = cz - carCache[7 * g + 2], rr = rk + carCache[7 * g + 3];
+                if(ex * ex + ey * ey + ez * ez < rr * rr) { list.push(g); carPairCount++; }
+            }
+        }
+    }
+    var carOver = [];
+    function carContactsOfNode(k, cx, cy, cz, r, rx, ry, rz, h, out) {
+        var P = self.softBody.params, sb = self.softBody;
+        var list = carPairs[k];
+        if(!list || !list.length) return;
+        var n = 0;
+        for(var i = 0; i < list.length; i++) {
+            var g = list[i];
+            var dx = cx - carCache[7 * g], dy = cy - carCache[7 * g + 1], dz = cz - carCache[7 * g + 2], rr = r + carCache[7 * g + 3];
+            if(dx * dx + dy * dy + dz * dz < rr * rr) carOver[n++] = g;
+        }
+        if(!n) return;
+        sb.velocity(k, nodeVel);
+        var vx = self.vx + (self.wy * rz - self.wz * ry) + Rm[0] * nodeVel.x + Rm[1] * nodeVel.y + Rm[2] * nodeVel.z;
+        var vy = self.vy + (self.wz * rx - self.wx * rz) + Rm[3] * nodeVel.x + Rm[4] * nodeVel.y + Rm[5] * nodeVel.z;
+        var vz = self.vz + (self.wx * ry - self.wy * rx) + Rm[6] * nodeVel.x + Rm[7] * nodeVel.y + Rm[8] * nodeVel.z;
+        // the node has one stiffness: shared over the spheres that it touches
+        var kc = P.contactK / n, cc = 2 * P.contactDamping * Math.sqrt(kc * sb.massOf(k));
+        for(var m = 0; m < n; m++) {
+            var s = carOver[m] * 7;
+            var ex = cx - carCache[s], ey = cy - carCache[s + 1], ez = cz - carCache[s + 2];
+            var dist = Math.sqrt(ex * ex + ey * ey + ez * ez), nx, ny, nz;
+            if(dist > 1e-5) { nx = ex / dist; ny = ey / dist; nz = ez / dist; } else { nx = 0; ny = 1; nz = 0; dist = 0; }
+            var depth = r + carCache[s + 3] - dist;
+            var wx = vx - carCache[s + 4], wy = vy - carCache[s + 5], wz = vz - carCache[s + 6];
+            var vn = wx * nx + wy * ny + wz * nz;
+            var fn = Math.max(0, kc * depth - cc * vn);
+            var tx = wx - vn * nx, ty = wy - vn * ny, tz = wz - vn * nz;
+            var tl = Math.sqrt(tx * tx + ty * ty + tz * tz);
+            var ft = tl > 1e-6 ? Math.min(P.friction * fn, tl * sb.massOf(k) / h / n) : 0;
+            out.x += fn * nx - (tl > 1e-6 ? ft * tx / tl : 0); out.y += fn * ny - (tl > 1e-6 ? ft * ty / tl : 0); out.z += fn * nz - (tl > 1e-6 ? ft * tz / tl : 0);
+            if(fn > self.carHit) self.carHit = fn;
+        }
+        self.carContacts += n;
+    }
+
     function nodeContacts(h) {
         var sb = self.softBody, ground = self.ground;
         var P = sb.params;
         var upX = Rm[1], upY = Rm[4], upZ = Rm[7];
-        if(!nodeTriCount) return;
+        if(!nodeTriCount && !carPairCount) return;
         var yUnder = -self.cgHeight + self.groundClearance;
         var ux = self.px + upX * yUnder, uy = self.py + upY * yUnder, uz = self.pz + upZ * yUnder;
         for(var k = 0; k < sb.count; k++) {
@@ -949,8 +1043,9 @@ OpenRacer.Vehicle = function (parameters, input) {
             var rx = Rm[0] * nodePos.x + Rm[1] * nodePos.y + Rm[2] * nodePos.z, ry = Rm[3] * nodePos.x + Rm[4] * nodePos.y + Rm[5] * nodePos.z, rz = Rm[6] * nodePos.x + Rm[7] * nodePos.y + Rm[8] * nodePos.z;
             var cx = self.px + rx, cy = self.py + ry, cz = self.pz + rz, r = sb.radiusOf(k);
             var fx = 0, fy = 0, fz = 0;
-            var mine = nodeTris[k];
-            if(!mine || !mine.length) continue;
+            var mine = nodeTriCount ? nodeTris[k] : null;
+            if(carPairCount) { carForce.x = 0; carForce.y = 0; carForce.z = 0; carContactsOfNode(k, cx, cy, cz, r, rx, ry, rz, h, carForce); fx = carForce.x; fy = carForce.y; fz = carForce.z; }
+            if(!mine || !mine.length) mine = noTriangles;
             for(var i = 0; i < mine.length; i++) {
                 var t = mine[i];
                 var d2 = ground.closest(t, cx, cy, cz, nearest);
@@ -1004,7 +1099,10 @@ OpenRacer.Vehicle = function (parameters, input) {
         ensureProxy();
         refreshCandidates();
         setTurn();
-        if(sb.quiet && !sb.plate && !wallCandidates.length && Rm[4] > 0.2) return;      // nothing to hit and nothing moving
+        self.carContacts = 0; self.carHit = 0;
+        buildCarPairs();
+        if(sb.quiet && !sb.plate && !wallCandidates.length && !carPairCount && Rm[4] > 0.2) return;      // nothing to hit and nothing moving
+        if(carPairCount) sb.quiet = false;
         buildNodeTriangles();
         sb.step(dt, nodeContacts);
         var rc = sb.reaction;

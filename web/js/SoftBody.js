@@ -75,6 +75,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
 
     // ---- the beams: every node to its nearest neighbours
     var beamA = [], beamB = [], beamRest = [], beamK = [], beamYield = [], beamBreak = [], beamAlive = [];
+    var beamRig = [];                                  // 1 for a beam of the suspension: the position solver has it, not the explicit loop (see rigSolve)
     var seen = {};
     for (var a = 0; a < N; a++) {
         var near = [];
@@ -90,7 +91,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
             var key = lo * 4096 + hi;
             if (seen[key]) continue;
             seen[key] = true;
-            beamA.push(lo); beamB.push(hi); beamRest.push(near[m][0]); beamK.push(P.beamK); beamYield.push(P.beamYield); beamBreak.push(P.beamBreak); beamAlive.push(1);
+            beamA.push(lo); beamB.push(hi); beamRest.push(near[m][0]); beamK.push(P.beamK); beamYield.push(P.beamYield); beamBreak.push(P.beamBreak); beamAlive.push(1); beamRig.push(0);
         }
     }
     var B = beamA.length;
@@ -111,6 +112,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         var d = Math.hypot(rest[3 * a] - rest[3 * b], rest[3 * a + 1] - rest[3 * b + 1], rest[3 * a + 2] - rest[3 * b + 2]);
         beamA.push(Math.min(a, b)); beamB.push(Math.max(a, b)); beamRest.push(d);
         beamK.push(params.stiffness || P.beamK); beamYield.push(params.yield_force || P.beamYield); beamBreak.push(params.break_force || P.beamBreak); beamAlive.push(1);
+        beamRig.push(isRig[a] || isRig[b] ? 1 : 0);
         B = beamA.length;
         self.beamCount = B;
         safeStep();
@@ -147,10 +149,12 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
     function safeStep() {
         var kSum = new Float64Array(N), cSum = new Float64Array(N);
         for (var k = 0; k < N; k++) {
-            kSum[k] = P.anchorK * aScale[k] + P.contactK;
-            cSum[k] = 2 * P.anchorDamping * Math.sqrt(P.anchorK * aScale[k] * mass[k]) + 2 * P.contactDamping * Math.sqrt(P.contactK * mass[k]);
+            var ka = isRig[k] ? 0 : P.anchorK * aScale[k];       // the anchors and the beams of the suspension are solved by position (rigSolve): they do not limit the step
+            kSum[k] = ka + P.contactK;
+            cSum[k] = 2 * P.anchorDamping * Math.sqrt(ka * mass[k]) + 2 * P.contactDamping * Math.sqrt(P.contactK * mass[k]);
         }
         for (var i = 0; i < beamA.length; i++) {
+            if (beamRig[i]) continue;
             var a = beamA[i], b = beamB[i];
             var cb = 2 * P.beamDamping * Math.sqrt(beamK[i] * Math.min(mass[a], mass[b]));
             kSum[a] += 2 * beamK[i]; kSum[b] += 2 * beamK[i];
@@ -205,10 +209,126 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         this.version++;
     };
 
+    // The displacement for the model from the state of the nodes (after a replay has put other numbers there)
+    this.syncDisplacement = function () {
+        for (var n = 0; n < 3 * N; n++) self.displacement[n] = u[n] + q[n];
+        this.version++;
+    };
+
     // The reaction of the anchors on the car, summed over the steps of the nodes: reaction[0..2] the force, [3..5] the torque about the centre of
     // gravity (frame, newtons and newton metres). Vehicle.js turns it into the world and adds it to the forces of the body.
     this.reaction = new Float64Array(6);
     this.quiet = true;                                 // nothing moves and nothing is pulled: a step can be left out
+
+
+    // ---- the suspension: a position solver (XPBD) instead of the explicit springs
+    // The beams of the suspension and the anchors of its nodes are the stiffest part (1e6 N/m on a few kg): explicit integration needs a very small
+    // step for them. Here a spring is a constraint with a compliance of 1/k (extended position based dynamics, Macklin 2016): that is backward Euler
+    // for the spring, stable for any step, and Gauss-Seidel over the few constraints of a wheel converges in a few passes. Everything else (the
+    // contacts, the shell) has already moved the nodes in the explicit step; this pulls the suspension into shape and takes the speed from the move.
+    var rigNodes = [], rigOld = new Float64Array(3 * N), rigLamA = new Float64Array(N), rigLamB = [], rigIters = 6;
+    for (var rn = 0; rn < N; rn++) if (isRig[rn]) rigNodes.push(rn);
+    var rigMaxMove = 0, rigMaxSpeed2 = 0;
+    function rigSolve(h, dt) {
+        var hard = P.hardening, h2 = h * h, i, k, it;
+        var reaction = self.reaction;
+        rigMaxMove = 0; rigMaxSpeed2 = 0;
+        var moved = false;
+        for (i = rigLamB.length; i < B; i++) rigLamB.push(0);
+        for (i = 0; i < B; i++) rigLamB[i] = 0;
+        for (i = 0; i < rigNodes.length; i++) rigLamA[rigNodes[i]] = 0;
+        for (it = 0; it < rigIters; it++) {
+            for (i = 0; i < rigNodes.length; i++) {                       // the anchors: the node is pulled to where it is held (q)
+                k = rigNodes[i];
+                if (!anchorAlive[k] || gone[k]) continue;
+                var ix = 3 * k;
+                var dx = u[ix] - q[ix], dy = u[ix + 1] - q[ix + 1], dz = u[ix + 2] - q[ix + 2];
+                var d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                if (d < 1e-12) continue;
+                var alpha = 1 / (P.anchorK * aScale[k] * h2), wk = 1 / mass[k];
+                var dl = (-d - alpha * rigLamA[k]) / (wk + alpha);
+                rigLamA[k] += dl;
+                var sc = wk * dl / d;
+                u[ix] += dx * sc; u[ix + 1] += dy * sc; u[ix + 2] += dz * sc;
+            }
+            for (i = 0; i < B; i++) {                                      // the beams
+                if (!beamRig[i] || !beamAlive[i] || gone[beamA[i]] || gone[beamB[i]]) continue;
+                var a = beamA[i] * 3, b = beamB[i] * 3;
+                var ex = rest[b] + u[b] + q[b] - rest[a] - u[a] - q[a], ey = rest[b + 1] + u[b + 1] + q[b + 1] - rest[a + 1] - u[a + 1] - q[a + 1], ez = rest[b + 2] + u[b + 2] + q[b + 2] - rest[a + 2] - u[a + 2] - q[a + 2];
+                var len = Math.sqrt(ex * ex + ey * ey + ez * ez);
+                if (len < 1e-6) continue;
+                var wa = 1 / mass[beamA[i]], wb = 1 / mass[beamB[i]];
+                var al = 1 / (beamK[i] * h2);
+                var dlb = (rigRest(i) - len - al * rigLamB[i]) / (wa + wb + al);      // C = len - rest, so -C = rest - len
+                rigLamB[i] += dlb;
+                var cx = ex / len * dlb, cy = ey / len * dlb, cz = ez / len * dlb;
+                u[a] -= wa * cx; u[a + 1] -= wa * cy; u[a + 2] -= wa * cz;
+                u[b] += wb * cx; u[b + 1] += wb * cy; u[b + 2] += wb * cz;
+            }
+        }
+        // the speed that the move gave, and the dampers (as an impulse that cannot overshoot)
+        for (i = 0; i < rigNodes.length; i++) {
+            k = rigNodes[i];
+            if (gone[k]) continue;
+            var o = 3 * k;
+            w[o] = (u[o] - rigOld[o]) / h; w[o + 1] = (u[o + 1] - rigOld[o + 1]) / h; w[o + 2] = (u[o + 2] - rigOld[o + 2]) / h;
+        }
+        for (i = 0; i < B; i++) {
+            if (!beamRig[i] || !beamAlive[i] || gone[beamA[i]] || gone[beamB[i]]) continue;
+            var a2 = beamA[i] * 3, b2 = beamB[i] * 3;
+            var fx = rest[b2] + u[b2] + q[b2] - rest[a2] - u[a2] - q[a2], fy = rest[b2 + 1] + u[b2 + 1] + q[b2 + 1] - rest[a2 + 1] - u[a2 + 1] - q[a2 + 1], fz = rest[b2 + 2] + u[b2 + 2] + q[b2 + 2] - rest[a2 + 2] - u[a2 + 2] - q[a2 + 2];
+            var l2 = Math.sqrt(fx * fx + fy * fy + fz * fz);
+            if (l2 < 1e-6) continue;
+            var nx = fx / l2, ny = fy / l2, nz = fz / l2;
+            var ma = mass[beamA[i]], mb = mass[beamB[i]], wsum = 1 / ma + 1 / mb;
+            var rv = (w[b2] - w[a2]) * nx + (w[b2 + 1] - w[a2 + 1]) * ny + (w[b2 + 2] - w[a2 + 2]) * nz;
+            var cb = 2 * P.beamDamping * Math.sqrt(beamK[i] * Math.min(ma, mb));
+            var imp = rv * cb * h / (1 + cb * h * wsum);
+            w[a2] += imp / ma * nx; w[a2 + 1] += imp / ma * ny; w[a2 + 2] += imp / ma * nz;
+            w[b2] -= imp / mb * nx; w[b2 + 1] -= imp / mb * ny; w[b2 + 2] -= imp / mb * nz;
+            // yield and break, as in the explicit loop
+            var ext = l2 - beamRest[i], force = beamK[i] * ext;
+            if (Math.abs(force) > beamYield[i]) {
+                var beyond = Math.abs(ext) - beamYield[i] / beamK[i];
+                var change = Math.sign(ext) * beyond * (1 - hard);
+                beamRest[i] += change;
+                self.absorbed += beamYield[i] * Math.abs(change);
+                ext = l2 - beamRest[i]; force = beamK[i] * ext;
+                moved = true;
+            }
+            if (Math.abs(force) > beamBreak[i]) { beamAlive[i] = 0; moved = true; }
+        }
+        for (i = 0; i < rigNodes.length; i++) {                            // the anchors: damper, yield, break, and what they pull on the car
+            k = rigNodes[i];
+            if (!anchorAlive[k] || gone[k]) { if (!gone[k]) { var s0 = 3 * k; var sp = w[s0] * w[s0] + w[s0 + 1] * w[s0 + 1] + w[s0 + 2] * w[s0 + 2]; if (sp > rigMaxSpeed2) rigMaxSpeed2 = sp; } continue; }
+            var ix2 = 3 * k;
+            var kA = P.anchorK * aScale[k];
+            var c = 2 * P.anchorDamping * Math.sqrt(kA * mass[k]);
+            var damp = 1 / (1 + c * h / mass[k]);
+            w[ix2] *= damp; w[ix2 + 1] *= damp; w[ix2 + 2] *= damp;
+            var ddx = u[ix2] - q[ix2], ddy = u[ix2 + 1] - q[ix2 + 1], ddz = u[ix2 + 2] - q[ix2 + 2];
+            var dd = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
+            var yieldD = anchorYield[k] / kA;
+            if (dd > yieldD) {
+                var shift = (dd - yieldD) * (1 - hard);
+                q[ix2] += ddx / dd * shift; q[ix2 + 1] += ddy / dd * shift; q[ix2 + 2] += ddz / dd * shift;
+                self.absorbed += anchorYield[k] * shift;
+                ddx = u[ix2] - q[ix2]; ddy = u[ix2 + 1] - q[ix2 + 1]; ddz = u[ix2 + 2] - q[ix2 + 2];
+                dd = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
+                moved = true;
+            }
+            if (dd > rigMaxMove) rigMaxMove = dd;
+            var sp2 = w[ix2] * w[ix2] + w[ix2 + 1] * w[ix2 + 1] + w[ix2 + 2] * w[ix2 + 2];
+            if (sp2 > rigMaxSpeed2) rigMaxSpeed2 = sp2;
+            if (kA * dd > anchorBreak[k]) { anchorAlive[k] = 0; moved = true; continue; }
+            var gx = kA * ddx + c * w[ix2], gy = kA * ddy + c * w[ix2 + 1], gz = kA * ddz + c * w[ix2 + 2];
+            var px = rest[ix2] + u[ix2] + q[ix2], py = rest[ix2 + 1] + u[ix2 + 1] + q[ix2 + 1], pz = rest[ix2 + 2] + u[ix2 + 2] + q[ix2 + 2];
+            reaction[0] += gx * h / dt; reaction[1] += gy * h / dt; reaction[2] += gz * h / dt;
+            reaction[3] += (py * gz - pz * gy) * h / dt; reaction[4] += (pz * gx - px * gz) * h / dt; reaction[5] += (px * gy - py * gx) * h / dt;
+        }
+        return moved;
+    }
+    function rigRest(i) { return beamRest[i]; }
 
     // One step of dt seconds of the nodes and the beams; 'contacts' (optional) is called with (dt) before the forces are summed, to add the
     // forces of the hits to this.force
@@ -217,13 +337,13 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         var reaction = this.reaction;
         reaction.fill(0);
         var moved = false, maxMove = 0, maxMove2 = 0;
-        var steps = Math.max(3, Math.min(14, Math.ceil(dt / hSafe))), h = dt / steps;      // small enough for the stiffest and densest place (see safeStep)
+        var DBG = OpenRacer.SoftBodyDebug || {}; var steps = Math.max(DBG.minSteps || 3, Math.min(DBG.maxSteps || 14, Math.ceil(dt / hSafe))), h = dt / steps; DBG.lastDt = dt; DBG.lastSteps = steps;      // small enough for the stiffest and densest place (see safeStep)
         for (var s = 0; s < steps; s++) {
             // the forces of the hits (the callback fills this.force), then the anchors and the beams
             if (contacts) contacts(h);
             if (this.plate) { pushPlate(this.plate, h); if (this.plate.done) { this.lastPlate = this.plate; this.plate = null; this.pinned = false; } }
             for (var k = 0; k < N; k++) {
-                if (!anchorAlive[k]) continue;
+                if (!anchorAlive[k] || isRig[k]) continue;
                 var ix = 3 * k;
                 var dx = u[ix] - q[ix], dy = u[ix + 1] - q[ix + 1], dz = u[ix + 2] - q[ix + 2];
                 var d = Math.sqrt(dx * dx + dy * dy + dz * dz);
@@ -250,7 +370,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
                 reaction[3] += (py * fz - pz * fy) * h / dt; reaction[4] += (pz * fx - px * fz) * h / dt; reaction[5] += (px * fy - py * fx) * h / dt;
             }
             for (var i = 0; i < B; i++) {
-                if (!beamAlive[i] || gone[beamA[i]] || gone[beamB[i]]) continue;
+                if (!beamAlive[i] || beamRig[i] || gone[beamA[i]] || gone[beamB[i]]) continue;
                 var a = beamA[i] * 3, b = beamB[i] * 3;
                 var ex = rest[b] + u[b] + q[b] - rest[a] - u[a] - q[a], ey = rest[b + 1] + u[b + 1] + q[b + 1] - rest[a + 1] - u[a + 1] - q[a + 1], ez = rest[b + 2] + u[b + 2] + q[b + 2] - rest[a + 2] - u[a + 2] - q[a + 2];
                 var len = Math.sqrt(ex * ex + ey * ey + ez * ez);
@@ -283,9 +403,11 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
                 w[o] += f[o] * im * h; w[o + 1] += f[o + 1] * im * h; w[o + 2] += f[o + 2] * im * h;
                 var speedSq = w[o] * w[o] + w[o + 1] * w[o + 1] + w[o + 2] * w[o + 2];
                 if(speedSq > maxMove2) maxMove2 = speedSq;
+                if (isRig[j]) { rigOld[o] = u[o]; rigOld[o + 1] = u[o + 1]; rigOld[o + 2] = u[o + 2]; }
                 u[o] += w[o] * h; u[o + 1] += w[o + 1] * h; u[o + 2] += w[o + 2] * h;
                 f[o] = 0; f[o + 1] = 0; f[o + 2] = 0;
             }
+            if (rigNodes.length) { if (rigSolve(h, dt)) moved = true; if (rigMaxMove > maxMove) maxMove = rigMaxMove; if (rigMaxSpeed2 > maxMove2) maxMove2 = rigMaxSpeed2; }
         }
         this.quiet = !moved && maxMove < 1e-4 && maxMove2 < 1e-6 && !this.plate;
         // the displacement for the model, when something moved

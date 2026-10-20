@@ -255,11 +255,12 @@ OpenRacer.Opponent = function (config, line, options) {
         lastFraction = fraction;
         if (this.pit.active) this.pittedThisLap = true;
         this.progress = this.lapsCompleted + fraction;
-        this.updateVisuals();
+        this.updateVisuals(delta);
     };
 
     var bodyPosition = { x: 0, y: 0, z: 0 }, bodyQuaternion = { x: 0, y: 0, z: 0, w: 1 }, bodyUp = new THREE.Vector3();
-    this.updateVisuals = function () {
+    this.updateVisuals = function (delta) {
+        delta = delta || 0;
         var v = this.vehicle, w = this.wheels;
         v.getBodyPose(bodyPosition, bodyQuaternion);
         this.body.quaternion.set(bodyQuaternion.x, bodyQuaternion.y, bodyQuaternion.z, bodyQuaternion.w);
@@ -291,13 +292,25 @@ OpenRacer.Opponent = function (config, line, options) {
 
 // The cars bump into each other: every car is two discs (at the axles); where they overlap the cars are pushed apart and exchange
 // momentum along the line between them, with a little of it as a turn.
+//
+// Two cars with a soft body (SOFTBODY.md, M4) hit each other with their shells: every car puts the others in vehicle.otherCars, and in its step the
+// nodes of the shell push against the collision spheres of the other (Vehicle.js, buildCarPairs). The discs are then only a backstop, a little
+// smaller than the car, for a hit that goes through the shell. A car without a soft body has nothing in otherCars and costs nothing.
 OpenRacer.collideCars = function (vehicles) {
     var restitution = 0.25;
+    for (var i = 0; i < vehicles.length; i++) {
+        var soft = vehicles[i];
+        if (!soft.otherCars) continue;
+        soft.otherCars.length = 0;
+        if (!soft.softBody) continue;
+        for (var s = 0; s < vehicles.length; s++) if (s !== i && Math.abs(soft.py - vehicles[s].py) < 6) soft.otherCars.push(vehicles[s]);
+    }
     for (var i = 0; i < vehicles.length; i++) {
         for (var j = i + 1; j < vehicles.length; j++) {
             var a = vehicles[i], b = vehicles[j];
             if (Math.abs(a.py - b.py) > 2.5) continue;
             var ra = a.halfWidth + 0.15, rb = b.halfWidth + 0.15;
+            if (a.softBody && b.softBody && a.ground && a.ground.use3D && b.ground && b.ground.use3D) { ra -= 0.35; rb -= 0.35; }
             var discsA = [[a.af * 0.8, 0], [-a.ar * 0.8, 0]], discsB = [[b.af * 0.8, 0], [-b.ar * 0.8, 0]];
             for (var p = 0; p < 2; p++) {
                 for (var q = 0; q < 2; q++) {

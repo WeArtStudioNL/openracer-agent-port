@@ -96,6 +96,59 @@ OpenRacer.Replay = (function() {
         }
     }
 
+    // ---- the soft body: the shell, the loose parts and the wheels that are bent or torn off (SOFTBODY.md, M4)
+    //
+    // A car with a soft body keeps a list of records next to the samples, and a record is only made when something in it has changed (the shell
+    // moves, a part opens or flies, a wheel bends): a car that drives without a hit makes none. A record holds the displacements of the nodes of the
+    // shell (whole millimetres, 16 bits), for every part its state and where it is, and for every wheel whether it is off and how it is bent.
+    var SOFT_SCALE = 1024, PART_FLOATS = 11, WHEEL_FLOATS = 5 * 4;
+    var MAX_SOFT_NODES = 400, MAX_SOFT_PARTS = 64;
+
+    function softOf(entry) {
+        var v = entry.object.vehicle, sb = v && v.softBody;
+        if(!sb) return null;
+        if(!entry.soft) entry.soft = { nodes: sb.bodyCount || sb.count, names: [], records: [], version: -1, disp: null };
+        return entry.soft;
+    }
+    function sameArray(a, b) {
+        if(!a || !b || a.length !== b.length) return false;
+        for(var i = 0; i < a.length; i++) if(a[i] !== b[i]) return false;
+        return true;
+    }
+    function fine(x) { return Math.round((x || 0) * 2000) / 2000; }        // half a millimetre, or a hundredth of a degree: the bend of a wheel that is at rest moves less than that
+    function wheelFloats(v, out) {
+        for(var k = 0; k < 4; k++) {
+            var w = v.wheels[k];
+            out[5 * k] = v.wheelLost && v.wheelLost[k] ? 1 : 0; out[5 * k + 1] = fine(w.toeBend); out[5 * k + 2] = fine(w.camberBend); out[5 * k + 3] = fine(w.shiftX); out[5 * k + 4] = fine(w.shiftZ);
+        }
+        return out;
+    }
+    function recordSoft(entry, index) {
+        var soft = softOf(entry);
+        if(!soft) return;
+        var object = entry.object, v = object.vehicle, sb = v.softBody, last = soft.records[soft.records.length - 1];
+        var disp = soft.disp;
+        if(sb.version !== soft.version || !disp) {
+            soft.version = sb.version;
+            var fresh = new Int16Array(3 * soft.nodes);
+            for(var i = 0; i < fresh.length; i++) fresh[i] = Math.max(-32767, Math.min(32767, Math.round(sb.displacement[i] * SOFT_SCALE)));
+            disp = soft.disp = sameArray(fresh, disp) ? disp : fresh;
+        }
+        var partList = object.parts && object.parts.replay;
+        var partData = new Float32Array(partList ? object.parts.parts.length * PART_FLOATS : 0);
+        if(partList) { partList.replayRecord(partData); soft.names = partList.names(); }
+        var wheels = wheelFloats(v, new Float32Array(WHEEL_FLOATS));
+        if(last && last.disp === disp && sameArray(last.parts, partData) && sameArray(last.wheels, wheels)) return;
+        soft.records.push({ index: index, disp: disp, parts: partData, wheels: wheels });
+    }
+    function trimSoft() {
+        var from = first();
+        cars.forEach(function(entry) {
+            var r = entry.soft && entry.soft.records;
+            while(r && r.length > 1 && r[1].index <= from) r.shift();
+        });
+    }
+
     function init() {
         if(typeof car === "undefined" || !car || !car.isReady() || typeof race === "undefined") return false;
         cars = [{ object: car, player: true }];
@@ -107,11 +160,11 @@ OpenRacer.Replay = (function() {
         if(!chunks.length || fill === CHUNK) {
             chunks.push(new Float32Array(CHUNK * perSample()));
             fill = 0;
-            if(chunks.length * CHUNK > MAX_SECONDS * RATE) { chunks.shift(); dropped++; }
+            if(chunks.length * CHUNK > MAX_SECONDS * RATE) { chunks.shift(); dropped++; trimSoft(); }
         }
         var chunk = chunks[chunks.length - 1];
         var base = fill * perSample();
-        for(var i = 0; i < cars.length; i++) write(chunk, base + i * STRIDE, cars[i]);
+        for(var i = 0; i < cars.length; i++) { write(chunk, base + i * STRIDE, cars[i]); recordSoft(cars[i], total); }
         fill++;
         total++;
     }
@@ -166,6 +219,71 @@ OpenRacer.Replay = (function() {
         out[P.gear] = x[ao + P.gear];
     }
 
+    // The record of the soft body at a time, and the one after it when it is near (a hit is a few samples long: between those the shell is
+    // interpolated, but a part that is thrown off stays where it was until the next record is a sample away)
+    function softAt(soft, position) {
+        var r = soft.records, lo = 0, hi = r.length - 1;
+        if(!r.length) return null;
+        while(lo < hi) { var mid = (lo + hi + 1) >> 1; if(r[mid].index <= position) lo = mid; else hi = mid - 1; }
+        return lo;
+    }
+    var mixParts = null, mixDisp = null;
+    function showSoft(entry, time) {
+        var soft = entry.soft, object = entry.object, v = object.vehicle, sb = v.softBody;
+        if(!soft || soft.broken || !sb || (sb.bodyCount || sb.count) !== soft.nodes) return;
+        var partList = object.parts && object.parts.replay;
+        if(partList && partList.names().join("|") !== soft.names.join("|") && soft.names.length) return;      // not the car that it was made with
+        var position = Math.max(first(), Math.min(last(), time / DT));
+        var i = softAt(soft, position);
+        if(i === null) return;
+        var rec = soft.records[i], next = soft.records[i + 1];
+        var f = next && next.index - rec.index <= 2 ? Math.max(0, Math.min(1, (position - rec.index) / (next.index - rec.index))) : 0;
+        if(f === 0) next = null;
+        // the shell
+        var n = 3 * soft.nodes;
+        if(!mixDisp || mixDisp.length < n) mixDisp = new Float32Array(n);
+        for(var k = 0; k < n; k++) mixDisp[k] = (next ? rec.disp[k] + (next.disp[k] - rec.disp[k]) * f : rec.disp[k]) / SOFT_SCALE;
+        var shown = soft.shown;
+        if(!shown || shown.rec !== rec || shown.f !== f) {
+            sb.displacement.set(mixDisp.subarray(0, n));
+            sb.version++;
+            soft.shown = { rec: rec, f: f };
+        }
+        // the parts
+        if(partList && rec.parts.length === partList.names().length * PART_FLOATS) {
+            var np = rec.parts.length;
+            if(!mixParts || mixParts.length < np) mixParts = new Float32Array(np);
+            for(var p = 0; p < np; p += PART_FLOATS) {
+                var code = rec.parts[p];
+                var both = next && next.parts.length === np && next.parts[p] === code && code;
+                for(var q = 0; q < PART_FLOATS; q++) mixParts[p + q] = both ? rec.parts[p + q] + (next.parts[p + q] - rec.parts[p + q]) * f : rec.parts[p + q];
+                if(both) {
+                    // the turn: along the shortest way, then made one again
+                    var dot = rec.parts[p + 4] * next.parts[p + 4] + rec.parts[p + 5] * next.parts[p + 5] + rec.parts[p + 6] * next.parts[p + 6] + rec.parts[p + 7] * next.parts[p + 7];
+                    if(dot < 0) for(var d = 4; d < 8; d++) mixParts[p + d] = rec.parts[p + d] + (-next.parts[p + d] - rec.parts[p + d]) * f;
+                    var len = Math.hypot(mixParts[p + 4], mixParts[p + 5], mixParts[p + 6], mixParts[p + 7]) || 1;
+                    for(var e = 4; e < 8; e++) mixParts[p + e] /= len;
+                }
+            }
+            partList.replayApply(mixParts, function(partIndex) { return frozenShell(soft, i, partIndex); });
+        }
+        // the wheels
+        var w = rec.wheels;
+        for(var k2 = 0; k2 < 4; k2++) {
+            var wheel = v.wheels[k2];
+            if(v.wheelLost) v.wheelLost[k2] = w[5 * k2] > 0.5;
+            wheel.toeBend = w[5 * k2 + 1]; wheel.camberBend = w[5 * k2 + 2]; wheel.shiftX = w[5 * k2 + 3]; wheel.shiftZ = w[5 * k2 + 4];
+        }
+    }
+    // the displacements of the shell at the moment that a part came off: the first record of the run in which it is not held
+    function frozenShell(soft, index, partIndex) {
+        var o = partIndex * PART_FLOATS, j = index;
+        while(j > 0 && soft.records[j - 1].parts.length > o && soft.records[j - 1].parts[o] !== 0) j--;
+        var disp = soft.records[j].disp, out = new Float32Array(disp.length);
+        for(var k = 0; k < disp.length; k++) out[k] = disp[k] / SOFT_SCALE;
+        return out;
+    }
+
     function show(time, delta) {
         for(var i = 0; i < cars.length; i++) {
             var entry = cars[i], object = entry.object;
@@ -173,6 +291,8 @@ OpenRacer.Replay = (function() {
             var visible = scratch[P.present] > 0.5;
             if(!visible) continue;
             read(scratch, 0, entry);
+            if(object.parts && object.parts.replay) object.parts.replay.replayBegin();       // (a car that is built while the replay is open: its parts are made after it)
+            if(entry.soft) showSoft(entry, time);
             object.vehicle.updateOutputs();
             if(entry.player) object.updateVisuals(delta);
             else object.updateVisuals();
@@ -568,6 +688,11 @@ OpenRacer.Replay = (function() {
     api.start = function() {
         if(api.active || (!api.viewer && !api.available())) return false;
         snapshot = cars.map(function(entry, i) { var s = new Float32Array(STRIDE); write(s, 0, entry); return s; });
+        cars.forEach(function(entry) {
+            var v = entry.object.vehicle;
+            if(entry.soft && v.softBody) { entry.live = { wheels: wheelFloats(v, new Float32Array(WHEEL_FLOATS)) }; entry.soft.shown = null; }
+            if(entry.object.parts && entry.object.parts.replay) entry.object.parts.replay.replayBegin();
+        });
         api.active = true;
         document.body.classList.add("replaying");
         t = api.end_time();
@@ -593,11 +718,24 @@ OpenRacer.Replay = (function() {
             if(entry.player) entry.object.updateVisuals(0); else entry.object.updateVisuals();
         }
         snapshot = null;
+        cars.forEach(function(entry) {
+            var v = entry.object.vehicle;
+            if(entry.object.parts && entry.object.parts.replay) entry.object.parts.replay.replayEnd();
+            if(entry.live && v.softBody) {
+                v.softBody.syncDisplacement();
+                var w = entry.live.wheels;
+                for(var k = 0; k < 4; k++) { if(v.wheelLost) v.wheelLost[k] = w[5 * k] > 0.5; v.wheels[k].toeBend = w[5 * k + 1]; v.wheels[k].camberBend = w[5 * k + 2]; v.wheels[k].shiftX = w[5 * k + 3]; v.wheels[k].shiftZ = w[5 * k + 4]; }
+                entry.live = null;
+            }
+        });
         leaveFree();
         if(ui) { ui.bar.remove(); ui.info.remove(); ui = null; }
         document.body.classList.remove("replaying");
         if(typeof lastFrameTime !== "undefined") lastFrameTime = performance.now();
     };
+
+    // To a time of the recording (seconds), for the tests
+    api.seek = function(seconds) { t = Math.max(api.start_time(), Math.min(api.end_time(), seconds)); };
 
     // Once per frame while the replay is open, with the real time of the frame
     api.frame = function(delta) {
@@ -620,9 +758,12 @@ OpenRacer.Replay = (function() {
     // ---- a file: save and open
 
     var MAGIC = [0x4f, 0x52, 0x52, 0x50];          // "ORRP"
-    var FORMAT = "openracer-replay", FILE_VERSION = 1;
+    var FORMAT = "openracer-replay", FILE_VERSION = 2;       // 2: the soft body (a block of records after the numbers); 1 files have none and can still be opened
     var MAX_FILE = 300 * 1024 * 1024, MAX_CARS = 12, MAX_SAMPLES = 108000;   // an hour
     var ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
+
+    // the bytes of a record: the sample (4), the displacements (16 bits each, to a multiple of four bytes), the parts and the wheels (32 bits each)
+    function recordSize(info) { return 4 + Math.ceil(info.nodes * 3 * 2 / 4) * 4 + info.parts.length * PART_FLOATS * 4 + WHEEL_FLOATS * 4; }
 
     function pack() {
         var per = perSample(), n = total - first();
@@ -633,8 +774,31 @@ OpenRacer.Replay = (function() {
             data.set(chunks[c].subarray(0, count * per), pos);
             pos += count * per;
         }
+        // the soft body: per car the records that are still inside the recording, as a block of bytes after the numbers
+        var base = first();
+        var softInfo = cars.map(function(entry) {
+            var soft = entry.soft;
+            if(!soft || !soft.records.length) return null;
+            return { nodes: soft.nodes, parts: soft.names.slice(0, MAX_SOFT_PARTS), count: soft.records.length };
+        });
+        var softBytes = 0, sizes = softInfo.map(function(info) { if(!info) return 0; var size = recordSize(info); softBytes += size * info.count; return size; });
+        var softBlob = new Uint8Array(softBytes), view = new DataView(softBlob.buffer), at = 0;
+        cars.forEach(function(entry, c) {
+            var info = softInfo[c];
+            if(!info) return;
+            entry.soft.records.forEach(function(rec) {
+                view.setUint32(at, Math.max(0, rec.index - base), true);
+                for(var i = 0; i < rec.disp.length; i++) view.setInt16(at + 4 + 2 * i, rec.disp[i], true);
+                var o = at + 4 + Math.ceil(rec.disp.length * 2 / 4) * 4;
+                for(var j = 0; j < info.parts.length * PART_FLOATS; j++) view.setFloat32(o + 4 * j, j < rec.parts.length ? rec.parts[j] : 0, true);
+                o += info.parts.length * PART_FLOATS * 4;
+                for(var k = 0; k < WHEEL_FLOATS; k++) view.setFloat32(o + 4 * k, rec.wheels[k], true);
+                at += sizes[c];
+            });
+        });
         var header = {
             format: FORMAT, version: FILE_VERSION, game: (OpenRacer.VERSION || ""), created: new Date().toISOString(),
+            soft: softInfo, softBytes: softBytes,
             rate: RATE, stride: STRIDE, samples: n,
             track: { id: currentTrack.id, name: currentTrack.name || currentTrack.id },
             cars: cars.map(function(entry) {
@@ -645,12 +809,13 @@ OpenRacer.Replay = (function() {
         };
         var text = new TextEncoder().encode(JSON.stringify(header));
         var padded = Math.ceil((text.length + 8) / 4) * 4 - 8;      // the numbers start on a multiple of four
-        var out = new Uint8Array(8 + padded + data.byteLength);
+        var out = new Uint8Array(8 + padded + data.byteLength + softBytes);
         out.set(MAGIC, 0);
         new DataView(out.buffer).setUint32(4, padded, true);
         out.fill(0x20, 8, 8 + padded);
         out.set(text, 8);
         out.set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength), 8 + padded);
+        out.set(softBlob, 8 + padded + data.byteLength);
         return out;
     }
 
@@ -700,7 +865,7 @@ OpenRacer.Replay = (function() {
         var header;
         try { header = JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + headerLength))); } catch(e) { throw bad("This replay file is damaged."); }
         if(!header || header.format !== FORMAT) throw bad("This is not an OpenRacer replay.");
-        if(header.version !== FILE_VERSION || header.stride !== STRIDE || header.rate !== RATE) throw bad("This replay was made with another version of OpenRacer (" + String(header.game || "?").slice(0, 20) + ") and cannot be opened by this one.");
+        if((header.version !== FILE_VERSION && header.version !== 1) || header.stride !== STRIDE || header.rate !== RATE) throw bad("This replay was made with another version of OpenRacer (" + String(header.game || "?").slice(0, 20) + ") and cannot be opened by this one.");
         if(!header.track || !ID_PATTERN.test(String(header.track.id)) || !Array.isArray(header.cars) || header.cars.length < 1 || header.cars.length > MAX_CARS) throw bad("This replay file is damaged.");
         for(var i = 0; i < header.cars.length; i++) {
             var c = header.cars[i];
@@ -713,11 +878,50 @@ OpenRacer.Replay = (function() {
         if(!(samples >= 2 && samples <= MAX_SAMPLES && samples === Math.floor(samples))) throw bad("This replay file is damaged.");
         var start = 8 + headerLength;
         var wanted = samples * header.cars.length * STRIDE * 4;
-        if(start % 4 !== 0 || bytes.length - start !== wanted) throw bad("This replay file is damaged.");
+        // the soft body (version 2): per car nothing or { nodes, parts: [names], count }, and the records in a block after the numbers
+        var soft = header.cars.map(function() { return null; }), softBytes = 0;
+        if(header.version === FILE_VERSION && header.soft !== undefined) {
+            if(!Array.isArray(header.soft) || header.soft.length !== header.cars.length) throw bad("This replay file is damaged.");
+            header.soft = header.soft.map(function(info) {
+                if(info === null) return null;
+                if(!info || !(info.nodes >= 1 && info.nodes <= MAX_SOFT_NODES && info.nodes === Math.floor(info.nodes)) || !Array.isArray(info.parts) || info.parts.length > MAX_SOFT_PARTS ||
+                   !(info.count >= 1 && info.count <= samples * 4 && info.count === Math.floor(info.count))) throw bad("This replay file is damaged.");
+                info.parts = info.parts.map(function(name) { return String(name).slice(0, 80); });
+                softBytes += recordSize(info) * info.count;
+                return info;
+            });
+            if(header.softBytes !== softBytes) throw bad("This replay file is damaged.");
+        } else header.soft = soft;
+        if(start % 4 !== 0 || bytes.length - start !== wanted + softBytes) throw bad("This replay file is damaged.");
         var data = new Float32Array(bytes.buffer.slice(bytes.byteOffset + start, bytes.byteOffset + start + wanted));
         for(var k = 0; k < data.length; k++) if(!isFinite(data[k])) throw bad("This replay file is damaged.");
+        var view = new DataView(bytes.buffer, bytes.byteOffset + start + wanted, softBytes), at = 0;
+        soft = header.soft.map(function(info) {
+            if(!info) return null;
+            var size = recordSize(info), records = [], previous = -1, disp = null;
+            for(var r = 0; r < info.count; r++, at += size) {
+                var index = view.getUint32(at, true);
+                if(index >= samples || index <= previous) throw bad("This replay file is damaged.");
+                previous = index;
+                var fresh = new Int16Array(info.nodes * 3);
+                for(var i = 0; i < fresh.length; i++) fresh[i] = view.getInt16(at + 4 + 2 * i, true);
+                if(!disp || !sameArray(disp, fresh)) disp = fresh;
+                var o = at + 4 + Math.ceil(fresh.length * 2 / 4) * 4;
+                var parts = new Float32Array(info.parts.length * PART_FLOATS);
+                for(var j = 0; j < parts.length; j++) {
+                    parts[j] = view.getFloat32(o + 4 * j, true);
+                    if(!isFinite(parts[j])) throw bad("This replay file is damaged.");
+                    if(j % PART_FLOATS === 0 && parts[j] !== 0 && parts[j] !== 1 && parts[j] !== 2) throw bad("This replay file is damaged.");
+                }
+                o += parts.length * 4;
+                var wheels = new Float32Array(WHEEL_FLOATS);
+                for(var w = 0; w < WHEEL_FLOATS; w++) { wheels[w] = view.getFloat32(o + 4 * w, true); if(!isFinite(wheels[w])) throw bad("This replay file is damaged."); }
+                records.push({ index: index, disp: disp, parts: parts, wheels: wheels });
+            }
+            return { nodes: info.nodes, names: info.parts, records: records, version: -1, disp: null };
+        });
         header.gears = Array.isArray(header.gears) ? header.gears.map(function(g) { return String(g).slice(0, 8); }) : [""];
-        return { header: header, data: data };
+        return { header: header, data: data, soft: soft };
     }
 
     // From the main menu: reads a file, checks that this game has the track and the cars, keeps it for the game that is started to show it.
@@ -775,7 +979,7 @@ OpenRacer.Replay = (function() {
     // Puts a file in place of the recording: the cars (the player's first, then the others as the file has them)
     api.load = function(parsed, objects) {
         var per = objects.length * STRIDE, n = parsed.header.samples;
-        cars = objects.map(function(object, i) { return { object: object, player: i === 0 }; });
+        cars = objects.map(function(object, i) { return { object: object, player: i === 0, soft: parsed.soft && parsed.soft[i] ? parsed.soft[i] : null }; });
         gearLabels = parsed.header.gears;
         chunks = [];
         for(var s = 0; s < n; s += CHUNK) {
@@ -788,6 +992,7 @@ OpenRacer.Replay = (function() {
         api.viewer = true;
     };
 
+    api.debugSoft = function() { return cars.map(function(e) { return e.soft ? e.soft.records.map(function(r) { var m = 0; for(var i = 0; i < r.disp.length; i++) m = Math.max(m, Math.abs(r.disp[i])); return r.index + ':' + (m / SOFT_SCALE).toFixed(3) + ':' + Array.prototype.join.call(r.parts.filter(function(x, i) { return i % PART_FLOATS === 0; }), ''); }) : null; }); };
     api.info = function() { return { seconds: total * DT, cars: cars.length, blocks: chunks.length, megabytes: chunks.length * CHUNK * perSample() * 4 / 1048576 }; };
     api.speeds = SPEEDS;
 

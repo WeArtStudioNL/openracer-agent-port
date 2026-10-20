@@ -443,6 +443,7 @@ OpenRacer.Parts = (function () {
         }
 
         function update(dt) {
+            if (replaying) return;                          // the replay (Replay.js) puts the parts where they were; nothing runs
             dt = Math.min(Math.max(dt, 1e-4), 1 / 20);
             frame++;
             setPose();
@@ -586,7 +587,82 @@ OpenRacer.Parts = (function () {
             }
         }
 
+        // ---- the replay (Replay.js): what is recorded of a part is its state (0 held, 1 hinged, 2 free) and, when it is not held, the place of its
+        // object in the scene (position, turn, size: 11 numbers). The engine does not run while a replay is shown; the parts are put where they were.
+        var replaying = false, PART_FLOATS = 11, tmpP = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpS = new THREE.Vector3();
+        function awayFromModel(part, frozen) {
+            var o = part.object;
+            part.rAway = true;
+            o.updateWorldMatrix(true, false);
+            var top = o;
+            while (top.parent) top = top.parent;
+            top.attach(o);
+            o.matrixAutoUpdate = false;
+            if (!part.group && ctx.softBodyMesh && ctx.softBodyMesh.release) {
+                // it keeps the dent that the car had when it came off (the replay gives those displacements), not the one of the moment that is shown
+                var live = null;
+                if (frozen && sb) { live = sb.displacement.slice(0, frozen.length); sb.displacement.set(frozen); }
+                ctx.softBodyMesh.release(o);
+                if (live) sb.displacement.set(live);
+            }
+        }
+        function backOnModel(part) {
+            var o = part.object;
+            part.rAway = false;
+            if (part.wheel !== undefined) o.matrixAutoUpdate = true;
+            else {
+                part.parent.add(o);
+                restoreHome(o, o.userData.partHome);
+                o.traverse(function (m) { if (m.userData && m.userData.sbDeform) m.userData.sbDeform.value = 1; });
+            }
+            if (ctx.softBodyMesh && ctx.softBodyMesh.unfreeze) ctx.softBodyMesh.unfreeze(o);
+        }
+        var replayApi = {
+            partFloats: PART_FLOATS,
+            names: function () { return parts.map(function (p) { return p.name; }); },
+            // out: Float32Array(parts.length * 11)
+            replayRecord: function (out) {
+                for (var i = 0; i < parts.length; i++) {
+                    var p = parts[i], o = i * PART_FLOATS, code = p.state === "held" ? 0 : (p.state === "hinged" ? 1 : 2);
+                    out[o] = code;
+                    if (!code) { for (var k = 1; k < PART_FLOATS; k++) out[o + k] = 0; continue; }
+                    p.object.matrix.decompose(tmpP, tmpQ, tmpS);
+                    out[o + 1] = tmpP.x; out[o + 2] = tmpP.y; out[o + 3] = tmpP.z;
+                    out[o + 4] = tmpQ.x; out[o + 5] = tmpQ.y; out[o + 6] = tmpQ.z; out[o + 7] = tmpQ.w;
+                    out[o + 8] = tmpS.x; out[o + 9] = tmpS.y; out[o + 10] = tmpS.z;
+                }
+            },
+            // in: Float32Array(parts.length * 11); frozen(i): the displacements (Float32Array) of the shell at the moment part i came off, or null
+            replayApply: function (arr, frozen) {
+                for (var i = 0; i < parts.length; i++) {
+                    var p = parts[i], o = i * PART_FLOATS, code = arr[o];
+                    if (!code) { if (p.rAway) backOnModel(p); continue; }
+                    if (!p.rAway) awayFromModel(p, frozen ? frozen(i) : null);
+                    p.object.matrix.compose(tmpP.set(arr[o + 1], arr[o + 2], arr[o + 3]), tmpQ.set(arr[o + 4], arr[o + 5], arr[o + 6], arr[o + 7]), tmpS.set(arr[o + 8], arr[o + 9], arr[o + 10]));
+                    p.object.matrixWorldNeedsUpdate = true;
+                }
+            },
+            replayBegin: function () {
+                if (replaying) return;
+                replaying = true;
+                parts.forEach(function (p) { p.rAway = p.state !== "held"; });
+            },
+            // back to the game: every part where the game has it
+            replayEnd: function () {
+                replaying = false;
+                parts.forEach(function (p) {
+                    if (p.state === "held") { if (p.rAway) backOnModel(p); return; }
+                    if (!p.rAway) awayFromModel(p, null);
+                    var t = p.body.translation(), r = p.body.rotation();
+                    bodyM.compose(a.set(t.x, t.y, t.z), qInv.set(r.x, r.y, r.z, r.w), unit);
+                    p.object.matrix.multiplyMatrices(bodyM, p.visual);
+                    p.object.matrixWorldNeedsUpdate = true;
+                });
+            }
+        };
+
         return {
+            replay: replayApi,
             world: world, parts: parts, events: events, update: update, repair: repair,
             // the car is taken out of the scene (the car editor makes a new one for every test): the parts that were thrown out of it go with it
             dispose: function () { parts.forEach(function (p) { if (p.state !== "held" && p.object.parent) p.object.parent.remove(p.object); }); },
