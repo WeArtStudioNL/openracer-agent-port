@@ -10,6 +10,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { createDesign } from "./track-design.js";
 
 const $ = (id) => document.getElementById(id);
@@ -66,6 +67,53 @@ scene.add(trackGroup);
 const markers = new THREE.Group(); // the start and the gates
 scene.add(markers);
 const raycaster = new THREE.Raycaster();
+
+// ---- the layers of the events (the drag strip): chosen in the list, it shows a gizmo with arrows for the place and a circle for the direction
+const eventLayers = { selected: null, dragging: false };
+const dragTarget = new THREE.Object3D();
+scene.add(dragTarget);
+const moveGizmo = new TransformControls(camera, renderer.domElement);
+moveGizmo.setSize(0.9);
+const turnGizmo = new TransformControls(camera, renderer.domElement);
+turnGizmo.setMode("rotate");
+turnGizmo.setSpace("world");
+turnGizmo.setSize(0.8);
+turnGizmo.showX = false; turnGizmo.showZ = false;       // the strip only turns about the vertical
+[moveGizmo, turnGizmo].forEach((g) => {
+    g.addEventListener("dragging-changed", (event) => { controls.enabled = !event.value; eventLayers.dragging = event.value; if (!event.value) updateMarkers(); });
+    g.addEventListener("objectChange", () => dragGizmoMoved());
+    scene.add(typeof g.getHelper === "function" ? g.getHelper() : g);
+});
+function dragGizmoMoved() {
+    if (!state.drag) return;
+    state.drag.x = dragTarget.position.x; state.drag.y = dragTarget.position.y; state.drag.z = dragTarget.position.z;
+    state.drag.heading = -dragTarget.rotation.y;          // (the heading goes from +x towards +z, a turn about y goes the other way)
+    updateMarkers();
+}
+function selectEvent(id) {
+    eventLayers.selected = eventLayers.selected === id ? null : id;
+    moveGizmo.detach(); turnGizmo.detach();
+    if (eventLayers.selected === "drag" && state.drag) {
+        syncDragTarget();
+        moveGizmo.attach(dragTarget); turnGizmo.attach(dragTarget);
+    } else eventLayers.selected = null;
+    renderEventLayers();
+}
+function syncDragTarget() {
+    if (!state.drag || eventLayers.dragging) return;
+    dragTarget.position.set(state.drag.x, state.drag.y, state.drag.z);
+    dragTarget.rotation.set(0, -state.drag.heading, 0);
+}
+function renderEventLayers() {
+    const list = $("eventList");
+    list.innerHTML = "";
+    const row = document.createElement("div");
+    row.className = "layer" + (eventLayers.selected === "drag" ? " selected" : "") + (state.drag ? "" : " dim");
+    row.innerHTML = "<i></i><span>Drag strip</span><span class=\"meta\">" + (state.drag ? Math.round(state.drag.length) + " m" : "none") + "</span>";
+    row.title = state.drag ? "Choose it to move it (arrows) and turn it (circle)" : "Place it with the Drag strip tool first";
+    row.addEventListener("click", () => { if (state.drag) selectEvent("drag"); });
+    list.appendChild(row);
+}
 
 function resize() {
     const w = view.clientWidth, h = view.clientHeight;
@@ -428,6 +476,9 @@ function updateMarkers() {
     } else {
         $("dragInfo").textContent = "No drag strip yet: click on the road and drag in its direction.";
     }
+    syncDragTarget();
+    if (eventLayers.selected === "drag" && !state.drag) selectEvent("drag");
+    renderEventLayers();
     renderGates();
 }
 
@@ -535,7 +586,7 @@ let drag = null;
 renderer.domElement.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
     drag = { x: event.clientX, y: event.clientY, hit: null, moved: false };
-    if (state.mode === "start" || state.mode === "gate" || state.mode === "drag") {
+    if ((state.mode === "start" || state.mode === "gate" || state.mode === "drag") && !moveGizmo.axis && !turnGizmo.axis) {
         const hit = roadHit(event);
         if (hit) {
             drag.hit = hit;
