@@ -19,10 +19,10 @@
 
 OpenRacer.Graphics = (function () {
     var PRESETS = {
-        low: { gfxScale: 0.75, gfxAA: 0, gfxShadows: 1, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: false },
-        medium: { gfxScale: 1, gfxAA: 2, gfxShadows: 2, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: true },
-        high: { gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true },
-        ultra: { gfxScale: 1, gfxAA: 4, gfxShadows: 3, gfxReflections: 2, gfxAO: 2, gfxGI: 1, gfxVignette: true }
+        low: { gfxScale: 0.75, gfxAA: 0, gfxShadows: 1, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: false, gfxSmoke: 50 },
+        medium: { gfxScale: 1, gfxAA: 2, gfxShadows: 2, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 75 },
+        high: { gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100 },
+        ultra: { gfxScale: 1, gfxAA: 4, gfxShadows: 3, gfxReflections: 2, gfxAO: 2, gfxGI: 1, gfxVignette: true, gfxSmoke: 100 }
     };
     var SHADOW_SIZES = [0, 512, 1024, 2048, 4096];
     var REFLECTION_EVERY = [0, 8, 2];                     // the frames between two updates of the reflections (0: not at all)
@@ -82,7 +82,8 @@ OpenRacer.Graphics = (function () {
             });
             var oldTarget = renderer.getRenderTarget(), oldAuto = renderer.autoClear, oldAlpha = renderer.getClearAlpha();
             renderer.getClearColor(this.clearColor);
-            var oldBackground = this.scene.background, oldOverride = this.scene.overrideMaterial;
+            var oldBackground = this.scene.background, oldOverride = this.scene.overrideMaterial, oldShadows = renderer.shadowMap.autoUpdate;
+            renderer.shadowMap.autoUpdate = false;                  // the shadow maps were made for the picture of the scene: not again
             renderer.setRenderTarget(this.target);
             renderer.autoClear = false;
             renderer.setClearColor(0x7777ff, 1);
@@ -100,6 +101,7 @@ OpenRacer.Graphics = (function () {
                 o.material = self.normalFor(o) || plain;
             });
             renderer.render(this.scene, this.camera);
+            renderer.shadowMap.autoUpdate = oldShadows;
             for (var m = 0; m < swapped.length; m += 2) swapped[m].material = swapped[m + 1];
             this.scene.overrideMaterial = oldOverride;
             this.scene.background = oldBackground;
@@ -205,6 +207,57 @@ OpenRacer.Graphics = (function () {
         }
     }
 
+    // ---- the smoke, after the screen space effects: the occlusion and the bounce are worked out from the surfaces, and the smoke is no surface;
+    // drawn with the scene they would darken and tint it as if it were the road behind it. Its own layer (Smoke.js): the camera leaves it out
+    // of the scene and this pass draws only that layer on the picture, with the depth of the surfaces to fade against and hide behind them.
+    class SmokePass extends THREE.Pass {
+        constructor(scene, camera, gbuffer, width, height) {
+            super();
+            this.scene = scene; this.camera = camera; this.gbuffer = gbuffer;
+            // the smoke goes into a picture of its own (not into the buffer of the composer, which is multisampled: what is drawn on such a buffer
+            // later is not kept), and is laid over the picture after it
+            this.target = new THREE.WebGLRenderTarget(width, height, { type: THREE.HalfFloatType, depthBuffer: false });
+            this.material = new THREE.ShaderMaterial({
+                uniforms: { tBase: { value: null }, tSmoke: { value: this.target.texture } },
+                vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+                fragmentShader: "uniform sampler2D tBase; uniform sampler2D tSmoke; varying vec2 vUv;" +
+                    "void main() { vec4 base = texture2D(tBase, vUv); vec4 smoke = texture2D(tSmoke, vUv); gl_FragColor = vec4(base.rgb * (1.0 - smoke.a) + smoke.rgb, base.a); }",
+                depthTest: false, depthWrite: false
+            });
+            this.quad = new THREE.FullScreenQuad(this.material);
+        }
+        setSize(width, height) { this.target.setSize(width, height); }
+        dispose() { this.target.dispose(); this.material.dispose(); this.quad.dispose(); }
+        render(renderer, writeBuffer, readBuffer) {
+            var u = OpenRacer.SmokeDepth, camera = this.camera, scene = this.scene;
+            u.tDepth.value = this.gbuffer.depthTexture; u.uUseDepth.value = 1;
+            u.uResolution.value.set(this.target.width, this.target.height);
+            u.uNear.value = camera.near; u.uFar.value = camera.far;
+            var oldMask = camera.layers.mask, oldBackground = scene.background, oldTarget = renderer.getRenderTarget(), oldShadows = renderer.shadowMap.autoUpdate;
+            var oldAuto = renderer.autoClear, oldAlpha = renderer.getClearAlpha();
+            renderer.getClearColor(this.clearColor || (this.clearColor = new THREE.Color()));
+            camera.layers.set(1);
+            scene.background = null;
+            renderer.shadowMap.autoUpdate = false;
+            renderer.setRenderTarget(this.target);
+            renderer.autoClear = false;
+            renderer.setClearColor(0x000000, 0);
+            renderer.clear();
+            renderer.render(scene, camera);
+            renderer.setClearColor(this.clearColor, oldAlpha);
+            renderer.shadowMap.autoUpdate = oldShadows;
+            renderer.autoClear = oldAuto;
+            scene.background = oldBackground;
+            camera.layers.mask = oldMask;
+            u.uUseDepth.value = 0;
+            // over the picture
+            this.material.uniforms.tBase.value = readBuffer.texture;
+            renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
+            this.quad.render(renderer);
+            renderer.setRenderTarget(oldTarget);
+        }
+    }
+
     // ---- the chain
     function disposePasses() {
         for (var k in passes) if (passes[k] && passes[k].dispose) passes[k].dispose();
@@ -257,6 +310,10 @@ OpenRacer.Graphics = (function () {
             passes.ssgi = new SSGIPass(camera, passes.gbuffer, width, height, gi);
             composer.addPass(passes.ssgi);
         }
+
+        // the smoke (layer 1): with the scene when there are no screen space effects, otherwise after them (SmokePass)
+        if (passes.gbuffer) { camera.layers.disable(1); passes.smoke = new SmokePass(scene, camera, passes.gbuffer, width, height); composer.addPass(passes.smoke); }
+        else camera.layers.enable(1);
 
         var effectColor = new THREE.ShaderPass(THREE.ColorCorrectionShader);
         effectColor.uniforms["mulRGB"].value.set(1.2, 1.2, 1.2);
@@ -318,6 +375,7 @@ OpenRacer.Graphics = (function () {
     function changed(name) {
         if (!ctx || applying || name === "gfxPreset") return;
         if (name === "gfxScale") { applyScale(); build(); }
+        else if (name === "gfxSmoke") { if (currentPreset() !== opt("gfxPreset")) Settings.setOption("gfxPreset", currentPreset()); }       // (Smoke.js reads it)
         else if (name === "gfxShadows") applyShadows();
         else if (name === "gfxReflections") applyReflections();
         else build();       // the anti-aliasing, the screen space effects, the vignette
