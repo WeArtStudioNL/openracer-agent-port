@@ -203,10 +203,11 @@ function setModel(root, isNew, replace) {
     renderMaterials();
     state.nodes = [];
     const walk = (object, depth) => {
-        if (object !== root && object.name) state.nodes.push({ name: object.name, depth });
+        if (object !== root && object.name) state.nodes.push({ name: object.name, depth, object });
         object.children.forEach((child) => walk(child, depth + 1));
     };
     walk(root, 0);
+    renderLayers();
     updateSteeringInfo();
     for (const slot of SLOTS) {
         const select = $("w" + slot);
@@ -687,6 +688,28 @@ function renderLayers() {
         row.addEventListener("click", () => selectLayer(l.id));
         list.appendChild(row);
     });
+    // every named object of the model, with an eye to show or hide it (a hidden object hides what is inside it too)
+    if (state.nodes.length) {
+        const g = document.createElement("div");
+        g.className = "group";
+        g.textContent = "Parts";
+        list.appendChild(g);
+        state.nodes.forEach((node) => {
+            const row = document.createElement("div");
+            row.className = "layer part";
+            row.style.paddingLeft = (18 + Math.min(node.depth, 6) * 10) + "px";
+            const text = document.createElement("span");
+            text.textContent = node.name;
+            text.title = node.name;
+            const eye = document.createElement("button");
+            eye.className = "eye";
+            const paint = () => { const on = node.object.visible; eye.textContent = on ? "👁" : "—"; eye.title = on ? "Hide" : "Show"; row.classList.toggle("dim", !on); };
+            eye.addEventListener("click", (e) => { e.stopPropagation(); node.object.visible = !node.object.visible; paint(); });
+            paint();
+            row.append(text, eye);
+            list.appendChild(row);
+        });
+    }
 }
 
 // a click on a marker in the view selects its layer
