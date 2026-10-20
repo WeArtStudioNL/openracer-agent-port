@@ -132,8 +132,10 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
     scene.add(mesh);
 
     var amount = 1;                                      // the smoke setting of the graphics menu (1 is 100%)
+    var alive = 0, made = 0;                             // how many puffs are alive after the last frame, and how many were made in this one: with none, nothing is done
 
     function spawn(x, y, z, vx, vy, vz, heat, dust) {
+        made++;
         var i = next;
         next = (next + 1) % capacity;
         positions[i * 3] = x + (Math.random() - 0.5) * 0.3;
@@ -224,6 +226,9 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                 last[w] = null;
             }
         }
+        if(alive === 0 && made === 0) return;               // no smoke and none made: the whole ring of puffs is not looked at, and nothing goes to the graphics card
+        made = 0;
+        alive = 0;
         var drag = Math.exp(-2.2 * delta);
         for(var i = 0; i < capacity; i++) {
             if(age[i] >= life[i]) {
@@ -231,6 +236,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                 continue;
             }
             age[i] += delta;
+            alive++;
             var t = Math.min(1, age[i] / life[i]);
             var px = positions[i * 3], py = positions[i * 3 + 1], pz = positions[i * 3 + 2];
             // a little turbulence that changes slowly in space and time, and the wind: the plume curls and drifts instead of rising in a column

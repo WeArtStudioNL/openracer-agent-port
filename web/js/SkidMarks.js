@@ -57,9 +57,10 @@ OpenRacer.SkidMarks = function (scene, capacity) {
             positions[(base + c) * 3] = corners[c][0]; positions[(base + c) * 3 + 1] = corners[c][1]; positions[(base + c) * 3 + 2] = corners[c][2];
             colors[(base + c) * 4] = r; colors[(base + c) * 4 + 1] = g; colors[(base + c) * 4 + 2] = bl; colors[(base + c) * 4 + 3] = corners[c][3];
         }
+        // only the four corners that were written go to the graphics card (the buffers hold thousands of strips)
+        geometry.attributes.position.addUpdateRange(base * 3, 12); geometry.attributes.position.needsUpdate = true;
+        geometry.attributes.color.addUpdateRange(base * 4, 16); geometry.attributes.color.needsUpdate = true;
         next = (next + 1) % capacity;
-        geometry.attributes.position.needsUpdate = true;
-        geometry.attributes.color.needsUpdate = true;
         prev.x = px; prev.y = py; prev.z = pz; prev.sx = side.x; prev.sy = side.y; prev.sz = side.z; prev.a = alpha;
     };
 

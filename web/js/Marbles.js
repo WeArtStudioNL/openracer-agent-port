@@ -54,18 +54,19 @@ OpenRacer.Marbles = function (scene, capacity) {
     attributes.iShade.needsUpdate = true;
 
     var SEEN = 2.5;                                      // how much bigger they are drawn than they are
-    var moving = 0;                                      // how many are in the air
+    var air = [];                                        // the ones that are in the air (a list, so that the ring of thousands is not looked at every frame)
+    var hit = { x: 0, y: 0, z: 0, region: 0 }, hit2 = { x: 0, y: 0, z: 0, region: 0 }, near = [], corner = new Array(9);
     var forward = { x: 0, z: 1 };
 
     function spawn(x, y, z, vx, vy, vz) {
         var i = next;
         next = (next + 1) % capacity;
-        if (flying[i]) moving--;
         radii[i] = 0.004 + Math.random() * 0.006;
         masses[i] = 0.0005 + (radii[i] - 0.004) / 0.006 * 0.002 * (0.7 + 0.6 * Math.random());
         positions[i * 3] = x; positions[i * 3 + 1] = y + radii[i]; positions[i * 3 + 2] = z;
         vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz;
-        flying[i] = 1; moving++;
+        if (!flying[i]) air.push(i);
+        flying[i] = 1;
         sizes[i] = 2 * radii[i] * SEEN;
         rotations[i] = Math.random() * 6.2832;
         shades[i] = 0.04 + Math.random() * 0.07;
@@ -102,35 +103,82 @@ OpenRacer.Marbles = function (scene, capacity) {
                     vehicle.vx + dx / dl * tangent, vehicle.vy + dy / dl * tangent + Math.random() * 0.3, vehicle.vz + dz / dl * tangent);
             }
         }
-        if (!moving) return;
-        var ground = vehicle.ground;
+        if (!air.length) return;
+        var ground = vehicle.ground, solid = ground && ground.nearby && ground.closest;
         var rolling = Math.pow(0.65, delta * 60);
-        for (var i = 0; i < capacity; i++) {
+        var kept = 0;
+        for (var a = 0; a < air.length; a++) {
+            var i = air[a];
             if (!flying[i]) continue;
+            var r = radii[i];
             var vx = vel[i * 3], vy = vel[i * 3 + 1] - 9.81 * delta, vz = vel[i * 3 + 2];
             // the drag of the air: half rho, Cd 0.7, the cross section of the marble, over its mass
             var speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
             if (speed > 1e-3) {
-                var slow = Math.min(0.9, 0.5 * 1.225 * 0.7 * Math.PI * radii[i] * radii[i] * speed / masses[i] * delta);      // (the share of the speed that it loses, kept below one)
+                var slow = Math.min(0.9, 0.5 * 1.225 * 0.7 * Math.PI * r * r * speed / masses[i] * delta);      // (the share of the speed that it loses, kept below one)
                 vx -= vx * slow; vy -= vy * slow; vz -= vz * slow;
+                speed *= 1 - slow;
             }
-            var x = positions[i * 3] += vx * delta, y = positions[i * 3 + 1] += vy * delta, z = positions[i * 3 + 2] += vz * delta;
-            var road = ground && ground.query ? ground.query(x, z, y + 0.3, 0.6) : null;
-            if (!road) { vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz; if (y < vehicle.py - 3) { flying[i] = 0; moving--; shades[i] = -1; } continue; }
-            var floor = road.y + radii[i];
-            if (y <= floor) {
-                positions[i * 3 + 1] = floor;
-                vy *= -0.25;                                  // hot rubber does not bounce
-                vx *= rolling; vz *= rolling;                 // and it rolls only a little
-                if (Math.abs(vy) < 0.5 && vx * vx + vz * vz < 0.16) { flying[i] = 0; moving--; vx = vy = vz = 0; }
+            var x = positions[i * 3], y = positions[i * 3 + 1], z = positions[i * 3 + 2];
+            // in small steps, so that a fast marble does not go through a thin wall (a fence, a kerb)
+            var steps = Math.min(3, Math.max(1, Math.ceil(speed * delta / 0.15))), h = delta / steps;
+            var rest = false, lost = false;
+            for (var st = 0; st < steps && !rest; st++) {
+                var x0 = x, y0 = y, z0 = z;
+                x += vx * h; y += vy * h; z += vz * h;
+                if (solid) {
+                    // The track as triangles (all of them: the road, the kerbs, the walls, the fences). The way from the old place to the new one is
+                    // tested against the plane of every triangle near it: a marble that would end up in or through a surface stops a radius in front
+                    // of it, where it touches, if that place is on the triangle (a sphere against a thin wall can go through it in one step otherwise).
+                    var len = Math.hypot(x - x0, y - y0, z - z0);
+                    ground.nearby((x0 + x) / 2, (y0 + y) / 2, (z0 + z) / 2, len / 2 + r + 0.02, near);
+                    var bestTc = 2, cx = 0, cy = 0, cz = 0, bnx = 0, bny = 0, bnz = 0;
+                    for (var q = 0; q < near.length; q++) {
+                        var tri = near[q];
+                        ground.vertices(tri, corner); ground.normalOf(tri, hit);
+                        var nx = hit.x, ny = hit.y, nz = hit.z;
+                        var d0 = nx * (x0 - corner[0]) + ny * (y0 - corner[1]) + nz * (z0 - corner[2]);
+                        var d1 = nx * (x - corner[0]) + ny * (y - corner[1]) + nz * (z - corner[2]);
+                        var side = d0 >= 0 ? 1 : -1;
+                        if (!((side > 0 && d1 < r) || (side < 0 && d1 > -r))) continue;          // it stays away from this surface
+                        var span = d0 - d1;
+                        var tc = Math.abs(span) < 1e-9 ? 0 : Math.max(0, Math.min(1, (d0 - side * r) / span));
+                        if (tc >= bestTc) continue;
+                        var qx = x0 + (x - x0) * tc, qy = y0 + (y - y0) * tc, qz = z0 + (z - z0) * tc;
+                        var d2 = ground.closest(tri, qx, qy, qz, hit2);
+                        if (d2 > (r + 0.004) * (r + 0.004)) continue;                              // the place is not on the triangle
+                        bestTc = tc; cx = qx; cy = qy; cz = qz; bnx = nx * side; bny = ny * side; bnz = nz * side;
+                    }
+                    if (bestTc <= 1) {
+                        x = cx; y = cy; z = cz;
+                        var vn = vx * bnx + vy * bny + vz * bnz;
+                        if (vn < 0) {
+                            // hot rubber does not bounce much: a quarter of the speed into the surface comes back; it rolls only a little
+                            vx -= 1.25 * vn * bnx; vy -= 1.25 * vn * bny; vz -= 1.25 * vn * bnz;
+                            vx *= rolling; vz *= rolling;
+                        }
+                        if (bny > 0.6 && Math.abs(vn) < 0.5 && vx * vx + vz * vz < 0.16) { rest = true; vx = vy = vz = 0; }
+                    }
+                } else {
+                    var road = ground && ground.query ? ground.query(x, z, y + 0.3, 0.6) : null;
+                    if (road && y <= road.y + r) {
+                        y = road.y + r; vy *= -0.25; vx *= rolling; vz *= rolling;
+                        if (Math.abs(vy) < 0.5 && vx * vx + vz * vz < 0.16) { rest = true; vx = vy = vz = 0; }
+                    }
+                }
             }
+            positions[i * 3] = x; positions[i * 3 + 1] = y; positions[i * 3 + 2] = z;
             vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz;
+            if (!rest && y < vehicle.py - 4) { lost = true; shades[i] = -1; }      // it fell off the world
+            if (rest || lost) flying[i] = 0; else air[kept++] = i;
         }
+        air.length = kept;
         attributes.iPos.needsUpdate = true; attributes.iSize.needsUpdate = true; attributes.iRot.needsUpdate = true; attributes.iShade.needsUpdate = true;
     };
 
+    this.spawn = spawn;                                  // (for the tests)
     this.clear = function () {
-        shades.fill(-1); flying.fill(0); moving = 0;
+        shades.fill(-1); flying.fill(0); air.length = 0;
         attributes.iShade.needsUpdate = true;
     };
 };
