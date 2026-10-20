@@ -73,7 +73,9 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                     // nothing at the edge of the tile: a puff that reaches it would end in a straight line (and bleed into the next tile)
                     var edge = Math.min(1, Math.max(0, (0.5 - Math.hypot(u - 0.5, v - 0.5)) / 0.14));
                     density *= edge * edge * (3 - 2 * edge);
-                    var light = 0.78 + 0.22 * (1 - v) - 0.12 * (1 - n);
+                    // light and dark patches: its own noise (not the one of the shape), a lit top and a darker, denser middle, as in a cloud that shades itself
+                    var patches = 0.6 * noise(lat, 16, u * 7 + 5, v * 7 + 13) + 0.4 * noise(lat, 16, u * 15 + 9, v * 15 + 2);
+                    var light = Math.max(0.3, Math.min(1, 0.72 + 0.2 * (1 - v) + 0.85 * (patches - 0.5) - 0.12 * density));
                     var i = ((oy + y) * canvas.width + ox + x) * 4;
                     image.data[i] = Math.min(255, 255 * light); image.data[i + 1] = Math.min(255, 255 * light); image.data[i + 2] = Math.min(255, 255 * (light + 0.03));
                     image.data[i + 3] = Math.round(255 * density);
@@ -221,7 +223,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                 // wheel stands still (and the car too) the plume stops and only a few small puffs go on.
                 var turning = Math.min(1, Math.max(Math.abs((wheel.omega || 0) * wheel.radius), Math.abs(wheel.forwardSpeed || 0)) / 3);
                 var bigShare = dust ? 1 : Math.max(0, Math.min(1, (wheel.smoke - 0.25) / 0.45)) * turning;
-                var fineShare = Math.min(1, wheel.smoke * 4) * (0.12 + 0.88 * turning);
+                var fineShare = Math.min(1, wheel.smoke * 20) * (0.12 + 0.88 * turning);
                 from.carry += (dust ? 45 : 90) * wheel.smoke * bigShare * delta * amount;
                 var count = Math.floor(from.carry);
                 from.carry -= count;
@@ -246,7 +248,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                         carVel.z * 0.06 + fwd.z * along2 + left.z * side + (Math.random() - 0.5) * 0.5, wheel.heat, dust);
                 }
                 // the second layer: many small puffs close to the tyre, from the patch of contact up the back of it
-                from.fine += (dust ? 40 : 150) * fineShare * delta * amount;
+                from.fine += (dust ? 40 : 300) * fineShare * delta * amount;
                 var fineCount = Math.floor(from.fine);
                 from.fine -= fineCount;
                 for(var q = 0; q < fineCount; q++) {
@@ -322,7 +324,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                                 spawn(wx, wy - 0.04, wz, vehicle.vx * 0.9, vehicle.vy * 0.9 + 0.2, vehicle.vz * 0.9, 0, false);
                                 var w = (next + capacity - 1) % capacity;
                                 wisp[w] = 1; bases[w] = bases[i];
-                                life[w] = 0.4 + Math.random() * 0.9;
+                                life[w] = 0.8 + Math.random() * 0.9;
                                 size0[w] = 0.25 + Math.random() * 0.15; size1[w] = 0.9 + Math.random() * 0.6;
                                 alpha0[w] = alpha0[i] * 0.8;
                             }
