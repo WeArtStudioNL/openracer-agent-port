@@ -1424,6 +1424,7 @@ function tuningFromCar(car) {
     const all = OpenRacer.CarTuning.fromConfig(car || DEFAULT_CAR);
     tuning = {};
     TUNING_KEYS.forEach((k) => { tuning[k] = all[k]; });
+    tuning.compound = all.compound;                       // (not a number: the kind of tyre)
     renderTuningCard();
 }
 
@@ -1437,6 +1438,23 @@ function renderTuningCard() {
         head.className = "group";
         head.textContent = group.name;
         box.appendChild(head);
+        if (group.name === "Tyres") {
+            // the kind of tyre: a choice, not a number; it changes the grip, the working temperature, the wear and where the rubber smokes
+            const row = document.createElement("div");
+            row.className = "row";
+            const cell = document.createElement("div");
+            const select = document.createElement("select");
+            select.id = "tune_compound";
+            OpenRacer.TyreCompounds.forEach((k) => { const o = document.createElement("option"); o.value = k.id; o.textContent = k.name; select.appendChild(o); });
+            select.value = tuning.compound || "road";
+            select.addEventListener("change", () => { tuning.compound = select.value; tuningChanged(); });
+            const hint = document.createElement("div");
+            hint.className = "hint";
+            hint.textContent = "Tyre compound (grip, working temperature, wear, smoke)";
+            cell.appendChild(select); cell.appendChild(hint);
+            row.appendChild(cell);
+            box.appendChild(row);
+        }
         for (let i = 0; i < items.length; i += 3) {
             const row = document.createElement("div");
             row.className = "row";
@@ -1488,6 +1506,7 @@ for (const id of ["mass", "front", "cgHeight", "wheelbase", "frontTrack", "rearT
 function tuningValues(config) {
     const values = OpenRacer.CarTuning.fromConfig(config);
     TUNING_KEYS.forEach((k) => { if (Number.isFinite(tuning[k])) values[k] = tuning[k]; });
+    if (tuning.compound) values.compound = tuning.compound;
     return values;
 }
 

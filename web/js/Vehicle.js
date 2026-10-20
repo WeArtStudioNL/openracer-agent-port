@@ -251,28 +251,39 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.baseMass = this.mass;                      // the mass without the fuel
     this.wearLaps = 0;
     var fuelMassTimer = 0;
-    var OPTIMUM = 85, WINDOW = 15, COLD = 45;       // °C: the best temperature, the width of the window, how far out the grip is at its least
+    // the kind of tyre (Wheel.js, TyreCompounds): the best temperature, the width of the window, how far out the grip is at its least
+    var tc = OpenRacer.TyreCompounds[1];
+    this.compound = 1;
+    this.setCompound = function (c) {
+        var list = OpenRacer.TyreCompounds, at = typeof c === "string" ? list.findIndex(function (k) { return k.id === c; }) : (c >= 0 && c < list.length ? Math.floor(c) : -1);
+        if(at < 0) at = 1;
+        this.compound = at;
+        tc = list[at];
+        for(var i = 0; i < 4; i++) { var w = this.wheels[i]; w.compoundGrip = tc.grip; w.condition = conditionOf(w) * (w.pressureGrip || 1); }
+    };
+    this.tyreKind = function () { return tc; };
+    this.setCompound(parameters.compound);
     var SURFACE_SHARE = 0.3, SURFACE_CAPACITY = 350, SURFACE_TAU = 6;    // the share of the burnt power that heats the rubber, the heat that the hot layer takes (J/K), how slowly it gives it away (s)
 
     function conditionOf(w) {
-        var off = Math.max(0, Math.abs(w.temp - OPTIMUM) - WINDOW) / COLD;
-        var byTemp = 1 - 0.22 * Math.min(1, off);
+        var off = Math.max(0, Math.abs(w.temp - tc.optimum) - tc.window) / tc.cold;
+        var byTemp = 1 - tc.coldLoss * Math.min(1, off);
         var byWear = 1 - 0.2 * Math.pow(Math.min(1, w.wear), 1.5) - (w.wear >= 1 ? 0.15 : 0);
         return byTemp * byWear;
     }
 
     // called every step for a wheel: slidePower is the power the slip burns (W), fz the load (N), v the speed over the road (m/s)
     this.wearStep = function (w, dt, slidePower, fz, v, contact) {
-        if(!this.wearEnabled) { w.temp = OPTIMUM; w.wear = Math.min(w.wear, 1); w.condition = w.pressureGrip || 1; return; }
+        if(!this.wearEnabled) { w.temp = tc.optimum; w.wear = Math.min(w.wear, 1); w.condition = w.pressureGrip || 1; return; }
         // the power of the slip (tens of kW in a bend at the limit) and the flexing under the load heat the tyre; the air cools
         // it (W/K, more the faster); the tread has a heat capacity of about 20 kJ/K, so it takes a minute or two to come up
-        var heatIn = (slidePower + (contact ? fz * Math.abs(v) * 0.025 : 0)) * this.tyreHeating * (w.pressureRoll || 1);
+        var heatIn = (slidePower + (contact ? fz * Math.abs(v) * 0.025 : 0)) * this.tyreHeating * tc.heating * (w.pressureRoll || 1);
         var cooling = (40 + 3 * Math.abs(v)) * (w.temp - this.ambient);
         w.temp += (heatIn - cooling) / 20000 * dt;
-        var overheated = Math.min(2, Math.max(0, (w.temp - (OPTIMUM + WINDOW)) / 30));
+        var overheated = Math.min(2, Math.max(0, (w.temp - (tc.optimum + tc.window)) / 30));
         // a powerful car spins its wheels a lot: the slip when driving off counts less than a slide through a bend
         var counted = Math.abs(v) < 8 ? slidePower * 0.35 : slidePower;
-        w.wear += counted * (1 + 2 * overheated) * dt / (6e6 * this.tyreLife) * this.wearScale;
+        w.wear += counted * (1 + 2 * overheated) * dt / (6e6 * this.tyreLife * tc.life) * this.wearScale;
         w.condition = conditionOf(w) * (w.pressureGrip || 1);
     };
 
@@ -379,6 +390,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.retune = function (t) {
         var i, w;
         if(t.mass !== undefined) { this.baseMass = t.mass; this.mass = t.mass + (this.wearEnabled ? this.fuel * 0.75 : 0); }
+        if(t.compound !== undefined) this.setCompound(t.compound);
         if(t.tyre_heating !== undefined) this.tyreHeating = t.tyre_heating;
         if(t.tyre_life !== undefined) this.tyreLife = t.tyre_life;
         if(t.fuel_use !== undefined) this.fuelUse = t.fuel_use;
@@ -1497,9 +1509,13 @@ OpenRacer.Vehicle = function (parameters, input) {
                 wheel.surfT += (SURFACE_SHARE * burnt / SURFACE_CAPACITY - (wheel.surfT - wheel.temp) / SURFACE_TAU) * dt;
                 wheel.surfT = Math.max(wheel.temp, Math.min(450, wheel.surfT));
                 if(wheel.surface === "road" || wheel.surface === "track01") {
-                    var smoking = smoothstep(175, 250, wheel.surfT);
-                    wheel.heat = smoothstep(175, 320, wheel.surfT);
-                    wheel.smoke = fz > 200 ? smoking * (0.4 + 0.6 * Math.min(1, burnt / 40000)) : 0;
+                    // A spinning tyre throws a thick cloud (a burnout); one that is locked, or only slides sideways (a handbrake turn, a drift without
+                    // power), is scrubbed along the road: it smokes, but thinner, and most of what it makes is the mark on the road.
+                    var spinShare = Math.max(0, Math.min(1, Math.max(0, wheel.omega * wheel.radius - vl) / Math.max(2, slideSpeed)));
+                    var density = 0.3 + 0.7 * spinShare;
+                    var smoking = smoothstep(175 + tc.smoke, 250 + tc.smoke, wheel.surfT);
+                    wheel.heat = smoothstep(175 + tc.smoke, 320 + tc.smoke, wheel.surfT) * (0.4 + 0.6 * spinShare);
+                    wheel.smoke = fz > 200 ? smoking * (0.4 + 0.6 * Math.min(1, burnt / 40000)) * density : 0;
                 } else {
                     wheel.smoke = fz > 200 ? Math.min(1, 0.15 * sliding + wheel.heat * Math.min(1, sliding * 2 + 0.2)) : 0;
                 }
@@ -1514,7 +1530,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 tyreTorque[iw] = -fxW * wheel.radius;
 
                 // rolling resistance (more on soft ground), not a torque on the wheel
-                var rr = wheel.rollingResistance * (wheel.pressureRoll || 1) * (surface.static < 0.8 ? 4 : 1) * fz * Math.tanh(vl / 0.3);
+                var rr = wheel.rollingResistance * tc.rolling * (wheel.pressureRoll || 1) * (surface.static < 0.8 ? 4 : 1) * fz * Math.tanh(vl / 0.3);
                 fxW -= rr;
 
                 // the forces on the car: the force along the wheel at the point of contact, the force across the wheel at the roll

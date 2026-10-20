@@ -116,6 +116,7 @@ OpenRacer.Car = function( config, domElement ) {
         downforce_rear: chassis.downforce_rear,
         ackermann: chassis.ackermann,
         suspension_travel: chassis.suspension_travel,
+        compound: config.tyres && config.tyres.compound,
         pressure_front: config.tyres && config.tyres.pressure_front, pressure_rear: config.tyres && config.tyres.pressure_rear,
         toe_front: chassis.toe_front, toe_rear: chassis.toe_rear,
         ride_front: chassis.ride_front,
@@ -284,6 +285,8 @@ OpenRacer.Car = function( config, domElement ) {
             tyreSmoke.update(delta, v, camera);
             var marks = OpenRacer.skidMarks && OpenRacer.skidMarks();
             if(marks) marks.update(v); // the rubber a sliding tyre leaves on the road (SkidMarks.js)
+            var pellets = OpenRacer.marbles && OpenRacer.marbles();
+            if(pellets) pellets.update(v, delta); // the marbles that a soft, hot tyre sheds (Marbles.js)
         }
         // the cameras behind the car follow its height (a jump, a hill), not the road under it; the small movements of the springs are smoothed out
         var baseY = bodyPosition.y - w[0].radius;

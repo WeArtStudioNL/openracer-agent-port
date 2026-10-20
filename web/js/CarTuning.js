@@ -30,6 +30,7 @@ OpenRacer.CarTuning = (function () {
             ["roll_camber", "Camber lost in roll", "%", 0, 100, 5]
         ] },
         { name: "Tyres", items: [
+            ["compound", "Tyre compound", "", 0, 0, 0],
             ["grip", "Grip", "%", 50, 160, 1],
             ["grip_balance", "Grip of the rear tyres (as a share of the front)", "%", 60, 140, 1],
             ["cornering", "Stiffness against the slip angle", "%", 50, 160, 1],
@@ -111,6 +112,7 @@ OpenRacer.CarTuning = (function () {
             spring_rear: (ch.spring_rear !== undefined ? ch.spring_rear : 27000) / 1000,
             damping_front: (ch.damping_front !== undefined ? ch.damping_front : 0.35) * 100,
             damping_rear: (ch.damping_rear !== undefined ? ch.damping_rear : 0.35) * 100,
+            compound: tyres.compound || "road",
             grip: (tyres.grip !== undefined ? tyres.grip : 1) * 100,
             grip_balance: (tyres.grip_balance !== undefined ? tyres.grip_balance : 1) * 100,
             cornering: (tyres.cornering !== undefined ? tyres.cornering : 1) * 100,
@@ -182,6 +184,7 @@ OpenRacer.CarTuning = (function () {
             spring_rear: v.spring_rear * 1000,
             damping_front: v.damping_front / 100,
             damping_rear: v.damping_rear / 100,
+            compound: v.compound,
             grip: v.grip / 100,
             grip_balance: v.grip_balance / 100,
             cornering: v.cornering / 100,
@@ -261,7 +264,7 @@ OpenRacer.CarTuning = (function () {
         c.chassis.camber_front = v.camber_front;
         c.chassis.camber_rear = v.camber_rear;
         c.chassis.roll_camber = v.roll_camber / 100;
-        c.tyres = { grip: v.grip / 100, grip_balance: v.grip_balance / 100, cornering: v.cornering / 100, rolling_resistance: v.rolling_resistance, heating: v.tyre_heating / 100, life: v.tyre_life / 100,
+        c.tyres = { compound: v.compound || "road", grip: v.grip / 100, grip_balance: v.grip_balance / 100, cornering: v.cornering / 100, rolling_resistance: v.rolling_resistance, heating: v.tyre_heating / 100, life: v.tyre_life / 100,
             pressure_front: v.pressure_front, pressure_rear: v.pressure_rear };
         c.fuel = { tank: v.tank, use: v.fuel_use / 100 };
         c.engine = c.engine || {};

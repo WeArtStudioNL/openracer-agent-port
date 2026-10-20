@@ -16,7 +16,7 @@ OpenRacer.vehicleParams = function (config, getSurface) {
         spring_front: chassis.spring_front, spring_rear: chassis.spring_rear, damping_front: chassis.damping_front, damping_rear: chassis.damping_rear,
         downforce: chassis.downforce, downforce_front: chassis.downforce_front, downforce_rear: chassis.downforce_rear, ackermann: chassis.ackermann,
         suspension_travel: chassis.suspension_travel, ride_front: chassis.ride_front, ride_rear: chassis.ride_rear, toe_front: chassis.toe_front, toe_rear: chassis.toe_rear,
-        pressure_front: config.tyres && config.tyres.pressure_front, pressure_rear: config.tyres && config.tyres.pressure_rear, roll_center_front: chassis.roll_center_front, roll_center_rear: chassis.roll_center_rear, camber_front: chassis.camber_front, camber_rear: chassis.camber_rear, roll_camber: chassis.roll_camber,
+        compound: config.tyres && config.tyres.compound, pressure_front: config.tyres && config.tyres.pressure_front, pressure_rear: config.tyres && config.tyres.pressure_rear, roll_center_front: chassis.roll_center_front, roll_center_rear: chassis.roll_center_rear, camber_front: chassis.camber_front, camber_rear: chassis.camber_rear, roll_camber: chassis.roll_camber,
         tire_diameter: chassis.tire_diameter, width: dimensions.width, length: dimensions.length, height: dimensions.height,
         Cdrag: 0.5 * chassis.drag_coefficient * dimensions.width * dimensions.height * 0.85 * 1.29,
         gear_ratios: drivetrain.gear_ratios.slice(), reverse_ratio: drivetrain.reverse_ratio, final_drive: drivetrain.final_drive, efficiency: drivetrain.efficiency,
@@ -236,6 +236,8 @@ OpenRacer.Opponent = function (config, line, options) {
         this.pit.update(delta);
         var marks = OpenRacer.skidMarks && OpenRacer.skidMarks();
         if (marks) marks.update(this.vehicle);
+        var pellets = OpenRacer.marbles && OpenRacer.marbles();
+        if (pellets) pellets.update(this.vehicle, delta);
         // laps: the fraction of the line wraps around, after the car went round (not when it dithers at the line)
         var fraction = line ? line.fractionOf(this.lineIndex) : 0;
         if (fraction < 0.2 && lastFraction > 0.8 && maxFraction > 0.5) {
