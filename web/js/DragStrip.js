@@ -11,6 +11,7 @@
  *                and come up slowly to the line again. A car that passes the line without staging has no run until it has gone back too.
  *              - The times and the speeds are shown for the standard distances within the length (60 ft, 330 ft, 1/8 mile, 1000 ft, 1/4 mile, ...)
  *                and the finish, as they are passed. The result stays until the car is back behind the line.
+ *              At the finish a time slip slides in from the top at the right of the screen, with the times on it; the cross or Escape closes it.
  *              The lines on the road are drawn: a white start line and a chequered finish line.
  */
 
@@ -20,6 +21,7 @@ OpenRacer.DragStrip = (function () {
     var ROLLOUT = 0.3;                           // m: the car has left the line
     var AMBER = 0.5;                             // s between the lights of the tree
     var strip = null, state = "idle", lines = null, hud = null, movableDone = false;
+    var slip = null;
     var tTree = 0, stagedS = 0, tGreen = 0, t0 = null, reaction = 0, results = [], prevT = 0, prevS = 0, prevV = 0, finishNote = "", lastHtml = "";
 
     function parse(ds) {
@@ -61,6 +63,67 @@ OpenRacer.DragStrip = (function () {
         if (!make(0, false) || !make(strip.length, true)) return;
         scene.add(group);
         lines = group;
+    }
+
+
+    // ---- the time slip
+    function pad(label, value) {
+        var dots = " ";
+        for (var n = label.length + String(value).length; n < 26; n++) dots += ".";
+        return label + dots + " " + value;
+    }
+    function build_slip() {
+        if (slip) return;
+        var style = document.createElement("style");
+        style.textContent =
+            "#dragSlip { position: fixed; right: 22px; top: 14px; z-index: 1600; width: 330px; box-sizing: border-box; padding: 18px 18px 30px; color: #1b1b1b; background: #f4f1e8; " +
+            "font-family: 'Courier New', Courier, monospace; font-size: 14px; line-height: 1.45; white-space: pre; box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55); " +
+            "transform: translateY(-115%); transition: transform 0.9s cubic-bezier(0.2, 0.8, 0.25, 1); pointer-events: none; }" +
+            "#dragSlip.open { transform: translateY(0); pointer-events: auto; }" +
+            "#dragSlip .close { position: absolute; right: 8px; top: 6px; width: 24px; height: 24px; border: 0; background: transparent; font-size: 20px; line-height: 20px; color: #444; cursor: pointer; }" +
+            "#dragSlip .close:hover { color: #000; }" +
+            "#dragSlip .centre { text-align: center; }" +
+            "#dragSlip .tear { position: absolute; left: 0; right: 0; bottom: -1px; height: 12px; background: linear-gradient(-45deg, transparent 8px, #f4f1e8 0), linear-gradient(45deg, transparent 8px, #f4f1e8 0); background-size: 16px 16px; background-position: left bottom; transform: translateY(12px); }";
+        document.head.appendChild(style);
+        slip = document.createElement("div");
+        slip.id = "dragSlip";
+        document.body.appendChild(slip);
+    }
+    // Escape closes the slip, before the settings menu (that script comes later) sees the key
+    window.addEventListener("keydown", function (e) {
+        if (e.code === "Escape" && slip && slip.classList.contains("open")) { closeSlip(); e.stopImmediatePropagation(); e.preventDefault(); }
+    }, true);
+    function closeSlip() { if (slip) slip.classList.remove("open"); }
+    function plain(t) { return t < 1 ? t.toFixed(3).replace(/^0/, "") : t.toFixed(3); }
+    function showSlip(car) {
+        build_slip();
+        var metric = Settings.option("units") !== "imperial";
+        var unit = metric ? "KM/H" : "MPH";
+        var speed = function (v) { return (v * (metric ? 3.6 : 2.2369362920544)).toFixed(2); };
+        var now = new Date();
+        var two = function (n) { return (n < 10 ? "0" : "") + n; };
+        var hours = now.getHours() % 12 || 12;
+        var track = (typeof currentTrack !== "undefined" && currentTrack && currentTrack.name) || "";
+        var carName = (car.config && car.config.name) || "";
+        var lines = [];
+        lines.push("<div class=\"centre\">WELCOME TO THE\n" + String(track).toUpperCase().slice(0, 28) + "\nDRAG STRIP\nHAVE A SAFE AND\nFUN DAY OF RACING!</div>", "");
+        lines.push(hours + ":" + two(now.getMinutes()) + (now.getHours() < 12 ? " AM" : " PM"), two(now.getMonth() + 1) + "/" + two(now.getDate()) + "/" + now.getFullYear(), "");
+        lines.push("<div class=\"centre\">TIME SLIP</div>", "");
+        lines.push(pad("CAR", carName.toUpperCase().slice(0, 18)), "");
+        lines.push(pad("R/T", plain(reaction)));
+        results.forEach(function (r) {
+            if (r.time === null) return;
+            var name = r.label.toUpperCase().replace(" MILE", "").replace(" FT", "");
+            lines.push(pad(name, plain(r.time)));
+            if (r.finish || r.label === "1/8 mile") lines.push(pad(unit, speed(r.speed)));
+        });
+        lines.push("", "COMPLETED RUN");
+        slip.innerHTML = "<button class=\"close\" title=\"Close (Escape)\">\u00d7</button>" + lines.join("\n").replace(/<\/div>\n/g, "</div>") + "<div class=\"tear\"></div>";
+        slip.querySelector(".close").addEventListener("click", closeSlip);
+        // from above into the picture (a frame later, so that the transition runs)
+        slip.classList.remove("open");
+        void slip.offsetWidth;
+        slip.classList.add("open");
     }
 
     // ---- the display
@@ -132,7 +195,8 @@ OpenRacer.DragStrip = (function () {
 
     function setState(next) {
         state = next;
-        if (next === "approach" || next === "idle" || next === "void") { t0 = null; results.forEach(function (r) { r.time = null; r.speed = null; }); reaction = 0; }
+        if (next === "approach" || next === "idle" || next === "void") {
+            closeSlip(); t0 = null; results.forEach(function (r) { r.time = null; r.speed = null; }); reaction = 0; }
     }
 
     function reset() { if (strip) setState("idle"); lastHtml = ""; }
@@ -188,7 +252,7 @@ OpenRacer.DragStrip = (function () {
                             r.speed = prevV + (forwardSpeed - prevV) * k;
                         }
                     }
-                    if (s >= strip.length) state = "finished";
+                    if (s >= strip.length) { state = "finished"; showSlip(car); }
                     else if (s < stagedS - 1 || !inLane && Math.abs(side) > strip.width) setState("void");   // back, or off the strip: no run
                 }
                 break;
