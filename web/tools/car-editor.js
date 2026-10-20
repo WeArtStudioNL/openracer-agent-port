@@ -1469,6 +1469,21 @@ function tuningChanged() {
     } catch (error) { console.warn(error); }
 }
 
+// the form of the car (mass, weight on the front, centre of gravity, size of the wheels and the axles, drag) goes to the car of the bench at
+// once too, as the Tuning card does: before, only a new test showed it
+function formChanged() {
+    if (!bench.vehicle || !bench.model) return;
+    try {
+        const config = buildConfig("test");
+        const area = config.dimensions.width * config.dimensions.height * 0.85;
+        const retune = OpenRacer.CarTuning.toRetune(tuningValues(config), area, 1.29);
+        // the wheels of the model give the wheelbase, the tracks and the tyre (startBench); without them the form does
+        if (!bench.model.measured) Object.assign(retune, { wheelbase: config.chassis.wheelbase, front_track: config.chassis.front_track, rear_track: config.chassis.rear_track, tire_diameter: config.chassis.tire_diameter });
+        bench.vehicle.retune(retune);
+    } catch (error) { /* a field that is empty or not valid yet: the next change tries again */ }
+}
+for (const id of ["mass", "front", "cgHeight", "wheelbase", "frontTrack", "rearTrack", "tyre", "drag", "steer"]) $(id).addEventListener("input", formChanged);
+
 // all the values of the table for a configuration from the form: the form's own, with the card's on top
 function tuningValues(config) {
     const values = OpenRacer.CarTuning.fromConfig(config);
