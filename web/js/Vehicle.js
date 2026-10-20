@@ -1257,6 +1257,8 @@ OpenRacer.Vehicle = function (parameters, input) {
         // the roll of the body (positive: leaning to the right), for the camber of the wheels
         rotateInverse(self.qx, self.qy, self.qz, self.qw, 0, 1, 0, tmpA);
         var rollRight = Math.asin(Math.max(-1, Math.min(1, tmpA.x)));
+        var speedNow = Math.sqrt(self.vx * self.vx + self.vy * self.vy + self.vz * self.vz);
+        var restHold = 1 - smoothstep(0.5, 2, speedNow);   // 1 at a standstill
         var newAxleFy = [0, 0];
 
         for(var iw = 0; iw < 4; iw++) {
@@ -1267,6 +1269,14 @@ OpenRacer.Vehicle = function (parameters, input) {
             rotate(self.qx, self.qy, self.qz, self.qw, wheel.mount.x, wheel.mount.y, wheel.mount.z, Rv);
             var fsBody = -springForce[iw];                 // the reaction on the body, along the suspension axis (up when the spring is pushed in)
             var fsx = axisY.x * -fsBody, fsy = axisY.y * -fsBody, fsz = axisY.z * -fsBody;
+            // At a standstill the suspension arms hold the wheel lengthways and sideways, so the spring only pushes the body along the normal of the
+            // road: the push along the tilted axis of a pitched body (a raised front: ride height) had a part along the road, and the car rolled
+            // back on flat ground with nothing in the model to hold it. Driving, the push is left as it was (the tuning of the cars is made with it):
+            // the projection fades out between 0.5 and 2 m/s.
+            if(restHold > 0 && wheel.hasContact && wheel.normal) {
+                var pn = wheel.normal, along = (axisY.x * pn.nx + axisY.y * pn.ny + axisY.z * pn.nz) * -fsBody;
+                fsx += (pn.nx * along - fsx) * restHold; fsy += (pn.ny * along - fsy) * restHold; fsz += (pn.nz * along - fsz) * restHold;
+            }
             forceBody.x += fsx; forceBody.y += fsy; forceBody.z += fsz;
             torque.x += Rv.y * fsz - Rv.z * fsy;
             torque.y += Rv.z * fsx - Rv.x * fsz;
