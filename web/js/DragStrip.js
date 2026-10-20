@@ -4,13 +4,14 @@
  * Description: The drag strip of a track (track.json "dragstrip": { x, z, heading, width, length }, placed in the track editor: the start line, the way
  *              the strip goes, and how far the finish line is). The front wheels of the car are the reference, as the beams of a real strip are.
  *              - Near the start line (within 45 m, in the lane) a text shows how far the front wheels are from the line.
- *              - With the front wheels at the line (a margin of a few decimetres) and the car standing nearly still, the lights come: stage, three
- *                ambers one after the other (half a second apart) and green. The timing starts when the car leaves the line (30 cm), the reaction
+ *              - With the front wheels at the line (a margin of a few decimetres) and the car standing nearly still, "Get ready" shows for two seconds
+ *                (time to switch on the two-step), and then the lights come: stage, three ambers one after the other (half a second apart) and green;
+ *                the lights go out again a second and a half after the green. The timing starts when the car leaves the line (30 cm), the reaction
  *                time is that moment minus the green light.
  *              - Leaving before the green light is a false start: a red light, the run is over and the car has to go back behind the line (3 m)
  *                and come up slowly to the line again. A car that passes the line without staging has no run until it has gone back too.
- *              - The times and the speeds are shown for the standard distances within the length (60 ft, 330 ft, 1/8 mile, 1000 ft, 1/4 mile, ...)
- *                and the finish, as they are passed. The result stays until the car is back behind the line.
+ *              - The times and the speeds are only shown at the end, on the time slip, for the standard distances within the length (60 ft, 330 ft,
+ *                1/8 mile, 1000 ft, 1/4 mile, ...) and the finish.
  *              At the finish a time slip slides in from the top at the right of the screen, with the times on it; the cross or Escape closes it.
  *              The lines on the road are drawn: a white start line and a chequered finish line.
  */
@@ -20,9 +21,11 @@ OpenRacer.DragStrip = (function () {
     var STAGE_MIN = -0.4, STAGE_MAX = 0.25;      // m: the front wheels at the line
     var ROLLOUT = 0.3;                           // m: the car has left the line
     var AMBER = 0.5;                             // s between the lights of the tree
+    var READY = 2.0;                             // s of "Get ready" before the tree
+    var GREEN_SHOWN = 1.5;                       // s that the tree stays after the green light
     var strip = null, state = "idle", lines = null, hud = null, movableDone = false;
     var slip = null;
-    var tTree = 0, stagedS = 0, tGreen = 0, t0 = null, reaction = 0, results = [], prevT = 0, prevS = 0, prevV = 0, finishNote = "", lastHtml = "";
+    var tReady = 0, tTree = 0, stagedS = 0, tGreen = 0, t0 = null, reaction = 0, results = [], prevT = 0, prevS = 0, prevV = 0, finishNote = "", lastHtml = "";
 
     function parse(ds) {
         strip = { src: ds, x: ds.x, z: ds.z, heading: ds.heading || 0, width: ds.width || 12, length: ds.length || 402.336 };
@@ -166,29 +169,22 @@ OpenRacer.DragStrip = (function () {
         var metric = Settings.option("units") !== "imperial";
         var html = "";
         var show = state !== "idle" && Settings.option("hud");
-        if (state === "approach" || state === "tree" || state === "void") {
+        if (state === "approach" || state === "void") {
             html += "<div class=\"distance\">" + (s <= 0 ? "Start line: " + distanceText(s, metric) : "Past the line") + "</div>";
         }
         if (state === "void") html += "<div class=\"note bad\">Drive back behind the line, then come up slowly</div>";
         if (state === "approach") html += "<div class=\"note\">" + (s > STAGE_MIN && s <= STAGE_MAX ? "Stand still at the line" : "Front wheels to the line, slowly") + "</div>";
-        if (state === "tree" || state === "go" || state === "false") {
+        if (state === "ready") html += "<div class=\"distance\">Get ready…</div><div class=\"note\">Hold the car still at the line</div>";
+        var showTree = state === "tree" || state === "false" || (state === "go" && clock - tGreen < GREEN_SHOWN);
+        if (showTree) {
             var t = clock - tTree;
-            var green = state === "go" || state === "finished";
+            var green = state === "go";
             var amber = state === "tree" ? Math.min(3, Math.floor(t / AMBER)) : (green ? 3 : 0);
             html += "<div class=\"tree\"><div class=\"row\">" + lamp("white", true) + lamp("white", true) + "</div>" +
                 "<div class=\"row\">" + lamp("amber", amber >= 1) + "</div><div class=\"row\">" + lamp("amber", amber >= 2) + "</div><div class=\"row\">" + lamp("amber", amber >= 3) + "</div>" +
-                "<div class=\"row\">" + lamp("green", green && state === "go") + "</div><div class=\"row\">" + lamp("red", state === "false") + "</div></div>";
+                "<div class=\"row\">" + lamp("green", green) + "</div><div class=\"row\">" + lamp("red", state === "false") + "</div></div>";
         }
         if (state === "false") html += "<div class=\"note bad\">FALSE START</div><div class=\"note\">Drive back behind the line and come up slowly</div>";
-        if (state === "go" || state === "finished") {
-            var rows = results.map(function (r) {
-                var sp = r.speed === null ? "" : (metric ? Math.round(r.speed * 3.6) + " km/h" : Math.round(r.speed * 2.2369362920544) + " mph");
-                return "<tr class=\"" + (r.time !== null ? "done " : "") + (r.finish ? "finish" : "") + "\"><td>" + r.label + "</td><td>" + (r.time === null ? "–" : r.time.toFixed(3) + " s") + "</td><td>" + sp + "</td></tr>";
-            }).join("");
-            html += "<table><tr><th>Distance</th><th>Time</th><th>Speed</th></tr>" + rows + "</table>";
-            if (t0 !== null || state === "finished") html += "<div class=\"note\">Reaction time " + reaction.toFixed(3) + " s</div>";
-            else html += "<div class=\"note\">GO</div>";
-        }
         if (html !== lastHtml) { lastHtml = html; hud.innerHTML = html; }
         hud.style.display = show && html ? "block" : "none";
     }
@@ -227,7 +223,12 @@ OpenRacer.DragStrip = (function () {
                 if (state === "void") { if (s < -3) setState("approach"); break; }
                 if (s > 5 && speed > 1) { setState("void"); break; }
                 if (state === "idle") setState("approach");
-                if (s >= STAGE_MIN && s <= STAGE_MAX && speed < 1.5 && aligned) { state = "tree"; tTree = clock; stagedS = s; }
+                if (s >= STAGE_MIN && s <= STAGE_MAX && speed < 1.5 && aligned) { state = "ready"; tReady = clock; }
+                break;
+            case "ready":
+                // standing still at the line: two seconds to get ready (the two-step on), then the lights; moving away cancels it
+                if (s < STAGE_MIN - 0.3 || s > STAGE_MAX + 0.3 || speed > 1.5 || !inLane) { state = "approach"; break; }
+                if (clock - tReady >= READY) { state = "tree"; tTree = clock; stagedS = s; }
                 break;
             case "tree":
                 if (s > stagedS + ROLLOUT) { state = "false"; break; }                  // away before the green light
