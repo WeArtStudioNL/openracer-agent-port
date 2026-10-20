@@ -1681,7 +1681,7 @@ export function initSoftBody(api) {
         hide();
         $("sbInfo").textContent = "";
         $("sbResult").textContent = "";
-        if (!sb.restarting && api.frameModel) api.frameModel();
+        if (!sb.restarting && !bench.starting && api.frameModel) api.frameModel();
     }
 
     // The wall of the full test (car-editor.js): the same wall and 3D ground as the crash test, but its own run

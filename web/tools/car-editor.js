@@ -1506,7 +1506,9 @@ async function startBench() {
     config.id = "test";
     config.model = { type: "gltf", file: "", rotation_y: num("rotation") || 0, scale: num("scale") > 0 ? num("scale") : 1, offset: [num("offsetX") || 0, num("offsetY") || 0, num("offsetZ") || 0] };
     config.materials = state.overrides;
+    bench.starting = true;                                  // a new test is not a stop: the camera stays where the user has put it
     stopBench();
+    bench.starting = false;
     const model = await new Promise((resolve, reject) => OpenRacer.loadCarModel(config, resolve, (message) => reject(new Error(message)), state.root));
     // the parking lock holds the wheels; not the brake pedal: a car that stands on its brakes is held still by the physics (its speed
     // is set to zero when it is nearly still)
