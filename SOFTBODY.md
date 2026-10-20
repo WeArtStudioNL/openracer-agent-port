@@ -310,7 +310,7 @@ On a bump, a jump or a ramp there are many triangles near the car that are not f
 after that it hits the car as soon as it does not overlap it (`clearOfCar` in `Parts.js`). A part that is inside the car, or touches it like a
 door that is shut, used to be pushed out at a great speed when the contact started (a bumper flew off through the road). Now it waits until it is
 clear (at most 3 s; then it stays a ghost to the car, but not to the road). The wheels are part of the car for the parts (balls of the size of the
-tyre), and a hinged part hits the car too.
+tyre). A hinged part does not hit the car (the contact fights the joint: at a crash of 150 km/h the hood jittered at its top spin); it hits it when it tears off.
 
 **Wheels.** A hit of a wheel on a wall (the hard contacts of the wheel spheres, `Vehicle.js`) adds damage: the impulse (N s) divided by
 `softbody.wheel_strength` (kN s, default 25, 0 = the wheels never break; the field "wheel strength" of the Soft body card). Damage 0..1 bends

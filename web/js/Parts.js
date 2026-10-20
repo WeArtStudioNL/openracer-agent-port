@@ -375,7 +375,9 @@ OpenRacer.Parts = (function () {
                 joinHinge(part);
                 part.state = "hinged";
                 part.body.setAngularDamping(part.spec.damping !== undefined ? part.spec.damping : 2.0); part.body.setLinearDamping(0.2);
-                waitForClear(part);
+                // a hinged part does not hit the car: it is held by the joint on the body, and the contact fights the joint (the hood jittered at the
+                // limit of its spin, thrown about at a crash); it hits the car when it tears off and is free
+                setGroups(part, false); part.pending = false;
                 emit("unlatched", part);
             } else {
                 if (part.joint) { world.removeImpulseJoint(part.joint, true); part.joint = null; }
