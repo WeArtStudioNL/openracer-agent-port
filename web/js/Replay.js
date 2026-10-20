@@ -687,6 +687,7 @@ OpenRacer.Replay = (function() {
 
     api.start = function() {
         if(api.active || (!api.viewer && !api.available())) return false;
+        if(Settings.option("camera") === 4) Settings.setOption("camera", 1);      // the free camera of the game has no place in a replay, which has its own
         snapshot = cars.map(function(entry, i) { var s = new Float32Array(STRIDE); write(s, 0, entry); return s; });
         cars.forEach(function(entry) {
             var v = entry.object.vehicle;

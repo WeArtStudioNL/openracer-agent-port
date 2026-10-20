@@ -73,6 +73,7 @@ var scripts = [
     "js/WheelControls.js",
     "js/ForceFeedback.js",
     "js/Settings.js",
+    "js/FreeCam.js",
     "js/Hud.js",
     "js/CarTuning.js",
     "js/Tuning.js",

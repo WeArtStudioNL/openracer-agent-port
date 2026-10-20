@@ -295,7 +295,7 @@ OpenRacer.Car = function( config, domElement ) {
     };
 
     // ---- the cameras: 1 is the fixed camera behind the car, 2 follows the direction of the car smoothly and
-    // widens its field of view with the speed (and comes closer, so the car keeps its size), 3 is in the car. Their places are set per car (see CarDefaults.js).
+    // widens its field of view with the speed (and comes closer, so the car keeps its size), 3 is in the car, 4 is the free camera (FreeCam.js). Their places are set per car (see CarDefaults.js).
     this.cameraSettings = OpenRacer.cameraSettings(config);
     this.cameraMode = 1;
     var followYaw = null;       // the direction that the following camera looks in
@@ -322,6 +322,9 @@ OpenRacer.Car = function( config, domElement ) {
     }
 
     this.setCameraMode = function(mode) {
+        // 4 is the free camera (FreeCam.js): it goes free from where the camera is now
+        if(this.cameraMode === 4 && mode !== 4) OpenRacer.FreeCam.leave();
+        if(mode === 4 && this.cameraMode !== 4) OpenRacer.FreeCam.enter(camera, this.body.position);
         this.cameraMode = mode;
         EngineSound.setInside(mode === 3);
         followYaw = null;
@@ -332,6 +335,11 @@ OpenRacer.Car = function( config, domElement ) {
         var cs = this.cameraSettings;
         var radius = this.wheels[0].radius;
         var speed = Math.abs(this.vehicle.u);
+
+        if(this.cameraMode === 4) {
+            OpenRacer.FreeCam.update(delta, this.body.position, camera, yaw);
+            return;
+        }
 
         if(this.cameraMode === 3) {
             // in the car: the camera goes with the body, with the pitch and the roll

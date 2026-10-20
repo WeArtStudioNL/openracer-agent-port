@@ -76,7 +76,8 @@ var Settings = (function() {
         { id: "cameraReset", group: "Other", label: "Camera behind the car", defaults: [key("Backquote")] },
         { id: "hudToggle", group: "Other", label: "HUD on/off", defaults: [key("KeyH")] },
         { id: "debugToggle", group: "Other", label: "Debug text on/off", defaults: [key("F3")] },
-        { id: "cameraSwitch", group: "Other", label: "Switch camera (fixed, follow, cockpit)", defaults: [key("KeyT")] },
+        { id: "freeCamFollow", group: "Other", label: "Free camera: follow the car or stay here", defaults: [key("KeyP")] },
+        { id: "cameraSwitch", group: "Other", label: "Switch camera (fixed, follow, cockpit, free)", defaults: [key("KeyT")] },
         { id: "toggleESC", group: "Other", label: "ESC (stability control) on/off", defaults: [key("KeyN")] },
         { id: "tuningMenu", group: "Other", label: "Tuning menu on/off", defaults: [key("KeyU")] },
         { id: "toggleTC", group: "Other", label: "Traction control on/off", defaults: [key("KeyC")] },
@@ -199,6 +200,8 @@ var Settings = (function() {
 
     // the actions that still work while a replay is shown (the others would act on the car of the game, which stands still)
     var REPLAY_ACTIONS = { cameraSwitch: true, cameraReset: true, mute: true, hudToggle: false };
+    // the cameras that can be chosen: the three of the cars, and the free one of the game (a replay has a free camera of its own)
+    function cameraCount() { return replayOn() ? 3 : 4; }
     function replayOn() { return typeof OpenRacer !== "undefined" && OpenRacer.Replay && OpenRacer.Replay.active; }
 
     function runHandler(id) {
@@ -683,8 +686,8 @@ var Settings = (function() {
         var page = tabPage("Car");
         page.appendChild(optionRow("Traction control", options.tc ? "On" : "Off", function() { setOption("tc", !options.tc); }));
         page.appendChild(optionRow("ESC (stability control)", options.esc ? "On" : "Off", function() { setOption("esc", !options.esc); }));
-        var cameraNames = ["1 Fixed behind the car", "2 Follow (smooth, FOV with speed)", "3 Cockpit"];
-        page.appendChild(optionRow("Camera", cameraNames[options.camera - 1] || "1", function() { setOption("camera", options.camera % 3 + 1); }));
+        var cameraNames = ["1 Fixed behind the car", "2 Follow (smooth, FOV with speed)", "3 Cockpit", "4 Free camera (buttons on the HUD, P follows the car)"];
+        page.appendChild(optionRow("Camera", cameraNames[options.camera - 1] || "1", function() { setOption("camera", options.camera % cameraCount() + 1); }));
         page.appendChild(optionRow("ABS", options.abs ? "On" : "Off", function() { setOption("abs", !options.abs); }));
         var gearboxNames = { automatic: "Automatic (P R N D)", sequential: "Sequential (paddles)", manual: "Manual (H-shifter, clutch)" };
         page.appendChild(optionRow("Gearbox", gearboxNames[options.gearbox] || options.gearbox, function() { cycleGearbox(); }));
@@ -898,7 +901,8 @@ var Settings = (function() {
     handlers.toggleABS = function() { setOption("abs", !options.abs); };
     handlers.gearboxMode = function() { cycleGearbox(); };
     handlers.toggleESC = function() { setOption("esc", !options.esc); };
-    handlers.cameraSwitch = function() { setOption("camera", options.camera % 3 + 1); };
+    handlers.cameraSwitch = function() { setOption("camera", options.camera % cameraCount() + 1); };
+    handlers.freeCamFollow = function() { if(options.camera === 4 && typeof OpenRacer !== "undefined" && OpenRacer.FreeCam) OpenRacer.FreeCam.toggleFollow(); };
     handlers.tuningMenu = function() { Tuning.toggle(); };
     handlers.hudToggle = function() { setOption("hud", !options.hud); };
     handlers.debugToggle = function() { setOption("debug", !options.debug); };
