@@ -32,7 +32,7 @@ OpenRacer.ExhaustFlames = function (scene, car) {
     var custom = [];
     (function load(n) {
         if (n > 16) return;
-        new THREE.TextureLoader().load("images/flames/flame" + n + ".png", function (t) {
+        new THREE.TextureLoader().load((car.imageBase || "") + "images/flames/flame" + n + ".png", function (t) {
             t.colorSpace = THREE.SRGBColorSpace;
             custom.push(t);
             load(n + 1);
@@ -132,5 +132,6 @@ OpenRacer.ExhaustFlames = function (scene, car) {
         }
     };
 
+    this.refresh = function () { local = null; };           // the points of car.exhaust have changed (the car editor)
     this.clear = function () { age.fill(1e9); sprites.forEach(function (sp) { sp.visible = false; }); };
 };

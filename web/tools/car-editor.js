@@ -100,6 +100,7 @@ scene.add(typeof gizmo.getHelper === "function" ? gizmo.getHelper() : gizmo);
 // ---- the exhaust points: where the flames come out (pops, bangs, anti-lag; Flames.js in the game). A layer each, with a gizmo for the place and a second one
 // for the direction: the flame goes along the negative z of the point, which the arrow shows. They go in car.json as "exhaust": [{ position, rotation (degrees) }]
 const exhaust = [];                    // { id, target, pipe }
+let flameTest = false, flames = null, flameTimer = 0, lastFrame = 0;     // the test of the flames (further down)
 let exhaustCounter = 0;
 const rotGizmo = new TransformControls(camera, renderer.domElement);
 rotGizmo.setMode("rotate");
@@ -160,6 +161,32 @@ function exhaustConfig() {
         rotation: [r(e.target.rotation.x * deg), r(e.target.rotation.y * deg), r(e.target.rotation.z * deg)] }));
 }
 
+// the test of the flames: while it is on, the points make a flame now and then, the way the game does (Flames.js, with the pictures of web/images/flames/)
+const flameCar = { exhaust: [], length: 4.5, width: 1.8, exhaustSystems: 1, imageBase: "../" };
+window.carEditorView = { scene, camera, controls };       // (for the tests)
+function setFlameTest(on) {
+    flameTest = on;
+    if (on && !flames && OpenRacer.ExhaustFlames) flames = new OpenRacer.ExhaustFlames(scene, flameCar);
+    if (!on && flames) flames.clear();
+    flameTimer = 0;
+    renderLayers();
+}
+function updateFlames(now) {
+    const dt = Math.min(0.1, Math.max(0, (now - lastFrame) / 1000));
+    lastFrame = now;
+    if (!flames) return;
+    if (flameTest && exhaust.length) {
+        flameTimer -= dt;
+        if (flameTimer <= 0) {
+            flameTimer = 0.18 + Math.random() * 0.4;
+            flameCar.exhaust = exhaustConfig();
+            flames.refresh();
+            flames.emit({ vx: 0, vy: 0, vz: 0 }, { strength: 0.6 + Math.random() * 0.9, loud: 1, flame: 1 }, { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() });
+        }
+    }
+    flames.update(dt, camera);
+}
+
 // While the crash test runs the bars are away and the view is wider. The camera must not jump: viewLock = { cx } is the middle (in the page) of the
 // view as it was, and the picture is kept where it was on the screen: the view shows a part of a wider picture that is centred on that middle.
 let viewLock = null;
@@ -183,6 +210,7 @@ resize();
 (function loop(now) {
     requestAnimationFrame(loop);
     if (window.benchFrame) window.benchFrame(now || performance.now()); // the test bench, once the module has made it (below)
+    updateFlames(now || performance.now());
     renderer.render(scene, camera);
     renderThumbnail();
 })();
@@ -758,7 +786,15 @@ function renderLayers() {
     // the exhaust points, with a button to remove one and a row to add one
     const exGroup = document.createElement("div");
     exGroup.className = "group";
-    exGroup.textContent = "Exhaust";
+    exGroup.style.cssText = "display: flex; align-items: center; justify-content: space-between;";
+    const exTitle = document.createElement("span");
+    exTitle.textContent = "Exhaust";
+    const test = document.createElement("button");
+    test.className = "small" + (flameTest ? " accent" : "");
+    test.textContent = flameTest ? "Test: on" : "Test: off";
+    test.title = "Show the flames of the pops and bangs at the exhaust points";
+    test.addEventListener("click", () => setFlameTest(!flameTest));
+    exGroup.append(exTitle, test);
     list.appendChild(exGroup);
     exhaust.forEach((e, i) => {
         const row = document.createElement("div");
