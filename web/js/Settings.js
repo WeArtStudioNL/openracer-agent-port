@@ -76,7 +76,8 @@ var Settings = (function() {
         { id: "cameraReset", group: "Other", label: "Camera behind the car", defaults: [key("Backquote")] },
         { id: "hudToggle", group: "Other", label: "HUD on/off", defaults: [key("KeyH")] },
         { id: "debugToggle", group: "Other", label: "Debug text on/off", defaults: [key("F3")] },
-        { id: "freeCamFollow", group: "Other", label: "Free camera: follow the car or stay here", defaults: [key("KeyP")] },
+        { id: "freeCamAim", group: "Other", label: "Free camera: look at the car or not", defaults: [key("KeyP")] },
+        { id: "freeCamFollow", group: "Other", label: "Free camera: move with the car or stay here", defaults: [key("KeyO")] },
         { id: "cameraSwitch", group: "Other", label: "Switch camera (fixed, follow, cockpit, free)", defaults: [key("KeyT")] },
         { id: "toggleESC", group: "Other", label: "ESC (stability control) on/off", defaults: [key("KeyN")] },
         { id: "tuningMenu", group: "Other", label: "Tuning menu on/off", defaults: [key("KeyU")] },
@@ -686,7 +687,7 @@ var Settings = (function() {
         var page = tabPage("Car");
         page.appendChild(optionRow("Traction control", options.tc ? "On" : "Off", function() { setOption("tc", !options.tc); }));
         page.appendChild(optionRow("ESC (stability control)", options.esc ? "On" : "Off", function() { setOption("esc", !options.esc); }));
-        var cameraNames = ["1 Fixed behind the car", "2 Follow (smooth, FOV with speed)", "3 Cockpit", "4 Free camera (buttons on the HUD, P follows the car)"];
+        var cameraNames = ["1 Fixed behind the car", "2 Follow (smooth, FOV with speed)", "3 Cockpit", "4 Free camera (buttons on the HUD, P looks at the car, O moves with it)"];
         page.appendChild(optionRow("Camera", cameraNames[options.camera - 1] || "1", function() { setOption("camera", options.camera % cameraCount() + 1); }));
         page.appendChild(optionRow("ABS", options.abs ? "On" : "Off", function() { setOption("abs", !options.abs); }));
         var gearboxNames = { automatic: "Automatic (P R N D)", sequential: "Sequential (paddles)", manual: "Manual (H-shifter, clutch)" };
@@ -902,6 +903,7 @@ var Settings = (function() {
     handlers.gearboxMode = function() { cycleGearbox(); };
     handlers.toggleESC = function() { setOption("esc", !options.esc); };
     handlers.cameraSwitch = function() { setOption("camera", options.camera % cameraCount() + 1); };
+    handlers.freeCamAim = function() { if(options.camera === 4 && typeof OpenRacer !== "undefined" && OpenRacer.FreeCam) OpenRacer.FreeCam.toggleAim(); };
     handlers.freeCamFollow = function() { if(options.camera === 4 && typeof OpenRacer !== "undefined" && OpenRacer.FreeCam) OpenRacer.FreeCam.toggleFollow(); };
     handlers.tuningMenu = function() { Tuning.toggle(); };
     handlers.hudToggle = function() { setOption("hud", !options.hud); };
