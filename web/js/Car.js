@@ -444,8 +444,11 @@ OpenRacer.Car = function( config, domElement ) {
             this.turnAngle += this.turnDir * ((tSpeed * 3) / speedFactor) * delta;
         } else {
             this.turnAngle += this.turnDir * (tSpeed / speedFactor) * delta;
-            if(Math.abs(this.turnAngle) > this.turnLimit) {
-                this.turnAngle = this.turnDir * this.turnLimit;
+            // the lock of the keyboard gets smaller with the speed (about half at 80 km/h, a fifth from 150 km/h): a key that is held at speed
+            // took the wheels to full lock, and the car snapped round; a wheel, a pad and the mouse have their own range
+            var lock = this.turnLimit * Math.max(0.2, 1 / (1 + Math.pow(Math.abs(v.u) / 22, 2)));
+            if(Math.abs(this.turnAngle) > lock) {
+                this.turnAngle = this.turnDir * lock;
             }
         }
 

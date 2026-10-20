@@ -1396,7 +1396,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             wheel.esc = escBrake[iw] > 30;
             brakeTorque[iw] = bt;
             wheel.brakeTorque = bt;
-            if(wheel.driven && wheel.hasContact) maxDrivenSlip = Math.max(maxDrivenSlip, (wheel.omega * wheel.radius - vl) / (self.tcAllowance * (1 + 0.12 * Math.abs(vl))));
+            if(wheel.driven && wheel.hasContact) maxDrivenSlip = Math.max(maxDrivenSlip, (wheel.omega * wheel.radius - vl) / (self.tcAllowance * (1.2 + 0.12 * Math.abs(vl))));
         }
 
         axleFy[0] = newAxleFy[0]; axleFy[1] = newAxleFy[1];
@@ -1405,13 +1405,18 @@ OpenRacer.Vehicle = function (parameters, input) {
         // Traction control only looks at the wheels: when a driven wheel turns faster than the road under it (it spins),
         // power is taken off the engine until it grips again, and given back slowly. A little wheel speed is allowed: one
         // metre per second and 12% of the speed, which is about where a tyre has the most grip.
+        // The power follows the slip like a controller, not like a switch: the factor changes at a rate that grows with how far the slip is past
+        // the allowance (down) or below it (up), and is still at the allowance. A switch (fast down above it, slow up below it) made the power
+        // saw-tooth at the edge, and the engine speed with it: the car stuttered under traction control instead of pulling in one stroke.
         var slipError = maxDrivenSlip - 1;
-        if(self.tcEnabled && slipError > 0) {
-            self.tcFactor = Math.max(0.12, self.tcFactor - dt * (3 + 5 * slipError));
-            for(var ti = 0; ti < 4; ti++) if(wheels[ti].driven) wheels[ti].tc = true;
+        if(self.tcEnabled) {
+            var rate = slipError > 0 ? -(4 + 8 * slipError) * Math.min(1, slipError * 4) : Math.min(1, -slipError * 6) + 1.5 * Math.max(0, Math.min(1, (-slipError - 0.5) / 0.4));
+            self.tcFactor = Math.max(0.2, Math.min(1, self.tcFactor + dt * rate));
+            if(slipError > 0.05) for(var ti = 0; ti < 4; ti++) if(wheels[ti].driven) wheels[ti].tc = true;
+            if(self.tcFactor > 0.98) for(var tk = 0; tk < 4; tk++) wheels[tk].tc = false;
         } else {
-            self.tcFactor = Math.min(1, self.tcFactor + dt * (slipError < -0.5 ? 2 : 0.4));
-            if(self.tcFactor > 0.98 || !self.tcEnabled) for(var tj = 0; tj < 4; tj++) wheels[tj].tc = false;
+            self.tcFactor = Math.min(1, self.tcFactor + dt * 2);
+            for(var tj = 0; tj < 4; tj++) wheels[tj].tc = false;
         }
 
         // ---- engine and clutch
