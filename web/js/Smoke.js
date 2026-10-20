@@ -198,8 +198,8 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                 from.carry += (dust ? 45 : 90) * wheel.smoke * delta * amount;
                 var count = Math.floor(from.carry);
                 from.carry -= count;
-                // The smoke is made where the tyre meets the road and has not much of the speed of the car (it is left behind): what the spinning tyre
-                // does to it is what counts. A tyre that spins faster than the car goes throws it backwards, fast (at the speed of the spin that is
+                // The smoke is made where the tyre meets the road and has almost nothing of the speed of the car (it is left on the road, so when the car
+                // swings away it is not taken along): what the spinning tyre does to it is what counts. A tyre that spins faster than the car goes throws it backwards, fast (at the speed of the spin that is
                 // beyond the speed of the car), and to the outside of the car, with a spread; a locked tyre leaves it where the car was.
                 var overspeed = (wheel.omega || 0) * wheel.radius - (wheel.forwardSpeed || 0);
                 var spun = Math.max(0, overspeed), locked = Math.max(0, -overspeed);
@@ -209,9 +209,9 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                     var back = Math.min(5, spun * (0.12 + Math.random() * 0.2)) - locked * 0.05;          // (at most 5 m/s: the air stops it within a few metres)
                     var side = outward * Math.min(3, spun * (0.08 + Math.random() * 0.12)) + (Math.random() - 0.5) * (0.8 + 0.05 * Math.min(spun, 10));
                     spawn(from.x + (cx - from.x) * f, from.y + (cy - from.y) * f, from.z + (cz - from.z) * f,
-                        carVel.x * 0.2 - fwd.x * back + left.x * side + (Math.random() - 0.5) * 0.5,
+                        carVel.x * 0.06 - fwd.x * back + left.x * side + (Math.random() - 0.5) * 0.5,
                         0.4 + Math.random() * 0.9 + Math.min(2, spun * 0.08),
-                        carVel.z * 0.2 - fwd.z * back + left.z * side + (Math.random() - 0.5) * 0.5, wheel.heat, dust);
+                        carVel.z * 0.06 - fwd.z * back + left.z * side + (Math.random() - 0.5) * 0.5, wheel.heat, dust);
                 }
                 from.x = cx; from.y = cy; from.z = cz;
                 last[w] = from;
@@ -235,12 +235,15 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
             vel[i * 3 + 1] = vel[i * 3 + 1] * drag + (0.3 * (1 - t)) * delta;      // warm air rises, less as it cools
             vel[i * 3 + 2] = (vel[i * 3 + 2] + az * delta) * drag;
             px += vel[i * 3] * delta; py += vel[i * 3 + 1] * delta; pz += vel[i * 3 + 2] * delta;
-            // out of the body of the car: a puff that is inside it is put on the nearest side, and loses its speed into it
+            // out of the body of the car: a puff that is inside it is put on the nearest side, and thrown off it (the car pushes the air away, it does
+            // not carry it): it gets the speed that took it out, away from the surface, so that a car that turns or slides through its own smoke leaves
+            // it behind instead of dragging it along
             if(box && Math.abs(px - vehicle.px) < box.radius && Math.abs(pz - vehicle.pz) < box.radius && Math.abs(py - vehicle.py) < box.radius) {
                 pLocal.set(px - vehicle.px, py - vehicle.py, pz - vehicle.pz).applyQuaternion(qInv);
                 var m = 0.12;                                // the puff has a size of its own: it keeps a little off the surface
                 var yLow = box.y0 + 0.1;                     // under the floor of the car the smoke can go (the car stands a hand above the road)
                 if(pLocal.x > box.x0 - m && pLocal.x < box.x1 + m && pLocal.y > yLow && pLocal.y < box.y1 + m && pLocal.z > box.z0 - m && pLocal.z < box.z1 + m) {
+                    var ox = px, oy = py, oz = pz;
                     var dxa = pLocal.x - (box.x0 - m), dxb = (box.x1 + m) - pLocal.x, dyb = (box.y1 + m) - pLocal.y, dza = pLocal.z - (box.z0 - m), dzb = (box.z1 + m) - pLocal.z;
                     var least = Math.min(dxa, dxb, dyb, dza, dzb);        // (not down: a puff does not leave through the road)
                     if(least === dxa) pLocal.x = box.x0 - m; else if(least === dxb) pLocal.x = box.x1 + m;
@@ -248,7 +251,11 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                     else if(least === dza) pLocal.z = box.z0 - m; else pLocal.z = box.z1 + m;
                     pLocal.applyQuaternion(qCar);
                     px = vehicle.px + pLocal.x; py = vehicle.py + pLocal.y; pz = vehicle.pz + pLocal.z;
-                    vel[i * 3] *= 0.7; vel[i * 3 + 2] *= 0.7;
+                    var pushed = Math.hypot(px - ox, py - oy, pz - oz) || 1e-6;
+                    var away = Math.min(5, pushed / Math.max(delta, 1e-3));            // m/s, along the way out
+                    vel[i * 3] = vel[i * 3] * 0.5 + (px - ox) / pushed * away;
+                    vel[i * 3 + 1] = vel[i * 3 + 1] * 0.5 + (py - oy) / pushed * away;
+                    vel[i * 3 + 2] = vel[i * 3 + 2] * 0.5 + (pz - oz) / pushed * away;
                 }
             }
             positions[i * 3] = px; positions[i * 3 + 1] = py; positions[i * 3 + 2] = pz;
