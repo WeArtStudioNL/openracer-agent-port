@@ -68,6 +68,9 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                     var n = 0.5 * noise(lat, 16, u * 5, v * 5) + 0.3 * noise(lat, 16, u * 11 + 3, v * 11 + 7) + 0.2 * noise(lat, 16, u * 23 + 11, v * 23 + 5);
                     var density = Math.max(0, Math.min(1, shape * 1.15 + (n - 0.5) * 0.95 - 0.2));
                     density = density * density * (3 - 2 * density);
+                    // nothing at the edge of the tile: a puff that reaches it would end in a straight line (and bleed into the next tile)
+                    var edge = Math.min(1, Math.max(0, (0.5 - Math.hypot(u - 0.5, v - 0.5)) / 0.14));
+                    density *= edge * edge * (3 - 2 * edge);
                     var light = 0.78 + 0.22 * (1 - v) - 0.12 * (1 - n);
                     var i = ((oy + y) * canvas.width + ox + x) * 4;
                     image.data[i] = Math.min(255, 255 * light); image.data[i + 1] = Math.min(255, 255 * light); image.data[i + 2] = Math.min(255, 255 * (light + 0.03));
@@ -111,7 +114,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
             "varying vec2 vUv; varying float vAlpha; varying vec3 vTint; varying vec2 vTile;" +
             "float lin(float d) { return uNear * uFar / (uFar - d * (uFar - uNear)); }" +
             "void main() {" +
-            "  vec4 t = texture2D(map, (vTile + vUv) * 0.5);" +
+            "  vec4 t = texture2D(map, (vTile + 0.02 + vUv * 0.96) * 0.5);" +
             "  float a = t.a * vAlpha;" +
             // soft particles: against the depth of the surfaces (the picture of the normals and the depth that the screen space effects make)
             "  if (uUseDepth > 0.5) {" +

@@ -8,7 +8,7 @@
  */
 
 OpenRacer.Marbles = function (scene, capacity) {
-    capacity = capacity || 4000;
+    capacity = capacity || 10000;
     var positions = new Float32Array(capacity * 3);
     var sizes = new Float32Array(capacity);
     var rotations = new Float32Array(capacity);
