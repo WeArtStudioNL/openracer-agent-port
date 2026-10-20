@@ -253,6 +253,46 @@ OpenRacer.GroundWorld = function (cellSize) {
             surface: surfaces[meta3[best * 3]], mesh: meshes[meta3[best * 3 + 1]] };
     };
 
+    // How far along a ray (a direction of unit length) the first triangle of any kind is (the road, a kerb, a wall, a fence; from both sides), not further than
+    // maxT; gives Infinity when there is none. For the camera: it must not go through a wall.
+    this.firstHit = function (ox, oy, oz, dx, dy, dz, maxT) {
+        if(!count3) return Infinity;
+        var ex = ox + dx * maxT, ey = oy + dy * maxT, ez = oz + dz * maxT;
+        var i0 = Math.floor(Math.min(ox, ex) / CELL3), i1 = Math.floor(Math.max(ox, ex) / CELL3);
+        var j0 = Math.floor(Math.min(oy, ey) / CELL3), j1 = Math.floor(Math.max(oy, ey) / CELL3);
+        var k0 = Math.floor(Math.min(oz, ez) / CELL3), k1 = Math.floor(Math.max(oz, ez) / CELL3);
+        stampValue++;
+        var bestT = Infinity;
+        for(var i = i0; i <= i1; i++) {
+            for(var j = j0; j <= j1; j++) {
+                for(var k = k0; k <= k1; k++) {
+                    var list = grid3.get(cellKey(i, j, k));
+                    if(!list) continue;
+                    for(var q = 0; q < list.length; q++) {
+                        var t = list[q];
+                        if(stamp3[t] === stampValue) continue;
+                        stamp3[t] = stampValue;
+                        var o = t * 12;
+                        var e1x = data3[o + 3], e1y = data3[o + 4], e1z = data3[o + 5], e2x = data3[o + 6], e2y = data3[o + 7], e2z = data3[o + 8];
+                        var px = dy * e2z - dz * e2y, py = dz * e2x - dx * e2z, pz = dx * e2y - dy * e2x;
+                        var det = e1x * px + e1y * py + e1z * pz;
+                        if(det > -1e-12 && det < 1e-12) continue;
+                        var inv = 1 / det;
+                        var tx = ox - data3[o], ty = oy - data3[o + 1], tz = oz - data3[o + 2];
+                        var u = (tx * px + ty * py + tz * pz) * inv;
+                        if(u < -1e-6 || u > 1 + 1e-6) continue;
+                        var qx = ty * e1z - tz * e1y, qy = tz * e1x - tx * e1z, qz = tx * e1y - ty * e1x;
+                        var v = (dx * qx + dy * qy + dz * qz) * inv;
+                        if(v < -1e-6 || u + v > 1 + 1e-6) continue;
+                        var hitT = (e2x * qx + e2y * qy + e2z * qz) * inv;
+                        if(hitT >= 0 && hitT < bestT && hitT <= maxT) bestT = hitT;
+                    }
+                }
+            }
+        }
+        return bestT;
+    };
+
     // The triangles (all, drivable or not) whose box touches a sphere, as a list of numbers in out
     this.nearby = function (cx, cy, cz, radius, out) {
         out.length = 0;

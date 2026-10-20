@@ -197,7 +197,8 @@ OpenRacer.DragStrip = (function () {
             ".dragModal button.ticket { background: #3b424c; color: #fff; border: 0; border-radius: 5px; padding: 4px 12px; cursor: pointer; font-size: 13px; } .dragModal button.ticket:hover { background: #566070; }" +
             ".dragModal .group { margin: 14px 0 4px; font-size: 12px; letter-spacing: 2px; color: #9ab; text-transform: uppercase; }" +
             ".dragModal .kv { display: flex; justify-content: space-between; gap: 14px; padding: 4px 0; border-bottom: 1px solid #262d37; font-size: 14px; } .dragModal .kv span:first-child { color: #9aa8ba; } .dragModal .kv span:last-child { text-align: right; }" +
-            ".dragModal .empty { color: #9aa8ba; padding: 18px 0; }";
+            ".dragModal .empty { color: #9aa8ba; padding: 18px 0; }" +
+            ".dragModal .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; } .dragModal .tab { background: #2b323c; color: #cfd8e3; border: 0; border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 14px; } .dragModal .tab:hover { background: #38414d; } .dragModal .tab.on { background: #3aa86b; color: #fff; }";
         document.head.appendChild(style);
     }
     function modal(extra) {
@@ -241,35 +242,61 @@ OpenRacer.DragStrip = (function () {
         m.box.appendChild(holder);
     }
 
+    function lengthName(length) {
+        var named = MARKS.filter(function (x) { return Math.abs(x[1] - length) < 0.5; })[0];
+        return named ? named[0] : Math.round(length) + " m";
+    }
+
+    // the top 50 of a track, with a tab for every distance that has runs (and the distance of the strip as it is now)
     function showTop(track) {
         var ds = track && track.dragstrip;
         if (!ds) return;
         var metric = Settings.option("units") !== "imperial";
-        var length = ds.length || 402.336;
-        var named = MARKS.filter(function (x) { return Math.abs(x[1] - length) < 0.5; })[0];
-        var runs = OpenRacer.Records.dragRuns(track.id, length).slice(0, 50);
+        var current = ds.length || 402.336;
+        var lengths = [current];
+        OpenRacer.Records.dragRuns(track.id).forEach(function (run) { if (!lengths.some(function (l) { return Math.abs(l - run.length) < 0.5; })) lengths.push(run.length); });
+        lengths.sort(function (a, b) { return a - b; });
+        var chosen = current;
         var m = modal();
         var head = document.createElement("div");
-        head.innerHTML = "<h2>Top 50 · drag strip</h2><div class=\"sub\">" + (track.name || track.id) + " · " + (named ? named[0] : Math.round(length) + " m") + " · the best runs in this browser</div>";
+        head.innerHTML = "<h2>Top 50 · drag strip</h2><div class=\"sub\">" + (track.name || track.id) + " · the best runs in this browser</div>";
         m.box.appendChild(head);
-        if (!runs.length) { var empty = document.createElement("div"); empty.className = "empty"; empty.textContent = "No runs yet. Drive the strip and your runs are kept here."; m.box.appendChild(empty); return; }
-        var table = document.createElement("table");
-        table.innerHTML = "<tr><th>#</th><th class=\"l\">Car</th><th>1/4 mile</th><th>2/4 mile</th><th>Top speed</th><th></th></tr>";
-        runs.forEach(function (run, n) {
-            var tr = document.createElement("tr");
-            var t = function (v) { return v === null || v === undefined ? "–" : v.toFixed(3) + " s"; };
-            tr.innerHTML = "<td>" + (n + 1) + "</td><td class=\"l\"></td><td>" + t(run.quarter) + "</td><td>" + t(run.half) + "</td><td>" + Math.round(run.topSpeed * (metric ? 3.6 : 2.2369362920544)) + (metric ? " km/h" : " mph") + "</td><td></td>";
-            var link = document.createElement("a");
-            link.className = "car"; link.textContent = run.car || run.carId; link.title = "Car and tuning of this run";
-            link.addEventListener("click", function () { showCar(run); });
-            tr.children[1].appendChild(link);
-            var button = document.createElement("button");
-            button.className = "ticket"; button.textContent = "Ticket"; button.title = "The ticket of this run";
-            button.addEventListener("click", function () { ticket(run); });
-            tr.children[5].appendChild(button);
-            table.appendChild(tr);
-        });
-        m.box.appendChild(table);
+        var tabs = document.createElement("div");
+        tabs.className = "tabs";
+        m.box.appendChild(tabs);
+        var body = document.createElement("div");
+        m.box.appendChild(body);
+        function render() {
+            tabs.innerHTML = "";
+            lengths.forEach(function (length) {
+                var tab = document.createElement("button");
+                tab.className = "tab" + (Math.abs(length - chosen) < 0.5 ? " on" : "");
+                tab.textContent = lengthName(length);
+                tab.addEventListener("click", function () { chosen = length; render(); });
+                tabs.appendChild(tab);
+            });
+            body.innerHTML = "";
+            var runs = OpenRacer.Records.dragRuns(track.id, chosen).slice(0, 50);
+            if (!runs.length) { var empty = document.createElement("div"); empty.className = "empty"; empty.textContent = "No runs over this distance yet. Drive the strip and your runs are kept here."; body.appendChild(empty); return; }
+            var table = document.createElement("table");
+            table.innerHTML = "<tr><th>#</th><th class=\"l\">Car</th><th>1/4 mile</th><th>2/4 mile</th><th>Top speed</th><th></th></tr>";
+            runs.forEach(function (run, n) {
+                var tr = document.createElement("tr");
+                var t = function (v) { return v === null || v === undefined ? "–" : v.toFixed(3) + " s"; };
+                tr.innerHTML = "<td>" + (n + 1) + "</td><td class=\"l\"></td><td>" + t(run.quarter) + "</td><td>" + t(run.half) + "</td><td>" + Math.round(run.topSpeed * (metric ? 3.6 : 2.2369362920544)) + (metric ? " km/h" : " mph") + "</td><td></td>";
+                var link = document.createElement("a");
+                link.className = "car"; link.textContent = run.car || run.carId; link.title = "Car and tuning of this run";
+                link.addEventListener("click", function () { showCar(run); });
+                tr.children[1].appendChild(link);
+                var button = document.createElement("button");
+                button.className = "ticket"; button.textContent = "Ticket"; button.title = "The ticket of this run";
+                button.addEventListener("click", function () { ticket(run); });
+                tr.children[5].appendChild(button);
+                table.appendChild(tr);
+            });
+            body.appendChild(table);
+        }
+        render();
     }
 
     // ---- the display

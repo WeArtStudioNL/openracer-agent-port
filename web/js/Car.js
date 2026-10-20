@@ -338,6 +338,34 @@ OpenRacer.Car = function( config, domElement ) {
         cameraFov = null;
     };
 
+    // The cameras behind the car must not go through a wall (or the road of a crest): three rays from the car to the camera and to a place a bit to each
+    // side of it, against all the triangles of the track (Ground.firstHit); the camera comes in front of the nearest. It comes in at once and goes out again
+    // smoothly, when the way is free.
+    var camClear = 1, camTarget = new THREE.Vector3(), camDir = new THREE.Vector3(), camEnd = new THREE.Vector3(), camSide = new THREE.Vector3(), camUp = new THREE.Vector3(0, 1, 0);
+    function keepCameraInView(car, delta) {
+        var ground = car.vehicle.ground;
+        if(!ground || !ground.firstHit) return;
+        camTarget.copy(car.body.position); camTarget.y += 0.9;
+        camDir.copy(camera.position).sub(camTarget);
+        var length = camDir.length();
+        if(length < 0.5) return;
+        camDir.divideScalar(length);
+        camSide.crossVectors(camDir, camUp).normalize();
+        var allowed = 1;
+        for(var r = 0; r < 4; r++) {
+            camEnd.copy(camera.position);
+            if(r === 1) camEnd.addScaledVector(camSide, 0.45);
+            else if(r === 2) camEnd.addScaledVector(camSide, -0.45);
+            else if(r === 3) camEnd.y += 0.4;
+            var rx = camEnd.x - camTarget.x, ry = camEnd.y - camTarget.y, rz = camEnd.z - camTarget.z, rl = Math.hypot(rx, ry, rz) || 1;
+            var hit = ground.firstHit(camTarget.x, camTarget.y, camTarget.z, rx / rl, ry / rl, rz / rl, rl);
+            if(hit < rl) allowed = Math.min(allowed, Math.max(0.1, (hit - 0.4) / rl));
+        }
+        camClear += (allowed - camClear) * (1 - Math.exp(-(allowed < camClear ? 40 : 3) * Math.min(delta, 0.1)));
+        camClear = Math.min(1, Math.max(0.1, camClear));
+        if(camClear < 0.999) camera.position.copy(camTarget).addScaledVector(camDir, length * camClear);
+    }
+
     this.updateCamera = function(delta, cx, cz, avgGround, yaw, bodyQ) {
         var cs = this.cameraSettings;
         var radius = this.wheels[0].radius;
@@ -375,6 +403,7 @@ OpenRacer.Car = function( config, domElement ) {
             camera.rotation.set(0, followYaw + Math.PI + this.cameraAngle, 0);
             camera.translateZ(f.distance * scale);
             camera.position.y = avgGround + f.look_height + (f.height - f.look_height) * scale;
+            keepCameraInView(this, delta);
             camera.lookAt(cx, avgGround + f.look_height, cz);
             setLens(cameraFov, 1);
             return;
@@ -385,6 +414,7 @@ OpenRacer.Car = function( config, domElement ) {
         camera.rotation.set(0, yaw + Math.PI + this.cameraAngle, 0);
         camera.translateZ(cs.chase.distance);
         camera.translateY(cs.chase.height - radius);
+        keepCameraInView(this, delta);
         setLens(cs.chase.fov, 1);
     };
 
