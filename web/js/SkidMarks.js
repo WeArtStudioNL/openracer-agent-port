@@ -25,6 +25,7 @@ OpenRacer.SkidMarks = function (scene, capacity) {
     var mesh = new THREE.Mesh(geometry, material);
     mesh.frustumCulled = false;
     mesh.renderOrder = 1;
+    mesh.userData.noGBuffer = true;                    // a thin film on the road, not a surface for the screen space effects (Graphics.js): they drew a dark band round every mark, also over the smoke
     scene.add(mesh);
     var next = 0;
     var HALF_WIDTH = 0.1, STEP = 0.12, LIFT = 0.012;
