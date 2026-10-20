@@ -49,6 +49,13 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
     // the nodes of a part (a hood, a door) belong to its group: they are joined to each other, and to the body only by the links of its mounts
     var partOf = sphereOf.map(function (si) { return spheres[si].part || null; });
     this.partOf = partOf;
+    // the nodes of the suspension (a hub, a knuckle, the pivots of the arms: CollisionProxy.js) come last: they are not part of the model of the
+    // car (the vertices are not tied to them) and get no beams of their own to their neighbours, only the ones that are added for the rig
+    var isRig = sphereOf.map(function (si) { return !!spheres[si].rig; });
+    this.isRig = isRig;
+    this.bodyCount = isRig.indexOf(true) < 0 ? N : isRig.indexOf(true);
+    var aScale = new Float64Array(N);                  // the stiffness of the anchor of a node as a factor (a hub is held by its arms, not by its anchor)
+    aScale.fill(1);
     var gone = new Uint8Array(N);                      // nodes of a part that has come loose: not simulated any more
     var rest = new Float64Array(3 * N);               // where the node is when the car is whole
     var radius = new Float64Array(N);
@@ -72,7 +79,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
     for (var a = 0; a < N; a++) {
         var near = [];
         for (var b = 0; b < N; b++) {
-            if (a === b || partOf[a] !== partOf[b]) continue;
+            if (a === b || partOf[a] !== partOf[b] || isRig[a] || isRig[b]) continue;
             var dx = rest[3 * a] - rest[3 * b], dy = rest[3 * a + 1] - rest[3 * b + 1], dz = rest[3 * a + 2] - rest[3 * b + 2];
             var d = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (d < P.reach && d > 0.02) near.push([d, b]);
@@ -114,6 +121,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         if (o.yield !== undefined) anchorYield[k] = o.yield;
         if (o.break !== undefined) anchorBreak[k] = o.break;
         if (o.mass !== undefined) mass[k] = Math.max(0.5, o.mass);
+        if (o.anchorScale !== undefined) aScale[k] = o.anchorScale;
         if (o.release) anchorAlive[k] = 0;                 // its anchor is gone: it is held by its beams only
         safeStep();
     };
@@ -139,8 +147,8 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
     function safeStep() {
         var kSum = new Float64Array(N), cSum = new Float64Array(N);
         for (var k = 0; k < N; k++) {
-            kSum[k] = P.anchorK + P.contactK;
-            cSum[k] = 2 * P.anchorDamping * Math.sqrt(P.anchorK * mass[k]) + 2 * P.contactDamping * Math.sqrt(P.contactK * mass[k]);
+            kSum[k] = P.anchorK * aScale[k] + P.contactK;
+            cSum[k] = 2 * P.anchorDamping * Math.sqrt(P.anchorK * aScale[k] * mass[k]) + 2 * P.contactDamping * Math.sqrt(P.contactK * mass[k]);
         }
         for (var i = 0; i < beamA.length; i++) {
             var a = beamA[i], b = beamB[i];
@@ -219,7 +227,8 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
                 var ix = 3 * k;
                 var dx = u[ix] - q[ix], dy = u[ix + 1] - q[ix + 1], dz = u[ix + 2] - q[ix + 2];
                 var d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                var yieldD = anchorYield[k] / P.anchorK;
+                var kA = P.anchorK * aScale[k];
+                var yieldD = anchorYield[k] / kA;
                 if (d > yieldD) {
                     // past the yield force: the shape stays bent. Only a share of what is beyond it is still a spring (the force goes on rising)
                     var excess = d - yieldD;
@@ -231,9 +240,9 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
                     moved = true;
                 }
                 if(d > maxMove) maxMove = d;
-                var c = 2 * P.anchorDamping * Math.sqrt(P.anchorK * mass[k]);
-                var fx = P.anchorK * dx + c * w[ix], fy = P.anchorK * dy + c * w[ix + 1], fz = P.anchorK * dz + c * w[ix + 2];   // the anchor pulls the node back; this is what it pulls on the car
-                if (P.anchorK * d > anchorBreak[k]) { anchorAlive[k] = 0; moved = true; continue; }       // it tears off
+                var c = 2 * P.anchorDamping * Math.sqrt(kA * mass[k]);
+                var fx = kA * dx + c * w[ix], fy = kA * dy + c * w[ix + 1], fz = kA * dz + c * w[ix + 2];   // the anchor pulls the node back; this is what it pulls on the car
+                if (kA * d > anchorBreak[k]) { anchorAlive[k] = 0; moved = true; continue; }       // it tears off
                 f[ix] -= fx; f[ix + 1] -= fy; f[ix + 2] -= fz;
                 // on the car, at the place of the node
                 var px = rest[ix] + u[ix] + q[ix], py = rest[ix + 1] + u[ix + 1] + q[ix + 1], pz = rest[ix + 2] + u[ix + 2] + q[ix + 2];

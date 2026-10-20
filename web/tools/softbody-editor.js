@@ -32,6 +32,7 @@ const SCALE = { "anchor.stiffness": 1e6, "anchor.yield_force": 1e3, "anchor.brea
 
 export function initSoftBody(api) {
     const { $, THREE, scene, camera, renderer, controls, bench, status } = api;
+    const nb = (s) => s.bodyCount || s.count;           // the nodes of the car: the ones of the suspension (the hubs, the arms) are not drawn or edited here
     const sb = { nodeEdits: new Map(), beamEdits: new Map(), parts: [], shown: false, group: null, points: null, lines: null, hinges: [], sel: { nodes: new Set(), beam: null }, layout: null, edit: false, keepSelection: null, crash: null, wall: null, dirty: false, partWin: null, partMode: null, pinSel: -1, win: null, partGroup: null, deferRestart: false };
 
     // ---- the settings
@@ -220,7 +221,7 @@ export function initSoftBody(api) {
                     const pt = numbers(q(f).value);
                     if (pt) return new THREE.Vector3(...pt);
                     const k = parseInt(q(nf).value, 10);
-                    return k >= 0 && k < s.count ? s.restPosition(k, new THREE.Vector3()) : null;
+                    return k >= 0 && k < nb(s) ? s.restPosition(k, new THREE.Vector3()) : null;
                 };
                 const p1 = place("mApt", "mA"), p2 = place("mBpt", "mB");
                 if (!p1 || !p2 || p1.distanceTo(p2) < 1e-4) { fail("Set the hinge points A and B first (a node or a point on the surface)."); break; }
@@ -323,7 +324,7 @@ export function initSoftBody(api) {
             sb.shown = true;
             showSelection();
             $("sbShow").textContent = "Hide the shell";
-            $("sbInfo").textContent = s.count + " nodes, " + s.beamCount + " beams";
+            $("sbInfo").textContent = nb(s) + " nodes, " + s.beamCount + " beams" + (s.count > nb(s) ? " (+" + (s.count - nb(s)) + " nodes of the suspension)" : "");
         } catch (error) { status(error.message, "error"); }
     }
     function hide() {
@@ -337,7 +338,7 @@ export function initSoftBody(api) {
     function drawShell(s) {
         if (sb.group) scene.remove(sb.group);
         const group = new THREE.Group();
-        const N = s.count, B = s.beamCount;
+        const N = nb(s), B = s.beamCount;
         const pointGeo = new THREE.BufferGeometry();
         pointGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(3 * N), 3));
         pointGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(3 * N), 3));
@@ -367,7 +368,7 @@ export function initSoftBody(api) {
         const pos = sb.mountLines.geometry.attributes.position, p = new THREE.Vector3(), q = new THREE.Vector3();
         let n = 0;
         sb.parts.forEach((part) => {
-            const m = (part.mounts || []).filter((x) => x.point || x.node < s.count);
+            const m = (part.mounts || []).filter((x) => x.point || x.node < nb(s));
             const at = (mount, out) => (mount.point ? out.set(mount.point[0], mount.point[1], mount.point[2]) : s.position(mount.node, out));
             if (m.length >= 2 && n < 38) {
                 at(m[0], p); at(m[1], q);
@@ -375,7 +376,7 @@ export function initSoftBody(api) {
             }
             if (m.length >= 1) {
                 (part.nodes || []).forEach((k) => {
-                    if (k >= s.count || n >= 39) return;
+                    if (k >= nb(s) || n >= 39) return;
                     at(m[0], p); s.position(k, q);
                     pos.setXYZ(2 * n, p.x, p.y, p.z); pos.setXYZ(2 * n + 1, q.x, q.y, q.z); n++;
                 });
@@ -433,7 +434,7 @@ export function initSoftBody(api) {
         const pos = sb.points.geometry.attributes.position, col = sb.points.geometry.attributes.color;
         const lp = sb.lines.geometry.attributes.position, lc = sb.lines.geometry.attributes.color;
         const rest = new THREE.Vector3();
-        for (let k = 0; k < s.count; k++) {
+        for (let k = 0; k < nb(s); k++) {
             s.position(k, nodePos); s.restPosition(k, rest);
             pos.setXYZ(k, nodePos.x, nodePos.y, nodePos.z);
             if (!s.alive(k)) tint.setRGB(0.35, 0.35, 0.4);
@@ -450,6 +451,11 @@ export function initSoftBody(api) {
         pos.needsUpdate = true; col.needsUpdate = true;
         const a = new THREE.Vector3(), b = new THREE.Vector3();
         for (let i = 0; i < s.beamCount; i++) {
+            if (s.beamA[i] >= nb(s) || s.beamB[i] >= nb(s)) {         // a beam of the suspension: not drawn (a line of no length)
+                s.position(0, a);
+                lp.setXYZ(2 * i, a.x, a.y, a.z); lp.setXYZ(2 * i + 1, a.x, a.y, a.z);
+                continue;
+            }
             const alive = s.beamAlive[i] === 1 && s.alive(s.beamA[i]) && s.alive(s.beamB[i]);
             s.position(s.beamA[i], a); s.position(s.beamB[i], b);
             lp.setXYZ(2 * i, a.x, a.y, a.z); lp.setXYZ(2 * i + 1, b.x, b.y, b.z);
@@ -606,7 +612,7 @@ export function initSoftBody(api) {
         sb.group.updateMatrixWorld(true);
         if (!l.add) sb.sel.nodes.clear();
         sb.sel.beam = null;
-        for (let k = 0; k < s.count; k++) {
+        for (let k = 0; k < nb(s); k++) {
             const [x, y, z] = screenOf(s, k, rect);
             if (z < 1 && inside(l.points, x, y)) sb.sel.nodes.add(k);
         }
@@ -621,7 +627,7 @@ export function initSoftBody(api) {
         if (sb.pushMode) { applyForceAt(mx, my, rect); return; }
         const p = new THREE.Vector3(), p2 = new THREE.Vector3();
         let node = -1, bestD = 14;
-        for (let k = 0; k < s.count; k++) {
+        for (let k = 0; k < nb(s); k++) {
             const [x, y] = screenOf(s, k, rect);
             const d = Math.hypot(x - mx, y - my);
             if (d < bestD) { bestD = d; node = k; }
@@ -640,6 +646,7 @@ export function initSoftBody(api) {
         let beam = -1;
         bestD = 8;
         for (let i = 0; i < s.beamCount; i++) {
+            if (s.beamA[i] >= nb(s) || s.beamB[i] >= nb(s)) continue;
             const [x1, y1] = screenOf(s, s.beamA[i], rect), [x2, y2] = screenOf(s, s.beamB[i], rect);
             const dx = x2 - x1, dy = y2 - y1, len2 = dx * dx + dy * dy || 1;
             const t = Math.max(0, Math.min(1, ((mx - x1) * dx + (my - y1) * dy) / len2));
@@ -710,7 +717,7 @@ export function initSoftBody(api) {
         if (sb.layout) return;
         const p = new THREE.Vector3();
         sb.layout = [];
-        for (let k = 0; k < s.count; k++) { s.restPosition(k, p); sb.layout.push({ x: +p.x.toFixed(4), y: +p.y.toFixed(4), z: +p.z.toFixed(4), r: +s.radiusOf(k).toFixed(4) }); }
+        for (let k = 0; k < nb(s); k++) { s.restPosition(k, p); sb.layout.push({ x: +p.x.toFixed(4), y: +p.y.toFixed(4), z: +p.z.toFixed(4), r: +s.radiusOf(k).toFixed(4) }); }
     }
     function addAt(mx, my, rect) {
         const s = softBody();
@@ -1178,7 +1185,7 @@ export function initSoftBody(api) {
         if (sb.shown && softBody()) {
             sb.group.updateMatrixWorld(true);
             const s = softBody();
-            for (let k = 0; k < s.count; k++) { const [x, y] = screenOf(s, k, rect); if (Math.hypot(x - mx, y - my) < 14) return false; }
+            for (let k = 0; k < nb(s); k++) { const [x, y] = screenOf(s, k, rect); if (Math.hypot(x - mx, y - my) < 14) return false; }
         }
         const loose = looseOf(hit.object);
         if (!loose) { if (sb.partWin && !sb.partMode) closePartWindow(); return false; }      // so does a click on the body

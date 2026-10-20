@@ -340,7 +340,7 @@ suspension be as stiff as they are in the car, without the 14 steps of the expli
 4. A solver of impulses for the suspension beams (the stiff ones), the shell stays as it is.
 5. The rest: both cars dent in a crash between two (M4), replay of the shell and the parts.
 
-**The first trial (step 1).** The front wheels do not have a collision sphere of their own any more (the `wheel` sphere of `CollisionProxy.js`): the
+**The first trial (step 1; replaced by the rig below).** The front wheels do not have a collision sphere of their own any more (the `wheel` sphere of `CollisionProxy.js`): the
 sphere is a node of the shell, the hub (`hub: true` in the list of spheres, nodes 195 and 196 on the Mustang), with an anchor (yield 20 kN, break
 100 kN, 25 kg, `softbody.hub_yield`, `hub_break`) and the beams to the shell around it that every node gets. `Vehicle.updateHubs()` reads where the hub is
 now against where it was made: the place of the wheel on the car shifts with it (`shiftX`, `shiftZ` on the mount), the toe is 0.5 rad per metre that
@@ -352,3 +352,31 @@ In the crash test of the Mustang, against a wall of 40 degrees: 70 km/h puts the
 degrees, 62% damage), 110 km/h tears the wheel off; head-on at 110 km/h the wheels are not touched (1 cm), as the wheels are behind the nose. What this
 does not do yet: the hub has no arms, so the bend is one displacement turned into toe and camber with factors, not what the arms do; and it is
 a node among the shell nodes, so the model of the car around the wheel arch is pulled along with it (the vertices tied to that node).
+
+### The rig: steps 2 and 3, for all four wheels
+
+Every wheel has a suspension of nodes and beams (`CollisionProxy.js` makes the spheres, then the beams after the shell; the nodes come last in the
+list and are not part of the model: `SoftBody.bodyCount` is the number of nodes of the car, `SoftBodyMesh`, `Parts` and the car editor only see those):
+
+- **The knuckle**: the hub `H` (the collision sphere of the wheel, 18 kg) and three more nodes, the ball joint above `Ub`, the one below `Lb` and the
+  end of the tie rod `Te` (6 kg), joined by six stiff beams (it turns, it does not bend).
+- **The pivots on the car** (10 kg, a stiff anchor): two for the upper arm (`U1`, `U2`), two for the lower arm (`L1`, `L2`) and one for the tie rod (`R`).
+- **The beams that bend**: the two beams of the upper arm (to `Ub`), the two of the lower arm (to `Lb`) and the tie rod (`R` to `Te`). Each is elastic
+  up to its yield force, bends for good above it and tears at its break force (arms 14 and 36 kN, tie rod 12 and 36 kN;
+  `softbody.arm_yield`, `arm_break`, `tie_yield`, `tie_break`). The hub and the knuckle have almost no anchor of their own (`setNode`, `anchorScale`),
+  so what holds a wheel are its arms.
+
+`Vehicle.updateHubs()` reads the wheel from where the nodes are: the **camber** is how far the line from `Lb` to `Ub` has leaned against how it was
+made, the **toe** how far the line from the hub to `Te` has turned, and the hub gives the **place** of the wheel (`shiftX`, `shiftZ`, on the mount, so the
+track and the wheelbase change). Toe and camber go into the tyre forces and into the model of the wheel; a bent wheel also grips up to 40% less. The wheel is
+**off** when both beams of an arm are torn, or the hub has moved 0.3 m (`hub_limit`); it then flies off as a rigid body (`Parts.js`) as before. A tie rod
+that is torn leaves the toe where it was. `"wheel_hubs": false` gives the old number (`wheel_strength`) for all the wheels.
+
+The crash test of the Mustang, front-right wheel, against a wall of 40 degrees: 75 km/h nothing, 90 km/h toe 6 degrees (56%), 110 km/h toe 20 degrees,
+130 km/h the wheel is off; head-on at 100 km/h the wheels are not touched. The step of the shell (physics 0.6 ms on average) did not grow
+noticeably with the 36 nodes and 98 beams of the four suspensions.
+
+**What is left of the design.** The spring and the damper are still the ones of `Vehicle.js` (a beam in the network would make the
+body feel the load of the road through the same beams, and that needs the solver below to be stable). The solver is still explicit with 3 to 14 steps: the
+suspension beams are stiff, and a solver of impulses (as the video says) would let them be as stiff as in the real car with fewer steps. Both cars dent in a
+crash between two (M4), and the replay of the shell and the parts, are not done.

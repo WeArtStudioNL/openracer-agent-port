@@ -853,26 +853,32 @@ OpenRacer.Vehicle = function (parameters, input) {
     }
     // The hub of a front wheel is a node of the shell: where it is now (the hit bent it) gives the place of the wheel on the car, its toe and its
     // camber; when its anchor has torn the wheel is off. In the frame of the car: x to the left, z forward.
-    var hubPos = { x: 0, y: 0, z: 0 }, hubRest = { x: 0, y: 0, z: 0 };
+    var hubPos = { x: 0, y: 0, z: 0 }, hubA = { x: 0, y: 0, z: 0 }, hubB = { x: 0, y: 0, z: 0 };
+    this.rig = [null, null, null, null];              // per wheel: the nodes of its suspension and the beams (CollisionProxy.js)
+    function turnOf(a) { return a > Math.PI ? a - 2 * Math.PI : (a < -Math.PI ? a + 2 * Math.PI : a); }
     function updateHubs() {
         var sb = self.softBody;
         if(!sb) return;
         for(var i = 0; i < 4; i++) {
-            var k = self.hubNode[i];
-            if(k < 0 || self.wheelLost[i]) continue;
-            var wh = self.wheels[i];
-            if(!sb.alive(k)) { loseWheel(i); continue; }
-            sb.position(k, hubPos); sb.restPosition(k, hubRest);
-            var dx = hubPos.x - hubRest.x, dz = hubPos.z - hubRest.z, dy = hubPos.y - hubRest.y;
+            var rig = self.rig[i];
+            if(!rig || self.wheelLost[i]) continue;
+            var wh = self.wheels[i], n = rig.nodes;
+            // the wheel is off when the arms are gone (both beams of the upper or of the lower arm), or the hub has moved too far
+            var upperAlive = sb.beamAlive[rig.upper[0]] || sb.beamAlive[rig.upper[1]], lowerAlive = sb.beamAlive[rig.lower[0]] || sb.beamAlive[rig.lower[1]];
+            sb.position(n.H, hubPos);
+            var dx = hubPos.x - rig.home.x, dy = hubPos.y - rig.home.y, dz = hubPos.z - rig.home.z;
             var moved = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            if(moved > self.hubLimit) { sb.setNode(k, { release: true }); loseWheel(i); continue; }      // bent so far that the wheel is off
-            var dIn = wh.right ? dx : -dx;                // pushed in (towards the middle of the car)
-            var dBack = -dz;
+            if(!upperAlive || !lowerAlive || moved > self.hubLimit) { sb.setNode(n.H, { release: true }); loseWheel(i); continue; }
+            // the camber from how the knuckle leans (the ball joints, above and below), the toe from how it has turned (the end of the tie rod
+            // against the hub), both against how it was made; and the hub gives the place of the wheel on the car
+            sb.position(n.Ub, hubA); sb.position(n.Lb, hubB);
+            var camber = turnOf(Math.atan2(hubA.x - hubB.x, hubA.y - hubB.y) - rig.camber0);
+            sb.position(n.Te, hubA);
+            var toe = turnOf(Math.atan2(hubA.x - hubPos.x, hubA.z - hubPos.z) - rig.toe0);
             wh.shiftX = dx; wh.shiftZ = dz;
-            var side = wh.right ? -1 : 1;
-            wh.toeBend = side * Math.max(-0.2, Math.min(0.2, dBack * 0.5));
-            wh.camberBend = side * Math.max(-0.25, Math.min(0.25, dIn * 1.0));
-            self.wheelDamage[i] = Math.min(0.99, moved / self.hubLimit);
+            wh.camberBend = Math.max(-0.35, Math.min(0.35, -camber));       // (a lean of the top to the left is a negative bend)
+            wh.toeBend = Math.max(-0.35, Math.min(0.35, -toe));              // (a turn towards the left is a negative angle of the wheel)
+            self.wheelDamage[i] = Math.min(0.99, Math.max(moved / self.hubLimit, Math.abs(toe) / 0.2, Math.abs(camber) / 0.2));
         }
     }
     this.onWheelLost = null;

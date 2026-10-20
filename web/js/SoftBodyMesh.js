@@ -16,9 +16,9 @@ OpenRacer.SoftBodyMesh = (function () {
     // groupOf(mesh) (optional): the name of the part that a mesh belongs to, or null for the body. The vertices of a part are tied to the nodes of
     // that part (so a hood dents by itself), the vertices of the body to the nodes that belong to no part.
     function attach(root, softBody, toVehicle, groupOf) {
-        if (!softBody || softBody.count < 1 || softBody.count > MAX_NODES) return null;
+        var N = softBody ? (softBody.bodyCount || softBody.count) : 0;        // the nodes of the suspension are not part of the model
+        if (!softBody || N < 1 || N > MAX_NODES) return null;
         root.updateMatrixWorld(true);
-        var N = softBody.count;
         var nodes = new Float32Array(3 * N);
         var tmp = { x: 0, y: 0, z: 0 };
         for (var k = 0; k < N; k++) { softBody.restPosition(k, tmp); nodes[3 * k] = tmp.x; nodes[3 * k + 1] = tmp.y; nodes[3 * k + 2] = tmp.z; }
@@ -93,7 +93,7 @@ OpenRacer.SoftBodyMesh = (function () {
                 // the part comes off the car: it keeps the bend that it has at this moment (a copy of the displacements), and does not follow the shell
                 // any more; before, it went back to its own shape, so a headlight or a grille that came off looked as if it had not been hit
                 var frozen = { value: new Float32Array(3 * MAX_NODES) };
-                frozen.value.set(softBody.displacement);
+                frozen.value.set(softBody.displacement.subarray(0, 3 * N));
                 object.traverse(function (m) {
                     if (!m.isMesh || !m.userData || !m.userData.sbDeform) return;
                     m.userData.sbUniform = frozen;
@@ -112,7 +112,7 @@ OpenRacer.SoftBodyMesh = (function () {
             update: function () {
                 if (softBody.version === seen) return;
                 seen = softBody.version;
-                uniform.value.set(softBody.displacement);
+                uniform.value.set(softBody.displacement.subarray(0, 3 * N));
                 for (var m = 0; m < materials.length; m++) materials[m].uniformsNeedUpdate = true;
             }
         };

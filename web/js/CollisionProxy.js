@@ -131,14 +131,23 @@ OpenRacer.CollisionProxy = (function () {
         }
         var cfg = (object.config && object.config.softbody) || {};
         if(spheres && cfg.enabled !== false && OpenRacer.SoftBody && cfg.wheel_hubs !== false) {
-            // the front wheels are nodes of the shell (the hub of the wheel), joined by beams to the shell around them: a hit on the wheel bends
-            // them, the toe, the camber and the place of the wheel follow from where the hub is (Vehicle.js, updateHubs), and when its anchor tears
-            // the wheel is off. (The rear wheels keep the damage as a number, wheel_strength.)
-            spheres = spheres.map(function (sp) {
+            // The suspension is part of the shell: a hub, a knuckle (three more nodes: the ball joints above and below, and the end of the tie rod) and
+            // the pivots of the arms on the car, for every wheel, joined by beams (below, after the shell is made). A hit on the wheel bends the arms
+            // and the tie rod, and the toe, the camber and the place of the wheel are worked out from where the nodes are (Vehicle.js, updateHubs).
+            // The collision sphere of the wheel is the hub. These nodes come last, and are not part of the model.
+            var rigSpheres = [];
+            spheres.forEach(function (sp) {
                 var wheel = sp.wheel && object.wheels[sp.wheelIndex];
-                if(wheel && wheel.front) return { x: sp.x, y: sp.y, z: sp.z, r: sp.r, hub: true, wheelIndex: sp.wheelIndex };
-                return sp;
+                if(!wheel) return;
+                var s = sp.x > 0 ? -1 : 1;                    // towards the middle of the car (x is to the left)
+                var add = function (role, dx, dy, dz, r) { rigSpheres.push({ x: sp.x + s * dx, y: sp.y + dy, z: sp.z + dz, r: r, rig: true, role: role, wheelIndex: sp.wheelIndex, hub: role === "H" }); };
+                add("H", 0, 0, 0, sp.r);
+                add("Ub", 0.12, 0.14, 0, 0.02); add("Lb", 0.10, -0.14, 0, 0.02); add("Te", 0.12, -0.04, -0.12, 0.02);
+                add("U1", 0.45, 0.20, 0.15, 0.02); add("U2", 0.45, 0.20, -0.15, 0.02);
+                add("L1", 0.50, -0.12, 0.20, 0.02); add("L2", 0.50, -0.12, -0.20, 0.02);
+                add("R", 0.50, -0.02, -0.12, 0.02);
             });
+            if(rigSpheres.length) spheres = spheres.filter(function (sp) { return !sp.wheel; }).concat(rigSpheres);
         }
         if(spheres) {
             v.collisionSpheres = spheres;
@@ -149,14 +158,41 @@ OpenRacer.CollisionProxy = (function () {
                 try { object.softBodyMesh = OpenRacer.SoftBodyMesh.attach(model.tilt, v.softBody, toVehicle, partGroups(object, model)); } catch(e) { console.warn("SoftBodyMesh: " + e.message); }
                 console.log("soft body: " + v.softBody.count + " nodes, " + v.softBody.beamCount + " beams");
                 v.hubLimit = cfg.hub_limit !== undefined ? cfg.hub_limit : 0.3;
+                var sbody = v.softBody, nodes = [{}, {}, {}, {}];
                 spheres.forEach(function (sp, si) {
-                    if(!sp.hub) return;
-                    var k = v.softBody.nodeOfSphere[si];
+                    if(!sp.rig) return;
+                    var k = sbody.nodeOfSphere[si];
                     if(k < 0) return;
-                    v.hubNode[sp.wheelIndex] = k; v.hubSphere[sp.wheelIndex] = si;
-                    // the strength of the suspension of a front wheel: the force at which the hub is bent for good (kN) and at which it tears off
-                    v.softBody.setNode(k, { yield: (cfg.hub_yield !== undefined ? cfg.hub_yield : 20) * 1000, break: (cfg.hub_break !== undefined ? cfg.hub_break : 100) * 1000, mass: 25 });
+                    nodes[sp.wheelIndex][sp.role] = k;
+                    if(sp.role === "H") { v.hubNode[sp.wheelIndex] = k; v.hubSphere[sp.wheelIndex] = si; }
                 });
+                // the strength of the parts of the suspension (cfg: arm_yield, arm_break, tie_yield, tie_break in kN)
+                var arm = { stiffness: 8e5, yield_force: (cfg.arm_yield !== undefined ? cfg.arm_yield : 14) * 1000, break_force: (cfg.arm_break !== undefined ? cfg.arm_break : 36) * 1000 };
+                var tie = { stiffness: 1.2e6, yield_force: (cfg.tie_yield !== undefined ? cfg.tie_yield : 12) * 1000, break_force: (cfg.tie_break !== undefined ? cfg.tie_break : 36) * 1000 };
+                var stiff = { stiffness: 1e6, yield_force: 60000, break_force: 200000 };
+                var p0 = { x: 0, y: 0, z: 0 }, p1 = { x: 0, y: 0, z: 0 };
+                for(var wi = 0; wi < 4; wi++) {
+                    var n = nodes[wi];
+                    if(n.H === undefined) continue;
+                    // held by its beams, not by its anchor; the pivots on the car are stiff
+                    sbody.setNode(n.H, { mass: 18, anchorScale: 0.02, yield: 1e9, break: 1e9 });
+                    ["Ub", "Lb", "Te"].forEach(function (role) { sbody.setNode(n[role], { mass: 6, anchorScale: 0.02, yield: 1e9, break: 1e9 }); });
+                    ["U1", "U2", "L1", "L2", "R"].forEach(function (role) { sbody.setNode(n[role], { mass: 10, anchorScale: 3, yield: 150000, break: 400000 }); });
+                    var rig = {
+                        nodes: n,
+                        upper: [sbody.addBeam(n.U1, n.Ub, arm), sbody.addBeam(n.U2, n.Ub, arm)],
+                        lower: [sbody.addBeam(n.L1, n.Lb, arm), sbody.addBeam(n.L2, n.Lb, arm)],
+                        tie: sbody.addBeam(n.R, n.Te, tie)
+                    };
+                    // the knuckle is stiff: it turns, it does not bend
+                    [["H", "Ub"], ["H", "Lb"], ["H", "Te"], ["Ub", "Lb"], ["Ub", "Te"], ["Lb", "Te"]].forEach(function (pair) { sbody.addBeam(n[pair[0]], n[pair[1]], stiff); });
+                    sbody.restPosition(n.Ub, p0); sbody.restPosition(n.Lb, p1);
+                    rig.camber0 = Math.atan2(p0.x - p1.x, p0.y - p1.y);
+                    sbody.restPosition(n.Te, p0); sbody.restPosition(n.H, p1);
+                    rig.toe0 = Math.atan2(p0.x - p1.x, p0.z - p1.z);
+                    rig.home = { x: p1.x, y: p1.y, z: p1.z };
+                    v.rig[wi] = rig;
+                }
             }
             // the wheels: car.json "softbody": { "wheel_strength": 25 } is the hit (kN s) that tears a wheel off; 0 keeps them on
             v.wheelStrength = v.softBody ? (cfg.wheel_strength !== undefined ? Math.max(0, cfg.wheel_strength) : 25) * 1000 : 0;

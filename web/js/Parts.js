@@ -160,13 +160,13 @@ OpenRacer.Parts = (function () {
             var nodes = spec.nodes ? spec.nodes.slice() : [];
             if (sb && !nodes.length) {
                 var order = [];
-                for (var k = 0; k < sb.count; k++) { sb.restPosition(k, a); order.push([a.distanceToSquared(centre), k]); }
+                for (var k = 0; k < (sb.bodyCount || sb.count); k++) { sb.restPosition(k, a); order.push([a.distanceToSquared(centre), k]); }
                 order.sort(function (x, y) { return x[0] - y[0]; });
                 for (var n = 0; n < Math.min(3, order.length); n++) nodes.push(order[n][1]);
             }
             // a part with nodes of its own (the nodes of the layout that name it): they dent it, and the hold on the body is a link beam to each mount
             var group = [];
-            if (sb && sb.partOf) for (var gk = 0; gk < sb.count; gk++) if (sb.partOf[gk] === spec.object) group.push(gk);
+            if (sb && sb.partOf) for (var gk = 0; gk < (sb.bodyCount || sb.count); gk++) if (sb.partOf[gk] === spec.object) group.push(gk);
             if (group.length && !spec.nodes) nodes = group.slice();
             // a mount is a node of the shell or a point (in the frame of the car): a point is held by the nearest node of the body
             var mountList = hinge && sb ? (spec.mounts || []).filter(function (m) { return m && ((m.node >= 0 && m.node < sb.count) || (Array.isArray(m.point) && m.point.length === 3)); }).slice(0, 2).map(function (m) {
@@ -175,7 +175,7 @@ OpenRacer.Parts = (function () {
                 if (out.point) {
                     var best = 1e9;
                     out.node = 0;
-                    for (var bk = 0; bk < sb.count; bk++) {
+                    for (var bk = 0; bk < (sb.bodyCount || sb.count); bk++) {
                         if (sb.partOf && sb.partOf[bk] === spec.object) continue;
                         sb.restPosition(bk, c);
                         var dist = out.point.distanceToSquared(c);
