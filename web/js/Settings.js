@@ -657,6 +657,15 @@ var Settings = (function() {
         mainMenu.textContent = "Main menu";
         mainMenu.onclick = function() { window.location.href = window.location.pathname; };
         buttons.appendChild(mainMenu);
+        // a track with a drag strip: the Top 50 and the tickets, at the top
+        if(typeof currentTrack !== "undefined" && currentTrack && currentTrack.dragstrip && OpenRacer.DragStrip) {
+            var drag = document.createElement("button");
+            drag.className = "big";
+            drag.style.cssText = "background: #2f8f5a; margin-left: 8px;";
+            drag.textContent = "Drag strip: Top 50 and tickets";
+            drag.onclick = function() { OpenRacer.DragStrip.showTop(currentTrack); };
+            buttons.appendChild(drag);
+        }
         top.appendChild(buttons);
         panel.appendChild(top);
         // the tabs: every tabPage(name) call gives the page of that tab (made on the first call)

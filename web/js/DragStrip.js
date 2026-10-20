@@ -277,7 +277,7 @@ OpenRacer.DragStrip = (function () {
             });
             body.innerHTML = "";
             var runs = OpenRacer.Records.dragRuns(track.id, chosen).slice(0, 50);
-            if (!runs.length) { var empty = document.createElement("div"); empty.className = "empty"; empty.textContent = "No runs over this distance yet. Drive the strip and your runs are kept here."; body.appendChild(empty); return; }
+            if (!runs.length) { var empty = document.createElement("div"); empty.className = "empty"; empty.textContent = "No runs over this distance yet. Drive the strip and your runs are kept here (while \"Save lap records\" is on in the main menu)."; body.appendChild(empty); return; }
             var table = document.createElement("table");
             table.innerHTML = "<tr><th>#</th><th class=\"l\">Car</th><th>1/4 mile</th><th>2/4 mile</th><th>Top speed</th><th></th></tr>";
             runs.forEach(function (run, n) {
