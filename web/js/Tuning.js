@@ -327,6 +327,7 @@ var Tuning = (function() {
         OpenRacer.CarTuning.FEATURES.forEach(function(feature) { extras.appendChild(featureRow(feature)); });
         panel.appendChild(extras);
         document.body.appendChild(panel);
+        OpenRacer.Movable.make(panel, { key: "tuning" });
     }
 
     function refresh() {

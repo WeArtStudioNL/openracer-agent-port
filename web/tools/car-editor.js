@@ -180,6 +180,7 @@ const EXHAUST_FIELDS = [
 const exhaustWindow = document.createElement("div");
 exhaustWindow.style.cssText = "position: absolute; left: 12px; bottom: 12px; width: 250px; padding: 10px 12px 12px; background: rgba(22, 27, 34, 0.94); border: 1px solid #323c4a; border-radius: 10px; color: #dfe6ef; font-size: 12.5px; display: none; z-index: 5;";
 $("view").appendChild(exhaustWindow);
+OpenRacer.Movable.make(exhaustWindow, { key: "editor-exhaust" });
 function updateExhaustWindow() {
     const entry = exhaust.find((e) => e.id === layers.selected);
     exhaustWindow.style.display = entry ? "block" : "none";

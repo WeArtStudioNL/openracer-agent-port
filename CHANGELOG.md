@@ -4,6 +4,9 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 ## Unreleased
 
+**Panels**
+- The tuning menu, the free camera panel, the replay bar and its speed box, and the exhaust window of the car editor can be moved (drag a part that is not a control) and scaled (the bottom right corner); where they are is kept in the browser.
+
 **Extras**
 - Optional extras with a checkbox in the tuning menu (the settings open below it): **pops and bangs** (sound and flames at the exhaust), **anti-lag** and a **boost gauge**. They are kept in car.json under `extras`.
 - The exhaust points of a car are placed in the car editor (the *Exhaust* layer, with a gizmo for the place and one for the direction); the flames can be your own pictures (`web/images/flames/`).

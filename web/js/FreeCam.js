@@ -86,6 +86,7 @@ OpenRacer.FreeCam = (function () {
         panel.appendChild(rowF);
         panel.appendChild(rowG);
         document.body.appendChild(panel);
+        OpenRacer.Movable.make(panel, { key: "freecam" });
         refreshUi();
     }
 
