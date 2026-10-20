@@ -4,6 +4,9 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 ## Unreleased
 
+**Extras**
+- Optional extras with a checkbox in the tuning menu (the settings open below it): **pops and bangs** (sound and flames at the exhaust), **anti-lag** and a **boost gauge**. They are kept in car.json under `extras`.
+
 **Launch**
 - The rev limiter is a hard fuel cut with a set rate (*Cuts per second*), so the engine bounces against the limit.
 - **Two-step** (Y switches it on; the clutch pedal in at a standstill, or Q on a keyboard), **transbrake** (F) and **launch control** (J, an option) with their own engine speeds in the tuning menu and the car editor; the pills LC, 2S and TB show them.

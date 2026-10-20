@@ -120,6 +120,8 @@ var Tuning = (function() {
             "#tuning .actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }" +
             "#tuning .actions .save { background: #2e9a5c; }" +
             "#tuning .message { color: #ffd04d; min-height: 16px; margin-top: 4px; }" +
+            "#tuning .featureLine { cursor: pointer; margin: 6px 0 2px; } #tuning .featureLine input { margin: 0; }" +
+            "#tuning .featureBox { display: none; margin: 4px 0 8px 10px; padding-left: 10px; border-left: 2px solid #3a4658; }" +
             "#tuning .gears { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 8px; }" +
             "#tuning .gears label { font-size: 11px; color: #8895a7; display: block; } #tuning .gears input { width: 100%; box-sizing: border-box; }";
         document.head.appendChild(style);
@@ -228,7 +230,8 @@ var Tuning = (function() {
         drive: ["Drive", [["rwd", "Rear wheels"], ["fwd", "Front wheels"], ["awd", "All wheels"]]],
         diff: ["Differential", [["open", "Open"], ["lsd", "Limited slip"], ["welded", "Welded (locked)"]]],
         compound: ["Tyre compound", OpenRacer.TyreCompounds.map(function(k) { return [k.id, k.name]; })],
-        center_diff: ["Centre differential", [["open", "Open"], ["lsd", "Limited slip"], ["locked", "Locked"]]]
+        center_diff: ["Centre differential", [["open", "Open"], ["lsd", "Limited slip"], ["locked", "Locked"]]],
+        antilag_mode: ["When", [["lift", "After lifting off the throttle"], ["launch", "Only with the two-step, the transbrake or the launch control"]]]
     };
 
     function selectRow(key) {
@@ -245,6 +248,29 @@ var Tuning = (function() {
         item.appendChild(line);
         controls.push({ key: key, select: select, line: line });
         return item;
+    }
+
+    // An extra with a checkbox: its settings are in a container below it that is open while the box is ticked
+    function featureRow(feature) {
+        var wrap = document.createElement("div");
+        wrap.className = "feature";
+        var line = document.createElement("label");
+        line.className = "line featureLine";
+        var box = document.createElement("input");
+        box.type = "checkbox";
+        var label = document.createElement("span");
+        label.className = "label";
+        label.textContent = feature.label;
+        line.appendChild(box);
+        line.appendChild(label);
+        wrap.appendChild(line);
+        var inner = document.createElement("div");
+        inner.className = "featureBox";
+        feature.items.forEach(function(def) { inner.appendChild(SELECTS[def[0]] ? selectRow(def[0]) : slider(def)); });
+        wrap.appendChild(inner);
+        box.addEventListener("change", function() { set(feature.key + "_on", box.checked); box.blur(); });
+        controls.push({ key: feature.key + "_on", checkbox: box, inner: inner, line: line });
+        return wrap;
     }
 
     function build() {
@@ -295,6 +321,11 @@ var Tuning = (function() {
             });
             panel.appendChild(details);
         });
+        var extras = document.createElement("details");
+        extras.open = false;
+        extras.innerHTML = "<summary>Extras</summary>";
+        OpenRacer.CarTuning.FEATURES.forEach(function(feature) { extras.appendChild(featureRow(feature)); });
+        panel.appendChild(extras);
         document.body.appendChild(panel);
     }
 
@@ -313,6 +344,10 @@ var Tuning = (function() {
                 c.input.style.color = changed(c.key) ? "#ffd04d" : "";
             } else if(c.select) {
                 c.select.value = values[c.key];
+                c.line.classList.toggle("changed", changed(c.key));
+            } else if(c.checkbox) {
+                c.checkbox.checked = !!values[c.key];
+                c.inner.style.display = values[c.key] ? "block" : "none";
                 c.line.classList.toggle("changed", changed(c.key));
             }
         });

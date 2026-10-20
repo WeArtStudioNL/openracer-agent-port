@@ -100,6 +100,35 @@ OpenRacer.CarTuning = (function () {
         ] }
     ];
 
+    // The optional extras: each has a checkbox (key + "_on") that opens its settings in the tuning menu. The values are kept in car.json under "extras".
+    // A select (antilag_mode) is made in Tuning.js.
+    var FEATURES = [
+        { key: "pops", label: "Pops and bangs (unburnt fuel burns in the exhaust)", items: [
+            ["pops_amount", "How often (on the rev limiter and the two-step)", "%", 0, 100, 5],
+            ["pops_overrun", "After lifting off the throttle: for", "s", 0, 4, 0.1],
+            ["pops_rpm", "From an engine speed of", "rpm", 1000, 8000, 100],
+            ["pops_loud", "How loud", "%", 20, 300, 10],
+            ["pops_flames", "Flames from the exhaust", "%", 0, 200, 10]
+        ] },
+        { key: "antilag", label: "Anti-lag (keeps the turbo spinning off the throttle)", items: [
+            ["antilag_mode", "When", "", 0, 0, 0],
+            ["antilag_boost", "Boost that is held", "%", 10, 100, 5],
+            ["antilag_rpm", "Works from an engine speed of", "rpm", 1000, 8000, 100],
+            ["antilag_time", "Longest time that it works", "s", 0.5, 20, 0.5],
+            ["antilag_bangs", "Bangs and flames", "%", 0, 300, 10],
+            ["antilag_fuel", "Extra fuel use while it works", "%", 0, 300, 10]
+        ] },
+        { key: "boost_gauge", label: "Boost gauge (the pressure of the turbo)", items: [
+            ["boost_full", "Boost pressure at full boost", "bar", 0.2, 3.5, 0.05],
+            ["boost_scale", "The gauge goes up to", "bar", 0.5, 4, 0.5]
+        ] }
+    ];
+    var FEATURE_DEFAULTS = {
+        pops_on: false, pops_amount: 60, pops_overrun: 2, pops_rpm: 3000, pops_loud: 100, pops_flames: 100,
+        antilag_on: false, antilag_mode: "lift", antilag_boost: 60, antilag_rpm: 3000, antilag_time: 5, antilag_bangs: 100, antilag_fuel: 60,
+        boost_gauge_on: false, boost_full: 1, boost_scale: 2
+    };
+
     function clone(x) { return JSON.parse(JSON.stringify(x)); }
     var V100 = (100 / 3.6) * (100 / 3.6); // (m/s)^2 at 100 km/h: the downforce in the menu is the force at that speed
 
@@ -174,6 +203,10 @@ OpenRacer.CarTuning = (function () {
         ["volume", "convolution", "audio_volume", "hf_gain", "noise", "jitter", "exhaust_length", "primary_length", "idle_pressure"].forEach(function(key) {
             v["es_" + key] = sound[key];
         });
+        // the extras: what car.json has, or the default (the full boost of a turbo car follows its share of boost)
+        var ex = c.extras || {};
+        Object.keys(FEATURE_DEFAULTS).forEach(function (key) { v[key] = ex[key] !== undefined ? ex[key] : FEATURE_DEFAULTS[key]; });
+        if(ex.boost_full === undefined && en.turbo && en.turbo.share) v.boost_full = Math.round(en.turbo.share * 20) / 10;
         return v;
     }
 
@@ -242,8 +275,16 @@ OpenRacer.CarTuning = (function () {
             camber_rear: v.camber_rear,
             roll_camber: v.roll_camber / 100,
             tc_allowance: v.tc_allowance / 100,
-            esc_gain: v.esc_gain / 100
+            esc_gain: v.esc_gain / 100,
+            extras: extrasOf(v)
         };
+    }
+
+    // the extras of the values (what is in car.json under "extras")
+    function extrasOf(v) {
+        var out = {};
+        Object.keys(FEATURE_DEFAULTS).forEach(function (key) { out[key] = v[key] !== undefined ? v[key] : FEATURE_DEFAULTS[key]; });
+        return out;
     }
 
     // a car configuration with the values in it (a copy; the id is left out, as car.json has none)
@@ -305,6 +346,7 @@ OpenRacer.CarTuning = (function () {
         var sound = {};
         Object.keys(v).forEach(function(key) { if(key.indexOf("es_") === 0) sound[key.substring(3)] = v[key]; });
         c.sound = { engine_sim: Object.assign({}, (c.sound || {}).engine_sim, sound) };
+        if(v.pops_on !== undefined) c.extras = extrasOf(v);        // (values from the car editor may not have them: the car keeps its own)
         delete c.id;
         return c;
     }
@@ -316,5 +358,5 @@ OpenRacer.CarTuning = (function () {
         return out;
     }
 
-    return { GROUPS: GROUPS, V100: V100, fromConfig: fromConfig, toRetune: toRetune, toConfig: toConfig, keys: keys };
+    return { GROUPS: GROUPS, FEATURES: FEATURES, FEATURE_DEFAULTS: FEATURE_DEFAULTS, V100: V100, fromConfig: fromConfig, toRetune: toRetune, toConfig: toConfig, keys: keys };
 })();

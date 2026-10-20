@@ -224,6 +224,11 @@ var EngineSound = (function() {
         synth.setThrottle(throttle);
     }
 
+    // A bang in the exhaust (pops, anti-lag): the strength is about 0.5 to 1.5, the loudness a factor
+    function pop(strength, loud) {
+        if(synth && synth.pop && ctx && ctx.state === "running" && !muted && !paused) synth.pop(600 * strength * loud);
+    }
+
     // Called every frame with how hard the tyres slide (0..1) and the speed of the car (m/s)
     function setTyres(amount, speed) {
         squealLevel = amount;
@@ -274,6 +279,7 @@ var EngineSound = (function() {
 
     return {
         update: update,
+        pop: pop,
         level: measureLevel,
         setTyres: setTyres,
         status: status,

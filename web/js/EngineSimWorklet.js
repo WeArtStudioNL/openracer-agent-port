@@ -274,7 +274,11 @@ class EngineSimProcessor extends AudioWorkletProcessor {
         this.throttle = 0;
         this.rpmFiltered = 0;
         this.build(options.processorOptions);
-        this.port.onmessage = (event) => this.build(event.data);
+        this.popQueue = 0;                              // energy (J) of unburnt fuel that the game lets burn in the exhaust at the next opening of an exhaust valve
+        this.port.onmessage = (event) => {
+            if (event.data && event.data.pop !== undefined) this.popQueue = Math.min(4000, this.popQueue + event.data.pop);
+            else this.build(event.data);
+        };
     }
 
     // Makes the engine from the parameters (see EngineSim.js for them)
@@ -386,6 +390,11 @@ class EngineSimProcessor extends AudioWorkletProcessor {
             if (exhaustOpen && !c.exhaustWasOpen && !c.burning && gas.fuel > 1e-7 && c.runner.T > p.afterfire_temperature) {
                 c.runnerPending += gas.fuel * FUEL_ENERGY * (0.3 + 0.5 * this.random());
                 gas.fuel = 0;
+            }
+            // a bang that the game asked for (pops and anti-lag): the fuel burns in this runner when its valve opens
+            if (this.popQueue > 0 && exhaustOpen && !c.exhaustWasOpen) {
+                c.runnerPending += this.popQueue;
+                this.popQueue = 0;
             }
             c.exhaustWasOpen = exhaustOpen;
             if (c.runnerPending > 0) {

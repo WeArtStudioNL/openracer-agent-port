@@ -71,11 +71,52 @@ OpenRacer.Engine = function( parameters ) {
     this.turboSpool = turbo ? (turbo.spool || 0.4) : 0.4;
     this.turboThreshold = turbo ? (turbo.threshold_rpm || 2500) : 2500;
     this.boost = 0;       // 0..1, how much of the boost is there
+    // The extras (CarTuning.js, car.json "extras"; the tuning menu sets them through Vehicle.retune): pops and bangs, and anti-lag.
+    // Pops: unburnt fuel burns in the exhaust, at the start of every cut of the rev limiter, and after lifting off the throttle; the bangs are
+    // events that the car shows (the flames) and plays (the sound): { strength, loud, flame }.
+    // Anti-lag: off the throttle (or in a launch hold) the turbo is kept at a share of its boost, with fuel burning in the exhaust: the throttle
+    // gives the full boost at once, the bangs go on, the fuel use is higher and the engine brakes less.
+    this.extras = {};
+    this.events = [];
+    this.holding = false;      // the car holds the engine for a launch: the two-step, the transbrake, the launch control (Vehicle.js)
+    this.alsActive = false;
+    this.alsTimer = 0;
+    this.fuelFactor = 1;       // the fuel use as a factor (more while the anti-lag works)
+    var overrun = 0, previousThrottle = 0, cutWas = false;
+    var engine = this;
+    function bang(strength, loud, flame) { if(engine.events.length < 40) engine.events.push({ strength: strength, loud: loud, flame: flame }); }
+    function stepExtras(throttle, dt, rpm) {
+        var x = engine.extras;
+        var popsOn = !!x.pops_on, als = !!x.antilag_on && engine.turboShare > 0;
+        var off = throttle < 0.15;
+        var wantAls = als && engine.running && rpm > x.antilag_rpm && (x.antilag_mode === "launch" ? engine.holding : (off || engine.holding));
+        if(wantAls) engine.alsTimer += dt;
+        else if(!als || (throttle > 0.3 && !engine.holding)) engine.alsTimer = 0;
+        engine.alsActive = wantAls && engine.alsTimer < x.antilag_time;
+        engine.fuelFactor = engine.alsActive ? 1 + x.antilag_fuel / 100 : 1;
+        if(previousThrottle > 0.5 && throttle < 0.1 && rpm > x.pops_rpm) overrun = x.pops_overrun;
+        if(throttle > 0.3) overrun = 0; else if(overrun > 0) overrun -= dt;
+        previousThrottle = throttle;
+        var loud = popsOn ? x.pops_loud / 100 : 1, flame = popsOn ? x.pops_flames / 100 : 1;
+        var rate = 0;
+        if(popsOn && rpm > x.pops_rpm && overrun > 0 && throttle < 0.1) {
+            rate = 14 * x.pops_amount / 100 * Math.sqrt(overrun / Math.max(0.1, x.pops_overrun)) * Math.min(1, Math.max(0.3, rpm / engine.limiterRPM));
+        }
+        if(engine.alsActive) rate = Math.max(rate, 16 * x.antilag_bangs / 100);
+        if(rate > 0 && Math.random() < rate * dt) bang((engine.alsActive ? 0.8 : 0.5) + Math.random() * 0.7, loud, flame);
+        // at the start of every cut of the rev limiter: the fuel that is not burnt in the cylinder burns in the exhaust
+        if(engine.cutting && !cutWas) {
+            if((popsOn && Math.random() < x.pops_amount / 100 * (engine.holding ? 1 : 0.6)) || (engine.alsActive && Math.random() < 0.8 * x.antilag_bangs / 100)) bang(0.7 + Math.random() * 0.6, loud, flame);
+        }
+        cutWas = engine.cutting;
+    }
     this.updateBoost = function (throttle, dt) {
         this.cutTime += dt; this.onTime += dt;
-        if(this.turboShare <= 0) { this.boost = 0; return; }
         var rpm = this.getRPM();
+        stepExtras(throttle, dt, rpm);
+        if(this.turboShare <= 0) { this.boost = 0; return; }
         var wanted = this.running ? Math.max(0, Math.min(1, throttle)) * Math.max(0, Math.min(1, (rpm - this.turboThreshold) / 2000)) : 0;
+        if(this.alsActive) wanted = Math.max(wanted, this.extras.antilag_boost / 100 * Math.min(1, 0.4 + (rpm - this.extras.antilag_rpm) / 3000));
         var tau = wanted > this.boost ? this.turboSpool : this.turboSpool * 0.35;
         this.boost += (wanted - this.boost) * Math.min(1, dt / tau);
     };
@@ -157,6 +198,6 @@ OpenRacer.Engine = function( parameters ) {
         thr *= this.throttleCut;
 
         var boosted = 1 - this.turboShare * (1 - this.boost); // the torque without boost is the share that is not from the turbo
-        return this.getTorque(rpm) * this.torqueScale * boosted * thr - (1 - thr) * this.getMotoringTorque(rpm);
+        return this.getTorque(rpm) * this.torqueScale * boosted * thr - (1 - thr) * this.getMotoringTorque(rpm) * (this.alsActive ? 0.5 : 1);
     };
 };

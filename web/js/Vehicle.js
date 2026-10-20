@@ -303,7 +303,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(!this.wearEnabled) { this.engine.noFuel = false; return; }
         var power = Math.max(0, engineTorque) * engineOmega;           // W
         // a racing engine burns about four times what the energy alone says (rich mixture, the throttle open and shut all the time)
-        this.fuelFlow = (0.0003 + power / (0.25 * 34e6) * 4) * this.fuelUse * this.wearScale;
+        this.fuelFlow = (0.0003 + power / (0.25 * 34e6) * 4) * this.fuelUse * this.wearScale * this.engine.fuelFactor;
         this.fuel = Math.max(0, this.fuel - this.fuelFlow * dt);
         this.engine.noFuel = this.fuel <= 0;
         fuelMassTimer += dt;
@@ -464,6 +464,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.engine_braking !== undefined) engine.motoringFactor = t.engine_braking;
         if(t.idle_rpm !== undefined) { engine.idleRPM = t.idle_rpm; engine.stallRPM = t.idle_rpm * 0.4; }
         if(t.limiter_rpm !== undefined) { engine.limiterRPM = t.limiter_rpm; engine.maxRPM = t.limiter_rpm + 1000; }
+        if(t.extras !== undefined) engine.extras = t.extras;
         if(t.limiter_hz !== undefined) engine.limiterHz = Math.max(1, t.limiter_hz);
         if(t.two_step_rpm !== undefined) engine.twoStepRPM = t.two_step_rpm;
         if(t.launch_rpm !== undefined) engine.launchRPM = t.launch_rpm;
@@ -1461,6 +1462,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         self.twoStepActive = self.twoStepEnabled && Math.abs(self.u) < 3 && ((inp.clutchAvailable && inp.clutch > 0.7) || !!inp.twoStep);
         if(wasTwoStep && !self.twoStepActive && inp.throttle > 0.3 && !inp.clutchPedalPresent) self.launchRelease = 0.15;
         engine.holdRPM = self.twoStepActive ? engine.twoStepRPM : (self.lcArmed ? engine.launchRPM : 0);
+        engine.holding = self.lcArmed || self.transbrakeHeld || self.twoStepActive;
         var newAxleFy = [0, 0];
 
         for(var iw = 0; iw < 4; iw++) {

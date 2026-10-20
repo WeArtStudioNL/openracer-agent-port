@@ -154,6 +154,7 @@ OpenRacer.Car = function( config, domElement ) {
     this.vehicle.ground = groundWorld;
     this.pit = new OpenRacer.PitStop(this.vehicle); // the pit stop on the pit lane (Pit.js), when the race has wear and fuel
     var tyreSmoke = new OpenRacer.TyreSmoke(scene);
+    var flames = new OpenRacer.ExhaustFlames(scene, { length: this.length, width: this.width, exhaust: config.exhaust, exhaustSystems: (config.sound && config.sound.engine_sim && config.sound.engine_sim.exhaust_systems) || 1 });
     this.engine = this.vehicle.engine;
     EngineSound.setCar(config); // the engine sound of this car
     this.wheels = this.vehicle.wheels;
@@ -213,6 +214,7 @@ OpenRacer.Car = function( config, domElement ) {
         var v = this.vehicle;
         v.reset(x, z, heading);
         tyreSmoke.clear();
+        flames.clear();
         lastGateX = null; // a jump of the car is no crossing of a gate
         this.lapStarted = false;
         this.throttle = 0;
@@ -488,6 +490,11 @@ OpenRacer.Car = function( config, domElement ) {
         // the rev limiter cuts the fuel: the engine sounds like it too
         EngineSound.update(this.engineRPM, this.throttle * this.engine.throttleCut, this.engine.throttleCut > 0.5);
         EngineSound.setTyres(v.squeal, Math.abs(v.u));
+        // the bangs of the exhaust (pops, anti-lag): the sound, and the flames
+        var bangs = this.engine.events;
+        for(var bi = 0; bi < bangs.length; bi++) { EngineSound.pop(bangs[bi].strength, bangs[bi].loud); flames.emit(v, bangs[bi]); }
+        bangs.length = 0;
+        flames.update(delta);
 
         this.updateVisuals(delta);
         if(typeof ForceFeedback !== "undefined") ForceFeedback.update(this, delta);

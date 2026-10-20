@@ -100,6 +100,11 @@ var Hud = (function() {
         container.appendChild(canvas);
         document.body.appendChild(container);
         context = canvas.getContext("2d");
+        boostCanvas = document.createElement("canvas");
+        boostCanvas.id = "hudBoost";
+        boostCanvas.style.cssText = "position: fixed; bottom: 16px; z-index: 900; pointer-events: none; display: none;";
+        document.body.appendChild(boostCanvas);
+        boostContext = boostCanvas.getContext("2d");
 
         lapPanel = document.createElement("div");
         lapPanel.id = "hudLaps";
@@ -114,6 +119,7 @@ var Hud = (function() {
     }
 
     // the tyres (the temperature as the colour, the wear as the dark part) and the fuel, when the race has them (Vehicle.js, Pit.js)
+    var boostCanvas = null, boostContext = null, boostPeak = 0, boostPeakTime = 0;
     var carPanel = null, carHtml = "";
     function tyreColour(temp) {
         // blue when cold, green in the window, red when hot
@@ -167,6 +173,12 @@ var Hud = (function() {
         canvas.style.height = size + "px";
         canvas.width = Math.round(size * ratio);
         canvas.height = Math.round(size * ratio);
+        var small = Math.round(size * 0.5);
+        boostCanvas.style.width = small + "px";
+        boostCanvas.style.height = small + "px";
+        boostCanvas.width = Math.round(small * ratio);
+        boostCanvas.height = Math.round(small * ratio);
+        boostCanvas.style.right = (16 + 80 + size) + "px";      // left of the pills and the gauge
     }
 
     function formatTime(seconds) {
@@ -277,6 +289,57 @@ var Hud = (function() {
         context.fillText((car.engineRPM / 1000).toFixed(1) + " x1000 rpm", cx, cy + R * 0.62);
     }
 
+    // The boost gauge (an extra of the tuning menu): the pressure of the manifold from the vacuum of a closed throttle (-1 bar) to the full boost, with a mark for the peak
+    function drawBoost(car) {
+        var engine = car.engine, x = engine.extras || {};
+        var show = !!x.boost_gauge_on && engine.turboShare > 0 && Settings.option("hud");
+        boostCanvas.style.display = show ? "block" : "none";
+        if(!show) return;
+        var s = Math.round(size * 0.5), cx = s / 2, cy = s / 2, R = s / 2 - 2;
+        var full = x.boost_full || 1, top = Math.max(0.5, x.boost_scale || 2), low = -1;
+        // the pressure: the boost, or the vacuum behind a throttle that is closed (less of it with boost)
+        var value = engine.boost * full - (1 - Math.min(1, Math.max(0, car.throttle))) * 0.6 * (1 - engine.boost);
+        var now = Date.now();
+        if(value >= boostPeak) { boostPeak = value; boostPeakTime = now; }
+        else if(now - boostPeakTime > 2500) boostPeak = value;               // the peak is kept for a while
+        var fraction = function(p) { return Math.max(0, Math.min(1, (p - low) / (top - low))); };
+        var c = boostContext;
+        c.setTransform(ratio, 0, 0, ratio, 0, 0);
+        c.clearRect(0, 0, s, s);
+        var face = c.createRadialGradient(cx, cy, R * 0.2, cx, cy, R);
+        face.addColorStop(0, "rgba(34, 40, 48, 0.82)");
+        face.addColorStop(1, "rgba(14, 17, 22, 0.86)");
+        c.beginPath(); c.arc(cx, cy, R, 0, Math.PI * 2); c.fillStyle = face; c.fill();
+        c.lineWidth = 2; c.strokeStyle = "rgba(255, 255, 255, 0.22)"; c.stroke();
+        var ring = R * 0.8, width = R * 0.12;
+        function ark(from, to, color) { c.beginPath(); c.arc(cx, cy, ring, angle(from), angle(to), false); c.lineWidth = width; c.strokeStyle = color; c.stroke(); }
+        ark(0, 1, "rgba(255, 255, 255, 0.09)");
+        ark(fraction(0), fraction(top), "rgba(46, 179, 90, 0.18)");
+        ark(fraction(Math.max(0.1, full)), fraction(top), "rgba(190, 36, 30, 0.3)");
+        if(value > 0.005) ark(fraction(0), fraction(value), value > full * 1.02 ? "#ff9f0a" : "#5fb3ff");
+        else if(value < -0.005) ark(fraction(value), fraction(0), "#9aa7b8");
+        // the peak
+        var pa = angle(fraction(boostPeak));
+        c.beginPath(); c.moveTo(cx + Math.cos(pa) * (ring - width * 0.7), cy + Math.sin(pa) * (ring - width * 0.7)); c.lineTo(cx + Math.cos(pa) * (ring + width * 0.7), cy + Math.sin(pa) * (ring + width * 0.7));
+        c.lineWidth = 3; c.strokeStyle = "#ffd04d"; c.stroke();
+        // the ticks and the numbers: every half bar, the whole bars are named
+        c.textAlign = "center"; c.textBaseline = "middle"; c.font = "bold " + Math.round(R * 0.13) + "px Arial";
+        for(var p = low; p <= top + 1e-6; p += 0.5) {
+            var a = angle(fraction(p)), whole = Math.abs(p - Math.round(p)) < 1e-6;
+            var inner = ring - width / 2 - (whole ? R * 0.07 : R * 0.035), outer = ring - width / 2 - 1;
+            c.beginPath(); c.moveTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner); c.lineTo(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer);
+            c.lineWidth = whole ? 2 : 1; c.strokeStyle = whole ? "rgba(255, 255, 255, 0.85)" : "rgba(255, 255, 255, 0.4)"; c.stroke();
+            if(whole) { c.fillStyle = "#e8edf3"; c.fillText(String(Math.round(p)), cx + Math.cos(a) * (ring - width / 2 - R * 0.2), cy + Math.sin(a) * (ring - width / 2 - R * 0.2)); }
+        }
+        // the value in the unit of the settings (bar, or psi)
+        var metric = Settings.option("units") !== "imperial";
+        c.fillStyle = "#ffffff"; c.font = "bold " + Math.round(R * 0.3) + "px Arial";
+        c.fillText((metric ? value : value * 14.5038).toFixed(metric ? 2 : 1), cx, cy + R * 0.12);
+        c.fillStyle = "#8fa0b4"; c.font = Math.round(R * 0.13) + "px Arial";
+        c.fillText(metric ? "BOOST bar" : "BOOST psi", cx, cy + R * 0.42);
+        if(engine.alsActive) { c.fillStyle = flash ? "#ffb340" : "#ff6b62"; c.font = "bold " + Math.round(R * 0.13) + "px Arial"; c.fillText("ANTI-LAG", cx, cy + R * 0.62); }
+    }
+
     function updateLaps(car) {
         var lap = car.raceLaps ? (car.lapsCompleted >= car.raceLaps ? "FINISHED" : car.lapsCompleted + 1 === car.raceLaps ? "FINAL LAP" : "LAP " + (car.lapsCompleted + 1) + "/" + car.raceLaps) : "LAP " + (car.lapsCompleted + 1);
         var html = "<div class=\"lap\">" + lap + (car.raceCount > 1 ? " &nbsp;·&nbsp; P" + car.racePosition + "/" + car.raceCount : "") + "</div>";
@@ -321,6 +384,7 @@ var Hud = (function() {
         var wanted = Math.round(Math.max(210, Math.min(330, Math.min(window.innerWidth, window.innerHeight) * 0.36)));
         if(wanted !== size) resize();
         drawGauge(car);
+        drawBoost(car);
         updateLaps(car);
         updateCar(car);
         var hint = EngineSound.status();

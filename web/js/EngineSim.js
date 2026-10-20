@@ -196,6 +196,8 @@ OpenRacer.EngineSimSynth = function (context, params, impulseResponse) {
     };
     this.setRpm = function (rpm) { this.rpmParam.setTargetAtTime(Math.max(0, rpm), context.currentTime, 0.02); };
     this.setThrottle = function (throttle) { this.throttleParam.setTargetAtTime(Math.max(0, Math.min(1, throttle)), context.currentTime, 0.03); };
+    // a bang: unburnt fuel of this energy (J) burns in the exhaust
+    this.pop = function (energy) { this.node.port.postMessage({ pop: energy }); };
     this.setIgnition = function (on) { this.ignitionParam.setValueAtTime(on ? 1 : 0, context.currentTime); };
     this.setInside = function (inside) { this.inside = inside; apply(); };
     this.setSilent = function (silent) { if (this.silent !== silent) { this.silent = silent; apply(); } };
