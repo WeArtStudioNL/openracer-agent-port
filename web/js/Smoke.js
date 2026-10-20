@@ -75,7 +75,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
                     density *= edge * edge * (3 - 2 * edge);
                     // light and dark patches: its own noise (not the one of the shape), a lit top and a darker, denser middle, as in a cloud that shades itself
                     var patches = 0.6 * noise(lat, 16, u * 7 + 5, v * 7 + 13) + 0.4 * noise(lat, 16, u * 15 + 9, v * 15 + 2);
-                    var light = Math.max(0.3, Math.min(1, 0.72 + 0.2 * (1 - v) + 0.85 * (patches - 0.5) - 0.12 * density));
+                    var light = Math.max(0.3, Math.min(1, 0.72 + 0.2 * (1 - v) + 0.3 * (patches - 0.5) - 0.05 * density));
                     var i = ((oy + y) * canvas.width + ox + x) * 4;
                     image.data[i] = Math.min(255, 255 * light); image.data[i + 1] = Math.min(255, 255 * light); image.data[i + 2] = Math.min(255, 255 * (light + 0.03));
                     image.data[i + 3] = Math.round(255 * density);
@@ -143,7 +143,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
     var self = this, quiet = false;                      // quiet: the puffs that are made while the smoke moves (wisps) are not recorded: the replay makes them again
     var alive = 0, made = 0;                             // how many puffs are alive after the last frame, and how many were made in this one: with none, nothing is done
 
-    function spawn(x, y, z, vx, vy, vz, heat, dust, fine) {
+    function spawn(x, y, z, vx, vy, vz, heat, dust, fine, grey) {
         made++;
         var i = next;
         wisp[i] = 0; touched[i] = -1e9;
@@ -171,6 +171,11 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
         var shade = 0.9 + Math.random() * 0.1;
         if(dust) { colours[i * 3] = 0.66 * shade; colours[i * 3 + 1] = 0.55 * shade; colours[i * 3 + 2] = 0.4 * shade; }
         else { colours[i * 3] = 0.9 * shade; colours[i * 3 + 1] = 0.91 * shade; colours[i * 3 + 2] = 0.94 * shade; }
+        if(grey) {
+            // the smoke of an exhaust after a bang: darker and thinner than the smoke of a tyre
+            for(var cc = 0; cc < 3; cc++) colours[i * 3 + cc] *= 0.5;
+            alpha0[i] *= 0.7;
+        }
         if(self.recorder && !quiet) {
             // for the replay (Replay.js): what this puff starts with
             self.recorder(Float32Array.of(0, positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2], vel[i * 3], vel[i * 3 + 1], vel[i * 3 + 2], bases[i], life[i], size0[i], size1[i],

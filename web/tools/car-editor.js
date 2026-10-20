@@ -100,7 +100,7 @@ scene.add(typeof gizmo.getHelper === "function" ? gizmo.getHelper() : gizmo);
 // ---- the exhaust points: where the flames come out (pops, bangs, anti-lag; Flames.js in the game). A layer each, with a gizmo for the place and a second one
 // for the direction: the flame goes along the negative z of the point, which the arrow shows. They go in car.json as "exhaust": [{ position, rotation (degrees) }]
 const exhaust = [];                    // { id, target, pipe }
-let flameTest = false, flames = null, flameTimer = 0, lastFrame = 0;     // the test of the flames (further down)
+let flameTest = false, flames = null, flameTimer = 0, lastFrame = 0, smokePreview = null;     // the test of the flames (further down)
 let exhaustCounter = 0;
 const rotGizmo = new TransformControls(camera, renderer.domElement);
 rotGizmo.setMode("rotate");
@@ -110,7 +110,9 @@ rotGizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !e
 rotGizmo.addEventListener("objectChange", () => renderLayers());
 scene.add(typeof rotGizmo.getHelper === "function" ? rotGizmo.getHelper() : rotGizmo);
 
-function addExhaust(position, rotation) {
+const EXHAUST_DEFAULTS = { diameter: 0.08, smoke: 1, flame_length: 1, flame_width: 1, brightness: 1 };
+
+function addExhaust(position, rotation, settings) {
     const target = new THREE.Object3D();
     const d = Math.PI / 180;
     target.position.set(position[0], position[1], position[2]);
@@ -120,13 +122,17 @@ function addExhaust(position, rotation) {
     pipe.position.z = 0.11;
     const arrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, 0), 0.5, 0xffb070, 0.14, 0.09);
     target.add(pipe, arrow);
-    const entry = { id: "ex" + (++exhaustCounter), target, pipe };
+    const entry = { id: "ex" + (++exhaustCounter), target, pipe, s: Object.assign({}, EXHAUST_DEFAULTS, settings || {}) };
+    sizePipe(entry);
     pipe.userData.layer = entry.id;
     exhaust.push(entry);
     gizmoTargets[entry.id] = target;
     scene.add(target);
     return entry;
 }
+
+// the pipe of the marker has the diameter of the point
+function sizePipe(entry) { const k = entry.s.diameter / 0.09; entry.pipe.scale.set(k, 1, k); }
 
 function removeExhaust(id) {
     const i = exhaust.findIndex((e) => e.id === id);
@@ -141,7 +147,7 @@ function removeExhaust(id) {
 // the exhaust points of a car.json: the older form is a list of positions
 function loadExhaust(list) {
     exhaust.slice().forEach((e) => removeExhaust(e.id));
-    (list || []).forEach((e) => addExhaust(Array.isArray(e) ? e : e.position, Array.isArray(e) ? [0, 0, 0] : (e.rotation || [0, 0, 0])));
+    (list || []).forEach((e) => addExhaust(Array.isArray(e) ? e : e.position, Array.isArray(e) ? [0, 0, 0] : (e.rotation || [0, 0, 0]), Array.isArray(e) ? null : e));
     renderLayers();
 }
 
@@ -158,16 +164,81 @@ function newExhaust() {
 function exhaustConfig() {
     const r = (v) => Math.round(v * 1000) / 1000, deg = 180 / Math.PI;
     return exhaust.map((e) => ({ position: [r(e.target.position.x), r(e.target.position.y), r(e.target.position.z)],
-        rotation: [r(e.target.rotation.x * deg), r(e.target.rotation.y * deg), r(e.target.rotation.z * deg)] }));
+        rotation: [r(e.target.rotation.x * deg), r(e.target.rotation.y * deg), r(e.target.rotation.z * deg)],
+        diameter: r(e.s.diameter), smoke: r(e.s.smoke), flame_length: r(e.s.flame_length), flame_width: r(e.s.flame_width), brightness: r(e.s.brightness) }));
+}
+
+// The settings of the exhaust point that is chosen, in a window over the view: the diameter of the pipe, the smoke after a bang, the length and the width of the
+// flame, and how bright it is (a pipe of 8 cm and the others at 100% are what the game has without them)
+const EXHAUST_FIELDS = [
+    ["diameter", "Diameter", "cm", 2, 20, 0.5, 100],
+    ["smoke", "Smoke", "%", 0, 300, 10, 100],
+    ["flame_length", "Flame length", "%", 20, 400, 10, 100],
+    ["flame_width", "Flame width", "%", 20, 400, 10, 100],
+    ["brightness", "Brightness", "%", 20, 300, 10, 100]
+];
+const exhaustWindow = document.createElement("div");
+exhaustWindow.style.cssText = "position: absolute; left: 12px; bottom: 12px; width: 250px; padding: 10px 12px 12px; background: rgba(22, 27, 34, 0.94); border: 1px solid #323c4a; border-radius: 10px; color: #dfe6ef; font-size: 12.5px; display: none; z-index: 5;";
+$("view").appendChild(exhaustWindow);
+function updateExhaustWindow() {
+    const entry = exhaust.find((e) => e.id === layers.selected);
+    exhaustWindow.style.display = entry ? "block" : "none";
+    if (!entry) return;
+    exhaustWindow.innerHTML = "";
+    const head = document.createElement("div");
+    head.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: bold;";
+    head.innerHTML = "<span>Exhaust " + (exhaust.indexOf(entry) + 1) + "</span>";
+    const close = document.createElement("button");
+    close.textContent = "×";
+    close.className = "small ghost";
+    close.addEventListener("click", () => selectLayer(entry.id));
+    head.appendChild(close);
+    exhaustWindow.appendChild(head);
+    EXHAUST_FIELDS.forEach(([key, label, unit, min, max, step, scale]) => {
+        const row = document.createElement("div");
+        row.style.cssText = "margin: 6px 0;";
+        const line = document.createElement("div");
+        line.style.cssText = "display: flex; align-items: center; gap: 6px;";
+        const name = document.createElement("span");
+        name.textContent = label;
+        name.style.flex = "1";
+        const number = document.createElement("input");
+        number.type = "number"; number.min = min; number.max = max; number.step = step;
+        number.style.width = "62px";
+        const unitEl = document.createElement("span");
+        unitEl.textContent = unit;
+        unitEl.style.cssText = "width: 18px; color: #7f90a5;";
+        line.append(name, number, unitEl);
+        const range = document.createElement("input");
+        range.type = "range"; range.min = min; range.max = max; range.step = step;
+        range.style.width = "100%";
+        const show = () => { const v = Math.round(entry.s[key] * scale * 10) / 10; number.value = v; range.value = v; };
+        const set = (v) => {
+            if (!Number.isFinite(v)) return;
+            entry.s[key] = Math.min(max * 2, Math.max(min / 2, v)) / scale;
+            sizePipe(entry);
+            show();
+        };
+        range.addEventListener("input", () => set(parseFloat(range.value)));
+        number.addEventListener("change", () => set(parseFloat(number.value)));
+        show();
+        row.append(line, range);
+        exhaustWindow.appendChild(row);
+    });
 }
 
 // the test of the flames: while it is on, the points make a flame now and then, the way the game does (Flames.js, with the pictures of web/images/flames/)
+const standing = { px: 0, py: 0, pz: 0, qx: 0, qy: 0, qz: 0, qw: 1, vx: 0, vy: 0, vz: 0, wheels: [], collisionSpheres: null };
 const flameCar = { exhaust: [], length: 4.5, width: 1.8, exhaustSystems: 1, imageBase: "../" };
-window.carEditorView = { scene, camera, controls };       // (for the tests)
+window.carEditorView = { scene, camera, controls, exhaustConfig };       // (for the tests)
 function setFlameTest(on) {
     flameTest = on;
-    if (on && !flames && OpenRacer.ExhaustFlames) flames = new OpenRacer.ExhaustFlames(scene, flameCar);
-    if (!on && flames) flames.clear();
+    if (on && !flames && OpenRacer.ExhaustFlames) {
+        // the smoke of the game (Smoke.js) is on its own layer of the camera
+        if (OpenRacer.TyreSmoke) { smokePreview = new OpenRacer.TyreSmoke(scene); camera.layers.enable(1); flameCar.smoke = (x, y, z, vx, vy, vz) => smokePreview.spawn(x, y, z, vx, vy, vz, 0.15, false, true, true); }
+        flames = new OpenRacer.ExhaustFlames(scene, flameCar);
+    }
+    if (!on && flames) { flames.clear(); if (smokePreview) smokePreview.clear(); }
     flameTimer = 0;
     renderLayers();
 }
@@ -185,6 +256,7 @@ function updateFlames(now) {
         }
     }
     flames.update(dt, camera);
+    if (smokePreview) smokePreview.update(dt, standing, camera, true);
 }
 
 // While the crash test runs the bars are away and the view is wider. The camera must not jump: viewLock = { cx } is the middle (in the page) of the
@@ -740,6 +812,7 @@ function selectLayer(id) {
         }
     }
     exhaust.forEach((e) => e.pipe.material.color.set(e.id === layers.selected ? 0xffd04d : 0xff7a3d));
+    updateExhaustWindow();
     // a wheel or the steering wheel is only marked in the list: the view stays where it is
     updateCameraMarkers();
     updateThumbnail();

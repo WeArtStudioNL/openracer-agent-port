@@ -154,7 +154,8 @@ OpenRacer.Car = function( config, domElement ) {
     this.vehicle.ground = groundWorld;
     this.pit = new OpenRacer.PitStop(this.vehicle); // the pit stop on the pit lane (Pit.js), when the race has wear and fuel
     var tyreSmoke = new OpenRacer.TyreSmoke(scene);
-    var flames = new OpenRacer.ExhaustFlames(scene, { length: this.length, width: this.width, exhaust: config.exhaust, exhaustSystems: (config.sound && config.sound.engine_sim && config.sound.engine_sim.exhaust_systems) || 1 });
+    var flames = new OpenRacer.ExhaustFlames(scene, { length: this.length, width: this.width, exhaust: config.exhaust, exhaustSystems: (config.sound && config.sound.engine_sim && config.sound.engine_sim.exhaust_systems) || 1,
+        smoke: function(x, y, z, vx, vy, vz, diameter) { tyreSmoke.spawn(x, y, z, vx, vy, vz, 0.15, false, true, true); } });
     this.engine = this.vehicle.engine;
     EngineSound.setCar(config); // the engine sound of this car
     this.wheels = this.vehicle.wheels;

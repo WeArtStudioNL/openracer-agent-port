@@ -40,7 +40,7 @@ OpenRacer.ExhaustFlames = function (scene, car) {
     })(1);
 
     var sprites = [], age = new Float32Array(N).fill(1e9), life = new Float32Array(N).fill(1), size0 = new Float32Array(N), size1 = new Float32Array(N);
-    var alpha0 = new Float32Array(N), own = new Float32Array(N), vel = [], next = 0;
+    var alpha0 = new Float32Array(N), own = new Float32Array(N), lengthF = new Float32Array(N), widthF = new Float32Array(N), vel = [], next = 0;
     var view = new THREE.Vector3();
     for (var i = 0; i < N; i++) {
         var material = new THREE.SpriteMaterial({ map: texture, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false });
@@ -62,7 +62,13 @@ OpenRacer.ExhaustFlames = function (scene, car) {
             local = car.exhaust.map(function (e) {
                 var position = Array.isArray(e) ? e : e.position, rotation = Array.isArray(e) ? [0, 0, 0] : (e.rotation || [0, 0, 0]);
                 euler.set(rotation[0] * Math.PI / 180, rotation[1] * Math.PI / 180, rotation[2] * Math.PI / 180);
-                return { position: new THREE.Vector3(position[0], position[1], position[2]), direction: new THREE.Vector3(0, 0, -1).applyEuler(euler) };
+                // the settings of the point (the car editor): the diameter of the pipe (m), the smoke, the length and the width of the flame, the brightness (factors)
+                var diameter = (!Array.isArray(e) && e.diameter) || 0.08;
+                return { position: new THREE.Vector3(position[0], position[1], position[2]), direction: new THREE.Vector3(0, 0, -1).applyEuler(euler),
+                    diameter: diameter, smoke: !Array.isArray(e) && e.smoke !== undefined ? e.smoke : 1,
+                    length: !Array.isArray(e) && e.flame_length !== undefined ? e.flame_length : 1,
+                    width: (diameter / 0.08) * (!Array.isArray(e) && e.flame_width !== undefined ? e.flame_width : 1),
+                    brightness: !Array.isArray(e) && e.brightness !== undefined ? e.brightness : 1 };
             });
             return local;
         }
@@ -71,7 +77,7 @@ OpenRacer.ExhaustFlames = function (scene, car) {
         var y = rear.y - 0.05;
         var backwards = new THREE.Vector3(0, -0.06, -1).normalize();
         local = (car.exhaustSystems >= 2 ? [car.width * 0.3, -car.width * 0.3] : [-car.width * 0.3]).map(function (x) {
-            return { position: new THREE.Vector3(x, y, z), direction: backwards.clone() };
+            return { position: new THREE.Vector3(x, y, z), direction: backwards.clone(), diameter: 0.08, smoke: 1, length: 1, width: 1, brightness: 1 };
         });
         return local;
     }
@@ -90,21 +96,31 @@ OpenRacer.ExhaustFlames = function (scene, car) {
                 var i = next;
                 next = (next + 1) % N;
                 var sp = sprites[i];
-                sp.position.set(body.position.x + p.x, body.position.y + p.y, body.position.z + p.z).addScaledVector(dir, Math.random() * 0.15);
+                sp.position.set(body.position.x + p.x + (Math.random() - 0.5) * list[k].diameter * 0.5, body.position.y + p.y + (Math.random() - 0.5) * list[k].diameter * 0.5, body.position.z + p.z + (Math.random() - 0.5) * list[k].diameter * 0.5).addScaledVector(dir, Math.random() * 0.15);
                 vel[i].copy(dir).multiplyScalar(2.5 + Math.random() * 5 * s).addScaledVector(carVel, 0.95);
                 vel[i].x += (Math.random() - 0.5) * 0.8; vel[i].y += (Math.random() - 0.5) * 0.8 + 0.3; vel[i].z += (Math.random() - 0.5) * 0.8;
                 age[i] = 0;
                 life[i] = 0.07 + Math.random() * 0.13 * Math.min(1.5, s);
                 size0[i] = 0.03 + Math.random() * 0.03;
                 size1[i] = (0.08 + 0.12 * Math.random()) * Math.min(2, 0.6 + s);
-                alpha0[i] = 0.9;
+                alpha0[i] = 0.9 * list[k].brightness;
+                lengthF[i] = list[k].length; widthF[i] = list[k].width;
                 // a picture of your own, or the gradient
                 var picture = custom.length ? custom[(Math.random() * custom.length) | 0] : null;
                 sp.material.map = picture || texture;
                 sp.material.needsUpdate = true;
                 own[i] = picture ? picture.image.width / picture.image.height : 0;
-                sp.center.set(picture ? 0 : 0.5, 0.5);
+                sp.center.set(picture ? 0 : 0.25, 0.5);          // (the gradient starts a little in front of the pipe)
                 sp.visible = true;
+            }
+            // the smoke after the bang: a few grey puffs from the pipe (the game makes them with the smoke of the tyres)
+            if (car.smoke && list[k].smoke > 0.01) {
+                var puffs = Math.round(list[k].smoke * (1 + event.strength * 1.5));
+                for (var m = 0; m < puffs; m++) {
+                    car.smoke(body.position.x + p.x + dir.x * 0.12, body.position.y + p.y + dir.y * 0.12, body.position.z + p.z + dir.z * 0.12,
+                        dir.x * (0.8 + Math.random()) + carVel.x * 0.5 + (Math.random() - 0.5) * 0.4, dir.y * (0.8 + Math.random()) + carVel.y * 0.5 + 0.2 + Math.random() * 0.3,
+                        dir.z * (0.8 + Math.random()) + carVel.z * 0.5 + (Math.random() - 0.5) * 0.4, list[k].diameter);
+                }
             }
         }
     };
@@ -118,15 +134,13 @@ OpenRacer.ExhaustFlames = function (scene, car) {
             sp.position.addScaledVector(vel[i], dt);
             vel[i].multiplyScalar(Math.exp(-5 * dt));
             var size = size0[i] + (size1[i] - size0[i]) * Math.sqrt(t);
-            if (own[i] > 0 && camera) {
-                // a picture: long in the way that it flies (as seen from the camera), the nozzle at the pipe
+            // long in the way that it flies (as seen from the camera), the nozzle at the pipe; a picture is longer than the gradient
+            if (camera) {
                 view.copy(vel[i]).transformDirection(camera.matrixWorldInverse);
                 sp.material.rotation = Math.atan2(view.y, view.x);
-                sp.scale.set(size * 2.2 * own[i], size * 1.1, 1);
-            } else {
-                sp.material.rotation = 0;
-                sp.scale.set(size, size, 1);
             }
+            if (own[i] > 0) sp.scale.set(size * 2.2 * own[i] * lengthF[i], size * 1.1 * widthF[i], 1);
+            else sp.scale.set(size * 1.8 * lengthF[i], size * widthF[i], 1);
             sp.material.opacity = alpha0[i] * Math.pow(1 - t, 1.5);
             sp.material.color.setRGB(1, 0.9 - 0.55 * t, 0.7 - 0.65 * t);       // pale at the start, orange at the end
         }
