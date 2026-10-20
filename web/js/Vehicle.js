@@ -222,6 +222,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         w.hasContact = false;
         w.heat = 0;                         // how hot the tyre is from sliding (0..1)
         w.smoke = 0;                        // how much smoke it makes (0..1)
+        w.surfT = 25;                       // the temperature of the surface of the tread (°C): what the slip burns heats a thin layer, see the smoke below
         w.squeal = 0;                       // how loud it squeals (0..1)
         w.normalForce = 0;
         w.temp = 25;                        // the temperature of the tyre (°C), see wearStep
@@ -251,6 +252,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.wearLaps = 0;
     var fuelMassTimer = 0;
     var OPTIMUM = 85, WINDOW = 15, COLD = 45;       // °C: the best temperature, the width of the window, how far out the grip is at its least
+    var SURFACE_SHARE = 0.3, SURFACE_CAPACITY = 350, SURFACE_TAU = 6;    // the share of the burnt power that heats the rubber, the heat that the hot layer takes (J/K), how slowly it gives it away (s)
 
     function conditionOf(w) {
         var off = Math.max(0, Math.abs(w.temp - OPTIMUM) - WINDOW) / COLD;
@@ -482,7 +484,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             w.omega = 0;
             w.slipRatio = w.slipTan = 0;
             w.absFactor = 1;
-            w.heat = w.smoke = w.squeal = 0;
+            w.heat = w.smoke = w.squeal = 0; w.surfT = w.temp;
             w.velocity.set(0, 0, 0);
             w.lastCompression = undefined;
             w.susLength = w.restLengthWheel !== undefined ? w.restLengthWheel : this.restLength;   // the wheel where it is at rest on the spring
@@ -1486,7 +1488,21 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var slideSpeed = Math.sqrt((wheel.omega * wheel.radius - vl) * (wheel.omega * wheel.radius - vl) + vt * vt);
                 var sliding = smoothstep(1.2, 2.2, wheel.s) * smoothstep(1.5, 6, slideSpeed);
                 wheel.heat = Math.max(0, Math.min(1, wheel.heat + (sliding > 0 ? sliding * dt / 1.8 : -dt / 2.5)));
-                wheel.smoke = fz > 200 ? Math.min(1, 0.15 * sliding + wheel.heat * Math.min(1, sliding * 2 + 0.2)) : 0;
+                // The smoke of the rubber on the road comes from the temperature of the surface of the tread (it gives off its oils and burns at
+                // about 200 to 260 °C; a little earlier here, so that a hard launch gives a wisp), not from the slip itself: the power that the slip burns (the force of the tyre times how fast it slides) heats a thin
+                // layer, of which a share goes into the rubber (the rest into the road); the layer gives its heat to the tyre and the air. A tyre that
+                // spins at a standstill, or one that spins a lot faster than the car goes, burns a lot of power and gets there in a few seconds; one that
+                // only slides a little, or only for a moment, does not. On dirt and grass there is dust, from the slide as before.
+                var burnt = Math.abs(wheel.fx * (wheel.omega * wheel.radius - vl)) + Math.abs(wheel.fy * vt);              // W
+                wheel.surfT += (SURFACE_SHARE * burnt / SURFACE_CAPACITY - (wheel.surfT - wheel.temp) / SURFACE_TAU) * dt;
+                wheel.surfT = Math.max(wheel.temp, Math.min(450, wheel.surfT));
+                if(wheel.surface === "road" || wheel.surface === "track01") {
+                    var smoking = smoothstep(175, 250, wheel.surfT);
+                    wheel.heat = smoothstep(175, 320, wheel.surfT);
+                    wheel.smoke = fz > 200 ? smoking * (0.4 + 0.6 * Math.min(1, burnt / 40000)) : 0;
+                } else {
+                    wheel.smoke = fz > 200 ? Math.min(1, 0.15 * sliding + wheel.heat * Math.min(1, sliding * 2 + 0.2)) : 0;
+                }
                 wheel.squeal = (wheel.surface === "road" || wheel.surface === "track01") && fz > 200
                     ? smoothstep(0.85, 1.5, wheel.s) * (1 - 0.4 * smoothstep(2.5, 4, wheel.s)) * smoothstep(0.4, 2.5, slideSpeed) : 0;
                 fxW = wheel.fx;
