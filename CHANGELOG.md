@@ -4,6 +4,9 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 ## Unreleased
 
+**Drag strip**
+- A *Drag strip* tool in the track editor (a window for the distance and the width; the start line is where you click, the strip goes the way you drag), and in the game: the distance to the start line, the lights, false starts, and the times and speeds at the standard distances within the strip.
+
 **Panels**
 - The tuning menu, the free camera panel, the replay bar and its speed box, and the exhaust window of the car editor can be moved (drag a part that is not a control) and scaled (the bottom right corner); where they are is kept in the browser.
 

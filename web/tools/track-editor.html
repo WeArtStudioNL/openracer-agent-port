@@ -141,11 +141,30 @@
 
 <div id="view">
     <div id="hud"></div>
+    <div id="dragWindow" style="display:none; position: absolute; right: 16px; top: 70px; width: 270px; padding: 10px 12px 12px; background: rgba(22, 27, 34, 0.94); border: 1px solid #323c4a; border-radius: 10px; color: #dfe6ef; font-size: 12.5px; z-index: 6;">
+        <div style="display: flex; justify-content: space-between; align-items: center; font-weight: bold; margin-bottom: 6px;"><span>Drag strip</span><button class="small ghost" id="dragClose" title="Close">×</button></div>
+        <div class="hint" style="margin-bottom: 6px;">Click on the road where the start line is and drag in the direction of the strip. The finish line is that far from it.</div>
+        <label>Distance</label>
+        <select id="dragLength" style="width:100%">
+            <option value="201.168">1/8 mile (201 m)</option>
+            <option value="304.8">1000 feet (305 m)</option>
+            <option value="402.336" selected>1/4 mile (402 m)</option>
+            <option value="804.672">1/2 mile (805 m)</option>
+            <option value="1000">1 kilometre</option>
+            <option value="1609.344">1 mile (1609 m)</option>
+            <option value="own">Own length…</option>
+        </select>
+        <div id="dragOwnRow" style="display:none; margin-top:6px;"><label>Length (m)</label><input type="number" id="dragOwn" value="500" min="50" max="5000" step="1" style="width:100%"></div>
+        <div style="margin-top:6px;"><label>Width of the strip (m)</label><input type="number" id="dragWidth" value="12" min="3" step="1" style="width:100%"></div>
+        <div class="hint" id="dragInfo" style="margin-top:8px;"></div>
+        <button class="small danger" id="dragRemove" style="margin-top:8px; width:100%">Remove the drag strip</button>
+    </div>
     <div id="toast"></div>
     <div class="float bottom" id="modes">
         <button data-mode="view" class="active">Look</button>
         <button data-mode="start">Place start</button>
         <button data-mode="gate">Add gate</button>
+        <button data-mode="drag">Drag strip</button>
         <button data-mode="node" class="design-only">Add node</button>
         <button data-mode="prefab" class="design-only">Place prefab</button>
     </div>
@@ -193,6 +212,7 @@
 </div>
 
 <script>var OpenRacer = {};</script>
+<script src="../js/Movable.js"></script>
 <script src="../js/Garage.js"></script>
 <script src="../js/Catalog.js"></script>
 <script src="../js/TrackEnvironment.js"></script>

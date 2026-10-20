@@ -216,6 +216,7 @@ OpenRacer.Car = function( config, domElement ) {
         v.reset(x, z, heading);
         tyreSmoke.clear();
         flames.clear();
+        if(OpenRacer.DragStrip) OpenRacer.DragStrip.reset();
         lastGateX = null; // a jump of the car is no crossing of a gate
         this.lapStarted = false;
         this.throttle = 0;
@@ -515,6 +516,7 @@ OpenRacer.Car = function( config, domElement ) {
         }
 
         this.updateLaps(showDebug);
+        if(OpenRacer.DragStrip) OpenRacer.DragStrip.update(this, this.clock);
 
         if(telemetry) {
             telemetry.update();

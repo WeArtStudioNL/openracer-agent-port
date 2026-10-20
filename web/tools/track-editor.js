@@ -31,6 +31,7 @@ const state = {
     selected: null,       // name of the selected part
     start: null,          // { x, y, z, heading }
     gates: [],            // [{ x, y, z, heading, width }]
+    drag: null,           // the drag strip: { x, y, z, heading, width, length } (the start line and the way the strip goes)
     mode: "view",
     markerScale: 1,
     env: OpenRacer.environmentDefaults(),
@@ -403,7 +404,58 @@ function updateMarkers() {
         markers.add(strip);
         markers.add(makeArrow(gate.x, gate.y, gate.z, gate.heading, colour, 5 * k));
     });
+    if (state.drag) {
+        // the drag strip: the start line (green), the finish line (red) and a line between them with a mark at every standard distance
+        const d = state.drag, dx = Math.cos(d.heading), dz = Math.sin(d.heading);
+        const fx = d.x + dx * d.length, fz = d.z + dz * d.length;
+        const fy = groundY(fx, fz, d.y);
+        const line = (x, y, z, colour) => {
+            const m = new THREE.Mesh(new THREE.PlaneGeometry(d.width, 1.2 * k), new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
+            m.rotation.x = -Math.PI / 2;
+            m.rotation.z = Math.atan2(-dx, -dz);
+            m.position.set(x, y + 0.35, z);
+            markers.add(m);
+        };
+        line(d.x, d.y, d.z, 0x4ed88a);
+        line(fx, fy, fz, 0xff5a4f);
+        markers.add(makeArrow(d.x, d.y, d.z, d.heading, 0x4ed88a, 9 * k));
+        markers.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(d.x, d.y + 0.5, d.z), new THREE.Vector3(fx, fy + 0.5, fz)]), new THREE.LineBasicMaterial({ color: 0xffffff })));
+        DRAG_MARKS.filter(([, metres]) => metres < d.length - 0.5).forEach(([, metres]) => {
+            const x = d.x + dx * metres, z = d.z + dz * metres;
+            line(x, groundY(x, z, d.y), z, 0xffffff);
+        });
+        $("dragInfo").textContent = "Start " + d.x.toFixed(0) + ", " + d.z.toFixed(0) + " · " + Math.round(d.length) + " m · the marks show 60 ft, 330 ft, 1/8 mile, 1000 ft, 1/4 mile ... within the strip.";
+    } else {
+        $("dragInfo").textContent = "No drag strip yet: click on the road and drag in its direction.";
+    }
     renderGates();
+}
+
+// the distances of the drag strip that are timed in the game (Name, metres)
+const DRAG_MARKS = [["60 ft", 18.288], ["330 ft", 100.584], ["1/8 mile", 201.168], ["1000 ft", 304.8], ["1/4 mile", 402.336], ["1/2 mile", 804.672], ["1 km", 1000], ["1 mile", 1609.344]];
+
+function dragLength() {
+    const v = $("dragLength").value;
+    return v === "own" ? Math.max(50, Math.min(5000, parseFloat($("dragOwn").value) || 500)) : parseFloat(v);
+}
+function dragChanged() {
+    $("dragOwnRow").style.display = $("dragLength").value === "own" ? "block" : "none";
+    if (state.drag) { state.drag.length = dragLength(); state.drag.width = Math.max(3, parseFloat($("dragWidth").value) || 12); updateMarkers(); }
+}
+["dragLength", "dragOwn", "dragWidth"].forEach((id) => $(id).addEventListener("input", dragChanged));
+$("dragLength").addEventListener("change", dragChanged);
+$("dragRemove").addEventListener("click", () => { state.drag = null; updateMarkers(); });
+$("dragClose").addEventListener("click", () => setMode("view"));
+OpenRacer.Movable.make($("dragWindow"), { key: "track-editor-drag" });
+// a drag strip that was loaded: the window shows its distance
+function showDrag() {
+    if (!state.drag) return;
+    const options = [...$("dragLength").options].filter((o) => o.value !== "own");
+    const match = options.find((o) => Math.abs(parseFloat(o.value) - state.drag.length) < 0.5);
+    if (match) $("dragLength").value = match.value;
+    else { $("dragLength").value = "own"; $("dragOwn").value = Math.round(state.drag.length); }
+    $("dragWidth").value = state.drag.width;
+    $("dragOwnRow").style.display = $("dragLength").value === "own" ? "block" : "none";
 }
 
 function renderGates() {
@@ -456,9 +508,11 @@ function stopDesign() {
 
 function setMode(mode) {
     state.mode = mode;
+    $("dragWindow").style.display = mode === "drag" ? "block" : "none";
     for (const button of document.querySelectorAll("#modes button")) button.classList.toggle("active", button.dataset.mode === mode);
     $("hud").textContent = (design && design.hudText(mode)) || (mode === "start" ? "Place start: click on the road and drag in the direction that the car drives."
         : mode === "gate" ? "Add gate: click on the road and drag in the direction that the car drives through the gate."
+        : mode === "drag" ? "Drag strip: click on the road where the start line is and drag in the direction of the strip."
         : "Look: drag to turn, right mouse button to move, scroll to zoom. Click a part to find it in the list.");
 }
 document.querySelectorAll("#modes button").forEach((b) => b.onclick = () => setMode(b.dataset.mode));
@@ -481,7 +535,7 @@ let drag = null;
 renderer.domElement.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
     drag = { x: event.clientX, y: event.clientY, hit: null, moved: false };
-    if (state.mode === "start" || state.mode === "gate") {
+    if (state.mode === "start" || state.mode === "gate" || state.mode === "drag") {
         const hit = roadHit(event);
         if (hit) {
             drag.hit = hit;
@@ -510,6 +564,9 @@ function place(d, preview) {
     const h = d.heading === undefined ? (state.start ? state.start.heading : 0) : d.heading;
     if (state.mode === "start") {
         state.start = { x: point.x, y: point.y, z: point.z, heading: h };
+    } else if (state.mode === "drag") {
+        state.drag = { x: point.x, y: point.y, z: point.z, heading: h, width: Math.max(3, parseFloat($("dragWidth").value) || 12), length: dragLength() };
+        d.added = true;
     } else if (state.mode === "gate") {
         const width = Math.max(2, parseFloat($("gateWidth").value) || 24);
         if (preview && d.added) state.gates.pop();
@@ -526,7 +583,7 @@ renderer.domElement.addEventListener("pointerup", (event) => {
     controls.enabled = true;
     if (d.hit) {
         if (!d.added && state.mode === "start") place(d, false);
-        else if (!d.added && state.mode === "gate") place(d, false);
+        else if (!d.added && (state.mode === "gate" || state.mode === "drag")) place(d, false);
         return;
     }
     if (state.mode === "view" && !d.moved && !(design && design.active())) {
@@ -683,6 +740,8 @@ async function loadExisting() {
         // the heights of the start and the gates come from the road
         if (state.start) state.start.y = groundY(state.start.x, state.start.z);
         state.gates = (track.gates || []).map((g) => ({ x: g.x, y: groundY(g.x, g.z), z: g.z, heading: g.heading, width: g.width || 24 }));
+        state.drag = track.dragstrip ? { x: track.dragstrip.x, y: groundY(track.dragstrip.x, track.dragstrip.z), z: track.dragstrip.z, heading: track.dragstrip.heading || 0, width: track.dragstrip.width || 12, length: track.dragstrip.length || 402.336 } : null;
+        showDrag();
         updateMarkers();
         updateLineNote();
         status("", "");
@@ -698,6 +757,7 @@ function newTrack() {
     state.mainFile = null;
     state.start = null;
     state.gates = [];
+    state.drag = null;
     state.legacy = false;
     state.idEdited = false;
     clearTrack();
@@ -753,6 +813,9 @@ async function save() {
         } else {
             delete config.gates;
         }
+
+        if (state.drag) config.dragstrip = { x: +state.drag.x.toFixed(3), z: +state.drag.z.toFixed(3), heading: +state.drag.heading.toFixed(5), width: state.drag.width, length: +state.drag.length.toFixed(2) };
+        else delete config.dragstrip;
 
         const uploads = [];
         let oldModel = null;
