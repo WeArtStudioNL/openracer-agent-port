@@ -492,7 +492,7 @@ OpenRacer.Car = function( config, domElement ) {
         EngineSound.setTyres(v.squeal, Math.abs(v.u));
         // the bangs of the exhaust (pops, anti-lag): the sound, and the flames
         var bangs = this.engine.events;
-        for(var bi = 0; bi < bangs.length; bi++) { EngineSound.pop(bangs[bi].strength, bangs[bi].loud); flames.emit(v, bangs[bi]); }
+        for(var bi = 0; bi < bangs.length; bi++) { EngineSound.pop(bangs[bi].strength, bangs[bi].loud); flames.emit(v, bangs[bi], this.body); }
         bangs.length = 0;
         flames.update(delta, camera);
 

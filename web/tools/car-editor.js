@@ -97,6 +97,69 @@ gizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !even
 gizmo.addEventListener("objectChange", () => gizmoMoved());
 scene.add(typeof gizmo.getHelper === "function" ? gizmo.getHelper() : gizmo);
 
+// ---- the exhaust points: where the flames come out (pops, bangs, anti-lag; Flames.js in the game). A layer each, with a gizmo for the place and a second one
+// for the direction: the flame goes along the negative z of the point, which the arrow shows. They go in car.json as "exhaust": [{ position, rotation (degrees) }]
+const exhaust = [];                    // { id, target, pipe }
+let exhaustCounter = 0;
+const rotGizmo = new TransformControls(camera, renderer.domElement);
+rotGizmo.setMode("rotate");
+rotGizmo.setSpace("local");
+rotGizmo.setSize(0.55);
+rotGizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !event.value; layers.dragging = event.value; if (!event.value) renderLayers(); });
+rotGizmo.addEventListener("objectChange", () => renderLayers());
+scene.add(typeof rotGizmo.getHelper === "function" ? rotGizmo.getHelper() : rotGizmo);
+
+function addExhaust(position, rotation) {
+    const target = new THREE.Object3D();
+    const d = Math.PI / 180;
+    target.position.set(position[0], position[1], position[2]);
+    target.rotation.set(rotation[0] * d, rotation[1] * d, rotation[2] * d);
+    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.22, 14), new THREE.MeshBasicMaterial({ color: 0xff7a3d }));
+    pipe.rotation.x = Math.PI / 2;     // along z, with its opening at the point and the rest of the pipe inside the car
+    pipe.position.z = 0.11;
+    const arrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, 0), 0.5, 0xffb070, 0.14, 0.09);
+    target.add(pipe, arrow);
+    const entry = { id: "ex" + (++exhaustCounter), target, pipe };
+    pipe.userData.layer = entry.id;
+    exhaust.push(entry);
+    gizmoTargets[entry.id] = target;
+    scene.add(target);
+    return entry;
+}
+
+function removeExhaust(id) {
+    const i = exhaust.findIndex((e) => e.id === id);
+    if (i < 0) return;
+    if (layers.selected === id) selectLayer(id);          // (it is let go)
+    scene.remove(exhaust[i].target);
+    delete gizmoTargets[id];
+    exhaust.splice(i, 1);
+    renderLayers();
+}
+
+// the exhaust points of a car.json: the older form is a list of positions
+function loadExhaust(list) {
+    exhaust.slice().forEach((e) => removeExhaust(e.id));
+    (list || []).forEach((e) => addExhaust(Array.isArray(e) ? e : e.position, Array.isArray(e) ? [0, 0, 0] : (e.rotation || [0, 0, 0])));
+    renderLayers();
+}
+
+// a new point: at the back of the car, on the other side than the last one
+function newExhaust() {
+    const centres = wheelCenters();
+    const size = currentSizes();
+    const rearZ = centres ? (centres.RL.c.z + centres.RR.c.z) / 2 - 0.7 : -size.dimensions.length * 0.45;
+    const y = centres ? (centres.RL.c.y + centres.RR.c.y) / 2 - 0.05 : -0.3;
+    const x = (exhaust.length % 2 === 0 ? -1 : 1) * size.dimensions.width * 0.3;
+    return addExhaust([Math.round(x * 100) / 100, Math.round(y * 100) / 100, Math.round(rearZ * 100) / 100], [0, 0, 0]);
+}
+
+function exhaustConfig() {
+    const r = (v) => Math.round(v * 1000) / 1000, deg = 180 / Math.PI;
+    return exhaust.map((e) => ({ position: [r(e.target.position.x), r(e.target.position.y), r(e.target.position.z)],
+        rotation: [r(e.target.rotation.x * deg), r(e.target.rotation.y * deg), r(e.target.rotation.z * deg)] }));
+}
+
 // While the crash test runs the bars are away and the view is wider. The camera must not jump: viewLock = { cx } is the middle (in the page) of the
 // view as it was, and the picture is kept where it was on the screen: the view shows a part of a wider picture that is centred on that middle.
 let viewLock = null;
@@ -613,6 +676,7 @@ function updateCameraMarkers() {
 // the fields follow the gizmo
 function gizmoMoved() {
     const id = layers.selected;
+    if (id && id.startsWith("ex")) { renderLayers(); return; }
     const r = (num("tyre") || 0.65) / 2;
     const fix = (v) => Math.round(v * 100) / 100;
     if (id === "chase" || id === "follow") {
@@ -637,14 +701,17 @@ function selectLayer(id) {
     layers.selected = layers.selected === id ? null : id;
     const sel = layers.selected;
     gizmo.detach();
+    rotGizmo.detach();
     if (sel && gizmoTargets[sel]) {
         if (sel === "model" && !state.root) { layers.selected = null; }
         else {
             gizmo.attach(gizmoTargets[sel]);
             gizmo.showX = sel !== "chase" && sel !== "follow"; // the cameras behind the car are in the middle
             gizmo.showY = gizmo.showZ = true;
+            if (sel.startsWith("ex")) rotGizmo.attach(gizmoTargets[sel]);
         }
     }
+    exhaust.forEach((e) => e.pipe.material.color.set(e.id === layers.selected ? 0xffd04d : 0xff7a3d));
     // a wheel or the steering wheel is only marked in the list: the view stays where it is
     updateCameraMarkers();
     updateThumbnail();
@@ -688,6 +755,37 @@ function renderLayers() {
         row.addEventListener("click", () => selectLayer(l.id));
         list.appendChild(row);
     });
+    // the exhaust points, with a button to remove one and a row to add one
+    const exGroup = document.createElement("div");
+    exGroup.className = "group";
+    exGroup.textContent = "Exhaust";
+    list.appendChild(exGroup);
+    exhaust.forEach((e, i) => {
+        const row = document.createElement("div");
+        row.className = "layer" + (e.id === layers.selected ? " selected" : "");
+        const dot = document.createElement("i");
+        dot.style.background = "#ff7a3d";
+        const text = document.createElement("span");
+        text.textContent = "Exhaust " + (i + 1);
+        const meta = document.createElement("span");
+        meta.className = "meta";
+        const p = e.target.position;
+        meta.textContent = p.x.toFixed(2) + ", " + p.y.toFixed(2) + ", " + p.z.toFixed(2);
+        const del = document.createElement("button");
+        del.className = "del";
+        del.textContent = "×";
+        del.title = "Remove this exhaust point";
+        del.addEventListener("click", (event) => { event.stopPropagation(); removeExhaust(e.id); });
+        row.append(dot, text, meta, del);
+        row.addEventListener("click", () => selectLayer(e.id));
+        list.appendChild(row);
+    });
+    const addRow = document.createElement("div");
+    addRow.className = "layer";
+    addRow.innerHTML = "<i style=\"background: transparent; border: 1px solid #ff7a3d\"></i><span>+ Add an exhaust point</span>";
+    addRow.title = "A point where the flames of the pops and bangs come out; move it and turn it with the gizmos";
+    addRow.addEventListener("click", () => { const e = newExhaust(); layers.selected = null; selectLayer(e.id); });
+    list.appendChild(addRow);
     // every named object of the model, with an eye to show or hide it (a hidden object hides what is inside it too)
     if (state.nodes.length) {
         const g = document.createElement("div");
@@ -721,7 +819,7 @@ renderer.domElement.addEventListener("pointerup", (e) => {
     pickDown = null;
     const rect = renderer.domElement.getBoundingClientRect();
     pickRay.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
-    const hit = pickRay.intersectObjects(cameraMarkers.children, false).find((h) => h.object.userData.layer);
+    const hit = pickRay.intersectObjects(cameraMarkers.children.concat(exhaust.map((e) => e.pipe)), false).find((h) => h.object.userData.layer);
     if (hit && hit.object.userData.layer !== layers.selected) selectLayer(hit.object.userData.layer);
 });
 
@@ -1117,6 +1215,7 @@ function buildConfig(id) {
             config.wheels.nodes[slot] = names;
         }
     }
+    if (exhaust.length) config.exhaust = exhaustConfig();
     if (softBodyEditor) {
         const soft = softBodyEditor.read();
         if (soft.softbody) config.softbody = soft.softbody;
@@ -1169,7 +1268,7 @@ async function save() {
         const old = state.existingCar;
         if (old && id === state.existingId) {
             for (const section of ["chassis", "drivetrain", "engine"]) config[section] = Object.assign({}, old[section], config[section]);
-            for (const section of ["tyres", "assists"]) if (old[section] && !config[section]) config[section] = old[section];
+            for (const section of ["tyres", "assists", "extras"]) if (old[section] && !config[section]) config[section] = old[section];
         }
 
         // the model that is replaced is removed from the folder of the car when it has another name
@@ -1285,6 +1384,7 @@ function fill(car) {
     state.curve = e.torque_curve.map((p) => [p[0], p[1]]);
     set("brakeFront", car.brakes.front); set("brakeRear", car.brakes.rear);
     fillCameras(OpenRacer.cameraSettings(car));
+    loadExhaust(car.exhaust);
     if (softBodyEditor) softBodyEditor.fill(car);
     fillEngineSim(OpenRacer.engineSimParams(car));
     stopPreview();

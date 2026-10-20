@@ -6,6 +6,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 **Extras**
 - Optional extras with a checkbox in the tuning menu (the settings open below it): **pops and bangs** (sound and flames at the exhaust), **anti-lag** and a **boost gauge**. They are kept in car.json under `extras`.
+- The exhaust points of a car are placed in the car editor (the *Exhaust* layer, with a gizmo for the place and one for the direction); the flames can be your own pictures (`web/images/flames/`).
 
 **Launch**
 - The rev limiter is a hard fuel cut with a set rate (*Cuts per second*), so the engine bounces against the limit.
