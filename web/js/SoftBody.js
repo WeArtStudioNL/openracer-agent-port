@@ -259,7 +259,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
                 if (len < 1e-6) continue;
                 var wa = 1 / mass[beamA[i]], wb = 1 / mass[beamB[i]];
                 var al = 1 / (beamK[i] * h2);
-                var dlb = (rigRest(i) - len - al * rigLamB[i]) / (wa + wb + al);      // C = len - rest, so -C = rest - len
+                var dlb = (beamRest[i] - len - al * rigLamB[i]) / (wa + wb + al);      // C = len - rest, so -C = rest - len
                 rigLamB[i] += dlb;
                 var cx = ex / len * dlb, cy = ey / len * dlb, cz = ez / len * dlb;
                 u[a] -= wa * cx; u[a + 1] -= wa * cy; u[a + 2] -= wa * cz;
@@ -328,7 +328,6 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         }
         return moved;
     }
-    function rigRest(i) { return beamRest[i]; }
 
     // One step of dt seconds of the nodes and the beams; 'contacts' (optional) is called with (dt) before the forces are summed, to add the
     // forces of the hits to this.force
@@ -337,7 +336,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         var reaction = this.reaction;
         reaction.fill(0);
         var moved = false, maxMove = 0, maxMove2 = 0;
-        var DBG = OpenRacer.SoftBodyDebug || {}; var steps = Math.max(DBG.minSteps || 3, Math.min(DBG.maxSteps || 14, Math.ceil(dt / hSafe))), h = dt / steps; DBG.lastDt = dt; DBG.lastSteps = steps;      // small enough for the stiffest and densest place (see safeStep)
+        var steps = Math.max(3, Math.min(8, Math.ceil(dt / hSafe))), h = dt / steps;      // small enough for the stiffest and densest place (see safeStep)
         for (var s = 0; s < steps; s++) {
             // the forces of the hits (the callback fills this.force), then the anchors and the beams
             if (contacts) contacts(h);

@@ -436,3 +436,37 @@ crash between two, and the replay of the shell and the parts: done, see M4 below
   and the parts that were loose, with at most 0.5 mm difference to the live shell. Not tested: a file that was made on purpose to be wrong (the checks are in the code
   and follow the older ones), the editor's crash test in a full run (started in headless Chrome, which draws less than a frame a second).
 
+
+## A position solver for the suspension (step 4 of the design)
+
+**What it is.** The beams of the suspension (every beam with a rig node at an end: the knuckle at 1e6 N/m, the arms at 8e5, the tie rod at 1.2e6) and the
+anchors of the rig nodes (the pivots on the car, the little that holds the hub and the knuckle) are no longer explicit springs. `SoftBody.rigSolve` treats them
+as constraints with a compliance of 1/k (XPBD, extended position based dynamics): backward Euler for the spring, stable for any step. In each small step the explicit
+part runs as before (contacts, the shell, the integration of all the nodes); then `rigSolve` pulls the rig nodes into shape with six Gauss-Seidel passes over the
+constraints, takes the speed from the move, and applies the dampers as an impulse that cannot overshoot (`1/(1+c h w)`). Yield (the rest length and `q` follow
+what is beyond the yield force), break and the reaction on the car are worked out from the final lengths, as in the explicit loop; the numbers (stiffness, yield,
+break, damping, hardening) are the same and still set per car. The nodes and the beams are the same (156 nodes, 386 beams on the Mustang). The suspension no longer
+counts in `safeStep`; the shell (anchors 8e5, beams 4e5, five neighbours, 2.5 kg a node) is the stiffest explicit part now.
+
+**Steps.** The explicit solver needed up to 14 small steps for a stiff network (h = 0.2 ms); the rig was stable down to 6 with it, and the shell at 3 blew up (6.9 MJ
+"absorbed"), so the step was never the rig's alone. With the position solver the cap is 8 (`h` = 0.37 ms at the 2.9 ms step of the editor's test bench): the rig
+holds at any count (tested down to 3 steps, where only the explicit shell goes wrong: 47 MJ at 3, a bend of 35 cm instead of 42 cm at 4, fine at 5 to 14). The shell
+is what keeps the cap at 8; to go lower it needs the same treatment (its beams as constraints), and that changes how it dents, so it was not done here.
+
+**Measured** (the editor's crash test, Mustang, front-right wheel at 40 degrees, headless Chromium; the old solver with 14 steps against the new one with 8):
+
+| crash | before (14 steps) | after (8 steps) |
+|---|---|---|
+| 90 km/h, 40 degrees | toe 5.9 to 8.4 degrees at the end (run to run), bend 35.4 cm, 107.6 kJ | toe 5.6 to 6.1, bend 34.2 cm, 101 kJ |
+| 110 km/h, 40 degrees | toe 20 degrees (the limit), bend 42.0 cm, 161 kJ | toe 20, bend 41.3 cm, 157 kJ |
+| 130 km/h, 40 degrees | wheel off, bend 47.4 cm, 1 anchor torn | wheel off, bend 46.8 cm, 1 anchor torn |
+| 100 km/h, head-on | wheels untouched, bend 22.5 cm, 151.7 kJ | wheels untouched, bend 22.3 cm, 149.5 kJ |
+
+With the new rig at 14 steps the numbers are those of the old one (bend 35.4 / 42.0 / 47.3 / 22.5 cm; 107.6 / 161.4 / 211.9 / 151.7 kJ), so the solver itself changes
+nothing; the small drop with 8 steps is the shell. The toe at 90 km/h varies a few degrees from run to run (the editor steps with the time of the frame).
+Physics time per step (`vehicle.update`, headless Chromium without a GPU, so slower than the browser: the numbers only compare): head-on 0.56 to 0.50 ms, 130 km/h
+1.10 to 0.98 ms, 90 km/h 1.87 to 1.4 ms (the average over the whole run, 8 steps against 14). Nodes and beams are the same. `node tools/physics-bench.js` does not load the
+shell and gives the same figures as before.
+
+**Not done.** The shell is still explicit (see above). The spring and the damper of the wheel are still those of `Vehicle.js`, not beams. A rig whose k is much
+higher than now would want more passes (six is enough for these constraints; the soft stretch of a pass that has not converged makes the rig a little softer).
