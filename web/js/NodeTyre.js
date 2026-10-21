@@ -45,7 +45,8 @@ OpenRacer.NodeTyre = function (wheel, count) {
     this.slidingShare = 0;          // the share of the load that is carried by nodes that slide
     this.patch = 0;                 // the length of the patch (m)
     this.profile = null;            // the depth of the tyre in the road at 5 places along it, 0.4 radius apart (the wheel measures it), or null: a flat road
-    this.restDamping = 1;           // the extra damping at a standstill (1 is a critical one for the car; 0 is none)
+    this.keepDeflection = true;     // a node keeps its deflection out of the patch while the wheel does not roll (false: it is set to zero)
+    this.restDamping = 2;           // the extra damping at a standstill, as a factor of 1.2 times the critical one for the car (1 left a car that had dropped off a ramp rocking on its tyres for ever; 2 stops it)
     this.carcass = true;            // the patch from the round of the tyre pressed into the road (with the profile), not from a fixed shape
     this.nodesIn = 0;
 
@@ -100,7 +101,7 @@ OpenRacer.NodeTyre = function (wheel, count) {
         }
         this.patch = 2 * half;
         // a node that is out of the patch relaxes as the wheel rolls (over about 5 cm of rolling), but not at a standstill: the deflection that holds a parked car stays
-        var relax = Math.exp(-Math.abs(omegaR) * dt / 0.05);
+        var relax = this.keepDeflection ? Math.exp(-Math.abs(omegaR) * dt / 0.05) : 0;
         for(var i = 0; i < N; i++) {
             var angle = (phase + i * pitch) % TWO_PI;
             if(angle > Math.PI) angle -= TWO_PI;
