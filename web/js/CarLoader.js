@@ -137,7 +137,30 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
         });
     }
 
+    // A texture that reads a set of texture coordinates the mesh does not have (a model whose glTF says texCoord 6 for a badge) makes the shader fail to compile
+    // ("uv6: undeclared identifier") and the part is not drawn: it falls back to the first set
+    function fixTextureChannels(root) {
+        var slots = ["map", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "emissiveMap", "alphaMap", "bumpMap", "lightMap", "clearcoatMap", "clearcoatNormalMap", "clearcoatRoughnessMap",
+            "sheenColorMap", "sheenRoughnessMap", "transmissionMap", "thicknessMap", "specularIntensityMap", "specularColorMap", "iridescenceMap", "anisotropyMap"];
+        root.traverse(function(object) {
+            if(!object.isMesh || !object.geometry) return;
+            [].concat(object.material).forEach(function(material) {
+                if(!material) return;
+                slots.forEach(function(slot) {
+                    var texture = material[slot];
+                    if(!texture || !texture.channel) return;
+                    var attribute = texture.channel === 1 ? "uv1" : (texture.channel === 0 ? "uv" : "uv" + texture.channel);
+                    if(!object.geometry.attributes[attribute]) {
+                        texture.channel = object.geometry.attributes.uv1 && texture.channel === 1 ? 1 : 0;
+                        material.needsUpdate = true;
+                    }
+                });
+            });
+        });
+    }
+
     function build(root) {
+        fixTextureChannels(root);
         calipersRoot = root;
         var pivot = new THREE.Group();
         pivot.add(root);
