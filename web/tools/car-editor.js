@@ -1313,13 +1313,13 @@ function buildConfig(id) {
             const wb = (c.FR.c.z + c.FL.c.z) / 2 - (c.RL.c.z + c.RR.c.z) / 2;
             const ft = Math.abs(c.FR.c.x - c.FL.c.x), rt = Math.abs(c.RR.c.x - c.RL.c.x);
             const d = (c.FR.size.y + c.FL.size.y + c.RL.size.y + c.RR.size.y) / 4;
-            if (wb > 1.2 && wb < 5 && ft > 0.6 && rt > 0.6 && d > 0.3 && d < 1.5) {
+            if (wb > 0.6 && wb < 5 && ft > 0.4 && rt > 0.4 && d > 0.1 && d < 1.5) {
                 config.chassis.wheelbase = Math.round(wb * 1000) / 1000;
                 config.chassis.front_track = Math.round(ft * 1000) / 1000;
                 config.chassis.rear_track = Math.round(rt * 1000) / 1000;
                 config.chassis.tire_diameter = Math.round(d * 1000) / 1000;
             } else {
-                throw new Error("The wheels of the model do not make a car: the front wheels have to be in front (turn the model) and the wheels have to be between 0.3 and 1.5 m. Check the wheel parts.");
+                throw new Error("The wheels of the model do not make a car: the front wheels have to be in front (turn the model) and the wheels have to be between 0.1 and 1.5 m (a wheelbase of at least 0.6 m, tracks of at least 0.4 m). Check the wheel parts.");
             }
         }
         config.wheels.nodes = {};

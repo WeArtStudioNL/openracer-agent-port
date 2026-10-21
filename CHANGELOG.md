@@ -4,6 +4,9 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 ## Unreleased
 
+**Car editor**
+- Small cars: a model with a wheelbase down to 0.6 m, tracks down to 0.4 m and wheels down to 0.1 m is accepted (a kart: 1.09 m wheelbase and 0.30 m wheels was refused: "The wheels of the model do not make a car", the limits were 1.2 m and 0.3 m). The same limits are in the game for the wheels of the model (`Car.js`).
+
 **Debug view**
 - The 0 key (also on the numeric keypad) shows what the physics sees: the triangles near the car (road, walls and the rest), the collision spheres, the nodes and beams of the shell, the contact of every wheel and the tread nodes of the tyre of nodes. See `DebugView.js`.
 
