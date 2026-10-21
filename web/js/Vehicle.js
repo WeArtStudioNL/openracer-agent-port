@@ -153,7 +153,7 @@ OpenRacer.Vehicle = function (parameters, input) {
 
     this.tyreDamage = false;          // a hard hit can puncture a tyre: it leaks and loses its pressure (applyPressure, the grip and the stiffness follow)
     this.tyreShell = { width: 0, rings: 3, segments: 36 };      // the cylinder of the tyre (tyre model "cylinder", TyreBody.js): rings across the tread, nodes round the wheel, the width (m, 0: from the wheel)
-    this.tyreModel = "classic";       // the tyre: "classic" (the slip curves of Wheel.js) or "nodes" (a ring of nodes, NodeTyre.js)
+    this.tyreModel = "cylinder";      // the tyre: "cylinder" (a body of nodes and beams, TyreBody.js: the way for every car) or "nodes" (a ring of nodes, NodeTyre.js, which is also what a track with 2D physics uses)
     this.tyreNodes = 72;               // the nodes of the tread of a tyre
     this.tyreStiffX = 20;              // the stiffness of the tyre of nodes along and across (per N of load)
     this.tyreStiffY = 18;
@@ -501,7 +501,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.tyre_segments !== undefined) this.tyreShell.segments = t.tyre_segments;
         if(t.tyre_width !== undefined || t.tyre_rings !== undefined || t.tyre_segments !== undefined) for(var tb = 0; tb < 4; tb++) if(this.wheels[tb].tyreBody) { this.wheels[tb].tyreBody.width = this.tyreShell.width; this.wheels[tb].tyreBody.rings = this.tyreShell.rings; this.wheels[tb].tyreBody.segments = this.tyreShell.segments; }
         if(t.tyre_damage !== undefined) { this.tyreDamage = !!t.tyre_damage; if(!this.tyreDamage) this.repairTyres(); }
-        if(t.tyre_model !== undefined) { this.tyreModel = t.tyre_model === "nodes" ? "nodes" : (t.tyre_model === "cylinder" ? "cylinder" : "classic"); }
+        if(t.tyre_model !== undefined) { this.tyreModel = t.tyre_model === "nodes" ? "nodes" : "cylinder"; }
         if(t.tyre_nodes !== undefined && t.tyre_nodes !== this.tyreNodes) { this.tyreNodes = Math.max(24, Math.min(240, Math.round(t.tyre_nodes))); for(var tn = 0; tn < 4; tn++) this.wheels[tn].nodeTyre = null; }
         if(t.tyre_stiff_x !== undefined) this.tyreStiffX = t.tyre_stiff_x;
         if(t.tyre_stiff_y !== undefined) this.tyreStiffY = t.tyre_stiff_y;
@@ -1653,8 +1653,8 @@ OpenRacer.Vehicle = function (parameters, input) {
                     wheel.fy = tb.friction.x * lx + tb.friction.y * ly + tb.friction.z * lz;
                     wheel.s = tb.slidingShare < 0.05 ? tb.used / 0.92 : Math.max(tb.used / 0.92, 1 + 0.9 * tb.slidingShare);
                     wheel.slip = wheel.s > 1.15;
-                } else if(self.tyreModel === "nodes") {
-                    // the tyre of nodes (NodeTyre.js): the slip speeds go to the nodes, the forces come out of them
+                } else {
+                    // the ring of nodes (NodeTyre.js): where there is no 3D road for the tyre body (a track with 2D physics), or when it is asked for
                     if(!wheel.nodeTyre) wheel.nodeTyre = new OpenRacer.NodeTyre(wheel, self.tyreNodes);
                     var friction = wheel.frictionFor(fzGrip, surface);
                     var camberSlide = self.camberGain * leanLeft * wheel.anglePeak / 0.15 * vref;    // (a leaning tyre pushes as if it slid a little)
@@ -1663,8 +1663,6 @@ OpenRacer.Vehicle = function (parameters, input) {
                     wheel.nodeTyre.stiffX = self.tyreStiffX;
                     wheel.nodeTyre.stiffY = self.tyreStiffY * self.corneringScale * (wheel.stiffnessBias || 1) * (wheel.pressureCorner || 1);
                     wheel.nodeTyre.step(dt, vl, vt - camberSlide, wheel.omega * wheel.radius, fzGrip, friction.mu, friction.sliding, wheel.radius, wheel.lateralGrip);
-                } else {
-                    wheel.tyreForce(wheel.slipRatio, wheel.slipTan - self.camberGain * leanLeft * wheel.anglePeak / 0.15, fzGrip, surface);
                 }
                 // Smoke and squeal: the tyre slides (s is above 1 past the peak of the grip) at some speed over the road. The heat builds
                 // up the longer it slides, so the smoke gets thicker, and goes away slowly when it grips again.

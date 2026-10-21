@@ -105,7 +105,7 @@
                 var n = w.normal;
                 seg(lines, w.contact.x, w.contact.y, w.contact.z, w.contact.x + n.nx * 0.5, w.contact.y + n.ny * 0.5, w.contact.z + n.nz * 0.5, CYAN);
             }
-            if (!nt || (v.tyreModel !== "nodes" && !replaying)) continue;
+            if (!nt || w.cylActive) continue;
             var node3 = player.wheels && player.wheels[i] && player.wheels[i].object && player.wheels[i].object.children[0] && player.wheels[i].object.children[0].children[0];
             if (!node3) continue;
             node3.updateWorldMatrix(true, false);
@@ -134,7 +134,7 @@
         // the tyre body (tyre model "cylinder", TyreBody.js): the nodes and the beams of every wheel, flattened where they touch the track; green where a node holds, red where it slides
         for (i = 0; i < 4; i++) {
             var tbody = v.wheels[i].tyreBody;
-            if (!tbody || v.tyreModel !== "cylinder") continue;
+            if (!tbody || !v.wheels[i].cylActive) continue;
             var nd = tbody.nodes(), segsN = nd.segments, perRing = segsN * 2;
             for (var r = 0; r < nd.rings; r++) {
                 for (k = 0; k < perRing; k += 2) {

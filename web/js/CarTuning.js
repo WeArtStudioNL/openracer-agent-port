@@ -156,7 +156,7 @@ OpenRacer.CarTuning = (function () {
             damping_front: (ch.damping_front !== undefined ? ch.damping_front : 0.35) * 100,
             damping_rear: (ch.damping_rear !== undefined ? ch.damping_rear : 0.35) * 100,
             compound: tyres.compound || "road",
-            tyre_model: tyres.model === "nodes" ? "nodes" : (tyres.model === "cylinder" ? "cylinder" : "classic"),
+            tyre_model: tyres.model === "nodes" ? "nodes" : "cylinder",
             tyre_damage: tyres.damage ? "on" : "off",
             tyre_width: tyres.shell && tyres.shell.width ? Math.round(tyres.shell.width * 100) : 0,
             tyre_rings: tyres.shell && tyres.shell.rings ? tyres.shell.rings : 3,
@@ -345,7 +345,7 @@ OpenRacer.CarTuning = (function () {
         c.chassis.camber_front = v.camber_front;
         c.chassis.camber_rear = v.camber_rear;
         c.chassis.roll_camber = v.roll_camber / 100;
-        c.tyres = { compound: v.compound || "road", model: v.tyre_model === "nodes" ? "nodes" : (v.tyre_model === "cylinder" ? "cylinder" : "classic"), damage: v.tyre_damage === "on", shell: { width: v.tyre_width / 100, rings: v.tyre_rings, segments: v.tyre_segments }, nodes: v.tyre_nodes, stiff_x: v.tyre_stiff_x, stiff_y: v.tyre_stiff_y, grip: v.grip / 100, grip_balance: v.grip_balance / 100, cornering: v.cornering / 100, rolling_resistance: v.rolling_resistance, heating: v.tyre_heating / 100, life: v.tyre_life / 100,
+        c.tyres = { compound: v.compound || "road", model: v.tyre_model === "nodes" ? "nodes" : "cylinder", damage: v.tyre_damage === "on", shell: { width: v.tyre_width / 100, rings: v.tyre_rings, segments: v.tyre_segments }, nodes: v.tyre_nodes, stiff_x: v.tyre_stiff_x, stiff_y: v.tyre_stiff_y, grip: v.grip / 100, grip_balance: v.grip_balance / 100, cornering: v.cornering / 100, rolling_resistance: v.rolling_resistance, heating: v.tyre_heating / 100, life: v.tyre_life / 100,
             pressure_front: v.pressure_front, pressure_rear: v.pressure_rear };
         c.fuel = { tank: v.tank, use: v.fuel_use / 100 };
         c.engine = c.engine || {};
