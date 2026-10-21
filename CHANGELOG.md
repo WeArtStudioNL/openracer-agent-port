@@ -4,6 +4,9 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 ## Unreleased
 
+**Performance**
+- Decor that is only drawn (tyre walls, trees) is merged per material and per 40 m cell when a track is loaded, so a track with thousands of loose parts needs a few hundred draw calls instead of thousands (Kartbaan Oldenzaal: 3852 parts in 68 groups). The collision and the road are unchanged.
+
 **Tyres**
 - An experimental tyre model made of nodes (*Tyre model: Nodes* in the tuning menu, `tyres.model` in car.json): a ring of tread nodes with springs and friction instead of slip curves. The default stays the classic model.
 

@@ -11,6 +11,7 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { Pass, FullScreenQuad } from "three/addons/postprocessing/Pass.js";
 import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
@@ -24,6 +25,7 @@ window.THREE = Object.assign({}, THREE_MODULE, {
     RenderPass: RenderPass,
     ShaderPass: ShaderPass,
     GLTFLoader: GLTFLoader,
+    mergeGeometries: mergeGeometries,
     OutputPass: OutputPass,
     Pass: Pass,
     FullScreenQuad: FullScreenQuad,

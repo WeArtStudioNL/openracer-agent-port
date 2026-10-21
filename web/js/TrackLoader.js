@@ -363,6 +363,7 @@ function loadGltfTrack(track) {
         });
         buildCollisionWorld();
         buildGroundWorld();
+        mergeScenery();
         applyTrackEnvironment(track);
         console.log("track loaded: " + track.model + ", " + pieces.length + " parts");
         trackLoadedCallback();
@@ -370,6 +371,42 @@ function loadGltfTrack(track) {
         console.error(error);
         alert("The track could not be loaded: " + (error.message || error));
     });
+}
+
+// Decor that is only drawn (tyre walls, trees: the "other" meshes) is merged per material and per cell of 40 m, so that a track with thousands
+// of loose parts costs a few hundred draw calls instead of thousands. The loose meshes stay in trackObjects (the collision and the ground world
+// have been built from them) but leave the scene.
+function mergeScenery() {
+    var cell = 40, groups = {}, merged = 0;
+    trackObjects["other"].forEach(function(mesh) {
+        if(Array.isArray(mesh.material) || !mesh.parent) return;
+        var s = mesh.geometry.boundingSphere;
+        var key = [mesh.material.uuid, Math.floor((mesh.position.x + s.center.x) / cell), Math.floor((mesh.position.z + s.center.z) / cell),
+            Object.keys(mesh.geometry.attributes).sort().join(","), mesh.userData.surface].join("|");
+        (groups[key] = groups[key] || []).push(mesh);
+    });
+    Object.keys(groups).forEach(function(key) {
+        var list = groups[key];
+        if(list.length < 2) return;
+        var geometry = THREE.mergeGeometries(list.map(function(mesh) {
+            var g = mesh.geometry;
+            if(mesh.position.lengthSq() === 0) return g;
+            g = g.clone(); g.translate(mesh.position.x, mesh.position.y, mesh.position.z);
+            return g;
+        }), false);
+        if(!geometry) return;
+        geometry.computeBoundingSphere();
+        var first = list[0];
+        var combined = new THREE.Mesh(geometry, first.material);
+        combined.name = "scenery";
+        combined.userData.surface = first.userData.surface;
+        combined.castShadow = list.some(function(mesh) { return mesh.castShadow; });
+        combined.receiveShadow = true;
+        list.forEach(function(mesh) { scene.remove(mesh); });
+        scene.add(combined);
+        merged += list.length;
+    });
+    console.log("scenery merged: " + merged + " parts in " + Object.keys(groups).length + " groups");
 }
 
 // The sky and the light of the track (see TrackEnvironment.js). A glTF track always gets them (a sky of colours if it says nothing),
