@@ -8,6 +8,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 - Decor that is only drawn (tyre walls, trees) is merged per material and per 40 m cell when a track is loaded, so a track with thousands of loose parts needs a few hundred draw calls instead of thousands (Kartbaan Oldenzaal: 3852 parts in 68 groups). The collision and the road are unchanged.
 
 **Tyres**
+- Tyre damage (*Tyre damage: On* in the tuning menu, `tyres.damage` in car.json): a hard hit (a load of more than 3.2 times the static one on a tyre) can puncture it; the tyre leaks and loses its pressure, so its grip, its sidewall stiffness and its vertical stiffness fall, and with the tyre of nodes the contact patch grows. `vehicle.puncture(wheel)` and `vehicle.repairTyres()` do it by hand. The patch of the tyre of nodes now follows the vertical stiffness of the tyre (and so its pressure). The road at every node (kerbs) and a carcass of nodes and beams are not done yet.
 - An experimental tyre model made of nodes (*Tyre model: Nodes* in the tuning menu, `tyres.model` in car.json): a ring of tread nodes with springs and friction instead of slip curves. The default stays the classic model.
 
 **Engine**

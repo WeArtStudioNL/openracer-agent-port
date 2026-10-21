@@ -73,7 +73,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.applyPressure = function () {
         for(var i = 0; i < 4; i++) {
             var w = this.wheels[i];
-            var p = w.front ? this.pressureFront : this.pressureRear;
+            var p = Math.max(0.15, (w.front ? this.pressureFront : this.pressureRear) - (w.pressureLoss || 0));      // (a puncture takes pressure away)
             var off = (p - 2.2) / 0.8;                                   // 0.8 bar off the optimum
             w.pressureGrip = Math.max(0.6, 1 - 0.08 * off * off);           // the grip of the patch: 0.8 bar off costs 8 %
             w.pressureCorner = Math.max(0.7, Math.min(1.25, 1 + 0.15 * (p - 2.2)));   // the stiffness of the sidewall against the slip angle
@@ -151,6 +151,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         return this.driveType === "awd" || (this.driveType === "fwd") === front;
     };
 
+    this.tyreDamage = false;          // a hard hit can puncture a tyre: it leaks and loses its pressure (applyPressure, the grip and the stiffness follow)
     this.tyreModel = "classic";       // the tyre: "classic" (the slip curves of Wheel.js) or "nodes" (a ring of nodes, NodeTyre.js)
     this.tyreNodes = 72;               // the nodes of the tread of a tyre
     this.tyreStiffX = 20;              // the stiffness of the tyre of nodes along and across (per N of load)
@@ -318,6 +319,10 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.freshTyres = function (temp) {
         for(var i = 0; i < 4; i++) { var w = this.wheels[i]; w.wear = 0; w.temp = temp === undefined ? 60 : temp; w.condition = conditionOf(w) * (w.pressureGrip || 1); }
     };
+    // a puncture: the tyre leaks (bar per second); the pressure falls and the grip, the sidewall and the stiffness of the tyre follow (applyPressure)
+    this.puncture = function (index, rate) { var w = this.wheels[index]; if(w && !w.leak) w.leak = rate || 0.05 + Math.random() * 0.1; };
+    this.repairTyres = function () { for(var i = 0; i < 4; i++) { this.wheels[i].leak = 0; this.wheels[i].pressureLoss = 0; } this.applyPressure(); };
+    this.punctured = function () { for(var i = 0; i < 4; i++) if(this.wheels[i].leak) return true; return false; };
     this.maxWear = function () { var m = 0; for(var i = 0; i < 4; i++) m = Math.max(m, this.wheels[i].wear); return m; };
 
     // ---- geometry that follows from the mass, the weight distribution and the springs
@@ -490,6 +495,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.diff_coast !== undefined) this.lockCoast = t.diff_coast;
         if(t.drag !== undefined) this.Cdrag = t.drag;
         if(t.tc_allowance !== undefined) this.tcAllowance = t.tc_allowance;
+        if(t.tyre_damage !== undefined) { this.tyreDamage = !!t.tyre_damage; if(!this.tyreDamage) this.repairTyres(); }
         if(t.tyre_model !== undefined) { this.tyreModel = t.tyre_model === "nodes" ? "nodes" : "classic"; }
         if(t.tyre_nodes !== undefined && t.tyre_nodes !== this.tyreNodes) { this.tyreNodes = Math.max(24, Math.min(240, Math.round(t.tyre_nodes))); for(var tn = 0; tn < 4; tn++) this.wheels[tn].nodeTyre = null; }
         if(t.tyre_stiff_x !== undefined) this.tyreStiffX = t.tyre_stiff_x;
@@ -1511,6 +1517,15 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var road2 = wheel.normal;
                 fz = tyreLoad[iw];                         // the load on the tyre, which is what it grips with
                 wheel.weight = fz;
+                if(self.tyreDamage) {
+                    // a hard hit (a kerb, a wall, a landing: a load of more than 3.2 times the static one) can puncture the tyre; a leaking tyre loses its pressure
+                    if(!wheel.leak && fz > 3.2 * self.mass * gravity / 4 && Math.random() < 0.5) self.puncture(iw);
+                    if(wheel.leak) {
+                        var nominal = wheel.front ? self.pressureFront : self.pressureRear;
+                        wheel.pressureLoss = Math.min(nominal - 0.15, (wheel.pressureLoss || 0) + wheel.leak * dt);
+                        if(++wheel.leakTick % 15 === 0) self.applyPressure();
+                    }
+                }
 
                 var nx = road2.nx, ny = road2.ny, nz = road2.nz;
                 // the point of contact and its velocity
@@ -1564,6 +1579,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                     if(!wheel.nodeTyre) wheel.nodeTyre = new OpenRacer.NodeTyre(wheel, self.tyreNodes);
                     var friction = wheel.frictionFor(fzGrip, surface);
                     var camberSlide = self.camberGain * leanLeft * wheel.anglePeak / 0.15 * vref;    // (a leaning tyre pushes as if it slid a little)
+                    wheel.nodeTyre.verticalStiffness = wheel.tyreRate || self.tyreRate;      // the patch comes from the stiffness of the tyre, which follows its pressure
                     wheel.nodeTyre.stiffX = self.tyreStiffX;
                     wheel.nodeTyre.stiffY = self.tyreStiffY * self.corneringScale * (wheel.stiffnessBias || 1) * (wheel.pressureCorner || 1);
                     wheel.nodeTyre.step(dt, vl, vt - camberSlide, wheel.omega * wheel.radius, fzGrip, friction.mu, friction.sliding, wheel.radius, wheel.lateralGrip);
