@@ -10,7 +10,7 @@
 
 (function () {
     var RADIUS = 14, MAX_TRIANGLES = 5000;
-    var on = false, group = null, frame = 0;
+    var on = false, group = null, offsets = [0, 0, 0, 0];
     var tri = [], corners = new Array(9), nodePos = { x: 0, y: 0, z: 0 };
     var q = new THREE.Quaternion(), v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3();
 
@@ -84,26 +84,40 @@
                 seg(lines, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z, YELLOW);
             }
         }
-        // the wheels: the contact, and the ring of tread nodes
+        // the wheels: the contact (not in a replay: it is not recorded), and the ring of tread nodes. The ring lies in the plane of the wheel as it is drawn (the model of the
+        // wheel: turned by the steering, leaning with the camber and the roll of the body), and turns with it; in a replay the turn comes from the recorded spin
+        var replaying = !!(OpenRacer.Replay && OpenRacer.Replay.active);
         var forward = v2.set(0, 0, 1).applyQuaternion(q).clone();
         for (i = 0; i < 4; i++) {
-            var w = v.wheels[i];
-            if (!w || !w.hasContact || !w.normal) continue;
-            var n = w.normal;
-            seg(lines, w.contact.x, w.contact.y, w.contact.z, w.contact.x + n.nx * 0.5, w.contact.y + n.ny * 0.5, w.contact.z + n.nz * 0.5, CYAN);
-            var nt = w.nodeTyre;
-            if (!nt || v.tyreModel !== "nodes") continue;
-            // the forward direction along the road, and the centre of the wheel above the contact
-            var h = w.heading || forward, fx = h.x, fy = h.y, fz = h.z;       // (the way the wheel points, turned by the steering)
-            var R = w.radius, cx = w.contact.x + n.nx * R, cy = w.contact.y + n.ny * R, cz = w.contact.z + n.nz * R;
-            var d = nt.debug, phase = d.phase(), pitch = 2 * Math.PI / nt.count, ox = 0, oy = 0, oz = 0;
+            var w = v.wheels[i], nt = w.nodeTyre;
+            if (!replaying && w.hasContact && w.normal) {
+                var n = w.normal;
+                seg(lines, w.contact.x, w.contact.y, w.contact.z, w.contact.x + n.nx * 0.5, w.contact.y + n.ny * 0.5, w.contact.z + n.nz * 0.5, CYAN);
+            }
+            if (!nt || (v.tyreModel !== "nodes" && !replaying)) continue;
+            var node3 = player.wheels && player.wheels[i] && player.wheels[i].object && player.wheels[i].object.children[0] && player.wheels[i].object.children[0].children[0];
+            if (!node3) continue;
+            node3.updateWorldMatrix(true, false);
+            var L = v3.set(1, 0, 0).transformDirection(node3.matrixWorld).clone();
+            // the way up in the plane of the wheel (away from the road), and forward in it
+            var U = new THREE.Vector3(0, 1, 0).addScaledVector(L, -L.y).normalize();
+            var F = new THREE.Vector3().crossVectors(L, U);
+            if (F.dot(forward) < 0) F.negate();
+            var R = w.radius, cx = w.center.x, cy = w.center.y, cz = w.center.z;
+            var d = nt.debug, pitch = 2 * Math.PI / nt.count, ox = 0, oy = 0, oz = 0;
+            if (!replaying) offsets[i] = d.phase() - (w.spin || 0);
+            var phase = replaying ? (w.spin || 0) + (offsets[i] || 0) : d.phase();
             for (k = 0; k <= nt.count; k++) {
-                var idx = k % nt.count, a = (phase + idx * pitch) % (2 * Math.PI);
-                var sn = Math.sin(a) * R, cs = -Math.cos(a) * R;
-                var px = cx + fx * sn + n.nx * cs, py = cy + fy * sn + n.ny * cs, pz = cz + fz * sn + n.nz * cs;
+                var idx = k % nt.count, angle = (phase + idx * pitch) % (2 * Math.PI);
+                if (angle > Math.PI) angle -= 2 * Math.PI;
+                var a = -angle, sn = Math.sin(a) * R, cs = -Math.cos(a) * R;
+                var px = cx + F.x * sn + U.x * cs, py = cy + F.y * sn + U.y * cs, pz = cz + F.z * sn + U.z * cs;
                 if (k) seg(lines, ox, oy, oz, px, py, pz, DIM);
                 ox = px; oy = py; oz = pz;
-                if (k < nt.count) push(points, px, py, pz, d.touching[idx] ? (d.sliding[idx] ? RED : GREEN) : DIM);
+                if (k < nt.count) {
+                    var inPatch = replaying ? Math.abs(angle * R) < nt.patch / 2 : d.touching[idx];
+                    push(points, px, py, pz, inPatch ? (!replaying && d.sliding[idx] ? RED : GREEN) : DIM);
+                }
             }
         }
         flush(lines); flush(points);
