@@ -99,6 +99,8 @@ OpenRacer.NodeTyre = function (wheel, count) {
             half = Math.max(0.025, (highX - lowX) / 2 + 0.006);
         }
         this.patch = 2 * half;
+        // a node that is out of the patch relaxes as the wheel rolls (over about 5 cm of rolling), but not at a standstill: the deflection that holds a parked car stays
+        var relax = Math.exp(-Math.abs(omegaR) * dt / 0.05);
         for(var i = 0; i < N; i++) {
             var angle = (phase + i * pitch) % TWO_PI;
             if(angle > Math.PI) angle -= TWO_PI;
@@ -108,9 +110,12 @@ OpenRacer.NodeTyre = function (wheel, count) {
                 var p = useCarcass ? dn : 1 - (x * x) / (half * half);
                 weight[i] = p; sumP += p;
                 inPatch[count++] = i;
-                if(!touching[i]) { touching[i] = 1; dx[i] = 0; dy[i] = 0; sliding[i] = 0; }     // a node that comes into the patch: free of load
-            } else if(touching[i]) {
-                touching[i] = 0; dx[i] = 0; dy[i] = 0; sliding[i] = 0;
+                if(!touching[i]) { touching[i] = 1; sliding[i] = 0; }     // a node that comes into the patch brings its deflection along (it has not relaxed yet at a standstill)
+            } else {
+                dx[i] *= relax; dy[i] *= relax;
+                if(touching[i]) {
+                    touching[i] = 0; sliding[i] = 0;
+                }
             }
         }
         this.nodesIn = count;

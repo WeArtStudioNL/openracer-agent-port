@@ -1527,8 +1527,8 @@ OpenRacer.Vehicle = function (parameters, input) {
                 fz = tyreLoad[iw];                         // the load on the tyre, which is what it grips with
                 wheel.weight = fz;
                 if(self.tyreDamage) {
-                    // a hard hit (a kerb, a wall, a landing: a load of more than 3.2 times the static one) can puncture the tyre; a leaking tyre loses its pressure
-                    if(!wheel.leak && fz > 3.2 * self.mass * gravity / 4 && Math.random() < 0.5) self.puncture(iw);
+                    // a hard hit (a kerb, a landing: a load of more than 5 times the static one) can puncture the tyre; a leaking tyre loses its pressure
+                    if(!wheel.leak && fz > 5 * self.mass * gravity / 4 && Math.random() < 0.3) self.puncture(iw);
                     if(wheel.leak) {
                         var nominal = wheel.front ? self.pressureFront : self.pressureRear;
                         wheel.pressureLoss = Math.min(nominal - 0.15, (wheel.pressureLoss || 0) + wheel.leak * dt);
