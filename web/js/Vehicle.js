@@ -814,6 +814,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     }
     this.proxy3 = null;
     this.softContacts = 0;
+    this.debugContacts = function () { return contacts3.slice(0, contactCount); };      // the contacts of the body spheres with the triangles in the last scan (DebugView.js)
     this.bodyFriction = 0.3;          // the friction of the body that slides on a surface (the underside on the road)
 
     // The triangles near the car, kept for a while (the car moves a few centimetres in a step)

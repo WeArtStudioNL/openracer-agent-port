@@ -36,7 +36,7 @@
         l.pos.length = 0; l.col.length = 0;
     }
 
-    var GREEN = [0.2, 0.9, 0.3], ORANGE = [1, 0.55, 0.1], GREY = [0.45, 0.55, 0.75], RED = [1, 0.2, 0.2], YELLOW = [1, 0.9, 0.2], CYAN = [0.2, 0.9, 1], DIM = [0.5, 0.5, 0.5];
+    var GREEN = [0.2, 0.9, 0.3], ORANGE = [1, 0.55, 0.1], GREY = [0.45, 0.55, 0.75], RED = [1, 0.2, 0.2], YELLOW = [1, 0.9, 0.2], CYAN = [0.2, 0.9, 1], MAGENTA = [1, 0.3, 1], DIM = [0.5, 0.5, 0.5];
 
     function update() {
         if (!on) return;
@@ -82,6 +82,17 @@
                 sb.position(sb.beamA[k], nodePos); worldOf(nodePos.x, nodePos.y, nodePos.z, v1);
                 sb.position(sb.beamB[k], nodePos); worldOf(nodePos.x, nodePos.y, nodePos.z, v2);
                 seg(lines, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z, YELLOW);
+            }
+        }
+        // where the body of the car touches the track (the spheres on a triangle): magenta; a wheel that has no contact with the road: a red cross at its hub
+        if (!(OpenRacer.Replay && OpenRacer.Replay.active) && v.debugContacts) {
+            var cs = v.debugContacts();
+            for (k = 0; k < cs.length; k++) { push(points, cs[k].qx, cs[k].qy, cs[k].qz, MAGENTA); seg(lines, cs[k].qx, cs[k].qy, cs[k].qz, cs[k].qx + cs[k].nx * 0.2, cs[k].qy + cs[k].ny * 0.2, cs[k].qz + cs[k].nz * 0.2, MAGENTA); }
+            for (i = 0; i < 4; i++) {
+                var wc = v.wheels[i];
+                if (wc.hasContact) continue;
+                var cc = wc.center, sz = 0.12;
+                seg(lines, cc.x - sz, cc.y, cc.z, cc.x + sz, cc.y, cc.z, RED); seg(lines, cc.x, cc.y - sz, cc.z, cc.x, cc.y + sz, cc.z, RED); seg(lines, cc.x, cc.y, cc.z - sz, cc.x, cc.y, cc.z + sz, RED);
             }
         }
         // the wheels: the contact (not in a replay: it is not recorded), and the ring of tread nodes. The ring lies in the plane of the wheel as it is drawn (the model of the
