@@ -33,6 +33,10 @@ OpenRacer.CarTuning = (function () {
             ["compound", "Tyre compound", "", 0, 0, 0],
             ["tyre_model", "Tyre model", "", 0, 0, 0],
             ["tyre_damage", "Tyre damage", "", 0, 0, 0],
+            ["tyre_shell", "Tyre shell for the walls", "", 0, 0, 0],
+            ["tyre_width", "Tyre shell: width (0: from the wheel)", "cm", 0, 40, 1],
+            ["tyre_rings", "Tyre shell: rings across the tread", "", 1, 5, 1],
+            ["tyre_segments", "Tyre shell: spheres round the wheel", "", 6, 32, 1],
             ["tyre_nodes", "Tyre of nodes: nodes in the tread", "", 36, 180, 4],
             ["tyre_stiff_x", "Tyre of nodes: stiffness along the tyre (x load)", "", 8, 40, 0.5],
             ["tyre_stiff_y", "Tyre of nodes: stiffness across the tyre (x load)", "", 8, 40, 0.5],
@@ -155,6 +159,10 @@ OpenRacer.CarTuning = (function () {
             compound: tyres.compound || "road",
             tyre_model: tyres.model === "nodes" ? "nodes" : "classic",
             tyre_damage: tyres.damage ? "on" : "off",
+            tyre_shell: (tyres.shell && tyres.shell.enabled === true) ? "on" : "off",
+            tyre_width: tyres.shell && tyres.shell.width ? Math.round(tyres.shell.width * 100) : 0,
+            tyre_rings: tyres.shell && tyres.shell.rings ? tyres.shell.rings : 3,
+            tyre_segments: tyres.shell && tyres.shell.segments ? tyres.shell.segments : 12,
             tyre_nodes: tyres.nodes || 72,
             tyre_stiff_x: tyres.stiff_x || 20,
             tyre_stiff_y: tyres.stiff_y || 18,
@@ -242,6 +250,8 @@ OpenRacer.CarTuning = (function () {
             compound: v.compound,
             tyre_model: v.tyre_model,
             tyre_damage: v.tyre_damage === "on",
+            tyre_shell: v.tyre_shell !== "off",
+            tyre_width: v.tyre_width, tyre_rings: v.tyre_rings, tyre_segments: v.tyre_segments,
             tyre_nodes: v.tyre_nodes,
             tyre_stiff_x: v.tyre_stiff_x,
             tyre_stiff_y: v.tyre_stiff_y,
@@ -338,7 +348,7 @@ OpenRacer.CarTuning = (function () {
         c.chassis.camber_front = v.camber_front;
         c.chassis.camber_rear = v.camber_rear;
         c.chassis.roll_camber = v.roll_camber / 100;
-        c.tyres = { compound: v.compound || "road", model: v.tyre_model === "nodes" ? "nodes" : "classic", damage: v.tyre_damage === "on", nodes: v.tyre_nodes, stiff_x: v.tyre_stiff_x, stiff_y: v.tyre_stiff_y, grip: v.grip / 100, grip_balance: v.grip_balance / 100, cornering: v.cornering / 100, rolling_resistance: v.rolling_resistance, heating: v.tyre_heating / 100, life: v.tyre_life / 100,
+        c.tyres = { compound: v.compound || "road", model: v.tyre_model === "nodes" ? "nodes" : "classic", damage: v.tyre_damage === "on", shell: { enabled: v.tyre_shell !== "off", width: v.tyre_width / 100, rings: v.tyre_rings, segments: v.tyre_segments }, nodes: v.tyre_nodes, stiff_x: v.tyre_stiff_x, stiff_y: v.tyre_stiff_y, grip: v.grip / 100, grip_balance: v.grip_balance / 100, cornering: v.cornering / 100, rolling_resistance: v.rolling_resistance, heating: v.tyre_heating / 100, life: v.tyre_life / 100,
             pressure_front: v.pressure_front, pressure_rear: v.pressure_rear };
         c.fuel = { tank: v.tank, use: v.fuel_use / 100 };
         c.engine = c.engine || {};

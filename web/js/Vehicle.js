@@ -495,6 +495,10 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.diff_coast !== undefined) this.lockCoast = t.diff_coast;
         if(t.drag !== undefined) this.Cdrag = t.drag;
         if(t.tc_allowance !== undefined) this.tcAllowance = t.tc_allowance;
+        if(t.tyre_shell !== undefined) this.tyreShell.enabled = !!t.tyre_shell;
+        if(t.tyre_width !== undefined) this.tyreShell.width = Math.max(0, t.tyre_width) / 100;
+        if(t.tyre_rings !== undefined) this.tyreShell.rings = t.tyre_rings;
+        if(t.tyre_segments !== undefined) this.tyreShell.segments = t.tyre_segments;
         if(t.tyre_damage !== undefined) { this.tyreDamage = !!t.tyre_damage; if(!this.tyreDamage) this.repairTyres(); }
         if(t.tyre_model !== undefined) { this.tyreModel = t.tyre_model === "nodes" ? "nodes" : "classic"; }
         if(t.tyre_nodes !== undefined && t.tyre_nodes !== this.tyreNodes) { this.tyreNodes = Math.max(24, Math.min(240, Math.round(t.tyre_nodes))); for(var tn = 0; tn < 4; tn++) this.wheels[tn].nodeTyre = null; }
@@ -833,6 +837,107 @@ OpenRacer.Vehicle = function (parameters, input) {
     }
     var wallCandidates = [];
 
+    // ---- the tyre shell: a rounded cylinder of small spheres round every wheel (rings across the tread, segments round it), where the wheel is now (the steering turns it).
+    // car.json "tyres": { "shell": { "enabled": true, "width": 0.21, "rings": 3, "segments": 12 } }, the tuning table has the same.
+    this.tyreShell = { enabled: false, width: 0, rings: 3, segments: 12 };      // width 0: 0.7 of the radius of the wheel; enabled: the walls and the sides of a ramp are felt by the shell (experimental, off)
+    var wheelCandidates = [[], [], [], []], cloud = { x: new Float64Array(0), y: new Float64Array(0), z: new Float64Array(0), wheel: new Uint8Array(0), r: [0, 0, 0, 0], count: 0 };
+    var axisL = { x: 0, y: 0, z: 0 }, axisF = { x: 0, y: 0, z: 0 }, axisU = { x: 0, y: 0, z: 0 };
+    function tyreSphereCloud() {
+        var shell = self.tyreShell, rings = Math.max(1, Math.min(5, Math.round(shell.rings))), segs = Math.max(6, Math.min(32, Math.round(shell.segments)));
+        var need = 4 * rings * segs;
+        if(cloud.x.length < need) { cloud.x = new Float64Array(need); cloud.y = new Float64Array(need); cloud.z = new Float64Array(need); cloud.wheel = new Uint8Array(need); }
+        var n = 0;
+        for(var i = 0; i < 4; i++) {
+            var w = self.wheels[i], list = wheelCandidates[i];
+            list.length = 0;
+            if(self.wheelLost[i] || !w.center) {         // (the places stay in the layout, they are empty)
+                cloud.r[i] = 0;
+                for(var e = 0; e < rings * segs; e++) { cloud.x[n] = self.px; cloud.y[n] = self.py; cloud.z[n] = self.pz; cloud.wheel[n] = i; n++; }
+                continue;
+            }
+            var R = w.radius, W = shell.width > 0 ? shell.width : Math.max(0.1, 0.7 * R), rs = W / (rings + 1), Rr = R - rs;
+            cloud.r[i] = rs;
+            var d = w.steerNow || 0, cd = Math.cos(d), sd = Math.sin(d);
+            rotate(self.qx, self.qy, self.qz, self.qw, cd, 0, sd, axisL);
+            rotate(self.qx, self.qy, self.qz, self.qw, -sd, 0, cd, axisF);
+            rotate(self.qx, self.qy, self.qz, self.qw, 0, 1, 0, axisU);
+            // the triangles that are near this wheel at all
+            for(var c = 0; c < candidates.length; c++) if(self.ground.boxNear(candidates[c], w.center.x, w.center.y, w.center.z, R + W / 2 + 0.1)) list.push(candidates[c]);
+            for(var j = 0; j < rings; j++) {
+                var o = (j - (rings - 1) / 2) * rs;
+                for(var k = 0; k < segs; k++) {
+                    var a = 2 * Math.PI * k / segs, sa = Math.sin(a) * Rr, ca = Math.cos(a) * Rr;
+                    cloud.x[n] = w.center.x + axisL.x * o + axisF.x * sa + axisU.x * ca;
+                    cloud.y[n] = w.center.y + axisL.y * o + axisF.y * sa + axisU.y * ca;
+                    cloud.z[n] = w.center.z + axisL.z * o + axisF.z * sa + axisU.z * ca;
+                    cloud.wheel[n] = i;
+                    n++;
+                }
+            }
+        }
+        cloud.count = n;
+        cloud.rings = rings; cloud.segments = segs;
+        return cloud;
+    }
+    this.tyreShellNodes = function () { return tyreSphereCloud(); };      // for the debug view
+
+    function testSphere(i, cx, cy, cz, r, tyreWheel, wantSoft, list) {
+        var ground = self.ground, yUnder = -self.cgHeight + self.groundClearance;
+        var ux = self.px + carUp.x * yUnder, uy = self.py + carUp.y * yUnder, uz = self.pz + carUp.z * yUnder;
+        for(var k = 0; k < list.length; k++) {
+            var t = list[k];
+            if(!ground.boxNear(t, cx, cy, cz, r)) continue;
+            var d2 = ground.closest(t, cx, cy, cz, nearest);
+            if(d2 >= r * r) continue;
+            var dist = Math.sqrt(d2);
+            var nx, ny, nz;
+            if(dist > 1e-5) { nx = (cx - nearest.x) / dist; ny = (cy - nearest.y) / dist; nz = (cz - nearest.z) / dist; }
+            else { ground.normalOf(t, triNormal); nx = triNormal.x; ny = triNormal.y; nz = triNormal.z; dist = 0; }
+            var depth = r - dist;
+            if(depth < 1e-4) continue;
+            if(nearest.region !== 0) {
+                // a contact with an edge or a corner of a triangle: when its direction is not that of the face, it is the seam between two
+                // triangles of a surface (the neighbour has the contact), and it would push the car sideways along the surface
+                ground.normalOf(t, triNormal);
+                var along = nx * triNormal.x + ny * triNormal.y + nz * triNormal.z;
+                if(along < 0) along = -along;
+                if(along < 0.85) continue;
+            }
+            var nUp = nx * carUp.x + ny * carUp.y + nz * carUp.z;
+            var soft = ny >= 0.5 || nUp >= 0.5;
+            if(soft && tyreWheel >= 0) {
+                // the road under the wheel is the business of the suspension (the tyre is pressed into it by its deflection, a few centimetres); only what the tyre is pressed into
+                // further than that (the side of a hump that the ray of the wheel does not see) is felt here
+                var pressed = depth - ((self.wheels[tyreWheel].tyreDeflection || 0) + 0.015);
+                if(pressed <= 0) continue;
+                depth = pressed;
+            }
+            var lowWall = false;
+            if(!soft) {
+                // a wall that is lower than the kerb height above the underside is driven over: the top of the wall above this point
+                if(ground.lineRange(t, nearest.x, nearest.y, nearest.z, carUp.x, carUp.y, carUp.z, wallRange)) {
+                    var top = (nearest.x - ux) * carUp.x + (nearest.y - uy) * carUp.y + (nearest.z - uz) * carUp.z + wallRange[1];
+                    if(top < self.kerbHeight) {
+                        if(tyreWheel < 0) continue;
+                        lowWall = true;                      // a tyre on a kerb or the side of a low ramp: the body does not hit it, but the tyre rests against it (a spring)
+                    }
+                }
+                // only a car that goes into the wall is hit by it; one that scrapes along it, or is in it after a hit, is pushed out softly
+                // (a hard push on something that does not come at it throws the car through the thin parts of a track)
+                var wx = self.vx + (self.wy * sphereAt.z - self.wz * sphereAt.y);
+                var wy = self.vy + (self.wz * sphereAt.x - self.wx * sphereAt.z);
+                var wz = self.vz + (self.wx * sphereAt.y - self.wy * sphereAt.x);
+                if(lowWall || wx * nx + wy * ny + wz * nz > -0.3) soft = true;
+            }
+            if(soft !== wantSoft) continue;
+            var c = contacts3[contactCount];
+            if(!c) c = contacts3[contactCount] = { nx: 0, ny: 0, nz: 0, depth: 0, qx: 0, qy: 0, qz: 0, tri: 0, sphere: 0 };
+            c.tri = t; c.sphere = i; c.tyre = tyreWheel >= 0;
+            c.nx = nx; c.ny = ny; c.nz = nz; c.depth = depth; c.qx = nearest.x; c.qy = nearest.y; c.qz = nearest.z;
+            contactCount++;
+        }
+    }
+
     // The contacts of the spheres with the triangles: the soft ones (wantSoft) or the walls, into contacts3 (contactCount of them)
     function scanContacts(wantSoft) {
         ensureProxy();
@@ -854,47 +959,17 @@ OpenRacer.Vehicle = function (parameters, input) {
                 self.softBody.position(node, nodePos);
                 rotate(self.qx, self.qy, self.qz, self.qw, nodePos.x, nodePos.y, nodePos.z, sphereAt);
             }
-            var cx = self.px + sphereAt.x, cy = self.py + sphereAt.y, cz = self.pz + sphereAt.z, r = sp.r;
-            for(var k = 0; k < candidates.length; k++) {
-                var t = candidates[k];
-                if(!ground.boxNear(t, cx, cy, cz, r)) continue;
-                var d2 = ground.closest(t, cx, cy, cz, nearest);
-                if(d2 >= r * r) continue;
-                var dist = Math.sqrt(d2);
-                var nx, ny, nz;
-                if(dist > 1e-5) { nx = (cx - nearest.x) / dist; ny = (cy - nearest.y) / dist; nz = (cz - nearest.z) / dist; }
-                else { ground.normalOf(t, triNormal); nx = triNormal.x; ny = triNormal.y; nz = triNormal.z; dist = 0; }
-                var depth = r - dist;
-                if(depth < 1e-4) continue;
-                if(nearest.region !== 0) {
-                    // a contact with an edge or a corner of a triangle: when its direction is not that of the face, it is the seam between two
-                    // triangles of a surface (the neighbour has the contact), and it would push the car sideways along the surface
-                    ground.normalOf(t, triNormal);
-                    var along = nx * triNormal.x + ny * triNormal.y + nz * triNormal.z;
-                    if(along < 0) along = -along;
-                    if(along < 0.85) continue;
-                }
-                var nUp = nx * carUp.x + ny * carUp.y + nz * carUp.z;
-                var soft = ny >= 0.5 || nUp >= 0.5;
-                if(!soft) {
-                    // a wall that is lower than the kerb height above the underside is driven over: the top of the wall above this point
-                    if(ground.lineRange(t, nearest.x, nearest.y, nearest.z, carUp.x, carUp.y, carUp.z, wallRange)) {
-                        var top = (nearest.x - ux) * carUp.x + (nearest.y - uy) * carUp.y + (nearest.z - uz) * carUp.z + wallRange[1];
-                        if(top < self.kerbHeight) continue;
-                    }
-                    // only a car that goes into the wall is hit by it; one that scrapes along it, or is in it after a hit, is pushed out softly
-                    // (a hard push on something that does not come at it throws the car through the thin parts of a track)
-                    var wx = self.vx + (self.wy * sphereAt.z - self.wz * sphereAt.y);
-                    var wy = self.vy + (self.wz * sphereAt.x - self.wx * sphereAt.z);
-                    var wz = self.vz + (self.wx * sphereAt.y - self.wy * sphereAt.x);
-                    if(wx * nx + wy * ny + wz * nz > -0.3) soft = true;
-                }
-                if(soft !== wantSoft) continue;
-                var c = contacts3[contactCount];
-                if(!c) c = contacts3[contactCount] = { nx: 0, ny: 0, nz: 0, depth: 0, qx: 0, qy: 0, qz: 0, tri: 0, sphere: 0 };
-                c.tri = t; c.sphere = i;
-                c.nx = nx; c.ny = ny; c.nz = nz; c.depth = depth; c.qx = nearest.x; c.qy = nearest.y; c.qz = nearest.z;
-                contactCount++;
+            testSphere(i, self.px + sphereAt.x, self.py + sphereAt.y, self.pz + sphereAt.z, sp.r, -1, wantSoft, candidates);
+        }
+        // the tyres: a rounded cylinder of small spheres round every wheel (a few rings across the tread, TyreShell below), that only feel the walls, so the tyre does not go through
+        // the side of a ramp or a wall that the single sphere of the hub is too small for. The road under the wheel is the business of the suspension.
+        if(self.tyreShell.enabled) {
+            var shellCloud = tyreSphereCloud();
+            for(var ts = 0; ts < shellCloud.count; ts++) {
+                var tw = shellCloud.wheel[ts], tl = wheelCandidates[tw];
+                if(!tl.length) continue;
+                sphereAt.x = shellCloud.x[ts] - self.px; sphereAt.y = shellCloud.y[ts] - self.py; sphereAt.z = shellCloud.z[ts] - self.pz;
+                testSphere(self.hubSphere[tw], shellCloud.x[ts], shellCloud.y[ts], shellCloud.z[ts], shellCloud.r[tw], tw, wantSoft, tl);
             }
         }
         return contactCount;
@@ -1183,9 +1258,11 @@ OpenRacer.Vehicle = function (parameters, input) {
     function bodyContacts3D(force, torque) {
         self.softContacts = scanContacts(true);       // for the debugging
         if(!self.softContacts) return;
-        var kc = 20 * self.mass, cc = 1.0 * Math.sqrt(kc * self.mass);
+        var kBody = 20 * self.mass, cBody = 1.0 * Math.sqrt(kBody * self.mass);
+        var kTyre = 0.5 * self.tyreRate, cTyre = 0.3 * Math.sqrt(kTyre * self.mass);      // a tyre against a kerb or a ramp: the stiffness of the tyre
         for(var i = 0; i < contactCount; i++) {
             var c = contacts3[i];
+            var kc = c.tyre ? kTyre : kBody, cc = c.tyre ? cTyre : cBody;
             var rx = c.qx - self.px, ry = c.qy - self.py, rz = c.qz - self.pz;
             var cx = self.vx + (self.wy * rz - self.wz * ry);
             var cy = self.vy + (self.wz * rx - self.wx * rz);
@@ -1341,6 +1418,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         // toe: a wheel on the right (x negative) points inwards with a turn to the left (a negative angle), one on the left with a turn to the right
         var toeF = self.toeFront * Math.PI / 180, toeR = self.toeRear * Math.PI / 180;
         var wheelAngle = [steerOf[0] - toeF, steerOf[1] + toeF, toeR, -toeR]; // FR, FL, RL, RR
+        for(var sn = 0; sn < 4; sn++) wheels[sn].steerNow = wheelAngle[sn];
         updateHubs();
         // a bent suspension: a wheel that is damaged points a little to the side, and grips less
         for(var bi = 0; bi < 4; bi++) {

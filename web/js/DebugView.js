@@ -36,7 +36,7 @@
         l.pos.length = 0; l.col.length = 0;
     }
 
-    var GREEN = [0.2, 0.9, 0.3], ORANGE = [1, 0.55, 0.1], GREY = [0.45, 0.55, 0.75], RED = [1, 0.2, 0.2], YELLOW = [1, 0.9, 0.2], CYAN = [0.2, 0.9, 1], MAGENTA = [1, 0.3, 1], DIM = [0.5, 0.5, 0.5];
+    var GREEN = [0.2, 0.9, 0.3], ORANGE = [1, 0.55, 0.1], GREY = [0.45, 0.55, 0.75], RED = [1, 0.2, 0.2], YELLOW = [1, 0.9, 0.2], CYAN = [0.2, 0.9, 1], MAGENTA = [1, 0.3, 1], TEAL = [0.1, 0.8, 0.8], DIM = [0.5, 0.5, 0.5];
 
     function update() {
         if (!on) return;
@@ -129,6 +129,17 @@
                     var inPatch = replaying ? Math.abs(angle * R) < nt.patch / 2 : d.touching[idx];
                     push(points, px, py, pz, inPatch ? (!replaying && d.sliding[idx] ? RED : GREEN) : DIM);
                 }
+            }
+        }
+        // the tyre shell: the rounded cylinder of spheres round every wheel, with the beams between them
+        var shell = v.tyreShellNodes && v.tyreShellNodes();
+        if (shell && shell.count) {
+            var rings = shell.rings, segs = shell.segments, perWheel = rings * segs;
+            for (i = 0; i < shell.count; i++) {
+                var base = i - (i % perWheel), ring = Math.floor((i - base) / segs), kk = (i - base) % segs, nextK = base + ring * segs + (kk + 1) % segs;
+                push(points, shell.x[i], shell.y[i], shell.z[i], TEAL);
+                seg(lines, shell.x[i], shell.y[i], shell.z[i], shell.x[nextK], shell.y[nextK], shell.z[nextK], TEAL);
+                if (ring + 1 < rings) seg(lines, shell.x[i], shell.y[i], shell.z[i], shell.x[i + segs], shell.y[i + segs], shell.z[i + segs], TEAL);
             }
         }
         flush(lines); flush(points);
