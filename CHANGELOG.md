@@ -9,6 +9,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 - The automatic clutch starts to grip at `drivetrain.clutch_start_rpm` and grips fully at `clutch_full_rpm` (1050 and 2000 by default, also in the tuning table): a kart with a centrifugal clutch and one gear lets the clutch slip until it locks at its engagement speed.
 
 **Car editor**
+- The test bench of the car editor loads the tyre scripts (`NodeTyre.js`, `TyreBody.js`) with the rest of the physics: without them the test crashed with "OpenRacer.NodeTyre is not a constructor". The floor of the test bench has no 3D road, so the tyre there is the ring of nodes.
 - Engine sound: layouts and presets for one, two and three cylinders: *Single 0.25 L (kart)*, *Single 0.4 L*, *Twin 0.8 L (parallel, 360 degrees)* and *Inline-3 1.0 L* (the layouts *Single cylinder* and *Inline 2* are new; *Inline 3* was there without a preset). Played offline, every one gives sound without errors, at about the level of the existing presets.
 - Small cars: a model with a wheelbase down to 0.6 m, tracks down to 0.4 m and wheels down to 0.1 m is accepted (a kart: 1.09 m wheelbase and 0.30 m wheels was refused: "The wheels of the model do not make a car", the limits were 1.2 m and 0.3 m). The same limits are in the game for the wheels of the model (`Car.js`).
 
