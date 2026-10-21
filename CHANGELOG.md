@@ -5,6 +5,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 ## Unreleased
 
 **Light vehicles**
+- The joints of the suspension in the collision shell (the lower ball joint and the arms) scale with a wheel smaller than 0.3 m: those of a car wheel stood in the road under a kart and held back its weight and its speed (12 contacts with the road at rest: a kart took 8.8 s to 30 km/h, now 5.6 s).
 - A vehicle under 600 kg (a kart) gets light wheels and a softer tyre: the wheels are 2.85 % of the mass (instead of 35 kg each), the tyre stiffness and damping go with the square root of the mass over 1230 kg, and the wheel inertia with the mass and the square of the diameter (a car wheel of 1.6 kg m² made the wheels most of the mass of a kart: a kart needed three times the power to get going).
 - The automatic clutch starts to grip at `drivetrain.clutch_start_rpm` and grips fully at `clutch_full_rpm` (1050 and 2000 by default, also in the tuning table): a kart with a centrifugal clutch and one gear lets the clutch slip until it locks at its engagement speed.
 

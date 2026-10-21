@@ -140,7 +140,10 @@ OpenRacer.CollisionProxy = (function () {
                 var wheel = sp.wheel && object.wheels[sp.wheelIndex];
                 if(!wheel) return;
                 var s = sp.x > 0 ? -1 : 1;                    // towards the middle of the car (x is to the left)
-                var add = function (role, dx, dy, dz, r) { rigSpheres.push({ x: sp.x + s * dx, y: sp.y + dy, z: sp.z + dz, r: r, rig: true, role: role, wheelIndex: sp.wheelIndex, hub: role === "H" }); };
+                // the places of the joints are those of a car wheel (0.32 m of radius); a smaller wheel (a kart) has them closer to the hub, or the lower ball joint and the arms
+                // stand in the road
+                var fit = Math.min(1, (wheel.radius || 0.32) / 0.3);
+                var add = function (role, dx, dy, dz, r) { rigSpheres.push({ x: sp.x + s * dx * fit, y: sp.y + dy * fit, z: sp.z + dz * fit, r: r, rig: true, role: role, wheelIndex: sp.wheelIndex, hub: role === "H" }); };
                 add("H", 0, 0, 0, sp.r);
                 add("Ub", 0.12, 0.14, 0, 0.02); add("Lb", 0.10, -0.14, 0, 0.02); add("Te", 0.12, -0.04, -0.12, 0.02);
                 add("U1", 0.45, 0.20, 0.15, 0.02); add("U2", 0.45, 0.20, -0.15, 0.02);
