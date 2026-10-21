@@ -26,6 +26,8 @@
 // system it is on (0 or 1; with one exhaust system all are on 0). The pattern of the exhaust systems is what gives a crossplane V8
 // its burble: two cylinders of the same bank fire after each other.
 OpenRacer.engineSimLayouts = {
+    "single": { label: "Single cylinder", cylinders: 1, exhaust: [0] },
+    "inline-2": { label: "Inline 2 (parallel twin, 360 degrees)", cylinders: 2, exhaust: [0, 0] },
     "inline-3": { label: "Inline 3", cylinders: 3, exhaust: [0, 0, 0] },
     "inline-4": { label: "Inline 4", cylinders: 4, exhaust: [0, 0, 0, 0] },
     "inline-5": { label: "Inline 5", cylinders: 5, exhaust: [0, 0, 0, 0, 0] },
@@ -50,6 +52,18 @@ OpenRacer.engineSimImpulseResponses = [
 ];
 
 OpenRacer.engineSimPresets = {
+    "Single 0.25 L (kart)": { layout: "single", bore: 70, stroke: 65, rod: 105, compression_ratio: 9.0, intake_duration: 232, exhaust_duration: 226,
+        intake_lift: 8.0, exhaust_lift: 7.5, intake_lobe_centre: 108, exhaust_lobe_centre: 108, intake_flow: 110, exhaust_flow: 90,
+        primary_length: 0.25, primary_flow: 90, exhaust_length: 0.9, outlet_flow: 160, exhaust_systems: 1, impulse_response: "minimal_muffling_03" },
+    "Single 0.4 L": { layout: "single", bore: 88, stroke: 64, rod: 110, compression_ratio: 8.5, intake_duration: 220, exhaust_duration: 216,
+        intake_lift: 8.5, exhaust_lift: 8.0, intake_lobe_centre: 110, exhaust_lobe_centre: 110, intake_flow: 130, exhaust_flow: 105,
+        primary_length: 0.3, primary_flow: 100, exhaust_length: 1.2, outlet_flow: 200, exhaust_systems: 1, impulse_response: "minimal_muffling_02" },
+    "Twin 0.8 L (parallel)": { layout: "inline-2", bore: 80, stroke: 80, rod: 130, compression_ratio: 10.0, intake_duration: 228, exhaust_duration: 224,
+        intake_lift: 9.0, exhaust_lift: 8.5, intake_lobe_centre: 110, exhaust_lobe_centre: 110, intake_flow: 170, exhaust_flow: 140,
+        primary_length: 0.35, primary_flow: 140, exhaust_length: 1.8, outlet_flow: 300, exhaust_systems: 1, impulse_response: "minimal_muffling_02" },
+    "Inline-3 1.0 L": { layout: "inline-3", bore: 74, stroke: 77.1, rod: 130, compression_ratio: 10.5, intake_duration: 230, exhaust_duration: 226,
+        intake_lift: 9.2, exhaust_lift: 8.8, intake_lobe_centre: 110, exhaust_lobe_centre: 110, intake_flow: 200, exhaust_flow: 160,
+        primary_length: 0.4, primary_flow: 160, exhaust_length: 2.0, outlet_flow: 380, exhaust_systems: 1, impulse_response: "minimal_muffling_01" },
     "Inline-4 2.0 L": { layout: "inline-4", bore: 86, stroke: 86, rod: 143, compression_ratio: 10.5, intake_duration: 228, exhaust_duration: 228,
         intake_lift: 9.5, exhaust_lift: 9.0, intake_lobe_centre: 110, exhaust_lobe_centre: 110, intake_flow: 230, exhaust_flow: 180,
         primary_length: 0.45, primary_flow: 180, exhaust_length: 2.4, outlet_flow: 450, exhaust_systems: 1, impulse_response: "minimal_muffling_02" },

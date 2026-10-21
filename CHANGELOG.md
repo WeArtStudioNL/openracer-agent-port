@@ -5,6 +5,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 ## Unreleased
 
 **Car editor**
+- Engine sound: layouts and presets for one, two and three cylinders: *Single 0.25 L (kart)*, *Single 0.4 L*, *Twin 0.8 L (parallel, 360 degrees)* and *Inline-3 1.0 L* (the layouts *Single cylinder* and *Inline 2* are new; *Inline 3* was there without a preset). Played offline, every one gives sound without errors, at about the level of the existing presets.
 - Small cars: a model with a wheelbase down to 0.6 m, tracks down to 0.4 m and wheels down to 0.1 m is accepted (a kart: 1.09 m wheelbase and 0.30 m wheels was refused: "The wheels of the model do not make a car", the limits were 1.2 m and 0.3 m). The same limits are in the game for the wheels of the model (`Car.js`).
 
 **Debug view**
