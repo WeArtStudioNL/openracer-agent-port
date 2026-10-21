@@ -94,7 +94,7 @@ const gizmoTargets = { chase: new THREE.Object3D(), follow: new THREE.Object3D()
 const gizmo = new TransformControls(camera, renderer.domElement);
 gizmo.setSize(0.8);
 gizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !event.value; layers.dragging = event.value; if (!event.value) updateCameraMarkers(); });
-gizmo.addEventListener("objectChange", () => gizmoMoved());
+gizmo.addEventListener("objectChange", () => { gizmoMoved(); syncExhaustFields(); });
 scene.add(typeof gizmo.getHelper === "function" ? gizmo.getHelper() : gizmo);
 
 // ---- the exhaust points: where the flames come out (pops, bangs, anti-lag; Flames.js in the game). A layer each, with a gizmo for the place and a second one
@@ -107,8 +107,35 @@ rotGizmo.setMode("rotate");
 rotGizmo.setSpace("local");
 rotGizmo.setSize(0.55);
 rotGizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !event.value; layers.dragging = event.value; if (!event.value) renderLayers(); });
-rotGizmo.addEventListener("objectChange", () => renderLayers());
+rotGizmo.addEventListener("objectChange", () => { renderLayers(); syncExhaustFields(); });
 scene.add(typeof rotGizmo.getHelper === "function" ? rotGizmo.getHelper() : rotGizmo);
+
+// An exhaust point has two gizmos, one at a time (the buttons Move and Rotate of its window, or the W and E keys): the arrows move it, the rings turn it. Nothing is aligned
+// for you: the point stays where you put it and points the way you turned it. The fields of the window give the numbers.
+let exhaustMode = "move";
+let exhaustFields = null;
+function attachExhaustGizmo() {
+    gizmo.detach(); rotGizmo.detach();
+    const target = layers.selected && gizmoTargets[layers.selected];
+    if (!target || !String(layers.selected).startsWith("ex")) return;
+    if (exhaustMode === "move") { gizmo.attach(target); gizmo.showX = gizmo.showY = gizmo.showZ = true; }
+    else rotGizmo.attach(target);
+}
+function syncExhaustFields() {
+    const entry = exhaust.find((e) => e.id === layers.selected);
+    if (!entry || !exhaustFields) return;
+    const r = (v) => Math.round(v * 1000) / 1000, d = 180 / Math.PI;
+    const p = entry.target.position, q = entry.target.rotation;
+    exhaustFields.pos.forEach((input, i) => { if (document.activeElement !== input) input.value = r([p.x, p.y, p.z][i]); });
+    exhaustFields.rot.forEach((input, i) => { if (document.activeElement !== input) input.value = Math.round([q.x, q.y, q.z][i] * d * 10) / 10; });
+}
+window.addEventListener("keydown", (e) => {
+    if (!layers.selected || !String(layers.selected).startsWith("ex") || e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target && e.target.tagName;
+    if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
+    if (e.code === "KeyW") { exhaustMode = "move"; attachExhaustGizmo(); updateExhaustWindow(); }
+    else if (e.code === "KeyE") { exhaustMode = "rotate"; attachExhaustGizmo(); updateExhaustWindow(); }
+});
 
 const EXHAUST_DEFAULTS = { diameter: 0.08, smoke: 1, flame_length_cm: 30, flame_width_cm: 12, brightness: 1 };
 
@@ -199,6 +226,43 @@ function updateExhaustWindow() {
     close.addEventListener("click", () => selectLayer(entry.id));
     head.appendChild(close);
     exhaustWindow.appendChild(head);
+    // the two gizmos, one at a time
+    const modes = document.createElement("div");
+    modes.style.cssText = "display: flex; gap: 6px; margin-bottom: 8px;";
+    [["move", "Move (W)"], ["rotate", "Rotate (E)"]].forEach(([mode, text]) => {
+        const b = document.createElement("button");
+        b.textContent = text;
+        b.className = "small" + (exhaustMode === mode ? " accent" : " ghost");
+        b.style.flex = "1";
+        b.addEventListener("click", () => { exhaustMode = mode; attachExhaustGizmo(); updateExhaustWindow(); });
+        modes.appendChild(b);
+    });
+    exhaustWindow.appendChild(modes);
+    // the numbers of the place (m) and the turn (degrees), that can be typed too
+    exhaustFields = { pos: [], rot: [] };
+    [["Position", "pos", "m", 0.01], ["Rotation", "rot", "°", 1]].forEach(([label, key, unit, step]) => {
+        const row = document.createElement("div");
+        row.style.cssText = "display: flex; align-items: center; gap: 4px; margin: 4px 0;";
+        const name = document.createElement("span");
+        name.textContent = label;
+        name.style.cssText = "width: 54px; flex: none; color: #9aa7b8;";
+        row.appendChild(name);
+        ["x", "y", "z"].forEach((axis, i) => {
+            const input = document.createElement("input");
+            input.type = "number"; input.step = step; input.style.cssText = "width: 50px; min-width: 0; padding: 4px 3px; font-size: 12px; box-sizing: border-box;"; input.title = axis + " (" + unit + ")";
+            input.addEventListener("change", () => {
+                const v = parseFloat(input.value);
+                if (!Number.isFinite(v)) return;
+                if (key === "pos") entry.target.position["xyz"[i]] = v;
+                else entry.target.rotation["xyz"[i]] = v * Math.PI / 180;
+                renderLayers();
+            });
+            exhaustFields[key].push(input);
+            row.appendChild(input);
+        });
+        exhaustWindow.appendChild(row);
+    });
+    syncExhaustFields();
     EXHAUST_FIELDS.forEach(([key, label, unit, min, max, step, scale]) => {
         const row = document.createElement("div");
         row.style.cssText = "margin: 6px 0;";
@@ -810,10 +874,12 @@ function selectLayer(id) {
     if (sel && gizmoTargets[sel]) {
         if (sel === "model" && !state.root) { layers.selected = null; }
         else {
-            gizmo.attach(gizmoTargets[sel]);
-            gizmo.showX = sel !== "chase" && sel !== "follow"; // the cameras behind the car are in the middle
-            gizmo.showY = gizmo.showZ = true;
-            if (sel.startsWith("ex")) rotGizmo.attach(gizmoTargets[sel]);
+            if (sel.startsWith("ex")) attachExhaustGizmo();
+            else {
+                gizmo.attach(gizmoTargets[sel]);
+                gizmo.showX = sel !== "chase" && sel !== "follow"; // the cameras behind the car are in the middle
+                gizmo.showY = gizmo.showZ = true;
+            }
         }
     }
     exhaust.forEach((e) => e.pipe.material.color.set(e.id === layers.selected ? 0xffd04d : 0xff7a3d));

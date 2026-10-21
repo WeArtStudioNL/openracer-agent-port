@@ -115,6 +115,165 @@ function renderEventLayers() {
     list.appendChild(row);
 }
 
+// ---- the AI racing line: drawn in the view when the track has one, and edited with nodes (Edit the line): click a node to take it, move it with the arrows of the gizmo (across the
+// road only: the height follows the road), Shift + click on the road adds a node on the nearest part of the line, Delete takes the chosen node away; Apply saves the line (a smooth curve
+// through the nodes, a point every 2 m), Cancel keeps what it was
+const lineLayer = new THREE.Group();
+scene.add(lineLayer);
+const lineEdit = { editing: false, nodes: [], selected: -1, dragging: false, show: true };
+const lineTarget = new THREE.Object3D();
+scene.add(lineTarget);
+const lineGizmo = new TransformControls(camera, renderer.domElement);
+lineGizmo.setSize(0.8);
+lineGizmo.showY = false;                                   // the position only, over the road; no turning
+lineGizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !event.value; lineEdit.dragging = event.value; if (!event.value) drawLine(); });
+lineGizmo.addEventListener("objectChange", () => {
+    const n = lineEdit.nodes[lineEdit.selected];
+    if (!n) return;
+    n.x = lineTarget.position.x; n.z = lineTarget.position.z;
+    n.y = groundY(n.x, n.z, n.y);
+    drawLine(true);
+});
+scene.add(typeof lineGizmo.getHelper === "function" ? lineGizmo.getHelper() : lineGizmo);
+
+// the points of the recorded line, or of the middle of a designed track, as the nodes to edit: about 8 m apart
+function lineNodesFrom(points, spacing) {
+    const nodes = [];
+    let last = null;
+    points.forEach((p) => {
+        if (!last || Math.hypot(p.x - last.x, p.z - last.z) >= spacing) { nodes.push({ x: p.x, y: p.y || 0, z: p.z }); last = p; }
+    });
+    if (nodes.length > 3 && Math.hypot(nodes[0].x - nodes[nodes.length - 1].x, nodes[0].z - nodes[nodes.length - 1].z) < spacing * 0.6) nodes.pop();      // (the loop closes by itself)
+    return nodes;
+}
+function lineCurve(nodes) {
+    return new THREE.CatmullRomCurve3(nodes.map((n) => new THREE.Vector3(n.x, n.y, n.z)), true, "centripetal", 0.5);
+}
+function lineSourcePoints() {
+    const track = state.existingTrack;
+    if (track && track.racing_line && track.racing_line.length > 10) return track.racing_line;
+    if (design && design.active()) {
+        const nodes = design.toJSON().nodes;
+        if (nodes && nodes.length >= 3) return lineCurve(nodes).getSpacedPoints(Math.max(32, Math.round(lineCurve(nodes).getLength() / 2))).map((v) => ({ x: v.x, y: v.y, z: v.z }));
+    }
+    return null;
+}
+
+function drawLine(keepNodes) {
+    lineLayer.clear();
+    const track = state.existingTrack;
+    let points = null;
+    if (lineEdit.editing && lineEdit.nodes.length >= 3) {
+        const curve = lineCurve(lineEdit.nodes);
+        points = curve.getSpacedPoints(Math.max(32, Math.round(curve.getLength() / 2)));
+    } else if (lineEdit.show && track && track.racing_line && track.racing_line.length > 10) {
+        points = track.racing_line.map((p) => new THREE.Vector3(p.x, p.y || 0, p.z));
+        points.push(points[0].clone());
+    }
+    if (!points) { renderLineButtons(); return; }
+    const lift = 0.5;
+    const geometry = new THREE.BufferGeometry().setFromPoints(points.map((v) => new THREE.Vector3(v.x, v.y + lift, v.z)));
+    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: lineEdit.editing ? 0x4db8ff : 0xffd04d, depthTest: false, transparent: true }));
+    line.renderOrder = 999;
+    lineLayer.add(line);
+    // a few arrows: the direction of the line
+    const step = Math.max(1, Math.floor(points.length / 24));
+    for (let i = 0; i + 1 < points.length; i += step) {
+        const a = points[i], b = points[i + 1];
+        const arrow = makeArrow(a.x, a.y, a.z, Math.atan2(b.z - a.z, b.x - a.x), lineEdit.editing ? 0x4db8ff : 0xffd04d, 3 * state.markerScale);
+        arrow.traverse((o) => { if (o.material) { o.material.depthTest = false; o.renderOrder = 999; } });
+        lineLayer.add(arrow);
+    }
+    if (lineEdit.editing) {
+        const radius = 0.9 * state.markerScale;
+        lineEdit.nodes.forEach((n, i) => {
+            const ball = new THREE.Mesh(new THREE.SphereGeometry(radius, 14, 10), new THREE.MeshBasicMaterial({ color: i === lineEdit.selected ? 0xff8a3d : (i === 0 ? 0x4ed88a : 0xffffff), depthTest: false, transparent: true }));
+            ball.position.set(n.x, n.y + lift + radius * 0.5, n.z);
+            ball.renderOrder = 1000;
+            ball.userData.lineNode = i;
+            lineLayer.add(ball);
+        });
+    }
+    renderLineButtons();
+}
+
+function selectLineNode(i) {
+    lineEdit.selected = i;
+    lineGizmo.detach();
+    if (i >= 0 && lineEdit.nodes[i]) {
+        lineTarget.position.set(lineEdit.nodes[i].x, lineEdit.nodes[i].y, lineEdit.nodes[i].z);
+        lineGizmo.attach(lineTarget);
+    }
+    drawLine();
+}
+function startLineEdit() {
+    const points = lineSourcePoints();
+    if (!points) { status("There is no line to edit: record one, or draw the track with nodes.", "error"); return; }
+    lineEdit.nodes = lineNodesFrom(points, 8);
+    if (lineEdit.nodes.length < 4) { status("The line is too short to edit.", "error"); return; }
+    lineEdit.editing = true; lineEdit.show = true;
+    selectLineNode(-1);
+    status("Editing the line: click a node, move it with the arrows. Shift + click on the road adds a node, Delete takes the chosen one away.", "ok");
+}
+function stopLineEdit() {
+    lineEdit.editing = false; lineEdit.nodes = []; lineEdit.selected = -1;
+    lineGizmo.detach();
+    drawLine();
+}
+function addLineNodeAt(x, z) {
+    // on the nearest part of the line between two nodes
+    const nodes = lineEdit.nodes;
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < nodes.length; i++) {
+        const a = nodes[i], b = nodes[(i + 1) % nodes.length];
+        const dx = b.x - a.x, dz = b.z - a.z, len2 = dx * dx + dz * dz || 1;
+        const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / len2));
+        const d = Math.hypot(x - (a.x + dx * t), z - (a.z + dz * t));
+        if (d < bestD) { bestD = d; best = i; }
+    }
+    nodes.splice(best + 1, 0, { x, y: groundY(x, z, nodes[best].y), z });
+    selectLineNode(best + 1);
+}
+function deleteLineNode() {
+    if (lineEdit.selected < 0 || lineEdit.nodes.length <= 4) { if (lineEdit.nodes.length <= 4) status("A line needs at least four nodes.", "error"); return; }
+    lineEdit.nodes.splice(lineEdit.selected, 1);
+    selectLineNode(-1);
+}
+async function applyLineEdit() {
+    const track = state.existingTrack;
+    if (!track || !state.existingId) { status("Save the track first: the line is saved on the saved track.", "error"); return; }
+    const curve = lineCurve(lineEdit.nodes);
+    const count = Math.max(32, Math.round(curve.getLength() / 2));
+    const line = curve.getSpacedPoints(count).slice(0, count).map((v) => ({ x: Math.round(v.x * 100) / 100, y: Math.round(groundY(v.x, v.z, v.y) * 100) / 100, z: Math.round(v.z * 100) / 100 }));
+    const config = JSON.parse(JSON.stringify(track));
+    delete config.id;
+    config.racing_line = line;
+    try {
+        await store(track.id, config);
+        track.racing_line = line;
+        stopLineEdit();
+        updateLineNote();
+        status("The line is saved (" + line.length + " points): the AI drives it from the next start.", "ok");
+    } catch (error) {
+        status(error.message, "error");
+    }
+}
+function renderLineButtons() {
+    const edit = $("editLine");
+    if (!edit) return;
+    const hasLine = !!lineSourcePoints();
+    edit.style.display = lineEdit.editing ? "none" : "";
+    edit.disabled = !hasLine;
+    for (const id of ["addLineNode", "deleteLineNode", "applyLine", "cancelLine"]) $(id).style.display = lineEdit.editing ? "" : "none";
+    $("deleteLineNode").disabled = lineEdit.selected < 0;
+    $("showLine").parentElement.style.display = lineEdit.editing ? "none" : "";
+}
+window.addEventListener("keydown", (e) => {
+    if (!lineEdit.editing || e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
+    if (e.code === "Delete" || e.code === "Backspace") { deleteLineNode(); e.preventDefault(); }
+    else if (e.code === "Escape") stopLineEdit();
+});
+
 function resize() {
     const w = view.clientWidth, h = view.clientHeight;
     renderer.setSize(w, h, false);
@@ -637,7 +796,14 @@ renderer.domElement.addEventListener("pointerup", (event) => {
         else if (!d.added && (state.mode === "gate" || state.mode === "drag")) place(d, false);
         return;
     }
-    if (state.mode === "view" && !d.moved && !(design && design.active())) {
+    if (lineEdit.editing && !d.moved && !lineEdit.dragging) {
+        const hits = pointerRay(event).intersectObjects(lineLayer.children, true).filter((h) => h.object.userData.lineNode !== undefined);
+        if (hits.length) { selectLineNode(hits[0].object.userData.lineNode); return; }
+        const road = event.shiftKey ? roadHit(event) : null;
+        if (road) { addLineNodeAt(road.point.x, road.point.z); return; }
+        if (!event.shiftKey) { selectLineNode(-1); return; }
+    }
+    if (state.mode === "view" && !d.moved && !lineEdit.editing && !(design && design.active())) {
         const hit = pointerRay(event).intersectObjects(trackGroup.children, true)[0];
         if (hit) selectPart(hit.object.name || "", true);
     }
@@ -967,6 +1133,7 @@ function updateLineNote() {
         : (track.design && track.design.nodes ? "the middle of the road (not recorded)" : "none: the AI cannot race here");
     $("recordLine").disabled = !track;
     $("clearLine").style.display = line && line.length ? "" : "none";
+    drawLine();
 }
 
 $("recordLine").onclick = async () => {
@@ -981,6 +1148,13 @@ $("recordLine").onclick = async () => {
     if (!car) { status("No car to drive with.", "error"); return; }
     window.location.href = "../index.html?car=" + encodeURIComponent(car) + "&track=" + encodeURIComponent(state.existingId) + "&recordline=1&ai=0&ghost=0&records=0";
 };
+
+$("editLine").onclick = startLineEdit;
+$("addLineNode").onclick = () => { if (lineEdit.nodes.length) { const n = lineEdit.nodes[Math.max(0, lineEdit.selected)], m = lineEdit.nodes[(Math.max(0, lineEdit.selected) + 1) % lineEdit.nodes.length]; addLineNodeAt((n.x + m.x) / 2, (n.z + m.z) / 2); } };
+$("deleteLineNode").onclick = deleteLineNode;
+$("applyLine").onclick = applyLineEdit;
+$("cancelLine").onclick = stopLineEdit;
+$("showLine").onchange = () => { lineEdit.show = $("showLine").checked; drawLine(); };
 
 $("clearLine").onclick = async () => {
     const track = state.existingTrack;

@@ -4,12 +4,16 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 ## Unreleased
 
+**Track editor**
+- The AI racing line is drawn in the view (yellow, with arrows in the direction it is driven; *Show the line* switches it off), and can be edited with nodes: *Edit the line* shows nodes about 8 m apart (blue line while editing), a click takes a node and the gizmo moves it over the road (the height follows the road), Shift + click on the road adds a node on the nearest part of the line, *Add node* adds one after the chosen node, Delete or *Delete node* takes one away, *Apply line* saves a smooth curve through the nodes (a point every 2 m) as `racing_line` of the track, *Cancel* keeps it as it was. A designed track without a recorded line can be edited from the middle of its road.
+
 **Light vehicles**
 - The joints of the suspension in the collision shell (the lower ball joint and the arms) scale with a wheel smaller than 0.3 m: those of a car wheel stood in the road under a kart and held back its weight and its speed (12 contacts with the road at rest: a kart took 8.8 s to 30 km/h, now 5.6 s).
 - A vehicle under 600 kg (a kart) gets light wheels and a softer tyre: the wheels are 2.85 % of the mass (instead of 35 kg each), the tyre stiffness and damping go with the square root of the mass over 1230 kg, and the wheel inertia with the mass and the square of the diameter (a car wheel of 1.6 kg m² made the wheels most of the mass of a kart: a kart needed three times the power to get going).
 - The automatic clutch starts to grip at `drivetrain.clutch_start_rpm` and grips fully at `clutch_full_rpm` (1050 and 2000 by default, also in the tuning table): a kart with a centrifugal clutch and one gear lets the clutch slip until it locks at its engagement speed.
 
 **Car editor**
+- Exhaust points: one gizmo at a time (the buttons *Move* and *Rotate* in the window of the point, or the W and E keys) instead of the arrows and the rings over each other, and fields for the place (m) and the turn (degrees) that follow the gizmo and can be typed. Nothing is aligned for you.
 - A texture that reads a set of texture coordinates that its mesh does not have (the badge of the Lotus Elise model says texCoord 6) no longer breaks the shader ("uv6: undeclared identifier": the part was not drawn): it falls back to the first set when the car is loaded (`CarLoader.js`).
 - The test bench of the car editor loads the tyre scripts (`NodeTyre.js`, `TyreBody.js`) with the rest of the physics: without them the test crashed with "OpenRacer.NodeTyre is not a constructor". The floor of the test bench has no 3D road, so the tyre there is the ring of nodes.
 - Engine sound: layouts and presets for one, two and three cylinders: *Single 0.25 L (kart)*, *Single 0.4 L*, *Twin 0.8 L (parallel, 360 degrees)* and *Inline-3 1.0 L* (the layouts *Single cylinder* and *Inline 2* are new; *Inline 3* was there without a preset). Played offline, every one gives sound without errors, at about the level of the existing presets.
