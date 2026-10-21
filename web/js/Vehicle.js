@@ -530,6 +530,16 @@ OpenRacer.Vehicle = function (parameters, input) {
         this.repairTyres();
     };
 
+    // Repairs the car and puts it back on its wheels where it is: the same place and heading, the roof up, 30 cm above the road, not moving (for a car that lies on its roof or its side)
+    this.repairUpright = function () {
+        var heading = this.psi;
+        var fx = axisZ.x, fz = axisZ.z;
+        if(fx * fx + fz * fz > 0.09) heading = Math.atan2(fz, fx);          // (a car that stands on its nose or tail has no heading from its front: it keeps the last one)
+        var x = this.px, z = this.pz;
+        this.reset(x, z, heading);
+        this.py += 0.3;
+    };
+
     // Puts the car on the road at a place, standing still with the springs at rest.
     this.reset = function (x, z, psi) {
         var road = roadAt(x, z, 1000, 0);
