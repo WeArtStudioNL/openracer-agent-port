@@ -4,6 +4,9 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 ## Unreleased
 
+**Tyres**
+- An experimental tyre model made of nodes (*Tyre model: Nodes* in the tuning menu, `tyres.model` in car.json): a ring of tread nodes with springs and friction instead of slip curves. The default stays the classic model.
+
 **Engine**
 - A turbo with a boost pressure in bar: the power follows the pressure (pressure ratio, compressor and intercooler efficiency, exhaust back pressure); the older share of torque stays for cars without it.
 

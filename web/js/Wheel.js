@@ -121,6 +121,15 @@ OpenRacer.Wheel = function (parameters) {
     // The two slips are taken together as one slip vector (each measured against the slip where its force peaks), the magic
     // formula gives the size of the force for the length of that vector, and the force points against the slip. So a tyre that
     // brakes hard has less left to corner with, and past the peak both forces fall away together: the way a sliding tyre lets go.
+    // the friction coefficients of the tyre for a load on a surface (the grip with the compound, the temperature and the wear, the load sensitivity): the static one and the
+    // one of a sliding tyre; also used by the tyre of nodes (NodeTyre.js)
+    this.frictionFor = function (load, surface) {
+        var grip = surface.static * this.gripScale * (this.condition || 1) * (this.damageGrip === undefined ? 1 : this.damageGrip) * (this.compoundGrip === undefined ? 1 : this.compoundGrip);
+        var mu = Math.min(1.4 * grip, Math.max(0.2 * grip, grip - this.loadSensitivity * (load - this.nominalLoad)));
+        return { mu: mu, sliding: mu * Math.min(0.98, surface.kinetic / surface.static) };
+    };
+    this.nodeTyre = null;       // the tyre of nodes, when that model is on (Vehicle.js: tyreModel)
+
     this.tyreForce = function (kappa, tanAlpha, load, surface) {
         var grip = surface.static * this.gripScale * (this.condition || 1) * (this.damageGrip === undefined ? 1 : this.damageGrip) * (this.compoundGrip === undefined ? 1 : this.compoundGrip); // condition: the temperature and the wear of the tyre (Vehicle.js)
         var mu = Math.min(1.4 * grip, Math.max(0.2 * grip, grip - this.loadSensitivity * (load - this.nominalLoad)));

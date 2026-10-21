@@ -151,6 +151,10 @@ OpenRacer.Vehicle = function (parameters, input) {
         return this.driveType === "awd" || (this.driveType === "fwd") === front;
     };
 
+    this.tyreModel = "classic";       // the tyre: "classic" (the slip curves of Wheel.js) or "nodes" (a ring of nodes, NodeTyre.js)
+    this.tyreNodes = 72;               // the nodes of the tread of a tyre
+    this.tyreStiffX = 20;              // the stiffness of the tyre of nodes along and across (per N of load)
+    this.tyreStiffY = 18;
     this.tcAllowance = 1;             // tuning: how much wheel spin the traction control allows, as a factor
     this.escGain = 1;                 // tuning: how hard the stability control steps in, as a factor
     this.tcEnabled = false;           // traction control: takes power off when the driven wheels spin
@@ -486,6 +490,10 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.diff_coast !== undefined) this.lockCoast = t.diff_coast;
         if(t.drag !== undefined) this.Cdrag = t.drag;
         if(t.tc_allowance !== undefined) this.tcAllowance = t.tc_allowance;
+        if(t.tyre_model !== undefined) { this.tyreModel = t.tyre_model === "nodes" ? "nodes" : "classic"; }
+        if(t.tyre_nodes !== undefined && t.tyre_nodes !== this.tyreNodes) { this.tyreNodes = Math.max(24, Math.min(240, Math.round(t.tyre_nodes))); for(var tn = 0; tn < 4; tn++) this.wheels[tn].nodeTyre = null; }
+        if(t.tyre_stiff_x !== undefined) this.tyreStiffX = t.tyre_stiff_x;
+        if(t.tyre_stiff_y !== undefined) this.tyreStiffY = t.tyre_stiff_y;
         if(t.esc_gain !== undefined) this.escGain = t.esc_gain;
     };
 
@@ -1551,7 +1559,17 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var camber = (wheel.front ? self.camberFront : self.camberRear) * Math.PI / 180;
                 var leanLeft = (wheel.right ? -camber : camber) - rollRight * self.rollCamber - (wheel.camberBend || 0);
                 var surface = self.getSurface(wheel.surface);
-                wheel.tyreForce(wheel.slipRatio, wheel.slipTan - self.camberGain * leanLeft * wheel.anglePeak / 0.15, fzGrip, surface);
+                if(self.tyreModel === "nodes") {
+                    // the tyre of nodes (NodeTyre.js): the slip speeds go to the nodes, the forces come out of them
+                    if(!wheel.nodeTyre) wheel.nodeTyre = new OpenRacer.NodeTyre(wheel, self.tyreNodes);
+                    var friction = wheel.frictionFor(fzGrip, surface);
+                    var camberSlide = self.camberGain * leanLeft * wheel.anglePeak / 0.15 * vref;    // (a leaning tyre pushes as if it slid a little)
+                    wheel.nodeTyre.stiffX = self.tyreStiffX;
+                    wheel.nodeTyre.stiffY = self.tyreStiffY * self.corneringScale * (wheel.stiffnessBias || 1) * (wheel.pressureCorner || 1);
+                    wheel.nodeTyre.step(dt, vl, vt - camberSlide, wheel.omega * wheel.radius, fzGrip, friction.mu, friction.sliding, wheel.radius, wheel.lateralGrip);
+                } else {
+                    wheel.tyreForce(wheel.slipRatio, wheel.slipTan - self.camberGain * leanLeft * wheel.anglePeak / 0.15, fzGrip, surface);
+                }
                 // Smoke and squeal: the tyre slides (s is above 1 past the peak of the grip) at some speed over the road. The heat builds
                 // up the longer it slides, so the smoke gets thicker, and goes away slowly when it grips again.
                 var slideSpeed = Math.sqrt((wheel.omega * wheel.radius - vl) * (wheel.omega * wheel.radius - vl) + vt * vt);
