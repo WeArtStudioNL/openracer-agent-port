@@ -406,7 +406,7 @@ OpenRacer.Replay = (function() {
         style.id = "replayStyle";
         style.textContent =
             "body.replayClean #replayInfo, body.replayClean #debugOut { display: none !important; }" +
-            "body.replaying #hud, body.replaying #hudLaps, body.replaying #hudCar, body.replaying #hudHint, body.replaying #touch, body.replaying #tuning { display: none !important; }" +
+            "body.replaying #hudBoost, body.replaying #dragHud, body.replaying #hud, body.replaying #hudLaps, body.replaying #hudCar, body.replaying #hudHint, body.replaying #touch, body.replaying #tuning { display: none !important; }" +
             "#replayBar { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(960px, calc(100% - 20px)); z-index: 1400; box-sizing: border-box; " +
                 "padding: 10px 14px 12px; background: rgba(14, 18, 24, 0.86); color: #fff; border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; " +
                 "font-family: Arial, sans-serif; font-size: 14px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); user-select: none; -webkit-user-select: none; touch-action: manipulation; }" +
