@@ -604,9 +604,20 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var downRPM = limit * (0.23 + 0.17 * thr);
                 var nextRatio = g < gears - 1 ? this.gear_ratios[g + 1] / this.gear_ratios[g] : 1;
                 var prevRatio = g > 0 ? this.gear_ratios[g - 1] / this.gear_ratios[g] : 1;
-                if(g < gears - 1 && rpm > upRPM && rpm * nextRatio > 0.35 * limit && this.u > 1) {
+                // The engine near the rev limiter with the throttle open while the car moves and the wheels spin faster than the road asks (a lot of power in a low
+                // gear: the speed of the road does not reach the shift speed): after a moment it shifts up, as an automatic does at the redline. The time is
+                // kept leaky, because the engine speed jumps about with the spinning wheels and the limiter.
+                var engineRpm = this.engine.getRPM();
+                var spinning = engineRpm >= limit * 0.8 && engineRpm > rpm * 1.2 + 300 && thr > 0.5 && this.u > 1 && this.engine.holdRPM <= 0;
+                this.limiterTime = spinning ? (this.limiterTime || 0) + delta : Math.max(0, (this.limiterTime || 0) - delta * 0.3);
+                this.noDownshift = Math.max(0, (this.noDownshift || 0) - delta);
+                if(g < gears - 1 && this.limiterTime > 0.35) {
                     inp.current_gear++;
-                } else if(g > 0 && (rpm < downRPM && rpm * prevRatio < 0.86 * limit || (this.u < 1.5 && thr < 0.1))) {
+                    this.limiterTime = 0;
+                    this.noDownshift = 3;                     // (and no kick down for a while: the engine speed drops, and it would go back and forth)
+                } else if(g < gears - 1 && rpm > upRPM && rpm * nextRatio > 0.35 * limit && this.u > 1) {
+                    inp.current_gear++;
+                } else if(g > 0 && ((rpm < downRPM && rpm * prevRatio < 0.86 * limit && this.noDownshift <= 0) || (this.u < 1.5 && thr < 0.1))) {
                     inp.current_gear--;
                 }
             }

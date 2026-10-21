@@ -7,6 +7,9 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 **Engine**
 - A turbo with a boost pressure in bar: the power follows the pressure (pressure ratio, compressor and intercooler efficiency, exhaust back pressure); the older share of torque stays for cars without it.
 
+**Gearbox**
+- The automatic gearbox shifts up when the engine is near the rev limiter with the wheels spinning faster than the road (a lot of power in a low gear): before, it only looked at the speed of the road and stayed on the limiter until the throttle was lifted. After such a shift it does not kick down for three seconds.
+
 **Controls**
 - Automatic gearbox: holding the brake key at a standstill (or below a speed that can be set) puts the car in reverse while it is held; the gas key brakes in reverse and is D again at a standstill.
 
