@@ -131,15 +131,23 @@
                 }
             }
         }
-        // the tyre shell: the rounded cylinder of spheres round every wheel, with the beams between them
-        var shell = v.tyreShellNodes && v.tyreShellNodes();
-        if (shell && shell.count) {
-            var rings = shell.rings, segs = shell.segments, perWheel = rings * segs;
-            for (i = 0; i < shell.count; i++) {
-                var base = i - (i % perWheel), ring = Math.floor((i - base) / segs), kk = (i - base) % segs, nextK = base + ring * segs + (kk + 1) % segs;
-                push(points, shell.x[i], shell.y[i], shell.z[i], TEAL);
-                seg(lines, shell.x[i], shell.y[i], shell.z[i], shell.x[nextK], shell.y[nextK], shell.z[nextK], TEAL);
-                if (ring + 1 < rings) seg(lines, shell.x[i], shell.y[i], shell.z[i], shell.x[i + segs], shell.y[i + segs], shell.z[i + segs], TEAL);
+        // the tyre body (tyre model "cylinder", TyreBody.js): the nodes and the beams of every wheel, flattened where they touch the track; green where a node holds, red where it slides
+        for (i = 0; i < 4; i++) {
+            var tbody = v.wheels[i].tyreBody;
+            if (!tbody || v.tyreModel !== "cylinder") continue;
+            var nd = tbody.nodes(), segsN = nd.segments, perRing = segsN * 2;
+            for (var r = 0; r < nd.rings; r++) {
+                for (k = 0; k < perRing; k += 2) {
+                    var i0 = r * perRing + k, i1 = r * perRing + (k + 2) % perRing, mid = i0 + 1;
+                    var colour2 = nd.contact[i0] ? (nd.sliding[i0] ? RED : GREEN) : TEAL;
+                    push(points, nd.x[i0], nd.y[i0], nd.z[i0], colour2);
+                    // the beam along the ring goes through the sample in the middle of it
+                    seg(lines, nd.x[i0], nd.y[i0], nd.z[i0], nd.x[mid], nd.y[mid], nd.z[mid], TEAL);
+                    seg(lines, nd.x[mid], nd.y[mid], nd.z[mid], nd.x[i1], nd.y[i1], nd.z[i1], TEAL);
+                    // the beam across to the next ring
+                    if (r + 1 < nd.rings) seg(lines, nd.x[i0], nd.y[i0], nd.z[i0], nd.x[i0 + perRing], nd.y[i0 + perRing], nd.z[i0 + perRing], TEAL);
+                    if (nd.contact[mid]) push(points, nd.x[mid], nd.y[mid], nd.z[mid], nd.sliding[mid] ? RED : GREEN);
+                }
             }
         }
         flush(lines); flush(points);

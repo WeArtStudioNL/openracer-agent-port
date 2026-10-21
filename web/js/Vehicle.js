@@ -152,6 +152,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     };
 
     this.tyreDamage = false;          // a hard hit can puncture a tyre: it leaks and loses its pressure (applyPressure, the grip and the stiffness follow)
+    this.tyreShell = { width: 0, rings: 3, segments: 36 };      // the cylinder of the tyre (tyre model "cylinder", TyreBody.js): rings across the tread, nodes round the wheel, the width (m, 0: from the wheel)
     this.tyreModel = "classic";       // the tyre: "classic" (the slip curves of Wheel.js) or "nodes" (a ring of nodes, NodeTyre.js)
     this.tyreNodes = 72;               // the nodes of the tread of a tyre
     this.tyreStiffX = 20;              // the stiffness of the tyre of nodes along and across (per N of load)
@@ -495,12 +496,12 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.diff_coast !== undefined) this.lockCoast = t.diff_coast;
         if(t.drag !== undefined) this.Cdrag = t.drag;
         if(t.tc_allowance !== undefined) this.tcAllowance = t.tc_allowance;
-        if(t.tyre_shell !== undefined) this.tyreShell.enabled = !!t.tyre_shell;
         if(t.tyre_width !== undefined) this.tyreShell.width = Math.max(0, t.tyre_width) / 100;
         if(t.tyre_rings !== undefined) this.tyreShell.rings = t.tyre_rings;
         if(t.tyre_segments !== undefined) this.tyreShell.segments = t.tyre_segments;
+        if(t.tyre_width !== undefined || t.tyre_rings !== undefined || t.tyre_segments !== undefined) for(var tb = 0; tb < 4; tb++) if(this.wheels[tb].tyreBody) { this.wheels[tb].tyreBody.width = this.tyreShell.width; this.wheels[tb].tyreBody.rings = this.tyreShell.rings; this.wheels[tb].tyreBody.segments = this.tyreShell.segments; }
         if(t.tyre_damage !== undefined) { this.tyreDamage = !!t.tyre_damage; if(!this.tyreDamage) this.repairTyres(); }
-        if(t.tyre_model !== undefined) { this.tyreModel = t.tyre_model === "nodes" ? "nodes" : "classic"; }
+        if(t.tyre_model !== undefined) { this.tyreModel = t.tyre_model === "nodes" ? "nodes" : (t.tyre_model === "cylinder" ? "cylinder" : "classic"); }
         if(t.tyre_nodes !== undefined && t.tyre_nodes !== this.tyreNodes) { this.tyreNodes = Math.max(24, Math.min(240, Math.round(t.tyre_nodes))); for(var tn = 0; tn < 4; tn++) this.wheels[tn].nodeTyre = null; }
         if(t.tyre_stiff_x !== undefined) this.tyreStiffX = t.tyre_stiff_x;
         if(t.tyre_stiff_y !== undefined) this.tyreStiffY = t.tyre_stiff_y;
@@ -670,6 +671,7 @@ OpenRacer.Vehicle = function (parameters, input) {
 
     // ---- what the rest of the game wants to know, from the rigid body
     var axisX = { x: 0, y: 0, z: 0 }, axisY = { x: 0, y: 0, z: 0 }, axisZ = { x: 0, y: 0, z: 0 };
+    var cylF = { x: 0, y: 0, z: 0 }, cylL = { x: 0, y: 0, z: 0 }, cylHub = { x: 0, y: 0, z: 0 }, cylVel = { x: 0, y: 0, z: 0 }, wheelList = [[], [], [], []];
     this.updateOutputs = function () {
         rotate(this.qx, this.qy, this.qz, this.qw, 1, 0, 0, axisX);
         rotate(this.qx, this.qy, this.qz, this.qw, 0, 1, 0, axisY);
@@ -837,50 +839,6 @@ OpenRacer.Vehicle = function (parameters, input) {
     }
     var wallCandidates = [];
 
-    // ---- the tyre shell: a rounded cylinder of small spheres round every wheel (rings across the tread, segments round it), where the wheel is now (the steering turns it).
-    // car.json "tyres": { "shell": { "enabled": true, "width": 0.21, "rings": 3, "segments": 12 } }, the tuning table has the same.
-    this.tyreShell = { enabled: false, width: 0, rings: 3, segments: 12 };      // width 0: 0.7 of the radius of the wheel; enabled: the walls and the sides of a ramp are felt by the shell (experimental, off)
-    var wheelCandidates = [[], [], [], []], cloud = { x: new Float64Array(0), y: new Float64Array(0), z: new Float64Array(0), wheel: new Uint8Array(0), r: [0, 0, 0, 0], count: 0 };
-    var axisL = { x: 0, y: 0, z: 0 }, axisF = { x: 0, y: 0, z: 0 }, axisU = { x: 0, y: 0, z: 0 };
-    function tyreSphereCloud() {
-        var shell = self.tyreShell, rings = Math.max(1, Math.min(5, Math.round(shell.rings))), segs = Math.max(6, Math.min(32, Math.round(shell.segments)));
-        var need = 4 * rings * segs;
-        if(cloud.x.length < need) { cloud.x = new Float64Array(need); cloud.y = new Float64Array(need); cloud.z = new Float64Array(need); cloud.wheel = new Uint8Array(need); }
-        var n = 0;
-        for(var i = 0; i < 4; i++) {
-            var w = self.wheels[i], list = wheelCandidates[i];
-            list.length = 0;
-            if(self.wheelLost[i] || !w.center) {         // (the places stay in the layout, they are empty)
-                cloud.r[i] = 0;
-                for(var e = 0; e < rings * segs; e++) { cloud.x[n] = self.px; cloud.y[n] = self.py; cloud.z[n] = self.pz; cloud.wheel[n] = i; n++; }
-                continue;
-            }
-            var R = w.radius, W = shell.width > 0 ? shell.width : Math.max(0.1, 0.7 * R), rs = W / (rings + 1), Rr = R - rs;
-            cloud.r[i] = rs;
-            var d = w.steerNow || 0, cd = Math.cos(d), sd = Math.sin(d);
-            rotate(self.qx, self.qy, self.qz, self.qw, cd, 0, sd, axisL);
-            rotate(self.qx, self.qy, self.qz, self.qw, -sd, 0, cd, axisF);
-            rotate(self.qx, self.qy, self.qz, self.qw, 0, 1, 0, axisU);
-            // the triangles that are near this wheel at all
-            for(var c = 0; c < candidates.length; c++) if(self.ground.boxNear(candidates[c], w.center.x, w.center.y, w.center.z, R + W / 2 + 0.1)) list.push(candidates[c]);
-            for(var j = 0; j < rings; j++) {
-                var o = (j - (rings - 1) / 2) * rs;
-                for(var k = 0; k < segs; k++) {
-                    var a = 2 * Math.PI * k / segs, sa = Math.sin(a) * Rr, ca = Math.cos(a) * Rr;
-                    cloud.x[n] = w.center.x + axisL.x * o + axisF.x * sa + axisU.x * ca;
-                    cloud.y[n] = w.center.y + axisL.y * o + axisF.y * sa + axisU.y * ca;
-                    cloud.z[n] = w.center.z + axisL.z * o + axisF.z * sa + axisU.z * ca;
-                    cloud.wheel[n] = i;
-                    n++;
-                }
-            }
-        }
-        cloud.count = n;
-        cloud.rings = rings; cloud.segments = segs;
-        return cloud;
-    }
-    this.tyreShellNodes = function () { return tyreSphereCloud(); };      // for the debug view
-
     function testSphere(i, cx, cy, cz, r, tyreWheel, wantSoft, list) {
         var ground = self.ground, yUnder = -self.cgHeight + self.groundClearance;
         var ux = self.px + carUp.x * yUnder, uy = self.py + carUp.y * yUnder, uz = self.pz + carUp.z * yUnder;
@@ -960,17 +918,6 @@ OpenRacer.Vehicle = function (parameters, input) {
                 rotate(self.qx, self.qy, self.qz, self.qw, nodePos.x, nodePos.y, nodePos.z, sphereAt);
             }
             testSphere(i, self.px + sphereAt.x, self.py + sphereAt.y, self.pz + sphereAt.z, sp.r, -1, wantSoft, candidates);
-        }
-        // the tyres: a rounded cylinder of small spheres round every wheel (a few rings across the tread, TyreShell below), that only feel the walls, so the tyre does not go through
-        // the side of a ramp or a wall that the single sphere of the hub is too small for. The road under the wheel is the business of the suspension.
-        if(self.tyreShell.enabled) {
-            var shellCloud = tyreSphereCloud();
-            for(var ts = 0; ts < shellCloud.count; ts++) {
-                var tw = shellCloud.wheel[ts], tl = wheelCandidates[tw];
-                if(!tl.length) continue;
-                sphereAt.x = shellCloud.x[ts] - self.px; sphereAt.y = shellCloud.y[ts] - self.py; sphereAt.z = shellCloud.z[ts] - self.pz;
-                testSphere(self.hubSphere[tw], shellCloud.x[ts], shellCloud.y[ts], shellCloud.z[ts], shellCloud.r[tw], tw, wantSoft, tl);
-            }
         }
         return contactCount;
     }
@@ -1445,7 +1392,8 @@ OpenRacer.Vehicle = function (parameters, input) {
             // when the middle passes it. The surface under the middle is the one that counts for the grip.
             var road = null, t = Infinity, surfaceRoad = null;
             w.profile[0] = w.profile[1] = w.profile[2] = w.profile[3] = w.profile[4] = NaN;
-            for(var sk = -2; sk <= 2 && ground3D; sk++) {
+            var cyl = self.tyreModel === "cylinder" && ground3D && !self.wheelLost[i];       // the tyre is a body of nodes (TyreBody.js): it finds the road itself
+            for(var sk = -2; sk <= 2 && ground3D && !cyl; sk++) {
                 // the 3D physics: a ray along the axis of the suspension (down for the car, whichever way that is in the world), from a
                 // little above the mount, so a car on a wall or upside down feels the road under its wheels
                 var alongR = sk * 0.4 * w.radius;
@@ -1459,7 +1407,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 w.profile[sk + 2] = (w.susLength + w.radius) - tR;       // how deep the tyre would stand in the road at this place, with the round of the tyre in it (NodeTyre.js)
                 if(tR < t) { t = tR; road = hit; }
             }
-            for(var sk = -2; sk <= 2 && !ground3D; sk++) {
+            for(var sk = -2; sk <= 2 && !ground3D && !cyl; sk++) {
                 var along = sk * 0.4 * w.radius;
                 var sample = roadAt(mx + axisZ.x * along, mz + axisZ.z * along, my, 0.3);
                 if(!sample) continue;
@@ -1494,6 +1442,41 @@ OpenRacer.Vehicle = function (parameters, input) {
                     var penRate = w.susVel + mountDown;
                     tyreLoad[i] = Math.max(0, (w.tyreRate || self.tyreRate) * pen + self.tyreDamping * penRate);
                     w.tyreDeflection = pen;  // how far the road pushes the tyre in (m)
+                }
+            }
+            w.cylActive = false;
+            if(cyl) {
+                var body = w.tyreBody || (w.tyreBody = new OpenRacer.TyreBody(w));
+                body.rings = self.tyreShell.rings; body.segments = self.tyreShell.segments; body.width = self.tyreShell.width;
+                body.stiffX = self.tyreStiffX; body.stiffY = self.tyreStiffY * self.corneringScale * (w.stiffnessBias || 1) * (w.pressureCorner || 1);
+                body.verticalStiffness = w.tyreRate || self.tyreRate; body.verticalDamping = self.tyreDamping; body.staticLoad = w.staticLoad || (self.mass * G / 4);
+                // the axes of the wheel: up (the suspension), forward in its plane (turned by the steering), and to the left
+                var ca = Math.cos(wheelAngle[i]), sa = Math.sin(wheelAngle[i]);
+                var cfx = axisZ.x * ca - axisX.x * sa, cfy = axisZ.y * ca - axisX.y * sa, cfz = axisZ.z * ca - axisX.z * sa;
+                var cdot = cfx * axisY.x + cfy * axisY.y + cfz * axisY.z;
+                cfx -= axisY.x * cdot; cfy -= axisY.y * cdot; cfz -= axisY.z * cdot;
+                var cfl = Math.sqrt(cfx * cfx + cfy * cfy + cfz * cfz) || 1; cfx /= cfl; cfy /= cfl; cfz /= cfl;
+                cylF.x = cfx; cylF.y = cfy; cylF.z = cfz;
+                cylL.x = axisY.y * cfz - axisY.z * cfy; cylL.y = axisY.z * cfx - axisY.x * cfz; cylL.z = axisY.x * cfy - axisY.y * cfx;
+                cylHub.x = mx - axisY.x * w.susLength; cylHub.y = my - axisY.y * w.susLength; cylHub.z = mz - axisY.z * w.susLength;
+                cylVel.x = vmx + down.x * w.susVel; cylVel.y = vmy + down.y * w.susVel; cylVel.z = vmz + down.z * w.susVel;
+                ensureProxy();
+                refreshCandidates();
+                var reach = w.radius + (body.width > 0 ? body.width : 0.7 * w.radius) / 2 + 0.12, wl = wheelList[i];
+                wl.length = 0;
+                for(var cc = 0; cc < candidates.length; cc++) if(self.ground.boxNear(candidates[cc], cylHub.x, cylHub.y, cylHub.z, reach)) wl.push(candidates[cc]);
+                var touched = body.step(dt, cylHub, cylVel, cylL, cylF, axisY, w.omega, self.ground, wl, function (load, name) { return w.frictionFor(load, self.getSurface(name)); }, w.lateralGrip, self.mass);
+                if(touched) {
+                    var up = body.normal.x * axisY.x + body.normal.y * axisY.y + body.normal.z * axisY.z + body.friction.x * axisY.x + body.friction.y * axisY.y + body.friction.z * axisY.z;
+                    tyreLoad[i] = Math.max(0, up);
+                    // what is left of the pressing forces across the suspension (the side of a ramp, a wall, a slope) goes to the car at the hub
+                    var nu = body.normal.x * axisY.x + body.normal.y * axisY.y + body.normal.z * axisY.z;
+                    w.perpX = body.normal.x - nu * axisY.x; w.perpY = body.normal.y - nu * axisY.y; w.perpZ = body.normal.z - nu * axisY.z;
+                    w.hasContact = true; anyContact = true; w.cylActive = true;
+                    w.surface = body.surface; w.groundY = body.groundY;
+                    w.normal = { nx: body.surfaceNormal.x, ny: body.surfaceNormal.y, nz: body.surfaceNormal.z, y: body.groundY, surface: body.surface, mesh: body.mesh };
+                    w.contact.x = body.centre.x; w.contact.y = body.centre.y; w.contact.z = body.centre.z;
+                    w.tyreDeflection = body.maxDepth;
                 }
             }
             if(!w.hasContact) w.tyreDeflection = 0;
@@ -1663,7 +1646,14 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var camber = (wheel.front ? self.camberFront : self.camberRear) * Math.PI / 180;
                 var leanLeft = (wheel.right ? -camber : camber) - rollRight * self.rollCamber - (wheel.camberBend || 0);
                 var surface = self.getSurface(wheel.surface);
-                if(self.tyreModel === "nodes") {
+                if(wheel.cylActive) {
+                    // the tyre as a body of nodes and beams (TyreBody.js): the friction that its samples carry, along the wheel and across it
+                    var tb = wheel.tyreBody;
+                    wheel.fx = tb.friction.x * fpx + tb.friction.y * fpy + tb.friction.z * fpz;
+                    wheel.fy = tb.friction.x * lx + tb.friction.y * ly + tb.friction.z * lz;
+                    wheel.s = tb.slidingShare < 0.05 ? tb.used / 0.92 : Math.max(tb.used / 0.92, 1 + 0.9 * tb.slidingShare);
+                    wheel.slip = wheel.s > 1.15;
+                } else if(self.tyreModel === "nodes") {
                     // the tyre of nodes (NodeTyre.js): the slip speeds go to the nodes, the forces come out of them
                     if(!wheel.nodeTyre) wheel.nodeTyre = new OpenRacer.NodeTyre(wheel, self.tyreNodes);
                     var friction = wheel.frictionFor(fzGrip, surface);
@@ -1738,6 +1728,12 @@ OpenRacer.Vehicle = function (parameters, input) {
                 torque.y += rcz * fyW * lx - rcx * fyW * lz;
                 torque.z += rcx * fyW * ly - rcy * fyW * lx;
                 sumFx += fxW; sumFy += fyW;
+                if(wheel.cylActive) {
+                    // the pressing force of the nodes across the suspension (a ramp side, a wall, a slope), on the car at the hub
+                    var hx = Rv.x - axisY.x * wheel.susLength, hy = Rv.y - axisY.y * wheel.susLength, hz = Rv.z - axisY.z * wheel.susLength;
+                    force.x += wheel.perpX; force.y += wheel.perpY; force.z += wheel.perpZ;
+                    torque.x += hy * wheel.perpZ - hz * wheel.perpY; torque.y += hz * wheel.perpX - hx * wheel.perpZ; torque.z += hx * wheel.perpY - hy * wheel.perpX;
+                }
                 newAxleFy[axle] += fyW;
             } else {
                 wheel.weight = 0;
