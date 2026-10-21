@@ -2,8 +2,8 @@
  * DebugView.js
  *
  * Description: A view of what the physics sees, switched on and off with the 0 key (also on the numeric keypad): the triangles of the track near the car (green: road that is
- *              driven on, orange: walls, blue-grey: the rest that the body can hit), the collision spheres of the car (white; red where a sphere is a node of the shell that is
- *              bent or torn off), the nodes and the beams of the shell (yellow points and lines; a broken beam is not drawn), the point and the normal of the contact of every
+ *              driven on, orange: walls, blue-grey: the rest that the body can hit), the nodes of the collision spheres of the car and the beams of the shell (yellow; a node that is
+ *              bent or torn off is red; a broken beam is not drawn; the spheres themselves are not), the point and the normal of the contact of every
  *              wheel (cyan) and, with the tyre model of nodes, the ring of tread nodes of every wheel (green in the patch, red where a node slides, grey out of it).
  *              It is drawn over everything (no depth test), outside the screen space effects, and costs nothing while it is off.
  */
@@ -36,17 +36,7 @@
         l.pos.length = 0; l.col.length = 0;
     }
 
-    var GREEN = [0.2, 0.9, 0.3], ORANGE = [1, 0.55, 0.1], GREY = [0.45, 0.55, 0.75], WHITE = [0.95, 0.95, 0.95], RED = [1, 0.2, 0.2], YELLOW = [1, 0.9, 0.2], CYAN = [0.2, 0.9, 1], DIM = [0.5, 0.5, 0.5];
-
-    function circle(l, cx, cy, cz, ax, ay, az, bx, by, bz, r, c) {
-        var n = 10, px = 0, py = 0, pz = 0;
-        for (var i = 0; i <= n; i++) {
-            var t = i / n * 2 * Math.PI, s = Math.sin(t) * r, k = Math.cos(t) * r;
-            var x = cx + ax * k + bx * s, y = cy + ay * k + by * s, z = cz + az * k + bz * s;
-            if (i) seg(l, px, py, pz, x, y, z, c);
-            px = x; py = y; pz = z;
-        }
-    }
+    var GREEN = [0.2, 0.9, 0.3], ORANGE = [1, 0.55, 0.1], GREY = [0.45, 0.55, 0.75], RED = [1, 0.2, 0.2], YELLOW = [1, 0.9, 0.2], CYAN = [0.2, 0.9, 1], DIM = [0.5, 0.5, 0.5];
 
     function update() {
         if (!on) return;
@@ -76,7 +66,7 @@
         for (i = 0; i < spheres.length; i++) {
             var sp = spheres[i];
             if (sp.disabled) continue;
-            var node = sb ? sb.nodeOfSphere[i] : -1, x = sp.x, y = sp.y, z = sp.z, colour = WHITE;
+            var node = sb ? sb.nodeOfSphere[i] : -1, x = sp.x, y = sp.y, z = sp.z, colour = YELLOW;
             if (node >= 0) {
                 if (!sb.alive(node)) colour = RED;
                 sb.position(node, nodePos); x = nodePos.x; y = nodePos.y; z = nodePos.z;
@@ -84,10 +74,7 @@
                 if (Math.abs(rp.x - x) + Math.abs(rp.y - y) + Math.abs(rp.z - z) > 0.02) colour = RED;
             }
             worldOf(x, y, z, v1);
-            circle(lines, v1.x, v1.y, v1.z, 1, 0, 0, 0, 0, 1, sp.r, colour);
-            circle(lines, v1.x, v1.y, v1.z, 1, 0, 0, 0, 1, 0, sp.r, colour);
-            circle(lines, v1.x, v1.y, v1.z, 0, 1, 0, 0, 0, 1, sp.r, colour);
-            push(points, v1.x, v1.y, v1.z, YELLOW);
+            push(points, v1.x, v1.y, v1.z, colour === RED ? RED : YELLOW);
         }
         if (sb && sb.beamA) {
             for (k = 0; k < sb.beamA.length; k++) {
