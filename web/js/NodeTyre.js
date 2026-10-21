@@ -22,6 +22,7 @@ OpenRacer.NodeTyre = function (wheel, count) {
     var touching = new Uint8Array(N), sliding = new Uint8Array(N);
     var dx = new Float32Array(N), dy = new Float32Array(N), weight = new Float32Array(N), inPatch = new Int32Array(N);
     var phase = 0;
+    function smooth(a, b, x) { var t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
     var riseAt = [0, 0, 0, 0, 0];
     // the rise of the road at x (m along the tyre): from the five places that the wheel measures (held at the ends)
     function riseOf(x, spacing) {
@@ -43,6 +44,7 @@ OpenRacer.NodeTyre = function (wheel, count) {
     this.slidingShare = 0;          // the share of the load that is carried by nodes that slide
     this.patch = 0;                 // the length of the patch (m)
     this.profile = null;            // the depth of the tyre in the road at 5 places along it, 0.4 radius apart (the wheel measures it), or null: a flat road
+    this.restDamping = 1;           // the extra damping at a standstill (1 is a critical one for the car; 0 is none)
     this.carcass = true;            // the patch from the round of the tyre pressed into the road (with the profile), not from a fixed shape
     this.nodesIn = 0;
 
@@ -124,6 +126,15 @@ OpenRacer.NodeTyre = function (wheel, count) {
         var dampX = this.damping * 2 * Math.sqrt(springX * inertia) / radius;      // N s/m along the tyre
         var dampY = 0.15 * this.damping * 2 * Math.sqrt(this.stiffY * load / half * Math.max(5, wheel.mass || 20)) * 0.5;      // (across the tyre the mass is the car's: little damping is needed)
         var rawX = omegaR - vl, rawY = -vt;
+        // At a standstill the spring of the nodes and the mass of the car ring (the car rocks on its tyres): near a standstill, and while the wheel hardly slips, the damping
+        // is raised to that of a critical one for the share of the car that the tyre carries; it fades out with speed and with the slip (a burnout is not held back)
+        var calm = (1 - smooth(0.5, 2.5, Math.max(Math.abs(vl), Math.abs(omegaR)))) * (1 - smooth(0.2, 0.8, Math.sqrt(rawX * rawX + rawY * rawY)));
+        calm *= this.restDamping;
+        if(calm > 0) {
+            var carMass = load / 9.81;
+            dampX = Math.max(dampX, calm * 1.2 * Math.sqrt(springX * carMass));
+            dampY = Math.max(dampY, calm * 1.2 * Math.sqrt(this.stiffY * load / half * carMass));
+        }
         // the friction of a node falls from the static to the sliding value with the speed that it slides at (a Stribeck curve): the peak of the grip is at a small slip,
         // the grip of a tyre that spins or locks is the sliding one
         var slideSpeed = Math.sqrt(filteredX * filteredX + filteredY * filteredY);
