@@ -231,6 +231,26 @@ var collisionWorld;
 var collisionIgnoredTextures = { "m_sky_blue": true, "horizon": true, "alpha": true, "grasst": true, "decor": true };
 var collisionSteepness = 0.5; // a triangle is a wall when its normal points up less than this
 
+// Small props that are drawn with a lot of triangles (a tyre of a tyre wall is 832) hit the car as their box: the physics tests every triangle near the car with
+// every sphere of it, and a wall of tyres put thousands of them in reach (1 frame per second next to the wall). Returns the box of a mesh to use, or null.
+function propBox(mesh) {
+    var index = mesh.geometry.index;
+    if(!index || index.count / 3 < 200) return null;
+    var sphere = mesh.geometry.boundingSphere;
+    if(!sphere || sphere.radius > 1.5) return null;
+    if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    return mesh.geometry.boundingBox;
+}
+
+// the 12 triangles of a box, to f(ax, ay, az, bx, by, bz, cx, cy, cz)
+function boxTriangles(box, offset, f) {
+    var x0 = box.min.x + offset.x, y0 = box.min.y + offset.y, z0 = box.min.z + offset.z, x1 = box.max.x + offset.x, y1 = box.max.y + offset.y, z1 = box.max.z + offset.z;
+    var c = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]];
+    [[0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7], [0, 1, 5], [0, 5, 4], [3, 6, 2], [3, 7, 6], [0, 4, 7], [0, 7, 3], [1, 2, 6], [1, 6, 5]].forEach(function(t) {
+        f(c[t[0]][0], c[t[0]][1], c[t[0]][2], c[t[1]][0], c[t[1]][1], c[t[1]][2], c[t[2]][0], c[t[2]][1], c[t[2]][2]);
+    });
+}
+
 function buildCollisionWorld() {
     collisionWorld = new OpenRacer.CollisionWorld(10);
     var a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
@@ -243,6 +263,8 @@ function buildCollisionWorld() {
             var position = mesh.geometry.attributes.position;
             var index = mesh.geometry.index;
             var offset = mesh.position;
+            var box = propBox(mesh);
+            if(box) { boxTriangles(box, offset, function(ax, ay, az, bx, by, bz, cx, cy, cz) { collisionWorld.addTriangle(ax, ay, az, bx, by, bz, cx, cy, cz); }); continue; }
             for(var t = 0; t < index.count; t += 3) {
                 a.fromBufferAttribute(position, index.getX(t)).add(offset);
                 b.fromBufferAttribute(position, index.getX(t + 1)).add(offset);
@@ -290,6 +312,8 @@ function buildGroundWorld() {
             var position = mesh.geometry.attributes.position;
             var index = mesh.geometry.index;
             var offset = mesh.position;
+            var box = drivable ? null : propBox(mesh);
+            if(box) { boxTriangles(box, offset, function(ax, ay, az, bx, by, bz, cx, cy, cz) { groundWorld.addTriangle3D(ax, ay, az, bx, by, bz, cx, cy, cz, texture, mesh.name, k, false); }); continue; }
             for(var t = 0; t < index.count; t += 3) {
                 a.fromBufferAttribute(position, index.getX(t)).add(offset);
                 b.fromBufferAttribute(position, index.getX(t + 1)).add(offset);
