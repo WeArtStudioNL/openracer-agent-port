@@ -139,6 +139,7 @@ OpenRacer.Car = function( config, domElement ) {
         final_drive: this.final_drive,
         efficiency: drivetrain.efficiency,
         shift_time: drivetrain.shift_time,
+        clutch_start_rpm: drivetrain.clutch_start_rpm, clutch_full_rpm: drivetrain.clutch_full_rpm,
         drive: drivetrain.drive,
         diff: drivetrain.diff,
         diff_preload: drivetrain.diff_preload,

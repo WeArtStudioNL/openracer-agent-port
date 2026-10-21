@@ -85,9 +85,11 @@ OpenRacer.Vehicle = function (parameters, input) {
     };
     // the wheel with its tyre, brake and hub is a mass of its own on the spring (kg per wheel), standing on the tyre, which is a
     // stiff spring (N/m) with a little damping (Ns/m): this is what takes the edge off a kerb
-    this.unsprungMass = parameters.unsprung_mass || 35;
-    this.tyreRate = parameters.tyre_rate || 220000;
-    this.tyreDamping = parameters.tyre_damping || 3000;
+    // a light vehicle (a kart: 200 kg) has light wheels and a softer tyre: the values for a car would make the wheels most of its mass and the tyre far too stiff for its load
+    var lightScale = (parameters.mass || 1230) < 600 ? (parameters.mass || 1230) / 1230 : 1;
+    this.unsprungMass = parameters.unsprung_mass || (lightScale < 1 ? Math.max(2, 0.0285 * parameters.mass) : 35);
+    this.tyreRate = parameters.tyre_rate || 220000 * Math.sqrt(lightScale);
+    this.tyreDamping = parameters.tyre_damping || 3000 * Math.sqrt(lightScale);
     // The roll centres: the height (m above the road) at which the suspension of an axle passes the lateral force of its tyres
     // to the body. The part of the load transfer below it goes through the linkage at once (geometric), only the rest rolls the
     // body on its springs. A higher roll centre: less roll, quicker response, a little jacking.
@@ -177,6 +179,8 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.yawWanted = 0;               // the yaw rate the steering asks for, as the car can follow it (it needs a moment to turn)
     this.steerApplied = 0;            // the angle of the front wheels
     this.understeerGradient = 0.0008; // (rad s^2/m) of the car, to know what the car does at a steering angle; set by layout() from the car
+    this.clutchStartRPM = parameters.clutch_start_rpm || 1050;      // the automatic clutch starts to grip here and grips fully at clutchFullRPM (a kart with a centrifugal clutch: later)
+    this.clutchFullRPM = parameters.clutch_full_rpm || 2000;
     this.shiftTime = parameters.shift_time || 0.32; // how long a shift of the gearbox takes without a clutch pedal (s)
     this.shiftTimer = 0;
     this.lastGearKey = null;
@@ -224,7 +228,8 @@ OpenRacer.Vehicle = function (parameters, input) {
     for(var i = 0; i < 4; i++) {
         var w = new OpenRacer.Wheel({
             name: defs[i].name, diameter: diameter, right: defs[i].right, front: defs[i].front,
-            driven: this.isDriven(defs[i].front), mass: 0, maxBrakeTorque: defs[i].front ? this.brakeFront : this.brakeRear
+            driven: this.isDriven(defs[i].front), mass: 0, maxBrakeTorque: defs[i].front ? this.brakeFront : this.brakeRear,
+            inertia: parameters.wheel_inertia || (lightScale < 1 ? 1.6 * lightScale * Math.pow(diameter / 0.632, 2) : 1.6)      // (a kart wheel is a few kg on a small radius, not a car wheel)
         });
         // A car that understeers at the limit is stable: the front tyres give up before the rear tyres. The rear tyres are
         // a little stiffer against the slip angle, as the whole car is (a rear that is too weak spins from a small steering movement).
@@ -444,6 +449,8 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.toe_rear !== undefined) this.toeRear = t.toe_rear;
         this.applyPressure();
         if(t.shift_time !== undefined) this.shiftTime = t.shift_time;
+        if(t.clutch_start_rpm !== undefined) this.clutchStartRPM = t.clutch_start_rpm;
+        if(t.clutch_full_rpm !== undefined) this.clutchFullRPM = Math.max(t.clutch_full_rpm, this.clutchStartRPM + 50);
         if(t.suspension_travel !== undefined) this.bumpTravel = Math.max(0.01, t.suspension_travel);
         if(t.ride_front !== undefined) this.rideFront = t.ride_front;
         if(t.ride_rear !== undefined) this.rideRear = t.ride_rear;
@@ -1800,7 +1807,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(inp.clutchPedalPresent) {
             engagement = pedalBite(inp.clutch);
         } else {
-            engagement = smoothstep(1050, 2000, rpm);
+            engagement = smoothstep(self.clutchStartRPM, self.clutchFullRPM, rpm);
             if(self.shiftTimer > 0) {
                 var ts = self.shiftTimer;
                 engagement = Math.min(engagement, ts > 0.14 ? 0 : 1 - smoothstep(0, 0.14, ts));

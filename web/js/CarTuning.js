@@ -72,6 +72,8 @@ OpenRacer.CarTuning = (function () {
             ["drive", "Drive", "", 0, 0, 0],
             ["final_drive", "Final drive", "", 1.5, 6.5, 0.05],
             ["shift_time", "Shift time (without a clutch pedal)", "s", 0.05, 1.5, 0.01],
+            ["clutch_start_rpm", "Automatic clutch: starts to grip at", "rpm", 500, 6000, 50],
+            ["clutch_full_rpm", "Automatic clutch: grips fully at", "rpm", 600, 7000, 50],
             ["gears", "Gears", "", 0, 0, 0],
             ["reverse_ratio", "Reverse", "", 1.0, 6.0, 0.05],
             ["clutch", "Clutch capacity (x peak torque)", "", 1.0, 3.5, 0.05],
@@ -202,6 +204,8 @@ OpenRacer.CarTuning = (function () {
             turbo_intercooler: (en.turbo && en.turbo.intercooler !== undefined ? en.turbo.intercooler : 0.75) * 100,
             turbo_efficiency: (en.turbo && en.turbo.efficiency > 0 ? en.turbo.efficiency : 0.7) * 100,
             shift_time: dt.shift_time || 0.32,
+            clutch_start_rpm: dt.clutch_start_rpm || 1050,
+            clutch_full_rpm: dt.clutch_full_rpm || 2000,
             suspension_travel: Math.round((ch.suspension_travel || 0.09) * 100),
             ride_front: Math.round((ch.ride_front || 0) * 1000),
             ride_rear: Math.round((ch.ride_rear || 0) * 1000),
@@ -291,6 +295,7 @@ OpenRacer.CarTuning = (function () {
             downforce_rear: v.downforce_rear / V100,
             ackermann: v.ackermann / 100,
             shift_time: v.shift_time,
+            clutch_start_rpm: v.clutch_start_rpm, clutch_full_rpm: v.clutch_full_rpm,
             turbo_share: v.turbo_share / 100,
             turbo_spool: v.turbo_spool,
             turbo_threshold: v.turbo_threshold,
@@ -362,6 +367,7 @@ OpenRacer.CarTuning = (function () {
             if(v.turbo_boost > 0) { c.engine.turbo.boost_bar = v.turbo_boost; c.engine.turbo.intercooler = v.turbo_intercooler / 100; c.engine.turbo.efficiency = v.turbo_efficiency / 100; }
         } else delete c.engine.turbo;
         c.drivetrain.shift_time = v.shift_time;
+        c.drivetrain.clutch_start_rpm = v.clutch_start_rpm; c.drivetrain.clutch_full_rpm = Math.max(v.clutch_full_rpm, v.clutch_start_rpm + 50);
         c.drivetrain.drive = v.drive;
         c.drivetrain.final_drive = v.final_drive;
         c.drivetrain.reverse_ratio = v.reverse_ratio;
