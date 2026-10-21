@@ -4,6 +4,9 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 ## Unreleased
 
+**Debug view**
+- The 0 key (also on the numeric keypad) shows what the physics sees: the triangles near the car (road, walls and the rest), the collision spheres, the nodes and beams of the shell, the contact of every wheel and the tread nodes of the tyre of nodes. See `DebugView.js`.
+
 **Performance**
 - A wall of tyres no longer drops the frame rate when the car drives close to it: the physics tested every triangle near the car (a tyre has 832, so 15,000 and more within 2 m) against every sphere of the car, 740 ms per step on Kartbaan Oldenzaal. Small props of 200 triangles and more (less than 1.5 m across) now hit the car as their box (12 triangles); the physics triangles of that track went from 2.4 million to 42 thousand, and a step next to the wall takes about 2.6 ms. What you see is unchanged.
 - Decor that is only drawn (tyre walls, trees) is merged per material and per 40 m cell when a track is loaded, so a track with thousands of loose parts needs a few hundred draw calls instead of thousands (Kartbaan Oldenzaal: 3852 parts in 68 groups). The collision and the road are unchanged.

@@ -35,6 +35,7 @@ OpenRacer.NodeTyre = function (wheel, count) {
     var filteredX = 0, filteredY = 0;
 
     this.count = N;
+    this.debug = { touching: touching, sliding: sliding, dx: dx, dy: dy, phase: function () { return phase; } };      // for the debug view (DebugView.js)
     this.stiffX = 20;               // the force along the tyre per slip (a slip ratio of 1), as a factor of the load (the slope of the curve at the start)
     this.stiffY = 18;               // the same across the tyre, per tan of the slip angle
     this.verticalStiffness = 220000;// N/m: how far the tyre is pressed in for a load (it makes the length of the patch)

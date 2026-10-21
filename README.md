@@ -163,6 +163,8 @@ Press **Esc** for the settings menu (the game pauses). It has options for tracti
 The game uses three.js r186 (`web/js/three`, vendored: the build and the few add-ons for post-processing). three.js is an ES module, so `web/js/bootstrap.js` imports it, exposes it as the global `THREE` and then loads the other scripts in order. The old JSON car models are converted to `BufferGeometry` by `parseLegacyModel` in `Helpers.js`.
 
 ## Keyboard
+**0** switches the debug view on and off: the triangles of the track near the car (green: road, orange: walls, blue-grey: the rest that the body can hit), the collision spheres of the car (white, red where a node is bent or torn off), the nodes and beams of the shell (yellow), the contact point and normal of every wheel (cyan) and, with the tyre model of nodes, the ring of tread nodes of every wheel (green in the patch, red where it slides). It is drawn over everything and costs nothing when it is off.
+
 The steering keys turn the wheels at a rate: fast at a standstill, slower the faster the car goes, and the wheels come back to the middle by themselves when the keys are let go. *Esc → Keyboard → Steering speed* scales that rate (50–300 %).
 
 ## Touch screen

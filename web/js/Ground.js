@@ -367,6 +367,14 @@ OpenRacer.GroundWorld = function (cellSize) {
         return dx * dx + dy * dy + dz * dz;
     };
 
+    // the corners of triangle t into out (9 numbers), for the debug view
+    this.corners = function (t, out) {
+        var o = t * 12;
+        out[0] = data3[o]; out[1] = data3[o + 1]; out[2] = data3[o + 2];
+        out[3] = data3[o] + data3[o + 3]; out[4] = data3[o + 1] + data3[o + 4]; out[5] = data3[o + 2] + data3[o + 5];
+        out[6] = data3[o] + data3[o + 6]; out[7] = data3[o + 1] + data3[o + 7]; out[8] = data3[o + 2] + data3[o + 8];
+        return out;
+    };
     this.normalOf = function (t, out) { var o = t * 12; out.x = data3[o + 9]; out.y = data3[o + 10]; out.z = data3[o + 11]; };
 
     // How far a line (through p, in the direction u of unit length) runs inside triangle t, as a range of distances along it: the top of a

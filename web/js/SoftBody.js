@@ -96,6 +96,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
     }
     var B = beamA.length;
     this.beamCount = B;
+    this.beamA = beamA; this.beamB = beamB; this.beamAlive = beamAlive;          // for the debug view (DebugView.js)
     (config.beams || []).forEach(function (o) {
         for (var i = 0; i < B; i++) {
             if ((beamA[i] === o.a && beamB[i] === o.b) || (beamA[i] === o.b && beamB[i] === o.a)) {
