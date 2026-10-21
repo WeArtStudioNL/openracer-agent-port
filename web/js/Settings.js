@@ -73,6 +73,7 @@ var Settings = (function() {
         { id: "gear7", wheelOnly: true, group: "Gearbox", label: "H-shifter: gear 8", wheel: { profile: "gear7", steps: ["gear7"] }, defaults: [] },
         { id: "reverseGear", wheelOnly: true, group: "Gearbox", label: "H-shifter: reverse", wheel: { profile: "reverseGear", steps: ["reverse"] }, defaults: [] },
         { id: "resetCar", group: "Other", label: "Back to the start", defaults: [key("KeyR"), padButton(3)] },
+        { id: "repairCar", group: "Other", label: "Repair the car where it stands (body, parts, wheels, tyres)", defaults: [key("Backspace")] },
         { id: "cameraLeft", group: "Other", label: "Camera left", defaults: [key("BracketLeft")] },
         { id: "cameraRight", group: "Other", label: "Camera right", defaults: [key("BracketRight")] },
         { id: "cameraReset", group: "Other", label: "Camera behind the car", defaults: [key("Backquote")] },
@@ -940,6 +941,7 @@ var Settings = (function() {
     handlers.wheelToggle = function() { WheelControls.toggle(); };
     handlers.startEngine = function() { if(window.car) window.car.startEngine(); };
     handlers.resetCar = function() { if(window.car) window.car.reset = true; };
+    handlers.repairCar = function() { if(window.car && window.car.vehicle) window.car.vehicle.repair(); };
     handlers.cameraReset = function() { if(window.car) window.car.cameraAngle = 0; };
     handlers.telemetry = function() { if(window.telemetry) window.telemetry.setVisible(!window.telemetry.visible); };
     handlers.shiftUp = function() { if(window.car) window.car.shiftUp(); };

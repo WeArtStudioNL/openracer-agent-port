@@ -510,6 +510,14 @@ OpenRacer.Vehicle = function (parameters, input) {
         return self.ground.query(x, z, y, above);
     }
 
+    // Repairs the car where it stands: the shell (dents), the parts that came off, the wheels (bent, torn off) and the tyres (punctures)
+    this.repair = function () {
+        if(this.softBody) this.softBody.repair();
+        if(this.parts) this.parts.repair();
+        if(this.repairWheels) this.repairWheels();
+        this.repairTyres();
+    };
+
     // Puts the car on the road at a place, standing still with the springs at rest.
     this.reset = function (x, z, psi) {
         var road = roadAt(x, z, 1000, 0);
@@ -520,8 +528,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         this.px = x; this.py = height + this.cgHeight + (this.rideFront + this.rideRear) / 2; this.pz = z; // the ride height lifts the body
         this.vx = this.vy = this.vz = 0;
         this.wx = this.wy = this.wz = 0;
-        if(this.softBody) this.softBody.repair();
-        if(this.parts) this.parts.repair();
+        this.repair();
         this.ax = this.ay = 0;
         this.suspensionHistory = null;
         for(var i = 0; i < 4; i++) {

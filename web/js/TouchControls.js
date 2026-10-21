@@ -180,6 +180,7 @@ var TouchControls = (function() {
 
         var top = el(root, "div", "top");
         actionButton(top, "↺", "resetCar");
+        actionButton(top, "🔧", "repairCar");
         actionButton(top, "📷", "cameraSwitch");
         var menu = el(top, "div", "btn", "☰");
         menu.addEventListener("pointerup", function() { Settings.toggleMenu(); });
