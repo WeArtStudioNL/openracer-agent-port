@@ -1547,6 +1547,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var fpx = fbx - nx * dotN, fpy = fby - ny * dotN, fpz = fbz - nz * dotN;
                 var fl = Math.sqrt(fpx * fpx + fpy * fpy + fpz * fpz) || 1;
                 fpx /= fl; fpy /= fl; fpz /= fl;
+                wheel.heading = wheel.heading || { x: 0, y: 0, z: 0 }; wheel.heading.x = fpx; wheel.heading.y = fpy; wheel.heading.z = fpz;       // (for the debug view)
                 var lx = ny * fpz - nz * fpy, ly = nz * fpx - nx * fpz, lz = nx * fpy - ny * fpx;   // n x f: to the left
 
                 vl = cvx * fpx + cvy * fpy + cvz * fpz;

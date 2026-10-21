@@ -94,8 +94,7 @@
             var nt = w.nodeTyre;
             if (!nt || v.tyreModel !== "nodes") continue;
             // the forward direction along the road, and the centre of the wheel above the contact
-            var fx = forward.x - n.nx * (forward.x * n.nx + forward.y * n.ny + forward.z * n.nz), fy = forward.y - n.ny * (forward.x * n.nx + forward.y * n.ny + forward.z * n.nz), fz = forward.z - n.nz * (forward.x * n.nx + forward.y * n.ny + forward.z * n.nz);
-            var fl = Math.sqrt(fx * fx + fy * fy + fz * fz) || 1; fx /= fl; fy /= fl; fz /= fl;
+            var h = w.heading || forward, fx = h.x, fy = h.y, fz = h.z;       // (the way the wheel points, turned by the steering)
             var R = w.radius, cx = w.contact.x + n.nx * R, cy = w.contact.y + n.ny * R, cz = w.contact.z + n.nz * R;
             var d = nt.debug, phase = d.phase(), pitch = 2 * Math.PI / nt.count, ox = 0, oy = 0, oz = 0;
             for (k = 0; k <= nt.count; k++) {
