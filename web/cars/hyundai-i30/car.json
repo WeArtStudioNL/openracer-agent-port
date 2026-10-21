@@ -1,0 +1,305 @@
+{
+ "name": "Hyundai i30",
+ "description": "2013 Hyundai i30 (GD), five-door hatchback: 1.6 GDI, 135 hp at 6300 rpm, 164 Nm at 4850 rpm, six-speed manual, front wheel drive. Placeholder model.",
+ "model": {
+  "type": "gltf",
+  "file": "cars/hyundai-i30/hyundai-i30-placeholder.glb",
+  "rotation_y": 0,
+  "scale": 1,
+  "offset": [
+   0,
+   0,
+   0
+  ]
+ },
+ "wheels": {
+  "mode": "model",
+  "nodes": {
+   "FR": [
+    "wheel_FR",
+    "rim_FR"
+   ],
+   "FL": [
+    "wheel_FL",
+    "rim_FL"
+   ],
+   "RL": [
+    "wheel_RL",
+    "rim_RL"
+   ],
+   "RR": [
+    "wheel_RR",
+    "rim_RR"
+   ]
+  }
+ },
+ "dimensions": {
+  "length": 4.3,
+  "width": 1.78,
+  "height": 1.465
+ },
+ "chassis": {
+  "mass": 1230,
+  "wheelbase": 2.65,
+  "front_track": 1.563,
+  "rear_track": 1.571,
+  "weight_distribution": 0.61,
+  "cg_height": 0.5,
+  "tire_diameter": 0.632,
+  "drag_coefficient": 0.31,
+  "max_steer_deg": 36,
+  "roll_front": 0.55,
+  "spring_front": 24000,
+  "spring_rear": 26000,
+  "suspension_travel": 0.12,
+  "damping_front": 0.38,
+  "damping_rear": 0.38,
+  "downforce_front": 0,
+  "downforce_rear": 0,
+  "ackermann": 0.6,
+  "ride_front": 0,
+  "ride_rear": 0,
+  "roll_center_front": 0.08,
+  "roll_center_rear": 0.15,
+  "toe_front": 0.05,
+  "toe_rear": 0.1,
+  "camber_front": -0.6,
+  "camber_rear": -1,
+  "roll_camber": 0.6
+ },
+ "drivetrain": {
+  "drive": "fwd",
+  "gear_ratios": [
+   3.308,
+   1.962,
+   1.257,
+   0.976,
+   0.778,
+   0.633
+  ],
+  "reverse_ratio": 3.583,
+  "final_drive": 4.333,
+  "efficiency": 0.92,
+  "clutch": 1.5,
+  "diff_preload": 0,
+  "diff_lock": 60,
+  "diff": "open",
+  "diff_power": 0,
+  "diff_coast": 0,
+  "shift_time": 0.32
+ },
+ "engine": {
+  "idle_rpm": 750,
+  "limiter_rpm": 6700,
+  "inertia": 0.18,
+  "torque_curve": [
+   [
+    0,
+    0
+   ],
+   [
+    800,
+    95
+   ],
+   [
+    1000,
+    105
+   ],
+   [
+    1500,
+    125
+   ],
+   [
+    2000,
+    140
+   ],
+   [
+    2500,
+    148
+   ],
+   [
+    3000,
+    152
+   ],
+   [
+    3500,
+    157
+   ],
+   [
+    4000,
+    161
+   ],
+   [
+    4500,
+    163
+   ],
+   [
+    4850,
+    164
+   ],
+   [
+    5500,
+    160
+   ],
+   [
+    6000,
+    155
+   ],
+   [
+    6300,
+    150
+   ],
+   [
+    6700,
+    138
+   ],
+   [
+    7000,
+    120
+   ]
+  ],
+  "power_scale": 1,
+  "braking_scale": 1,
+  "limiter_hz": 12,
+  "two_step_rpm": 4700,
+  "launch_rpm": 4000
+ },
+ "brakes": {
+  "front": 1400,
+  "rear": 700
+ },
+ "cameras": {
+  "chase": {
+   "distance": 9,
+   "height": 2.1,
+   "fov": 35
+  },
+  "follow": {
+   "distance": 6.6,
+   "height": 2,
+   "look_height": 0.8,
+   "smoothing": 3.5,
+   "fov_standing": 45,
+   "fov_fast": 75,
+   "fov_full_speed": 70,
+   "dolly": 1
+  },
+  "cockpit": {
+   "position": [
+    0.37,
+    0.83,
+    0.25
+   ],
+   "fov": 75
+  }
+ },
+ "steering_wheel": {
+  "degrees": 485
+ },
+ "sound": {
+  "engine_sim": {
+   "layout": "inline-4",
+   "impulse_response": "mild_exhaust",
+   "convolution": 0.5,
+   "bore": 77,
+   "stroke": 85,
+   "rod": 143,
+   "compression_ratio": 11,
+   "burn_duration": 45,
+   "burn_randomness": 0.2,
+   "intake_duration": 228,
+   "intake_lift": 9.5,
+   "intake_lobe_centre": 110,
+   "exhaust_duration": 228,
+   "exhaust_lift": 9,
+   "exhaust_lobe_centre": 110,
+   "intake_flow": 230,
+   "exhaust_flow": 180,
+   "idle_pressure": 0.35,
+   "exhaust_systems": 1,
+   "primary_length": 0.45,
+   "primary_flow": 180,
+   "exhaust_length": 2.4,
+   "outlet_flow": 450,
+   "collector_area": 20,
+   "hf_gain": 0.01,
+   "noise": 1,
+   "jitter": 0.5,
+   "volume": 1,
+   "audio_volume": 1,
+   "simulation_frequency": 10000,
+   "timing": [
+    [
+     0,
+     12
+    ],
+    [
+     1000,
+     14
+    ],
+    [
+     2000,
+     22
+    ],
+    [
+     3000,
+     28
+    ],
+    [
+     4000,
+     32
+    ],
+    [
+     5000,
+     35
+    ],
+    [
+     6000,
+     37
+    ],
+    [
+     9000,
+     37
+    ]
+   ]
+  }
+ },
+ "tyres": {
+  "compound": "road",
+  "grip": 1,
+  "grip_balance": 1,
+  "cornering": 1,
+  "rolling_resistance": 0.012,
+  "heating": 1,
+  "life": 1,
+  "pressure_front": 2.3,
+  "pressure_rear": 2.3
+ },
+ "fuel": {
+  "tank": 53,
+  "use": 1
+ },
+ "assists": {
+  "tc_allowance": 1,
+  "esc_gain": 1
+ },
+ "exhaust": [
+  {
+   "position": [
+    0.45,
+    -0.036,
+    -2.14
+   ],
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "diameter": 0.055,
+   "smoke": 1,
+   "flame_length_cm": 20,
+   "flame_width_cm": 8,
+   "brightness": 1
+  }
+ ]
+}
