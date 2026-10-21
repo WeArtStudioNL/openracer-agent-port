@@ -22,6 +22,15 @@ OpenRacer.NodeTyre = function (wheel, count) {
     var touching = new Uint8Array(N), sliding = new Uint8Array(N);
     var dx = new Float32Array(N), dy = new Float32Array(N), weight = new Float32Array(N), inPatch = new Int32Array(N);
     var phase = 0;
+    var riseAt = [0, 0, 0, 0, 0];
+    // the rise of the road at x (m along the tyre): from the five places that the wheel measures (held at the ends)
+    function riseOf(x, spacing) {
+        var u = x / spacing + 2;
+        if(u <= 0) return riseAt[0];
+        if(u >= 4) return riseAt[4];
+        var s = Math.floor(u), f = u - s;
+        return riseAt[s] * (1 - f) + riseAt[s + 1] * f;
+    }
     var filteredX = 0, filteredY = 0;
 
     this.count = N;
@@ -33,6 +42,8 @@ OpenRacer.NodeTyre = function (wheel, count) {
     this.stribeck = 8;              // m/s: the speed of the slide over which the friction falls from the static to the sliding value
     this.slidingShare = 0;          // the share of the load that is carried by nodes that slide
     this.patch = 0;                 // the length of the patch (m)
+    this.profile = null;            // the depth of the tyre in the road at 5 places along it, 0.4 radius apart (the wheel measures it), or null: a flat road
+    this.carcass = true;            // the patch from the round of the tyre pressed into the road (with the profile), not from a fixed shape
     this.nodesIn = 0;
 
     // One step: vl and vt the speed of the contact over the road along and across the wheel (m/s, vt to the left), omegaR the speed of the tread over the hub (m/s), load
@@ -49,15 +60,49 @@ OpenRacer.NodeTyre = function (wheel, count) {
         // the patch: half a length from the pressing in of the tyre
         var pressed = load / this.verticalStiffness;
         var half = Math.max(0.025, Math.min(0.22, Math.sqrt(radius * pressed)));
-        this.patch = 2 * half;
         phase = (phase + omegaR / radius * dt) % TWO_PI;
         var pitch = TWO_PI / N, sumP = 0, count = 0;
+        // The carcass: every node is a radial spring that the road presses in by (delta - x^2 / 2R - the rise of the road at x); delta (how far the tyre as a whole is
+        // pressed in) is found so that the springs carry the load. A kerb or a bump under part of the patch then moves the load to the nodes on it.
+        var useCarcass = this.carcass;
+        var delta = 0, rise = null;
+        if(useCarcass) {
+            rise = riseAt;
+            var spacing = 0.4 * radius, p0 = this.profile, ref = 0;
+            if(p0 && p0[2] === p0[2]) {       // (a number: the wheel has a road under its middle)
+                ref = p0[2];
+                for(var s = 0; s < 5; s++) {
+                    var xs = (s - 2) * spacing;
+                    rise[s] = p0[s] === p0[s] ? ref - (radius - Math.sqrt(radius * radius - xs * xs)) - p0[s] : 0;      // (a place without road: no rise)
+                }
+            } else { rise[0] = rise[1] = rise[2] = rise[3] = rise[4] = 0; }
+            // the radial stiffness per metre of the patch: the tyre as a whole has verticalStiffness for a patch of about 0.1 m
+            var kr = this.verticalStiffness / 0.1, lo = 0, hi = 0.12;
+            for(var it = 0; it < 14; it++) {
+                var mid = 0.5 * (lo + hi), carry = 0;
+                for(var q = 0; q < 36; q++) {
+                    var xq = (q + 0.5) / 36 * 0.44 - 0.22;
+                    var dq = mid - xq * xq / (2 * radius) - riseOf(xq, spacing);
+                    if(dq > 0) carry += dq;
+                }
+                if(carry * kr * 0.44 / 36 < load) lo = mid; else hi = mid;
+            }
+            delta = 0.5 * (lo + hi);
+            var lowX = 0, highX = 0;
+            for(var q2 = 0; q2 < 36; q2++) {
+                var xr = (q2 + 0.5) / 36 * 0.44 - 0.22;
+                if(delta - xr * xr / (2 * radius) - riseOf(xr, spacing) > 0) { if(lowX === 0) lowX = xr; highX = xr; }
+            }
+            half = Math.max(0.025, (highX - lowX) / 2 + 0.006);
+        }
+        this.patch = 2 * half;
         for(var i = 0; i < N; i++) {
             var angle = (phase + i * pitch) % TWO_PI;
             if(angle > Math.PI) angle -= TWO_PI;
             var x = angle * radius;
-            if(x > -half && x < half) {
-                var p = 1 - (x * x) / (half * half);
+            var dn = useCarcass ? delta - x * x / (2 * radius) - riseOf(x, spacing) : 0;
+            if(useCarcass ? dn > 0 : (x > -half && x < half)) {
+                var p = useCarcass ? dn : 1 - (x * x) / (half * half);
                 weight[i] = p; sumP += p;
                 inPatch[count++] = i;
                 if(!touching[i]) { touching[i] = 1; dx[i] = 0; dy[i] = 0; sliding[i] = 0; }     // a node that comes into the patch: free of load

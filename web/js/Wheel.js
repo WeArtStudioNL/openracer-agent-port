@@ -128,6 +128,7 @@ OpenRacer.Wheel = function (parameters) {
         var mu = Math.min(1.4 * grip, Math.max(0.2 * grip, grip - this.loadSensitivity * (load - this.nominalLoad)));
         return { mu: mu, sliding: mu * Math.min(0.98, surface.kinetic / surface.static) };
     };
+    this.profile = [NaN, NaN, NaN, NaN, NaN];                       // the depth of the tyre in the road at five places along it (Vehicle.js, for the tyre of nodes)
     this.nodeTyre = null;                                           // the tyre of nodes, when that model is on (Vehicle.js: tyreModel)
     this.leak = 0; this.pressureLoss = 0; this.leakTick = 0;      // a puncture (Vehicle.puncture): bar per second, bar lost so far
 

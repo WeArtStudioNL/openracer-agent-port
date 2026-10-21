@@ -1358,6 +1358,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             // reaches the road first. So a kerb or an edge lifts the wheel gradually as it rolls on to it, instead of all at once
             // when the middle passes it. The surface under the middle is the one that counts for the grip.
             var road = null, t = Infinity, surfaceRoad = null;
+            w.profile[0] = w.profile[1] = w.profile[2] = w.profile[3] = w.profile[4] = NaN;
             for(var sk = -2; sk <= 2 && ground3D; sk++) {
                 // the 3D physics: a ray along the axis of the suspension (down for the car, whichever way that is in the world), from a
                 // little above the mount, so a car on a wall or upside down feels the road under its wheels
@@ -1369,6 +1370,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 if(sk === 0) surfaceRoad = hit;
                 var liftR = w.radius - Math.sqrt(w.radius * w.radius - alongR * alongR);
                 var tR = hit.t - RISE + liftR;
+                w.profile[sk + 2] = (w.susLength + w.radius) - tR;       // how deep the tyre would stand in the road at this place, with the round of the tyre in it (NodeTyre.js)
                 if(tR < t) { t = tR; road = hit; }
             }
             for(var sk = -2; sk <= 2 && !ground3D; sk++) {
@@ -1580,6 +1582,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                     var friction = wheel.frictionFor(fzGrip, surface);
                     var camberSlide = self.camberGain * leanLeft * wheel.anglePeak / 0.15 * vref;    // (a leaning tyre pushes as if it slid a little)
                     wheel.nodeTyre.verticalStiffness = wheel.tyreRate || self.tyreRate;      // the patch comes from the stiffness of the tyre, which follows its pressure
+                    wheel.nodeTyre.profile = ground3D ? wheel.profile : null;
                     wheel.nodeTyre.stiffX = self.tyreStiffX;
                     wheel.nodeTyre.stiffY = self.tyreStiffY * self.corneringScale * (wheel.stiffnessBias || 1) * (wheel.pressureCorner || 1);
                     wheel.nodeTyre.step(dt, vl, vt - camberSlide, wheel.omega * wheel.radius, fzGrip, friction.mu, friction.sliding, wheel.radius, wheel.lateralGrip);
