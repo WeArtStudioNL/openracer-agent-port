@@ -12,7 +12,8 @@
 
 // The depth of the surfaces for the smoke, when the smoke is drawn after the screen space effects (SmokePass in Graphics.js): the puffs fade
 // where they meet a surface and are not drawn behind one. Without it (uUseDepth 0) the smoke is drawn with the scene and the depth buffer does it.
-OpenRacer.SmokeDepth = { tDepth: { value: null }, uUseDepth: { value: 0 }, uResolution: { value: new THREE.Vector2(1, 1) }, uNear: { value: 1 }, uFar: { value: 5000 } };
+// (The car editor loads this script before it has THREE: the resolution is then a plain pair of numbers, which a uniform takes as well.)
+OpenRacer.SmokeDepth = { tDepth: { value: null }, uUseDepth: { value: 0 }, uResolution: { value: typeof THREE !== "undefined" ? new THREE.Vector2(1, 1) : { x: 1, y: 1, set: function(x, y) { this.x = x; this.y = y; return this; } } }, uNear: { value: 1 }, uFar: { value: 5000 } };
 
 OpenRacer.TyreSmoke = function(scene, capacity) {
     capacity = capacity || 2500;
