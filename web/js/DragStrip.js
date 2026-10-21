@@ -150,7 +150,7 @@ OpenRacer.DragStrip = (function () {
             mass: Math.round(v.mass), front: Math.round(v.weight_distribution * 1000) / 10, drive: v.driveType, gearbox: car.gearboxMode,
             kw: Math.round(kwMax), kwRpm: kwRpm, hp: Math.round(kwMax * 1.34102), nm: Math.round(nmMax), nmRpm: nmRpm,
             limiter: Math.round(e.limiterRPM), twoStepRpm: Math.round(e.twoStepRPM), launchRpm: Math.round(e.launchRPM),
-            turbo: e.turboShare > 0 ? { share: Math.round(e.turboShare * 100), boost: x.boost_full || null, spool: e.turboSpool } : null,
+            turbo: e.hasTurbo() ? { share: Math.round(e.turboShare * 100), bar: e.turboBar > 0 ? Math.round(e.turboBar * 100) / 100 : null, boost: x.boost_full || null, spool: e.turboSpool } : null,
             gears: (car.gear_ratios || []).map(function (g) { return Math.round(g * 1000) / 1000; }), finalDrive: car.final_drive,
             tyres: kind ? kind.name : "", pressure: [Math.round(v.pressureFront * 10) / 10, Math.round(v.pressureRear * 10) / 10],
             tc: !!v.tcEnabled, abs: !!v.absEnabled, esc: !!v.escEnabled, shiftTime: v.shiftTime,
@@ -230,7 +230,7 @@ OpenRacer.DragStrip = (function () {
         html += "<div class=\"group\">Car</div>" + kv("Mass", (i.mass || "?") + " kg") + kv("Weight on the front axle", (i.front || "?") + " %") + kv("Drive", drive) +
             kv("Gearbox", i.gearbox || "") + kv("Tyres", (i.tyres || "") + (i.pressure ? " · " + i.pressure[0] + " / " + i.pressure[1] + " bar" : ""));
         html += "<div class=\"group\">Engine</div>" + kv("Power", i.hp ? i.hp + " hp (" + i.kw + " kW) at " + i.kwRpm + " rpm" : "") + kv("Torque", i.nm ? i.nm + " Nm at " + i.nmRpm + " rpm" : "") +
-            kv("Rev limit", (i.limiter || "") + " rpm") + (i.turbo ? kv("Turbo", i.turbo.share + " % boost" + (i.turbo.boost ? ", " + i.turbo.boost + " bar" : "") + ", spool " + (i.turbo.spool || 0).toFixed(2) + " s") : kv("Turbo", "none"));
+            kv("Rev limit", (i.limiter || "") + " rpm") + (i.turbo ? kv("Turbo", (i.turbo.bar ? i.turbo.bar + " bar boost" : i.turbo.share + " % boost" + (i.turbo.boost ? ", " + i.turbo.boost + " bar" : "")) + ", spool " + (i.turbo.spool || 0).toFixed(2) + " s") : kv("Turbo", "none"));
         html += "<div class=\"group\">Transmission</div>" + kv("Final drive", i.finalDrive || "") + kv("Gears", (i.gears || []).join(" · ")) + kv("Shift time", (i.shiftTime || 0).toFixed(2) + " s");
         html += "<div class=\"group\">Launch and extras</div>" + kv("Used on the start", (run.aids && run.aids.length) ? run.aids.join(", ") : "none") +
             kv("Two-step speed", (i.twoStepRpm || "") + " rpm") + kv("Launch control speed", (i.launchRpm || "") + " rpm") +

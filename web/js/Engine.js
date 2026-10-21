@@ -70,6 +70,22 @@ OpenRacer.Engine = function( parameters ) {
     this.turboShare = turbo ? Math.max(0, Math.min(0.9, turbo.share !== undefined ? turbo.share : 0.5)) : 0;
     this.turboSpool = turbo ? (turbo.spool || 0.4) : 0.4;
     this.turboThreshold = turbo ? (turbo.threshold_rpm || 2500) : 2500;
+    // The turbo as a pressure: with a boost pressure in bar (boost_bar of "turbo") the torque of the curve is that of the engine without the turbo, and the boost
+    // (0 to 1 of boost_bar) makes it more by the air that the turbo puts in: the pressure ratio, the heat of the compressed air (the efficiency of the compressor,
+    // the intercooler takes part of the heat off again) and the back pressure of the exhaust (3.5% of the power per bar). Without it the older model counts: the
+    // share of the torque that comes with boost.
+    this.turboBar = turbo && turbo.boost_bar > 0 ? turbo.boost_bar : 0;
+    this.turboIntercooler = turbo && turbo.intercooler !== undefined ? turbo.intercooler : 0.75;
+    this.turboEfficiency = turbo && turbo.efficiency > 0 ? turbo.efficiency : 0.7;
+    this.hasTurbo = function () { return this.turboShare > 0 || this.turboBar > 0; };
+    // the power as a factor for a boost pressure (bar above the atmosphere)
+    this.boostFactor = function (bar) {
+        if(bar <= 0) return 1;
+        var T0 = 293.15, ratio = 1 + bar;
+        var out = T0 * (1 + (Math.pow(ratio, 0.286) - 1) / Math.max(0.3, this.turboEfficiency));
+        var manifold = out - this.turboIntercooler * (out - T0);
+        return ratio * (T0 / manifold) * (1 - 0.035 * bar);
+    };
     this.boost = 0;       // 0..1, how much of the boost is there
     // The extras (CarTuning.js, car.json "extras"; the tuning menu sets them through Vehicle.retune): pops and bangs, and anti-lag.
     // Pops: unburnt fuel burns in the exhaust, at the start of every cut of the rev limiter, and after lifting off the throttle; the bangs are
@@ -87,7 +103,7 @@ OpenRacer.Engine = function( parameters ) {
     function bang(strength, loud, flame) { if(engine.events.length < 40) engine.events.push({ strength: strength, loud: loud, flame: flame }); }
     function stepExtras(throttle, dt, rpm) {
         var x = engine.extras;
-        var popsOn = !!x.pops_on, als = !!x.antilag_on && engine.turboShare > 0;
+        var popsOn = !!x.pops_on, als = !!x.antilag_on && engine.hasTurbo();
         var off = throttle < 0.15;
         var wantAls = als && engine.running && rpm > x.antilag_rpm && (x.antilag_mode === "launch" ? engine.holding : (off || engine.holding));
         if(wantAls) engine.alsTimer += dt;
@@ -114,7 +130,7 @@ OpenRacer.Engine = function( parameters ) {
         this.cutTime += dt; this.onTime += dt;
         var rpm = this.getRPM();
         stepExtras(throttle, dt, rpm);
-        if(this.turboShare <= 0) { this.boost = 0; return; }
+        if(!this.hasTurbo()) { this.boost = 0; return; }
         var wanted = this.running ? Math.max(0, Math.min(1, throttle)) * Math.max(0, Math.min(1, (rpm - this.turboThreshold) / 2000)) : 0;
         if(this.alsActive) wanted = Math.max(wanted, this.extras.antilag_boost / 100 * Math.min(1, 0.4 + (rpm - this.extras.antilag_rpm) / 3000));
         var tau = wanted > this.boost ? this.turboSpool : this.turboSpool * 0.35;
@@ -197,7 +213,7 @@ OpenRacer.Engine = function( parameters ) {
         this.throttleCut = this.cutting ? 0 : 1;
         thr *= this.throttleCut;
 
-        var boosted = 1 - this.turboShare * (1 - this.boost); // the torque without boost is the share that is not from the turbo
+        var boosted = this.turboBar > 0 ? this.boostFactor(this.boost * this.turboBar) : 1 - this.turboShare * (1 - this.boost); // (the older model: the torque without boost is the share that is not from the turbo)
         return this.getTorque(rpm) * this.torqueScale * boosted * thr - (1 - thr) * this.getMotoringTorque(rpm) * (this.alsActive ? 0.5 : 1);
     };
 };

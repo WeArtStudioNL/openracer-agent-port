@@ -4,6 +4,9 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 ## Unreleased
 
+**Engine**
+- A turbo with a boost pressure in bar: the power follows the pressure (pressure ratio, compressor and intercooler efficiency, exhaust back pressure); the older share of torque stays for cars without it.
+
 **Controls**
 - Automatic gearbox: holding the brake key at a standstill (or below a speed that can be set) puts the car in reverse while it is held; the gas key brakes in reverse and is D again at a standstill.
 

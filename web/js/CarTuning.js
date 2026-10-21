@@ -55,7 +55,10 @@ OpenRacer.CarTuning = (function () {
             ["engine_braking", "Engine braking", "%", 20, 300, 5],
             ["turbo_share", "Turbo: share of the torque that is boost (0: no turbo)", "%", 0, 90, 5],
             ["turbo_spool", "Turbo: spool time (the lag)", "s", 0.05, 2, 0.05],
-            ["turbo_threshold", "Turbo: from", "rpm", 1000, 6000, 100]
+            ["turbo_threshold", "Turbo: from", "rpm", 1000, 6000, 100],
+            ["turbo_boost", "Turbo: boost pressure at full boost (0: the share of the torque above is used)", "bar", 0, 6, 0.05],
+            ["turbo_intercooler", "Turbo: intercooler efficiency", "%", 0, 95, 1],
+            ["turbo_efficiency", "Turbo: compressor efficiency", "%", 55, 80, 1]
         ] },
         { name: "Transmission", items: [
             ["drive", "Drive", "", 0, 0, 0],
@@ -119,7 +122,7 @@ OpenRacer.CarTuning = (function () {
             ["antilag_fuel", "Extra fuel use while it works", "%", 0, 300, 10]
         ] },
         { key: "boost_gauge", label: "Boost gauge (the pressure of the turbo)", items: [
-            ["boost_full", "Boost pressure at full boost", "bar", 0.2, 3.5, 0.05],
+            ["boost_full", "Boost pressure at full boost (when the turbo has no pressure of its own)", "bar", 0.2, 6, 0.05],
             ["boost_scale", "The gauge goes up to", "bar", 0.5, 4, 0.5]
         ] }
     ];
@@ -179,6 +182,9 @@ OpenRacer.CarTuning = (function () {
             turbo_share: (en.turbo && en.turbo.share !== undefined ? en.turbo.share : (en.turbo ? 0.5 : 0)) * 100,
             turbo_spool: en.turbo && en.turbo.spool ? en.turbo.spool : 0.4,
             turbo_threshold: en.turbo && en.turbo.threshold_rpm ? en.turbo.threshold_rpm : 2500,
+            turbo_boost: en.turbo && en.turbo.boost_bar > 0 ? en.turbo.boost_bar : 0,
+            turbo_intercooler: (en.turbo && en.turbo.intercooler !== undefined ? en.turbo.intercooler : 0.75) * 100,
+            turbo_efficiency: (en.turbo && en.turbo.efficiency > 0 ? en.turbo.efficiency : 0.7) * 100,
             shift_time: dt.shift_time || 0.32,
             suspension_travel: Math.round((ch.suspension_travel || 0.09) * 100),
             ride_front: Math.round((ch.ride_front || 0) * 1000),
@@ -266,6 +272,9 @@ OpenRacer.CarTuning = (function () {
             turbo_share: v.turbo_share / 100,
             turbo_spool: v.turbo_spool,
             turbo_threshold: v.turbo_threshold,
+            turbo_boost: v.turbo_boost,
+            turbo_intercooler: v.turbo_intercooler / 100,
+            turbo_efficiency: v.turbo_efficiency / 100,
             suspension_travel: v.suspension_travel / 100,
             ride_front: v.ride_front / 1000,
             ride_rear: v.ride_rear / 1000,
@@ -326,8 +335,10 @@ OpenRacer.CarTuning = (function () {
         c.engine.two_step_rpm = v.two_step_rpm;
         c.engine.launch_rpm = v.launch_rpm;
         c.engine.inertia = v.engine_inertia;
-        if(v.turbo_share > 0) c.engine.turbo = { share: v.turbo_share / 100, spool: v.turbo_spool, threshold_rpm: v.turbo_threshold };
-        else delete c.engine.turbo;
+        if(v.turbo_share > 0 || v.turbo_boost > 0) {
+            c.engine.turbo = { share: v.turbo_share / 100, spool: v.turbo_spool, threshold_rpm: v.turbo_threshold };
+            if(v.turbo_boost > 0) { c.engine.turbo.boost_bar = v.turbo_boost; c.engine.turbo.intercooler = v.turbo_intercooler / 100; c.engine.turbo.efficiency = v.turbo_efficiency / 100; }
+        } else delete c.engine.turbo;
         c.drivetrain.shift_time = v.shift_time;
         c.drivetrain.drive = v.drive;
         c.drivetrain.final_drive = v.final_drive;

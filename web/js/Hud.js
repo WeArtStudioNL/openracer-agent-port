@@ -292,11 +292,11 @@ var Hud = (function() {
     // The boost gauge (an extra of the tuning menu): the pressure of the manifold from the vacuum of a closed throttle (-1 bar) to the full boost, with a mark for the peak
     function drawBoost(car) {
         var engine = car.engine, x = engine.extras || {};
-        var show = !!x.boost_gauge_on && engine.turboShare > 0 && Settings.option("hud");
+        var show = !!x.boost_gauge_on && engine.hasTurbo() && Settings.option("hud");
         boostCanvas.style.display = show ? "block" : "none";
         if(!show) return;
         var s = Math.round(size * 0.5), cx = s / 2, cy = s / 2, R = s / 2 - 2;
-        var full = x.boost_full || 1, top = Math.max(0.5, x.boost_scale || 2), low = -1;
+        var full = engine.turboBar > 0 ? engine.turboBar : (x.boost_full || 1), top = Math.max(0.5, x.boost_scale || 2, full * 1.15), low = -1;
         // the pressure: the boost, or the vacuum behind a throttle that is closed (less of it with boost)
         var value = engine.boost * full - (1 - Math.min(1, Math.max(0, car.throttle))) * 0.6 * (1 - engine.boost);
         var now = Date.now();
