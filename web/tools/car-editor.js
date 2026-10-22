@@ -1400,6 +1400,11 @@ function buildConfig(id) {
         }
     }
     if (exhaust.length) config.exhaust = exhaustConfig();
+    // the steering wheel part, moved in the view: offset, rotation and scale about its middle (the name and the axis that the car had are kept)
+    const wheelPlace = driverEditor && driverEditor.wheelConfig();
+    const keptWheel = state.existingCar && state.existingCar.steering_wheel;
+    if (keptWheel) for (const key of ["name", "axis"]) if (keptWheel[key] !== undefined) config.steering_wheel[key] = keptWheel[key];
+    if (wheelPlace) Object.assign(config.steering_wheel, wheelPlace);
     const driverConfig = driverEditor && driverEditor.read();
     if (driverConfig) config.driver = driverConfig;
     if (softBodyEditor) {
@@ -2172,7 +2177,7 @@ $("testReset").addEventListener("click", resetCar);
 tuningFromCar(null); // the Tuning card for a new car
 
 driverEditor = initDriver({
-    $, THREE, scene, camera, renderer, controls, status, GLTFLoader,
+    $, THREE, scene, camera, renderer, controls, status, GLTFLoader, root: () => state.root,
     resolve: (file) => OpenRacer.Garage.resolve(state.existingCar, "../" + file),
     setDragging: (on) => { layers.dragging = on; },
     deselectLayers: () => { if (layers.selected) selectLayer(layers.selected); }

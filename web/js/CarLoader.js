@@ -272,23 +272,48 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
         // the vertices of the part in the space of the body, for its middle and its shape
         var points = [];
         var v = new THREE.Vector3();
-        node.traverse(function (child) {
-            if(!child.isMesh || !child.geometry.attributes.position) return;
-            var position = child.geometry.attributes.position;
-            var step = Math.max(1, Math.floor(position.count / 4000));
-            for(var i = 0; i < position.count; i += step) {
-                v.fromBufferAttribute(position, i).applyMatrix4(child.matrixWorld);
-                points.push(v.x, v.y, v.z);
-            }
-        });
-        if(points.length < 9) return null;
-        var box = new THREE.Box3();
-        for(var p = 0; p < points.length; p += 3) box.expandByPoint(v.set(points[p], points[p + 1], points[p + 2]));
-        var centre = box.getCenter(new THREE.Vector3());
+        var centre;
+        function measure() {
+            points = [];
+            space.updateMatrixWorld(true);
+            node.traverse(function (child) {
+                if(!child.isMesh || !child.geometry.attributes.position) return;
+                var position = child.geometry.attributes.position;
+                var step = Math.max(1, Math.floor(position.count / 4000));
+                for(var i = 0; i < position.count; i += step) {
+                    v.fromBufferAttribute(position, i).applyMatrix4(child.matrixWorld);
+                    points.push(v.x, v.y, v.z);
+                }
+            });
+            if(points.length < 9) return false;
+            var box = new THREE.Box3();
+            for(var p = 0; p < points.length; p += 3) box.expandByPoint(v.set(points[p], points[p + 1], points[p + 2]));
+            centre = box.getCenter(new THREE.Vector3());
+            return true;
+        }
+        if(!measure()) return null;
+        // the place of the wheel as the car editor set it: moved, turned and scaled about its middle (steering_wheel.offset, .rotation in degrees, .scale)
+        var tuned = settings.offset || settings.rotation || settings.scale;
+        var turnedBy = null;
+        if(tuned) {
+            var off = settings.offset || [0, 0, 0], rot = settings.rotation || [0, 0, 0], sc = settings.scale;
+            var scale = Array.isArray(sc) ? sc : [sc || 1, sc || 1, sc || 1];
+            var d = Math.PI / 180;
+            turnedBy = new THREE.Quaternion().setFromEuler(new THREE.Euler(rot[0] * d, rot[1] * d, rot[2] * d, "XYZ"));
+            var M = new THREE.Matrix4().compose(centre.clone().add(new THREE.Vector3(off[0], off[1], off[2])), turnedBy, new THREE.Vector3(scale[0], scale[1], scale[2]))
+                .multiply(new THREE.Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z));
+            node.updateWorldMatrix(true, false);
+            var world = node.matrixWorld.clone().premultiply(M);
+            if(node.parent) { node.parent.updateWorldMatrix(true, false); world.premultiply(new THREE.Matrix4().copy(node.parent.matrixWorld).invert()); }
+            world.decompose(node.position, node.quaternion, node.scale);
+            node.updateMatrix();
+            if(!measure()) return null;
+        }
 
         var axis;
         if(settings.axis && settings.axis.length === 3) {
             axis = new THREE.Vector3(settings.axis[0], settings.axis[1], settings.axis[2]).normalize();
+            if(turnedBy) axis.applyQuaternion(turnedBy);
         } else {
             axis = flattestDirection(points, centre);
         }

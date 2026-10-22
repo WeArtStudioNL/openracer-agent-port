@@ -17,15 +17,31 @@ const ROLES = [
     ["legL", "Left leg", ["thigh", "shin", "foot"]], ["legR", "Right leg", ["thigh", "shin", "foot"]]
 ];
 const MARK = { handL: 0x5ec8ff, handR: 0xff6b6b, footL: 0x8ee26b, footR: 0xffd04d };
+const POLES = { pArmL: "armL", pArmR: "armR", pLegL: "legL", pLegR: "legR" };      // where the elbows and the knees point to: nodes too
+const POLE_COLOUR = { pArmL: 0xa8e0ff, pArmR: 0xffb3b3, pLegL: 0xc5f0b0, pLegR: 0xffe79a };
 
 export function initDriver(api) {
     const { $, THREE, scene, camera, renderer, controls, status } = api;
     const drv = { enabled: false, driver: null, file: null, existingFile: null, selected: null, mode: "move", dragging: false, steer: 0, throttle: 0, brake: 0, bones: {} };
     const targets = {};
+    // an invisible ball round a marker, so that it is easy to click
+    function addHitBall(mesh, radius) {
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(radius, 10, 8), new THREE.MeshBasicMaterial({ visible: false }));
+        mesh.add(ball);
+    }
     for (const [key, colour] of Object.entries(MARK)) {
         const mesh = new THREE.Mesh(new THREE.SphereGeometry(key.startsWith("hand") ? 0.03 : 0.045, 14, 10), new THREE.MeshBasicMaterial({ color: colour, depthTest: false, transparent: true }));
         mesh.renderOrder = 999;
         mesh.visible = false;
+        addHitBall(mesh, 0.1);
+        scene.add(mesh);
+        targets[key] = mesh;
+    }
+    for (const [key, colour] of Object.entries(POLE_COLOUR)) {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.05), new THREE.MeshBasicMaterial({ color: colour, depthTest: false, transparent: true, opacity: 0.85 }));
+        mesh.renderOrder = 999;
+        mesh.visible = false;
+        addHitBall(mesh, 0.09);
         scene.add(mesh);
         targets[key] = mesh;
     }
@@ -51,9 +67,11 @@ export function initDriver(api) {
             <div class="group">Place (the gizmo is in the view)</div>
             <div class="row" id="drvPlace">
                 <button class="small" data-t="model">Driver</button><button class="small" data-t="handL">Left hand</button><button class="small" data-t="handR">Right hand</button>
-                <button class="small" data-t="footL">Left foot (brake)</button><button class="small" data-t="footR">Right foot (gas)</button>
+                <button class="small" data-t="footL">Left foot (brake)</button><button class="small" data-t="footR">Right foot (gas)</button><button class="small" data-t="wheel">Steering wheel</button>
             </div>
-            <div class="row" id="drvModes"><button class="small accent" data-m="move">Move (W)</button><button class="small ghost" data-m="rotate">Rotate (E)</button></div>
+            <div class="row" id="drvModes"><button class="small accent" data-m="move">Move (W)</button><button class="small ghost" data-m="rotate">Rotate (E)</button><button class="small ghost" data-m="scale" id="drvScaleMode">Scale (R)</button></div>
+            <div class="hint">Click a node in the view to take it: the coloured balls are the hands and the feet, the small cubes the elbows and the knees. Click the figure to take the model, click the steering wheel to take that.</div>
+            <div class="row"><button class="small ghost" id="drvResetPoles">Reset the elbows and knees</button></div>
             <div class="row">
                 <div><input type="number" id="drvScale" step="0.01" min="0.1" max="3" value="1"><div class="hint">scale</div></div>
                 <div><input type="number" id="drvTravel" step="1" min="0" max="20" value="6"><div class="hint">pedal travel (cm)</div></div>
@@ -82,15 +100,18 @@ export function initDriver(api) {
     function attach() {
         gizmo.detach();
         const key = drv.selected;
+        if (key === "wheel") { if (prepareWheel()) { gizmo.setMode(drv.mode === "rotate" ? "rotate" : drv.mode === "scale" ? "scale" : "translate"); gizmo.setSpace(drv.mode === "rotate" || drv.mode === "scale" ? "local" : "world"); gizmo.attach(wheel.target); } else { drv.selected = null; status("The model has no part called steering wheel.", "error"); } markButtons(); return; }
         if (!key || !drv.driver) { markButtons(); return; }
         if (key === "model") { gizmo.setMode(drv.mode === "rotate" ? "rotate" : "translate"); gizmo.setSpace(drv.mode === "rotate" ? "local" : "world"); gizmo.attach(drv.driver.root); }
         else { gizmo.setMode("translate"); gizmo.setSpace("world"); gizmo.attach(targets[key]); }
         markButtons();
     }
     function markButtons() {
+        card.dataset.selected = drv.selected || "";
         card.querySelectorAll("#drvPlace button").forEach((b) => { b.className = "small" + (b.dataset.t === drv.selected ? " accent" : ""); });
         card.querySelectorAll("#drvModes button").forEach((b) => { b.className = "small" + (b.dataset.m === drv.mode ? " accent" : " ghost"); });
-        el("drvModes").style.display = drv.selected === "model" ? "flex" : "none";
+        el("drvModes").style.display = drv.selected === "model" || drv.selected === "wheel" ? "flex" : "none";
+        el("drvScaleMode").style.display = drv.selected === "wheel" ? "" : "none";
     }
     function select(key) {
         drv.selected = drv.selected === key ? null : key;
@@ -100,27 +121,87 @@ export function initDriver(api) {
     el("drvPlace").addEventListener("click", (e) => { const t = e.target.dataset && e.target.dataset.t; if (t) select(t); });
     el("drvModes").addEventListener("click", (e) => { const m = e.target.dataset && e.target.dataset.m; if (m) { drv.mode = m; attach(); } });
     window.addEventListener("keydown", (e) => {
-        if (drv.selected !== "model" || e.ctrlKey || e.metaKey || e.altKey) return;
+        if ((drv.selected !== "model" && drv.selected !== "wheel") || e.ctrlKey || e.metaKey || e.altKey) return;
         const t = e.target && e.target.tagName;
         if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
-        if (e.code === "KeyW") { drv.mode = "move"; attach(); } else if (e.code === "KeyE") { drv.mode = "rotate"; attach(); }
+        if (e.code === "KeyW") { drv.mode = "move"; attach(); } else if (e.code === "KeyE") { drv.mode = "rotate"; attach(); } else if (e.code === "KeyR" && drv.selected === "wheel") { drv.mode = "scale"; attach(); }
     });
 
     // the gizmo moved something: the config follows
     function moved() {
         const d = drv.driver;
+        if (drv.selected === "wheel") { applyWheel(); return; }
         if (!d) return;
         const r = (v) => Math.round(v * 1000) / 1000, deg = 180 / Math.PI, cfg = d.config;
         const key = drv.selected;
         if (key === "model") {
             cfg.position = [r(d.root.position.x), r(d.root.position.y), r(d.root.position.z)];
             cfg.rotation = [r(d.root.rotation.x * deg), r(d.root.rotation.y * deg), r(d.root.rotation.z * deg)];
+        } else if (key === "wheel") {
+            applyWheel();
+        } else if (POLES[key]) {
+            const p = targets[key].position;
+            cfg.poles = cfg.poles || {};
+            cfg.poles[POLES[key]] = [r(p.x), r(p.y), r(p.z)];
         } else if (key) {
             const p = targets[key].position, v = [r(p.x), r(p.y), r(p.z)];
             if (key === "handL") cfg.hands.left = v; else if (key === "handR") cfg.hands.right = v;
             else if (key === "footL") cfg.feet.left = v; else if (key === "footR") cfg.feet.right = v;
         }
     }
+
+    // ---- the steering wheel of the car: the part of the model, moved, turned and scaled about its middle (steering_wheel.offset, .rotation, .scale in car.json)
+    const wheel = { node: null, rest: null, centre: new THREE.Vector3(), target: new THREE.Object3D(), pending: null, root: null };
+    scene.add(wheel.target);
+    function findWheelNode(root) {
+        let node = null;
+        root.traverse((child) => {
+            if (node) return;
+            const name = (child.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            if (name.indexOf("steeringwheel") !== -1 || name.indexOf("steerwheel") !== -1) node = child;
+        });
+        return node;
+    }
+    function prepareWheel() {
+        const root = api.root && api.root();
+        if (!root) return false;
+        if (wheel.node && wheel.root === root) return true;
+        const node = findWheelNode(root);
+        if (!node) return false;
+        root.updateMatrixWorld(true);
+        wheel.node = node; wheel.root = root;
+        wheel.rest = node.matrixWorld.clone();
+        new THREE.Box3().setFromObject(node).getCenter(wheel.centre);
+        wheel.target.position.copy(wheel.centre); wheel.target.quaternion.identity(); wheel.target.scale.set(1, 1, 1);
+        if (wheel.pending) {
+            const w = wheel.pending, d = Math.PI / 180;
+            const off = w.offset || [0, 0, 0], rot = w.rotation || [0, 0, 0], sc = Array.isArray(w.scale) ? w.scale : [w.scale || 1, w.scale || 1, w.scale || 1];
+            wheel.target.position.set(wheel.centre.x + off[0], wheel.centre.y + off[1], wheel.centre.z + off[2]);
+            wheel.target.quaternion.setFromEuler(new THREE.Euler(rot[0] * d, rot[1] * d, rot[2] * d, "XYZ"));
+            wheel.target.scale.set(sc[0], sc[1], sc[2]);
+            wheel.pending = null;
+            applyWheel();
+        }
+        return true;
+    }
+    function applyWheel() {
+        if (!wheel.node) return;
+        const M = new THREE.Matrix4().compose(wheel.target.position, wheel.target.quaternion, wheel.target.scale).multiply(new THREE.Matrix4().makeTranslation(-wheel.centre.x, -wheel.centre.y, -wheel.centre.z));
+        const world = wheel.rest.clone().premultiply(M);
+        const parent = wheel.node.parent;
+        if (parent) { parent.updateWorldMatrix(true, false); world.premultiply(new THREE.Matrix4().copy(parent.matrixWorld).invert()); }
+        world.decompose(wheel.node.position, wheel.node.quaternion, wheel.node.scale);
+        wheel.node.updateMatrix();
+    }
+    function wheelConfig() {
+        if (!wheel.node) return wheel.pending ? { offset: wheel.pending.offset, rotation: wheel.pending.rotation, scale: wheel.pending.scale } : null;
+        const r = (v) => Math.round(v * 1000) / 1000, deg = 180 / Math.PI, p = wheel.target.position, q = new THREE.Euler().setFromQuaternion(wheel.target.quaternion, "XYZ"), s = wheel.target.scale;
+        const moved = p.distanceTo(wheel.centre) > 1e-4 || wheel.target.quaternion.angleTo(new THREE.Quaternion()) > 1e-4 || Math.abs(s.x - 1) + Math.abs(s.y - 1) + Math.abs(s.z - 1) > 1e-4;
+        if (!moved) return null;
+        const uniform = Math.abs(s.x - s.y) < 1e-4 && Math.abs(s.y - s.z) < 1e-4;
+        return { offset: [r(p.x - wheel.centre.x), r(p.y - wheel.centre.y), r(p.z - wheel.centre.z)], rotation: [r(q.x * deg), r(q.y * deg), r(q.z * deg)], scale: uniform ? r(s.x) : [r(s.x), r(s.y), r(s.z)] };
+    }
+    function resetWheel() { wheel.node = null; wheel.rest = null; wheel.root = null; wheel.pending = null; }
 
     // ---- the model
     function setEnabled(on) {
@@ -211,7 +292,30 @@ export function initDriver(api) {
         add("hips", undefined, "Hips");
         add("head", undefined, "Head (hidden in the cockpit view)");
     }
+    el("drvResetPoles").onclick = () => { if (drv.driver) { delete drv.driver.config.poles; drv.driver.config.poles = null; } };
     el("drvGuess").onclick = () => { if (!drv.driver) return; drv.driver.config.bones = {}; drv.driver.resolveBones(); fillBones(); info(); };
+
+    // ---- a click in the view takes a node, the figure or the steering wheel
+    const ray = new THREE.Raycaster();
+    let down = null;
+    renderer.domElement.addEventListener("pointerdown", (e) => { down = [e.clientX, e.clientY]; });
+    renderer.domElement.addEventListener("pointerup", (e) => {
+        if (!down || drv.dragging || Math.abs(e.clientX - down[0]) + Math.abs(e.clientY - down[1]) > 4) { down = null; return; }
+        down = null;
+        if (gizmo.axis) return;                                           // (the click was on the gizmo)
+        const rect = renderer.domElement.getBoundingClientRect();
+        ray.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
+        const markers = Object.entries(targets).filter(([, m]) => m.visible);
+        const hit = ray.intersectObjects(markers.map(([, m]) => m), true)[0];
+        if (hit) {
+            let o = hit.object;
+            while (o && !markers.some(([, m]) => m === o)) o = o.parent;
+            const found = o && markers.find(([, m]) => m === o);
+            if (found) { if (drv.selected !== found[0]) select(found[0]); return; }
+        }
+        if (drv.driver && drv.enabled && ray.intersectObject(drv.driver.root, true).length) { if (drv.selected !== "model") select("model"); return; }
+        if (prepareWheel() && wheel.node && ray.intersectObject(wheel.node, true).length && drv.selected !== "wheel") select("wheel");
+    });
 
     // ---- the fields and the test
     el("drvScale").addEventListener("change", () => { if (!drv.driver) return; const v = parseFloat(el("drvScale").value); if (v > 0) { drv.driver.config.scale = v; drv.driver.place(); } });
@@ -237,6 +341,11 @@ export function initDriver(api) {
         ring.scale.setScalar(radius);
         ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);
         d.update(dt || 0.016, drv.throttle, drv.brake);
+        for (const [key, role] of Object.entries(POLES)) {
+            if (drv.dragging && drv.selected === key) continue;
+            if (d.poles[role]) targets[key].position.copy(d.poles[role]);
+        }
+        if (!wheel.node && wheel.pending) prepareWheel();
     }
 
     // ---- the car: what goes in car.json, and what is read from it
@@ -249,10 +358,13 @@ export function initDriver(api) {
         if (drv.driver.bones.head) bones.head = drv.driver.bones.head.name;
         return { enabled: true, file: "", position: c.position.slice(), rotation: c.rotation.slice(), scale: c.scale, bones, hands: { left: c.hands.left.slice(), right: c.hands.right.slice() },
             feet: { left: c.feet.left.slice(), right: c.feet.right.slice(), travel: c.feet.travel, direction: c.feet.direction.slice() }, elbow_out: c.elbow_out, knee_out: c.knee_out,
-            wheel_axis: c.wheel_axis };
+            wheel_axis: c.wheel_axis, poles: c.poles ? JSON.parse(JSON.stringify(c.poles)) : undefined };
     }
     function newFile() { return drv.file; }
     function fill(car) {
+        resetWheel();
+        const sw = car && car.steering_wheel;
+        if (sw && (sw.offset || sw.rotation || sw.scale)) wheel.pending = { offset: sw.offset, rotation: sw.rotation, scale: sw.scale };
         const config = car && car.driver;
         if (drv.driver) { drv.driver.dispose(); drv.driver = null; }
         drv.file = null; drv.existingFile = null; drv.selected = null;
@@ -269,5 +381,5 @@ export function initDriver(api) {
     }
     function deselect() { if (drv.selected) { drv.selected = null; attach(); } }
 
-    return { read, fill, frame, newFile, existingFile: () => drv.existingFile, deselect, saved: (path) => { drv.file = null; drv.existingFile = path; } };
+    return { read, fill, frame, newFile, wheelConfig, existingFile: () => drv.existingFile, deselect, saved: (path) => { drv.file = null; drv.existingFile = path; } };
 }

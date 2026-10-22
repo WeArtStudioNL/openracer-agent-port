@@ -8,7 +8,7 @@
  *              - the feet follow the pedals: the right foot the throttle, the left foot the brake, along the way that the pedal moves;
  *              - the arms and the legs are two bones each with an inverse kinematics (IK): the hand or the foot goes to its place and the elbow or the knee bends to the side of a pole.
  *              car.json "driver": { enabled, file, position [x, y, z], rotation [x, y, z] (degrees), scale, bones: { hips, head, armL: [upper, lower, hand], armR, legL: [upper, lower, foot],
- *              legR }, hands: { left [x, y, z], right }, feet: { left (the brake), right (the throttle), travel (m), direction [x, y, z] }, elbow_out, knee_out }, all in the space of
+ *              legR }, poles: { armL, armR, legL, legR: [x, y, z] } (where the elbows and the knees point to; without it from elbow_out and knee_out), hands: { left [x, y, z], right }, feet: { left (the brake), right (the throttle), travel (m), direction [x, y, z] }, elbow_out, knee_out }, all in the space of
  *              the body of the car (the space that the cameras and the exhaust points are in).
  */
 
@@ -25,6 +25,7 @@ OpenRacer.Driver = function (config, parent, steering) {
     var rest = new Map();                              // bone -> its local rotation in the T pose
     var restScale = new Map();
     this.showHead = true;
+    this.poles = {};                                   // where the elbows and the knees point to, in the space of the body (set in the car editor, or from elbow_out and knee_out)
 
     var V = THREE.Vector3, Q = THREE.Quaternion;
     var a = new V(), b = new V(), c = new V(), t = new V(), pole = new V(), n = new V(), u = new V(), tmp = new V(), tmp2 = new V();
@@ -255,9 +256,11 @@ OpenRacer.Driver = function (config, parent, steering) {
             gripPoint(e[1], grip[e[1]]);
             self.parent.localToWorld(world.copy(grip[e[1]]));
             chain[0].getWorldPosition(a);
-            // the elbow goes outwards and down, behind the hand
-            self.parent.worldToLocal(tmp.copy(a));
-            tmp.add(new V(e[2] * cfg.elbow_out, -0.5, -0.5));
+            // the elbow goes outwards and down, behind the hand (or to the node that was set in the car editor)
+            var set = cfg.poles && cfg.poles[e[0]];
+            if (set) tmp.set(set[0], set[1], set[2]);
+            else { self.parent.worldToLocal(tmp.copy(a)); tmp.add(new V(e[2] * cfg.elbow_out, -0.5, -0.5)); }
+            (self.poles[e[0]] || (self.poles[e[0]] = new V())).copy(tmp);
             self.parent.localToWorld(pole.copy(tmp));
             solve(chain, world, pole);
         });
@@ -267,8 +270,10 @@ OpenRacer.Driver = function (config, parent, steering) {
             footTarget(e[1], e[3], footPoint);
             self.parent.localToWorld(world.copy(footPoint));
             chain[0].getWorldPosition(a);
-            self.parent.worldToLocal(tmp.copy(a));
-            tmp.add(new V(e[2] * cfg.knee_out, 0.35, 1));
+            var setKnee = cfg.poles && cfg.poles[e[0]];
+            if (setKnee) tmp.set(setKnee[0], setKnee[1], setKnee[2]);
+            else { self.parent.worldToLocal(tmp.copy(a)); tmp.add(new V(e[2] * cfg.knee_out, 0.35, 1)); }
+            (self.poles[e[0]] || (self.poles[e[0]] = new V())).copy(tmp);
             self.parent.localToWorld(pole.copy(tmp));
             solve(chain, world, pole);
         });
@@ -291,7 +296,7 @@ OpenRacer.Driver.defaults = function () {
         enabled: false, file: "", position: [0, 0, 0], rotation: [0, 0, 0], scale: 1, bones: {},
         hands: { left: [0.15, 0.2, 0.3], right: [-0.15, 0.2, 0.3] },
         feet: { left: [0.1, -0.1, 0.5], right: [-0.1, -0.1, 0.5], travel: 0.06, direction: [0, -0.5, 0.85] },
-        elbow_out: 0.5, knee_out: 0.15
+        elbow_out: 0.5, knee_out: 0.15, poles: null
     };
 };
 OpenRacer.Driver.withDefaults = function (c) {
@@ -299,6 +304,7 @@ OpenRacer.Driver.withDefaults = function (c) {
     out.hands = Object.assign({}, d.hands, (c && c.hands) || {});
     out.feet = Object.assign({}, d.feet, (c && c.feet) || {});
     out.bones = Object.assign({}, (c && c.bones) || {});
+    out.poles = c && c.poles ? JSON.parse(JSON.stringify(c.poles)) : null;
     ["position", "rotation"].forEach(function (k) { if (!Array.isArray(out[k]) || out[k].length !== 3) out[k] = d[k].slice(); });
     return out;
 };
