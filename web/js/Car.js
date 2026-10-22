@@ -296,7 +296,8 @@ OpenRacer.Car = function( config, domElement ) {
         }
         // the driver: the hands on the steering wheel, the feet on the pedals (the head is not drawn in the cockpit view, it is in front of the camera)
         if(this.driver) {
-            this.driver.setCockpit(this.cameraMode === 3);
+            // (the camera of a replay that is its own, the free and the cinematic one, is outside the car whatever the camera of the game is)
+            this.driver.setCockpit(this.cameraMode === 3 && !(OpenRacer.Replay && OpenRacer.Replay.active && OpenRacer.Replay.ownCamera));
             this.driver.update(delta || 0.016, this.throttle, this.brakePedal);
         }
         // the checkpoint of the road under the rear wheel

@@ -850,6 +850,9 @@ OpenRacer.Replay = (function() {
 
     // ---- start and stop
 
+    // is the camera one of the replay's own (the free or the cinematic one): outside the car
+    Object.defineProperty(api, "ownCamera", { get: function() { return free.active || cine.active; } });
+
     api.start = function() {
         if(api.active || (!api.viewer && !api.available())) return false;
         if(Settings.option("camera") === 4) Settings.setOption("camera", 1);      // the free camera of the game has no place in a replay, which has its own
