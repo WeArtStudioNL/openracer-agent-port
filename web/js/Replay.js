@@ -843,13 +843,13 @@ OpenRacer.Replay = (function() {
         for(var name in effects) {
             var e = effects[name];
             e.snapshot = api.viewer ? null : e.object.replaySnapshot();
-            e.cursor = firstAfter(e.rows, api.end_time());
+            e.cursor = firstAfter(e.rows, api.start_time());
         }
-        effectTime = api.viewer ? null : api.end_time();
+        effectTime = api.viewer ? null : api.start_time();
         api.active = true;
         document.body.classList.add("replaying");
-        t = api.end_time();
-        playing = false;
+        t = api.start_time();                 // a replay begins at the beginning, wound all the way back
+        playing = !!api.viewer;               // (one that was opened from the list plays at once)
         direction = 1;
         scrubbing = false;
         player = null;
