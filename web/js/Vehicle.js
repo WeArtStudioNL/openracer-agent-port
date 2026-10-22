@@ -1993,6 +1993,30 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.pushes = [];
     this.pushDown = function (bx, by, bz, newtons) { this.pushes.push({ x: bx, y: by, z: bz, n: newtons }); };
 
+    // A number that is not a number (NaN, infinity) in the state of the car stays there for good and the car is dead (and the sound throws). It should not happen; when it does, it is
+    // reported once with the name of the field (the cause is then to be found), the car is put back upright where it last was fine, and the wheels start clean.
+    var lastGood = null, reported = false;
+    var BODY_FIELDS = ["px", "py", "pz", "vx", "vy", "vz", "wx", "wy", "wz", "qx", "qy", "qz", "qw"];
+    var WHEEL_FIELDS = ["omega", "s", "slipRatio", "slipTan", "susLength", "susVel", "heat", "smoke", "squeal", "surfT", "roadT", "temp", "fx", "fy"];
+    this.checkFinite = function () {
+        var bad = null, i, k, w;
+        for(i = 0; i < BODY_FIELDS.length && !bad; i++) if(!isFinite(this[BODY_FIELDS[i]])) bad = BODY_FIELDS[i];
+        var wheelBad = null;
+        for(i = 0; i < 4 && !wheelBad; i++) {
+            w = this.wheels[i];
+            for(k = 0; k < WHEEL_FIELDS.length; k++) if(typeof w[WHEEL_FIELDS[k]] === "number" && !isFinite(w[WHEEL_FIELDS[k]])) { wheelBad = "wheel " + i + " " + WHEEL_FIELDS[k]; break; }
+        }
+        if(!bad && !wheelBad) { lastGood = { x: this.px, z: this.pz, psi: this.psi }; return; }
+        if(!reported) { reported = true; console.warn("Vehicle: a value is not a number (" + (bad || wheelBad) + "); the car is put back on the road."); }
+        if(bad && lastGood) { this.reset(lastGood.x, lastGood.z, lastGood.psi); this.py += 0.3; }
+        else if(bad) this.reset(0, 0, 0);
+        // the wheels that were not reset (or have a field that is not a number) start clean
+        for(i = 0; i < 4; i++) {
+            w = this.wheels[i];
+            for(k = 0; k < WHEEL_FIELDS.length; k++) if(typeof w[WHEEL_FIELDS[k]] === "number" && !isFinite(w[WHEEL_FIELDS[k]])) w[WHEEL_FIELDS[k]] = (WHEEL_FIELDS[k] === "temp" || WHEEL_FIELDS[k] === "surfT" || WHEEL_FIELDS[k] === "roadT") ? this.ambient : (WHEEL_FIELDS[k] === "susLength" && w.restLengthWheel !== undefined ? w.restLengthWheel : 0);
+        }
+    };
+
     this.update = function (delta) {
         this.updateControls(delta);
         this.impactTime += delta;
@@ -2000,6 +2024,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         var dt = delta / steps;
         for(var s = 0; s < steps; s++) step(dt);
         this.pushes.length = 0;
+        this.checkFinite();
         this.squeal = 0;
         for(var q = 0; q < 4; q++) this.squeal = Math.max(this.squeal, this.wheels[q].squeal);
         this.updateOutputs();

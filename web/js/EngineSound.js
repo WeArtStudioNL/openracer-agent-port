@@ -231,6 +231,8 @@ var EngineSound = (function() {
 
     // Called every frame with how hard the tyres slide (0..1) and the speed of the car (m/s)
     function setTyres(amount, speed) {
+        if(!isFinite(amount)) amount = 0;           // (a number that is not a number cannot go to the audio)
+        if(!isFinite(speed)) speed = 0;
         squealLevel = amount;
         squealSpeed = speed;
         if(!ctx || !squeal || ctx.state !== "running") return;
