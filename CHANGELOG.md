@@ -9,6 +9,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 - In the race column of the main menu, a list with a tick for every car chooses which cars may race against you (shown when a race of laps or AI opponents is chosen; *all* and *none* above it; all are ticked by default and the choice is remembered). The AI cars are taken from the ticked cars in turn (`aicars` in the address); with none ticked every car may race.
 
 **Replay**
+- The Cinematic camera has a zoom of your own on top of the field of view that it chooses itself: the slider *Field of view ×* (0.2 to 3; below 1 zooms in) under the camera buttons, or `[` (in) and `]` (out). The zoom is kept when the camera goes to another one.
 - A replay begins at the beginning (wound all the way back to 0:00), not at the end; one that is opened from the list of Replays plays at once, one from the game waits paused.
 - Before the game goes back to the main menu after a race or practice (the *Main menu* button of the pause menu, of the race results and of the skidpad), it asks *Save the replay?* (Save replay, Don't save, Cancel) when there is a recording that was not saved. *Save replay* in the replay bar now keeps the replay in the list as well.
 - **Open a replay** of the main menu is now **Replays**: a window with the saved replays (track, cars, length, date, size; *Watch*, *Download* as a `.openracer-replay` file, *Delete*) and *Import replay…* for a file that someone sent. They are kept in the browser (IndexedDB).

@@ -508,6 +508,16 @@ OpenRacer.Replay = (function() {
             if(i === 4 && !cinemaCameras().length) b.style.display = "none";           // (a track without cameras of its own)
             return b;
         });
+        // the cinematic camera: a zoom of your own on top of the field of view that it chooses itself
+        cineRow = el(bar, "div", "row freecam");
+        var cineLabel = el(cineRow, "span", "label", "Field of view ×" + cine.scale.toFixed(2));
+        var cineSlider = el(cineRow, "input");
+        cineSlider.type = "range"; cineSlider.min = "0.2"; cineSlider.max = "3"; cineSlider.step = "0.01"; cineSlider.value = String(cine.scale);
+        cineSlider.title = "Zoom the cinematic camera: below 1 in, above 1 out ([ and ] too)";
+        cineSlider.setAttribute("aria-label", "Field of view of the cinematic camera");
+        cineSlider.addEventListener("input", function() { cine.scale = parseFloat(cineSlider.value); cineLabel.textContent = "Field of view ×" + cine.scale.toFixed(2); });
+        cineSlider.addEventListener("keydown", function(e) { if(/^Arrow/.test(e.code)) e.stopPropagation(); });
+        cineInfo = { label: cineLabel, slider: cineSlider };
         freeRow = el(bar, "div", "row freecam");
         var speedLabel = el(freeRow, "span", "label", "Speed " + free.speed.toFixed(1) + "×");
         var speedSlider = el(freeRow, "input");
@@ -641,7 +651,8 @@ OpenRacer.Replay = (function() {
 
     // ---- the cinematic camera: the cameras that the track editor put in the track. The camera whose range (a circle on the floor) the car is in is used, else the nearest one (it only goes to another when that is clearly better), it stays where it
     // is and only turns to follow the car, and its field of view is chosen so that the car is about the same size in the picture
-    var cine = { active: false, index: -1, fov: 40, quat: new THREE.Quaternion() };
+    var cine = { active: false, index: -1, fov: 40, scale: 1, quat: new THREE.Quaternion() };
+    var cineRow = null, cineInfo = null;
     function cinemaCameras() { return (typeof currentTrack !== "undefined" && currentTrack && Array.isArray(currentTrack.cameras)) ? currentTrack.cameras.filter(function(c) { return c && isFinite(c.x) && isFinite(c.y) && isFinite(c.z); }) : []; }
     function enterCine() {
         if(cine.active || !cinemaCameras().length) return;
@@ -677,7 +688,14 @@ OpenRacer.Replay = (function() {
         tmpQ.setFromRotationMatrix(tmpM);
         if(cut) cine.quat.copy(tmpQ); else cine.quat.slerp(tmpQ, 1 - Math.exp(-8 * delta));
         camera.quaternion.copy(cine.quat);
-        var wanted = Math.max(14, Math.min(60, 2 * Math.atan(9 / Math.max(5, distance(c))) * 180 / Math.PI));
+        // your own zoom on top of it: [ narrows the field of view, ] widens it (or the slider)
+        var zoom = (keys.BracketRight ? 1 : 0) - (keys.BracketLeft ? 1 : 0);
+        if(zoom) {
+            cine.scale = Math.max(0.2, Math.min(3, cine.scale * Math.exp(zoom * 0.9 * delta)));
+            if(cineInfo) { cineInfo.slider.value = String(cine.scale); cineInfo.label.textContent = "Field of view ×" + cine.scale.toFixed(2); }
+        }
+        var wanted = Math.max(14, Math.min(60, 2 * Math.atan(9 / Math.max(5, distance(c))) * 180 / Math.PI)) * cine.scale;
+        wanted = Math.max(3, Math.min(110, wanted));
         cine.fov = cut ? wanted : cine.fov + (wanted - cine.fov) * (1 - Math.exp(-4 * delta));
         if(Math.abs(camera.fov - cine.fov) > 0.01 || camera.near !== 0.3) {
             camera.fov = cine.fov;
@@ -819,6 +837,7 @@ OpenRacer.Replay = (function() {
         var mode = Settings.option("camera");
         cameraButtons.forEach(function(b, i) { b.className = (i === 3 ? free.active : i === 4 ? cine.active : (!free.active && !cine.active && mode === i + 1)) ? "on" : ""; });
         freeRow.style.display = free.active ? "flex" : "none";
+        if(cineRow) cineRow.style.display = cine.active ? "flex" : "none";
         if(free.active) {
             freeInfo.aim.className = free.aim ? "on" : "";
             freeInfo.parent.className = free.parent ? "on" : "";
