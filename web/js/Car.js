@@ -292,6 +292,7 @@ OpenRacer.Car = function( config, domElement ) {
             var sw = this.steeringWheel;
             var ratio = (sw.degrees * Math.PI / 180) / this.maxTurn;
             sw.object.quaternion.setFromAxisAngle(sw.axis, -v.steerApplied * ratio);
+            sw.angle = -v.steerApplied * ratio;
         }
         // the driver: the hands on the steering wheel, the feet on the pedals (the head is not drawn in the cockpit view, it is in front of the camera)
         if(this.driver) {

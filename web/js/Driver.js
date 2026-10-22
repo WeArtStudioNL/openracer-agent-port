@@ -31,13 +31,11 @@ OpenRacer.Driver = function (config, parent, steering) {
     var a = new V(), b = new V(), c = new V(), t = new V(), pole = new V(), n = new V(), u = new V(), tmp = new V(), tmp2 = new V();
     var qa = new Q(), qb = new Q(), qp = new Q();
 
-    // the hands: riding on the wheel (a grip that goes with it, shift: where on the wheel, as an angle from the rest grip) or free (hovering behind the wheel, on its way to the next grip);
-    // a change blends from where the hand was to where it goes, with a lift towards the driver
+    // the hands: p goes from 0 (on the wheel, where the hand is on it) to 1 (at the top of the wheel) along the curve of handing over (gripPoint)
     var hand = {
-        left: { mode: "ride", shift: 0, t: 1, from: new V(), last: new V(), S: new V(), E: new V(), p: 0 },
-        right: { mode: "ride", shift: 0, t: 1, from: new V(), last: new V(), S: new V(), E: new V(), p: 0 }
+        left: { last: new V(), S: new V(), p: 0 },
+        right: { last: new V(), S: new V(), p: 0 }
     };
-    var seq = { phase: 0, sign: 0 };                   // the steps of passing the hands over (handsStep)
     this.turn = 0;                                     // the turn of the steering wheel (rad), as the model turns it: for the test in the car editor too
     this.throttle = 0;
     this.brake = 0;
@@ -223,110 +221,51 @@ OpenRacer.Driver = function (config, parent, steering) {
         }
     }
     // How a driver turns a wheel a long way (here to the right; to the left it is the mirror image): hands at 9 and 3 o'clock turn with the wheel; the left hand rides over the top and the
-    // right one down. At 130 degrees the right hand lets go and goes to the chest, out of the way of the left arm; the left hand rides on to about 4 o'clock; then the right hand comes forward again and takes the wheel at the top
-    // (12 o'clock), the left hand lets go at the same moment and takes the top when the right one has pulled a little; both ride on. A hand that comes to 4 o'clock lets go and takes the top again.
-    // Back at the middle the hands go back to 9 and 3 o'clock. Angles: from the top of the wheel, in the way that the wheel turns.
-    var DEG = Math.PI / 180, FIRST = 130 * DEG, PULL_END = 120 * DEG, TAKE_OVER = 40 * DEG, HOME = 50 * DEG, BLEND_TIME = 0.22, BACK = 0.24, CHEST_DOWN = 0.06, LIFT = 0.04, PATH_TIME = 1.0;
-    function change(name, mode, shift) {
-        var h = hand[name];
-        h.from.copy(h.last);
-        h.mode = mode;
-        if (shift !== undefined) h.shift = shift;
-        h.t = 0;
-    }
-    // where on the wheel (as a shift) a hand has to take hold to be at the top (12 o'clock) now
-    function shiftToTop(name, previous) {
-        var s = wrap(-(gripAngle[name] + self.turn));
-        return previous + wrap(s - previous);                           // (the same place as a shift that goes on from the one that it had, no jump of whole turns)
-    }
-    // a hand that lets go goes to the top in one slow movement: from where it let go, by the chest (out of the way of the other arm), forward to the top (12 o'clock); a curve through
-    // those three places that starts and ends slowly. p goes from 0 to 1.
-    function startPath(name) {
-        var h = hand[name];
-        h.S.copy(h.last);
-        turned(restGrip[name], -gripAngle[name], h.E);                       // the top, the place of a grip at 12 o'clock
-        h.mode = "path"; h.p = 0; h.t = 1;
-    }
-    function grabTop(name) {
-        var h = hand[name];
-        h.shift = shiftToTop(name, h.shift);
-        h.mode = "ride"; h.t = 1; h.p = 0;
-    }
-    var chestAt = new V(), ctrl = new V();
+    // right one down. At 130 degrees the right hand lets go and goes to the chest, out of the way of the left arm, and forward to the top (12 o'clock) where it takes the wheel when the left hand
+    // is at about 4 o'clock. Then the left hand lets go and goes in one movement to the chest and to the top, to arrive a little before the end of the lock. The right hand holds on from there.
+    // Everything is a function of the turn of the wheel (the hands only follow it at a limited speed), so the way back to the middle is exactly the same movement in the other direction.
+    // Angles: from the top of the wheel, in the way that the wheel turns.
+    var DEG = Math.PI / 180, FIRST = 130 * DEG, PULL_END = 120 * DEG, BACK = 0.24, CHEST_DOWN = 0.06, PATH_TIME = 0.6, LOCK_MARGIN = 20 * DEG;
+    var chestAt = new V(), ctrl = new V(), handE = new V();
+    var plan = { sign: 1, lead: "left", trail: "right", rel: { left: 0, right: 0 }, end: { left: 0, right: 0 } };
     function handsStep(dt) {
-        ["left", "right"].forEach(function (name) { var h = hand[name]; if (h.t < 1) h.t = Math.min(1, h.t + dt / BLEND_TIME); });
         var turn = self.turn, sign = turn >= 0 ? 1 : -1, tau = Math.abs(turn);
         // the hand that leads (goes over the top) has its rest grip before the top, in the way that the wheel turns
         var lead = sign * gripAngle.left < 0 ? "left" : "right", trail = lead === "left" ? "right" : "left";
-        var beta = function (name) { return wrap(sign * (gripAngle[name] + turn + hand[name].shift)); };
-        var busy = hand.left.t < 1 || hand.right.t < 1;
-        if (seq.phase > 0 && sign !== seq.sign) seq.phase = 0, seq.homing = true;
-        // back at the middle: both hands go back to 9 and 3 o'clock, one at a time
-        if (seq.phase > 0 && tau < HOME) {
-            if (!busy) {
-                var name = hand[lead].shift !== 0 || hand[lead].mode !== "ride" ? lead : trail;
-                if (hand[name].shift !== 0 || hand[name].mode !== "ride") change(name, "ride", 0);
-                if (hand.left.shift === 0 && hand.right.shift === 0 && hand.left.mode === "ride" && hand.right.mode === "ride") seq.phase = 0;
-            }
-            return;
-        }
-        if (seq.homing || (seq.phase === 0 && (hand.left.shift !== 0 || hand.right.shift !== 0 || hand.left.mode !== "ride" || hand.right.mode !== "ride"))) {
-            // not in a turn and not at home: go home
-            if (!busy) {
-                var away = hand.left.shift !== 0 || hand.left.mode !== "ride" ? "left" : (hand.right.shift !== 0 || hand.right.mode !== "ride" ? "right" : null);
-                if (away) change(away, "ride", 0); else seq.homing = false;
-            }
-            if (tau < FIRST) return;
-        }
-        // the hands on their way to the top: the one that let go first moves with the turn of the wheel (and slowly), the other moves in time
-        var tauGrab = PULL_END - sign * gripAngle[lead];
+        // the turns at which each hand lets go, and the turns at which it is at the top: the trail hand lets go at 130 degrees and takes the top when the lead hand is at 4 o'clock, the lead hand
+        // lets go there and arrives at the top a little before the end of the lock
+        var grab1 = Math.max(FIRST + 10 * DEG, PULL_END - sign * gripAngle[lead]);
+        var lock = Math.max(150 * DEG, (self.steering && self.steering.degrees > 0 ? self.steering.degrees * DEG : 200 * DEG));
+        var grab2 = Math.max(grab1 + 10 * DEG, lock - LOCK_MARGIN);
+        plan.sign = sign; plan.lead = lead; plan.trail = trail;
+        plan.rel[trail] = FIRST; plan.end[trail] = grab1;
+        plan.rel[lead] = grab1; plan.end[lead] = grab2;
         ["left", "right"].forEach(function (name) {
             var h = hand[name];
-            if (h.mode !== "path") return;
-            if (seq.phase === 1 && name === seq.trail) {
-                var target = Math.max(0, Math.min(1, (tau - FIRST) / Math.max(1e-3, tauGrab - FIRST)));
-                h.p += Math.max(0, Math.min(target - h.p, dt / PATH_TIME));
-            } else h.p = Math.min(1, h.p + dt / PATH_TIME);
+            var target = Math.max(0, Math.min(1, (tau - plan.rel[name]) / (plan.end[name] - plan.rel[name])));
+            var step = dt / PATH_TIME;
+            h.p += Math.max(-step, Math.min(step, target - h.p));
         });
-        if (seq.phase === 1 && hand[seq.trail].mode === "path" && hand[seq.trail].p >= 0.98 && beta(seq.lead) >= PULL_END) {
-            // the lead hand is at 4 o'clock: the other takes the top and this one lets go
-            grabTop(seq.trail); startPath(seq.lead); seq.phase = 2;
-        } else if (seq.phase === 2 && hand[seq.lead].mode === "path" && hand[seq.lead].p >= 0.98) {
-            grabTop(seq.lead); seq.phase = 3;
-        } else if (seq.phase === 3) {
-            ["left", "right"].forEach(function (name) { var h = hand[name]; if (h.mode === "path" && h.p >= 0.98) grabTop(name); });
-        }
-        if (busy) return;
-        if (seq.phase === 0) {
-            seq.sign = sign;
-            if (tau >= FIRST) { startPath(trail); seq.phase = 1; seq.lead = lead; seq.trail = trail; }
-        } else if (seq.phase === 1) {
-            if (tau < FIRST - 20 * DEG) { change(seq.trail, "ride"); seq.phase = 0; }                                                // the wheel went back
-        } else if (seq.phase === 3) {
-            // a hand that comes to 4 o'clock lets go and goes to the top, when the other is far enough on
-            var first = beta("left") >= beta("right") ? "left" : "right", second = first === "left" ? "right" : "left";
-            if (hand[first].mode === "ride" && hand[second].mode === "ride" && beta(first) >= PULL_END && beta(second) >= TAKE_OVER) startPath(first);
-        }
     }
-    var freeAt = new V();
     function gripPoint(name, out) {
         var h = hand[name];
         if (!self.steering) return out.copy(restGrip[name]);
-        if (h.mode === "path") {
-            // one curve through the place where the hand let go, the chest and the top, slow at both ends
-            chestAt.copy(centre).addScaledVector(axis, BACK).addScaledVector(top, -CHEST_DOWN);
-            ctrl.copy(chestAt).multiplyScalar(2).addScaledVector(h.S, -0.5).addScaledVector(h.E, -0.5);
-            var u = h.p * h.p * (3 - 2 * h.p), v = 1 - u;
-            out.set(0, 0, 0).addScaledVector(h.S, v * v).addScaledVector(ctrl, 2 * v * u).addScaledVector(h.E, u * u);
+        var sign = plan.sign;
+        var tau = Math.abs(self.turn), rel = plan.rel[name], end = plan.end[name];
+        if (h.p <= 0 && tau <= rel) {
+            turned(restGrip[name], self.turn, out);                                        // on the wheel, where the hand is on it
             h.last.copy(out);
             return out;
         }
-        turned(restGrip[name], self.turn + h.shift, freeAt);
-        if (h.t < 1) {
-            var f = h.t * h.t * (3 - 2 * h.t);
-            out.copy(h.from).lerp(freeAt, f);
-            out.addScaledVector(axis, LIFT * Math.sin(Math.PI * h.t));
-        } else out.copy(freeAt);
+        // one curve through the place where the hand let go, the chest and the top (12 o'clock; it turns with the wheel after the turn at which the hand takes it), slow at both ends
+        turned(restGrip[name], sign * Math.min(tau, rel), h.S);
+        turned(restGrip[name], -gripAngle[name], handE);
+        qa.setFromAxisAngle(axis, sign * Math.max(0, tau - end));
+        handE.sub(centre).applyQuaternion(qa).add(centre);
+        chestAt.copy(centre).addScaledVector(axis, BACK).addScaledVector(top, -CHEST_DOWN);
+        ctrl.copy(chestAt).multiplyScalar(2).addScaledVector(h.S, -0.5).addScaledVector(handE, -0.5);
+        var u = h.p * h.p * (3 - 2 * h.p), v = 1 - u;
+        out.set(0, 0, 0).addScaledVector(h.S, v * v).addScaledVector(ctrl, 2 * v * u).addScaledVector(handE, u * u);
         h.last.copy(out);
         return out;
     }
@@ -345,10 +284,12 @@ OpenRacer.Driver = function (config, parent, steering) {
         self.root.updateMatrixWorld(true);
         if (self.steering) {
             // the turn of the wheel: the angle of the pivot about its axis
+            // (the car gives the angle itself: the quaternion cannot tell a turn of more than 360 degrees)
             var q = self.steering.object.quaternion;
             var s = Math.sqrt(q.x * q.x + q.y * q.y + q.z * q.z);
             self.turn = 2 * Math.atan2(q.x * self.steering.axis.x + q.y * self.steering.axis.y + q.z * self.steering.axis.z, q.w);
             if (s < 1e-9) self.turn = 0;
+            if (typeof self.steering.angle === "number") self.turn = self.steering.angle;
         }
         self.throttle = throttle === undefined ? self.throttle : throttle;
         self.brake = brake === undefined ? self.brake : brake;

@@ -338,6 +338,8 @@ export function initDriver(api) {
         const axis = ringAxis();
         d.steering.axis.copy(axis);
         wheelPivot.quaternion.setFromAxisAngle(axis, -drv.steer * Math.PI / 180);
+        d.steering.angle = -drv.steer * Math.PI / 180;
+        d.steering.degrees = 450;
         d.update(dt || 0.016, drv.throttle, drv.brake);
         for (const key of Object.keys(TORSO)) {
             if (drv.dragging && drv.selected === key) continue;
