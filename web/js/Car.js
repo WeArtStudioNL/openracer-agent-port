@@ -312,12 +312,20 @@ OpenRacer.Car = function( config, domElement ) {
             if(pellets) pellets.update(v, delta); // the marbles that a soft, hot tyre sheds (Marbles.js)
         }
         // the cameras behind the car follow its height (a jump, a hill), not the road under it; the small movements of the springs are smoothed out
-        var baseY = bodyPosition.y - w[0].radius;
+        // (in a replay the camera can follow another car, which is then the subject of the camera)
+        var subject = this.cameraSubject || this, camX = cx, camZ = cz, camYaw = yaw, baseY = bodyPosition.y - w[0].radius;
+        if(subject !== this) {
+            var sv = subject.vehicle, soffset = (sv.af - sv.ar) / 2;
+            camX = sv.x + Math.cos(sv.psi) * soffset; camZ = sv.z + Math.sin(sv.psi) * soffset;
+            camYaw = piOver2 - sv.psi;
+            baseY = subject.body.position.y - subject.wheels[0].radius;
+        }
+        if(subject !== lastSubject) { lastSubject = subject; cameraBaseY = null; followYaw = null; camClear = 1; }
         if(cameraBaseY === null || Math.abs(baseY - cameraBaseY) > 3) cameraBaseY = baseY;
         cameraBaseY += (baseY - cameraBaseY) * Math.min(1, delta / 0.08);
-        this.updateCamera(delta, cx, cz, cameraBaseY, yaw, this.body.quaternion);
+        this.updateCamera(delta, camX, camZ, cameraBaseY, camYaw, subject.body.quaternion, subject);
 
-        shadowLight.position.copy(this.body.position).add(sunDirection);
+        shadowLight.position.copy(subject.body.position).add(sunDirection);
     };
 
     // ---- the cameras: 1 is the fixed camera behind the car, 2 follows the direction of the car smoothly and
@@ -385,10 +393,13 @@ OpenRacer.Car = function( config, domElement ) {
         if(camClear < 0.999) camera.position.copy(camTarget).addScaledVector(camDir, length * camClear);
     }
 
-    this.updateCamera = function(delta, cx, cz, avgGround, yaw, bodyQ) {
+    this.cameraSubject = null;      // the car that the camera follows when it is not this one (a replay: Replay.js)
+    var lastSubject = null;
+    this.updateCamera = function(delta, cx, cz, avgGround, yaw, bodyQ, subject) {
+        subject = subject || this;
         var cs = this.cameraSettings;
-        var radius = this.wheels[0].radius;
-        var speed = Math.abs(this.vehicle.u);
+        var radius = subject.wheels[0].radius;
+        var speed = Math.abs(subject.vehicle.u);
 
         if(this.cameraMode === 4) {
             OpenRacer.FreeCam.update(delta, this.body.position, camera, yaw);
@@ -399,7 +410,7 @@ OpenRacer.Car = function( config, domElement ) {
             // in the car: the camera goes with the body, with the pitch and the roll
             qBody.copy(bodyQ);
             var p = cs.cockpit.position;
-            cockpitOffset.set(p[0], p[1], p[2]).applyQuaternion(qBody).add(this.body.position);
+            cockpitOffset.set(p[0], p[1], p[2]).applyQuaternion(qBody).add(subject.body.position);
             camera.position.copy(cockpitOffset);
             qLook.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.cameraAngle);
             camera.quaternion.copy(qBody).multiply(qLook).multiply(qFlip);
@@ -422,7 +433,7 @@ OpenRacer.Car = function( config, domElement ) {
             camera.rotation.set(0, followYaw + Math.PI + this.cameraAngle, 0);
             camera.translateZ(f.distance * scale);
             camera.position.y = avgGround + f.look_height + (f.height - f.look_height) * scale;
-            keepCameraInView(this, delta);
+            keepCameraInView(subject, delta);
             camera.lookAt(cx, avgGround + f.look_height, cz);
             setLens(cameraFov, 1);
             return;
@@ -433,7 +444,7 @@ OpenRacer.Car = function( config, domElement ) {
         camera.rotation.set(0, yaw + Math.PI + this.cameraAngle, 0);
         camera.translateZ(cs.chase.distance);
         camera.translateY(cs.chase.height - radius);
-        keepCameraInView(this, delta);
+        keepCameraInView(subject, delta);
         setLens(cs.chase.fov, 1);
     };
 

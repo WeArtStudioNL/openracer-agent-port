@@ -377,6 +377,8 @@ OpenRacer.Replay = (function() {
     }
 
     function show(time, delta) {
+        // the cameras of the game follow the car that was chosen (Tab, or the Car button)
+        if(cars.length) cars[0].object.cameraSubject = free.target > 0 && free.target < cars.length ? cars[free.target].object : null;
         for(var i = 0; i < cars.length; i++) {
             var entry = cars[i], object = entry.object;
             interpolate(time, i, scratch);
@@ -518,6 +520,8 @@ OpenRacer.Replay = (function() {
         cineSlider.addEventListener("input", function() { cine.scale = parseFloat(cineSlider.value); cineLabel.textContent = "Field of view ×" + cine.scale.toFixed(2); });
         cineSlider.addEventListener("keydown", function(e) { if(/^Arrow/.test(e.code)) e.stopPropagation(); });
         cineInfo = { label: cineLabel, slider: cineSlider };
+        carButton = button(cameraRow, "Car", "The car that the camera follows (Tab)", function() { nextTarget(); });
+        carButton.style.display = cars.length > 1 ? "" : "none";
         freeRow = el(bar, "div", "row freecam");
         var speedLabel = el(freeRow, "span", "label", "Speed " + free.speed.toFixed(1) + "×");
         var speedSlider = el(freeRow, "input");
@@ -575,11 +579,11 @@ OpenRacer.Replay = (function() {
         var target = event.target;
         if(target && /^(TEXTAREA|SELECT)$/.test(target.tagName)) return;
         keys[event.code] = true;
+        if(event.code === "Tab" && cars.length > 1) { nextTarget(); event.preventDefault(); return; }
         if(free.active) {
             // the keys of the free camera (the arrows move it, so they do not jump in time then)
             if(event.code === "KeyF" && !event.repeat) { toggleAim(); event.preventDefault(); return; }
             if(event.code === "KeyL" && !event.repeat) { toggleParent(); event.preventDefault(); return; }
-            if(event.code === "Tab") { nextTarget(); event.preventDefault(); return; }
             if(/^Arrow/.test(event.code) || /^(Bracket|Shift|Control)/.test(event.code)) { event.preventDefault(); return; }
         }
         if(event.code === "Space") {
@@ -635,7 +639,6 @@ OpenRacer.Replay = (function() {
         free.quat.copy(camera.quaternion);
         free.parent = false;
         free.aim = false;
-        free.target = 0;
         anglesFromWorld(free.quat);
         free.fov = free.fovT = camera.fov;
         updateCameraUi();
@@ -831,13 +834,14 @@ OpenRacer.Replay = (function() {
     window.addEventListener("keyup", function(event) { keys[event.code] = false; }, true);
     window.addEventListener("blur", function() { keys = {}; });
 
-    var cameraButtons = null, freeRow = null, freeInfo = null;
+    var cameraButtons = null, freeRow = null, freeInfo = null, carButton = null;
     function updateCameraUi() {
         if(!ui || !cameraButtons) return;
         var mode = Settings.option("camera");
         cameraButtons.forEach(function(b, i) { b.className = (i === 3 ? free.active : i === 4 ? cine.active : (!free.active && !cine.active && mode === i + 1)) ? "on" : ""; });
         freeRow.style.display = free.active ? "flex" : "none";
         if(cineRow) cineRow.style.display = cine.active ? "flex" : "none";
+        if(carButton) { var chosen = cars[Math.min(free.target, cars.length - 1)]; carButton.textContent = "Car: " + (chosen ? String(chosen.object.name || chosen.object.config.name || chosen.object.config.id).slice(0, 24) : ""); }
         if(free.active) {
             freeInfo.aim.className = free.aim ? "on" : "";
             freeInfo.parent.className = free.parent ? "on" : "";
@@ -885,6 +889,7 @@ OpenRacer.Replay = (function() {
         // a replay from a file has no game behind it: back to the main menu
         if(api.viewer) { window.location.href = window.location.pathname; return; }
         api.active = false;
+        if(cars.length) cars[0].object.cameraSubject = null;
         // the cars are put back where the game left them
         for(var i = 0; i < cars.length; i++) {
             var entry = cars[i];
