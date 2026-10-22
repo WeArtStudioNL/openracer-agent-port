@@ -83,7 +83,7 @@ export function initDriver(api) {
         gizmo.detach();
         const key = drv.selected;
         if (!key || !drv.driver) { markButtons(); return; }
-        if (key === "model") { gizmo.setMode(drv.mode); gizmo.setSpace(drv.mode === "rotate" ? "local" : "world"); gizmo.attach(drv.driver.root); }
+        if (key === "model") { gizmo.setMode(drv.mode === "rotate" ? "rotate" : "translate"); gizmo.setSpace(drv.mode === "rotate" ? "local" : "world"); gizmo.attach(drv.driver.root); }
         else { gizmo.setMode("translate"); gizmo.setSpace("world"); gizmo.attach(targets[key]); }
         markButtons();
     }
