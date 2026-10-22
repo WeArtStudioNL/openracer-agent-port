@@ -72,18 +72,19 @@ export function initDriver(api) {
     card.className = "card";
     card.innerHTML = `
         <summary>Driver<span class="meta" id="drvInfo">none</span></summary>
+        <style>.drv-wrap { flex-wrap: wrap; } .drv-wrap > * { flex: 1 1 auto; min-width: max-content; } .drv-wrap > button { height: auto; min-height: 27px; white-space: nowrap; }</style>
         <div class="body">
             <p class="sub">A driver in the car: a .glb with a simple skeleton in the T pose (from Blender). Place it and the hands and feet with the gizmos; in the game the hands hold the steering wheel and
             pass over when they would cross, and the feet follow the pedals.</p>
             <label class="check"><input type="checkbox" id="drvEnabled"> The car has a driver</label>
-            <div class="row"><button class="small accent" id="drvPick">Load the driver model…</button><input type="file" id="drvFile" accept=".glb,.gltf" style="display:none"></div>
+            <div class="row drv-wrap"><button class="small accent" id="drvPick">Load the driver model…</button><input type="file" id="drvFile" accept=".glb,.gltf" style="display:none"></div>
             <div class="hint" id="drvFileInfo">No model loaded.</div>
             <div class="group">Place (the gizmo is in the view)</div>
-            <div class="row" id="drvPlace">
+            <div class="row drv-wrap" id="drvPlace">
                 <button class="small" data-t="model">Driver</button><button class="small" data-t="handL">Left hand</button><button class="small" data-t="handR">Right hand</button>
                 <button class="small" data-t="footL">Left foot (brake)</button><button class="small" data-t="footR">Right foot (gas)</button><button class="small" data-t="wheel">Wheel (ring)</button><button class="small" data-t="chest">Chest</button><button class="small" data-t="head">Head</button>
             </div>
-            <div class="row" id="drvModes"><button class="small accent" data-m="move">Move (W)</button><button class="small ghost" data-m="rotate">Rotate (E)</button><button class="small ghost" data-m="scale" id="drvScaleMode">Scale (R)</button></div>
+            <div class="row drv-wrap" id="drvModes"><button class="small accent" data-m="move">Move (W)</button><button class="small ghost" data-m="rotate">Rotate (E)</button><button class="small ghost" data-m="scale" id="drvScaleMode">Scale (R)</button></div>
             <div id="drvGripRow" style="display:none">
                 <div class="hint">Grip of this hand <span id="drvGripOut">0%</span> (the fingers, open to closed)</div><input type="range" id="drvGrip" min="0" max="100" step="1" value="0" style="width:100%">
                 <div class="row"><select id="drvCurl"><option value="x">Fingers close: +x of the bones</option><option value="-x">Fingers close: -x of the bones (the other way)</option></select></div>
@@ -102,8 +103,8 @@ export function initDriver(api) {
             <div id="drvKeysStrip" style="position:relative;height:16px;margin:2px 7px 6px"></div>
             <div class="group">Keyframes of the hands</div>
             <div class="hint">Set the movement of the hands yourself. Make keys from the automatic movement, turn the steering slider to a place (the positive side: the other side is the mirror image, with the hands changed over), take a hand and move it, turn it, or set its grip: a key is made at that turn. The hands go through the keys, and the way back is the same movement the other way. Click a mark under the slider to go to a key (blue: left hand, red: right hand).</div>
-            <div class="row"><button class="small accent" id="drvKeysBake">Make keys from the automatic movement</button><button class="small ghost" id="drvKeysOff">Back to automatic</button></div>
-            <div class="row"><button class="small" id="drvKeyAdd">Add a key here</button><button class="small ghost" id="drvKeyDel">Delete the key here</button><label class="check"><input type="checkbox" id="drvKeyWheel"> rides the wheel</label></div>
+            <div class="row drv-wrap"><button class="small accent" id="drvKeysBake">Make keys from the automatic movement</button><button class="small ghost" id="drvKeysOff">Back to automatic</button></div>
+            <div class="row drv-wrap"><button class="small" id="drvKeyAdd">Add a key here</button><button class="small ghost" id="drvKeyDel">Delete the key here</button><label class="check"><input type="checkbox" id="drvKeyWheel"> rides the wheel</label></div>
             <div class="hint" id="drvKeyInfo">No keys: the hands move by themselves.</div>
             <div class="hint">Throttle</div><input type="range" id="drvThrottle" min="0" max="1" step="0.01" value="0" style="width:100%">
             <div class="hint">Brake</div><input type="range" id="drvBrake" min="0" max="1" step="0.01" value="0" style="width:100%">
