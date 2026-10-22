@@ -87,6 +87,19 @@ var MainMenu = (function() {
             "#mainMenu .badge { display: inline-block; font-size: 11px; font-weight: normal; letter-spacing: 1px; text-transform: uppercase; vertical-align: middle; " +
             "margin-left: 8px; padding: 2px 7px; border-radius: 10px; background: #3b5b8a; color: #dbe7f7; }" +
             "#mainMenu .badge.folder { background: #6b5a2b; color: #f3e6c4; }" +
+            // the window of the replays
+            "#replaysDialog { position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 3100; background: rgba(0, 0, 0, 0.65); display: flex; align-items: center; justify-content: center; }" +
+            "#replaysDialog .box { width: 720px; max-width: calc(100% - 40px); max-height: calc(100% - 40px); overflow-y: auto; background: #1d232c; border: 2px solid #2c3541; border-radius: 10px; padding: 20px 24px; color: #fff; font-family: Arial, sans-serif; }" +
+            "#replaysDialog h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: 1px; }" +
+            "#replaysDialog .note { color: #9aa8ba; font-size: 14px; line-height: 1.5; margin: 0 0 14px; }" +
+            "#replaysDialog .row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid #2c3541; border-radius: 6px; margin-bottom: 6px; }" +
+            "#replaysDialog .row .name { flex: 1; min-width: 0; }" +
+            "#replaysDialog .row .meta { color: #7e90a6; font-size: 13px; }" +
+            "#replaysDialog .error { color: #ff8a80; font-size: 14px; margin: 8px 0; }" +
+            "#replaysDialog button { background: #2c3541; color: #fff; border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; }" +
+            "#replaysDialog button:hover { background: #3a4656; }" +
+            "#replaysDialog button.primary { background: #3d7bd9; }" +
+            "#replaysDialog button.danger { background: #5a3a3a; }" +
             // the garage dialog
             "#garageDialog { position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 3100; background: rgba(0, 0, 0, 0.65); display: flex; align-items: center; justify-content: center; }" +
             "#garageDialog .box { width: 720px; max-width: calc(100% - 40px); max-height: calc(100% - 40px); overflow-y: auto; background: #1d232c; border: 2px solid #2c3541; border-radius: 10px; padding: 20px 24px; color: #fff; font-family: Arial, sans-serif; }" +
@@ -484,6 +497,105 @@ var MainMenu = (function() {
             "&laps=" + (raceOptions.laps || 0) + "&wear=" + (raceOptions.wear === undefined ? 1 : raceOptions.wear) + aiCarsParameter();
     }
 
+    // The window of the replays: the saved ones to watch, download or delete, and a file to import
+    function showReplays(carList, trackList) {
+        var shade = document.createElement("div");
+        shade.id = "replaysDialog";
+        var box = document.createElement("div");
+        box.className = "box";
+        shade.appendChild(box);
+        shade.onclick = function(e) { if(e.target === shade) shade.remove(); };
+        var title = document.createElement("h2");
+        title.textContent = "Replays";
+        box.appendChild(title);
+        var note = document.createElement("p");
+        note.className = "note";
+        note.textContent = "The replays that you saved after a race or practice, kept in this browser. A replay needs the same track and cars as the one who made it. Import a replay file that someone sent, or download one to send it.";
+        box.appendChild(note);
+        var problem = document.createElement("div");
+        problem.className = "error";
+        box.appendChild(problem);
+        var list = document.createElement("div");
+        box.appendChild(list);
+        var foot = document.createElement("div");
+        foot.style.cssText = "display: flex; gap: 8px; justify-content: space-between; margin-top: 14px;";
+        box.appendChild(foot);
+        var input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".openracer-replay";
+        input.style.display = "none";
+        var importButton = document.createElement("button");
+        importButton.className = "primary";
+        importButton.textContent = "Import replay…";
+        importButton.title = "Add a replay file (.openracer-replay) to the list";
+        importButton.onclick = function() { input.click(); };
+        input.onchange = function() {
+            var file = input.files && input.files[0];
+            input.value = "";
+            if(!file) return;
+            problem.textContent = "";
+            OpenRacer.Replay.library.importFile(file).then(fill).catch(function(error) { problem.textContent = error.message || "This file could not be imported."; });
+        };
+        var close = document.createElement("button");
+        close.textContent = "Close";
+        close.onclick = function() { shade.remove(); };
+        foot.appendChild(importButton);
+        foot.appendChild(input);
+        foot.appendChild(close);
+        document.body.appendChild(shade);
+
+        var format = function(seconds) { var s = Math.round(seconds); return Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2); };
+        var size = function(bytes) { return bytes < 1048576 ? Math.max(1, Math.round(bytes / 1024)) + " KB" : (bytes / 1048576).toFixed(1) + " MB"; };
+        function fill() {
+            OpenRacer.Replay.library.list().then(function(items) {
+                list.innerHTML = "";
+                if(!items.length) {
+                    var empty = document.createElement("div");
+                    empty.className = "note";
+                    empty.textContent = "No replays yet. After a race or practice the game asks if the replay is to be saved, and the replay bar has a Save replay button.";
+                    list.appendChild(empty);
+                    return;
+                }
+                items.forEach(function(item) {
+                    var row = document.createElement("div");
+                    row.className = "row";
+                    var text = document.createElement("div");
+                    text.className = "name";
+                    var name = document.createElement("div");
+                    name.textContent = item.track.name;
+                    var meta = document.createElement("div");
+                    meta.className = "meta";
+                    meta.textContent = (item.cars || []).slice(0, 3).join(", ") + ((item.cars || []).length > 3 ? " …" : "") + " · " + format(item.seconds) + " · " + new Date(item.created).toLocaleString() + " · " + size(item.bytes);
+                    text.appendChild(name);
+                    text.appendChild(meta);
+                    row.appendChild(text);
+                    var watch = document.createElement("button");
+                    watch.className = "primary";
+                    watch.textContent = "Watch";
+                    watch.onclick = function() {
+                        problem.textContent = "";
+                        OpenRacer.Replay.library.open(item.id, carList, trackList).then(function(ids) {
+                            window.location.href = window.location.pathname + "?car=" + encodeURIComponent(ids.car) + "&track=" + encodeURIComponent(ids.track) + "&replay=1";
+                        }).catch(function(error) { problem.textContent = error.message || "This replay could not be opened."; });
+                    };
+                    var download = document.createElement("button");
+                    download.textContent = "Download";
+                    download.title = "Save the replay as a file, to keep or to send";
+                    download.onclick = function() { OpenRacer.Replay.library.download(item.id, item.track.id).catch(function(error) { problem.textContent = error.message; }); };
+                    var remove = document.createElement("button");
+                    remove.className = "danger";
+                    remove.textContent = "Delete";
+                    remove.onclick = function() { if(confirm("Delete this replay?")) OpenRacer.Replay.library.remove(item.id).then(fill); };
+                    row.appendChild(watch);
+                    row.appendChild(download);
+                    row.appendChild(remove);
+                    list.appendChild(row);
+                });
+            }).catch(function(error) { problem.textContent = (error && error.message) || "The replays could not be read."; });
+        }
+        fill();
+    }
+
     function render(error) {
         element.innerHTML = "";
         var wrap = document.createElement("div");
@@ -638,23 +750,12 @@ var MainMenu = (function() {
             wrap.appendChild(skidpad);
         }
 
-        // a replay that someone saved (Replay.js): it needs the same track and cars as the one who made it
-        var replayInput = document.createElement("input");
-        replayInput.type = "file";
-        replayInput.style.display = "none";
-        replayInput.onchange = function() {
-            var file = replayInput.files && replayInput.files[0];
-            if(!file) return;
-            OpenRacer.Replay.openFile(file, cars, tracks).then(function(ids) {
-                window.location.href = window.location.pathname + "?car=" + encodeURIComponent(ids.car) + "&track=" + encodeURIComponent(ids.track) + "&replay=1";
-            }).catch(function(problem) { render(problem.message || "This file could not be opened."); });
-        };
-        wrap.appendChild(replayInput);
+        // the replays that were saved (Replay.js): a list in a window, and a file that someone sent can be imported. A replay needs the same track and cars as the one who made it
         var openReplay = document.createElement("button");
         openReplay.className = "secondary";
-        openReplay.textContent = "Open a replay";
-        openReplay.title = "Watch a replay that was saved from the game (a .openracer-replay file)";
-        openReplay.onclick = function() { replayInput.click(); };
+        openReplay.textContent = "Replays";
+        openReplay.title = "The replays that you saved, and import a replay file that someone sent";
+        openReplay.onclick = function() { showReplays(cars, tracks); };
         wrap.appendChild(openReplay);
 
         var foot = document.createElement("div");

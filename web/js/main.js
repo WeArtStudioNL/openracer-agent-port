@@ -260,7 +260,13 @@ function renderResults() {
     resultsHtml = html;
     resultsPanel.innerHTML = html;
     document.getElementById("raceAgain").onclick = function() { window.location.reload(); };
-    document.getElementById("raceMenu").onclick = function() { window.location.href = window.location.pathname; };
+    document.getElementById("raceMenu").onclick = leaveToMenu;
+}
+
+// To the main menu: a recording that was not saved is asked about first (Replay.js)
+function leaveToMenu() {
+    var leave = function() { window.location.href = window.location.pathname; };
+    if(OpenRacer.Replay && OpenRacer.Replay.confirmLeave) OpenRacer.Replay.confirmLeave(leave); else leave();
 }
 
 // Recording the racing line for the track editor ("Record AI racing line"): the player drives calm laps, every lap replaces the
@@ -387,7 +393,7 @@ function startSkidpad() {
         sp.panel = panel;
         document.getElementById("skidReset").onclick = skidpadReset;
         document.getElementById("skidTune").onclick = function() { Tuning.toggle(); };
-        document.getElementById("skidMenu").onclick = function() { window.location.href = window.location.pathname; };
+        document.getElementById("skidMenu").onclick = leaveToMenu;
     }
 
     function skidpadReset() {

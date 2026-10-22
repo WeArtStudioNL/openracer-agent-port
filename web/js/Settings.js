@@ -656,7 +656,7 @@ var Settings = (function() {
         mainMenu.className = "big";
         mainMenu.style.cssText = "background: #3b424c; margin-left: 8px;";
         mainMenu.textContent = "Main menu";
-        mainMenu.onclick = function() { window.location.href = window.location.pathname; };
+        mainMenu.onclick = function() { var leave = function() { window.location.href = window.location.pathname; }; if(OpenRacer.Replay && OpenRacer.Replay.confirmLeave) OpenRacer.Replay.confirmLeave(leave); else leave(); };
         buttons.appendChild(mainMenu);
         // a track with a drag strip: the Top 50 and the tickets, at the top
         if(typeof currentTrack !== "undefined" && currentTrack && currentTrack.dragstrip && OpenRacer.DragStrip) {
