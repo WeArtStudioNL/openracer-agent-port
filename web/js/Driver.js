@@ -33,8 +33,8 @@ OpenRacer.Driver = function (config, parent, steering) {
 
     // the hands: p goes from 0 (on the wheel, where the hand is on it) to 1 (at the top of the wheel) along the curve of handing over (gripPoint)
     var hand = {
-        left: { last: new V(), S: new V(), p: 0 },
-        right: { last: new V(), S: new V(), p: 0 }
+        left: { last: new V(), S: new V(), p: 0, delta: 0 },
+        right: { last: new V(), S: new V(), p: 0, delta: 0 }
     };
     this.turn = 0;                                     // the turn of the steering wheel (rad), as the model turns it: for the test in the car editor too
     this.throttle = 0;
@@ -52,6 +52,7 @@ OpenRacer.Driver = function (config, parent, steering) {
     // the model: the scene of a glb; the bones are found by the names of the config, or by a guess for what the config does not say
     this.setModel = function (scene) {
         if (self.model) self.root.remove(self.model);
+        fingerRest.clear();
         self.model = scene;
         scene.traverse(function (o) { if (o.isMesh) { o.frustumCulled = false; o.castShadow = true; } });
         self.root.add(scene);
@@ -110,7 +111,61 @@ OpenRacer.Driver = function (config, parent, steering) {
         if (self.bones.head) rest.set(self.bones.head, self.bones.head.quaternion.clone());
         ["armL", "armR", "legL", "legR"].forEach(function (key) { self.bones[key].forEach(function (bone) { if (bone) rest.set(bone, bone.quaternion.clone()); }); });
         if (self.bones.head) restScale.set(self.bones.head, self.bones.head.scale.clone());
+        findFingers();
     };
+    // ---- the fingers: every bone below a hand, except the bones of the palm, curls about an axis that is found from the direction of the finger and the way the hand closes (down, in the
+    // T pose, the palm faces down; the config says otherwise). The three joints of a finger curl by 75, 95 and 65 degrees at full grip, the thumb by less.
+    var CURL = [75, 95, 65], CURL_THUMB = [35, 40, 35];
+    var CURL_DIRECTIONS = { down: [0, -1, 0], up: [0, 1, 0], front: [0, 0, 1], back: [0, 0, -1] };
+    this.fingers = { armL: [], armR: [] };
+    var fingerRest = new Map();                        // finger bone -> its local rotation in the pose of the model (open)
+    function findFingers() {
+        self.fingers = { armL: [], armR: [] };
+        if (!self.model) return;
+        fingerRest.forEach(function (q, bone) { bone.quaternion.copy(q); });                  // (open again, whatever the grip was)
+        self.root.updateMatrixWorld(true);
+        var qcar = new Q(), qbone = new Q(), pf = new V(), pc = new V(), dir = new V(), ax = new V();
+        self.parent.getWorldQuaternion(qcar);
+        // (the directions are in the space of the car: down, up, front and back)
+        var name = self.config.grip_curl || "down", c = new V().fromArray(CURL_DIRECTIONS[name] || CURL_DIRECTIONS.down).applyQuaternion(qcar);
+        ["armL", "armR"].forEach(function (key) {
+            var hand = self.bones[key] && self.bones[key][2];
+            if (!hand) return;
+            // a rig with control bones (Rigify) has the fingers that move the mesh named DEF-: those curl, the controls are passed over
+            var deform = false;
+            hand.traverse(function (o) { if (o.isBone && /^DEF-.*(f_|finger|thumb)/i.test(o.name)) deform = true; });
+            var walk = function (bone, depth, thumb) {
+                var kids = bone.children.filter(function (k) { return k.isBone; });
+                var isPalm = /palm|meta/i.test(bone.name) && depth === 0;
+                if (!isPalm && bone !== hand && !(deform && !/^DEF-/.test(bone.name))) {
+                    bone.getWorldPosition(pf);
+                    if (kids.length) kids[0].getWorldPosition(pc); else if (bone.parent) { bone.parent.getWorldPosition(pc); pc.copy(pf).multiplyScalar(2).sub(pc); } else return;
+                    dir.subVectors(pc, pf);
+                    if (dir.lengthSq() > 1e-12) {
+                        dir.normalize();
+                        ax.crossVectors(dir, c);
+                        if (ax.lengthSq() < 1e-6) ax.set(1, 0, 0);
+                        ax.normalize();
+                        bone.getWorldQuaternion(qbone);
+                        self.fingers[key].push({ bone: bone, depth: depth, thumb: thumb, axis: ax.clone().applyQuaternion(qbone.invert()), rest: fingerRest.get(bone) || fingerRest.set(bone, bone.quaternion.clone()).get(bone) });
+                        depth++;
+                    }
+                } else if (isPalm) depth = 0;
+                kids.forEach(function (k) { walk(k, depth, thumb || /thumb/i.test(k.name)); });
+            };
+            walk(hand, 0, false);
+        });
+    }
+    this.refreshFingers = findFingers;
+    var qf = new Q();
+    // closes the fingers of a hand (0 open, 1 closed)
+    function curl(key, amount) {
+        (self.fingers[key] || []).forEach(function (f) {
+            var angles = f.thumb ? CURL_THUMB : CURL, deg = angles[Math.min(f.depth, angles.length - 1)];
+            f.bone.quaternion.copy(f.rest).multiply(qf.setFromAxisAngle(f.axis, deg * DEG_TO_RAD * amount));
+        });
+    }
+    var DEG_TO_RAD = Math.PI / 180;
     this.complete = function () { return ["armL", "armR", "legL", "legR"].every(function (k) { return self.bones[k] && self.bones[k].every(Boolean); }); };
 
     // ---- the chest and the head, turned as the car editor set them (rotation in degrees about the axes of the car, about the bone itself)
@@ -249,11 +304,12 @@ OpenRacer.Driver = function (config, parent, steering) {
     }
     function gripPoint(name, out) {
         var h = hand[name];
-        if (!self.steering) return out.copy(restGrip[name]);
+        if (!self.steering) { h.delta = 0; return out.copy(restGrip[name]); }
         var sign = plan.sign;
         var tau = Math.abs(self.turn), rel = plan.rel[name], end = plan.end[name];
         if (h.p <= 0 && tau <= rel) {
             turned(restGrip[name], self.turn, out);                                        // on the wheel, where the hand is on it
+            h.delta = self.turn;
             h.last.copy(out);
             return out;
         }
@@ -265,6 +321,9 @@ OpenRacer.Driver = function (config, parent, steering) {
         chestAt.copy(centre).addScaledVector(axis, BACK).addScaledVector(top, -CHEST_DOWN);
         ctrl.copy(chestAt).multiplyScalar(2).addScaledVector(h.S, -0.5).addScaledVector(handE, -0.5);
         var u = h.p * h.p * (3 - 2 * h.p), v = 1 - u;
+        // the hand turns about the middle of the wheel as it goes round: from the turn that it had where it let go to the turn that it has at the top (the short way)
+        var d0 = sign * Math.min(tau, rel), d1 = -gripAngle[name] + sign * Math.max(0, tau - end);
+        h.delta = d0 + wrap(d1 - d0) * u;
         out.set(0, 0, 0).addScaledVector(h.S, v * v).addScaledVector(ctrl, 2 * v * u).addScaledVector(handE, u * u);
         h.last.copy(out);
         return out;
@@ -296,7 +355,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         torso();
         readGrips();
         if (self.steering) handsStep(dt || 0.016);
-        var cfg = self.config, world = new V();
+        var cfg = self.config, world = new V(), restWorld = new V(), wheelFrameOk = wheelFrame();
         // the bones that are on the left of the car (+x in the space of the body) take the left hand and the left foot, whatever the model calls them (a model that faces the other way
         // has its L on the right)
         var xOf = function (chain) { chain[0].getWorldPosition(tmp2); return self.parent.worldToLocal(tmp2).x; };
@@ -313,7 +372,31 @@ OpenRacer.Driver = function (config, parent, steering) {
             else { self.parent.worldToLocal(tmp.copy(a)); tmp.add(new V(e[2] * cfg.elbow_out, -0.5, -0.5)); }
             (self.poles[e[0]] || (self.poles[e[0]] = new V())).copy(tmp);
             self.parent.localToWorld(pole.copy(tmp));
+            // the hand is turned as the car editor set it (turned about the middle of the wheel as far as the hand has gone round it): the orientation of the hand when it is at its rest grip,
+            // with the offset, turned by the angle that the hand has gone round
+            var rot = cfg.hands.rotation && cfg.hands.rotation[e[1]], hasRot = self.steering && wheelFrameOk;
+            var hq = null;
+            if (hasRot) {
+                self.parent.localToWorld(restWorld.copy(restGrip[e[1]]));
+                solve(chain, restWorld, pole);
+                chain[2].quaternion.copy(rest.get(chain[2]));
+                chain[2].updateMatrixWorld(true);
+                chain[2].getWorldQuaternion(qa);
+                self.parent.getWorldQuaternion(qbody);
+                hq = qa.clone();
+            }
             solve(chain, world, pole);
+            if (hq) {
+                // (the offset and the turn are in the space of the car)
+                qd.setFromEuler(eul.set(((rot && rot[0]) || 0) * DEG_TO_RAD, ((rot && rot[1]) || 0) * DEG_TO_RAD, ((rot && rot[2]) || 0) * DEG_TO_RAD, "XYZ"));
+                qw.setFromAxisAngle(axis, hand[e[1]].delta).multiply(qd);
+                qw.premultiply(qbody).multiply(qbody.clone().invert());                // the turn, in the world
+                hq.premultiply(qw);
+                chain[2].parent.getWorldQuaternion(qpw);
+                chain[2].quaternion.copy(hq.premultiply(qpw.invert()));
+                chain[2].updateMatrixWorld(true);
+            }
+            curl(e[0], Math.max(0, Math.min(1, (cfg.hands.grip && cfg.hands.grip[e[1]]) || 0)));
         });
         // legs
         [[legLeft, "left", 1, self.brake], [legLeft === "legL" ? "legR" : "legL", "right", -1, self.throttle]].forEach(function (e) {
@@ -347,12 +430,15 @@ OpenRacer.Driver.defaults = function () {
         enabled: false, file: "", position: [0, 0, 0], rotation: [0, 0, 0], scale: 1, bones: {},
         hands: { left: [0.15, 0.2, 0.3], right: [-0.15, 0.2, 0.3] },
         feet: { left: [0.1, -0.1, 0.5], right: [-0.1, -0.1, 0.5], travel: 0.06, direction: [0, -0.5, 0.85] },
-        elbow_out: 0.5, knee_out: 0.15, poles: null, wheel: null, pivot: "", chest: { rotation: [0, 0, 0] }, head: { rotation: [0, 0, 0] }
+        elbow_out: 0.5, knee_out: 0.15, poles: null, wheel: null, pivot: "", grip_curl: "down", chest: { rotation: [0, 0, 0] }, head: { rotation: [0, 0, 0] }
     };
 };
 OpenRacer.Driver.withDefaults = function (c) {
     var d = OpenRacer.Driver.defaults(), out = Object.assign({}, d, c || {});
     out.hands = Object.assign({}, d.hands, (c && c.hands) || {});
+    var hr = (c && c.hands && c.hands.rotation) || {}, hg = (c && c.hands && c.hands.grip) || {};
+    out.hands.rotation = { left: (hr.left || [0, 0, 0]).slice(), right: (hr.right || [0, 0, 0]).slice() };            // the turn of a hand (degrees, in the space of the car)
+    out.hands.grip = { left: hg.left || 0, right: hg.right || 0 };                                                        // how far the fingers are closed (0..1)
     out.feet = Object.assign({}, d.feet, (c && c.feet) || {});
     out.bones = Object.assign({}, (c && c.bones) || {});
     out.poles = c && c.poles ? JSON.parse(JSON.stringify(c.poles)) : null;

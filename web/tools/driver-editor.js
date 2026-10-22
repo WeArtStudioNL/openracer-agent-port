@@ -35,6 +35,12 @@ export function initDriver(api) {
         mesh.renderOrder = 999;
         mesh.visible = false;
         addHitBall(mesh, 0.1);
+        if (key.startsWith("hand")) {
+            // the turn of a hand: a small cross of three lines (red x, green y, blue z of the car)
+            const axes = new THREE.AxesHelper(0.07);
+            axes.material.depthTest = false; axes.renderOrder = 999;
+            mesh.add(axes);
+        }
         scene.add(mesh);
         targets[key] = mesh;
     }
@@ -78,6 +84,11 @@ export function initDriver(api) {
                 <button class="small" data-t="footL">Left foot (brake)</button><button class="small" data-t="footR">Right foot (gas)</button><button class="small" data-t="wheel">Wheel (ring)</button><button class="small" data-t="chest">Chest</button><button class="small" data-t="head">Head</button>
             </div>
             <div class="row" id="drvModes"><button class="small accent" data-m="move">Move (W)</button><button class="small ghost" data-m="rotate">Rotate (E)</button><button class="small ghost" data-m="scale" id="drvScaleMode">Scale (R)</button></div>
+            <div id="drvGripRow" style="display:none">
+                <div class="hint">Grip of this hand <span id="drvGripOut">0%</span> (the fingers, open to closed)</div><input type="range" id="drvGrip" min="0" max="100" step="1" value="0" style="width:100%">
+                <div class="row"><select id="drvCurl"><option value="down">Fingers close downwards</option><option value="up">Fingers close upwards</option><option value="front">Fingers close to the front</option><option value="back">Fingers close to the back</option></select></div>
+                <div class="hint">Turn the hand with Rotate (E): it turns about the middle of the wheel as it goes round it.</div>
+            </div>
             <div class="hint">Click a node in the view to take it: the coloured balls are the hands and the feet, the small cubes the elbows and the knees. Click the figure to take the model, click the grey ring to take the ring of the hands: match it to the steering wheel of the model with the gizmo (move, rotate, scale: its size is where the hands hold).</div>
             <div class="row"><button class="small ghost" id="drvResetPoles">Reset the elbows and knees</button></div>
             <div class="row">
@@ -119,6 +130,7 @@ export function initDriver(api) {
         if (!key || !drv.driver) { markButtons(); return; }
         if (key === "model") { gizmo.setMode(drv.mode === "rotate" ? "rotate" : "translate"); gizmo.setSpace(drv.mode === "rotate" ? "local" : "world"); gizmo.attach(drv.driver.root); }
         else if (TORSO[key]) { gizmo.setMode("rotate"); gizmo.setSpace("world"); gizmo.attach(targets[key]); }
+        else if (key === "handL" || key === "handR") { gizmo.setMode(drv.mode === "rotate" ? "rotate" : "translate"); gizmo.setSpace("world"); gizmo.attach(targets[key]); }
         else { gizmo.setMode("translate"); gizmo.setSpace("world"); gizmo.attach(targets[key]); }
         markButtons();
     }
@@ -126,7 +138,14 @@ export function initDriver(api) {
         card.dataset.selected = drv.selected || "";
         card.querySelectorAll("#drvPlace button").forEach((b) => { b.className = "small" + (b.dataset.t === drv.selected ? " accent" : ""); });
         card.querySelectorAll("#drvModes button").forEach((b) => { b.className = "small" + (b.dataset.m === drv.mode ? " accent" : " ghost"); });
-        el("drvModes").style.display = drv.selected === "model" || drv.selected === "wheel" ? "flex" : "none";
+        const hand = drv.selected === "handL" || drv.selected === "handR";
+        el("drvModes").style.display = drv.selected === "model" || drv.selected === "wheel" || hand ? "flex" : "none";
+        el("drvGripRow").style.display = hand && drv.driver ? "" : "none";
+        if (hand && drv.driver) {
+            const g = drv.driver.config.hands.grip[drv.selected === "handL" ? "left" : "right"] || 0;
+            el("drvGrip").value = Math.round(g * 100); el("drvGripOut").textContent = Math.round(g * 100) + "%";
+            el("drvCurl").value = drv.driver.config.grip_curl || "down";
+        }
         el("drvScaleMode").style.display = drv.selected === "wheel" ? "" : "none";
     }
     function select(key) {
@@ -137,7 +156,7 @@ export function initDriver(api) {
     el("drvPlace").addEventListener("click", (e) => { const t = e.target.dataset && e.target.dataset.t; if (t) select(t); });
     el("drvModes").addEventListener("click", (e) => { const m = e.target.dataset && e.target.dataset.m; if (m) { drv.mode = m; attach(); } });
     window.addEventListener("keydown", (e) => {
-        if ((drv.selected !== "model" && drv.selected !== "wheel") || e.ctrlKey || e.metaKey || e.altKey) return;
+        if ((drv.selected !== "model" && drv.selected !== "wheel" && drv.selected !== "handL" && drv.selected !== "handR") || e.ctrlKey || e.metaKey || e.altKey) return;
         const t = e.target && e.target.tagName;
         if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
         if (e.code === "KeyW") { drv.mode = "move"; attach(); } else if (e.code === "KeyE") { drv.mode = "rotate"; attach(); } else if (e.code === "KeyR" && drv.selected === "wheel") { drv.mode = "scale"; attach(); }
@@ -160,6 +179,9 @@ export function initDriver(api) {
             const p = targets[key].position;
             cfg.poles = cfg.poles || {};
             cfg.poles[POLES[key]] = [r(p.x), r(p.y), r(p.z)];
+        } else if ((key === "handL" || key === "handR") && drv.mode === "rotate") {
+            const e = new THREE.Euler().setFromQuaternion(targets[key].quaternion, "XYZ");
+            cfg.hands.rotation[key === "handL" ? "left" : "right"] = [r(e.x * deg), r(e.y * deg), r(e.z * deg)];
         } else if (key) {
             const p = targets[key].position, v = [r(p.x), r(p.y), r(p.z)];
             if (key === "handL") cfg.hands.left = v; else if (key === "handR") cfg.hands.right = v;
@@ -237,6 +259,8 @@ export function initDriver(api) {
     function syncTargets() {
         const c = drv.driver.config;
         targets.handL.position.set(...c.hands.left); targets.handR.position.set(...c.hands.right);
+        const k = Math.PI / 180;
+        for (const [key, side] of [["handL", "left"], ["handR", "right"]]) { const q = c.hands.rotation[side]; targets[key].quaternion.setFromEuler(new THREE.Euler(q[0] * k, q[1] * k, q[2] * k, "XYZ")); }
         targets.footL.position.set(...c.feet.left); targets.footR.position.set(...c.feet.right);
     }
     function syncFields() {
@@ -325,6 +349,13 @@ export function initDriver(api) {
     el("drvTravel").addEventListener("change", () => { if (drv.driver) drv.driver.config.feet.travel = Math.max(0, parseFloat(el("drvTravel").value) || 0) / 100; });
     el("drvElbow").addEventListener("change", () => { if (drv.driver) drv.driver.config.elbow_out = parseFloat(el("drvElbow").value) || 0; });
     el("drvKnee").addEventListener("change", () => { if (drv.driver) drv.driver.config.knee_out = parseFloat(el("drvKnee").value) || 0; });
+    el("drvGrip").addEventListener("input", () => {
+        if (!drv.driver) return;
+        const v = parseFloat(el("drvGrip").value) / 100;
+        drv.driver.config.hands.grip[drv.selected === "handR" ? "right" : "left"] = v;
+        el("drvGripOut").textContent = Math.round(v * 100) + "%";
+    });
+    el("drvCurl").addEventListener("change", () => { if (drv.driver) { drv.driver.config.grip_curl = el("drvCurl").value; drv.driver.refreshFingers(); } });
     el("drvSteer").addEventListener("input", () => { drv.steer = parseFloat(el("drvSteer").value); el("drvSteerOut").textContent = drv.steer + "°"; });
     el("drvThrottle").addEventListener("input", () => { drv.throttle = parseFloat(el("drvThrottle").value); });
     el("drvBrake").addEventListener("input", () => { drv.brake = parseFloat(el("drvBrake").value); });
@@ -363,7 +394,7 @@ export function initDriver(api) {
         if (drv.driver.bones.hips) bones.hips = drv.driver.bones.hips.name;
         if (drv.driver.bones.chest && drv.driver.bones.chest[0]) bones.chest = drv.driver.bones.chest[0].name;
         if (drv.driver.bones.head) bones.head = drv.driver.bones.head.name;
-        return { enabled: true, file: "", position: c.position.slice(), rotation: c.rotation.slice(), scale: c.scale, bones, hands: { left: c.hands.left.slice(), right: c.hands.right.slice() },
+        return { enabled: true, file: "", position: c.position.slice(), rotation: c.rotation.slice(), scale: c.scale, bones, hands: { left: c.hands.left.slice(), right: c.hands.right.slice(), rotation: { left: c.hands.rotation.left.slice(), right: c.hands.rotation.right.slice() }, grip: { left: c.hands.grip.left, right: c.hands.grip.right } }, grip_curl: c.grip_curl,
             feet: { left: c.feet.left.slice(), right: c.feet.right.slice(), travel: c.feet.travel, direction: c.feet.direction.slice() }, elbow_out: c.elbow_out, knee_out: c.knee_out,
             wheel: c.wheel ? JSON.parse(JSON.stringify(c.wheel)) : undefined, pivot: c.pivot, chest: { rotation: c.chest.rotation.slice() }, head: { rotation: c.head.rotation.slice() }, poles: c.poles ? JSON.parse(JSON.stringify(c.poles)) : undefined };
     }
