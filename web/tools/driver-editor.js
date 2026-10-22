@@ -17,6 +17,7 @@ const ROLES = [
     ["legL", "Left leg", ["thigh", "shin", "foot"]], ["legR", "Right leg", ["thigh", "shin", "foot"]]
 ];
 const MARK = { handL: 0x5ec8ff, handR: 0xff6b6b, footL: 0x8ee26b, footR: 0xffd04d };
+const TORSO = { chest: 0xffe2a8, head: 0xe8c8ff };                  // the chest and the head: nodes to turn them
 const POLES = { pArmL: "armL", pArmR: "armR", pLegL: "legL", pLegR: "legR" };      // where the elbows and the knees point to: nodes too
 const POLE_COLOUR = { pArmL: 0xa8e0ff, pArmR: 0xffb3b3, pLegL: 0xc5f0b0, pLegR: 0xffe79a };
 
@@ -31,6 +32,14 @@ export function initDriver(api) {
     }
     for (const [key, colour] of Object.entries(MARK)) {
         const mesh = new THREE.Mesh(new THREE.SphereGeometry(key.startsWith("hand") ? 0.03 : 0.045, 14, 10), new THREE.MeshBasicMaterial({ color: colour, depthTest: false, transparent: true }));
+        mesh.renderOrder = 999;
+        mesh.visible = false;
+        addHitBall(mesh, 0.1);
+        scene.add(mesh);
+        targets[key] = mesh;
+    }
+    for (const [key, colour] of Object.entries(TORSO)) {
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.05, 14, 10), new THREE.MeshBasicMaterial({ color: colour, depthTest: false, transparent: true, opacity: 0.9 }));
         mesh.renderOrder = 999;
         mesh.visible = false;
         addHitBall(mesh, 0.1);
@@ -66,7 +75,7 @@ export function initDriver(api) {
             <div class="group">Place (the gizmo is in the view)</div>
             <div class="row" id="drvPlace">
                 <button class="small" data-t="model">Driver</button><button class="small" data-t="handL">Left hand</button><button class="small" data-t="handR">Right hand</button>
-                <button class="small" data-t="footL">Left foot (brake)</button><button class="small" data-t="footR">Right foot (gas)</button><button class="small" data-t="wheel">Wheel (ring)</button>
+                <button class="small" data-t="footL">Left foot (brake)</button><button class="small" data-t="footR">Right foot (gas)</button><button class="small" data-t="wheel">Wheel (ring)</button><button class="small" data-t="chest">Chest</button><button class="small" data-t="head">Head</button>
             </div>
             <div class="row" id="drvModes"><button class="small accent" data-m="move">Move (W)</button><button class="small ghost" data-m="rotate">Rotate (E)</button><button class="small ghost" data-m="scale" id="drvScaleMode">Scale (R)</button></div>
             <div class="hint">Click a node in the view to take it: the coloured balls are the hands and the feet, the small cubes the elbows and the knees. Click the figure to take the model, click the grey ring to take the ring of the hands: match it to the steering wheel of the model with the gizmo (move, rotate, scale: its size is where the hands hold).</div>
@@ -109,6 +118,7 @@ export function initDriver(api) {
         }
         if (!key || !drv.driver) { markButtons(); return; }
         if (key === "model") { gizmo.setMode(drv.mode === "rotate" ? "rotate" : "translate"); gizmo.setSpace(drv.mode === "rotate" ? "local" : "world"); gizmo.attach(drv.driver.root); }
+        else if (TORSO[key]) { gizmo.setMode("rotate"); gizmo.setSpace("world"); gizmo.attach(targets[key]); }
         else { gizmo.setMode("translate"); gizmo.setSpace("world"); gizmo.attach(targets[key]); }
         markButtons();
     }
@@ -143,6 +153,9 @@ export function initDriver(api) {
         if (key === "model") {
             cfg.position = [r(d.root.position.x), r(d.root.position.y), r(d.root.position.z)];
             cfg.rotation = [r(d.root.rotation.x * deg), r(d.root.rotation.y * deg), r(d.root.rotation.z * deg)];
+        } else if (TORSO[key]) {
+            const e = new THREE.Euler().setFromQuaternion(targets[key].quaternion, "XYZ");
+            cfg[key] = { rotation: [r(e.x * deg), r(e.y * deg), r(e.z * deg)] };
         } else if (POLES[key]) {
             const p = targets[key].position;
             cfg.poles = cfg.poles || {};
@@ -262,7 +275,7 @@ export function initDriver(api) {
             row.className = "row";
             const select = document.createElement("select");
             select.innerHTML = "<option value=''>(none)</option>" + names.map((n) => "<option>" + n.replace(/</g, "&lt;") + "</option>").join("");
-            const bone = index === undefined ? d.bones[key] : d.bones[key][index];
+            const bone = key === "chest" ? d.bones.chest[0] : (index === undefined ? d.bones[key] : d.bones[key][index]);
             select.value = bone ? bone.name : "";
             select.addEventListener("change", () => {
                 const cfg = d.config.bones;
@@ -278,6 +291,7 @@ export function initDriver(api) {
             box.appendChild(row);
         };
         for (const [key, title, parts] of ROLES) parts.forEach((p, i) => add(key, i, title + ": " + p));
+        add("chest", undefined, "Chest (the bone that the shoulders hang on)");
         add("hips", undefined, "Hips");
         add("head", undefined, "Head (hidden in the cockpit view)");
     }
@@ -325,6 +339,13 @@ export function initDriver(api) {
         d.steering.axis.copy(axis);
         wheelPivot.quaternion.setFromAxisAngle(axis, -drv.steer * Math.PI / 180);
         d.update(dt || 0.016, drv.throttle, drv.brake);
+        for (const key of Object.keys(TORSO)) {
+            if (drv.dragging && drv.selected === key) continue;
+            const bone = key === "chest" ? d.bones.chest[0] : d.bones.head;
+            if (bone) bone.getWorldPosition(targets[key].position);
+            const rot = (d.config[key] && d.config[key].rotation) || [0, 0, 0], k = Math.PI / 180;
+            targets[key].quaternion.setFromEuler(new THREE.Euler(rot[0] * k, rot[1] * k, rot[2] * k, "XYZ"));
+        }
         for (const [key, role] of Object.entries(POLES)) {
             if (drv.dragging && drv.selected === key) continue;
             if (d.poles[role]) targets[key].position.copy(d.poles[role]);
@@ -338,10 +359,11 @@ export function initDriver(api) {
         const bones = {};
         for (const [key, , parts] of ROLES) { const list = drv.driver.bones[key]; if (list && list.every(Boolean)) bones[key] = list.map((b) => b.name); }
         if (drv.driver.bones.hips) bones.hips = drv.driver.bones.hips.name;
+        if (drv.driver.bones.chest && drv.driver.bones.chest[0]) bones.chest = drv.driver.bones.chest[0].name;
         if (drv.driver.bones.head) bones.head = drv.driver.bones.head.name;
         return { enabled: true, file: "", position: c.position.slice(), rotation: c.rotation.slice(), scale: c.scale, bones, hands: { left: c.hands.left.slice(), right: c.hands.right.slice() },
             feet: { left: c.feet.left.slice(), right: c.feet.right.slice(), travel: c.feet.travel, direction: c.feet.direction.slice() }, elbow_out: c.elbow_out, knee_out: c.knee_out,
-            wheel: c.wheel ? JSON.parse(JSON.stringify(c.wheel)) : undefined, poles: c.poles ? JSON.parse(JSON.stringify(c.poles)) : undefined };
+            wheel: c.wheel ? JSON.parse(JSON.stringify(c.wheel)) : undefined, pivot: c.pivot, chest: { rotation: c.chest.rotation.slice() }, head: { rotation: c.head.rotation.slice() }, poles: c.poles ? JSON.parse(JSON.stringify(c.poles)) : undefined };
     }
     function newFile() { return drv.file; }
     function fill(car) {

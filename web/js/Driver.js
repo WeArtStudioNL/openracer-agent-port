@@ -59,6 +59,21 @@ OpenRacer.Driver = function (config, parent, steering) {
         self.root.add(scene);
         self.place();
         self.resolveBones();
+        // the model turns and scales about its hips (the pivot of the gizmo is in the body, not at the feet): the model is moved so that its hips are at the origin of the driver; a driver that
+        // was saved with the origin at the feet (without "pivot") is converted, so that it stays where it was
+        var hips = self.bones.hips;
+        if (hips) {
+            self.root.updateMatrixWorld(true);
+            var h = self.root.worldToLocal(hips.getWorldPosition(new V()));
+            if (self.config.pivot !== "hips") {
+                var cfgR = self.config.rotation, k = Math.PI / 180;
+                var move = h.clone().multiplyScalar(self.config.scale > 0 ? self.config.scale : 1).applyEuler(new THREE.Euler(cfgR[0] * k, cfgR[1] * k, cfgR[2] * k, "XYZ"));
+                self.config.position = [self.config.position[0] + move.x, self.config.position[1] + move.y, self.config.position[2] + move.z].map(function (v) { return Math.round(v * 1000) / 1000; });
+                self.config.pivot = "hips";
+            }
+            scene.position.sub(h);
+            self.place();
+        }
         self.facing = self.measureFacing();
     };
     // which way the model faces, from where its left and right shoulders are: 1 when it faces +z (the front of the car: its left side is on +x), -1 when it faces the other way
@@ -84,11 +99,43 @@ OpenRacer.Driver = function (config, parent, steering) {
         });
         self.bones.hips = pick(cfg.hips, guess.hips);
         self.bones.head = pick(cfg.head, guess.head);
+        // the chest: the bone that the shoulders hang on and the bones of the mesh that go with it (a Rigify rig has the deform bone DEF-spine.003 and the ORG-spine.003 that the arms hang on)
+        var chestBone = pick(cfg.chest, guess.chest);
+        self.bones.chest = [];
+        if (chestBone) {
+            self.bones.chest.push(chestBone);
+            var partner = byName[chestBone.name.replace(/^DEF-/, "ORG-")];
+            if (partner && partner !== chestBone && /^DEF-/.test(chestBone.name)) self.bones.chest.push(partner);
+        }
         rest.clear(); restScale.clear();
+        self.bones.chest.forEach(function (bone) { rest.set(bone, bone.quaternion.clone()); });
+        if (self.bones.head) rest.set(self.bones.head, self.bones.head.quaternion.clone());
         ["armL", "armR", "legL", "legR"].forEach(function (key) { self.bones[key].forEach(function (bone) { if (bone) rest.set(bone, bone.quaternion.clone()); }); });
         if (self.bones.head) restScale.set(self.bones.head, self.bones.head.scale.clone());
     };
     this.complete = function () { return ["armL", "armR", "legL", "legR"].every(function (k) { return self.bones[k] && self.bones[k].every(Boolean); }); };
+
+    // ---- the chest and the head, turned as the car editor set them (rotation in degrees about the axes of the car, about the bone itself)
+    var qd = new Q(), qw = new Q(), qpw = new Q(), qbody = new Q(), eul = new THREE.Euler();
+    function turnBone(bone, offset) {
+        bone.quaternion.copy(rest.get(bone));
+        if (!offset || (Math.abs(offset[0]) + Math.abs(offset[1]) + Math.abs(offset[2]) < 1e-6)) return;
+        self.model.updateMatrixWorld(true);
+        var k = Math.PI / 180;
+        qd.setFromEuler(eul.set(offset[0] * k, offset[1] * k, offset[2] * k, "XYZ"));
+        self.parent.getWorldQuaternion(qbody);
+        qd.premultiply(qbody).multiply(qbody.clone().invert());                    // the turn in the space of the car, in the world
+        bone.getWorldQuaternion(qw);
+        qw.premultiply(qd);
+        if (bone.parent) { bone.parent.getWorldQuaternion(qpw); qpw.invert(); qw.premultiply(qpw); }
+        bone.quaternion.copy(qw);
+    }
+    function torso() {
+        var cfg = self.config;
+        self.bones.chest.forEach(function (bone) { turnBone(bone, cfg.chest && cfg.chest.rotation); });
+        if (self.bones.head) turnBone(self.bones.head, cfg.head && cfg.head.rotation);
+        self.model.updateMatrixWorld(true);
+    }
 
     // ---- the inverse kinematics of two bones: upper, lower, end (a hand or a foot); target and pole are in the world
     function solve(chain, target, poleWorld) {
@@ -305,6 +352,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         }
         self.throttle = throttle === undefined ? self.throttle : throttle;
         self.brake = brake === undefined ? self.brake : brake;
+        torso();
         readGrips();
         if (self.steering) handsStep(dt || 0.016);
         var cfg = self.config, world = new V();
@@ -358,7 +406,7 @@ OpenRacer.Driver.defaults = function () {
         enabled: false, file: "", position: [0, 0, 0], rotation: [0, 0, 0], scale: 1, bones: {},
         hands: { left: [0.15, 0.2, 0.3], right: [-0.15, 0.2, 0.3] },
         feet: { left: [0.1, -0.1, 0.5], right: [-0.1, -0.1, 0.5], travel: 0.06, direction: [0, -0.5, 0.85] },
-        elbow_out: 0.5, knee_out: 0.15, poles: null, wheel: null
+        elbow_out: 0.5, knee_out: 0.15, poles: null, wheel: null, pivot: "", chest: { rotation: [0, 0, 0] }, head: { rotation: [0, 0, 0] }
     };
 };
 OpenRacer.Driver.withDefaults = function (c) {
@@ -368,6 +416,8 @@ OpenRacer.Driver.withDefaults = function (c) {
     out.bones = Object.assign({}, (c && c.bones) || {});
     out.poles = c && c.poles ? JSON.parse(JSON.stringify(c.poles)) : null;
     out.wheel = c && c.wheel ? JSON.parse(JSON.stringify(c.wheel)) : null;
+    out.chest = { rotation: (c && c.chest && c.chest.rotation ? c.chest.rotation : [0, 0, 0]).slice() };
+    out.head = { rotation: (c && c.head && c.head.rotation ? c.head.rotation : [0, 0, 0]).slice() };
     ["position", "rotation"].forEach(function (k) { if (!Array.isArray(out[k]) || out[k].length !== 3) out[k] = d[k].slice(); });
     return out;
 };
@@ -409,6 +459,8 @@ OpenRacer.Driver.guessBones = function (model) {
             find(side, [/foot/i, /ankle/i])
         ];
     });
+    out.chest = bones.find(function (b) { return /^DEF-spine\.?003$/i.test(b.name); }) || bones.find(function (b) { return /(^|[^a-z])(chest|upper.?body|torso)/i.test(b.name) && !control.test(b.name); }) ||
+        bones.find(function (b) { return /spine\.?0?(2|1)$/i.test(b.name) && !control.test(b.name); }) || null;
     out.hips = bones.find(function (b) { return /^DEF-spine$/i.test(b.name); }) || bones.find(function (b) { return /hips|pelvis/i.test(b.name) && !control.test(b.name); }) || bones.find(function (b) { return /hips|pelvis/i.test(b.name); }) || null;
     // the head: Rigify has a control "head" and the deform bone DEF-spine.006 that moves the mesh (only that one hides the head in the cockpit view)
     out.head = bones.find(function (b) { return /^DEF-spine\.?006$/i.test(b.name) || /^DEF-head$/i.test(b.name); }) ||
