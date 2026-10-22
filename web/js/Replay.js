@@ -639,10 +639,10 @@ OpenRacer.Replay = (function() {
         updateCameraUi();
     }
 
-    // ---- the cinematic camera: the cameras that the track editor put in the track. The nearest one to the car is used (it only goes to another when that is clearly nearer), it stays where it
+    // ---- the cinematic camera: the cameras that the track editor put in the track. The camera whose range (a circle on the floor) the car is in is used, else the nearest one (it only goes to another when that is clearly better), it stays where it
     // is and only turns to follow the car, and its field of view is chosen so that the car is about the same size in the picture
     var cine = { active: false, index: -1, fov: 40, quat: new THREE.Quaternion() };
-    function cinemaCameras() { return (typeof currentTrack !== "undefined" && currentTrack && Array.isArray(currentTrack.cameras)) ? currentTrack.cameras.filter(function(c) { return isFinite(c.x) && isFinite(c.y) && isFinite(c.z); }) : []; }
+    function cinemaCameras() { return (typeof currentTrack !== "undefined" && currentTrack && Array.isArray(currentTrack.cameras)) ? currentTrack.cameras.filter(function(c) { return c && isFinite(c.x) && isFinite(c.y) && isFinite(c.z); }) : []; }
     function enterCine() {
         if(cine.active || !cinemaCameras().length) return;
         cine.active = true;
@@ -659,11 +659,18 @@ OpenRacer.Replay = (function() {
         if(!list.length || !body) return;
         delta = Math.min(delta, 0.1);
         var distance = function(c) { return Math.hypot(c.x - body.position.x, c.y - body.position.y, c.z - body.position.z); };
+        // how well a camera suits: inside its range (a circle on the floor, the one that the track editor shows) from 0 at the middle to 1 at the edge, outside it more than 1 and more the farther
+        // away it is from the circle; a camera without a range has a circle of nothing at its own place
+        var score = function(c) {
+            var r = c.range && c.range.r > 0 ? c.range : { x: c.x, z: c.z, r: 0 };
+            var away = Math.hypot(body.position.x - r.x, body.position.z - r.z);
+            return away < r.r ? away / r.r : 1 + (away - r.r);
+        };
         var nearest = 0;
-        list.forEach(function(c, i) { if(distance(c) < distance(list[nearest])) nearest = i; });
+        list.forEach(function(c, i) { if(score(c) < score(list[nearest])) nearest = i; });
         var cut = false;
         if(cine.index < 0 || cine.index >= list.length) { cine.index = nearest; cut = true; }
-        else if(nearest !== cine.index && distance(list[nearest]) < distance(list[cine.index]) * 0.85) { cine.index = nearest; cut = true; }      // (not at once: no flicker where two are as near)
+        else if(nearest !== cine.index && score(list[nearest]) < score(list[cine.index]) * 0.85) { cine.index = nearest; cut = true; }      // (not at once: no flicker where two suit as well)
         var c = list[cine.index];
         camera.position.set(c.x, c.y, c.z);
         tmpM.lookAt(camera.position, tmpV2.copy(body.position).add(V3(0, 0.7, 0)), V3(0, 1, 0));

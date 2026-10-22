@@ -32,7 +32,9 @@ const state = {
     selected: null,       // name of the selected part
     start: null,          // { x, y, z, heading }
     gates: [],            // [{ x, y, z, heading, width }]
-    cameras: [],          // the cinematic cameras of the replay: [{ x, y, z }] (y is the height in the world)
+    cameras: [],          // the cinematic cameras of the replay: [{ x, y, z, range: { x, z, r } }] (y is the height in the world; range: the circle on the floor where the camera is used, set by hand or not)
+    camSel: -1,           // the chosen camera
+    camRange: false,      // the range of the chosen camera is being changed
     drag: null,           // the drag strip: { x, y, z, heading, width, length } (the start line and the way the strip goes)
     mode: "view",
     markerScale: 1,
@@ -68,6 +70,66 @@ scene.add(trackGroup);
 const markers = new THREE.Group(); // the start and the gates
 scene.add(markers);
 const raycaster = new THREE.Raycaster();
+
+// ---- the cinematic cameras: a click chooses one, a gizmo moves it, and the button above it changes its range (a circle on the floor: the middle moves it, the node on the edge sets the radius)
+const camTarget = new THREE.Object3D();
+scene.add(camTarget);
+const camGizmo = new TransformControls(camera, renderer.domElement);
+camGizmo.setSize(0.8);
+camGizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !event.value; });
+camGizmo.addEventListener("objectChange", () => {
+    const c = state.cameras[state.camSel];
+    if (!c) return;
+    c.x = camTarget.position.x; c.y = camTarget.position.y; c.z = camTarget.position.z;
+    updateMarkers();
+});
+scene.add(typeof camGizmo.getHelper === "function" ? camGizmo.getHelper() : camGizmo);
+const DEFAULT_RANGE = 30;
+function rangeOf(c) { return c.range || { x: c.x, z: c.z, r: DEFAULT_RANGE }; }
+function selectCamera(i, rangeMode) {
+    state.camSel = i >= 0 && state.cameras[i] ? i : -1;
+    state.camRange = state.camSel >= 0 && !!rangeMode;
+    camGizmo.detach();
+    if (state.camSel >= 0 && !state.camRange) {
+        const c = state.cameras[state.camSel];
+        camTarget.position.set(c.x, c.y, c.z);
+        camGizmo.attach(camTarget);
+    }
+    updateMarkers();
+}
+const rangeRings = new Map();      // the heights of the floor along a circle, kept (the floor is looked up with rays)
+function rangePoints(x, z, r) {
+    const key = x.toFixed(1) + "," + z.toFixed(1) + "," + r.toFixed(1);
+    if (rangeRings.has(key)) return rangeRings.get(key);
+    const points = [];
+    for (let i = 0; i <= 64; i++) {
+        const a = i / 64 * Math.PI * 2, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
+        points.push(new THREE.Vector3(px, groundY(px, pz, groundY(x, z)) + 0.5, pz));
+    }
+    if (rangeRings.size > 400) rangeRings.clear();
+    rangeRings.set(key, points);
+    return points;
+}
+const camIcons = document.createElement("div");
+camIcons.style.cssText = "position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden;";
+view.appendChild(camIcons);
+const iconVector = new THREE.Vector3();
+function positionCamIcons() {
+    const rect = renderer.domElement.getBoundingClientRect(), box = view.getBoundingClientRect();
+    [...camIcons.children].forEach((button) => {
+        const c = state.cameras[button.dataset.camera];
+        if (!c) return;
+        iconVector.set(c.x, c.y + 1.6 * state.markerScale, c.z).project(camera);
+        const visible = iconVector.z < 1 && iconVector.z > -1;
+        button.style.display = visible ? "" : "none";
+        button.style.left = (rect.left - box.left + (iconVector.x * 0.5 + 0.5) * rect.width) + "px";
+        button.style.top = (rect.top - box.top + (-iconVector.y * 0.5 + 0.5) * rect.height) + "px";
+    });
+}
+window.addEventListener("keydown", (event) => {
+    const t = event.target && event.target.tagName;
+    if (event.code === "Escape" && t !== "INPUT" && t !== "TEXTAREA" && state.camSel >= 0) selectCamera(-1);
+});
 
 // ---- the layers of the events (the drag strip): chosen in the list, it shows a gizmo with arrows for the place and a circle for the direction
 const eventLayers = { selected: null, dragging: false };
@@ -286,6 +348,7 @@ resize();
 (function loop() {
     requestAnimationFrame(loop);
     renderer.render(scene, camera);
+    positionCamIcons();
 })();
 
 let toastTimer = 0;
@@ -612,13 +675,21 @@ function updateMarkers() {
         markers.add(strip);
         markers.add(makeArrow(gate.x, gate.y, gate.z, gate.heading, colour, 5 * k));
     });
+    camIcons.innerHTML = "";
     state.cameras.forEach((c, i) => {
-        // a camera: a body with a lens, and a line down to the ground
-        const body = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1, 1.8), new THREE.MeshBasicMaterial({ color: 0xff7bd5, depthTest: false, transparent: true }));
+        // a camera: a body with a lens, a line down to the ground, and its range: a circle on the floor
+        const chosen = i === state.camSel;
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1, 1.8), new THREE.MeshBasicMaterial({ color: chosen ? 0xffd04d : 0xff7bd5, depthTest: false, transparent: true }));
         body.position.set(c.x, c.y, c.z);
         body.scale.setScalar(k);
         body.renderOrder = 998;
+        body.userData.camera = i;
         markers.add(body);
+        const hit = new THREE.Mesh(new THREE.SphereGeometry(1.6, 8, 6), new THREE.MeshBasicMaterial({ visible: false }));
+        hit.position.copy(body.position);
+        hit.scale.setScalar(k);
+        hit.userData.camera = i;
+        markers.add(hit);
         const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 0.8, 12), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true }));
         lens.rotation.x = Math.PI / 2;
         lens.position.set(c.x, c.y, c.z + 1.2 * k);
@@ -627,6 +698,31 @@ function updateMarkers() {
         markers.add(lens);
         const ground = groundY(c.x, c.z, c.y);
         markers.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(c.x, c.y, c.z), new THREE.Vector3(c.x, ground, c.z)]), new THREE.LineBasicMaterial({ color: 0xff7bd5 })));
+        const range = rangeOf(c);
+        const ring = new THREE.Line(new THREE.BufferGeometry().setFromPoints(rangePoints(range.x, range.z, range.r)), new THREE.LineBasicMaterial({ color: chosen ? 0xffd04d : 0xff7bd5, depthTest: false, transparent: true, opacity: chosen ? 1 : 0.5 }));
+        ring.renderOrder = 997;
+        markers.add(ring);
+        if (chosen && state.camRange) {
+            // the nodes of the range: the middle moves the circle, the one on the edge sets the radius
+            const gy = groundY(range.x, range.z, c.y);
+            const node = (x, z, name, colour) => {
+                const ball = new THREE.Mesh(new THREE.SphereGeometry(0.9 * k, 14, 10), new THREE.MeshBasicMaterial({ color: colour, depthTest: false, transparent: true }));
+                ball.position.set(x, groundY(x, z, gy) + 0.9 * k, z);
+                ball.renderOrder = 1000;
+                ball.userData.rangeNode = name;
+                markers.add(ball);
+            };
+            node(range.x, range.z, "centre", 0xffffff);
+            node(range.x + range.r, range.z, "edge", 0xff8a3d);
+        }
+        // the button above the camera: it opens the range
+        const icon = document.createElement("button");
+        icon.dataset.camera = String(i);
+        icon.textContent = "◎";
+        icon.title = "Change the range of this camera";
+        icon.style.cssText = "position: absolute; transform: translate(-50%, -100%); width: 26px; height: 26px; border-radius: 13px; padding: 0; line-height: 24px; font-size: 15px; cursor: pointer; pointer-events: auto; border: 2px solid " + (chosen ? "#ffd04d" : "#ff7bd5") + "; color: #fff; background: " + (chosen && state.camRange ? "#ff7bd5" : "rgba(22, 27, 34, 0.9)") + ";";
+        icon.onclick = () => selectCamera(i, !(state.camSel === i && state.camRange));
+        camIcons.appendChild(icon);
     });
     renderCameras();
     if (state.drag) {
@@ -714,19 +810,27 @@ function renderCameras() {
     state.cameras.forEach((c, i) => {
         const row = document.createElement("div");
         row.className = "gate";
+        if (i === state.camSel) row.style.background = "rgba(255, 208, 77, 0.12)";
         const text = document.createElement("span");
         text.textContent = "Camera " + (i + 1);
+        text.style.cursor = "pointer";
+        text.title = "Choose this camera";
+        text.onclick = () => selectCamera(i === state.camSel ? -1 : i);
         row.appendChild(text);
         for (const key of ["x", "y", "z"]) {
             const input = document.createElement("input");
             input.type = "number"; input.step = "0.5"; input.value = c[key].toFixed(1); input.style.width = "62px"; input.title = key === "y" ? "Height (m)" : key;
-            input.onchange = () => { const v = parseFloat(input.value); if (isFinite(v)) { c[key] = v; updateMarkers(); } };
+            input.onchange = () => { const v = parseFloat(input.value); if (isFinite(v)) { c[key] = v; if (i === state.camSel && !state.camRange) camTarget.position.set(c.x, c.y, c.z); updateMarkers(); } };
             row.appendChild(input);
         }
+        const radius = document.createElement("input");
+        radius.type = "number"; radius.step = "1"; radius.min = "2"; radius.value = rangeOf(c).r.toFixed(0); radius.style.width = "56px"; radius.title = "Radius of the range (m)";
+        radius.onchange = () => { const v = parseFloat(radius.value); if (isFinite(v) && v >= 2) { c.range = Object.assign({}, rangeOf(c), { r: v }); updateMarkers(); } };
+        row.appendChild(radius);
         const remove = document.createElement("button");
         remove.className = "small danger";
         remove.textContent = "Remove";
-        remove.onclick = () => { state.cameras.splice(i, 1); updateMarkers(); };
+        remove.onclick = () => { state.cameras.splice(i, 1); selectCamera(-1); };
         row.appendChild(remove);
         list.appendChild(row);
     });
@@ -765,7 +869,7 @@ function setMode(mode) {
     for (const button of document.querySelectorAll("#modes button")) button.classList.toggle("active", button.dataset.mode === mode);
     $("hud").textContent = (design && design.hudText(mode)) || (mode === "start" ? "Place start: click on the road and drag in the direction that the car drives."
         : mode === "gate" ? "Add gate: click on the road and drag in the direction that the car drives through the gate."
-        : mode === "camera" ? "Add camera: click on the road or beside it, the camera is put above that place (set the height in the list). In the replay the camera nearest to the car is used and it turns to follow the car."
+        : mode === "camera" ? "Add camera: click on the road or beside it, the camera is put above that place (set the height in the list). Click a camera in Look to choose it and move it with the gizmo; the button above it changes its range."
         : mode === "drag" ? "Drag strip: click on the road where the start line is and drag in the direction of the strip."
         : "Look: drag to turn, right mouse button to move, scroll to zoom. Click a part to find it in the list.");
 }
@@ -789,6 +893,17 @@ let drag = null;
 renderer.domElement.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
     drag = { x: event.clientX, y: event.clientY, hit: null, moved: false };
+    if (state.camRange && state.camSel >= 0) {
+        // the nodes of the range of the chosen camera
+        const nodes = pointerRay(event).intersectObjects(markers.children, false).filter((h) => h.object.userData.rangeNode);
+        if (nodes.length) {
+            drag.range = nodes[0].object.userData.rangeNode;
+            drag.level = nodes[0].object.position.y;
+            controls.enabled = false;
+            renderer.domElement.setPointerCapture(event.pointerId);
+            return;
+        }
+    }
     if ((state.mode === "start" || state.mode === "gate" || state.mode === "drag" || state.mode === "camera") && !moveGizmo.axis && !turnGizmo.axis) {
         const hit = roadHit(event);
         if (hit) {
@@ -802,6 +917,17 @@ renderer.domElement.addEventListener("pointerdown", (event) => {
 renderer.domElement.addEventListener("pointermove", (event) => {
     if (!drag) return;
     if (Math.abs(event.clientX - drag.x) + Math.abs(event.clientY - drag.y) > 4) drag.moved = true;
+    if (drag.range) {
+        const c = state.cameras[state.camSel];
+        const p = pointerRay(event).ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -drag.level), new THREE.Vector3());
+        if (c && p) {
+            const range = rangeOf(c);
+            if (drag.range === "centre") c.range = { x: p.x, z: p.z, r: range.r };
+            else c.range = { x: range.x, z: range.z, r: Math.max(2, Math.hypot(p.x - range.x, p.z - range.z)) };
+            updateMarkers();
+        }
+        return;
+    }
     if (!drag.hit) return;
     // the direction: from the place that was clicked to where the pointer is, on the level of the road there
     const ray = pointerRay(event).ray;
@@ -838,6 +964,11 @@ renderer.domElement.addEventListener("pointerup", (event) => {
     const d = drag;
     drag = null;
     controls.enabled = true;
+    if (d.range) { renderCameras(); return; }
+    if (state.mode !== "camera" && !d.moved && !d.hit && state.cameras.length) {
+        const hits = pointerRay(event).intersectObjects(markers.children, false).filter((h) => h.object.userData.camera !== undefined);
+        if (hits.length) { selectCamera(hits[0].object.userData.camera, state.camRange && state.camSel === hits[0].object.userData.camera); return; }
+    }
     if (d.hit) {
         if (!d.added && state.mode === "start") place(d, false);
         else if (!d.added && (state.mode === "gate" || state.mode === "drag" || state.mode === "camera")) place(d, false);
@@ -1005,7 +1136,12 @@ async function loadExisting() {
         // the heights of the start and the gates come from the road
         if (state.start) state.start.y = groundY(state.start.x, state.start.z);
         state.gates = (track.gates || []).map((g) => ({ x: g.x, y: groundY(g.x, g.z), z: g.z, heading: g.heading, width: g.width || 24 }));
-        state.cameras = (track.cameras || []).filter((c) => isFinite(c.x) && isFinite(c.z)).map((c) => ({ x: c.x, y: isFinite(c.y) ? c.y : groundY(c.x, c.z) + 3, z: c.z }));
+        state.cameras = (track.cameras || []).filter((c) => isFinite(c.x) && isFinite(c.z)).map((c) => {
+            const camera = { x: c.x, y: isFinite(c.y) ? c.y : groundY(c.x, c.z) + 3, z: c.z };
+            if (c.range && isFinite(c.range.x) && isFinite(c.range.z) && c.range.r > 0) camera.range = { x: c.range.x, z: c.range.z, r: c.range.r };
+            return camera;
+        });
+        selectCamera(-1);
         state.drag = track.dragstrip ? { x: track.dragstrip.x, y: groundY(track.dragstrip.x, track.dragstrip.z), z: track.dragstrip.z, heading: track.dragstrip.heading || 0, width: track.dragstrip.width || 12, length: track.dragstrip.length || 402.336 } : null;
         showDrag();
         updateMarkers();
@@ -1024,6 +1160,7 @@ function newTrack() {
     state.start = null;
     state.gates = [];
     state.cameras = [];
+    selectCamera(-1);
     state.drag = null;
     state.legacy = false;
     state.idEdited = false;
@@ -1081,7 +1218,7 @@ async function save() {
             delete config.gates;
         }
 
-        if (state.cameras.length) config.cameras = state.cameras.map((c) => ({ x: +c.x.toFixed(2), y: +c.y.toFixed(2), z: +c.z.toFixed(2) }));
+        if (state.cameras.length) config.cameras = state.cameras.map((c) => Object.assign({ x: +c.x.toFixed(2), y: +c.y.toFixed(2), z: +c.z.toFixed(2) }, c.range ? { range: { x: +c.range.x.toFixed(2), z: +c.range.z.toFixed(2), r: +c.range.r.toFixed(1) } } : {}));
         else delete config.cameras;
 
         if (state.drag) config.dragstrip = { x: +state.drag.x.toFixed(3), z: +state.drag.z.toFixed(3), heading: +state.drag.heading.toFixed(5), width: state.drag.width, length: +state.drag.length.toFixed(2) };
