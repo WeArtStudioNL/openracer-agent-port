@@ -23,6 +23,7 @@ def use_materials(table):
 
 
 nodes, meshes, accessors, views = [], [], [], []
+images, textures = [], []
 blob = bytearray()
 
 
@@ -51,6 +52,37 @@ def add_mesh(name, positions, normals, indices, material):
     a = len(accessors) - 3
     meshes.append({"name": name, "primitives": [{"attributes": {"POSITION": a, "NORMAL": a + 1}, "indices": a + 2, "material": material_index[material]}]})
     return len(meshes) - 1
+
+
+def add_texture(png_bytes, mime="image/png"):
+    """A picture (the bytes of a PNG or a JPEG) as a texture; gives its index for a material ({"baseColorTexture": {"index": n}})."""
+    images.append({"bufferView": add_view(bytes(png_bytes)), "mimeType": mime})
+    textures.append({"source": len(images) - 1})
+    return len(textures) - 1
+
+
+def add_mesh_uv(name, positions, normals, uvs, indices, material):
+    """A mesh with texture coordinates (u, v from the top left of the picture, as glTF has it)."""
+    pos = struct.pack("<%df" % len(positions), *positions)
+    nor = struct.pack("<%df" % len(normals), *normals)
+    tex = struct.pack("<%df" % len(uvs), *uvs)
+    idx = struct.pack("<%dI" % len(indices), *indices)
+    count = len(positions) // 3
+    xs, ys, zs = positions[0::3], positions[1::3], positions[2::3]
+    accessors.append({"bufferView": add_view(pos, 34962), "componentType": 5126, "count": count, "type": "VEC3",
+                      "min": [min(xs), min(ys), min(zs)], "max": [max(xs), max(ys), max(zs)]})
+    accessors.append({"bufferView": add_view(nor, 34962), "componentType": 5126, "count": count, "type": "VEC3"})
+    accessors.append({"bufferView": add_view(tex, 34962), "componentType": 5126, "count": count, "type": "VEC2"})
+    accessors.append({"bufferView": add_view(idx, 34963), "componentType": 5125, "count": len(indices), "type": "SCALAR"})
+    a = len(accessors) - 4
+    meshes.append({"name": name, "primitives": [{"attributes": {"POSITION": a, "NORMAL": a + 1, "TEXCOORD_0": a + 2}, "indices": a + 3, "material": material_index[material]}]})
+    return len(meshes) - 1
+
+
+def part_uv(name, pivot, positions, normals, uvs, indices, material):
+    mesh = add_mesh_uv(name, positions, normals, uvs, indices, material)
+    nodes.append({"name": name, "translation": list(pivot), "mesh": mesh})
+    return len(nodes) - 1
 
 
 def box(size, centre=(0, 0, 0)):
@@ -147,8 +179,10 @@ def write(out, scene_name, generator):
         "scene": 0, "scenes": [{"name": scene_name, "nodes": list(range(len(nodes)))}],
         "nodes": nodes, "meshes": meshes, "accessors": accessors, "bufferViews": views,
         "buffers": [{"byteLength": len(blob)}],
-        "materials": [{"name": name, "pbrMetallicRoughness": {"baseColorFactor": colour, "metallicFactor": 0.1, "roughnessFactor": 0.7}} for name, colour in materials.items()]
+        "materials": [dict(colour, name=name) if isinstance(colour, dict) else {"name": name, "pbrMetallicRoughness": {"baseColorFactor": colour, "metallicFactor": 0.1, "roughnessFactor": 0.7}} for name, colour in materials.items()]
     }
+    if textures:
+        gltf["images"], gltf["textures"] = images, textures
     while len(blob) % 4:
         blob.append(0)
     json_bytes = json.dumps(gltf, separators=(",", ":")).encode()
