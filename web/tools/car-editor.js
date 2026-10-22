@@ -895,8 +895,21 @@ function selectLayer(id) {
 
 // The part that is chosen in the view (a click on a loose part, the Soft body card): its row in the Parts list is lit and the list scrolls to it
 let chosenPart = null;
+const expandedParts = new Set();       // the parents of the Parts list that are open
+let partsFor = null;
 function showChosenPart(name) {
     chosenPart = name || null;
+    // the parents of the part open, so that its row is there
+    if (chosenPart) {
+        const at = state.nodes.findIndex((n) => n.name === chosenPart);
+        if (at > 0) {
+            let depth = state.nodes[at].depth, opened = false;
+            for (let i = at - 1; i >= 0 && depth > 0; i--) {
+                if (state.nodes[i].depth < depth) { depth = state.nodes[i].depth; if (!expandedParts.has(state.nodes[i].name)) { expandedParts.add(state.nodes[i].name); opened = true; } }
+            }
+            if (opened) renderLayers();
+        }
+    }
     let found = null;
     document.querySelectorAll("#layerList .layer.part").forEach((row) => {
         const on = !!chosenPart && row.dataset.part === chosenPart;
@@ -989,11 +1002,25 @@ function renderLayers() {
         g.className = "group";
         g.textContent = "Parts";
         list.appendChild(g);
-        state.nodes.forEach((node) => {
+        // only the parents are shown, the objects inside them fold out with the arrow (all folded when a model is loaded)
+        if (partsFor !== state.nodes) { partsFor = state.nodes; expandedParts.clear(); }
+        let hiddenFrom = Infinity;                       // the depth of the folded parent that hides the rows below it
+        state.nodes.forEach((node, index) => {
+            if (node.depth > hiddenFrom) return;
+            hiddenFrom = Infinity;
+            const hasChildren = index + 1 < state.nodes.length && state.nodes[index + 1].depth > node.depth;
+            const open = expandedParts.has(node.name);
+            if (hasChildren && !open) hiddenFrom = node.depth;
             const row = document.createElement("div");
             row.className = "layer part" + (node.name === chosenPart ? " selected" : "");
             row.dataset.part = node.name;
-            row.style.paddingLeft = (18 + Math.min(node.depth, 6) * 10) + "px";
+            row.style.paddingLeft = (6 + Math.min(node.depth, 6) * 10) + "px";
+            const arrow = document.createElement("button");
+            arrow.className = "eye";
+            arrow.style.cssText = "margin-left: 0; width: 18px; flex: none; opacity: " + (hasChildren ? 1 : 0) + ";";
+            arrow.textContent = open ? "▾" : "▸";
+            arrow.title = hasChildren ? (open ? "Fold" : "Show what is inside") : "";
+            arrow.addEventListener("click", (e) => { e.stopPropagation(); if (!hasChildren) return; if (expandedParts.has(node.name)) expandedParts.delete(node.name); else expandedParts.add(node.name); renderLayers(); });
             const text = document.createElement("span");
             text.textContent = node.name;
             text.title = node.name;
@@ -1002,7 +1029,7 @@ function renderLayers() {
             const paint = () => { const on = node.object.visible; eye.textContent = on ? "👁" : "—"; eye.title = on ? "Hide" : "Show"; row.classList.toggle("dim", !on); };
             eye.addEventListener("click", (e) => { e.stopPropagation(); node.object.visible = !node.object.visible; syncBenchVisibility(); paint(); });
             paint();
-            row.append(text, eye);
+            row.append(arrow, text, eye);
             list.appendChild(row);
         });
     }
