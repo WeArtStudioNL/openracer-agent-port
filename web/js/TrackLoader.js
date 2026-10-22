@@ -399,17 +399,6 @@ function loadGltfTrack(track) {
     });
 }
 
-// A material with a picture that has an alpha channel (alphaMode "BLEND" in a glTF: a tree, a fence, a sign) is blended in the order of the objects, and then an object that is behind
-// another is drawn over it now and then. It is cut out instead (what is less than half there is not drawn, the rest is solid and writes the depth), where the order does not matter.
-// A material that is see-through as a whole (opacity below 1: glass) stays blended.
-function cutOut(material) {
-    if(!material || !material.map || !material.transparent || material.opacity < 1) return;
-    material.transparent = false;
-    material.alphaTest = 0.5;
-    material.depthWrite = true;
-    material.needsUpdate = true;
-}
-
 // Decor that is only drawn (tyre walls, trees: the "other" meshes) is merged per material and per cell of 40 m, so that a track with thousands
 // of loose parts costs a few hundred draw calls instead of thousands. The loose meshes stay in trackObjects (the collision and the ground world
 // have been built from them) but leave the scene.

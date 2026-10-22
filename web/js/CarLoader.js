@@ -146,6 +146,7 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
             if(!object.isMesh || !object.geometry) return;
             [].concat(object.material).forEach(function(material) {
                 if(!material) return;
+                cutOut(material);          // (the rims and the calipers are pictures with an alpha channel: blended, they are drawn over what is in front of them)
                 slots.forEach(function(slot) {
                     var texture = material[slot];
                     if(!texture || !texture.channel) return;

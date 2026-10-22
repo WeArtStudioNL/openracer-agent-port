@@ -36,6 +36,17 @@ function getSign(x) {
     return x > 0 ? 1 : x === 0 ? 0 : -1;
 }
 
+// A material with a picture that has an alpha channel (alphaMode "BLEND" in a glTF: a tree, a fence, a sign) is blended in the order of the objects, and then an object that is behind
+// another is drawn over it now and then. It is cut out instead (what is less than half there is not drawn, the rest is solid and writes the depth), where the order does not matter.
+// A material that is see-through as a whole (opacity below 1: glass) stays blended.
+function cutOut(material) {
+    if(!material || !material.map || !material.transparent || material.opacity < 1) return;
+    material.transparent = false;
+    material.alphaTest = 0.5;
+    material.depthWrite = true;
+    material.needsUpdate = true;
+}
+
 function endsWith(str, suffix) {
     return str.indexOf(suffix, str.length - suffix.length) !== -1;
 }
