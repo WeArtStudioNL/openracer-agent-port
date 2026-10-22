@@ -202,10 +202,14 @@ export function initDriver(api) {
         el("drvFileInfo").textContent = !drv.driver ? "No model loaded."
             : (drv.file ? drv.file.name + " (" + (drv.file.size / 1048576).toFixed(1) + " MB)" : "The model of this car (driver.glb)") + (drv.driver.complete() ? "" : ". Not every bone of the arms and the legs is found: set them under Bones.");
     }
-    function install(sceneRoot, config) {
+    function install(sceneRoot, config, fresh) {
         if (drv.driver) drv.driver.dispose();
         const d = new OpenRacer.Driver(config, scene, { object: wheelPivot, axis: wheelAxis(config) });
+        // a new model that faces the back of the car (a Rigify mannequin does) is turned round, when the driver has not been turned yet
+        const rot = d.config.rotation, unturned = rot.every((v) => Math.abs(v) < 1e-6) || (Math.abs(rot[0]) + Math.abs(rot[2]) < 1e-6 && Math.abs(Math.abs(rot[1]) - 180) < 1e-6);      // (not turned, or turned round before)
+        if (fresh && unturned) d.config.rotation = [0, 0, 0];
         d.setModel(sceneRoot);
+        if (fresh && unturned && d.facing === -1) { d.config.rotation = [0, 180, 0]; d.place(); d.turnedRound = true; }
         drv.driver = d;
         syncTargets();
         fillBones();
@@ -231,8 +235,8 @@ export function initDriver(api) {
         new api.GLTFLoader().load(url, (gltf) => {
             const cfg = drv.driver ? drv.driver.config : OpenRacer.Driver.withDefaults({ enabled: true, position: [0, 0, 0] });
             drv.file = file; drv.existingFile = null;
-            install(gltf.scene, cfg);
-            status("Driver model loaded.", "ok");
+            install(gltf.scene, cfg, true);
+            status(drv.driver && drv.driver.turnedRound ? "Driver model loaded. It faced the back of the car, so it is turned round (rotation 180° about y)." : "Driver model loaded.", "ok");
         }, undefined, (error) => status("Could not read the driver model: " + (error.message || error), "error"));
     }
     el("drvPick").onclick = () => el("drvFile").click();

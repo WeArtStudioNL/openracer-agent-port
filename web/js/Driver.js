@@ -59,6 +59,19 @@ OpenRacer.Driver = function (config, parent, steering) {
         self.root.add(scene);
         self.place();
         self.resolveBones();
+        self.facing = self.measureFacing();
+    };
+    // which way the model faces, from where its left and right shoulders are: 1 when it faces +z (the front of the car: its left side is on +x), -1 when it faces the other way
+    // (a Rigify mannequin from Blender comes in this way round), 0 when the shoulders are not found
+    this.facing = 0;
+    this.measureFacing = function () {
+        var l = self.bones.armL && self.bones.armL[0], r = self.bones.armR && self.bones.armR[0];
+        if (!l || !r) return 0;
+        self.root.updateMatrixWorld(true);
+        // in the space of the body of the car (+x is the left of the car)
+        var pl = self.parent.worldToLocal(l.getWorldPosition(new V())), pr = self.parent.worldToLocal(r.getWorldPosition(new V()));
+        var dx = pl.x - pr.x;
+        return Math.abs(dx) < 1e-4 ? 0 : (dx > 0 ? 1 : -1);
     };
     this.resolveBones = function () {
         var guess = OpenRacer.Driver.guessBones(self.model);
