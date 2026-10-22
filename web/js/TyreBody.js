@@ -108,6 +108,9 @@ OpenRacer.TyreBody = function (wheel) {
         var length0 = 2 * Math.sqrt(2 * R * Math.max(0.004, delta0));
         var kn = self.stiffnessScale * 1.5 * self.verticalStiffness * spacing / (rings * length0);
         var cn = self.verticalDamping * spacing / (rings * length0);
+        // a tyre that is pushed in a long way gets hard (the sidewall folds and the rim comes near the road): past this depth it is stiffer the deeper it goes, so a hard landing
+        // does not sink the wheel into the road
+        var bottom = 0.22 * R;
         var count = 0, sumFn = 0, maxDepth = 0;
         var fnx = 0, fny = 0, fnz = 0;
         var minF = 1e9, maxF = -1e9;
@@ -152,7 +155,7 @@ OpenRacer.TyreBody = function (wheel) {
             var rx = x - hub.x, ry = y - hub.y, rz = z - hub.z;
             var vx = vel.x + omega * (L.y * rz - L.z * ry), vy = vel.y + omega * (L.z * rx - L.x * rz), vz = vel.z + omega * (L.x * ry - L.y * rx);
             var vn = vx * bnx + vy * bny + vz * bnz;
-            var fn = kn * bestDepth - cn * vn;
+            var fn = kn * bestDepth * (bestDepth > bottom ? 1 + 10 * (bestDepth - bottom) / R : 1) - cn * vn;
             if(fn <= 0) { if(inContact[i]) { inContact[i] = 0; sliding[i] = 0; } depth[i] = 0; fnSample[i] = 0; continue; }
             if(!inContact[i]) { inContact[i] = 1; sliding[i] = 0; }
             depth[i] = bestDepth; nx[i] = bnx; ny[i] = bny; nz[i] = bnz; tri[i] = found; fnSample[i] = fn;

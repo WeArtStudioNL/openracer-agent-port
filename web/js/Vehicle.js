@@ -1496,7 +1496,9 @@ OpenRacer.Vehicle = function (parameters, input) {
                     w.normal = road;
                     w.contact.x = mx + down.x * t; w.contact.y = my + down.y * t; w.contact.z = mz + down.z * t;
                     var penRate = w.susVel + mountDown;
-                    tyreLoad[i] = Math.max(0, (w.tyreRate || self.tyreRate) * pen + self.tyreDamping * penRate);
+                    // (the tyre gets hard when it is pushed in a long way, as in TyreBody.js)
+                    var hard = pen > 0.22 * w.radius ? 1 + 10 * (pen - 0.22 * w.radius) / w.radius : 1;
+                    tyreLoad[i] = Math.max(0, (w.tyreRate || self.tyreRate) * pen * hard + self.tyreDamping * penRate);
                     w.tyreDeflection = pen;  // how far the road pushes the tyre in (m)
                 }
             }
@@ -1560,11 +1562,14 @@ OpenRacer.Vehicle = function (parameters, input) {
             // sharp hit of the wheel does not go through the damper into the body
             var cUse = xdotS > 0 ? cS : cS * self.reboundFactor;
             var knee = 0.3, mag = Math.abs(xdotS);
-            var damperS = (mag <= knee ? cUse * mag : cUse * (knee + 0.35 * (mag - knee))) * (xdotS > 0 ? 1 : -1);
+            var blow = xdotS > 0 ? 0.35 : 0.7;               // (going out the damper holds on better: a spring that is let go does not throw the body up)
+            var damperS = (mag <= knee ? cUse * mag : cUse * (knee + blow * (mag - knee))) * (xdotS > 0 ? 1 : -1);
             // the bump stop and the droop stop: stiff, and damped (a wheel that lands on an undamped stop rings on it at 16 Hz)
             var stopRate = 12 * rateS, stopDamping = 2.5 * Math.sqrt(stopRate * self.unsprungMass);
-            var bumpS = ws.susLength < ws.minLength ? stopRate * (ws.minLength - ws.susLength) + Math.max(0, stopDamping * xdotS) : 0;
-            var droopS = ws.susLength > ws.freeLength ? -stopRate * (ws.susLength - ws.freeLength) - Math.max(0, stopDamping * ws.susVel) : 0;
+            // (the damping works both ways, and only the force that comes out is kept above zero: a stop that only damps going in gives back the energy that it took, and a truck
+            // that lands hard bounces off it like a trampoline)
+            var bumpS = ws.susLength < ws.minLength ? Math.max(0, stopRate * (ws.minLength - ws.susLength) + stopDamping * xdotS) : 0;
+            var droopS = ws.susLength > ws.freeLength ? Math.min(0, -stopRate * (ws.susLength - ws.freeLength) - stopDamping * ws.susVel) : 0;
             // a progressive spring: beyond the rest height the spring gets stiffer with the travel that is used (the extra stiffness is zero at rest, so the ride height stays)
             var used = Math.max(0, ws.restLengthWheel - ws.susLength);
             var progressive = self.springProgression > 0 ? self.springProgression * rateS * used * used / self.bumpTravel : 0;

@@ -68,7 +68,10 @@
     "roll_camber": 0.6,
     "suspension_length": 0.6,
     "damping_rebound": 2.2,
-    "spring_progression": 1.2
+    "spring_progression": 1.2,
+    "unsprung_mass": 90,
+    "tyre_rate": 170000,
+    "tyre_damping": 7000
   },
   "drivetrain": {
     "drive": "rwd",
