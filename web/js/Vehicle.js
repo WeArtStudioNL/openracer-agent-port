@@ -118,13 +118,14 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.rearWheelRate = parameters.spring_rear || 27000;
     this.frontDamping = parameters.damping_front || 0.35;     // damping ratio when the spring is pushed in (rebound is stiffer)
     this.rearDamping = parameters.damping_rear || 0.35;
-    this.reboundFactor = 1.7;
-    this.restLength = 0.28;           // from the mount to the middle of the wheel, at rest (m)
+    this.reboundFactor = parameters.damping_rebound || 1.7;    // the damper is this much stiffer when the spring goes out (rebound) than when it is pushed in
+    this.springProgression = parameters.spring_progression || 0;   // 0: a linear spring; 1: the spring is twice as stiff at the end of the bump travel as at rest (a progressive spring, as the long travel of an off-road car needs)
+    this.restLength = parameters.suspension_length || 0.28;   // from the mount to the middle of the wheel, at rest (m): the room that the travel has
     // the ride height per axle: how much further out (positive) or in the wheels of an axle sit at rest than that (m); it raises or
     // lowers the body there, with its centre of gravity, and gives it rake when the two differ
     this.rideFront = parameters.ride_front || 0;
     this.rideRear = parameters.ride_rear || 0;
-    this.bumpTravel = parameters.suspension_travel || 0.09; // how much further the spring can go in before the bump stop (m)
+    this.bumpTravel = Math.min(parameters.suspension_travel || 0.09, Math.max(0.05, (parameters.suspension_length || 0.28) - 0.05)); // how much further the spring can go in before the bump stop (m)
     this.groundClearance = 0.13;      // of the underside of the body at rest (m)
 
     this.engine = new OpenRacer.Engine(parameters.engine);
@@ -451,7 +452,10 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.shift_time !== undefined) this.shiftTime = t.shift_time;
         if(t.clutch_start_rpm !== undefined) this.clutchStartRPM = t.clutch_start_rpm;
         if(t.clutch_full_rpm !== undefined) this.clutchFullRPM = Math.max(t.clutch_full_rpm, this.clutchStartRPM + 50);
-        if(t.suspension_travel !== undefined) this.bumpTravel = Math.max(0.01, t.suspension_travel);
+        if(t.suspension_length !== undefined) this.restLength = Math.max(0.2, t.suspension_length);
+        if(t.suspension_travel !== undefined) this.bumpTravel = Math.max(0.01, Math.min(t.suspension_travel, this.restLength - 0.05));
+        if(t.spring_progression !== undefined) this.springProgression = Math.max(0, t.spring_progression);
+        if(t.damping_rebound !== undefined) this.reboundFactor = Math.max(1, t.damping_rebound);
         if(t.ride_front !== undefined) this.rideFront = t.ride_front;
         if(t.ride_rear !== undefined) this.rideRear = t.ride_rear;
         if(t.turbo_share !== undefined) this.engine.turboShare = Math.max(0, Math.min(0.9, t.turbo_share));
@@ -1561,7 +1565,10 @@ OpenRacer.Vehicle = function (parameters, input) {
             var stopRate = 12 * rateS, stopDamping = 2.5 * Math.sqrt(stopRate * self.unsprungMass);
             var bumpS = ws.susLength < ws.minLength ? stopRate * (ws.minLength - ws.susLength) + Math.max(0, stopDamping * xdotS) : 0;
             var droopS = ws.susLength > ws.freeLength ? -stopRate * (ws.susLength - ws.freeLength) - Math.max(0, stopDamping * ws.susVel) : 0;
-            var fs = rateS * comp[si] + damperS + bumpS + droopS + arbForce[si];
+            // a progressive spring: beyond the rest height the spring gets stiffer with the travel that is used (the extra stiffness is zero at rest, so the ride height stays)
+            var used = Math.max(0, ws.restLengthWheel - ws.susLength);
+            var progressive = self.springProgression > 0 ? self.springProgression * rateS * used * used / self.bumpTravel : 0;
+            var fs = rateS * comp[si] + progressive + damperS + bumpS + droopS + arbForce[si];
             springForce[si] = self.wheelLost[si] ? 0 : fs;
             // the wheel: the spring pushes it out, the tyre pushes it in, gravity pulls it along the axis, and it rides with the mount
             var accel = (fs - tyreLoad[si]) / self.unsprungMass + gDown - lastBodyAccDown;

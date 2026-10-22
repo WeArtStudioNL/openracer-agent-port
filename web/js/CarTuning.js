@@ -19,6 +19,9 @@ OpenRacer.CarTuning = (function () {
             ["damping_front", "Front dampers", "%", 10, 100, 1],
             ["damping_rear", "Rear dampers", "%", 10, 100, 1],
             ["suspension_travel", "Suspension travel before the bump stop", "cm", 1, 80, 1],
+            ["suspension_length", "Room for the travel (the spring from the mount to the middle of the wheel)", "cm", 20, 100, 1],
+            ["spring_progression", "Progressive springs (extra stiffness at the end of the travel)", "%", 0, 400, 10],
+            ["damping_rebound", "Rebound damping (against compression damping)", "×", 1, 4, 0.1],
             ["ride_front", "Ride height at the front (from the car as made)", "mm", -60, 80, 5],
             ["ride_rear", "Ride height at the rear", "mm", -60, 80, 5],
             ["roll_center_front", "Roll centre at the front", "cm", -5, 40, 1],
@@ -207,6 +210,9 @@ OpenRacer.CarTuning = (function () {
             clutch_start_rpm: dt.clutch_start_rpm || 1050,
             clutch_full_rpm: dt.clutch_full_rpm || 2000,
             suspension_travel: Math.round((ch.suspension_travel || 0.09) * 100),
+            suspension_length: Math.round((ch.suspension_length || 0.28) * 100),
+            spring_progression: Math.round((ch.spring_progression || 0) * 100),
+            damping_rebound: ch.damping_rebound || 1.7,
             ride_front: Math.round((ch.ride_front || 0) * 1000),
             ride_rear: Math.round((ch.ride_rear || 0) * 1000),
             roll_center_front: (ch.roll_center_front !== undefined ? ch.roll_center_front : 0.06) * 100,
@@ -303,6 +309,9 @@ OpenRacer.CarTuning = (function () {
             turbo_intercooler: v.turbo_intercooler / 100,
             turbo_efficiency: v.turbo_efficiency / 100,
             suspension_travel: v.suspension_travel / 100,
+            suspension_length: v.suspension_length / 100,
+            spring_progression: v.spring_progression / 100,
+            damping_rebound: v.damping_rebound,
             ride_front: v.ride_front / 1000,
             ride_rear: v.ride_rear / 1000,
             roll_center_front: v.roll_center_front / 100,
@@ -341,6 +350,9 @@ OpenRacer.CarTuning = (function () {
         delete c.chassis.downforce;
         c.chassis.ackermann = v.ackermann / 100;
         c.chassis.suspension_travel = v.suspension_travel / 100;
+        c.chassis.suspension_length = v.suspension_length / 100;
+        c.chassis.spring_progression = v.spring_progression / 100;
+        c.chassis.damping_rebound = v.damping_rebound;
         c.chassis.ride_front = v.ride_front / 1000;
         c.chassis.ride_rear = v.ride_rear / 1000;
         c.chassis.roll_center_front = v.roll_center_front / 100;

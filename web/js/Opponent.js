@@ -15,7 +15,7 @@ OpenRacer.vehicleParams = function (config, getSurface) {
         weight_distribution: chassis.weight_distribution, cgHeight: chassis.cg_height, roll_front: chassis.roll_front,
         spring_front: chassis.spring_front, spring_rear: chassis.spring_rear, damping_front: chassis.damping_front, damping_rear: chassis.damping_rear,
         downforce: chassis.downforce, downforce_front: chassis.downforce_front, downforce_rear: chassis.downforce_rear, ackermann: chassis.ackermann,
-        suspension_travel: chassis.suspension_travel, ride_front: chassis.ride_front, ride_rear: chassis.ride_rear, toe_front: chassis.toe_front, toe_rear: chassis.toe_rear,
+        suspension_travel: chassis.suspension_travel, suspension_length: chassis.suspension_length, spring_progression: chassis.spring_progression, damping_rebound: chassis.damping_rebound, ride_front: chassis.ride_front, ride_rear: chassis.ride_rear, toe_front: chassis.toe_front, toe_rear: chassis.toe_rear,
         compound: config.tyres && config.tyres.compound, pressure_front: config.tyres && config.tyres.pressure_front, pressure_rear: config.tyres && config.tyres.pressure_rear, roll_center_front: chassis.roll_center_front, roll_center_rear: chassis.roll_center_rear, camber_front: chassis.camber_front, camber_rear: chassis.camber_rear, roll_camber: chassis.roll_camber,
         tire_diameter: chassis.tire_diameter, width: dimensions.width, length: dimensions.length, height: dimensions.height,
         Cdrag: 0.5 * chassis.drag_coefficient * dimensions.width * dimensions.height * 0.85 * 1.29,
