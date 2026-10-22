@@ -32,6 +32,7 @@ const state = {
     selected: null,       // name of the selected part
     start: null,          // { x, y, z, heading }
     gates: [],            // [{ x, y, z, heading, width }]
+    cameras: [],          // the cinematic cameras of the replay: [{ x, y, z }] (y is the height in the world)
     drag: null,           // the drag strip: { x, y, z, heading, width, length } (the start line and the way the strip goes)
     mode: "view",
     markerScale: 1,
@@ -611,6 +612,23 @@ function updateMarkers() {
         markers.add(strip);
         markers.add(makeArrow(gate.x, gate.y, gate.z, gate.heading, colour, 5 * k));
     });
+    state.cameras.forEach((c, i) => {
+        // a camera: a body with a lens, and a line down to the ground
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1, 1.8), new THREE.MeshBasicMaterial({ color: 0xff7bd5, depthTest: false, transparent: true }));
+        body.position.set(c.x, c.y, c.z);
+        body.scale.setScalar(k);
+        body.renderOrder = 998;
+        markers.add(body);
+        const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 0.8, 12), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true }));
+        lens.rotation.x = Math.PI / 2;
+        lens.position.set(c.x, c.y, c.z + 1.2 * k);
+        lens.scale.setScalar(k);
+        lens.renderOrder = 998;
+        markers.add(lens);
+        const ground = groundY(c.x, c.z, c.y);
+        markers.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(c.x, c.y, c.z), new THREE.Vector3(c.x, ground, c.z)]), new THREE.LineBasicMaterial({ color: 0xff7bd5 })));
+    });
+    renderCameras();
     if (state.drag) {
         // the drag strip: the start line (green), the finish line (red) and a line between them with a mark at every standard distance
         const d = state.drag, dx = Math.cos(d.heading), dz = Math.sin(d.heading);
@@ -690,6 +708,31 @@ function renderGates() {
         : (oldCheckpoints ? "No gates: this track counts laps with " + oldCheckpoints + " road pieces (old format). Gates replace them." : "No gates: no laps are counted.");
 }
 
+function renderCameras() {
+    const list = $("cameras");
+    list.innerHTML = "";
+    state.cameras.forEach((c, i) => {
+        const row = document.createElement("div");
+        row.className = "gate";
+        const text = document.createElement("span");
+        text.textContent = "Camera " + (i + 1);
+        row.appendChild(text);
+        for (const key of ["x", "y", "z"]) {
+            const input = document.createElement("input");
+            input.type = "number"; input.step = "0.5"; input.value = c[key].toFixed(1); input.style.width = "62px"; input.title = key === "y" ? "Height (m)" : key;
+            input.onchange = () => { const v = parseFloat(input.value); if (isFinite(v)) { c[key] = v; updateMarkers(); } };
+            row.appendChild(input);
+        }
+        const remove = document.createElement("button");
+        remove.className = "small danger";
+        remove.textContent = "Remove";
+        remove.onclick = () => { state.cameras.splice(i, 1); updateMarkers(); };
+        row.appendChild(remove);
+        list.appendChild(row);
+    });
+    $("cameraNote").textContent = state.cameras.length ? state.cameras.length + " cameras" : "none";
+}
+
 function readStartFields() {
     const x = parseFloat($("startX").value), z = parseFloat($("startZ").value), h = parseFloat($("startHeading").value) || 0;
     if (!isFinite(x) || !isFinite(z)) return;
@@ -722,6 +765,7 @@ function setMode(mode) {
     for (const button of document.querySelectorAll("#modes button")) button.classList.toggle("active", button.dataset.mode === mode);
     $("hud").textContent = (design && design.hudText(mode)) || (mode === "start" ? "Place start: click on the road and drag in the direction that the car drives."
         : mode === "gate" ? "Add gate: click on the road and drag in the direction that the car drives through the gate."
+        : mode === "camera" ? "Add camera: click on the road or beside it, the camera is put above that place (set the height in the list). In the replay the camera nearest to the car is used and it turns to follow the car."
         : mode === "drag" ? "Drag strip: click on the road where the start line is and drag in the direction of the strip."
         : "Look: drag to turn, right mouse button to move, scroll to zoom. Click a part to find it in the list.");
 }
@@ -745,7 +789,7 @@ let drag = null;
 renderer.domElement.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
     drag = { x: event.clientX, y: event.clientY, hit: null, moved: false };
-    if ((state.mode === "start" || state.mode === "gate" || state.mode === "drag") && !moveGizmo.axis && !turnGizmo.axis) {
+    if ((state.mode === "start" || state.mode === "gate" || state.mode === "drag" || state.mode === "camera") && !moveGizmo.axis && !turnGizmo.axis) {
         const hit = roadHit(event);
         if (hit) {
             drag.hit = hit;
@@ -777,6 +821,9 @@ function place(d, preview) {
     } else if (state.mode === "drag") {
         state.drag = { x: point.x, y: point.y, z: point.z, heading: h, width: Math.max(3, parseFloat($("dragWidth").value) || 12), length: dragLength() };
         d.added = true;
+    } else if (state.mode === "camera") {
+        if (!d.added) state.cameras.push({ x: point.x, y: point.y + Math.max(0.5, parseFloat($("cameraHeight").value) || 3), z: point.z });
+        d.added = true;
     } else if (state.mode === "gate") {
         const width = Math.max(2, parseFloat($("gateWidth").value) || 24);
         if (preview && d.added) state.gates.pop();
@@ -793,7 +840,7 @@ renderer.domElement.addEventListener("pointerup", (event) => {
     controls.enabled = true;
     if (d.hit) {
         if (!d.added && state.mode === "start") place(d, false);
-        else if (!d.added && (state.mode === "gate" || state.mode === "drag")) place(d, false);
+        else if (!d.added && (state.mode === "gate" || state.mode === "drag" || state.mode === "camera")) place(d, false);
         return;
     }
     if (lineEdit.editing && !d.moved && !lineEdit.dragging) {
@@ -947,6 +994,7 @@ async function loadExisting() {
     applyEnv();
     state.start = track.start ? { x: track.start.x, y: 0, z: track.start.z, heading: track.start.heading || 0 } : null;
     state.gates = [];
+    state.cameras = [];
     $("delete").style.display = "";
     $("editing").textContent = "Changing the track “" + id + "”. Saving overwrites it.";
     status("Loading…");
@@ -957,6 +1005,7 @@ async function loadExisting() {
         // the heights of the start and the gates come from the road
         if (state.start) state.start.y = groundY(state.start.x, state.start.z);
         state.gates = (track.gates || []).map((g) => ({ x: g.x, y: groundY(g.x, g.z), z: g.z, heading: g.heading, width: g.width || 24 }));
+        state.cameras = (track.cameras || []).filter((c) => isFinite(c.x) && isFinite(c.z)).map((c) => ({ x: c.x, y: isFinite(c.y) ? c.y : groundY(c.x, c.z) + 3, z: c.z }));
         state.drag = track.dragstrip ? { x: track.dragstrip.x, y: groundY(track.dragstrip.x, track.dragstrip.z), z: track.dragstrip.z, heading: track.dragstrip.heading || 0, width: track.dragstrip.width || 12, length: track.dragstrip.length || 402.336 } : null;
         showDrag();
         updateMarkers();
@@ -974,6 +1023,7 @@ function newTrack() {
     state.mainFile = null;
     state.start = null;
     state.gates = [];
+    state.cameras = [];
     state.drag = null;
     state.legacy = false;
     state.idEdited = false;
@@ -1030,6 +1080,9 @@ async function save() {
         } else {
             delete config.gates;
         }
+
+        if (state.cameras.length) config.cameras = state.cameras.map((c) => ({ x: +c.x.toFixed(2), y: +c.y.toFixed(2), z: +c.z.toFixed(2) }));
+        else delete config.cameras;
 
         if (state.drag) config.dragstrip = { x: +state.drag.x.toFixed(3), z: +state.drag.z.toFixed(3), heading: +state.drag.heading.toFixed(5), width: state.drag.width, length: +state.drag.length.toFixed(2) };
         else delete config.dragstrip;

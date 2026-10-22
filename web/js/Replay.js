@@ -497,12 +497,15 @@ OpenRacer.Replay = (function() {
         // the cameras: the three of the game and the free one
         var cameraRow = el(bar, "div", "row cameras");
         el(cameraRow, "span", "label", "Camera");
-        cameraButtons = [["Fixed", "The fixed camera behind the car"], ["Follow", "The camera that follows the car"], ["Cockpit", "In the car"], ["Free", "A camera that you move yourself"]].map(function(c, i) {
-            return button(cameraRow, c[0], c[1] + (i < 3 ? "" : " (WASD or arrows, Shift and Control up and down, mouse look, [ and ] zoom)"), function() {
-                if(i === 3) enterFree();
-                else { leaveFree(); Settings.setOption("camera", i + 1); }
+        cameraButtons = [["Fixed", "The fixed camera behind the car"], ["Follow", "The camera that follows the car"], ["Cockpit", "In the car"], ["Free", "A camera that you move yourself"], ["Cinematic", "The cameras of the track: the one nearest to the car, which turns to follow it"]].map(function(c, i) {
+            var b = button(cameraRow, c[0], c[1] + (i !== 3 ? "" : " (WASD or arrows, Shift and Control up and down, mouse look, [ and ] zoom)"), function() {
+                if(i === 3) { leaveCine(); enterFree(); }
+                else if(i === 4) { leaveFree(); enterCine(); }
+                else { leaveFree(); leaveCine(); Settings.setOption("camera", i + 1); }
                 updateCameraUi();
             });
+            if(i === 4 && !cinemaCameras().length) b.style.display = "none";           // (a track without cameras of its own)
+            return b;
         });
         freeRow = el(bar, "div", "row freecam");
         var speedLabel = el(freeRow, "span", "label", "Speed " + free.speed.toFixed(1) + "×");
@@ -633,6 +636,46 @@ OpenRacer.Replay = (function() {
         free.parent = false;
         if(document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
         updateCameraUi();
+    }
+
+    // ---- the cinematic camera: the cameras that the track editor put in the track. The nearest one to the car is used (it only goes to another when that is clearly nearer), it stays where it
+    // is and only turns to follow the car, and its field of view is chosen so that the car is about the same size in the picture
+    var cine = { active: false, index: -1, fov: 40, quat: new THREE.Quaternion() };
+    function cinemaCameras() { return (typeof currentTrack !== "undefined" && currentTrack && Array.isArray(currentTrack.cameras)) ? currentTrack.cameras.filter(function(c) { return isFinite(c.x) && isFinite(c.y) && isFinite(c.z); }) : []; }
+    function enterCine() {
+        if(cine.active || !cinemaCameras().length) return;
+        cine.active = true;
+        cine.index = -1;
+        updateCameraUi();
+    }
+    function leaveCine() {
+        if(!cine.active) return;
+        cine.active = false;
+        updateCameraUi();
+    }
+    function updateCine(delta) {
+        var list = cinemaCameras(), body = targetObject();
+        if(!list.length || !body) return;
+        delta = Math.min(delta, 0.1);
+        var distance = function(c) { return Math.hypot(c.x - body.position.x, c.y - body.position.y, c.z - body.position.z); };
+        var nearest = 0;
+        list.forEach(function(c, i) { if(distance(c) < distance(list[nearest])) nearest = i; });
+        var cut = false;
+        if(cine.index < 0 || cine.index >= list.length) { cine.index = nearest; cut = true; }
+        else if(nearest !== cine.index && distance(list[nearest]) < distance(list[cine.index]) * 0.85) { cine.index = nearest; cut = true; }      // (not at once: no flicker where two are as near)
+        var c = list[cine.index];
+        camera.position.set(c.x, c.y, c.z);
+        tmpM.lookAt(camera.position, tmpV2.copy(body.position).add(V3(0, 0.7, 0)), V3(0, 1, 0));
+        tmpQ.setFromRotationMatrix(tmpM);
+        if(cut) cine.quat.copy(tmpQ); else cine.quat.slerp(tmpQ, 1 - Math.exp(-8 * delta));
+        camera.quaternion.copy(cine.quat);
+        var wanted = Math.max(14, Math.min(60, 2 * Math.atan(9 / Math.max(5, distance(c))) * 180 / Math.PI));
+        cine.fov = cut ? wanted : cine.fov + (wanted - cine.fov) * (1 - Math.exp(-4 * delta));
+        if(Math.abs(camera.fov - cine.fov) > 0.01 || camera.near !== 0.3) {
+            camera.fov = cine.fov;
+            camera.near = 0.3;
+            camera.updateProjectionMatrix();
+        }
     }
 
     function toggleAim() {
@@ -766,7 +809,7 @@ OpenRacer.Replay = (function() {
     function updateCameraUi() {
         if(!ui || !cameraButtons) return;
         var mode = Settings.option("camera");
-        cameraButtons.forEach(function(b, i) { b.className = (i === 3 ? free.active : (!free.active && mode === i + 1)) ? "on" : ""; });
+        cameraButtons.forEach(function(b, i) { b.className = (i === 3 ? free.active : i === 4 ? cine.active : (!free.active && !cine.active && mode === i + 1)) ? "on" : ""; });
         freeRow.style.display = free.active ? "flex" : "none";
         if(free.active) {
             freeInfo.aim.className = free.aim ? "on" : "";
@@ -776,7 +819,7 @@ OpenRacer.Replay = (function() {
             freeInfo.target.style.display = cars.length > 1 ? "" : "none";
         }
     }
-    Settings.onOptionChange(function(name) { if(name === "camera" && api.active) { if(free.active) leaveFree(); else updateCameraUi(); } });
+    Settings.onOptionChange(function(name) { if(name === "camera" && api.active) { if(cine.active) leaveCine(); if(free.active) leaveFree(); else updateCameraUi(); } });
 
     // ---- start and stop
 
@@ -832,6 +875,7 @@ OpenRacer.Replay = (function() {
             }
         });
         leaveFree();
+        leaveCine();
         if(ui) { ui.bar.remove(); ui.info.remove(); ui = null; }
         document.body.classList.remove("replaying", "replayClean");
         if(typeof lastFrameTime !== "undefined") lastFrameTime = performance.now();
@@ -851,6 +895,7 @@ OpenRacer.Replay = (function() {
         show(t, delta);
         showEffects(t);
         if(free.active) updateFree(delta);
+        else if(cine.active) updateCine(delta);
         if(typeof EngineSound !== "undefined" && player) {
             var live = playing && !scrubbing && direction > 0;
             EngineSound.setPaused(!live);
