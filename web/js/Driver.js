@@ -299,55 +299,49 @@ OpenRacer.Driver = function (config, parent, steering) {
     // ---- the keyframes: the movement of each hand as the car editor set it. A key is at a turn of the steering wheel (t, degrees, from 0 to the lock) and holds the place of the hand (pos), its
     // turn (rot: degrees, in the space of the car), the grip (0..1) and whether it rides the wheel (wheel: the place and the turn are then those at the middle, and go round with the wheel,
     // the way a hand that holds the rim does; otherwise they are fixed in the car). The hand goes through the places of the keys (a smooth curve), turns from one key to the next and
-    // opens or closes its fingers. The keys are set for one side of the steering (AUTHOR), the other side is the mirror image, with the hands changed over. The way back to the middle is the
+    // opens or closes its fingers. A key is at a place of the steering slider of the car editor (t: from -lock to +lock; the turn of the wheel is minus that). The way back to the middle is the
     // same movement the other way, because everything is a function of the turn.
-    var AUTHOR = -1;
     var keyTmp = new V(), keyQ = new Q(), keyQ2 = new Q(), keyEul = new THREE.Euler();
     this.handPose = { left: { pos: new V(), quat: new Q(), grip: 0, keyed: false }, right: { pos: new V(), quat: new Q(), grip: 0, keyed: false } };
     var baking = false;
     this.keysActive = function () { if (baking) return false; var k = self.config.keys; return !!(k && ((k.left && k.left.length) || (k.right && k.right.length))); };
-    function keyAnchor(k, tau, outPos, outQuat) {
-        var angle = AUTHOR * tau;
+    function keyAnchor(k, angle, outPos, outQuat) {
         outPos.set(k.pos[0], k.pos[1], k.pos[2]);
         if (k.wheel) { turned(keyTmp.copy(outPos), angle, outPos); outQuat.setFromAxisAngle(axis, angle); } else outQuat.identity();
         var r = k.rot || [0, 0, 0];
         outQuat.multiply(keyQ2.setFromEuler(keyEul.set(r[0] * DEG, r[1] * DEG, r[2] * DEG, "XYZ")));
     }
     var anchors = [new V(), new V(), new V(), new V()], anchorQ = [new Q(), new Q()];
-    // the pose of a hand with a turn of the wheel (a turn the other way than the keys are set for is mirrored about the plane between the two rest grips); returns false when there are no keys
+    // the pose of a hand with a turn of the wheel; returns false when there are no keys
     function keyPose(name, turn, outPos, outQuat) {
-        var keys = self.config.keys, mirror = turn > 0 * DEG;
-        var side = mirror ? (name === "left" ? "right" : "left") : name;
-        var list = keys && keys[side];
+        var keys = self.config.keys, list = keys && keys[name];
         if (!list || !list.length) return false;
-        var tau = Math.abs(turn), n = list.length, i = 0;
-        while (i < n - 1 && tau >= list[i + 1].t * DEG) i++;
+        var at = -turn / DEG, n = list.length, i = 0;                                        // (the place of the steering slider)
+        while (i < n - 1 && at >= list[i + 1].t) i++;
         var u = 0;
-        if (tau > list[0].t * DEG && i < n - 1) u = (tau - list[i].t * DEG) / ((list[i + 1].t - list[i].t) * DEG);
+        if (at > list[0].t && i < n - 1) u = (at - list[i].t) / (list[i + 1].t - list[i].t);
         var j = Math.min(i + 1, n - 1), i0 = Math.max(i - 1, 0), i3 = Math.min(i + 2, n - 1);
-        keyAnchor(list[i0], tau, anchors[0], keyQ); keyAnchor(list[i], tau, anchors[1], anchorQ[0]); keyAnchor(list[j], tau, anchors[2], anchorQ[1]); keyAnchor(list[i3], tau, anchors[3], keyQ);
+        keyAnchor(list[i0], turn, anchors[0], keyQ); keyAnchor(list[i], turn, anchors[1], anchorQ[0]); keyAnchor(list[j], turn, anchors[2], anchorQ[1]); keyAnchor(list[i3], turn, anchors[3], keyQ);
         var p0 = anchors[0], p1 = anchors[1], p2 = anchors[2], p3 = anchors[3], u2 = u * u, u3 = u2 * u;
         outPos.set(0, 0, 0);
         outPos.addScaledVector(p0, 0.5 * (-u3 + 2 * u2 - u)).addScaledVector(p1, 0.5 * (3 * u3 - 5 * u2 + 2)).addScaledVector(p2, 0.5 * (-3 * u3 + 4 * u2 + u)).addScaledVector(p3, 0.5 * (u3 - u2));
         var su = u2 * (3 - 2 * u);
         outQuat.copy(anchorQ[0]).slerp(anchorQ[1], su);
         var grip = list[i].grip + (list[j].grip - list[i].grip) * su;
-        if (mirror) { outPos.x = restGrip.left.x + restGrip.right.x - outPos.x; outQuat.y = -outQuat.y; outQuat.z = -outQuat.z; }
         return grip;
     }
-    // the turn of the chest or the head from its keys (a turn the other way is the mirror image: x stays, y and z change sign); null when there are no keys
+    // the turn of the chest or the head from its keys; null when there are no keys
     function torsoKeyRot(name, turn) {
         var list = self.config.keys && self.config.keys[name];
         if (!list || !list.length) return null;
-        var tau = Math.abs(turn), n = list.length, i = 0;
-        while (i < n - 1 && tau >= list[i + 1].t * DEG) i++;
+        var at = -turn / DEG, n = list.length, i = 0;
+        while (i < n - 1 && at >= list[i + 1].t) i++;
         var u = 0;
-        if (tau > list[0].t * DEG && i < n - 1) u = (tau - list[i].t * DEG) / ((list[i + 1].t - list[i].t) * DEG);
+        if (at > list[0].t && i < n - 1) u = (at - list[i].t) / (list[i + 1].t - list[i].t);
         var j = Math.min(i + 1, n - 1), su = u * u * (3 - 2 * u), qa0 = new Q(), qb0 = new Q();
         qa0.setFromEuler(keyEul.set(list[i].rot[0] * DEG, list[i].rot[1] * DEG, list[i].rot[2] * DEG, "XYZ"));
         qb0.setFromEuler(keyEul.set(list[j].rot[0] * DEG, list[j].rot[1] * DEG, list[j].rot[2] * DEG, "XYZ"));
         qa0.slerp(qb0, su);
-        if (turn > 0) { qa0.y = -qa0.y; qa0.z = -qa0.z; }
         keyEul.setFromQuaternion(qa0, "XYZ");
         return [keyEul.x / DEG, keyEul.y / DEG, keyEul.z / DEG];
     }
@@ -355,7 +349,6 @@ OpenRacer.Driver = function (config, parent, steering) {
     this.setTorsoKey = function (name, tDeg, rot) {
         var keys = self.config.keys || (self.config.keys = { left: [], right: [] });
         var list = keys[name] || (keys[name] = []);
-        tDeg = Math.max(0, tDeg);
         var at = -1;
         list.forEach(function (k, i) { if (Math.abs(k.t - tDeg) < 0.75) at = i; });
         var key = { t: at >= 0 ? list[at].t : Math.round(tDeg * 10) / 10, rot: rot.map(function (v) { return Math.round(v * 10) / 10; }) };
@@ -379,11 +372,10 @@ OpenRacer.Driver = function (config, parent, steering) {
         if (!wheelFrame()) return null;
         var keys = self.config.keys || (self.config.keys = { left: [], right: [] });
         var list = keys[side] || (keys[side] = []);
-        tDeg = Math.max(0, tDeg);
         var at = -1;
         list.forEach(function (k, i) { if (Math.abs(k.t - tDeg) < 0.75) at = i; });
         var wheel = wheelFlag !== undefined ? wheelFlag : (at >= 0 ? list[at].wheel : onRim(pos, side));
-        var angle = AUTHOR * tDeg * DEG, p = pos.clone(), q = quat.clone();
+        var angle = -tDeg * DEG, p = pos.clone(), q = quat.clone();
         if (wheel) { turned(p, -angle, p); q.premultiply(new Q().setFromAxisAngle(axis, -angle)); }
         var e = new THREE.Euler().setFromQuaternion(q, "XYZ");
         var key = { t: at >= 0 ? list[at].t : Math.round(tDeg * 10) / 10, pos: [round3(p.x), round3(p.y), round3(p.z)], rot: [e.x / DEG, e.y / DEG, e.z / DEG].map(function (v) { return Math.round(v * 10) / 10; }), grip: round3(Math.max(0, Math.min(1, gripAmount || 0))), wheel: wheel };
@@ -407,15 +399,16 @@ OpenRacer.Driver = function (config, parent, steering) {
         var savedTurn = self.turn, savedP = { left: hand.left.p, right: hand.right.p };
         self.config.keys = { left: [], right: [] };
         baking = true;
-        planFor(AUTHOR * 1e-3);
+        planFor(-1e-3);
         var lock = plan.lock / DEG;
         var times = [0, 100, 130, 150, 170, 190, 210, 240, 290, 340, 390, Math.round(lock - LOCK_MARGIN / DEG)].filter(function (t, i, a) { return t <= lock && a.indexOf(t) === i; });
+        times = times.concat(times.filter(function (t) { return t > 0; }).map(function (t) { return -t; })).sort(function (a, b) { return a - b; });
         var out = new V(), cfg = self.config;
         times.forEach(function (t) {
-            self.turn = AUTHOR * t * DEG;
+            self.turn = -t * DEG;
             planFor(self.turn);
             ["left", "right"].forEach(function (name) {
-                var h = hand[name], tau = t * DEG;
+                var h = hand[name], tau = Math.abs(t) * DEG;
                 h.p = targetP(name, tau);
                 gripPoint(name, out);
                 var wheel = (h.p <= 0 && tau <= plan.rel[name]) || (h.p >= 1 && tau > plan.end[name]);

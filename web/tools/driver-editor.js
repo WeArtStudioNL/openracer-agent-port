@@ -102,7 +102,7 @@ export function initDriver(api) {
             <div class="hint">Steering <span id="drvSteerOut">0°</span></div><input type="range" id="drvSteer" min="-450" max="450" step="1" value="0" style="width:100%">
             <div id="drvKeysStrip" style="position:relative;height:34px;margin:2px 7px 6px"></div>
             <div class="group">Keyframes of the hands</div>
-            <div class="hint">Set the movement of the hands, the chest and the head yourself. Make keys from the automatic movement, turn the steering slider to a place (the positive side: the other side is the mirror image, with the hands changed over), take a hand and move it, turn it, or set its grip, or turn the chest or the head: a key is made at that turn. The hands go through the keys, and the way back is the same movement the other way. Click a mark under the slider to go to a key (blue: left hand, red: right hand, yellow: chest, purple: head).</div>
+            <div class="hint">Set the movement of the hands, the chest and the head yourself. Make keys from the automatic movement, turn the steering slider to a place (from -450° to 450°: the left and the right side are set separately), take a hand and move it, turn it, or set its grip, or turn the chest or the head: a key is made at that turn. The hands go through the keys, and the way back is the same movement the other way. Click a mark under the slider to go to a key (blue: left hand, red: right hand, yellow: chest, purple: head).</div>
             <div class="row drv-wrap"><button class="small accent" id="drvKeysBake">Make keys from the automatic movement</button><button class="small ghost" id="drvKeysOff">Back to automatic</button></div>
             <div class="row drv-wrap"><button class="small" id="drvKeyAdd">Add a key here</button><button class="small ghost" id="drvKeyDel">Delete the key here</button><label class="check"><input type="checkbox" id="drvKeyWheel"> rides the wheel</label></div>
             <div class="hint" id="drvKeyInfo">No keys: the hands move by themselves.</div>
@@ -176,8 +176,6 @@ export function initDriver(api) {
     function keysOn() { return !!(drv.driver && drv.driver.keysActive()); }
     function keysAny() { return !!(drv.driver && drv.driver.keysAny()); }
     function markerRot(key) { const e = new THREE.Euler().setFromQuaternion(targets[key].quaternion, "XYZ"), deg = 180 / Math.PI; return [e.x * deg, e.y * deg, e.z * deg]; }
-    function authored() { return drv.steer >= 0; }
-    function keyWarning() { status("Keys are set with the steering on the positive side (the other side is the mirror image). Turn the slider to the right.", "error"); }
     function setHandKey(side, gripOverride) {
         const d = drv.driver, pose = d.handPose[side], m = targets[side === "left" ? "handL" : "handR"];
         const grip = gripOverride !== undefined ? gripOverride : pose.grip;
@@ -191,7 +189,7 @@ export function initDriver(api) {
         const keys = d.config.keys;
         for (const [side, colour, top] of [["left", "#5ec8ff", 0], ["right", "#ff6b6b", 8], ["chest", "#ffe2a8", 16], ["head", "#e8c8ff", 24]]) {
             for (const k of keys[side] || []) {
-                for (const sign of [1, -1]) {
+                for (const sign of [1]) {
                     const tick = document.createElement("div");
                     tick.style.cssText = "position:absolute;width:5px;height:7px;border-radius:2px;cursor:pointer;transform:translateX(-50%);top:" + top + "px;left:" + ((sign * k.t + 450) / 900 * 100) + "%;background:" + colour + ";opacity:" + (sign > 0 ? 1 : 0.3);
                     tick.title = side + ", " + k.t + "°";
@@ -200,7 +198,7 @@ export function initDriver(api) {
                 }
             }
         }
-        const side = KEY_NAME[drv.selected], key = side && authored() ? d.keyAt(side, drv.steer) : null;
+        const side = KEY_NAME[drv.selected], key = side ? d.keyAt(side, drv.steer) : null;
         el("drvKeyWheel").disabled = !key || !HAND_SIDE[drv.selected];
         el("drvKeyWheel").checked = !!(key && key.wheel);
         const count = (n) => (keys[n] || []).length;
@@ -216,12 +214,11 @@ export function initDriver(api) {
         const side = KEY_NAME[drv.selected];
         if (!drv.driver || !side) { status("Take a hand, the chest or the head first.", "error"); return; }
         if (!keysAny()) { status("Make keys first.", "error"); return; }
-        if (!authored()) { keyWarning(); return; }
         if (HAND_SIDE[drv.selected]) setHandKey(side); else { drv.driver.setTorsoKey(side, drv.steer, markerRot(drv.selected)); refreshKeys(); }
     };
-    el("drvKeyDel").onclick = () => { const side = KEY_NAME[drv.selected]; if (drv.driver && side && authored()) { drv.driver.removeKey(side, drv.steer); refreshKeys(); } };
+    el("drvKeyDel").onclick = () => { const side = KEY_NAME[drv.selected]; if (drv.driver && side) { drv.driver.removeKey(side, drv.steer); refreshKeys(); } };
     el("drvKeyWheel").addEventListener("change", () => {
-        const side = HAND_SIDE[drv.selected], d = drv.driver, key = side && authored() ? d.keyAt(side, drv.steer) : null;
+        const side = HAND_SIDE[drv.selected], d = drv.driver, key = side ? d.keyAt(side, drv.steer) : null;
         if (!key) return;
         const pose = d.handPose[side];
         d.setKey(side, drv.steer, pose.pos, pose.quat, pose.grip, el("drvKeyWheel").checked);
@@ -232,14 +229,12 @@ export function initDriver(api) {
     function moved() {
         const d = drv.driver;
         if (d && TORSO[drv.selected] && keysAny()) {
-            if (!authored()) { keyWarning(); return; }
-            d.setTorsoKey(drv.selected, drv.steer, markerRot(drv.selected));
+                d.setTorsoKey(drv.selected, drv.steer, markerRot(drv.selected));
             refreshKeys();
             return;
         }
         if (d && HAND_SIDE[drv.selected] && keysOn()) {
-            if (!authored()) { keyWarning(); return; }
-            setHandKey(HAND_SIDE[drv.selected]);
+                setHandKey(HAND_SIDE[drv.selected]);
             return;
         }
         if (drv.selected === "wheel") { if (drv.mode === "scale") ringGroup.scale.setScalar(Math.max(0.03, ringGroup.scale.x)); ringToConfig(); return; }
@@ -430,7 +425,7 @@ export function initDriver(api) {
     el("drvGrip").addEventListener("input", () => {
         if (!drv.driver) return;
         const v = parseFloat(el("drvGrip").value) / 100;
-        if (keysOn()) { if (!authored()) { keyWarning(); return; } setHandKey(drv.selected === "handR" ? "right" : "left", v); }
+        if (keysOn()) { setHandKey(drv.selected === "handR" ? "right" : "left", v); }
         else drv.driver.config.hands.grip[drv.selected === "handR" ? "right" : "left"] = v;
         el("drvGripOut").textContent = Math.round(v * 100) + "%";
     });
