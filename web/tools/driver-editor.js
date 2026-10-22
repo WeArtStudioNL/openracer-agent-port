@@ -98,7 +98,7 @@ export function initDriver(api) {
                 <div><input type="number" id="drvKnee" step="0.05" min="-1" max="2" value="0.15"><div class="hint">knees out</div></div>
             </div>
             <div class="group">Try it</div>
-            <div class="hint">Steering <span id="drvSteerOut">0°</span></div><input type="range" id="drvSteer" min="-540" max="540" step="1" value="0" style="width:100%">
+            <div class="hint">Steering <span id="drvSteerOut">0°</span></div><input type="range" id="drvSteer" min="-450" max="450" step="1" value="0" style="width:100%">
             <div class="hint">Throttle</div><input type="range" id="drvThrottle" min="0" max="1" step="0.01" value="0" style="width:100%">
             <div class="hint">Brake</div><input type="range" id="drvBrake" min="0" max="1" step="0.01" value="0" style="width:100%">
             <details class="sub-card"><summary class="hint" style="cursor:pointer">Bones of the arms and the legs</summary>
