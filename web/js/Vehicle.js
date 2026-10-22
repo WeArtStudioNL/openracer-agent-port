@@ -282,7 +282,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(at < 0) at = 1;
         this.compound = at;
         tc = list[at];
-        for(var i = 0; i < 4; i++) { var w = this.wheels[i]; w.compoundGrip = tc.grip; w.condition = conditionOf(w) * (w.pressureGrip || 1); }
+        for(var i = 0; i < 4; i++) { var w = this.wheels[i]; w.compoundGrip = tc.grip; w.compoundLoose = tc.looseGrip || 1; w.condition = conditionOf(w) * (w.pressureGrip || 1); }
     };
     this.tyreKind = function () { return tc; };
     this.setCompound(parameters.compound);
@@ -1767,7 +1767,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 tyreTorque[iw] = -fxW * wheel.radius;
 
                 // rolling resistance (more on soft ground), not a torque on the wheel
-                var rr = wheel.rollingResistance * tc.rolling * (wheel.pressureRoll || 1) * (surface.static < 0.8 ? 4 : 1) * fz * Math.tanh(vl / 0.3);
+                var rr = wheel.rollingResistance * tc.rolling * (wheel.pressureRoll || 1) * (surface.static < 0.8 ? 4 * (surface.loose && tc.looseRolling ? tc.looseRolling : 1) : 1) * fz * Math.tanh(vl / 0.3);
                 fxW -= rr;
 
                 // the forces on the car: the force along the wheel at the point of contact, the force across the wheel at the roll

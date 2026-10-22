@@ -29,7 +29,7 @@
 
 // The kinds of tyre: the grip (a factor), the working window (the best temperature, its width, and how fast the grip goes when it is outside of it:
 // the smaller "cold", the faster, and "coldLoss", the grip that is lost at most), how fast the tyre heats and wears (factors), the rolling
-// resistance (a factor), and where the rubber smokes and sheds marbles (degrees, against a road tyre). The first is the one that a car without a
+// resistance (a factor), looseGrip and looseRolling (factors on the grip and the rolling resistance on a loose surface, grass and ground; 1 when not given), and where the rubber smokes and sheds marbles (degrees, against a road tyre). The first is the one that a car without a
 // choice has (road). Vehicle.js uses it (setCompound); the tuning menu and the car editor choose it (CarTuning.js, "compound").
 OpenRacer.TyreCompounds = [
     { id: "eco", name: "Eco (hard, lasts)", grip: 0.88, optimum: 70, window: 20, cold: 55, coldLoss: 0.16, heating: 0.8, life: 1.7, rolling: 0.8, smoke: 20 },
@@ -37,7 +37,9 @@ OpenRacer.TyreCompounds = [
     { id: "sport", name: "Sport", grip: 1.1, optimum: 90, window: 14, cold: 42, coldLoss: 0.25, heating: 1.15, life: 0.7, rolling: 1.05, smoke: -5 },
     { id: "semislick", name: "Semi-slick", grip: 1.25, optimum: 95, window: 12, cold: 38, coldLoss: 0.3, heating: 1.3, life: 0.45, rolling: 1.1, smoke: -12 },
     { id: "slick", name: "Slick (race)", grip: 1.45, optimum: 100, window: 10, cold: 30, coldLoss: 0.4, heating: 1.5, life: 0.3, rolling: 1.15, smoke: -20 },
-    { id: "winter", name: "Winter (soft, cold)", grip: 0.9, optimum: 55, window: 25, cold: 55, coldLoss: 0.2, heating: 0.9, life: 1.2, rolling: 1.1, smoke: -10 }
+    { id: "winter", name: "Winter (soft, cold)", grip: 0.9, optimum: 55, window: 25, cold: 55, coldLoss: 0.2, heating: 0.9, life: 1.2, rolling: 1.1, smoke: -10 },
+    // knobbly: less grip on tarmac, a lot more on grass and ground (sand, dirt: the surfaces that give way), where it also digs in less (looseRolling: the rolling resistance there)
+    { id: "offroad", name: "Off-road (knobbly)", grip: 0.82, looseGrip: 1.7, looseRolling: 0.6, optimum: 70, window: 25, cold: 60, coldLoss: 0.15, heating: 0.9, life: 0.9, rolling: 1.25, smoke: 5 }
 ];
 
 OpenRacer.Wheel = function (parameters) {
@@ -107,7 +109,7 @@ OpenRacer.Wheel = function (parameters) {
     // the friction coefficients of the tyre for a load on a surface (the grip with the compound, the temperature and the wear, the load sensitivity): the static one and the
     // one of a sliding tyre; used by the tyre bodies (TyreBody.js, NodeTyre.js)
     this.frictionFor = function (load, surface) {
-        var grip = surface.static * this.gripScale * (this.condition || 1) * (this.damageGrip === undefined ? 1 : this.damageGrip) * (this.compoundGrip === undefined ? 1 : this.compoundGrip);
+        var grip = surface.static * this.gripScale * (this.condition || 1) * (this.damageGrip === undefined ? 1 : this.damageGrip) * (this.compoundGrip === undefined ? 1 : this.compoundGrip) * (surface.loose && this.compoundLoose ? this.compoundLoose : 1);
         var mu = Math.min(1.4 * grip, Math.max(0.2 * grip, grip - this.loadSensitivity * (load - this.nominalLoad)));
         return { mu: mu, sliding: mu * Math.min(0.98, surface.kinetic / surface.static) };
     };
