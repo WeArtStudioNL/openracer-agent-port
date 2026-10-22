@@ -282,7 +282,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(at < 0) at = 1;
         this.compound = at;
         tc = list[at];
-        for(var i = 0; i < 4; i++) { var w = this.wheels[i]; w.compoundGrip = tc.grip; w.compoundLoose = tc.looseGrip || 1; w.condition = conditionOf(w) * (w.pressureGrip || 1); }
+        for(var i = 0; i < 4; i++) { var w = this.wheels[i]; w.compoundGrip = tc.grip; w.compoundLoose = tc.looseGrip || 1; w.compoundLooseSlide = tc.looseSlide || 0; w.condition = conditionOf(w) * (w.pressureGrip || 1); }
     };
     this.tyreKind = function () { return tc; };
     this.setCompound(parameters.compound);

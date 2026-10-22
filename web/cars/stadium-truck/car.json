@@ -1,6 +1,6 @@
 {
   "name": "Stadium truck (example)",
-  "description": "A stadium truck with long travel suspension: an example car with a bare model (stadium-truck.glb) to model around",
+  "description": "A stadium truck with long travel suspension and four wheel drive: an example car with a bare model (stadium-truck.glb) to model around",
   "model": {
     "type": "gltf",
     "file": "cars/stadium-truck/Trophy Truck.glb",
@@ -43,8 +43,8 @@
     "wheelbase": 3.1,
     "front_track": 2,
     "rear_track": 2,
-    "weight_distribution": 0.5,
-    "cg_height": 0.85,
+    "weight_distribution": 0.54,
+    "cg_height": 0.78,
     "suspension_travel": 0.38,
     "tire_diameter": 0.9,
     "drag_coefficient": 0.55,
@@ -74,13 +74,13 @@
     "tyre_damping": 7000
   },
   "drivetrain": {
-    "drive": "rwd",
+    "drive": "awd",
     "diff": "lsd",
     "diff_preload": 60,
     "diff_power": 0.4,
     "diff_coast": 0.2,
     "center_diff": "lsd",
-    "center_split": 0.4,
+    "center_split": 0.35,
     "gear_ratios": [
       2.8,
       1.8,
@@ -262,7 +262,7 @@
     "stiff_x": 20,
     "stiff_y": 18,
     "grip": 1,
-    "grip_balance": 1,
+    "grip_balance": 1.12,
     "cornering": 1,
     "rolling_resistance": 0.015,
     "heating": 1,
