@@ -1261,6 +1261,7 @@ export function initSoftBody(api) {
         renderPartWin();
         drawPartGizmos();
         outline(selectedObject());
+        if (api.partChosen) api.partChosen(object.name);
     }
     function closePartWindow() {
         if (sb.partMode === "nodes") { fadeOthers(false); sb.deferRestart = false; sb.partMode = null; changed(true); rebuildSoon(); }
@@ -1269,6 +1270,7 @@ export function initSoftBody(api) {
         sb.partWin = null;
         drawPartGizmos();
         outline(null);
+        if (api.partChosen) api.partChosen(null);
     }
     function partChanged() {
         changed();

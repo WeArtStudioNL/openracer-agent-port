@@ -893,6 +893,19 @@ function selectLayer(id) {
     updateThumbnail();
 }
 
+// The part that is chosen in the view (a click on a loose part, the Soft body card): its row in the Parts list is lit and the list scrolls to it
+let chosenPart = null;
+function showChosenPart(name) {
+    chosenPart = name || null;
+    let found = null;
+    document.querySelectorAll("#layerList .layer.part").forEach((row) => {
+        const on = !!chosenPart && row.dataset.part === chosenPart;
+        row.classList.toggle("selected", on);
+        if (on && !found) found = row;
+    });
+    if (found) found.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
 function renderLayers() {
     const list = $("layerList");
     list.innerHTML = "";
@@ -978,7 +991,8 @@ function renderLayers() {
         list.appendChild(g);
         state.nodes.forEach((node) => {
             const row = document.createElement("div");
-            row.className = "layer part";
+            row.className = "layer part" + (node.name === chosenPart ? " selected" : "");
+            row.dataset.part = node.name;
             row.style.paddingLeft = (18 + Math.min(node.depth, 6) * 10) + "px";
             const text = document.createElement("span");
             text.textContent = node.name;
@@ -2180,6 +2194,7 @@ driverEditor = initDriver({
 
 softBodyEditor = initSoftBody({
     $, THREE, scene, camera, renderer, controls, bench, status, startBench, stopBench,
+    partChosen: showChosenPart,
     driverUnder: (e) => !!(driverEditor && driverEditor.under(e)),
     nodeNames: () => state.nodes.map((n) => n.name),
     floorY: () => grid.position.y,
