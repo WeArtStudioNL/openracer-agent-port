@@ -100,9 +100,9 @@ export function initDriver(api) {
             </div>
             <div class="group">Try it</div>
             <div class="hint">Steering <span id="drvSteerOut">0°</span></div><input type="range" id="drvSteer" min="-450" max="450" step="1" value="0" style="width:100%">
-            <div id="drvKeysStrip" style="position:relative;height:16px;margin:2px 7px 6px"></div>
+            <div id="drvKeysStrip" style="position:relative;height:34px;margin:2px 7px 6px"></div>
             <div class="group">Keyframes of the hands</div>
-            <div class="hint">Set the movement of the hands yourself. Make keys from the automatic movement, turn the steering slider to a place (the positive side: the other side is the mirror image, with the hands changed over), take a hand and move it, turn it, or set its grip: a key is made at that turn. The hands go through the keys, and the way back is the same movement the other way. Click a mark under the slider to go to a key (blue: left hand, red: right hand).</div>
+            <div class="hint">Set the movement of the hands, the chest and the head yourself. Make keys from the automatic movement, turn the steering slider to a place (the positive side: the other side is the mirror image, with the hands changed over), take a hand and move it, turn it, or set its grip, or turn the chest or the head: a key is made at that turn. The hands go through the keys, and the way back is the same movement the other way. Click a mark under the slider to go to a key (blue: left hand, red: right hand, yellow: chest, purple: head).</div>
             <div class="row drv-wrap"><button class="small accent" id="drvKeysBake">Make keys from the automatic movement</button><button class="small ghost" id="drvKeysOff">Back to automatic</button></div>
             <div class="row drv-wrap"><button class="small" id="drvKeyAdd">Add a key here</button><button class="small ghost" id="drvKeyDel">Delete the key here</button><label class="check"><input type="checkbox" id="drvKeyWheel"> rides the wheel</label></div>
             <div class="hint" id="drvKeyInfo">No keys: the hands move by themselves.</div>
@@ -172,7 +172,10 @@ export function initDriver(api) {
 
     // ---- the keyframes
     const HAND_SIDE = { handL: "left", handR: "right" };
+    const KEY_NAME = { handL: "left", handR: "right", chest: "chest", head: "head" };
     function keysOn() { return !!(drv.driver && drv.driver.keysActive()); }
+    function keysAny() { return !!(drv.driver && drv.driver.keysAny()); }
+    function markerRot(key) { const e = new THREE.Euler().setFromQuaternion(targets[key].quaternion, "XYZ"), deg = 180 / Math.PI; return [e.x * deg, e.y * deg, e.z * deg]; }
     function authored() { return drv.steer >= 0; }
     function keyWarning() { status("Keys are set with the steering on the positive side (the other side is the mirror image). Turn the slider to the right.", "error"); }
     function setHandKey(side, gripOverride) {
@@ -184,23 +187,24 @@ export function initDriver(api) {
     function refreshKeys() {
         const d = drv.driver, strip = el("drvKeysStrip");
         strip.innerHTML = "";
-        if (!d || !keysOn()) { el("drvKeyInfo").textContent = "No keys: the hands move by themselves."; el("drvKeyWheel").disabled = true; return; }
+        if (!d || !keysAny()) { el("drvKeyInfo").textContent = "No keys: the hands move by themselves."; el("drvKeyWheel").disabled = true; return; }
         const keys = d.config.keys;
-        for (const [side, colour, top] of [["left", "#5ec8ff", 0], ["right", "#ff6b6b", 8]]) {
+        for (const [side, colour, top] of [["left", "#5ec8ff", 0], ["right", "#ff6b6b", 8], ["chest", "#ffe2a8", 16], ["head", "#e8c8ff", 24]]) {
             for (const k of keys[side] || []) {
                 for (const sign of [1, -1]) {
                     const tick = document.createElement("div");
                     tick.style.cssText = "position:absolute;width:5px;height:7px;border-radius:2px;cursor:pointer;transform:translateX(-50%);top:" + top + "px;left:" + ((sign * k.t + 450) / 900 * 100) + "%;background:" + colour + ";opacity:" + (sign > 0 ? 1 : 0.3);
-                    tick.title = (side === "left" ? "Left" : "Right") + " hand, " + k.t + "°";
+                    tick.title = side + ", " + k.t + "°";
                     tick.dataset.t = String(sign * k.t);
                     strip.appendChild(tick);
                 }
             }
         }
-        const side = HAND_SIDE[drv.selected], key = side && authored() ? d.keyAt(side, drv.steer) : null;
-        el("drvKeyWheel").disabled = !key;
+        const side = KEY_NAME[drv.selected], key = side && authored() ? d.keyAt(side, drv.steer) : null;
+        el("drvKeyWheel").disabled = !key || !HAND_SIDE[drv.selected];
         el("drvKeyWheel").checked = !!(key && key.wheel);
-        el("drvKeyInfo").textContent = "Left hand: " + (keys.left || []).length + " keys, right hand: " + (keys.right || []).length + " keys. " + (side ? (key ? "A key of this hand is here (" + key.t + "°)." : "No key of this hand here.") : "Take a hand to set keys.");
+        const count = (n) => (keys[n] || []).length;
+        el("drvKeyInfo").textContent = "Keys: left hand " + count("left") + ", right hand " + count("right") + ", chest " + count("chest") + ", head " + count("head") + ". " + (side ? (key ? "A key of this one is here (" + key.t + "°)." : "No key of this one here.") : "Take a hand, the chest or the head to set keys.");
     }
     el("drvKeysStrip").addEventListener("click", (e) => { const t = e.target.dataset && e.target.dataset.t; if (t === undefined) return; el("drvSteer").value = t; el("drvSteer").dispatchEvent(new Event("input", { bubbles: true })); });
     el("drvKeysBake").onclick = () => {
@@ -209,13 +213,13 @@ export function initDriver(api) {
     };
     el("drvKeysOff").onclick = () => { if (!drv.driver) return; drv.driver.config.keys = null; syncTargets(); refreshKeys(); };
     el("drvKeyAdd").onclick = () => {
-        const side = HAND_SIDE[drv.selected];
-        if (!drv.driver || !side) { status("Take a hand first.", "error"); return; }
-        if (!keysOn()) { status("Make keys first.", "error"); return; }
+        const side = KEY_NAME[drv.selected];
+        if (!drv.driver || !side) { status("Take a hand, the chest or the head first.", "error"); return; }
+        if (!keysAny()) { status("Make keys first.", "error"); return; }
         if (!authored()) { keyWarning(); return; }
-        setHandKey(side);
+        if (HAND_SIDE[drv.selected]) setHandKey(side); else { drv.driver.setTorsoKey(side, drv.steer, markerRot(drv.selected)); refreshKeys(); }
     };
-    el("drvKeyDel").onclick = () => { const side = HAND_SIDE[drv.selected]; if (drv.driver && side && authored()) { drv.driver.removeKey(side, drv.steer); refreshKeys(); } };
+    el("drvKeyDel").onclick = () => { const side = KEY_NAME[drv.selected]; if (drv.driver && side && authored()) { drv.driver.removeKey(side, drv.steer); refreshKeys(); } };
     el("drvKeyWheel").addEventListener("change", () => {
         const side = HAND_SIDE[drv.selected], d = drv.driver, key = side && authored() ? d.keyAt(side, drv.steer) : null;
         if (!key) return;
@@ -227,6 +231,12 @@ export function initDriver(api) {
     // the gizmo moved something: the config follows
     function moved() {
         const d = drv.driver;
+        if (d && TORSO[drv.selected] && keysAny()) {
+            if (!authored()) { keyWarning(); return; }
+            d.setTorsoKey(drv.selected, drv.steer, markerRot(drv.selected));
+            refreshKeys();
+            return;
+        }
         if (d && HAND_SIDE[drv.selected] && keysOn()) {
             if (!authored()) { keyWarning(); return; }
             setHandKey(HAND_SIDE[drv.selected]);
@@ -453,7 +463,7 @@ export function initDriver(api) {
             if (drv.dragging && drv.selected === key) continue;
             const bone = key === "chest" ? d.bones.chest[0] : d.bones.head;
             if (bone) bone.getWorldPosition(targets[key].position);
-            const rot = (d.config[key] && d.config[key].rotation) || [0, 0, 0], k = Math.PI / 180;
+            const rot = d.torsoPose[key] || [0, 0, 0], k = Math.PI / 180;
             targets[key].quaternion.setFromEuler(new THREE.Euler(rot[0] * k, rot[1] * k, rot[2] * k, "XYZ"));
         }
         for (const [key, role] of Object.entries(POLES)) {

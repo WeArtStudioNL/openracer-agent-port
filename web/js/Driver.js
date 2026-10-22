@@ -168,10 +168,13 @@ OpenRacer.Driver = function (config, parent, steering) {
         if (bone.parent) { bone.parent.getWorldQuaternion(qpw); qpw.invert(); qw.premultiply(qpw); }
         bone.quaternion.copy(qw);
     }
+    // the turn of the chest and of the head (degrees): as the car editor set them, or from the keys when there are some (see the keyframes below)
+    this.torsoPose = { chest: [0, 0, 0], head: [0, 0, 0] };
     function torso() {
         var cfg = self.config;
-        self.bones.chest.forEach(function (bone) { turnBone(bone, cfg.chest && cfg.chest.rotation); });
-        if (self.bones.head) turnBone(self.bones.head, cfg.head && cfg.head.rotation);
+        ["chest", "head"].forEach(function (name) { self.torsoPose[name] = torsoKeyRot(name, self.turn) || (cfg[name] && cfg[name].rotation) || [0, 0, 0]; });
+        self.bones.chest.forEach(function (bone) { turnBone(bone, self.torsoPose.chest); });
+        if (self.bones.head) turnBone(self.bones.head, self.torsoPose.head);
         self.model.updateMatrixWorld(true);
     }
 
@@ -332,6 +335,34 @@ OpenRacer.Driver = function (config, parent, steering) {
         if (mirror) { outPos.x = restGrip.left.x + restGrip.right.x - outPos.x; outQuat.y = -outQuat.y; outQuat.z = -outQuat.z; }
         return grip;
     }
+    // the turn of the chest or the head from its keys (a turn the other way is the mirror image: x stays, y and z change sign); null when there are no keys
+    function torsoKeyRot(name, turn) {
+        var list = self.config.keys && self.config.keys[name];
+        if (!list || !list.length) return null;
+        var tau = Math.abs(turn), n = list.length, i = 0;
+        while (i < n - 1 && tau >= list[i + 1].t * DEG) i++;
+        var u = 0;
+        if (tau > list[0].t * DEG && i < n - 1) u = (tau - list[i].t * DEG) / ((list[i + 1].t - list[i].t) * DEG);
+        var j = Math.min(i + 1, n - 1), su = u * u * (3 - 2 * u), qa0 = new Q(), qb0 = new Q();
+        qa0.setFromEuler(keyEul.set(list[i].rot[0] * DEG, list[i].rot[1] * DEG, list[i].rot[2] * DEG, "XYZ"));
+        qb0.setFromEuler(keyEul.set(list[j].rot[0] * DEG, list[j].rot[1] * DEG, list[j].rot[2] * DEG, "XYZ"));
+        qa0.slerp(qb0, su);
+        if (turn > 0) { qa0.y = -qa0.y; qa0.z = -qa0.z; }
+        keyEul.setFromQuaternion(qa0, "XYZ");
+        return [keyEul.x / DEG, keyEul.y / DEG, keyEul.z / DEG];
+    }
+    // sets the key of the chest or the head at a turn of the wheel (degrees); rot in degrees, in the space of the car
+    this.setTorsoKey = function (name, tDeg, rot) {
+        var keys = self.config.keys || (self.config.keys = { left: [], right: [] });
+        var list = keys[name] || (keys[name] = []);
+        tDeg = Math.max(0, tDeg);
+        var at = -1;
+        list.forEach(function (k, i) { if (Math.abs(k.t - tDeg) < 0.75) at = i; });
+        var key = { t: at >= 0 ? list[at].t : Math.round(tDeg * 10) / 10, rot: rot.map(function (v) { return Math.round(v * 10) / 10; }) };
+        if (at >= 0) list[at] = key; else { list.push(key); list.sort(function (a, b) { return a.t - b.t; }); }
+        return key;
+    };
+    this.keysAny = function () { var k = self.config.keys; return !!(k && ["left", "right", "chest", "head"].some(function (n) { return k[n] && k[n].length; })); };
     // is a place on the rim of the wheel (where a hand rides)
     function onRim(pos, name) {
         rel.subVectors(pos, centre);
@@ -363,7 +394,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         var list = self.config.keys && self.config.keys[side];
         if (!list) return;
         for (var i = list.length - 1; i >= 0; i--) if (Math.abs(list[i].t - tDeg) < 0.75) list.splice(i, 1);
-        if (!self.keysActive()) self.config.keys = null;
+        if (!self.keysAny()) self.config.keys = null;
     };
     this.keyAt = function (side, tDeg) {
         var list = self.config.keys && self.config.keys[side];
@@ -394,6 +425,7 @@ OpenRacer.Driver = function (config, parent, steering) {
             });
         });
         baking = false;
+        ["chest", "head"].forEach(function (name) { self.setTorsoKey(name, 0, ((cfg[name] && cfg[name].rotation) || [0, 0, 0]).slice()); });
         self.turn = savedTurn;
         hand.left.p = savedP.left; hand.right.p = savedP.right;
         return true;
