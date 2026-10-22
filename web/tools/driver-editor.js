@@ -99,6 +99,12 @@ export function initDriver(api) {
             </div>
             <div class="group">Try it</div>
             <div class="hint">Steering <span id="drvSteerOut">0°</span></div><input type="range" id="drvSteer" min="-450" max="450" step="1" value="0" style="width:100%">
+            <div id="drvKeysStrip" style="position:relative;height:16px;margin:2px 7px 6px"></div>
+            <div class="group">Keyframes of the hands</div>
+            <div class="hint">Set the movement of the hands yourself. Make keys from the automatic movement, turn the steering slider to a place (the positive side: the other side is the mirror image, with the hands changed over), take a hand and move it, turn it, or set its grip: a key is made at that turn. The hands go through the keys, and the way back is the same movement the other way. Click a mark under the slider to go to a key (blue: left hand, red: right hand).</div>
+            <div class="row"><button class="small accent" id="drvKeysBake">Make keys from the automatic movement</button><button class="small ghost" id="drvKeysOff">Back to automatic</button></div>
+            <div class="row"><button class="small" id="drvKeyAdd">Add a key here</button><button class="small ghost" id="drvKeyDel">Delete the key here</button><label class="check"><input type="checkbox" id="drvKeyWheel"> rides the wheel</label></div>
+            <div class="hint" id="drvKeyInfo">No keys: the hands move by themselves.</div>
             <div class="hint">Throttle</div><input type="range" id="drvThrottle" min="0" max="1" step="0.01" value="0" style="width:100%">
             <div class="hint">Brake</div><input type="range" id="drvBrake" min="0" max="1" step="0.01" value="0" style="width:100%">
             <details class="sub-card"><summary class="hint" style="cursor:pointer">Bones of the arms and the legs</summary>
@@ -150,6 +156,7 @@ export function initDriver(api) {
     }
     function select(key) {
         drv.selected = drv.selected === key ? null : key;
+        setTimeout(() => refreshKeys(), 0);
         if (drv.selected && api.deselectLayers) api.deselectLayers();
         attach();
     }
@@ -162,9 +169,68 @@ export function initDriver(api) {
         if (e.code === "KeyW") { drv.mode = "move"; attach(); } else if (e.code === "KeyE") { drv.mode = "rotate"; attach(); } else if (e.code === "KeyR" && drv.selected === "wheel") { drv.mode = "scale"; attach(); }
     });
 
+    // ---- the keyframes
+    const HAND_SIDE = { handL: "left", handR: "right" };
+    function keysOn() { return !!(drv.driver && drv.driver.keysActive()); }
+    function authored() { return drv.steer >= 0; }
+    function keyWarning() { status("Keys are set with the steering on the positive side (the other side is the mirror image). Turn the slider to the right.", "error"); }
+    function setHandKey(side, gripOverride) {
+        const d = drv.driver, pose = d.handPose[side], m = targets[side === "left" ? "handL" : "handR"];
+        const grip = gripOverride !== undefined ? gripOverride : pose.grip;
+        d.setKey(side, drv.steer, m.position, m.quaternion, grip);
+        refreshKeys();
+    }
+    function refreshKeys() {
+        const d = drv.driver, strip = el("drvKeysStrip");
+        strip.innerHTML = "";
+        if (!d || !keysOn()) { el("drvKeyInfo").textContent = "No keys: the hands move by themselves."; el("drvKeyWheel").disabled = true; return; }
+        const keys = d.config.keys;
+        for (const [side, colour, top] of [["left", "#5ec8ff", 0], ["right", "#ff6b6b", 8]]) {
+            for (const k of keys[side] || []) {
+                for (const sign of [1, -1]) {
+                    const tick = document.createElement("div");
+                    tick.style.cssText = "position:absolute;width:5px;height:7px;border-radius:2px;cursor:pointer;transform:translateX(-50%);top:" + top + "px;left:" + ((sign * k.t + 450) / 900 * 100) + "%;background:" + colour + ";opacity:" + (sign > 0 ? 1 : 0.3);
+                    tick.title = (side === "left" ? "Left" : "Right") + " hand, " + k.t + "°";
+                    tick.dataset.t = String(sign * k.t);
+                    strip.appendChild(tick);
+                }
+            }
+        }
+        const side = HAND_SIDE[drv.selected], key = side && authored() ? d.keyAt(side, drv.steer) : null;
+        el("drvKeyWheel").disabled = !key;
+        el("drvKeyWheel").checked = !!(key && key.wheel);
+        el("drvKeyInfo").textContent = "Left hand: " + (keys.left || []).length + " keys, right hand: " + (keys.right || []).length + " keys. " + (side ? (key ? "A key of this hand is here (" + key.t + "°)." : "No key of this hand here.") : "Take a hand to set keys.");
+    }
+    el("drvKeysStrip").addEventListener("click", (e) => { const t = e.target.dataset && e.target.dataset.t; if (t === undefined) return; el("drvSteer").value = t; el("drvSteer").dispatchEvent(new Event("input", { bubbles: true })); });
+    el("drvKeysBake").onclick = () => {
+        if (!drv.driver) { status("Load the driver model first.", "error"); return; }
+        if (drv.driver.bakeKeys()) { status("Keys made from the automatic movement. Turn the steering slider to a key and move a hand to change it.", "ok"); refreshKeys(); } else status("The keys could not be made.", "error");
+    };
+    el("drvKeysOff").onclick = () => { if (!drv.driver) return; drv.driver.config.keys = null; syncTargets(); refreshKeys(); };
+    el("drvKeyAdd").onclick = () => {
+        const side = HAND_SIDE[drv.selected];
+        if (!drv.driver || !side) { status("Take a hand first.", "error"); return; }
+        if (!keysOn()) { status("Make keys first.", "error"); return; }
+        if (!authored()) { keyWarning(); return; }
+        setHandKey(side);
+    };
+    el("drvKeyDel").onclick = () => { const side = HAND_SIDE[drv.selected]; if (drv.driver && side && authored()) { drv.driver.removeKey(side, drv.steer); refreshKeys(); } };
+    el("drvKeyWheel").addEventListener("change", () => {
+        const side = HAND_SIDE[drv.selected], d = drv.driver, key = side && authored() ? d.keyAt(side, drv.steer) : null;
+        if (!key) return;
+        const pose = d.handPose[side];
+        d.setKey(side, drv.steer, pose.pos, pose.quat, pose.grip, el("drvKeyWheel").checked);
+        refreshKeys();
+    });
+
     // the gizmo moved something: the config follows
     function moved() {
         const d = drv.driver;
+        if (d && HAND_SIDE[drv.selected] && keysOn()) {
+            if (!authored()) { keyWarning(); return; }
+            setHandKey(HAND_SIDE[drv.selected]);
+            return;
+        }
         if (drv.selected === "wheel") { if (drv.mode === "scale") ringGroup.scale.setScalar(Math.max(0.03, ringGroup.scale.x)); ringToConfig(); return; }
         if (!d) return;
         const r = (v) => Math.round(v * 1000) / 1000, deg = 180 / Math.PI, cfg = d.config;
@@ -249,6 +315,7 @@ export function initDriver(api) {
         syncTargets();
         fillBones();
         syncFields();
+        refreshKeys();
         setEnabled(true);
         attach();
     }
@@ -352,11 +419,12 @@ export function initDriver(api) {
     el("drvGrip").addEventListener("input", () => {
         if (!drv.driver) return;
         const v = parseFloat(el("drvGrip").value) / 100;
-        drv.driver.config.hands.grip[drv.selected === "handR" ? "right" : "left"] = v;
+        if (keysOn()) { if (!authored()) { keyWarning(); return; } setHandKey(drv.selected === "handR" ? "right" : "left", v); }
+        else drv.driver.config.hands.grip[drv.selected === "handR" ? "right" : "left"] = v;
         el("drvGripOut").textContent = Math.round(v * 100) + "%";
     });
     el("drvCurl").addEventListener("change", () => { if (drv.driver) { drv.driver.config.grip_curl = el("drvCurl").value; drv.driver.refreshFingers(); } });
-    el("drvSteer").addEventListener("input", () => { drv.steer = parseFloat(el("drvSteer").value); el("drvSteerOut").textContent = drv.steer + "°"; });
+    el("drvSteer").addEventListener("input", () => { drv.steer = parseFloat(el("drvSteer").value); el("drvSteerOut").textContent = drv.steer + "°"; refreshKeys(); });
     el("drvThrottle").addEventListener("input", () => { drv.throttle = parseFloat(el("drvThrottle").value); });
     el("drvBrake").addEventListener("input", () => { drv.brake = parseFloat(el("drvBrake").value); });
 
@@ -372,6 +440,14 @@ export function initDriver(api) {
         d.steering.angle = -drv.steer * Math.PI / 180;
         d.steering.degrees = 450;
         d.update(dt || 0.016, drv.throttle, drv.brake);
+        if (d.keysActive()) {
+            for (const [key, side] of [["handL", "left"], ["handR", "right"]]) {
+                if (drv.dragging && drv.selected === key) continue;
+                const pose = d.handPose[side];
+                targets[key].position.copy(pose.pos); targets[key].quaternion.copy(pose.quat);
+                if (drv.selected === key && document.activeElement !== el("drvGrip")) { el("drvGrip").value = Math.round(pose.grip * 100); el("drvGripOut").textContent = Math.round(pose.grip * 100) + "%"; }
+            }
+        }
         for (const key of Object.keys(TORSO)) {
             if (drv.dragging && drv.selected === key) continue;
             const bone = key === "chest" ? d.bones.chest[0] : d.bones.head;
@@ -394,7 +470,7 @@ export function initDriver(api) {
         if (drv.driver.bones.hips) bones.hips = drv.driver.bones.hips.name;
         if (drv.driver.bones.chest && drv.driver.bones.chest[0]) bones.chest = drv.driver.bones.chest[0].name;
         if (drv.driver.bones.head) bones.head = drv.driver.bones.head.name;
-        return { enabled: true, file: "", position: c.position.slice(), rotation: c.rotation.slice(), scale: c.scale, bones, hands: { left: c.hands.left.slice(), right: c.hands.right.slice(), rotation: { left: c.hands.rotation.left.slice(), right: c.hands.rotation.right.slice() }, grip: { left: c.hands.grip.left, right: c.hands.grip.right } }, grip_curl: c.grip_curl,
+        return { enabled: true, file: "", position: c.position.slice(), rotation: c.rotation.slice(), scale: c.scale, bones, hands: { left: c.hands.left.slice(), right: c.hands.right.slice(), rotation: { left: c.hands.rotation.left.slice(), right: c.hands.rotation.right.slice() }, grip: { left: c.hands.grip.left, right: c.hands.grip.right } }, grip_curl: c.grip_curl, keys: c.keys ? JSON.parse(JSON.stringify(c.keys)) : undefined,
             feet: { left: c.feet.left.slice(), right: c.feet.right.slice(), travel: c.feet.travel, direction: c.feet.direction.slice() }, elbow_out: c.elbow_out, knee_out: c.knee_out,
             wheel: c.wheel ? JSON.parse(JSON.stringify(c.wheel)) : undefined, pivot: c.pivot, chest: { rotation: c.chest.rotation.slice() }, head: { rotation: c.head.rotation.slice() }, poles: c.poles ? JSON.parse(JSON.stringify(c.poles)) : undefined };
     }
