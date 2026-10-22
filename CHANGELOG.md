@@ -5,6 +5,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 ## Unreleased
 
 **Race**
+- The reset key (R, and ↺ on a touch screen) only puts the car back at the saved position, as it is: the damage, the tyres (heat, wear, pressure) and the engine stay, and the car stands still on its wheels. The key *Save the place of the car for the reset* (4, rebindable in *Esc → Controls → Other*) saves where the car is now (the place, the heading and the height; kept per track in the browser); until one is saved the reset goes to the start. Repairing is for the repair key (Backspace).
 - A value that is not a number (NaN) in the state of a car no longer kills the car and the sound (`setTargetAtTime ... non-finite` in the tyre squeal): the sound ignores such a value, and the vehicle checks its state after every update, reports the field once in the console (`Vehicle: a value is not a number (...)`) and puts the car back upright where it was last fine.
 - In the race column of the main menu, a list with a tick for every car chooses which cars may race against you (shown when a race of laps or AI opponents is chosen; *all* and *none* above it; all are ticked by default and the choice is remembered). The AI cars are taken from the ticked cars in turn (`aicars` in the address); with none ticked every car may race.
 

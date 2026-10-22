@@ -540,6 +540,41 @@ OpenRacer.Vehicle = function (parameters, input) {
         this.py += 0.3;
     };
 
+    // Where the car is (for a place to come back to): { x, z, psi (the heading), py (the height of the body, null when the car is not on its wheels) }
+    this.pose = function () {
+        var heading = this.psi;
+        if(axisZ.x * axisZ.x + axisZ.z * axisZ.z > 0.09) heading = Math.atan2(axisZ.z, axisZ.x);
+        var up = rotate(this.qx, this.qy, this.qz, this.qw, 0, 1, 0, { x: 0, y: 0, z: 0 });
+        return { x: this.px, z: this.pz, psi: heading, py: up.y > 0.7 ? this.py : null };
+    };
+
+    // Puts the car somewhere standing still and on its wheels, in the state it is in: the damage, the tyres (heat, wear, pressure) and the engine stay as they are, only the place, the
+    // movement and the springs are reset. py: the height of the body there (null: on the road)
+    this.relocate = function (x, z, psi, py) {
+        var angle = Math.PI / 2 - psi;
+        this.qx = 0; this.qy = Math.sin(angle / 2); this.qz = 0; this.qw = Math.cos(angle / 2);
+        var road = roadAt(x, z, 1000, 0);
+        this.px = x; this.pz = z;
+        this.py = py === null || py === undefined ? (road ? road.y : 0) + this.cgHeight + (this.rideFront + this.rideRear) / 2 : py + 0.05;
+        this.vx = this.vy = this.vz = 0;
+        this.wx = this.wy = this.wz = 0;
+        this.ax = this.ay = 0;
+        this.suspensionHistory = null;
+        if(this.softBody) this.softBody.settle();
+        for(var i = 0; i < 4; i++) {
+            var w = this.wheels[i];
+            w.omega = 0;
+            w.slipRatio = w.slipTan = 0;
+            w.absFactor = 1;
+            w.velocity.set(0, 0, 0);
+            w.lastCompression = undefined;
+            w.susLength = w.restLengthWheel !== undefined ? w.restLengthWheel : this.restLength;
+            w.susVel = 0;
+        }
+        this.updateOutputs();
+        this.measureWheels();
+    };
+
     // Puts the car on the road at a place, standing still with the springs at rest.
     this.reset = function (x, z, psi) {
         var road = roadAt(x, z, 1000, 0);

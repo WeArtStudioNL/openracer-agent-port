@@ -238,6 +238,33 @@ OpenRacer.Car = function( config, domElement ) {
         this.updateVisuals(0);
     };
 
+    // ---- the place that the reset key goes back to: the one that was saved with the save key (per track, kept in the browser), else the start
+    var resetKey = "openracer.resetposition." + (currentTrack && currentTrack.id);
+    var savedReset = null;
+    try { var stored = JSON.parse(window.localStorage.getItem(resetKey)); if(stored && isFinite(stored.x) && isFinite(stored.z) && isFinite(stored.psi)) savedReset = stored; } catch(e) { /* no storage */ }
+    this.saveResetPosition = function() {
+        savedReset = this.vehicle.pose();
+        try { window.localStorage.setItem(resetKey, JSON.stringify(savedReset)); } catch(e) { /* no storage */ }
+        var note = document.createElement("div");
+        note.style.cssText = "position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1001; padding: 8px 18px; background: rgba(20, 24, 31, 0.85); color: #fff; font-family: Arial; border-radius: 6px;";
+        note.textContent = "Reset position saved";
+        document.body.appendChild(note);
+        setTimeout(function() { note.remove(); }, 1600);
+    };
+    this.returnToSaved = function() {
+        var v = this.vehicle, p = savedReset || { x: startX, z: startZ, psi: startHeading, py: null };
+        v.relocate(p.x, p.z, p.psi, p.py);
+        tyreSmoke.clear();
+        flames.clear();
+        if(OpenRacer.DragStrip) OpenRacer.DragStrip.reset();
+        lastGateX = null; // a jump of the car is no crossing of a gate
+        this.lapStarted = false;
+        this.throttle = 0;
+        this.brakePedal = 0;
+        this.turnAngle = 0;
+        this.updateVisuals(0);
+    };
+
     // ---- display: the 3D objects follow the physics
 
     var bodyPosition = { x: 0, y: 0, z: 0 };
@@ -470,9 +497,9 @@ OpenRacer.Car = function( config, domElement ) {
         var v = this.vehicle;
 
         if(this.reset) {
-            // one reset per key press
+            // one reset per key press: back to the saved place (the start when none was saved), in the state that the car is in
             this.reset = false;
-            this.place(startX, startZ, startHeading);
+            this.returnToSaved();
             return;
         }
 

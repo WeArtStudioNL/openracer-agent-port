@@ -210,6 +210,13 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         this.version++;
     };
 
+    // The car is put somewhere else and stands still: the elastic bending and the movement of the nodes stop, the permanent bending stays
+    this.settle = function () {
+        u.fill(0); w.fill(0); f.fill(0);
+        for (var n = 0; n < 3 * N; n++) this.displacement[n] = q[n];
+        this.version++;
+    };
+
     // The displacement for the model from the state of the nodes (after a replay has put other numbers there)
     this.syncDisplacement = function () {
         for (var n = 0; n < 3 * N; n++) self.displacement[n] = u[n] + q[n];

@@ -72,7 +72,8 @@ var Settings = (function() {
         { id: "gear6", wheelOnly: true, group: "Gearbox", label: "H-shifter: gear 7", wheel: { profile: "gear6", steps: ["gear6"] }, defaults: [] },
         { id: "gear7", wheelOnly: true, group: "Gearbox", label: "H-shifter: gear 8", wheel: { profile: "gear7", steps: ["gear7"] }, defaults: [] },
         { id: "reverseGear", wheelOnly: true, group: "Gearbox", label: "H-shifter: reverse", wheel: { profile: "reverseGear", steps: ["reverse"] }, defaults: [] },
-        { id: "resetCar", group: "Other", label: "Back to the start", defaults: [key("KeyR"), padButton(3)] },
+        { id: "resetCar", group: "Other", label: "Reset the car to the saved position (the start when none is saved), as it is: the damage and the tyres stay", defaults: [key("KeyR"), padButton(3)] },
+        { id: "saveResetPosition", group: "Other", label: "Save the place of the car for the reset", defaults: [key("Digit4")] },
         { id: "repairCar", group: "Other", label: "Repair the car and put it on its wheels where it is, 30 cm above the road (body, parts, wheels, tyres)", defaults: [key("Backspace")] },
         { id: "cameraLeft", group: "Other", label: "Camera left", defaults: [key("BracketLeft")] },
         { id: "cameraRight", group: "Other", label: "Camera right", defaults: [key("BracketRight")] },
@@ -941,6 +942,7 @@ var Settings = (function() {
     handlers.wheelToggle = function() { WheelControls.toggle(); };
     handlers.startEngine = function() { if(window.car) window.car.startEngine(); };
     handlers.resetCar = function() { if(window.car) window.car.reset = true; };
+    handlers.saveResetPosition = function() { if(window.car && window.car.saveResetPosition) window.car.saveResetPosition(); };
     handlers.repairCar = function() { if(window.car && window.car.vehicle) { window.car.vehicle.repairUpright(); if(window.car.updateVisuals) window.car.updateVisuals(0); } };
     handlers.cameraReset = function() { if(window.car) window.car.cameraAngle = 0; };
     handlers.telemetry = function() { if(window.telemetry) window.telemetry.setVisible(!window.telemetry.visible); };
