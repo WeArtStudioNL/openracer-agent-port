@@ -392,6 +392,33 @@ OpenRacer.Driver = function (config, parent, steering) {
         var list = self.config.keys && self.config.keys[side];
         return (list || []).filter(function (k) { return Math.abs(k.t - tDeg) < 0.75; })[0] || null;
     };
+    // The keys of the side with the positive turns of the steering slider (t above 0, and the key at 0) are put on the other side as a mirror image: the keys at a negative t are replaced by the
+    // ones of the other hand (left becomes right) mirrored about the plane through the middle of the wheel, and the turns of the chest and the head mirrored. Gives the number of keys that were made.
+    this.mirrorKeys = function () {
+        var keys = self.config.keys;
+        if (!keys) return 0;
+        readGrips();
+        var plane = 2 * centre.x, made = 0;                  // (the plane through the middle of the wheel: the hands that ride the wheel turn about it)
+        var reflect = function (rot) {
+            var q = new Q().setFromEuler(new THREE.Euler(rot[0] * DEG, rot[1] * DEG, rot[2] * DEG, "XYZ"));
+            q.y = -q.y; q.z = -q.z;
+            var e = new THREE.Euler().setFromQuaternion(q, "XYZ");
+            return [e.x / DEG, e.y / DEG, e.z / DEG].map(function (v) { return Math.round(v * 10) / 10; });
+        };
+        var source = { left: (keys.left || []).filter(function (k) { return k.t > 0; }), right: (keys.right || []).filter(function (k) { return k.t > 0; }), chest: (keys.chest || []).filter(function (k) { return k.t > 0; }), head: (keys.head || []).filter(function (k) { return k.t > 0; }) };
+        ["left", "right", "chest", "head"].forEach(function (name) { keys[name] = (keys[name] || []).filter(function (k) { return k.t >= 0; }); });
+        [["left", "right"], ["right", "left"], ["chest", "chest"], ["head", "head"]].forEach(function (pair) {
+            source[pair[0]].forEach(function (k) {
+                var copy = { t: -k.t, rot: reflect(k.rot || [0, 0, 0]) };
+                if (k.pos) { copy.pos = [Math.round((plane - k.pos[0]) * 1000) / 1000, k.pos[1], k.pos[2]]; copy.grip = k.grip; copy.wheel = k.wheel; }
+                keys[pair[1]].push(copy);
+                made++;
+            });
+        });
+        ["left", "right", "chest", "head"].forEach(function (name) { keys[name].sort(function (a, b) { return a.t - b.t; }); });
+        return made;
+    };
+
     // keys from the automatic movement (the hand over): a start for the keys that are then set by hand
     this.bakeKeys = function () {
         readGrips();

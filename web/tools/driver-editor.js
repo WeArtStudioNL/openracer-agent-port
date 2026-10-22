@@ -104,7 +104,7 @@ export function initDriver(api) {
             <div class="group">Keyframes of the hands</div>
             <div class="hint">Set the movement of the hands, the chest and the head yourself. Make keys from the automatic movement, turn the steering slider to a place (from -450° to 450°: the left and the right side are set separately), take a hand and move it, turn it, or set its grip, or turn the chest or the head: a key is made at that turn. The hands go through the keys, and the way back is the same movement the other way. Click a mark under the slider to go to a key (blue: left hand, red: right hand, yellow: chest, purple: head).</div>
             <div class="row drv-wrap"><button class="small accent" id="drvKeysBake">Make keys from the automatic movement</button><button class="small ghost" id="drvKeysOff">Back to automatic</button></div>
-            <div class="row drv-wrap"><button class="small" id="drvKeyAdd">Add a key here</button><button class="small ghost" id="drvKeyDel">Delete the key here</button><label class="check"><input type="checkbox" id="drvKeyWheel"> rides the wheel</label></div>
+            <div class="row drv-wrap"><button class="small" id="drvKeyAdd">Add a key here</button><button class="small ghost" id="drvKeyDel">Delete the key here</button><button class="small" id="drvKeyMirror" title="Replace the keys on the side of the negative degrees by the mirror image of the keys on the positive side: the hands changed over and mirrored">Mirror the + keys to the − side</button><label class="check"><input type="checkbox" id="drvKeyWheel"> rides the wheel</label></div>
             <div class="hint" id="drvKeyInfo">No keys: the hands move by themselves.</div>
             <div class="hint">Throttle</div><input type="range" id="drvThrottle" min="0" max="1" step="0.01" value="0" style="width:100%">
             <div class="hint">Brake</div><input type="range" id="drvBrake" min="0" max="1" step="0.01" value="0" style="width:100%">
@@ -210,6 +210,12 @@ export function initDriver(api) {
         if (drv.driver.bakeKeys()) { status("Keys made from the automatic movement. Turn the steering slider to a key and move a hand to change it.", "ok"); refreshKeys(); } else status("The keys could not be made.", "error");
     };
     el("drvKeysOff").onclick = () => { if (!drv.driver) return; drv.driver.config.keys = null; syncTargets(); refreshKeys(); };
+    el("drvKeyMirror").onclick = () => {
+        if (!drv.driver || !keysAny()) { status("Make keys first.", "error"); return; }
+        const made = drv.driver.mirrorKeys();
+        status(made ? made + " keys mirrored to the negative side (what was there is replaced)." : "There are no keys on the positive side to mirror.", made ? "ok" : "error");
+        refreshKeys();
+    };
     el("drvKeyAdd").onclick = () => {
         const side = KEY_NAME[drv.selected];
         if (!drv.driver || !side) { status("Take a hand, the chest or the head first.", "error"); return; }
@@ -301,7 +307,7 @@ export function initDriver(api) {
         if (drv.driver) drv.driver.root.visible = on;
         ring.visible = on && !!drv.driver; ringHit.visible = true;
         for (const t of Object.values(targets)) t.visible = on && !!drv.driver;
-        if (!on) { drv.selected = null; attach(); }
+        if (!on) { drv.selected = null; attach(); if (api.steeringPreview) api.steeringPreview(null, null, null); }
         info();
     }
     function info() {
@@ -445,6 +451,7 @@ export function initDriver(api) {
         d.steering.axis.copy(axis);
         wheelPivot.quaternion.setFromAxisAngle(axis, -drv.steer * Math.PI / 180);
         d.steering.angle = -drv.steer * Math.PI / 180;
+        if (api.steeringPreview && !drv.benchParent) api.steeringPreview(ringGroup.position, axis, -drv.steer * Math.PI / 180);       // (the steering wheel of the model turns with it)
         d.steering.degrees = 450;
         d.update(dt || 0.016, drv.throttle, drv.brake);
         if (d.keysActive()) {

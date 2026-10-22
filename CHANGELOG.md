@@ -20,6 +20,8 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 - **Open a replay** of the main menu is now **Replays**: a window with the saved replays (track, cars, length, date, size; *Watch*, *Download* as a `.openracer-replay` file, *Delete*) and *Import replay…* for a file that someone sent. They are kept in the browser (IndexedDB).
 
 **Car editor**
+- The steering wheel of the model turns with the *Steering* slider of the Driver card (about the ring of the hands), so the hands and the wheel go together; it goes back to rest when the driver is switched off.
+- *Mirror the + keys to the − side* (Driver card, keyframes) replaces the keys at negative degrees by the mirror image of the keys at positive degrees: left hand keys become right hand keys and the other way round, mirrored about the plane through the middle of the wheel, with the chest and the head turned the other way (y and z change sign). The key at 0 stays.
 - The Parts list of the Layers panel shows only the parents, folded: an arrow in front of a part opens what is inside it (the i30: 44 rows instead of 128). It is folded again when a model is loaded, and the parents of a part that is chosen in the view open by themselves.
 - In the test of the car (the physics of the game) the driver goes with the car that is tested (in its frame, as in the game) and is no longer left behind where the car stood; the nodes are hidden then, and when the test stops the driver and its nodes are back.
 - A part that is chosen in the view (a click on a loose part, which opens its window in the Soft body card) is lit in the Parts list of the Layers panel, and the list scrolls to it; it goes out when the part window is closed.

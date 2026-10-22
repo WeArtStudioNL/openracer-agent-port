@@ -1551,6 +1551,31 @@ async function deleteCar() {
 
 // ---- the steering wheel
 
+// The steering wheel of the model turns with the Steering slider of the Driver card (the ring of the hands is the axis and the middle): angle in radians about axis through centre
+// (scene space), or null to put it back where it was
+let steerRest = null;
+function steeringPreview(centre, axis, angle) {
+    const found = state.nodes.find((n) => /steeringwheel|steerwheel/i.test(n.name.replace(/[^a-z0-9]/gi, "")));
+    if (steerRest && (!found || steerRest.object !== found.object)) { steerRest.object.matrix.copy(steerRest.matrix); steerRest.object.matrix.decompose(steerRest.object.position, steerRest.object.quaternion, steerRest.object.scale); steerRest = null; }
+    if (!found) return;
+    const object = found.object;
+    if (!steerRest) { object.updateMatrix(); steerRest = { object, matrix: object.matrix.clone() }; }
+    object.matrix.copy(steerRest.matrix);
+    object.matrix.decompose(object.position, object.quaternion, object.scale);
+    if (angle === null || !angle) { object.updateMatrixWorld(true); return; }
+    object.updateMatrixWorld(true);
+    const parent = object.parent;
+    if (parent) parent.updateMatrixWorld(true);
+    const world = object.matrixWorld.clone();
+    const turn = new THREE.Matrix4().makeTranslation(centre.x, centre.y, centre.z)
+        .multiply(new THREE.Matrix4().makeRotationAxis(axis, angle))
+        .multiply(new THREE.Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z));
+    world.premultiply(turn);
+    if (parent) world.premultiply(parent.matrixWorld.clone().invert());
+    world.decompose(object.position, object.quaternion, object.scale);
+    object.updateMatrixWorld(true);
+}
+
 function updateSteeringInfo() {
     const found = state.nodes.find((n) => /steeringwheel|steerwheel/i.test(n.name.replace(/[^a-z0-9]/gi, "")));
     $("steeringInfo").textContent = !state.nodes.length ? "No model loaded."
@@ -2216,6 +2241,7 @@ tuningFromCar(null); // the Tuning card for a new car
 
 driverEditor = initDriver({
     $, THREE, scene, camera, renderer, controls, status, GLTFLoader,
+    steeringPreview,
     resolve: (file) => OpenRacer.Garage.resolve(state.existingCar, "../" + file),
     setDragging: (on) => { layers.dragging = on; },
     deselectLayers: () => { if (layers.selected) selectLayer(layers.selected); }
