@@ -30,11 +30,13 @@ OpenRacer.Driver = function (config, parent, steering) {
     var a = new V(), b = new V(), c = new V(), t = new V(), pole = new V(), n = new V(), u = new V(), tmp = new V(), tmp2 = new V();
     var qa = new Q(), qb = new Q(), qp = new Q();
 
-    // a state of the hands: how far a hand has moved its grip over the wheel (rad), and the change of grip that is in progress
+    // the hands: riding on the wheel (a grip that goes with it, shift: where on the wheel, as an angle from the rest grip) or free (hovering behind the wheel, on its way to the next grip);
+    // a change blends from where the hand was to where it goes, with a lift towards the driver
     var hand = {
-        left: { shift: 0, from: 0, to: 0, t: 1 },
-        right: { shift: 0, from: 0, to: 0, t: 1 }
+        left: { mode: "ride", shift: 0, t: 1, from: new V(), last: new V() },
+        right: { mode: "ride", shift: 0, t: 1, from: new V(), last: new V() }
     };
+    var seq = { phase: 0, sign: 0 };                   // the steps of passing the hands over (handsStep)
     this.turn = 0;                                     // the turn of the steering wheel (rad), as the model turns it: for the test in the car editor too
     this.throttle = 0;
     this.brake = 0;
@@ -145,39 +147,81 @@ OpenRacer.Driver = function (config, parent, steering) {
         var h = self.config.hands;
         restGrip.left.set(h.left[0], h.left[1], h.left[2]);
         restGrip.right.set(h.right[0], h.right[1], h.right[2]);
+        if (!hand.left.init) { hand.left.last.copy(restGrip.left); hand.right.last.copy(restGrip.right); hand.left.init = hand.right.init = true; }
         if (wheelFrame()) {
             gripAngle.left = angleOf(restGrip.left); gripAngle.right = angleOf(restGrip.right);
             gripSide.left = Math.sin(gripAngle.left) >= 0 ? 1 : -1; gripSide.right = Math.sin(gripAngle.right) >= 0 ? 1 : -1;
         }
     }
-    // a hand would cross the middle of the wheel (the line from the top to the bottom, to the side of the other hand): it lets go and takes the wheel again further back
-    var MARGIN = 40 * Math.PI / 180, REGRIP_TIME = 0.2;
-    function handsStep(dt) {
-        var turn = self.turn;
-        ["left", "right"].forEach(function (name) {
-            var s = hand[name];
-            if (s.t < 1) { s.t = Math.min(1, s.t + dt / REGRIP_TIME); if (s.t >= 1) s.shift = s.to; return; }
-            var other = hand[name === "left" ? "right" : "left"];
-            if (other.t < 1) return;                                          // one hand at a time
-            var alpha = wrap(gripAngle[name] + turn + s.shift), sd = gripSide[name];
-            var inside = sd > 0 ? (alpha >= MARGIN && alpha <= Math.PI - MARGIN) : (alpha <= -MARGIN && alpha >= -Math.PI + MARGIN);
-            if (inside) return;
-            // it left through the top (near 0) or the bottom (near 180 degrees): the new grip is on the other side of the horizontal, 40 degrees from it
-            var throughTop = Math.abs(alpha) < Math.PI / 2;
-            var target = sd * (Math.PI / 2 + (throughTop ? 1 : -1) * 35 * Math.PI / 180);
-            var shift = wrap(target - (gripAngle[name] + turn)) ;
-            // the shift is counted so that it goes on from the one that it had (no jump of whole turns)
-            var diff = wrap(shift - s.shift);
-            s.from = s.shift; s.to = s.shift + diff; s.t = 0;
-        });
+    // How a driver turns a wheel a long way (here to the right; to the left it is the mirror image): hands at 9 and 3 o'clock turn with the wheel; the left hand rides over the top and the
+    // right one down. At about half a turn the right hand lets go and goes back a little behind the left arm; the left hand rides on to about 4 o'clock; then the right hand takes the wheel at the top
+    // (12 o'clock), the left hand lets go at the same moment and takes the top when the right one has pulled a little; both ride on. A hand that comes to 4 o'clock lets go and takes the top again.
+    // Back at the middle the hands go back to 9 and 3 o'clock. Angles: from the top of the wheel, in the way that the wheel turns.
+    var DEG = Math.PI / 180, FIRST = 160 * DEG, PULL_END = 120 * DEG, TAKE_OVER = 40 * DEG, HOME = 50 * DEG, BLEND_TIME = 0.22, BACK = 0.12, LIFT = 0.07;
+    function change(name, mode, shift) {
+        var h = hand[name];
+        h.from.copy(h.last);
+        h.mode = mode;
+        if (shift !== undefined) h.shift = shift;
+        h.t = 0;
     }
+    // where on the wheel (as a shift) a hand has to take hold to be at the top (12 o'clock) now
+    function shiftToTop(name, previous) {
+        var s = wrap(-(gripAngle[name] + self.turn));
+        return previous + wrap(s - previous);                           // (the same place as a shift that goes on from the one that it had, no jump of whole turns)
+    }
+    function handsStep(dt) {
+        ["left", "right"].forEach(function (name) { var h = hand[name]; if (h.t < 1) h.t = Math.min(1, h.t + dt / BLEND_TIME); });
+        var turn = self.turn, sign = turn >= 0 ? 1 : -1, tau = Math.abs(turn);
+        // the hand that leads (goes over the top) has its rest grip before the top, in the way that the wheel turns
+        var lead = sign * gripAngle.left < 0 ? "left" : "right", trail = lead === "left" ? "right" : "left";
+        var beta = function (name) { return wrap(sign * (gripAngle[name] + turn + hand[name].shift)); };
+        var busy = hand.left.t < 1 || hand.right.t < 1;
+        if (seq.phase > 0 && sign !== seq.sign) seq.phase = 0, seq.homing = true;
+        // back at the middle: both hands go back to 9 and 3 o'clock, one at a time
+        if (seq.phase > 0 && tau < HOME) {
+            if (!busy) {
+                var name = hand[lead].shift !== 0 || hand[lead].mode !== "ride" ? lead : trail;
+                if (hand[name].shift !== 0 || hand[name].mode !== "ride") change(name, "ride", 0);
+                if (hand.left.shift === 0 && hand.right.shift === 0 && hand.left.mode === "ride" && hand.right.mode === "ride") seq.phase = 0;
+            }
+            return;
+        }
+        if (seq.homing || (seq.phase === 0 && (hand.left.shift !== 0 || hand.right.shift !== 0 || hand.left.mode !== "ride" || hand.right.mode !== "ride"))) {
+            // not in a turn and not at home: go home
+            if (!busy) {
+                var away = hand.left.shift !== 0 || hand.left.mode !== "ride" ? "left" : (hand.right.shift !== 0 || hand.right.mode !== "ride" ? "right" : null);
+                if (away) change(away, "ride", 0); else seq.homing = false;
+            }
+            if (tau < FIRST) return;
+        }
+        if (busy) return;
+        if (seq.phase === 0) {
+            seq.sign = sign;
+            if (tau >= FIRST) { change(trail, "free"); seq.phase = 1; seq.lead = lead; seq.trail = trail; }
+        } else if (seq.phase === 1) {
+            if (tau < FIRST - 20 * DEG) { change(seq.trail, "ride"); seq.phase = 0; }                                                // the wheel went back
+            else if (beta(seq.lead) >= PULL_END) { change(seq.trail, "ride", shiftToTop(seq.trail, hand[seq.trail].shift)); change(seq.lead, "free"); seq.phase = 2; }
+        } else if (seq.phase === 2) {
+            if (beta(seq.trail) >= TAKE_OVER) { change(seq.lead, "ride", shiftToTop(seq.lead, hand[seq.lead].shift)); seq.phase = 3; }
+        } else if (seq.phase === 3) {
+            // a hand that comes to 4 o'clock lets go and takes the top, when the other is far enough on
+            var first = beta("left") >= beta("right") ? "left" : "right", second = first === "left" ? "right" : "left";
+            if (beta(first) >= PULL_END && beta(second) >= TAKE_OVER) change(first, "ride", shiftToTop(first, hand[first].shift));
+        }
+    }
+    var freeAt = new V();
     function gripPoint(name, out) {
-        var s = hand[name];
+        var h = hand[name];
         if (!self.steering) return out.copy(restGrip[name]);
-        // during a change of grip the hand goes along the rim from the old place to the new one (not straight over the middle of the wheel), and comes off the wheel a little
-        var shift = s.t < 1 ? s.from + (s.to - s.from) * (s.t * s.t * (3 - 2 * s.t)) : s.shift;
-        turned(restGrip[name], self.turn + shift, out);
-        if (s.t < 1) out.addScaledVector(axis, 0.06 * Math.sin(Math.PI * s.t));      // towards the driver
+        turned(restGrip[name], self.turn + h.shift, freeAt);
+        if (h.mode === "free") freeAt.addScaledVector(axis, BACK);                   // hovering behind the wheel, out of the way of the other arm
+        if (h.t < 1) {
+            var f = h.t * h.t * (3 - 2 * h.t);
+            out.copy(h.from).lerp(freeAt, f);
+            out.addScaledVector(axis, LIFT * Math.sin(Math.PI * h.t));
+        } else out.copy(freeAt);
+        h.last.copy(out);
         return out;
     }
 
