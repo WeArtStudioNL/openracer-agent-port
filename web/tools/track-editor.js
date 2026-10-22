@@ -12,6 +12,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { createDesign } from "./track-design.js";
+import { buildTerrain, readHeights } from "./heightmap.js";
 
 const $ = (id) => document.getElementById(id);
 const ROLES = [["road", "Road"], ["track01", "Pit lane"], ["grass", "Grass"], ["ground", "Ground"], ["scenery", "Scenery"], ["decor", "Decor"]];
@@ -544,7 +545,7 @@ function setModel(root, roles) {
     renderParts();
 }
 
-function loadFromFiles(list) {
+function loadFromFiles(list, givenRoles) {
     state.files = new Map();
     for (const file of list) state.files.set(file.name, file);
     const main = [...state.files.keys()].find((n) => /\.glb$/i.test(n)) || [...state.files.keys()].find((n) => /\.gltf$/i.test(n));
@@ -563,12 +564,12 @@ function loadFromFiles(list) {
     });
     status("Loading " + main + " (" + (state.files.get(main).size / 1048576).toFixed(1) + " MB)…");
     // a part of the new model that has the name of a part of the old one keeps its surface
-    const kept = state.parts.size && !state.legacy ? Object.assign({}, state.roles) : null;
+    const kept = givenRoles || (state.parts.size && !state.legacy ? Object.assign({}, state.roles) : null);
     new GLTFLoader(manager).load(urls.get(main), (gltf) => {
         state.legacy = false;
         setModel(gltf.scene, kept);
         $("modelInfo").textContent = main + " (" + (state.files.get(main).size / 1048576).toFixed(1) + " MB), " + state.parts.size + " named parts";
-        status("Model loaded: " + state.parts.size + " parts. " + (kept ? "Parts with the name of an old part keep their surface; check the new ones. " : "") + "Save the track to keep it.", "ok");
+        status("Model loaded: " + state.parts.size + " parts. " + (kept && !givenRoles ? "Parts with the name of an old part keep their surface; check the new ones. " : "") + "Save the track to keep it.", "ok");
         updateMarkers();
     }, undefined, (error) => status("Could not read the model: " + (error.message || error), "error"));
 }
@@ -1386,9 +1387,134 @@ $("delete").onclick = deleteTrack;
 $("id").addEventListener("input", () => { state.idEdited = true; });
 $("name").addEventListener("input", () => { if (!state.idEdited && !state.existingId) $("id").value = slug($("name").value); });
 
+// ---- the first choice, and the height map
+
+function dialog(title, build) {
+    const shade = document.createElement("div");
+    shade.style.cssText = "position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 50; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; font-family: inherit;";
+    const box = document.createElement("div");
+    box.style.cssText = "width: 440px; max-width: calc(100% - 32px); max-height: calc(100% - 32px); overflow-y: auto; background: #1d232c; border: 1px solid #323c4a; border-radius: 10px; padding: 18px 20px; color: #dfe6ef;";
+    const heading = document.createElement("div");
+    heading.textContent = title;
+    heading.style.cssText = "font-size: 18px; font-weight: bold; margin-bottom: 10px;";
+    box.appendChild(heading);
+    shade.appendChild(box);
+    document.body.appendChild(shade);
+    const close = () => shade.remove();
+    build(box, close);
+    return { close, shade };
+}
+
+// At the start: open a track, make a track from a height map, or a new track
+function startDialog() {
+    dialog("Track editor", (box, close) => {
+        const note = document.createElement("div");
+        note.textContent = "What do you want to do?";
+        note.style.cssText = "color: #9aa8ba; margin-bottom: 12px;";
+        box.appendChild(note);
+        const choice = (label, hint, action) => {
+            const b = document.createElement("button");
+            b.className = "accent";
+            b.style.cssText = "display: block; width: 100%; text-align: left; margin-bottom: 8px; padding: 10px 14px; height: auto;";
+            b.innerHTML = "<b></b><div style='font-weight: normal; font-size: 12.5px; opacity: 0.8; margin-top: 2px'></div>";
+            b.firstChild.textContent = label; b.lastChild.textContent = hint;
+            b.onclick = action;
+            box.appendChild(b);
+            return b;
+        };
+        const openRow = document.createElement("div");
+        openRow.style.cssText = "display: none; gap: 8px; margin: 0 0 8px;";
+        const select = document.createElement("select");
+        select.style.flex = "1";
+        select.innerHTML = state.tracks.map((t) => "<option value=\"" + String(t.id).replace(/"/g, "&quot;") + "\">" + String(t.name || t.id).replace(/[<>&]/g, "") + " (" + String(t.id).replace(/[<>&]/g, "") + ")</option>").join("");
+        const go = document.createElement("button");
+        go.className = "primary";
+        go.textContent = "Open";
+        go.onclick = () => { $("existing").value = select.value; close(); loadExisting(); };
+        openRow.append(select, go);
+        choice("Open track", state.tracks.length ? state.tracks.length + " tracks to change" : "There are no tracks yet", () => { if (state.tracks.length) openRow.style.display = openRow.style.display === "none" ? "flex" : "none"; });
+        box.appendChild(openRow);
+        choice("Import height map", "A track from a height map (16 bit grey PNG) and a colour map", () => { close(); heightDialog(); });
+        choice("New track", "Start empty: import a model, or draw the road with nodes", () => { close(); newTrack(); });
+    });
+}
+
+// The height map and the colour map: the size of the square in metres, the height of white, and how fine the mesh is
+function heightDialog() {
+    dialog("Import height map", (box, close) => {
+        const field = (label, node, hint) => {
+            const row = document.createElement("div");
+            row.style.marginBottom = "10px";
+            const l = document.createElement("label");
+            l.textContent = label;
+            l.style.cssText = "display: block; font-size: 12.5px; color: #9aa8ba; margin-bottom: 3px;";
+            row.append(l, node);
+            if (hint) { const h = document.createElement("div"); h.className = "hint"; h.textContent = hint; h.style.cssText = "font-size: 12px; color: #7f90a5; margin-top: 3px;"; row.appendChild(h); }
+            box.appendChild(row);
+            return row;
+        };
+        const input = (type, extra) => { const e = document.createElement("input"); e.type = type; Object.assign(e, extra || {}); e.style.width = "100%"; return e; };
+        const heightFile = input("file", { accept: ".png,.jpg,.jpeg,.webp" });
+        const colourFile = input("file", { accept: ".png,.jpg,.jpeg,.webp" });
+        const info = document.createElement("div");
+        info.style.cssText = "font-size: 12.5px; color: #9aa8ba; margin: -4px 0 10px;";
+        const size = input("number", { min: 10, step: 1, value: 1024 });
+        const top = input("number", { min: 0, step: 1, value: 60 });
+        const step = document.createElement("select");
+        step.style.width = "100%";
+        step.innerHTML = "<option value='2'>every 2nd pixel (fine, heavy)</option><option value='4' selected>every 4th pixel</option><option value='8'>every 8th pixel (light)</option><option value='1'>every pixel (too heavy for 1024 × 1024)</option>";
+        const role = document.createElement("select");
+        role.style.width = "100%";
+        role.innerHTML = "<option value='road'>Road (all the ground has the grip of the road)</option><option value='grass'>Grass</option><option value='ground'>Ground</option>";
+        field("Height map (greyscale, 16 bit PNG: black is low, white is high)", heightFile);
+        box.appendChild(info);
+        field("Colour map (a picture of the colour of the same square, any size: 2048 or 4096 for a map of 1024)", colourFile);
+        field("Size of the square (m)", size, "1024 pixels and 1024 m: a pixel is a metre.");
+        field("Height of white (m)", top, "Black is the level of the start, white is this many metres higher.");
+        field("Mesh", step);
+        field("Surface", role, "One grip for the whole map for now.");
+        let map = null;
+        heightFile.onchange = async () => {
+            map = null; info.textContent = "";
+            if (!heightFile.files[0]) return;
+            try {
+                map = await readHeights(heightFile.files[0]);
+                info.textContent = map.width + " × " + map.height + " pixels, " + map.depth + " bit" + (map.depth < 16 ? " (a 16 bit picture has smoother slopes)" : "") + (map.width !== map.height ? ". Not a square: the map is as wide as the size and as deep as its shape gives." : "");
+                size.value = map.width;
+            } catch (error) { info.textContent = error.message; info.style.color = "#ff8a80"; return; }
+            info.style.color = "#9aa8ba";
+        };
+        const row = document.createElement("div");
+        row.style.cssText = "display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px;";
+        const cancel = document.createElement("button");
+        cancel.textContent = "Cancel";
+        cancel.onclick = () => { close(); startDialog(); };
+        const make = document.createElement("button");
+        make.className = "primary";
+        make.textContent = "Make the track";
+        make.onclick = async () => {
+            if (!heightFile.files[0]) { info.textContent = "Choose the height map first."; info.style.color = "#ff8a80"; return; }
+            make.disabled = true; make.textContent = "Making…";
+            try {
+                const result = await buildTerrain(heightFile.files[0], colourFile.files[0] || null, { size: parseFloat(size.value), top: parseFloat(top.value), step: parseInt(step.value, 10) });
+                close();
+                newTrack();
+                loadFromFiles([result.file], { terrain: role.value });
+                status("The height map is a mesh of " + result.grid[0] + " × " + result.grid[1] + " points (" + result.triangles + " triangles), " + Math.round(result.size[0]) + " × " + Math.round(result.size[1]) + " m. Place the start on it, add gates and save.", "ok");
+            } catch (error) {
+                make.disabled = false; make.textContent = "Make the track";
+                info.textContent = error.message || String(error); info.style.color = "#ff8a80";
+            }
+        };
+        row.append(cancel, make);
+        box.appendChild(row);
+    });
+}
+$("importHeight").onclick = heightDialog;
+
 renderLegend();
 renderParts();
 fillEnv(OpenRacer.environmentDefaults());
 applyEnv();
 updateLineNote();
-openFromAddress();
+openFromAddress().then(() => { if (!new URLSearchParams(window.location.search).get("track")) startDialog(); });
