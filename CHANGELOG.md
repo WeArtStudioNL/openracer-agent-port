@@ -4,6 +4,9 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 ## Unreleased
 
+**Race**
+- In the race column of the main menu, a list with a tick for every car chooses which cars may race against you (shown when a race of laps or AI opponents is chosen; *all* and *none* above it; all are ticked by default and the choice is remembered). The AI cars are taken from the ticked cars in turn (`aicars` in the address); with none ticked every car may race.
+
 **Track editor**
 - The AI racing line is drawn in the view (yellow, with arrows in the direction it is driven; *Show the line* switches it off), and can be edited with nodes: *Edit the line* shows nodes about 8 m apart (blue line while editing), a click takes a node and the gizmo moves it over the road (the height follows the road), Shift + click on the road adds a node on the nearest part of the line, *Add node* adds one after the chosen node, Delete or *Delete node* takes one away, *Apply line* saves a smooth curve through the nodes (a point every 2 m) as `racing_line` of the track, *Cancel* keeps it as it was. A designed track without a recorded line can be edited from the middle of its road.
 

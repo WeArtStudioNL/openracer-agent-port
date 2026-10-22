@@ -79,6 +79,10 @@ var MainMenu = (function() {
             "#mainMenu .option button { background: #2c3541; color: #fff; border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; min-width: 120px; }" +
             "#mainMenu .option button:hover { background: #3a4656; }" +
             "#mainMenu .record { color: #9aa8ba; font-size: 14px; margin: 6px 0 14px; }" +
+            "#mainMenu .aicars { background: #1d232c; border: 2px solid #2c3541; border-radius: 8px; padding: 8px 14px; margin-bottom: 10px; }" +
+            "#mainMenu .aicars h3 { margin: 2px 0 6px; font-size: 14px; color: #cfd8e3; font-weight: normal; display: flex; justify-content: space-between; }" +
+            "#mainMenu .aicars h3 a { color: #7fa6e0; cursor: pointer; font-size: 12px; margin-left: 10px; }" +
+            "#mainMenu .aicars label { display: flex; align-items: center; gap: 8px; padding: 3px 0; color: #cfd8e3; cursor: pointer; }" +
             // the badge of a car or track that is not of the server: the garage of this browser or a folder on the PC (Garage.js)
             "#mainMenu .badge { display: inline-block; font-size: 11px; font-weight: normal; letter-spacing: 1px; text-transform: uppercase; vertical-align: middle; " +
             "margin-left: 8px; padding: 2px 7px; border-radius: 10px; background: #3b5b8a; color: #dbe7f7; }" +
@@ -459,12 +463,25 @@ var MainMenu = (function() {
         document.body.appendChild(overlay);
     }
 
+    // the cars that may race against you (the ticks of the race column): all of them when none is ticked off; the ids go in the address as aicars
+    function allowedAiCars() {
+        var ids = cars.map(function(c) { return c.id; });
+        if(!Array.isArray(raceOptions.aiCars)) return ids;
+        return ids.filter(function(id) { return raceOptions.aiCars.indexOf(id) >= 0; });
+    }
+    function aiCarsParameter() {
+        if(!Array.isArray(raceOptions.aiCars)) return "";
+        var allowed = allowedAiCars();
+        if(allowed.length === cars.length || !allowed.length) return "";
+        return "&aicars=" + allowed.map(encodeURIComponent).join(",");
+    }
+
     function start() {
         if(!choice.car || !choice.track) return;
         remember();
         window.location.href = window.location.pathname + "?car=" + encodeURIComponent(choice.car) + "&track=" + encodeURIComponent(choice.track) +
             "&ai=" + raceOptions.ai + "&difficulty=" + raceOptions.difficulty + "&ghost=" + (raceOptions.ghost ? 1 : 0) + "&records=" + (raceOptions.records ? 1 : 0) +
-            "&laps=" + (raceOptions.laps || 0) + "&wear=" + (raceOptions.wear === undefined ? 1 : raceOptions.wear);
+            "&laps=" + (raceOptions.laps || 0) + "&wear=" + (raceOptions.wear === undefined ? 1 : raceOptions.wear) + aiCarsParameter();
     }
 
     function render(error) {
@@ -515,6 +532,42 @@ var MainMenu = (function() {
         raceColumn.appendChild(option("AI opponents", raceOptions.ai === 0 ? "None" : String(raceOptions.ai), function() { raceOptions.ai = counts[(counts.indexOf(raceOptions.ai) + 1) % counts.length]; }));
         var levels = ["easy", "normal", "hard"], levelNames = { easy: "Easy", normal: "Normal", hard: "Hard" };
         raceColumn.appendChild(option("Difficulty", levelNames[raceOptions.difficulty] || "Normal", function() { raceOptions.difficulty = levels[(levels.indexOf(raceOptions.difficulty) + 1) % levels.length]; }));
+        if((raceOptions.laps > 0 || raceOptions.ai > 0) && cars.length > 1) {
+            // which cars may race against you: tick them
+            var box = document.createElement("div");
+            box.className = "aicars";
+            var title = document.createElement("h3");
+            title.innerHTML = "<span>Cars in the race</span>";
+            var links = document.createElement("span");
+            [["all", function() { return null; }], ["none", function() { return []; }]].forEach(function(entry) {
+                var a = document.createElement("a");
+                a.textContent = entry[0];
+                a.onclick = function() { raceOptions.aiCars = entry[1](); rememberRace(); render(); };
+                links.appendChild(a);
+            });
+            title.appendChild(links);
+            box.appendChild(title);
+            var allowed = allowedAiCars();
+            cars.forEach(function(car) {
+                var label = document.createElement("label");
+                var tick = document.createElement("input");
+                tick.type = "checkbox";
+                tick.checked = allowed.indexOf(car.id) >= 0;
+                tick.onchange = function() {
+                    var current = allowedAiCars();
+                    var at = current.indexOf(car.id);
+                    if(tick.checked && at < 0) current.push(car.id);
+                    else if(!tick.checked && at >= 0) current.splice(at, 1);
+                    raceOptions.aiCars = current.length === cars.length ? null : current;
+                    rememberRace();
+                    render();
+                };
+                label.appendChild(tick);
+                label.appendChild(document.createTextNode(car.name || car.id));
+                box.appendChild(label);
+            });
+            raceColumn.appendChild(box);
+        }
         var wears = [0, 1, 3], wearNames = { 0: "Off", 1: "On", 3: "Fast (short races)" };
         raceColumn.appendChild(option("Tyre wear and fuel", wearNames[raceOptions.wear] || "On", function() { raceOptions.wear = wears[(wears.indexOf(raceOptions.wear === undefined ? 1 : raceOptions.wear) + 1) % wears.length]; }));
         raceColumn.appendChild(option("Ghost of your best lap", raceOptions.ghost ? "On" : "Off", function() { raceOptions.ghost = !raceOptions.ghost; }));
@@ -527,7 +580,7 @@ var MainMenu = (function() {
             (OpenRacer.Records && OpenRacer.Records.anyGhost(choice.track)));
         record.innerHTML = (raceOptions.laps ? "A race of " + raceOptions.laps + " laps from a standing start, with a countdown; practice has no end.<br>" : "") +
             (best ? "Best lap with this car: <b>" + OpenRacer.Records.format(best) + "</b>" : "No lap record with this car here yet.") +
-            (raceOptions.ai > 0 ? "<br>" + (hasLine ? "The AI drives the racing line of this track." : "The AI needs a racing line: drive one lap here first, or draw the track in the track editor.") : "");
+            (raceOptions.ai > 0 && Array.isArray(raceOptions.aiCars) && !raceOptions.aiCars.length ? "<br>No car is ticked: every car may race." : "") + (raceOptions.ai > 0 ? "<br>" + (hasLine ? "The AI drives the racing line of this track." : "The AI needs a racing line: drive one lap here first, or draw the track in the track editor.") : "");
         if(trackChosen && trackChosen.dragstrip && OpenRacer.DragStrip) {
             raceColumn.appendChild(option("Drag strip", "Top 50", function() { OpenRacer.DragStrip.showTop(trackChosen); }));
         }

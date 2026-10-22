@@ -57,6 +57,7 @@ function raceOptionsFromQuery(query) {
         ghost: query.get("ghost") !== "0",
         records: query.get("records") !== "0",
         laps: Math.max(0, Math.min(99, parseInt(query.get("laps") || "0", 10) || 0)), // 0: practice, no end
+        aiCars: query.get("aicars") ? query.get("aicars").split(",").filter(Boolean) : null,        // the ids of the cars that may race against you (null: all)
         wear: Math.max(0, Math.min(5, parseFloat(query.get("wear") === null ? "1" : query.get("wear")) || 0)) // tyre wear and fuel: 0 off, 1 as it is, 3 fast
     };
 }
@@ -120,6 +121,7 @@ function setupRace() {
         var startIndex = race.line.nearest(start.x, start.z);
         race.line.origin = startIndex; // the laps of the line are counted from the start
         var cars = race.allCars.length ? race.allCars : [carConfig];
+        if(options.aiCars) { var chosen = cars.filter(function(c) { return options.aiCars.indexOf(c.id) >= 0; }); if(chosen.length) cars = chosen; }
         for(var i = 0; i < options.ai; i++) {
             var config = cars[i % cars.length];
             var opponent = new OpenRacer.Opponent(config, race.line, { skill: skill * (1 - 0.04 * (i % 3)), color: colours[i % colours.length], name: (config.name || config.id) + " " + (i + 1) });
