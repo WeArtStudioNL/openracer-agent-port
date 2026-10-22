@@ -88,6 +88,7 @@ OpenRacer.Replay = (function() {
         v.qx = array[offset + P.qx]; v.qy = array[offset + P.qy]; v.qz = array[offset + P.qz]; v.qw = array[offset + P.qw];
         v.vx = array[offset + P.vx]; v.vy = array[offset + P.vy]; v.vz = array[offset + P.vz];
         v.steerApplied = array[offset + P.steer];
+        object.throttle = array[offset + P.throttle]; object.brakePedal = array[offset + P.brake];      // (the driver model works the pedals)
         for(var k = 0; k < 4; k++) {
             var w = v.wheels[k], o = offset + FIELDS + k * WHEEL_FIELDS;
             w.center.x = array[o]; w.center.y = array[o + 1]; w.center.z = array[o + 2];

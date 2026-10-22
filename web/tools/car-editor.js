@@ -13,6 +13,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { initSoftBody } from "./softbody-editor.js";
+import { initDriver } from "./driver-editor.js";
 
 const $ = (id) => document.getElementById(id);
 const SLOTS = ["FR", "FL", "RL", "RR"];
@@ -22,6 +23,7 @@ const ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const FILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/;
 
 let softBodyEditor = null; // the Soft body card (softbody-editor.js), made at the end
+let driverEditor = null;   // the Driver card (driver-editor.js), made at the end
 const state = {
     files: new Map(),       // name -> File, the files that were picked
     mainFile: null,         // name of the glb or gltf among them
@@ -352,6 +354,7 @@ resize();
     requestAnimationFrame(loop);
     if (window.benchFrame) window.benchFrame(now || performance.now()); // the test bench, once the module has made it (below)
     updateFlames(now || performance.now());
+    if (driverEditor) driverEditor.frame(0.016);
     renderer.render(scene, camera);
     renderThumbnail();
 })();
@@ -867,6 +870,7 @@ function gizmoMoved() {
 }
 
 function selectLayer(id) {
+    if (driverEditor) driverEditor.deselect();
     layers.selected = layers.selected === id ? null : id;
     const sel = layers.selected;
     gizmo.detach();
@@ -1396,6 +1400,8 @@ function buildConfig(id) {
         }
     }
     if (exhaust.length) config.exhaust = exhaustConfig();
+    const driverConfig = driverEditor && driverEditor.read();
+    if (driverConfig) config.driver = driverConfig;
     if (softBodyEditor) {
         const soft = softBodyEditor.read();
         if (soft.softbody) config.softbody = soft.softbody;
@@ -1444,6 +1450,19 @@ async function save() {
             config.model.offset = [num("offsetX") || 0, num("offsetY") || 0, num("offsetZ") || 0];
         }
 
+        // the driver model: a new file is saved as driver.glb in the folder of the car; the one that the car has goes along when it is saved under another id
+        if (config.driver) {
+            const fresh = driverEditor.newFile();
+            const kept = driverEditor.existingFile();
+            if (fresh) { uploads.push(["driver.glb", fresh]); config.driver.file = "cars/" + id + "/driver.glb"; }
+            else if (kept && id !== state.existingId) {
+                const blob = await (await fetch(OpenRacer.Garage.resolve(state.existingCar, "../" + kept))).blob();
+                uploads.push(["driver.glb", blob]);
+                config.driver.file = "cars/" + id + "/driver.glb";
+            } else if (kept) config.driver.file = kept;
+            else delete config.driver;
+        }
+
         // what the tuning menu of the game has put in the configuration, and that this form does not have, is kept
         const old = state.existingCar;
         if (old && id === state.existingId) {
@@ -1466,6 +1485,7 @@ async function save() {
         state.existingCar = Object.assign({}, config, { id });
         state.files = new Map();
         state.mainFile = null;
+        if (driverEditor) driverEditor.saved(config.driver ? config.driver.file : null);
         await refreshList(id);
         $("delete").style.display = "";
         status(saved.where === "server" ? "Saved as cars/" + id + ". It is in the main menu of the game now."
@@ -1566,6 +1586,7 @@ function fill(car) {
     fillCameras(OpenRacer.cameraSettings(car));
     loadExhaust(car.exhaust);
     if (softBodyEditor) softBodyEditor.fill(car);
+    if (driverEditor) driverEditor.fill(car);
     fillEngineSim(OpenRacer.engineSimParams(car));
     stopPreview();
     engineSimChanged();
@@ -1618,6 +1639,7 @@ function loadExisting() {
 
 function newCar() {
     if (softBodyEditor) softBodyEditor.fill({});
+    if (driverEditor) driverEditor.fill({});
     fillEngineSim(OpenRacer.engineSimParams(null));
     tuningFromCar(null);
     stopPreview();
@@ -2148,6 +2170,13 @@ function driveFrame(dt) {
 $("testDrive").addEventListener("click", toggleDrive);
 $("testReset").addEventListener("click", resetCar);
 tuningFromCar(null); // the Tuning card for a new car
+
+driverEditor = initDriver({
+    $, THREE, scene, camera, renderer, controls, status, GLTFLoader,
+    resolve: (file) => OpenRacer.Garage.resolve(state.existingCar, "../" + file),
+    setDragging: (on) => { layers.dragging = on; },
+    deselectLayers: () => { if (layers.selected) selectLayer(layers.selected); }
+});
 
 softBodyEditor = initSoftBody({
     $, THREE, scene, camera, renderer, controls, bench, status, startBench, stopBench,

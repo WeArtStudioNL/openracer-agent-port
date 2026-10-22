@@ -182,6 +182,14 @@ OpenRacer.Car = function( config, domElement ) {
         tobj.wheelsLoaded = true;
         // the collision shape of the car, from its model (CollisionProxy.js), for the 3D physics
         OpenRacer.CollisionProxy.apply(tobj, model, modelMid);
+        // the driver: a model with a skeleton that holds the steering wheel and works the pedals (Driver.js), when the car has one
+        var driverConfig = config.driver;
+        if(driverConfig && driverConfig.enabled && driverConfig.file && OpenRacer.Driver) {
+            var driver = new OpenRacer.Driver(driverConfig, model.tilt, model.steeringWheel);
+            driver.load(OpenRacer.Garage ? OpenRacer.Garage.resolve(config, driverConfig.file) : driverConfig.file, OpenRacer.Garage ? OpenRacer.Garage.manager(config) : undefined,
+                function() { tobj.driver = driver; },
+                function(error) { console.warn("The driver model could not be loaded: " + (error && error.message ? error.message : error)); });
+        }
     }, function(message) {
         tobj.loadError = message;
         console.error(message);
@@ -284,6 +292,11 @@ OpenRacer.Car = function( config, domElement ) {
             var sw = this.steeringWheel;
             var ratio = (sw.degrees * Math.PI / 180) / this.maxTurn;
             sw.object.quaternion.setFromAxisAngle(sw.axis, -v.steerApplied * ratio);
+        }
+        // the driver: the hands on the steering wheel, the feet on the pedals (the head is not drawn in the cockpit view, it is in front of the camera)
+        if(this.driver) {
+            this.driver.setCockpit(this.cameraMode === 3);
+            this.driver.update(delta || 0.016, this.throttle, this.brakePedal);
         }
         // the checkpoint of the road under the rear wheel
         var rear = w[2];
