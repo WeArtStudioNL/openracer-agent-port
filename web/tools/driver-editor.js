@@ -86,7 +86,7 @@ export function initDriver(api) {
             <div class="row" id="drvModes"><button class="small accent" data-m="move">Move (W)</button><button class="small ghost" data-m="rotate">Rotate (E)</button><button class="small ghost" data-m="scale" id="drvScaleMode">Scale (R)</button></div>
             <div id="drvGripRow" style="display:none">
                 <div class="hint">Grip of this hand <span id="drvGripOut">0%</span> (the fingers, open to closed)</div><input type="range" id="drvGrip" min="0" max="100" step="1" value="0" style="width:100%">
-                <div class="row"><select id="drvCurl"><option value="down">Fingers close downwards</option><option value="up">Fingers close upwards</option><option value="front">Fingers close to the front</option><option value="back">Fingers close to the back</option></select></div>
+                <div class="row"><select id="drvCurl"><option value="x">Fingers close: +x of the bones</option><option value="-x">Fingers close: -x of the bones (the other way)</option></select></div>
                 <div class="hint">Turn the hand with Rotate (E): it turns about the middle of the wheel as it goes round it.</div>
             </div>
             <div class="hint">Click a node in the view to take it: the coloured balls are the hands and the feet, the small cubes the elbows and the knees. Click the figure to take the model, click the grey ring to take the ring of the hands: match it to the steering wheel of the model with the gizmo (move, rotate, scale: its size is where the hands hold).</div>
@@ -144,7 +144,7 @@ export function initDriver(api) {
         if (hand && drv.driver) {
             const g = drv.driver.config.hands.grip[drv.selected === "handL" ? "left" : "right"] || 0;
             el("drvGrip").value = Math.round(g * 100); el("drvGripOut").textContent = Math.round(g * 100) + "%";
-            el("drvCurl").value = drv.driver.config.grip_curl || "down";
+            el("drvCurl").value = drv.driver.config.grip_curl || "x";
         }
         el("drvScaleMode").style.display = drv.selected === "wheel" ? "" : "none";
     }

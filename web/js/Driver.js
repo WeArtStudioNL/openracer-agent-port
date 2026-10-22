@@ -113,10 +113,9 @@ OpenRacer.Driver = function (config, parent, steering) {
         if (self.bones.head) restScale.set(self.bones.head, self.bones.head.scale.clone());
         findFingers();
     };
-    // ---- the fingers: every bone below a hand, except the bones of the palm, curls about an axis that is found from the direction of the finger and the way the hand closes (down, in the
-    // T pose, the palm faces down; the config says otherwise). The three joints of a finger curl by 75, 95 and 65 degrees at full grip, the thumb by less.
-    var CURL = [75, 95, 65], CURL_THUMB = [35, 40, 35];
-    var CURL_DIRECTIONS = { down: [0, -1, 0], up: [0, 1, 0], front: [0, 0, 1], back: [0, 0, -1] };
+    // ---- the fingers: every bone below a hand, except the bones of the palm, turns about its local x axis (the way a Blender rig is made: all the joints of a finger close by turning
+    // 65 degrees about their local x; the thumb the same). grip_curl "x" or "-x" is the way round.
+    var CURL_DEGREES = 65;
     this.fingers = { armL: [], armR: [] };
     var fingerRest = new Map();                        // finger bone -> its local rotation in the pose of the model (open)
     function findFingers() {
@@ -124,10 +123,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         if (!self.model) return;
         fingerRest.forEach(function (q, bone) { bone.quaternion.copy(q); });                  // (open again, whatever the grip was)
         self.root.updateMatrixWorld(true);
-        var qcar = new Q(), qbone = new Q(), pf = new V(), pc = new V(), dir = new V(), ax = new V();
-        self.parent.getWorldQuaternion(qcar);
-        // (the directions are in the space of the car: down, up, front and back)
-        var name = self.config.grip_curl || "down", c = new V().fromArray(CURL_DIRECTIONS[name] || CURL_DIRECTIONS.down).applyQuaternion(qcar);
+        var axisX = new V(self.config.grip_curl === "-x" ? -1 : 1, 0, 0);
         ["armL", "armR"].forEach(function (key) {
             var hand = self.bones[key] && self.bones[key][2];
             if (!hand) return;
@@ -138,18 +134,8 @@ OpenRacer.Driver = function (config, parent, steering) {
                 var kids = bone.children.filter(function (k) { return k.isBone; });
                 var isPalm = /palm|meta/i.test(bone.name) && depth === 0;
                 if (!isPalm && bone !== hand && !(deform && !/^DEF-/.test(bone.name))) {
-                    bone.getWorldPosition(pf);
-                    if (kids.length) kids[0].getWorldPosition(pc); else if (bone.parent) { bone.parent.getWorldPosition(pc); pc.copy(pf).multiplyScalar(2).sub(pc); } else return;
-                    dir.subVectors(pc, pf);
-                    if (dir.lengthSq() > 1e-12) {
-                        dir.normalize();
-                        ax.crossVectors(dir, c);
-                        if (ax.lengthSq() < 1e-6) ax.set(1, 0, 0);
-                        ax.normalize();
-                        bone.getWorldQuaternion(qbone);
-                        self.fingers[key].push({ bone: bone, depth: depth, thumb: thumb, axis: ax.clone().applyQuaternion(qbone.invert()), rest: fingerRest.get(bone) || fingerRest.set(bone, bone.quaternion.clone()).get(bone) });
-                        depth++;
-                    }
+                    self.fingers[key].push({ bone: bone, depth: depth, thumb: thumb, axis: axisX, rest: fingerRest.get(bone) || fingerRest.set(bone, bone.quaternion.clone()).get(bone) });
+                    depth++;
                 } else if (isPalm) depth = 0;
                 kids.forEach(function (k) { walk(k, depth, thumb || /thumb/i.test(k.name)); });
             };
@@ -161,8 +147,7 @@ OpenRacer.Driver = function (config, parent, steering) {
     // closes the fingers of a hand (0 open, 1 closed)
     function curl(key, amount) {
         (self.fingers[key] || []).forEach(function (f) {
-            var angles = f.thumb ? CURL_THUMB : CURL, deg = angles[Math.min(f.depth, angles.length - 1)];
-            f.bone.quaternion.copy(f.rest).multiply(qf.setFromAxisAngle(f.axis, deg * DEG_TO_RAD * amount));
+            f.bone.quaternion.copy(f.rest).multiply(qf.setFromAxisAngle(f.axis, CURL_DEGREES * DEG_TO_RAD * amount));
         });
     }
     var DEG_TO_RAD = Math.PI / 180;
@@ -430,7 +415,7 @@ OpenRacer.Driver.defaults = function () {
         enabled: false, file: "", position: [0, 0, 0], rotation: [0, 0, 0], scale: 1, bones: {},
         hands: { left: [0.15, 0.2, 0.3], right: [-0.15, 0.2, 0.3] },
         feet: { left: [0.1, -0.1, 0.5], right: [-0.1, -0.1, 0.5], travel: 0.06, direction: [0, -0.5, 0.85] },
-        elbow_out: 0.5, knee_out: 0.15, poles: null, wheel: null, pivot: "", grip_curl: "down", chest: { rotation: [0, 0, 0] }, head: { rotation: [0, 0, 0] }
+        elbow_out: 0.5, knee_out: 0.15, poles: null, wheel: null, pivot: "", grip_curl: "x", chest: { rotation: [0, 0, 0] }, head: { rotation: [0, 0, 0] }
     };
 };
 OpenRacer.Driver.withDefaults = function (c) {
