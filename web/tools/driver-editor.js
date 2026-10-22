@@ -318,6 +318,7 @@ export function initDriver(api) {
         d.setModel(sceneRoot);
         if (fresh && unturned && d.facing === -1) { d.config.rotation = [0, 180, 0]; d.place(); d.turnedRound = true; }
         drv.driver = d;
+        if (drv.benchParent) d.setParent(drv.benchParent);          // (while the car is tested the figure is in its frame)
         syncTargets();
         fillBones();
         syncFields();
@@ -498,6 +499,25 @@ export function initDriver(api) {
     }
     function deselect() { if (drv.selected) { drv.selected = null; attach(); } }
 
+    // the test of the car (the physics of the game): the figure and the wheel it holds go with the car that is tested, in its frame, and the nodes are hidden; when the test stops they go back
+    function attachToBench(parent) {
+        if (!drv.driver) return;
+        drv.benchParent = parent;
+        drv.driver.setParent(parent);
+        parent.add(wheelPivot);
+        for (const t of Object.values(targets)) t.visible = false;
+        ring.visible = false; ringHit.visible = false;
+        gizmo.detach();
+    }
+    function detachFromBench() {
+        if (!drv.benchParent) return;
+        drv.benchParent = null;
+        scene.add(wheelPivot);
+        if (drv.driver) drv.driver.setParent(scene);
+        ringHit.visible = true;
+        setEnabled(drv.enabled);
+    }
+
     // is the driver (the figure or one of its nodes) under the pointer: then a click is for the driver and not for the car part behind it
     const underRay = new THREE.Raycaster();
     function under(e) {
@@ -508,5 +528,5 @@ export function initDriver(api) {
         return underRay.intersectObjects(objects, true).length > 0;
     }
 
-    return { read, fill, frame, under, newFile, existingFile: () => drv.existingFile, deselect, saved: (path) => { drv.file = null; drv.existingFile = path; } };
+    return { read, fill, frame, under, attachToBench, detachFromBench, newFile, existingFile: () => drv.existingFile, deselect, saved: (path) => { drv.file = null; drv.existingFile = path; } };
 }

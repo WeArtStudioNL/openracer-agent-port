@@ -546,7 +546,9 @@ OpenRacer.Driver = function (config, parent, steering) {
         if (head && restScale.has(head)) head.scale.copy(restScale.get(head)).multiplyScalar(self.showHead ? 1 : 0.001);
     };
     this.setCockpit = function (inside) { self.showHead = !inside; };
-    this.dispose = function () { parent.remove(self.root); };
+    this.dispose = function () { self.parent.remove(self.root); };
+    // the figure goes to another frame (the car editor puts it in the frame of the car that is tested, which moves with the physics)
+    this.setParent = function (next) { self.parent.remove(self.root); self.parent = next; next.add(self.root); };
 
     // loads the glb of the driver (url): the model goes into place when it has arrived
     this.load = function (url, manager, done, fail) {

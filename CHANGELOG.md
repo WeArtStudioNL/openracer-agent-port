@@ -20,6 +20,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 - **Open a replay** of the main menu is now **Replays**: a window with the saved replays (track, cars, length, date, size; *Watch*, *Download* as a `.openracer-replay` file, *Delete*) and *Import replay…* for a file that someone sent. They are kept in the browser (IndexedDB).
 
 **Car editor**
+- In the test of the car (the physics of the game) the driver goes with the car that is tested (in its frame, as in the game) and is no longer left behind where the car stood; the nodes are hidden then, and when the test stops the driver and its nodes are back.
 - A part that is chosen in the view (a click on a loose part, which opens its window in the Soft body card) is lit in the Parts list of the Layers panel, and the list scrolls to it; it goes out when the part window is closed.
 - A click on the driver (the figure or one of its nodes) is for the driver only: it no longer also opens a loose part of the car behind it in the Soft body card, which started the crash test.
 
