@@ -8,7 +8,7 @@
  *              - the feet follow the pedals: the right foot the throttle, the left foot the brake, along the way that the pedal moves;
  *              - the arms and the legs are two bones each with an inverse kinematics (IK): the hand or the foot goes to its place and the elbow or the knee bends to the side of a pole.
  *              car.json "driver": { enabled, file, position [x, y, z], rotation [x, y, z] (degrees), scale, bones: { hips, head, armL: [upper, lower, hand], armR, legL: [upper, lower, foot],
- *              legR }, poles: { armL, armR, legL, legR: [x, y, z] } (where the elbows and the knees point to; without it from elbow_out and knee_out), hands: { left [x, y, z], right }, feet: { left (the brake), right (the throttle), travel (m), direction [x, y, z] }, elbow_out, knee_out }, all in the space of
+ *              legR }, wheel: { position [x, y, z], rotation [x, y, z] (degrees), radius } (the ring of the hands, matched to the steering wheel of the model), poles: { armL, armR, legL, legR: [x, y, z] } (where the elbows and the knees point to; without it from elbow_out and knee_out), hands: { left [x, y, z], right }, feet: { left (the brake), right (the throttle), travel (m), direction [x, y, z] }, elbow_out, knee_out }, all in the space of
  *              the body of the car (the space that the cameras and the exhaust points are in).
  */
 
@@ -120,9 +120,17 @@ OpenRacer.Driver = function (config, parent, steering) {
     // ---- the grips of the hands on the steering wheel
     var top = new V(), side = new V(), rel = new V(), axis = new V(), centre = new V();
     function wheelFrame() {
-        if (!self.steering) return false;
-        axis.copy(self.steering.axis).normalize();
-        centre.copy(self.steering.object.position);
+        var w = self.config.wheel;
+        if (w && w.position) {
+            // the ring that was set in the car editor: the place, the turn (the axis is its normal) and the size; it turns the same way as the steering wheel of the car
+            centre.set(w.position[0], w.position[1], w.position[2]);
+            var r = w.rotation || [0, 0, 0], k = Math.PI / 180;
+            axis.set(0, 0, 1).applyEuler(new THREE.Euler(r[0] * k, r[1] * k, r[2] * k, "XYZ")).normalize();
+            if (self.steering ? axis.dot(self.steering.axis) < 0 : axis.z > 0) axis.negate();
+        } else if (self.steering) {
+            axis.copy(self.steering.axis).normalize();
+            centre.copy(self.steering.object.position);
+        } else return false;
         // the way up on the wheel: up of the car, in the plane of the wheel
         top.set(0, 1, 0).addScaledVector(axis, -axis.y);
         if (top.lengthSq() < 1e-6) top.set(0, 0, 1);
@@ -296,7 +304,7 @@ OpenRacer.Driver.defaults = function () {
         enabled: false, file: "", position: [0, 0, 0], rotation: [0, 0, 0], scale: 1, bones: {},
         hands: { left: [0.15, 0.2, 0.3], right: [-0.15, 0.2, 0.3] },
         feet: { left: [0.1, -0.1, 0.5], right: [-0.1, -0.1, 0.5], travel: 0.06, direction: [0, -0.5, 0.85] },
-        elbow_out: 0.5, knee_out: 0.15, poles: null
+        elbow_out: 0.5, knee_out: 0.15, poles: null, wheel: null
     };
 };
 OpenRacer.Driver.withDefaults = function (c) {
@@ -305,6 +313,7 @@ OpenRacer.Driver.withDefaults = function (c) {
     out.feet = Object.assign({}, d.feet, (c && c.feet) || {});
     out.bones = Object.assign({}, (c && c.bones) || {});
     out.poles = c && c.poles ? JSON.parse(JSON.stringify(c.poles)) : null;
+    out.wheel = c && c.wheel ? JSON.parse(JSON.stringify(c.wheel)) : null;
     ["position", "rotation"].forEach(function (k) { if (!Array.isArray(out[k]) || out[k].length !== 3) out[k] = d[k].slice(); });
     return out;
 };
