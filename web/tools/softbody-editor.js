@@ -575,6 +575,7 @@ export function initSoftBody(api) {
         const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
         down = null;
         if (moved > 4) return;
+        if (api.driverUnder && api.driverUnder(e)) return;          // the driver is in front: the click is for the driver, not for the car part behind it
         if (partClick(e)) return;                                   // the part window: a pin point, a node of the part, or the window of a loose object
         if (!sb.shown || !softBody()) return;
         click(e);

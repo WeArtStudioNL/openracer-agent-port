@@ -2180,6 +2180,7 @@ driverEditor = initDriver({
 
 softBodyEditor = initSoftBody({
     $, THREE, scene, camera, renderer, controls, bench, status, startBench, stopBench,
+    driverUnder: (e) => !!(driverEditor && driverEditor.under(e)),
     nodeNames: () => state.nodes.map((n) => n.name),
     floorY: () => grid.position.y,
     root: () => state.root,

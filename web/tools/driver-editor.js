@@ -498,5 +498,15 @@ export function initDriver(api) {
     }
     function deselect() { if (drv.selected) { drv.selected = null; attach(); } }
 
-    return { read, fill, frame, newFile, existingFile: () => drv.existingFile, deselect, saved: (path) => { drv.file = null; drv.existingFile = path; } };
+    // is the driver (the figure or one of its nodes) under the pointer: then a click is for the driver and not for the car part behind it
+    const underRay = new THREE.Raycaster();
+    function under(e) {
+        if (!drv.driver || !drv.enabled) return false;
+        const rect = renderer.domElement.getBoundingClientRect();
+        underRay.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
+        const objects = Object.values(targets).filter((m) => m.visible).concat([drv.driver.root]);
+        return underRay.intersectObjects(objects, true).length > 0;
+    }
+
+    return { read, fill, frame, under, newFile, existingFile: () => drv.existingFile, deselect, saved: (path) => { drv.file = null; drv.existingFile = path; } };
 }
