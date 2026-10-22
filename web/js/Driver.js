@@ -163,10 +163,10 @@ OpenRacer.Driver = function (config, parent, steering) {
         }
     }
     // How a driver turns a wheel a long way (here to the right; to the left it is the mirror image): hands at 9 and 3 o'clock turn with the wheel; the left hand rides over the top and the
-    // right one down. At about half a turn the right hand lets go and goes back a little behind the left arm; the left hand rides on to about 4 o'clock; then the right hand takes the wheel at the top
+    // right one down. At 130 degrees the right hand lets go and goes to the chest, out of the way of the left arm; the left hand rides on to about 4 o'clock; then the right hand comes forward again and takes the wheel at the top
     // (12 o'clock), the left hand lets go at the same moment and takes the top when the right one has pulled a little; both ride on. A hand that comes to 4 o'clock lets go and takes the top again.
     // Back at the middle the hands go back to 9 and 3 o'clock. Angles: from the top of the wheel, in the way that the wheel turns.
-    var DEG = Math.PI / 180, FIRST = 160 * DEG, PULL_END = 120 * DEG, TAKE_OVER = 40 * DEG, HOME = 50 * DEG, BLEND_TIME = 0.22, BACK = 0.12, LIFT = 0.07;
+    var DEG = Math.PI / 180, FIRST = 130 * DEG, PULL_END = 120 * DEG, TAKE_OVER = 40 * DEG, HOME = 50 * DEG, BLEND_TIME = 0.22, BACK = 0.24, CHEST_DOWN = 0.06, LIFT = 0.04;
     function change(name, mode, shift) {
         var h = hand[name];
         h.from.copy(h.last);
@@ -223,8 +223,8 @@ OpenRacer.Driver = function (config, parent, steering) {
     function gripPoint(name, out) {
         var h = hand[name];
         if (!self.steering) return out.copy(restGrip[name]);
-        turned(restGrip[name], self.turn + h.shift, freeAt);
-        if (h.mode === "free") freeAt.addScaledVector(axis, BACK);                   // hovering behind the wheel, out of the way of the other arm
+        if (h.mode === "free") freeAt.copy(centre).addScaledVector(axis, BACK).addScaledVector(top, -CHEST_DOWN);      // the hand that lets go goes to the chest, out of the way of the other arm, and comes forward to the top from there
+        else turned(restGrip[name], self.turn + h.shift, freeAt);
         if (h.t < 1) {
             var f = h.t * h.t * (3 - 2 * h.t);
             out.copy(h.from).lerp(freeAt, f);
