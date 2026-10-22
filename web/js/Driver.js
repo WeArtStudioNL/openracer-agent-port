@@ -258,8 +258,12 @@ OpenRacer.Driver = function (config, parent, steering) {
         readGrips();
         if (self.steering) handsStep(dt || 0.016);
         var cfg = self.config, world = new V();
+        // the bones that are on the left of the car (+x in the space of the body) take the left hand and the left foot, whatever the model calls them (a model that faces the other way
+        // has its L on the right)
+        var xOf = function (chain) { chain[0].getWorldPosition(tmp2); return self.parent.worldToLocal(tmp2).x; };
+        var armLeft = xOf(self.bones.armL) >= xOf(self.bones.armR) ? "armL" : "armR", legLeft = xOf(self.bones.legL) >= xOf(self.bones.legR) ? "legL" : "legR";
         // arms
-        [["armL", "left", 1], ["armR", "right", -1]].forEach(function (e) {
+        [[armLeft, "left", 1], [armLeft === "armL" ? "armR" : "armL", "right", -1]].forEach(function (e) {
             var chain = self.bones[e[0]];
             gripPoint(e[1], grip[e[1]]);
             self.parent.localToWorld(world.copy(grip[e[1]]));
@@ -273,7 +277,7 @@ OpenRacer.Driver = function (config, parent, steering) {
             solve(chain, world, pole);
         });
         // legs
-        [["legL", "left", 1, self.brake], ["legR", "right", -1, self.throttle]].forEach(function (e) {
+        [[legLeft, "left", 1, self.brake], [legLeft === "legL" ? "legR" : "legL", "right", -1, self.throttle]].forEach(function (e) {
             var chain = self.bones[e[0]];
             footTarget(e[1], e[3], footPoint);
             self.parent.localToWorld(world.copy(footPoint));
@@ -330,11 +334,16 @@ OpenRacer.Driver.guessBones = function (model) {
         return null;
     };
     var finger = /finger|thumb|index|middle|ring|pinky|little|toe|twist|roll/i;
-    // the patterns are tried in turn: the first that finds a bone on that side wins
+    // the patterns are tried in turn: the first that finds a bone on that side wins. A rig with control bones (Rigify: ORG-, MCH-, _fk, _ik, tweak) has the bones that move the mesh
+    // named DEF-: those are taken, not the controls, and not the twist bones (.001) between the bones of a limb
+    var control = /(^|[-_.])(ORG|MCH|WGT|VIS)|tweak|_fk|_ik|master|parent|widget|pole|\.?00\d$/i;
     var find = function (side, patterns, exclude) {
         for (var i = 0; i < patterns.length; i++) {
-            var found = bones.find(function (b) { return sideOf(b.name) === side && patterns[i].test(b.name) && !(exclude && exclude.test(b.name)) && !finger.test(b.name); });
-            if (found) return found;
+            var candidates = bones.filter(function (b) { return sideOf(b.name) === side && patterns[i].test(b.name) && !(exclude && exclude.test(b.name)) && !finger.test(b.name); });
+            if (!candidates.length) continue;
+            var rank = function (b) { return /^DEF-/.test(b.name) && !control.test(b.name) ? 0 : (control.test(b.name) ? 2 : 1); };
+            candidates.sort(function (x, y) { return rank(x) - rank(y); });
+            return candidates[0];
         }
         return null;
     };
@@ -350,7 +359,10 @@ OpenRacer.Driver.guessBones = function (model) {
             find(side, [/foot/i, /ankle/i])
         ];
     });
-    out.hips = bones.find(function (b) { return /hips|pelvis/i.test(b.name); }) || null;
-    out.head = bones.find(function (b) { return /^head|[^a-z]head$|head$/i.test(b.name) && !/end|top/i.test(b.name); }) || null;
+    out.hips = bones.find(function (b) { return /^DEF-spine$/i.test(b.name); }) || bones.find(function (b) { return /hips|pelvis/i.test(b.name) && !control.test(b.name); }) || bones.find(function (b) { return /hips|pelvis/i.test(b.name); }) || null;
+    // the head: Rigify has a control "head" and the deform bone DEF-spine.006 that moves the mesh (only that one hides the head in the cockpit view)
+    out.head = bones.find(function (b) { return /^DEF-spine\.?006$/i.test(b.name) || /^DEF-head$/i.test(b.name); }) ||
+        bones.find(function (b) { return /^head|[^a-z]head$|head$/i.test(b.name) && !/end|top/i.test(b.name) && !control.test(b.name); }) ||
+        bones.find(function (b) { return /^head|[^a-z]head$|head$/i.test(b.name) && !/end|top/i.test(b.name); }) || null;
     return out;
 };

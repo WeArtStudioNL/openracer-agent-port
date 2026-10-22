@@ -246,7 +246,8 @@ export function initDriver(api) {
     function boneNames() {
         const names = [];
         if (drv.driver && drv.driver.model) drv.driver.model.traverse((o) => { if (o.isBone) names.push(o.name); });
-        return names;
+        // a rig with many control bones (Rigify): the deform bones (DEF-) first, the ones that move the mesh
+        return names.sort((a, b) => (/^DEF-/.test(b) ? 1 : 0) - (/^DEF-/.test(a) ? 1 : 0));
     }
     function fillBones() {
         const box = el("drvBones");
