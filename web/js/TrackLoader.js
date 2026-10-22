@@ -174,7 +174,8 @@ function loadScene() {
                                     texture.name = textureName;
                                     if(shine !== undefined && mat.isMeshPhongMaterial) mat.shininess = shine;
                                     if(endsWith(textureFile, ".png")) {
-                                        mat.transparent = true;
+                                        // a picture with an alpha channel (a tree, a fence, a sign): cut out, not blended, so the order that the objects are drawn in does not matter
+                                        mat.alphaTest = 0.5;
                                     }
 
                                     //console.log("vert count = " + geometry.vertices.length);
@@ -377,6 +378,7 @@ function loadGltfTrack(track) {
             mesh.receiveShadow = true;
             [].concat(mesh.material).forEach(function(material) {
                 if(material.map) material.map.anisotropy = maxAnisotropy;
+                cutOut(material);
             });
             var category = trackRoles[role];
             if(category === "track") trackObjects["track"].push(mesh);
@@ -395,6 +397,17 @@ function loadGltfTrack(track) {
         console.error(error);
         alert("The track could not be loaded: " + (error.message || error));
     });
+}
+
+// A material with a picture that has an alpha channel (alphaMode "BLEND" in a glTF: a tree, a fence, a sign) is blended in the order of the objects, and then an object that is behind
+// another is drawn over it now and then. It is cut out instead (what is less than half there is not drawn, the rest is solid and writes the depth), where the order does not matter.
+// A material that is see-through as a whole (opacity below 1: glass) stays blended.
+function cutOut(material) {
+    if(!material || !material.map || !material.transparent || material.opacity < 1) return;
+    material.transparent = false;
+    material.alphaTest = 0.5;
+    material.depthWrite = true;
+    material.needsUpdate = true;
 }
 
 // Decor that is only drawn (tyre walls, trees: the "other" meshes) is merged per material and per cell of 40 m, so that a track with thousands
