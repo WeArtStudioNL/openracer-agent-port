@@ -45,6 +45,11 @@ OpenRacer.Motorcycle = function (settings) {
     this.posture = { lat: 0, long: 0, drop: 0, tuck: 0, sit: 0, knee: 0 };       // body space: lat to the left, long forward, drop up (m); tuck, sit, knee: 0 to 1
     var vPrev = null, accel = { x: 0, y: 0, z: 0 }, dw = { x: 0, y: 0, z: 0 };
     this.riderKey = 0;                                      // -1: the rider is put back, 1: forward (keys, set by Car.js)
+    this.sinceBrake = 99; this.counterGain = 1;
+    this.counterWait = s.counter_wait !== undefined ? s.counter_wait : 1.0;      // s after the brake before the countersteering starts to come back
+    this.counterRamp = s.counter_ramp !== undefined ? s.counter_ramp : 1.5;      // s in which it comes back
+    this.fastFrom = s.fast_from !== undefined ? s.fast_from : 38;                  // m/s: from this speed the lean that the keys can ask for goes down
+    this.gripG = s.grip_g !== undefined ? s.grip_g : 1.05;                        // the lateral g that the tyres give when nothing else is asked of them
     this.pushing = false;                                   // the rider walks the bike back (set by Car.js)
     this.command = 0;                                      // the lean that is asked (-1..1)
     this.targetLean = 0;                                   // what the rider takes (rad, left is positive)
@@ -110,13 +115,19 @@ OpenRacer.Motorcycle = function (settings) {
         // the lean of the whole (the bike and the rider that hangs off): tan(phi) = a / g. The bike itself leans phi less atan(share * hang off / height of the centre of gravity)
         var share = self.riderMass / v.mass, epsFull = Math.atan(share * self.maxHang / v.cgHeight);
         var eps = Math.atan(share * self.posture.lat / v.cgHeight);       // to the left: positive
-        var phiMax = self.maxLean + epsFull;
+        // at speed the tyres have to give a slip angle for every bit of lean, and the body crabs: past about 40 m/s the lean that is allowed goes down (to 18 degrees at 60 m/s), so that a key
+        // held at 190 km/h is a gentle bend and not a slide
+        var speedMax = self.maxLean - (self.maxLean - 18 * DEG) * smooth(self.fastFrom, self.fastFrom + 22, Math.abs(u));
+        // the tyres have so much grip, and what they give along the bike (the engine, the air, the brake: how much the speed goes down) they cannot give sideways: the circle of grip
+        var aLong = Math.max(0, -(accel.x * state.fx + accel.z * state.fz)), gripMax = self.gripG * G;
+        speedMax = Math.min(speedMax, Math.atan(Math.sqrt(Math.max(0, gripMax * gripMax - aLong * aLong)) / G));
+        var phiMax = speedMax + epsFull;
         var want = -c * Math.min(phiMax, cap) * fast;
         var brake = Math.max(0, Math.min(1, inp.brakePedal || 0)), bend = smooth(8 * DEG, 30 * DEG, Math.abs(want));
         want *= 1 + self.cornerBrake * brake * bend;                  // the rear brake takes it deeper into the bend (the front brake is not used in a bend: brakeScale)
         want = Math.max(-phiMax, Math.min(phiMax, want));
         want *= 1 - self.standUp * Math.max(0, Math.min(1, inp.throttle || 0)) * Math.min(1, Math.abs(want) / (15 * DEG));
-        var bikeWant = Math.max(-self.maxLean, Math.min(self.maxLean, want - eps * Math.min(1, Math.abs(want) / (6 * DEG))));
+        var bikeWant = Math.max(-speedMax, Math.min(speedMax, want - eps * Math.min(1, Math.abs(want) / (6 * DEG))));
         self.targetLean += (bikeWant - self.targetLean) * Math.min(1, dt / self.leanResponse);
         var target = self.targetLean;
         // the angle of the wheel that a bend of this lean needs: a = g tan(lean of the whole) less the camber thrust of the tyres, delta = L a / u^2 (to the left: negative)
@@ -130,7 +141,14 @@ OpenRacer.Motorcycle = function (settings) {
         // countersteering: to start a lean to the left the wheel goes to the right for a moment, in proportion to what the lean still has to go
         var cLimit = Math.min(0.07, 5 / Math.max(u * u, 1));       // (at most about half a g of sideways push from it at any speed)
         var counter = Math.max(-cLimit, Math.min(cLimit, 0.3 * (target - state.lean))) * smooth(3, 10, Math.abs(u));
-        if (typeof Settings !== "undefined" && Settings.option("bikeSteering") === "lean") counter = 0;       // (the menu: the lean only, no countersteering)
+        // On a straight (no lean asked for) the rider steers out a lean that came from outside (a bump, a crest, a hit): that keeps the bike straight, braking or not. It is always there.
+        // The countersteering to start a lean (the menu: Countersteer + lean) is not used while the brake is on (the rider has his hands full, and a wheel that is turned the other way with
+        // the weight on the front breaks the tail away): it comes back slowly after the brake (counter_wait, counter_ramp).
+        var straight = 1 - smooth(2 * DEG, 6 * DEG, Math.abs(target));
+        if ((inp.brakePedal || 0) > 0.05) self.sinceBrake = 0; else self.sinceBrake += dt;
+        self.counterGain = smooth(self.counterWait, self.counterWait + self.counterRamp, self.sinceBrake);
+        var pulse = typeof Settings !== "undefined" && Settings.option("bikeSteering") === "counter" ? self.counterGain : 0;
+        counter *= straight + (1 - straight) * pulse;
         var geometric = c * lock;                                  // at a walking pace the angle is the command
         var w = 1 - smooth(2, 5, Math.abs(u));
         var wanted = w * geometric + (1 - w) * (steady + counter);
