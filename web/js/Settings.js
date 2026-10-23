@@ -100,7 +100,7 @@ var Settings = (function() {
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
     var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, autoReverse: true, autoReversePedals: true, autoReverseSpeed: 3, dragReady: 2, dragGreen: 1.5, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 1, volume: 0.8,
-        padSlow: 1.5, padAssist: true, keySteer: 1, keyAssist: true,
+        padSlow: 1.5, padAssist: true, keySteer: 1, keySlow: 1, keyAssist: true,
         // the graphics (Graphics.js): a preset is a set of these
         gfxPreset: "high", gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100 };
 
@@ -752,6 +752,10 @@ var Settings = (function() {
         keyNote.textContent = "The steering keys turn the wheels at a rate: fast at a standstill, slower the faster the car goes; the wheels come back to the middle by themselves when the keys are let go.";
         page.appendChild(keyNote);
         page.appendChild(sliderRow("Steering speed", "keySteer", 0.5, 3, 0.1, function(v) { return Math.round(v * 100) + "%" + (Math.abs(v - 1) < 0.01 ? " (as it was)" : ""); }));
+        page.appendChild(sliderRow("Slower at speed", "keySlow", 0, 3, 0.25, function(v) {
+            var at100 = 1 + Math.max(0, (100 / 3.6) / 4 - 1) * v;
+            return v === 0 ? "off: the same at every speed" : at100.toFixed(1) + "× slower at 100 km/h" + (Math.abs(v - 1) < 0.01 ? " (as it was)" : "");
+        }));
         page.appendChild(checkRow("Steering assist", "keyAssist", "when the rear steps out the front wheels turn into the slide by themselves, so it does not become a spin"));
         page = tabPage("Gamepad");
         var padNote = document.createElement("div");

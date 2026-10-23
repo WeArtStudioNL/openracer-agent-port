@@ -542,7 +542,9 @@ OpenRacer.Car = function( config, domElement ) {
         if(this.turnRight) this.turnDir = 1;
         if(this.turnLeft && this.turnRight) this.turnDir = 0;
         var tSpeed = this.turnSpeed * 0.3 * (Settings.option("keySteer") || 1); // the steering speed of the keyboard (settings menu)
-        var speedFactor = Math.max(Math.abs(v.u) / 4, 1);
+        var slow = Settings.option("keySlow");           // how much slower the keys steer at speed (settings menu, Keyboard): 1 as it was, 0 not at all
+        if(slow === undefined || slow === null) slow = 1;
+        var speedFactor = 1 + Math.max(0, Math.abs(v.u) / 4 - 1) * slow;
         if(this.turnDir === 0) {
             if(!mouseDown && !usingGamepad)
                 this.turnAngle *= Math.pow(0.75, delta * 60);
@@ -554,7 +556,7 @@ OpenRacer.Car = function( config, domElement ) {
             this.turnAngle += this.turnDir * (tSpeed / speedFactor) * delta;
             // the lock of the keyboard gets smaller with the speed (about half at 80 km/h, a fifth from 150 km/h): a key that is held at speed
             // took the wheels to full lock, and the car snapped round; a wheel, a pad and the mouse have their own range
-            var lock = this.turnLimit * Math.max(0.2, 1 / (1 + Math.pow(Math.abs(v.u) / 22, 2)));
+            var lock = this.turnLimit * Math.max(0.2, 1 / (1 + Math.pow(Math.abs(v.u) / 22, 2) * slow));
             if(Math.abs(this.turnAngle) > lock) {
                 this.turnAngle = this.turnDir * lock;
             }
