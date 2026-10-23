@@ -104,6 +104,8 @@ var Settings = (function() {
 
     var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, autoReverse: true, autoReversePedals: true, autoReverseSpeed: 3, dragReady: 2, dragGreen: 1.5, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 2, volume: 0.8,
         padSlow: 1.5, padAssist: true, keySteer: 1, keySlow: 1, keyAssist: true,
+        // a motorcycle: the steering ("counter": countersteering to start a lean and the lean; "lean": the lean only) and the follow camera ("lean": it rolls with the bike; "classic": as a car)
+        bikeSteering: "counter", bikeCamera: "lean",
         // the easing of the keys: the time that a key takes to bring the pedal or the wheels to the full value (s), and the curve of it (1 straight, below 1 quick at first, above 1 slow at first)
         keyThrottleTime: 0.5, keyThrottleCurve: 0.6, keyBrakeTime: 0.4, keyBrakeCurve: 0.6, keySteerTime: 0.9, keySteerCurve: 1,
         // the graphics (Graphics.js): a preset is a set of these
@@ -579,6 +581,30 @@ var Settings = (function() {
         return row;
     }
 
+    // a row with a list to choose from: choices is [[value, text], ...]
+    function selectRow(label, name, choices) {
+        var row = document.createElement("div");
+        row.className = "row";
+        var l = document.createElement("div");
+        l.className = "label";
+        l.textContent = label;
+        row.appendChild(l);
+        var inputs = document.createElement("div");
+        inputs.className = "inputs";
+        var select = document.createElement("select");
+        select.style.cssText = "font: inherit; color: var(--head); background: var(--bg2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; cursor: pointer;";
+        choices.forEach(function(c) {
+            var o = document.createElement("option");
+            o.value = c[0]; o.textContent = c[1];
+            if(options[name] === c[0]) o.selected = true;
+            select.appendChild(o);
+        });
+        select.onchange = function() { setOption(name, select.value); };
+        inputs.appendChild(select);
+        row.appendChild(inputs);
+        return row;
+    }
+
     // a row with a slider: the value is shown next to it, formatted by text(value)
     function sliderRow(label, name, min, max, step, text) {
         var row = document.createElement("div");
@@ -760,6 +786,11 @@ var Settings = (function() {
         page.appendChild(optionRow("ESC (stability control)", options.esc ? "On" : "Off", function() { setOption("esc", !options.esc); }));
         var cameraNames = ["Follow (smooth, FOV with speed)", "Cockpit", "Free camera (buttons on the HUD, P looks at the car, O moves with it)"];
         page.appendChild(optionRow("Camera", cameraNames[options.camera - 2] || cameraNames[0], function() { setOption("camera", nextCamera(options.camera)); }));
+        // a motorcycle: how it is steered, and the camera that follows it (to try what feels right)
+        if(typeof car !== "undefined" && car && car.vehicle && car.vehicle.controller) {
+            page.appendChild(optionRow("Motorcycle steering", options.bikeSteering === "lean" ? "Lean only" : "Countersteer + lean", function() { setOption("bikeSteering", options.bikeSteering === "lean" ? "counter" : "lean"); }));
+            page.appendChild(selectRow("Motorcycle follow camera", "bikeCamera", [["lean", "Motorcycle lean chase (the picture rolls with the bike)"], ["classic", "Classic chase (as a car)"]]));
+        }
         page.appendChild(optionRow("ABS", options.abs ? "On" : "Off", function() { setOption("abs", !options.abs); }));
         var gearboxNames = { automatic: "Automatic (P R N D)", sequential: "Sequential (paddles)", manual: "Manual (H-shifter, clutch)" };
         page.appendChild(optionRow("Gearbox", gearboxNames[options.gearbox] || options.gearbox, function() { cycleGearbox(); }));

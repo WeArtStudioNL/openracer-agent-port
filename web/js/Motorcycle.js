@@ -130,6 +130,7 @@ OpenRacer.Motorcycle = function (settings) {
         // countersteering: to start a lean to the left the wheel goes to the right for a moment, in proportion to what the lean still has to go
         var cLimit = Math.min(0.07, 5 / Math.max(u * u, 1));       // (at most about half a g of sideways push from it at any speed)
         var counter = Math.max(-cLimit, Math.min(cLimit, 0.3 * (target - state.lean))) * smooth(3, 10, Math.abs(u));
+        if (typeof Settings !== "undefined" && Settings.option("bikeSteering") === "lean") counter = 0;       // (the menu: the lean only, no countersteering)
         var geometric = c * lock;                                  // at a walking pace the angle is the command
         var w = 1 - smooth(2, 5, Math.abs(u));
         var wanted = w * geometric + (1 - w) * (steady + counter);
@@ -142,7 +143,7 @@ OpenRacer.Motorcycle = function (settings) {
         var m = v.mass, w = v.wheels;
         var rearRatio = ((w[2].weight || 0) + (w[3].weight || 0)) / Math.max(1, (1 - v.weight_distribution) * m * G);
         // the front brake is let off as the rear wheel is nearly free of the road (it keeps a few percent of its load: the limit of the front brake), the rear brake goes with the load of the rear wheel
-        var target = Math.max(0, Math.min(1, (rearRatio - 0.015) / 0.07));
+        var target = Math.max(0, Math.min(1, (rearRatio - 0.10) / 0.18));
         self.frontBrake += (target - self.frontBrake) * Math.min(1, dt / (target < self.frontBrake ? 0.02 : 0.1));
         // (after a crest the rear wheel comes down hard and it spins faster than the road: the rear brake comes back slowly, so that it does not lock and slide)
         var rearTarget = Math.max(0, Math.min(1, rearRatio * 1.2));
@@ -233,7 +234,8 @@ OpenRacer.Motorcycle = function (settings) {
 
     // ---- hook for the camera: it rolls with the lean, a part of it, smoothed. camera: the three.js camera, after it was placed
     this.cameraRoll = function (camera, v, dt) {
-        self.roll += (v.lean * self.cameraRollFactor - self.roll) * Math.min(1, (dt || 0.016) / 0.12);
+        var classic = typeof Settings !== "undefined" && Settings.option("bikeCamera") === "classic";       // (the menu: the chase camera of a car, that does not roll)
+        self.roll += ((classic ? 0 : v.lean * self.cameraRollFactor) - self.roll) * Math.min(1, (dt || 0.016) / 0.12);
         camera.rotateZ(self.roll);
     };
 };
