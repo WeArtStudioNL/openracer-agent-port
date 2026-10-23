@@ -15,9 +15,9 @@ import { createDesign } from "./track-design.js";
 import { buildTerrain, readHeights } from "./heightmap.js";
 
 const $ = (id) => document.getElementById(id);
-const ROLES = [["road", "Road"], ["track01", "Pit lane"], ["grass", "Grass"], ["ground", "Ground"], ["scenery", "Scenery"], ["decor", "Decor"]];
-const ROLE_COLORS = { road: 0x8a93a1, track01: 0xc2a672, grass: 0x4f9b45, ground: 0x9a7a4e, scenery: 0xc45d5d, decor: 0x6c8cd5 };
-const DRIVABLE = { road: true, track01: true, grass: true, ground: true };
+const ROLES = [["road", "Road"], ["track01", "Pit lane"], ["grass", "Grass"], ["ground", "Ground"], ["sand", "Sand"], ["gravel", "Gravel"], ["mud", "Mud"], ["scenery", "Scenery"], ["decor", "Decor"]];
+const ROLE_COLORS = { road: 0x8a93a1, track01: 0xc2a672, grass: 0x4f9b45, ground: 0x9a7a4e, sand: 0xe0c27a, gravel: 0x9b9a93, mud: 0x5b432b, scenery: 0xc45d5d, decor: 0x6c8cd5 };
+const DRIVABLE = { road: true, track01: true, grass: true, ground: true, sand: true, gravel: true, mud: true };
 const ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const FILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/;
 
@@ -390,7 +390,10 @@ function guessRole(name, materialName) {
     if (/pit/i.test(text) && /road|lane|asphalt|tarmac/i.test(text)) return "track01";
     if (/road|asphalt|tarmac|track|strip|kerb|curb|circuit/i.test(text)) return "road";
     if (/grass|gras|lawn|field/i.test(text)) return "grass";
-    if (/dirt|sand|gravel|ground|soil|mud|terrain/i.test(text)) return "ground";
+    if (/sand|zand|desert|dune/i.test(text)) return "sand";
+    if (/gravel|grind|split/i.test(text)) return "gravel";
+    if (/mud|modder|klei/i.test(text)) return "mud";
+    if (/dirt|ground|soil|terrain/i.test(text)) return "ground";
     return "scenery";
 }
 
@@ -1456,6 +1459,7 @@ function heightDialog() {
         const input = (type, extra) => { const e = document.createElement("input"); e.type = type; Object.assign(e, extra || {}); e.style.width = "100%"; return e; };
         const heightFile = input("file", { accept: ".png,.jpg,.jpeg,.webp" });
         const colourFile = input("file", { accept: ".png,.jpg,.jpeg,.webp" });
+        const surfaceFile = input("file", { accept: ".png,.jpg,.jpeg,.webp" });
         const info = document.createElement("div");
         info.style.cssText = "font-size: 12.5px; color: #9aa8ba; margin: -4px 0 10px;";
         const size = input("number", { min: 10, step: 1, value: 1024 });
@@ -1465,14 +1469,15 @@ function heightDialog() {
         step.innerHTML = "<option value='2'>every 2nd pixel (fine, heavy)</option><option value='4' selected>every 4th pixel</option><option value='8'>every 8th pixel (light)</option><option value='1'>every pixel (too heavy for 1024 × 1024)</option>";
         const role = document.createElement("select");
         role.style.width = "100%";
-        role.innerHTML = "<option value='road'>Road (all the ground has the grip of the road)</option><option value='grass'>Grass</option><option value='ground'>Ground</option>";
+        role.innerHTML = "<option value='road'>Road</option><option value='sand'>Sand</option><option value='gravel'>Gravel</option><option value='mud'>Mud</option><option value='grass'>Grass</option><option value='ground'>Ground</option>";
         field("Height map (greyscale, 16 bit PNG: black is low, white is high)", heightFile);
         box.appendChild(info);
         field("Colour map (a picture of the colour of the same square, any size: 2048 or 4096 for a map of 1024)", colourFile);
+        field("Surface map (optional: grey road, yellow sand, white gravel, brown mud, green grass, orange ground)", surfaceFile);
         field("Size of the square (m)", size, "1024 pixels and 1024 m: a pixel is a metre.");
         field("Height of white (m)", top, "Black is the level of the start, white is this many metres higher.");
         field("Mesh", step);
-        field("Surface", role, "One grip for the whole map for now.");
+        field("Surface", role, "For the whole map, when there is no surface map.");
         let map = null;
         heightFile.onchange = async () => {
             map = null; info.textContent = "";
@@ -1496,10 +1501,10 @@ function heightDialog() {
             if (!heightFile.files[0]) { info.textContent = "Choose the height map first."; info.style.color = "#ff8a80"; return; }
             make.disabled = true; make.textContent = "Making…";
             try {
-                const result = await buildTerrain(heightFile.files[0], colourFile.files[0] || null, { size: parseFloat(size.value), top: parseFloat(top.value), step: parseInt(step.value, 10) });
+                const result = await buildTerrain(heightFile.files[0], colourFile.files[0] || null, { size: parseFloat(size.value), top: parseFloat(top.value), step: parseInt(step.value, 10), role: role.value, surfaceFile: surfaceFile.files[0] || null });
                 close();
                 newTrack();
-                loadFromFiles([result.file], { terrain: role.value });
+                loadFromFiles([result.file], result.roles);
                 status("The height map is a mesh of " + result.grid[0] + " × " + result.grid[1] + " points (" + result.triangles + " triangles), " + Math.round(result.size[0]) + " × " + Math.round(result.size[1]) + " m. Place the start on it, add gates and save.", "ok");
             } catch (error) {
                 make.disabled = false; make.textContent = "Make the track";

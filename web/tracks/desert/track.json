@@ -92,7 +92,7 @@
  "surfaces": {
   "meshes": {
    "road": "road",
-   "terrain": "ground"
+   "terrain": "sand"
   }
  },
  "racing_line": [

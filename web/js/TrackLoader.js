@@ -336,9 +336,9 @@ function meshSurface(mesh) {
 // ---- tracks from a glTF/glb model (made with the track editor, see tools/track-editor.html)
 //
 // track.json has "model" (the file in the folder of the track) and "surfaces": { "meshes": { <name of a part>: <role> }, "materials": { <name of a
-// material>: <role> } }. The roles are road, track01, grass and ground (the car can drive on them, each with its own grip), scenery (visible,
+// material>: <role> } }. The roles are road, track01, grass, ground, sand, gravel and mud (the car can drive on them, each with its own grip), scenery (visible,
 // the car drives into its steep parts), decor (only to look at) and, for what is not mentioned, scenery. The model is made in metres, y up.
-var trackRoles = { road: "track", track01: "ground", grass: "grass", ground: "ground" };
+var trackRoles = { road: "track", track01: "ground", grass: "grass", ground: "ground", sand: "ground", gravel: "ground", mud: "ground" };
 
 function trackRole(mesh, surfaces) {
     var meshes = surfaces.meshes || {};

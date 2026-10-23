@@ -92,6 +92,30 @@ export async function readHeights(file) {
     return { width: canvas.width, height: canvas.height, data, depth: 8 };
 }
 
+// The colours of a surface map, and the surface that each one is (the nearest colour counts)
+export const SURFACE_COLOURS = { road: [128, 128, 128], sand: [255, 255, 0], gravel: [255, 255, 255], mud: [120, 72, 30], grass: [0, 170, 0], ground: [200, 120, 40] };
+
+async function readSurfaces(file) {
+    const bitmap = await createImageBitmap(file);
+    const size = Math.min(1024, Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = size; canvas.height = size;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    context.imageSmoothingEnabled = false;
+    context.drawImage(bitmap, 0, 0, size, size);
+    return { size, pixels: context.getImageData(0, 0, size, size).data };
+}
+
+function surfaceAt(map, u, v) {
+    const x = Math.min(map.size - 1, Math.floor(u * map.size)), y = Math.min(map.size - 1, Math.floor(v * map.size)), i = (y * map.size + x) * 4;
+    let best = "road", bestD = Infinity;
+    for (const [role, c] of Object.entries(SURFACE_COLOURS)) {
+        const d = (map.pixels[i] - c[0]) ** 2 + (map.pixels[i + 1] - c[1]) ** 2 + (map.pixels[i + 2] - c[2]) ** 2;
+        if (d < bestD) { bestD = d; best = role; }
+    }
+    return best;
+}
+
 function loadImage(file) {
     return new Promise((resolve, reject) => {
         const url = URL.createObjectURL(file);
@@ -127,20 +151,23 @@ export async function buildTerrain(heightFile, colourFile, options) {
             uvs[2 * k] = u; uvs[2 * k + 1] = v;                       // (the picture is read from the top, as glTF has it)
         }
     }
-    const indices = new Uint32Array((nx - 1) * (nz - 1) * 6);
-    let n = 0;
+    // the cells, by surface: with a surface map every cell has the surface of the colour of the map where it is (a part for every surface), without one the whole terrain has the one
+    const surfaces = options.surfaceFile ? await readSurfaces(options.surfaceFile) : null;
+    const cells = {};
     for (let j = 0; j < nz - 1; j++) {
         for (let i = 0; i < nx - 1; i++) {
+            const role = surfaces ? surfaceAt(surfaces, (i + 0.5) / (nx - 1), (j + 0.5) / (nz - 1)) : "all";
             const a = j * nx + i, b = a + 1, c = a + nx, d = c + 1;
-            indices[n++] = a; indices[n++] = c; indices[n++] = b;
-            indices[n++] = b; indices[n++] = c; indices[n++] = d;
+            (cells[role] || (cells[role] = [])).push(a, c, b, b, c, d);
         }
     }
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
-    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
-    geometry.computeVertexNormals();
+    const indices = { length: Object.values(cells).reduce((n, l) => n + l.length, 0) };
+    const base = new THREE.BufferGeometry();
+    base.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    base.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+    base.setIndex(new THREE.BufferAttribute(new Uint32Array(cells[Object.keys(cells)[0]]), 1));
+    base.computeVertexNormals();
+    const geometry = base;
     const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
     material.name = "terrain";
     if (colourFile) {
@@ -154,10 +181,19 @@ export async function buildTerrain(heightFile, colourFile, options) {
     } else {
         material.color.set(0x8a9a78);
     }
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = "terrain";
     const scene = new THREE.Scene();
-    scene.add(mesh);
+    const roles = {};
+    for (const [role, list] of Object.entries(cells)) {
+        const part = new THREE.BufferGeometry();
+        part.setAttribute("position", base.getAttribute("position"));
+        part.setAttribute("normal", base.getAttribute("normal"));
+        part.setAttribute("uv", base.getAttribute("uv"));
+        part.setIndex(new THREE.BufferAttribute(new Uint32Array(list), 1));
+        const mesh = new THREE.Mesh(part, material);
+        mesh.name = role === "all" ? "terrain" : "terrain_" + role;
+        roles[mesh.name] = role === "all" ? (options.role || "road") : role;
+        scene.add(mesh);
+    }
     const glb = await new Promise((resolve, reject) => new GLTFExporter().parse(scene, resolve, (e) => reject(new Error("The terrain could not be made: " + (e.message || e))), { binary: true }));
-    return { file: new File([glb], "terrain.glb", { type: "model/gltf-binary" }), vertices: nx * nz, triangles: indices.length / 3, grid: [nx, nz], size: [size, depthSize], pixels: [map.width, map.height], depth: map.depth };
+    return { file: new File([glb], "terrain.glb", { type: "model/gltf-binary" }), vertices: nx * nz, triangles: indices.length / 3, roles, parts: Object.keys(cells).length, grid: [nx, nz], size: [size, depthSize], pixels: [map.width, map.height], depth: map.depth };
 }

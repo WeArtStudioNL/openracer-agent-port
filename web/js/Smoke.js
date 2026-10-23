@@ -144,6 +144,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
     var self = this, quiet = false;                      // quiet: the puffs that are made while the smoke moves (wisps) are not recorded: the replay makes them again
     var alive = 0, made = 0;                             // how many puffs are alive after the last frame, and how many were made in this one: with none, nothing is done
 
+    var DUST = [0.66, 0.55, 0.4], dustTint = DUST;       // the colour of the dust that is thrown up (the surface says: Helpers.js)
     function spawn(x, y, z, vx, vy, vz, heat, dust, fine, grey) {
         made++;
         var i = next;
@@ -170,7 +171,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
         spin[i] = (Math.random() - 0.5) * 0.8;
         frames[i] = Math.floor(Math.random() * 4);
         var shade = 0.9 + Math.random() * 0.1;
-        if(dust) { colours[i * 3] = 0.66 * shade; colours[i * 3 + 1] = 0.55 * shade; colours[i * 3 + 2] = 0.4 * shade; }
+        if(dust) { colours[i * 3] = dustTint[0] * shade; colours[i * 3 + 1] = dustTint[1] * shade; colours[i * 3 + 2] = dustTint[2] * shade; }
         else { colours[i * 3] = 0.9 * shade; colours[i * 3 + 1] = 0.91 * shade; colours[i * 3 + 2] = 0.94 * shade; }
         if(grey) {
             // the smoke of an exhaust after a bang: darker and thinner than the smoke of a tyre
@@ -221,6 +222,7 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
             var wheel = wheels[w];
             if(amount > 0 && wheel.smoke > 0.02 && wheel.hasContact) {
                 var dust = wheel.surface !== "road" && wheel.surface !== "track01";
+                if(dust) dustTint = (typeof getSurface === "function" && getSurface(wheel.surface).dust) || DUST;
                 var cx = wheel.contact.x, cy = wheel.contact.y, cz = wheel.contact.z;
                 var from = last[w];
                 if(!from || Math.hypot(cx - from.x, cz - from.z) > 6) from = { x: cx, y: cy, z: cz, carry: 0, fine: 0 };

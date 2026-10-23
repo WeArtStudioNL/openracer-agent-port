@@ -7,7 +7,7 @@ car leaves the ground at speed), made from numbers: the centre line, the heights
 
     python3 tools/make-desert-track.py
 
-The glb has two parts: "road" (the asphalt, role road) and "terrain" (the sand, role ground; the surface that gives way: the off-road tyre grips there). The terrain
+The glb has two parts: "road" (the asphalt, role road) and "terrain" (the sand, role sand; the surface that gives way: the off-road tyre grips there). The terrain
 is flat for 16 m on both sides of the road (the road bed), then goes over into the dunes, so the road can be driven without the terrain coming through it.
 """
 import json
@@ -261,7 +261,7 @@ track = {
         "sun": {"azimuth": 35, "elevation": 48, "intensity": 0.95, "color": "#fff1d6"},
         "ambient": {"color": "#8a7a68", "intensity": 1}
     },
-    "surfaces": {"meshes": {"road": "road", "terrain": "ground"}},
+    "surfaces": {"meshes": {"road": "road", "terrain": "sand"}},
     "racing_line": [{"x": round2(cx[i]), "y": round2(road_h[i]), "z": round2(cz[i])} for i in range(0, COUNT, 2)],
     "cameras": []
 }

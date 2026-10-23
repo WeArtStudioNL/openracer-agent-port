@@ -1538,7 +1538,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                     w.tyreDeflection = body.maxDepth;
                 }
             }
-            if(!w.hasContact) w.tyreDeflection = 0;
+            if(!w.hasContact) { w.tyreDeflection = 0; w.hadContact = false; }
             comp[i] = w.freeLength - w.susLength;
             compVelocity[i] = -w.susVel;
             w.suspensionLength = w.susLength;
@@ -1761,7 +1761,15 @@ OpenRacer.Vehicle = function (parameters, input) {
                     wheel.smoke = fz > 200 ? smoking * (0.4 + 0.6 * Math.min(1, burnt / 40000)) * density : 0;
                 } else {
                     wheel.smoke = fz > 200 ? Math.min(1, 0.15 * sliding + wheel.heat * Math.min(1, sliding * 2 + 0.2)) : 0;
+                    // loose ground is thrown up by a tyre that only rolls (a thin plume that follows the car), and by a tyre that lands (a puff that dies away in a tenth of a second)
+                    if(surface.loose && fz > 200) {
+                        var rollingDust = Math.min(0.28, Math.max(0, (Math.abs(vl) - 5) / 40));
+                        if(!wheel.hadContact) wheel.puff = Math.min(1, Math.abs(self.vy) / 9);
+                        wheel.puff = (wheel.puff || 0) * Math.exp(-dt / 0.12);
+                        wheel.smoke = Math.max(wheel.smoke, rollingDust, wheel.puff > 0.08 ? wheel.puff : 0);
+                    }
                 }
+                wheel.hadContact = true;
                 wheel.squeal = (wheel.surface === "road" || wheel.surface === "track01") && fz > 200
                     ? smoothstep(1.2, 2.2, wheel.s) * (1 - 0.4 * smoothstep(2.5, 4, wheel.s)) * smoothstep(1.2, 5, slideSpeed) : 0;
                 fxW = wheel.fx;
@@ -1773,7 +1781,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 tyreTorque[iw] = -fxW * wheel.radius;
 
                 // rolling resistance (more on soft ground), not a torque on the wheel
-                var rr = wheel.rollingResistance * tc.rolling * (wheel.pressureRoll || 1) * (surface.static < 0.8 ? 4 * (surface.loose && tc.looseRolling ? tc.looseRolling : 1) : 1) * fz * Math.tanh(vl / 0.3);
+                var rr = wheel.rollingResistance * tc.rolling * (wheel.pressureRoll || 1) * (surface.drag ? surface.drag * (surface.loose && tc.looseRolling ? tc.looseRolling : 1) : (surface.static < 0.8 ? 4 * (surface.loose && tc.looseRolling ? tc.looseRolling : 1) : 1)) * fz * Math.tanh(vl / 0.3);
                 fxW -= rr;
 
                 // the forces on the car: the force along the wheel at the point of contact, the force across the wheel at the roll
