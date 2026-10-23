@@ -35,6 +35,7 @@ var circuitObjects;
 //var otherObjects = [];
 var trackObjects = { track: [], grass: [], ground: [], other: [] };
 var searchOrder = ["track", "grass", "ground", "other"];
+var trackRigidPieces = [];   // the parts of the model that are rigid bodies (RigidObjects.js): named rigid...
 var trackGates = [];         // lines across the road { x, z, heading, width } that make a lap, in order; the first is the finish line
 var trackCheckPoints = [];   // names of the road pieces that make a lap, from the track
 var currentTrack = null;     // the track that is loaded (see tracks/<id>/track.json)
@@ -344,6 +345,7 @@ function trackRole(mesh, surfaces) {
     var meshes = surfaces.meshes || {};
     var materials = surfaces.materials || {};
     for(var node = mesh; node; node = node.parent) {
+        if(node.name && /^rigid/i.test(node.name)) return "rigid";      // a rigid body (RigidObjects.js)
         if(node.name && meshes[node.name]) return meshes[node.name];
     }
     var material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
@@ -357,6 +359,7 @@ function loadGltfTrack(track) {
         gltf.scene.updateMatrixWorld(true);
         var surfaces = track.surfaces || {};
         var pieces = [];
+        trackRigidPieces = [];
         gltf.scene.traverse(function(object) { if(object.isMesh) pieces.push(object); });
         var maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
         pieces.forEach(function(piece) {
@@ -380,6 +383,18 @@ function loadGltfTrack(track) {
                 if(material.map) material.map.anisotropy = maxAnisotropy;
                 cutOut(material);
             });
+            if(role === "rigid") {
+                // a body of its own: the mesh is moved to its middle (the body turns about it) and leaves the road and the walls
+                geometry.computeBoundingBox();
+                var middle = geometry.boundingBox.getCenter(new THREE.Vector3());
+                geometry.translate(-middle.x, -middle.y, -middle.z);
+                geometry.computeBoundingSphere();
+                mesh.position.copy(middle);
+                mesh.castShadow = true;
+                trackRigidPieces.push(mesh);
+                scene.add(mesh);
+                return;
+            }
             var category = trackRoles[role];
             if(category === "track") trackObjects["track"].push(mesh);
             else if(category === "grass") trackObjects["grass"].push(mesh);

@@ -95,6 +95,7 @@ function banner(text) {
 
 function trackLoaded() {
     car = new OpenRacer.Car(carConfig);
+    if(OpenRacer.RigidObjects) OpenRacer.RigidObjects.setup(currentTrack, typeof trackRigidPieces !== "undefined" ? trackRigidPieces : []);
     if(OpenRacer.GateMarkers) OpenRacer.GateMarkers.build(currentTrack);
     Tuning.attach(car, carConfig); // the tuning menu, with the tuning that was kept for this car
     telemetry = new OpenRacer.Telemetry({car: car, domElement: document.getElementById("telemetry")});
@@ -487,6 +488,7 @@ function updateRace(delta) {
     var vehicles = [car.vehicle].concat(race.opponents.map(function(o) { return o.vehicle; }));
     race.opponents.forEach(function(o) { o.update(delta, vehicles); });
     if(race.opponents.length) OpenRacer.collideCars(vehicles);
+    if(OpenRacer.RigidObjects) OpenRacer.RigidObjects.update(delta, vehicles);
     race.ghost.update(car, delta);
     if(race.opponents.length && race.line && !race.playerFinished) {
         // the place: how far along the line everyone is, counted the same way for the player as for the AI (laps of the line)

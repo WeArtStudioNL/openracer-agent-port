@@ -141,6 +141,14 @@ Next to it, `web/tools/physics-check.html` (open it from the server) runs the ph
 
 **Performance:** the graphics settings have a *draw distance* (500 to 5000 m; the presets set it) and AI cars more than 450 m from the camera are not drawn. **F2** saves the picture of the game as a PNG.
 
+## Rigid objects in a track
+Things that can be knocked over (barrels, boxes, cones, balls) lie asleep in the track and are only simulated when a car touches them; after a while without moving they sleep again (`web/js/RigidObjects.js`, the engine is Rapier). Two ways to put them in a track:
+
+* in the model of the track: name a part, or a node above it, `rigid_...` (`rigid_barrel_1`, `Rigid Cone.002`). It becomes a body of the shape of the part (convex hull) with a mass from its box (250 kg/m³, `"rigid_density"` in track.json) or from the name (`rigid_barrel_60kg`). It is no longer part of the road or the walls.
+* in `track.json`: `"objects": [{ "shape": "box", "x": 10, "z": 20, "size": [1, 0.8, 1], "mass": 40, "grid": [1, 5], "layers": 3, "heading": 90, "color": "#c9a25b" }, { "shape": "cylinder", "x": 12, "z": 22, "radius": 0.3, "height": 0.9 }]`. Shapes: `box`, `cylinder`, `cone`, `sphere`; `y` is the road when left out; `grid` and `spacing` make a block, `layers` a stack.
+
+A car pushes them and feels their mass: the change of speed of the objects it hits is taken from its own speed.
+
 ## Skidpad
 *Skidpad* in the main menu (next to the editors) takes the chosen car to `web/tracks/skidpad` (a round pad with a painted circle of 50 m radius, made by `tools/make-skidpad.py`) and drives it round the circle by itself (`?mode=skidpad`, `startSkidpad` in `main.js`): the steering holds the painted line, the speed goes up a quarter of a metre per second every second, and the lateral acceleration is read from the tyre forces while the car still follows the circle. When it lets go (off the line or sliding) the result comes up: the g it held, the speed, and *Reset* (again, with the tuning as it is now), *Tune* (the tuning menu of the game, so you can change the car and press Reset) and *Back to the menu*. The ESC is off for it; the traction control follows your setting. The same test as the bench's skidpad, but to look at.
 
