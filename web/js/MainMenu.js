@@ -413,6 +413,30 @@ var MainMenu = (function() {
                 actions.appendChild(importButton);
                 actions.appendChild(importInput);
                 box.appendChild(actions);
+                // a link to a zip: import it, or make the link of the game that imports it for someone else
+                var linkRow = document.createElement("div");
+                linkRow.className = "actions";
+                var linkInput = document.createElement("input");
+                linkInput.type = "text";
+                linkInput.placeholder = "Link to a zip (https://…)";
+                linkInput.style.cssText = "flex: 1; min-width: 200px; padding: 6px 8px; border-radius: 4px; border: 1px solid #2c3541; background: #11161d; color: #fff;";
+                var linkImport = document.createElement("button");
+                linkImport.textContent = "Import";
+                linkImport.onclick = function() {
+                    if(!linkInput.value.trim()) return;
+                    say("Importing…");
+                    Garage.importUrl(linkInput.value.trim()).then(function(item) { build(); say("Imported " + item.kind.slice(0, -1) + " " + item.id + "."); }).catch(function(error) { say("Could not import: " + error.message, true); });
+                };
+                var linkCopy = document.createElement("button");
+                linkCopy.textContent = "Copy game link";
+                linkCopy.title = "A link of this game that adds the zip at that link for whoever opens it";
+                linkCopy.onclick = function() {
+                    if(!linkInput.value.trim()) return;
+                    var game = window.location.origin + window.location.pathname + "?import=" + encodeURIComponent(linkInput.value.trim());
+                    (navigator.clipboard ? navigator.clipboard.writeText(game) : Promise.reject()).then(function() { say("Link copied."); }, function() { linkInput.value = game; linkInput.select(); say("Copy the link from the field."); });
+                };
+                linkRow.appendChild(linkInput); linkRow.appendChild(linkImport); linkRow.appendChild(linkCopy);
+                box.appendChild(linkRow);
                 box.insertAdjacentHTML("beforeend", "<div class=\"note\" style=\"margin-top: 8px;\">A zip with car.json or track.json and the files of the model (an exported one, or a zipped folder from web/cars or web/tracks).</div>");
 
                 // the folder on the PC
@@ -804,6 +828,23 @@ var MainMenu = (function() {
         });
     }
 
+    // ?import=<link to a zip>: the car or the track at that link is added to the garage, after a question
+    function importFromAddress() {
+        var url = new URLSearchParams(window.location.search).get("import");
+        if(!url) return false;
+        var host = url;
+        try { host = new URL(url).host; } catch(e) { /* as it is */ }
+        window.history.replaceState(null, "", window.location.pathname);
+        if(!window.confirm("Add the car or track from " + host + " to your garage?")) return false;
+        element.innerHTML = "<div style=\"padding: 40px; color: #fff; font: 18px Arial;\">Importing from " + host.replace(/[<>&]/g, "") + "…</div>";
+        OpenRacer.Garage.importUrl(url).then(function(item) {
+            if(item.kind === "cars") choice.car = item.id; else choice.track = item.id;
+            remember();
+            load();
+        }).catch(function(error) { load(); window.alert("Could not import: " + error.message); });
+        return true;
+    }
+
     function show() {
         addStyle();
         var last = remembered();
@@ -815,8 +856,8 @@ var MainMenu = (function() {
         window.addEventListener("keydown", function(event) {
             if(event.code === "Enter") start();
         });
-        load();
+        if(!importFromAddress()) load();
     }
 
-    return { show: show };
+    return { show: show, importFromAddress: importFromAddress };
 })();

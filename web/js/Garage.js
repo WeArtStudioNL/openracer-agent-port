@@ -328,6 +328,22 @@ OpenRacer.Garage = (function () {
         });
     }
 
+    // Puts the car or the track of a zip that is somewhere on the web in the garage (the site has to allow it: CORS). Promise of { kind, id }.
+    function importUrl(url) {
+        var u;
+        try { u = new URL(url, window.location.href); } catch (e) { return Promise.reject(new Error("This is not a link.")); }
+        if (!/^https?:$/.test(u.protocol)) return Promise.reject(new Error("Only links that start with http or https."));
+        return fetch(u.href).then(function (response) {
+            if (!response.ok) throw new Error("The link gave " + response.status + ".");
+            return response.blob();
+        }, function () { throw new Error("The link could not be read (the site has to allow other sites to read it)."); }).then(function (blob) {
+            if (blob.size > 1e9) throw new Error("This file is too large.");
+            var name = "item.zip";
+            try { name = decodeURIComponent(u.pathname.split("/").pop() || name); } catch (e) { /* keep it */ }
+            return importZip(new File([blob], name));
+        });
+    }
+
     // Promise of { used, quota } in bytes, where the browser tells
     function usage() {
         if (!navigator.storage || !navigator.storage.estimate) return Promise.resolve(null);
@@ -344,6 +360,6 @@ OpenRacer.Garage = (function () {
         available: available, list: list, get: get, put: put, remove: remove,
         configOf: configOf, sourceOf: sourceOf, resolve: resolve, manager: manager,
         folderSupported: folderSupported, linkFolder: linkFolder, unlinkFolder: unlinkFolder, folderPermission: folderPermission, folderInfo: folderInfo, folderList: folderList,
-        store: store, discard: discard, exportZip: exportZip, importZip: importZip, usage: usage, sizeOf: sizeOf
+        store: store, discard: discard, exportZip: exportZip, importZip: importZip, importUrl: importUrl, usage: usage, sizeOf: sizeOf
     };
 })();
