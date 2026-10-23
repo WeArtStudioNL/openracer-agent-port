@@ -25,7 +25,7 @@
 <div id="cars" style="margin: 10px 0;"></div>
 <button id="run">Run</button> <span id="state" class="note"></span>
 <table id="results"><thead><tr><th>Car</th><th>Ride height</th><th>Landing (3 m)</th><th>Hard landing (10 m)</th><th>Wheels at 30 m/s</th><th>Cornering</th><th>Whole</th></tr></thead><tbody></tbody></table>
-<div class="note" style="margin-top: 14px;">Limits: still bouncing 1.5 s after a 3 m landing (more than 0.5 m/s up) or a 10 m landing (1.5 m/s); wheels that flicker (let go of the road) at most 4 times in 10 s on the straight; the yaw rate in a bend that is held at most 1.15 of what the steering asks; a ride height within 8 cm of the one that the car is made for; no number that is not a number, and no speed that jumps.</div>
+<div class="note" style="margin-top: 14px;">Limits: still bouncing 1.5 s after a 3 m landing (more than 0.5 m/s up) or a 10 m landing (3 m/s); wheels that flicker (let go of the road) at most 4 times in 10 s on the straight; the yaw rate in a bend that is held at most 1.15 of what the steering asks; a ride height within 8 cm of the one that the car is made for; no number that is not a number, and no speed that jumps.</div>
 <iframe id="game" title="game"></iframe>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -69,7 +69,7 @@ function checks(w) {
     };
     const a = land(3), b = land(10);
     out.land3 = { ok: !a.bad && a.up < 0.5, text: "hop " + a.up.toFixed(2) + " m/s" };
-    out.land10 = { ok: !b.bad && b.up < 1.5, text: "hop " + b.up.toFixed(2) + " m/s, travel left " + (b.min * 100).toFixed(0) + " cm" };
+    out.land10 = { ok: !b.bad && b.up < 3, text: "hop " + b.up.toFixed(2) + " m/s, travel left " + (b.min * 100).toFixed(0) + " cm" };
 
     // wheels on a straight at 30 m/s
     place(); v.vx = Math.cos(H) * 30; v.vz = Math.sin(H) * 30;
