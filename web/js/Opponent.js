@@ -226,6 +226,18 @@ OpenRacer.Opponent = function (config, line, options) {
         if (speed < 0.5 && this.throttle > 0.3) { this.stuck = (this.stuck || 0) + delta; } else this.stuck = 0;
         if (this.stuck > 2.5) { this.reverse = true; this.throttle = 0.5; this.brakePedal = 0; this.turnAngle = -smoothSteer; if (this.stuck > 4.5) this.stuck = 0; }
         else this.reverse = false;
+        // lost: stuck for a long time (a rock, a dune), far from the line, or on its roof: put back on the line, facing along it, standing, in the state it is in
+        var here = line.point(this.lineIndex);
+        var offLine = Math.hypot(here.x - v.x, here.z - v.z);
+        var upY = 1 - 2 * (v.qx * v.qx + v.qz * v.qz);
+        if ((speed < 1.5 && this.throttle > 0.3 && !inLane) || offLine > 45 || upY < 0.25) this.lostFor = (this.lostFor || 0) + delta;
+        else this.lostFor = Math.max(0, (this.lostFor || 0) - 2 * delta);
+        if (this.lostFor > 7 && !inLane) {
+            var ahead1 = line.point(this.lineIndex + 3), ahead2 = line.point(this.lineIndex + 4);
+            v.relocate(ahead1.x, ahead1.z, Math.atan2(ahead2.z - ahead1.z, ahead2.x - ahead1.x), null);
+            this.lostFor = 0; this.stuck = 0; smoothSteer = 0; this.reverse = false;
+            this.recovered = (this.recovered || 0) + 1;
+        }
     };
 
     this.update = function (delta, others) {
