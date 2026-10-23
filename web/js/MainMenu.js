@@ -739,10 +739,13 @@ var MainMenu = (function() {
     var MODE_KEY = "openracer.mode";
     var mode = "free";
     try { mode = window.localStorage.getItem(MODE_KEY) || "free"; } catch(e) { /* no storage */ }
-    var STEP_NAMES = { mode: "Play", car: "Car", track: "Track", race: "Race" };
+    var STEP_NAMES = { mode: "Play", car: "Car", track: "Track", race: "Race", surface: "Ground" };
+    var SURFACE_KEY = "openracer.skidSurface";
+    var skidSurface = "road";
+    try { skidSurface = window.localStorage.getItem(SURFACE_KEY) || "road"; } catch(e) { /* no storage */ }
 
     function stepsOf() {
-        return mode === "race" ? ["mode", "car", "track", "race"] : (mode === "skidpad" ? ["mode", "car"] : ["mode", "car", "track"]);
+        return mode === "race" ? ["mode", "car", "track", "race"] : (mode === "skidpad" ? ["mode", "car", "surface"] : ["mode", "car", "track"]);
     }
     function go(next) { screen = next; render(); var page = element.querySelector(".page"); if(page) page.scrollTop = 0; }
     function setMode(value) {
@@ -765,7 +768,7 @@ var MainMenu = (function() {
         if(!choice.car) return;
         remember();
         if(mode === "skidpad") {
-            window.location.href = window.location.pathname + "?car=" + encodeURIComponent(choice.car) + "&track=skidpad&mode=skidpad&ai=0&ghost=0&records=0&wear=0";
+            window.location.href = window.location.pathname + "?car=" + encodeURIComponent(choice.car) + "&track=skidpad&mode=skidpad&ai=0&ghost=0&records=0&wear=0&surface=" + encodeURIComponent(skidSurface);
             return;
         }
         if(!choice.track) return;
@@ -979,6 +982,28 @@ var MainMenu = (function() {
         inner.appendChild(list);
     }
 
+    // the ground of the skidpad: the same circle on asphalt, wet asphalt, grass, gravel, sand or mud
+    function surfaceStep(inner) {
+        inner.innerHTML = "<h2>Choose the ground</h2><div class=\"sub\">Your car circles faster and faster on it until it lets go.</div>";
+        var grid = document.createElement("div");
+        grid.className = "modes";
+        SKIDPAD_SURFACES.forEach(function(s) {
+            var d = document.createElement("div");
+            d.className = "mode" + (skidSurface === s.id ? " selected" : "");
+            d.innerHTML = "<b></b><span></span>";
+            var swatch = document.createElement("i");
+            swatch.style.cssText = "display: inline-block; width: 14px; height: 14px; border-radius: 4px; margin-right: 10px; vertical-align: -1px; background: " + s.colour + ";";
+            d.firstChild.appendChild(swatch);
+            d.firstChild.appendChild(document.createTextNode(s.name));
+            var surface = getSurface(s.id);
+            d.lastChild.textContent = "Grip " + surface.static.toFixed(2) + (surface.loose ? ", loose ground" : "");
+            d.onclick = function() { skidSurface = s.id; try { window.localStorage.setItem(SURFACE_KEY, s.id); } catch(e) {} render(); };
+            d.ondblclick = goNext;
+            grid.appendChild(d);
+        });
+        inner.appendChild(grid);
+    }
+
     function raceStep(inner) {
         inner.innerHTML = "<h2>Set up the race</h2><div class=\"sub\">A race starts from a standing start, with a countdown.</div>";
         function setting(label, items, current, apply) {
@@ -1024,6 +1049,7 @@ var MainMenu = (function() {
         var parts = [];
         if(screen !== "mode") parts.push({ free: "Free drive", race: "Race", skidpad: "Skidpad" }[mode]);
         if(car && screen !== "mode" && screen !== "car") parts.push(car.name || car.id);
+        if(mode === "skidpad" && screen === "surface") parts.push((SKIDPAD_SURFACES.filter(function(s) { return s.id === skidSurface; })[0] || {}).name || "Asphalt");
         else if(car && screen === "car") parts.push(car.name || car.id);
         if(track && mode !== "skidpad" && (screen === "track" || screen === "race")) parts.push(track.name || track.id);
         if(screen === "race") parts.push(raceOptions.laps + " laps, " + raceOptions.ai + " opponents");
@@ -1076,6 +1102,7 @@ var MainMenu = (function() {
         else if(screen === "car") carStep(inner);
         else if(screen === "track") trackStep(inner);
         else if(screen === "race") raceStep(inner);
+        else if(screen === "surface") surfaceStep(inner);
 
         var bar = document.createElement("div");
         bar.className = "bar";

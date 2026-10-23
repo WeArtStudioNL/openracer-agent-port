@@ -52,7 +52,7 @@ function endsWith(str, suffix) {
 }
 
 // Textures that can be driven on
-var drivableTextures = { "road": true, "grass": true, "ground": true, "track01": true, "sand": true, "gravel": true, "mud": true };
+var drivableTextures = { "road": true, "grass": true, "ground": true, "track01": true, "sand": true, "gravel": true, "mud": true, "wet": true };
 
 var groundRay = new THREE.Raycaster();
 var groundDown = new THREE.Vector3(0, -1, 0);
@@ -97,6 +97,7 @@ function getGroundAt(x, z, hintY) {
 var uCoeff = {
     "road": { static: 1.2, kinetic: 1.06 },
     "track01": { static: 1.03, kinetic: 0.93 },
+    "wet": { static: 0.85, kinetic: 0.75 },        // wet asphalt (the skidpad)
     "grass": { static: 0.62, kinetic: 0.52, loose: true, dust: [0.5, 0.58, 0.3] },
     // sand, gravel and mud: loose ground, each with its own grip, its own drag (the rolling resistance of the tyre in it, as a factor) and the colour of what it throws up
     "sand": { static: 0.6, kinetic: 0.5, loose: true, drag: 4.5, dust: [0.86, 0.72, 0.5] },

@@ -36,6 +36,20 @@ var circuitObjects;
 var trackObjects = { track: [], grass: [], ground: [], other: [] };
 var searchOrder = ["track", "grass", "ground", "other"];
 var trackRigidPieces = [];   // the parts of the model that are rigid bodies (RigidObjects.js): named rigid...
+// The ground of the skidpad: the choice in the menu (?surface=<id>), or the asphalt that it is made with
+var SKIDPAD_SURFACES = [
+    { id: "road", name: "Asphalt", colour: "#5d6168" },
+    { id: "wet", name: "Wet asphalt", colour: "#383d45" },
+    { id: "grass", name: "Grass", colour: "#5a8a3c" },
+    { id: "gravel", name: "Gravel", colour: "#8f8a80" },
+    { id: "sand", name: "Sand", colour: "#cdaa6e" },
+    { id: "mud", name: "Mud", colour: "#5a432c" }
+];
+var skidpadSurface = (function() {
+    var wanted = new URLSearchParams(window.location.search).get("surface");
+    var found = SKIDPAD_SURFACES.filter(function(s) { return s.id === wanted; })[0];
+    return found && found.id !== "road" ? found : null;
+})();
 var trackGates = [];         // lines across the road { x, z, heading, width } that make a lap, in order; the first is the finish line
 var trackCheckPoints = [];   // names of the road pieces that make a lap, from the track
 var currentTrack = null;     // the track that is loaded (see tracks/<id>/track.json)
@@ -339,7 +353,7 @@ function meshSurface(mesh) {
 // track.json has "model" (the file in the folder of the track) and "surfaces": { "meshes": { <name of a part>: <role> }, "materials": { <name of a
 // material>: <role> } }. The roles are road, track01, grass, ground, sand, gravel and mud (the car can drive on them, each with its own grip), scenery (visible,
 // the car drives into its steep parts), decor (only to look at) and, for what is not mentioned, scenery. The model is made in metres, y up.
-var trackRoles = { road: "track", track01: "ground", grass: "grass", ground: "ground", sand: "ground", gravel: "ground", mud: "ground" };
+var trackRoles = { wet: "track", road: "track", track01: "ground", grass: "grass", ground: "ground", sand: "ground", gravel: "ground", mud: "ground" };
 
 function trackRole(mesh, surfaces) {
     var meshes = surfaces.meshes || {};
@@ -364,6 +378,16 @@ function loadGltfTrack(track) {
         var maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
         pieces.forEach(function(piece) {
             var role = trackRole(piece, surfaces);
+            // the skidpad on a surface of the player's choice (?surface=, see skidpadSurface): the pad and the ground round it, and the colour of the pad to show it
+            if(currentTrack.skidpad && skidpadSurface && (role === "road" || role === "grass")) {
+                role = skidpadSurface.id;
+                if(!/^circle/.test(piece.name)) {
+                    piece.material = [].concat(piece.material)[0].clone();
+                    piece.material.map = null;
+                    piece.material.color.set(skidpadSurface.colour);
+                    if(piece.material.roughness !== undefined) piece.material.roughness = 1;
+                }
+            }
             // the transform of the part is baked into the geometry: the rest of the game wants the track in world coordinates
             var geometry = piece.geometry.clone();
             geometry.applyMatrix4(piece.matrixWorld);
