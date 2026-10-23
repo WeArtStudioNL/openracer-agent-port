@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenRacer physics check</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+    body { font: 14px/1.5 Arial, sans-serif; background: #12161c; color: #dfe6ef; margin: 0; padding: 20px; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    .sub { color: #9aa8ba; margin-bottom: 14px; }
+    button { background: #3d7bd9; color: #fff; border: 0; border-radius: 5px; padding: 8px 16px; cursor: pointer; font-size: 14px; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    table { border-collapse: collapse; margin-top: 16px; width: 100%; max-width: 1100px; }
+    th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #263040; vertical-align: top; }
+    th { color: #9aa8ba; font-weight: normal; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; }
+    .ok { color: #6fdc8c; } .bad { color: #ff8a80; font-weight: bold; } .note { color: #7e90a6; font-size: 12px; }
+    #cars label { margin-right: 14px; white-space: nowrap; }
+    iframe { position: fixed; right: 10px; bottom: 10px; width: 320px; height: 200px; border: 1px solid #263040; opacity: 0.85; }
+</style>
+</head>
+<body>
+<h1>Physics check</h1>
+<div class="sub">Runs the physics of the game for the cars you pick, on a track, and says what is wrong: bounce after a landing, a wheel that flickers, a car that spins by itself, a bad ride height, a car that blows up. Run it after a change to the physics or to a car. It takes a few seconds for a car.</div>
+<div><label>Track <select id="track"><option value="circuit">circuit</option><option value="desert">desert</option><option value="openracer-test-track">openracer-test-track</option></select></label></div>
+<div id="cars" style="margin: 10px 0;"></div>
+<button id="run">Run</button> <span id="state" class="note"></span>
+<table id="results"><thead><tr><th>Car</th><th>Ride height</th><th>Landing (3 m)</th><th>Hard landing (10 m)</th><th>Wheels at 30 m/s</th><th>Cornering</th><th>Whole</th></tr></thead><tbody></tbody></table>
+<div class="note" style="margin-top: 14px;">Limits: still bouncing 1.5 s after a 3 m landing (more than 0.5 m/s up) or a 10 m landing (1.5 m/s); wheels that flicker (let go of the road) at most 4 times in 10 s on the straight; the yaw rate in a bend that is held at most 1.15 of what the steering asks; a ride height within 8 cm of the one that the car is made for; no number that is not a number, and no speed that jumps.</div>
+<iframe id="game" title="game"></iframe>
+<script>
+const $ = (id) => document.getElementById(id);
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function carList() {
+    try { return (await (await fetch("/api/cars")).json()).map((c) => c.id); } catch (e) { /* no API */ }
+    try { return await (await fetch("../cars/index.json")).json(); } catch (e) { return []; }
+}
+carList().then((ids) => {
+    $("cars").innerHTML = ids.map((id) => '<label><input type="checkbox" value="' + id + '"' + (/stadium|mustang/.test(id) ? " checked" : "") + "> " + id + "</label>").join("");
+});
+
+// opens the game with a car on a track and gives its window when the car is ready
+async function load(car, track) {
+    const frame = $("game");
+    frame.src = "../index.html?track=" + encodeURIComponent(track) + "&car=" + encodeURIComponent(car) + "&ai=0&ghost=0&records=0";
+    for (let i = 0; i < 120; i++) {
+        await wait(500);
+        try { const w = frame.contentWindow; if (w.car && w.car.isReady && w.car.isReady() && w.car.vehicle && w.currentTrack) { await wait(1000); return w; } } catch (e) { /* not yet */ }
+    }
+    throw new Error("The game did not start.");
+}
+
+function checks(w) {
+    const v = w.car.vehicle, inp = v.input, s = w.currentTrack.start, H = s.heading || 0;
+    const out = {};
+    const place = () => { v.reset(s.x, s.z, H); inp.neutral = false; inp.parkingLock = false; inp.handbrake = false; inp.reverse = false; inp.current_gear = 0; inp.turnAngle = 0; inp.throttle = 0; inp.brakePedal = 0; v.escEnabled = false; v.tcEnabled = false; };
+    const finite = () => ["px", "py", "pz", "vx", "vy", "vz"].every((k) => isFinite(v[k]));
+
+    // ride height: where the wheels stand after a second at rest, against where the car is made for them
+    place(); for (let t = 0; t < 200; t++) v.update(0.01);
+    const off = Math.max(...v.wheels.map((x) => Math.abs(x.susLength - x.restLengthWheel)));
+    out.ride = { value: off, ok: off < 0.08, text: (off * 100).toFixed(1) + " cm off" };
+
+    // landings: the hop after it
+    const land = (height) => {
+        place(); v.py += height; let up = 0, bad = false, min = 9;
+        for (let t = 0; t < 600; t++) { v.update(0.01); if (!finite()) bad = true; min = Math.min(min, ...v.wheels.map((x) => x.susLength)); if (t > 150) up = Math.max(up, v.vy); }
+        return { up, bad, min };
+    };
+    const a = land(3), b = land(10);
+    out.land3 = { ok: !a.bad && a.up < 0.5, text: "hop " + a.up.toFixed(2) + " m/s" };
+    out.land10 = { ok: !b.bad && b.up < 1.5, text: "hop " + b.up.toFixed(2) + " m/s, travel left " + (b.min * 100).toFixed(0) + " cm" };
+
+    // wheels on a straight at 30 m/s
+    place(); v.vx = Math.cos(H) * 30; v.vz = Math.sin(H) * 30;
+    const prev = [true, true, true, true], toggles = [0, 0, 0, 0]; let blew = false, lastSpeed = 30;
+    for (let t = 0; t < 600; t++) {
+        const err = 30 - v.u; inp.throttle = Math.max(0, Math.min(1, 0.3 + 0.1 * err)); inp.brakePedal = 0; v.update(0.0166);
+        if (t > 60) v.wheels.forEach((x, i) => { if (x.hasContact !== prev[i]) toggles[i]++; prev[i] = x.hasContact; });
+        const sp = Math.hypot(v.vx, v.vy, v.vz); if (sp - lastSpeed > 35 || !finite()) blew = true; lastSpeed = sp;
+    }
+    const flick = Math.max(...toggles);
+    out.straight = { ok: flick <= 4 && !blew, text: flick + " flickers" + (blew ? ", the speed jumped" : "") };
+
+    // cornering: coasting with a little steering, the yaw rate that is kept against what the steering asks
+    place(); inp.neutral = true; v.vx = Math.cos(H) * 18; v.vz = Math.sin(H) * 18; const delta = 0.05; let worst = 0;
+    for (let t = 0; t < 250; t++) { inp.turnAngle = delta * Math.min(1, t / 30); v.update(0.01); if (t > 120) { const kin = v.u * Math.tan(delta) / v.wheelbase; if (kin > 0.01) worst = Math.max(worst, Math.abs(v.wy) / kin); } }
+    out.corner = { ok: worst < 1.15, text: "yaw " + worst.toFixed(2) + "× of the steering" };
+    place();
+    return out;
+}
+
+async function run() {
+    const picked = [...document.querySelectorAll("#cars input:checked")].map((i) => i.value);
+    $("run").disabled = true;
+    $("results").tBodies[0].innerHTML = "";
+    for (const car of picked) {
+        $("state").textContent = "Running " + car + "…";
+        const row = $("results").tBodies[0].insertRow();
+        try {
+            const w = await load(car, $("track").value);
+            const r = checks(w);
+            const cell = (c) => '<td class="' + (c.ok ? "ok" : "bad") + '">' + (c.ok ? "✓ " : "✗ ") + c.text + "</td>";
+            const all = Object.values(r).every((c) => c.ok);
+            row.innerHTML = "<td>" + car + "</td>" + cell(r.ride) + cell(r.land3) + cell(r.land10) + cell(r.straight) + cell(r.corner) + '<td class="' + (all ? "ok" : "bad") + '">' + (all ? "all good" : "check") + "</td>";
+        } catch (e) {
+            row.innerHTML = "<td>" + car + '</td><td colspan="6" class="bad">' + String(e.message).replace(/[<>&]/g, "") + "</td>";
+        }
+    }
+    $("state").textContent = "Done.";
+    $("run").disabled = false;
+}
+$("run").onclick = run;
+</script>
+</body>
+</html>
