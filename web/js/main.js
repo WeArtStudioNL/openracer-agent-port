@@ -38,7 +38,7 @@ function showLoading() {
         clearInterval(timer);
         bar.style.width = "100%";
         box.style.opacity = "0";
-        setTimeout(function() { box.remove(); }, 450);
+        setTimeout(function() { box.remove(); race.ready = true; }, 450);
     }, 250);
 }
 
@@ -187,13 +187,56 @@ function setupReplayViewer() {
 // come in. The AI counts its laps along the line, the player's laps are counted by the gates (Car.js).
 function startRace(laps) {
     race.laps = laps;
-    race.state = "countdown";
+    race.state = "waiting";      // until everything has loaded and the loading screen is gone; then the fly-by over the grid, then the countdown
     race.countdown = 4;          // 3, 2, 1 and GO (a second each)
     race.results = [];
     race.winnerTime = null;
     car.raceLaps = laps;
     car.held = true;
     race.opponents.forEach(function(o) { o.held = true; });
+}
+
+// The camera flies over the grid from the front to the back, at the side of it, and then the view of the player comes back
+var FLYBY_SECONDS = 6;
+function beginFlyby() {
+    var s = currentTrack.start, h = s.heading || 0, dx = Math.cos(h), dz = Math.sin(h);
+    var front = 0;
+    race.opponents.forEach(function(o) { front = Math.max(front, (o.vehicle.px - s.x) * dx + (o.vehicle.pz - s.z) * dz); });
+    front += 14;
+    var back = -14;
+    var state = race.flyby = { time: 0, skip: false };
+    function skip() { state.skip = true; }
+    state.keydown = function(e) { if(e.code === "Enter" || e.code === "Space") skip(); };
+    window.addEventListener("keydown", state.keydown);
+    window.addEventListener("pointerdown", skip);
+    state.pointerdown = skip;
+    var note = document.createElement("div");
+    note.textContent = "Press Enter to skip";
+    note.style.cssText = "position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 1001; color: var(--muted); font: 14px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; text-shadow: 0 1px 4px #000; pointer-events: none;";
+    document.body.appendChild(note);
+    state.note = note;
+    car.cameraOverride = function(delta) {
+        if(Settings.isPaused()) return true;
+        state.time += Math.min(delta, 1);   // (a slow computer does not make it longer than it is)
+        var t = Math.min(1, state.time / FLYBY_SECONDS), e = t * t * (3 - 2 * t);
+        var along = front + (back - front) * e;
+        var ground = car.body.position.y - car.wheels[0].radius;
+        var px = -dz, pz = dx;           // across the grid
+        camera.position.set(s.x + dx * along + px * 8, ground + 2.4, s.z + dz * along + pz * 8);
+        camera.lookAt(s.x + dx * (along - 5) - px * 0.5, ground + 0.7, s.z + dz * (along - 5) - pz * 0.5);
+        return true;
+    };
+    race.state = "flyby";
+}
+function endFlyby() {
+    var state = race.flyby;
+    car.cameraOverride = null;
+    window.removeEventListener("keydown", state.keydown);
+    window.removeEventListener("pointerdown", state.pointerdown);
+    state.note.remove();
+    race.flyby = null;
+    race.state = "countdown";
+    race.countdown = 4;
     var overlay = document.createElement("div");
     overlay.id = "raceOverlay";
     overlay.style.cssText = "position: absolute; top: 18%; left: 50%; transform: translateX(-50%); z-index: 1001; font: bold 96px Arial; " +
@@ -203,6 +246,14 @@ function startRace(laps) {
 }
 
 function updateRaceFlow(delta) {
+    if(race.state === "waiting") {
+        if(race.ready) beginFlyby();
+        return;
+    }
+    if(race.state === "flyby") {
+        if(race.flyby.skip || race.flyby.time >= FLYBY_SECONDS) endFlyby();
+        return;
+    }
     if(race.state === "countdown") {
         race.countdown -= delta;
         var n = Math.ceil(race.countdown - 1);
@@ -211,6 +262,7 @@ function updateRaceFlow(delta) {
         if(race.countdown <= 1 && car.held) {
             // GO: the clocks of the race start here
             car.held = false;
+            car.brakePedal = 0; car.handbrake = false;
             race.opponents.forEach(function(o) { o.held = false; o.goClock = o.clock; });
             race.goClock = car.clock;
         }

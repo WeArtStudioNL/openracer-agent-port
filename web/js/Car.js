@@ -55,6 +55,7 @@ OpenRacer.Car = function( config, domElement ) {
     
     this.lapsCompleted = 0;
     this.raceLaps = 0;        // the laps of the race (0: practice, no end), shown by the HUD
+    var wasHeld = false;
     this.held = false;        // held on the grid (the countdown of a race, see main.js)
     this.lapStartTime = 0;    // the time (of the clock below) that the lap that is going started
     this.laps = [];
@@ -422,7 +423,9 @@ OpenRacer.Car = function( config, domElement ) {
 
     this.cameraSubject = null;      // the car that the camera follows when it is not this one (a replay: Replay.js)
     var lastSubject = null;
+    this.cameraOverride = null;     // a function that places the camera itself (the fly-by over the grid, main.js); true when it did
     this.updateCamera = function(delta, cx, cz, avgGround, yaw, bodyQ, subject) {
+        if(this.cameraOverride && this.cameraOverride(delta)) return;
         subject = subject || this;
         var cs = this.cameraSettings;
         var radius = subject.wheels[0].radius;
@@ -491,6 +494,8 @@ OpenRacer.Car = function( config, domElement ) {
         gamepadUpdate(delta);
         // on the grid before the start of a race: the brakes are on, the engine can be revved
         if(this.held) { this.brakePedal = 1; this.handbrake = true; this.accelerate = false; this.throttle = Math.min(this.throttle, 0.6); }
+        else if(wasHeld) { this.brakePedal = 0; this.handbrake = false; this.brake = false; }   // GO: the brake of the grid is let go
+        wasHeld = this.held;
         // the clutch pedal works the clutch in the manual mode, once it is used or the shifter was moved
         if(this.clutchAvailable && this.gearboxMode === "manual" && this.clutch > 0.08) this.manualClutch = true;
         this.clutchPedalPresent = this.clutchAvailable && this.gearboxMode === "manual" && this.manualClutch;
