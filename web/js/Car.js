@@ -214,7 +214,9 @@ OpenRacer.Car = function( config, domElement ) {
         var frontTrack = Math.abs(c.FR.x - c.FL.x);
         var rearTrack = Math.abs(c.RR.x - c.RL.x);
         var diameter = measured.diameter;
-        if(!(wheelbase > 0.6 && wheelbase < 5 && frontTrack > 0.4 && frontTrack < 3 && rearTrack > 0.4 && rearTrack < 3 && diameter > 0.1 && diameter < 1.5)) {
+        var bike = config.type === "motorcycle";          // (a wheel at each end: no track)
+        if(bike) { frontTrack = Math.max(0.04, frontTrack); rearTrack = Math.max(0.04, rearTrack); }
+        if(!(wheelbase > 0.6 && wheelbase < 5 && frontTrack > (bike ? 0 : 0.4) && frontTrack < 3 && rearTrack > (bike ? 0 : 0.4) && rearTrack < 3 && diameter > 0.1 && diameter < 1.5)) {
             console.warn("Car: the wheels of the model give no sensible wheelbase/track/tyre (" + wheelbase.toFixed(2) + ", " + frontTrack.toFixed(2) + ", " + rearTrack.toFixed(2) + ", " + diameter.toFixed(2) + "), using car.json");
             return;
         }

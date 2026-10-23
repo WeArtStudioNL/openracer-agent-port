@@ -22,7 +22,7 @@ The game's physics has four wheels, and a motorcycle is that physics with change
 A driver (a model with a skeleton, added in the car editor as for a car) on a bike is a rider when the model has the places that a rider takes, found by name (`Driver.js`):
 
 * `footpeg_L`, `footpeg_R`: the feet. The left foot also follows the shift lever.
-* `grip_L`, `grip_R`: the hands. They turn with the handlebar about the axis of the fork, and the hands go round with them. **The right wrist rolls with the throttle**: `grip_R` is turned (up to 43 degrees) by the gas and the hand with it.
+* `grip_L`, `grip_R`: the hands. The pivot of a hand is its grip, and `driver.hands.offset` (left, right: x, y, z in the frame of the grip, set by moving the hand in the driver editor) is the offset from it. They turn with the handlebar about the axis of the fork, and the hands go round with them. **The right wrist rolls with the throttle**: `grip_R` is turned (up to 43 degrees) by the gas and the hand with it.
 * `frontbrake_R`, `clutch_L`: the fingers that are not the thumb point at the lever (the thumb is round the grip). They close a little more with the brake; the left ones pull the clutch lever with every shift.
 * `shifter_L`: the shift lever (its origin is its hinge, the lever goes forward from it to a toe peg). The game turns it with every shift and the left foot goes with its toe peg: **first gear is a tap down, every gear above it a tap up, and neutral, between the first and the second, a small tap: up from the first gear, down from the second**.
 

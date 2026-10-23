@@ -513,7 +513,7 @@ function replaceModel() {
     if (centres) {
         const wheelbase = ((centres.FR.c.z + centres.FL.c.z) / 2) - ((centres.RR.c.z + centres.RL.c.z) / 2);
         const track = Math.abs(centres.FL.c.x - centres.FR.c.x);
-        const diameter = SLOTS.reduce((sum, s) => sum + centres[s].size.y, 0) / 4;
+        const diameter = meanTyre(centres);
         const off = [];
         if (Math.abs(wheelbase - num("wheelbase")) > 0.03) off.push("wheelbase " + wheelbase.toFixed(2) + " m (car: " + num("wheelbase") + ")");
         if (Math.abs(track - num("frontTrack")) > 0.03) off.push("front track " + track.toFixed(2) + " m (car: " + num("frontTrack") + ")");
@@ -570,6 +570,14 @@ function wheelBox(slot) {
 }
 
 // the centres of the four wheels (in the space of the car), or null if a wheel has no parts
+// the diameter of the tyre: the mean of the wheels that are wheels (a motorcycle has dots of a millimetre for the two slots that it does not need)
+function meanTyre(c) {
+    const sizes = SLOTS.map((s) => c[s].size.y), big = Math.max(...sizes), real = sizes.filter((v) => v >= 0.5 * big);
+    return real.reduce((a, v) => a + v, 0) / real.length;
+}
+
+function isBike() { return !!(state.existingCar && state.existingCar.type === "motorcycle"); }
+
 function wheelCenters() {
     if (wheelMode() !== "model") return null;
     const centres = {};
@@ -691,9 +699,9 @@ function chassisFromWheels() {
     const c = wheelCenters();
     if (!c) { status("Select the parts of the four wheels first.", "error"); return; }
     $("wheelbase").value = (((c.FR.c.z + c.FL.c.z) / 2) - ((c.RR.c.z + c.RL.c.z) / 2)).toFixed(3);
-    $("frontTrack").value = Math.abs(c.FL.c.x - c.FR.c.x).toFixed(3);
-    $("rearTrack").value = Math.abs(c.RL.c.x - c.RR.c.x).toFixed(3);
-    $("tyre").value = (SLOTS.reduce((sum, s) => sum + c[s].size.y, 0) / 4).toFixed(3);
+    $("frontTrack").value = Math.max(isBike() ? 0.04 : 0, Math.abs(c.FL.c.x - c.FR.c.x)).toFixed(3);
+    $("rearTrack").value = Math.max(isBike() ? 0.04 : 0, Math.abs(c.RL.c.x - c.RR.c.x)).toFixed(3);
+    $("tyre").value = meanTyre(c).toFixed(3);
     updateHelpers();
 }
 
@@ -1408,6 +1416,8 @@ function buildConfig(id) {
         config.cameras.follow.fov_fast, config.cameras.follow.fov_full_speed, config.cameras.follow.dolly, config.cameras.cockpit.fov, ...config.cameras.cockpit.position];
     if (!camNumbers.every(Number.isFinite)) throw new Error("Every field of the cameras needs a number.");
     if (!config.name) throw new Error("Give the car a name.");
+    // a motorcycle stays one (the form has no field for the type or for the rider and the lean): they are kept from the car as it was loaded
+    if (isBike()) { config.type = "motorcycle"; config.motorcycle = JSON.parse(JSON.stringify(state.existingCar.motorcycle || {})); }
     // the settings of the Tuning card (the rest of the tuning menu) go into the configuration too
     const withTuning = OpenRacer.CarTuning.toConfig(config, tuningValues(config));
     ["tyres", "fuel", "assists"].forEach((k) => { config[k] = withTuning[k]; });
@@ -1420,11 +1430,12 @@ function buildConfig(id) {
         if (c) {
             const wb = (c.FR.c.z + c.FL.c.z) / 2 - (c.RL.c.z + c.RR.c.z) / 2;
             const ft = Math.abs(c.FR.c.x - c.FL.c.x), rt = Math.abs(c.RR.c.x - c.RL.c.x);
-            const d = (c.FR.size.y + c.FL.size.y + c.RL.size.y + c.RR.size.y) / 4;
-            if (wb > 0.6 && wb < 5 && ft > 0.4 && rt > 0.4 && d > 0.1 && d < 1.5) {
+            const d = meanTyre(c);
+            const bike = isBike();         // (a motorcycle has a wheel at each end: no track, the physics has a pair of wheels 4 cm apart)
+            if (wb > 0.6 && wb < 5 && (bike || (ft > 0.4 && rt > 0.4)) && d > 0.1 && d < 1.5) {
                 config.chassis.wheelbase = Math.round(wb * 1000) / 1000;
-                config.chassis.front_track = Math.round(ft * 1000) / 1000;
-                config.chassis.rear_track = Math.round(rt * 1000) / 1000;
+                config.chassis.front_track = Math.round((bike ? Math.max(0.04, ft) : ft) * 1000) / 1000;
+                config.chassis.rear_track = Math.round((bike ? Math.max(0.04, rt) : rt) * 1000) / 1000;
                 config.chassis.tire_diameter = Math.round(d * 1000) / 1000;
             } else {
                 throw new Error("The wheels of the model do not make a car: the front wheels have to be in front (turn the model) and the wheels have to be between 0.1 and 1.5 m (a wheelbase of at least 0.6 m, tracks of at least 0.4 m). Check the wheel parts.");

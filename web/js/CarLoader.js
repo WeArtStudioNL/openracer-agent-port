@@ -199,7 +199,7 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
                 var box = new THREE.Box3();
                 parts.forEach(function (part) { box.expandByObject(part); });
                 measured.centres[slot] = box.getCenter(new THREE.Vector3());
-                measured.diameter += box.getSize(new THREE.Vector3()).y / 4;
+                (measured.sizes = measured.sizes || []).push(box.getSize(new THREE.Vector3()).y);
                 var chain = wheelChain(new THREE.Object3D(), false);
                 chain.spin.remove(chain.spin.children[0]);
                 chain.object.position.copy(box.getCenter(new THREE.Vector3()));
@@ -213,6 +213,9 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
                 space.remove(chain.object);
                 wheels.push(chain.object);
             });
+            // the diameter of the tyre: the mean of the wheels that are wheels (a motorcycle has two wheels and two dots of a millimetre for the other two slots)
+            var biggest = Math.max.apply(null, measured.sizes), real = measured.sizes.filter(function(s) { return s >= 0.5 * biggest; });
+            measured.diameter = real.reduce(function(a, s) { return a + s; }, 0) / real.length;
             finish(wheels);
         } else {
             if(config.wheels && config.wheels.mode === "model") console.warn("CarLoader: not every wheel has parts of the model, using the default wheel");

@@ -114,8 +114,9 @@ OpenRacer.Opponent = function (config, line, options) {
         if (model.measured) {
             var c = model.measured.centres;
             var wheelbase = (c.FR.z + c.FL.z) / 2 - (c.RL.z + c.RR.z) / 2;
-            var frontTrack = Math.abs(c.FR.x - c.FL.x), rearTrack = Math.abs(c.RR.x - c.RL.x);
-            if (wheelbase > 1.2 && wheelbase < 5 && frontTrack > 0.6 && rearTrack > 0.6 && model.measured.diameter > 0.3) {
+            var frontTrack = Math.abs(c.FR.x - c.FL.x), rearTrack = Math.abs(c.RR.x - c.RL.x), bike = config.type === "motorcycle";
+            if (bike) { frontTrack = Math.max(0.04, frontTrack); rearTrack = Math.max(0.04, rearTrack); }
+            if (wheelbase > 1.2 && wheelbase < 5 && frontTrack > (bike ? 0 : 0.6) && rearTrack > (bike ? 0 : 0.6) && model.measured.diameter > 0.3) {
                 self.vehicle.retune({ wheelbase: wheelbase, front_track: frontTrack, rear_track: rearTrack, tire_diameter: model.measured.diameter });
                 modelMid = new THREE.Vector3((c.FR.x + c.FL.x + c.RL.x + c.RR.x) / 4, (c.FR.y + c.FL.y + c.RL.y + c.RR.y) / 4, (c.FR.z + c.FL.z + c.RL.z + c.RR.z) / 4);
             }
