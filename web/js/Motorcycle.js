@@ -44,6 +44,7 @@ OpenRacer.Motorcycle = function (settings) {
     this.maxHang = s.hang_off !== undefined ? s.hang_off : 0.3;                    // m: how far the rider hangs off the seat to the inside of a bend
     this.posture = { lat: 0, long: 0, drop: 0, tuck: 0, sit: 0, knee: 0 };       // body space: lat to the left, long forward, drop up (m); tuck, sit, knee: 0 to 1
     var vPrev = null, accel = { x: 0, y: 0, z: 0 }, dw = { x: 0, y: 0, z: 0 };
+    this.pushing = false;                                   // the rider walks the bike back (set by Car.js)
     this.command = 0;                                      // the lean that is asked (-1..1)
     this.targetLean = 0;                                   // what the rider takes (rad, left is positive)
     this.steer = 0;                                        // the angle of the front wheel that was given to the physics (rad, right is positive)
@@ -140,6 +141,15 @@ OpenRacer.Motorcycle = function (settings) {
         if (Math.abs(u) > 3) {
             var yawErr = c.r - u * c.delta / v.wheelbase;
             torque.y += Math.max(-1800, Math.min(1800, self.balance * (c.inertiaY / 0.12) * yawErr * fast));
+        }
+        // no reverse gear: the rider walks the bike back (Car.js says when), slowly, with a small force
+        if(self.pushing) {
+            var pushF = Math.max(-900, Math.min(900, v.mass * 3 * (-1.2 - u)));
+            force.x += state.fx * pushF; force.z += state.fz * pushF;
+        } else if(u < -0.05 && u > -2 && !(v.input.throttle > 0.05)) {
+            // the push has stopped: the rider holds the bike with his feet and it stops
+            var holdF = Math.min(700, v.mass * 4 * -u);
+            force.x += state.fx * holdF; force.z += state.fz * holdF;
         }
         // the camber thrust: the leaned tyres push the bike to the inside of the bend
         var load = 0;

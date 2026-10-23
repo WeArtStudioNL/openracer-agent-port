@@ -657,8 +657,12 @@ OpenRacer.Driver = function (config, parent, steering) {
         return true;
     };
 
+    var walk = 0, walkPhase = 0, groundY = -0.3;      // pushing the bike back: how much the feet walk (0 to 1), where in the step, and the road in the space of the body
     function riderPose(dt, throttle, brake, state) {
         if (!riderRest) recordRest();
+        walk += ((state && state.push ? 1 : 0) - walk) * Math.min(1, dt / 0.3);
+        if (state && state.groundY !== undefined) groundY = state.groundY;
+        if (walk > 0.001) walkPhase += dt * Math.abs((state && state.speed) || 0) / 0.8 * Math.PI;
         var cfg = self.config;
         // the gear: the shift lever and the left hand
         if (state) shiftEvents(state.gear || 0, !!state.neutral);
@@ -708,6 +712,13 @@ OpenRacer.Driver = function (config, parent, steering) {
             rider[e[2]].localToWorld(rw.copy(footOffset(e[1] > 0 ? "left" : "right")));
             self.parent.worldToLocal(local.copy(rw));
             if (e[2] === "pegL" && rider.shifter && riderRest.tip) { bodyPos2(rider.shifter, riderRest.tip, tmp); local.add(tmp.sub(riderRest.tipAt)); }
+            // pushing the bike back: the feet come off the pegs and shuffle along the ground, one after the other
+            if (walk > 0.001) {
+                var pegAt = local.clone();
+                var stride = Math.sin(walkPhase + (e[1] > 0 ? 0 : Math.PI)), lift = Math.max(0, Math.cos(walkPhase + (e[1] > 0 ? 0 : Math.PI)));
+                tmp.set(pegAt.x + e[1] * 0.12, groundY + 0.03 + 0.1 * lift, pegAt.z + 0.05 + 0.22 * stride);
+                local.lerp(tmp, walk);
+            }
             self.parent.localToWorld(world.copy(local));
             chain[0].getWorldPosition(a);
             var setKnee = cfg.poles && cfg.poles[e[0]];

@@ -86,6 +86,7 @@ OpenRacer.Car = function( config, domElement ) {
     this.accelerate = false;
     this.brake = false;
     this.reverse = false;
+    this.pushBack = false;           // a motorcycle: the rider pushes it back with his feet (no reverse gear)
     this.autoReverse = false;        // automatic: the car is in reverse because the brake key was held at a standstill
     this.autoReversePedals = false;  // the same with analog pedals (a wheel, a pad, the touch pedals): the pedals are swapped for the physics
     this.keyPedals = false;
@@ -331,7 +332,7 @@ OpenRacer.Car = function( config, domElement ) {
         if(this.driver) {
             // (the camera of a replay that is its own, the free and the cinematic one, is outside the car whatever the camera of the game is)
             this.driver.setCockpit(this.cameraMode === 3 && !(OpenRacer.Replay && OpenRacer.Replay.active && OpenRacer.Replay.ownCamera));
-            this.driver.update(delta || 0.016, this.throttle, this.brakePedal, { gear: this.current_gear, neutral: this.neutral, posture: this.vehicle.controller ? this.vehicle.controller.posture : null });
+            this.driver.update(delta || 0.016, this.throttle, this.brakePedal, { gear: this.current_gear, neutral: this.neutral, push: !!this.pushBack, speed: this.vehicle.u, groundY: -this.tire_diameter / 2, posture: this.vehicle.controller ? this.vehicle.controller.posture : null });
         }
         // the checkpoint of the road under the rear wheel
         var rear = w[2];
@@ -605,7 +606,7 @@ OpenRacer.Car = function( config, domElement ) {
         // The same reverse for analog pedals (a wheel, the triggers of a pad, the touch pedals): the brake pedal held at a standstill is the gas of the reverse,
         // the gas pedal is the brake; for the physics the two values are swapped, and put back after it
         var swapPedals = false;
-        if(usingGamepad && !this.keyPedals && !this.autoReverse && this.gearboxMode === "automatic" && this.selector === "D" && !this.parkingLock && Settings.option("autoReversePedals") &&
+        if(usingGamepad && !this.vehicle.controller && !this.keyPedals && !this.autoReverse && this.gearboxMode === "automatic" && this.selector === "D" && !this.parkingLock && Settings.option("autoReversePedals") &&
            !this.vehicle.launchControlEnabled && !(OpenRacer.DragStrip && OpenRacer.DragStrip.holding)) {
             var padUp = this.throttle > 0.1, padDown = this.brakePedal > 0.1, padAlong = v.u, padLimit = Math.max(0.3, Settings.option("autoReverseSpeed") / 3.6);
             if(!this.autoReversePedals) {
@@ -754,7 +755,16 @@ OpenRacer.Car = function( config, domElement ) {
         // most games. In reverse the brake key is the gas and the gas key brakes; the gas key at a standstill is D again.
         var rawUp = this.accelerate, rawDown = this.brake;
         this.keyPedals = rawUp || rawDown;
-        if(this.gearboxMode === "automatic" && this.selector === "D" && !this.parkingLock && Settings.option("autoReverse") &&
+        // A motorcycle has no reverse gear: the brake key held at a standstill (or the reverse key) makes the rider push it back, with his feet on the ground (Motorcycle.js, Driver.js)
+        var bike = !!this.vehicle.controller;
+        if(bike) {
+            var still = Math.abs(this.vehicle.u) < 0.4 || this.pushBack;
+            if(rawDown && !rawUp && still) { if(this.pushSince === undefined) this.pushSince = this.clock; } else this.pushSince = undefined;
+            this.pushBack = this.pushSince !== undefined && this.clock - this.pushSince > 0.6;
+            this.autoReverse = false;
+            if(this.pushBack) { this.accelerate = false; this.brake = false; }
+        }
+        if(!bike && this.gearboxMode === "automatic" && this.selector === "D" && !this.parkingLock && Settings.option("autoReverse") &&
            !this.vehicle.launchControlEnabled && !(OpenRacer.DragStrip && OpenRacer.DragStrip.holding)) {
             var along = this.vehicle.u, limit = Math.max(0.3, Settings.option("autoReverseSpeed") / 3.6);
             if(!this.autoReverse) {
@@ -789,6 +799,11 @@ OpenRacer.Car = function( config, domElement ) {
             if(reverseKey) this.neutral = false;
         }
         heldReverse = reverseKey;
+        if(bike) {
+            this.reverse = false;
+            if(reverseKey || (this.gearboxMode === "automatic" && this.selector === "R")) this.pushBack = true;
+            this.vehicle.controller.pushing = this.pushBack;
+        }
     };
 
     // ---- the gearbox
