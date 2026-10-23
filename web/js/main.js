@@ -105,7 +105,7 @@ function trackLoaded() {
 function setupRace() {
     var options = race.options = raceOptionsFromQuery(new URLSearchParams(window.location.search));
     var track = currentTrack;
-    if(new URLSearchParams(window.location.search).get("replay") === "1") { setupReplayViewer(); return; }
+    if(new URLSearchParams(window.location.search).get("replay") === "1" || new URLSearchParams(window.location.search).get("editor") === "1") { setupReplayViewer(); return; }
     if(new URLSearchParams(window.location.search).get("recordline") === "1") { recordLine(); return; }
     if(new URLSearchParams(window.location.search).get("mode") === "skidpad") { startSkidpad(); return; }
     // the racing line: a line saved with the track (recorded for it), the middle of a designed track, or the best lap that was driven here
@@ -510,12 +510,23 @@ function onEnterFrame() {
     Settings.update();
     // a replay from a file: once the cars have loaded it is shown, and the game itself never runs
     if(race.viewer && car && car.isReady() && race.opponents.every(function(o) { return o.loaded; })) {
+        var inEditor = new URLSearchParams(window.location.search).get("editor") === "1";
+        OpenRacer.Replay.editor = inEditor;               // (the video editor has its own keys, see VideoEditor.js)
         OpenRacer.Replay.load(race.viewer, [car].concat(race.opponents));
         race.viewer = null;
         OpenRacer.Replay.start();
+        if(inEditor) OpenRacer.VideoEditor.start();
         lastFrameTime = performance.now();
     }
     if(race.viewer) return;
+    // the video editor (VideoEditor.js): two pictures of the replay and a timeline
+    if(OpenRacer.VideoEditor && OpenRacer.VideoEditor.active) {
+        var editNow = performance.now();
+        var editDelta = Math.min(0.1, (editNow - lastFrameTime) / 1000);
+        lastFrameTime = editNow;
+        OpenRacer.VideoEditor.frame(editDelta);
+        return;
+    }
     // the replay (Replay.js): the game stands still and the recording is shown
     if(OpenRacer.Replay && OpenRacer.Replay.active) {
         var replayNow = performance.now();

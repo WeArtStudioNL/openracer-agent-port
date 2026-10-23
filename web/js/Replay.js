@@ -472,6 +472,10 @@ OpenRacer.Replay = (function() {
         if(api.viewer) save.style.display = "none";            // (a replay that is already in the list)
         videoButton = button(right, "● Video", "Record the replay from the start to the end as a video (.mp4)", function() { toggleVideo(); });
         if(typeof MediaRecorder === "undefined" || !document.createElement("canvas").captureStream) videoButton.style.display = "none";
+        var editor = button(right, "Video editor", "Cut this replay, change the speed, place the camera, and save it as a replay or as a video", function() {
+            editor.textContent = "Opening…";
+            api.openInEditor().catch(function(error) { editor.textContent = "Could not open"; console.error(error); setTimeout(function() { editor.textContent = "Video editor"; }, 4000); });
+        });
         var exit = button(right, api.viewer ? "Main menu" : "Back to the game", "Escape", function() { api.stop(); });
         exit.className = "exit";
 
@@ -582,6 +586,14 @@ OpenRacer.Replay = (function() {
         var target = event.target;
         if(target && /^(TEXTAREA|SELECT)$/.test(target.tagName)) return;
         keys[event.code] = true;
+        // the video editor has its own keys: here only the free camera is moved (and its F, L and Tab)
+        if(api.editor) {
+            if(target && /^(INPUT|BUTTON)$/.test(target.tagName) && !/^(Tab)$/.test(event.code)) { if(target.tagName === "INPUT" && target.type !== "range") return; }
+            if(free.active && !event.repeat && event.code === "KeyF") { toggleAim(); event.preventDefault(); }
+            else if(free.active && !event.repeat && event.code === "KeyL") { toggleParent(); event.preventDefault(); }
+            else if(free.active && (/^Arrow/.test(event.code) || /^(Bracket|Shift|Control)/.test(event.code))) event.preventDefault();
+            return;
+        }
         if(event.code === "Tab" && cars.length > 1) { nextTarget(); event.preventDefault(); return; }
         if(free.active) {
             // the keys of the free camera (the arrows move it, so they do not jump in time then)
@@ -973,6 +985,58 @@ OpenRacer.Replay = (function() {
         if(typeof lastFrameTime !== "undefined") lastFrameTime = performance.now();
     };
 
+    // ---- for the video editor (VideoEditor.js) and for a replay that has a camera track (CameraTrack.js)
+    api.editor = false;                   // the editor has the keys; the bar is hidden by the page
+    api.afterFrame = null;                // function(time, delta): called at the end of every frame of the replay (the camera track)
+    api.free = free;                      // the free camera (position and look in the frame of the world or of the car, fov, aim, parent, target)
+    api.enterFree = enterFree; api.leaveFree = leaveFree; api.toggleAim = toggleAim; api.toggleParent = toggleParent; api.nextTarget = nextTarget;
+    api.carCount = function() { return cars.length; };
+    api.carBody = function(i) { var e = cars[i]; return e ? e.object.body : null; };
+    api.pause = function() { playing = false; if(ui) ui.sync(); };
+    api.time = function() { return t; };
+    // the cars at a time, nothing else (no effects, no free camera): a second monitor
+    api.preview = function(time, delta) { show(Math.max(api.start_time(), Math.min(api.end_time(), time)), delta || 0); };
+    // A new recording from this one: the source time of every sample of the new one (a list of seconds). Without the soft body and the effects. extra: more for the header (the camera track).
+    // Gives a promise of the bytes of a file.
+    api.bake = function(times, extra) {
+        if(!cars.length || times.length < 2) return Promise.reject(new Error("There is nothing to save."));
+        var per = perSample(), n = times.length, data = new Float32Array(n * per), sample = new Float32Array(STRIDE);
+        for(var i = 0; i < n; i++) for(var c = 0; c < cars.length; c++) { interpolate(times[i], c, sample); data.set(sample, i * per + c * STRIDE); }
+        var header = {
+            format: FORMAT, version: FILE_VERSION, game: (OpenRacer.VERSION || ""), created: new Date().toISOString(),
+            soft: cars.map(function() { return null; }), softBytes: 0, effects: {},
+            rate: RATE, stride: STRIDE, samples: n,
+            track: { id: currentTrack.id, name: currentTrack.name || currentTrack.id },
+            cars: cars.map(function(entry) { var o = entry.object; return { id: o.config.id, name: String(o.name || o.config.name || o.config.id), color: typeof o.color === "number" ? o.color : null, player: entry.player }; }),
+            gears: gearLabels
+        };
+        for(var key in (extra || {})) header[key] = extra[key];
+        var text = new TextEncoder().encode(JSON.stringify(header));
+        var padded = Math.ceil((text.length + 8) / 4) * 4 - 8;
+        var out = new Uint8Array(8 + padded + data.byteLength);
+        out.set(MAGIC, 0);
+        new DataView(out.buffer).setUint32(4, padded, true);
+        out.fill(0x20, 8, 8 + padded);
+        out.set(text, 8);
+        out.set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength), 8 + padded);
+        return gzip(out).then(function(bytes) { return { bytes: bytes, seconds: n / RATE }; });
+    };
+    // keeps bytes (of bake) in the list of Replays, with a name
+    api.keepBaked = function(name, baked) {
+        return libraryAdd(baked.bytes, { created: new Date().toISOString(), name: String(name).slice(0, 80), track: { id: currentTrack.id, name: String(currentTrack.name || currentTrack.id) },
+            cars: cars.map(function(entry) { return String(entry.object.name || entry.object.config.name || entry.object.config.id); }), seconds: baked.seconds, bytes: baked.bytes.length });
+    };
+    // from the bar of a replay to the video editor: what is shown goes to the new page as it would for a file
+    api.openInEditor = function() {
+        if(!cars.length || total < 2) return Promise.reject(new Error("Nothing is recorded yet."));
+        return Promise.resolve(unpack(pack())).then(stash).then(function() {
+            window.location.href = window.location.pathname + "?car=" + encodeURIComponent(cars[0].object.config.id) + "&track=" + encodeURIComponent(currentTrack.id) + "&editor=1";
+        });
+    };
+    // the replay that was stashed, as it was loaded (for the editor)
+    api.header = function() { return headerOf; };
+    var headerOf = null;
+
     // To a time of the recording (seconds), for the tests
     api.seek = function(seconds) { t = Math.max(api.start_time(), Math.min(api.end_time(), seconds)); };
 
@@ -989,6 +1053,7 @@ OpenRacer.Replay = (function() {
         if(video.recorder && (!playing || t >= api.end_time() - 0.02)) stopVideo();      // (the end, or a pause: the video is done)
         if(free.active) updateFree(delta);
         else if(cine.active) updateCine(delta);
+        if(api.afterFrame) api.afterFrame(t, delta);
         if(typeof EngineSound !== "undefined" && player) {
             var live = playing && !scrubbing && direction > 0;
             EngineSound.setPaused(!live);
@@ -1199,6 +1264,8 @@ OpenRacer.Replay = (function() {
             effectData[name2] = block;
             effectAt += length * 4;
         }
+        // a camera track (the video editor): a list of keys, each with the numbers that CameraTrack.js needs
+        if(OpenRacer.CameraTrack) header.camera = OpenRacer.CameraTrack.clean(header.camera); else delete header.camera;
         header.gears = Array.isArray(header.gears) ? header.gears.map(function(g) { return String(g).slice(0, 8); }) : [""];
         return { header: header, data: data, soft: soft, effects: effectData };
     }
@@ -1378,6 +1445,7 @@ OpenRacer.Replay = (function() {
     // Puts a file in place of the recording: the cars (the player's first, then the others as the file has them)
     api.load = function(parsed, objects) {
         var per = objects.length * STRIDE, n = parsed.header.samples;
+        headerOf = parsed.header;
         cars = objects.map(function(object, i) { return { object: object, player: i === 0, soft: parsed.soft && parsed.soft[i] ? parsed.soft[i] : null }; });
         gearLabels = parsed.header.gears;
         chunks = [];
@@ -1389,6 +1457,12 @@ OpenRacer.Replay = (function() {
         dropped = 0;
         total = n;
         api.viewer = true;
+        // a replay that was made in the video editor has a camera track: it is the camera, unless the free camera or a cinematic one is chosen
+        api.afterFrame = null;
+        if(!api.editor && parsed.header.camera && parsed.header.camera.length && OpenRacer.CameraTrack) {
+            var cameraKeys = parsed.header.camera;
+            api.afterFrame = function(time) { if(!free.active && !cine.active) OpenRacer.CameraTrack.apply(cameraKeys, time, camera, api.carBody); };
+        }
         // the skid marks, the smoke and the marbles of the file: their objects are made (the game does not drive, so nobody has asked for them), and get the rows
         if(OpenRacer.skidMarks) OpenRacer.skidMarks();
         if(OpenRacer.marbles) OpenRacer.marbles();

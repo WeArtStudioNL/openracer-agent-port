@@ -700,7 +700,7 @@ var MainMenu = (function() {
                     var text = document.createElement("div");
                     text.className = "name";
                     var name = document.createElement("div");
-                    name.textContent = item.track.name;
+                    name.textContent = item.name ? item.name + " · " + item.track.name : item.track.name;
                     var meta = document.createElement("div");
                     meta.className = "meta";
                     meta.textContent = (item.cars || []).slice(0, 3).join(", ") + ((item.cars || []).length > 3 ? " …" : "") + " · " + format(item.seconds) + " · " + new Date(item.created).toLocaleString() + " · " + size(item.bytes);
@@ -724,7 +724,17 @@ var MainMenu = (function() {
                     remove.className = "danger";
                     remove.textContent = "Delete";
                     remove.onclick = function() { OpenRacerDialog.ask({ title: "Delete this replay?", ok: "Delete", danger: true }).then(function(yes) { if(yes) OpenRacer.Replay.library.remove(item.id).then(fill); }); };
+                    var edit = document.createElement("button");
+                    edit.textContent = "Edit";
+                    edit.title = "Open the replay in the video editor: cut it, change the speed, place the camera";
+                    edit.onclick = function() {
+                        problem.textContent = "";
+                        OpenRacer.Replay.library.open(item.id, carList, trackList).then(function(ids) {
+                            window.location.href = window.location.pathname + "?car=" + encodeURIComponent(ids.car) + "&track=" + encodeURIComponent(ids.track) + "&editor=1";
+                        }).catch(function(error) { problem.textContent = error.message || "This replay could not be opened."; });
+                    };
                     row.appendChild(watch);
+                    row.appendChild(edit);
                     row.appendChild(download);
                     row.appendChild(remove);
                     list.appendChild(row);
