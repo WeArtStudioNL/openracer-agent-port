@@ -1,9 +1,18 @@
 #!/usr/bin/env bash
 # Serves the OpenRacer web app locally and opens it in the default browser.
-# Usage: ./start-server.sh [port]   (default port: 8000)
+# Usage: ./start-server.sh [port] [--local]   (default port: 8000)
+# The game is also served on the local network (the address is printed: a phone or another computer can open it);
+# --local keeps it to this computer. Only this computer can save cars and tracks to the folders.
 set -euo pipefail
 
-PORT="${1:-8000}"
+PORT=8000
+LOCAL=""
+for arg in "$@"; do
+    case "$arg" in
+        --local) LOCAL="--local" ;;
+        [0-9]*) PORT="$arg" ;;
+    esac
+done
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/web"
 URL="http://localhost:${PORT}"
 
@@ -24,4 +33,4 @@ echo "Serving $ROOT at $URL (Ctrl+C to stop)"
 echo "Files are read from disk on every request and never cached: after a git pull, just refresh the page."
 echo "Car editor: $URL/tools/car-editor.html"
 # A plain static server that tells the browser never to cache, plus the API for the car and track lists and the car editor
-exec python3 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/tools/serve.py" "$PORT"
+exec python3 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/tools/serve.py" "$PORT" $LOCAL

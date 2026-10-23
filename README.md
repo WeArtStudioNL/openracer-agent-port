@@ -18,7 +18,9 @@ What is new in every version is in [CHANGELOG.md](CHANGELOG.md). The version of 
 ## Running locally
 OpenRacer is a static web app with a small helper for the lists of cars and tracks. Run it with
 
-    ./start-server.sh        # optionally pass a port, default 8000
+    ./start-server.sh        # optionally pass a port, default 8000; add --local to keep it to this computer
+
+The server is also reachable on the local network: it prints the address (for example http://192.168.1.51:8000) for a phone, a tablet or another computer. Those can play and read; only this computer can write cars and tracks to the folders (the others keep them in the garage of their own browser). The firewall of the computer may ask for permission.
 
 This serves the `web` folder (`tools/serve.py`) and opens http://localhost:8000 in your browser (WebGL required). Nothing is cached, so after a `git pull` a normal page refresh is enough and the server never needs a restart. Opening `index.html` directly does not work, because the game loads its files. A plain web server (`cd web && python3 -m http.server 8000`) works too: the standard cars and tracks are then the ones in `web/cars/index.json` and `web/tracks/index.json` (which `serve.py` keeps up to date), and what a player makes or imports goes to the garage of their browser (see *Your own cars and tracks*).
 

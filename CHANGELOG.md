@@ -5,6 +5,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 ## Unreleased
 
 **Race**
+- `start-server.sh` serves on the local network and prints the address to open on a phone, a tablet or another computer (`--local` keeps it to this computer). The server already listened on every address; now it says where. The API that writes and deletes cars and tracks stays closed to the other computers.
 - Share by link: *My garage* has a field *Link to a zip* with *Import* (the car or track of a zip somewhere on the web, as long as the site allows it) and *Copy game link*, which makes a link of the game, `?import=<link>`, that asks "Add the car or track from <site> to your garage?" for whoever opens it and then selects the new car or track. Only http and https links are taken, and the question comes first.
 - The ten longest jumps of a track are kept (browser): the notice says the place (#3 here, or *Longest jump here*), and the main menu has *Jumps*, a list of them for the chosen track (distance, time in the air, height, car, date) with *Start over*.
 - Jumps: when the car has been in the air for more than 0.6 s and lands, a notice shows how far it went (m), how long it was in the air and how high, and *Longest jump here* when it is the best on the track (kept per track in this browser; `JumpStats.js`).

@@ -13,7 +13,7 @@ New cars and tracks are found by looking at the folders, so a folder with a car.
 web/cars or web/tracks shows up in the game at once. The lists are also written to cars/index.json and
 tracks/index.json, for when the game is served by a plain web server without this API.
 
-Usage: tools/serve.py [port]   (default port 8000). Nothing is cached, so a refresh shows the latest files.
+Usage: tools/serve.py [port] [--local]   (default port 8000; the server is reachable on the local network, --local keeps it to this computer). Nothing is cached, so a refresh shows the latest files.
 """
 import json
 import os
@@ -166,8 +166,29 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json({"ok": True})
 
 
+def network_address():
+    """The address of this machine on the local network (the one that other devices use), or None"""
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("10.255.255.255", 1))          # (nothing is sent: it only tells which network card would be used)
+            ip = s.getsockname()[0]
+        return None if ip.startswith("127.") else ip
+    except OSError:
+        return None
+
+
 if __name__ == "__main__":
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    local_only = "--local" in sys.argv[1:]
+    port = int(args[0]) if args else 8000
     write_indexes()
     print("Serving %s at http://localhost:%d (Ctrl+C to stop)" % (ROOT, port))
-    ThreadingHTTPServer(("", port), Handler).serve_forever()
+    if local_only:
+        print("Only this computer can reach it (--local).")
+    else:
+        ip = network_address()
+        if ip:
+            print("On your network (a phone, a tablet, another computer): http://%s:%d" % (ip, port))
+        print("The others can play and read; only this computer can save cars and tracks to the folders (the others keep them in their own browser).")
+    ThreadingHTTPServer(("127.0.0.1" if local_only else "", port), Handler).serve_forever()
