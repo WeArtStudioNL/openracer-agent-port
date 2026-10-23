@@ -1299,28 +1299,37 @@ function drawChart() {
     const w = canvas.width, h = canvas.height;
     g.clearRect(0, 0, w, h);
     const maxRpm = Math.max(num("limiter") || 7000, ...state.curve.map((p) => p[0])) * 1.05;
-    const maxNm = Math.max(1, ...state.curve.map((p) => p[1])) * 1.1;
-    const maxHp = Math.max(1, ...state.curve.map((p) => power(p[0], p[1]))) * 1.1;
-    g.strokeStyle = "#2c3541";
-    g.fillStyle = "#6f7d92";
+    // torque (Nm) and power (hp) share one scale on the left, with a step of 1, 2 or 5 times a power of ten (0, 10, 20, 30 ... or 0, 50, 100, 150 ...) that has at most 7 lines
+    const top = Math.max(1, ...state.curve.map((p) => p[1]), ...state.curve.map((p) => power(p[0], p[1]))) * 1.08;
+    let step = 1;
+    for (const m of [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000]) { step = m; if (top / m <= 7) break; }
+    const maxY = Math.ceil(top / step) * step;
+    const left = 62, bottom = h - 24, plotW = w - left - 4, plotH = bottom - 8;
+    const X = (rpm) => left + rpm / maxRpm * plotW, Y = (v) => bottom - v / maxY * plotH;
     g.font = "20px Arial";
+    g.lineWidth = 1;
+    // the horizontal lines, with the numbers at the left
+    for (let v = 0; v <= maxY + 1e-9; v += step) {
+        g.strokeStyle = "#2c3541"; g.beginPath(); g.moveTo(left, Y(v)); g.lineTo(w, Y(v)); g.stroke();
+        g.fillStyle = "#8a97aa"; g.textAlign = "right"; g.textBaseline = "middle";
+        g.fillText(String(v), left - 8, Math.min(bottom - 8, Math.max(10, Y(v))));
+    }
+    g.textAlign = "left"; g.textBaseline = "alphabetic";
+    g.strokeStyle = "#2c3541"; g.fillStyle = "#6f7d92";
     for (let r = 0; r <= maxRpm; r += 1000) {
-        const x = r / maxRpm * w;
-        g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h - 22); g.stroke();
+        const x = X(r);
+        g.beginPath(); g.moveTo(x, 0); g.lineTo(x, bottom); g.stroke();
         g.fillText(r / 1000 + "k", x + 3, h - 4);
     }
-    const line = (color, value, scale) => {
+    const line = (color, value) => {
         g.strokeStyle = color; g.lineWidth = 3; g.beginPath();
-        state.curve.forEach((p, i) => {
-            const x = p[0] / maxRpm * w, y = (h - 24) - value(p) / scale * (h - 30);
-            if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
-        });
+        state.curve.forEach((p, i) => { const x = X(p[0]), y = Y(value(p)); if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); });
         g.stroke();
     };
-    line("#ff9f43", (p) => p[1], maxNm);
-    line("#54a0ff", (p) => power(p[0], p[1]), maxHp);
-    const limitX = (num("limiter") || 0) / maxRpm * w;
-    g.strokeStyle = "#ff5e5e"; g.lineWidth = 2; g.beginPath(); g.moveTo(limitX, 0); g.lineTo(limitX, h - 22); g.stroke();
+    line("#ff9f43", (p) => p[1]);
+    line("#54a0ff", (p) => power(p[0], p[1]));
+    const limitX = X(num("limiter") || 0);
+    g.strokeStyle = "#ff5e5e"; g.lineWidth = 2; g.beginPath(); g.moveTo(limitX, 0); g.lineTo(limitX, bottom); g.stroke();
     const peak = state.curve.reduce((best, p) => (power(p[0], p[1]) > best.hp ? { hp: power(p[0], p[1]), rpm: p[0] } : best), { hp: 0, rpm: 0 });
     const torque = Math.max(0, ...state.curve.map((p) => p[1]));
     $("peakInfo").textContent = Math.round(peak.hp) + " hp at " + peak.rpm + " rpm, " + Math.round(torque) + " Nm";
