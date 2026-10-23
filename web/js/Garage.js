@@ -323,18 +323,28 @@ OpenRacer.Garage = (function () {
                 if (found.kind === "cars" && json.model && json.model.file) {
                     json.model.file = "cars/" + id + "/" + json.model.file.split("/").pop();
                 }
-                // is there one with this id already (of the server, of the garage, of a folder)? then it is asked first
-                var existing = typeof Catalog !== "undefined" ? Catalog.load(found.kind).catch(function () { return []; }) : Promise.resolve([]);
-                return existing.then(function (list) {
-                    var kindName = found.kind.slice(0, -1);
-                    var same = list.filter(function (item) { return item.id === id; })[0];
-                    if (same) {
-                        var where = sourceOf(same) === "garage" ? "your garage" : (sourceOf(same) === "folder" ? "the linked folder" : "the game");
-                        if (!window.confirm("There already is a " + kindName + " “" + (same.name || id) + "” (" + id + ") in " + where + ". Replace it with the one in the zip?")) {
-                            throw new Error("Not imported: the " + kindName + " “" + id + "” was already there.");
-                        }
+                // is there one with this id already (in the garage, of the server, of a folder)? then it is shown what is different, and asked first
+                var kindName = found.kind.slice(0, -1);
+                return get(found.kind, id).then(function (record) {
+                    if (record) return { config: record.json, where: "your garage" };
+                    var catalog = typeof Catalog !== "undefined" ? Catalog.load(found.kind).catch(function () { return []; }) : Promise.resolve([]);
+                    return catalog.then(function (list) {
+                        var same = list.filter(function (item) { return item.id === id; })[0];
+                        return same ? { config: same, where: sourceOf(same) === "folder" ? "the linked folder" : "the game" } : null;
+                    });
+                }).then(function (existing) {
+                    var store = function () { return put(found.kind, id, json, files, { replace: true }).then(function () { return { kind: found.kind, id: id }; }); };
+                    if (!existing) return store();
+                    var changes = OpenRacerDialog.differences(existing.config, json);
+                    var name = existing.config.name || json.name || id;
+                    var title = "The " + kindName + " “" + name + "” is already there";
+                    var cancelled = function () { throw new Error("Not imported: the " + kindName + " “" + id + "” was already there."); };
+                    if (!changes.length) {
+                        return OpenRacerDialog.ask({ title: title, text: "It is in " + existing.where + " with the same settings as in the zip. Nothing to change in car.json" + (found.kind === "cars" ? "" : "/track.json") + " (the model files are not compared).", ok: "Replace anyway", cancel: "Keep it" })
+                            .then(function (yes) { return yes ? store() : cancelled(); });
                     }
-                    return put(found.kind, id, json, files, { replace: true }).then(function () { return { kind: found.kind, id: id }; });
+                    return OpenRacerDialog.ask({ title: title, text: "It is in " + existing.where + ". The zip has " + changes.length + " difference" + (changes.length === 1 ? "" : "s") + ": replace it?", details: changes, ok: "Replace", cancel: "Keep the old one" })
+                        .then(function (yes) { return yes ? store() : cancelled(); });
                 });
             });
         });

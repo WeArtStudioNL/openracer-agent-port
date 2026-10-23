@@ -428,8 +428,9 @@ var MainMenu = (function() {
                         deleteButton.className = "danger";
                         deleteButton.textContent = "Delete";
                         deleteButton.onclick = function() {
-                            if(!window.confirm("Delete " + (record.json.name || record.id) + " from the garage of this browser?")) return;
-                            Garage.remove(kind, record.id).then(build).catch(function(error) { say("Could not delete: " + error.message, true); });
+                            OpenRacerDialog.ask({ title: "Delete " + (record.json.name || record.id) + "?", text: "It is removed from the garage of this browser.", ok: "Delete", danger: true }).then(function(yes) {
+                                if(yes) Garage.remove(kind, record.id).then(build).catch(function(error) { say("Could not delete: " + error.message, true); });
+                            });
                         };
                         row.appendChild(deleteButton);
                         box.appendChild(row);
@@ -590,7 +591,7 @@ var MainMenu = (function() {
         var reset = document.createElement("button");
         reset.className = "danger";
         reset.textContent = "Start over";
-        reset.onclick = function() { if(window.confirm("Remove the jumps of this track?")) { OpenRacer.JumpStats.clear(track.id); fill(); } };
+        reset.onclick = function() { OpenRacerDialog.ask({ title: "Remove the jumps of this track?", ok: "Remove", danger: true }).then(function(yes) { if(yes) { OpenRacer.JumpStats.clear(track.id); fill(); } }); };
         var close = document.createElement("button");
         close.textContent = "Close";
         close.onclick = function() { shade.remove(); };
@@ -722,7 +723,7 @@ var MainMenu = (function() {
                     var remove = document.createElement("button");
                     remove.className = "danger";
                     remove.textContent = "Delete";
-                    remove.onclick = function() { if(confirm("Delete this replay?")) OpenRacer.Replay.library.remove(item.id).then(fill); };
+                    remove.onclick = function() { OpenRacerDialog.ask({ title: "Delete this replay?", ok: "Delete", danger: true }).then(function(yes) { if(yes) OpenRacer.Replay.library.remove(item.id).then(fill); }); };
                     row.appendChild(watch);
                     row.appendChild(download);
                     row.appendChild(remove);
@@ -1124,13 +1125,19 @@ var MainMenu = (function() {
         var host = url;
         try { host = new URL(url).host; } catch(e) { /* as it is */ }
         window.history.replaceState(null, "", window.location.pathname);
-        if(!window.confirm("Add the car or track from " + host + " to your garage?")) return false;
-        element.innerHTML = "<div style=\"padding: 40px; color: #fff; font: 18px Arial;\">Importing from " + host.replace(/[<>&]/g, "") + "…</div>";
-        OpenRacer.Garage.importUrl(url).then(function(item) {
-            if(item.kind === "cars") choice.car = item.id; else choice.track = item.id;
-            remember();
-            load();
-        }).catch(function(error) { load(); window.alert("Could not import: " + error.message); });
+        OpenRacerDialog.ask({ title: "Add from " + host + "?", text: "The car or track at this link is added to your garage.", ok: "Add", cancel: "Not now" }).then(function(yes) {
+            if(!yes) { load(); return; }
+            element.innerHTML = "";
+            var busy = document.createElement("div");
+            busy.style.cssText = "margin: auto; color: var(--text); font-size: 18px;";
+            busy.textContent = "Importing from " + host + "…";
+            element.appendChild(busy);
+            OpenRacer.Garage.importUrl(url).then(function(item) {
+                if(item.kind === "cars") choice.car = item.id; else choice.track = item.id;
+                remember();
+                load();
+            }).catch(function(error) { load(); OpenRacerDialog.tell({ title: "Could not import", text: error.message }); });
+        });
         return true;
     }
 

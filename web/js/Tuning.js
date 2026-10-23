@@ -361,8 +361,10 @@ var Tuning = (function() {
     function tunedConfig() { return OpenRacer.CarTuning.toConfig(config, values); }
 
     function saveToCar() {
-        if(!window.confirm("Write this tuning to the car (cars/" + config.id + "/car.json)? The car as it was made is overwritten. " +
-            "Without the server of start-server.sh it goes to the garage of this browser instead.")) return;
+        OpenRacerDialog.ask({ title: "Write this tuning to the car?", text: "The car as it was made is overwritten (cars/" + config.id + "/car.json). Without the server of start-server.sh it goes to the garage of this browser instead.", ok: "Write it" }).then(function(yes) { if(yes) writeTuning(); });
+    }
+
+    function writeTuning() {
         var tuned = tunedConfig();
         // the server when it is there (serve.py), otherwise the garage of this browser (Garage.js)
         OpenRacer.Garage.store("cars", config.id, tuned, {}, {}).then(function(result) {

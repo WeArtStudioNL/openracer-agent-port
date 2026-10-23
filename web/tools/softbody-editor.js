@@ -779,9 +779,9 @@ export function initSoftBody(api) {
         $("sbEditBox").style.display = sb.edit ? "" : "none";
         showSelection();
     });
-    $("sbResetNodes").addEventListener("click", () => {
+    $("sbResetNodes").addEventListener("click", async () => {
         if (!sb.layout) { status("The nodes are the ones made from the model already.", "ok"); return; }
-        if (!confirm("Throw away your nodes and make them again from the model? The strengths set on single nodes and beams go too.")) return;
+        if (!(await OpenRacerDialog.ask({ title: "Make the nodes again?", text: "Your nodes are thrown away and made again from the model. The strengths set on single nodes and beams go too.", ok: "Make again", danger: true }))) return;
         sb.layout = null; sb.nodeEdits.clear(); sb.beamEdits.clear(); sb.sel.nodes.clear(); sb.sel.beam = null;
         changed(true);
     });
@@ -879,7 +879,7 @@ export function initSoftBody(api) {
             const s = softBody();
             if (!s) return;
             const max = Math.min(120, Math.max(10, parseInt($("sbMaxNodes").value, 10) || 80));
-            if (sb.layout && !confirm("Make new nodes with the rays? The nodes you made and the strengths set on single nodes go.")) return;
+            if (sb.layout && !(await OpenRacerDialog.ask({ title: "Make new nodes with the rays?", text: "The nodes you made and the strengths set on single nodes go.", ok: "Make new nodes", danger: true }))) return;
             const meshes = modelMeshes();
             bench.model.tilt.updateMatrixWorld(true);
             const box = new THREE.Box3().setFromObject(bench.model.tilt);

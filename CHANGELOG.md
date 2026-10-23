@@ -5,6 +5,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 ## Unreleased
 
 **Look and menu**
+- **No more alerts or confirms of the browser**: every question and message is a window of the game (`web/dialog.js`, in the look of the menu): deleting, replacing, importing a link, writing a tuning, the editors, a track that does not load. Importing a car or track that already exists (in the game, the garage or the linked folder) now **shows what is different** (`chassis.max_steer_deg 35 → 42`, added and removed fields) in that window, or says that the settings are the same; *Replace* or *Keep the old one*. The model files are not compared.
 - *My garage* shows a small picture of every car, and the home screen of the menu is in the middle of the page.
 - Importing a zip (or a link) of a car or track now asks first when one with the same id is already there (in the game, the garage or the linked folder): *Replace it?*; *Cancel* imports nothing. It replaced it without asking before.
 - **Still pictures of the cars in the menu**: the turning previews that loaded slowly are a picture of each car, from the front at an angle (`preview.webp` in the folder of the car, made once by the menu and kept in the browser too; the car editor takes it away when the car is saved again). The first time takes a moment, after that the menu shows them at once, and nothing is drawn while you choose.

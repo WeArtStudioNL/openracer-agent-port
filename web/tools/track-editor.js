@@ -863,8 +863,8 @@ function renderObjects() {
         const remove = document.createElement("button");
         remove.className = "small danger";
         remove.textContent = "Remove";
-        remove.onclick = () => {
-            if (objectState.list.some((o) => o.model === name) && !confirm("Remove this model and the objects that stand in the track?")) return;
+        remove.onclick = async () => {
+            if (objectState.list.some((o) => o.model === name) && !(await OpenRacerDialog.ask({ title: "Remove this model?", text: "The objects that stand in the track go too.", ok: "Remove", danger: true }))) return;
             objectState.models.delete(name);
             objectState.list = objectState.list.filter((o) => o.model !== name);
             if (objectState.selected === name) objectState.selected = null;
@@ -1345,7 +1345,7 @@ async function save() {
         if (!state.start) throw new Error("Place the start of the track on the road.");
         if (!state.root && !design.active()) throw new Error("Import a model first, or draw the track with nodes.");
         if (state.tracks.some((t) => t.id === id) && id !== state.existingId &&
-            !confirm("There already is a track with the id “" + id + "”. Replace it?")) return;
+            !(await OpenRacerDialog.ask({ title: "Replace the track “" + id + "”?", text: "There already is a track with this id.", ok: "Replace" }))) return;
 
         const old = state.existingTrack;
         const config = old && id === state.existingId ? JSON.parse(JSON.stringify(old)) : {};
@@ -1462,7 +1462,7 @@ async function save() {
 }
 
 async function deleteTrack() {
-    if (!state.existingId || !confirm("Delete the track “" + state.existingId + "” with all its files?")) return;
+    if (!state.existingId || !(await OpenRacerDialog.ask({ title: "Delete the track “" + state.existingId + "”?", text: "With all its files.", ok: "Delete", danger: true }))) return;
     let result;
     try {
         result = await OpenRacer.Garage.discard("tracks", state.existingId, { base: "../" });

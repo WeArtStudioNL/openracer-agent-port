@@ -410,7 +410,7 @@ function loadGltfTrack(track) {
         trackLoadedCallback();
     }, undefined, function(error) {
         console.error(error);
-        alert("The track could not be loaded: " + (error.message || error));
+        OpenRacerDialog.tell({ title: "The track could not be loaded", text: String(error.message || error), ok: "Back to the menu" }).then(function() { window.location.href = window.location.pathname; });
     });
 }
 

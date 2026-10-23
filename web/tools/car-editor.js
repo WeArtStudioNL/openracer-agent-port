@@ -1456,7 +1456,7 @@ async function save() {
         if (!ID_PATTERN.test(id)) throw new Error("The id may only have lower case letters, digits, - and _.");
         const config = buildConfig(id);
         if (state.cars.some((car) => car.id === id) && id !== state.existingId &&
-            !confirm("There already is a car with the id “" + id + "”. Replace it?")) return;
+            !(await OpenRacerDialog.ask({ title: "Replace the car “" + id + "”?", text: "There already is a car with this id.", ok: "Replace" }))) return;
 
         // the model
         const uploads = [];
@@ -1554,7 +1554,7 @@ window.addEventListener("drop", (e) => {
 });
 
 async function deleteCar() {
-    if (!state.existingId || !confirm("Delete the car “" + state.existingId + "” with all its files?")) return;
+    if (!state.existingId || !(await OpenRacerDialog.ask({ title: "Delete the car “" + state.existingId + "”?", text: "With all its files.", ok: "Delete", danger: true }))) return;
     try {
         const result = await OpenRacer.Garage.discard("cars", state.existingId, { base: "../" });
         status(result.where === "server" ? "Deleted." : "Deleted from your garage.", "ok");
