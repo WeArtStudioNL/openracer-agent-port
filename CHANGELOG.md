@@ -5,6 +5,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 ## Unreleased
 
 **Race**
+- Sound of the road and of landings (made in the browser, no files): the tyres on loose ground hiss, crunch or squelch with the speed (sand low and soft, gravel high and sharp, mud dull, grass soft), and a landing or a hard hit on the bump stop is a thud, as loud as it was hard (a drop of 4 m is 0.7). `EngineSound.setGround` and `EngineSound.impact`; quieter inside the car.
 - New surfaces: **sand** (grip 0.60, sliding 0.50, a rolling resistance of 4.5 times), **gravel** (0.78, 0.66, 3 times) and **mud** (0.50, 0.44, 6 times), each a role of the track editor (the colours of the legend, and a part called sand, gravel, zand, mud and so on is given the role by itself) next to road, pit lane, grass and ground. The off-road tyre grips on all of them. The Desert has sand now.
 - *Import height map* has an optional *Surface map*: a picture in which a colour is a surface (grey road, yellow sand, white gravel, brown mud, green grass, orange ground; the nearest colour counts), which makes a part of the terrain for every surface (`terrain_sand`, …) with its role. Without it the whole terrain has the surface of the list.
 - Dust: a tyre that rolls on a loose surface throws up a thin plume (from 5 m/s, following the speed), a tyre that lands makes a puff that dies away in a tenth of a second (more with a harder landing), and the dust has the colour of the surface (`dust` of a surface in Helpers.js): sand, grey for gravel, dark for mud.

@@ -244,6 +244,57 @@ var EngineSound = (function() {
         squeal.set(amount, speed, (muted || paused ? 0 : volume) * (inside ? 0.12 : 0.3), ctx.currentTime);
     }
 
+    // ---- the road under the tyres, and what lands: noise that is made here (no files). The tyres on loose ground hiss, crunch or squelch with the speed (sand low and soft, gravel
+    // high and sharp, mud dull, grass soft); a landing or the bump stop is a thud (low noise and a falling tone) as loud as it was hard.
+    var landNoiseBuffer = null, ground = null;
+    var GROUND_SOUND = { sand: [700, 0.5, 0.5, "lowpass"], gravel: [2600, 1.2, 0.8, "bandpass"], mud: [380, 0.7, 0.7, "lowpass"], grass: [1100, 0.5, 0.35, "lowpass"], ground: [1500, 0.7, 0.5, "lowpass"] };
+    function landNoise() {
+        if(landNoiseBuffer) return landNoiseBuffer;
+        landNoiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+        var data = landNoiseBuffer.getChannelData(0);
+        for(var i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+        return landNoiseBuffer;
+    }
+    function setGround(kind, speed) {
+        if(!ctx || ctx.state !== "running" || !isFinite(speed)) return;
+        var spec = GROUND_SOUND[kind];
+        if(!ground) {
+            var source = ctx.createBufferSource();
+            source.buffer = landNoise(); source.loop = true;
+            var filter = ctx.createBiquadFilter();
+            var gain = ctx.createGain();
+            gain.gain.value = 0;
+            source.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+            source.start();
+            ground = { filter: filter, gain: gain };
+        }
+        var now = ctx.currentTime;
+        var loud = spec ? Math.min(1, Math.max(0, speed - 2) / 25) * spec[1] * (muted || paused ? 0 : volume) * (inside ? 0.35 : 0.5) * 0.25 : 0;
+        if(spec) { ground.filter.type = spec[3]; ground.filter.frequency.setTargetAtTime(spec[0] * (0.7 + 0.5 * Math.min(1, speed / 30)), now, 0.2); ground.filter.Q.value = spec[3] === "bandpass" ? 0.8 : 0.5; }
+        ground.gain.gain.setTargetAtTime(loud, now, 0.15);
+    }
+    function impact(strength) {
+        if(!ctx || ctx.state !== "running" || muted || paused || !isFinite(strength) || strength < 0.12) return;
+        strength = Math.min(1, strength);
+        var now = ctx.currentTime, v = volume * (inside ? 0.7 : 1);
+        var source = ctx.createBufferSource();
+        source.buffer = landNoise();
+        var low = ctx.createBiquadFilter();
+        low.type = "lowpass"; low.frequency.value = 260 + 500 * strength;
+        var gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.9 * strength * v, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18 + 0.3 * strength);
+        source.connect(low); low.connect(gain); gain.connect(ctx.destination);
+        source.start(now, Math.random()); source.stop(now + 0.6);
+        var tone = ctx.createOscillator(), toneGain = ctx.createGain();
+        tone.frequency.setValueAtTime(95, now);
+        tone.frequency.exponentialRampToValueAtTime(38, now + 0.22);
+        toneGain.gain.setValueAtTime(0.7 * strength * v, now);
+        toneGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+        tone.connect(toneGain); toneGain.connect(ctx.destination);
+        tone.start(now); tone.stop(now + 0.3);
+    }
+
     // The synth follows the parameters of the car, with the impulse response of its exhaust
     function applyParams(p) {
         simParams = p;
@@ -289,6 +340,8 @@ var EngineSound = (function() {
         pop: pop,
         level: measureLevel,
         setTyres: setTyres,
+        setGround: setGround,
+        impact: impact,
         status: status,
         setMuted: function(value) { muted = value; },
         setPaused: function(value) { paused = value; },

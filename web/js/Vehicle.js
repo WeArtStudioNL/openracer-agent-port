@@ -1538,6 +1538,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                     w.tyreDeflection = body.maxDepth;
                 }
             }
+            if(w.hasContact && !w.hadContact && self.vy < -3) self.soundImpact = Math.max(self.soundImpact || 0, Math.min(1, -self.vy / 12));       // (a landing)
             if(!w.hasContact) { w.tyreDeflection = 0; w.hadContact = false; }
             comp[i] = w.freeLength - w.susLength;
             compVelocity[i] = -w.susVel;
@@ -1574,6 +1575,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             // a progressive spring: beyond the rest height the spring gets stiffer with the travel that is used (the extra stiffness is zero at rest, so the ride height stays)
             var used = Math.max(0, ws.restLengthWheel - ws.susLength);
             var progressive = self.springProgression > 0 ? self.springProgression * rateS * used * used / self.bumpTravel : 0;
+            if(bumpS > 0 && xdotS > 2.5) self.soundImpact = Math.max(self.soundImpact || 0, Math.min(1, (xdotS - 2) / 6));       // (the bump stop hit hard)
             var fs = rateS * comp[si] + progressive + damperS + bumpS + droopS + arbForce[si];
             springForce[si] = self.wheelLost[si] ? 0 : fs;
             // the wheel: the spring pushes it out, the tyre pushes it in, gravity pulls it along the axis, and it rides with the mount
@@ -2089,6 +2091,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.update = function (delta) {
         this.updateControls(delta);
         this.impactTime += delta;
+        this.soundImpact = 0;             // how hard something landed or hit the bump stop in this update (0..1), for the sound (Car.js)
         var steps = Math.max(1, Math.ceil(delta / 0.003));
         var dt = delta / steps;
         for(var s = 0; s < steps; s++) step(dt);

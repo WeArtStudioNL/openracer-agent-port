@@ -601,6 +601,11 @@ OpenRacer.Car = function( config, domElement ) {
         EngineSound.update(this.engineRPM, this.throttle * this.engine.throttleCut, this.engine.throttleCut > 0.5);
         if(swapPedals) { var back = this.throttle; this.throttle = this.brakePedal; this.brakePedal = back; }
         EngineSound.setTyres(v.squeal, Math.abs(v.u));
+        // the road under the tyres (the surface of the wheels that touch it), and a landing or a hit on the bump stop
+        var under = "road";
+        for(var gi = 0; gi < 4; gi++) if(this.wheels[gi].hasContact && this.wheels[gi].surface !== "road" && this.wheels[gi].surface !== "track01") under = this.wheels[gi].surface;
+        EngineSound.setGround(under, Math.abs(v.u));
+        if(v.soundImpact > 0.12) EngineSound.impact(v.soundImpact);
         // the bangs of the exhaust (pops, anti-lag): the sound, and the flames
         var bangs = this.engine.events;
         for(var bi = 0; bi < bangs.length; bi++) { EngineSound.pop(bangs[bi].strength, bangs[bi].loud); flames.emit(v, bangs[bi], this.body); }
