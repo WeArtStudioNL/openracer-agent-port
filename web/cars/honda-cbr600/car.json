@@ -71,7 +71,8 @@
  "motorcycle": {
   "max_lean_deg": 52,
   "balance": 1.0,
-  "rider_mass": 75
+  "rider_mass": 75,
+  "max_lateral_g": 0.9
  },
  "drivetrain": {
   "drive": "rwd",
@@ -181,7 +182,7 @@
    ]
   ],
   "power_scale": 1,
-  "braking_scale": 1,
+  "braking_scale": 0.3,
   "limiter_hz": 20,
   "two_step_rpm": 8000,
   "launch_rpm": 9000

@@ -564,7 +564,7 @@ OpenRacer.Car = function( config, domElement ) {
         // The assist: when the rear steps out, the front wheels are turned into the slide (as the pad does, controls.js), on top of what the keys
         // made, and it fades with the slide. Only while the keyboard steers (not mouse, pad or a wheel that has the angle).
         var assist = 0;
-        if(Settings.option("keyAssist") && !mouseDown && !usingGamepad && !foreign && v.u > 3) {
+        if(Settings.option("keyAssist") && !v.motorcycle && !mouseDown && !usingGamepad && !foreign && v.u > 3) {     // (a motorcycle has its rider: the front wheel is not turned into a slide by itself)
             var beta = Math.atan2(v.v, v.u);                 // the slip angle of the car: positive when it moves to the right of where it points
             var counter = Math.sign(beta) * Math.max(0, Math.abs(beta) - 0.035) * 1.1;
             assist = Math.max(-0.6 * this.maxTurn, Math.min(0.6 * this.maxTurn, counter));

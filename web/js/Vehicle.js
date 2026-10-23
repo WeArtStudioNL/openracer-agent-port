@@ -1377,7 +1377,16 @@ OpenRacer.Vehicle = function (parameters, input) {
         self.updateOutputs();
         var u = self.u, v = self.v, r = self.r;
         // a motorcycle steers less the faster it goes (a small angle at the front wheel is a lot at speed)
-        if(self.motorcycle) delta *= 1 / (1 + Math.pow(Math.abs(u) / (self.motorcycle.steer_speed || 14), 2));
+        // The steering of a motorcycle is a wish for a bend: at speed a small angle is a lot of sideways acceleration (a = u^2 delta / L), so the angle that the
+        // keys or the wheel give is cut to what makes at most `max_lateral_g` (more as the steering is turned further, to half the lock), and it follows with a delay
+        if(self.motorcycle) {
+            var mcs = self.motorcycle, lockHalf = 0.5 * (inp.maxTurn || 0.38);
+            var wish = Math.min(1, Math.abs(delta) / lockHalf) * (mcs.max_lateral_g || 0.9) * G;
+            var cut = wish * L / (u * u + 1);
+            var target = Math.sign(delta) * Math.min(Math.abs(delta), cut);
+            self.bikeSteer = (self.bikeSteer || 0) + (target - (self.bikeSteer || 0)) * Math.min(1, dt / 0.07);
+            delta = self.bikeSteer;
+        }
 
         // ---- ESC, the electronic stability control
         // Sensors tell it what the driver asks for (the steering angle gives the direction that the car should turn to, at
@@ -1599,6 +1608,16 @@ OpenRacer.Vehicle = function (parameters, input) {
         torque.x = torque.y = torque.z = 0;
         var tyreTorque = [0, 0, 0, 0];
         var brakeTorque = [0, 0, 0, 0];
+        // a motorcycle that brakes hard lifts its rear wheel (a stoppie) and goes over the front: the brake of the front wheel is let off as the rear wheel loses its load
+        // (what the rear wheel lift mitigation of a modern bike does), so that the front stays where it grips and the rear stays on the road
+        if(self.motorcycle) {
+            var rearRatio = ((wheels[2].weight || 0) + (wheels[3].weight || 0)) / Math.max(1, (1 - self.weight_distribution) * m * G);
+            var scaleTarget = Math.max(0, Math.min(1, (rearRatio - 0.08) / 0.24));
+            if(self.frontBrakeScale === undefined) self.frontBrakeScale = 1;
+            self.frontBrakeScale += (scaleTarget - self.frontBrakeScale) * Math.min(1, dt / (scaleTarget < self.frontBrakeScale ? 0.02 : 0.12));
+            // and the rear brake goes with the load of the rear wheel (the brake force distribution of a bike with linked brakes): a light rear wheel that locks has no side grip left
+            self.rearBrakeScale = Math.max(0, Math.min(1, rearRatio * 1.2));
+        }
         var maxDrivenSlip = 0;
         var brakePedal = inp.brakePedal;
         var handbrake = inp.handbrake ? 1 : 0;
@@ -1833,7 +1852,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 wheel.absFactor = Math.min(1, wheel.absFactor + 8 * dt);
                 if(wheel.absFactor > 0.98) wheel.abs = false;
             }
-            var bt = brakePedal * wheel.maxBrakeTorque * wheel.absFactor;
+            var bt = brakePedal * wheel.maxBrakeTorque * wheel.absFactor * (self.motorcycle ? (wheel.front ? self.frontBrakeScale : self.rearBrakeScale) : 1);
             if(!wheel.front) bt += handbrake * 1800;
             if(inp.parkingLock) bt = Math.max(bt, 4000); // P: the parking lock holds all wheels
             if(self.transbrakeHeld && wheel.driven) bt = Math.max(bt, 4000); // the transbrake holds the driven wheels
@@ -2029,6 +2048,13 @@ OpenRacer.Vehicle = function (parameters, input) {
             var alive = 1 - Math.min(1, Math.max(0, (Math.abs(lean) - 1.15) / 0.25));                  // past about 66 degrees the bike is going down: the rider lets go
             T = alive * Math.max(-6 * gh, Math.min(6 * gh, T));
             torque.x -= fx * T; torque.z -= fz * T;
+            // the rider also keeps the bike pointing the way the front wheel asks (a loaded front wheel and a light rear one, in hard braking, is a bike that wants to
+            // swing round): a torque about the vertical that damps the yaw rate that the steering did not ask for
+            if(Math.abs(u) > 3) {
+                var yawErr = r - u * delta / L;                                                              // (to the right: positive)
+                var yawT = Math.max(-1800, Math.min(1800, (mc.balance || 1) * (inertiaY / 0.12) * yawErr * fast));
+                torque.y += yawT;
+            }
         }
 
         // ---- the body on the road, for a landing or a car that has turned over

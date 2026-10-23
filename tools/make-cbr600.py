@@ -240,7 +240,7 @@ if not os.path.exists(CAR):
             "downforce_front": 0, "downforce_rear": 0, "ackermann": 0, "ride_front": 0, "ride_rear": 0,
             "roll_center_front": 0.3, "roll_center_rear": 0.3, "toe_front": 0, "toe_rear": 0, "camber_front": 0, "camber_rear": 0, "roll_camber": 0
         },
-        "motorcycle": {"max_lean_deg": 52, "balance": 1.0, "rider_mass": 75},
+        "motorcycle": {"max_lean_deg": 52, "balance": 1.0, "rider_mass": 75, "max_lateral_g": 0.9},
         "drivetrain": {
             "drive": "rwd", "diff": "welded", "diff_preload": 0, "diff_power": 0, "diff_coast": 0, "center_diff": "lsd", "center_split": 0.4,
             "gear_ratios": [2.75, 2.0, 1.667, 1.444, 1.304, 1.208], "reverse_ratio": 3.0, "final_drive": 6.03, "efficiency": 0.93, "shift_time": 0.12,
@@ -250,7 +250,7 @@ if not os.path.exists(CAR):
             "idle_rpm": 1400, "limiter_rpm": 15500, "inertia": 0.06,
             "torque_curve": [[0, 0], [1000, 30], [2000, 38], [3000, 42], [4000, 45], [5000, 47], [6000, 50], [7000, 52], [8000, 55], [9000, 58], [10000, 62],
                              [11000, 65], [11250, 66], [12000, 65.5], [13000, 63], [13500, 60.5], [14000, 57], [15000, 48], [16000, 20]],
-            "power_scale": 1, "braking_scale": 1, "limiter_hz": 20, "two_step_rpm": 8000, "launch_rpm": 9000
+            "power_scale": 1, "braking_scale": 0.3, "limiter_hz": 20, "two_step_rpm": 8000, "launch_rpm": 9000
         },
         "brakes": {"front": 380, "rear": 110},
         "tyres": {"compound": "sport", "model": "cylinder", "damage": False, "grip": 1.1, "grip_balance": 1, "cornering": 1, "rolling_resistance": 0.012,
