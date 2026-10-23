@@ -492,7 +492,163 @@ OpenRacer.Driver = function (config, parent, steering) {
     }
 
     // One step: the steering (the pivot of the wheel as the game turns it, or this.turn set by hand), the pedals (0..1)
-    this.update = function (dt, throttle, brake) {
+    // ---- a rider on a motorcycle: when the body of the car has the places that a rider takes (found by name: grip_L, grip_R, footpeg_L, footpeg_R, and frontbrake_R, clutch_L and shifter_L
+    // when it has them) the driver does not hold a steering wheel and work two pedals but sits on the bike:
+    //   - the hands are on grip_L and grip_R, turn with them (the steering turns the handlebar about the axis of the fork, and the hands go round with it) and the right wrist rolls with the
+    //     throttle (grip_R is turned by the gas);
+    //   - the fingers, but not the thumb, are not round the grip but at the lever: the right ones at frontbrake_R (they close a little with the brake), the left ones at clutch_L (they pull
+    //     the lever with every shift);
+    //   - the feet are on the footpegs; the left foot goes with the shift lever (shifter_L), which turns with every shift: the first gear is a tap down, every gear above it a tap up,
+    //     and neutral, between the first and the second, a small tap, up from the first gear and down from the second.
+    var rider = null, riderTried = false;
+    var riderRest = null;
+    var shiftState = { gear: null, neutral: null, time: 9, amp: 0, angle: 0 };
+    var SHIFT_FULL = 0.34, SHIFT_HALF = 0.13, SHIFT_UP = 0.07, SHIFT_BACK = 0.2, THROTTLE_ROLL = 0.75;
+    var rw = new V(), rl = new V(), rq1 = new Q(), rq2 = new Q(), rq3 = new Q(), rAxisX = new V(1, 0, 0);
+    function findRider() {
+        var get = function (name) { return self.parent.getObjectByName(name) || null; };
+        var r = { gripL: get("grip_L"), gripR: get("grip_R"), pegL: get("footpeg_L"), pegR: get("footpeg_R"), brake: get("frontbrake_R"), clutch: get("clutch_L"), shifter: get("shifter_L") };
+        return r.gripL && r.gripR && r.pegL && r.pegR ? r : null;
+    }
+    // the place of an object in the space of the body of the car (the parent of the driver)
+    function bodyPos(object, out) { object.getWorldPosition(rw); return self.parent.worldToLocal(out.copy(rw)); }
+    function bodyQuat(object, out) {
+        object.getWorldQuaternion(out);
+        self.parent.getWorldQuaternion(rq1);
+        return out.premultiply(rq1.invert());
+    }
+    function farthestPoint(object) {
+        var best = new V(), most = 0;
+        object.traverse(function (o) {
+            if (!o.isMesh || !o.geometry.attributes.position) return;
+            var p = o.geometry.attributes.position, tmpv = new V();
+            for (var i = 0; i < p.count; i++) { tmpv.fromBufferAttribute(p, i); if (tmpv.lengthSq() > most) { most = tmpv.lengthSq(); best.copy(tmpv); } }
+        });
+        return best;
+    }
+    function recordRest() {
+        var r = riderRest = { pos: {}, quat: {}, local: {}, tip: null, tipAt: new V() };
+        ["gripL", "gripR"].forEach(function (k) {
+            r.pos[k] = bodyPos(rider[k], new V());
+            r.quat[k] = bodyQuat(rider[k], new Q());
+            r.local[k] = rider[k].quaternion.clone();
+        });
+        r.pos.brake = rider.brake ? bodyPos(rider.brake, new V()) : null;
+        r.pos.clutch = rider.clutch ? bodyPos(rider.clutch, new V()) : null;
+        if (rider.shifter) {
+            rider.shifter.updateMatrixWorld(true);
+            r.local.shifter = rider.shifter.quaternion.clone();
+            r.tip = farthestPoint(rider.shifter);
+            rider.shifter.updateMatrixWorld(true);
+            r.tipAt = bodyPos2(rider.shifter, r.tip, new V());
+        }
+    }
+    function bodyPos2(object, local, out) { object.localToWorld(rw.copy(local)); return self.parent.worldToLocal(out.copy(rw)); }
+    // a shift of the gear: the shift lever gets a tap (a pulse: it goes quickly to the angle and comes back more slowly)
+    function shiftEvents(g, neutral) {
+        if (shiftState.gear === null) { shiftState.gear = g; shiftState.neutral = neutral; return; }
+        var s = shiftState, amp = 0;
+        if (neutral !== s.neutral) amp = neutral ? (s.gear === 0 ? -SHIFT_HALF : SHIFT_HALF) : (g === 0 ? SHIFT_FULL : -SHIFT_FULL);      // (the angle: plus is a tap down, minus a tap up)
+        else if (!neutral && g !== s.gear) amp = g > s.gear ? -SHIFT_FULL : SHIFT_FULL;
+        if (amp) { s.amp = amp; s.time = 0; }
+        s.gear = g; s.neutral = neutral;
+    }
+    function shiftAngle(dt) {
+        var s = shiftState;
+        s.time += dt;
+        var k = s.time < SHIFT_UP ? (s.time / SHIFT_UP) : Math.max(0, 1 - (s.time - SHIFT_UP) / SHIFT_BACK);
+        k = k * k * (3 - 2 * Math.min(1, k));
+        s.angle = s.amp * k;
+        s.pull = s.time < SHIFT_UP + SHIFT_BACK ? Math.sin(Math.PI * Math.min(1, s.time / (SHIFT_UP + SHIFT_BACK))) : 0;          // the clutch hand pulls while the lever moves
+        return s.angle;
+    }
+    var riderTip = new V(), riderHand = new V();
+    // the fingers of a hand: the thumb round the grip, the others open (a little closed) and pointing at the lever
+    function fingersAtLever(key, chain, leverPos, curlAmount) {
+        var list = self.fingers[key] || [];
+        list.forEach(function (f) { f.bone.quaternion.copy(f.rest).multiply(qf.setFromAxisAngle(f.axis, CURL_DEGREES * DEG_TO_RAD * (f.thumb ? 0.9 : curlAmount))); });
+        chain[2].updateMatrixWorld(true);
+        if (!leverPos) return;
+        // the root bone of every finger that is not the thumb (not the wrist: that goes with the grip) is turned so that the finger points at the lever
+        var target = self.parent.localToWorld(leverPos.clone()), from = new V(), to = new V(), p0 = new V(), p1 = new V();
+        list.forEach(function (f) {
+            if (f.thumb || f.depth !== 0) return;
+            var child = f.bone.children.filter(function (k) { return k.isBone; })[0];
+            if (!child) return;
+            f.bone.getWorldPosition(p0); child.getWorldPosition(p1);
+            from.copy(p1).sub(p0); to.copy(target).sub(p0);
+            if (from.lengthSq() < 1e-10 || to.lengthSq() < 1e-10) return;
+            qa.setFromUnitVectors(from.clone().normalize(), to.clone().normalize());
+            var angle = 2 * Math.acos(Math.min(1, Math.abs(qa.w)));
+            if (angle > 1.4) qa.slerp(qb.identity(), 1 - 1.4 / angle);                                              // at most 80 degrees
+            f.bone.getWorldQuaternion(qb);
+            qb.premultiply(qa);
+            if (f.bone.parent) { f.bone.parent.getWorldQuaternion(qp); qp.invert(); qb.premultiply(qp); }
+            f.bone.quaternion.copy(qb);
+            f.bone.updateMatrixWorld(true);
+        });
+    }
+    function riderPose(dt, throttle, brake, state) {
+        if (!riderRest) recordRest();
+        var cfg = self.config;
+        // the gear: the shift lever and the left hand
+        if (state) shiftEvents(state.gear || 0, !!state.neutral);
+        var angle = shiftAngle(dt);
+        if (rider.shifter && riderRest.local.shifter) rider.shifter.quaternion.copy(riderRest.local.shifter).multiply(rq2.setFromAxisAngle(rAxisX, angle));
+        // the throttle: the right grip rolls towards the rider
+        rider.gripR.quaternion.copy(riderRest.local.gripR).multiply(rq2.setFromAxisAngle(rAxisX, -THROTTLE_ROLL * Math.max(0, Math.min(1, throttle || 0))));
+        self.parent.updateMatrixWorld(true);
+        var xOf = function (chain) { chain[0].getWorldPosition(tmp2); return self.parent.worldToLocal(tmp2).x; };
+        var armLeft = xOf(self.bones.armL) >= xOf(self.bones.armR) ? "armL" : "armR", legLeft = xOf(self.bones.legL) >= xOf(self.bones.legR) ? "legL" : "legR";
+        var world = new V(), restWorld = new V(), local = new V();
+        [[armLeft, "left", 1, "gripL", "clutch", 0.25 + 0.5 * (shiftState.pull || 0)], [armLeft === "armL" ? "armR" : "armL", "right", -1, "gripR", "brake", 0.25 + 0.4 * Math.max(0, Math.min(1, brake || 0))]].forEach(function (e) {
+            var chain = self.bones[e[0]], key = e[3];
+            self.parent.localToWorld(restWorld.copy(riderRest.pos[key]));
+            bodyPos(rider[key], local);
+            self.parent.localToWorld(world.copy(local));
+            chain[0].getWorldPosition(a);
+            var set = cfg.poles && cfg.poles[e[0]];
+            if (set) tmp.set(set[0], set[1], set[2]);
+            else { self.parent.worldToLocal(tmp.copy(a)); tmp.add(new V(e[2] * 0.45, -0.25, -0.35)); }
+            (self.poles[e[0]] || (self.poles[e[0]] = new V())).copy(tmp);
+            self.parent.localToWorld(pole.copy(tmp));
+            // the hand at the grip in its rest place (for its orientation), and then at the grip where it is now, turned by what the grip has turned since (the steering, the throttle)
+            solve(chain, restWorld, pole);
+            chain[2].quaternion.copy(rest.get(chain[2]));
+            chain[2].updateMatrixWorld(true);
+            var hq = chain[2].getWorldQuaternion(new Q());
+            solve(chain, world, pole);
+            // (the turn since the rest, in the space of the body, then in the world)
+            bodyQuat(rider[key], rq3);
+            rq3.multiply(rq1.copy(riderRest.quat[key]).invert());
+            self.parent.getWorldQuaternion(qbody);
+            rq3.premultiply(qbody).multiply(qbody.clone().invert());
+            hq.premultiply(rq3);
+            var off = cfg.hands.rotation && cfg.hands.rotation[e[1]];
+            if (off) { qd.setFromEuler(eul.set((off[0] || 0) * DEG_TO_RAD, (off[1] || 0) * DEG_TO_RAD, (off[2] || 0) * DEG_TO_RAD, "XYZ")); qd.premultiply(qbody).multiply(qbody.clone().invert()); hq.premultiply(qd); }
+            chain[2].parent.getWorldQuaternion(qpw);
+            chain[2].quaternion.copy(hq.premultiply(qpw.invert()));
+            chain[2].updateMatrixWorld(true);
+            var lever = riderRest.pos[e[4]] && rider[e[4]] ? bodyPos(rider[e[4]], new V()) : null;
+            fingersAtLever(e[0], chain, lever, e[5]);
+        });
+        // the feet on the pegs; the left foot is on the toe peg of the shift lever as far as the lever has moved
+        [[legLeft, 1, "pegL"], [legLeft === "legL" ? "legR" : "legL", -1, "pegR"]].forEach(function (e) {
+            var chain = self.bones[e[0]];
+            bodyPos(rider[e[2]], local);
+            if (e[2] === "pegL" && rider.shifter && riderRest.tip) { bodyPos2(rider.shifter, riderRest.tip, tmp); local.add(tmp.sub(riderRest.tipAt)); }
+            self.parent.localToWorld(world.copy(local));
+            chain[0].getWorldPosition(a);
+            var setKnee = cfg.poles && cfg.poles[e[0]];
+            if (setKnee) tmp.set(setKnee[0], setKnee[1], setKnee[2]);
+            else { self.parent.worldToLocal(tmp.copy(a)); tmp.add(new V(e[1] * 0.3, 0.1, 0.8)); }
+            (self.poles[e[0]] || (self.poles[e[0]] = new V())).copy(tmp);
+            self.parent.localToWorld(pole.copy(tmp));
+            solve(chain, world, pole);
+        });
+    }
+
+    this.update = function (dt, throttle, brake, state) {
         if (!self.model || !self.complete()) return;
         self.root.updateMatrixWorld(true);
         if (self.steering) {
@@ -507,6 +663,13 @@ OpenRacer.Driver = function (config, parent, steering) {
         self.throttle = throttle === undefined ? self.throttle : throttle;
         self.brake = brake === undefined ? self.brake : brake;
         torso();
+        if (!riderTried) { riderTried = true; rider = findRider(); }
+        if (rider) {
+            riderPose(dt || 0.016, throttle, brake, state);
+            var h = self.bones.head;
+            if (h && restScale.has(h)) h.scale.copy(restScale.get(h)).multiplyScalar(self.showHead ? 1 : 0.001);
+            return;
+        }
         readGrips();
         if (self.steering) { if (self.keysActive()) planFor(self.turn); else handsStep(dt || 0.016); }
         var cfg = self.config, world = new V(), restWorld = new V(), wheelFrameOk = wheelFrame();

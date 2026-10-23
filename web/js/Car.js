@@ -329,7 +329,7 @@ OpenRacer.Car = function( config, domElement ) {
         if(this.driver) {
             // (the camera of a replay that is its own, the free and the cinematic one, is outside the car whatever the camera of the game is)
             this.driver.setCockpit(this.cameraMode === 3 && !(OpenRacer.Replay && OpenRacer.Replay.active && OpenRacer.Replay.ownCamera));
-            this.driver.update(delta || 0.016, this.throttle, this.brakePedal);
+            this.driver.update(delta || 0.016, this.throttle, this.brakePedal, { gear: this.current_gear, neutral: this.neutral });
         }
         // the checkpoint of the road under the rear wheel
         var rear = w[2];

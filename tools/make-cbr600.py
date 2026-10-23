@@ -186,9 +186,18 @@ part("steerhead_cylinder", (0, 0, 0), cylinder_tubes(), "black")
 part("brake_fork_leg_FL", (0, 0, 0), leg_tubes(), "gold")
 clamp_top, clamp_low = along(0.60), along(0.40)
 part("steerhead_clamp", (0, 0, 0), merge(box((0.24, 0.05, 0.08), (0, clamp_top[1], clamp_top[2])), box((0.24, 0.045, 0.08), (0, clamp_low[1], clamp_low[2]))), "alu")
-handle = merge(*[tube((s * 0.07, top[1] + 0.03, top[2] - 0.0), (s * 0.30, top[1] + 0.07, top[2] - 0.10), 0.03) for s in (1, -1)],
-               *[tube((s * 0.30, top[1] + 0.07, top[2] - 0.10), (s * 0.32, top[1] + 0.05, top[2] - 0.17), 0.04) for s in (1, -1)])
+handle = merge(*[tube((s * 0.07, top[1] + 0.03, top[2] - 0.0), (s * 0.255, top[1] + 0.06, top[2] - 0.135), 0.03) for s in (1, -1)])
 part("steerhead_handlebar", (0, 0, 0), handle, "black")
+
+# The places that the rider takes hold of, as parts of their own (the driver of the game finds them by name, see Driver.js). They hang on the handlebar and turn with the steering
+# (the loader takes them with the steering head): grip_L and grip_R, the rubber grips (the right one turns with the throttle), frontbrake_R, the brake lever, and clutch_L, the clutch
+# lever; the origin of a lever is where the fingers go. The pivot of a part is its origin.
+GRIP_Y, GRIP_Z = top[1] + 0.06, top[2] - 0.135
+for side, name in ((1, "L"), (-1, "R")):
+    part("grip_" + name, (side * 0.31, GRIP_Y, GRIP_Z), g.cylinder_x(0.02, 0.12), "black")
+lever_at = (GRIP_Y - 0.018, GRIP_Z + 0.085)
+part("frontbrake_R", (-0.30, lever_at[0], lever_at[1]), merge(tube((0.0, 0.025, -0.045), (0.01, -0.03, 0.055), 0.016), box((0.03, 0.02, 0.02), (0.0, -0.03, 0.055))), "alu")
+part("clutch_L", (0.30, lever_at[0], lever_at[1]), merge(tube((0.0, 0.025, -0.045), (-0.01, -0.03, 0.055), 0.016), box((0.03, 0.02, 0.02), (0.0, -0.03, 0.055))), "alu")
 part("brake_mudguard_FL", (0, 0, 0), merge(*[box((0.02, 0.03, 0.30), (s * 0.12, 0.33, FRONT - 0.02)) for s in (1, -1)], box((0.17, 0.018, 0.30), (0, 0.352, FRONT - 0.02))), "paint")
 part("brake_caliper_FL", (0, 0, 0), merge(*[box((0.03, 0.09, 0.07), (s * 0.095, -0.12, FRONT + 0.08)) for s in (1, -1)]), "gold")
 
@@ -238,7 +247,11 @@ part("tail", (0, 0, 0), loft([
     ring(-0.60, 0, 0.45, 0.12, 0.06), ring(-0.80, 0, 0.50, 0.13, 0.06), ring(-0.98, 0, 0.55, 0.11, 0.04), ring(-1.04, 0, 0.56, 0.09, 0.03)]), "paint")
 part("taillight", (0, 0, 0), box((0.14, 0.03, 0.02), (0, 0.56, -1.05)), "paint")
 part("mirrors", (0, 0, 0), merge(*[merge(tube((s * 0.15, 0.62, 0.45), (s * 0.24, 0.72, 0.36), 0.015), box((0.09, 0.05, 0.02), (s * 0.25, 0.72, 0.35))) for s in (1, -1)]), "black")
-part("footpegs", (0, 0, 0), merge(*[merge(tube((s * 0.13, -0.10, -0.12), (s * 0.18, -0.10, -0.12), 0.025), box((0.05, 0.015, 0.08), (s * 0.21, -0.10, -0.12))) for s in (1, -1)]), "alu")
+# the footpegs (footpeg_L and footpeg_R: where the feet of the rider go) and the shift lever (shifter_L): its origin is its hinge, the lever goes forward from it to a toe peg and turns about
+# the x axis (the game turns it a little with every shift, and the left foot follows the toe peg)
+for side, name in ((1, "L"), (-1, "R")):
+    part("footpeg_" + name, (side * 0.21, -0.10, -0.12), merge(tube((side * -0.08, 0.0, 0.0), (side * -0.03, 0.0, 0.0), 0.025), box((0.05, 0.015, 0.08))), "alu")
+part("shifter_L", (0.17, -0.13, -0.24), merge(tube((0.0, 0.0, 0.0), (0.0, 0.015, 0.20), 0.02), box((0.04, 0.012, 0.03), (0.0, 0.02, 0.215))), "alu")
 
 g.write(OUT, "honda-cbr600", "OpenRacer make-cbr600.py")
 

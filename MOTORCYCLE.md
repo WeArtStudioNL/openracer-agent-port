@@ -18,6 +18,16 @@ The game's physics has four wheels, and a motorcycle is that physics with change
 
 `tools/make-cbr600.py` makes `cbr600.glb`. Wheels: `wheel_FL` (the tyre), `wheel_FL_rim`, `wheel_FL_disc`, and the same for `RL`, listed in `wheels.nodes` of the car. What steers with the front wheel without spinning is a part whose name ends in `FL` and starts with or contains `brake` (`brake_fork_FL`, `brake_handlebar_FL`, ...): the loader hangs the parts of a brake caliper on the steering of its wheel.
 
+## The rider
+A driver (a model with a skeleton, added in the car editor as for a car) on a bike is a rider when the model has the places that a rider takes, found by name (`Driver.js`):
+
+* `footpeg_L`, `footpeg_R`: the feet. The left foot also follows the shift lever.
+* `grip_L`, `grip_R`: the hands. They turn with the handlebar about the axis of the fork, and the hands go round with them. **The right wrist rolls with the throttle**: `grip_R` is turned (up to 43 degrees) by the gas and the hand with it.
+* `frontbrake_R`, `clutch_L`: the fingers that are not the thumb point at the lever (the thumb is round the grip). They close a little more with the brake; the left ones pull the clutch lever with every shift.
+* `shifter_L`: the shift lever (its origin is its hinge, the lever goes forward from it to a toe peg). The game turns it with every shift and the left foot goes with its toe peg: **first gear is a tap down, every gear above it a tap up, and neutral, between the first and the second, a small tap: up from the first gear, down from the second**.
+
+The grips and the levers hang on the handlebar and turn with the steering (the loader takes `grip_L`, `grip_R`, `frontbrake_R` and `clutch_L` with the steering head). Without these parts a driver is a driver of a car (the steering wheel and the pedals). Where the model sits (`position`, `rotation`, `scale`, the turn of the chest) is set in the car editor as for any driver; the hands can be turned with `hands.rotation`, the elbows and the knees pointed with `poles`. The CBR has no driver of its own yet: a model of a rider that is small enough for the bars to be in reach (the one of the kart needed a scale of 1.15 and the chest turned 85 degrees forward).
+
 ## The engine sound
 The sound is the combustion model of the game, with parameters. New presets in `web/js/EngineSim.js`: *Single 0.65 L (thumper)*, *Inline-3 0.8 L (triple)*, *Inline-4 0.6 L (supersport)* and *Inline-4 1.0 L (superbike)*. `node tools/check-engine-sound.js [preset]` (or `--car honda-cbr600`, `--wav file.wav` to write eight seconds from idle to the limiter to listen to) runs the real worklet without a browser and says if a preset is silent, clips or has not got the pitch of its firing frequency.
 

@@ -224,7 +224,9 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
         function makeHead() {
             if(config.type !== "motorcycle" || !measured || !measured.centres.FL) return null;
             var parts = [];
-            root.traverse(function(child) { if(String(child.name || "").toLowerCase().replace(/[^a-z0-9]/g, "").indexOf("steerhead") === 0) parts.push(child); });
+            // (and the parts of the handlebar that the rider takes hold of, which turn with it: the grips, the brake lever and the clutch lever, see Driver.js)
+            var ON_HANDLEBAR = { gripl: 1, gripr: 1, frontbraker: 1, clutchl: 1 };
+            root.traverse(function(child) { var n = String(child.name || "").toLowerCase().replace(/[^a-z0-9]/g, ""); if(n.indexOf("steerhead") === 0 || ON_HANDLEBAR[n]) parts.push(child); });
             parts = parts.filter(function(part) { return !parts.some(function(other) { return other !== part && isInside(part, other); }); });
             if(!parts.length) return null;
             var object = new THREE.Object3D();
