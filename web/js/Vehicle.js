@@ -1762,7 +1762,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                     wheel.smoke = fz > 200 ? Math.min(1, 0.15 * sliding + wheel.heat * Math.min(1, sliding * 2 + 0.2)) : 0;
                 }
                 wheel.squeal = (wheel.surface === "road" || wheel.surface === "track01") && fz > 200
-                    ? smoothstep(0.85, 1.5, wheel.s) * (1 - 0.4 * smoothstep(2.5, 4, wheel.s)) * smoothstep(0.4, 2.5, slideSpeed) : 0;
+                    ? smoothstep(1.2, 2.2, wheel.s) * (1 - 0.4 * smoothstep(2.5, 4, wheel.s)) * smoothstep(1.2, 5, slideSpeed) : 0;
                 fxW = wheel.fx;
                 fyW = wheel.fy;
                 // the temperature and the wear: the power that the slip burns

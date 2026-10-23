@@ -5,6 +5,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 ## Unreleased
 
 **Race**
+- The tyre squeal is quieter and later: it starts from a real slide (the slip must pass 1.2, it was 0.85, and the slide must go faster than 1.2 m/s), the sound itself is silent until a fifth of the slide and then grows softly (power 1.6 instead of 1.3), it is a quarter quieter, and it comes in over 0.12 s. A half throttle start and a bend below the limit are silent now; a bend over the limit, a full throttle start and a hard stop squeal as before.
 - A car whose contacts blow up is held back: a gain of more than 35 m/s in one update (over 50 m/s) keeps the speed that it had, and a spin of more than 60 rad/s is brought back to 60; it is said once in the console (`Vehicle: the speed jumped from … to …`, with the place). An AI kart in a replay of the Desert was launched from a stand-still to 100 and later 169 m/s.
 - When the browser takes the graphics away (`webglcontextlost`) there is a note on the screen (*Reload the page if the picture stays wrong*) and a line in the console; a picture that went black without an error was not visible before.
 - Fix for `--https`: the page could keep loading or time out, because the handshake of a connection that said nothing (a browser opens some in advance) was waited for in the loop that accepts connections, which stopped the whole server. The handshake is now made in the thread of the connection, with a time limit of 15 s.
