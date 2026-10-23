@@ -154,11 +154,6 @@
     "rear": 1700
   },
   "cameras": {
-    "chase": {
-      "distance": 10.5,
-      "height": 2.6,
-      "fov": 35
-    },
     "follow": {
       "distance": 8,
       "height": 2.8,

@@ -77,9 +77,8 @@ scene.add(cameraMarkers);
 // the layers panel (see further down): what can be selected, and the gizmo that moves the cameras and the model
 const LAYERS = [
     { group: "Cameras" },
-    { id: "chase", label: "1 Fixed camera", color: "#4d8dff" },
-    { id: "follow", label: "2 Follow camera", color: "#37d67a" },
-    { id: "cockpit", label: "3 Cockpit camera", color: "#ff9f43" },
+    { id: "follow", label: "1 Follow camera", color: "#37d67a" },
+    { id: "cockpit", label: "2 Cockpit camera", color: "#ff9f43" },
     { group: "Car" },
     { id: "model", label: "Model (offset)", color: "#c6cfdb" },
     { id: "steering", label: "Steering wheel", color: "#e0b040" },
@@ -91,8 +90,8 @@ const LAYERS = [
     { id: "wRL", label: "Rear left", color: "#8ee26b" }
 ];
 const layers = { selected: null, dragging: false };
-const gizmoTargets = { chase: new THREE.Object3D(), follow: new THREE.Object3D(), cockpit: new THREE.Object3D(), model: pivot };
-[gizmoTargets.chase, gizmoTargets.follow, gizmoTargets.cockpit].forEach((o) => scene.add(o));
+const gizmoTargets = { follow: new THREE.Object3D(), cockpit: new THREE.Object3D(), model: pivot };
+[gizmoTargets.follow, gizmoTargets.cockpit].forEach((o) => scene.add(o));
 const gizmo = new TransformControls(camera, renderer.domElement);
 gizmo.setSize(0.8);
 gizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !event.value; layers.dragging = event.value; if (!event.value) updateCameraMarkers(); });
@@ -785,7 +784,6 @@ function renderMaterials() {
 // ---- cameras
 
 const CAM_FIELDS = {
-    camChaseDist: (c) => c.chase.distance, camChaseHeight: (c) => c.chase.height, camChaseFov: (c) => c.chase.fov,
     camFolDist: (c) => c.follow.distance, camFolHeight: (c) => c.follow.height, camFolLook: (c) => c.follow.look_height,
     camFolSmooth: (c) => c.follow.smoothing, camFolFovStand: (c) => c.follow.fov_standing, camFolFovFast: (c) => c.follow.fov_fast,
     camFolSpeed: (c) => Math.round(c.follow.fov_full_speed * 3.6), camFolDolly: (c) => c.follow.dolly,
@@ -808,7 +806,6 @@ function defaultCameras() {
 function readCameras() {
     const n = (id) => num(id);
     return {
-        chase: { distance: n("camChaseDist"), height: n("camChaseHeight"), fov: n("camChaseFov") },
         follow: { distance: n("camFolDist"), height: n("camFolHeight"), look_height: n("camFolLook"), smoothing: n("camFolSmooth"),
             fov_standing: n("camFolFovStand"), fov_fast: n("camFolFovFast"), fov_full_speed: n("camFolSpeed") / 3.6, dolly: n("camFolDolly") },
         cockpit: { position: [n("camCockX"), n("camCockY"), n("camCockZ")], fov: n("camCockFov") }
@@ -831,9 +828,6 @@ function updateCameraMarkers() {
         cameraMarkers.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), new THREE.LineBasicMaterial({ color })));
     };
     // the road is r below the origin of the model; the cameras behind the car look at the middle of it
-    if (Number.isFinite(c.chase.distance) && Number.isFinite(c.chase.height)) {
-        line(0x4d8dff, dot(0x4d8dff, 0, c.chase.height - r, -c.chase.distance, "chase"), new THREE.Vector3(0, 0, 0));
-    }
     if (Number.isFinite(c.follow.distance) && Number.isFinite(c.follow.height)) {
         line(0x37d67a, dot(0x37d67a, 0, c.follow.height - r, -c.follow.distance, "follow"), new THREE.Vector3(0, (c.follow.look_height || 0) - r, 0));
         // where the camera is at full speed: closer, in the measure that the field of view is wider
@@ -860,12 +854,12 @@ function gizmoMoved() {
     if (id && id.startsWith("ex")) { renderLayers(); return; }
     const r = (num("tyre") || 0.65) / 2;
     const fix = (v) => Math.round(v * 100) / 100;
-    if (id === "chase" || id === "follow") {
+    if (id === "follow") {
         const p = gizmoTargets[id].position;
         p.x = 0;
         if (p.z > -0.5) p.z = -0.5;
-        $(id === "chase" ? "camChaseDist" : "camFolDist").value = fix(-p.z);
-        $(id === "chase" ? "camChaseHeight" : "camFolHeight").value = fix(p.y + r);
+        $("camFolDist").value = fix(-p.z);
+        $("camFolHeight").value = fix(p.y + r);
     } else if (id === "cockpit") {
         const p = gizmoTargets.cockpit.position;
         $("camCockX").value = fix(p.x); $("camCockY").value = fix(p.y); $("camCockZ").value = fix(p.z);
@@ -890,7 +884,7 @@ function selectLayer(id) {
             if (sel.startsWith("ex")) attachExhaustGizmo();
             else {
                 gizmo.attach(gizmoTargets[sel]);
-                gizmo.showX = sel !== "chase" && sel !== "follow"; // the cameras behind the car are in the middle
+                gizmo.showX = sel !== "follow"; // the cameras behind the car are in the middle
                 gizmo.showY = gizmo.showZ = true;
             }
         }
@@ -949,7 +943,6 @@ function renderLayers() {
         row.append(dot, text);
         const meta = document.createElement("span");
         meta.className = "meta";
-        if (l.id === "chase") meta.textContent = num("camChaseDist") + " m, " + num("camChaseFov") + "°";
         if (l.id === "follow") meta.textContent = num("camFolDist") + " m, " + num("camFolFovStand") + "°";
         if (l.id === "cockpit") meta.textContent = num("camCockFov") + "°";
         if (l.id === "model") { meta.textContent = state.root ? "" : "none"; if (!state.root) row.classList.add("dim"); }
@@ -1067,34 +1060,29 @@ const thumbCamera = new THREE.PerspectiveCamera(45, 246 / 138, 0.05, 300);
 
 function updateThumbnail() {
     const id = layers.selected;
-    const isCamera = id === "chase" || id === "follow" || id === "cockpit";
+    const isCamera = id === "follow" || id === "cockpit";
     thumbRenderer.domElement.style.display = isCamera ? "block" : "none";
     if (!isCamera) { $("thumbLabel").textContent = "Select a camera to see what it sees."; return; }
     const c = readCameras();
     const r = (num("tyre") || 0.65) / 2;
-    if (id === "chase") {
-        thumbCamera.position.set(0, c.chase.height - r, -c.chase.distance);
-        thumbCamera.rotation.set(0, Math.PI, 0); // looks along the car
-        thumbCamera.fov = c.chase.fov;
-        $("thumbLabel").textContent = "1 Fixed camera, " + c.chase.distance + " m behind, " + c.chase.height + " m high, FOV " + c.chase.fov + "°";
-    } else if (id === "follow") {
+    if (id === "follow") {
         thumbCamera.position.set(0, c.follow.height - r, -c.follow.distance);
         thumbCamera.lookAt(0, (c.follow.look_height || 0) - r, 0);
         thumbCamera.fov = c.follow.fov_standing;
-        $("thumbLabel").textContent = "2 Follow camera at a standstill, FOV " + c.follow.fov_standing + "° (" + c.follow.fov_fast + "° at full speed)";
+        $("thumbLabel").textContent = "1 Follow camera at a standstill, FOV " + c.follow.fov_standing + "° (" + c.follow.fov_fast + "° at full speed)";
     } else {
         const p = c.cockpit.position;
         thumbCamera.position.set(p[0], p[1], p[2]);
         thumbCamera.rotation.set(0, Math.PI, 0);
         thumbCamera.fov = c.cockpit.fov;
-        $("thumbLabel").textContent = "3 Cockpit camera, FOV " + c.cockpit.fov + "°";
+        $("thumbLabel").textContent = "2 Cockpit camera, FOV " + c.cockpit.fov + "°";
     }
     thumbCamera.updateProjectionMatrix();
 }
 
 function renderThumbnail() {
     const id = layers.selected;
-    if (id !== "chase" && id !== "follow" && id !== "cockpit") return;
+    if (id !== "follow" && id !== "cockpit") return;
     // without the markers and the gizmo, the way the game shows it
     cameraMarkers.visible = false;
     const helper = typeof gizmo.getHelper === "function" ? gizmo.getHelper() : gizmo;
@@ -1415,7 +1403,7 @@ function buildConfig(id) {
         sound: { engine_sim: readEngineSim() }
     };
     if (!engineSimValid(config.sound.engine_sim)) throw new Error("Every field of the engine sound needs a value.");
-    const camNumbers = [config.cameras.chase.distance, config.cameras.chase.height, config.cameras.chase.fov, config.cameras.follow.distance,
+    const camNumbers = [config.cameras.follow.distance,
         config.cameras.follow.height, config.cameras.follow.look_height, config.cameras.follow.smoothing, config.cameras.follow.fov_standing,
         config.cameras.follow.fov_fast, config.cameras.follow.fov_full_speed, config.cameras.follow.dolly, config.cameras.cockpit.fov, ...config.cameras.cockpit.position];
     if (!camNumbers.every(Number.isFinite)) throw new Error("Every field of the cameras needs a number.");

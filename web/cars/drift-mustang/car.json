@@ -131,11 +131,6 @@
     "rolling_resistance": 0.015
   },
   "cameras": {
-    "chase": {
-      "distance": 10,
-      "height": 2.34,
-      "fov": 35
-    },
     "follow": {
       "distance": 7.5,
       "height": 2.1,
