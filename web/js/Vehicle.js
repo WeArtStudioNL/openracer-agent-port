@@ -752,7 +752,8 @@ OpenRacer.Vehicle = function (parameters, input) {
             // The wheel is drawn on the road, not pushed into it: the tyre's squash beyond what it has at rest (a landing, a kerb)
             // lifts the drawn wheel, because the mesh of the tyre does not flatten. The parts of the suspension rig follow the same place.
             var squash = Math.max(0, (w.tyreDeflection || 0) - w.staticLoad / (w.tyreRate || this.tyreRate));
-            w.visualLength = (w.hasContact ? w.suspensionLength : w.freeLength) - squash;
+            // (a wheel that lets go of the road for a moment goes out on its spring as the physics has it, it does not snap to the end of its travel and back)
+            w.visualLength = Math.min(w.suspensionLength, w.freeLength) - squash;
             var length = w.visualLength;
             w.center.x = mx - axisY.x * length;
             w.center.y = my - axisY.y * length;

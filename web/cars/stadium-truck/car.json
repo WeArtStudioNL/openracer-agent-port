@@ -256,7 +256,7 @@
     "shell": {
       "width": 0,
       "rings": 3,
-      "segments": 12
+      "segments": 36
     },
     "nodes": 72,
     "stiff_x": 20,
