@@ -521,6 +521,70 @@ var MainMenu = (function() {
             "&laps=" + (raceOptions.laps || 0) + "&wear=" + (raceOptions.wear === undefined ? 1 : raceOptions.wear) + aiCarsParameter();
     }
 
+    // The longest jumps on the chosen track (JumpStats.js), with a button to start over
+    function showJumps() {
+        var track = tracks.filter(function(t) { return t.id === choice.track; })[0];
+        if(!track) return;
+        var shade = document.createElement("div");
+        shade.id = "replaysDialog";
+        var box = document.createElement("div");
+        box.className = "box";
+        shade.appendChild(box);
+        shade.onclick = function(e) { if(e.target === shade) shade.remove(); };
+        var title = document.createElement("h2");
+        title.textContent = "Longest jumps · " + (track.name || track.id);
+        box.appendChild(title);
+        var list = document.createElement("div");
+        box.appendChild(list);
+        var foot = document.createElement("div");
+        foot.style.cssText = "display: flex; gap: 8px; justify-content: space-between; margin-top: 14px;";
+        var reset = document.createElement("button");
+        reset.className = "danger";
+        reset.textContent = "Start over";
+        reset.onclick = function() { if(window.confirm("Remove the jumps of this track?")) { OpenRacer.JumpStats.clear(track.id); fill(); } };
+        var close = document.createElement("button");
+        close.textContent = "Close";
+        close.onclick = function() { shade.remove(); };
+        foot.appendChild(reset);
+        foot.appendChild(close);
+        box.appendChild(foot);
+        document.body.appendChild(shade);
+        function fill() {
+            list.innerHTML = "";
+            var jumps = OpenRacer.JumpStats.top(track.id);
+            if(!jumps.length) {
+                var empty = document.createElement("div");
+                empty.className = "note";
+                empty.textContent = "No jumps yet. Stay in the air for more than half a second.";
+                list.appendChild(empty);
+                reset.style.visibility = "hidden";
+                return;
+            }
+            reset.style.visibility = "";
+            jumps.forEach(function(j, i) {
+                var row = document.createElement("div");
+                row.className = "row";
+                var place = document.createElement("div");
+                place.style.cssText = "width: 26px; font-weight: bold; color: " + (i === 0 ? "#ffd04d" : "#9fb0c4") + ";";
+                place.textContent = String(i + 1);
+                var text = document.createElement("div");
+                text.className = "name";
+                var main = document.createElement("div");
+                main.textContent = j.distance.toFixed(0) + " m";
+                main.style.fontSize = "18px";
+                var meta = document.createElement("div");
+                meta.className = "meta";
+                meta.textContent = j.air.toFixed(1) + " s in the air · " + (j.height || 0).toFixed(1) + " m high" + (j.car ? " · " + j.car : "") + (j.date ? " · " + new Date(j.date).toLocaleDateString() : "");
+                text.appendChild(main);
+                text.appendChild(meta);
+                row.appendChild(place);
+                row.appendChild(text);
+                list.appendChild(row);
+            });
+        }
+        fill();
+    }
+
     // The window of the replays: the saved ones to watch, download or delete, and a file to import
     function showReplays(carList, trackList) {
         var shade = document.createElement("div");
@@ -789,6 +853,12 @@ var MainMenu = (function() {
         openReplay.title = "The replays that you saved, and import a replay file that someone sent";
         openReplay.onclick = function() { showReplays(cars, tracks); };
         wrap.appendChild(openReplay);
+        var jumpsButton = document.createElement("button");
+        jumpsButton.className = "secondary";
+        jumpsButton.textContent = "Jumps";
+        jumpsButton.title = "The longest jumps on the chosen track";
+        jumpsButton.onclick = showJumps;
+        wrap.appendChild(jumpsButton);
 
         var foot = document.createElement("div");
         foot.className = "foot";

@@ -457,7 +457,7 @@ function onEnterFrame() {
         lastFrameTime = now;
         if(d > 0.1) d = 0.1; // after a pause of the browser (another tab, no focus) the game goes on from here, it does not catch up
         car.update(d, true);
-        if(OpenRacer.JumpStats) OpenRacer.JumpStats.update(car.vehicle, d, currentTrack.id);
+        if(OpenRacer.JumpStats) OpenRacer.JumpStats.update(car.vehicle, d, currentTrack.id, car.config && car.config.name);
         updateRace(d);
         if(OpenRacer.Replay) OpenRacer.Replay.record(d);   // everything is recorded from the start, for the replay
     }
