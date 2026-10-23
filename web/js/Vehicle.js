@@ -2042,7 +2042,7 @@ OpenRacer.Vehicle = function (parameters, input) {
 
     // A number that is not a number (NaN, infinity) in the state of the car stays there for good and the car is dead (and the sound throws). It should not happen; when it does, it is
     // reported once with the name of the field (the cause is then to be found), the car is put back upright where it last was fine, and the wheels start clean.
-    var lastGood = null, reported = false;
+    var lastGood = null, reported = false, lastSpeed = 0, blewUp = false;
     var BODY_FIELDS = ["px", "py", "pz", "vx", "vy", "vz", "wx", "wy", "wz", "qx", "qy", "qz", "qw"];
     var WHEEL_FIELDS = ["omega", "s", "slipRatio", "slipTan", "susLength", "susVel", "heat", "smoke", "squeal", "surfT", "roadT", "temp", "fx", "fy"];
     this.checkFinite = function () {
@@ -2053,7 +2053,20 @@ OpenRacer.Vehicle = function (parameters, input) {
             w = this.wheels[i];
             for(k = 0; k < WHEEL_FIELDS.length; k++) if(typeof w[WHEEL_FIELDS[k]] === "number" && !isFinite(w[WHEEL_FIELDS[k]])) { wheelBad = "wheel " + i + " " + WHEEL_FIELDS[k]; break; }
         }
-        if(!bad && !wheelBad) { lastGood = { x: this.px, z: this.pz, psi: this.psi }; return; }
+        if(!bad && !wheelBad) {
+            // a car does not gain 35 m/s in one update, nor spin faster than 60 rad/s: that is the contacts blowing up (a wheel in a corner of the terrain), not driving. The speed
+            // that it had is kept, and it is said once.
+            var speedNow = Math.sqrt(this.vx * this.vx + this.vy * this.vy + this.vz * this.vz), spinNow = Math.sqrt(this.wx * this.wx + this.wy * this.wy + this.wz * this.wz);
+            if((speedNow - lastSpeed > 35 && speedNow > 50) || spinNow > 60) {
+                if(!blewUp) { blewUp = true; console.warn("Vehicle: the speed jumped from " + lastSpeed.toFixed(0) + " to " + speedNow.toFixed(0) + " m/s (spin " + spinNow.toFixed(0) + " rad/s) at " + this.px.toFixed(0) + ", " + this.pz.toFixed(0) + ": it is held back."); }
+                if(speedNow - lastSpeed > 35 && speedNow > 50) { var keep = Math.max(lastSpeed, 1) / speedNow; this.vx *= keep; this.vy *= keep; this.vz *= keep; }
+                if(spinNow > 60) { var calm = 60 / spinNow; this.wx *= calm; this.wy *= calm; this.wz *= calm; }
+                speedNow = Math.sqrt(this.vx * this.vx + this.vy * this.vy + this.vz * this.vz);
+            }
+            lastSpeed = speedNow;
+            lastGood = { x: this.px, z: this.pz, psi: this.psi };
+            return;
+        }
         if(!reported) { reported = true; console.warn("Vehicle: a value is not a number (" + (bad || wheelBad) + "); the car is put back on the road."); }
         if(bad && lastGood) { this.reset(lastGood.x, lastGood.z, lastGood.psi); this.py += 0.3; }
         else if(bad) this.reset(0, 0, 0);

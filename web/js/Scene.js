@@ -104,6 +104,21 @@ RACER.Scene = function (parameters, domElement) {
         applyToneMapping(Settings.option("toneMapping"));
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        // when the browser takes the graphics away (too little memory on the video card), the picture can go wrong without any error: say so
+        renderer.domElement.addEventListener("webglcontextlost", function(event) {
+            event.preventDefault();
+            console.warn("The browser took the graphics away (webglcontextlost).");
+            var note = document.createElement("div");
+            note.id = "contextLostNote";
+            note.style.cssText = "position: fixed; left: 50%; top: 20px; transform: translateX(-50%); z-index: 5000; padding: 10px 18px; background: rgba(120, 30, 20, 0.92); color: #fff; font: 15px Arial; border-radius: 8px;";
+            note.textContent = "The browser reset the graphics. Reload the page if the picture stays wrong.";
+            document.body.appendChild(note);
+        });
+        renderer.domElement.addEventListener("webglcontextrestored", function() {
+            console.warn("The graphics are back (webglcontextrestored).");
+            var note = document.getElementById("contextLostNote");
+            if(note) note.remove();
+        });
 
         camera = new THREE.PerspectiveCamera( 35, SCREEN_WIDTH / SCREEN_HEIGHT, 1, 5000 );
 

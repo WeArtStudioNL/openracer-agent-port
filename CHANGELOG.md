@@ -5,6 +5,8 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 ## Unreleased
 
 **Race**
+- A car whose contacts blow up is held back: a gain of more than 35 m/s in one update (over 50 m/s) keeps the speed that it had, and a spin of more than 60 rad/s is brought back to 60; it is said once in the console (`Vehicle: the speed jumped from … to …`, with the place). An AI kart in a replay of the Desert was launched from a stand-still to 100 and later 169 m/s.
+- When the browser takes the graphics away (`webglcontextlost`) there is a note on the screen (*Reload the page if the picture stays wrong*) and a line in the console; a picture that went black without an error was not visible before.
 - Fix for `--https`: the page could keep loading or time out, because the handshake of a connection that said nothing (a browser opens some in advance) was waited for in the loop that accepts connections, which stopped the whole server. The handshake is now made in the thread of the connection, with a time limit of 15 s.
 - `start-server.sh --https` serves over https with a certificate that is made at the first start (openssl, or mkcert when it is installed, which the browser trusts): for localhost and the address on the network, in `tools/.certs` (not in git). The browser warns once about a self-signed one. With it the game can use what https asks for (the clipboard, the gamepad and the motion sensors on another device).
 - `start-server.sh` serves on the local network and prints the address to open on a phone, a tablet or another computer (`--local` keeps it to this computer). The server already listened on every address; now it says where. The API that writes and deletes cars and tracks stays closed to the other computers.
