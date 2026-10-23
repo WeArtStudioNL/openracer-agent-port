@@ -187,6 +187,7 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
         // of the wheel: the direction in which it is flattest (found from its shape), or "steering_wheel.axis" of the car (in the space of the model).
         var steering = findSteeringWheel(root, space);
 
+        var takenAt = {};   // the parts that the slots have taken (by name), and where they were
         var measured = null; // the centres and the size of the wheels of the model, in the space of the body
         if(complete) {
             measured = { centres: {}, diameter: 0 };
@@ -196,8 +197,16 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
                 parts = parts.filter(function (part) {
                     return !parts.some(function (other) { return other !== part && isInside(part, other); });
                 });
+                // the parts that an earlier slot took are not in the model any more (a motorcycle: wheel_FL for both FR and FL): this slot has the same place and no wheel of its own
                 var box = new THREE.Box3();
-                parts.forEach(function (part) { box.expandByObject(part); });
+                var again = nodes[slot].filter(function (name) { return takenAt[name]; });
+                if(!parts.length && again.length) {
+                    box.setFromCenterAndSize(takenAt[again[0]], new THREE.Vector3(0.001, 0.001, 0.001));
+                } else {
+                    parts.forEach(function (part) { box.expandByObject(part); });
+                    var middle = box.getCenter(new THREE.Vector3());
+                    nodes[slot].forEach(function (name) { takenAt[name] = middle; });
+                }
                 measured.centres[slot] = box.getCenter(new THREE.Vector3());
                 (measured.sizes = measured.sizes || []).push(box.getSize(new THREE.Vector3()).y);
                 var chain = wheelChain(new THREE.Object3D(), false);
