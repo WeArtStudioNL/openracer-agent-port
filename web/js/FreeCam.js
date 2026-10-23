@@ -1,7 +1,7 @@
 /*
  * FreeCam.js
  *
- * Description: The fourth camera of the game (the camera switcher: fixed, follow, cockpit, free). The camera is not tied to the car: it is moved
+ * Description: The fourth camera of the game (the camera switcher: follow, cockpit, free). The camera is not tied to the car: it is moved
  *              with the buttons of a panel at the top right of the HUD (the keys are the ones that drive the car): forward, back, left and right
  *              (level, the way the camera looks), up and down, turn up, down, left and right, and a wider or a narrower field of view. Two toggles, on the
  *              panel and on keys (actions of the settings menu): P, "freeCamAim", the camera looks at the car (it keeps its place and turns to the
@@ -107,6 +107,7 @@ OpenRacer.FreeCam = (function () {
         if (!panel) buildPanel();
         active = true;
         pos.copy(camera.position);
+        pos.y += 10;                                     // it starts 10 m higher than the camera that it came from
         euler.setFromQuaternion(camera.quaternion, "YXZ");
         yaw = euler.y; pitch = euler.x;
         fov = camera.fov;
@@ -132,7 +133,7 @@ OpenRacer.FreeCam = (function () {
         if (placeBehind) {
             placeBehind = false;
             var ahead = new THREE.Vector3(Math.sin(carYaw), 0, Math.cos(carYaw));
-            pos.copy(carPosition).addScaledVector(ahead, -8); pos.y += 3;
+            pos.copy(carPosition).addScaledVector(ahead, -8); pos.y += 10;
             yaw = carYaw + Math.PI; pitch = -0.15; fov = 50;
             lastCar.copy(carPosition);
         }

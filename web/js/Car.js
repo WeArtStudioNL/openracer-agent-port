@@ -356,10 +356,10 @@ OpenRacer.Car = function( config, domElement ) {
         shadowLight.position.copy(subject.body.position).add(sunDirection);
     };
 
-    // ---- the cameras: 1 is the fixed camera behind the car, 2 follows the direction of the car smoothly and
+    // ---- the cameras: (1, the fixed camera behind the car, is gone) 2 follows the direction of the car smoothly and
     // widens its field of view with the speed (and comes closer, so the car keeps its size), 3 is in the car, 4 is the free camera (FreeCam.js). Their places are set per car (see CarDefaults.js).
     this.cameraSettings = OpenRacer.cameraSettings(config);
-    this.cameraMode = 1;
+    this.cameraMode = 2;
     var followYaw = null;       // the direction that the following camera looks in
     var cameraFov = null;
     var cameraNear = 1;
@@ -384,6 +384,7 @@ OpenRacer.Car = function( config, domElement ) {
     }
 
     this.setCameraMode = function(mode) {
+        if(mode === 1) mode = 2;      // the fixed camera is gone (a saved choice of it becomes the following camera)
         // 4 is the free camera (FreeCam.js): it goes free from where the camera is now
         if(this.cameraMode === 4 && mode !== 4) OpenRacer.FreeCam.leave();
         if(mode === 4 && this.cameraMode !== 4) OpenRacer.FreeCam.enter(camera, this.body.position);
@@ -468,14 +469,6 @@ OpenRacer.Car = function( config, domElement ) {
             setLens(cameraFov, 1);
             return;
         }
-
-        // the fixed camera behind the car
-        camera.position.set(cx, avgGround + radius, cz);
-        camera.rotation.set(0, yaw + Math.PI + this.cameraAngle, 0);
-        camera.translateZ(cs.chase.distance);
-        camera.translateY(cs.chase.height - radius);
-        keepCameraInView(subject, delta);
-        setLens(cs.chase.fov, 1);
     };
 
     this.startEngine = function() {

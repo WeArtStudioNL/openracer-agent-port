@@ -15,7 +15,7 @@
  *              file holds the recording and the ids of the track and the cars, not their models, so the other one needs the same cars and
  *              track (the standard ones, or the ones of a zip of the garage). Nothing goes to a server.
  *
- *              Cameras: Fixed, Follow and Cockpit are those of the game; Free is a camera that is moved by hand: WASD or the arrows move it,
+ *              Cameras: Follow and Cockpit are those of the game; Free is a camera that is moved by hand: WASD or the arrows move it,
  *              Shift and Control up and down, the mouse (click the scene) or the right stick looks around like a first person view, [ and ]
  *              change the field of view. F aims the camera at the car (and the mouse look rests), L fixes the camera to the car, so that it
  *              goes with it, Tab chooses another car. All movements, the look and the zoom are smoothed and damped; a slider (0.1 to 3)
@@ -503,14 +503,14 @@ OpenRacer.Replay = (function() {
         // the cameras: the three of the game and the free one
         var cameraRow = el(bar, "div", "row cameras");
         el(cameraRow, "span", "label", "Camera");
-        cameraButtons = [["Fixed", "The fixed camera behind the car"], ["Follow", "The camera that follows the car"], ["Cockpit", "In the car"], ["Free", "A camera that you move yourself"], ["Cinematic", "The cameras of the track: the one nearest to the car, which turns to follow it"]].map(function(c, i) {
-            var b = button(cameraRow, c[0], c[1] + (i !== 3 ? "" : " (WASD or arrows, Shift and Control up and down, mouse look, [ and ] zoom)"), function() {
-                if(i === 3) { leaveCine(); enterFree(); }
-                else if(i === 4) { leaveFree(); enterCine(); }
-                else { leaveFree(); leaveCine(); Settings.setOption("camera", i + 1); }
+        cameraButtons = [["Follow", "The camera that follows the car"], ["Cockpit", "In the car"], ["Free", "A camera that you move yourself"], ["Cinematic", "The cameras of the track: the one nearest to the car, which turns to follow it"]].map(function(c, i) {
+            var b = button(cameraRow, c[0], c[1] + (i !== 2 ? "" : " (WASD or arrows, Shift and Control up and down, mouse look, [ and ] zoom)"), function() {
+                if(i === 2) { leaveCine(); enterFree(); }
+                else if(i === 3) { leaveFree(); enterCine(); }
+                else { leaveFree(); leaveCine(); Settings.setOption("camera", i + 2); }
                 updateCameraUi();
             });
-            if(i === 4 && !cinemaCameras().length) b.style.display = "none";           // (a track without cameras of its own)
+            if(i === 3 && !cinemaCameras().length) b.style.display = "none";           // (a track without cameras of its own)
             return b;
         });
         // the cinematic camera: a zoom of your own on top of the field of view that it chooses itself
@@ -880,7 +880,7 @@ OpenRacer.Replay = (function() {
     function updateCameraUi() {
         if(!ui || !cameraButtons) return;
         var mode = Settings.option("camera");
-        cameraButtons.forEach(function(b, i) { b.className = (i === 3 ? free.active : i === 4 ? cine.active : (!free.active && !cine.active && mode === i + 1)) ? "on" : ""; });
+        cameraButtons.forEach(function(b, i) { b.className = (i === 2 ? free.active : i === 3 ? cine.active : (!free.active && !cine.active && mode === i + 2)) ? "on" : ""; });
         freeRow.style.display = free.active ? "flex" : "none";
         if(cineRow) cineRow.style.display = cine.active ? "flex" : "none";
         if(carButton) { var chosen = cars[Math.min(free.target, cars.length - 1)]; carButton.textContent = "Car: " + (chosen ? String(chosen.object.name || chosen.object.config.name || chosen.object.config.id).slice(0, 24) : ""); }
@@ -901,7 +901,7 @@ OpenRacer.Replay = (function() {
 
     api.start = function() {
         if(api.active || (!api.viewer && !api.available())) return false;
-        if(Settings.option("camera") === 4) Settings.setOption("camera", 1);      // the free camera of the game has no place in a replay, which has its own
+        if(Settings.option("camera") === 4) Settings.setOption("camera", 2);      // the free camera of the game has no place in a replay, which has its own
         snapshot = cars.map(function(entry, i) { var s = new Float32Array(STRIDE); write(s, 0, entry); return s; });
         cars.forEach(function(entry) {
             var v = entry.object.vehicle;
