@@ -93,6 +93,17 @@
         </details>
 
         <details class="card" open>
+            <summary>Objects<span class="meta" id="objectNote"></span></summary>
+            <div class="body">
+                <p class="sub">Your own models (glb) to put in the track: a barrel, a block, a tree. Add one with +, then click <b>Place</b> and click on the road. The model's origin is its base. A <b>rigid</b> object sleeps until a car hits it, then it is pushed and falls; a model that is not rigid stays where it is.</p>
+                <div id="objectModels"></div>
+                <button class="small" id="objectAdd" title="Add a glb model">+ Add a model</button>
+                <input type="file" id="objectFile" accept=".glb,model/gltf-binary" style="display:none" multiple>
+                <div id="objectList"></div>
+            </div>
+        </details>
+
+        <details class="card" open>
             <summary>Cinematic cameras<span class="meta" id="cameraNote">none</span></summary>
             <div class="body">
                 <p class="sub">Cameras for the replay (the camera button Cinematic): use <b>Add camera</b> in the view and click on the track. Click a camera to choose it and move it with the gizmo. The button above a camera changes its range, a circle on the floor: move it with the node in the middle, set the radius with the node on the edge. In the replay the camera whose circle the car is in is used (else the nearest), and it always turns to follow the car. The fields of a camera are x, y, z and the radius of the range.</p>
@@ -185,6 +196,7 @@
         <button data-mode="start">Place start</button>
         <button data-mode="gate">Add gate</button>
         <button data-mode="drag">Drag strip</button>
+        <button data-mode="object">Place object</button>
         <button data-mode="camera">Add camera</button>
         <button data-mode="node" class="design-only">Add node</button>
         <button data-mode="prefab" class="design-only">Place prefab</button>

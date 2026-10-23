@@ -70,6 +70,11 @@ const trackGroup = new THREE.Group();
 scene.add(trackGroup);
 const markers = new THREE.Group(); // the start and the gates
 scene.add(markers);
+const objectLayer = new THREE.Group(); // the models of the objects, where they are placed
+scene.add(objectLayer);
+// the objects of the track: models (glb) that were added, and where they stand. A model: { file (a Blob, when it was added now), name (the file in the folder of the track),
+// rigid, mass (kg, 0: from its size), scene (the loaded model) }
+const objectState = { models: new Map(), list: [], selected: null };
 const raycaster = new THREE.Raycaster();
 
 // ---- the cinematic cameras: a click chooses one, a gizmo moves it, and the button above it changes its range (a circle on the floor: the middle moves it, the node on the edge sets the radius)
@@ -651,6 +656,7 @@ function makeArrow(x, y, z, h, colour, length) {
 
 function updateMarkers() {
     markers.clear();
+    showObjects();
     const k = state.markerScale;
     if (state.start) {
         const s = state.start;
@@ -786,6 +792,127 @@ function showDrag() {
     $("dragOwnRow").style.display = $("dragLength").value === "own" ? "block" : "none";
 }
 
+// ---- the objects
+
+const OBJECT_PREFIX = "obj-";
+function objectFileName(original) {
+    const base = original.replace(/\.[^.]*$/, "").replace(/[^A-Za-z0-9._ -]+/g, "-").replace(/^[^A-Za-z0-9]+/, "").slice(0, 60) || "object";
+    return OBJECT_PREFIX + base + ".glb";
+}
+
+function loadObjectScene(model, url) {
+    return new Promise((resolve) => new GLTFLoader(OpenRacer.Garage.manager(state.existingTrack || { id: "" }, THREE)).load(url, (gltf) => {
+        gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+        model.scene = gltf.scene;
+        resolve(true);
+    }, undefined, () => { model.scene = null; resolve(false); }));
+}
+
+// a model that was picked: it is shown, and it is the one that Place puts down
+async function addObjectModel(file) {
+    let name = objectFileName(file.name);
+    let k = 2;
+    while (objectState.models.has(name)) name = name.replace(/(-\d+)?\.glb$/, "-" + (k++) + ".glb");
+    const model = { name, file, rigid: true, mass: 0, scene: null };
+    const url = URL.createObjectURL(file);
+    const ok = await loadObjectScene(model, url);
+    URL.revokeObjectURL(url);
+    if (!ok) { status("The file “" + file.name + "” could not be read as a glb.", "error"); return; }
+    objectState.models.set(name, model);
+    objectState.selected = name;
+    renderObjects();
+    status("Model added. Choose Place object in the toolbar and click on the road.", "ok");
+}
+
+function showObjects() {
+    objectLayer.clear();
+    for (const o of objectState.list) {
+        const model = objectState.models.get(o.model);
+        if (!model || !model.scene) continue;
+        const copy = model.scene.clone(true);
+        copy.position.set(o.x, o.y, o.z);
+        copy.rotation.y = -o.heading;
+        objectLayer.add(copy);
+    }
+}
+
+function renderObjects() {
+    const holder = $("objectModels");
+    holder.innerHTML = "";
+    for (const [name, model] of objectState.models) {
+        const row = document.createElement("div");
+        row.className = "gate";
+        row.style.flexWrap = "wrap";
+        const title = document.createElement("span");
+        title.textContent = name.replace(OBJECT_PREFIX, "").replace(/\.glb$/, "") + " (" + objectState.list.filter((o) => o.model === name).length + ")";
+        title.style.fontWeight = objectState.selected === name ? "700" : "400";
+        const rigid = document.createElement("label");
+        rigid.style.cssText = "display:flex;align-items:center;gap:4px;font-size:12px";
+        const tick = document.createElement("input");
+        tick.type = "checkbox"; tick.checked = model.rigid;
+        tick.onchange = () => { model.rigid = tick.checked; mass.style.display = tick.checked ? "" : "none"; };
+        rigid.append(tick, "rigid");
+        const mass = document.createElement("input");
+        mass.type = "number"; mass.min = "0"; mass.step = "5"; mass.value = model.mass || ""; mass.placeholder = "kg (auto)";
+        mass.style.cssText = "width:80px" + (model.rigid ? "" : ";display:none");
+        mass.onchange = () => { model.mass = Math.max(0, parseFloat(mass.value) || 0); };
+        const place = document.createElement("button");
+        place.className = "small";
+        place.textContent = "Place";
+        place.onclick = () => { objectState.selected = name; renderObjects(); setMode("object"); };
+        const remove = document.createElement("button");
+        remove.className = "small danger";
+        remove.textContent = "Remove";
+        remove.onclick = () => {
+            if (objectState.list.some((o) => o.model === name) && !confirm("Remove this model and the objects that stand in the track?")) return;
+            objectState.models.delete(name);
+            objectState.list = objectState.list.filter((o) => o.model !== name);
+            if (objectState.selected === name) objectState.selected = null;
+            renderObjects(); updateMarkers();
+        };
+        row.append(title, rigid, mass, place, remove);
+        holder.appendChild(row);
+    }
+    const list = $("objectList");
+    list.innerHTML = "";
+    objectState.list.forEach((o, i) => {
+        const row = document.createElement("div");
+        row.className = "gate";
+        const text = document.createElement("span");
+        text.textContent = o.model.replace(OBJECT_PREFIX, "").replace(/\.glb$/, "") + ": " + o.x.toFixed(0) + ", " + o.z.toFixed(0);
+        const remove = document.createElement("button");
+        remove.className = "small danger";
+        remove.textContent = "Remove";
+        remove.onclick = () => { objectState.list.splice(i, 1); renderObjects(); updateMarkers(); };
+        row.append(text, remove);
+        list.appendChild(row);
+    });
+    $("objectNote").textContent = objectState.list.length ? objectState.list.length + " placed" : (objectState.models.size ? objectState.models.size + " models" : "none");
+}
+$("objectAdd").onclick = () => $("objectFile").click();
+$("objectFile").onchange = async (e) => { for (const f of e.target.files) await addObjectModel(f); $("objectFile").value = ""; };
+
+// the objects of a track that is opened: the models that its objects use are loaded from its folder
+async function loadObjects(track) {
+    objectState.models = new Map(); objectState.list = []; objectState.selected = null;
+    for (const spec of track.objects || []) {
+        if (!spec.model || !isFinite(spec.x) || !isFinite(spec.z)) continue;
+        let model = objectState.models.get(spec.model);
+        if (!model) {
+            model = { name: spec.model, file: null, rigid: spec.rigid !== false, mass: spec.mass || 0, scene: null };
+            objectState.models.set(spec.model, model);
+            await loadObjectScene(model, trackFile(track, spec.model));
+        }
+        objectState.list.push({ model: spec.model, x: spec.x, y: isFinite(spec.y) ? spec.y : groundY(spec.x, spec.z), z: spec.z, heading: (spec.heading || 0) * Math.PI / 180 });
+    }
+    renderObjects(); updateMarkers();
+}
+
+function resetObjects() {
+    objectState.models = new Map(); objectState.list = []; objectState.selected = null;
+    renderObjects(); updateMarkers();
+}
+
 function renderGates() {
     const list = $("gates");
     list.innerHTML = "";
@@ -874,6 +1001,7 @@ function setMode(mode) {
     $("hud").textContent = (design && design.hudText(mode)) || (mode === "start" ? "Place start: click on the road and drag in the direction that the car drives."
         : mode === "gate" ? "Add gate: click on the road and drag in the direction that the car drives through the gate."
         : mode === "camera" ? "Add camera: click on the road or beside it, the camera is put above that place (set the height in the list). Click a camera in Look to choose it and move it with the gizmo; the button above it changes its range."
+        : mode === "object" ? "Place object: click on the road (or the ground) where the object stands, and drag to turn it. Add a model with + in the Objects card first."
         : mode === "drag" ? "Drag strip: click on the road where the start line is and drag in the direction of the strip."
         : "Look: drag to turn, right mouse button to move, scroll to zoom. Click a part to find it in the list.");
 }
@@ -908,7 +1036,7 @@ renderer.domElement.addEventListener("pointerdown", (event) => {
             return;
         }
     }
-    if ((state.mode === "start" || state.mode === "gate" || state.mode === "drag" || state.mode === "camera") && !moveGizmo.axis && !turnGizmo.axis) {
+    if ((state.mode === "start" || state.mode === "gate" || state.mode === "drag" || state.mode === "camera" || state.mode === "object") && !moveGizmo.axis && !turnGizmo.axis) {
         const hit = roadHit(event);
         if (hit) {
             drag.hit = hit;
@@ -954,6 +1082,12 @@ function place(d, preview) {
     } else if (state.mode === "camera") {
         if (!d.added) state.cameras.push({ x: point.x, y: point.y + Math.max(0.5, parseFloat($("cameraHeight").value) || 3), z: point.z });
         d.added = true;
+    } else if (state.mode === "object") {
+        if (!objectState.selected || !objectState.models.has(objectState.selected)) { status("Add a model with + in the Objects card and choose Place first.", "error"); d.added = true; return; }
+        if (preview && d.added) objectState.list.pop();
+        objectState.list.push({ model: objectState.selected, x: point.x, y: point.y, z: point.z, heading: h });
+        d.added = true;
+        renderObjects();
     } else if (state.mode === "gate") {
         const width = Math.max(2, parseFloat($("gateWidth").value) || 24);
         if (preview && d.added) state.gates.pop();
@@ -975,7 +1109,7 @@ renderer.domElement.addEventListener("pointerup", (event) => {
     }
     if (d.hit) {
         if (!d.added && state.mode === "start") place(d, false);
-        else if (!d.added && (state.mode === "gate" || state.mode === "drag" || state.mode === "camera")) place(d, false);
+        else if (!d.added && (state.mode === "gate" || state.mode === "drag" || state.mode === "camera" || state.mode === "object")) place(d, false);
         return;
     }
     if (lineEdit.editing && !d.moved && !lineEdit.dragging) {
@@ -1147,6 +1281,7 @@ async function loadExisting() {
             return camera;
         });
         selectCamera(-1);
+        await loadObjects(track);
         state.drag = track.dragstrip ? { x: track.dragstrip.x, y: groundY(track.dragstrip.x, track.dragstrip.z), z: track.dragstrip.z, heading: track.dragstrip.heading || 0, width: track.dragstrip.width || 12, length: track.dragstrip.length || 402.336 } : null;
         showDrag();
         updateMarkers();
@@ -1166,6 +1301,7 @@ function newTrack() {
     state.gates = [];
     $("showGates").checked = true;
     state.cameras = [];
+    resetObjects();
     selectCamera(-1);
     state.drag = null;
     state.legacy = false;
@@ -1258,7 +1394,25 @@ async function save() {
             const blob = await (await fetch(trackFile(old, old.model))).blob();
             if (!/\.glb$/i.test(old.model)) throw new Error("To save this track under another id, import its model files again.");
             uploads.push([old.model, blob]);
+            config.model = old.model;
         }
+        // the objects: their models go in the folder of the track; the objects of the old file that have no model of ours (written by hand) stay
+        const handMade = (old && id === state.existingId && Array.isArray(old.objects) ? old.objects : (old && Array.isArray(old.objects) ? old.objects : [])).filter((o) => !o.model);
+        const made = [];
+        for (const o of objectState.list) {
+            const model = objectState.models.get(o.model);
+            if (!model) continue;
+            if (!FILE_PATTERN.test(model.name)) throw new Error("The file name “" + model.name + "” has characters that are not allowed.");
+            const spec = { model: model.name, x: +o.x.toFixed(3), z: +o.z.toFixed(3), y: +o.y.toFixed(3), heading: +(o.heading * 180 / Math.PI).toFixed(2) };
+            if (!model.rigid) spec.rigid = false; else if (model.mass > 0) spec.mass = model.mass;
+            made.push(spec);
+        }
+        for (const model of objectState.models.values()) {
+            if (!made.some((o) => o.model === model.name)) continue;
+            if (model.file) uploads.push([model.name, model.file]);
+            else if (id !== state.existingId && state.existingTrack) uploads.push([model.name, await (await fetch(trackFile(state.existingTrack, model.name))).blob()]);
+        }
+        if (handMade.length || made.length) config.objects = handMade.concat(made); else delete config.objects;
         let oldSky = null;
         if (state.envOn) {
             const e = readEnv();
@@ -1296,6 +1450,7 @@ async function save() {
         state.skyName = config.environment && config.environment.sky_image || "";
         state.oldSkyName = state.skyName;
         state.skyFile = null;
+        for (const m of objectState.models.values()) m.file = null;       // the models are in the folder of the track now
         await refreshList(id);
         $("delete").style.display = "";
         updateLineNote();

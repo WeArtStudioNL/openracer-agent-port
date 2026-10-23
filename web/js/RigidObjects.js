@@ -105,6 +105,18 @@ OpenRacer.RigidObjects = (function () {
         }
     }
 
+    // the points of a hull without the same point twice (a mesh has a corner once for every face that meets there, and a hull of such points can fail)
+    function uniquePoints(list) {
+        var seen = {}, out = [];
+        for (var i = 0; i < list.length; i += 3) {
+            var key = Math.round(list[i] * 500) + "," + Math.round(list[i + 1] * 500) + "," + Math.round(list[i + 2] * 500);
+            if (seen[key]) continue;
+            seen[key] = 1;
+            out.push(list[i], list[i + 1], list[i + 2]);
+        }
+        return new Float32Array(out);
+    }
+
     // a part of the model (already moved to its own middle, see TrackLoader.js): the convex hull of its points
     function fromPiece(mesh, density) {
         var geometry = mesh.geometry, position = geometry.attributes.position;
@@ -112,8 +124,9 @@ OpenRacer.RigidObjects = (function () {
         var box = geometry.boundingBox, size = box.getSize(new THREE.Vector3());
         var step = Math.max(1, Math.floor(position.count / 160)), points = [];
         for (var i = 0; i < position.count; i += step) points.push(position.getX(i), position.getY(i), position.getZ(i));
+        points = uniquePoints(points);
         var mass = massFromName(mesh.name) || Math.max(1, size.x * size.y * size.z * density);
-        return { object: mesh, shape: { type: "hull", points: new Float32Array(points), hx: size.x / 2, hy: size.y / 2, hz: size.z / 2 }, mass: mass, radius: size.length() / 2 };
+        return { object: mesh, shape: { type: "hull", points: points, hx: size.x / 2, hy: size.y / 2, hz: size.z / 2 }, mass: mass, radius: size.length() / 2 };
     }
 
     // ---- the engine
@@ -121,7 +134,7 @@ OpenRacer.RigidObjects = (function () {
     function colliderFor(shape) {
         if (shape.type === "hull") {
             var hull = null;
-            try { hull = R.ColliderDesc.convexHull(shape.points); } catch (e) { hull = null; }
+            try { hull = shape.points.length >= 12 ? R.ColliderDesc.convexHull(shape.points) : null; } catch (e) { hull = null; }
             return hull || R.ColliderDesc.cuboid(Math.max(0.04, shape.hx), Math.max(0.04, shape.hy), Math.max(0.04, shape.hz));
         }
         if (shape.type === "box") return R.ColliderDesc.cuboid(shape.hx, shape.hy, shape.hz);
@@ -296,19 +309,72 @@ OpenRacer.RigidObjects = (function () {
         world = null; trackCollider = null; ready = false;
     }
 
+    // an object of track.json that has a model (a glb of the track folder, made in the track editor): the model is placed with its origin on the road, and
+    // turned by the heading. A rigid one becomes a body whose shape is the hull of the model and whose pivot is the middle of its box; the other is only put there.
+    function fromModel(spec, gltfScene, ground, density, out) {
+        var heading = (spec.heading || 0) * Math.PI / 180;
+        var y = spec.y;
+        if (y === undefined) { var hit = ground && ground.query ? ground.query(spec.x, spec.z, 5000, 0) : null; y = hit ? hit.y : 0; }
+        var inner = gltfScene.clone(true);
+        inner.traverse(function (o) { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+        if (spec.rigid === false) {
+            inner.position.set(spec.x, y, spec.z);
+            inner.rotation.y = -heading;
+            scene.add(inner);
+            return;
+        }
+        inner.updateMatrixWorld(true);
+        var box = new THREE.Box3().setFromObject(inner), size = box.getSize(new THREE.Vector3()), centre = box.getCenter(new THREE.Vector3());
+        var points = [], a = new THREE.Vector3(), count = 0;
+        inner.traverse(function (o) { if (o.isMesh && o.geometry.attributes.position) count += o.geometry.attributes.position.count; });
+        var step = Math.max(1, Math.floor(count / 160));
+        inner.traverse(function (o) {
+            if (!o.isMesh || !o.geometry.attributes.position) return;
+            var position = o.geometry.attributes.position;
+            for (var i = 0; i < position.count; i += step) {
+                a.fromBufferAttribute(position, i).applyMatrix4(o.matrixWorld).sub(centre);
+                points.push(a.x, a.y, a.z);
+            }
+        });
+        var holder = new THREE.Group();
+        inner.position.set(-centre.x, -centre.y, -centre.z);
+        holder.add(inner);
+        holder.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -heading);
+        var middle = centre.clone().applyQuaternion(holder.quaternion);
+        holder.position.set(spec.x + middle.x, y + middle.y, spec.z + middle.z);
+        var mass = spec.mass || Math.max(1, size.x * size.y * size.z * density);
+        out.push({ object: holder, shape: { type: "hull", points: uniquePoints(points), hx: size.x / 2, hy: size.y / 2, hz: size.z / 2 }, mass: mass, radius: size.length() / 2 });
+    }
+
     // The track is loaded: the parts of the model that are rigid (made by TrackLoader.js, in the scene already) and the "objects" of track.json
     function setup(track, pieces) {
         clear();
         var specs = [];
         var density = track && track.rigid_density ? track.rigid_density : DENSITY;
+        var ground = typeof groundWorld !== "undefined" ? groundWorld : null;
         (pieces || []).forEach(function (mesh) { specs.push(fromPiece(mesh, density)); });
+        var withModel = [];
         ((track && track.objects) || []).forEach(function (spec) {
-            try { fromSpec(spec, typeof groundWorld !== "undefined" ? groundWorld : null, specs); } catch (e) { console.warn("RigidObjects: " + e.message); }
+            if (spec.model) { withModel.push(spec); return; }
+            try { fromSpec(spec, ground, specs); } catch (e) { console.warn("RigidObjects: " + e.message); }
         });
-        if (!specs.length) return;
-        specs.forEach(function (s) { if (!s.object.parent) scene.add(s.object); });
-        loadEngine().then(function (lib) { R = lib; build(specs); console.log("rigid objects: " + specs.length); })
-            .catch(function (e) { console.warn("RigidObjects: " + e.message); });
+        // the glb of the objects: every file once
+        var files = {};
+        withModel.forEach(function (spec) {
+            if (files[spec.model]) return;
+            files[spec.model] = new Promise(function (resolve) {
+                var loader = new THREE.GLTFLoader(OpenRacer.Garage ? OpenRacer.Garage.manager(track) : undefined);
+                loader.load(trackFile(spec.model), function (gltf) { resolve(gltf.scene); }, undefined, function (e) { console.warn("RigidObjects: " + spec.model + " could not be loaded"); resolve(null); });
+            });
+        });
+        var loaded = Promise.all(withModel.map(function (spec) { return files[spec.model]; })).then(function (scenes) {
+            withModel.forEach(function (spec, i) { if (scenes[i]) { try { fromModel(spec, scenes[i], ground, density, specs); } catch (e) { console.warn("RigidObjects: " + e.message); } } });
+        });
+        loaded.then(function () {
+            if (!specs.length) return null;
+            specs.forEach(function (s) { if (!s.object.parent) scene.add(s.object); });
+            return loadEngine().then(function (lib) { R = lib; build(specs); console.log("rigid objects: " + specs.length); });
+        }).catch(function (e) { console.warn("RigidObjects: " + e.message); });
     }
 
     return { setup: setup, update: update, reset: reset, clear: clear, count: function () { return objects.length; }, awake: function () { return objects.filter(function (e) { return !e.body.isSleeping(); }).length; }, isReady: function () { return ready; }, stats: stats };

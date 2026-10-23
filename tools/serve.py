@@ -8,6 +8,8 @@
   DELETE /api/cars/<id>/<file>          removes one file of a car (the old model when it is replaced); local connections only
   PUT    /api/tracks/<id>/<file>        the same for a track (track.json, the model, textures; <file> may be images/<name>)
   DELETE /api/tracks/<id>[/<file>]      removes a track, or one file of it
+  GET    /api/convert                   {"ffmpeg": true} when ffmpeg is installed here
+  POST   /api/convert/mp4               a video (webm) in the body, the same video as mp4 (H.264) back, made by ffmpeg; local connections only
 
 New cars and tracks are found by looking at the folders, so a folder with a car.json or track.json that is put in
 web/cars or web/tracks shows up in the game at once. The lists are also written to cars/index.json and
@@ -19,7 +21,9 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
+import tempfile
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
@@ -100,7 +104,48 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(scan("cars", "car.json"))
         if path == "/api/tracks":
             return self.send_json(scan("tracks", "track.json"))
+        if path == "/api/convert":
+            return self.send_json({"ffmpeg": shutil.which("ffmpeg") is not None})
         return super().do_GET()
+
+    def do_POST(self):
+        if urlparse(self.path).path != "/api/convert/mp4" or not self.is_local():
+            return self.send_json({"error": "not allowed"}, 403)
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            return self.send_json({"error": "ffmpeg is not installed"}, 501)
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            return self.send_json({"error": "bad length"}, 400)
+        if length <= 0 or length > MAX_UPLOAD:
+            return self.send_json({"error": "bad length"}, 400)
+        with tempfile.TemporaryDirectory() as folder:
+            source, target = os.path.join(folder, "in.webm"), os.path.join(folder, "out.mp4")
+            with open(source, "wb") as f:
+                left = length
+                while left > 0:
+                    chunk = self.rfile.read(min(1024 * 1024, left))
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    left -= len(chunk)
+            # H.264 in a mp4 that plays everywhere: even sizes, yuv420p, the index at the front
+            command = [ffmpeg, "-y", "-loglevel", "error", "-i", source, "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libx264", "-preset", "veryfast",
+                       "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", target]
+            try:
+                done = subprocess.run(command, capture_output=True, timeout=1800)
+            except subprocess.TimeoutExpired:
+                return self.send_json({"error": "ffmpeg took too long"}, 504)
+            if done.returncode != 0 or not os.path.isfile(target):
+                return self.send_json({"error": "ffmpeg failed: " + done.stderr.decode("utf-8", "replace")[-300:]}, 500)
+            size = os.path.getsize(target)
+            self.send_response(200)
+            self.send_header("Content-Type", "video/mp4")
+            self.send_header("Content-Length", str(size))
+            self.end_headers()
+            with open(target, "rb") as f:
+                shutil.copyfileobj(f, self.wfile)
 
     def item_path(self, parts):
         """web/<cars|tracks>/<id>[/<file>] for the parts of an API path, or None if they are not valid.

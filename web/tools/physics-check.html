@@ -16,6 +16,12 @@
     .ok { color: #6fdc8c; } .bad { color: #ff8a80; font-weight: bold; } .note { color: #7e90a6; font-size: 12px; }
     #cars label { margin-right: 14px; white-space: nowrap; }
     iframe { position: fixed; right: 10px; bottom: 10px; width: 320px; height: 200px; border: 1px solid #272e37; opacity: 0.85; }
+/* checkboxes: an orange square when on, without a tick */
+input[type=checkbox] { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; flex: none; border: 1.5px solid #8d97a3; border-radius: 4px; background: transparent; vertical-align: middle; cursor: pointer; }
+input[type=checkbox]:hover { border-color: #ff5a1f; }
+input[type=checkbox]:checked { background: #ff5a1f; border-color: #ff5a1f; }
+input[type=checkbox]:disabled { opacity: .4; cursor: default; }
+input[type=checkbox]:focus-visible { outline: 2px solid #ffb020; outline-offset: 2px; }
 </style>
 </head>
 <body>

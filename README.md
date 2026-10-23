@@ -147,6 +147,8 @@ Things that can be knocked over (barrels, boxes, cones, balls) lie asleep in the
 * in the model of the track: name a part, or a node above it, `rigid_...` (`rigid_barrel_1`, `Rigid Cone.002`). It becomes a body of the shape of the part (convex hull) with a mass from its box (250 kg/m³, `"rigid_density"` in track.json) or from the name (`rigid_barrel_60kg`). It is no longer part of the road or the walls.
 * in `track.json`: `"objects": [{ "shape": "box", "x": 10, "z": 20, "size": [1, 0.8, 1], "mass": 40, "grid": [1, 5], "layers": 3, "heading": 90, "color": "#c9a25b" }, { "shape": "cylinder", "x": 12, "z": 22, "radius": 0.3, "height": 0.9 }]`. Shapes: `box`, `cylinder`, `cone`, `sphere`; `y` is the road when left out; `grid` and `spacing` make a block, `layers` a stack.
 
+* in the track editor: the *Objects* card, **+ Add a model** (a glb with its origin at its base), then *Place object* and click on the road; tick *rigid* (and a mass in kg) for a body that is pushed, or leave it off for a model that stays.
+
 A car pushes them and feels their mass: the change of speed of the objects it hits is taken from its own speed.
 
 ## Skidpad

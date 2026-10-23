@@ -243,3 +243,10 @@ button.set { height: 19px; padding: 0 7px; font-size: 11px; margin-left: 5px; ve
 /* the crash test shows the car, the wall and the stop button, nothing else */
 body.crashing #side, body.crashing #layers, body.crashing #panelToggles, body.crashing #hud, body.crashing #toast,
 body.crashing .partwin, body.crashing #layersOpen, body.crashing #testBar { display: none !important; }
+
+/* checkboxes: an orange square when on, without a tick */
+input[type=checkbox] { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; flex: none; border: 1.5px solid var(--muted, #8d97a3); border-radius: 4px; background: transparent; vertical-align: middle; cursor: pointer; }
+input[type=checkbox]:hover { border-color: var(--accent, #ff5a1f); }
+input[type=checkbox]:checked { background: var(--accent, #ff5a1f); border-color: var(--accent, #ff5a1f); }
+input[type=checkbox]:disabled { opacity: .4; cursor: default; }
+input[type=checkbox]:focus-visible { outline: 2px solid var(--accent2, #ffb020); outline-offset: 2px; }

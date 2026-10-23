@@ -470,7 +470,7 @@ OpenRacer.Replay = (function() {
             setTimeout(function() { save.textContent = "Save replay"; }, 4000);
         });
         if(api.viewer) save.style.display = "none";            // (a replay that is already in the list)
-        videoButton = button(right, "● Video", "Record the replay from the start to the end as a video (.webm)", function() { toggleVideo(); });
+        videoButton = button(right, "● Video", "Record the replay from the start to the end as a video (.mp4)", function() { toggleVideo(); });
         if(typeof MediaRecorder === "undefined" || !document.createElement("canvas").captureStream) videoButton.style.display = "none";
         var exit = button(right, api.viewer ? "Main menu" : "Back to the game", "Escape", function() { api.stop(); });
         exit.className = "exit";
@@ -839,13 +839,13 @@ OpenRacer.Replay = (function() {
 
     var cameraButtons = null, freeRow = null, freeInfo = null, carButton = null, videoButton = null;
 
-    // ---- a video of the replay: from the start to the end at normal speed, from the canvas of the game (without the bar and without sound), kept as a .webm
+    // ---- a video of the replay: from the start to the end at normal speed, from the canvas of the game (without the bar and without sound), kept as a .mp4 (the browser makes it directly when it can; else a .webm that the local server turns into .mp4 with ffmpeg)
     var video = { recorder: null, chunks: [] };
     function toggleVideo() {
         if(video.recorder) { stopVideo(); return; }
         var canvas = typeof renderer !== "undefined" && renderer.domElement;
         if(!canvas || typeof MediaRecorder === "undefined") return;
-        var types = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"];
+        var types = ["video/mp4;codecs=avc1.640028", "video/mp4;codecs=avc1.42E01E", "video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
         var type = types.filter(function(t) { return MediaRecorder.isTypeSupported(t); })[0];
         if(!type) { videoButton.textContent = "No video here"; setTimeout(function() { videoButton.textContent = "● Video"; }, 3000); return; }
         var stream = canvas.captureStream(60);
@@ -858,14 +858,24 @@ OpenRacer.Replay = (function() {
             document.body.classList.remove("replayFilming");
             if(videoButton) videoButton.textContent = "● Video";
             if(!blob.size) return;
-            var url = URL.createObjectURL(blob);
-            var link = document.createElement("a");
-            link.href = url;
-            link.download = "openracer-" + String(currentTrack.id).replace(/[^A-Za-z0-9_-]/g, "") + "-" + new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13) + (/mp4/.test(type) ? ".mp4" : ".webm");
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            setTimeout(function() { URL.revokeObjectURL(url); }, 30000);
+            var stem = "openracer-" + String(currentTrack.id).replace(/[^A-Za-z0-9_-]/g, "") + "-" + new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13);
+            function save(file, extension) {
+                var url = URL.createObjectURL(file);
+                var link = document.createElement("a");
+                link.href = url;
+                link.download = stem + extension;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                setTimeout(function() { URL.revokeObjectURL(url); }, 30000);
+            }
+            if(/mp4/.test(type)) { save(blob, ".mp4"); return; }
+            // a webm: the local server (tools/serve.py) turns it into a mp4 with ffmpeg; without it the webm is kept
+            if(videoButton) { videoButton.textContent = "Making the mp4…"; videoButton.disabled = true; }
+            function done() { if(videoButton) { videoButton.textContent = "● Video"; videoButton.disabled = false; } }
+            fetch("/api/convert/mp4", { method: "POST", body: blob }).then(function(r) { if(!r.ok) throw new Error("no"); return r.blob(); })
+                .then(function(mp4) { save(mp4, ".mp4"); done(); })
+                .catch(function() { save(blob, ".webm"); done(); });
         };
         // from the start, at normal speed
         t = api.start_time(); direction = 1; speed = 1; playing = true;
