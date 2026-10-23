@@ -170,9 +170,26 @@ OpenRacer.Driver = function (config, parent, steering) {
     }
     // the turn of the chest and of the head (degrees): as the car editor set them, or from the keys when there are some (see the keyframes below)
     this.torsoPose = { chest: [0, 0, 0], head: [0, 0, 0] };
+    this.posture = null;                                 // the posture of a rider on a motorcycle (Motorcycle.js), set by update()
+    var postureOff = new V();
+    // the rider is moved on the bike (the hands and the feet stay on the grips and the pegs: the arms and the legs follow)
+    function applyPosture() {
+        var p = self.posture;
+        self.root.position.sub(postureOff);
+        if (p) postureOff.set(p.lat * 0.7, p.drop * 0.7, p.long * 0.7); else postureOff.set(0, 0, 0);
+        self.root.position.add(postureOff);
+    }
     function torso() {
         var cfg = self.config;
         ["chest", "head"].forEach(function (name) { self.torsoPose[name] = torsoKeyRot(name, self.turn) || (cfg[name] && cfg[name].rotation) || [0, 0, 0]; });
+        // a rider of a motorcycle: flat on the tank on the throttle, back on the brake, and over to the inside of a bend (the posture of Motorcycle.js)
+        var post = self.posture;
+        if (post) {
+            var pitch = 28 * post.tuck - 10 * post.sit, roll = -14 * (post.lat / 0.3);
+            var c = self.torsoPose.chest, h = self.torsoPose.head;
+            self.torsoPose.chest = [c[0] + pitch, c[1], c[2] + roll];
+            self.torsoPose.head = [h[0] - 0.7 * pitch, h[1], h[2] - 0.6 * roll];
+        }
         self.bones.chest.forEach(function (bone) { turnBone(bone, self.torsoPose.chest); });
         if (self.bones.head) turnBone(self.bones.head, self.torsoPose.head);
         self.model.updateMatrixWorld(true);
@@ -696,6 +713,13 @@ OpenRacer.Driver = function (config, parent, steering) {
             var setKnee = cfg.poles && cfg.poles[e[0]];
             if (setKnee) tmp.set(setKnee[0], setKnee[1], setKnee[2]);
             else { self.parent.worldToLocal(tmp.copy(a)); tmp.add(new V(e[1] * 0.3, 0.1, 0.8)); }
+            // in a bend the knee of the inside goes out and down to the road, the other one goes out a little
+            var post = self.posture;
+            if (post && post.knee > 0.01 && post.lat * e[1] !== 0) {
+                var inside = post.lat * e[1] > 0;
+                tmp.x += e[1] * (inside ? 0.6 : 0.25) * post.knee;
+                if (inside) tmp.y -= 0.5 * post.knee;
+            }
             (self.poles[e[0]] || (self.poles[e[0]] = new V())).copy(tmp);
             self.parent.localToWorld(pole.copy(tmp));
             solve(chain, world, pole);
@@ -704,6 +728,8 @@ OpenRacer.Driver = function (config, parent, steering) {
 
     this.update = function (dt, throttle, brake, state) {
         if (!self.model || !self.complete()) return;
+        self.posture = (state && state.posture) || null;
+        applyPosture();
         self.root.updateMatrixWorld(true);
         if (self.steering) {
             // the turn of the wheel: the angle of the pivot about its axis

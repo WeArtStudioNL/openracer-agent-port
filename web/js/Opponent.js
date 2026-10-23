@@ -11,7 +11,7 @@
 OpenRacer.vehicleParams = function (config, getSurface) {
     var chassis = config.chassis, drivetrain = config.drivetrain, dimensions = config.dimensions;
     return {
-        mass: chassis.mass, wheelbase: chassis.wheelbase, front_track: chassis.front_track, rear_track: chassis.rear_track,
+        mass: chassis.mass + OpenRacer.Motorcycle.riderMass(config), wheelbase: chassis.wheelbase, front_track: chassis.front_track, rear_track: chassis.rear_track,
         weight_distribution: chassis.weight_distribution, cgHeight: chassis.cg_height, roll_front: chassis.roll_front,
         spring_front: chassis.spring_front, spring_rear: chassis.spring_rear, damping_front: chassis.damping_front, damping_rear: chassis.damping_rear,
         downforce: chassis.downforce, downforce_front: chassis.downforce_front, downforce_rear: chassis.downforce_rear, ackermann: chassis.ackermann,

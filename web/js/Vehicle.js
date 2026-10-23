@@ -1984,7 +1984,8 @@ OpenRacer.Vehicle = function (parameters, input) {
 
         // ---- the forces on the car that are not at the wheels: the air (drag, and downforce)
         var speed = Math.sqrt(self.vx * self.vx + self.vy * self.vy + self.vz * self.vz);
-        var dragX = -self.Cdrag * speed * self.vx, dragY = -self.Cdrag * speed * self.vy, dragZ = -self.Cdrag * speed * self.vz;
+        var cDrag = self.controller ? self.Cdrag * self.controller.dragScale() : self.Cdrag;      // (a rider of a motorcycle sits up or lies flat)
+        var dragX = -cDrag * speed * self.vx, dragY = -cDrag * speed * self.vy, dragZ = -cDrag * speed * self.vz;
         force.x += dragX; force.y += dragY; force.z += dragZ;
         // the downforce (or lift) of each axle presses along the up axis of the body, at the axle: it also pitches the car
         var u2 = u * u;

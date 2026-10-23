@@ -152,7 +152,7 @@ OpenRacer.CarTuning = (function () {
     function fromConfig(c) {
         var ch = c.chassis, dt = c.drivetrain, en = c.engine || {}, tyres = c.tyres || {}, assists = c.assists || {};
         var v = {
-            mass: ch.mass,
+            mass: ch.mass + (OpenRacer.Motorcycle ? OpenRacer.Motorcycle.riderMass(c) : 0),      // (a motorcycle: the bike and its rider)
             front_weight: ch.weight_distribution * 100,
             cg_height: ch.cg_height || 0.55,
             roll_front: (ch.roll_front !== undefined ? ch.roll_front : 0.55) * 100,
@@ -335,7 +335,7 @@ OpenRacer.CarTuning = (function () {
     // a car configuration with the values in it (a copy; the id is left out, as car.json has none)
     function toConfig(c, v) {
         c = clone(c);
-        c.chassis.mass = v.mass;
+        c.chassis.mass = v.mass - (OpenRacer.Motorcycle ? OpenRacer.Motorcycle.riderMass(c) : 0);
         c.chassis.weight_distribution = v.front_weight / 100;
         c.chassis.cg_height = v.cg_height;
         c.chassis.roll_front = v.roll_front / 100;

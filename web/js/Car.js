@@ -41,7 +41,7 @@ OpenRacer.Car = function( config, domElement ) {
     this.tire_diameter = chassis.tire_diameter;
     this.body = new THREE.Object3D();
     this.bodyLift = 2;         // how far the origin of the body is above the road, in tyre radii (set by the model)
-    this.mass = chassis.mass;
+    this.mass = chassis.mass + OpenRacer.Motorcycle.riderMass(config);      // (a motorcycle: the bike and its rider)
     this.throttle = 0;
     this.brakePedal = 0;
     this.width = config.dimensions.width;
@@ -331,7 +331,7 @@ OpenRacer.Car = function( config, domElement ) {
         if(this.driver) {
             // (the camera of a replay that is its own, the free and the cinematic one, is outside the car whatever the camera of the game is)
             this.driver.setCockpit(this.cameraMode === 3 && !(OpenRacer.Replay && OpenRacer.Replay.active && OpenRacer.Replay.ownCamera));
-            this.driver.update(delta || 0.016, this.throttle, this.brakePedal, { gear: this.current_gear, neutral: this.neutral });
+            this.driver.update(delta || 0.016, this.throttle, this.brakePedal, { gear: this.current_gear, neutral: this.neutral, posture: this.vehicle.controller ? this.vehicle.controller.posture : null });
         }
         // the checkpoint of the road under the rear wheel
         var rear = w[2];
