@@ -640,7 +640,30 @@ OpenRacer.Driver = function (config, parent, steering) {
     };
     // for the car editor: is the driver a rider (the body has the grips and the pegs); the pivot of a hand in the space of the body (the grip and the offset), and a place in that space made
     // the offset of the hand (so that the hand of the editor sits on its grip, and what is moved away from it is the offset)
-    this.isRider = function () { if (!riderTried) { riderTried = true; rider = findRider(); } return !!rider; };
+    // (the body can load after the driver, so a driver that found no grips looks again, every half second)
+    var riderTriedAt = -1e9, riderFound = null;
+    this.isRider = function () {
+        if (!rider) {
+            var now = performance.now();
+            if (!riderTried || now - riderTriedAt > 500) { riderTried = true; riderTriedAt = now; rider = findRider(); if (rider) migratePivots(); }
+        }
+        return !!rider;
+    };
+    // A driver that was set up before the bike was a rider has the pivots of the hands and the feet as places in the body (hands.left, feet.left, ...) and no offsets: when those are near the
+    // grips and the pegs (within 35 cm) they become the offsets, so that the hands and the feet stay where they were
+    function migratePivots() {
+        var cfg = self.config, zero = function (o) { return !o || (!o.left || !o.left.some(Boolean)) && (!o.right || !o.right.some(Boolean)); };
+        if (!zero(cfg.hands.offset) || !zero(cfg.feet.offset)) return;
+        self.parent.updateMatrixWorld(true);
+        var near = function (obj, p) { return p && p.length === 3 && self.parent.worldToLocal(obj.getWorldPosition(new V())).distanceTo(new V(p[0], p[1], p[2])) < 0.35; };
+        var ok = near(rider.gripL, cfg.hands.left) && near(rider.gripR, cfg.hands.right) && near(rider.pegL, cfg.feet.left) && near(rider.pegR, cfg.feet.right);
+        if (!ok) return;
+        self.setHandPivot("left", new V(cfg.hands.left[0], cfg.hands.left[1], cfg.hands.left[2]));
+        self.setHandPivot("right", new V(cfg.hands.right[0], cfg.hands.right[1], cfg.hands.right[2]));
+        self.setFootPivot("left", new V(cfg.feet.left[0], cfg.feet.left[1], cfg.feet.left[2]));
+        self.setFootPivot("right", new V(cfg.feet.right[0], cfg.feet.right[1], cfg.feet.right[2]));
+        console.log("Driver: the pivots of the hands and the feet are now offsets from the grips and the pegs");
+    }
     this.handPivot = function (side, out) {
         if (!self.isRider()) return null;
         self.parent.updateMatrixWorld(true);
@@ -754,7 +777,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         self.throttle = throttle === undefined ? self.throttle : throttle;
         self.brake = brake === undefined ? self.brake : brake;
         torso();
-        if (!riderTried) { riderTried = true; rider = findRider(); }
+        self.isRider();
         if (rider) {
             riderPose(dt || 0.016, throttle, brake, state);
             var h = self.bones.head;

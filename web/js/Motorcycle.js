@@ -100,7 +100,7 @@ OpenRacer.Motorcycle = function (settings) {
         // countersteering: to start a lean to the left the wheel goes to the right for a moment, in proportion to what the lean still has to go
         var cLimit = Math.min(0.07, 5 / Math.max(u * u, 1));       // (at most about half a g of sideways push from it at any speed)
         var counter = Math.max(-cLimit, Math.min(cLimit, 0.3 * (target - state.lean))) * smooth(3, 10, Math.abs(u));
-        var geometric = -c * lock;                                  // at a walking pace the angle is the command
+        var geometric = c * lock;                                  // at a walking pace the angle is the command
         var w = 1 - smooth(2, 5, Math.abs(u));
         var wanted = w * geometric + (1 - w) * (steady + counter);
         self.steer += (wanted - self.steer) * Math.min(1, dt / 0.05);
