@@ -29,6 +29,8 @@ OpenRacer.vehicleParams = function (config, getSurface) {
     };
 };
 
+var LOD_DISTANCE = 450;   // metres from the camera, beyond that an AI car is not drawn
+
 OpenRacer.Opponent = function (config, line, options) {
     var self = this;
     options = options || {};
@@ -277,6 +279,13 @@ OpenRacer.Opponent = function (config, line, options) {
     this.updateVisuals = function (delta) {
         delta = delta || 0;
         var v = this.vehicle, w = this.wheels;
+        // a car far from the camera is not drawn, and its model (wheels, suspension, soft body, parts) is not moved either
+        var far = typeof camera !== "undefined" && camera && Math.hypot(v.px - camera.position.x, v.pz - camera.position.z) > LOD_DISTANCE;
+        if (this.body.visible === far) {
+            this.body.visible = !far;
+            for (var k = 0; k < 4; k++) if (w[k].object) w[k].object.visible = !far;
+        }
+        if (far) return;
         v.getBodyPose(bodyPosition, bodyQuaternion);
         this.body.quaternion.set(bodyQuaternion.x, bodyQuaternion.y, bodyQuaternion.z, bodyQuaternion.w);
         if (modelMid) {

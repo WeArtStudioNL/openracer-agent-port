@@ -77,7 +77,8 @@ OpenRacer.makeSky = function(THREE, env, texture) {
     sky.matrixWorldAutoUpdate = false;
     sky.onBeforeRender = function(renderer, scene, camera) {
         sky.position.copy(camera.position);
-        sky.matrixWorld.makeTranslation(camera.position.x, camera.position.y, camera.position.z);
+        var scale = Math.min(1, camera.far * 0.9 / 3000);   // inside the far plane, when the draw distance is short
+        sky.matrixWorld.makeScale(scale, scale, scale).setPosition(camera.position.x, camera.position.y, camera.position.z);
     };
     return sky;
 };

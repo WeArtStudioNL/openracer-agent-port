@@ -102,7 +102,7 @@ var Settings = (function() {
     var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, autoReverse: true, autoReversePedals: true, autoReverseSpeed: 3, dragReady: 2, dragGreen: 1.5, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 1, volume: 0.8,
         padSlow: 1.5, padAssist: true, keySteer: 1, keySlow: 1, keyAssist: true,
         // the graphics (Graphics.js): a preset is a set of these
-        gfxPreset: "high", gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100 };
+        gfxPreset: "high", gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000 };
 
     var bindings = {};      // action id -> list of inputs
     var options = {};
@@ -853,6 +853,7 @@ var Settings = (function() {
             page.appendChild(optionRow("Global illumination (SSGI)", effectNames[options.gfxGI], gfxCycle("gfxGI", [0, 1, 2])));
             page.appendChild(optionRow("Vignette", options.gfxVignette ? "On" : "Off", gfxCycle("gfxVignette", [false, true])));
             page.appendChild(sliderRow("Smoke", "gfxSmoke", 0, 200, 10, function(v) { return v + "%"; }));
+            page.appendChild(optionRow("Draw distance", options.gfxDistance + " m", gfxCycle("gfxDistance", [500, 1000, 2000, 5000])));
         }
         page = tabPage("Tools");
         page.appendChild(optionRow("Debug text", options.debug ? "On" : "Off", function() { setOption("debug", !options.debug); }));

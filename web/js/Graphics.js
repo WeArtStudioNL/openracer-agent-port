@@ -19,10 +19,10 @@
 
 OpenRacer.Graphics = (function () {
     var PRESETS = {
-        low: { gfxScale: 0.75, gfxAA: 0, gfxShadows: 1, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: false, gfxSmoke: 50 },
-        medium: { gfxScale: 1, gfxAA: 2, gfxShadows: 2, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 75 },
-        high: { gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100 },
-        ultra: { gfxScale: 1, gfxAA: 4, gfxShadows: 3, gfxReflections: 2, gfxAO: 2, gfxGI: 1, gfxVignette: true, gfxSmoke: 100 }
+        low: { gfxScale: 0.75, gfxAA: 0, gfxShadows: 1, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: false, gfxSmoke: 50, gfxDistance: 500 },
+        medium: { gfxScale: 1, gfxAA: 2, gfxShadows: 2, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 75, gfxDistance: 1000 },
+        high: { gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000 },
+        ultra: { gfxScale: 1, gfxAA: 4, gfxShadows: 3, gfxReflections: 2, gfxAO: 2, gfxGI: 1, gfxVignette: true, gfxSmoke: 100, gfxDistance: 5000 }
     };
     var SHADOW_SIZES = [0, 512, 1024, 2048, 4096];
     var REFLECTION_EVERY = [0, 8, 2];                     // the frames between two updates of the reflections (0: not at all)
@@ -347,6 +347,10 @@ OpenRacer.Graphics = (function () {
         var every = REFLECTION_EVERY[opt("gfxReflections")];
         ctx.reflections(every);
     }
+    function applyDistance() {
+        ctx.camera.far = opt("gfxDistance") || 5000;
+        ctx.camera.updateProjectionMatrix();
+    }
     function applyScale() {
         ctx.renderer.setPixelRatio(ctx.basePixelRatio() * opt("gfxScale"));
         ctx.resize();
@@ -358,6 +362,7 @@ OpenRacer.Graphics = (function () {
         ctx.renderer.setPixelRatio(ctx.basePixelRatio() * opt("gfxScale"));
         applyShadows();
         applyReflections();
+        applyDistance();
         return build();
     }
 
@@ -376,6 +381,7 @@ OpenRacer.Graphics = (function () {
         if (!ctx || applying || name === "gfxPreset") return;
         if (name === "gfxScale") { applyScale(); build(); }
         else if (name === "gfxSmoke") { if (currentPreset() !== opt("gfxPreset")) Settings.setOption("gfxPreset", currentPreset()); }       // (Smoke.js reads it)
+        else if (name === "gfxDistance") { applyDistance(); if (currentPreset() !== opt("gfxPreset")) Settings.setOption("gfxPreset", currentPreset()); }
         else if (name === "gfxShadows") applyShadows();
         else if (name === "gfxReflections") applyReflections();
         else build();       // the anti-aliasing, the screen space effects, the vignette
@@ -389,7 +395,7 @@ OpenRacer.Graphics = (function () {
         for (var k in p) Settings.setOption(k, p[k]);
         Settings.setOption("gfxPreset", name);
         applying = false;
-        applyScale(); applyShadows(); applyReflections(); build();
+        applyScale(); applyShadows(); applyReflections(); applyDistance(); build();
     }
 
     function setSize(width, height) {
