@@ -47,6 +47,10 @@ OpenRacer.Vehicle = function (parameters, input) {
     var G = 9.81;
     var self = this;
 
+    // A motorcycle ("type": "motorcycle" in car.json, see MOTORCYCLE.md): the same physics, with a pair of wheels at both ends (no track between them), and a rider
+    // who keeps the bike up: a torque about the long axis that holds the lean the corner asks for (a_lateral = g tan(lean)) and damps the fall
+    this.motorcycle = parameters.motorcycle || null;
+    this.lean = 0;                    // how far the bike leans to the left (rad; negative: to the right)
     this.input = input; // throttle, brakePedal, clutch, clutchPedalPresent, handbrake, turnAngle, neutral, reverse, manualGearbox, current_gear
     this.mass = parameters.mass;
     this.wheelbase = parameters.wheelbase;
@@ -1372,6 +1376,8 @@ OpenRacer.Vehicle = function (parameters, input) {
 
         self.updateOutputs();
         var u = self.u, v = self.v, r = self.r;
+        // a motorcycle steers less the faster it goes (a small angle at the front wheel is a lot at speed)
+        if(self.motorcycle) delta *= 1 / (1 + Math.pow(Math.abs(u) / (self.motorcycle.steer_speed || 14), 2));
 
         // ---- ESC, the electronic stability control
         // Sensors tell it what the driver asks for (the steering angle gives the direction that the car should turn to, at
@@ -1999,8 +2005,35 @@ OpenRacer.Vehicle = function (parameters, input) {
             torque.z += Rv.x * -push.n - Rv.y * 0;
         }
 
+        // ---- the rider of a motorcycle: a torque about the long axis of the bike. The lean that the corner needs follows from the sideways acceleration
+        // (a = u * yaw rate, from what the front wheel asks for and what the bike does): lean = atan(a / g). The torque pulls the lean to it and damps the roll.
+        if(self.motorcycle && !self.airborne) {
+            var mc = self.motorcycle;
+            rotate(self.qx, self.qy, self.qz, self.qw, 0, 1, 0, Mv);                                    // the up of the bike
+            var upX = Mv.x, upY = Mv.y, upZ = Mv.z;
+            rotate(self.qx, self.qy, self.qz, self.qw, 0, 0, 1, Mv);                                    // its forward
+            var fl = Math.sqrt(Mv.x * Mv.x + Mv.z * Mv.z) || 1, fx = Mv.x / fl, fz = Mv.z / fl;
+            var lean = Math.atan2(upX * fz - upZ * fx, upY);                                            // to the left: positive (the left of f is (fz, -fx))
+            var leanRate = -(self.wx * fx + self.wz * fz);                                              // how fast it falls to the left
+            self.lean = lean;
+            var maxLean = (mc.max_lean_deg || 50) * Math.PI / 180;
+            var fast = Math.min(1, Math.max(0, (Math.abs(u) - 1.5) / 3));                               // at a walking pace the rider holds it up with a foot
+            var ask = Math.max(-1.1 * G, Math.min(1.1 * G, (0.15 * r + 0.85 * u * delta / L) * u));                                              // the sideways acceleration to the right (r and delta are positive to the right)
+            var target = fast * Math.max(-maxLean, Math.min(maxLean, -Math.atan(ask / G)));
+            var rollMass = m + (mc.rider_mass || 0) * 0;
+            var gh = rollMass * G * self.cgHeight;
+            var Kp = (mc.balance || 1) * 7 * gh;
+            var rollInertia = rollMass * self.cgHeight * self.cgHeight + inertiaZ;
+            var Kd = 1.5 * Math.sqrt(Kp * rollInertia);
+            var T = Kp * (target - lean) - Kd * leanRate;                                               // about the axis that leans it to the left
+            var alive = 1 - Math.min(1, Math.max(0, (Math.abs(lean) - 1.15) / 0.25));                  // past about 66 degrees the bike is going down: the rider lets go
+            T = alive * Math.max(-6 * gh, Math.min(6 * gh, T));
+            torque.x -= fx * T; torque.z -= fz * T;
+        }
+
         // ---- the body on the road, for a landing or a car that has turned over
-        if(ground3D) { bodyContacts3D(force, torque); if(self.softBody) shellStep(dt, force, torque); } else bodyCorners(force, torque);
+        // (a motorcycle that leans in a corner has its bodywork near the road: that is no crash until it is nearly on its side)
+        if(ground3D) { if(!(self.motorcycle && Math.abs(self.lean) < 1.15)) bodyContacts3D(force, torque); if(self.softBody) shellStep(dt, force, torque); } else if(!(self.motorcycle && Math.abs(self.lean) < 1.15)) bodyCorners(force, torque);
 
         // ---- integrate: Newton for the movement, Euler for the rotation (with the gyroscopic term of a body that is not round)
         var accX = force.x / m + forceBody.x / mBody, accY = force.y / m + forceBody.y / mBody, accZ = force.z / m + forceBody.z / mBody;

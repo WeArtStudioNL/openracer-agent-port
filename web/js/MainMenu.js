@@ -133,6 +133,7 @@ var MainMenu = (function() {
     }
 
     function carSpecs(car) {
+        if(car.type === "motorcycle") return Math.round(car.chassis.mass) + " kg · motorcycle · " + (car.drivetrain && car.drivetrain.gear_ratios ? car.drivetrain.gear_ratios.length : "?") + " gears";
         var drive = (car.drivetrain && car.drivetrain.drive || "rwd").toUpperCase();
         var gears = car.drivetrain && car.drivetrain.gear_ratios ? car.drivetrain.gear_ratios.length : "?";
         return Math.round(car.chassis.mass) + " kg · " + drive + " · " + gears + " gears";

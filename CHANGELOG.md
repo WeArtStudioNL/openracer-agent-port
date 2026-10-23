@@ -4,6 +4,10 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 ## Unreleased
 
+**Motorcycles (a prototype)**
+- A car with `"type": "motorcycle"` is a motorcycle: two wheels (a pair at each end in the physics), a rider that keeps the bike up and leans it into the corner (`lean = atan(a / g)`), steering that gets smaller with the speed, and the bodywork that may lean over the road. The first one is the **Honda CBR 600 RR** (`web/cars/honda-cbr600`, a model made by `tools/make-cbr600.py`): 270 kg with the rider, 118 hp to 15 500 rpm, six gears, a fork of 17 kN/m and a shock of 24 kN/m. On the flat pad it holds 12 m/s at leans of 20 to 47 degrees, brakes from 90 km/h in 36 m (0.96 g) and goes 0 to 90 km/h in 4.5 s. See `MOTORCYCLE.md`.
+- New engine sound presets for motorcycles (a thumper, a triple, a 600 cc and a 1000 cc four), and `tools/check-engine-sound.js`: it runs the real engine sound without a browser and reports the level, clipping and the pitch against the firing frequency of every preset.
+
 **Look and menu**
 - **No more alerts or confirms of the browser**: every question and message is a window of the game (`web/dialog.js`, in the look of the menu): deleting, replacing, importing a link, writing a tuning, the editors, a track that does not load. Importing a car or track that already exists (in the game, the garage or the linked folder) now **shows what is different** (`chassis.max_steer_deg 35 → 42`, added and removed fields) in that window, or says that the settings are the same; *Replace* or *Keep the old one*. The model files are not compared.
 - *My garage* shows a small picture of every car, and the home screen of the menu is in the middle of the page.

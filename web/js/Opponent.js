@@ -17,6 +17,7 @@ OpenRacer.vehicleParams = function (config, getSurface) {
         downforce: chassis.downforce, downforce_front: chassis.downforce_front, downforce_rear: chassis.downforce_rear, ackermann: chassis.ackermann,
         suspension_travel: chassis.suspension_travel, unsprung_mass: chassis.unsprung_mass, tyre_rate: chassis.tyre_rate, tyre_damping: chassis.tyre_damping, suspension_length: chassis.suspension_length, spring_progression: chassis.spring_progression, damping_rebound: chassis.damping_rebound, ride_front: chassis.ride_front, ride_rear: chassis.ride_rear, toe_front: chassis.toe_front, toe_rear: chassis.toe_rear,
         compound: config.tyres && config.tyres.compound, pressure_front: config.tyres && config.tyres.pressure_front, pressure_rear: config.tyres && config.tyres.pressure_rear, roll_center_front: chassis.roll_center_front, roll_center_rear: chassis.roll_center_rear, camber_front: chassis.camber_front, camber_rear: chassis.camber_rear, roll_camber: chassis.roll_camber,
+        motorcycle: config.type === "motorcycle" ? (config.motorcycle || {}) : null,
         tire_diameter: chassis.tire_diameter, width: dimensions.width, length: dimensions.length, height: dimensions.height,
         Cdrag: 0.5 * chassis.drag_coefficient * dimensions.width * dimensions.height * 0.85 * 1.29,
         gear_ratios: drivetrain.gear_ratios.slice(), reverse_ratio: drivetrain.reverse_ratio, final_drive: drivetrain.final_drive, efficiency: drivetrain.efficiency,

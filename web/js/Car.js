@@ -130,6 +130,7 @@ OpenRacer.Car = function( config, domElement ) {
         camber_front: chassis.camber_front,
         camber_rear: chassis.camber_rear,
         roll_camber: chassis.roll_camber,
+        motorcycle: config.type === "motorcycle" ? (config.motorcycle || {}) : null,
         tire_diameter: this.tire_diameter,
         width: this.width,
         length: this.length,
