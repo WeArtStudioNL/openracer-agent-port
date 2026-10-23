@@ -643,6 +643,38 @@ var Settings = (function() {
         resume.textContent = "Resume";
         resume.onclick = closeMenu;
         buttons.appendChild(resume);
+        // the ghost as a file: to send your best lap, or to race the lap of someone else (Ghost.js)
+        var ghost = window.car && window.car.ghost;
+        if(ghost && ghost.open) {
+            var ghostRow = document.createElement("div");
+            ghostRow.style.cssText = "margin-top: 10px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 13px;";
+            var label = document.createElement("span");
+            label.textContent = ghost.friend ? "Ghost: " + ghost.friend.name + " " + OpenRacer.Records.format(ghost.friend.time) : "Ghost";
+            label.style.cssText = "opacity: 0.8; margin-right: 4px;";
+            ghostRow.appendChild(label);
+            var small = function(text, title, action, off) {
+                var b = document.createElement("button");
+                b.className = "big";
+                b.style.cssText = "font-size: 13px; padding: 5px 10px; background: #3b424c;" + (off ? " opacity: 0.45;" : "");
+                b.textContent = text; b.title = title; b.disabled = !!off;
+                b.onclick = action;
+                ghostRow.appendChild(b);
+                return b;
+            };
+            small("Save lap", "Save your best lap with this car on this track as a file to send", function() { ghost.download(); }, !ghost.hasBest());
+            var picker = document.createElement("input");
+            picker.type = "file"; picker.accept = ".openracer-ghost,application/json"; picker.style.display = "none";
+            picker.onchange = function() {
+                var file = picker.files && picker.files[0];
+                picker.value = "";
+                if(!file) return;
+                ghost.open(file).then(function(g) { label.textContent = "Ghost: " + g.name + " " + OpenRacer.Records.format(g.time); }).catch(function(e) { label.textContent = e.message; label.style.color = "#ff8a80"; });
+            };
+            ghostRow.appendChild(picker);
+            small("Race a ghost", "Race against the lap in a ghost file that someone sent", function() { picker.click(); });
+            if(ghost.friend) small("Own lap", "Back to your own best lap as the ghost", function() { ghost.clearFriend(); label.textContent = "Ghost: your best lap"; });
+            title.appendChild(ghostRow);
+        }
         var replay = document.createElement("button");
         replay.className = "big";
         replay.style.cssText = "background: #ff6a2b; margin-left: 8px;";

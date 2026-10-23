@@ -12,6 +12,7 @@ OpenRacer.Ghost = function (config, trackId) {
     this.enabled = false;          // shows the ghost of the best lap
     this.saving = true;            // keeps a lap that is the best
     this.best = OpenRacer.Records.ghost(trackId, config.id) || null;
+    this.friend = null;            // the ghost of a file that someone sent: { name, car, time, samples }; it is shown instead of the best lap
     this.recording = null;         // the samples of the lap that is going
     var body = null, wheels = null, steering = null;
     var since = 0;                 // time since the last sample
@@ -72,11 +73,12 @@ OpenRacer.Ghost = function (config, trackId) {
                 if (this.recording.length > RATE * 60 * 20) this.recording.shift(); // a lap of more than twenty minutes is no lap
             }
         }
-        if (!this.enabled || !this.best || !this.best.samples) return;
+        var shown = this.friend || this.best;
+        if (!this.enabled || !shown || !shown.samples) return;
         load();
         if (!body) return;
         var t = car.lapStartTime !== undefined ? car.clock - car.lapStartTime : 0;
-        var samples = this.best.samples;
+        var samples = shown.samples;
         if (t > samples[samples.length - 1].t + 0.5 || car.lapsCompleted === 0 && car.clock < 0.5) {
             // the ghost finished (or the race has not started): it waits at the line
             setVisible(false);
@@ -121,7 +123,53 @@ OpenRacer.Ghost = function (config, trackId) {
         return true;
     };
 
+    // ---- a ghost as a file, to send or to race: { format, version, track, car, name, time, samples }
+    var FRIEND = "openracer.friendghost." + trackId;
+    function rounded(samples) {
+        var r = function (v, n) { var f = Math.pow(10, n); return Math.round(v * f) / f; };
+        return samples.map(function (s) {
+            return { t: r(s.t, 3), x: r(s.x, 3), y: r(s.y, 3), z: r(s.z, 3), qx: r(s.qx, 4), qy: r(s.qy, 4), qz: r(s.qz, 4), qw: r(s.qw, 4), w: s.w.map(function (p) { return [r(p[0], 3), r(p[1], 3), r(p[2], 3)]; }), s: r(s.s, 3), r: r(s.r, 2) };
+        });
+    }
+    this.hasBest = function () { return !!(this.best && this.best.samples && this.best.samples.length > 10); };
+    // saves the best lap of this car on this track as a file
+    this.download = function (name) {
+        if (!this.hasBest()) return false;
+        var data = { format: "openracer-ghost", version: 1, track: trackId, car: { id: config.id, name: String(config.name || config.id) }, name: name || "", time: this.best.time, created: new Date().toISOString(), samples: rounded(this.best.samples) };
+        var url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: "application/json" }));
+        var link = document.createElement("a");
+        link.href = url;
+        link.download = "ghost-" + String(trackId).replace(/[^A-Za-z0-9_-]/g, "") + "-" + String(config.id).replace(/[^A-Za-z0-9_-]/g, "") + "-" + OpenRacer.Records.format(this.best.time).replace(/[:.]/g, "-") + ".openracer-ghost";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+        return true;
+    };
+    // takes a ghost file; gives a promise of the ghost (or fails with a message)
+    this.open = function (file) {
+        var self = this;
+        if (file.size > 20 * 1048576) return Promise.reject(new Error("This file is too large to be a ghost."));
+        return file.text().then(function (text) {
+            var d;
+            try { d = JSON.parse(text); } catch (e) { throw new Error("This is not a ghost file."); }
+            if (!d || d.format !== "openracer-ghost" || !Array.isArray(d.samples) || d.samples.length < 10) throw new Error("This is not a ghost file.");
+            if (d.track !== trackId) throw new Error("This ghost is for another track (" + String(d.track).slice(0, 40) + ").");
+            var ok = d.samples.every(function (s) { return s && isFinite(s.t) && isFinite(s.x) && isFinite(s.y) && isFinite(s.z) && isFinite(s.qw) && Array.isArray(s.w) && s.w.length >= 4; });
+            if (!ok || !isFinite(d.time)) throw new Error("This ghost file is damaged.");
+            self.friend = { name: String(d.name || (d.car && d.car.name) || "Ghost").slice(0, 40), car: d.car, time: d.time, samples: d.samples };
+            self.enabled = true;
+            try { window.localStorage.setItem(FRIEND, JSON.stringify(self.friend)); } catch (e) { /* too big or no storage: it is kept for this game only */ }
+            return self.friend;
+        });
+    };
+    this.clearFriend = function () {
+        this.friend = null;
+        try { window.localStorage.removeItem(FRIEND); } catch (e) { /* no storage */ }
+    };
+    try { var kept = JSON.parse(window.localStorage.getItem(FRIEND)); if (kept && kept.samples) this.friend = kept; } catch (e) { /* none */ }
+
     this.isVisible = function () { return !!(body && body.visible); };
 
-    this.bestTime = function () { return this.best ? this.best.time : OpenRacer.Records.best(trackId, config.id); };
+    this.bestTime = function () { return this.friend ? this.friend.time : (this.best ? this.best.time : OpenRacer.Records.best(trackId, config.id)); };
 };
