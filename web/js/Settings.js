@@ -80,6 +80,7 @@ var Settings = (function() {
         { id: "cameraReset", group: "Other", label: "Camera behind the car", defaults: [key("Backquote")] },
         { id: "hudToggle", group: "Other", label: "HUD on/off", defaults: [key("KeyH")] },
         { id: "debugToggle", group: "Other", label: "Debug text on/off", defaults: [key("F3")] },
+        { id: "photo", group: "Other", label: "Photo: save the picture of the game as a PNG (no HUD; use the free camera to frame it)", defaults: [key("F2")] },
         { id: "freeCamAim", group: "Other", label: "Free camera: look at the car or not", defaults: [key("KeyP")] },
         { id: "freeCamFollow", group: "Other", label: "Free camera: move with the car or stay here", defaults: [key("KeyO")] },
         { id: "cameraSwitch", group: "Other", label: "Switch camera (fixed, follow, cockpit, free)", defaults: [key("KeyT")] },
@@ -974,6 +975,7 @@ var Settings = (function() {
     handlers.tuningMenu = function() { Tuning.toggle(); };
     handlers.hudToggle = function() { setOption("hud", !options.hud); };
     handlers.debugToggle = function() { setOption("debug", !options.debug); };
+    handlers.photo = function() { if(typeof takePhoto === "function") takePhoto(); };
     handlers.mute = function() { setOption("sound", !options.sound); };
     handlers.calibrate = function() { WheelControls.startCalibration(window.car); };
     handlers.wheelToggle = function() { WheelControls.toggle(); };

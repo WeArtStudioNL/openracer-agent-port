@@ -21,6 +21,27 @@ Settings.onOptionChange(function(name, value) {
 EngineSound.setMuted(!Settings.option("sound"));
 EngineSound.setVolume(Settings.option("volume"));
 
+// A bar while the track, the car and the other cars load (the loader of three.js counts the files); it goes when all of them are in
+function showLoading() {
+    var box = document.createElement("div");
+    box.style.cssText = "position: fixed; inset: 0; z-index: 2000; background: #12161c; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #dfe6ef; font-family: Arial, sans-serif; transition: opacity 0.4s;";
+    box.innerHTML = "<div style=\"font-size: 28px; letter-spacing: 2px;\">OpenRacer</div><div style=\"width: 260px; height: 6px; background: #263040; border-radius: 3px; overflow: hidden;\"><div style=\"height: 100%; width: 3%; background: #3d7bd9; transition: width 0.2s;\"></div></div>";
+    document.body.appendChild(box);
+    var bar = box.firstChild.nextSibling.firstChild, best = 0.03, started = Date.now();
+    THREE.DefaultLoadingManager.onProgress = function(url, loaded, total) {
+        best = Math.max(best, Math.min(0.95, loaded / Math.max(1, total)));
+        bar.style.width = (best * 100) + "%";
+    };
+    var timer = setInterval(function() {
+        var ready = typeof car !== "undefined" && car && car.isReady() && race.opponents.every(function(o) { return o.loaded; });
+        if(!ready && Date.now() - started < 90000) return;
+        clearInterval(timer);
+        bar.style.width = "100%";
+        box.style.opacity = "0";
+        setTimeout(function() { box.remove(); }, 450);
+    }, 250);
+}
+
 function startGame(carId, trackId) {
     Promise.all([Catalog.load("cars"), Catalog.load("tracks")]).then(function(result) {
         var carFound = result[0].filter(function(item) { return item.id === carId; })[0];
@@ -35,6 +56,7 @@ function startGame(carId, trackId) {
         s = new RACER.Scene();
         s.init();
         initialiseMaterials();
+        showLoading();
         loadTrack(trackFound, trackLoaded);
     }).catch(function(error) {
         console.error(error);

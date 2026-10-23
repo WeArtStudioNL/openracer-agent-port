@@ -196,6 +196,21 @@ var countStart = 0;
 var fps = 0;
 var processingSplit = "";
 
+// The picture of the game (the canvas only, so without the HUD) as a PNG file. It is drawn again and copied in the same turn, because the
+// canvas is empty again when the browser has shown it.
+function takePhoto() {
+    if(useComposer) composer.render(); else renderer.render(scene, camera);
+    renderer.domElement.toBlob(function(blob) {
+        if(!blob) return;
+        var link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "openracer-" + (typeof currentTrack !== "undefined" && currentTrack ? currentTrack.id : "photo") + "-" + Date.now() + ".png";
+        link.click();
+        setTimeout(function() { URL.revokeObjectURL(link.href); }, 5000);
+        if(typeof banner === "function") banner("Photo saved");
+    }, "image/png");
+}
+
 function render() {
     if(Date.now() - countStart > 1000) {
         fps = frameCount;

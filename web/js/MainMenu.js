@@ -689,6 +689,36 @@ var MainMenu = (function() {
         var wrap = document.createElement("div");
         wrap.className = "wrap";
         wrap.innerHTML = "<h1>OpenRacer</h1><div class=\"tag\">Choose a car and a track</div>";
+
+        // the first time: one button that starts something good, and it goes away for good once it is used or closed
+        var welcomed = false;
+        try { welcomed = !!localStorage.getItem("openracer.welcomed"); } catch(e) { welcomed = true; }
+        var hasTruck = cars.some(function(c) { return c.id === "stadium-truck"; }) && tracks.some(function(t) { return t.id === "desert"; });
+        if(!welcomed && hasTruck) {
+            var welcome = document.createElement("div");
+            welcome.style.cssText = "margin: 14px 0; padding: 14px 18px; border-radius: 8px; background: rgba(61, 123, 217, 0.18); border: 1px solid #3d7bd9; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;";
+            var message = document.createElement("div");
+            message.style.cssText = "flex: 1; min-width: 200px;";
+            message.textContent = "New here? Jump a stadium truck over the dunes of the Desert.";
+            var go = document.createElement("button");
+            go.className = "start";
+            go.textContent = "Drive";
+            go.onclick = function() {
+                try { localStorage.setItem("openracer.welcomed", "1"); } catch(e) {}
+                window.location.href = window.location.pathname + "?car=stadium-truck&track=desert&ai=0&ghost=0&records=0";
+            };
+            var close = document.createElement("button");
+            close.className = "secondary";
+            close.textContent = "Close";
+            close.onclick = function() {
+                try { localStorage.setItem("openracer.welcomed", "1"); } catch(e) {}
+                welcome.remove();
+            };
+            welcome.appendChild(message);
+            welcome.appendChild(go);
+            welcome.appendChild(close);
+            wrap.appendChild(welcome);
+        }
         // the cars: a row of tiles over the whole width, four across
         var carRow = document.createElement("div");
         carRow.className = "cars";

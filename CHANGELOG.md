@@ -5,6 +5,8 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 ## Unreleased
 
 **Race**
+- **Photo** (F2, a key you can change): saves the picture of the game as a PNG (the canvas only, so without the HUD; frame it with the free camera).
+- A **loading bar** over the game while the track, the car and the AI cars load, and a first-run card in the main menu (*Drive*: the stadium truck on the Desert; *Close* or Drive hides it for good, `openracer.welcomed` in the browser).
 - Performance: a **draw distance** in the graphics settings (500, 1000, 2000 or 5000 m; the presets have 500, 1000, 2000 and 5000, High is 2000): the far plane of the camera, with the sky shrunk to stay inside it. AI cars more than 450 m from the camera are not drawn and their model (wheels, suspension, soft body, parts) is not moved; they drive on as before. Everything else is culled by three.js as it was (the Desert is in parts for that).
 - A **physics check** page, `web/tools/physics-check.html`: pick cars and a track, and it runs the ride height, a landing from 3 m and from 10 m, the wheels on a straight at 30 m/s (flickers) and a bend (yaw against the steering), and marks what is outside the limits. Run it after a change to the physics or to a car.
 - An AI car that is lost is put back: when it has been stuck for a long time (not moving with the throttle open), more than 45 m from its line, or on its roof, for 7 seconds in all, it stands on the line again, a few metres ahead and facing along it, in the state that it is in (damage and tyres stay). `Opponent.recovered` counts them. An AI car that was 104 m off the line in the Desert was back on it after 7 s.
