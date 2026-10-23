@@ -18,6 +18,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 - In the race column of the main menu, a list with a tick for every car chooses which cars may race against you (shown when a race of laps or AI opponents is chosen; *all* and *none* above it; all are ticked by default and the choice is remembered). The AI cars are taken from the ticked cars in turn (`aicars` in the address); with none ticked every car may race.
 
 **Replay**
+- *● Video* in the replay bar records the replay from the start to the end, at normal speed, as a video (.webm, 8 Mbit/s, the picture of the game without the bar and without sound) and saves it when it is done; the button is *■ Stop* while it runs, and a pause or the end stops it too.
 - In a replay the cameras Fixed, Follow and Cockpit follow the car that is chosen, like the Free and the Cinematic camera: Tab, or the new *Car* button in the camera row (when there are more cars), goes to the next car, and the choice holds when the camera changes. (The cockpit camera of another car is put where the cockpit of your own car is.)
 - The head of the driver is drawn in a replay with the Free or the Cinematic camera, also when the camera of the game is the cockpit one (it was hidden there, as in the cockpit view).
 - The Cinematic camera has a zoom of your own on top of the field of view that it chooses itself: the slider *Field of view ×* (0.2 to 3; below 1 zooms in) under the camera buttons, or `[` (in) and `]` (out). The zoom is kept when the camera goes to another one.

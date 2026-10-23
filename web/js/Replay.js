@@ -409,6 +409,7 @@ OpenRacer.Replay = (function() {
         style.id = "replayStyle";
         style.textContent =
             "body.replayClean #replayInfo, body.replayClean #debugOut { display: none !important; }" +
+            "body.replayFilming #replayBar { opacity: 0.4; }" +
             "body.replaying #hudBoost, body.replaying #dragHud, body.replaying #hud, body.replaying #hudLaps, body.replaying #hudCar, body.replaying #hudHint, body.replaying #touch, body.replaying #tuning { display: none !important; }" +
             "#replayBar { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(960px, calc(100% - 20px)); z-index: 1400; box-sizing: border-box; " +
                 "padding: 10px 14px 12px; background: rgba(14, 18, 24, 0.86); color: #fff; border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; " +
@@ -469,6 +470,8 @@ OpenRacer.Replay = (function() {
             setTimeout(function() { save.textContent = "Save replay"; }, 4000);
         });
         if(api.viewer) save.style.display = "none";            // (a replay that is already in the list)
+        videoButton = button(right, "● Video", "Record the replay from the start to the end as a video (.webm)", function() { toggleVideo(); });
+        if(typeof MediaRecorder === "undefined" || !document.createElement("canvas").captureStream) videoButton.style.display = "none";
         var exit = button(right, api.viewer ? "Main menu" : "Back to the game", "Escape", function() { api.stop(); });
         exit.className = "exit";
 
@@ -834,7 +837,46 @@ OpenRacer.Replay = (function() {
     window.addEventListener("keyup", function(event) { keys[event.code] = false; }, true);
     window.addEventListener("blur", function() { keys = {}; });
 
-    var cameraButtons = null, freeRow = null, freeInfo = null, carButton = null;
+    var cameraButtons = null, freeRow = null, freeInfo = null, carButton = null, videoButton = null;
+
+    // ---- a video of the replay: from the start to the end at normal speed, from the canvas of the game (without the bar and without sound), kept as a .webm
+    var video = { recorder: null, chunks: [] };
+    function toggleVideo() {
+        if(video.recorder) { stopVideo(); return; }
+        var canvas = typeof renderer !== "undefined" && renderer.domElement;
+        if(!canvas || typeof MediaRecorder === "undefined") return;
+        var types = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"];
+        var type = types.filter(function(t) { return MediaRecorder.isTypeSupported(t); })[0];
+        if(!type) { videoButton.textContent = "No video here"; setTimeout(function() { videoButton.textContent = "● Video"; }, 3000); return; }
+        var stream = canvas.captureStream(60);
+        video.chunks = [];
+        video.recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8000000 });
+        video.recorder.ondataavailable = function(e) { if(e.data && e.data.size) video.chunks.push(e.data); };
+        video.recorder.onstop = function() {
+            var blob = new Blob(video.chunks, { type: type.split(";")[0] });
+            video.recorder = null; video.chunks = [];
+            document.body.classList.remove("replayFilming");
+            if(videoButton) videoButton.textContent = "● Video";
+            if(!blob.size) return;
+            var url = URL.createObjectURL(blob);
+            var link = document.createElement("a");
+            link.href = url;
+            link.download = "openracer-" + String(currentTrack.id).replace(/[^A-Za-z0-9_-]/g, "") + "-" + new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13) + (/mp4/.test(type) ? ".mp4" : ".webm");
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(function() { URL.revokeObjectURL(url); }, 30000);
+        };
+        // from the start, at normal speed
+        t = api.start_time(); direction = 1; speed = 1; playing = true;
+        if(ui) ui.sync();
+        document.body.classList.add("replayFilming");
+        videoButton.textContent = "■ Stop (recording)";
+        video.recorder.start(250);
+    }
+    function stopVideo() {
+        if(video.recorder && video.recorder.state !== "inactive") video.recorder.stop();
+    }
     function updateCameraUi() {
         if(!ui || !cameraButtons) return;
         var mode = Settings.option("camera");
@@ -909,6 +951,7 @@ OpenRacer.Replay = (function() {
                 entry.live = null;
             }
         });
+        stopVideo();
         leaveFree();
         leaveCine();
         if(ui) { ui.bar.remove(); ui.info.remove(); ui = null; }
@@ -929,6 +972,7 @@ OpenRacer.Replay = (function() {
         }
         show(t, delta);
         showEffects(t);
+        if(video.recorder && (!playing || t >= api.end_time() - 0.02)) stopVideo();      // (the end, or a pause: the video is done)
         if(free.active) updateFree(delta);
         else if(cine.active) updateCine(delta);
         if(typeof EngineSound !== "undefined" && player) {
