@@ -13,7 +13,7 @@ New cars and tracks are found by looking at the folders, so a folder with a car.
 web/cars or web/tracks shows up in the game at once. The lists are also written to cars/index.json and
 tracks/index.json, for when the game is served by a plain web server without this API.
 
-Usage: tools/serve.py [port] [--local]   (default port 8000; the server is reachable on the local network, --local keeps it to this computer). Nothing is cached, so a refresh shows the latest files.
+Usage: tools/serve.py [port] [--local] [--https]   (default port 8000; the server is reachable on the local network, --local keeps it to this computer). Nothing is cached, so a refresh shows the latest files.
 """
 import json
 import os
@@ -166,6 +166,38 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json({"ok": True})
 
 
+CERT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".certs")
+
+
+def make_certificate(ip):
+    """A certificate for https on this computer (localhost, 127.0.0.1 and its address on the network), kept in tools/.certs. mkcert makes one that the browser trusts, when it is
+    installed (mkcert -install once); otherwise it is a self-signed one made with openssl, which the browser warns about once. Gives (certificate, key)."""
+    import shutil
+    import subprocess
+    os.makedirs(CERT_DIR, exist_ok=True)
+    cert, key, stamp = [os.path.join(CERT_DIR, n) for n in ("cert.pem", "key.pem", "for.txt")]
+    names = ["localhost", "127.0.0.1", "::1"] + ([ip] if ip else [])
+    wanted = ",".join(names)
+    if os.path.exists(cert) and os.path.exists(key) and os.path.exists(stamp) and open(stamp).read() == wanted:
+        return cert, key
+    if shutil.which("mkcert"):
+        subprocess.run(["mkcert", "-cert-file", cert, "-key-file", key] + names, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        kind = "mkcert"
+    else:
+        if not shutil.which("openssl"):
+            raise SystemExit("https needs openssl (or mkcert) to make a certificate.")
+        config = os.path.join(CERT_DIR, "openssl.cnf")
+        alt = ",".join(("IP:" + n) if n.replace(".", "").isdigit() or ":" in n else ("DNS:" + n) for n in names)
+        with open(config, "w") as f:
+            f.write("[req]\ndistinguished_name=dn\nx509_extensions=ext\nprompt=no\n[dn]\nCN=OpenRacer (local)\n[ext]\nsubjectAltName=" + alt + "\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n")
+        subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", key, "-out", cert, "-days", "825", "-config", config], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        kind = "self-signed"
+    with open(stamp, "w") as f:
+        f.write(wanted)
+    print("Made a certificate (%s) for %s" % (kind, wanted))
+    return cert, key
+
+
 def network_address():
     """The address of this machine on the local network (the one that other devices use), or None"""
     import socket
@@ -181,14 +213,24 @@ def network_address():
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     local_only = "--local" in sys.argv[1:]
+    secure = "--https" in sys.argv[1:]
+    scheme = "https" if secure else "http"
     port = int(args[0]) if args else 8000
     write_indexes()
-    print("Serving %s at http://localhost:%d (Ctrl+C to stop)" % (ROOT, port))
+    print("Serving %s at %s://localhost:%d (Ctrl+C to stop)" % (ROOT, scheme, port))
     if local_only:
         print("Only this computer can reach it (--local).")
     else:
         ip = network_address()
         if ip:
-            print("On your network (a phone, a tablet, another computer): http://%s:%d" % (ip, port))
+            print("On your network (a phone, a tablet, another computer): %s://%s:%d" % (scheme, ip, port))
         print("The others can play and read; only this computer can save cars and tracks to the folders (the others keep them in their own browser).")
-    ThreadingHTTPServer(("127.0.0.1" if local_only else "", port), Handler).serve_forever()
+    server = ThreadingHTTPServer(("127.0.0.1" if local_only else "", port), Handler)
+    if secure:
+        import ssl
+        cert, key = make_certificate(None if local_only else network_address())
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(cert, key)
+        server.socket = context.wrap_socket(server.socket, server_side=True)
+        print("https: the browser warns once about the certificate (it is made here, not by an authority): choose to go on. With mkcert installed (mkcert -install) there is no warning.")
+    server.serve_forever()

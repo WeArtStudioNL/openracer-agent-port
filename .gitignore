@@ -46,3 +46,6 @@ Temporary Items
 .playwright-mcp/
 tools/__pycache__/
 __pycache__/
+
+# the certificate that start-server.sh --https makes
+tools/.certs/
