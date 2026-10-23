@@ -120,9 +120,12 @@ OpenRacer.Motorcycle = function (settings) {
         self.targetLean += (bikeWant - self.targetLean) * Math.min(1, dt / self.leanResponse);
         var target = self.targetLean;
         // the angle of the wheel that a bend of this lean needs: a = g tan(lean of the whole) less the camber thrust of the tyres, delta = L a / u^2 (to the left: negative)
-        var phiNow = target + eps * Math.min(1, Math.abs(target) / (6 * DEG));
+        // (of the lean that the bike has, not the one that it is going to: a front wheel that is ahead of the lean pushes the bike sideways, and when the keys go from left to right quickly
+        // that is a bike that slides)
+        var leanNow = Math.max(-self.maxLean, Math.min(self.maxLean, state.lean));
+        var phiNow = leanNow + eps * Math.min(1, Math.abs(leanNow) / (6 * DEG));
         var phi = Math.abs(phiNow);
-        var aSlip = G * Math.max(0, Math.tan(phi) - self.camberThrust * Math.sin(Math.abs(target)));
+        var aSlip = G * Math.max(0, Math.tan(phi) - self.camberThrust * Math.sin(Math.abs(leanNow)));
         var steady = -Math.sign(phiNow) * Math.atan(v.wheelbase * aSlip / Math.max(u * u, 1));
         // countersteering: to start a lean to the left the wheel goes to the right for a moment, in proportion to what the lean still has to go
         var cLimit = Math.min(0.07, 5 / Math.max(u * u, 1));       // (at most about half a g of sideways push from it at any speed)
