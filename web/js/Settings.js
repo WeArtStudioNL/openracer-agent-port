@@ -1025,6 +1025,7 @@ var Settings = (function() {
         setOption: setOption,
         onOptionChange: function(fn) { optionListeners.push(fn); },
         setVirtual: function(id, held) { virtualDown[id] = !!held; },
+        trigger: function(id) { if(!paused && !replayOn() && handlers[id]) handlers[id](); },      // an action once, as a key press does (the buttons of the HUD)
         isPaused: function() { return paused; },
         toggleMenu: toggleMenu,
         bindings: function(id) { return bindings[id]; }

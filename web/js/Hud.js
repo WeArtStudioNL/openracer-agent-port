@@ -52,6 +52,7 @@ var Hud = (function() {
             "#hud .pills { display: flex; flex-direction: column; gap: 7px; margin-bottom: 14px; }" +
             "#hud .pill { min-width: 62px; padding: 5px 10px; border-radius: 7px; font-size: 15px; font-weight: bold; letter-spacing: 1px; text-align: center; color: #fff;" +
             " border: 2px solid; background: rgba(15, 18, 22, 0.72); transition: background 0.12s, border-color 0.12s, color 0.12s; }" +
+            "body.touch #hud .pill.tap { pointer-events: auto; cursor: pointer; touch-action: manipulation; padding: 9px 12px; min-width: 66px; }" +
             "#hud .pill.off { border-color: #d9372f; color: #ff6b62; box-shadow: 0 0 8px rgba(217, 55, 47, 0.35); }" +
             "#hud .pill.on { border-color: #2eb35a; color: #52e085; box-shadow: 0 0 8px rgba(46, 179, 90, 0.35); }" +
             "#hud .pill.active { border-color: #f5c518; background: rgba(245, 197, 24, 0.9); color: #1a1500; box-shadow: 0 0 14px rgba(245, 197, 24, 0.8); }" +
@@ -90,6 +91,13 @@ var Hud = (function() {
             var pill = document.createElement("div");
             pill.className = "pill off";
             pill.textContent = name;
+            // on a touch screen the pills are buttons: they switch the aid on and off, as the keys do
+            var action = { TC: "toggleTC", LC: "toggleLaunch", ESC: "toggleESC", ABS: "toggleABS", "2S": "toggleTwoStep" }[name];
+            if(action) {
+                pill.className += " tap";
+                pill.tap = true;
+                pill.addEventListener("pointerdown", function(e) { if(!document.body.classList.contains("touch")) return; e.preventDefault(); e.stopPropagation(); Settings.trigger(action); });
+            }
             pillColumn.appendChild(pill);
             pills[name] = pill;
         });
@@ -162,7 +170,7 @@ var Hud = (function() {
     function setPill(name, state) {
         if(pillStates[name] === state) return;
         pillStates[name] = state;
-        pills[name].className = "pill " + state;
+        pills[name].className = "pill " + state + (pills[name].tap ? " tap" : "");
         pills[name].title = name + " " + STATE_NAMES[state];
     }
 
