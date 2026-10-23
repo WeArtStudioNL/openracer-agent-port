@@ -102,6 +102,8 @@ var Settings = (function() {
 
     var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, autoReverse: true, autoReversePedals: true, autoReverseSpeed: 3, dragReady: 2, dragGreen: 1.5, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 2, volume: 0.8,
         padSlow: 1.5, padAssist: true, keySteer: 1, keySlow: 1, keyAssist: true,
+        // the easing of the keys: the time that a key takes to bring the pedal or the wheels to the full value (s), and the curve of it (1 straight, below 1 quick at first, above 1 slow at first)
+        keyThrottleTime: 0.5, keyThrottleCurve: 0.6, keyBrakeTime: 0.4, keyBrakeCurve: 0.6, keySteerTime: 0.9, keySteerCurve: 1,
         // the graphics (Graphics.js): a preset is a set of these
         gfxPreset: "high", gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000 };
 
@@ -600,6 +602,21 @@ var Settings = (function() {
         return row;
     }
 
+    // The curve of an easing: a slider from 0.3 to 3 and the shape of the curve (the value that the pedal has, from 0 to 1, over the time that the key is held)
+    function curveRow(label, name) {
+        var row = sliderRow(label, name, 0.3, 3, 0.1, function(v) {
+            return v.toFixed(1) + (Math.abs(v - 1) < 0.05 ? " (straight)" : (v < 1 ? " (quick at first)" : " (slow at first)"));
+        });
+        var c = options[name], points = [];
+        for(var i = 0; i <= 20; i++) points.push((2 + i * 2.8).toFixed(1) + "," + (30 - 28 * Math.pow(i / 20, c)).toFixed(1));
+        var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("width", "60"); svg.setAttribute("height", "32"); svg.setAttribute("viewBox", "0 0 60 32");
+        svg.style.cssText = "margin-left: 8px; flex: none;";
+        svg.innerHTML = "<rect x=\"1\" y=\"1\" width=\"58\" height=\"30\" rx=\"4\" fill=\"none\" stroke=\"#272e37\"/><polyline points=\"" + points.join(" ") + "\" fill=\"none\" stroke=\"#ff5a1f\" stroke-width=\"2\"/>";
+        row.querySelector(".inputs").appendChild(svg);
+        return row;
+    }
+
     // a row with a check box
     function checkRow(label, name, note) {
         var row = document.createElement("div");
@@ -750,9 +767,16 @@ var Settings = (function() {
         page = tabPage("Keyboard");
         var keyNote = document.createElement("div");
         keyNote.className = "sub";
-        keyNote.textContent = "The steering keys turn the wheels at a rate: fast at a standstill, slower the faster the car goes; the wheels come back to the middle by themselves when the keys are let go.";
+        keyNote.textContent = "How the keys bring the gas, the brake and the wheels up: the time to the full value and the curve of it (the line shows the pedal over the time that the key is held). The steering gets slower the faster the car goes; the wheels come back to the middle by themselves when the keys are let go.";
         page.appendChild(keyNote);
-        page.appendChild(sliderRow("Steering speed", "keySteer", 0.5, 3, 0.1, function(v) { return Math.round(v * 100) + "%" + (Math.abs(v - 1) < 0.01 ? " (as it was)" : ""); }));
+        // the easing of the keys: how long a key takes to bring the pedal or the wheels to the full value, and the curve of it (drawn next to the slider)
+        [["Throttle", "keyThrottleTime", "keyThrottleCurve", "to full gas"], ["Brake", "keyBrakeTime", "keyBrakeCurve", "to full brake"], ["Steering", "keySteerTime", "keySteerCurve", "to full lock at a standstill"]].forEach(function(g) {
+            var head = document.createElement("h2");
+            head.textContent = g[0];
+            page.appendChild(head);
+            page.appendChild(sliderRow("Time " + g[3], g[1], 0.05, 2, 0.05, function(v) { return v.toFixed(2) + " s"; }));
+            page.appendChild(curveRow("Curve", g[2]));
+        });
         page.appendChild(sliderRow("Slower at speed", "keySlow", 0, 3, 0.25, function(v) {
             var at100 = 1 + Math.max(0, (100 / 3.6) / 4 - 1) * v;
             return v === 0 ? "off: the same at every speed" : at100.toFixed(1) + "× slower at 100 km/h" + (Math.abs(v - 1) < 0.01 ? " (as it was)" : "");

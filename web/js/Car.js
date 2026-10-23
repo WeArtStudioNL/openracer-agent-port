@@ -516,13 +516,19 @@ OpenRacer.Car = function( config, domElement ) {
             var soundStatus = EngineSound.status();
             if(soundStatus) debugOut(soundStatus);
         }
+        // the keys bring the pedals up over a time and along a curve (settings menu, Keyboard: the easing of the throttle and of the brake); letting go is at once
+        var easeThrottle = Settings.option("keyThrottleCurve"), timeThrottle = Settings.option("keyThrottleTime") || 0.5;
+        var easeBrake = Settings.option("keyBrakeCurve"), timeBrake = Settings.option("keyBrakeTime") || 0.4;
         if(this.accelerate) {
-            this.throttle += (1 - this.throttle) * delta * 4;
-        }
+            this.thrHeld = (this.thrHeld || 0) + delta;
+            this.throttle = Math.pow(Math.min(1, this.thrHeld / timeThrottle), easeThrottle || 1);
+        } else this.thrHeld = 0;
+        if(this.held) this.throttle = Math.min(this.throttle, 0.6);
         if(this.throttle > 1) this.throttle = 1;
         if(this.brake) {
-            this.brakePedal += (1 - this.brakePedal) * delta * 6;
-        }
+            this.brkHeld = (this.brkHeld || 0) + delta;
+            this.brakePedal = Math.pow(Math.min(1, this.brkHeld / timeBrake), easeBrake || 1);
+        } else this.brkHeld = 0;
         if(delta > 0.1) {
             if(showDebug) { debugOut("DELTA WARN - " + delta); }
             delta = 0.1;
@@ -534,13 +540,16 @@ OpenRacer.Car = function( config, domElement ) {
         var assistWas = this.assistOffset || 0;
         if(this.lastWritten !== undefined && this.turnAngle !== this.lastWritten) assistWas = 0; else this.turnAngle -= assistWas;
         var foreign = this.lastWritten !== undefined && assistWas === 0 && this.turnAngle !== this.lastWritten;
+        // the keys work on the angle without the curve (keyRaw); what the car gets is that angle along the curve of the settings (Keyboard: the easing of the steering)
+        var keyboardSteering = !mouseDown && !usingGamepad && !foreign;
+        if(keyboardSteering && this.keyRaw !== undefined) this.turnAngle = this.keyRaw; else this.keyRaw = this.turnAngle;
 
         // steering with the keyboard: slower at speed, and the wheels centre themselves
         this.turnDir = 0;
         if(this.turnLeft) this.turnDir = -1;
         if(this.turnRight) this.turnDir = 1;
         if(this.turnLeft && this.turnRight) this.turnDir = 0;
-        var tSpeed = this.turnSpeed * 0.3 * (Settings.option("keySteer") || 1); // the steering speed of the keyboard (settings menu)
+        var tSpeed = this.turnLimit / (Settings.option("keySteerTime") || 0.9);      // the steering speed of the keyboard: the lock in the time of the settings menu (at a standstill)
         var slow = Settings.option("keySlow");           // how much slower the keys steer at speed (settings menu, Keyboard): 1 as it was, 0 not at all
         if(slow === undefined || slow === null) slow = 1;
         var speedFactor = 1 + Math.max(0, Math.abs(v.u) / 4 - 1) * slow;
@@ -560,6 +569,15 @@ OpenRacer.Car = function( config, domElement ) {
                 this.turnAngle = this.turnDir * lock;
             }
         }
+
+        var steerCurve = Settings.option("keySteerCurve") || 1;
+        if(keyboardSteering) {
+            this.keyRaw = this.turnAngle;
+            if(steerCurve !== 1) {
+                var lockNow = this.turnLimit * Math.max(0.2, 1 / (1 + Math.pow(Math.abs(v.u) / 22, 2) * slow));
+                this.turnAngle = Math.sign(this.turnAngle) * lockNow * Math.pow(Math.min(1, Math.abs(this.turnAngle) / lockNow), steerCurve);
+            }
+        } else this.keyRaw = this.turnAngle;
 
         // The assist: when the rear steps out, the front wheels are turned into the slide (as the pad does, controls.js), on top of what the keys
         // made, and it fades with the slide. Only while the keyboard steers (not mouse, pad or a wheel that has the angle).
