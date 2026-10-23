@@ -555,6 +555,7 @@ OpenRacer.Car = function( config, domElement ) {
         if(this.turnRight) this.turnDir = 1;
         if(this.turnLeft && this.turnRight) this.turnDir = 0;
         var tSpeed = this.turnLimit / (Settings.option("keySteerTime") || 0.9);      // the steering speed of the keyboard: the lock in the time of the settings menu (at a standstill)
+        if(v.controller) tSpeed *= v.controller.keyRate;      // (a motorcycle: the keys ask for a lean, which comes faster than the wheels of a car turn)
         var slow = Settings.option("keySlow");           // how much slower the keys steer at speed (settings menu, Keyboard): 1 as it was, 0 not at all
         if(slow === undefined || slow === null) slow = 1;
         if(v.controller) slow = 0;                       // (a motorcycle: the keys ask for a lean, and that is the same at every speed)

@@ -28,10 +28,12 @@ OpenRacer.Motorcycle = function (settings) {
     this.settings = s;
     this.maxLean = (s.max_lean_deg || 50) * DEG;
     this.balance = s.balance || 1;
-    this.leanResponse = s.lean_response || 0.16;          // s: how fast the lean follows what is asked
+    this.leanResponse = s.lean_response || 0.1;          // s: how fast the lean follows what is asked
     this.camberThrust = s.camber_thrust !== undefined ? s.camber_thrust : 0.3;
     this.standUp = s.throttle_stand_up !== undefined ? s.throttle_stand_up : 0.18;
     this.cameraRollFactor = s.camera_roll !== undefined ? s.camera_roll : 0.45;
+    this.keyRate = s.key_steer_rate || 2;                    // how much faster the steering keys bring the lean command than they turn the wheels of a car
+    this.cornerBrake = s.corner_brake !== undefined ? s.corner_brake : 0.2;    // how much further the bike leans into the bend on the rear brake
     this.command = 0;                                      // the lean that is asked (-1..1)
     this.targetLean = 0;                                   // what the rider takes (rad, left is positive)
     this.steer = 0;                                        // the angle of the front wheel that was given to the physics (rad, right is positive)
@@ -68,6 +70,9 @@ OpenRacer.Motorcycle = function (settings) {
         // the lean that the command asks for, less at a walking pace (a bend of that lean needs a speed: tan(lean) = u^2 tan(steering lock) / (L g)), and stood up a little by the throttle
         var cap = Math.atan(u * u * Math.tan(lock) / (v.wheelbase * G));
         var want = -c * Math.min(self.maxLean, cap) * fast;
+        var brake = Math.max(0, Math.min(1, inp.brakePedal || 0)), bend = smooth(8 * DEG, 30 * DEG, Math.abs(want));
+        want *= 1 + self.cornerBrake * brake * bend;                  // the rear brake takes it deeper into the bend (the front brake is not used in a bend: brakeScale)
+        want = Math.max(-self.maxLean, Math.min(self.maxLean, want));
         want *= 1 - self.standUp * Math.max(0, Math.min(1, inp.throttle || 0)) * Math.min(1, Math.abs(want) / (15 * DEG));
         self.targetLean += (want - self.targetLean) * Math.min(1, dt / self.leanResponse);
         var target = self.targetLean;
@@ -94,7 +99,11 @@ OpenRacer.Motorcycle = function (settings) {
         self.frontBrake += (target - self.frontBrake) * Math.min(1, dt / (target < self.frontBrake ? 0.02 : 0.1));
         self.rearBrake = Math.max(0, Math.min(1, rearRatio * 1.2));
     };
-    this.brakeScale = function (v, wheel) { return wheel.front ? self.frontBrake : self.rearBrake; };
+    // in a bend the front brake stands the bike up, so it is hardly used (a rider uses the rear brake): from 8 to 30 degrees of lean it goes to a tenth
+    this.brakeScale = function (v, wheel) {
+        if(!wheel.front) return self.rearBrake;
+        return self.frontBrake * (1 - 0.9 * smooth(8 * DEG, 30 * DEG, Math.abs(v.lean)));
+    };
 
     // ---- hook: the body of the bike does not touch the road in a lean (it is no crash until the bike is nearly on its side)
     this.keepBodyOff = function (v) { return Math.abs(v.lean) < 1.15; };
@@ -104,7 +113,7 @@ OpenRacer.Motorcycle = function (settings) {
         var state = leanOf(v), u = c.u;
         v.lean = state.lean;
         var m = v.mass, gh = m * G * v.cgHeight;
-        var kp = self.balance * 7 * gh, inertia = m * v.cgHeight * v.cgHeight + c.inertiaZ, kd = 1.5 * Math.sqrt(kp * inertia);
+        var kp = self.balance * 10 * gh, inertia = m * v.cgHeight * v.cgHeight + c.inertiaZ, kd = 1.5 * Math.sqrt(kp * inertia);
         var T = kp * (self.targetLean - state.lean) - kd * state.rate;                           // about the axis that leans it to the left
         var alive = 1 - Math.min(1, Math.max(0, (Math.abs(state.lean) - 1.15) / 0.25));         // past about 66 degrees the bike is going down: the rider lets go
         T = alive * Math.max(-6 * gh, Math.min(6 * gh, T));

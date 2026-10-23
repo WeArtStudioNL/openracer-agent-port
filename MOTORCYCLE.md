@@ -37,3 +37,4 @@ The sound is the combustion model of the game, with parameters. New presets in `
 * A wheelie and a stoppie are there (the springs and the weight transfer do them), but the rider does not catch them.
 * Crashes: after about 66 degrees the bike falls over and slides; the rider is not thrown off.
 * The suspension of the model (the fork that goes in) does not move; the physics does.
+* **Quick and braking in a bend.** `key_steer_rate` (2) is how much faster the keys bring the lean than the wheels of a car turn, `lean_response` (0.1 s) how fast the rider follows. In a bend the front brake is cut to a tenth (it stands the bike up) and the rear brake takes the bike deeper into it: `corner_brake` (0.2) more lean at full pedal.
