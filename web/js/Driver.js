@@ -569,31 +569,58 @@ OpenRacer.Driver = function (config, parent, steering) {
         list.forEach(function (f) { f.bone.quaternion.copy(f.rest).multiply(qf.setFromAxisAngle(f.axis, CURL_DEGREES * DEG_TO_RAD * (f.thumb ? 0.9 : curlAmount))); });
         chain[2].updateMatrixWorld(true);
         if (!leverPos) return;
-        // the root bone of every finger that is not the thumb (not the wrist: that goes with the grip) is turned so that the finger points at the lever
-        var target = self.parent.localToWorld(leverPos.clone()), from = new V(), to = new V(), p0 = new V(), p1 = new V();
-        list.forEach(function (f) {
-            if (f.thumb || f.depth !== 0) return;
-            var child = f.bone.children.filter(function (k) { return k.isBone; })[0];
-            if (!child) return;
-            f.bone.getWorldPosition(p0); child.getWorldPosition(p1);
-            from.copy(p1).sub(p0); to.copy(target).sub(p0);
-            if (from.lengthSq() < 1e-10 || to.lengthSq() < 1e-10) return;
-            qa.setFromUnitVectors(from.clone().normalize(), to.clone().normalize());
-            var angle = 2 * Math.acos(Math.min(1, Math.abs(qa.w)));
-            if (angle > 1.4) qa.slerp(qb.identity(), 1 - 1.4 / angle);                                              // at most 80 degrees
-            f.bone.getWorldQuaternion(qb);
-            qb.premultiply(qa);
-            if (f.bone.parent) { f.bone.parent.getWorldQuaternion(qp); qp.invert(); qb.premultiply(qp); }
-            f.bone.quaternion.copy(qb);
+        // The middle finger is the base: its root bone is turned about its local x axis (the axis that all the fingers close about, as at a grip) to the angle at which the finger points
+        // best at the lever, and that angle is added to the roots of all the other fingers, not the thumb: they do not all point at the one place, they close together
+        var roots = list.filter(function (f) { return !f.thumb && f.depth === 0; });
+        if (!roots.length) return;
+        var base = roots.filter(function (f) { return /middle|mid|f_?2|finger.?2/i.test(f.bone.name); })[0] || roots.slice().sort(function (x, y) { return x.bone.name < y.bone.name ? -1 : 1; })[Math.min(1, roots.length - 1)];
+        var child = base.bone.children.filter(function (k) { return k.isBone; })[0];
+        if (!child) return;
+        var target = self.parent.localToWorld(leverPos.clone()), p0 = new V(), p1 = new V(), want = new V();
+        var start = base.bone.quaternion.clone(), best = 0, bestAngle = 1e9;
+        for (var step = -14; step <= 14; step++) {
+            var theta = step * 0.1;
+            base.bone.quaternion.copy(start).multiply(qf.setFromAxisAngle(base.axis, theta));
+            base.bone.updateMatrixWorld(true);
+            base.bone.getWorldPosition(p0); child.getWorldPosition(p1);
+            want.copy(target).sub(p0);
+            var angle = p1.clone().sub(p0).angleTo(want);
+            if (angle < bestAngle) { bestAngle = angle; best = theta; }
+        }
+        base.bone.quaternion.copy(start);
+        roots.forEach(function (f) {
+            f.bone.quaternion.multiply(qf.setFromAxisAngle(f.axis, best));
             f.bone.updateMatrixWorld(true);
         });
     }
+
     // the offset of a hand from its grip (hands.offset.left / right, metres, in the frame of the grip)
     var offsetTmp = new V();
     function handOffset(side) {
         var o = self.config.hands.offset && self.config.hands.offset[side];
         return offsetTmp.set(o ? o[0] || 0 : 0, o ? o[1] || 0 : 0, o ? o[2] || 0 : 0);
     }
+    // the same for a foot: the pivot is the peg and an offset from it (feet.offset.left / right, in the frame of the peg)
+    var footTmp = new V();
+    function footOffset(side) {
+        var o = self.config.feet.offset && self.config.feet.offset[side];
+        return footTmp.set(o ? o[0] || 0 : 0, o ? o[1] || 0 : 0, o ? o[2] || 0 : 0);
+    }
+    this.footPivot = function (side, out) {
+        if (!self.isRider()) return null;
+        self.parent.updateMatrixWorld(true);
+        rider[side === "left" ? "pegL" : "pegR"].localToWorld(rw.copy(footOffset(side)));
+        return out.copy(self.parent.worldToLocal(rw));
+    };
+    this.setFootPivot = function (side, point) {
+        if (!self.isRider()) return false;
+        self.parent.updateMatrixWorld(true);
+        var peg = rider[side === "left" ? "pegL" : "pegR"], local = peg.worldToLocal(self.parent.localToWorld(point.clone()));
+        var r = function (v) { return Math.round(v * 1000) / 1000; };
+        if (!self.config.feet.offset) self.config.feet.offset = { left: [0, 0, 0], right: [0, 0, 0] };
+        self.config.feet.offset[side] = [r(local.x), r(local.y), r(local.z)];
+        return true;
+    };
     // for the car editor: is the driver a rider (the body has the grips and the pegs); the pivot of a hand in the space of the body (the grip and the offset), and a place in that space made
     // the offset of the hand (so that the hand of the editor sits on its grip, and what is moved away from it is the offset)
     this.isRider = function () { if (!riderTried) { riderTried = true; rider = findRider(); } return !!rider; };
@@ -661,7 +688,8 @@ OpenRacer.Driver = function (config, parent, steering) {
         // the feet on the pegs; the left foot is on the toe peg of the shift lever as far as the lever has moved
         [[legLeft, 1, "pegL"], [legLeft === "legL" ? "legR" : "legL", -1, "pegR"]].forEach(function (e) {
             var chain = self.bones[e[0]];
-            bodyPos(rider[e[2]], local);
+            rider[e[2]].localToWorld(rw.copy(footOffset(e[1] > 0 ? "left" : "right")));
+            self.parent.worldToLocal(local.copy(rw));
             if (e[2] === "pegL" && rider.shifter && riderRest.tip) { bodyPos2(rider.shifter, riderRest.tip, tmp); local.add(tmp.sub(riderRest.tipAt)); }
             self.parent.localToWorld(world.copy(local));
             chain[0].getWorldPosition(a);
@@ -791,6 +819,8 @@ OpenRacer.Driver.withDefaults = function (c) {
     var ho = (c && c.hands && c.hands.offset) || {};
     out.hands.offset = { left: (ho.left || [0, 0, 0]).slice(), right: (ho.right || [0, 0, 0]).slice() };                // (a rider: the pivot of the hand is its grip, and this is the offset from it)                                                        // how far the fingers are closed (0..1)
     out.feet = Object.assign({}, d.feet, (c && c.feet) || {});
+    var fo = (c && c.feet && c.feet.offset) || {};
+    out.feet.offset = { left: (fo.left || [0, 0, 0]).slice(), right: (fo.right || [0, 0, 0]).slice() };                // (a rider: the pivot of a foot is its peg, and this is the offset from it)
     out.bones = Object.assign({}, (c && c.bones) || {});
     out.poles = c && c.poles ? JSON.parse(JSON.stringify(c.poles)) : null;
     out.wheel = c && c.wheel ? JSON.parse(JSON.stringify(c.wheel)) : null;

@@ -264,6 +264,7 @@ export function initDriver(api) {
             const p = targets[key].position, v = [r(p.x), r(p.y), r(p.z)];
             if ((key === "handL" || key === "handR") && d.isRider()) d.setHandPivot(key === "handL" ? "left" : "right", p);       // (a rider: what is moved away from the grip is the offset)
             else if (key === "handL") cfg.hands.left = v; else if (key === "handR") cfg.hands.right = v;
+            else if ((key === "footL" || key === "footR") && d.isRider()) d.setFootPivot(key === "footL" ? "left" : "right", p);
             else if (key === "footL") cfg.feet.left = v; else if (key === "footR") cfg.feet.right = v;
         }
     }
@@ -340,7 +341,7 @@ export function initDriver(api) {
     function syncTargets() {
         const c = drv.driver.config;
         targets.handL.position.set(...c.hands.left); targets.handR.position.set(...c.hands.right);
-        if (drv.driver.isRider()) { drv.driver.handPivot("left", targets.handL.position); drv.driver.handPivot("right", targets.handR.position); }       // (a rider: the pivot of a hand is its grip, and the offset from it)
+        if (drv.driver.isRider()) { drv.driver.handPivot("left", targets.handL.position); drv.driver.handPivot("right", targets.handR.position); drv.driver.footPivot("left", targets.footL.position); drv.driver.footPivot("right", targets.footR.position); }       // (a rider: the pivot of a hand is its grip, and the offset from it)
         const k = Math.PI / 180;
         for (const [key, side] of [["handL", "left"], ["handR", "right"]]) { const q = c.hands.rotation[side]; targets[key].quaternion.setFromEuler(new THREE.Euler(q[0] * k, q[1] * k, q[2] * k, "XYZ")); }
         targets.footL.position.set(...c.feet.left); targets.footR.position.set(...c.feet.right);
@@ -458,6 +459,7 @@ export function initDriver(api) {
         d.update(dt || 0.016, drv.throttle, drv.brake);
         if (d.isRider()) {
             for (const [key, side] of [["handL", "left"], ["handR", "right"]]) { if (!(drv.dragging && drv.selected === key)) d.handPivot(side, targets[key].position); }
+            for (const [key, side] of [["footL", "left"], ["footR", "right"]]) { if (!(drv.dragging && drv.selected === key)) d.footPivot(side, targets[key].position); }
         } else if (d.keysActive()) {
             for (const [key, side] of [["handL", "left"], ["handR", "right"]]) {
                 if (drv.dragging && drv.selected === key) continue;
@@ -489,7 +491,7 @@ export function initDriver(api) {
         if (drv.driver.bones.chest && drv.driver.bones.chest[0]) bones.chest = drv.driver.bones.chest[0].name;
         if (drv.driver.bones.head) bones.head = drv.driver.bones.head.name;
         return { enabled: true, file: "", position: c.position.slice(), rotation: c.rotation.slice(), scale: c.scale, bones, hands: { left: c.hands.left.slice(), right: c.hands.right.slice(), rotation: { left: c.hands.rotation.left.slice(), right: c.hands.rotation.right.slice() }, grip: { left: c.hands.grip.left, right: c.hands.grip.right }, offset: c.hands.offset ? { left: c.hands.offset.left.slice(), right: c.hands.offset.right.slice() } : undefined }, grip_curl: c.grip_curl, keys: c.keys ? JSON.parse(JSON.stringify(c.keys)) : undefined,
-            feet: { left: c.feet.left.slice(), right: c.feet.right.slice(), travel: c.feet.travel, direction: c.feet.direction.slice() }, elbow_out: c.elbow_out, knee_out: c.knee_out,
+            feet: { left: c.feet.left.slice(), right: c.feet.right.slice(), travel: c.feet.travel, direction: c.feet.direction.slice(), offset: c.feet.offset ? { left: c.feet.offset.left.slice(), right: c.feet.offset.right.slice() } : undefined }, elbow_out: c.elbow_out, knee_out: c.knee_out,
             wheel: c.wheel ? JSON.parse(JSON.stringify(c.wheel)) : undefined, pivot: c.pivot, chest: { rotation: c.chest.rotation.slice() }, head: { rotation: c.head.rotation.slice() }, poles: c.poles ? JSON.parse(JSON.stringify(c.poles)) : undefined };
     }
     function newFile() { return drv.file; }
