@@ -390,6 +390,16 @@ var MainMenu = (function() {
                     records.forEach(function(record) {
                         var row = document.createElement("div");
                         row.className = "row";
+                        // a car: its little picture (the one of the menu), from the catalogue that has the car with its files
+                        var carOfRecord = kind === "cars" ? cars.filter(function(c) { return c.id === record.id; })[0] : null;
+                        if(carOfRecord) {
+                            var thumb = document.createElement("img");
+                            thumb.alt = "";
+                            thumb.draggable = false;
+                            thumb.style.cssText = "width: 84px; height: 56px; object-fit: contain; flex: none; border-radius: 6px; background: radial-gradient(circle at 50% 60%, #3a3f47 0%, #1b1f25 60%, #0d0f12 100%);";
+                            row.appendChild(thumb);
+                            previews.request(carOfRecord, thumb);
+                        }
                         var name = document.createElement("div");
                         name.className = "name";
                         var files = Object.keys(record.files || {});
@@ -1054,6 +1064,7 @@ var MainMenu = (function() {
             page.appendChild(message);
         }
         if(screen === "home") {
+            page.style.display = "flex";      // the home screen in the middle of the page, both ways
             home(page);
             return;
         }
