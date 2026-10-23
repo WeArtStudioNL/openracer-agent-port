@@ -5,7 +5,7 @@
  *              car for what is not in the configuration. Used by the game and by the car editor.
  *
  *   follow:  the camera behind the car that turns smoothly with the direction of the car (camera 1): distance, height above the road,
- *            look_height (the height above the road that it looks at), smoothing (how fast it follows, per second),
+ *            look_height (the height above the road that it looks at), look_z (how far ahead of the middle of the car it looks, 0; negative: behind it), smoothing (how fast it follows, per second),
  *            fov_standing and fov_fast (the field of view at a standstill and at fov_full_speed in m/s: the faster, the wider), and
  *            dolly (0 to 1): the camera comes closer in the measure that the field of view widens, so that the car keeps its size in
  *            the picture and only the sense of speed changes (1); 0 leaves the camera where it is. The distance and the height are those at a standstill.
@@ -20,7 +20,7 @@ OpenRacer.cameraSettings = function (config) {
     var round = function (v, n) { var f = Math.pow(10, n); return Math.round(v * f) / f; };
     var given = config.cameras || {};
     var defaults = {
-        follow: { distance: round(d.length * 1.55, 1), height: round(d.height * 1.6, 2), look_height: round(d.height * 0.6, 2),
+        follow: { distance: round(d.length * 1.55, 1), height: round(d.height * 1.6, 2), look_height: round(d.height * 0.6, 2), look_z: 0,
             smoothing: 3.5, fov_standing: 45, fov_fast: 75, fov_full_speed: 70, dolly: 1 },
         cockpit: { position: [round(d.width * 0.2, 2), round(d.height * 0.8 - r, 2), round(d.length * 0.05, 2)], fov: 75 }
     };

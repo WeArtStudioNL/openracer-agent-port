@@ -429,6 +429,7 @@ OpenRacer.Car = function( config, domElement ) {
 
     this.cameraSubject = null;      // the car that the camera follows when it is not this one (a replay: Replay.js)
     var lastSubject = null;
+    var lookDir = new THREE.Vector3();
     this.cameraOverride = null;     // a function that places the camera itself (the fly-by over the grid, main.js); true when it did
     this.updateCamera = function(delta, cx, cz, avgGround, yaw, bodyQ, subject) {
         if(this.cameraOverride && this.cameraOverride(delta)) return;
@@ -467,10 +468,12 @@ OpenRacer.Car = function( config, domElement ) {
             var scale = 1 + f.dolly * (Math.tan(f.fov_standing * Math.PI / 360) / Math.tan(cameraFov * Math.PI / 360) - 1);
             camera.position.set(cx, avgGround + radius, cz);
             camera.rotation.set(0, followYaw + Math.PI + this.cameraAngle, 0);
+            var lookZ = f.look_z || 0;                      // the point that it looks at, ahead of the middle of the car (or behind it: negative)
+            camera.getWorldDirection(lookDir);
             camera.translateZ(f.distance * scale);
             camera.position.y = avgGround + f.look_height + (f.height - f.look_height) * scale;
             keepCameraInView(subject, delta);
-            camera.lookAt(cx, avgGround + f.look_height, cz);
+            camera.lookAt(cx + lookDir.x * lookZ, avgGround + f.look_height, cz + lookDir.z * lookZ);
             if(this.vehicle.controller) this.vehicle.controller.cameraRoll(camera, this.vehicle, delta);      // (a motorcycle: the picture leans with the bike)
             setLens(cameraFov, 1);
             return;
