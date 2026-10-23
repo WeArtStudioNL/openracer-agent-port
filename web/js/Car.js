@@ -801,7 +801,8 @@ OpenRacer.Car = function( config, domElement ) {
         heldReverse = reverseKey;
         if(bike) {
             this.reverse = false;
-            if(reverseKey || (this.gearboxMode === "automatic" && this.selector === "R")) this.pushBack = true;
+            if(this.gearboxMode === "automatic" && this.selector === "R") this.pushBack = true;      // (the reverse key of a car is > for the rider of a bike)
+            this.vehicle.controller.riderKey = (Settings.isDown("riderForward") ? 1 : 0) - (Settings.isDown("riderBack") ? 1 : 0);
             this.vehicle.controller.pushing = this.pushBack;
         }
     };

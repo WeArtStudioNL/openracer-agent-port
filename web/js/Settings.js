@@ -58,6 +58,8 @@ var Settings = (function() {
         { id: "clutch", wheelOnly: true, group: "Driving", label: "Clutch", wheel: { profile: "clutch", steps: ["clutch"] }, defaults: [] },
         { id: "handbrake", group: "Driving", label: "Handbrake", defaults: [key("Space"), padButton(0)] },
         { id: "reverse", group: "Driving", label: "Reverse (hold)", defaults: [key("Period")] },
+        { id: "riderBack", group: "Driving", label: "Motorcycle: rider back, < (hold)", defaults: [key("Comma")] },
+        { id: "riderForward", group: "Driving", label: "Motorcycle: rider forward, > (hold)", defaults: [key("Period")] },
         { id: "twoStep", group: "Driving", label: "Two-step: hold the engine at the two-step speed at a standstill (hold; works with the option off too)", defaults: [key("KeyQ")] },
         { id: "transbrake", group: "Driving", label: "Transbrake: hold the car with the engine free, let go to launch (hold)", defaults: [key("KeyF")] },
         { id: "gearboxMode", group: "Gearbox", label: "Gearbox mode", defaults: [key("KeyG")] },

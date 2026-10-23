@@ -44,6 +44,7 @@ OpenRacer.Motorcycle = function (settings) {
     this.maxHang = s.hang_off !== undefined ? s.hang_off : 0.3;                    // m: how far the rider hangs off the seat to the inside of a bend
     this.posture = { lat: 0, long: 0, drop: 0, tuck: 0, sit: 0, knee: 0 };       // body space: lat to the left, long forward, drop up (m); tuck, sit, knee: 0 to 1
     var vPrev = null, accel = { x: 0, y: 0, z: 0 }, dw = { x: 0, y: 0, z: 0 };
+    this.riderKey = 0;                                      // -1: the rider is put back, 1: forward (keys, set by Car.js)
     this.pushing = false;                                   // the rider walks the bike back (set by Car.js)
     this.command = 0;                                      // the lean that is asked (-1..1)
     this.targetLean = 0;                                   // what the rider takes (rad, left is positive)
@@ -63,12 +64,38 @@ OpenRacer.Motorcycle = function (settings) {
     }
     var up = { x: 0, y: 0, z: 0 }, fwd = { x: 0, y: 0, z: 0 };
 
-    // The lean of the bike to the left (rad), and how fast it falls to the left, from its pose
-    function leanOf(v) {
+    // The road under the bike: the mean of the normals of the wheels that touch it (by their load), smoothed. A bike on a bank or over a crest is kept square to the road, not to the sky:
+    // a bike that is upright on a bank slides down it.
+    var road = { x: 0, y: 1, z: 0 }, roadAt = -1;
+    function roadOf(v, dt) {
+        if (!dt) return road;                                   // (once for every step of the physics: the other callers take what there is)
+        var sx = 0, sy = 0, sz = 0, sw = 0;
+        for (var i = 0; i < 4; i++) {
+            var w = v.wheels[i];
+            if (w.hasContact && w.normal && w.weight > 0) { sx += w.normal.nx * w.weight; sy += w.normal.ny * w.weight; sz += w.normal.nz * w.weight; sw += w.weight; }
+        }
+        if (sw > 0) {
+            var l = Math.sqrt(sx * sx + sy * sy + sz * sz) || 1, k = Math.min(1, (dt || 0.016) / 0.15);
+            road.x += (sx / l - road.x) * k; road.y += (sy / l - road.y) * k; road.z += (sz / l - road.z) * k;
+        } else {
+            var k2 = Math.min(1, (dt || 0.016) / 0.3);                     // in the air it goes back to the sky
+            road.x -= road.x * k2; road.y += (1 - road.y) * k2; road.z -= road.z * k2;
+        }
+        var n = Math.sqrt(road.x * road.x + road.y * road.y + road.z * road.z) || 1;
+        road.x /= n; road.y /= n; road.z /= n;
+        return road;
+    }
+
+    // The lean of the bike to the left (rad) from the road, and how fast it falls to the left, from its pose
+    function leanOf(v, dt) {
         rotate(v, 0, 1, 0, up);
         rotate(v, 0, 0, 1, fwd);
         var fl = Math.sqrt(fwd.x * fwd.x + fwd.z * fwd.z) || 1, fx = fwd.x / fl, fz = fwd.z / fl;
-        return { lean: Math.atan2(up.x * fz - up.z * fx, up.y), rate: -(v.wx * fx + v.wz * fz), fx: fx, fz: fz };
+        var n = roadOf(v, dt);
+        // the left of the bike along the road: n x forward
+        var lx = n.y * fwd.z - n.z * fwd.y, ly = n.z * fwd.x - n.x * fwd.z, lz = n.x * fwd.y - n.y * fwd.x, ll = Math.sqrt(lx * lx + ly * ly + lz * lz) || 1;
+        lx /= ll; ly /= ll; lz /= ll;
+        return { lean: Math.atan2(up.x * lx + up.y * ly + up.z * lz, up.x * n.x + up.y * n.y + up.z * n.z), rate: -(v.wx * fx + v.wz * fz), fx: fx, fz: fz };
     }
 
     // ---- hook: the angle of the front wheel (right is positive), from what the input asks for. delta: what the input gave (the angle of the wheel or the lock that is turned).
@@ -76,7 +103,7 @@ OpenRacer.Motorcycle = function (settings) {
         var inp = v.input, lock = inp.turnLimit || inp.maxTurn || 0.38;
         var c = Math.max(-1, Math.min(1, delta / lock));          // the lean command: left is negative, as the steering of a car
         self.command = c;
-        var state = leanOf(v);
+        var state = leanOf(v, 0);
         var fast = smooth(1.5, 4.5, Math.abs(u));                  // at a walking pace the rider holds it up with a foot
         // the lean that the command asks for, less at a walking pace (a bend of that lean needs a speed: tan(lean) = u^2 tan(steering lock) / (L g)), and stood up a little by the throttle
         var cap = Math.atan(u * u * Math.tan(lock) / (v.wheelbase * G));
@@ -114,7 +141,9 @@ OpenRacer.Motorcycle = function (settings) {
         // the front brake is let off as the rear wheel is nearly free of the road (it keeps a few percent of its load: the limit of the front brake), the rear brake goes with the load of the rear wheel
         var target = Math.max(0, Math.min(1, (rearRatio - 0.015) / 0.07));
         self.frontBrake += (target - self.frontBrake) * Math.min(1, dt / (target < self.frontBrake ? 0.02 : 0.1));
-        self.rearBrake = Math.max(0, Math.min(1, rearRatio * 1.2));
+        // (after a crest the rear wheel comes down hard and it spins faster than the road: the rear brake comes back slowly, so that it does not lock and slide)
+        var rearTarget = Math.max(0, Math.min(1, rearRatio * 1.2));
+        self.rearBrake = rearTarget > self.rearBrake ? Math.min(rearTarget, self.rearBrake + dt / 0.3) : rearTarget;
     };
     // in a bend the front brake stands the bike up, so it is hardly used (a rider uses the rear brake): from 8 to 30 degrees of lean it goes to a tenth
     this.brakeScale = function (v, wheel) {
@@ -127,7 +156,7 @@ OpenRacer.Motorcycle = function (settings) {
 
     // ---- hook: the rider and the tyres; the forces and the torques of the physics are added to
     this.apply = function (v, force, torque, dt, c) {
-        var state = leanOf(v), u = c.u;
+        var state = leanOf(v, dt), u = c.u;
         v.lean = state.lean;
         self.rider(v, torque, dt, u, state);
         var m = v.mass, gh = m * G * v.cgHeight;
@@ -138,9 +167,16 @@ OpenRacer.Motorcycle = function (settings) {
         torque.x -= state.fx * T; torque.z -= state.fz * T;
         // the yaw that the steering did not ask for is damped
         var fast = smooth(1.5, 4.5, Math.abs(u));
+        // the front wheel in the air (a wheelie): it does not steer, the lean does. A bike that leans turns at g tan(lean) / u, and the rider takes it round at that rate
+        var frontLoad = ((v.wheels[0].weight || 0) + (v.wheels[1].weight || 0)) / Math.max(1, v.weight_distribution * v.mass * G);
+        var lift = 1 - smooth(0.05, 0.5, frontLoad);
         if (Math.abs(u) > 3) {
             var yawErr = c.r - u * c.delta / v.wheelbase;
-            torque.y += Math.max(-1800, Math.min(1800, self.balance * (c.inertiaY / 0.12) * yawErr * fast));
+            torque.y += (1 - lift) * Math.max(-1800, Math.min(1800, self.balance * (c.inertiaY / 0.12) * yawErr * fast));
+        }
+        if (lift > 0.001 && Math.abs(u) > 2) {
+            var rLean = -G * Math.tan(Math.max(-1.2, Math.min(1.2, state.lean))) / Math.max(Math.abs(u), 4);
+            torque.y += lift * Math.max(-1500, Math.min(1500, c.inertiaY * 6 * (c.r - rLean)));
         }
         // no reverse gear: the rider walks the bike back (Car.js says when), slowly, with a small force
         if(self.pushing) {
@@ -164,6 +200,7 @@ OpenRacer.Motorcycle = function (settings) {
         var p = self.posture, i = inputOf(v), fwdSpeed = Math.max(0, u);
         // the targets: sits back and up on the brake, flat and forward on the throttle at speed, off the seat to the inside of a bend
         var tuck = i.thr * smooth(12, 35, fwdSpeed) * (1 - i.brk), sit = i.brk * smooth(4, 20, fwdSpeed);
+        if(self.riderKey) { tuck = self.riderKey > 0 ? 1 : 0; sit = self.riderKey < 0 ? 1 : 0; }      // the keys < and > put the rider back or forward
         var bendT = smooth(8 * DEG, 40 * DEG, Math.abs(self.targetLean)) * smooth(5, 12, Math.abs(u));
         var hang = Math.sign(self.targetLean) * bendT;
         var k = function (t) { return Math.min(1, dt / t); };
