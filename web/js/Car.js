@@ -172,6 +172,7 @@ OpenRacer.Car = function( config, domElement ) {
         tobj.bodyLift = model.bodyLift;
         tobj.steeringWheel = model.steeringWheel || null;
         tobj.rig = model.rig || null; // the moving parts of the suspension and the steering of the model, when it has them
+        tobj.head = model.head || null;   // the front end of a motorcycle that stays and turns (CarLoader.js)
         tobj.followModelWheels(model.measured);
         tobj.body.add(model.tilt);
         scene.add(tobj.body);
@@ -311,6 +312,7 @@ OpenRacer.Car = function( config, domElement ) {
                 wheel.object.quaternion.copy(this.body.quaternion);
                 wheel.turn(i < 2 ? this.vehicle.steerApplied : 0);
                 wheel.object.children[0].children[0].rotation.x = wheel.spin;
+                if(this.head && i === 1) OpenRacer.updateFork(this.head, wheel, this.body, this.vehicle.steerApplied);
             }
         }
         if(this.rig) this.rig.update(this.vehicle);

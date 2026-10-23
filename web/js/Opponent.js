@@ -92,6 +92,7 @@ OpenRacer.Opponent = function (config, line, options) {
         scene.add(self.body);
         self.steeringWheel = model.steeringWheel || null;
         self.rig = model.rig || null;
+        self.head = model.head || null;
         for (var i = 0; i < 4; i++) {
             self.wheels[i].object = model.wheels[i];
             scene.add(model.wheels[i]);
@@ -304,6 +305,7 @@ OpenRacer.Opponent = function (config, line, options) {
             wheel.object.quaternion.copy(this.body.quaternion);
             wheel.turn(i < 2 ? v.steerApplied : 0);
             wheel.object.children[0].children[0].rotation.x = wheel.spin;
+            if (this.head && i === 1) OpenRacer.updateFork(this.head, wheel, this.body, v.steerApplied);
         }
         if (this.rig) this.rig.update(v);
         if(this.softBodyMesh) this.softBodyMesh.update();

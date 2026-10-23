@@ -72,7 +72,8 @@
   "max_lean_deg": 52,
   "balance": 1.0,
   "rider_mass": 75,
-  "max_lateral_g": 0.9
+  "max_lateral_g": 0.9,
+  "rake_deg": 24.5
  },
  "drivetrain": {
   "drive": "rwd",

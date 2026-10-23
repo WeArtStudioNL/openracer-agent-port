@@ -219,7 +219,28 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
             defaultWheels(config.wheels && config.wheels.default_model, finish);
         }
 
+        // The front end of a motorcycle that stays and turns: the parts called steerhead_... (the cylinders of the fork, the triple clamp, the handlebar). They hang on the
+        // body (they do not go with the wheel), and turn with the steering about the axis of the fork, which goes through the middle of the front wheel (config.motorcycle.rake_deg).
+        function makeHead() {
+            if(config.type !== "motorcycle" || !measured || !measured.centres.FL) return null;
+            var parts = [];
+            root.traverse(function(child) { if(String(child.name || "").toLowerCase().replace(/[^a-z0-9]/g, "").indexOf("steerhead") === 0) parts.push(child); });
+            parts = parts.filter(function(part) { return !parts.some(function(other) { return other !== part && isInside(part, other); }); });
+            if(!parts.length) return null;
+            var object = new THREE.Object3D();
+            object.name = "steerhead";
+            object.position.copy(measured.centres.FL);
+            space.add(object);
+            object.updateMatrixWorld(true);
+            parts.forEach(function(part) { object.attach(part); });
+            space.remove(object);
+            var rake = ((config.motorcycle && config.motorcycle.rake_deg) || 24.5) * Math.PI / 180;
+            return { object: object, axis: new THREE.Vector3(0, Math.cos(rake), -Math.sin(rake)), rake: rake };
+        }
+
         function finish(wheelObjects) {
+            var head = makeHead();
+            if(head) tilt.add(head.object);
             if(steering) tilt.add(steering.object);
             tilt.add(pivot);
             // the moving parts of the suspension and the steering, when the model has them (SuspensionRig.js)
@@ -240,7 +261,7 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
             });
             // the changes to the materials that were made in the car editor
             OpenRacer.applyMaterialOverrides(THREE, [tilt].concat(wheelObjects), config.materials);
-            onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1, steeringWheel: steering, measured: measured, rig: rig });
+            onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1, steeringWheel: steering, measured: measured, rig: rig, head: head });
         }
     }
 
@@ -361,4 +382,18 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
         try { build(loadedRoot.clone(true)); } catch(e) { console.error(e); onError("Could not use the model (" + e + ")"); }
     } else if(model.type === "gltf") gltf();
     else legacy();
+};
+
+// The front end of a motorcycle each frame: the head (the cylinders, the clamp, the handlebar) turns with the steering about the axis of the fork, the front wheel (with the
+// leg, the brake caliper and the mudguard that hang on it) turns about it too and goes along it with the springs (the physics lets the wheel go straight up and down; the
+// fork goes along its rake, so the wheel moves back a little as it goes up). front: the front wheel (Wheel.js), body: the object of the body, steer: the angle of the front wheel.
+OpenRacer.updateFork = function(head, front, body, steer) {
+    if(!head || !front || !front.object) return;
+    head.object.quaternion.setFromAxisAngle(head.axis, -steer);
+    front.object.children[0].quaternion.setFromAxisAngle(head.axis, -steer - (front.toeBend || 0));
+    var compression = (front.restLengthWheel || 0) - (front.susLength || 0);
+    var back = -compression * Math.tan(head.rake);
+    OpenRacer.updateFork.forward = OpenRacer.updateFork.forward || new THREE.Vector3();
+    OpenRacer.updateFork.forward.set(0, 0, 1).applyQuaternion(body.quaternion).multiplyScalar(back);
+    front.object.position.add(OpenRacer.updateFork.forward);
 };

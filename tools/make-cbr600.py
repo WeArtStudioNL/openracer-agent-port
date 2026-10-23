@@ -140,11 +140,13 @@ def mirrored(function, *args):
 for name, z, outer, width in (("FL", FRONT, 0.300, 0.125), ("RL", REAR, 0.310, 0.18)):
     part("wheel_" + name, (0, 0, z), tyre(outer, width, 0.216), "tyre")
     part("wheel_" + name + "_rim", (0, 0, z), merge(g.cylinder_x(0.222, width * 0.82), spokes(0.222, width * 0.9)), "rim")
-    discs = merge(*[g.cylinder_x(0.155 if name == "FL" else 0.11, 0.008) for _ in (0,)])
+    def disc(radius, x):
+        p, n, i = g.cylinder_x(radius, 0.008)
+        return [v + (x if k % 3 == 0 else 0) for k, v in enumerate(p)], n, i
     if name == "FL":
-        part("wheel_" + name + "_disc", (0, 0, z), merge(*[box((0.008, 0.31, 0.31), (s * 0.075, 0, 0)) for s in (1, -1)]), "disc")
+        part("wheel_" + name + "_disc", (0, 0, z), merge(disc(0.155, 0.075), disc(0.155, -0.075)), "disc")
     else:
-        part("wheel_" + name + "_disc", (0, 0, z), box((0.008, 0.22, 0.22), (0.075, 0, 0)), "disc")
+        part("wheel_" + name + "_disc", (0, 0, z), disc(0.11, 0.075), "disc")
 # the other two wheels of the physics: a millimetre, in the middle of the wheel
 part("wheel_FR", (0, 0, FRONT), box((0.002, 0.002, 0.002)), "black")
 part("wheel_RR", (0, 0, REAR), box((0.002, 0.002, 0.002)), "black")
@@ -156,19 +158,37 @@ top = (axle[0], axle[1] + 0.62 * math.cos(rake), axle[2] - 0.62 * math.sin(rake)
 mid = (axle[0], axle[1] + 0.32 * math.cos(rake), axle[2] - 0.32 * math.sin(rake))
 
 
-def fork_tubes():
+# The fork is two parts. The cylinder (the upper tube, black) hangs on the steering head and stays where it is, it only turns with the steering; the leg (the lower
+# leg, gold) goes with the wheel: it slides into the cylinder and out of it, in line with it, with the wheel, the disc, the brake caliper and the mudguard.
+# The clamp (the triple clamp) and the handlebar stay where they are and only turn. The parts that stay and turn are called steerhead_..., the ones that go
+# with the wheel and turn are called brake_..._FL (the loader hangs the parts of a brake caliper on the steering of the front wheel).
+def along(l):
+    return (axle[0], axle[1] + l * math.cos(rake), axle[2] - l * math.sin(rake))
+
+
+def cylinder_tubes():
     out = []
     for s in (1, -1):
-        out.append(tube((s * 0.095, axle[1], axle[2]), (s * 0.095, top[1], top[2]), 0.05))     # the lower leg (gold) and the upper tube
-        out.append(tube((s * 0.095, mid[1], mid[2]), (s * 0.095, top[1] + 0.02, top[2] - 0.01), 0.058))
+        a, b = along(0.30), along(0.64)
+        out.append(tube((s * 0.095, a[1], a[2]), (s * 0.095, b[1], b[2]), 0.058))
     return merge(*out)
 
 
-part("brake_fork_FL", (0, 0, 0), fork_tubes(), "gold")
-part("brake_clamp_FL", (0, 0, 0), merge(box((0.24, 0.05, 0.08), (0, top[1] - 0.02, top[2] + 0.0)), box((0.24, 0.045, 0.08), (0, mid[1] + 0.12, mid[2] - 0.08))), "alu")
+def leg_tubes():
+    out = []
+    for s in (1, -1):
+        a, b = along(0.0), along(0.36)
+        out.append(tube((s * 0.095, a[1], a[2]), (s * 0.095, b[1], b[2]), 0.044))
+    return merge(*out)
+
+
+part("steerhead_cylinder", (0, 0, 0), cylinder_tubes(), "black")
+part("brake_fork_leg_FL", (0, 0, 0), leg_tubes(), "gold")
+clamp_top, clamp_low = along(0.60), along(0.40)
+part("steerhead_clamp", (0, 0, 0), merge(box((0.24, 0.05, 0.08), (0, clamp_top[1], clamp_top[2])), box((0.24, 0.045, 0.08), (0, clamp_low[1], clamp_low[2]))), "alu")
 handle = merge(*[tube((s * 0.07, top[1] + 0.03, top[2] - 0.0), (s * 0.30, top[1] + 0.07, top[2] - 0.10), 0.03) for s in (1, -1)],
                *[tube((s * 0.30, top[1] + 0.07, top[2] - 0.10), (s * 0.32, top[1] + 0.05, top[2] - 0.17), 0.04) for s in (1, -1)])
-part("brake_handlebar_FL", (0, 0, 0), handle, "black")
+part("steerhead_handlebar", (0, 0, 0), handle, "black")
 part("brake_mudguard_FL", (0, 0, 0), merge(*[box((0.02, 0.03, 0.30), (s * 0.12, 0.33, FRONT - 0.02)) for s in (1, -1)], box((0.17, 0.018, 0.30), (0, 0.352, FRONT - 0.02))), "paint")
 part("brake_caliper_FL", (0, 0, 0), merge(*[box((0.03, 0.09, 0.07), (s * 0.095, -0.12, FRONT + 0.08)) for s in (1, -1)]), "gold")
 
@@ -240,7 +260,7 @@ if not os.path.exists(CAR):
             "downforce_front": 0, "downforce_rear": 0, "ackermann": 0, "ride_front": 0, "ride_rear": 0,
             "roll_center_front": 0.3, "roll_center_rear": 0.3, "toe_front": 0, "toe_rear": 0, "camber_front": 0, "camber_rear": 0, "roll_camber": 0
         },
-        "motorcycle": {"max_lean_deg": 52, "balance": 1.0, "rider_mass": 75, "max_lateral_g": 0.9},
+        "motorcycle": {"rake_deg": 24.5, "max_lean_deg": 52, "balance": 1.0, "rider_mass": 75, "max_lateral_g": 0.9},
         "drivetrain": {
             "drive": "rwd", "diff": "welded", "diff_preload": 0, "diff_power": 0, "diff_coast": 0, "center_diff": "lsd", "center_split": 0.4,
             "gear_ratios": [2.75, 2.0, 1.667, 1.444, 1.304, 1.208], "reverse_ratio": 3.0, "final_drive": 6.03, "efficiency": 0.93, "shift_time": 0.12,
