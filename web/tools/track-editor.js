@@ -1420,7 +1420,7 @@ function startDialog() {
         box.appendChild(note);
         const choice = (label, hint, action) => {
             const b = document.createElement("button");
-            b.className = "accent";
+            b.className = "";
             b.style.cssText = "display: block; width: 100%; text-align: left; margin-bottom: 8px; padding: 10px 14px; height: auto;";
             b.innerHTML = "<b></b><div style='font-weight: normal; font-size: 12.5px; opacity: 0.8; margin-top: 2px'></div>";
             b.firstChild.textContent = label; b.lastChild.textContent = hint;

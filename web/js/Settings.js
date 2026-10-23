@@ -381,35 +381,35 @@ var Settings = (function() {
     function addStyle() {
         var style = document.createElement("style");
         style.textContent =
-            "#settingsMenu { position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 2000; background: rgba(0, 0, 0, 0.72); " +
-            "color: #fff; font-family: Arial, sans-serif; font-size: 15px; overflow-y: auto; }" +
-            "#settingsMenu .panel { max-width: 820px; margin: 30px auto; padding: 22px 28px; background: #1c1f24; border-radius: 8px; }" +
+            "#settingsMenu { position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 3500; background: rgba(0, 0, 0, 0.72); " +
+            "color: var(--text); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 15px; overflow-y: auto; }" +
+            "#settingsMenu .panel { max-width: 820px; margin: 30px auto; padding: 22px 28px; background: var(--panel); border-radius: 8px; }" +
             "#settingsMenu h1 { margin: 0 0 4px 0; font-size: 26px; }" +
-            "#settingsMenu h2 { margin: 24px 0 8px 0; font-size: 17px; color: #9ab; text-transform: uppercase; letter-spacing: 1px; }" +
-            "#settingsMenu .sub { color: #889; margin-bottom: 14px; }" +
-            "#settingsMenu .row { display: flex; align-items: center; padding: 5px 0; border-bottom: 1px solid #2c3036; min-height: 34px; }" +
+            "#settingsMenu h2 { margin: 24px 0 8px 0; font-size: 17px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }" +
+            "#settingsMenu .sub { color: var(--muted); margin-bottom: 14px; }" +
+            "#settingsMenu .row { display: flex; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); min-height: 34px; }" +
             "#settingsMenu .label { width: 210px; flex: none; }" +
             "#settingsMenu .inputs { flex: 1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }" +
-            "#settingsMenu .chip { display: inline-flex; align-items: center; background: #2d333b; border-radius: 4px; padding: 2px 4px 2px 8px; gap: 4px; }" +
+            "#settingsMenu .chip { display: inline-flex; align-items: center; background: var(--line); border-radius: 4px; padding: 2px 4px 2px 8px; gap: 4px; }" +
             "#settingsMenu .chip.wheel { background: #3a3326; }" +
             "#settingsMenu .chip.waiting { background: #7a5a00; }" +
             "#settingsMenu .dev { opacity: 0.55; font-size: 11px; text-transform: uppercase; }" +
-            "#settingsMenu button { background: #3b424c; color: #fff; border: 0; border-radius: 3px; cursor: pointer; font-size: 14px; padding: 3px 7px; }" +
-            "#settingsMenu button:hover { background: #566070; }" +
+            "#settingsMenu button { background: var(--line); color: #fff; border: 0; border-radius: 3px; cursor: pointer; font-size: 14px; padding: 3px 7px; }" +
+            "#settingsMenu button:hover { background: #343c47; }" +
             "#settingsMenu .chip button { background: transparent; padding: 2px 5px; }" +
-            "#settingsMenu .chip button:hover { background: #566070; }" +
+            "#settingsMenu .chip button:hover { background: #343c47; }" +
             "#settingsMenu .add { padding: 3px 10px; }" +
             "#settingsMenu .top { display: flex; justify-content: space-between; align-items: flex-start; }" +
-            "#settingsMenu .version { text-align: right; color: #667; font-size: 12px; margin-top: 18px; }" +
-            "#settingsMenu .tabs { display: flex; gap: 4px; margin: 18px 0 6px; border-bottom: 1px solid #2c3036; }" +
-            "#settingsMenu .tab { background: transparent; color: #9ab; padding: 8px 14px; border-radius: 6px 6px 0 0; font-size: 15px; }" +
-            "#settingsMenu .tab:hover { background: #262b33; color: #fff; }" +
-            "#settingsMenu .tab.active { background: #2d333b; color: #fff; }" +
+            "#settingsMenu .version { text-align: right; color: var(--muted); font-size: 12px; margin-top: 18px; }" +
+            "#settingsMenu .tabs { display: flex; gap: 4px; margin: 18px 0 6px; border-bottom: 1px solid var(--line); }" +
+            "#settingsMenu .tab { background: transparent; color: var(--muted); padding: 8px 14px; border-radius: 6px 6px 0 0; font-size: 15px; }" +
+            "#settingsMenu .tab:hover { background: var(--bg2); color: #fff; }" +
+            "#settingsMenu .tab.active { background: var(--bg2); color: var(--head); box-shadow: inset 0 -2px var(--accent); }" +
             "#settingsMenu .page h2:first-child { margin-top: 10px; }" +
-            "#settingsMenu .big { font-size: 16px; padding: 8px 18px; background: #2e7d46; }" +
-            "#settingsMenu .big:hover { background: #3a9a58; }" +
-            "#settingsMenu .none { color: #667; font-style: italic; }" +
-            "#settingsMenu .hint { color: #e0b040; margin: 8px 0 0 0; min-height: 18px; }" +
+            "#settingsMenu .big { font-size: 16px; padding: 8px 18px; background: var(--accent); }" +
+            "#settingsMenu .big:hover { background: var(--accent); }" +
+            "#settingsMenu .none { color: var(--muted); font-style: italic; }" +
+            "#settingsMenu .hint { color: var(--accent2); margin: 8px 0 0 0; min-height: 18px; }" +
             "#settingsMenu .toggle { min-width: 110px; }";
         document.head.appendChild(style);
     }
@@ -591,7 +591,7 @@ var Settings = (function() {
         input.value = options[name];
         input.style.cssText = "width: 160px; vertical-align: middle;";
         var value = document.createElement("span");
-        value.style.cssText = "display: inline-block; min-width: 150px; margin-left: 10px; color: #cfd8e3;";
+        value.style.cssText = "display: inline-block; min-width: 150px; margin-left: 10px; color: var(--head);";
         value.textContent = text(options[name]);
         input.oninput = function() { setOption(name, parseFloat(input.value)); value.textContent = text(options[name]); };
         inputs.appendChild(input);
@@ -618,7 +618,7 @@ var Settings = (function() {
         inputs.appendChild(box);
         if(note) {
             var span = document.createElement("span");
-            span.style.cssText = "margin-left: 10px; color: #9fb0c4; font-size: 13px;";
+            span.style.cssText = "margin-left: 10px; color: var(--muted); font-size: 13px;";
             span.textContent = note;
             inputs.appendChild(span);
         }
@@ -656,7 +656,7 @@ var Settings = (function() {
             var small = function(text, title, action, off) {
                 var b = document.createElement("button");
                 b.className = "big";
-                b.style.cssText = "font-size: 13px; padding: 5px 10px; background: #3b424c;" + (off ? " opacity: 0.45;" : "");
+                b.style.cssText = "font-size: 13px; padding: 5px 10px; background: var(--line);" + (off ? " opacity: 0.45;" : "");
                 b.textContent = text; b.title = title; b.disabled = !!off;
                 b.onclick = action;
                 ghostRow.appendChild(b);
@@ -678,7 +678,7 @@ var Settings = (function() {
         }
         var replay = document.createElement("button");
         replay.className = "big";
-        replay.style.cssText = "background: #ff6a2b; margin-left: 8px;";
+        replay.style.cssText = "background: var(--accent); margin-left: 8px;";
         replay.textContent = "Replay";
         var canReplay = typeof OpenRacer !== "undefined" && OpenRacer.Replay && OpenRacer.Replay.available();
         replay.disabled = !canReplay;
@@ -688,7 +688,7 @@ var Settings = (function() {
         buttons.appendChild(replay);
         var mainMenu = document.createElement("button");
         mainMenu.className = "big";
-        mainMenu.style.cssText = "background: #3b424c; margin-left: 8px;";
+        mainMenu.style.cssText = "background: var(--line); margin-left: 8px;";
         mainMenu.textContent = "Main menu";
         mainMenu.onclick = function() { var leave = function() { window.location.href = window.location.pathname; }; if(OpenRacer.Replay && OpenRacer.Replay.confirmLeave) OpenRacer.Replay.confirmLeave(leave); else leave(); };
         buttons.appendChild(mainMenu);

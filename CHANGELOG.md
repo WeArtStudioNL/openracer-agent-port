@@ -4,6 +4,10 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 ## Unreleased
 
+**Look and menu**
+- The menu is a few screens, one choice each, and starts with the OpenRacer logo as on openracer.eu: **Play** (and Garage, Replays, Create, Settings under it), then *Free drive / Race / Skidpad*, the car, the track and, for a race, its options (laps, opponents, difficulty as buttons, the rest under *More options…*), with *Back* and *Next* and a line of what you chose. The page of 1900 px with all the choices and eight buttons is gone; the editors are one *Create* window, and the skidpad is a way to play. Enter goes on, Esc goes back.
+- One look everywhere: `web/theme.css` has the colours of openracer.eu (dark, orange accent); the menu, the windows, the settings, the tuning menu, the replay bar, the results and the two editors use them, and the logo mark is in the editors too.
+
 **Race**
 - **Checkpoints in the game**: a track can show its gates (two posts, a bar and a strip over the road at every gate; the finish line white, the next gate green, the ones passed dim, the others orange). It is a checkbox of the track editor, *Show the checkpoints in the game* (`show_gates` in track.json; on for a new track, off for a track that has it not). The editor saves the height of every gate now. `GateMarkers.js`.
 - **Photo** (F2, a key you can change): saves the picture of the game as a PNG (the canvas only, so without the HUD; frame it with the free camera).

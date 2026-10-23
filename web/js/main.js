@@ -24,8 +24,8 @@ EngineSound.setVolume(Settings.option("volume"));
 // A bar while the track, the car and the other cars load (the loader of three.js counts the files); it goes when all of them are in
 function showLoading() {
     var box = document.createElement("div");
-    box.style.cssText = "position: fixed; inset: 0; z-index: 2000; background: #12161c; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #dfe6ef; font-family: Arial, sans-serif; transition: opacity 0.4s;";
-    box.innerHTML = "<div style=\"font-size: 28px; letter-spacing: 2px;\">OpenRacer</div><div style=\"width: 260px; height: 6px; background: #263040; border-radius: 3px; overflow: hidden;\"><div style=\"height: 100%; width: 3%; background: #3d7bd9; transition: width 0.2s;\"></div></div>";
+    box.style.cssText = "position: fixed; inset: 0; z-index: 2000; background: var(--bg2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #dfe6ef; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; transition: opacity 0.4s;";
+    box.innerHTML = "<div style=\"font-size: 28px; letter-spacing: 2px;\">OpenRacer</div><div style=\"width: 260px; height: 6px; background: #263040; border-radius: 3px; overflow: hidden;\"><div style=\"height: 100%; width: 3%; background: var(--accent); transition: width 0.2s;\"></div></div>";
     document.body.appendChild(box);
     var bar = box.firstChild.nextSibling.firstChild, best = 0.03, started = Date.now();
     THREE.DefaultLoadingManager.onProgress = function(url, loaded, total) {
@@ -87,7 +87,7 @@ function raceOptionsFromQuery(query) {
 function banner(text) {
     var div = document.createElement("div");
     div.style.cssText = "position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1001; padding: 10px 20px; " +
-        "background: rgba(20, 24, 31, 0.85); color: #ffffff; font-family: Arial; border-radius: 6px;";
+        "background: rgba(20, 24, 31, 0.85); color: #ffffff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; border-radius: 6px;";
     div.textContent = text;
     document.body.appendChild(div);
     setTimeout(function() { div.remove(); }, 9000);
@@ -207,7 +207,7 @@ function updateRaceFlow(delta) {
         race.countdown -= delta;
         var n = Math.ceil(race.countdown - 1);
         race.overlay.textContent = n > 0 ? String(n) : "GO!";
-        race.overlay.style.color = n > 0 ? (n === 1 ? "#ffd04d" : "#ffffff") : "#5be07a";
+        race.overlay.style.color = n > 0 ? (n === 1 ? "var(--accent2)" : "#ffffff") : "#5be07a";
         if(race.countdown <= 1 && car.held) {
             // GO: the clocks of the race start here
             car.held = false;
@@ -259,7 +259,7 @@ function showResults() {
     resultsPanel = document.createElement("div");
     resultsPanel.id = "raceResults";
     resultsPanel.style.cssText = "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1002; min-width: 420px; padding: 22px 28px; " +
-        "background: rgba(20, 24, 31, 0.92); color: #ffffff; font-family: Arial; border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);";
+        "background: rgba(24, 29, 35, 0.95); color: #ffffff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);";
     document.body.appendChild(resultsPanel);
     renderResults();
 }
@@ -268,17 +268,17 @@ function renderResults() {
     var rows = standings();
     var position = rows.map(function(r) { return r.player; }).indexOf(true) + 1;
     var html = "<div style=\"font-size: 26px; font-weight: bold; margin-bottom: 4px;\">" + (position === 1 ? "You won!" : "Finished P" + position) + "</div>" +
-        "<div style=\"color: #9fb0c4; margin-bottom: 14px;\">" + race.laps + " laps · " + (currentTrack.name || currentTrack.id) + "</div>" +
+        "<div style=\"color: var(--muted); margin-bottom: 14px;\">" + race.laps + " laps · " + (currentTrack.name || currentTrack.id) + "</div>" +
         "<table style=\"border-collapse: collapse; width: 100%; font-size: 15px;\">" +
-        "<tr style=\"color: #9fb0c4; text-align: left;\"><th style=\"padding: 4px 10px 4px 0;\">#</th><th>Car</th><th style=\"text-align: right;\">Best lap</th><th style=\"text-align: right;\">Time</th></tr>";
+        "<tr style=\"color: var(--muted); text-align: left;\"><th style=\"padding: 4px 10px 4px 0;\">#</th><th>Car</th><th style=\"text-align: right;\">Best lap</th><th style=\"text-align: right;\">Time</th></tr>";
     rows.forEach(function(r, i) {
         var time = r.time === null ? "running" : (i === 0 ? Hud.formatTime(r.time) : "+" + Hud.formatTime(r.time - rows[0].time));
-        html += "<tr style=\"" + (r.player ? "color: #ffd04d; font-weight: bold;" : "") + "\"><td style=\"padding: 5px 10px 5px 0;\">" + (i + 1) + "</td><td>" + escapeHtml(r.name) + "</td>" +
+        html += "<tr style=\"" + (r.player ? "color: var(--accent2); font-weight: bold;" : "") + "\"><td style=\"padding: 5px 10px 5px 0;\">" + (i + 1) + "</td><td>" + escapeHtml(r.name) + "</td>" +
             "<td style=\"text-align: right; padding-left: 16px;\">" + (r.best === null ? "–" : Hud.formatTime(r.best)) + "</td><td style=\"text-align: right; padding-left: 16px;\">" + time + "</td></tr>";
     });
     html += "</table><div style=\"margin-top: 18px; text-align: right;\">" +
-        "<button id=\"raceAgain\" style=\"padding: 9px 18px; margin-right: 8px; font: bold 15px Arial; background: #3d7bd9; color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Race again</button>" +
-        "<button id=\"raceMenu\" style=\"padding: 9px 18px; font: bold 15px Arial; background: #3b424c; color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Main menu</button></div>";
+        "<button id=\"raceAgain\" style=\"padding: 9px 18px; margin-right: 8px; font: bold 15px Arial; background: var(--accent); color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Race again</button>" +
+        "<button id=\"raceMenu\" style=\"padding: 9px 18px; font: bold 15px Arial; background: var(--line); color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Main menu</button></div>";
     if(html === resultsHtml) return;
     resultsHtml = html;
     resultsPanel.innerHTML = html;
@@ -303,7 +303,7 @@ function recordLine() {
     var lap = null, laps = 0;
     var note = document.createElement("div");
     note.style.cssText = "position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1001; padding: 10px 20px; " +
-        "background: rgba(20, 24, 31, 0.85); color: #ffffff; font-family: Arial; border-radius: 6px; text-align: center; line-height: 1.4;";
+        "background: rgba(20, 24, 31, 0.85); color: #ffffff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; border-radius: 6px; text-align: center; line-height: 1.4;";
     var stop = document.createElement("button");
     stop.textContent = "Stop";
     stop.style.cssText = "position: absolute; right: 20px; bottom: 60px; z-index: 1001; padding: 10px 26px; font: bold 16px Arial; " +
@@ -352,7 +352,7 @@ function startSkidpad() {
     car.vehicle.wearEnabled = false;
     var overlay = document.createElement("div");
     overlay.style.cssText = "position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1001; padding: 10px 20px; " +
-        "background: rgba(20, 24, 31, 0.85); color: #ffffff; font-family: Arial; border-radius: 6px; text-align: center; line-height: 1.4; min-width: 320px;";
+        "background: rgba(20, 24, 31, 0.85); color: #ffffff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; border-radius: 6px; text-align: center; line-height: 1.4; min-width: 320px;";
     document.body.appendChild(overlay);
     sp.overlay = overlay;
     // the car's keys and pads do nothing: the skidpad drives
@@ -404,14 +404,14 @@ function startSkidpad() {
         var g = sp.best / 9.81;
         var panel = document.createElement("div");
         panel.style.cssText = "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1002; min-width: 380px; padding: 22px 28px; " +
-            "background: rgba(20, 24, 31, 0.92); color: #ffffff; font-family: Arial; border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); text-align: center;";
+            "background: rgba(24, 29, 35, 0.95); color: #ffffff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); text-align: center;";
         var verdict = g > 1.1 ? "a racing car on slicks" : g > 0.95 ? "a sports car" : g > 0.85 ? "a good road car" : g > 0.75 ? "an ordinary road car" : "a van";
-        panel.innerHTML = "<div style=\"font-size: 15px; color: #9fb0c4; letter-spacing: 2px;\">SKIDPAD · " + escapeHtml(carConfig.name || carConfig.id) + "</div>" +
+        panel.innerHTML = "<div style=\"font-size: 15px; color: var(--muted); letter-spacing: 2px;\">SKIDPAD · " + escapeHtml(carConfig.name || carConfig.id) + "</div>" +
             "<div style=\"font-size: 54px; font-weight: bold; margin: 6px 0 2px;\">" + g.toFixed(2) + " g</div>" +
-            "<div style=\"color: #cfd8e3; margin-bottom: 18px;\">held at " + Math.round(sp.bestSpeed * 3.6) + " km/h on the circle of " + R + " m · like " + verdict + "</div>" +
-            "<button id=\"skidReset\" style=\"padding: 9px 18px; margin: 0 4px; font: bold 15px Arial; background: #3d7bd9; color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Reset</button>" +
-            "<button id=\"skidTune\" style=\"padding: 9px 18px; margin: 0 4px; font: bold 15px Arial; background: #3b424c; color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Tune</button>" +
-            "<button id=\"skidMenu\" style=\"padding: 9px 18px; margin: 0 4px; font: bold 15px Arial; background: #3b424c; color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Back to the menu</button>";
+            "<div style=\"color: var(--head); margin-bottom: 18px;\">held at " + Math.round(sp.bestSpeed * 3.6) + " km/h on the circle of " + R + " m · like " + verdict + "</div>" +
+            "<button id=\"skidReset\" style=\"padding: 9px 18px; margin: 0 4px; font: bold 15px Arial; background: var(--accent); color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Reset</button>" +
+            "<button id=\"skidTune\" style=\"padding: 9px 18px; margin: 0 4px; font: bold 15px Arial; background: var(--line); color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Tune</button>" +
+            "<button id=\"skidMenu\" style=\"padding: 9px 18px; margin: 0 4px; font: bold 15px Arial; background: var(--line); color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Back to the menu</button>";
         document.body.appendChild(panel);
         sp.panel = panel;
         document.getElementById("skidReset").onclick = skidpadReset;

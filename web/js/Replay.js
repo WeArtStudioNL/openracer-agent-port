@@ -412,24 +412,24 @@ OpenRacer.Replay = (function() {
             "body.replayFilming #replayBar { opacity: 0.4; }" +
             "body.replaying #hudBoost, body.replaying #dragHud, body.replaying #hud, body.replaying #hudLaps, body.replaying #hudCar, body.replaying #hudHint, body.replaying #touch, body.replaying #tuning { display: none !important; }" +
             "#replayBar { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(960px, calc(100% - 20px)); z-index: 1400; box-sizing: border-box; " +
-                "padding: 10px 14px 12px; background: rgba(14, 18, 24, 0.86); color: #fff; border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; " +
-                "font-family: Arial, sans-serif; font-size: 14px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); user-select: none; -webkit-user-select: none; touch-action: manipulation; }" +
+                "padding: 10px 14px 12px; background: rgba(24, 29, 35, 0.86); color: #fff; border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; " +
+                "font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 14px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); user-select: none; -webkit-user-select: none; touch-action: manipulation; }" +
             "#replayBar .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }" +
             "#replayBar .head { justify-content: space-between; margin-bottom: 6px; }" +
-            "#replayBar .tag { font-weight: bold; letter-spacing: 3px; color: #ff6a2b; }" +
-            "#replayBar .time { font-variant-numeric: tabular-nums; color: #cfd8e3; }" +
-            "#replayBar input[type=range] { width: 100%; margin: 4px 0 8px; accent-color: #ff6a2b; height: 26px; }" +
-            "#replayBar button { font: inherit; color: #fff; background: #2b323c; border: 1px solid rgba(255,255,255,0.16); border-radius: 8px; padding: 7px 12px; cursor: pointer; min-width: 40px; }" +
-            "#replayBar button:hover { background: #38414d; }" +
-            "#replayBar button.on { background: #ff6a2b; border-color: #ff6a2b; }" +
+            "#replayBar .tag { font-weight: bold; letter-spacing: 3px; color: var(--accent); }" +
+            "#replayBar .time { font-variant-numeric: tabular-nums; color: var(--head); }" +
+            "#replayBar input[type=range] { width: 100%; margin: 4px 0 8px; accent-color: var(--accent); height: 26px; }" +
+            "#replayBar button { font: inherit; color: #fff; background: var(--line); border: 1px solid rgba(255,255,255,0.16); border-radius: 8px; padding: 7px 12px; cursor: pointer; min-width: 40px; }" +
+            "#replayBar button:hover { background: #343c47; }" +
+            "#replayBar button.on { background: var(--accent); border-color: var(--accent); }" +
             "#replayBar .spacer { flex: 1; }" +
             "#replayBar .speeds { margin-left: auto; }" +
-            "#replayBar .speeds span { color: #9fb0c4; margin-right: 2px; }" +
-            "#replayBar .exit { background: #3d7bd9; border-color: #3d7bd9; }" +
-            "#replayBar .cameras, #replayBar .freecam { margin-top: 8px; } #replayBar .label { color: #9fb0c4; min-width: 56px; } #replayBar .hint { color: #8795a6; font-size: 12px; }" +
+            "#replayBar .speeds span { color: var(--muted); margin-right: 2px; }" +
+            "#replayBar .exit { background: var(--accent); border-color: var(--accent); }" +
+            "#replayBar .cameras, #replayBar .freecam { margin-top: 8px; } #replayBar .label { color: var(--muted); min-width: 56px; } #replayBar .hint { color: var(--muted); font-size: 12px; }" +
             "#replayBar .freecam input[type=range] { width: 160px; margin: 0; height: 20px; }" +
-            "#replayInfo { position: fixed; left: 16px; top: 14px; z-index: 1400; padding: 8px 12px; background: rgba(14, 18, 24, 0.78); color: #fff; " +
-                "border-radius: 10px; font-family: Arial, sans-serif; font-size: 15px; font-variant-numeric: tabular-nums; pointer-events: none; }" +
+            "#replayInfo { position: fixed; left: 16px; top: 14px; z-index: 1400; padding: 8px 12px; background: rgba(24, 29, 35, 0.78); color: #fff; " +
+                "border-radius: 10px; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 15px; font-variant-numeric: tabular-nums; pointer-events: none; }" +
             "#replayInfo b { font-size: 22px; }" +
             "@media (max-width: 600px) { #replayBar { bottom: 6px; padding: 8px 8px 10px; } #replayBar button { padding: 6px 8px; min-width: 34px; } }" +
             // a phone on its side: a lower bar, so that the car stays in view
@@ -1289,14 +1289,14 @@ OpenRacer.Replay = (function() {
         css();
         var shade = el(document.body, "div");
         shade.id = "replayLeave";
-        shade.style.cssText = "position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 6000; background: rgba(0, 0, 0, 0.7); display: flex; align-items: center; justify-content: center; font-family: Arial, sans-serif;";
+        shade.style.cssText = "position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 6000; background: rgba(0, 0, 0, 0.7); display: flex; align-items: center; justify-content: center; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;";
         var box = el(shade, "div");
-        box.style.cssText = "width: 420px; max-width: calc(100% - 40px); background: #1d232c; border: 2px solid #2c3541; border-radius: 10px; padding: 20px 24px; color: #fff;";
+        box.style.cssText = "width: 420px; max-width: calc(100% - 40px); background: var(--panel); border: 2px solid var(--line); border-radius: 10px; padding: 20px 24px; color: #fff;";
         var title = el(box, "div", "", "Save the replay?");
         title.style.cssText = "font-size: 20px; font-weight: bold; margin-bottom: 8px;";
         var minutes = Math.round((total - first()) / RATE);
         var text = el(box, "div", "", "The race on " + String(currentTrack.name || currentTrack.id) + " (" + Math.floor(minutes / 60) + ":" + ("0" + (minutes % 60)).slice(-2) + ") can be kept in Replays in the main menu. If you do not save it, it is gone.");
-        text.style.cssText = "color: #9aa8ba; font-size: 14px; line-height: 1.5; margin-bottom: 16px;";
+        text.style.cssText = "color: var(--muted); font-size: 14px; line-height: 1.5; margin-bottom: 16px;";
         var row = el(box, "div");
         row.style.cssText = "display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;";
         var style = function(b, colour) { b.style.cssText = "padding: 9px 16px; font: bold 14px Arial; background: " + colour + "; color: #fff; border: 0; border-radius: 6px; cursor: pointer;"; };
@@ -1308,7 +1308,7 @@ OpenRacer.Replay = (function() {
                 keep.textContent = "Could not save"; text.textContent = (error && error.message) || "The replay could not be saved."; text.style.color = "#ff8a80"; keep.disabled = false;
             });
         });
-        style(cancel, "#3b424c"); style(drop, "#5a3a3a"); style(keep, "#3d7bd9");
+        style(cancel, "var(--line)"); style(drop, "#5a3a3a"); style(keep, "var(--accent)");
     };
 
     // The file that was kept for this game (once): { header, data } or null

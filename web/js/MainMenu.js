@@ -34,88 +34,93 @@ var MainMenu = (function() {
     function addStyle() {
         var style = document.createElement("style");
         style.textContent =
-            "#mainMenu { position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 3000; overflow-y: auto; color: #fff; " +
-            "font-family: Arial, sans-serif; background: linear-gradient(180deg, #14181f 0%, #25303f 100%); }" +
-            "#mainMenu .wrap { max-width: 1240px; margin: 0 auto; padding: 36px 28px 60px; }" +
-            "#mainMenu h1 { font-size: 44px; margin: 0; letter-spacing: 2px; }" +
-            "#mainMenu .tag { color: #8fa3bd; margin: 4px 0 28px; }" +
-            "#mainMenu .columns { display: flex; gap: 32px; flex-wrap: wrap; }" +
-            "#mainMenu .column { flex: 1; min-width: 300px; }" +
-            "#mainMenu h2 { font-size: 15px; letter-spacing: 2px; color: #9ab; text-transform: uppercase; margin: 0 0 10px; }" +
-            "#mainMenu .card { background: #1d232c; border: 2px solid #2c3541; border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; }" +
-            "#mainMenu .card:hover { border-color: #4a5a70; }" +
-            "#mainMenu .card.selected { border-color: #3aa86a; background: #1f2d27; }" +
-            "#mainMenu .card .name { font-size: 19px; font-weight: bold; }" +
-            "#mainMenu .card .info { color: #9aa8ba; font-size: 14px; margin-top: 4px; }" +
-            "#mainMenu .card .specs { color: #7e90a6; font-size: 13px; margin-top: 6px; }" +
-            // the cars: square tiles with the turning model of the car on a dark radial gradient, the text over it
-            "#mainMenu .cars { margin-bottom: 30px; }" +
+            // the look is the one of openracer.eu (theme.css); the menu is a few screens, one decision each
+            "#mainMenu { position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 3000; display: flex; flex-direction: column; color: var(--text); " +
+            "font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: radial-gradient(ellipse at 50% -10%, rgba(255, 90, 31, 0.16), transparent 55%), var(--bg); }" +
+            "#mainMenu .top { display: flex; align-items: center; gap: 18px; padding: 14px 24px; border-bottom: 1px solid var(--line); flex: none; }" +
+            "#mainMenu .steps { margin-left: auto; display: flex; gap: 6px; font-size: 13px; color: var(--muted); }" +
+            "#mainMenu .steps span { padding: 4px 10px; border-radius: 12px; }" +
+            "#mainMenu .steps span.on { background: var(--accent); color: #fff; font-weight: 600; }" +
+            "#mainMenu .steps span.done { color: var(--text); cursor: pointer; }" +
+            "#mainMenu .page { flex: 1; overflow-y: auto; }" +
+            "#mainMenu .inner { max-width: 1120px; margin: 0 auto; padding: 28px 24px 40px; }" +
+            "#mainMenu h2 { font-size: 26px; margin: 0 0 4px; color: var(--head); letter-spacing: -.01em; }" +
+            "#mainMenu .sub { color: var(--muted); margin: 0 0 22px; }" +
+            "#mainMenu .bar { flex: none; display: flex; align-items: center; gap: 14px; padding: 14px 24px; border-top: 1px solid var(--line); background: var(--bg2); }" +
+            "#mainMenu .bar .summary { flex: 1; color: var(--muted); font-size: 14px; text-align: center; }" +
+            "#mainMenu .bar .summary b { color: var(--head); }" +
+            "#mainMenu .error { color: var(--bad); padding: 12px 24px; }" +
+            // home
+            "#mainMenu .home { margin: auto; text-align: center; padding: 30px 24px; }" +
+            "#mainMenu .home .tagline { color: var(--muted); font-size: 18px; margin: 14px 0 34px; }" +
+            "#mainMenu .home .play { font-size: 22px; padding: 16px 70px; border-radius: 12px; }" +
+            "#mainMenu .home .quick { display: block; margin: 12px auto 0; background: none; border: 0; color: var(--accent2); cursor: pointer; font-size: 14px; }" +
+            "#mainMenu .home .links { display: flex; justify-content: center; gap: 8px; margin-top: 34px; flex-wrap: wrap; }" +
+            "#mainMenu .home .foot { margin-top: 40px; font-size: 13px; color: var(--muted); }" +
+            "#mainMenu .home .foot a { color: var(--muted); margin: 0 8px; text-decoration: none; }" +
+            "#mainMenu .home .foot a:hover { color: var(--head); }" +
+            // the choice of the way to play
+            "#mainMenu .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }" +
+            "@media (max-width: 800px) { #mainMenu .modes { grid-template-columns: 1fr; } }" +
+            "#mainMenu .mode { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px 22px; cursor: pointer; }" +
+            "#mainMenu .mode:hover { border-color: var(--muted); }" +
+            "#mainMenu .mode.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }" +
+            "#mainMenu .mode b { display: block; font-size: 20px; color: var(--head); margin-bottom: 6px; }" +
+            "#mainMenu .mode span { color: var(--muted); font-size: 14px; line-height: 1.5; }" +
+            // the cars: tiles with the turning model of the car on a dark gradient, the text over it
             "#mainMenu .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }" +
             "@media (max-width: 900px) { #mainMenu .tiles { grid-template-columns: repeat(2, 1fr); } }" +
-            "#mainMenu .tile { position: relative; aspect-ratio: 1; border: 2px solid #2c3541; border-radius: 10px; overflow: hidden; cursor: pointer; " +
-            "background: radial-gradient(circle at 50% 58%, #62676e 0%, #2b2f36 48%, #000000 100%); }" +
-            "#mainMenu .tile:hover { border-color: #4a5a70; }" +
-            "#mainMenu .tile.selected { border-color: #3aa86a; box-shadow: 0 0 0 1px #3aa86a inset, 0 0 18px rgba(58, 168, 106, 0.35); }" +
+            "#mainMenu .tile { position: relative; aspect-ratio: 1; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; cursor: pointer; " +
+            "background: radial-gradient(circle at 50% 58%, #3a3f47 0%, #1b1f25 52%, #0d0f12 100%); }" +
+            "#mainMenu .tile:hover { border-color: var(--muted); }" +
+            "#mainMenu .tile.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset, 0 0 22px rgba(255, 90, 31, 0.28); }" +
             "#mainMenu .tile canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }" +
             "#mainMenu .tile .over { position: absolute; left: 0; top: 0; right: 0; bottom: 0; padding: 12px 14px; pointer-events: none; display: flex; flex-direction: column; " +
-            "text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9); background: linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0) 38%, rgba(0, 0, 0, 0) 70%, rgba(0, 0, 0, 0.55) 100%); }" +
-            "#mainMenu .tile .name { font-size: 19px; font-weight: bold; }" +
-            "#mainMenu .tile .info { color: #c9d3df; font-size: 13px; margin-top: 2px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }" +
+            "text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9); background: linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0) 72%, rgba(0, 0, 0, 0.6) 100%); }" +
+            "#mainMenu .tile .name { font-size: 18px; font-weight: 700; color: var(--head); }" +
             "#mainMenu .tile .bottom { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; }" +
-            "#mainMenu .tile .hp { font-size: 26px; font-weight: bold; line-height: 1; white-space: nowrap; }" +
-            "#mainMenu .tile .hp small { font-size: 12px; font-weight: normal; color: #9fb0c4; letter-spacing: 1px; margin-left: 4px; }" +
-            "#mainMenu .tile .specs { color: #9fb0c4; font-size: 12px; line-height: 1.3; }" +
-            "#mainMenu .start { margin-top: 18px; font-size: 22px; padding: 14px 44px; border: 0; border-radius: 8px; background: #2e9a5c; color: #fff; cursor: pointer; }" +
-            "#mainMenu .start:hover { background: #38b56e; }" +
-            "#mainMenu .secondary { margin-top: 18px; margin-left: 12px; font-size: 22px; padding: 14px 30px; border: 0; border-radius: 8px; background: #36404e; color: #fff; cursor: pointer; }" +
-            "#mainMenu .secondary:hover { background: #4a586b; }" +
-            "#mainMenu .start:disabled { background: #3a4350; color: #7c8794; cursor: default; }" +
-            "#mainMenu .foot { margin-top: 30px; color: #7e90a6; font-size: 14px; line-height: 1.6; }" +
-            "#mainMenu .foot a { color: #7fb8ff; }" +
-            "#mainMenu .foot button { background: #2c3541; color: #fff; border: 0; border-radius: 4px; padding: 4px 10px; cursor: pointer; }" +
-            "#mainMenu .error { color: #ff9a8a; }" +
-            "#mainMenu .option { display: flex; align-items: center; justify-content: space-between; background: #1d232c; border: 2px solid #2c3541; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; }" +
-            "#mainMenu .option .label { color: #cfd8e3; }" +
-            "#mainMenu .option button { background: #2c3541; color: #fff; border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; min-width: 120px; }" +
-            "#mainMenu .option button:hover { background: #3a4656; }" +
-            "#mainMenu .record { color: #9aa8ba; font-size: 14px; margin: 6px 0 14px; }" +
-            "#mainMenu .aicars { background: #1d232c; border: 2px solid #2c3541; border-radius: 8px; padding: 8px 14px; margin-bottom: 10px; }" +
-            "#mainMenu .aicars h3 { margin: 2px 0 6px; font-size: 14px; color: #cfd8e3; font-weight: normal; display: flex; justify-content: space-between; }" +
-            "#mainMenu .aicars h3 a { color: #7fa6e0; cursor: pointer; font-size: 12px; margin-left: 10px; }" +
-            "#mainMenu .aicars label { display: flex; align-items: center; gap: 8px; padding: 3px 0; color: #cfd8e3; cursor: pointer; }" +
+            "#mainMenu .tile .hp { font-size: 24px; font-weight: 700; line-height: 1; white-space: nowrap; color: var(--head); }" +
+            "#mainMenu .tile .hp small { font-size: 11px; font-weight: normal; color: var(--muted); letter-spacing: 1px; margin-left: 4px; }" +
+            "#mainMenu .tile .specs { color: var(--muted); font-size: 12px; line-height: 1.3; }" +
+            // the tracks
+            "#mainMenu .list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }" +
+            "@media (max-width: 800px) { #mainMenu .list { grid-template-columns: 1fr; } }" +
+            "#mainMenu .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; cursor: pointer; }" +
+            "#mainMenu .card:hover { border-color: var(--muted); }" +
+            "#mainMenu .card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }" +
+            "#mainMenu .card .name { font-size: 18px; font-weight: 700; color: var(--head); }" +
+            "#mainMenu .card .info { color: var(--muted); font-size: 14px; margin-top: 4px; line-height: 1.45; }" +
+            "#mainMenu .card .extra { margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); }" +
+            // the options of a race: a row with the choices as chips
+            "#mainMenu .setting { display: flex; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }" +
+            "#mainMenu .setting .label { width: 170px; color: var(--head); font-weight: 600; }" +
+            "#mainMenu .chips { display: flex; gap: 6px; flex-wrap: wrap; }" +
+            "#mainMenu .chip, .or-dialog .chip { background: var(--panel); border: 1px solid var(--line); color: var(--text); border-radius: 18px; padding: 7px 16px; cursor: pointer; font: inherit; font-size: 14px; }" +
+            "#mainMenu .chip:hover, .or-dialog .chip:hover { border-color: var(--muted); }" +
+            "#mainMenu .chip.on, .or-dialog .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }" +
+            "#mainMenu .hint { color: var(--muted); font-size: 14px; margin-top: 16px; line-height: 1.6; }" +
             // the badge of a car or track that is not of the server: the garage of this browser or a folder on the PC (Garage.js)
-            "#mainMenu .badge { display: inline-block; font-size: 11px; font-weight: normal; letter-spacing: 1px; text-transform: uppercase; vertical-align: middle; " +
-            "margin-left: 8px; padding: 2px 7px; border-radius: 10px; background: #3b5b8a; color: #dbe7f7; }" +
-            "#mainMenu .badge.folder { background: #6b5a2b; color: #f3e6c4; }" +
-            // the window of the replays
-            "#replaysDialog { position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 3100; background: rgba(0, 0, 0, 0.65); display: flex; align-items: center; justify-content: center; }" +
-            "#replaysDialog .box { width: 720px; max-width: calc(100% - 40px); max-height: calc(100% - 40px); overflow-y: auto; background: #1d232c; border: 2px solid #2c3541; border-radius: 10px; padding: 20px 24px; color: #fff; font-family: Arial, sans-serif; }" +
-            "#replaysDialog h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: 1px; }" +
-            "#replaysDialog .note { color: #9aa8ba; font-size: 14px; line-height: 1.5; margin: 0 0 14px; }" +
-            "#replaysDialog .row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid #2c3541; border-radius: 6px; margin-bottom: 6px; }" +
-            "#replaysDialog .row .name { flex: 1; min-width: 0; }" +
-            "#replaysDialog .row .meta { color: #7e90a6; font-size: 13px; }" +
-            "#replaysDialog .error { color: #ff8a80; font-size: 14px; margin: 8px 0; }" +
-            "#replaysDialog button { background: #2c3541; color: #fff; border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; }" +
-            "#replaysDialog button:hover { background: #3a4656; }" +
-            "#replaysDialog button.primary { background: #3d7bd9; }" +
-            "#replaysDialog button.danger { background: #5a3a3a; }" +
-            // the garage dialog
-            "#garageDialog { position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 3100; background: rgba(0, 0, 0, 0.65); display: flex; align-items: center; justify-content: center; }" +
-            "#garageDialog .box { width: 720px; max-width: calc(100% - 40px); max-height: calc(100% - 40px); overflow-y: auto; background: #1d232c; border: 2px solid #2c3541; border-radius: 10px; padding: 20px 24px; color: #fff; font-family: Arial, sans-serif; }" +
-            "#garageDialog h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: 1px; }" +
-            "#garageDialog .note { color: #9aa8ba; font-size: 14px; line-height: 1.5; margin: 0 0 14px; }" +
-            "#garageDialog h3 { font-size: 13px; letter-spacing: 2px; color: #9ab; text-transform: uppercase; margin: 16px 0 6px; }" +
-            "#garageDialog .row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid #2c3541; border-radius: 6px; margin-bottom: 6px; }" +
-            "#garageDialog .row .name { flex: 1; }" +
-            "#garageDialog .row .meta { color: #7e90a6; font-size: 13px; }" +
-            "#garageDialog button { background: #2c3541; color: #fff; border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; }" +
-            "#garageDialog button:hover { background: #3a4656; }" +
-            "#garageDialog button.danger:hover { background: #8a3a32; }" +
+            ".or-badge, #mainMenu .badge { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; vertical-align: middle; " +
+            "margin-left: 8px; padding: 2px 7px; border-radius: 10px; background: var(--line); color: var(--text); }" +
+            // the windows (the replays, the garage, the jumps, more options, the editors)
+            "#replaysDialog, #garageDialog, #editorsDialog, #moreDialog { position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 3100; background: rgba(0, 0, 0, 0.7); display: flex; align-items: center; justify-content: center; }" +
+            ".or-dialog .box, #replaysDialog .box, #garageDialog .box { width: 720px; max-width: calc(100% - 40px); max-height: calc(100% - 40px); overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 22px 26px; color: var(--text); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }" +
+            ".or-dialog h2, #replaysDialog h2, #garageDialog h2 { margin: 0 0 4px; font-size: 22px; color: var(--head); }" +
+            ".or-dialog .note, #replaysDialog .note, #garageDialog .note { color: var(--muted); font-size: 14px; line-height: 1.5; margin: 0 0 14px; }" +
+            "#garageDialog h3 { font-size: 12px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; margin: 16px 0 6px; }" +
+            ".or-dialog .row, #replaysDialog .row, #garageDialog .row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; }" +
+            "#replaysDialog .row .name, #garageDialog .row .name { flex: 1; min-width: 0; }" +
+            "#replaysDialog .row .meta, #garageDialog .row .meta { color: var(--muted); font-size: 13px; }" +
+            "#replaysDialog .error { color: var(--bad); font-size: 14px; margin: 8px 0; }" +
+            "#replaysDialog button, #garageDialog button, .or-dialog button.or-btn { background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; cursor: pointer; font: inherit; font-size: 14px; }" +
+            "#replaysDialog button:hover, #garageDialog button:hover, .or-dialog button.or-btn:hover { border-color: var(--muted); color: var(--head); }" +
+            "#replaysDialog button.primary, #garageDialog button.primary, .or-dialog button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }" +
+            "#replaysDialog button.danger:hover, #garageDialog button.danger:hover { border-color: var(--bad); color: var(--bad); }" +
             "#garageDialog .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }" +
-            "#garageDialog .status { color: #ffd04d; font-size: 14px; min-height: 18px; margin-top: 10px; }" +
-            "#garageDialog .status.error { color: #ff9a8a; }" +
-            "#garageDialog .close { float: right; }";
+            "#garageDialog .status { color: var(--accent2); font-size: 14px; min-height: 18px; margin-top: 10px; }" +
+            "#garageDialog .status.error { color: var(--bad); }" +
+            "#garageDialog .close { float: right; }" +
+            ".or-dialog label.tick { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }";
         document.head.appendChild(style);
     }
 
@@ -244,12 +249,7 @@ var MainMenu = (function() {
         name.textContent = car.name || car.id;
         addBadge(name, car);
         over.appendChild(name);
-        if(car.description) {
-            var info = document.createElement("div");
-            info.className = "info";
-            info.textContent = car.description;
-            over.appendChild(info);
-        }
+        div.title = car.description || "";
         var bottom = document.createElement("div");
         bottom.className = "bottom";
         var specs = document.createElement("div");
@@ -264,33 +264,8 @@ var MainMenu = (function() {
         over.appendChild(bottom);
         div.appendChild(over);
         div.onclick = function() { choice.car = car.id; remember(); render(); };
-        div.ondblclick = start;
+        div.ondblclick = goNext;
         showcase.add(car, canvas);
-        return div;
-    }
-
-    function card(item, key, lines) {
-        var div = document.createElement("div");
-        div.className = "card" + (choice[key] === item.id ? " selected" : "");
-        var name = document.createElement("div");
-        name.className = "name";
-        name.textContent = item.name || item.id;
-        addBadge(name, item);
-        div.appendChild(name);
-        if(item.description) {
-            var info = document.createElement("div");
-            info.className = "info";
-            info.textContent = item.description;
-            div.appendChild(info);
-        }
-        if(lines) {
-            var specs = document.createElement("div");
-            specs.className = "specs";
-            specs.textContent = lines;
-            div.appendChild(specs);
-        }
-        div.onclick = function() { choice[key] = item.id; remember(); render(); };
-        div.ondblclick = start;
         return div;
     }
 
@@ -299,7 +274,7 @@ var MainMenu = (function() {
         var source = OpenRacer.Garage ? OpenRacer.Garage.sourceOf(item) : null;
         if(!source) return;
         var badge = document.createElement("span");
-        badge.className = "badge " + source;
+        badge.className = "or-badge " + source;
         badge.textContent = source === "folder" ? "folder" : "my garage";
         badge.title = source === "folder" ? "From the folder on your PC that is linked in the garage" : "In the garage of this browser";
         name.appendChild(badge);
@@ -333,9 +308,7 @@ var MainMenu = (function() {
             closeButton.textContent = "Close";
             closeButton.onclick = close;
             box.appendChild(closeButton);
-            box.insertAdjacentHTML("beforeend", "<h2>My garage</h2><p class=\"note\">Your own cars and tracks live here, in this browser, next to the ones that come with the game: " +
-                "what you save in the car editor and the track editor, what you import from a zip, and the tuning you save to a car. Nothing is sent to the server. " +
-                "Export a car or track as a zip to pass it on or to keep it, and import a zip someone gave you.</p>");
+            box.insertAdjacentHTML("beforeend", "<h2>My garage</h2><p class=\"note\">Your own cars and tracks, kept in this browser. Export one as a zip to share it, or import a zip you were given.</p>");
             status = document.createElement("div");
             status.className = "status";
 
@@ -437,7 +410,7 @@ var MainMenu = (function() {
                 };
                 linkRow.appendChild(linkInput); linkRow.appendChild(linkImport); linkRow.appendChild(linkCopy);
                 box.appendChild(linkRow);
-                box.insertAdjacentHTML("beforeend", "<div class=\"note\" style=\"margin-top: 8px;\">A zip with car.json or track.json and the files of the model (an exported one, or a zipped folder from web/cars or web/tracks).</div>");
+                box.insertAdjacentHTML("beforeend", "<div class=\"note\" style=\"margin-top: 8px;\">A zip of a car or track.</div>");
 
                 // the folder on the PC
                 box.insertAdjacentHTML("beforeend", "<h3>Folder on your PC</h3>");
@@ -467,8 +440,7 @@ var MainMenu = (function() {
                         unlink.onclick = function() { Garage.unlinkFolder().then(build); };
                         folderActions.appendChild(unlink);
                     } else {
-                        folderNote.textContent = "Link a folder on your PC with cars and tracks in it (cars/<id>/car.json and tracks/<id>/track.json, like web/cars and web/tracks): " +
-                            "they are read from there every time the menu opens, nothing is copied.";
+                        folderNote.textContent = "Cars and tracks from a folder on your PC are read from there each time. Nothing is copied.";
                         var link = document.createElement("button");
                         link.textContent = "Link a folder…";
                         link.onclick = function() {
@@ -598,7 +570,7 @@ var MainMenu = (function() {
         box.appendChild(title);
         var note = document.createElement("p");
         note.className = "note";
-        note.textContent = "The replays that you saved after a race or practice, kept in this browser. A replay needs the same track and cars as the one who made it. Import a replay file that someone sent, or download one to send it.";
+        note.textContent = "Replays you saved, kept in this browser. Import a replay file to watch someone else's (you need the same track and cars).";
         box.appendChild(note);
         var problem = document.createElement("div");
         problem.className = "error";
@@ -640,7 +612,7 @@ var MainMenu = (function() {
                 if(!items.length) {
                     var empty = document.createElement("div");
                     empty.className = "note";
-                    empty.textContent = "No replays yet. After a race or practice the game asks if the replay is to be saved, and the replay bar has a Save replay button.";
+                    empty.textContent = "No replays yet. The game asks to save one after a race or practice.";
                     list.appendChild(empty);
                     return;
                 }
@@ -684,229 +656,368 @@ var MainMenu = (function() {
         fill();
     }
 
-    function render(error) {
-        element.innerHTML = "";
-        var wrap = document.createElement("div");
-        wrap.className = "wrap";
-        wrap.innerHTML = "<h1>OpenRacer</h1><div class=\"tag\">Choose a car and a track</div>";
+    // ---- the screens: home, then the steps of Play: the way to play, the car, the track and (for a race) its options
+    var screen = "home";
+    var MODE_KEY = "openracer.mode";
+    var mode = "free";
+    try { mode = window.localStorage.getItem(MODE_KEY) || "free"; } catch(e) { /* no storage */ }
+    var STEP_NAMES = { mode: "Play", car: "Car", track: "Track", race: "Race" };
 
-        // the first time: one button that starts something good, and it goes away for good once it is used or closed
+    function stepsOf() {
+        return mode === "race" ? ["mode", "car", "track", "race"] : (mode === "skidpad" ? ["mode", "car"] : ["mode", "car", "track"]);
+    }
+    function go(next) { screen = next; render(); var page = element.querySelector(".page"); if(page) page.scrollTop = 0; }
+    function setMode(value) {
+        mode = value;
+        try { window.localStorage.setItem(MODE_KEY, mode); } catch(e) { /* no storage */ }
+        if(mode === "race") { if(!raceOptions.laps) raceOptions.laps = 3; if(!raceOptions.ai) raceOptions.ai = 3; rememberRace(); }
+    }
+    function goNext() {
+        var steps = stepsOf(), at = steps.indexOf(screen);
+        if(at < 0) return;
+        if(at === steps.length - 1) begin(); else go(steps[at + 1]);
+    }
+    function goBack() {
+        var steps = stepsOf(), at = steps.indexOf(screen);
+        go(at <= 0 ? "home" : steps[at - 1]);
+    }
+
+    // what the game is started with, from the way to play
+    function begin() {
+        if(!choice.car) return;
+        remember();
+        if(mode === "skidpad") {
+            window.location.href = window.location.pathname + "?car=" + encodeURIComponent(choice.car) + "&track=skidpad&mode=skidpad&ai=0&ghost=0&records=0&wear=0";
+            return;
+        }
+        if(!choice.track) return;
+        var free = mode !== "race";
+        var saved = { laps: raceOptions.laps, ai: raceOptions.ai };
+        if(free) { raceOptions.laps = 0; raceOptions.ai = 0; }
+        start();
+        raceOptions.laps = saved.laps; raceOptions.ai = saved.ai;
+    }
+
+    function button(text, className, onClick) {
+        var b = document.createElement("button");
+        b.className = "or-btn" + (className ? " " + className : "");
+        b.textContent = text;
+        if(onClick) b.onclick = onClick;
+        return b;
+    }
+
+    // a dialog with a title, a note and the content that the callback puts in; it is shut by a click beside it
+    function dialog(id, title, note, fill) {
+        var old = document.getElementById(id);
+        if(old) old.remove();
+        var shade = document.createElement("div");
+        shade.id = id;
+        shade.className = "or-dialog";
+        var box = document.createElement("div");
+        box.className = "box";
+        shade.appendChild(box);
+        function close() { shade.remove(); }
+        shade.onclick = function(e) { if(e.target === shade) close(); };
+        var h = document.createElement("h2");
+        h.textContent = title;
+        box.appendChild(h);
+        if(note) { var n = document.createElement("div"); n.className = "note"; n.textContent = note; box.appendChild(n); }
+        fill(box, close);
+        document.body.appendChild(shade);
+    }
+
+    function showEditors() {
+        dialog("editorsDialog", "Create", "Make your own cars and tracks from a model.", function(box, close) {
+            var car = button("Car editor", "primary", function() { window.location.href = "tools/car-editor.html"; });
+            var track = button("Track editor", "primary", function() { window.location.href = "tools/track-editor.html"; });
+            var row = document.createElement("div");
+            row.style.cssText = "display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px;";
+            row.appendChild(car); row.appendChild(track);
+            row.appendChild(button("Close", "ghost", close));
+            box.appendChild(row);
+        });
+    }
+
+    // the choices of a race that are not in the way: tyre wear and fuel, the ghost, the records and the cars that race
+    function showMore() {
+        dialog("moreDialog", "More race options", null, function(box, close) {
+            function chips(label, items, current, apply) {
+                var row = document.createElement("div");
+                row.className = "setting";
+                row.innerHTML = "<span class=\"label\"></span>";
+                row.firstChild.textContent = label;
+                var group = document.createElement("div");
+                group.className = "chips";
+                items.forEach(function(item) {
+                    var c = document.createElement("button");
+                    c.className = "chip" + (item[0] === current ? " on" : "");
+                    c.textContent = item[1];
+                    c.onclick = function() { apply(item[0]); rememberRace(); showMore(); };
+                    group.appendChild(c);
+                });
+                row.appendChild(group);
+                box.appendChild(row);
+            }
+            chips("Tyre wear and fuel", [[0, "Off"], [1, "On"], [3, "Fast"]], raceOptions.wear === undefined ? 1 : raceOptions.wear, function(v) { raceOptions.wear = v; });
+            chips("Ghost of your best lap", [[false, "Off"], [true, "On"]], !!raceOptions.ghost, function(v) { raceOptions.ghost = v; });
+            chips("Save lap records", [[false, "Off"], [true, "On"]], !!raceOptions.records, function(v) { raceOptions.records = v; });
+            if(cars.length > 1) {
+                var title = document.createElement("div");
+                title.className = "setting";
+                title.innerHTML = "<span class=\"label\">Cars that may race</span>";
+                var allowed = allowedAiCars();
+                var group = document.createElement("div");
+                group.style.cssText = "flex: 1; min-width: 220px;";
+                cars.forEach(function(car) {
+                    var label = document.createElement("label");
+                    label.className = "tick";
+                    var tick = document.createElement("input");
+                    tick.type = "checkbox";
+                    tick.checked = allowed.indexOf(car.id) >= 0;
+                    tick.onchange = function() {
+                        var current = allowedAiCars();
+                        var at = current.indexOf(car.id);
+                        if(tick.checked && at < 0) current.push(car.id);
+                        else if(!tick.checked && at >= 0) current.splice(at, 1);
+                        raceOptions.aiCars = current.length === cars.length ? null : current;
+                        rememberRace();
+                    };
+                    label.appendChild(tick);
+                    label.appendChild(document.createTextNode(car.name || car.id));
+                    group.appendChild(label);
+                });
+                title.appendChild(group);
+                box.appendChild(title);
+            }
+            var foot = document.createElement("div");
+            foot.style.cssText = "display: flex; justify-content: flex-end; margin-top: 16px;";
+            foot.appendChild(button("Done", "primary", close));
+            box.appendChild(foot);
+        });
+    }
+
+    function home(page) {
+        var box = document.createElement("div");
+        box.className = "home";
+        var logo = document.createElement("div");
+        logo.className = "or-logo big";
+        logo.innerHTML = "<i></i>OpenRacer";
+        box.appendChild(logo);
+        var tag = document.createElement("div");
+        tag.className = "tagline";
+        tag.textContent = "A racing simulator that lives in a tab.";
+        box.appendChild(tag);
+        var play = button("Play", "primary play", function() { go("mode"); });
+        play.disabled = !(cars.length && tracks.length);
+        box.appendChild(play);
         var welcomed = false;
         try { welcomed = !!localStorage.getItem("openracer.welcomed"); } catch(e) { welcomed = true; }
         var hasTruck = cars.some(function(c) { return c.id === "stadium-truck"; }) && tracks.some(function(t) { return t.id === "desert"; });
         if(!welcomed && hasTruck) {
-            var welcome = document.createElement("div");
-            welcome.style.cssText = "margin: 14px 0; padding: 14px 18px; border-radius: 8px; background: rgba(61, 123, 217, 0.18); border: 1px solid #3d7bd9; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;";
-            var message = document.createElement("div");
-            message.style.cssText = "flex: 1; min-width: 200px;";
-            message.textContent = "New here? Jump a stadium truck over the dunes of the Desert.";
-            var go = document.createElement("button");
-            go.className = "start";
-            go.textContent = "Drive";
-            go.onclick = function() {
+            var quick = document.createElement("button");
+            quick.className = "quick";
+            quick.textContent = "New here? Jump a stadium truck over the dunes of the Desert";
+            quick.onclick = function() {
                 try { localStorage.setItem("openracer.welcomed", "1"); } catch(e) {}
                 window.location.href = window.location.pathname + "?car=stadium-truck&track=desert&ai=0&ghost=0&records=0";
             };
-            var close = document.createElement("button");
-            close.className = "secondary";
-            close.textContent = "Close";
-            close.onclick = function() {
-                try { localStorage.setItem("openracer.welcomed", "1"); } catch(e) {}
-                welcome.remove();
-            };
-            welcome.appendChild(message);
-            welcome.appendChild(go);
-            welcome.appendChild(close);
-            wrap.appendChild(welcome);
+            box.appendChild(quick);
         }
-        // the cars: a row of tiles over the whole width, four across
-        var carRow = document.createElement("div");
-        carRow.className = "cars";
-        carRow.innerHTML = "<h2>Car</h2>";
-        var tiles = document.createElement("div");
-        tiles.className = "tiles";
+        var links = document.createElement("div");
+        links.className = "links";
+        if(OpenRacer.Garage && OpenRacer.Garage.available()) links.appendChild(button("Garage", "ghost", showGarage));
+        links.appendChild(button("Replays", "ghost", function() { showReplays(cars, tracks); }));
+        links.appendChild(button("Create", "ghost", showEditors));
+        links.appendChild(button("Settings", "ghost", function() { Settings.toggleMenu(); }));
+        box.appendChild(links);
+        var foot = document.createElement("div");
+        foot.className = "foot";
+        foot.innerHTML = "<a href=\"https://openracer.eu\" target=\"_blank\" rel=\"noopener\">openracer.eu</a><a href=\"https://discord.gg/JFgHVFUagF\" target=\"_blank\" rel=\"noopener\">Discord</a><span></span>";
+        foot.lastChild.textContent = "v" + OpenRacer.VERSION;
+        box.appendChild(foot);
+        page.appendChild(box);
+    }
+
+    function modeStep(inner) {
+        inner.innerHTML = "<h2>How do you want to play?</h2><div class=\"sub\">You can change it any time.</div>";
+        var grid = document.createElement("div");
+        grid.className = "modes";
+        [["free", "Free drive", "Just drive. No end, no opponents, and your best lap is kept."],
+         ["race", "Race", "Laps from a standing start against AI cars, with a countdown."],
+         ["skidpad", "Skidpad", "Your car circles faster and faster until it lets go: how many g does it hold?"]].forEach(function(m) {
+            var d = document.createElement("div");
+            d.className = "mode" + (mode === m[0] ? " selected" : "");
+            d.innerHTML = "<b></b><span></span>";
+            d.firstChild.textContent = m[1];
+            d.lastChild.textContent = m[2];
+            d.onclick = function() { setMode(m[0]); go("car"); };
+            grid.appendChild(d);
+        });
+        inner.appendChild(grid);
+    }
+
+    function carStep(inner) {
+        inner.innerHTML = "<h2>Choose your car</h2><div class=\"sub\">Double-click a car to go on.</div>";
+        var tilesBox = document.createElement("div");
+        tilesBox.className = "tiles";
         showcase.clear();
-        cars.forEach(function(car) { tiles.appendChild(carTile(car)); });
-        carRow.appendChild(tiles);
-        wrap.appendChild(carRow);
+        cars.forEach(function(car) { tilesBox.appendChild(carTile(car)); });
+        inner.appendChild(tilesBox);
+    }
 
-        var columns = document.createElement("div");
-        columns.className = "columns";
+    function trackStep(inner) {
+        inner.innerHTML = "<h2>Choose the track</h2><div class=\"sub\">Double-click a track to go on.</div>";
+        var list = document.createElement("div");
+        list.className = "list";
+        tracks.filter(function(t) { return t.id !== "skidpad"; }).forEach(function(track) {   // the skidpad is a way to play
+            var d = document.createElement("div");
+            d.className = "card" + (choice.track === track.id ? " selected" : "");
+            var name = document.createElement("div");
+            name.className = "name";
+            name.textContent = track.name || track.id;
+            addBadge(name, track);
+            d.appendChild(name);
+            if(track.description) {
+                var info = document.createElement("div");
+                info.className = "info";
+                info.textContent = track.description;
+                d.appendChild(info);
+            }
+            if(choice.track === track.id) {
+                var extra = document.createElement("div");
+                extra.className = "extra";
+                var best = choice.car && OpenRacer.Records ? OpenRacer.Records.best(track.id, choice.car) : null;
+                var text = document.createElement("span");
+                text.textContent = best ? "Best lap: " + OpenRacer.Records.format(best) : "No lap record yet";
+                extra.appendChild(text);
+                extra.appendChild(button("Longest jumps", "ghost", function(e) { e.stopPropagation(); showJumps(); }));
+                if(track.dragstrip && OpenRacer.DragStrip) extra.appendChild(button("Drag top 50", "ghost", function(e) { e.stopPropagation(); OpenRacer.DragStrip.showTop(track); }));
+                d.appendChild(extra);
+            }
+            d.onclick = function() { choice.track = track.id; remember(); render(); };
+            d.ondblclick = goNext;
+            list.appendChild(d);
+        });
+        inner.appendChild(list);
+    }
 
-        var trackColumn = document.createElement("div");
-        trackColumn.className = "column";
-        trackColumn.innerHTML = "<h2>Track</h2>";
-        tracks.forEach(function(track) { trackColumn.appendChild(card(track, "track", "")); });
-        columns.appendChild(trackColumn);
-
-        // the race: AI cars, the ghost and the records (see main.js)
-        var raceColumn = document.createElement("div");
-        raceColumn.className = "column";
-        raceColumn.innerHTML = "<h2>Race</h2>";
-        var option = function(label, text, onClick) {
+    function raceStep(inner) {
+        inner.innerHTML = "<h2>Set up the race</h2><div class=\"sub\">A race starts from a standing start, with a countdown.</div>";
+        function setting(label, items, current, apply) {
             var row = document.createElement("div");
-            row.className = "option";
+            row.className = "setting";
             var l = document.createElement("span");
             l.className = "label";
             l.textContent = label;
-            var b = document.createElement("button");
-            b.textContent = text;
-            b.onclick = function() { onClick(); rememberRace(); render(); };
             row.appendChild(l);
-            row.appendChild(b);
-            return row;
-        };
-        var lapCounts = [0, 3, 5, 10];
-        raceColumn.appendChild(option("Race", raceOptions.laps ? raceOptions.laps + " laps" : "Practice", function() { raceOptions.laps = lapCounts[(lapCounts.indexOf(raceOptions.laps || 0) + 1) % lapCounts.length]; }));
-        var counts = [0, 1, 2, 3, 5, 7];
-        raceColumn.appendChild(option("AI opponents", raceOptions.ai === 0 ? "None" : String(raceOptions.ai), function() { raceOptions.ai = counts[(counts.indexOf(raceOptions.ai) + 1) % counts.length]; }));
-        var levels = ["easy", "normal", "hard"], levelNames = { easy: "Easy", normal: "Normal", hard: "Hard" };
-        raceColumn.appendChild(option("Difficulty", levelNames[raceOptions.difficulty] || "Normal", function() { raceOptions.difficulty = levels[(levels.indexOf(raceOptions.difficulty) + 1) % levels.length]; }));
-        if((raceOptions.laps > 0 || raceOptions.ai > 0) && cars.length > 1) {
-            // which cars may race against you: tick them
-            var box = document.createElement("div");
-            box.className = "aicars";
-            var title = document.createElement("h3");
-            title.innerHTML = "<span>Cars in the race</span>";
-            var links = document.createElement("span");
-            [["all", function() { return null; }], ["none", function() { return []; }]].forEach(function(entry) {
-                var a = document.createElement("a");
-                a.textContent = entry[0];
-                a.onclick = function() { raceOptions.aiCars = entry[1](); rememberRace(); render(); };
-                links.appendChild(a);
+            var group = document.createElement("div");
+            group.className = "chips";
+            items.forEach(function(item) {
+                var c = document.createElement("button");
+                c.className = "chip" + (item[0] === current ? " on" : "");
+                c.textContent = item[1];
+                c.onclick = function() { apply(item[0]); rememberRace(); render(); };
+                group.appendChild(c);
             });
-            title.appendChild(links);
-            box.appendChild(title);
-            var allowed = allowedAiCars();
-            cars.forEach(function(car) {
-                var label = document.createElement("label");
-                var tick = document.createElement("input");
-                tick.type = "checkbox";
-                tick.checked = allowed.indexOf(car.id) >= 0;
-                tick.onchange = function() {
-                    var current = allowedAiCars();
-                    var at = current.indexOf(car.id);
-                    if(tick.checked && at < 0) current.push(car.id);
-                    else if(!tick.checked && at >= 0) current.splice(at, 1);
-                    raceOptions.aiCars = current.length === cars.length ? null : current;
-                    rememberRace();
-                    render();
-                };
-                label.appendChild(tick);
-                label.appendChild(document.createTextNode(car.name || car.id));
-                box.appendChild(label);
-            });
-            raceColumn.appendChild(box);
+            row.appendChild(group);
+            inner.appendChild(row);
         }
-        var wears = [0, 1, 3], wearNames = { 0: "Off", 1: "On", 3: "Fast (short races)" };
-        raceColumn.appendChild(option("Tyre wear and fuel", wearNames[raceOptions.wear] || "On", function() { raceOptions.wear = wears[(wears.indexOf(raceOptions.wear === undefined ? 1 : raceOptions.wear) + 1) % wears.length]; }));
-        raceColumn.appendChild(option("Ghost of your best lap", raceOptions.ghost ? "On" : "Off", function() { raceOptions.ghost = !raceOptions.ghost; }));
-        raceColumn.appendChild(option("Save lap records", raceOptions.records ? "On" : "Off", function() { raceOptions.records = !raceOptions.records; }));
-        var record = document.createElement("div");
-        record.className = "record";
-        var best = choice.track && choice.car && typeof OpenRacer !== "undefined" && OpenRacer.Records ? OpenRacer.Records.best(choice.track, choice.car) : null;
+        setting("Laps", [[3, "3"], [5, "5"], [10, "10"], [25, "25"]], raceOptions.laps, function(v) { raceOptions.laps = v; });
+        setting("Opponents", [[1, "1"], [2, "2"], [3, "3"], [5, "5"], [7, "7"]], raceOptions.ai, function(v) { raceOptions.ai = v; });
+        setting("Difficulty", [["easy", "Easy"], ["normal", "Normal"], ["hard", "Hard"]], raceOptions.difficulty, function(v) { raceOptions.difficulty = v; });
         var trackChosen = tracks.filter(function(t) { return t.id === choice.track; })[0];
         var hasLine = trackChosen && ((trackChosen.design && trackChosen.design.nodes) || (trackChosen.racing_line && trackChosen.racing_line.length > 10) ||
             (OpenRacer.Records && OpenRacer.Records.anyGhost(choice.track)));
-        record.innerHTML = (raceOptions.laps ? "A race of " + raceOptions.laps + " laps from a standing start, with a countdown; practice has no end.<br>" : "") +
-            (best ? "Best lap with this car: <b>" + OpenRacer.Records.format(best) + "</b>" : "No lap record with this car here yet.") +
-            (raceOptions.ai > 0 && Array.isArray(raceOptions.aiCars) && !raceOptions.aiCars.length ? "<br>No car is ticked: every car may race." : "") + (raceOptions.ai > 0 ? "<br>" + (hasLine ? "The AI drives the racing line of this track." : "The AI needs a racing line: drive one lap here first, or draw the track in the track editor.") : "");
-        if(trackChosen && trackChosen.dragstrip && OpenRacer.DragStrip) {
-            raceColumn.appendChild(option("Drag strip", "Top 50", function() { OpenRacer.DragStrip.showTop(trackChosen); }));
+        if(!hasLine) {
+            var hint = document.createElement("div");
+            hint.className = "hint";
+            hint.textContent = "The AI needs a racing line on this track: drive one lap here first, or draw the track in the track editor.";
+            inner.appendChild(hint);
         }
-        raceColumn.appendChild(record);
-        columns.appendChild(raceColumn);
-        wrap.appendChild(columns);
+        var more = document.createElement("div");
+        more.style.marginTop = "18px";
+        more.appendChild(button("More options…", "ghost", showMore));
+        inner.appendChild(more);
+    }
 
+    function summary() {
+        var car = cars.filter(function(c) { return c.id === choice.car; })[0];
+        var track = tracks.filter(function(t) { return t.id === choice.track; })[0];
+        var parts = [];
+        if(screen !== "mode") parts.push({ free: "Free drive", race: "Race", skidpad: "Skidpad" }[mode]);
+        if(car && screen !== "mode" && screen !== "car") parts.push(car.name || car.id);
+        else if(car && screen === "car") parts.push(car.name || car.id);
+        if(track && mode !== "skidpad" && (screen === "track" || screen === "race")) parts.push(track.name || track.id);
+        if(screen === "race") parts.push(raceOptions.laps + " laps, " + raceOptions.ai + " opponents");
+        return parts;
+    }
+
+    function render(error) {
+        element.innerHTML = "";
+        var top = document.createElement("div");
+        top.className = "top";
+        if(screen !== "home") {
+            var logo = document.createElement("a");
+            logo.className = "or-logo";
+            logo.href = "#";
+            logo.innerHTML = "<i></i>OpenRacer";
+            logo.onclick = function(e) { e.preventDefault(); go("home"); };
+            top.appendChild(logo);
+            var steps = stepsOf();
+            var chips = document.createElement("div");
+            chips.className = "steps";
+            var at = steps.indexOf(screen);
+            steps.forEach(function(s, i) {
+                var span = document.createElement("span");
+                span.textContent = (i + 1) + " " + STEP_NAMES[s];
+                span.className = i === at ? "on" : (i < at ? "done" : "");
+                if(i < at) span.onclick = function() { go(s); };
+                chips.appendChild(span);
+            });
+            top.appendChild(chips);
+            element.appendChild(top);
+        }
+        var page = document.createElement("div");
+        page.className = "page";
+        element.appendChild(page);
         if(error) {
             var message = document.createElement("div");
-            message.className = "foot error";
+            message.className = "error";
             message.textContent = error;
-            wrap.appendChild(message);
+            page.appendChild(message);
         }
-
-        var button = document.createElement("button");
-        button.className = "start";
-        button.textContent = "Start";
-        button.disabled = !(choice.car && choice.track);
-        button.onclick = start;
-        wrap.appendChild(button);
-
-        var editor = document.createElement("button");
-        editor.className = "secondary";
-        editor.textContent = "Car editor";
-        editor.onclick = function() { window.location.href = "tools/car-editor.html"; };
-        wrap.appendChild(editor);
-
-        var trackEditor = document.createElement("button");
-        trackEditor.className = "secondary";
-        trackEditor.textContent = "Track editor";
-        trackEditor.onclick = function() { window.location.href = "tools/track-editor.html"; };
-        wrap.appendChild(trackEditor);
-
-        // the garage: the player's own cars and tracks in this browser (Garage.js)
-        if(OpenRacer.Garage && OpenRacer.Garage.available()) {
-            var garage = document.createElement("button");
-            garage.className = "secondary";
-            garage.textContent = "My garage";
-            garage.title = "Your own cars and tracks in this browser: import or export a zip, link a folder on your PC";
-            garage.onclick = showGarage;
-            wrap.appendChild(garage);
+        if(screen === "home") {
+            home(page);
+            return;
         }
+        var inner = document.createElement("div");
+        inner.className = "inner";
+        page.appendChild(inner);
+        if(screen === "mode") modeStep(inner);
+        else if(screen === "car") carStep(inner);
+        else if(screen === "track") trackStep(inner);
+        else if(screen === "race") raceStep(inner);
 
-        // the skidpad: the chosen car drives round the circle by itself until it lets go (main.js, startSkidpad)
-        if(tracks.some(function(t) { return t.id === "skidpad"; })) {
-            var skidpad = document.createElement("button");
-            skidpad.className = "secondary";
-            skidpad.textContent = "Skidpad";
-            skidpad.title = "The chosen car drives round a circle of 50 m faster and faster until it lets go: how much lateral g does it hold?";
-            skidpad.disabled = !choice.car;
-            skidpad.onclick = function() {
-                remember();
-                window.location.href = window.location.pathname + "?car=" + encodeURIComponent(choice.car) + "&track=skidpad&mode=skidpad&ai=0&ghost=0&records=0&wear=0";
-            };
-            wrap.appendChild(skidpad);
+        var bar = document.createElement("div");
+        bar.className = "bar";
+        bar.appendChild(button("‹ Back", "ghost", goBack));
+        var sum = document.createElement("div");
+        sum.className = "summary";
+        summary().forEach(function(part, i) {
+            if(i) sum.appendChild(document.createTextNode("  ·  "));
+            var b = document.createElement("b");
+            b.textContent = part;
+            sum.appendChild(b);
+        });
+        bar.appendChild(sum);
+        if(screen !== "mode") {
+            var steps2 = stepsOf();
+            var last = steps2.indexOf(screen) === steps2.length - 1;
+            var next = button(last ? (mode === "skidpad" ? "Start" : "Start ▶") : "Next ›", "primary", goNext);
+            next.disabled = (screen === "car" && !choice.car) || (screen === "track" && !choice.track);
+            bar.appendChild(next);
         }
-
-        // your own car: drop a .glb in the car editor
-        var addCar = document.createElement("button");
-        addCar.className = "secondary";
-        addCar.textContent = "Add your car";
-        addCar.title = "Drop a .glb: it is set up and driven";
-        addCar.onclick = function() { window.location.href = "tools/car-editor.html"; };
-        wrap.appendChild(addCar);
-
-        // the replays that were saved (Replay.js): a list in a window, and a file that someone sent can be imported. A replay needs the same track and cars as the one who made it
-        var openReplay = document.createElement("button");
-        openReplay.className = "secondary";
-        openReplay.textContent = "Replays";
-        openReplay.title = "The replays that you saved, and import a replay file that someone sent";
-        openReplay.onclick = function() { showReplays(cars, tracks); };
-        wrap.appendChild(openReplay);
-        var jumpsButton = document.createElement("button");
-        jumpsButton.className = "secondary";
-        jumpsButton.textContent = "Jumps";
-        jumpsButton.title = "The longest jumps on the chosen track";
-        jumpsButton.onclick = showJumps;
-        wrap.appendChild(jumpsButton);
-
-        var foot = document.createElement("div");
-        foot.className = "foot";
-        foot.innerHTML = "Cars are in <code>web/cars</code> and tracks in <code>web/tracks</code>: a folder with a <code>car.json</code> or " +
-            "<code>track.json</code> is found by itself. Make a car from a glTF/glb model (for example from Blender) with the " +
-            "<a href=\"tools/car-editor.html\">car editor</a>, and a track from a glTF/glb model with the <a href=\"tools/track-editor.html\">track editor</a>. " +
-            "Without the server of start-server.sh they are kept in <i>My garage</i>, in this browser. ";
-        var rescan = document.createElement("button");
-        rescan.textContent = "Look for new cars and tracks";
-        rescan.onclick = load;
-        foot.appendChild(rescan);
-        wrap.appendChild(foot);
-        var version = document.createElement("div");
-        version.className = "foot";
-        version.style.cssText = "text-align: right; opacity: 0.6;";
-        version.textContent = "OpenRacer " + OpenRacer.VERSION;
-        wrap.appendChild(version);
-        element.appendChild(wrap);
+        element.appendChild(bar);
     }
 
     function pick(list, id) {
@@ -954,7 +1065,9 @@ var MainMenu = (function() {
         element.id = "mainMenu";
         document.body.appendChild(element);
         window.addEventListener("keydown", function(event) {
-            if(event.code === "Enter") start();
+            if(document.querySelector(".or-dialog, #replaysDialog, #garageDialog, #settingsMenu")) return;
+            if(event.code === "Enter") { if(screen === "home") go("mode"); else if(screen !== "mode") goNext(); }
+            else if(event.code === "Escape" && screen !== "home") goBack();
         });
         if(!importFromAddress()) load();
     }
