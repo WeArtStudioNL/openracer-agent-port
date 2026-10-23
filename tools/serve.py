@@ -198,6 +198,26 @@ def make_certificate(ip):
     return cert, key
 
 
+class SecureServer(ThreadingHTTPServer):
+    """https where the handshake is made in the thread of the connection, not in the loop that accepts them: a browser opens connections in advance that say nothing for a long
+    time (and a computer that cannot finish a handshake), and a handshake in the accepting loop made the whole server wait for them: the page kept loading."""
+    context = None
+
+    def get_request(self):
+        return self.socket.accept()
+
+    def process_request_thread(self, request, client_address):
+        import ssl
+        try:
+            request.settimeout(15)
+            request = self.context.wrap_socket(request, server_side=True)
+            request.settimeout(None)
+        except (ssl.SSLError, OSError):
+            self.shutdown_request(request)
+            return
+        super().process_request_thread(request, client_address)
+
+
 def network_address():
     """The address of this machine on the local network (the one that other devices use), or None"""
     import socket
@@ -225,12 +245,14 @@ if __name__ == "__main__":
         if ip:
             print("On your network (a phone, a tablet, another computer): %s://%s:%d" % (scheme, ip, port))
         print("The others can play and read; only this computer can save cars and tracks to the folders (the others keep them in their own browser).")
-    server = ThreadingHTTPServer(("127.0.0.1" if local_only else "", port), Handler)
+    address = ("127.0.0.1" if local_only else "", port)
     if secure:
         import ssl
         cert, key = make_certificate(None if local_only else network_address())
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.load_cert_chain(cert, key)
-        server.socket = context.wrap_socket(server.socket, server_side=True)
+        server = SecureServer(address, Handler)
+        server.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        server.context.load_cert_chain(cert, key)
         print("https: the browser warns once about the certificate (it is made here, not by an authority): choose to go on. With mkcert installed (mkcert -install) there is no warning.")
+    else:
+        server = ThreadingHTTPServer(address, Handler)
     server.serve_forever()

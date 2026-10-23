@@ -5,6 +5,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 ## Unreleased
 
 **Race**
+- Fix for `--https`: the page could keep loading or time out, because the handshake of a connection that said nothing (a browser opens some in advance) was waited for in the loop that accepts connections, which stopped the whole server. The handshake is now made in the thread of the connection, with a time limit of 15 s.
 - `start-server.sh --https` serves over https with a certificate that is made at the first start (openssl, or mkcert when it is installed, which the browser trusts): for localhost and the address on the network, in `tools/.certs` (not in git). The browser warns once about a self-signed one. With it the game can use what https asks for (the clipboard, the gamepad and the motion sensors on another device).
 - `start-server.sh` serves on the local network and prints the address to open on a phone, a tablet or another computer (`--local` keeps it to this computer). The server already listened on every address; now it says where. The API that writes and deletes cars and tracks stays closed to the other computers.
 - Share by link: *My garage* has a field *Link to a zip* with *Import* (the car or track of a zip somewhere on the web, as long as the site allows it) and *Copy game link*, which makes a link of the game, `?import=<link>`, that asks "Add the car or track from <site> to your garage?" for whoever opens it and then selects the new car or track. Only http and https links are taken, and the question comes first.
