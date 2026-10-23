@@ -1139,6 +1139,7 @@ async function loadExisting() {
         else { stopDesign(); await loadLegacyTrack(track); }
         // the heights of the start and the gates come from the road
         if (state.start) state.start.y = groundY(state.start.x, state.start.z);
+        $("showGates").checked = !!track.show_gates;
         state.gates = (track.gates || []).map((g) => ({ x: g.x, y: groundY(g.x, g.z), z: g.z, heading: g.heading, width: g.width || 24 }));
         state.cameras = (track.cameras || []).filter((c) => isFinite(c.x) && isFinite(c.z)).map((c) => {
             const camera = { x: c.x, y: isFinite(c.y) ? c.y : groundY(c.x, c.z) + 3, z: c.z };
@@ -1163,6 +1164,7 @@ function newTrack() {
     state.mainFile = null;
     state.start = null;
     state.gates = [];
+    $("showGates").checked = true;
     state.cameras = [];
     selectCamera(-1);
     state.drag = null;
@@ -1216,7 +1218,8 @@ async function save() {
         config.description = $("description").value.trim();
         config.start = { x: +state.start.x.toFixed(3), z: +state.start.z.toFixed(3), heading: +state.start.heading.toFixed(5) };
         if (state.gates.length) {
-            config.gates = state.gates.map((g) => ({ x: +g.x.toFixed(3), z: +g.z.toFixed(3), heading: +g.heading.toFixed(5), width: g.width }));
+            config.gates = state.gates.map((g) => ({ x: +g.x.toFixed(3), z: +g.z.toFixed(3), heading: +g.heading.toFixed(5), width: g.width, y: +g.y.toFixed(2) }));
+            if ($("showGates").checked) config.show_gates = true; else delete config.show_gates;
             delete config.checkpoints; // gates replace the road pieces of the old format
         } else {
             delete config.gates;

@@ -5,6 +5,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 ## Unreleased
 
 **Race**
+- **Checkpoints in the game**: a track can show its gates (two posts, a bar and a strip over the road at every gate; the finish line white, the next gate green, the ones passed dim, the others orange). It is a checkbox of the track editor, *Show the checkpoints in the game* (`show_gates` in track.json; on for a new track, off for a track that has it not). The editor saves the height of every gate now. `GateMarkers.js`.
 - **Photo** (F2, a key you can change): saves the picture of the game as a PNG (the canvas only, so without the HUD; frame it with the free camera).
 - A **loading bar** over the game while the track, the car and the AI cars load, and a first-run card in the main menu (*Drive*: the stadium truck on the Desert; *Close* or Drive hides it for good, `openracer.welcomed` in the browser).
 - Performance: a **draw distance** in the graphics settings (500, 1000, 2000 or 5000 m; the presets have 500, 1000, 2000 and 5000, High is 2000): the far plane of the camera, with the sky shrunk to stay inside it. AI cars more than 450 m from the camera are not drawn and their model (wheels, suspension, soft body, parts) is not moved; they drive on as before. Everything else is culled by three.js as it was (the Desert is in parts for that).

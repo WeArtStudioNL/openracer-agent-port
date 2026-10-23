@@ -95,6 +95,7 @@ function banner(text) {
 
 function trackLoaded() {
     car = new OpenRacer.Car(carConfig);
+    if(OpenRacer.GateMarkers) OpenRacer.GateMarkers.build(currentTrack);
     Tuning.attach(car, carConfig); // the tuning menu, with the tuning that was kept for this car
     telemetry = new OpenRacer.Telemetry({car: car, domElement: document.getElementById("telemetry")});
     setupRace();
@@ -479,6 +480,7 @@ function onEnterFrame() {
         lastFrameTime = now;
         if(d > 0.1) d = 0.1; // after a pause of the browser (another tab, no focus) the game goes on from here, it does not catch up
         car.update(d, true);
+        if(OpenRacer.GateMarkers) OpenRacer.GateMarkers.update(car);
         if(OpenRacer.JumpStats) OpenRacer.JumpStats.update(car.vehicle, d, currentTrack.id, car.config && car.config.name);
         updateRace(d);
         if(OpenRacer.Replay) OpenRacer.Replay.record(d);   // everything is recorded from the start, for the replay
