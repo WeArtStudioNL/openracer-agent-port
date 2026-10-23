@@ -331,8 +331,7 @@ var MainMenu = (function() {
         bottom.appendChild(hp);
         over.appendChild(bottom);
         div.appendChild(over);
-        div.onclick = function() { choice.car = car.id; remember(); render(); };
-        div.ondblclick = goNext;
+        div.onclick = function() { choice.car = car.id; remember(); goNext(); };      // (a click on a car goes on to the next step)
         previews.request(car, picture);
         return div;
     }
@@ -939,7 +938,7 @@ var MainMenu = (function() {
     }
 
     function carStep(inner) {
-        inner.innerHTML = "<h2>Choose your car</h2><div class=\"sub\">Double-click a car to go on.</div>";
+        inner.innerHTML = "<h2>Choose your car</h2><div class=\"sub\">Click a car to go on.</div>";
         var tilesBox = document.createElement("div");
         tilesBox.className = "tiles";
         showcase.clear();
