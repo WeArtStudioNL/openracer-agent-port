@@ -21,7 +21,8 @@ var TouchControls = (function() {
     var state = { steer: 0, throttle: 0, brake: 0, engaged: false };
     var stick = { id: null, x0: 0, y0: 0, radius: 70 };
     var pedals = { gas: { id: null, value: 0 }, brake: { id: null, value: 0 } };
-    var virtualHeld = {};   // button element -> { id: pointer id, action }
+    var virtualHeld = {};   // action -> id of the pointer that holds its button
+    var buttonOf = {};      // action -> the button element
 
     function wanted() {
         var q = new URLSearchParams(window.location.search).get("touch");
@@ -89,6 +90,7 @@ var TouchControls = (function() {
             e.preventDefault();
             try { b.setPointerCapture(e.pointerId); } catch(err) { /* not captured */ }
             virtualHeld[action] = e.pointerId;
+            buttonOf[action] = b;
             b.classList.add("down");
             Settings.setVirtual(action, true);
         });
@@ -100,6 +102,7 @@ var TouchControls = (function() {
         }
         b.addEventListener("pointerup", up);
         b.addEventListener("pointercancel", up);
+        b.addEventListener("lostpointercapture", up);
         return b;
     }
 
@@ -116,6 +119,7 @@ var TouchControls = (function() {
         function up(e) { if(pedals[name].id === e.pointerId) pedals[name].id = null; }
         p.addEventListener("pointerup", up);
         p.addEventListener("pointercancel", up);
+        p.addEventListener("lostpointercapture", up);
         return p;
     }
 
@@ -132,7 +136,8 @@ var TouchControls = (function() {
         hint = el(root, "div", "hint", "◀ ▶");
 
         zone.addEventListener("pointerdown", function(e) {
-            if(stick.id !== null || fromMouse(e)) return;
+            if(fromMouse(e)) return;
+            // (a finger that is down already, and a new one: the old one is a finger whose end was lost, the new touch takes over)
             e.preventDefault();
             try { zone.setPointerCapture(e.pointerId); } catch(err) { /* not captured */ }
             stick.id = e.pointerId;
@@ -160,11 +165,9 @@ var TouchControls = (function() {
         });
         function release(e) {
             if(e.pointerId !== stick.id) return;
-            stick.id = null;
-            state.steer = 0;
-            ring.style.display = knob.style.display = "none";
-            hint.style.opacity = "1";
+            releaseStick();
         }
+        releaseStickNow = function() { stick.id = null; state.steer = 0; ring.style.display = knob.style.display = "none"; hint.style.opacity = "1"; };
         zone.addEventListener("pointerup", release);
         zone.addEventListener("pointercancel", release);
         zone.addEventListener("lostpointercapture", release);
@@ -186,9 +189,33 @@ var TouchControls = (function() {
         menu.addEventListener("pointerup", function() { Settings.toggleMenu(); });
     }
 
+    var releaseStickNow = null;
+    function releaseStick() { if(releaseStickNow) releaseStickNow(); else { stick.id = null; state.steer = 0; } }
+
+    // A finger that has ended, wherever it was (the browser can take the end of a touch away from the element that has it: a gesture of the system, a notification, a
+    // finger on the edge, a third finger): what that finger held is let go. And when no finger is on the screen any more, nothing is held.
+    function endPointer(id) {
+        if(stick.id === id) releaseStick();
+        ["gas", "brake"].forEach(function(name) { if(pedals[name].id === id) pedals[name].id = null; });
+        Object.keys(virtualHeld).forEach(function(action) {
+            if(virtualHeld[action] !== id) return;
+            delete virtualHeld[action];
+            Settings.setVirtual(action, false);
+            if(buttonOf[action]) buttonOf[action].classList.remove("down");
+        });
+    }
+    window.addEventListener("pointerup", function(e) { if(enabled) endPointer(e.pointerId); }, true);
+    window.addEventListener("pointercancel", function(e) { if(enabled) endPointer(e.pointerId); }, true);
+    function touchesEnded(e) { if(enabled && e.touches && e.touches.length === 0) releaseAll(); }
+    window.addEventListener("touchend", touchesEnded, true);
+    window.addEventListener("touchcancel", touchesEnded, true);
+    document.addEventListener("visibilitychange", function() { if(enabled && document.hidden) releaseAll(); });
+    window.addEventListener("pagehide", function() { if(enabled) releaseAll(); });
+
     function releaseAll() {
         stick.id = null; state.steer = 0;
         if(ring) ring.style.display = knob.style.display = "none";
+        if(hint) hint.style.opacity = "1";
         pedals.gas.id = pedals.brake.id = null;
         Object.keys(virtualHeld).forEach(function(a) { Settings.setVirtual(a, false); delete virtualHeld[a]; });
         if(root) Array.prototype.forEach.call(root.querySelectorAll(".btn.down"), function(b) { b.classList.remove("down"); });
