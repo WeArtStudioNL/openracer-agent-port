@@ -74,7 +74,7 @@ var MainMenu = (function() {
             "background: radial-gradient(circle at 50% 58%, #3a3f47 0%, #1b1f25 52%, #0d0f12 100%); }" +
             "#mainMenu .tile:hover { border-color: var(--muted); }" +
             "#mainMenu .tile.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset, 0 0 22px rgba(255, 90, 31, 0.28); }" +
-            "#mainMenu .tile canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }" +
+            "#mainMenu .tile img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: contain; display: block; }" +
             "#mainMenu .tile .over { position: absolute; left: 0; top: 0; right: 0; bottom: 0; padding: 12px 14px; pointer-events: none; display: flex; flex-direction: column; " +
             "text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9); background: linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0) 72%, rgba(0, 0, 0, 0.6) 100%); }" +
             "#mainMenu .tile .name { font-size: 18px; font-weight: 700; color: var(--head); }" +
@@ -234,14 +234,81 @@ var MainMenu = (function() {
                 tile.context.drawImage(renderer.domElement, 0, 0, tile.canvas.width, tile.canvas.height);
             });
         }
-        return { add: add, clear: clear };
+        // one still of a car, from the front at an angle, as a webp (a Blob): the model is loaded if it is not yet, and the hidden renderer draws it once
+        function still(car, done) {
+            init();
+            var m = modelOf(car), waited = 0;
+            (function wait() {
+                if(!m.object) {
+                    if((waited += 100) > 20000) { done(null); return; }
+                    setTimeout(wait, 100);
+                    return;
+                }
+                renderer.setSize(480, 480, false);
+                cam.aspect = 1; cam.updateProjectionMatrix();
+                group.children.forEach(function(o) { o.visible = o === m.object; });
+                m.object.rotation.y = 0;
+                var d = m.length * 1.75;
+                cam.position.set(Math.sin(0.75) * d, m.length * 0.38, Math.cos(0.75) * d);
+                cam.lookAt(0, m.radius * 1.3, 0);
+                renderer.render(scene, cam);
+                renderer.domElement.toBlob(done, "image/webp", 0.88);
+            })();
+        }
+        return { add: add, clear: clear, still: still };
+    })();
+
+    // The pictures of the cars in the menu: still, from the front at an angle. Once made they are kept: as a file of the car (preview.webp, when this server may write it)
+    // and in this browser (localStorage), so the next time they are there at once. The car editor takes the file away when the car is saved again.
+    var previews = (function() {
+        var queue = [], busy = false;
+        function stamp(car) {
+            var s = JSON.stringify([car.id, car.model, car.chassis, car.dimensions]), h = 0;
+            for(var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+            return (h >>> 0).toString(36);
+        }
+        function key(car) { return "openracer.preview." + car.id + "." + stamp(car); }
+        function next() {
+            if(busy || !queue.length) return;
+            busy = true;
+            var job = queue.shift();
+            showcase.still(job.car, function(blob) {
+                busy = false;
+                if(blob) {
+                    var reader = new FileReader();
+                    reader.onload = function() {
+                        job.img.src = reader.result;
+                        try { window.localStorage.setItem(key(job.car), reader.result); } catch(e) { /* full */ }
+                    };
+                    reader.readAsDataURL(blob);
+                    if(!(OpenRacer.Garage && OpenRacer.Garage.sourceOf(job.car))) {
+                        fetch("/api/cars/" + encodeURIComponent(job.car.id) + "/preview.webp", { method: "PUT", body: blob }).catch(function() { /* not this server's to write */ });
+                    }
+                }
+                next();
+            });
+        }
+        function request(car, img) {
+            img.style.visibility = "hidden";
+            img.onload = function() { img.style.visibility = ""; };
+            var cached = null;
+            try { cached = window.localStorage.getItem(key(car)); } catch(e) { /* no storage */ }
+            if(cached) { img.src = cached; return; }
+            function make() { queue.push({ car: car, img: img }); next(); }
+            if(OpenRacer.Garage && OpenRacer.Garage.sourceOf(car)) { make(); return; }
+            img.onerror = function() { img.onerror = null; make(); };
+            img.src = "cars/" + encodeURIComponent(car.id) + "/preview.webp?v=" + stamp(car);
+        }
+        return { request: request };
     })();
 
     function carTile(car) {
         var div = document.createElement("div");
         div.className = "tile" + (choice.car === car.id ? " selected" : "");
-        var canvas = document.createElement("canvas");
-        div.appendChild(canvas);
+        var picture = document.createElement("img");
+        picture.alt = "";
+        picture.draggable = false;
+        div.appendChild(picture);
         var over = document.createElement("div");
         over.className = "over";
         var name = document.createElement("div");
@@ -265,7 +332,7 @@ var MainMenu = (function() {
         div.appendChild(over);
         div.onclick = function() { choice.car = car.id; remember(); render(); };
         div.ondblclick = goNext;
-        showcase.add(car, canvas);
+        previews.request(car, picture);
         return div;
     }
 

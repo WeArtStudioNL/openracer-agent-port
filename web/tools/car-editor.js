@@ -1518,6 +1518,7 @@ async function save() {
         for (const [fileName, file] of uploads) files[fileName] = file;
         const remove = oldFile && config.model.type === "gltf" && oldFile !== config.model.file && oldFile.startsWith("cars/" + id + "/") ? [oldFile.split("/").pop()] : [];
         const saved = await OpenRacer.Garage.store("cars", id, config, files, { base: "../", remove });
+        fetch("../api/cars/" + encodeURIComponent(id) + "/preview.webp", { method: "DELETE" }).catch(() => {});      // the picture in the menu is made again
         state.replacedModel = null;
         state.existingId = id;
         state.existingModel = config.model;

@@ -5,6 +5,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 ## Unreleased
 
 **Look and menu**
+- **Still pictures of the cars in the menu**: the turning previews that loaded slowly are a picture of each car, from the front at an angle (`preview.webp` in the folder of the car, made once by the menu and kept in the browser too; the car editor takes it away when the car is saved again). The first time takes a moment, after that the menu shows them at once, and nothing is drawn while you choose.
 - The menu is a few screens, one choice each, and starts with the OpenRacer logo as on openracer.eu: **Play** (and Garage, Replays, Create, Settings under it), then *Free drive / Race / Skidpad*, the car, the track and, for a race, its options (laps, opponents, difficulty as buttons, the rest under *More options…*), with *Back* and *Next* and a line of what you chose. The page of 1900 px with all the choices and eight buttons is gone; the editors are one *Create* window, and the skidpad is a way to play. Enter goes on, Esc goes back.
 - One look everywhere: `web/theme.css` has the colours of openracer.eu (dark, orange accent); the menu, the windows, the settings, the tuning menu, the replay bar, the results and the two editors use them, and the logo mark is in the editors too.
 
