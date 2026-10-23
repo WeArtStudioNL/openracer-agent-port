@@ -79,6 +79,7 @@ var scripts = [
     "js/Driver.js",
     "js/DebugView.js",
     "js/DragStrip.js",
+    "js/Motorcycle.js",
     "js/Vehicle.js",
     "js/Telemetry.js",
     "js/EngineSim.js",

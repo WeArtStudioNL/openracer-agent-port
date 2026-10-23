@@ -49,7 +49,7 @@ OpenRacer.Vehicle = function (parameters, input) {
 
     // A motorcycle ("type": "motorcycle" in car.json, see MOTORCYCLE.md): the same physics, with a pair of wheels at both ends (no track between them), and a rider
     // who keeps the bike up: a torque about the long axis that holds the lean the corner asks for (a_lateral = g tan(lean)) and damps the fall
-    this.motorcycle = parameters.motorcycle || null;
+    this.controller = parameters.motorcycle ? new OpenRacer.Motorcycle(parameters.motorcycle) : null;   // (Motorcycle.js; a car has none, and goes through none of its hooks)
     this.lean = 0;                    // how far the bike leans to the left (rad; negative: to the right)
     this.input = input; // throttle, brakePedal, clutch, clutchPedalPresent, handbrake, turnAngle, neutral, reverse, manualGearbox, current_gear
     this.mass = parameters.mass;
@@ -1376,17 +1376,7 @@ OpenRacer.Vehicle = function (parameters, input) {
 
         self.updateOutputs();
         var u = self.u, v = self.v, r = self.r;
-        // a motorcycle steers less the faster it goes (a small angle at the front wheel is a lot at speed)
-        // The steering of a motorcycle is a wish for a bend: at speed a small angle is a lot of sideways acceleration (a = u^2 delta / L), so the angle that the
-        // keys or the wheel give is cut to what makes at most `max_lateral_g` (more as the steering is turned further, to half the lock), and it follows with a delay
-        if(self.motorcycle) {
-            var mcs = self.motorcycle, lockHalf = 0.5 * (inp.maxTurn || 0.38);
-            var wish = Math.min(1, Math.abs(delta) / lockHalf) * (mcs.max_lateral_g || 0.9) * G;
-            var cut = wish * L / (u * u + 1);
-            var target = Math.sign(delta) * Math.min(Math.abs(delta), cut);
-            self.bikeSteer = (self.bikeSteer || 0) + (target - (self.bikeSteer || 0)) * Math.min(1, dt / 0.07);
-            delta = self.bikeSteer;
-        }
+        if(self.controller) delta = self.controller.steering(self, delta, u, dt);
 
         // ---- ESC, the electronic stability control
         // Sensors tell it what the driver asks for (the steering angle gives the direction that the car should turn to, at
@@ -1608,16 +1598,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         torque.x = torque.y = torque.z = 0;
         var tyreTorque = [0, 0, 0, 0];
         var brakeTorque = [0, 0, 0, 0];
-        // a motorcycle that brakes hard lifts its rear wheel (a stoppie) and goes over the front: the brake of the front wheel is let off as the rear wheel loses its load
-        // (what the rear wheel lift mitigation of a modern bike does), so that the front stays where it grips and the rear stays on the road
-        if(self.motorcycle) {
-            var rearRatio = ((wheels[2].weight || 0) + (wheels[3].weight || 0)) / Math.max(1, (1 - self.weight_distribution) * m * G);
-            var scaleTarget = Math.max(0, Math.min(1, (rearRatio - 0.08) / 0.24));
-            if(self.frontBrakeScale === undefined) self.frontBrakeScale = 1;
-            self.frontBrakeScale += (scaleTarget - self.frontBrakeScale) * Math.min(1, dt / (scaleTarget < self.frontBrakeScale ? 0.02 : 0.12));
-            // and the rear brake goes with the load of the rear wheel (the brake force distribution of a bike with linked brakes): a light rear wheel that locks has no side grip left
-            self.rearBrakeScale = Math.max(0, Math.min(1, rearRatio * 1.2));
-        }
+        if(self.controller) self.controller.brakeStep(self, dt);
         var maxDrivenSlip = 0;
         var brakePedal = inp.brakePedal;
         var handbrake = inp.handbrake ? 1 : 0;
@@ -1852,7 +1833,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 wheel.absFactor = Math.min(1, wheel.absFactor + 8 * dt);
                 if(wheel.absFactor > 0.98) wheel.abs = false;
             }
-            var bt = brakePedal * wheel.maxBrakeTorque * wheel.absFactor * (self.motorcycle ? (wheel.front ? self.frontBrakeScale : self.rearBrakeScale) : 1);
+            var bt = brakePedal * wheel.maxBrakeTorque * wheel.absFactor * (self.controller ? self.controller.brakeScale(self, wheel) : 1);
             if(!wheel.front) bt += handbrake * 1800;
             if(inp.parkingLock) bt = Math.max(bt, 4000); // P: the parking lock holds all wheels
             if(self.transbrakeHeld && wheel.driven) bt = Math.max(bt, 4000); // the transbrake holds the driven wheels
@@ -2024,42 +2005,12 @@ OpenRacer.Vehicle = function (parameters, input) {
             torque.z += Rv.x * -push.n - Rv.y * 0;
         }
 
-        // ---- the rider of a motorcycle: a torque about the long axis of the bike. The lean that the corner needs follows from the sideways acceleration
-        // (a = u * yaw rate, from what the front wheel asks for and what the bike does): lean = atan(a / g). The torque pulls the lean to it and damps the roll.
-        if(self.motorcycle && !self.airborne) {
-            var mc = self.motorcycle;
-            rotate(self.qx, self.qy, self.qz, self.qw, 0, 1, 0, Mv);                                    // the up of the bike
-            var upX = Mv.x, upY = Mv.y, upZ = Mv.z;
-            rotate(self.qx, self.qy, self.qz, self.qw, 0, 0, 1, Mv);                                    // its forward
-            var fl = Math.sqrt(Mv.x * Mv.x + Mv.z * Mv.z) || 1, fx = Mv.x / fl, fz = Mv.z / fl;
-            var lean = Math.atan2(upX * fz - upZ * fx, upY);                                            // to the left: positive (the left of f is (fz, -fx))
-            var leanRate = -(self.wx * fx + self.wz * fz);                                              // how fast it falls to the left
-            self.lean = lean;
-            var maxLean = (mc.max_lean_deg || 50) * Math.PI / 180;
-            var fast = Math.min(1, Math.max(0, (Math.abs(u) - 1.5) / 3));                               // at a walking pace the rider holds it up with a foot
-            var ask = Math.max(-1.1 * G, Math.min(1.1 * G, (0.15 * r + 0.85 * u * delta / L) * u));                                              // the sideways acceleration to the right (r and delta are positive to the right)
-            var target = fast * Math.max(-maxLean, Math.min(maxLean, -Math.atan(ask / G)));
-            var rollMass = m + (mc.rider_mass || 0) * 0;
-            var gh = rollMass * G * self.cgHeight;
-            var Kp = (mc.balance || 1) * 7 * gh;
-            var rollInertia = rollMass * self.cgHeight * self.cgHeight + inertiaZ;
-            var Kd = 1.5 * Math.sqrt(Kp * rollInertia);
-            var T = Kp * (target - lean) - Kd * leanRate;                                               // about the axis that leans it to the left
-            var alive = 1 - Math.min(1, Math.max(0, (Math.abs(lean) - 1.15) / 0.25));                  // past about 66 degrees the bike is going down: the rider lets go
-            T = alive * Math.max(-6 * gh, Math.min(6 * gh, T));
-            torque.x -= fx * T; torque.z -= fz * T;
-            // the rider also keeps the bike pointing the way the front wheel asks (a loaded front wheel and a light rear one, in hard braking, is a bike that wants to
-            // swing round): a torque about the vertical that damps the yaw rate that the steering did not ask for
-            if(Math.abs(u) > 3) {
-                var yawErr = r - u * delta / L;                                                              // (to the right: positive)
-                var yawT = Math.max(-1800, Math.min(1800, (mc.balance || 1) * (inertiaY / 0.12) * yawErr * fast));
-                torque.y += yawT;
-            }
-        }
+        // ---- a controller (the rider and the tyres of a motorcycle)
+        if(self.controller && !self.airborne) self.controller.apply(self, force, torque, dt, { u: u, r: r, delta: delta, inertiaZ: inertiaZ, inertiaY: inertiaY });
 
         // ---- the body on the road, for a landing or a car that has turned over
         // (a motorcycle that leans in a corner has its bodywork near the road: that is no crash until it is nearly on its side)
-        if(ground3D) { if(!(self.motorcycle && Math.abs(self.lean) < 1.15)) bodyContacts3D(force, torque); if(self.softBody) shellStep(dt, force, torque); } else if(!(self.motorcycle && Math.abs(self.lean) < 1.15)) bodyCorners(force, torque);
+        if(ground3D) { if(!(self.controller && self.controller.keepBodyOff(self))) bodyContacts3D(force, torque); if(self.softBody) shellStep(dt, force, torque); } else if(!(self.controller && self.controller.keepBodyOff(self))) bodyCorners(force, torque);
 
         // ---- integrate: Newton for the movement, Euler for the rotation (with the gyroscopic term of a body that is not round)
         var accX = force.x / m + forceBody.x / mBody, accY = force.y / m + forceBody.y / mBody, accZ = force.z / m + forceBody.z / mBody;

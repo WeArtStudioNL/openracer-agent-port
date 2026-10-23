@@ -471,6 +471,7 @@ OpenRacer.Car = function( config, domElement ) {
             camera.position.y = avgGround + f.look_height + (f.height - f.look_height) * scale;
             keepCameraInView(subject, delta);
             camera.lookAt(cx, avgGround + f.look_height, cz);
+            if(this.vehicle.controller) this.vehicle.controller.cameraRoll(camera, this.vehicle, delta);      // (a motorcycle: the picture leans with the bike)
             setLens(cameraFov, 1);
             return;
         }
@@ -556,6 +557,7 @@ OpenRacer.Car = function( config, domElement ) {
         var tSpeed = this.turnLimit / (Settings.option("keySteerTime") || 0.9);      // the steering speed of the keyboard: the lock in the time of the settings menu (at a standstill)
         var slow = Settings.option("keySlow");           // how much slower the keys steer at speed (settings menu, Keyboard): 1 as it was, 0 not at all
         if(slow === undefined || slow === null) slow = 1;
+        if(v.controller) slow = 0;                       // (a motorcycle: the keys ask for a lean, and that is the same at every speed)
         var speedFactor = 1 + Math.max(0, Math.abs(v.u) / 4 - 1) * slow;
         if(this.turnDir === 0) {
             if(!mouseDown && !usingGamepad)
@@ -586,7 +588,7 @@ OpenRacer.Car = function( config, domElement ) {
         // The assist: when the rear steps out, the front wheels are turned into the slide (as the pad does, controls.js), on top of what the keys
         // made, and it fades with the slide. Only while the keyboard steers (not mouse, pad or a wheel that has the angle).
         var assist = 0;
-        if(Settings.option("keyAssist") && !v.motorcycle && !mouseDown && !usingGamepad && !foreign && v.u > 3) {     // (a motorcycle has its rider: the front wheel is not turned into a slide by itself)
+        if(Settings.option("keyAssist") && !v.controller && !mouseDown && !usingGamepad && !foreign && v.u > 3) {     // (a motorcycle has its rider: the front wheel is not turned into a slide by itself)
             var beta = Math.atan2(v.v, v.u);                 // the slip angle of the car: positive when it moves to the right of where it points
             var counter = Math.sign(beta) * Math.max(0, Math.abs(beta) - 0.035) * 1.1;
             assist = Math.max(-0.6 * this.maxTurn, Math.min(0.6 * this.maxTurn, counter));
