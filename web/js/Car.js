@@ -676,6 +676,7 @@ OpenRacer.Car = function( config, domElement ) {
             this.currentCheckPoint = lastTerrain;
             name = lastTerrain;
         }
+        if(trackGates.length && window.OpenRacer && OpenRacer.GateMarkers) OpenRacer.GateMarkers.passed(this, crossed);
         if(name === trackCheckPoints[0]) {
             // the finish line; a lap of less than twenty seconds is no lap (back and forth over the line)
             if(this.lapStarted && this.clock - this.lapStartTime < 20) return;
