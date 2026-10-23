@@ -839,16 +839,20 @@ OpenRacer.Replay = (function() {
 
     var cameraButtons = null, freeRow = null, freeInfo = null, carButton = null, videoButton = null;
 
-    // ---- a video of the replay: from the start to the end at normal speed, from the canvas of the game (without the bar and without sound), kept as a .mp4 (the browser makes it directly when it can; else a .webm that the local server turns into .mp4 with ffmpeg)
+    // ---- a video of the replay: from the start to the end at normal speed, from the canvas of the game (without the bar, with the sound of the game), kept as a .mp4 (the browser makes it directly when it can; else a .webm that the local server turns into .mp4 with ffmpeg)
     var video = { recorder: null, chunks: [] };
     function toggleVideo() {
         if(video.recorder) { stopVideo(); return; }
         var canvas = typeof renderer !== "undefined" && renderer.domElement;
         if(!canvas || typeof MediaRecorder === "undefined") return;
-        var types = ["video/mp4;codecs=avc1.640028", "video/mp4;codecs=avc1.42E01E", "video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+        var types = ["video/mp4;codecs=avc1.640028,mp4a.40.2", "video/mp4;codecs=avc1.42E01E,mp4a.40.2", "video/mp4;codecs=avc1.640028", "video/mp4;codecs=avc1.42E01E", "video/mp4;codecs=avc1", "video/mp4",
+            "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
         var type = types.filter(function(t) { return MediaRecorder.isTypeSupported(t); })[0];
         if(!type) { videoButton.textContent = "No video here"; setTimeout(function() { videoButton.textContent = "● Video"; }, 3000); return; }
         var stream = canvas.captureStream(60);
+        // the sound of the replay (the engine and the rest that EngineSound plays), when the browser has started it (a key or a click first)
+        var sound = typeof EngineSound !== "undefined" && EngineSound.recordingStream ? EngineSound.recordingStream() : null;
+        if(sound) sound.getAudioTracks().forEach(function(track) { stream.addTrack(track); });
         video.chunks = [];
         video.recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8000000 });
         video.recorder.ondataavailable = function(e) { if(e.data && e.data.size) video.chunks.push(e.data); };
@@ -881,7 +885,7 @@ OpenRacer.Replay = (function() {
         t = api.start_time(); direction = 1; speed = 1; playing = true;
         if(ui) ui.sync();
         document.body.classList.add("replayFilming");
-        videoButton.textContent = "■ Stop (recording)";
+        videoButton.textContent = sound ? "■ Stop (recording)" : "■ Stop (recording, no sound: press a key first)";
         video.recorder.start(250);
     }
     function stopVideo() {
@@ -996,7 +1000,8 @@ OpenRacer.Replay = (function() {
     // ---- a file: save and open
 
     var MAGIC = [0x4f, 0x52, 0x52, 0x50];          // "ORRP"
-    var FORMAT = "openracer-replay", FILE_VERSION = 2;       // 2: the soft body (a block of records after the numbers); 1 files have none and can still be opened
+    var FORMAT = "openracer-replay", FILE_VERSION = 3;       // 3: the skid marks, the smoke and the marbles (a block of rows after the soft body); 2: the soft body (a block of records after the numbers); 1 files have none; all can still be opened
+    var EFFECT_FLOATS = { skid: 29, smoke: 18, marbles: 16 }, MAX_EFFECT_ROWS = 400000;    // the numbers in a row of every effect (SkidMarks.js, Smoke.js, Marbles.js)
     var MAX_FILE = 300 * 1024 * 1024, MAX_CARS = 12, MAX_SAMPLES = 108000;   // an hour
     var ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
 
@@ -1034,9 +1039,24 @@ OpenRacer.Replay = (function() {
                 at += sizes[c];
             });
         });
+        // the skid marks, the smoke and the marbles: their rows (what was made, and when), with the times counted from the start of the recording
+        var T0 = api.start_time(), effectInfo = {}, effectBlocks = [], effectBytes = 0;
+        for(var effectName in EFFECT_FLOATS) {
+            var effect = effects[effectName];
+            if(!effect || !effect.rows.length) continue;
+            var floats = EFFECT_FLOATS[effectName], rows = effect.rows.slice(Math.max(0, effect.rows.length - MAX_EFFECT_ROWS)), block = new Float32Array(rows.length * floats);
+            for(var ri = 0; ri < rows.length; ri++) {
+                block.set(rows[ri].subarray(0, floats), ri * floats);
+                block[ri * floats] = Math.max(0, rows[ri][0] - T0);
+                if(effectName === "marbles" && rows[ri][11] < 1e8) block[ri * floats + 11] = Math.max(0, rows[ri][11] - T0);
+            }
+            effectInfo[effectName] = rows.length;
+            effectBlocks.push(block);
+            effectBytes += block.byteLength;
+        }
         var header = {
             format: FORMAT, version: FILE_VERSION, game: (OpenRacer.VERSION || ""), created: new Date().toISOString(),
-            soft: softInfo, softBytes: softBytes,
+            soft: softInfo, softBytes: softBytes, effects: effectInfo,
             rate: RATE, stride: STRIDE, samples: n,
             track: { id: currentTrack.id, name: currentTrack.name || currentTrack.id },
             cars: cars.map(function(entry) {
@@ -1047,13 +1067,15 @@ OpenRacer.Replay = (function() {
         };
         var text = new TextEncoder().encode(JSON.stringify(header));
         var padded = Math.ceil((text.length + 8) / 4) * 4 - 8;      // the numbers start on a multiple of four
-        var out = new Uint8Array(8 + padded + data.byteLength + softBytes);
+        var out = new Uint8Array(8 + padded + data.byteLength + softBytes + effectBytes);
         out.set(MAGIC, 0);
         new DataView(out.buffer).setUint32(4, padded, true);
         out.fill(0x20, 8, 8 + padded);
         out.set(text, 8);
         out.set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength), 8 + padded);
         out.set(softBlob, 8 + padded + data.byteLength);
+        var effectAt = 8 + padded + data.byteLength + softBytes;
+        effectBlocks.forEach(function(block) { out.set(new Uint8Array(block.buffer, block.byteOffset, block.byteLength), effectAt); effectAt += block.byteLength; });
         return out;
     }
 
@@ -1103,7 +1125,7 @@ OpenRacer.Replay = (function() {
         var header;
         try { header = JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + headerLength))); } catch(e) { throw bad("This replay file is damaged."); }
         if(!header || header.format !== FORMAT) throw bad("This is not an OpenRacer replay.");
-        if((header.version !== FILE_VERSION && header.version !== 1) || header.stride !== STRIDE || header.rate !== RATE) throw bad("This replay was made with another version of OpenRacer (" + String(header.game || "?").slice(0, 20) + ") and cannot be opened by this one.");
+        if((header.version !== FILE_VERSION && header.version !== 2 && header.version !== 1) || header.stride !== STRIDE || header.rate !== RATE) throw bad("This replay was made with another version of OpenRacer (" + String(header.game || "?").slice(0, 20) + ") and cannot be opened by this one.");
         if(!header.track || !ID_PATTERN.test(String(header.track.id)) || !Array.isArray(header.cars) || header.cars.length < 1 || header.cars.length > MAX_CARS) throw bad("This replay file is damaged.");
         for(var i = 0; i < header.cars.length; i++) {
             var c = header.cars[i];
@@ -1118,7 +1140,7 @@ OpenRacer.Replay = (function() {
         var wanted = samples * header.cars.length * STRIDE * 4;
         // the soft body (version 2): per car nothing or { nodes, parts: [names], count }, and the records in a block after the numbers
         var soft = header.cars.map(function() { return null; }), softBytes = 0;
-        if(header.version === FILE_VERSION && header.soft !== undefined) {
+        if(header.version >= 2 && header.soft !== undefined) {
             if(!Array.isArray(header.soft) || header.soft.length !== header.cars.length) throw bad("This replay file is damaged.");
             header.soft = header.soft.map(function(info) {
                 if(info === null) return null;
@@ -1130,7 +1152,18 @@ OpenRacer.Replay = (function() {
             });
             if(header.softBytes !== softBytes) throw bad("This replay file is damaged.");
         } else header.soft = soft;
-        if(start % 4 !== 0 || bytes.length - start !== wanted + softBytes) throw bad("This replay file is damaged.");
+        // the effects (version 3): per name the number of rows
+        var effectCounts = {}, effectBytes = 0;
+        if(header.version >= 3 && header.effects) {
+            if(typeof header.effects !== "object") throw bad("This replay file is damaged.");
+            for(var en in header.effects) {
+                var rowCount = header.effects[en];
+                if(!EFFECT_FLOATS[en] || !(rowCount >= 0 && rowCount <= MAX_EFFECT_ROWS && rowCount === Math.floor(rowCount))) throw bad("This replay file is damaged.");
+                effectCounts[en] = rowCount;
+                effectBytes += rowCount * EFFECT_FLOATS[en] * 4;
+            }
+        }
+        if(start % 4 !== 0 || bytes.length - start !== wanted + softBytes + effectBytes) throw bad("This replay file is damaged.");
         var data = new Float32Array(bytes.buffer.slice(bytes.byteOffset + start, bytes.byteOffset + start + wanted));
         for(var k = 0; k < data.length; k++) if(!isFinite(data[k])) throw bad("This replay file is damaged.");
         var view = new DataView(bytes.buffer, bytes.byteOffset + start + wanted, softBytes), at = 0;
@@ -1158,8 +1191,16 @@ OpenRacer.Replay = (function() {
             }
             return { nodes: info.nodes, names: info.parts, records: records, version: -1, disp: null };
         });
+        var effectData = {}, effectAt = bytes.byteOffset + start + wanted + softBytes;
+        for(var name2 in effectCounts) {
+            var length = effectCounts[name2] * EFFECT_FLOATS[name2];
+            var block = new Float32Array(bytes.buffer.slice(effectAt, effectAt + length * 4));
+            for(var bi = 0; bi < block.length; bi++) if(!isFinite(block[bi])) throw bad("This replay file is damaged.");
+            effectData[name2] = block;
+            effectAt += length * 4;
+        }
         header.gears = Array.isArray(header.gears) ? header.gears.map(function(g) { return String(g).slice(0, 8); }) : [""];
-        return { header: header, data: data, soft: soft };
+        return { header: header, data: data, soft: soft, effects: effectData };
     }
 
     // From the main menu: reads a file, checks that this game has the track and the cars, keeps it for the game that is started to show it.
@@ -1348,9 +1389,21 @@ OpenRacer.Replay = (function() {
         dropped = 0;
         total = n;
         api.viewer = true;
+        // the skid marks, the smoke and the marbles of the file: their objects are made (the game does not drive, so nobody has asked for them), and get the rows
+        if(OpenRacer.skidMarks) OpenRacer.skidMarks();
+        if(OpenRacer.marbles) OpenRacer.marbles();
+        effectTime = null;
+        for(var name in effects) {
+            var e = effects[name], block = parsed.effects && parsed.effects[name];
+            e.rows = []; e.base = 0; e.cursor = 0; e.snapshot = null;
+            if(!block) continue;
+            var floats = EFFECT_FLOATS[name];
+            for(var r = 0; r < block.length / floats; r++) e.rows.push(block.subarray(r * floats, (r + 1) * floats));
+        }
     };
 
     api.debugEffects = function() { return effects; };
+    api.debugPack = function() { return pack(); };
     api.debugSoft = function() { return cars.map(function(e) { return e.soft ? e.soft.records.map(function(r) { var m = 0; for(var i = 0; i < r.disp.length; i++) m = Math.max(m, Math.abs(r.disp[i])); return r.index + ':' + (m / SOFT_SCALE).toFixed(3) + ':' + Array.prototype.join.call(r.parts.filter(function(x, i) { return i % PART_FLOATS === 0; }), ''); }) : null; }); };
     api.info = function() { return { seconds: total * DT, cars: cars.length, blocks: chunks.length, megabytes: chunks.length * CHUNK * perSample() * 4 / 1048576 }; };
     api.speeds = SPEEDS;

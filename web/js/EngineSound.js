@@ -9,6 +9,7 @@
 
 var EngineSound = (function() {
     var ctx = null;
+    var bus = null, recordDestination = null;     // everything that is heard goes through the bus; the video of a replay takes its sound from it
     var synth = null;
     var output = null;           // the volume of the whole sound
     var loading = false;
@@ -184,9 +185,11 @@ var EngineSound = (function() {
                 return;
             }
             ctx = new AudioContextClass();
+            bus = ctx.createGain();
+            bus.connect(ctx.destination);
             output = ctx.createGain();
             output.gain.value = level();
-            output.connect(ctx.destination);
+            output.connect(bus);
             analyser = ctx.createAnalyser();
             analyser.fftSize = 1024;
             output.connect(analyser);
@@ -264,7 +267,7 @@ var EngineSound = (function() {
             var filter = ctx.createBiquadFilter();
             var gain = ctx.createGain();
             gain.gain.value = 0;
-            source.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+            source.connect(filter); filter.connect(gain); gain.connect(bus || ctx.destination);
             source.start();
             ground = { filter: filter, gain: gain };
         }
@@ -284,14 +287,14 @@ var EngineSound = (function() {
         var gain = ctx.createGain();
         gain.gain.setValueAtTime(0.9 * strength * v, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18 + 0.3 * strength);
-        source.connect(low); low.connect(gain); gain.connect(ctx.destination);
+        source.connect(low); low.connect(gain); gain.connect(bus || ctx.destination);
         source.start(now, Math.random()); source.stop(now + 0.6);
         var tone = ctx.createOscillator(), toneGain = ctx.createGain();
         tone.frequency.setValueAtTime(95, now);
         tone.frequency.exponentialRampToValueAtTime(38, now + 0.22);
         toneGain.gain.setValueAtTime(0.7 * strength * v, now);
         toneGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
-        tone.connect(toneGain); toneGain.connect(ctx.destination);
+        tone.connect(toneGain); toneGain.connect(bus || ctx.destination);
         tone.start(now); tone.stop(now + 0.3);
     }
 
@@ -335,6 +338,13 @@ var EngineSound = (function() {
         return Math.sqrt(sum / analyserData.length);
     }
 
+    // the sound as a stream, for the video of a replay (null: there is no sound yet, the browser asks for a click or a key first)
+    function recordingStream() {
+        if(!ctx || !bus) return null;
+        if(!recordDestination) { recordDestination = ctx.createMediaStreamDestination(); bus.connect(recordDestination); }
+        return recordDestination.stream;
+    }
+
     return {
         update: update,
         pop: pop,
@@ -359,6 +369,7 @@ var EngineSound = (function() {
         setInside: function(value) {
             inside = value;
             if(synth) synth.setInside(value);
-        }
+        },
+        recordingStream: recordingStream
     };
 })();

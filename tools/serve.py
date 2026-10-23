@@ -132,7 +132,7 @@ class Handler(SimpleHTTPRequestHandler):
                     left -= len(chunk)
             # H.264 in a mp4 that plays everywhere: even sizes, yuv420p, the index at the front
             command = [ffmpeg, "-y", "-loglevel", "error", "-i", source, "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libx264", "-preset", "veryfast",
-                       "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", target]
+                       "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-c:a", "aac", "-b:a", "160k", target]
             try:
                 done = subprocess.run(command, capture_output=True, timeout=1800)
             except subprocess.TimeoutExpired:

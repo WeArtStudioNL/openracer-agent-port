@@ -843,7 +843,7 @@ var MainMenu = (function() {
             chips("Tyre wear and fuel", [[0, "Off"], [1, "On"], [3, "Fast"]], raceOptions.wear === undefined ? 1 : raceOptions.wear, function(v) { raceOptions.wear = v; });
             chips("Ghost of your best lap", [[false, "Off"], [true, "On"]], !!raceOptions.ghost, function(v) { raceOptions.ghost = v; });
             chips("Save lap records", [[false, "Off"], [true, "On"]], !!raceOptions.records, function(v) { raceOptions.records = v; });
-            if(cars.length > 1) {
+            if(cars.length > 1 && mode === "race") {
                 var title = document.createElement("div");
                 title.className = "setting";
                 title.innerHTML = "<span class=\"label\">Cars that may race</span>";
@@ -981,6 +981,25 @@ var MainMenu = (function() {
             list.appendChild(d);
         });
         inner.appendChild(list);
+        if(mode === "free") {
+            // free drive has its choices too: the wear of the tyres and the fuel (the rest is under More options)
+            var row = document.createElement("div");
+            row.className = "setting";
+            row.innerHTML = "<span class=\"label\">Tyre wear and fuel</span>";
+            var group = document.createElement("div");
+            group.className = "chips";
+            [[0, "Off"], [1, "On"], [3, "Fast"]].forEach(function(item) {
+                var c = document.createElement("button");
+                c.className = "chip" + (item[0] === (raceOptions.wear === undefined ? 1 : raceOptions.wear) ? " on" : "");
+                c.textContent = item[1];
+                c.onclick = function() { raceOptions.wear = item[0]; rememberRace(); render(); };
+                group.appendChild(c);
+            });
+            row.appendChild(group);
+            group.appendChild(button("More options…", "ghost", showMore));
+            row.style.cssText = "margin-bottom: 14px; padding-top: 0;";
+            inner.insertBefore(row, list);
+        }
     }
 
     // the ground of the skidpad: the same circle on asphalt, wet asphalt, grass, gravel, sand or mud
