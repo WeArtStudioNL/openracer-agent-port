@@ -60,6 +60,7 @@ OpenRacer.GateMarkers = (function () {
         scene.add(group);
         last = "";
         track = trackArg;
+        nextGate = 0; passedGates = trackArg.gates.map(function () { return false; });
     }
 
     function clear() {
@@ -68,13 +69,10 @@ OpenRacer.GateMarkers = (function () {
         if (hud) { hud.style.display = "none"; shown = false; }
     }
 
-    // the gate that the player has to pass next: the finish line before the lap has started and after the last gate, else the first gate not passed
-    function nextIndex(player) {
-        var done = player.checkPointsCompleted;
-        if (!player.lapStarted) return 0;
-        for (var i = 1; i < done.length; i++) if (!done[i]) return i;
-        return 0;
-    }
+    // The gates in order, as the markers show them: the finish line first, then every gate in turn. Only a gate that is passed in its turn changes colour;
+    // a gate out of turn (a wrong one) stays as it is. (The lap itself is counted by Car.js.)
+    var nextGate = 0, passedGates = [];
+    function nextIndex() { return nextGate; }
 
     // ---- the arrow at the top of the screen: where the next gate is, and how far
     var hud = null, arrow = null, label = null, shown = false;
@@ -111,9 +109,9 @@ OpenRacer.GateMarkers = (function () {
     // the colours follow the lap of the player: call it every frame, it only works when something changed
     function update(player) {
         if (!group || !player || !player.checkPointsCompleted) return;
-        var done = player.checkPointsCompleted, next = nextIndex(player);
+        var done = passedGates, next = nextGate;
         updateHud(player, next);
-        var key = done.map(function (d) { return d ? 1 : 0; }).join("") + ":" + next + ":" + (player.lapStarted ? 1 : 0);
+        var key = done.map(function (d) { return d ? 1 : 0; }).join("") + ":" + next + ":" + "";
         if (key === last) return;
         last = key;
         gates.forEach(function (holder, i) {
@@ -153,10 +151,14 @@ OpenRacer.GateMarkers = (function () {
 
     // the player went through gate `index` (called by Car.js before the lap is counted)
     function passed(player, index) {
-        if (!group || index < 0 || !player.checkPointsCompleted) return;
-        var next = nextIndex(player);
-        if (index === next) sound(true);
-        else if (!(index !== 0 && player.checkPointsCompleted[index])) sound(false);   // a gate that was passed already is not a mistake
+        if (!group || index < 0) return;
+        var n = gates.length;
+        if (index === nextGate) {
+            sound(true);
+            if (index === 0) { for (var i = 0; i < n; i++) passedGates[i] = false; nextGate = n > 1 ? 1 : 0; }   // the finish line: a new lap
+            else { passedGates[index] = true; nextGate = index + 1 < n ? index + 1 : 0; }
+            last = "";
+        } else if (!passedGates[index]) sound(false);        // a gate that was passed already is not a mistake
     }
 
     return { build: build, clear: clear, update: update, passed: passed };
