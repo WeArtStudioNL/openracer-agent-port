@@ -398,7 +398,7 @@ function loadFromFiles(list) {
     new GLTFLoader(manager).load(urls.get(main), (gltf) => {
         setModel(gltf.scene, !replacing, replacing);
         $("modelInfo").textContent = main + " (" + (state.files.get(main).size / 1048576).toFixed(1) + " MB), " + state.nodes.length + " named parts";
-        if (!replacing) status("Model loaded.", "ok");
+        if (!replacing) quickSetup(main);
     }, undefined, (error) => status("Could not read the model: " + (error.message || error), "error"));
 }
 
@@ -598,8 +598,17 @@ function updateHelpers() {
     grid.position.y = wheelMode() === "model" && centres ? Math.min(...SLOTS.map((s) => centres[s].c.y - centres[s].size.y / 2)) : -radius;
     updateSpeedInfo();
     const box = new THREE.Box3().setFromObject(pivot);
-    $("hud").textContent = state.root ? "Blue arrow: forward. The axes are the origin: it has to be at the height of the wheel axles, between the axles.\n" +
-        "Model " + box.getSize(new THREE.Vector3()).toArray().map((v) => v.toFixed(2)).join(" x ") + " m (width x height x length)" : "";
+    $("hud").textContent = !state.root ? "Drop a .glb file here to make a car" : "Blue arrow: forward. The axes are the origin: it has to be at the height of the wheel axles, between the axles.\n" +
+        "Model " + box.getSize(new THREE.Vector3()).toArray().map((v) => v.toFixed(2)).join(" x ") + " m (width x height x length)";
+}
+
+// A new model is set up by itself: the wheels are found, the car takes its size from them and the model is put on the floor; what is left is a name and Save and drive
+function quickSetup(file) {
+    guessWheels();
+    const ok = SLOTS.every((s) => $("w" + s).selectedOptions.length);
+    if (ok) { chassisFromWheels(); fit(); sizeFromModel(); }
+    if (!state.existingId && !$("name").value.trim()) { $("name").value = file.replace(/\.(glb|gltf)$/i, "").replace(/[_-]+/g, " ").trim(); if (!state.idEdited) $("id").value = slug($("name").value); }
+    status(ok ? "Ready: Save and drive." : "Pick the four wheels (Wheels and steering), then Save and drive.", ok ? "ok" : "error");
 }
 
 function guessWheels() {
@@ -1452,6 +1461,7 @@ function buildConfig(id) {
 }
 
 async function save() {
+    let done = false;
     try {
         const name = $("name").value.trim();
         const id = $("id").value.trim() || slug(name);
@@ -1531,10 +1541,28 @@ async function save() {
         $("delete").style.display = "";
         status(saved.where === "server" ? "Saved as cars/" + id + ". It is in the main menu of the game now."
             : "Saved in your garage, in this browser (the server does not save). It is in the main menu of the game now.", "ok");
+        done = true;
     } catch (error) {
         status(error.message, "error");
     }
+    return done;
 }
+
+// the car is saved and driven at once, on the track that was chosen last
+async function saveAndDrive() {
+    if (!(await save())) return;
+    let track = "circuit";
+    try { track = (JSON.parse(localStorage.getItem("openracer.lastChoice")) || {}).track || track; } catch (e) { /* no storage */ }
+    window.location.href = "../index.html?car=" + encodeURIComponent(state.existingId) + "&track=" + encodeURIComponent(track);
+}
+$("saveDrive").addEventListener("click", saveAndDrive);
+// a .glb that is dropped on the page becomes the model
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const files = [...(e.dataTransfer ? e.dataTransfer.files : [])];
+    if (files.some((f) => /\.(glb|gltf)$/i.test(f.name))) loadFromFiles(files);
+});
 
 async function deleteCar() {
     if (!state.existingId || !confirm("Delete the car “" + state.existingId + "” with all its files?")) return;
@@ -1727,6 +1755,7 @@ function newCar() {
     $("modelInfo").textContent = "No model loaded.";
     $("modelNote").textContent = "";
     $("files").value = "";
+    $("name").value = ""; $("id").value = ""; $("description").value = "";
     $("delete").style.display = "none";
     $("editing").textContent = "Choose a car to change it, or make a new one below. Saving a car that was chosen here overwrites it.";
     helpers.clear();

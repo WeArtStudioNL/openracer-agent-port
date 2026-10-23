@@ -750,6 +750,14 @@ var MainMenu = (function() {
             wrap.appendChild(skidpad);
         }
 
+        // your own car: drop a .glb in the car editor
+        var addCar = document.createElement("button");
+        addCar.className = "secondary";
+        addCar.textContent = "Add your car";
+        addCar.title = "Drop a .glb: it is set up and driven";
+        addCar.onclick = function() { window.location.href = "tools/car-editor.html"; };
+        wrap.appendChild(addCar);
+
         // the replays that were saved (Replay.js): a list in a window, and a file that someone sent can be imported. A replay needs the same track and cars as the one who made it
         var openReplay = document.createElement("button");
         openReplay.className = "secondary";
