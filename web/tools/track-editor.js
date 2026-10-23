@@ -1566,6 +1566,28 @@ function dialog(title, build) {
     return { close, shade };
 }
 
+// Open track: every track is a button, and a click opens it at once (Back goes to the choices of the start)
+function trackPicker() {
+    dialog("Open a track", (box, close) => {
+        const list = document.createElement("div");
+        list.style.cssText = "display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; max-height: 60vh; overflow-y: auto; margin-bottom: 12px;";
+        for (const t of state.tracks) {
+            const b = document.createElement("button");
+            b.style.cssText = "text-align: left; padding: 10px 14px; height: auto; white-space: normal;";
+            b.innerHTML = "<b></b><div style='font-weight: normal; font-size: 12.5px; opacity: 0.75; margin-top: 2px'></div>";
+            b.firstChild.textContent = t.name || t.id;
+            b.lastChild.textContent = t.id;
+            b.onclick = () => { $("existing").value = t.id; close(); loadExisting(); };
+            list.appendChild(b);
+        }
+        box.appendChild(list);
+        const back = document.createElement("button");
+        back.textContent = "Back";
+        back.onclick = () => { close(); startDialog(); };
+        box.appendChild(back);
+    });
+}
+
 // At the start: open a track, make a track from a height map, or a new track
 function startDialog() {
     dialog("Track editor", (box, close) => {
@@ -1583,18 +1605,7 @@ function startDialog() {
             box.appendChild(b);
             return b;
         };
-        const openRow = document.createElement("div");
-        openRow.style.cssText = "display: none; gap: 8px; margin: 0 0 8px;";
-        const select = document.createElement("select");
-        select.style.flex = "1";
-        select.innerHTML = state.tracks.map((t) => "<option value=\"" + String(t.id).replace(/"/g, "&quot;") + "\">" + String(t.name || t.id).replace(/[<>&]/g, "") + " (" + String(t.id).replace(/[<>&]/g, "") + ")</option>").join("");
-        const go = document.createElement("button");
-        go.className = "primary";
-        go.textContent = "Open";
-        go.onclick = () => { $("existing").value = select.value; close(); loadExisting(); };
-        openRow.append(select, go);
-        choice("Open track", state.tracks.length ? state.tracks.length + " tracks to change" : "There are no tracks yet", () => { if (state.tracks.length) openRow.style.display = openRow.style.display === "none" ? "flex" : "none"; });
-        box.appendChild(openRow);
+        choice("Open track", state.tracks.length ? state.tracks.length + " tracks to change" : "There are no tracks yet", () => { if (state.tracks.length) { close(); trackPicker(); } });
         choice("Import height map", "A track from a height map (16 bit grey PNG) and a colour map", () => { close(); heightDialog(); });
         choice("New track", "Start empty: import a model, or draw the road with nodes", () => { close(); newTrack(); });
     });

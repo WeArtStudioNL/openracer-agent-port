@@ -9,6 +9,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 - New engine sound presets for motorcycles (a thumper, a triple, a 600 cc and a 1000 cc four), and `tools/check-engine-sound.js`: it runs the real engine sound without a browser and reports the level, clipping and the pitch against the firing frequency of every preset.
 
 **Look and menu**
+- *Open track* in the track editor shows every track as a button (no dropdown); a click opens it at once, *Back* goes back to the choices.
 - **No more alerts or confirms of the browser**: every question and message is a window of the game (`web/dialog.js`, in the look of the menu): deleting, replacing, importing a link, writing a tuning, the editors, a track that does not load. Importing a car or track that already exists (in the game, the garage or the linked folder) now **shows what is different** (`chassis.max_steer_deg 35 → 42`, added and removed fields) in that window, or says that the settings are the same; *Replace* or *Keep the old one*. The model files are not compared.
 - *My garage* shows a small picture of every car, and the home screen of the menu is in the middle of the page.
 - Importing a zip (or a link) of a car or track now asks first when one with the same id is already there (in the game, the garage or the linked folder): *Replace it?*; *Cancel* imports nothing. It replaced it without asking before.
