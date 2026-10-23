@@ -323,7 +323,19 @@ OpenRacer.Garage = (function () {
                 if (found.kind === "cars" && json.model && json.model.file) {
                     json.model.file = "cars/" + id + "/" + json.model.file.split("/").pop();
                 }
-                return put(found.kind, id, json, files, { replace: true }).then(function () { return { kind: found.kind, id: id }; });
+                // is there one with this id already (of the server, of the garage, of a folder)? then it is asked first
+                var existing = typeof Catalog !== "undefined" ? Catalog.load(found.kind).catch(function () { return []; }) : Promise.resolve([]);
+                return existing.then(function (list) {
+                    var kindName = found.kind.slice(0, -1);
+                    var same = list.filter(function (item) { return item.id === id; })[0];
+                    if (same) {
+                        var where = sourceOf(same) === "garage" ? "your garage" : (sourceOf(same) === "folder" ? "the linked folder" : "the game");
+                        if (!window.confirm("There already is a " + kindName + " “" + (same.name || id) + "” (" + id + ") in " + where + ". Replace it with the one in the zip?")) {
+                            throw new Error("Not imported: the " + kindName + " “" + id + "” was already there.");
+                        }
+                    }
+                    return put(found.kind, id, json, files, { replace: true }).then(function () { return { kind: found.kind, id: id }; });
+                });
             });
         });
     }
