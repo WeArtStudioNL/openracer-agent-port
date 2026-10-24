@@ -438,7 +438,6 @@ OpenRacer.Car = function( config, domElement ) {
     this.goLimp = function() {
         var v = this.vehicle, c = v.controller;
         if(!c || c.crashed || c.limp || !this.driver || !this.driver.crash) return;
-        if(Math.abs(v.u) < 8) { c.crashed = true; c.crashSpeed = { x: v.vx, y: v.vy, z: v.vz }; return; }      // slow: it just goes down (the update throws the rider)
         c.limp = true;
         this.driver.crash(new THREE.Vector3(v.vx, v.vy, v.vz), v.ground, { bike: v, onBike: true });
         this.crashShown = true;                                    // (a reset or a repair ends it)

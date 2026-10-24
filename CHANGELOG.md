@@ -16,6 +16,9 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 - **ESC is off on a motorcycle**: it took the small angle of the front wheel in a bend for oversteer and braked the front, which broke the bike away on the brakes at speed.
 - **Every part starts with the speed it has**: the speed of the bike at that place (its speed and its turn) and the rider's own movement on it, measured from the frame before (at most 5 m/s); no kick upwards and no random tumble any more. The spheres of the bike move on with their speed within a frame (a rider held to a bike at 25 m/s shook, as the spheres stood still for the frame).
 - **Leaning too far is a lowside**: the rider can ask about 10 degrees more lean than the tyres hold (`over_lean_deg`), the tyres let go past that and the bike goes down past 63 degrees (`crash_lean_deg`; the default `max_lean_deg` is 60). Holding full lean at 110 or 160 km/h puts it down in about two seconds.
+- **The limp rider (the key 9) gets no help at all**: the front wheel is let go and comes straight, no castor, no balance, no throttle; the tyres and the lean decide where the bike goes, it leans over within a second or two at any speed (also at a walking pace: no direct fall any more) and past 40 degrees, or once it has stopped, it is a body that slides, as in a crash.
+- **A walking pace with the bars at the lock**: the throttle is eased to a tenth (the bike went on accelerating round the turn), the rider cannot hold it up any more and it leans into the turn and goes over; with the bars half turned nothing changes.
+- A reset at speed (the bike put back at once) is not a hit: the hit that crashes is a loss of speed, not a change of place.
 - **The replay shows the ragdoll**: the places of the particles are recorded every sample while the rider is one, and a replay file (version 4) keeps them; a file from before opens as it did.
 
 **Car editor: orthographic view and standard views**

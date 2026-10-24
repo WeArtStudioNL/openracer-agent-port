@@ -123,11 +123,9 @@ OpenRacer.Motorcycle = function (settings) {
     this.steering = function (v, delta, u, dt) {
         if (self.crashed) { self.steer += (0 - self.steer) * Math.min(1, dt / 0.1); return self.steer; }
         if (self.limp) {
-            // nobody steers: the front wheel castors into the lean on its own, but not quite enough to hold it (a bike without a rider wanders off its line and goes down within
-            // seconds; past 40 degrees it is down)
-            var st = leanOf(v, 0), ph = Math.max(-1.05, Math.min(1.05, st.lean));
-            var own = -Math.sign(ph) * Math.atan(v.wheelbase * G * Math.tan(Math.abs(ph)) / Math.max(u * u, 1)) * 0.9 * smooth(2, 6, Math.abs(u));
-            self.steer += (own - self.steer) * Math.min(1, dt / 0.08);
+            // nobody steers and nothing helps: the front wheel is let go (it comes straight), and the tyres and the lean decide where the bike goes; it goes down past 40 degrees, or
+            // when it has stopped
+            self.steer += (0 - self.steer) * Math.min(1, dt / 0.3);
             return self.steer;
         }
         var inp = v.input, lock = inp.turnLimit || inp.maxTurn || 0.38;
@@ -203,7 +201,9 @@ OpenRacer.Motorcycle = function (settings) {
         var frontLoad = ((v.wheels[0].weight || 0) + (v.wheels[1].weight || 0)) / Math.max(1, v.weight_distribution * v.mass * G);
         var want = on && Math.abs(v.u) > 0.5 ? Math.max(0.15, Math.min(1, (frontLoad - 0.08) / 0.3)) : 1;
         self.wheelieScale += (want - self.wheelieScale) * Math.min(1, dt / (want < self.wheelieScale ? 0.03 : 0.25));
-        return self.wheelieScale;
+        // at a walking pace with the bars turned far the throttle is eased: the bike slows in the turn instead of driving on round it
+        var slowLock = (1 - smooth(2.0, 4.0, Math.abs(v.u))) * smooth(0.6, 0.95, Math.abs(self.command || 0));
+        return self.wheelieScale * (1 - 0.92 * slowLock);
     };
 
     // ---- hook: the brakes. brakeStep once per step of the physics, brakeScale for every wheel
@@ -252,12 +252,15 @@ OpenRacer.Motorcycle = function (settings) {
             var wall = v.impactTime < 0.05 && v.lastImpact > 5.5 && v.impactTime !== self.wallHit;
             if (wall) self.wallHit = v.impactTime;
             // a hit that is not a wall of the body (the wheels into a barrier, a kerb): the speed lost in a tenth of a second, more than 8 m/s (over 8 g), at more than 20 km/h before it
-            now += dt; hist.push({ t: now, x: v.vx, z: v.vz });
+            now += dt; hist.push({ t: now, x: v.vx, z: v.vz, px: v.px, pz: v.pz });
             while (hist.length > 2 && hist[1].t < now - 0.1) hist.shift();
-            var old = hist[0], lost = Math.sqrt((v.vx - old.x) * (v.vx - old.x) + (v.vz - old.z) * (v.vz - old.z));
-            var hit = lost > 8 && Math.sqrt(old.x * old.x + old.z * old.z) > 5.5;
+            var old = hist[0], last = hist[hist.length - 2] || old;
+            // (a reset puts the bike somewhere else at once: that is no hit; the speeds before it are forgotten)
+            if (Math.abs(v.px - last.px) + Math.abs(v.pz - last.pz) > 3) { hist.length = 0; hist.push({ t: now, x: v.vx, z: v.vz, px: v.px, pz: v.pz }); old = hist[0]; }
+            var speedOld = Math.sqrt(old.x * old.x + old.z * old.z), speedNow = Math.sqrt(v.vx * v.vx + v.vz * v.vz);
+            var hit = speedOld - speedNow > 8 && speedOld > 5.5;
             if (hit && !wall) { wall = true; v.lastWall = v.lastWall || {}; v.lastWall.v = [old.x, 0, old.z]; }
-            if (Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) || aMag > 3.5 * G || (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) || wall) {
+            if (Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) || (self.limp && Math.abs(u) < 0.5) || aMag > 3.5 * G || (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) || wall) {
                 self.crashed = true;
                 var before = wall && v.lastWall && v.lastWall.v ? v.lastWall.v : null;
                 self.crashSpeed = before ? { x: before[0], y: before[1], z: before[2] } : { x: v.vx, y: v.vy, z: v.vz };
@@ -281,7 +284,11 @@ OpenRacer.Motorcycle = function (settings) {
         self.rider(v, torque, dt, u, state);
         var m = v.mass, gh = m * G * v.cgHeight;
         var kp = self.balance * 10 * gh, inertia = m * v.cgHeight * v.cgHeight + c.inertiaZ, kd = 1.5 * Math.sqrt(kp * inertia);
+        // at a walking pace with the bars turned far the rider cannot hold the bike up: the balance fades and it leans into the turn and goes down (unless the foot is down: standing)
+        var slowLock = (1 - smooth(2.0, 4.0, Math.abs(u))) * smooth(0.6, 0.95, Math.abs(self.command || 0)) * (1 - self.footDown);
+        kp *= 1 - 0.98 * slowLock; kd *= 1 - 0.8 * slowLock;
         var T = kp * (self.targetLean - state.lean) - kd * state.rate;                           // about the axis that leans it to the left
+        T -= slowLock * 0.5 * gh * Math.sign(self.command || 0);                              // (and it leans into the turn: a bike that crawls with the bars at the lock goes over to the inside; left is a negative command and a positive T)
         T = alive * Math.max(-6 * gh, Math.min(6 * gh, T));
         torque.x -= state.ax * T; torque.y -= state.ay * T; torque.z -= state.az * T;
         // the yaw that the steering did not ask for is damped
