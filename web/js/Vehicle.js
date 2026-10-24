@@ -351,6 +351,9 @@ OpenRacer.Vehicle = function (parameters, input) {
             w.mass = this.mass * (w.front ? this.weight_distribution : 1 - this.weight_distribution) / 2;
             w.rate = w.front ? this.frontWheelRate : this.rearWheelRate;
             if(this.soloWheels && (i === 0 || i === 2)) { w.mass *= 2; w.rate *= 2; }                         // (a motorcycle: the one wheel of the end carries it all, on the spring of both)
+            // (and the front wheel has the inertia of a front wheel with its discs and tyre, 1.2 kg m2 at least: at the 0.33 that the size of a bike gave, the tyre force of a hard brake turned
+            // the wheel round in a frame, past the road speed, and back: the force flipped between -3000 and +3000 N about three times a second, and the fork and the rear wheel hopped)
+            if(this.soloWheels && this.wheels[i] && this.wheels[i].front && !parameters.wheel_inertia) this.wheels[i].inertia = Math.max(this.wheels[i].inertia, 1.2);
             w.staticLoad = w.mass * G;
             // free length: the spring is pushed in by the weight at rest, to the rest length
             w.restLengthWheel = this.restLength + (w.front ? this.rideFront : this.rideRear); // where the wheel sits at rest
