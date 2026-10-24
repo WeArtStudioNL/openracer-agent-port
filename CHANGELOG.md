@@ -21,6 +21,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 - A reset at speed (the bike put back at once) is not a hit: the hit that crashes is a loss of speed, not a change of place.
 - **A burnout**: the brake and the throttle together at a standstill (or nearly) hold the front brake and let the rear brake off, so the rear wheel spins (it sat at 4 000 rpm with both wheels held).
 - **Reset puts the engine at idle with the clutch open** (also for a car): it kept its speed, and in gear it spun the wheels up again the moment the car was put down.
+- **A wheelie past the balance point is not a crash**: the lean (the roll) is now how far the bike's own left axis dips below the road, so a wheelie or a stoppie reads 0 degrees of lean however steep it is (measured from the up of the bike it read 180 degrees past the vertical, and that was a crash at once). The tail scrapes and the rear brake can still bring it down; it is a crash once the bike is on its back (its up more than 100 degrees from the road).
 - **The replay shows the ragdoll**: the places of the particles are recorded every sample while the rider is one, and a replay file (version 4) keeps them; a file from before opens as it did.
 
 **Car editor: orthographic view and standard views**

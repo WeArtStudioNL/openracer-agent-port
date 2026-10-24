@@ -80,7 +80,7 @@ OpenRacer.Motorcycle = function (settings) {
         out.z = iz * qw + iw * -qz + ix * -qy - iy * -qx;
         return out;
     }
-    var up = { x: 0, y: 0, z: 0 }, fwd = { x: 0, y: 0, z: 0 };
+    var up = { x: 0, y: 0, z: 0 }, fwd = { x: 0, y: 0, z: 0 }, side = { x: 0, y: 0, z: 0 };
 
     // The road under the bike: the mean of the normals of the wheels that touch it (by their load), smoothed. A bike on a bank or over a crest is kept square to the road, not to the sky:
     // a bike that is upright on a bank slides down it.
@@ -111,12 +111,21 @@ OpenRacer.Motorcycle = function (settings) {
         var fl = Math.sqrt(fwd.x * fwd.x + fwd.z * fwd.z) || 1, fx = fwd.x / fl, fz = fwd.z / fl;
         var n = roadOf(v, dt);
         // the left of the bike along the road: n x forward
-        var lx = n.y * fwd.z - n.z * fwd.y, ly = n.z * fwd.x - n.x * fwd.z, lz = n.x * fwd.y - n.y * fwd.x, ll = Math.sqrt(lx * lx + ly * ly + lz * lz) || 1;
+        var lx = n.y * fwd.z - n.z * fwd.y, ly = n.z * fwd.x - n.x * fwd.z, lz = n.x * fwd.y - n.y * fwd.x, ll = Math.sqrt(lx * lx + ly * ly + lz * lz);
+        rotate(v, 1, 0, 0, side);
+        if (ll < 0.2) { lx = side.x; ly = side.y; lz = side.z; ll = 1; }                 // (the bike nearly vertical, a wheelie or a stoppie: its own left)
         lx /= ll; ly /= ll; lz /= ll;
+        // The lean (the roll) is how far the bike's own left axis dips below the road: in a wheelie or a stoppie the up of the bike turns forward or back but its left axis stays level,
+        // so the lean stays 0 (measured from the up of the bike it read 180 degrees past the vertical, and a wheelie that went past the balance point was a crash at once).
+        // A bike that is upside down (its up below the road and not pitched up on end) is past 90 degrees.
+        var sinRoll = Math.max(-1, Math.min(1, -(side.x * n.x + side.y * n.y + side.z * n.z)));
+        var upN = up.x * n.x + up.y * n.y + up.z * n.z, fwdN = Math.abs(fwd.x * n.x + fwd.y * n.y + fwd.z * n.z);
+        var lean = Math.asin(sinRoll);
+        if (upN < 0 && fwdN < 0.7) lean = (sinRoll >= 0 ? Math.PI : -Math.PI) - lean;
         // The roll axis of the bike is its own forward (ax, ay, az), not the horizontal one (fx, fz): a torque about the horizontal axis on a slope, or with the nose down on the brake,
         // has a part about the up of the bike, and that was a yaw of several hundred newton metres (the rider pulling the bike up on a climb swung its tail out)
         var al = Math.sqrt(fwd.x * fwd.x + fwd.y * fwd.y + fwd.z * fwd.z) || 1, ax = fwd.x / al, ay = fwd.y / al, az = fwd.z / al;
-        return { lean: Math.atan2(up.x * lx + up.y * ly + up.z * lz, up.x * n.x + up.y * n.y + up.z * n.z), rate: -(v.wx * ax + v.wy * ay + v.wz * az), fx: fx, fz: fz, ax: ax, ay: ay, az: az, lx: lx, ly: ly, lz: lz };
+        return { lean: lean, rate: -(v.wx * ax + v.wy * ay + v.wz * az), fx: fx, fz: fz, ax: ax, ay: ay, az: az, lx: lx, ly: ly, lz: lz, upN: upN, fwdN: fwdN };
     }
 
     // ---- hook: the angle of the front wheel (right is positive), from what the input asks for. delta: what the input gave (the angle of the wheel or the lock that is turned).
@@ -264,7 +273,9 @@ OpenRacer.Motorcycle = function (settings) {
             var speedOld = Math.sqrt(old.x * old.x + old.z * old.z), speedNow = Math.sqrt(v.vx * v.vx + v.vz * v.vz);
             var hit = speedOld - speedNow > 8 && speedOld > 5.5;
             if (hit && !wall) { wall = true; v.lastWall = v.lastWall || {}; v.lastWall.v = [old.x, 0, old.z]; }
-            if (Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) || (self.limp && Math.abs(u) < 0.5) || aMag > 3.5 * G || (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) || wall) {
+            // a wheelie that went over: the bike on its back (its up more than 100 degrees from the road); up to there the tail scrapes and the rear brake can still bring it down
+            var over = state.upN < -0.17;
+            if (Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) || (self.limp && Math.abs(u) < 0.5) || over || aMag > 3.5 * G || (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) || wall) {
                 self.crashed = true;
                 var before = wall && v.lastWall && v.lastWall.v ? v.lastWall.v : null;
                 self.crashSpeed = before ? { x: before[0], y: before[1], z: before[2] } : { x: v.vx, y: v.vy, z: v.vz };
