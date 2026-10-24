@@ -25,6 +25,7 @@
     <script type="importmap">
         { "imports": { "three": "../js/three/build/three.module.js", "three/addons/": "../js/three/examples/jsm/" } }
     </script>
+    <style>body.bike .carOnly { display: none !important; } body:not(.bike) .bikeOnly { display: none !important; }</style>
 </head>
 <body>
 <div id="side">
@@ -41,6 +42,11 @@
                 <div class="row">
                     <select id="existing"></select>
                     <button id="newCar" class="fixed ghost">New car</button>
+                    <button id="newBike" class="fixed ghost">New motorcycle</button>
+                </div>
+                <div class="row">
+                    <div><label>Type</label><select id="vehicleType"><option value="car">Car</option><option value="motorcycle">Motorcycle</option></select></div>
+                    <div><span class="hint" style="display:block; margin-top:26px">A motorcycle shows only what a motorcycle has: one wheel at each end, no differential, no steering wheel; the Motorcycle card has the rider and the lean.</span></div>
                 </div>
                 <div class="row">
                     <div><label>Name</label><input type="text" id="name" placeholder="My car"></div>
@@ -85,21 +91,24 @@
                 <div id="wheelSelects">
                     <p class="sub">Select the parts of each wheel (tyre, rim, disc…); Ctrl or Cmd selects more.</p>
                     <div class="row">
-                        <div><label><span style="color:#ff6b6b">■</span> Front right</label><select multiple id="wFR"></select></div>
-                        <div><label><span style="color:#5ec8ff">■</span> Front left</label><select multiple id="wFL"></select></div>
+                        <div class="carOnly"><label><span style="color:#ff6b6b">■</span> Front right</label><select multiple id="wFR"></select></div>
+                        <div><label id="lblFL"><span style="color:#5ec8ff">■</span> Front left</label><select multiple id="wFL"></select></div>
                     </div>
                     <div class="row">
-                        <div><label><span style="color:#ffd04d">■</span> Rear right</label><select multiple id="wRR"></select></div>
-                        <div><label><span style="color:#8ee26b">■</span> Rear left</label><select multiple id="wRL"></select></div>
+                        <div class="carOnly"><label><span style="color:#ffd04d">■</span> Rear right</label><select multiple id="wRR"></select></div>
+                        <div><label id="lblRL"><span style="color:#8ee26b">■</span> Rear left</label><select multiple id="wRL"></select></div>
                     </div>
                     <div class="buttons"><button id="guessWheels" class="small">Find the wheels by their names and places</button></div>
                 </div>
+                <div class="carOnly">
                 <div class="group">Steering wheel</div>
                 <div class="hint" id="steeringInfo">No model loaded.</div>
                 <div class="row">
                     <div><label>Turn at full lock (°, each way)</label><input type="number" id="steeringDegrees" min="30" max="1000" step="10" value="450"></div>
                     <div><span class="hint" style="display:block; margin-top:26px">A part called <b>steeringwheel</b> turns with the steering.</span></div>
                 </div>
+                </div>
+                <div class="bikeOnly hint">The front end of a motorcycle is found by name: <b>steerhead_…</b> turns with the steering, <b>brake_…_FL</b> goes with the front wheel along the fork, <b>swingarm</b> turns with the rear wheel, and the rider takes <b>grip_L/R</b>, <b>footpeg_L/R</b>, <b>frontbrake_R</b>, <b>clutch_L</b> and <b>shifter_L</b> (see MOTORCYCLE.md).</div>
             </div>
         </details>
 
@@ -121,8 +130,8 @@
                 </div>
                 <div class="row">
                     <div><input type="number" id="wheelbase" step="0.01" value="2.7"><div class="hint">wheelbase (m)</div></div>
-                    <div><input type="number" id="frontTrack" step="0.01" value="1.55"><div class="hint">front track (m)</div></div>
-                    <div><input type="number" id="rearTrack" step="0.01" value="1.55"><div class="hint">rear track (m)</div></div>
+                    <div class="carOnly"><input type="number" id="frontTrack" step="0.01" value="1.55"><div class="hint">front track (m)</div></div>
+                    <div class="carOnly"><input type="number" id="rearTrack" step="0.01" value="1.55"><div class="hint">rear track (m)</div></div>
                 </div>
                 <div class="row">
                     <div><input type="number" id="tyre" step="0.005" value="0.65"><div class="hint">tyre diameter (m)</div></div>
@@ -142,6 +151,27 @@
             </div>
         </details>
 
+        <details class="card bikeOnly" id="bikeCard" open>
+            <summary>Motorcycle</summary>
+            <div class="body">
+                <p class="sub">The rider and the lean (<code>motorcycle</code> in car.json, Motorcycle.js). The rider is a mass on the bike that leans into the corners; the lean is capped, and at speed the keys ask for less of it.</p>
+                <div class="row">
+                    <div><input type="number" id="bikeMaxLean" step="1" min="20" max="70" value="52"><div class="hint">max lean (°)</div></div>
+                    <div><input type="number" id="bikeFastLean" step="1" min="10" max="60" value="30"><div class="hint">lean at top speed (°)</div></div>
+                    <div><input type="number" id="bikeRake" step="0.5" min="15" max="35" value="24.5"><div class="hint">rake of the fork (°)</div></div>
+                </div>
+                <div class="row">
+                    <div><input type="number" id="bikeRiderMass" step="5" min="0" max="150" value="80"><div class="hint">rider mass (kg, on top of the mass)</div></div>
+                    <div><input type="number" id="bikeHangOff" step="0.05" min="0" max="0.6" value="0.3"><div class="hint">hang off (m, to the inside)</div></div>
+                    <div><input type="number" id="bikeMaxLatG" step="0.05" min="0.3" max="2" value="0.9"><div class="hint">max lateral g (the lean it asks for)</div></div>
+                </div>
+                <div class="row">
+                    <div><input type="number" id="bikeBalance" step="0.1" min="0" max="3" value="1"><div class="hint">balance (the strength of the rider's lean control)</div></div>
+                    <div></div><div></div>
+                </div>
+            </div>
+        </details>
+
         <details class="card">
             <summary>Tuning<span class="meta" id="tuningInfo"></span></summary>
             <div class="body">
@@ -153,24 +183,24 @@
         <details class="card">
             <summary>Drivetrain<span class="meta" id="speedInfo"></span></summary>
             <div class="body">
-                <div class="row">
+                <div class="row carOnly">
                     <div><label>Drive</label><select id="drive"><option value="rwd">Rear wheel drive</option><option value="fwd">Front wheel drive</option><option value="awd">All wheel drive</option></select></div>
                     <div><label>Differential</label><select id="diff"><option value="open">Open</option><option value="lsd">Limited slip</option><option value="welded">Welded (locked)</option></select></div>
                 </div>
-                <div class="row" id="lsdBox">
+                <div class="row carOnly" id="lsdBox">
                     <div><input type="number" id="diffPreload" step="10" min="0" value="150"><div class="hint">preload (Nm)</div></div>
                     <div><input type="number" id="diffPower" step="5" min="0" max="100" value="30"><div class="hint">lock under power (%)</div></div>
                     <div><input type="number" id="diffCoast" step="5" min="0" max="100" value="10"><div class="hint">lock off throttle (%)</div></div>
                 </div>
-                <div class="row">
+                <div class="row carOnly">
                     <div id="centerBox"><label>Centre differential (AWD)</label><select id="centerDiff"><option value="open">Open</option><option value="lsd">Limited slip</option><option value="locked">Locked</option></select></div>
                     <div id="splitBox"><label>Torque to the front (%)</label><input type="number" id="centerSplit" step="1" min="0" max="100" value="40"></div>
                 </div>
-                <div class="hint" id="diffInfo"></div>
+                <div class="hint carOnly" id="diffInfo"></div>
                 <div><label>Gear ratios (1st, 2nd, … separated by commas)</label><input type="text" id="gears" value="3.6, 2.1, 1.4, 1.0, 0.8"></div>
                 <div class="row">
                     <div><input type="number" id="finalDrive" step="0.05" value="3.5"><div class="hint">final drive</div></div>
-                    <div><input type="number" id="reverse" step="0.05" value="3.4"><div class="hint">reverse ratio</div></div>
+                    <div class="carOnly"><input type="number" id="reverse" step="0.05" value="3.4"><div class="hint">reverse ratio</div></div>
                     <div><input type="number" id="efficiency" step="0.01" min="0.5" max="1" value="0.92"><div class="hint">efficiency</div></div>
                 </div>
             </div>

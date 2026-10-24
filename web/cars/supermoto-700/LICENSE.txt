@@ -1,0 +1,4 @@
+Supermoto 700 (OpenRacer)
+Model: "2022 Husqvarna FS 450" (https://skfb.ly/pNEwR) by OUTPISTON, licensed under CC Attribution-NonCommercial-ShareAlike 4.0 (http://creativecommons.org/licenses/by-nc-sa/4.0/).
+Changes for OpenRacer: exported to glTF, parts renamed for the game (wheel_FL, wheel_RL, steerhead_cylinder, brake_fork_leg_FL, swingarm, grip_L/R, frontbrake_R, clutch_L, shifter_L, footpeg_L/R), the origins of the grips and the levers moved to the parts, materials adjusted. The changed model is under the same licence. Non-commercial use only.
+The code of OpenRacer is GPLv3; this model is not.

@@ -22,6 +22,9 @@ The game's physics has four wheels, and a motorcycle is that physics with change
 * **The bodywork can lean.** While the lean is less than 66 degrees the body spheres do not touch the road (a bike in a corner has its fairing near it); past that they do, and the bike slides on its side.
 * **Different suspension at the front and the rear:** `spring_front`/`spring_rear`, `damping_front`/`damping_rear` as for a car (a fork of 17 kN/m and a shock of 24 kN/m).
 
+## The car editor
+*New motorcycle* in the Car card makes one (or set *Type* to motorcycle): the form then shows only what a motorcycle has. The wheels are *Front wheel* and *Rear wheel* (the physics gets a pair 4 cm apart from them), the drive is to the rear wheel through a welded diff, and the *Motorcycle* card has the rider and the lean: the max lean, the lean at top speed (`fast_lean_deg`), the rake of the fork, the rider mass (on top of the mass of the bike), the hang off, the max lateral g and the balance. The origin of a grip, a lever or a footpeg has to be at the part: the rider's hands and feet pivot on it.
+
 ## The model
 **The front end.** Two sets of parts, by name. What stays on the bike and only turns with the steering is `steerhead_...` (`steerhead_cylinder`: the upper tubes of the fork, `steerhead_clamp`: the triple clamp, `steerhead_handlebar`); the loader hangs them on the steering head. What goes with the front wheel is the parts of the wheel (the tyre and the disc spin) and the parts called `brake_..._FL` (`brake_fork_leg_FL`: the lower leg, `brake_caliper_FL`, `brake_mudguard_FL`): they turn with the steering and slide along the fork with the springs, in line with the cylinders (the physics lets the wheel go straight up and down; the visual moves it back a little as it goes up, `OpenRacer.updateFork`).
 

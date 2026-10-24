@@ -628,7 +628,36 @@ function meanTyre(c) {
     return real.reduce((a, v) => a + v, 0) / real.length;
 }
 
-function isBike() { return !!(state.existingCar && state.existingCar.type === "motorcycle"); }
+function isBike() { return $("vehicleType").value === "motorcycle"; }
+// The type of the vehicle: a motorcycle shows only what a motorcycle has (the parts of the form marked carOnly go, the bikeOnly ones come), its wheels are one at each
+// end (the Front left and Rear left selects; the right slots are kept the same, the physics has a pair 4 cm apart), the drive is to the rear wheel through a welded diff
+const BIKE_DEFAULTS = { max_lean_deg: 52, fast_lean_deg: 30, rake_deg: 24.5, rider_mass: 80, hang_off: 0.3, max_lateral_g: 0.9, balance: 1 };
+function applyTypeUI() {
+    const bike = isBike();
+    document.body.classList.toggle("bike", bike);
+    $("lblFL").innerHTML = bike ? '<span style="color:#5ec8ff">■</span> Front wheel' : '<span style="color:#5ec8ff">■</span> Front left';
+    $("lblRL").innerHTML = bike ? '<span style="color:#8ee26b">■</span> Rear wheel' : '<span style="color:#8ee26b">■</span> Rear left';
+    if (bike) { $("drive").value = "rwd"; $("diff").value = "welded"; syncBikeWheels(); }
+    if (state.root) updateHelpers();
+}
+function syncBikeWheels() {
+    if (!isBike()) return;
+    [["FL", "FR"], ["RL", "RR"]].forEach(([from, to]) => {
+        const names = [...$("w" + from).selectedOptions].map((o) => o.value);
+        [...$("w" + to).options].forEach((o) => { o.selected = names.includes(o.value); });
+    });
+}
+function fillBike(m) {
+    const v = Object.assign({}, BIKE_DEFAULTS, m || {});
+    $("bikeMaxLean").value = v.max_lean_deg; $("bikeFastLean").value = v.fast_lean_deg; $("bikeRake").value = v.rake_deg;
+    $("bikeRiderMass").value = v.rider_mass; $("bikeHangOff").value = v.hang_off; $("bikeMaxLatG").value = v.max_lateral_g; $("bikeBalance").value = v.balance;
+}
+function readBike() {
+    const n = (id, key) => { const x = parseFloat($(id).value); return Number.isFinite(x) ? x : BIKE_DEFAULTS[key]; };
+    return { max_lean_deg: n("bikeMaxLean", "max_lean_deg"), fast_lean_deg: n("bikeFastLean", "fast_lean_deg"), rake_deg: n("bikeRake", "rake_deg"), rider_mass: n("bikeRiderMass", "rider_mass"), hang_off: n("bikeHangOff", "hang_off"), max_lateral_g: n("bikeMaxLatG", "max_lateral_g"), balance: n("bikeBalance", "balance") };
+}
+$("vehicleType").addEventListener("change", applyTypeUI);
+["wFL", "wRL"].forEach((id) => $(id).addEventListener("change", syncBikeWheels));
 
 function wheelCenters() {
     if (wheelMode() !== "model") return null;
@@ -1486,8 +1515,8 @@ function buildConfig(id) {
         config.cameras.follow.fov_fast, config.cameras.follow.fov_full_speed, config.cameras.follow.dolly, config.cameras.cockpit.fov, ...config.cameras.cockpit.position];
     if (!camNumbers.every(Number.isFinite)) throw new Error("Every field of the cameras needs a number.");
     if (!config.name) throw new Error("Give the car a name.");
-    // a motorcycle stays one (the form has no field for the type or for the rider and the lean): they are kept from the car as it was loaded
-    if (isBike()) { config.type = "motorcycle"; config.motorcycle = JSON.parse(JSON.stringify(state.existingCar.motorcycle || {})); }
+    // a motorcycle: the type, the rider and the lean from the Motorcycle card; the drive is to the rear wheel (welded: one wheel on the axle, the ghost wheel goes with it)
+    if (isBike()) { config.type = "motorcycle"; config.motorcycle = readBike(); config.drivetrain.drive = "rwd"; config.drivetrain.diff = "welded"; }
     // the settings of the Tuning card (the rest of the tuning menu) go into the configuration too
     const withTuning = OpenRacer.CarTuning.toConfig(config, tuningValues(config));
     ["tyres", "fuel", "assists"].forEach((k) => { config[k] = withTuning[k]; });
@@ -1732,6 +1761,9 @@ function fill(car) {
     set("travel", Math.round((c.suspension_travel || 0.09) * 100)); $("travelLabel").textContent = $("travel").value + " cm";
     set("wheelbase", c.wheelbase); set("frontTrack", c.front_track); set("rearTrack", c.rear_track);
     set("tyre", c.tire_diameter); set("drag", c.drag_coefficient); set("steer", c.max_steer_deg);
+    $("vehicleType").value = car.type === "motorcycle" ? "motorcycle" : "car";
+    fillBike(car.motorcycle);
+    applyTypeUI();
     tuningFromCar(car);
     const d = car.drivetrain;
     set("steeringDegrees", (car.steering_wheel && car.steering_wheel.degrees) || 450);
@@ -1801,7 +1833,9 @@ function loadExisting() {
     status("Loaded " + (car.name || car.id) + ".");
 }
 
-function newCar() {
+function newCar(type) {
+    $("vehicleType").value = type === "motorcycle" ? "motorcycle" : "car";
+    fillBike(null);
     if (softBodyEditor) softBodyEditor.fill({});
     if (driverEditor) driverEditor.fill({});
     fillEngineSim(OpenRacer.engineSimParams(null));
@@ -1863,7 +1897,15 @@ $("existing").addEventListener("change", loadExisting);
 $("camDefaults").addEventListener("click", defaultCameras);
 document.querySelectorAll(".cam").forEach((el) => el.addEventListener("input", updateCameraMarkers));
 for (const id of ["length", "width", "height", "tyre"]) $(id).addEventListener("input", updateCameraMarkers);
-$("newCar").addEventListener("click", () => { newCar(); $("existing").value = ""; });
+$("newCar").addEventListener("click", () => { newCar("car"); $("existing").value = ""; applyTypeUI(); });
+$("newBike").addEventListener("click", () => {
+    newCar("motorcycle"); $("existing").value = "";
+    // what a motorcycle has by default (the CBR 600 of the game as a start): the mass without the rider, a tall centre of gravity, a 17 inch wheel, short gears
+    const set = (id, v) => { $(id).value = v; };
+    set("mass", 190); set("front", 49); set("cgHeight", 0.62); set("travel", 12); $("travelLabel").textContent = "12 cm"; set("tyre", 0.61); set("drag", 0.6); set("steer", 22);
+    set("brakeFront", 1200); set("brakeRear", 250); set("gears", "2.75, 2, 1.667, 1.444, 1.304, 1.208"); set("finalDrive", 6); set("length", 2.0); set("width", 0.72); set("height", 1.1); set("wheelbase", 1.4);
+    applyTypeUI();
+});
 $("save").addEventListener("click", save);
 $("delete").addEventListener("click", deleteCar);
 
