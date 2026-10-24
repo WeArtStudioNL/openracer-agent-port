@@ -89,6 +89,7 @@ OpenRacer.Replay = (function() {
         v.vx = array[offset + P.vx]; v.vy = array[offset + P.vy]; v.vz = array[offset + P.vz];
         v.steerApplied = array[offset + P.steer];
         object.throttle = array[offset + P.throttle]; object.brakePedal = array[offset + P.brake];      // (the driver model works the pedals)
+        object.replayGear = gearLabels[array[offset + P.gear] | 0] || "";                                 // (the rider of a bike taps the shift lever with every change of it)
         // the squeal of the tyres (the sound, EngineSound.setTyres): not recorded, so read from the sample: the slip of the body sideways (a spinning or a locked wheel is not seen:
         // the spin is an angle that is interpolated, no speed can be read from it)
         var fwd = rotateZ(v.qx, v.qy, v.qz, v.qw), u = v.vx * fwd.x + v.vz * fwd.z, side = -v.vx * fwd.z + v.vz * fwd.x, speed = Math.hypot(v.vx, v.vz);

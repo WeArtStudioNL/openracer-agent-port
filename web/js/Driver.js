@@ -552,6 +552,29 @@ OpenRacer.Driver = function (config, parent, steering) {
         });
         r.pos.brake = rider.brake ? bodyPos(rider.brake, new V()) : null;
         r.pos.clutch = rider.clutch ? bodyPos(rider.clutch, new V()) : null;
+        // the levers turn when they are pulled: about an axis up through their hinge, the inboard end of the lever (its vertex nearest the middle of the bike: the perch is there, and the
+        // origin of a lever is where the fingers go, not its hinge), by LEVER_PULL at a full pull, the tip towards the rider
+        r.lever = {};
+        ["brake", "clutch"].forEach(function (k) {
+            var lever = rider[k];
+            if (!lever) return;
+            lever.updateMatrixWorld(true);
+            var hinge = null, best = Infinity, tmpv = new V();
+            lever.traverse(function (o) {
+                if (!o.isMesh || !o.geometry.attributes.position) return;
+                var pa = o.geometry.attributes.position;
+                for (var i = 0; i < pa.count; i++) {
+                    tmpv.fromBufferAttribute(pa, i); o.localToWorld(tmpv); self.parent.worldToLocal(tmpv);
+                    if (Math.abs(tmpv.x) < best) { best = Math.abs(tmpv.x); hinge = tmpv.clone(); }
+                }
+            });
+            if (!hinge) return;
+            var up = new V(0, 1, 0);
+            lever.parent.getWorldQuaternion(rq1); self.parent.getWorldQuaternion(rq2);
+            var toLever = rq1.invert().multiply(rq2);                                   // body frame to the frame of the parent of the lever
+            self.parent.localToWorld(hinge); lever.worldToLocal(hinge);                 // the hinge in the lever's own frame
+            r.lever[k] = { pos: lever.position.clone(), quat: lever.quaternion.clone(), hinge: hinge, axis: up.applyQuaternion(toLever).applyQuaternion(lever.quaternion.clone().invert()).normalize(), side: bodyPos(lever, new V()).x >= 0 ? 1 : -1 };
+        });
         if (rider.shifter) {
             rider.shifter.updateMatrixWorld(true);
             r.local.shifter = rider.shifter.quaternion.clone();
@@ -578,6 +601,15 @@ OpenRacer.Driver = function (config, parent, steering) {
         s.angle = s.amp * k;
         s.pull = s.time < SHIFT_UP + SHIFT_BACK ? Math.sin(Math.PI * Math.min(1, s.time / (SHIFT_UP + SHIFT_BACK))) : 0;          // the clutch hand pulls while the lever moves
         return s.angle;
+    }
+    var LEVER_PULL = 0.3;         // rad: a lever at a full pull
+    function pullLever(k, amount) {
+        var L = riderRest.lever && riderRest.lever[k], lever = rider[k];
+        if (!L || !lever) return;
+        rq2.setFromAxisAngle(L.axis, L.side * LEVER_PULL * amount);
+        lever.quaternion.copy(L.quat).multiply(rq2);
+        rw.copy(L.hinge).applyQuaternion(rq2).sub(L.hinge).negate().applyQuaternion(L.quat);     // the hinge stays where it is
+        lever.position.copy(L.pos).add(rw);
     }
     var riderTip = new V(), riderHand = new V();
     // the fingers of a hand: the thumb round the grip, the others open (a little closed) and pointing at the lever
@@ -691,6 +723,9 @@ OpenRacer.Driver = function (config, parent, steering) {
         if (state) shiftEvents(state.gear || 0, !!state.neutral);
         var angle = shiftAngle(dt);
         if (rider.shifter && riderRest.local.shifter) rider.shifter.quaternion.copy(riderRest.local.shifter).multiply(rq2.setFromAxisAngle(rAxisX, angle));
+        // the levers: the front brake lever with the brake, the clutch lever with the pull of a shift
+        pullLever("brake", Math.max(0, Math.min(1, brake || 0)));
+        pullLever("clutch", shiftState.pull || 0);
         // the throttle: the right grip rolls towards the rider
         rider.gripR.quaternion.copy(riderRest.local.gripR).multiply(rq2.setFromAxisAngle(rAxisX, -THROTTLE_ROLL * Math.max(0, Math.min(1, throttle || 0))));
         self.parent.updateMatrixWorld(true);
