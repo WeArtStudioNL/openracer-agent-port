@@ -4,6 +4,9 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 ## Unreleased
 
+**The rider is a ragdoll in a crash**
+- The rider that is thrown off the motorcycle is a jointed ragdoll: fifteen particles (the hips, the chest, the head, the shoulders, the elbows, the hands, the hip joints, the knees and the feet) held together by sticks, with a rigid torso and a limit on how far an arm or a leg folds; they fly, fall and slide over the road (0.7 g of friction, a little bounce, a barrier is a wall), and the skeleton is posed on them every frame. He comes to rest and lies still. Before, he was one stiff body that tumbled.
+
 **Car editor: orthographic view and standard views**
 - A switch between perspective and orthographic (no perspective) in the view, and buttons for the standard views (left, right, top, bottom, front) at the distance the camera has: in the bar at the bottom left of the view, or with O and the numpad (4, 6, 8, 2, 5). The same camera is used, so the gizmos, picking and the other editors keep working. On the bench a motorcycle stands upright: it does not rest to the right on the foot of the rider, as it does at a standstill in the game. While the nodes of the soft body are edited the driver is hidden, with its markers, so that it is not in the way of the nodes.
 

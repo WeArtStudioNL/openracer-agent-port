@@ -766,23 +766,55 @@ OpenRacer.Driver = function (config, parent, steering) {
         });
     }
 
-    // ---- a crash (a motorcycle): the rider is thrown off and tumbles over the road as one loose body, and lies there until a reset or a repair puts him back on the bike
+    // ---- a crash (a motorcycle): the rider is thrown off as a ragdoll: a set of particles (the hips, the chest, the head, the shoulders, the elbows, the hands, the hip joints,
+    // the knees and the feet) that fly, fall and slide over the road, held together by sticks (the bones keep their length, the torso is rigid, a limb cannot fold past a
+    // minimum), and the skeleton is posed on them every frame (the root on the hips and the chest, the arms and the legs with the inverse kinematics on the hand or the foot
+    // with the elbow or the knee as the pole). He lies there until a reset or a repair puts him back on the bike.
     var ragdoll = null, keptParent = null, keptPos = new V(), keptQuat = new Q();
+    var RIGID = ["hips", "chest", "shL", "shR", "hiL", "hiR", "head"];
+    function particle(pos, r) { return { p: pos.clone(), q: pos.clone(), v: new V(), r: r, floor: -1e9 }; }      // q: the place a step before (Verlet); v: the speed to start with
     this.crash = function (velocity, ground) {
-        if (ragdoll || !self.model) return;
+        if (ragdoll || !self.model || !self.complete()) return;
         keptParent = self.root.parent; keptPos.copy(self.root.position); keptQuat.copy(self.root.quaternion);
         var top = self.root; while (top.parent) top = top.parent;
         self.root.updateMatrixWorld(true);
         top.attach(self.root);
+        // the limbs loose: every bone in its rest pose, and the particles where the joints are now
+        rest.forEach(function (q, bone) { bone.quaternion.copy(q); });
+        self.root.updateMatrixWorld(true);
         var y0 = self.root.position.y;
         var groundY = function (x, z) {
             if (ground && ground.firstHit) { var d = ground.firstHit(x, y0 + 20, z, 0, -1, 0, 100); if (d < 100) return y0 + 20 - d; }
             return y0 - 0.6;
         };
+        var B = self.bones, wp = function (bone) { return bone.getWorldPosition(new V()); };
+        var P = {};
+        P.hips = particle(wp(B.hips), 0.13);
+        P.shL = particle(wp(B.armL[0]), 0.1); P.elL = particle(wp(B.armL[1]), 0.06); P.haL = particle(wp(B.armL[2]), 0.05);
+        P.shR = particle(wp(B.armR[0]), 0.1); P.elR = particle(wp(B.armR[1]), 0.06); P.haR = particle(wp(B.armR[2]), 0.05);
+        P.hiL = particle(wp(B.legL[0]), 0.1); P.knL = particle(wp(B.legL[1]), 0.07); P.ftL = particle(wp(B.legL[2]), 0.06);
+        P.hiR = particle(wp(B.legR[0]), 0.1); P.knR = particle(wp(B.legR[1]), 0.07); P.ftR = particle(wp(B.legR[2]), 0.06);
+        P.chest = particle(P.shL.p.clone().add(P.shR.p).multiplyScalar(0.5), 0.14);
+        var upDir = P.chest.p.clone().sub(P.hips.p).normalize();
+        P.head = particle(B.head ? wp(B.head).addScaledVector(upDir, 0.1) : P.chest.p.clone().addScaledVector(upDir, 0.3), 0.11);
+        var sticks = [], mins = [];
+        var stick = function (a, b) { sticks.push({ a: P[a], b: P[b], len: P[a].p.distanceTo(P[b].p) }); };
+        for (var i = 0; i < RIGID.length; i++) for (var j = i + 1; j < RIGID.length; j++) stick(RIGID[i], RIGID[j]);
+        [["shL", "elL", "haL"], ["shR", "elR", "haR"], ["hiL", "knL", "ftL"], ["hiR", "knR", "ftR"]].forEach(function (c, k) {
+            stick(c[0], c[1]); stick(c[1], c[2]);
+            var len = P[c[0]].p.distanceTo(P[c[1]].p) + P[c[1]].p.distanceTo(P[c[2]].p);
+            mins.push({ a: P[c[0]], b: P[c[2]], len: len * (k < 2 ? 0.3 : 0.45) });            // an arm or a leg folds no further than this
+        });
+        // the frame of the torso in the space of the root (the root is put on the particles from it)
+        var toLocal = function (v) { return self.root.worldToLocal(v.clone()); };
+        var frame = { up: toLocal(P.chest.p).sub(toLocal(P.hips.p)).normalize(), side: toLocal(P.shL.p).sub(toLocal(P.shR.p)) };
+        frame.side.addScaledVector(frame.up, -frame.side.dot(frame.up)).normalize();
+        // the speed: the bike's, a little upwards, and a tumble about the hips
         var vel = velocity.clone(); vel.y += 2.5;
-        ragdoll = { vel: vel, spin: new V(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(2 + Math.min(6, vel.length() * 0.15)), groundY: groundY, rest: 0 };
-        // the limbs loose: every bone in its rest pose
-        rest.forEach(function (q, bone) { bone.quaternion.copy(q); });
+        var spin = new V(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(2 + Math.min(6, vel.length() * 0.15));
+        var arm = new V(), vi = new V();
+        for (var key in P) { arm.subVectors(P[key].p, P.hips.p); P[key].v.crossVectors(spin, arm).add(vel); }
+        ragdoll = { pts: P, sticks: sticks, mins: mins, groundY: groundY, frame: frame, asleep: 0, time: 0, started: false };
     };
     this.ragdollState = function () { return ragdoll; };
     this.recover = function () {
@@ -790,27 +822,91 @@ OpenRacer.Driver = function (config, parent, steering) {
         ragdoll = null;
         if (keptParent) { keptParent.add(self.root); self.root.position.copy(keptPos); self.root.quaternion.copy(keptQuat); }
         self.root.scale.setScalar(1);
+        rest.forEach(function (q, bone) { bone.quaternion.copy(q); });
     };
-    var tumbleQ = new Q(), tumbleAxis = new V();
-    function tumble(dt) {
-        var r = ragdoll, p = self.root.position;
-        r.vel.y -= 9.81 * dt;
-        p.addScaledVector(r.vel, dt);
-        var floor = r.groundY(p.x, p.z) + 0.35;
-        if (p.y < floor) {
-            p.y = floor;
-            if (r.vel.y < 0) r.vel.y = -r.vel.y * 0.25;
-            var slide = Math.exp(-1.8 * dt);                                   // the road takes the speed out of him (a slide of about 20 m from 70 km/h)
-            r.vel.x *= slide; r.vel.z *= slide; r.spin.multiplyScalar(Math.exp(-3 * dt));
+    var rgUp = new V(), rgSide = new V(), rgFwd = new V(), rgM = new THREE.Matrix4(), rgM0 = new THREE.Matrix4(), rgQ = new Q(), rgQ0 = new Q(), rgD = new V();
+    function ragdollStep(dt) {
+        var r = ragdoll, P = r.pts, key;
+        r.time += dt;
+        if (r.asleep > 1) return;                                                  // lying still: nothing moves any more
+        // fixed substeps (a Verlet step keeps its speed as a distance per step: the step has to stay the same length)
+        var h = 1 / 240; r.acc = (r.acc || 0) + dt; var n = Math.min(12, Math.floor(r.acc / h)); r.acc -= n * h;
+        if (!n) return;
+        for (key in P) {
+            var pt = P[key], fl = r.groundY(pt.p.x, pt.p.z) + pt.r;
+            // a floor that is suddenly much higher is a wall or a kerb (a barrier beside the grass): he stops against it, instead of being lifted onto it in one step
+            pt.wall = pt.floor > -1e8 && fl > pt.floor + 0.3;
+            if (!pt.wall) pt.floor = fl;
         }
-        var w = r.spin.length();
-        if (w > 1e-4) { tumbleAxis.copy(r.spin).divideScalar(w); tumbleQ.setFromAxisAngle(tumbleAxis, w * dt); self.root.quaternion.premultiply(tumbleQ); }
-        if (r.vel.lengthSq() < 0.04 && w < 0.05) { r.vel.set(0, 0, 0); r.spin.set(0, 0, 0); }
+        var most = 0;
+        if (!r.started) { r.started = true; for (key in P) P[key].q.copy(P[key].p).addScaledVector(P[key].v, -h); }      // (the speed in the length of the first substep)
+        for (var s = 0; s < n; s++) {
+            for (key in P) {
+                var q = P[key], vx = q.p.x - q.q.x, vy = q.p.y - q.q.y, vz = q.p.z - q.q.z;
+                q.q.copy(q.p);
+                q.p.x += vx * 0.998; q.p.y += vy * 0.998 - 9.81 * h * h; q.p.z += vz * 0.998;
+            }
+            for (var it = 0; it < 5; it++) {
+                for (var i = 0; i < r.sticks.length; i++) {
+                    var st = r.sticks[i]; rgD.subVectors(st.b.p, st.a.p);
+                    var len = rgD.length(); if (len < 1e-6) continue;
+                    var corr = (len - st.len) / len * 0.5;
+                    st.a.p.addScaledVector(rgD, corr); st.b.p.addScaledVector(rgD, -corr);
+                }
+                for (i = 0; i < r.mins.length; i++) {
+                    var mn = r.mins[i]; rgD.subVectors(mn.b.p, mn.a.p);
+                    len = rgD.length(); if (len >= mn.len || len < 1e-6) continue;
+                    corr = (len - mn.len) / len * 0.5;
+                    mn.a.p.addScaledVector(rgD, corr); mn.b.p.addScaledVector(rgD, -corr);
+                }
+                var touching = 0;
+                for (key in P) {
+                    var g = P[key];
+                    if (g.wall) { g.p.x = g.q.x; g.p.z = g.q.z; }
+                    if (g.p.y < g.floor) {
+                        g.p.y = g.floor;
+                        if (g.q.y < g.floor) g.q.y = g.floor; else g.q.y = g.floor + (g.q.y - g.floor) * 0.2;      // the fall is taken (a little bounce)
+                        if (g.p.y - g.q.y > 3 * h) g.q.y = g.p.y - 3 * h;                                         // (never thrown up faster than 3 m/s by the floor)
+                        touching++;
+                    }
+                }
+                // the road takes the speed out of him: the whole body slows when a part of it is on the road (the sticks drag the rest along anyway; a slide of some 15 m from 70 km/h)
+                if (touching && it === 0) {
+                    var dv = 0.7 * 9.81 * h * h * Math.min(1, touching / 4);                         // (leathers on tarmac: about 0.7 g, less when he only touches with a hand)
+                    for (key in P) {
+                        g = P[key];
+                        var sx = g.p.x - g.q.x, sz = g.p.z - g.q.z, sp = Math.sqrt(sx * sx + sz * sz);
+                        if (sp < 1e-9) continue;
+                        var k = Math.max(0, sp - dv) / sp;
+                        g.q.x = g.p.x - sx * k; g.q.z = g.p.z - sz * k;
+                    }
+                }
+            }
+        }
+        for (key in P) most = Math.max(most, P[key].p.distanceToSquared(P[key].q));
+        if (Math.sqrt(most) / h < 0.08) r.asleep += dt; else r.asleep = 0;
+        ragdollPose();
+    }
+    // the skeleton on the particles
+    function ragdollPose() {
+        var r = ragdoll, P = r.pts, B = self.bones;
+        rgUp.subVectors(P.chest.p, P.hips.p).normalize();
+        rgSide.subVectors(P.shL.p, P.shR.p); rgSide.addScaledVector(rgUp, -rgSide.dot(rgUp)).normalize();
+        rgFwd.crossVectors(rgSide, rgUp);
+        rgM.makeBasis(rgSide, rgUp, rgFwd); rgQ.setFromRotationMatrix(rgM);
+        rgFwd.crossVectors(r.frame.side, r.frame.up);
+        rgM0.makeBasis(r.frame.side, r.frame.up, rgFwd); rgQ0.setFromRotationMatrix(rgM0).invert();
+        self.root.quaternion.copy(rgQ.multiply(rgQ0));
+        self.root.position.copy(P.hips.p);
+        self.root.updateMatrixWorld(true);
+        solve(B.armL, P.haL.p, P.elL.p); solve(B.armR, P.haR.p, P.elR.p);
+        solve(B.legL, P.ftL.p, P.knL.p); solve(B.legR, P.ftR.p, P.knR.p);
+        self.root.updateMatrixWorld(true);
     }
 
     this.update = function (dt, throttle, brake, state) {
         if (!self.model || !self.complete()) return;
-        if (ragdoll) { tumble(dt || 0.016); self.root.updateMatrixWorld(true); return; }
+        if (ragdoll) { ragdollStep(Math.min(0.05, dt || 0.016)); return; }
         self.posture = (state && state.posture) || null;
         applyPosture();
         self.root.updateMatrixWorld(true);
