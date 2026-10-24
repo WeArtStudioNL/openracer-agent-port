@@ -4,6 +4,9 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 ## Unreleased
 
+**Car editor: orthographic view and standard views**
+- A switch between perspective and orthographic (no perspective) in the view, and buttons for the standard views (left, right, top, bottom, front) at the distance the camera has: in the bar at the bottom left of the view, or with O and the numpad (4, 6, 8, 2, 5). The same camera is used, so the gizmos, picking and the other editors keep working.
+
 **Motorcycles (a prototype)**
 - A car with `"type": "motorcycle"` is a motorcycle: two wheels (a pair at each end in the physics), a rider that keeps the bike up and leans it into the corner (`lean = atan(a / g)`), steering that gets smaller with the speed, and the bodywork that may lean over the road. The first one is the **Honda CBR 600 RR** (`web/cars/honda-cbr600`, a model made by `tools/make-cbr600.py`): 270 kg with the rider, 118 hp to 15 500 rpm, six gears, a fork of 17 kN/m and a shock of 24 kN/m. On the flat pad it holds 12 m/s at leans of 20 to 47 degrees, brakes from 90 km/h in 36 m (0.96 g) and goes 0 to 90 km/h in 4.5 s. See `MOTORCYCLE.md`.
 - **The CBR was hard to ride with the keyboard** (a straight line was fine, but braking or steering threw it round): the steering assist of the keyboard turned the front wheel into every wobble (off for a bike now); the steering was an angle that at speed was several g of sideways acceleration (now a wish for a bend, cut to 0.9 g, with a short delay); the engine braking dragged the rear wheel at 30 % slip when the throttle was shut (0.3 now); a hard brake lifted the rear wheel and let the rear brake lock (the brakes now follow the load of the wheels); and the rider damps the yaw that was not asked for. On the circuit and on the pad: braking from 25 to 33 m/s, with and without a key held for a bend, stays straight or on its lean (28 to 35 degrees), without a swing.

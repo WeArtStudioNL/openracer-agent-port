@@ -332,6 +332,57 @@ function updateFlames(now) {
 
 // While the crash test runs the bars are away and the view is wider. The camera must not jump: viewLock = { cx } is the middle (in the page) of the
 // view as it was, and the picture is kept where it was on the screen: the view shows a part of a wider picture that is centred on that middle.
+// ---- the view: perspective or orthographic (the same camera object, so the gizmos, the picking and the other editors keep working: the flags that three.js looks at and the
+// projection are switched), and the standard views (left, right, top, bottom, front) at the distance the camera has
+let ortho = false, orthoHalf = 2;
+const perspectiveProjection = camera.updateProjectionMatrix.bind(camera);
+camera.updateProjectionMatrix = function () {
+    if (!ortho) { perspectiveProjection(); return; }
+    const h = orthoHalf / (camera.zoom || 1), w = h * camera.aspect;
+    camera.left = -w; camera.right = w; camera.top = h; camera.bottom = -h;
+    camera.projectionMatrix.makeOrthographic(-w, w, h, -h, camera.near, camera.far);
+    camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+};
+function setOrtho(on) {
+    if (on === ortho) return;
+    const dist = camera.position.distanceTo(controls.target);
+    if (on) { orthoHalf = dist * Math.tan(camera.fov * Math.PI / 360); camera.zoom = 1; }
+    else {
+        // back to a perspective that shows the same size: the camera at the distance that gives the half height of the picture
+        const want = (orthoHalf / (camera.zoom || 1)) / Math.tan(camera.fov * Math.PI / 360);
+        const dir = camera.position.clone().sub(controls.target).normalize();
+        camera.position.copy(controls.target).addScaledVector(dir, want);
+        camera.zoom = 1;
+    }
+    ortho = on;
+    camera.isPerspectiveCamera = !on; camera.isOrthographicCamera = on;
+    camera.updateProjectionMatrix();
+    controls.update();
+    $("viewOrtho").classList.toggle("accent", on);
+    $("viewOrtho").textContent = on ? "Ortho" : "Persp";
+}
+function standardView(dx, dy, dz) {
+    const dist = Math.max(0.5, camera.position.distanceTo(controls.target));
+    camera.position.set(controls.target.x + dx * dist, controls.target.y + dy * dist, controls.target.z + dz * dist + (dy ? 0.0001 : 0));
+    camera.lookAt(controls.target);
+    controls.update();
+}
+$("viewOrtho").addEventListener("click", () => setOrtho(!ortho));
+$("viewLeft").addEventListener("click", () => standardView(1, 0, 0));       // (x is the left of the car)
+$("viewRight").addEventListener("click", () => standardView(-1, 0, 0));
+$("viewTop").addEventListener("click", () => standardView(0, 1, 0));
+$("viewBottom").addEventListener("click", () => standardView(0, -1, 0));
+$("viewFront").addEventListener("click", () => standardView(0, 0, 1));
+window.addEventListener("keydown", (e) => {
+    if (/input|textarea|select/i.test((document.activeElement || {}).tagName || "")) return;
+    if (e.key === "o" || e.key === "O") setOrtho(!ortho);
+    else if (e.code === "Numpad4") standardView(1, 0, 0); else if (e.code === "Numpad6") standardView(-1, 0, 0);
+    else if (e.code === "Numpad8") standardView(0, 1, 0); else if (e.code === "Numpad2") standardView(0, -1, 0); else if (e.code === "Numpad5") standardView(0, 0, 1);
+    else return;
+    e.preventDefault();
+});
+$("viewOrtho").textContent = "Persp";
+
 let viewLock = null;
 function resize() {
     const w = view.clientWidth, h = view.clientHeight;
