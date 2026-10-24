@@ -14,6 +14,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 - The tyres squeal later on a motorcycle (the camber of its tyres carries a bend).
 - A bike that is down slides with a steady 0.6 g of friction and the rider with 0.55 g, so they slide together (the bike lost its speed as a share of it, 3 g at first, and caught the rider up from behind at full speed; that was the rider that "shot off the bike").
 - The version is 2.2.0-dev, so that every browser loads the new scripts (the ?v= of the scripts is the version).
+- The front of a wheelie comes down without the bounce: the fork and the shock of a motorcycle keep damping at speed (the digressive damper of a car let the spring throw the bike 2.6 m/s back up after a wheelie to the vertical).
 
 **Motorcycles (a prototype)**
 - A car with `"type": "motorcycle"` is a motorcycle: two wheels (a pair at each end in the physics), a rider that keeps the bike up and leans it into the corner (`lean = atan(a / g)`), steering that gets smaller with the speed, and the bodywork that may lean over the road. The first one is the **Honda CBR 600 RR** (`web/cars/honda-cbr600`, a model made by `tools/make-cbr600.py`): 270 kg with the rider, 118 hp to 15 500 rpm, six gears, a fork of 17 kN/m and a shock of 24 kN/m. On the flat pad it holds 12 m/s at leans of 20 to 47 degrees, brakes from 90 km/h in 36 m (0.96 g) and goes 0 to 90 km/h in 4.5 s. See `MOTORCYCLE.md`.
@@ -91,6 +92,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 **A camera per clip, and the speed of the free camera**
 - Every clip of the video editor has a camera of its own: the camera track (your keys, over the follow camera), or the follow, cockpit or cinematic camera of the game. A clip that is cut in two keeps it.
 - The speed of the free camera has a slider in the camera row of the video editor (it only had one in the replay bar).
+- The video editor has sound: the engine plays while the program or the source plays (the replay itself was not "playing" there, so the sound stayed paused).
 
 **Replay: the free camera and the video editor**
 - The free camera: Q and E tilt the picture, smoothly (the tilt is kept in a camera key, `roll`); Space goes up and Alt down (Shift and Control still work); Enter plays and pauses, in the replay and in the video editor (Space did, and it now moves the camera); a hint ("Mouse look · Escape for the UI") while the mouse looks around; and a third way to fix the camera to the car, **Fixed, sky up (K)**: it goes with the car's place but not with its turn (a camera key keeps it as `sky`).

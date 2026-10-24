@@ -1046,6 +1046,7 @@ OpenRacer.Replay = (function() {
     // ---- for the video editor (VideoEditor.js) and for a replay that has a camera track (CameraTrack.js)
     api.editor = false;                   // the editor has the keys; the bar is hidden by the page
     api.afterFrame = null;                // function(time, delta): called at the end of every frame of the replay (the camera track)
+    api.editorPlaying = false;            // the video editor plays its program or its source: the sound plays (the replay itself is not "playing" then: the editor sets its time)
     api.free = free;                      // the free camera (position and look in the frame of the world or of the car, fov, aim, parent, target)
     api.enterFree = enterFree; api.leaveFree = leaveFree; api.toggleAim = toggleAim; api.toggleParent = toggleParent; api.toggleSky = toggleSky; api.nextTarget = nextTarget;
     // the camera of the game for a clip of the video editor: "follow", "cockpit", "cinematic", or "track" (the camera track, over the follow camera); not while the free camera is on
@@ -1121,7 +1122,7 @@ OpenRacer.Replay = (function() {
         else if(cine.active) updateCine(delta);
         if(api.afterFrame) api.afterFrame(t, delta);
         if(typeof EngineSound !== "undefined" && player) {
-            var live = playing && !scrubbing && direction > 0;
+            var live = (playing || api.editorPlaying) && !scrubbing && direction > 0;      // (the video editor plays the replay itself: it says when, see VideoEditor.js)
             EngineSound.setPaused(!live);
             if(live) EngineSound.update(player.rpm, player.throttle, false);
         }

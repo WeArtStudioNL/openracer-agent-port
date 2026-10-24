@@ -732,6 +732,7 @@ OpenRacer.VideoEditor = (function () {
         // the program
         var m = mapFinal(state.T);
         Replay.seek(m ? m.src : state.srcT);
+        Replay.editorPlaying = !!(state.finalPlaying || state.srcPlaying) && !recording;
         Replay.frame(delta);
         var clipCam = m && m.clip && m.clip.cam && m.clip.cam !== "track" ? m.clip.cam : "track";
         if (Replay.setGameCamera) Replay.setGameCamera(clipCam);
