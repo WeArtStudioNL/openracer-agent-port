@@ -431,6 +431,16 @@ OpenRacer.Car = function( config, domElement ) {
     this.cameraSubject = null;      // the car that the camera follows when it is not this one (a replay: Replay.js)
     var lastSubject = null;
     var lookDir = new THREE.Vector3();
+    this.crashShown = false;
+    // after a reset or a repair of a motorcycle that went down: the rider back on the bike, the camera of the game again
+    this.recoverCrash = function() {
+        if(!this.crashShown) return;
+        this.crashShown = false;
+        if(this.vehicle.controller && this.vehicle.controller.recover) this.vehicle.controller.recover();
+        if(this.driver && this.driver.recover) this.driver.recover();
+        this.cameraOverride = null;
+        camera.fov = 45; camera.updateProjectionMatrix();
+    };
     this.cameraOverride = null;     // a function that places the camera itself (the fly-by over the grid, main.js); true when it did
     this.updateCamera = function(delta, cx, cz, avgGround, yaw, bodyQ, subject) {
         if(this.cameraOverride && this.cameraOverride(delta)) return;
@@ -508,7 +518,26 @@ OpenRacer.Car = function( config, domElement ) {
             // one reset per key press: back to the saved place (the start when none was saved), in the state that the car is in
             this.reset = false;
             this.returnToSaved();
+            this.recoverCrash();
             return;
+        }
+        // a motorcycle that goes down: the rider is thrown off and the camera stays where it is, looking at the two of them
+        if(v.controller && v.controller.crashed && !this.crashShown) {
+            this.crashShown = true;
+            var cs = v.controller.crashSpeed || { x: v.vx, y: v.vy, z: v.vz };
+            if(this.driver && this.driver.crash) this.driver.crash(new THREE.Vector3(cs.x, cs.y, cs.z), v.ground);
+            var fixed = camera.position.clone(), look = new THREE.Vector3(), mid = new THREE.Vector3(), rider = new THREE.Vector3();
+            var self = this;
+            this.cameraOverride = function(delta) {
+                look.copy(self.body.position);
+                if(self.driver && self.driver.root) { self.driver.root.getWorldPosition(rider); mid.copy(look).add(rider).multiplyScalar(0.5); } else mid.copy(look);
+                camera.position.copy(fixed);
+                camera.lookAt(mid);
+                var apart = self.driver && self.driver.root ? look.distanceTo(rider) : 0, away = fixed.distanceTo(mid);
+                var fov = Math.max(35, Math.min(80, 2 * Math.atan((apart * 0.6 + 4) / Math.max(3, away)) * 180 / Math.PI));
+                if(Math.abs(camera.fov - fov) > 0.2) { camera.fov += (fov - camera.fov) * Math.min(1, (delta || 0.016) / 0.3); camera.updateProjectionMatrix(); }
+                return true;
+            };
         }
 
         if(this.cameraLeft) {
@@ -782,6 +811,8 @@ OpenRacer.Car = function( config, domElement ) {
         this.transbrake = Settings.isDown("transbrake");
         this.cameraLeft = Settings.isDown("cameraLeft");
         this.cameraRight = Settings.isDown("cameraRight");
+        // a motorcycle that has crashed takes no input (a reset or a repair brings the rider back)
+        if(this.vehicle.controller && this.vehicle.controller.crashed) { this.accelerate = this.brake = this.turnLeft = this.turnRight = this.handbrake = false; this.throttle = 0; this.brakePedal = 0; }
         // letting go of the key lets go of the pedal at once
         if(heldAccelerate && !this.accelerate) this.throttle = 0;
         if(heldBrake && !this.brake) this.brakePedal = 0;

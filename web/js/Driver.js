@@ -766,8 +766,51 @@ OpenRacer.Driver = function (config, parent, steering) {
         });
     }
 
+    // ---- a crash (a motorcycle): the rider is thrown off and tumbles over the road as one loose body, and lies there until a reset or a repair puts him back on the bike
+    var ragdoll = null, keptParent = null, keptPos = new V(), keptQuat = new Q();
+    this.crash = function (velocity, ground) {
+        if (ragdoll || !self.model) return;
+        keptParent = self.root.parent; keptPos.copy(self.root.position); keptQuat.copy(self.root.quaternion);
+        var top = self.root; while (top.parent) top = top.parent;
+        self.root.updateMatrixWorld(true);
+        top.attach(self.root);
+        var y0 = self.root.position.y;
+        var groundY = function (x, z) {
+            if (ground && ground.firstHit) { var d = ground.firstHit(x, y0 + 20, z, 0, -1, 0, 100); if (d < 100) return y0 + 20 - d; }
+            return y0 - 0.6;
+        };
+        var vel = velocity.clone(); vel.y += 2.5;
+        ragdoll = { vel: vel, spin: new V(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(2 + Math.min(6, vel.length() * 0.15)), groundY: groundY, rest: 0 };
+        // the limbs loose: every bone in its rest pose
+        rest.forEach(function (q, bone) { bone.quaternion.copy(q); });
+    };
+    this.ragdollState = function () { return ragdoll; };
+    this.recover = function () {
+        if (!ragdoll) return;
+        ragdoll = null;
+        if (keptParent) { keptParent.add(self.root); self.root.position.copy(keptPos); self.root.quaternion.copy(keptQuat); }
+        self.root.scale.setScalar(1);
+    };
+    var tumbleQ = new Q(), tumbleAxis = new V();
+    function tumble(dt) {
+        var r = ragdoll, p = self.root.position;
+        r.vel.y -= 9.81 * dt;
+        p.addScaledVector(r.vel, dt);
+        var floor = r.groundY(p.x, p.z) + 0.35;
+        if (p.y < floor) {
+            p.y = floor;
+            if (r.vel.y < 0) r.vel.y = -r.vel.y * 0.25;
+            var slide = Math.exp(-1.8 * dt);                                   // the road takes the speed out of him (a slide of about 20 m from 70 km/h)
+            r.vel.x *= slide; r.vel.z *= slide; r.spin.multiplyScalar(Math.exp(-3 * dt));
+        }
+        var w = r.spin.length();
+        if (w > 1e-4) { tumbleAxis.copy(r.spin).divideScalar(w); tumbleQ.setFromAxisAngle(tumbleAxis, w * dt); self.root.quaternion.premultiply(tumbleQ); }
+        if (r.vel.lengthSq() < 0.04 && w < 0.05) { r.vel.set(0, 0, 0); r.spin.set(0, 0, 0); }
+    }
+
     this.update = function (dt, throttle, brake, state) {
         if (!self.model || !self.complete()) return;
+        if (ragdoll) { tumble(dt || 0.016); self.root.updateMatrixWorld(true); return; }
         self.posture = (state && state.posture) || null;
         applyPosture();
         self.root.updateMatrixWorld(true);

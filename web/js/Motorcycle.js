@@ -55,6 +55,7 @@ OpenRacer.Motorcycle = function (settings) {
     this.footDown = 0;                                       // 0 to 1: the right foot of the rider on the road (a standstill)
     this.footLean = (s.foot_lean_deg !== undefined ? s.foot_lean_deg : 7) * DEG;   // how far the bike rests to the right on the foot
     this.wheelieScale = 1;                                  // the throttle that the wheelie control leaves (1: all of it)
+    this.crashed = false;                                   // the bike is down: the rider is a ragdoll, the bike a body that slides, no input until a reset or a repair
     this.pushing = false;                                   // the rider walks the bike back (set by Car.js)
     this.command = 0;                                      // the lean that is asked (-1..1)
     this.targetLean = 0;                                   // what the rider takes (rad, left is positive)
@@ -113,6 +114,7 @@ OpenRacer.Motorcycle = function (settings) {
 
     // ---- hook: the angle of the front wheel (right is positive), from what the input asks for. delta: what the input gave (the angle of the wheel or the lock that is turned).
     this.steering = function (v, delta, u, dt) {
+        if (self.crashed) { self.steer += (0 - self.steer) * Math.min(1, dt / 0.1); return self.steer; }
         var inp = v.input, lock = inp.turnLimit || inp.maxTurn || 0.38;
         var c = Math.max(-1, Math.min(1, delta / lock));          // the lean command: left is negative, as the steering of a car
         self.command = c;
@@ -181,6 +183,7 @@ OpenRacer.Motorcycle = function (settings) {
     // ---- hook: the wheelie control (the menu: Wheelie control, on by default): the rider rolls the throttle off as the front wheel goes light, and keeps it there at about a tenth of
     // its load; a bike with a lot of torque from low revs loops over backwards at full throttle otherwise
     this.throttleScale = function (v, dt) {
+        if (self.crashed) { self.wheelieScale = 0; return 0; }
         var on = typeof Settings === "undefined" || Settings.option("wheelieControl") !== false;
         var frontLoad = ((v.wheels[0].weight || 0) + (v.wheels[1].weight || 0)) / Math.max(1, v.weight_distribution * v.mass * G);
         var want = on && Math.abs(v.u) > 0.5 ? Math.max(0.15, Math.min(1, (frontLoad - 0.08) / 0.3)) : 1;
@@ -190,6 +193,17 @@ OpenRacer.Motorcycle = function (settings) {
 
     // ---- hook: the brakes. brakeStep once per step of the physics, brakeScale for every wheel
     this.brakeStep = function (v, dt) {
+        // a bike that is down slides and tumbles, it does not fly: the road takes its speed (a slide of about half a g), it does not go faster than it went, and it does not spin up
+        if (self.crashed) {
+            var cs = self.crashSpeed || { x: 0, y: 0, z: 0 }, vmax = Math.sqrt(cs.x * cs.x + cs.z * cs.z) + 1, sp = Math.sqrt(v.vx * v.vx + v.vz * v.vz);
+            if (sp > vmax) { v.vx *= vmax / sp; v.vz *= vmax / sp; }
+            var slide = Math.exp(-dt * (v.airborne ? 0.1 : 1.2));
+            v.vx *= slide; v.vz *= slide;
+            if (v.vy > 3) v.vy = 3;
+            var spin = Math.exp(-dt * 2.5), wmax = 8, wl = Math.sqrt(v.wx * v.wx + v.wy * v.wy + v.wz * v.wz);
+            v.wx *= spin; v.wy *= spin; v.wz *= spin;
+            if (wl > wmax) { v.wx *= wmax / wl; v.wy *= wmax / wl; v.wz *= wmax / wl; }
+        }
         var m = v.mass, w = v.wheels;
         var rearRatio = ((w[2].weight || 0) + (w[3].weight || 0)) / Math.max(1, (1 - v.weight_distribution) * m * G);
         // the front brake is let off as the rear wheel is nearly free of the road (it keeps a few percent of its load: the limit of the front brake), the rear brake goes with the load of the rear wheel
@@ -201,17 +215,26 @@ OpenRacer.Motorcycle = function (settings) {
     };
     // in a bend the front brake stands the bike up, so it is hardly used (a rider uses the rear brake): from 8 to 30 degrees of lean it goes to a tenth
     this.brakeScale = function (v, wheel) {
+        if (self.crashed) return 0;
         if(!wheel.front) return self.rearBrake;
         return self.frontBrake * (1 - 0.9 * smooth(8 * DEG, 30 * DEG, Math.abs(v.lean)));
     };
 
     // ---- hook: the body of the bike does not touch the road in a lean (it is no crash until the bike is nearly on its side)
-    this.keepBodyOff = function (v) { return Math.abs(v.lean) < 1.15; };
+    this.keepBodyOff = function (v) { return !self.crashed && Math.abs(v.lean) < 1.15; };
 
     // ---- hook: the rider and the tyres; the forces and the torques of the physics are added to
     this.apply = function (v, force, torque, dt, c) {
         var state = leanOf(v, dt), u = c.u;
         v.lean = state.lean;
+        // A crash: the bike is nearly on its side, or a hit (a change of speed of more than 6 g, or more than 2.2 g sideways at speed: a wall, a kerb). From then on the rider does nothing,
+        // the bike is a body that slides (Vehicle.js: its spheres touch the road), and the rider is thrown off (Driver.js, a ragdoll), until a reset or a repair (Car.js)
+        if (!self.crashed) {
+            var aMag = Math.sqrt(accel.x * accel.x + accel.y * accel.y + accel.z * accel.z);
+            var aLat = accel.x * state.lx + accel.y * state.ly + accel.z * state.lz;
+            if (Math.abs(state.lean) > 1.2 || aMag > 2.8 * G || (Math.abs(aLat) > 2.2 * G && Math.abs(u) > 5)) { self.crashed = true; self.crashSpeed = { x: v.vx, y: v.vy, z: v.vz }; }
+        }
+        if (self.crashed) { self.posture.lat = self.posture.knee = self.posture.tuck = self.posture.sit = 0; return; }
         self.rider(v, torque, dt, u, state);
         var m = v.mass, gh = m * G * v.cgHeight;
         var kp = self.balance * 10 * gh, inertia = m * v.cgHeight * v.cgHeight + c.inertiaZ, kd = 1.5 * Math.sqrt(kp * inertia);
@@ -310,6 +333,9 @@ OpenRacer.Motorcycle = function (settings) {
     this.dragScale = function () { return 1 + 0.35 * self.posture.sit - 0.3 * self.posture.tuck; };
 
     // ---- hook for the camera: it rolls with the lean, a part of it, smoothed. camera: the three.js camera, after it was placed
+    // after a reset or a repair: the rider is back on the bike
+    this.recover = function () { self.crashed = false; self.footDown = 0; self.targetLean = 0; self.steer = 0; self.wheelieScale = 1; vPrev = null; accel.x = accel.y = accel.z = 0; };
+
     this.cameraRoll = function (camera, v, dt) {
         var classic = typeof Settings !== "undefined" && Settings.option("bikeCamera") === "classic";       // (the menu: the chase camera of a car, that does not roll)
         self.roll += ((classic ? 0 : v.lean * self.cameraRollFactor) - self.roll) * Math.min(1, (dt || 0.016) / 0.12);
