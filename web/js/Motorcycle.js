@@ -53,6 +53,7 @@ OpenRacer.Motorcycle = function (settings) {
     this.frontComply = s.front_comply !== undefined ? s.front_comply : 3;            // how much the front wheel castors into its own slip on the brake (3: it keeps a quarter of the slip angle)
     this.complied = 0;
     this.footDown = 0;                                       // 0 to 1: the right foot of the rider on the road (a standstill)
+    this.noFoot = false;                                     // the car editor: the bike stands upright on its bench, the foot never goes down
     this.footLean = (s.foot_lean_deg !== undefined ? s.foot_lean_deg : 7) * DEG;   // how far the bike rests to the right on the foot
     this.wheelieScale = 1;                                  // the throttle that the wheelie control leaves (1: all of it)
     this.crashed = false;                                   // the bike is down: the rider is a ragdoll, the bike a body that slides, no input until a reset or a repair
@@ -134,7 +135,7 @@ OpenRacer.Motorcycle = function (settings) {
         var phiMax = speedMax + epsFull;
         var want = -c * Math.min(phiMax, cap) * fast;
         // at a standstill the rider puts the right foot down and the bike rests against it, a little to the right; on the gas the foot comes back up in two seconds
-        var still = Math.abs(u) < 0.6 && (inp.throttle || 0) < 0.05 && !self.pushing;
+        var still = !self.noFoot && Math.abs(u) < 0.6 && (inp.throttle || 0) < 0.05 && !self.pushing;
         self.footDown += ((still ? 1 : 0) - self.footDown) * Math.min(1, dt / (still ? 0.5 : 2.0));
         want -= self.footLean * self.footDown * (1 - fast);
         var brake = Math.max(0, Math.min(1, inp.brakePedal || 0)), bend = smooth(8 * DEG, 30 * DEG, Math.abs(want));

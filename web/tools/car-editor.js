@@ -2012,6 +2012,7 @@ async function startBench() {
     const input = { throttle: 0, brakePedal: 0, clutch: 0, clutchPedalPresent: false, handbrake: false, turnAngle: 0, neutral: true, reverse: false, manualGearbox: false, current_gear: 0, parkingLock: true };
     const v = new OpenRacer.Vehicle(OpenRacer.vehicleParams(config, roadGrip), input);
     v.ground = flatRoad;
+    if (v.controller) v.controller.noFoot = true;     // (a motorcycle: upright on the bench, not resting on the foot of the rider as at a standstill in the game)
     bench.modelMid = null;
     if (model.measured) {
         // the physics takes the wheelbase, the tracks and the tyre from the wheels of the model, as the game does

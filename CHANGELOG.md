@@ -5,7 +5,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 ## Unreleased
 
 **Car editor: orthographic view and standard views**
-- A switch between perspective and orthographic (no perspective) in the view, and buttons for the standard views (left, right, top, bottom, front) at the distance the camera has: in the bar at the bottom left of the view, or with O and the numpad (4, 6, 8, 2, 5). The same camera is used, so the gizmos, picking and the other editors keep working.
+- A switch between perspective and orthographic (no perspective) in the view, and buttons for the standard views (left, right, top, bottom, front) at the distance the camera has: in the bar at the bottom left of the view, or with O and the numpad (4, 6, 8, 2, 5). The same camera is used, so the gizmos, picking and the other editors keep working. On the bench a motorcycle stands upright: it does not rest to the right on the foot of the rider, as it does at a standstill in the game.
 
 **Motorcycles (a prototype)**
 - A car with `"type": "motorcycle"` is a motorcycle: two wheels (a pair at each end in the physics), a rider that keeps the bike up and leans it into the corner (`lean = atan(a / g)`), steering that gets smaller with the speed, and the bodywork that may lean over the road. The first one is the **Honda CBR 600 RR** (`web/cars/honda-cbr600`, a model made by `tools/make-cbr600.py`): 270 kg with the rider, 118 hp to 15 500 rpm, six gears, a fork of 17 kN/m and a shock of 24 kN/m. On the flat pad it holds 12 m/s at leans of 20 to 47 degrees, brakes from 90 km/h in 36 m (0.96 g) and goes 0 to 90 km/h in 4.5 s. See `MOTORCYCLE.md`.
