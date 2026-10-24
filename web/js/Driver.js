@@ -709,18 +709,30 @@ OpenRacer.Driver = function (config, parent, steering) {
             else { self.parent.worldToLocal(tmp.copy(a)); tmp.add(new V(e[2] * 0.45, -0.25, -0.35)); }
             (self.poles[e[0]] || (self.poles[e[0]] = new V())).copy(tmp);
             self.parent.localToWorld(pole.copy(tmp));
-            // the hand at the grip in its rest place (for its orientation), and then at the grip where it is now, turned by what the grip has turned since (the steering, the throttle)
-            solve(chain, restWorld, pole);
-            chain[2].quaternion.copy(rest.get(chain[2]));
-            chain[2].updateMatrixWorld(true);
-            var hq = chain[2].getWorldQuaternion(new Q());
-            solve(chain, world, pole);
-            // (the turn since the rest, in the space of the body, then in the world)
-            bodyQuat(rider[key], rq3);
-            rq3.multiply(rq1.copy(riderRest.quat[key]).invert());
+            // The hand on the grip: its turn relative to the grip is found once, with the rider in his neutral posture (the hand at the grip in its rest place, with the arm as the
+            // inverse kinematics puts it there), and kept: every frame the hand is the grip where it is now (steered, the throttle rolled) with that turn on it. It was found again
+            // every frame, from the arm that the posture of the moment gave, so a rider that hung off a bend turned his hands on the grips (the fingers pointed up).
             self.parent.getWorldQuaternion(qbody);
-            rq3.premultiply(qbody).multiply(qbody.clone().invert());
-            hq.premultiply(rq3);
+            if (!riderRest.handRel) riderRest.handRel = {};
+            if (!riderRest.handRel[key]) {
+                // neutral: the root without the posture offset, the chest and the head at rest, for this one solve
+                var keepPos = self.root.position.clone();
+                self.root.position.sub(postureOff);
+                self.bones.chest.forEach(function (bone) { bone.quaternion.copy(rest.get(bone)); });
+                if (self.bones.head) self.bones.head.quaternion.copy(rest.get(self.bones.head));
+                self.root.updateMatrixWorld(true);
+                solve(chain, restWorld, pole);
+                chain[2].quaternion.copy(rest.get(chain[2]));
+                chain[2].updateMatrixWorld(true);
+                var hq0 = chain[2].getWorldQuaternion(new Q());
+                hq0.premultiply(qbody.clone().invert());                            // in the space of the body
+                riderRest.handRel[key] = rq1.copy(riderRest.quat[key]).invert().multiply(hq0).clone();      // relative to the grip at rest
+                self.root.position.copy(keepPos);
+                self.root.updateMatrixWorld(true);
+            }
+            solve(chain, world, pole);
+            bodyQuat(rider[key], rq3);                                             // the grip now, in the space of the body
+            var hq = qbody.clone().multiply(rq3).multiply(riderRest.handRel[key]);
             var turnOff = cfg.hands.rotation && cfg.hands.rotation[e[1]];
             if (turnOff) { qd.setFromEuler(eul.set((turnOff[0] || 0) * DEG_TO_RAD, (turnOff[1] || 0) * DEG_TO_RAD, (turnOff[2] || 0) * DEG_TO_RAD, "XYZ")); qd.premultiply(qbody).multiply(qbody.clone().invert()); hq.premultiply(qd); }
             chain[2].parent.getWorldQuaternion(qpw);
