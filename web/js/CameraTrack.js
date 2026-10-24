@@ -2,12 +2,14 @@
  * CameraTrack.js
  *
  * Description: A camera track for a replay: a list of keys (made in the video editor, VideoEditor.js, and kept in a replay file as "camera" in its header), and what the camera does
- *              between them. A key is { t, pos: [x, y, z], yaw, pitch, fov, parent, aim, target }:
+ *              between them. A key is { t, pos: [x, y, z], yaw, pitch, roll, fov, parent, sky, aim, target }:
  *                t        the time in the replay (seconds)
  *                pos      the place of the camera, in the world, or, when it is parented, in the frame of the car (x to the left, y up, z forward)
  *                yaw, pitch   where it looks (radians; in the frame of the car when parented), unless aim is on
+ *                roll     the tilt of the picture (radians)
  *                fov      the vertical field of view (degrees)
  *                parent   the camera goes with the car (pos and the look are in the frame of the car)
+ *                sky      with parent: the camera goes with the car's place only and keeps the sky up (pos is an offset in the world)
  *                aim      the camera points at the car (a little above its middle) wherever it is
  *                target   the car (0 is the player, 1 and up the opponents)
  *              Between two keys the camera moves smoothly (slow at both ends): the place, the look and the field of view. Before the first and after the last it stays at those.
@@ -29,8 +31,8 @@ OpenRacer.CameraTrack = (function () {
             var k = keys[i];
             if (!k || !Array.isArray(k.pos) || k.pos.length !== 3 || !k.pos.every(function (x) { return typeof x === "number" && isFinite(x) && Math.abs(x) < 1e6; })) continue;
             out.push({
-                t: Math.max(0, finite(k.t, 0)), pos: k.pos.slice(), yaw: finite(k.yaw, 0), pitch: Math.max(-1.55, Math.min(1.55, finite(k.pitch, 0))),
-                fov: Math.max(8, Math.min(110, finite(k.fov, 60))), parent: !!k.parent, aim: !!k.aim, target: Math.max(0, Math.min(11, Math.floor(finite(k.target, 0))))
+                t: Math.max(0, finite(k.t, 0)), pos: k.pos.slice(), yaw: finite(k.yaw, 0), pitch: Math.max(-1.55, Math.min(1.55, finite(k.pitch, 0))), roll: Math.max(-Math.PI, Math.min(Math.PI, finite(k.roll, 0))),
+                fov: Math.max(8, Math.min(110, finite(k.fov, 60))), parent: !!k.parent, sky: !!k.parent && !!k.sky, aim: !!k.aim, target: Math.max(0, Math.min(11, Math.floor(finite(k.target, 0))))
             });
         }
         out.sort(function (a, b) { return a.t - b.t; });
@@ -38,17 +40,19 @@ OpenRacer.CameraTrack = (function () {
     }
 
     // the place and the look of a key in the world, now (the car moves, so a key that goes with it is worked out every time)
+    var tmpRoll = new Q(), axisZ = new V(0, 0, 1);
     function pose(k, body, outPos, outQuat) {
         outPos.set(k.pos[0], k.pos[1], k.pos[2]);
-        if (k.parent && body) outPos.applyQuaternion(body.quaternion).add(body.position);
+        if (k.parent && body) { if (k.sky) outPos.add(body.position); else outPos.applyQuaternion(body.quaternion).add(body.position); }
         if (k.aim && body) {
             tmpAim.copy(body.position).y += 0.7;
             tmpMatrix.lookAt(outPos, tmpAim, up);
             outQuat.setFromRotationMatrix(tmpMatrix);
+            if (k.roll) outQuat.multiply(tmpRoll.setFromAxisAngle(axisZ, k.roll));
         } else {
-            tmpEuler.set(k.pitch, k.yaw, 0, "YXZ");
+            tmpEuler.set(k.pitch, k.yaw, k.roll || 0, "YXZ");
             outQuat.setFromEuler(tmpEuler);
-            if (k.parent && body) outQuat.premultiply(body.quaternion);
+            if (k.parent && body && !k.sky) outQuat.premultiply(body.quaternion);
         }
     }
 
@@ -77,16 +81,16 @@ OpenRacer.CameraTrack = (function () {
 
     // a key from the free camera of the replay (Replay.free): what it has now
     function fromFree(free, time) {
-        return { t: time, pos: [free.pos.x, free.pos.y, free.pos.z], yaw: free.yaw, pitch: free.pitch, fov: free.fov, parent: !!free.parent, aim: !!free.aim, target: free.target || 0 };
+        return { t: time, pos: [free.pos.x, free.pos.y, free.pos.z], yaw: free.yaw, pitch: free.pitch, roll: free.roll || 0, fov: free.fov, parent: !!free.parent, sky: !!free.parent && !!free.sky, aim: !!free.aim, target: free.target || 0 };
     }
 
     // the free camera of the replay put where a key is (the camera of the editor starts from the track)
     function toFree(free, k, camera) {
         free.pos.set(k.pos[0], k.pos[1], k.pos[2]);
         free.vel.set(0, 0, 0);
-        free.yaw = free.yawT = k.yaw; free.pitch = free.pitchT = k.pitch;
+        free.yaw = free.yawT = k.yaw; free.pitch = free.pitchT = k.pitch; free.roll = free.rollT = k.roll || 0;
         free.fov = free.fovT = k.fov;
-        free.parent = !!k.parent; free.aim = !!k.aim; free.target = k.target || 0;
+        free.parent = !!k.parent; free.sky = !!k.parent && !!k.sky; free.aim = !!k.aim; free.target = k.target || 0;
         free.quat.copy(camera.quaternion);
     }
 

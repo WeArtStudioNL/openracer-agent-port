@@ -49,17 +49,69 @@ OpenRacer.VideoEditor = (function () {
 
     // ---- the clips: a source part, and a speed that may change along it
 
+    // between two keys the speed goes from the one to the other: straight, or eased (a key with "ease out" leaves its speed slowly, one with "ease in" arrives at it slowly)
     function speedAtOffset(clip, offset) {
         var keys = clip.keys;
         if (!keys.length) return clip.speed;
         if (offset <= keys[0].at) return keys[0].speed;
         for (var i = 1; i < keys.length; i++) {
             if (offset <= keys[i].at) {
-                var f = (offset - keys[i - 1].at) / Math.max(1e-6, keys[i].at - keys[i - 1].at);
-                return keys[i - 1].speed + (keys[i].speed - keys[i - 1].speed) * f;
+                var a = keys[i - 1], b = keys[i], f = (offset - a.at) / Math.max(1e-6, b.at - a.at);
+                if (a.easeOut && b.easeIn) f = f * f * (3 - 2 * f);
+                else if (a.easeOut) f = f * f;
+                else if (b.easeIn) f = 1 - (1 - f) * (1 - f);
+                return a.speed + (b.speed - a.speed) * f;
             }
         }
         return keys[keys.length - 1].speed;
+    }
+    // the ramp of a clip drawn in its block: the speed curve (a log scale from the slowest to the fastest), and the keys as dots that can be clicked (the inspector shows that key) and dragged
+    // (along: when it is; up and down: how fast)
+    var RAMP_TOP = 3, RAMP_H = 30;
+    function rampY(speed) { return RAMP_TOP + (1 - (Math.log(clamp(speed, MIN_SPEED, MAX_SPEED)) - Math.log(MIN_SPEED)) / (Math.log(MAX_SPEED) - Math.log(MIN_SPEED))) * RAMP_H; }
+    function rampSpeed(y) { return clamp(Math.exp(Math.log(MIN_SPEED) + (1 - (y - RAMP_TOP) / RAMP_H) * (Math.log(MAX_SPEED) - Math.log(MIN_SPEED))), MIN_SPEED, MAX_SPEED); }
+    function drawRamp(block, clip, index) {
+        if (!clip.keys.length) return;
+        var width = Math.max(6, clip.duration * state.scale - 2), svgNS = "http://www.w3.org/2000/svg";
+        var svg = document.createElementNS(svgNS, "svg");
+        svg.setAttribute("class", "ramp"); svg.setAttribute("width", width); svg.setAttribute("height", RAMP_TOP * 2 + RAMP_H);
+        var points = [], length = clip.out - clip.in;
+        for (var x = 0; x <= width; x += 3) {
+            var offset = offsetAt(clip, clamp(x / state.scale, 0, clip.duration));
+            points.push(x + "," + rampY(speedAtOffset(clip, offset)).toFixed(1));
+        }
+        var line = document.createElementNS(svgNS, "polyline");
+        line.setAttribute("points", points.join(" ")); line.setAttribute("fill", "none"); line.setAttribute("stroke", "#ffd04d"); line.setAttribute("stroke-width", "1.5");
+        svg.appendChild(line);
+        block.appendChild(svg);
+        clip.keys.forEach(function (k, ki) {
+            var d = el(block, "div", "rk" + (index === state.selected && ki === state.selectedKey ? " sel" : ""));
+            d.style.left = timeAtOffset(clip, k.at) * state.scale + "px";
+            d.style.top = rampY(k.speed) + "px";
+            d.title = "×" + round(k.speed, 2) + " at " + fmt(clip.in + k.at) + " (click: this key; drag: move it, up and down for the speed)";
+            d.addEventListener("pointerdown", function (event) {
+                event.stopPropagation(); event.preventDefault();
+                var rect = block.getBoundingClientRect(), moved = false, startX = event.clientX, startY = event.clientY;
+                try { if (d.setPointerCapture) d.setPointerCapture(event.pointerId); } catch (err) { /* (no pointer to capture) */ }
+                var move = function (e) {
+                    if (!moved && Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY) < 3) return;
+                    moved = true;
+                    var f = clamp((e.clientX - rect.left) / state.scale, 0, clip.duration);
+                    k.at = clamp(offsetAt(clip, f), 0, length);
+                    k.speed = round(rampSpeed(e.clientY - rect.top), 2);
+                    prepare(clip);
+                    state.selected = index; state.selectedKey = clip.keys.indexOf(k);
+                    renderTimeline(); renderInspector();
+                };
+                var up = function () {
+                    d.removeEventListener("pointermove", move); d.removeEventListener("pointerup", up); d.removeEventListener("pointercancel", up);
+                    state.selected = index; state.selectedKey = clip.keys.indexOf(k);
+                    if (moved) touch(); else { renderTimeline(); renderInspector(); }
+                };
+                d.addEventListener("pointermove", move); d.addEventListener("pointerup", up); d.addEventListener("pointercancel", up);
+            });
+            d.addEventListener("click", function (event) { event.stopPropagation(); });
+        });
     }
 
     // the table of a clip: the time in the timeline at every step of the source (the integral of 1 / speed)
@@ -314,7 +366,9 @@ OpenRacer.VideoEditor = (function () {
             "#vedit .clip { position: absolute; top: 14px; height: 38px; box-sizing: border-box; background: #2a4a6b; border: 1px solid #4a7aa6; border-radius: 5px; overflow: hidden; padding: 3px 6px; color: #fff; cursor: pointer; white-space: nowrap; }" +
             "#vedit .clip.sel { background: #35618c; border-color: var(--accent, #ff5a1f); box-shadow: 0 0 0 1px var(--accent, #ff5a1f) inset; }" +
             "#vedit .clip .l1 { font-size: 11px; } #vedit .clip .l2 { font-size: 10px; color: #b9c8d8; }" +
-            "#vedit .clip .rk { position: absolute; bottom: 0; width: 7px; height: 7px; background: #ffd04d; transform: translateX(-3px) rotate(45deg); }" +
+            "#vedit .clip .ramp { position: absolute; left: 0; top: 0; pointer-events: none; }" +
+            "#vedit .clip .rk { position: absolute; width: 9px; height: 9px; background: #ffd04d; border: 1px solid #0e1217; border-radius: 50%; transform: translate(-5px, -5px); cursor: grab; touch-action: none; }" +
+            "#vedit .clip .rk.sel { background: var(--accent, #ff5a1f); width: 11px; height: 11px; transform: translate(-6px, -6px); }" +
             "#vedit .ck { position: absolute; top: 22px; width: 14px; height: 14px; background: #37d67a; border: 1px solid #0e1217; transform: translateX(-7px) rotate(45deg); cursor: pointer; }" +
             "#vedit .ck.sel { background: var(--accent, #ff5a1f); }" +
             "#vedit .ck.parent { border-radius: 50%; } " +
@@ -354,7 +408,7 @@ OpenRacer.VideoEditor = (function () {
         ui.srcCanvas.width = 640; ui.srcCanvas.height = 360;
         srcCtx = ui.srcCanvas.getContext("2d");
         var sr = el(left, "div", "row");
-        ui.srcPlay = button(sr, "▶", "Play the source (Shift + Space)", function () { toggleSrc(); });
+        ui.srcPlay = button(sr, "▶", "Play the source (Shift + Enter)", function () { toggleSrc(); });
         button(sr, "⏮", "To the start of the source", function () { state.srcT = Replay.start_time(); updateSrcUi(); });
         ui.srcTime = el(sr, "span", "time", "");
         var scrub = el(left, "div", "scrub");
@@ -377,14 +431,15 @@ OpenRacer.VideoEditor = (function () {
         ui.finalScreen = el(right, "div", "screen");
         ui.empty = el(ui.finalScreen, "div", "over", "Empty. Set In and Out in the source, then Insert.");
         var fr = el(right, "div", "row");
-        ui.play = button(fr, "▶", "Play the result (Space)", function () { toggleFinal(); });
+        ui.play = button(fr, "▶", "Play the result (Enter)", function () { toggleFinal(); });
         button(fr, "⏮", "To the start (Home)", function () { state.T = 0; state.finalPlaying = false; });
         ui.time = el(fr, "span", "time", "");
         el(fr, "span", "spacer");
         var cr = el(right, "div", "row");
         el(cr, "span", "hint", "Camera:");
-        ui.free = button(cr, "Free camera", "Fly the camera: WASD or the arrows, Shift and Control up and down, click the picture and move the mouse to look, [ and ] zoom. Off: the camera track (or the game camera) plays.", function () { toggleFree(); });
+        ui.free = button(cr, "Free camera", "Fly the camera: WASD or the arrows, Space and Alt up and down, Q and E tilt, click the picture and move the mouse to look, [ and ] zoom. Off: the camera track (or the game camera) plays.", function () { toggleFree(); });
         ui.parent = button(cr, "Parent to car", "The camera goes with the car, from where it is now (L)", function () { if (Replay.free.active) Replay.toggleParent(); else say("Turn on the free camera first."); });
+        ui.sky = button(cr, "Parent, sky up", "The camera goes with the car's place but not with its turn (K)", function () { if (Replay.free.active) Replay.toggleSky(); else say("Turn on the free camera first."); });
         ui.aim = button(cr, "Point at car", "The camera keeps looking at the car (F)", function () { if (Replay.free.active) Replay.toggleAim(); else say("Turn on the free camera first."); });
         ui.car = button(cr, "Car", "The next car (Tab)", function () { if (Replay.carCount() > 1) Replay.nextTarget(); });
         ui.key = button(cr, "Key here", "Put a camera key at the playhead, with the camera as it is now", function () { keyHere(); }, "primary");
@@ -457,7 +512,7 @@ OpenRacer.VideoEditor = (function () {
             block.style.width = Math.max(6, clip.duration * state.scale - 2) + "px";
             el(block, "div", "l1", (i + 1) + " · " + fmt(clip.in) + " – " + fmt(clip.out));
             el(block, "div", "l2", clip.keys.length ? "ramp, " + clip.keys.length + " keys · " + round(clip.duration, 2) + " s" : "×" + round(clip.speed, 2) + " · " + round(clip.duration, 2) + " s");
-            clip.keys.forEach(function (k) { var d = el(block, "div", "rk"); d.style.left = timeAtOffset(clip, k.at) * state.scale + "px"; });
+            drawRamp(block, clip, i);
             block.onclick = function () { state.selected = i; state.selectedKey = -1; renderTimeline(); renderInspector(); };
         });
         // the camera keys
@@ -484,6 +539,24 @@ OpenRacer.VideoEditor = (function () {
         box.innerHTML = "";
         var clip = state.clips[state.selected];
         if (!clip) { el(box, "span", "hint", "Select a clip to change its speed, or to make a ramp with keys. A camera key: click it in the camera lane."); return; }
+        var key = clip.keys[state.selectedKey];
+        if (key) {
+            // one key of the ramp: its speed, and how the speed comes to it and leaves it
+            el(box, "span", "hint", "Ramp key at " + fmt(clip.in + key.at) + " · speed");
+            var ks = el(box, "input"); ks.type = "number"; ks.step = "0.05"; ks.min = String(MIN_SPEED); ks.max = String(MAX_SPEED); ks.value = String(round(key.speed, 2));
+            ks.addEventListener("keydown", function (e) { e.stopPropagation(); });
+            ks.onchange = function () { key.speed = clamp(parseFloat(ks.value) || 1, MIN_SPEED, MAX_SPEED); prepare(clip); touch(); };
+            var easeIn = el(box, "label", "hint"); var ci = el(easeIn, "input"); ci.type = "checkbox"; ci.checked = !!key.easeIn; easeIn.appendChild(document.createTextNode(" ease in"));
+            easeIn.title = "The speed arrives at this key slowly";
+            ci.onchange = function () { key.easeIn = ci.checked; prepare(clip); touch(); };
+            var easeOut = el(box, "label", "hint"); var co = el(easeOut, "input"); co.type = "checkbox"; co.checked = !!key.easeOut; easeOut.appendChild(document.createTextNode(" ease out"));
+            easeOut.title = "The speed leaves this key slowly";
+            co.onchange = function () { key.easeOut = co.checked; prepare(clip); touch(); };
+            button(box, "Delete key", "Delete this key of the ramp", function () { clip.keys.splice(state.selectedKey, 1); state.selectedKey = -1; if (clip.keys.length < 2) { clip.speed = clip.keys.length ? clip.keys[0].speed : clip.speed; clip.keys = []; } prepare(clip); touch(); });
+            el(box, "span", "sep");
+            el(box, "span", "hint", "Click the clip for the clip itself. Drag a key along for when, up and down for how fast.");
+            return;
+        }
         el(box, "span", "hint", "Clip " + (state.selected + 1) + ":");
         el(box, "span", "hint", clip.keys.length ? "speed from the ramp keys" : "speed");
         var speed = el(box, "input"); speed.type = "number"; speed.step = "0.05"; speed.min = String(MIN_SPEED); speed.max = String(MAX_SPEED); speed.value = String(round(clip.speed, 2));
@@ -500,14 +573,7 @@ OpenRacer.VideoEditor = (function () {
             prepare(clip); touch();
         });
         if (clip.keys.length) button(box, "Remove ramp", "Back to one speed", function () { clip.speed = round(speedAtOffset(clip, 0), 2); clip.keys = []; prepare(clip); touch(); });
-        clip.keys.forEach(function (k, i) {
-            var r = el(box, "span", "rkrow");
-            el(r, "span", "hint", fmt(clip.in + k.at));
-            var s = el(r, "input"); s.type = "number"; s.step = "0.05"; s.min = String(MIN_SPEED); s.max = String(MAX_SPEED); s.value = String(round(k.speed, 2));
-            s.addEventListener("keydown", function (e) { e.stopPropagation(); });
-            s.onchange = function () { k.speed = clamp(parseFloat(s.value) || 1, MIN_SPEED, MAX_SPEED); prepare(clip); touch(); };
-            button(r, "×", "Delete this key", function () { clip.keys.splice(i, 1); if (clip.keys.length < 2) { clip.speed = clip.keys.length ? clip.keys[0].speed : clip.speed; clip.keys = []; } prepare(clip); touch(); });
-        });
+        if (clip.keys.length) el(box, "span", "hint", "The ramp is drawn in the clip: click a key for its speed and its ease, drag it to move it.");
         el(box, "span", "sep");
         button(box, "Split at playhead", "Cut the clip in two at the playhead", function () {
             var at = starts()[state.selected];
@@ -590,7 +656,8 @@ OpenRacer.VideoEditor = (function () {
         var free = Replay.free;
         ui.play.textContent = state.finalPlaying ? "❚❚" : "▶";
         ui.free.className = free.active ? "on" : "";
-        ui.parent.className = free.active && free.parent ? "on" : "";
+        ui.parent.className = free.active && free.parent && !free.sky ? "on" : "";
+        ui.sky.className = free.active && free.parent && free.sky ? "on" : "";
         ui.aim.className = free.active && free.aim ? "on" : "";
         ui.car.style.display = Replay.carCount() > 1 ? "" : "none";
         ui.car.textContent = "Car " + ((free.target || 0) + 1);
@@ -663,7 +730,7 @@ OpenRacer.VideoEditor = (function () {
             if (x > sl + w - 30 || x < sl) ui.scroller.scrollLeft = Math.max(0, x - 40);
         }
         if (ui.free.className !== (Replay.free.active ? "on" : "")) updateButtons();
-        else if ((ui.parent.className === "on") !== (Replay.free.active && Replay.free.parent) || (ui.aim.className === "on") !== (Replay.free.active && Replay.free.aim)) updateButtons();
+        else if ((ui.parent.className === "on") !== (Replay.free.active && Replay.free.parent && !Replay.free.sky) || (ui.sky.className === "on") !== (Replay.free.active && Replay.free.parent && !!Replay.free.sky) || (ui.aim.className === "on") !== (Replay.free.active && Replay.free.aim)) updateButtons();
     };
 
     // ---- the keys
@@ -674,7 +741,7 @@ OpenRacer.VideoEditor = (function () {
         if (target && (/^(TEXTAREA|SELECT)$/.test(target.tagName) || (target.tagName === "INPUT" && target.type !== "range"))) return;
         if (document.querySelector(".veShade")) return;
         var free = Replay.free.active;
-        if (event.code === "Space") { event.preventDefault(); if (event.shiftKey) toggleSrc(); else toggleFinal(); }
+        if (event.code === "Enter") { event.preventDefault(); if (event.shiftKey) toggleSrc(); else toggleFinal(); }
         else if (event.code === "KeyI") { setIn(); event.preventDefault(); }
         else if (event.code === "KeyO") { setOut(); event.preventDefault(); }
         else if (event.code === "Home") { state.T = 0; state.finalPlaying = false; event.preventDefault(); }

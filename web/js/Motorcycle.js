@@ -126,7 +126,7 @@ OpenRacer.Motorcycle = function (settings) {
         // The roll axis of the bike is its own forward (ax, ay, az), not the horizontal one (fx, fz): a torque about the horizontal axis on a slope, or with the nose down on the brake,
         // has a part about the up of the bike, and that was a yaw of several hundred newton metres (the rider pulling the bike up on a climb swung its tail out)
         var al = Math.sqrt(fwd.x * fwd.x + fwd.y * fwd.y + fwd.z * fwd.z) || 1, ax = fwd.x / al, ay = fwd.y / al, az = fwd.z / al;
-        return { lean: lean, rate: -(v.wx * ax + v.wy * ay + v.wz * az), fx: fx, fz: fz, ax: ax, ay: ay, az: az, lx: lx, ly: ly, lz: lz, upN: upN, fwdN: fwdN };
+        return { lean: lean, rate: -(v.wx * ax + v.wy * ay + v.wz * az), fx: fx, fz: fz, ax: ax, ay: ay, az: az, lx: lx, ly: ly, lz: lz, upN: upN, fwdN: fwdN, noseUp: fwd.x * n.x + fwd.y * n.y + fwd.z * n.z };
     }
 
     // ---- hook: the angle of the front wheel (right is positive), from what the input asks for. delta: what the input gave (the angle of the wheel or the lock that is turned).
@@ -157,9 +157,11 @@ OpenRacer.Motorcycle = function (settings) {
         var phiMax = speedMax + epsFull;
         var want = -c * Math.min(phiMax, cap) * fast;
         // at a standstill the rider puts the right foot down and the bike rests against it, a little to the right
-        // (the foot comes up once the bike itself moves at 5 km/h: not on the throttle and not on the speed of the rear wheel, so it stays down in a burnout; up in about a second)
-        var still = !self.noFoot && Math.abs(u) < 1.4 && !self.pushing;
-        self.footDown += ((still ? 1 : 0) - self.footDown) * Math.min(1, dt / (still ? 0.5 : 1.0));
+        // (the foot comes up once the bike itself moves at 7 km/h, or when the nose is up more than 30 degrees (a wheelie): not on the throttle and not on the speed of the rear
+        // wheel, so it stays down in a burnout; up and down in about a second. Whenever it should be down it reaches for the road: a wheelie that is braked to a walking pace
+        // puts the right foot down towards the ground)
+        var still = !self.noFoot && Math.abs(u) < 7 / 3.6 && state.noseUp < 0.5 && !self.pushing;
+        self.footDown += ((still ? 1 : 0) - self.footDown) * Math.min(1, dt / 1.0);
         want -= self.footLean * self.footDown * (1 - fast);
         var brake = Math.max(0, Math.min(1, inp.brakePedal || 0)), bend = smooth(8 * DEG, 30 * DEG, Math.abs(want));
         want *= 1 + self.cornerBrake * brake * bend;                  // the rear brake takes it deeper into the bend (the front brake is not used in a bend: brakeScale)
@@ -373,8 +375,8 @@ OpenRacer.Motorcycle = function (settings) {
         var state = leanOf(v, 0), u = v.u;
         v.lean = state.lean;
         self.targetLean = state.lean;
-        var still = Math.abs(u) < 1.4;
-        self.footDown += ((still ? 1 : 0) - self.footDown) * Math.min(1, dt / (still ? 0.5 : 1.0));
+        var still = Math.abs(u) < 7 / 3.6 && state.noseUp < 0.5;
+        self.footDown += ((still ? 1 : 0) - self.footDown) * Math.min(1, dt / 1.0);
         self.postureStep(dt, u, thr, brk, state.lean);
     };
     this.rider = function (v, torque, dt, u, state) {

@@ -740,6 +740,8 @@ OpenRacer.Driver = function (config, parent, steering) {
             var footDown = state && state.footDown ? state.footDown : 0;
             if (e[1] < 0 && footDown > 0.001 && walk < 0.5) {
                 tmp.set(local.x - 0.22, groundY + 0.02, local.z + 0.08);
+                // the road itself, where the bike is pitched (a wheelie braked to a walking pace: the foot reaches down for the road, as far as the leg goes)
+                if (state && typeof state.roadY === "number") { self.parent.localToWorld(tmp); tmp.y = state.roadY + 0.02; self.parent.worldToLocal(tmp); }
                 local.lerp(tmp, footDown);
             }
             if (walk > 0.001) {
