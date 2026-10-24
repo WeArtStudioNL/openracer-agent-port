@@ -549,5 +549,5 @@ export function initDriver(api) {
         return underRay.intersectObjects(objects, true).length > 0;
     }
 
-    return { read, fill, frame, under, hide, attachToBench, detachFromBench, newFile, existingFile: () => drv.existingFile, deselect, saved: (path) => { drv.file = null; drv.existingFile = path; } };
+    return { read, fill, frame, under, hide, attachToBench, detachFromBench, newFile, driver: () => drv.driver, existingFile: () => drv.existingFile, deselect, saved: (path) => { drv.file = null; drv.existingFile = path; } };
 }

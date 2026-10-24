@@ -58,6 +58,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         self.root.add(scene);
         self.place();
         self.resolveBones();
+        installTorsoCull(scene);
         // the model turns and scales about its hips (the pivot of the gizmo is in the body, not at the feet): the model is moved so that its hips are at the origin of the driver; a driver that
         // was saved with the origin at the feet (without "pivot") is converted, so that it stays where it was
         var hips = self.bones.hips;
@@ -1245,7 +1246,40 @@ OpenRacer.Driver = function (config, parent, steering) {
         var head = self.bones.head;
         if (head && restScale.has(head)) head.scale.copy(restScale.get(head)).multiplyScalar(self.showHead ? 1 : 0.001);
     };
-    this.setCockpit = function (inside) { self.showHead = !inside; };
+    this.setCockpit = function (inside) { self.showHead = !inside; cullUniforms.uHideTorso.value = inside ? 1 : 0; };
+    // The cockpit view: the torso of the driver is in the camera (the chest of a rider that lies on the tank). The vertices of the skinned mesh that belong mostly to the bones
+    // of the torso (the hips, the spine, the chest, the neck: by the names of the bones) are dropped in the vertex shader while the view is inside, so the arms, the hands and the legs
+    // stay, and no mesh is cut. The materials of the model get the test by onBeforeCompile; the indices are those of the skeleton of each mesh.
+    var cullUniforms = { uHideTorso: { value: 0 } }, CULL_MAX = 12;
+    function installTorsoCull(scene) {
+        var torso = /spine|chest|torso|hips|pelvis|neck|breast|belly|stomach|shoulder|clavicle/i, limb = /arm|hand|leg|foot|thigh|shin|head|finger|thumb|toe/i;      // (the shoulders go with the torso: they are at the camera)
+        scene.traverse(function (o) {
+            if (!o.isSkinnedMesh || !o.skeleton) return;
+            var list = [];
+            o.skeleton.bones.forEach(function (bone, i) { if (torso.test(bone.name) && !limb.test(bone.name) && list.length < CULL_MAX) list.push(i); });
+            if (!list.length) return;
+            var arr = new Float32Array(CULL_MAX).fill(-1);
+            list.forEach(function (i, k) { arr[k] = i; });
+            var mats = Array.isArray(o.material) ? o.material : [o.material];
+            mats.forEach(function (m) {
+                if (!m || m.userData.torsoCull) return;
+                m.userData.torsoCull = true;
+                m.onBeforeCompile = function (shader) {
+                    shader.uniforms.uHideTorso = cullUniforms.uHideTorso;
+                    shader.uniforms.uHideBones = { value: arr };
+                    // the weight of the torso bones of the vertex goes to the fragment shader, which drops the fragment past a half: a triangle across the edge is cut there,
+                    // not stretched (moving the vertex would stretch it to the corner of the screen)
+                    shader.vertexShader = "uniform float uHideBones[" + CULL_MAX + "];\nvarying float vTorsoHide;\n" + shader.vertexShader.replace("#include <project_vertex>",
+                        "#include <project_vertex>\nvTorsoHide = 0.0;\n#ifdef USE_SKINNING\nfor (int i = 0; i < " + CULL_MAX + "; i++) { float b = uHideBones[i]; if (b < 0.0) break;" +
+                        " vTorsoHide += (abs(skinIndex.x - b) < 0.5 ? skinWeight.x : 0.0) + (abs(skinIndex.y - b) < 0.5 ? skinWeight.y : 0.0) + (abs(skinIndex.z - b) < 0.5 ? skinWeight.z : 0.0) + (abs(skinIndex.w - b) < 0.5 ? skinWeight.w : 0.0); }\n#endif");
+                    shader.fragmentShader = "uniform float uHideTorso;\nvarying float vTorsoHide;\n" + shader.fragmentShader.replace("#include <clipping_planes_fragment>",
+                        "if (uHideTorso > 0.5 && vTorsoHide > 0.5) discard;\n#include <clipping_planes_fragment>");
+                };
+                m.customProgramCacheKey = function () { return "torsoCull"; };
+                m.needsUpdate = true;
+            });
+        });
+    }
     this.dispose = function () { self.parent.remove(self.root); };
     // the figure goes to another frame (the car editor puts it in the frame of the car that is tested, which moves with the physics)
     this.setParent = function (next) { self.parent.remove(self.root); self.parent = next; next.add(self.root); };

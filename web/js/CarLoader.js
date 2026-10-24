@@ -187,7 +187,7 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
         // of the wheel: the direction in which it is flattest (found from its shape), or "steering_wheel.axis" of the car (in the space of the model).
         var steering = findSteeringWheel(root, space);
 
-        var takenAt = {};   // the parts that the slots have taken (by name), and where they were
+        var takenAt = {}, takenBy = {};   // the parts that the slots have taken (by name): where they were, and the chain that holds them
         var measured = null; // the centres and the size of the wheels of the model, in the space of the body
         if(complete) {
             measured = { centres: {}, diameter: 0 };
@@ -200,8 +200,10 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
                 // the parts that an earlier slot took are not in the model any more (a motorcycle: wheel_FL for both FR and FL): this slot has the same place and no wheel of its own
                 var box = new THREE.Box3();
                 var again = nodes[slot].filter(function (name) { return takenAt[name]; });
+                var sharesWith = null;        // the chain of the earlier slot that holds the wheel of this slot (a motorcycle)
                 if(!parts.length && again.length) {
                     box.setFromCenterAndSize(takenAt[again[0]], new THREE.Vector3(0.001, 0.001, 0.001));
+                    sharesWith = takenBy[again[0]] || null;
                 } else {
                     parts.forEach(function (part) { box.expandByObject(part); });
                     var middle = box.getCenter(new THREE.Vector3());
@@ -216,9 +218,15 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
                 chain.object.updateMatrixWorld(true);
                 // attach keeps the place of a part in the world: it ends up around the middle of the wheel
                 parts.forEach(function (part) { chain.spin.attach(part); });
+                nodes[slot].forEach(function (name) { if(!takenBy[name]) takenBy[name] = chain; });
                 // the brake caliper of this wheel (a part called brake_caliper_FL or the like, not a wheel part): it goes with the
-                // wheel and steers with it, but it does not spin, so it hangs on the steering link of the chain
-                calipersOf(slot).forEach(function (part) { chain.object.children[0].attach(part); });
+                // wheel and steers with it, but it does not spin, so it hangs on the steering link of the chain. On a motorcycle the wheel of this slot was taken by an
+                // earlier slot (FR takes wheel_FL, FL has nothing of its own): its parts (brake_fork_leg_FL, brake_mudguard_FL) hang on that chain, the one that is drawn
+                // at the wheel; on their own slot they stood beside the wheel, by the track of the ghost wheel, and without the travel of the fork
+                var holder = sharesWith || chain, extra = calipersOf(slot);
+                if(holder !== chain && extra.length) { space.add(holder.object); holder.object.updateMatrixWorld(true); }      // (attach needs it in the space of the model)
+                extra.forEach(function (part) { holder.object.children[0].attach(part); });
+                if(holder !== chain && extra.length) space.remove(holder.object);
                 space.remove(chain.object);
                 wheels.push(chain.object);
             });

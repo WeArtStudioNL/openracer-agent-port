@@ -305,11 +305,10 @@ OpenRacer.Motorcycle = function (settings) {
             // a spin: the bike turns about its vertical faster than 4 rad/s at speed (a jump landed on a lean: the front took the hit with the rear in the air, and the bike was
             // thrown round in a tenth of a second and went on backwards at 100 km/h)
             var spin = Math.abs(v.wy || 0) > 4 && Math.abs(u) > 5;
-            // a wheel torn off (the soft body, Vehicle.js loseWheel): nobody rides a bike on one wheel
-            var lostWheel = !!(v.wheelLost && (v.wheelLost[0] || v.wheelLost[2]));
-            if (lostWheel || Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) || (self.limp && Math.abs(u) < 0.5) || over || lowside || spin || aMag > 3.5 * G || (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) || wall) {
+            // (a wheel torn off is no crash by itself: the rider can hold the bike up on its fork or its swingarm, which touch the road (keepBodyOff); it goes down when it leans)
+            if (Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) || (self.limp && Math.abs(u) < 0.5) || over || lowside || spin || aMag > 3.5 * G || (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) || wall) {
                 self.crashed = true;
-                self.crashReason = lostWheel ? "wheel" : Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) ? "lean" : (self.limp && Math.abs(u) < 0.5) ? "limp-still" : over ? "over" : lowside ? "lowside" : spin ? "spin" : aMag > 3.5 * G ? "accel " + (aMag / G).toFixed(1) + "g" : (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) ? "lateral" : hit ? "hit " + (speedOld - speedNow).toFixed(1) : "wall";     // (for the debugging)
+                self.crashReason = Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) ? "lean" : (self.limp && Math.abs(u) < 0.5) ? "limp-still" : over ? "over" : lowside ? "lowside" : spin ? "spin" : aMag > 3.5 * G ? "accel " + (aMag / G).toFixed(1) + "g" : (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) ? "lateral" : hit ? "hit " + (speedOld - speedNow).toFixed(1) : "wall";     // (for the debugging)
                 var before = wall && v.lastWall && v.lastWall.v ? v.lastWall.v : null;
                 self.crashSpeed = before ? { x: before[0], y: before[1], z: before[2] } : { x: v.vx, y: v.vy, z: v.vz };
             }

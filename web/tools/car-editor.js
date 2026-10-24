@@ -1153,7 +1153,11 @@ function renderThumbnail() {
     const helper = typeof gizmo.getHelper === "function" ? gizmo.getHelper() : gizmo;
     const wasVisible = helper.visible;
     helper.visible = false;
+    // (the cockpit camera: the torso and the head of the driver are not drawn, as in the game)
+    const drv = driverEditor && driverEditor.driver ? driverEditor.driver() : null;
+    if (drv && id === "cockpit") { drv.setCockpit(true); drv.update(0); }
     thumbRenderer.render(scene, thumbCamera);
+    if (drv && id === "cockpit") { drv.setCockpit(false); drv.update(0); }
     helper.visible = wasVisible;
     cameraMarkers.visible = true;
 }
@@ -2083,6 +2087,7 @@ function benchFrame(now) {
     bench.model.wheels.forEach((object, i) => {
         const w = v.wheels[i];
         object.position.set(w.center.x, w.center.y, w.center.z);
+        if (v.soloWheels) object.position.add(new THREE.Vector3(w.b, 0, 0).applyQuaternion(body.quaternion));     // (a motorcycle: the wheel of the model is drawn in the middle, not 2 cm aside as the physics has it)
         object.quaternion.copy(body.quaternion);
         if (object.children[0]) {
             object.children[0].rotation.y = -(i < 2 ? v.steerApplied : 0) - (w.toeBend || 0);   // the front wheels steer; a bent wheel points aside

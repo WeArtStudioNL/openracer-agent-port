@@ -257,8 +257,25 @@ OpenRacer.Car = function( config, domElement ) {
         document.body.appendChild(note);
         setTimeout(function() { note.remove(); }, 1600);
     };
+    // without a saved place the reset goes to the track near the car: the nearest point of the racing line of the AI (race.line), in its direction, or else the nearest point of
+    // the line from the gate that was passed last to the next gate; the start when there is neither
+    var lastCrossedGate = null;
+    this.nearestOnTrack = function() {
+        var v = this.vehicle, line = typeof race !== "undefined" && race && race.line;
+        if(line && line.count && line.count() > 1) {
+            var pt = line.point(line.nearest(v.px, v.pz));
+            return { x: pt.x, z: pt.z, psi: line.headingAt(v.px, v.pz), py: null };
+        }
+        if(trackGates.length > 1 && lastCrossedGate !== null) {
+            var g = trackGates[lastCrossedGate], n = trackGates[(lastCrossedGate + 1) % trackGates.length];
+            var dx = n.x - g.x, dz = n.z - g.z, len2 = dx * dx + dz * dz;
+            var t = len2 > 0 ? Math.max(0, Math.min(1, ((v.px - g.x) * dx + (v.pz - g.z) * dz) / len2)) : 0;
+            return { x: g.x + dx * t, z: g.z + dz * t, psi: len2 > 0 ? Math.atan2(dz, dx) : g.heading, py: null };
+        }
+        return null;
+    };
     this.returnToSaved = function() {
-        var v = this.vehicle, p = savedReset || { x: startX, z: startZ, psi: startHeading, py: null };
+        var v = this.vehicle, p = savedReset || this.nearestOnTrack() || { x: startX, z: startZ, psi: startHeading, py: null };
         v.relocate(p.x, p.z, p.psi, p.py);
         tyreSmoke.clear();
         flames.clear();
@@ -312,6 +329,8 @@ OpenRacer.Car = function( config, domElement ) {
             wheel.position.set(wheel.center.x, wheel.center.y, wheel.center.z);
             if(wheel.object) {
                 wheel.object.position.copy(wheel.position);
+                // (a motorcycle: the physics has its pair of wheels 4 cm apart, the model has one wheel in the middle: it is drawn in the middle)
+                if(this.vehicle.soloWheels) wheel.object.position.add(soloShift.set(wheel.b, 0, 0).applyQuaternion(this.body.quaternion));
                 wheel.object.quaternion.copy(this.body.quaternion);
                 wheel.turn(i < 2 ? this.vehicle.steerApplied : 0);
                 wheel.object.children[0].children[0].rotation.x = wheel.spin;
@@ -511,6 +530,7 @@ OpenRacer.Car = function( config, domElement ) {
 
     // ---- main loop
 
+    var soloShift = new THREE.Vector3();
     this.update = function( delta, showDebug ) {
         if(!this.isReady()) return;
         if(!placed) {
@@ -755,6 +775,7 @@ OpenRacer.Car = function( config, domElement ) {
         if(trackGates.length) {
             var crossed = checkGates(this.vehicle);
             if(crossed === null) return;
+            lastCrossedGate = crossed;
             name = "g" + crossed;
         } else {
             if(lastTerrain === this.currentCheckPoint) return;
