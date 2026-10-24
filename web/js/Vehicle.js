@@ -1556,6 +1556,8 @@ OpenRacer.Vehicle = function (parameters, input) {
                 if(touched) {
                     var up = body.normal.x * axisY.x + body.normal.y * axisY.y + body.normal.z * axisY.z + body.friction.x * axisY.x + body.friction.y * axisY.y + body.friction.z * axisY.z;
                     tyreLoad[i] = Math.max(0, up);
+                    // (a motorcycle: a tyre carries no more than six times its static load; a leaned landing from a jump at 170 km/h pressed one in to 31 kN, and the bike was thrown over)
+                    if(self.soloWheels) tyreLoad[i] = Math.min(tyreLoad[i], 6 * (w.staticLoad || 1500));
                     // what is left of the pressing forces across the suspension (the side of a ramp, a wall, a slope) goes to the car at the hub
                     var nu = body.normal.x * axisY.x + body.normal.y * axisY.y + body.normal.z * axisY.z;
                     w.perpX = body.normal.x - nu * axisY.x; w.perpY = body.normal.y - nu * axisY.y; w.perpZ = body.normal.z - nu * axisY.z;
@@ -1859,6 +1861,11 @@ OpenRacer.Vehicle = function (parameters, input) {
                 sumFx += fxW; sumFy += fyW;
                 if(wheel.cylActive) {
                     // the pressing force of the nodes across the suspension (a ramp side, a wall, a slope), on the car at the hub
+                    // (a motorcycle: no more than the static load of the wheel; a tyre that lands leaned on a slope at 170 km/h pressed with 4 000 N and threw the bike backwards at 100 km/h)
+                    if(self.soloWheels) {
+                        var perpMag = Math.sqrt(wheel.perpX * wheel.perpX + wheel.perpY * wheel.perpY + wheel.perpZ * wheel.perpZ), perpCap = wheel.staticLoad || 1500;
+                        if(perpMag > perpCap) { var ps = perpCap / perpMag; wheel.perpX *= ps; wheel.perpY *= ps; wheel.perpZ *= ps; }
+                    }
                     var hx = Rv.x - axisY.x * wheel.susLength, hy = Rv.y - axisY.y * wheel.susLength, hz = Rv.z - axisY.z * wheel.susLength;
                     force.x += wheel.perpX; force.y += wheel.perpY; force.z += wheel.perpZ;
                     torque.x += hy * wheel.perpZ - hz * wheel.perpY; torque.y += hz * wheel.perpX - hx * wheel.perpZ; torque.z += hx * wheel.perpY - hy * wheel.perpX;

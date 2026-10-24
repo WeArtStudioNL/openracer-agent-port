@@ -4,7 +4,7 @@
 
 ## Riding it (the short version)
 * **Keys.** Steer left and right asks for a lean (the standard, *Motorcycle steering: lean only* in the Escape menu; *Countersteer + lean* adds a push on the bars that is off while braking). Gas and brake as a car; the front brake eases as the rear comes up, in a bend the rear brake does the work. `<` and `>` move the rider back and forward (weight for a wheelie or a stoppie). No reverse: hold the brake at a standstill and the rider pushes the bike back with his feet. Brake and gas together at a standstill is a burnout.
-* **Menu options.** *Wheelie control* rolls the gas off as the front lifts. *Motorcycle follow camera*: classic chase, or one that leans with the bike. ESC does nothing on a bike; TC and ABS work as on a car.
+* **Menu options.** *Wheelie control* rolls the gas off as the front lifts. *Lean at top speed* is what the keys can still ask for at the top of the speed (15 to 45 degrees, 30 as standard). *Motorcycle follow camera*: classic chase, or one that leans with the bike. ESC does nothing on a bike; TC and ABS work as on a car.
 * **What puts it down.** More than about 63 degrees of lean (10 past what the tyres hold), a hit of a wall or a barrier, 3.5 g, or a wheelie that goes over onto its back. Then the rider is a ragdoll, the bike slides as a body, the camera watches from 2.5 m, and nothing works until **Reset** or **Repair** (Backspace).
 * **The key 9** makes the rider limp on the bike (to try the crash): the bike rides on with no help until it goes down.
 * **At a standstill** the right foot goes down and the bike rests on it; it comes up at 7 km/h or with the nose up in a wheelie, and reaches for the road again when the bike slows.
