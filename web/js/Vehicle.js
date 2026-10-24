@@ -2021,8 +2021,10 @@ OpenRacer.Vehicle = function (parameters, input) {
             var wj = wheels[j];
             // The tyre can only bring the wheel to the speed of the road, not past it in one step: at a standstill the step of the tyre force is far more than the slip it answers
             // (a light wheel, a stiff tyre), and the wheel reversed every frame (the tyres of a bike jittered back and forth at a standstill)
+            // (not while the engine drives the wheel: the tyre then holds the slip that balances the drive, and a wheel kept at the road speed has no slip and the drive goes through it: a
+            // bike looped over backwards at the start)
             var dOm = dt * tyreTorque[j] / wj.inertia, over = wj.omega - (wj.forwardSpeed || 0) / wj.radius;
-            if(over * dOm < 0 && Math.abs(dOm) > Math.abs(over)) dOm = -over;
+            if(Math.abs(wheelDrive[j]) < 5 && over * dOm < 0 && Math.abs(dOm) > Math.abs(over)) dOm = -over;
             var omegaFree = wj.omega + dOm + dt * wheelDrive[j] / wj.inertia;
             var bt2 = brakeTorque[j];
             if(bt2 > 0) {
