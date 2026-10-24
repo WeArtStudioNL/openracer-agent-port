@@ -1593,7 +1593,9 @@ OpenRacer.Vehicle = function (parameters, input) {
             var cUse = xdotS > 0 ? cS : cS * self.reboundFactor;
             var knee = 0.3, mag = Math.abs(xdotS);
             var blow = xdotS > 0 ? 0.35 : 0.7;               // (going out the damper holds on better: a spring that is let go does not throw the body up)
-            if(self.soloWheels) blow = xdotS > 0 ? 0.9 : 0.8;  // (a fork or a shock of a motorcycle keeps damping at speed: the front of a wheelie that came down bounced the bike 2.6 m/s back up)
+            // a fork or a shock of a motorcycle: no blow-off, and a hard hit (a landing from a wheelie) is taken by the damper, twice as much from 0.5 m/s, and the rebound is held
+            // (the tyre does not bounce back off the road)
+            if(self.soloWheels) { blow = 1; if(xdotS <= 0) cUse *= 1.25; }
             var damperS = (mag <= knee ? cUse * mag : cUse * (knee + blow * (mag - knee))) * (xdotS > 0 ? 1 : -1);
             // the bump stop and the droop stop: stiff, and damped (a wheel that lands on an undamped stop rings on it at 16 Hz)
             var stopRate = 12 * rateS, stopDamping = 2.5 * Math.sqrt(stopRate * self.unsprungMass);

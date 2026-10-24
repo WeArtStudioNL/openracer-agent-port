@@ -619,12 +619,8 @@ OpenRacer.Car = function( config, domElement ) {
         if(v.controller) slow = 0;                       // (a motorcycle: the keys ask for a lean, and that is the same at every speed)
         var speedFactor = 1 + Math.max(0, Math.abs(v.u) / 4 - 1) * slow;
         if(this.turnDir === 0) {
-            if(!mouseDown && !usingGamepad) {
-                // a motorcycle: the lean comes back at a steady rate when the key is let go (it snapped back in a tenth of a second, which was no good for a small correction in a bend
-                // or the way out of one); a car's wheels come straight at once
-                if(v.controller) { var back = tSpeed * 0.6 * delta; this.turnAngle = Math.abs(this.turnAngle) <= back ? 0 : this.turnAngle - Math.sign(this.turnAngle) * back; }
-                else this.turnAngle *= Math.pow(0.75, delta * 60);
-            }
+            if(!mouseDown && !usingGamepad)
+                this.turnAngle *= Math.pow(0.75, delta * 60);
         } else if(this.turnDir < 0 && this.turnAngle > 0) {
             this.turnAngle += this.turnDir * ((tSpeed * 3) / speedFactor) * delta;
         } else if(this.turnDir > 0 && this.turnAngle < 0) {

@@ -9,12 +9,11 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 ### Motorcycles
 
 **After the first drive**
-- The lean comes back at a steady rate when the key is let go (about a second from full lean; it snapped back in a tenth of a second, which was no good for a small correction in a bend or the way out of one).
 - The brakes: the rear keeps at least 22 % of its load while a lean is asked for or the bike leans or slides (a rear with no load has no grip sideways), and both brakes come off as the slip of the bike grows past 5 degrees, as the cornering ABS of a modern bike does. A hard brake with a little steering at 180 km/h still slides; that goes deeper, into the rear tyre under the brakes, and is an open point.
 - The tyres squeal later on a motorcycle (the camber of its tyres carries a bend).
 - A bike that is down slides with a steady 0.6 g of friction and the rider with 0.55 g, so they slide together (the bike lost its speed as a share of it, 3 g at first, and caught the rider up from behind at full speed; that was the rider that "shot off the bike").
 - The version is 2.2.0-dev, so that every browser loads the new scripts (the ?v= of the scripts is the version).
-- The front of a wheelie comes down without the bounce: the fork and the shock of a motorcycle keep damping at speed (the digressive damper of a car let the spring throw the bike 2.6 m/s back up after a wheelie to the vertical).
+- The front of a wheelie comes down without the bounce: the fork and the shock of a motorcycle have no blow-off (the damper of a car lets go past 0.3 m/s, and the spring threw the bike 2.6 m/s back up after a wheelie to the vertical) and hold the rebound a quarter more.
 
 **Motorcycles (a prototype)**
 - A car with `"type": "motorcycle"` is a motorcycle: two wheels (a pair at each end in the physics), a rider that keeps the bike up and leans it into the corner (`lean = atan(a / g)`), steering that gets smaller with the speed, and the bodywork that may lean over the road. The first one is the **Honda CBR 600 RR** (`web/cars/honda-cbr600`, a model made by `tools/make-cbr600.py`): 270 kg with the rider, 118 hp to 15 500 rpm, six gears, a fork of 17 kN/m and a shock of 24 kN/m. On the flat pad it holds 12 m/s at leans of 20 to 47 degrees, brakes from 90 km/h in 36 m (0.96 g) and goes 0 to 90 km/h in 4.5 s. See `MOTORCYCLE.md`.
