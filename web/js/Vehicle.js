@@ -568,6 +568,10 @@ OpenRacer.Vehicle = function (parameters, input) {
         this.wx = this.wy = this.wz = 0;
         this.ax = this.ay = 0;
         this.suspensionHistory = null;
+        // the engine at idle with the clutch open (it kept its speed, and in gear it spun the wheels up again the moment the car was put down)
+        this.engine.omega = this.engine.idleRPM * Math.PI / 30;
+        this.clutchEngagement = 0;
+        this.shiftTimer = 0;
         if(this.softBody) this.softBody.settle();
         for(var i = 0; i < 4; i++) {
             var w = this.wheels[i];

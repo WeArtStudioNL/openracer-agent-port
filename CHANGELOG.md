@@ -19,6 +19,8 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 - **The limp rider (the key 9) gets no help at all**: the front wheel is let go and comes straight, no castor, no balance, no throttle; the tyres and the lean decide where the bike goes, it leans over within a second or two at any speed (also at a walking pace: no direct fall any more) and past 40 degrees, or once it has stopped, it is a body that slides, as in a crash.
 - **A walking pace with the bars at the lock**: the throttle is eased to a tenth (the bike went on accelerating round the turn), the rider cannot hold it up any more and it leans into the turn and goes over; with the bars half turned nothing changes.
 - A reset at speed (the bike put back at once) is not a hit: the hit that crashes is a loss of speed, not a change of place.
+- **A burnout**: the brake and the throttle together at a standstill (or nearly) hold the front brake and let the rear brake off, so the rear wheel spins (it sat at 4 000 rpm with both wheels held).
+- **Reset puts the engine at idle with the clutch open** (also for a car): it kept its speed, and in gear it spun the wheels up again the moment the car was put down.
 - **The replay shows the ragdoll**: the places of the particles are recorded every sample while the rider is one, and a replay file (version 4) keeps them; a file from before opens as it did.
 
 **Car editor: orthographic view and standard views**

@@ -226,7 +226,11 @@ OpenRacer.Motorcycle = function (settings) {
         self.frontBrake += (target - self.frontBrake) * Math.min(1, dt / (target < self.frontBrake ? 0.02 : 0.1));
         // (after a crest the rear wheel comes down hard and it spins faster than the road: the rear brake comes back slowly, so that it does not lock and slide)
         var rearTarget = Math.max(0, Math.min(1, rearRatio * 1.2));
+        // a burnout: the brake and the throttle together at a standstill (or nearly) is the front brake held and the rear wheel let spin; the rear brake comes off
+        var inp = v.input, burnout = smooth(0.2, 0.6, inp.throttle || 0) * smooth(0.2, 0.5, inp.brakePedal || 0) * (1 - smooth(2, 5, Math.abs(v.u)));
+        rearTarget *= 1 - burnout;
         self.rearBrake = rearTarget > self.rearBrake ? Math.min(rearTarget, self.rearBrake + dt / 0.3) : rearTarget;
+        if (burnout > 0.5) self.frontBrake = Math.max(self.frontBrake, burnout);
     };
     // in a bend the front brake stands the bike up, so it is hardly used (a rider uses the rear brake): from 8 to 30 degrees of lean it goes to a tenth
     this.brakeScale = function (v, wheel) {
