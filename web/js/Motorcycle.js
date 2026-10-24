@@ -54,6 +54,7 @@ OpenRacer.Motorcycle = function (settings) {
     this.complied = 0;
     this.footDown = 0;                                       // 0 to 1: the right foot of the rider on the road (a standstill)
     this.footLean = (s.foot_lean_deg !== undefined ? s.foot_lean_deg : 7) * DEG;   // how far the bike rests to the right on the foot
+    this.wheelieScale = 1;                                  // the throttle that the wheelie control leaves (1: all of it)
     this.pushing = false;                                   // the rider walks the bike back (set by Car.js)
     this.command = 0;                                      // the lean that is asked (-1..1)
     this.targetLean = 0;                                   // what the rider takes (rad, left is positive)
@@ -177,6 +178,16 @@ OpenRacer.Motorcycle = function (settings) {
         return self.steer;
     };
 
+    // ---- hook: the wheelie control (the menu: Wheelie control, on by default): the rider rolls the throttle off as the front wheel goes light, and keeps it there at about a tenth of
+    // its load; a bike with a lot of torque from low revs loops over backwards at full throttle otherwise
+    this.throttleScale = function (v, dt) {
+        var on = typeof Settings === "undefined" || Settings.option("wheelieControl") !== false;
+        var frontLoad = ((v.wheels[0].weight || 0) + (v.wheels[1].weight || 0)) / Math.max(1, v.weight_distribution * v.mass * G);
+        var want = on && Math.abs(v.u) > 0.5 ? Math.max(0.15, Math.min(1, (frontLoad - 0.08) / 0.3)) : 1;
+        self.wheelieScale += (want - self.wheelieScale) * Math.min(1, dt / (want < self.wheelieScale ? 0.03 : 0.25));
+        return self.wheelieScale;
+    };
+
     // ---- hook: the brakes. brakeStep once per step of the physics, brakeScale for every wheel
     this.brakeStep = function (v, dt) {
         var m = v.mass, w = v.wheels;
@@ -253,18 +264,31 @@ OpenRacer.Motorcycle = function (settings) {
 
     // ---- the rider on the bike: where he sits, from what the bike does, and what his weight does to the bike
     var inputOf = function (v) { var i = v.input; return { thr: Math.max(0, Math.min(1, i.throttle || 0)), brk: Math.max(0, Math.min(1, i.brakePedal || 0)) }; };
-    this.rider = function (v, torque, dt, u, state) {
-        var p = self.posture, i = inputOf(v), fwdSpeed = Math.max(0, u);
-        // the targets: sits back and up on the brake, flat and forward on the throttle at speed, off the seat to the inside of a bend
+    // the posture of the rider from what the bike does (also for a replay, which has no physics: the lean and the pedals of the recording)
+    this.postureStep = function (dt, u, thr, brk, lean) {
+        var p = self.posture, i = { thr: thr, brk: brk }, fwdSpeed = Math.max(0, u);
         var tuck = i.thr * smooth(12, 35, fwdSpeed) * (1 - i.brk), sit = i.brk * smooth(4, 20, fwdSpeed);
-        if(self.riderKey) { tuck = self.riderKey > 0 ? 1 : 0; sit = self.riderKey < 0 ? 1 : 0; }      // the keys < and > put the rider back or forward
-        var bendT = smooth(8 * DEG, 40 * DEG, Math.abs(self.targetLean)) * smooth(5, 12, Math.abs(u));
-        var hang = Math.sign(self.targetLean) * bendT;
+        if(self.riderKey) { tuck = self.riderKey > 0 ? 1 : 0; sit = self.riderKey < 0 ? 1 : 0; }
+        var bendT = smooth(8 * DEG, 40 * DEG, Math.abs(lean)) * smooth(5, 12, Math.abs(u));
+        var hang = Math.sign(lean) * bendT;
         var k = function (t) { return Math.min(1, dt / t); };
         p.tuck += (tuck - p.tuck) * k(0.35); p.sit += (sit - p.sit) * k(0.25);
         p.lat += (hang * self.maxHang - p.lat) * k(0.25); p.knee += (bendT - p.knee) * k(0.3);
         p.long += ((-0.22 * sit + 0.12 * tuck) - p.long) * k(0.3);
         p.drop += ((-0.09 * tuck + 0.05 * sit) - p.drop) * k(0.3);
+    };
+    // a replay: the posture and the foot from the recording (the lean of the body, the speed and the pedals), nothing else
+    this.replayStep = function (v, dt, thr, brk) {
+        var state = leanOf(v, 0), u = v.u;
+        v.lean = state.lean;
+        self.targetLean = state.lean;
+        var still = Math.abs(u) < 0.6 && thr < 0.05;
+        self.footDown += ((still ? 1 : 0) - self.footDown) * Math.min(1, dt / (still ? 0.5 : 2.0));
+        self.postureStep(dt, u, thr, brk, state.lean);
+    };
+    this.rider = function (v, torque, dt, u, state) {
+        var p = self.posture, i = inputOf(v), fwdSpeed = Math.max(0, u);
+        self.postureStep(dt, u, i.thr, i.brk, self.targetLean);
         // the acceleration of the bike, from how its speed changes (smoothed): the rider's weight is gravity less that
         if(vPrev && dt > 0) {
             var kk = Math.min(1, dt / 0.08);

@@ -105,7 +105,7 @@ var Settings = (function() {
     var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, autoReverse: true, autoReversePedals: true, autoReverseSpeed: 3, dragReady: 2, dragGreen: 1.5, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 2, volume: 0.8,
         padSlow: 1.5, padAssist: true, keySteer: 1, keySlow: 1, keyAssist: true,
         // a motorcycle: the steering ("counter": countersteering to start a lean and the lean; "lean": the lean only) and the follow camera ("lean": it rolls with the bike; "classic": as a car)
-        bikeSteering: "lean", bikeCamera: "lean",
+        bikeSteering: "lean", bikeCamera: "lean", wheelieControl: true,
         // the easing of the keys: the time that a key takes to bring the pedal or the wheels to the full value (s), and the curve of it (1 straight, below 1 quick at first, above 1 slow at first)
         keyThrottleTime: 0.5, keyThrottleCurve: 0.6, keyBrakeTime: 0.4, keyBrakeCurve: 0.6, keySteerTime: 0.9, keySteerCurve: 1,
         // the graphics (Graphics.js): a preset is a set of these
@@ -789,6 +789,7 @@ var Settings = (function() {
         // a motorcycle: how it is steered, and the camera that follows it (to try what feels right)
         if(typeof car !== "undefined" && car && car.vehicle && car.vehicle.controller) {
             page.appendChild(optionRow("Motorcycle steering", options.bikeSteering === "counter" ? "Countersteer + lean" : "Lean only", function() { setOption("bikeSteering", options.bikeSteering === "counter" ? "lean" : "counter"); }));
+            page.appendChild(optionRow("Wheelie control (the rider rolls the gas off as the front wheel lifts)", options.wheelieControl !== false ? "On" : "Off", function() { setOption("wheelieControl", options.wheelieControl === false); }));
             page.appendChild(selectRow("Motorcycle follow camera", "bikeCamera", [["lean", "Motorcycle lean chase (the picture rolls with the bike)"], ["classic", "Classic chase (as a car)"]]));
         }
         page.appendChild(optionRow("ABS", options.abs ? "On" : "Off", function() { setOption("abs", !options.abs); }));

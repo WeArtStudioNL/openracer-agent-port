@@ -388,6 +388,8 @@ OpenRacer.Replay = (function() {
             if(object.parts && object.parts.replay) object.parts.replay.replayBegin();       // (a car that is built while the replay is open: its parts are made after it)
             if(entry.soft) showSoft(entry, time);
             object.vehicle.updateOutputs();
+            // a motorcycle: the rider's posture and the foot at a standstill from the recording (the physics does not run in a replay)
+            if(object.vehicle.controller && object.vehicle.controller.replayStep) object.vehicle.controller.replayStep(object.vehicle, delta || 0, object.throttle || 0, object.brakePedal || 0);
             if(entry.player) object.updateVisuals(delta);
             else object.updateVisuals();
             if(i === 0) player = { rpm: scratch[P.rpm], throttle: scratch[P.throttle], brake: scratch[P.brake], gear: gearLabels[scratch[P.gear] | 0] || "", speed: Math.hypot(scratch[P.vx], scratch[P.vz]) };

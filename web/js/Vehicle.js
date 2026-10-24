@@ -1867,7 +1867,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         // ---- engine and clutch
         var gs = self.getGearRatio();
         var shares = self.torqueShares(); // the share of the torque of every wheel with open differentials
-        var throttle = inp.throttle * self.tcFactor * (1 - 0.85 * escCut);
+        var throttle = inp.throttle * self.tcFactor * (1 - 0.85 * escCut) * (self.controller && self.controller.throttleScale ? self.controller.throttleScale(self, dt) : 1);
         // the gearbox takes the power off while it shifts
         if(self.shiftTimer > 0) throttle *= 0.15;
         engine.updateBoost(throttle, dt);
