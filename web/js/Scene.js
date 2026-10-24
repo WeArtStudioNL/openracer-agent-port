@@ -240,9 +240,10 @@ function render() {
             cubeCamera.update( renderer, scene );
             //renderer.autoClear = false;
 
-            car.body.visible = true;
+            var shown = !(OpenRacer.DebugView && OpenRacer.DebugView.modelsHidden());      // (the debug view can hide the model: the - key)
+            car.body.visible = shown;
             for(var w = 0; w < car.wheels.length; w++) {
-                if(car.wheels[w].object) car.wheels[w].object.visible = true;
+                if(car.wheels[w].object) car.wheels[w].object.visible = shown;
             }
             cubeCount = 0;
             if(environmentCount++ % ENVIRONMENT_EVERY === 0) updateEnvironment();

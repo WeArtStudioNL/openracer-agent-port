@@ -61,6 +61,7 @@ OpenRacer.Motorcycle = function (settings) {
     this.wheelieScale = 1;                                  // the throttle that the wheelie control leaves (1: all of it)
     this.crashed = false;                                   // the bike is down: the rider is a ragdoll, the bike a body that slides, no input until a reset or a repair
     this.limp = false;                                      // the rider has gone limp on the bike (a hit, or the key for it): no throttle, no steering, no balance; the bike rides on until his weight tips it over
+    this.weight = { x: 0, y: -G, z: 0 };                    // the weight of the rider per kg (gravity less the acceleration of the bike), for the debug view
     this.riderLoad = null;                                  // where the middle of the limp rider is (world, from Driver.ragdollCentre): his weight off the middle of the bike leans it
     this.burnout = 0;                                        // 0 to 1: a burnout is going on (brakeStep)
     this.yawCap = 3000; this.yawCapBrake = 6000;             // N m: what the rider's hold on the yaw can give, and the extra on the brakes
@@ -431,6 +432,7 @@ OpenRacer.Motorcycle = function (settings) {
         // above), so the part about the long axis of the bike is left out
         rotate(v, p.lat, p.drop, p.long, dw);
         var gx = -accel.x, gy = -G - accel.y, gz = -accel.z;
+        self.weight.x = gx; self.weight.y = gy; self.weight.z = gz;         // (for the debug view: the weight of the rider per kg, gravity less the acceleration)
         var tx = self.riderMass * (dw.y * gz - dw.z * gy), ty = self.riderMass * (dw.z * gx - dw.x * gz), tz = self.riderMass * (dw.x * gy - dw.y * gx);
         var along = tx * state.ax + ty * state.ay + tz * state.az;
         torque.x += tx - along * state.ax; torque.y += ty - along * state.ay; torque.z += tz - along * state.az;

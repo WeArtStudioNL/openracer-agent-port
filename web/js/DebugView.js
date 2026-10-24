@@ -5,6 +5,10 @@
  *              driven on, orange: walls, blue-grey: the rest that the body can hit), the nodes of the collision spheres of the car and the beams of the shell (yellow; a node that is
  *              bent or torn off is red; a broken beam is not drawn; the spheres themselves are not), the point and the normal of the contact of every
  *              wheel (cyan) and, with the tyre model of nodes, the ring of tread nodes of every wheel (green in the patch, red where a node slides, grey out of it).
+ *              A motorcycle: the mass of the rider as a block (orange) where the physics has it (the centre of gravity of the bike, moved by the posture: back on the brake, flat on
+ *              the gas, to the inside of a bend; the limp rider is where his ragdoll is), with its weight as an arrow (gravity less the acceleration of the bike: it tips forward on
+ *              the brake), and the fork: the cylinders that stay (white, from the hub at rest up along the steering axis) and the legs that go with the wheel (orange, up from the hub).
+ *              The - key (also on the keypad) hides the model of the car and the driver while the view is on, so only the lines are seen; the view off shows them again.
  *              It is drawn over everything (no depth test), outside the screen space effects, and costs nothing while it is off.
  */
 
@@ -36,7 +40,7 @@
         l.pos.length = 0; l.col.length = 0;
     }
 
-    var GREEN = [0.2, 0.9, 0.3], ORANGE = [1, 0.55, 0.1], GREY = [0.45, 0.55, 0.75], RED = [1, 0.2, 0.2], YELLOW = [1, 0.9, 0.2], CYAN = [0.2, 0.9, 1], MAGENTA = [1, 0.3, 1], TEAL = [0.1, 0.8, 0.8], DIM = [0.5, 0.5, 0.5];
+    var GREEN = [0.2, 0.9, 0.3], ORANGE = [1, 0.55, 0.1], GREY = [0.45, 0.55, 0.75], RED = [1, 0.2, 0.2], YELLOW = [1, 0.9, 0.2], CYAN = [0.2, 0.9, 1], MAGENTA = [1, 0.3, 1], TEAL = [0.1, 0.8, 0.8], DIM = [0.5, 0.5, 0.5], WHITE = [0.95, 0.95, 0.95];
 
     function update() {
         if (!on) return;
@@ -150,8 +154,47 @@
                 }
             }
         }
+        // a motorcycle: the rider as a block and his weight, and the fork
+        var mc = v.controller;
+        if (mc && mc.posture && mc.weight) {
+            var p = mc.posture, rl = mc.riderLoad, ctr = new THREE.Vector3();
+            if (mc.limp && rl) ctr.set(rl.x, rl.y, rl.z);
+            else worldOf(p.lat, p.drop, p.long, ctr);
+            var bx = 0.16, by = 0.22, bz = 0.14, ex = v3.set(1, 0, 0).applyQuaternion(q).clone(), ey = new THREE.Vector3(0, 1, 0).applyQuaternion(q), ez = forward;
+            var cornerAt = function (sx, sy, sz, out) { return out.copy(ctr).addScaledVector(ex, sx * bx).addScaledVector(ey, sy * by).addScaledVector(ez, sz * bz); };
+            var ca = new THREE.Vector3(), cb = new THREE.Vector3(), edges = [[-1,-1,-1, 1,-1,-1], [1,-1,-1, 1,-1,1], [1,-1,1, -1,-1,1], [-1,-1,1, -1,-1,-1], [-1,1,-1, 1,1,-1], [1,1,-1, 1,1,1], [1,1,1, -1,1,1], [-1,1,1, -1,1,-1], [-1,-1,-1, -1,1,-1], [1,-1,-1, 1,1,-1], [1,-1,1, 1,1,1], [-1,-1,1, -1,1,1]];
+            for (k = 0; k < edges.length; k++) { var ed = edges[k]; cornerAt(ed[0], ed[1], ed[2], ca); cornerAt(ed[3], ed[4], ed[5], cb); seg(lines, ca.x, ca.y, ca.z, cb.x, cb.y, cb.z, ORANGE); }
+            // from the middle of the bike to the block (how far the rider is off it), and the weight: an arrow of 0.5 m at 1 g
+            seg(lines, v.px, v.py, v.pz, ctr.x, ctr.y, ctr.z, ORANGE);
+            var wgt = mc.weight, scaleW = 0.5 / 9.81;
+            seg(lines, ctr.x, ctr.y, ctr.z, ctr.x + wgt.x * scaleW, ctr.y + wgt.y * scaleW, ctr.z + wgt.z * scaleW, RED);
+            push(points, ctr.x + wgt.x * scaleW, ctr.y + wgt.y * scaleW, ctr.z + wgt.z * scaleW, RED);
+            // the fork: the axis through the steering head (the cylinders, from the hub at rest up), and the legs from the hub as it is now
+            var head = player.head, fw = v.wheels[0];
+            if (head && head.object && player.body) {
+                var hub0 = head.object.getWorldPosition(new THREE.Vector3()), ax = head.axis.clone().applyQuaternion(player.body.quaternion).normalize();
+                var lat = new THREE.Vector3().crossVectors(ax, forward).normalize();
+                for (k = -1; k <= 1; k += 2) {
+                    var o0 = hub0.clone().addScaledVector(lat, k * 0.1);
+                    seg(lines, o0.x, o0.y, o0.z, o0.x + ax.x * 0.65, o0.y + ax.y * 0.65, o0.z + ax.z * 0.65, WHITE);
+                    var hc = fw.center, o1 = new THREE.Vector3(hc.x, hc.y, hc.z).addScaledVector(lat, k * 0.1);
+                    seg(lines, o1.x, o1.y, o1.z, o1.x + ax.x * 0.4, o1.y + ax.y * 0.4, o1.z + ax.z * 0.4, ORANGE);
+                }
+                seg(lines, hub0.x - lat.x * 0.1, hub0.y - lat.y * 0.1, hub0.z - lat.z * 0.1, hub0.x + lat.x * 0.1, hub0.y + lat.y * 0.1, hub0.z + lat.z * 0.1, WHITE);
+            }
+        }
         flush(lines); flush(points);
     }
+
+    // the - key: the model of the car (with the driver) and the wheels are hidden while the view is on, so only the lines are seen
+    var modelsHidden = false;
+    function showModels(show) {
+        var player = typeof car !== "undefined" ? car : null;
+        if (!player) return;
+        if (player.body) player.body.visible = show;
+        (player.wheels || []).forEach(function (w) { if (w.object) w.object.visible = show; });
+    }
+    function toggleModels() { modelsHidden = !modelsHidden; showModels(!modelsHidden); }
 
     function setOn(value) {
         on = value;
@@ -159,16 +202,17 @@
             if (!group) { group = new THREE.Group(); group.name = "debug view"; lines = layer("lines"); points = layer("points"); }
             if (typeof scene !== "undefined" && scene) scene.add(group);
             requestAnimationFrame(update);
-        } else if (group && group.parent) group.parent.remove(group);
+        } else { if (group && group.parent) group.parent.remove(group); if (modelsHidden) { modelsHidden = false; showModels(true); } }
     }
     function toggle() { setOn(!on); }
 
     window.addEventListener("keydown", function (e) {
-        if (e.code !== "Digit0" && e.code !== "Numpad0") return;
+        var zero = e.code === "Digit0" || e.code === "Numpad0", minus = e.code === "Minus" || e.code === "NumpadSubtract";
+        if (!zero && !minus) return;
         if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
         var tag = e.target && e.target.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target && e.target.isContentEditable)) return;
-        toggle();
+        if (zero) toggle(); else if (on) toggleModels();
     });
-    OpenRacer.DebugView = { toggle: toggle, isOn: function () { return on; } };
+    OpenRacer.DebugView = { toggle: toggle, isOn: function () { return on; }, modelsHidden: function () { return on && modelsHidden; } };
 })();
