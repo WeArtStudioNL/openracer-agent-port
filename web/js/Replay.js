@@ -565,7 +565,15 @@ OpenRacer.Replay = (function() {
         cineSlider.setAttribute("aria-label", "Field of view of the cinematic camera");
         cineSlider.addEventListener("input", function() { cine.scale = parseFloat(cineSlider.value); cineLabel.textContent = "Field of view ×" + cine.scale.toFixed(2); });
         cineSlider.addEventListener("keydown", function(e) { if(/^Arrow/.test(e.code)) e.stopPropagation(); });
-        cineInfo = { label: cineLabel, slider: cineSlider };
+        // and where it looks: at the car, or this many metres ahead of it (along the way it points), for a camera that waits for the car in a bend
+        var leadLabel = el(cineRow, "span", "label", "Look ahead " + cine.lead.toFixed(0) + " m");
+        var leadSlider = el(cineRow, "input");
+        leadSlider.type = "range"; leadSlider.min = "0"; leadSlider.max = "40"; leadSlider.step = "1"; leadSlider.value = String(cine.lead);
+        leadSlider.title = "Where the cinematic camera looks: at the car (0), or this many metres in front of it";
+        leadSlider.setAttribute("aria-label", "Look ahead of the cinematic camera, in metres");
+        leadSlider.addEventListener("input", function() { cine.lead = parseFloat(leadSlider.value); leadLabel.textContent = "Look ahead " + cine.lead.toFixed(0) + " m"; });
+        leadSlider.addEventListener("keydown", function(e) { if(/^Arrow/.test(e.code)) e.stopPropagation(); });
+        cineInfo = { label: cineLabel, slider: cineSlider, leadLabel: leadLabel, leadSlider: leadSlider };
         carButton = button(cameraRow, "Car", "The car that the camera follows (Tab)", function() { nextTarget(); });
         carButton.style.display = cars.length > 1 ? "" : "none";
         freeRow = el(bar, "div", "row freecam");
@@ -675,7 +683,7 @@ OpenRacer.Replay = (function() {
     try { var storedSpeed = parseFloat(localStorage.getItem("openracer.replay.freeSpeed")); if(storedSpeed >= 0.1 && storedSpeed <= 3) free.speed = storedSpeed; } catch(e) { /* no storage */ }
     var keys = {};
     var BASE_SPEED = 12, VERTICAL_SPEED = 8, FOV_RATE = 40, LOOK_SENSITIVITY = 0.0022, STICK_LOOK = 2.4, ROLL_RATE = 1.0;
-    var tmpQ = new THREE.Quaternion(), tmpQ2 = new THREE.Quaternion(), tmpV = V3(0, 0, 0), tmpV2 = V3(0, 0, 0), tmpE = new THREE.Euler(0, 0, 0, "YXZ"), tmpM = new THREE.Matrix4();
+    var tmpQ = new THREE.Quaternion(), tmpQ2 = new THREE.Quaternion(), tmpV = V3(0, 0, 0), tmpV2 = V3(0, 0, 0), tmpV3 = V3(0, 0, 0), tmpE = new THREE.Euler(0, 0, 0, "YXZ"), tmpM = new THREE.Matrix4();
     var pointerLocked = false;
 
     function targetObject() { var entry = cars[Math.min(free.target, cars.length - 1)]; return entry ? entry.object.body : null; }
@@ -714,7 +722,7 @@ OpenRacer.Replay = (function() {
 
     // ---- the cinematic camera: the cameras that the track editor put in the track. The camera whose range (a circle on the floor) the car is in is used, else the nearest one (it only goes to another when that is clearly better), it stays where it
     // is and only turns to follow the car, and its field of view is chosen so that the car is about the same size in the picture
-    var cine = { active: false, index: -1, fov: 40, scale: 1, quat: new THREE.Quaternion() };
+    var cine = { active: false, index: -1, fov: 40, scale: 1, lead: 0, override: null, quat: new THREE.Quaternion() };      // lead: metres ahead of the car that it looks at (override: the lead of a clip of the video editor)
     var cineRow = null, cineInfo = null;
     function cinemaCameras() { return (typeof currentTrack !== "undefined" && currentTrack && Array.isArray(currentTrack.cameras)) ? currentTrack.cameras.filter(function(c) { return c && isFinite(c.x) && isFinite(c.y) && isFinite(c.z); }) : []; }
     function enterCine() {
@@ -747,7 +755,11 @@ OpenRacer.Replay = (function() {
         else if(nearest !== cine.index && score(list[nearest]) < score(list[cine.index]) * 0.85) { cine.index = nearest; cut = true; }      // (not at once: no flicker where two suit as well)
         var c = list[cine.index];
         camera.position.set(c.x, c.y, c.z);
-        tmpM.lookAt(camera.position, tmpV2.copy(body.position).add(V3(0, 0.7, 0)), V3(0, 1, 0));
+        // the point that it looks at: the car, or ahead of it along the way it points (level: a car that pitches up on a crest does not move the point into the sky)
+        var lead = cine.override !== null ? cine.override : cine.lead;
+        tmpV2.copy(body.position).add(V3(0, 0.7, 0));
+        if(lead > 0) { tmpV3.set(0, 0, 1).applyQuaternion(body.quaternion); tmpV3.y = 0; if(tmpV3.lengthSq() > 1e-6) tmpV2.addScaledVector(tmpV3.normalize(), lead); }
+        tmpM.lookAt(camera.position, tmpV2, V3(0, 1, 0));
         tmpQ.setFromRotationMatrix(tmpM);
         if(cut) cine.quat.copy(tmpQ); else cine.quat.slerp(tmpQ, 1 - Math.exp(-8 * delta));
         camera.quaternion.copy(cine.quat);
@@ -1062,13 +1074,15 @@ OpenRacer.Replay = (function() {
     api.free = free;                      // the free camera (position and look in the frame of the world or of the car, fov, aim, parent, target)
     api.enterFree = enterFree; api.leaveFree = leaveFree; api.toggleAim = toggleAim; api.toggleParent = toggleParent; api.toggleSky = toggleSky; api.nextTarget = nextTarget;
     // the camera of the game for a clip of the video editor: "follow", "cockpit", "cinematic", or "track" (the camera track, over the follow camera); not while the free camera is on
-    api.setGameCamera = function(mode) {
+    api.setGameCamera = function(mode, lead) {
+        cine.override = mode === "cinematic" && isFinite(lead) ? Math.max(0, lead) : null;      // (the look ahead of the clip, for the cinematic camera)
         if(free.active) return;
         if(mode === "cinematic") { if(!cine.active && cinemaCameras().length) enterCine(); return; }
         if(cine.active) leaveCine();
         if(mode === "cockpit") { if(Settings.option("camera") !== 3) Settings.setOption("camera", 3); }
         else if(Settings.option("camera") !== 2) Settings.setOption("camera", 2);
     };
+    api.clearCameraOverride = function() { cine.override = null; };      // (the video editor is left: the look ahead of the slider again)
     api.carCount = function() { return cars.length; };
     api.carBody = function(i) { var e = cars[i]; return e ? e.object.body : null; };
     api.pause = function() { playing = false; if(ui) ui.sync(); };

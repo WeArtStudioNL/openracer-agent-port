@@ -209,6 +209,7 @@ OpenRacer.VideoEditor = (function () {
         });
         if (clip.keys.length) { keysA.push({ at: offset, speed: speedHere }); keysB.unshift({ at: 0, speed: speedHere }); }
         var a = newClip(clip.in, clip.in + offset, clip.speed, keysA, clip.cam), b = newClip(clip.in + offset, clip.out, clip.speed, keysB, clip.cam);
+        a.lead = b.lead = clip.lead || 0;
         state.clips.splice(index, 1, a, b);
         return true;
     }
@@ -569,7 +570,16 @@ OpenRacer.VideoEditor = (function () {
         [["track", "Camera track"], ["follow", "Follow"], ["cockpit", "Cockpit"], ["cinematic", "Cinematic"]].forEach(function (o) { var opt = el(camSel, "option", "", o[1]); opt.value = o[0]; if ((clip.cam || "track") === o[0]) opt.selected = true; });
         camSel.title = "The camera of this clip: the camera track (your keys, over the follow camera), or one of the cameras of the game";
         camSel.addEventListener("keydown", function (e) { e.stopPropagation(); });
-        camSel.onchange = function () { clip.cam = camSel.value; touch(); };
+        // the cinematic camera of this clip looks at the car, or this many metres ahead of it
+        var leadBox = el(box, "span", "");
+        leadBox.style.display = (clip.cam === "cinematic") ? "" : "none";
+        el(leadBox, "span", "hint", "look ahead ");
+        var leadIn = el(leadBox, "input"); leadIn.type = "number"; leadIn.step = "1"; leadIn.min = "0"; leadIn.max = "40"; leadIn.value = String(clip.lead || 0); leadIn.style.width = "52px";
+        leadIn.title = "Where the cinematic camera looks: at the car (0), or this many metres in front of it";
+        leadIn.addEventListener("keydown", function (e) { e.stopPropagation(); });
+        leadIn.onchange = function () { var v = parseFloat(leadIn.value); clip.lead = isFinite(v) ? Math.max(0, Math.min(40, v)) : 0; leadIn.value = String(clip.lead); touch(); };
+        el(leadBox, "span", "hint", " m");
+        camSel.onchange = function () { clip.cam = camSel.value; leadBox.style.display = clip.cam === "cinematic" ? "" : "none"; touch(); };
         el(box, "span", "hint", clip.keys.length ? "speed from the ramp keys" : "speed");
         var speed = el(box, "input"); speed.type = "number"; speed.step = "0.05"; speed.min = String(MIN_SPEED); speed.max = String(MAX_SPEED); speed.value = String(round(clip.speed, 2));
         speed.disabled = clip.keys.length > 0;
@@ -735,7 +745,7 @@ OpenRacer.VideoEditor = (function () {
         Replay.editorPlaying = !!(state.finalPlaying || state.srcPlaying) && !recording;
         Replay.frame(delta);
         var clipCam = m && m.clip && m.clip.cam && m.clip.cam !== "track" ? m.clip.cam : "track";
-        if (Replay.setGameCamera) Replay.setGameCamera(clipCam);
+        if (Replay.setGameCamera) Replay.setGameCamera(clipCam, m && m.clip ? m.clip.lead : undefined);
         if (!Replay.free.active && clipCam === "track" && state.camera.length) OpenRacer.CameraTrack.apply(state.camera, state.T, camera, Replay.carBody);
         ui.time.textContent = fmt(state.T) + " / " + fmt(length) + (m && m.clip ? "   ×" + round(speedAtOffset(m.clip, m.src - m.clip.in), 2) : "");
         placeHead();
