@@ -102,7 +102,7 @@ OpenRacer.Replay = (function() {
     // A car with a soft body keeps a list of records next to the samples, and a record is only made when something in it has changed (the shell
     // moves, a part opens or flies, a wheel bends): a car that drives without a hit makes none. A record holds the displacements of the nodes of the
     // shell (whole millimetres, 16 bits), for every part its state and where it is, and for every wheel whether it is off and how it is bent.
-    var SOFT_SCALE = 1024, PART_FLOATS = 11, WHEEL_FLOATS = 5 * 4;
+    var SOFT_SCALE = 1024, PART_FLOATS = 11, WHEEL_FLOATS = 5 * 4, RIDER_FLOATS = 45;      // RIDER_FLOATS: the particles of a rider that is a ragdoll (Driver.RAGDOLL_FLOATS)
     var MAX_SOFT_NODES = 400, MAX_SOFT_PARTS = 64;
 
     function softOf(entry) {
@@ -147,7 +147,31 @@ OpenRacer.Replay = (function() {
         cars.forEach(function(entry) {
             var r = entry.soft && entry.soft.records;
             while(r && r.length > 1 && r[1].index <= from) r.shift();
+            var q = entry.rider && entry.rider.records;
+            while(q && q.length > 1 && q[1].index <= from) q.shift();
         });
+    }
+    // ---- the rider of a motorcycle that is a ragdoll (a crash, Driver.js): the places of his particles every sample while he is one, and a record without them when he is back on the bike
+    function recordRider(entry, index) {
+        var driver = entry.object.driver;
+        if(!driver || !driver.ragdollPoints) return;
+        var pts = driver.ragdollPoints(new Float32Array(RIDER_FLOATS));
+        if(!entry.rider) { if(!pts) return; entry.rider = { records: [] }; }
+        var records = entry.rider.records, last = records[records.length - 1];
+        if(!pts && (!last || !last.pts)) return;
+        records.push({ index: index, pts: pts });
+    }
+    var mixRider = new Float32Array(RIDER_FLOATS);
+    function showRider(entry, time) {
+        var rider = entry.rider, driver = entry.object.driver;
+        if(!driver || !driver.showRagdoll) return;
+        if(!rider || !rider.records.length) return;
+        var position = Math.max(first(), Math.min(last(), time / DT));
+        var i = softAt(rider, position), rec = rider.records[i], next = rider.records[i + 1];
+        if(position < rec.index || !rec.pts) { driver.hideRagdoll(); return; }
+        var f = next && next.pts && next.index - rec.index <= 2 ? Math.max(0, Math.min(1, (position - rec.index) / (next.index - rec.index))) : 0;
+        for(var k = 0; k < RIDER_FLOATS; k++) mixRider[k] = f ? rec.pts[k] + (next.pts[k] - rec.pts[k]) * f : rec.pts[k];
+        driver.showRagdoll(mixRider);
     }
 
     function init() {
@@ -165,7 +189,7 @@ OpenRacer.Replay = (function() {
         }
         var chunk = chunks[chunks.length - 1];
         var base = fill * perSample();
-        for(var i = 0; i < cars.length; i++) { write(chunk, base + i * STRIDE, cars[i]); recordSoft(cars[i], total); }
+        for(var i = 0; i < cars.length; i++) { write(chunk, base + i * STRIDE, cars[i]); recordSoft(cars[i], total); recordRider(cars[i], total); }
         fill++;
         total++;
     }
@@ -390,6 +414,7 @@ OpenRacer.Replay = (function() {
             object.vehicle.updateOutputs();
             // a motorcycle: the rider's posture and the foot at a standstill from the recording (the physics does not run in a replay)
             if(object.vehicle.controller && object.vehicle.controller.replayStep) object.vehicle.controller.replayStep(object.vehicle, delta || 0, object.throttle || 0, object.brakePedal || 0);
+            showRider(entry, time);
             if(entry.player) object.updateVisuals(delta);
             else object.updateVisuals();
             if(i === 0) player = { rpm: scratch[P.rpm], throttle: scratch[P.throttle], brake: scratch[P.brake], gear: gearLabels[scratch[P.gear] | 0] || "", speed: Math.hypot(scratch[P.vx], scratch[P.vz]) };
@@ -1067,7 +1092,7 @@ OpenRacer.Replay = (function() {
     // ---- a file: save and open
 
     var MAGIC = [0x4f, 0x52, 0x52, 0x50];          // "ORRP"
-    var FORMAT = "openracer-replay", FILE_VERSION = 3;       // 3: the skid marks, the smoke and the marbles (a block of rows after the soft body); 2: the soft body (a block of records after the numbers); 1 files have none; all can still be opened
+    var FORMAT = "openracer-replay", FILE_VERSION = 4;       // 4: the rider that is a ragdoll (a block of records after the effects); 3: the skid marks, the smoke and the marbles (a block of rows after the soft body); 2: the soft body (a block of records after the numbers); 1 files have none; all can still be opened
     var EFFECT_FLOATS = { skid: 29, smoke: 18, marbles: 16 }, MAX_EFFECT_ROWS = 400000;    // the numbers in a row of every effect (SkidMarks.js, Smoke.js, Marbles.js)
     var MAX_FILE = 300 * 1024 * 1024, MAX_CARS = 12, MAX_SAMPLES = 108000;   // an hour
     var ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
@@ -1121,9 +1146,21 @@ OpenRacer.Replay = (function() {
             effectBlocks.push(block);
             effectBytes += block.byteLength;
         }
+        // the rider that is a ragdoll: per car its records (the sample, whether he is one, and the places of his particles), after the effects
+        var RIDER_SIZE = 4 + 4 + RIDER_FLOATS * 4, riderInfo = cars.map(function(entry) { return entry.rider && entry.rider.records.length ? entry.rider.records.length : 0; });
+        var riderBytes = riderInfo.reduce(function(a, b) { return a + b; }, 0) * RIDER_SIZE, riderBlob = new Uint8Array(riderBytes), riderView = new DataView(riderBlob.buffer), riderAt = 0;
+        cars.forEach(function(entry, c) {
+            if(!riderInfo[c]) return;
+            entry.rider.records.forEach(function(rec) {
+                riderView.setUint32(riderAt, Math.max(0, rec.index - base), true);
+                riderView.setFloat32(riderAt + 4, rec.pts ? 1 : 0, true);
+                for(var k = 0; k < RIDER_FLOATS; k++) riderView.setFloat32(riderAt + 8 + 4 * k, rec.pts ? rec.pts[k] : 0, true);
+                riderAt += RIDER_SIZE;
+            });
+        });
         var header = {
             format: FORMAT, version: FILE_VERSION, game: (OpenRacer.VERSION || ""), created: new Date().toISOString(),
-            soft: softInfo, softBytes: softBytes, effects: effectInfo,
+            soft: softInfo, softBytes: softBytes, effects: effectInfo, rider: riderInfo,
             rate: RATE, stride: STRIDE, samples: n,
             track: { id: currentTrack.id, name: currentTrack.name || currentTrack.id },
             cars: cars.map(function(entry) {
@@ -1134,7 +1171,7 @@ OpenRacer.Replay = (function() {
         };
         var text = new TextEncoder().encode(JSON.stringify(header));
         var padded = Math.ceil((text.length + 8) / 4) * 4 - 8;      // the numbers start on a multiple of four
-        var out = new Uint8Array(8 + padded + data.byteLength + softBytes + effectBytes);
+        var out = new Uint8Array(8 + padded + data.byteLength + softBytes + effectBytes + riderBytes);
         out.set(MAGIC, 0);
         new DataView(out.buffer).setUint32(4, padded, true);
         out.fill(0x20, 8, 8 + padded);
@@ -1143,6 +1180,7 @@ OpenRacer.Replay = (function() {
         out.set(softBlob, 8 + padded + data.byteLength);
         var effectAt = 8 + padded + data.byteLength + softBytes;
         effectBlocks.forEach(function(block) { out.set(new Uint8Array(block.buffer, block.byteOffset, block.byteLength), effectAt); effectAt += block.byteLength; });
+        out.set(riderBlob, effectAt);
         return out;
     }
 
@@ -1192,7 +1230,7 @@ OpenRacer.Replay = (function() {
         var header;
         try { header = JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + headerLength))); } catch(e) { throw bad("This replay file is damaged."); }
         if(!header || header.format !== FORMAT) throw bad("This is not an OpenRacer replay.");
-        if((header.version !== FILE_VERSION && header.version !== 2 && header.version !== 1) || header.stride !== STRIDE || header.rate !== RATE) throw bad("This replay was made with another version of OpenRacer (" + String(header.game || "?").slice(0, 20) + ") and cannot be opened by this one.");
+        if((header.version !== FILE_VERSION && header.version !== 3 && header.version !== 2 && header.version !== 1) || header.stride !== STRIDE || header.rate !== RATE) throw bad("This replay was made with another version of OpenRacer (" + String(header.game || "?").slice(0, 20) + ") and cannot be opened by this one.");
         if(!header.track || !ID_PATTERN.test(String(header.track.id)) || !Array.isArray(header.cars) || header.cars.length < 1 || header.cars.length > MAX_CARS) throw bad("This replay file is damaged.");
         for(var i = 0; i < header.cars.length; i++) {
             var c = header.cars[i];
@@ -1230,7 +1268,13 @@ OpenRacer.Replay = (function() {
                 effectBytes += rowCount * EFFECT_FLOATS[en] * 4;
             }
         }
-        if(start % 4 !== 0 || bytes.length - start !== wanted + softBytes + effectBytes) throw bad("This replay file is damaged.");
+        // the rider that is a ragdoll (version 4 and up): per car a count of records after the effects
+        var RIDER_SIZE = 4 + 4 + RIDER_FLOATS * 4, riderTotal = 0;
+        if(header.rider !== undefined) {
+            if(!Array.isArray(header.rider) || header.rider.length !== header.cars.length) throw bad("This replay file is damaged.");
+            header.rider = header.rider.map(function(n) { n = Math.floor(Number(n) || 0); if(n < 0 || n > samples * 2) throw bad("This replay file is damaged."); riderTotal += n; return n; });
+        }
+        if(start % 4 !== 0 || bytes.length - start !== wanted + softBytes + effectBytes + riderTotal * RIDER_SIZE) throw bad("This replay file is damaged.");
         var data = new Float32Array(bytes.buffer.slice(bytes.byteOffset + start, bytes.byteOffset + start + wanted));
         for(var k = 0; k < data.length; k++) if(!isFinite(data[k])) throw bad("This replay file is damaged.");
         var view = new DataView(bytes.buffer, bytes.byteOffset + start + wanted, softBytes), at = 0;
@@ -1266,10 +1310,31 @@ OpenRacer.Replay = (function() {
             effectData[name2] = block;
             effectAt += length * 4;
         }
+        // the rider that is a ragdoll (version 4 and up): per car a count of records after the effects
+        var rider = null;
+        if(Array.isArray(header.rider) && riderTotal) {
+            var riderView = new DataView(bytes.buffer, effectAt, riderTotal * RIDER_SIZE), rAt = 0;
+            rider = header.rider.map(function(n) {
+                if(!n) return null;
+                var records = [], prev = -1;
+                for(var r = 0; r < n; r++, rAt += RIDER_SIZE) {
+                    var idx = riderView.getUint32(rAt, true), present = riderView.getFloat32(rAt + 4, true);
+                    if(idx >= samples || idx <= prev) throw bad("This replay file is damaged.");
+                    prev = idx;
+                    var pts = null;
+                    if(present > 0.5) {
+                        pts = new Float32Array(RIDER_FLOATS);
+                        for(var k = 0; k < RIDER_FLOATS; k++) { pts[k] = riderView.getFloat32(rAt + 8 + 4 * k, true); if(!isFinite(pts[k]) || Math.abs(pts[k]) > 1e6) throw bad("This replay file is damaged."); }
+                    }
+                    records.push({ index: idx, pts: pts });
+                }
+                return { records: records };
+            });
+        }
         // a camera track (the video editor): a list of keys, each with the numbers that CameraTrack.js needs
         if(OpenRacer.CameraTrack) header.camera = OpenRacer.CameraTrack.clean(header.camera); else delete header.camera;
         header.gears = Array.isArray(header.gears) ? header.gears.map(function(g) { return String(g).slice(0, 8); }) : [""];
-        return { header: header, data: data, soft: soft, effects: effectData };
+        return { header: header, data: data, soft: soft, effects: effectData, rider: rider };
     }
 
     // From the main menu: reads a file, checks that this game has the track and the cars, keeps it for the game that is started to show it.
@@ -1448,7 +1513,7 @@ OpenRacer.Replay = (function() {
     api.load = function(parsed, objects) {
         var per = objects.length * STRIDE, n = parsed.header.samples;
         headerOf = parsed.header;
-        cars = objects.map(function(object, i) { return { object: object, player: i === 0, soft: parsed.soft && parsed.soft[i] ? parsed.soft[i] : null }; });
+        cars = objects.map(function(object, i) { return { object: object, player: i === 0, soft: parsed.soft && parsed.soft[i] ? parsed.soft[i] : null, rider: parsed.rider && parsed.rider[i] ? parsed.rider[i] : null }; });
         gearLabels = parsed.header.gears;
         chunks = [];
         for(var s = 0; s < n; s += CHUNK) {

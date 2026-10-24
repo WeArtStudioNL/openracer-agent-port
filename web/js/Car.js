@@ -432,10 +432,20 @@ OpenRacer.Car = function( config, domElement ) {
     var lastSubject = null;
     var lookDir = new THREE.Vector3();
     this.crashShown = false;
+    this.crashDown = false;          // the bike itself has gone down (the camera of the crash is on)
     // after a reset or a repair of a motorcycle that went down: the rider back on the bike, the camera of the game again
+    // the rider goes limp on the bike (a ragdoll that lies on it, Driver.js) and the bike rides on without him (Motorcycle.js, limp); the camera follows as usual until the bike goes down
+    this.goLimp = function() {
+        var v = this.vehicle, c = v.controller;
+        if(!c || c.crashed || c.limp || !this.driver || !this.driver.crash) return;
+        c.limp = true;
+        this.driver.crash(new THREE.Vector3(v.vx, v.vy, v.vz), v.ground, { bike: v, onBike: true });
+        this.crashShown = true;                                    // (a reset or a repair ends it)
+    };
     this.recoverCrash = function() {
         if(!this.crashShown) return;
         this.crashShown = false;
+        this.crashDown = false;
         if(this.vehicle.controller && this.vehicle.controller.recover) this.vehicle.controller.recover();
         if(this.driver && this.driver.recover) this.driver.recover();
         this.cameraOverride = null;
@@ -521,14 +531,16 @@ OpenRacer.Car = function( config, domElement ) {
             this.recoverCrash();
             return;
         }
+        // a limp rider on the bike: where his weight is, for the bike that he leans over
+        if(v.controller && v.controller.limp && this.driver && this.driver.ragdollCentre) { v.controller.riderLoad = this.driver.ragdollCentre(); if(this.driver.ragdollSeated) this.driver.ragdollSeated(!v.controller.crashed && Math.abs(v.lean || 0) < 0.5); }
         // a motorcycle that goes down: the rider is thrown off and the camera stays where it is, looking at the two of them
-        if(v.controller && v.controller.crashed && !this.crashShown) {
-            this.crashShown = true;
+        if(v.controller && v.controller.crashed && !this.crashDown) {
+            this.crashDown = true; this.crashShown = true;
             var cs = v.controller.crashSpeed || { x: v.vx, y: v.vy, z: v.vz };
-            if(this.driver && this.driver.crash) this.driver.crash(new THREE.Vector3(cs.x, cs.y, cs.z), v.ground);
-            // the camera on a circle of 9 m round the bike, on the far side from the rider (the bike between the camera and the rider), a little up; it moves smoothly
+            if(this.driver && this.driver.crash) this.driver.crash(new THREE.Vector3(cs.x, cs.y, cs.z), v.ground, { bike: v });
+            // the camera on a circle of 2.5 m round the bike, on the far side from the rider (the bike between the camera and the rider), a little up; it moves there smoothly from where it was
             var look = new THREE.Vector3(), rider = new THREE.Vector3(), wantPos = new THREE.Vector3(), dir = new THREE.Vector3(), aim = new THREE.Vector3();
-            var self = this, RADIUS = 9, HEIGHT = 3, first = true;
+            var self = this, RADIUS = 2.5, HEIGHT = 1.3;
             this.cameraOverride = function(delta) {
                 look.copy(self.body.position);
                 if(self.driver && self.driver.root) self.driver.root.getWorldPosition(rider); else rider.copy(look);
@@ -537,10 +549,10 @@ OpenRacer.Car = function( config, domElement ) {
                 if(dir.lengthSq() < 0.01) dir.set(1, 0, 0);
                 dir.normalize();
                 wantPos.copy(look).addScaledVector(dir, RADIUS); wantPos.y = look.y + HEIGHT;
-                if(first) { camera.position.copy(wantPos); first = false; } else camera.position.lerp(wantPos, 1 - Math.exp(-3 * Math.min(delta || 0.016, 0.1)));
+                camera.position.lerp(wantPos, 1 - Math.exp(-2 * Math.min(delta || 0.016, 0.1)));
                 aim.copy(look).lerp(rider, 0.35);
                 camera.lookAt(aim);
-                var apart = look.distanceTo(rider), fov = Math.max(40, Math.min(75, 2 * Math.atan((apart * 0.5 + 3) / Math.max(4, camera.position.distanceTo(aim))) * 180 / Math.PI));
+                var apart = look.distanceTo(rider), fov = Math.max(45, Math.min(80, 2 * Math.atan((apart * 0.5 + 2) / Math.max(2.5, camera.position.distanceTo(aim))) * 180 / Math.PI));
                 if(Math.abs(camera.fov - fov) > 0.2) { camera.fov += (fov - camera.fov) * Math.min(1, (delta || 0.016) / 0.3); camera.updateProjectionMatrix(); }
                 return true;
             };
@@ -780,7 +792,7 @@ OpenRacer.Car = function( config, domElement ) {
 
     var heldAccelerate = false;
     var heldBrake = false;
-    var heldReverse = false;
+    var heldReverse = false, heldRagdoll = false;
 
     // Reads the keys and buttons that are held (the inputs are set in the settings menu, see Settings.js)
     this.pollInput = function() {
@@ -818,7 +830,7 @@ OpenRacer.Car = function( config, domElement ) {
         this.cameraLeft = Settings.isDown("cameraLeft");
         this.cameraRight = Settings.isDown("cameraRight");
         // a motorcycle that has crashed takes no input (a reset or a repair brings the rider back)
-        if(this.vehicle.controller && this.vehicle.controller.crashed) { this.accelerate = this.brake = this.turnLeft = this.turnRight = this.handbrake = false; this.throttle = 0; this.brakePedal = 0; }
+        if(this.vehicle.controller && (this.vehicle.controller.crashed || this.vehicle.controller.limp)) { this.accelerate = this.brake = this.turnLeft = this.turnRight = this.handbrake = false; this.throttle = 0; this.brakePedal = 0; }
         // letting go of the key lets go of the pedal at once
         if(heldAccelerate && !this.accelerate) this.throttle = 0;
         if(heldBrake && !this.brake) this.brakePedal = 0;
@@ -841,6 +853,10 @@ OpenRacer.Car = function( config, domElement ) {
             if(this.gearboxMode === "automatic" && this.selector === "R") this.pushBack = true;      // (the reverse key of a car is > for the rider of a bike)
             this.vehicle.controller.riderKey = (Settings.isDown("riderForward") ? 1 : 0) - (Settings.isDown("riderBack") ? 1 : 0);
             this.vehicle.controller.pushing = this.pushBack;
+            // the key for a crash (to try it): the rider goes limp where he sits; the bike rides on without him until his weight tips it over
+            var ragdollKey = Settings.isDown("ragdoll");
+            if(ragdollKey && !heldRagdoll) this.goLimp();
+            heldRagdoll = ragdollKey;
         }
     };
 

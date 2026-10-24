@@ -57,6 +57,10 @@ OpenRacer.Motorcycle = function (settings) {
     this.footLean = (s.foot_lean_deg !== undefined ? s.foot_lean_deg : 7) * DEG;   // how far the bike rests to the right on the foot
     this.wheelieScale = 1;                                  // the throttle that the wheelie control leaves (1: all of it)
     this.crashed = false;                                   // the bike is down: the rider is a ragdoll, the bike a body that slides, no input until a reset or a repair
+    this.limp = false;                                      // the rider has gone limp on the bike (a hit, or the key for it): no throttle, no steering, no balance; the bike rides on until his weight tips it over
+    this.riderLoad = null;                                  // where the middle of the limp rider is (world, from Driver.ragdollCentre): his weight off the middle of the bike leans it
+    this.wallHit = 0;                                        // the last wall hit that was seen (Vehicle.impactTime), so that one hit crashes once
+    var hist = [], now = 0;                                  // the speed of the last tenth of a second: a hit that the smoothed acceleration misses (a wall through the wheels, a kerb)
     this.pushing = false;                                   // the rider walks the bike back (set by Car.js)
     this.command = 0;                                      // the lean that is asked (-1..1)
     this.targetLean = 0;                                   // what the rider takes (rad, left is positive)
@@ -116,6 +120,14 @@ OpenRacer.Motorcycle = function (settings) {
     // ---- hook: the angle of the front wheel (right is positive), from what the input asks for. delta: what the input gave (the angle of the wheel or the lock that is turned).
     this.steering = function (v, delta, u, dt) {
         if (self.crashed) { self.steer += (0 - self.steer) * Math.min(1, dt / 0.1); return self.steer; }
+        if (self.limp) {
+            // nobody steers: the front wheel castors into the lean on its own (a bike rolls on without a rider at speed and rights itself, a little more than the bend of its lean asks),
+            // until the speed is gone or the weight of the limp rider pulls it over
+            var st = leanOf(v, 0), ph = Math.max(-1.05, Math.min(1.05, st.lean));
+            var own = -Math.sign(ph) * Math.atan(v.wheelbase * G * Math.tan(Math.abs(ph)) / Math.max(u * u, 1)) * 1.4 * smooth(2, 6, Math.abs(u));
+            self.steer += (own - self.steer) * Math.min(1, dt / 0.08);
+            return self.steer;
+        }
         var inp = v.input, lock = inp.turnLimit || inp.maxTurn || 0.38;
         var c = Math.max(-1, Math.min(1, delta / lock));          // the lean command: left is negative, as the steering of a car
         self.command = c;
@@ -184,7 +196,7 @@ OpenRacer.Motorcycle = function (settings) {
     // ---- hook: the wheelie control (the menu: Wheelie control, on by default): the rider rolls the throttle off as the front wheel goes light, and keeps it there at about a tenth of
     // its load; a bike with a lot of torque from low revs loops over backwards at full throttle otherwise
     this.throttleScale = function (v, dt) {
-        if (self.crashed) { self.wheelieScale = 0; return 0; }
+        if (self.crashed || self.limp) { self.wheelieScale = 0; return 0; }
         var on = typeof Settings === "undefined" || Settings.option("wheelieControl") !== false;
         var frontLoad = ((v.wheels[0].weight || 0) + (v.wheels[1].weight || 0)) / Math.max(1, v.weight_distribution * v.mass * G);
         var want = on && Math.abs(v.u) > 0.5 ? Math.max(0.15, Math.min(1, (frontLoad - 0.08) / 0.3)) : 1;
@@ -233,14 +245,41 @@ OpenRacer.Motorcycle = function (settings) {
         if (!self.crashed) {
             var aMag = Math.sqrt(accel.x * accel.x + accel.y * accel.y + accel.z * accel.z);
             var aLat = accel.x * state.lx + accel.y * state.ly + accel.z * state.lz;
-            if (Math.abs(state.lean) > 1.2 || aMag > 2.8 * G || (Math.abs(aLat) > 2.2 * G && Math.abs(u) > 5)) { self.crashed = true; self.crashSpeed = { x: v.vx, y: v.vy, z: v.vz }; }
+            // a wall: the body of the bike hit something at more than 20 km/h (Vehicle.js: impactTime goes to 0 at a hit, lastImpact is the speed into it); the rider is thrown at the
+            // speed the bike had before the hit (not the bounce)
+            var wall = v.impactTime < 0.05 && v.lastImpact > 5.5 && v.impactTime !== self.wallHit;
+            if (wall) self.wallHit = v.impactTime;
+            // a hit that is not a wall of the body (the wheels into a barrier, a kerb): the speed lost in a tenth of a second, more than 6 m/s (over 6 g), at more than 20 km/h before it
+            now += dt; hist.push({ t: now, x: v.vx, z: v.vz });
+            while (hist.length > 2 && hist[1].t < now - 0.1) hist.shift();
+            var old = hist[0], lost = Math.sqrt((v.vx - old.x) * (v.vx - old.x) + (v.vz - old.z) * (v.vz - old.z));
+            var hit = lost > 6 && Math.sqrt(old.x * old.x + old.z * old.z) > 5.5;
+            if (hit && !wall) { wall = true; v.lastWall = v.lastWall || {}; v.lastWall.v = [old.x, 0, old.z]; }
+            if (Math.abs(state.lean) > (self.limp ? 1.0 : 1.2) || aMag > 2.8 * G || (Math.abs(aLat) > 2.2 * G && Math.abs(u) > 5) || wall) {
+                self.crashed = true;
+                var before = wall && v.lastWall && v.lastWall.v ? v.lastWall.v : null;
+                self.crashSpeed = before ? { x: before[0], y: before[1], z: before[2] } : { x: v.vx, y: v.vy, z: v.vz };
+            }
         }
         if (self.crashed) { self.posture.lat = self.posture.knee = self.posture.tuck = self.posture.sit = 0; return; }
+        if (self.limp) {
+            // the rider does nothing: the bike has only its own balance (none: it leans over as his weight hangs off it) and the castor of the front wheel. His weight is on the bike already
+            // (the mass of the rider is in the mass of the bike); what leans it is that weight off the middle: the torque of the middle of the body about the centre of gravity
+            self.posture.lat = self.posture.knee = self.posture.tuck = self.posture.sit = 0;
+            var L = self.riderLoad;
+            if (L) {
+                var rx = L.x - v.px, rz = L.z - v.pz, Fy = -self.riderMass * G, arm = Math.sqrt(rx * rx + rz * rz);
+                if (arm > 0.5) { rx *= 0.5 / arm; rz *= 0.5 / arm; }                                 // (a body that hangs further than half a metre off the bike is off it: no more leverage)
+                torque.x += -rz * Fy; torque.z += rx * Fy;
+            }
+            vPrev = null;
+        }
+        var alive = 1 - Math.min(1, Math.max(0, (Math.abs(state.lean) - 1.15) / 0.25));         // past about 66 degrees the bike is going down: the rider lets go
+        if (!self.limp) {                                                                        // (a limp rider: none of this; the tyres below still give their camber thrust)
         self.rider(v, torque, dt, u, state);
         var m = v.mass, gh = m * G * v.cgHeight;
         var kp = self.balance * 10 * gh, inertia = m * v.cgHeight * v.cgHeight + c.inertiaZ, kd = 1.5 * Math.sqrt(kp * inertia);
         var T = kp * (self.targetLean - state.lean) - kd * state.rate;                           // about the axis that leans it to the left
-        var alive = 1 - Math.min(1, Math.max(0, (Math.abs(state.lean) - 1.15) / 0.25));         // past about 66 degrees the bike is going down: the rider lets go
         T = alive * Math.max(-6 * gh, Math.min(6 * gh, T));
         torque.x -= state.ax * T; torque.y -= state.ay * T; torque.z -= state.az * T;
         // the yaw that the steering did not ask for is damped
@@ -266,6 +305,7 @@ OpenRacer.Motorcycle = function (settings) {
             // the push has stopped: the rider holds the bike with his feet and it stops
             var holdF = Math.min(700, v.mass * 4 * -u);
             force.x += state.fx * holdF; force.z += state.fz * holdF;
+        }
         }
         // The camber thrust: a leaned tyre pushes the bike to the inside of the bend by itself, with its load times tan(lean) (a round tyre gives nearly all of the sideways force of a
         // bend this way, so the slip angles stay small and a light rear does not step out). At the contact patch of every wheel, so that it is balanced front and rear by the loads and
@@ -335,7 +375,7 @@ OpenRacer.Motorcycle = function (settings) {
 
     // ---- hook for the camera: it rolls with the lean, a part of it, smoothed. camera: the three.js camera, after it was placed
     // after a reset or a repair: the rider is back on the bike
-    this.recover = function () { self.crashed = false; self.footDown = 0; self.targetLean = 0; self.steer = 0; self.wheelieScale = 1; vPrev = null; accel.x = accel.y = accel.z = 0; };
+    this.recover = function () { hist.length = 0; self.crashed = false; self.limp = false; self.riderLoad = null; self.footDown = 0; self.targetLean = 0; self.steer = 0; self.wheelieScale = 1; vPrev = null; accel.x = accel.y = accel.z = 0; };
 
     this.cameraRoll = function (camera, v, dt) {
         var classic = typeof Settings !== "undefined" && Settings.option("bikeCamera") === "classic";       // (the menu: the chase camera of a car, that does not roll)

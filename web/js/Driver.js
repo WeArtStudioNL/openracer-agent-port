@@ -772,9 +772,14 @@ OpenRacer.Driver = function (config, parent, steering) {
     // with the elbow or the knee as the pole). He lies there until a reset or a repair puts him back on the bike.
     var ragdoll = null, keptParent = null, keptPos = new V(), keptQuat = new Q();
     var RIGID = ["hips", "chest", "shL", "shR", "hiL", "hiR", "head"];
-    function particle(pos, r) { return { p: pos.clone(), q: pos.clone(), v: new V(), r: r, floor: -1e9 }; }      // q: the place a step before (Verlet); v: the speed to start with
-    this.crash = function (velocity, ground) {
+    var ORDER = ["hips", "chest", "head", "shL", "elL", "haL", "shR", "elR", "haR", "hiL", "knL", "ftL", "hiR", "knR", "ftR"];     // the particles in a replay (Replay.js), 3 numbers each
+    this.RAGDOLL_FLOATS = ORDER.length * 3;
+    function particle(pos, r) { return { p: pos.clone(), q: pos.clone(), v: new V(), r: r, floor: -1e9, inside: null }; }      // inside: the spheres of the bike that it started in (not pushed out of those: he sits in the bike)      // q: the place a step before (Verlet); v: the speed to start with
+    // options: { bike: the vehicle (Vehicle.js) that the body collides with (its spheres); onBike: he goes limp where he sits (no throw, no tumble: he slumps on the bike and falls
+    // off it by himself); playback: a replay, nothing moves by itself }
+    this.crash = function (velocity, ground, options) {
         if (ragdoll || !self.model || !self.complete()) return;
+        options = options || {};
         keptParent = self.root.parent; keptPos.copy(self.root.position); keptQuat.copy(self.root.quaternion);
         var top = self.root; while (top.parent) top = top.parent;
         self.root.updateMatrixWorld(true);
@@ -810,12 +815,34 @@ OpenRacer.Driver = function (config, parent, steering) {
         var frame = { up: toLocal(P.chest.p).sub(toLocal(P.hips.p)).normalize(), side: toLocal(P.shL.p).sub(toLocal(P.shR.p)) };
         frame.side.addScaledVector(frame.up, -frame.side.dot(frame.up)).normalize();
         // the speed: the bike's, a little upwards, and a tumble about the hips
-        var vel = velocity.clone(); vel.y += 2.5;
-        var spin = new V(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(2 + Math.min(6, vel.length() * 0.15));
+        var vel = velocity.clone(), spin = new V();
+        if (!options.onBike) {
+            vel.y += 2.5;
+            spin.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(2 + Math.min(6, vel.length() * 0.15));
+        }
         var arm = new V(), vi = new V();
         for (var key in P) { arm.subVectors(P[key].p, P.hips.p); P[key].v.crossVectors(spin, arm).add(vel); }
-        ragdoll = { pts: P, sticks: sticks, mins: mins, groundY: groundY, frame: frame, asleep: 0, time: 0, started: false };
+        ragdoll = { pts: P, sticks: sticks, mins: mins, groundY: groundY, frame: frame, asleep: 0, time: 0, started: false, bike: options.bike || null, playback: !!options.playback, spheres: new Float64Array(8 * 256), sphereCount: 0, centre: new V(), fresh: !!options.bike, seated: !!options.onBike };
+        ragdoll.centre.copy(P.hips.p);
     };
+    // the middle of the body (the world): what its weight does to a bike that he lies on (Motorcycle.js)
+    this.ragdollCentre = function () { return ragdoll ? ragdoll.centre : null; };
+    this.ragdollBike = function (bike) { if (ragdoll) ragdoll.bike = bike; };
+    this.ragdollSeated = function (on) { if (ragdoll) ragdoll.seated = !!on; };       // the seat holds him (the bike is upright) or lets him go
+    // the places of the particles, for a replay (RAGDOLL_FLOATS numbers), or null when he sits on the bike
+    this.ragdollPoints = function (out) {
+        if (!ragdoll) return null;
+        for (var i = 0; i < ORDER.length; i++) { var p = ragdoll.pts[ORDER[i]].p; out[3 * i] = p.x; out[3 * i + 1] = p.y; out[3 * i + 2] = p.z; }
+        return out;
+    };
+    // a replay: the body where the recording says (the particles from the numbers of ragdollPoints), nothing moves by itself
+    this.showRagdoll = function (arr) {
+        if (!ragdoll) { self.crash(new V(), null, { playback: true }); if (!ragdoll) return; }
+        for (var i = 0; i < ORDER.length; i++) { var p = ragdoll.pts[ORDER[i]].p; p.set(arr[3 * i], arr[3 * i + 1], arr[3 * i + 2]); ragdoll.pts[ORDER[i]].q.copy(p); }
+        ragdoll.playback = true;
+        ragdollPose();
+    };
+    this.hideRagdoll = function () { self.recover(); };
     this.ragdollState = function () { return ragdoll; };
     this.recover = function () {
         if (!ragdoll) return;
@@ -825,13 +852,86 @@ OpenRacer.Driver = function (config, parent, steering) {
         rest.forEach(function (q, bone) { bone.quaternion.copy(q); });
     };
     var rgUp = new V(), rgSide = new V(), rgFwd = new V(), rgM = new THREE.Matrix4(), rgM0 = new THREE.Matrix4(), rgQ = new Q(), rgQ0 = new Q(), rgD = new V();
+    // the spheres of the bike that are near the body this frame: [x, y, z, r, vx, vy, vz] each, from Vehicle.sphereWorld
+    function bikeSpheres(r) {
+        r.sphereCount = 0;
+        var bike = r.bike;
+        if (!bike || !bike.sphereWorld) return;
+        if (bike.boundRadius) bike.boundRadius();                                  // (makes the spheres when they are not there yet)
+        if (!bike.proxy3) return;
+        var n = bike.proxy3.length, c = r.centre, out = r.spheres, buf = bikeTmp;
+        for (var i = 0; i < n && r.sphereCount < 256; i++) {
+            if (!bike.sphereWorld(i, buf, 0)) continue;
+            var dx = buf[0] - c.x, dy = buf[1] - c.y, dz = buf[2] - c.z, reach = buf[3] + 1.6;
+            if (dx * dx + dy * dy + dz * dz > reach * reach) continue;
+            // the speed of the sphere: that of the bike as a body (v + w x r); not the speed of a node of the shell that dents (that can be anything for a moment in a crash)
+            var rx = buf[0] - bike.px, ry = buf[1] - bike.py, rz = buf[2] - bike.pz;
+            buf[4] = bike.vx + (bike.wy * rz - bike.wz * ry); buf[5] = bike.vy + (bike.wz * rx - bike.wx * rz); buf[6] = bike.vz + (bike.wx * ry - bike.wy * rx);
+            var sv = Math.sqrt(buf[4] * buf[4] + buf[5] * buf[5] + buf[6] * buf[6]);
+            if (sv > 60) { buf[4] *= 60 / sv; buf[5] *= 60 / sv; buf[6] *= 60 / sv; }
+            for (var k = 0; k < 7; k++) out[8 * r.sphereCount + k] = buf[k];
+            out[8 * r.sphereCount + 7] = i;
+            r.sphereCount++;
+        }
+    }
+    var bikeTmp = new Float64Array(7);
+    // a particle against the spheres of the bike: pushed out, its speed into the sphere taken away (the sphere's own speed is kept: he goes with the bike that he lies on), and some of
+    // the speed along it (he does not slide off at once). Positions only, a step at a time: nothing can blow up at speed
+    function bikeContact(g, r, h) {
+        var S = r.spheres, n = r.sphereCount, hit = false;
+        for (var i = 0; i < n; i++) {
+            var o = 8 * i, dx = g.p.x - S[o], dy = g.p.y - S[o + 1], dz = g.p.z - S[o + 2], rr = S[o + 3] + g.r, d2 = dx * dx + dy * dy + dz * dz;
+            var id = S[o + 7], was = -1;
+            if (g.inside) for (var k = 0; k < g.inside.length; k++) if (g.inside[k].id === id) { was = k; break; }
+            if (d2 >= rr * rr) { if (was >= 0) g.inside.splice(was, 1); continue; }           // (out of a sphere he started in: from now on it is solid for him)
+            if (d2 < 1e-12) continue;
+            var d = Math.sqrt(d2), nx = dx / d, ny = dy / d, nz = dz / d;
+            // a sphere he started in (the seat, the tank) does not push him out: he sits in it, as far in as he was, and it carries him along; any other is solid
+            // (a seat particle is pinned to its sphere, at the distance it had, while the bike is upright: r.seated; a leaning bike lets him go)
+            var push = was >= 0 ? (g.inside[was].hold && r.seated ? g.inside[was].d - d : 0) : rr - d;
+            if (push < 0 && !(was >= 0 && g.inside[was].hold)) push = 0;
+            // the speed relative to the sphere (per step), before the push: the push is a move, not a speed
+            var vx = g.p.x - g.q.x - S[o + 4] * h, vy = g.p.y - g.q.y - S[o + 5] * h, vz = g.p.z - g.q.z - S[o + 6] * h;
+            if (push !== 0) {
+                g.p.x += nx * push; g.p.y += ny * push; g.p.z += nz * push;
+                var vn = vx * nx + vy * ny + vz * nz;
+                if (push > 0 ? vn < 0 : vn > 0) { vx -= vn * nx; vy -= vn * ny; vz -= vn * nz; }
+            }
+            var f = Math.exp(-(was >= 0 && g.inside[was].hold ? 40 : 6) * h);        // the grip of the leathers on the bike (the seat holds him until his weight pulls him off it)
+            vx *= f; vy *= f; vz *= f;
+            var sp = Math.sqrt(vx * vx + vy * vy + vz * vz), cap = 4 * h;                // never faster than 4 m/s relative to the bike out of a contact (a part that is deep in it is pushed out, not shot out)
+            if (sp > cap) { vx *= cap / sp; vy *= cap / sp; vz *= cap / sp; }
+            g.q.x = g.p.x - vx - S[o + 4] * h; g.q.y = g.p.y - vy - S[o + 5] * h; g.q.z = g.p.z - vz - S[o + 6] * h;
+            hit = true;
+        }
+        return hit;
+    }
     function ragdollStep(dt) {
         var r = ragdoll, P = r.pts, key;
         r.time += dt;
+        if (r.playback) return;
         if (r.asleep > 1) return;                                                  // lying still: nothing moves any more
         // fixed substeps (a Verlet step keeps its speed as a distance per step: the step has to stay the same length)
         var h = 1 / 240; r.acc = (r.acc || 0) + dt; var n = Math.min(12, Math.floor(r.acc / h)); r.acc -= n * h;
         if (!n) return;
+        bikeSpheres(r);
+        if (r.fresh) {
+            // the first step: the spheres that a particle is in now are the ones he sits in (the seat, the tank between the knees): they do not push him out
+            r.fresh = false;
+            // (every particle: the spheres it is in do not push it; the ones that sit, the hips, the hip joints and the knees (against the tank), are held where they are in the one sphere they are deepest in,
+            // the seat: that is what holds him on the bike until he slides off it)
+            for (key in P) {
+                var pf = P[key], S = r.spheres, seat = key === "hips" || key === "hiL" || key === "hiR" || key === "knL" || key === "knR", deepest = -1, deep = 0; pf.inside = [];
+                for (var si = 0; si < r.sphereCount; si++) {
+                    var ox = pf.p.x - S[8 * si], oy = pf.p.y - S[8 * si + 1], oz = pf.p.z - S[8 * si + 2], rs = S[8 * si + 3] + pf.r;
+                    var dd = ox * ox + oy * oy + oz * oz;
+                    if (dd >= rs * rs) continue;
+                    pf.inside.push({ id: S[8 * si + 7], d: 0, hold: false });
+                    if (rs - Math.sqrt(dd) > deep) { deep = rs - Math.sqrt(dd); deepest = pf.inside.length - 1; pf.inside[deepest].d = Math.sqrt(dd); }
+                }
+                if (seat && deepest >= 0) pf.inside[deepest].hold = true;
+            }
+        }
         for (key in P) {
             var pt = P[key], fl = r.groundY(pt.p.x, pt.p.z) + pt.r;
             // a floor that is suddenly much higher is a wall or a kerb (a barrier beside the grass): he stops against it, instead of being lifted onto it in one step
@@ -847,6 +947,7 @@ OpenRacer.Driver = function (config, parent, steering) {
                 q.p.x += vx * 0.998; q.p.y += vy * 0.998 - 9.81 * h * h; q.p.z += vz * 0.998;
             }
             for (var it = 0; it < 5; it++) {
+                if (r.sphereCount) for (key in P) bikeContact(P[key], r, h);
                 for (var i = 0; i < r.sticks.length; i++) {
                     var st = r.sticks[i]; rgD.subVectors(st.b.p, st.a.p);
                     var len = rgD.length(); if (len < 1e-6) continue;
@@ -883,8 +984,10 @@ OpenRacer.Driver = function (config, parent, steering) {
                 }
             }
         }
-        for (key in P) most = Math.max(most, P[key].p.distanceToSquared(P[key].q));
-        if (Math.sqrt(most) / h < 0.08) r.asleep += dt; else r.asleep = 0;
+        r.centre.set(0, 0, 0);
+        for (key in P) { most = Math.max(most, P[key].p.distanceToSquared(P[key].q)); r.centre.add(P[key].p); }
+        r.centre.divideScalar(ORDER.length);
+        if (Math.sqrt(most) / h < 0.08 && !r.sphereCount) r.asleep += dt; else r.asleep = 0;
         ragdollPose();
     }
     // the skeleton on the particles
