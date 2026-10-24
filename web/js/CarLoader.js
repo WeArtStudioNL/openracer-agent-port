@@ -243,21 +243,38 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
         // body (they do not go with the wheel), and turn with the steering about the axis of the fork, which goes through the middle of the front wheel (config.motorcycle.rake_deg).
         function makeHead() {
             if(config.type !== "motorcycle" || !measured || !measured.centres.FL) return null;
-            var parts = [];
+            var parts = [], axisNode = null;
             // (and the parts of the handlebar that the rider takes hold of, which turn with it: the grips, the brake lever and the clutch lever, see Driver.js)
             var ON_HANDLEBAR = { gripl: 1, gripr: 1, frontbraker: 1, clutchl: 1 };
-            root.traverse(function(child) { var n = String(child.name || "").toLowerCase().replace(/[^a-z0-9]/g, ""); if(n.indexOf("steerhead") === 0 || ON_HANDLEBAR[n]) parts.push(child); });
+            // A node called exactly "steerhead" (an empty is best) is the steering axis: its origin is the pivot and its local up axis (Blender: Z) points up the fork. Without one the
+            // axis goes through the middle of the front wheel at config.motorcycle.rake_deg.
+            root.traverse(function(child) {
+                var n = String(child.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                if(n === "steerhead" && !axisNode) { axisNode = child; var hasMesh = false; child.traverse(function(o) { if(o.isMesh) hasMesh = true; }); if(!hasMesh) return; }
+                if(n.indexOf("steerhead") === 0 || ON_HANDLEBAR[n]) parts.push(child);
+            });
             parts = parts.filter(function(part) { return !parts.some(function(other) { return other !== part && isInside(part, other); }); });
             if(!parts.length) return null;
-            var object = new THREE.Object3D();
+            var object = new THREE.Object3D(), axis, pivot = measured.centres.FL.clone();
+            if(axisNode) {
+                space.updateMatrixWorld(true);
+                pivot = axisNode.getWorldPosition(new THREE.Vector3());
+                axis = new THREE.Vector3(0, 1, 0).applyQuaternion(axisNode.getWorldQuaternion(new THREE.Quaternion())).normalize();
+                if(axis.y < 0) axis.negate();
+                if(axis.y < 0.3) { console.warn("CarLoader: the steering axis (steerhead) lies down; using the rake of the car"); axisNode = null; pivot = measured.centres.FL.clone(); }
+            }
+            if(!axisNode) {
+                var rake0 = ((config.motorcycle && config.motorcycle.rake_deg) || 24.5) * Math.PI / 180;
+                axis = new THREE.Vector3(0, Math.cos(rake0), -Math.sin(rake0));
+            }
             object.name = "steerhead";
-            object.position.copy(measured.centres.FL);
+            object.position.copy(pivot);
             space.add(object);
             object.updateMatrixWorld(true);
             parts.forEach(function(part) { object.attach(part); });
             space.remove(object);
-            var rake = ((config.motorcycle && config.motorcycle.rake_deg) || 24.5) * Math.PI / 180;
-            return { object: object, axis: new THREE.Vector3(0, Math.cos(rake), -Math.sin(rake)), rake: rake };
+            // (how far the wheel goes back along the fork for a metre of travel straight up, from the axis: the rake)
+            return { object: object, axis: axis, rake: Math.atan2(-axis.z, axis.y), pivot: pivot, wheel: measured.centres.FL.clone(), custom: !!axisNode };
         }
 
         function finish(wheelObjects) {
@@ -439,6 +456,16 @@ OpenRacer.updateFork = function(head, front, body, steer) {
     if(!head || !front || !front.object) return;
     head.object.quaternion.setFromAxisAngle(head.axis, -steer);
     front.object.children[0].quaternion.setFromAxisAngle(head.axis, -steer - (front.toeBend || 0));
+    // the wheel turns about the line of the axis, which does not have to go through its middle: it swings round the pivot by the steering angle (in the frame of the body)
+    if(head.custom) {
+        OpenRacer.updateFork.swing = OpenRacer.updateFork.swing || new THREE.Vector3();
+        OpenRacer.updateFork.q = OpenRacer.updateFork.q || new THREE.Quaternion();
+        var sw = OpenRacer.updateFork.swing.copy(head.wheel).sub(head.pivot);                                    // from the pivot to the middle of the wheel
+        OpenRacer.updateFork.q.setFromAxisAngle(head.axis, -steer - (front.toeBend || 0));
+        sw.copy(sw.clone().applyQuaternion(OpenRacer.updateFork.q).sub(sw));                                     // where it moves to: R d - d
+        sw.applyQuaternion(body.quaternion);
+        front.object.position.add(sw);
+    }
     var compression = (front.restLengthWheel || 0) - (front.susLength || 0);
     var back = -compression * Math.tan(head.rake);
     OpenRacer.updateFork.forward = OpenRacer.updateFork.forward || new THREE.Vector3();
