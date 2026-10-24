@@ -286,7 +286,16 @@ OpenRacer.Motorcycle = function (settings) {
                 self.crashSpeed = before ? { x: before[0], y: before[1], z: before[2] } : { x: v.vx, y: v.vy, z: v.vz };
             }
         }
-        if (self.crashed) { self.posture.lat = self.posture.knee = self.posture.tuck = self.posture.sit = 0; return; }
+        if (self.crashed) {
+            self.posture.lat = self.posture.knee = self.posture.tuck = self.posture.sit = 0;
+            // a bike that is down but still stands (a crash at a standstill, the key 9 while it stands: nothing holds it up, but its wheels on their narrow track did): it falls over,
+            // to the side it leans to already (the right, where it rested on the foot, when it stands straight)
+            if (Math.abs(u) < 3 && Math.abs(state.lean) < 1.0) {
+                var side = state.lean < -0.01 ? -1 : 1, fall = 0.6 * v.mass * G * v.cgHeight;
+                torque.x -= state.ax * side * fall; torque.y -= state.ay * side * fall; torque.z -= state.az * side * fall;
+            }
+            return;
+        }
         if (self.limp) {
             // the rider does nothing: the bike has only its own balance (none: it leans over as his weight hangs off it) and the castor of the front wheel. His weight is on the bike already
             // (the mass of the rider is in the mass of the bike); what leans it is that weight off the middle: the torque of the middle of the body about the centre of gravity
