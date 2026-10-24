@@ -2,7 +2,7 @@
 
 What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in `web/js/Version.js`.
 
-## Unreleased
+## 2.2.0 (2026-10-24)
 
 Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motorcycles with a rider and a ragdoll crash, a driver in the car, replays as files with a video editor, a new menu, the drag strip, and much more. Per subject:
 
@@ -15,7 +15,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 - A lowside: a bike that slides sideways past 15 degrees for half a second while it leans goes down (it crabbed along for seconds at the limit of the lean).
 - The hands keep their turn on the grips when the rider hangs off a bend: the turn of a hand relative to its grip is found once, in his neutral posture, and kept (it was found again every frame from the arm that the posture of the moment gave, and the fingers pointed up in a bend).
 - A bike that is down slides with a steady 0.6 g of friction and the rider with 0.55 g, so they slide together (the bike lost its speed as a share of it, 3 g at first, and caught the rider up from behind at full speed; that was the rider that "shot off the bike").
-- The version is 2.2.0-dev, so that every browser loads the new scripts (the ?v= of the scripts is the version).
+- The version is 2.2.0: the replay file is version 4 and the physics of a motorcycle changed; every browser loads the new scripts (the ?v= of the scripts is the version).
 - The front of a wheelie comes down without the bounce: the fork and the shock of a motorcycle have no blow-off (the damper of a car lets go past 0.3 m/s, and the spring threw the bike 2.6 m/s back up after a wheelie to the vertical) and hold the rebound a quarter more. Their damper, and the damping of the stops, is solved implicitly, so it is stable at any strength: the one wheel of an end has twice the spring of a wheel of a pair, and the explicit damper rang at 240 Hz and blew up on a hard landing or on the brakes.
 - The fork legs, the caliper and the mudguard move with the wheel again: they hang on the model's wheel_FL, which is the lost wheel of the front pair since the motorcycle has two wheels; the lost wheel now goes with the live one.
 
