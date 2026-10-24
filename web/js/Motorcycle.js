@@ -247,12 +247,31 @@ OpenRacer.Motorcycle = function (settings) {
         // load has no grip sideways, and a little steering on the brakes at 180 km/h stepped the tail out (a slip of 10 degrees), which was a crash when the brake came off
         var beta = Math.atan2(v.v || 0, Math.max(Math.abs(v.u), 1));
         var minRear = 0.06 + 0.16 * Math.max(smooth(0.15, 0.5, Math.abs(self.command || 0)), smooth(2 * DEG, 6 * DEG, Math.abs(beta)), smooth(3 * DEG, 10 * DEG, Math.abs(v.lean || 0)));
-        var target = Math.max(0, Math.min(1, (rearRatio - minRear) / 0.16));
+        var bt = self.brakeTune || (self.brakeTune = { ff: 1, ffGain: 0.8, band: 0.16, down: 0.03, up: 0.3, filt: 0.02 });
+        // (the load of the rear wheel is noisy: the brake follows a smoothed one)
+        self.rearFilt = bt.filt > 0 ? (self.rearFilt === undefined ? rearRatio : self.rearFilt + (rearRatio - self.rearFilt) * Math.min(1, dt / bt.filt)) : rearRatio;
+        // (and where it is going: the load of the rear wheel with its rate of change, so that the brake lets off before the rear is up and takes hold before it is down again)
+        var rearRate = self.rearPrev === undefined || dt <= 0 ? 0 : (self.rearFilt - self.rearPrev) / dt;
+        self.rearPrev = self.rearFilt;
+        self.rearRateF = (self.rearRateF || 0) + (rearRate - (self.rearRateF || 0)) * Math.min(1, dt / 0.03);
+        var rearPred = self.rearFilt + (bt.td || 0) * self.rearRateF;
+        var target = Math.max(0, Math.min(1, (rearPred - minRear) / bt.band));
         // the bike slides sideways under the brakes (the front has no grip left sideways when it brakes with all it has): both brakes come off as the slip grows past 5 degrees, so the
         // tyres can hold the bike straight again (what the cornering ABS of a modern bike does; without it a little steering on the brakes at 180 km/h ended at 40 degrees of slip)
         var slideOff = 1 - 0.9 * smooth(5 * DEG, 12 * DEG, Math.abs(beta));
         target *= slideOff;
-        self.frontBrake += (target - self.frontBrake) * Math.min(1, dt / (target < self.frontBrake ? 0.02 : 0.1));
+        if (bt.ff) {
+            // the limit from the force, not from what the rear wheel did a moment ago: the rear wheel keeps its load while the braking force of the road on the bike (what the tyres give: Fx)
+            // is below m g (1 - front share) (1 - minRear) wheelbase / (height of the centre of gravity), the weight that the brake can throw onto the front by statics. The brake comes off
+            // in proportion as that force goes past it, at once (the force follows the brake in a few hundredths of a second, the rear wheel only after the pitch), and goes back slowly.
+            var fxNow = Math.max(0, -((w[0].fxLast || 0) + (w[2].fxLast || 0)));
+            var fMax = m * G * (1 - v.weight_distribution) * (1 - minRear) * v.wheelbase / Math.max(0.3, v.cgHeight) * bt.ffGain;
+            var kf = fxNow > fMax && fxNow > 1 ? fMax / fxNow : 1;
+            if (kf < 1) self.frontBrake += (Math.min(self.frontBrake, target) * kf - self.frontBrake) * Math.min(1, dt / bt.down);
+            else self.frontBrake += (target - self.frontBrake) * Math.min(1, dt / bt.up);
+            if (rearPred < minRear * 0.5) self.frontBrake *= Math.max(0, 1 - dt / 0.04);
+        } else
+        self.frontBrake += (target - self.frontBrake) * Math.min(1, dt / (target < self.frontBrake ? bt.down : bt.up));
         // (after a crest the rear wheel comes down hard and it spins faster than the road: the rear brake comes back slowly, so that it does not lock and slide)
         var rearTarget = Math.max(0, Math.min(1, rearRatio * 1.2)) * slideOff;
         // a burnout: the brake and the throttle together at a standstill (or nearly) is the front brake held and the rear wheel let spin; the rear brake comes off

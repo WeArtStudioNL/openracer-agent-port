@@ -1623,7 +1623,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var fs0 = rateS * comp[si] + progressive + bumpSpring + droopSpring + arbForce[si];
                 // the part of the road force along the wheel that goes along the travel (the force of the last step, a little smoothed: the brake and the ABS make it jump)
                 var slopeS = ws.front ? self.forkSlope : self.swingSlope, staticS = ws.staticLoad || 1500;
-                ws.feLoad = (ws.feLoad || 0) + (Math.max(-1.5 * staticS, Math.min(1.5 * staticS, self.forkDive * slopeS * (ws.fxLast || 0))) - (ws.feLoad || 0)) * Math.min(1, dt / 0.03);
+                ws.feLoad = (ws.feLoad || 0) + (Math.max(-1.5 * staticS, Math.min(1.5 * staticS, self.forkDive * slopeS * (ws.fxLast || 0))) - (ws.feLoad || 0)) * Math.min(1, dt / (self.feTau || 0.03));
                 var accel0 = (fs0 - tyreLoad[si] - ws.feLoad) / self.unsprungMass + gDown - lastBodyAccDown;
                 ws.susVel = (ws.susVel + accel0 * dt) / (1 + cTot * dt / self.unsprungMass);
                 fs = fs0 - cTot * ws.susVel;
