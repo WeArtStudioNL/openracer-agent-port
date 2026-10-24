@@ -906,6 +906,38 @@ OpenRacer.Driver = function (config, parent, steering) {
         }
         return hit;
     }
+    // ---- the limits of the joints (what a body can do): the elbows bend only backwards and the knees only forwards (the middle of a limb kept on its side of the line from
+    // its root to its end), the upper arm within 120 degrees of hanging down and out, the thigh within 100 degrees of down and a little forward. A limb that is moved into a
+    // limit is put at the limit, and most of its speed into it is taken out (no bounce off the limit)
+    var jUp = new V(), jSide = new V(), jFwd = new V(), jRest = new V(), jDir = new V(), jTmp = new V(), DEG = Math.PI / 180;
+    function hinge(a, mid, b, dir, sign) {
+        jTmp.copy(a.p).add(b.p).multiplyScalar(0.5);
+        var d = (mid.p.x - jTmp.x) * dir.x + (mid.p.y - jTmp.y) * dir.y + (mid.p.z - jTmp.z) * dir.z;
+        if (d * sign >= 0) return;
+        mid.p.addScaledVector(dir, -d); mid.q.addScaledVector(dir, -d * 0.7);
+    }
+    function cone(root, end, rest, maxDeg) {
+        jDir.subVectors(end.p, root.p);
+        var len = jDir.length(); if (len < 1e-6) return;
+        jDir.divideScalar(len);
+        var c = jDir.dot(rest), lim = maxDeg * DEG;
+        if (c >= Math.cos(lim)) return;
+        jTmp.crossVectors(jDir, rest); if (jTmp.lengthSq() < 1e-10) return;
+        jTmp.normalize();
+        jDir.applyAxisAngle(jTmp, Math.acos(Math.max(-1, c)) - lim);
+        jTmp.copy(root.p).addScaledVector(jDir, len).sub(end.p);
+        end.p.add(jTmp); end.q.addScaledVector(jTmp, 0.7);
+    }
+    function jointLimits(P) {
+        jUp.subVectors(P.chest.p, P.hips.p).normalize();
+        jSide.subVectors(P.shL.p, P.shR.p); jSide.addScaledVector(jUp, -jSide.dot(jUp)).normalize();
+        jFwd.crossVectors(jSide, jUp);
+        hinge(P.shL, P.elL, P.haL, jFwd, -1); hinge(P.shR, P.elR, P.haR, jFwd, -1);
+        hinge(P.hiL, P.knL, P.ftL, jFwd, 1); hinge(P.hiR, P.knR, P.ftR, jFwd, 1);
+        jRest.copy(jUp).multiplyScalar(-0.8).addScaledVector(jSide, 0.6).normalize(); cone(P.shL, P.elL, jRest, 120);
+        jRest.copy(jUp).multiplyScalar(-0.8).addScaledVector(jSide, -0.6).normalize(); cone(P.shR, P.elR, jRest, 120);
+        jRest.copy(jUp).multiplyScalar(-1).addScaledVector(jFwd, 0.35).normalize(); cone(P.hiL, P.knL, jRest, 100); cone(P.hiR, P.knR, jRest, 100);
+    }
     function ragdollStep(dt) {
         var r = ragdoll, P = r.pts, key;
         r.time += dt;
@@ -960,6 +992,7 @@ OpenRacer.Driver = function (config, parent, steering) {
                     corr = (len - mn.len) / len * 0.5;
                     mn.a.p.addScaledVector(rgD, corr); mn.b.p.addScaledVector(rgD, -corr);
                 }
+                jointLimits(P);
                 var touching = 0;
                 for (key in P) {
                     var g = P[key];

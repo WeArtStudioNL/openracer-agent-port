@@ -10,6 +10,10 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 - **A limp rider** (the key 9, "Motorcycle: the rider goes limp", to try it): he slumps where he sits, the seat and the tank hold his hips and knees while the bike is upright, the rest hangs; the bike rides on without him, with the castor of its front wheel for balance and no throttle, and his weight off the middle leans it; it goes down when the speed is gone or he pulls it over, and he slides off a bike that leans more than 30 degrees.
 - **A hit crashes**: a wall or a barrier that takes more than 6 m/s of speed in a tenth of a second at more than 20 km/h (riding into a barrier at 40 km/h made the bike bounce back with the rider on it) throws the rider at the speed the bike had before the hit.
 - **The crash camera** moves smoothly from where it was to a circle of 2.5 m round the bike (it was 9 m, and it jumped there), the bike between it and the rider.
+- **The joints have their limits**: the elbows bend only backwards and the knees only forwards, the upper arm stays within 120 degrees of hanging down and out, the thigh within 100 degrees of down and a little forward; a limb that swings into a limit stops there (most of its speed is taken out, no bounce).
+- The limp rider (the key 9) now brings the bike down: the castor of the front wheel is not quite enough to hold it, it leans within a second, he slides off past 30 degrees, and a bike with nobody on it goes down as a body; below 30 km/h it just falls over.
+- The crash limits are wider (a hard brake in a bend threw the rider at once): 3.5 g of acceleration (was 2.8), 3 g sideways (was 2.2), 74 degrees of lean (was 69), a hit of 8 m/s in a tenth of a second (was 6).
+- **ESC is off on a motorcycle**: it took the small angle of the front wheel in a bend for oversteer and braked the front, which broke the bike away on the brakes at speed.
 - **The replay shows the ragdoll**: the places of the particles are recorded every sample while the rider is one, and a replay file (version 4) keeps them; a file from before opens as it did.
 
 **Car editor: orthographic view and standard views**

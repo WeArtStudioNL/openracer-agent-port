@@ -1387,7 +1387,8 @@ OpenRacer.Vehicle = function (parameters, input) {
         // make the car slide.
         var escBrake = [0, 0, 0, 0];
         var escCut = 0;
-        if(self.escEnabled && !inp.handbrake && u > 5 && !self.airborne) {
+        // (not on a motorcycle: its front wheel is turned a little for a lot of yaw in a bend, which looks like oversteer to it, and a brake on the front in a bend throws a bike down)
+        if(self.escEnabled && !self.controller && !inp.handbrake && u > 5 && !self.airborne) {
             var steady = u * delta / (L + self.understeerGradient * u * u); // the yaw rate that goes with the steering
             // the car follows a steering movement with a delay: a car that is only just starting to turn is not understeering
             self.yawWanted += (steady - self.yawWanted) * Math.min(1, dt / 0.25);

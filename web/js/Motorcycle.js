@@ -121,10 +121,10 @@ OpenRacer.Motorcycle = function (settings) {
     this.steering = function (v, delta, u, dt) {
         if (self.crashed) { self.steer += (0 - self.steer) * Math.min(1, dt / 0.1); return self.steer; }
         if (self.limp) {
-            // nobody steers: the front wheel castors into the lean on its own (a bike rolls on without a rider at speed and rights itself, a little more than the bend of its lean asks),
-            // until the speed is gone or the weight of the limp rider pulls it over
+            // nobody steers: the front wheel castors into the lean on its own, but not quite enough to hold it (a bike without a rider wanders off its line and goes down within
+            // seconds; past 40 degrees it is down)
             var st = leanOf(v, 0), ph = Math.max(-1.05, Math.min(1.05, st.lean));
-            var own = -Math.sign(ph) * Math.atan(v.wheelbase * G * Math.tan(Math.abs(ph)) / Math.max(u * u, 1)) * 1.4 * smooth(2, 6, Math.abs(u));
+            var own = -Math.sign(ph) * Math.atan(v.wheelbase * G * Math.tan(Math.abs(ph)) / Math.max(u * u, 1)) * 0.9 * smooth(2, 6, Math.abs(u));
             self.steer += (own - self.steer) * Math.min(1, dt / 0.08);
             return self.steer;
         }
@@ -249,13 +249,13 @@ OpenRacer.Motorcycle = function (settings) {
             // speed the bike had before the hit (not the bounce)
             var wall = v.impactTime < 0.05 && v.lastImpact > 5.5 && v.impactTime !== self.wallHit;
             if (wall) self.wallHit = v.impactTime;
-            // a hit that is not a wall of the body (the wheels into a barrier, a kerb): the speed lost in a tenth of a second, more than 6 m/s (over 6 g), at more than 20 km/h before it
+            // a hit that is not a wall of the body (the wheels into a barrier, a kerb): the speed lost in a tenth of a second, more than 8 m/s (over 8 g), at more than 20 km/h before it
             now += dt; hist.push({ t: now, x: v.vx, z: v.vz });
             while (hist.length > 2 && hist[1].t < now - 0.1) hist.shift();
             var old = hist[0], lost = Math.sqrt((v.vx - old.x) * (v.vx - old.x) + (v.vz - old.z) * (v.vz - old.z));
-            var hit = lost > 6 && Math.sqrt(old.x * old.x + old.z * old.z) > 5.5;
+            var hit = lost > 8 && Math.sqrt(old.x * old.x + old.z * old.z) > 5.5;
             if (hit && !wall) { wall = true; v.lastWall = v.lastWall || {}; v.lastWall.v = [old.x, 0, old.z]; }
-            if (Math.abs(state.lean) > (self.limp ? 1.0 : 1.2) || aMag > 2.8 * G || (Math.abs(aLat) > 2.2 * G && Math.abs(u) > 5) || wall) {
+            if (Math.abs(state.lean) > (self.limp ? 0.7 : 1.3) || aMag > 3.5 * G || (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) || wall) {
                 self.crashed = true;
                 var before = wall && v.lastWall && v.lastWall.v ? v.lastWall.v : null;
                 self.crashSpeed = before ? { x: before[0], y: before[1], z: before[2] } : { x: v.vx, y: v.vy, z: v.vz };

@@ -438,6 +438,7 @@ OpenRacer.Car = function( config, domElement ) {
     this.goLimp = function() {
         var v = this.vehicle, c = v.controller;
         if(!c || c.crashed || c.limp || !this.driver || !this.driver.crash) return;
+        if(Math.abs(v.u) < 8) { c.crashed = true; c.crashSpeed = { x: v.vx, y: v.vy, z: v.vz }; return; }      // slow: it just goes down (the update throws the rider)
         c.limp = true;
         this.driver.crash(new THREE.Vector3(v.vx, v.vy, v.vz), v.ground, { bike: v, onBike: true });
         this.crashShown = true;                                    // (a reset or a repair ends it)
@@ -532,7 +533,13 @@ OpenRacer.Car = function( config, domElement ) {
             return;
         }
         // a limp rider on the bike: where his weight is, for the bike that he leans over
-        if(v.controller && v.controller.limp && this.driver && this.driver.ragdollCentre) { v.controller.riderLoad = this.driver.ragdollCentre(); if(this.driver.ragdollSeated) this.driver.ragdollSeated(!v.controller.crashed && Math.abs(v.lean || 0) < 0.5); }
+        if(v.controller && v.controller.limp && this.driver && this.driver.ragdollCentre) {
+            var centre = v.controller.riderLoad = this.driver.ragdollCentre();
+            if(this.driver.ragdollSeated) this.driver.ragdollSeated(!v.controller.crashed && Math.abs(v.lean || 0) < 0.5);
+            // the rider is off the bike (beside it, or on the road): nothing holds the bike up any more, it goes down as a body
+            var off = centre && (Math.hypot(centre.x - v.px, centre.z - v.pz) > 1.1 || centre.y - v.py < -0.3);
+            if(off && !v.controller.crashed) { v.controller.crashed = true; v.controller.crashSpeed = { x: v.vx, y: v.vy, z: v.vz }; }
+        }
         // a motorcycle that goes down: the rider is thrown off and the camera stays where it is, looking at the two of them
         if(v.controller && v.controller.crashed && !this.crashDown) {
             this.crashDown = true; this.crashShown = true;
