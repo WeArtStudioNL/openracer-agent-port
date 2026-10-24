@@ -22,6 +22,8 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 - **A burnout**: the brake and the throttle together at a standstill (or nearly) hold the front brake and let the rear brake off, so the rear wheel spins (it sat at 4 000 rpm with both wheels held).
 - **Reset puts the engine at idle with the clutch open** (also for a car): it kept its speed, and in gear it spun the wheels up again the moment the car was put down.
 - **A wheelie past the balance point is not a crash**: the lean (the roll) is now how far the bike's own left axis dips below the road, so a wheelie or a stoppie reads 0 degrees of lean however steep it is (measured from the up of the bike it read 180 degrees past the vertical, and that was a crash at once). The tail scrapes and the rear brake can still bring it down; it is a crash once the bike is on its back (its up more than 100 degrees from the road).
+- The foot comes up once the bike itself moves at 5 km/h, in about a second: not on the throttle (it came up the moment the throttle was opened) and not on the speed of the rear wheel, so it stays down in a burnout.
+- A burnout goes on: the traction control and the wheelie control stay out of it, and a tyre that spins a lot faster than the road melts and gives less (from 4 m/s of spin to a little over half at 14; a locked wheel or a slide is not this). Before, the rear wheel at a standstill pulled 1.6 g against the front brake, the engine was pulled down to the clutch and the wheel stopped after a few seconds.
 - **The replay shows the ragdoll**: the places of the particles are recorded every sample while the rider is one, and a replay file (version 4) keeps them; a file from before opens as it did.
 
 **Car editor: orthographic view and standard views**

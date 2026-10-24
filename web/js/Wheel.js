@@ -113,8 +113,13 @@ OpenRacer.Wheel = function (parameters) {
         var mu = Math.min(1.4 * grip, Math.max(0.2 * grip, grip - this.loadSensitivity * (load - this.nominalLoad)));
         var ratio = surface.kinetic / surface.static;
         if(surface.loose && this.compoundLooseSlide && this.compoundLooseSlide > ratio) ratio = this.compoundLooseSlide;
-        return { mu: mu, sliding: mu * Math.min(0.98, ratio) };
+        // a tyre that spins a lot faster than the road (a burnout, the wheels lit up): the rubber melts and gives less, from 4 m/s of spin to a little over half at 14 (a locked wheel
+        // or a slide is not this: the spin is the wheel ahead of the road); without this a rear wheel at a standstill pulled 1.6 g against the front brake and stalled the engine
+        var spin = this.spinSlide || 0, melt = spin <= 4 ? 0 : spin >= 14 ? 1 : (spin - 4) / 10;
+        melt = melt * melt * (3 - 2 * melt);
+        return { mu: mu, sliding: mu * Math.min(0.98, ratio) * (1 - 0.45 * melt) };
     };
+    this.spinSlide = 0;                                             // m/s that the tyre runs ahead of the road (Vehicle.js: omega r - the forward speed), for the friction of a tyre that spins
     this.profile = [NaN, NaN, NaN, NaN, NaN];                       // the depth of the tyre in the road at five places along it (Vehicle.js, for the ring of nodes)
     this.nodeTyre = null;                                           // the ring of nodes, where the tyre body cannot be used (tracks with 2D physics, Vehicle.js)
     this.leak = 0; this.pressureLoss = 0; this.leakTick = 0;      // a puncture (Vehicle.puncture): bar per second, bar lost so far

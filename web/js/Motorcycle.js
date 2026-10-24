@@ -61,6 +61,7 @@ OpenRacer.Motorcycle = function (settings) {
     this.crashed = false;                                   // the bike is down: the rider is a ragdoll, the bike a body that slides, no input until a reset or a repair
     this.limp = false;                                      // the rider has gone limp on the bike (a hit, or the key for it): no throttle, no steering, no balance; the bike rides on until his weight tips it over
     this.riderLoad = null;                                  // where the middle of the limp rider is (world, from Driver.ragdollCentre): his weight off the middle of the bike leans it
+    this.burnout = 0;                                        // 0 to 1: a burnout is going on (brakeStep)
     this.wallHit = 0;                                        // the last wall hit that was seen (Vehicle.impactTime), so that one hit crashes once
     var hist = [], now = 0;                                  // the speed of the last tenth of a second: a hit that the smoothed acceleration misses (a wall through the wheels, a kerb)
     this.pushing = false;                                   // the rider walks the bike back (set by Car.js)
@@ -155,9 +156,10 @@ OpenRacer.Motorcycle = function (settings) {
         speedMax = Math.min(speedMax, Math.atan(Math.sqrt(Math.max(0, gripMax * gripMax - aLong * aLong)) / G) + self.overLean);     // (a little past the grip: that is the lowside)
         var phiMax = speedMax + epsFull;
         var want = -c * Math.min(phiMax, cap) * fast;
-        // at a standstill the rider puts the right foot down and the bike rests against it, a little to the right; on the gas the foot comes back up in two seconds
-        var still = !self.noFoot && Math.abs(u) < 0.6 && (inp.throttle || 0) < 0.05 && !self.pushing;
-        self.footDown += ((still ? 1 : 0) - self.footDown) * Math.min(1, dt / (still ? 0.5 : 2.0));
+        // at a standstill the rider puts the right foot down and the bike rests against it, a little to the right
+        // (the foot comes up once the bike itself moves at 5 km/h: not on the throttle and not on the speed of the rear wheel, so it stays down in a burnout; up in about a second)
+        var still = !self.noFoot && Math.abs(u) < 1.4 && !self.pushing;
+        self.footDown += ((still ? 1 : 0) - self.footDown) * Math.min(1, dt / (still ? 0.5 : 1.0));
         want -= self.footLean * self.footDown * (1 - fast);
         var brake = Math.max(0, Math.min(1, inp.brakePedal || 0)), bend = smooth(8 * DEG, 30 * DEG, Math.abs(want));
         want *= 1 + self.cornerBrake * brake * bend;                  // the rear brake takes it deeper into the bend (the front brake is not used in a bend: brakeScale)
@@ -208,7 +210,7 @@ OpenRacer.Motorcycle = function (settings) {
         if (self.crashed || self.limp) { self.wheelieScale = 0; return 0; }
         var on = typeof Settings === "undefined" || Settings.option("wheelieControl") !== false;
         var frontLoad = ((v.wheels[0].weight || 0) + (v.wheels[1].weight || 0)) / Math.max(1, v.weight_distribution * v.mass * G);
-        var want = on && Math.abs(v.u) > 0.5 ? Math.max(0.15, Math.min(1, (frontLoad - 0.08) / 0.3)) : 1;
+        var want = on && Math.abs(v.u) > 0.5 && self.burnout < 0.5 ? Math.max(0.15, Math.min(1, (frontLoad - 0.08) / 0.3)) : 1;     // (not in a burnout: the front lifts a little there, and the cut let the engine fall to the clutch)
         self.wheelieScale += (want - self.wheelieScale) * Math.min(1, dt / (want < self.wheelieScale ? 0.03 : 0.25));
         // at a walking pace with the bars turned far the throttle is eased: the bike slows in the turn instead of driving on round it
         var slowLock = (1 - smooth(2.0, 4.0, Math.abs(v.u))) * smooth(0.6, 0.95, Math.abs(self.command || 0));
@@ -237,6 +239,7 @@ OpenRacer.Motorcycle = function (settings) {
         var rearTarget = Math.max(0, Math.min(1, rearRatio * 1.2));
         // a burnout: the brake and the throttle together at a standstill (or nearly) is the front brake held and the rear wheel let spin; the rear brake comes off
         var inp = v.input, burnout = smooth(0.2, 0.6, inp.throttle || 0) * smooth(0.2, 0.5, inp.brakePedal || 0) * (1 - smooth(2, 5, Math.abs(v.u)));
+        self.burnout = burnout;                                                                  // (Vehicle.js: the traction control stays out of a burnout)
         rearTarget *= 1 - burnout;
         self.rearBrake = rearTarget > self.rearBrake ? Math.min(rearTarget, self.rearBrake + dt / 0.3) : rearTarget;
         if (burnout > 0.5) self.frontBrake = Math.max(self.frontBrake, burnout);
@@ -370,8 +373,8 @@ OpenRacer.Motorcycle = function (settings) {
         var state = leanOf(v, 0), u = v.u;
         v.lean = state.lean;
         self.targetLean = state.lean;
-        var still = Math.abs(u) < 0.6 && thr < 0.05;
-        self.footDown += ((still ? 1 : 0) - self.footDown) * Math.min(1, dt / (still ? 0.5 : 2.0));
+        var still = Math.abs(u) < 1.4;
+        self.footDown += ((still ? 1 : 0) - self.footDown) * Math.min(1, dt / (still ? 0.5 : 1.0));
         self.postureStep(dt, u, thr, brk, state.lean);
     };
     this.rider = function (v, torque, dt, u, state) {

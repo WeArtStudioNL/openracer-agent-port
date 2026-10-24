@@ -1700,6 +1700,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 vl = cvx * fpx + cvy * fpy + cvz * fpz;
                 var vt = cvx * lx + cvy * ly + cvz * lz;
                 wheel.forwardSpeed = vl;
+                wheel.spinSlide = wheel.omega * wheel.radius - vl;                         // (Wheel.frictionFor: a tyre that spins fast melts and gives less)
 
                 // slip, with a relaxation length: the tyre needs to roll a bit before the slip builds up
                 var vref = Math.max(Math.abs(vl), 1.5);
@@ -1859,7 +1860,8 @@ OpenRacer.Vehicle = function (parameters, input) {
         // the allowance (down) or below it (up), and is still at the allowance. A switch (fast down above it, slow up below it) made the power
         // saw-tooth at the edge, and the engine speed with it: the car stuttered under traction control instead of pulling in one stroke.
         var slipError = maxDrivenSlip - 1;
-        if(self.tcEnabled || self.launching > 0) {
+        // (not in a burnout of a motorcycle: the rear wheel is meant to spin there, and the throttle it cut let the clutch slip and the wheel stop after a moment)
+        if((self.tcEnabled && !(self.controller && self.controller.burnout > 0.5)) || self.launching > 0) {
             var rate = slipError > 0 ? -(4 + 8 * slipError) * Math.min(1, slipError * 4) : Math.min(1, -slipError * 6) + 1.5 * Math.max(0, Math.min(1, (-slipError - 0.5) / 0.4));
             self.tcFactor = Math.max(0.2, Math.min(1, self.tcFactor + dt * rate));
             if(slipError > 0.05) for(var ti = 0; ti < 4; ti++) if(wheels[ti].driven) wheels[ti].tc = true;
@@ -1875,6 +1877,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         var throttle = inp.throttle * self.tcFactor * (1 - 0.85 * escCut) * (self.controller && self.controller.throttleScale ? self.controller.throttleScale(self, dt) : 1);
         // the gearbox takes the power off while it shifts
         if(self.shiftTimer > 0) throttle *= 0.15;
+        self.throttleUsed = throttle;                      // (for the debugging)
         engine.updateBoost(throttle, dt);
         var Te = engine.getNetTorque(throttle);
         var rpm = engine.getRPM();
