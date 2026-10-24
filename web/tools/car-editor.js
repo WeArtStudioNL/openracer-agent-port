@@ -2094,6 +2094,9 @@ function benchFrame(now) {
             object.children[0].rotation.z = w.camberBend || 0;
             if (object.children[0].children[0]) object.children[0].children[0].rotation.x = w.spin;
         }
+        // a motorcycle: the front wheel along the fork, the rear wheel on the swingarm (as in the game)
+        if (bench.model.head && i === 0) OpenRacer.updateFork(bench.model.head, w, body, v.steerApplied);
+        if (bench.model.swingarm && i === 2) OpenRacer.updateSwingarm(bench.model.swingarm, w, body);
     });
     if (bench.model.rig) bench.model.rig.update(v);
     if (softBodyEditor) softBodyEditor.frame(dt);

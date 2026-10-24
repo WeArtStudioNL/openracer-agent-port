@@ -283,7 +283,7 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
             });
             // the changes to the materials that were made in the car editor
             OpenRacer.applyMaterialOverrides(THREE, [tilt].concat(wheelObjects), config.materials);
-            onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1, steeringWheel: steering, measured: measured, rig: rig, head: head });
+            onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1, steeringWheel: steering, measured: measured, rig: rig, head: head, swingarm: head ? findSwingarm(root, space, measured) : null });
         }
     }
 
@@ -404,6 +404,32 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
         try { build(loadedRoot.clone(true)); } catch(e) { console.error(e); onError("Could not use the model (" + e + ")"); }
     } else if(model.type === "gltf") gltf();
     else legacy();
+};
+
+// The swingarm of a motorcycle: a part called swingarm (or swing_arm, rear_arm) turns about its own origin, the pivot on the frame, as the rear wheel goes up and down: the wheel is
+// on the end of it. Found once, in the space of the body: the axis of the pivot (the x axis of the body, in the frame of the part) and the length to the rear axle.
+function findSwingarm(root, space, measured) {
+    var part = null;
+    root.traverse(function(child) { if(!part && /^(swing_?arm|rear_?arm|swingarm)/i.test(String(child.name || ""))) part = child; });
+    if(!part || !measured || !measured.centres.RL) return null;
+    space.updateMatrixWorld(true);
+    var pivot = part.getWorldPosition(new THREE.Vector3()), axle = measured.centres.RL;
+    var length = Math.hypot(axle.y - pivot.y, axle.z - pivot.z);
+    if(!(length > 0.1)) return null;
+    var q = part.getWorldQuaternion(new THREE.Quaternion());
+    return { object: part, rest: part.quaternion.clone(), axis: new THREE.Vector3(1, 0, 0).applyQuaternion(q.invert()).normalize(), length: length, pivotZ: pivot.z, axleZ: axle.z };
+}
+OpenRacer.updateSwingarm = function(arm, rear, body) {
+    if(!arm || !rear || !rear.object) return;
+    var up = (rear.restLengthWheel || 0) - (rear.susLength || 0);                       // how far the wheel is up from where it sits at rest
+    var a = Math.asin(Math.max(-1, Math.min(1, up / arm.length)));
+    if(arm.pivotZ < arm.axleZ) a = -a;                                                  // (a pivot behind the axle: the other way round)
+    OpenRacer.updateSwingarm.q = OpenRacer.updateSwingarm.q || new THREE.Quaternion();
+    arm.object.quaternion.copy(arm.rest).multiply(OpenRacer.updateSwingarm.q.setFromAxisAngle(arm.axis, a));
+    // the wheel is on the arc of the arm: it comes forward a little as it goes up
+    OpenRacer.updateSwingarm.forward = OpenRacer.updateSwingarm.forward || new THREE.Vector3();
+    OpenRacer.updateSwingarm.forward.set(0, 0, 1).applyQuaternion(body.quaternion).multiplyScalar(arm.length * (1 - Math.cos(a)) * (arm.pivotZ < arm.axleZ ? -1 : 1));
+    rear.object.position.add(OpenRacer.updateSwingarm.forward);
 };
 
 // The front end of a motorcycle each frame: the head (the cylinders, the clamp, the handlebar) turns with the steering about the axis of the fork, the front wheel (with the

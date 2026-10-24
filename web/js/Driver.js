@@ -1250,13 +1250,17 @@ OpenRacer.Driver = function (config, parent, steering) {
     // The cockpit view: the torso of the driver is in the camera (the chest of a rider that lies on the tank). The vertices of the skinned mesh that belong mostly to the bones
     // of the torso (the hips, the spine, the chest, the neck: by the names of the bones) are dropped in the vertex shader while the view is inside, so the arms, the hands and the legs
     // stay, and no mesh is cut. The materials of the model get the test by onBeforeCompile; the indices are those of the skeleton of each mesh.
-    var cullUniforms = { uHideTorso: { value: 0 } }, CULL_MAX = 12;
+    var cullUniforms = { uHideTorso: { value: 0 } }, CULL_MAX = 32;
     function installTorsoCull(scene) {
-        var torso = /spine|chest|torso|hips|pelvis|neck|breast|belly|stomach|shoulder|clavicle/i, limb = /arm|hand|leg|foot|thigh|shin|head|finger|thumb|toe/i;      // (the shoulders go with the torso: they are at the camera)
+        var torso = /spine|chest|torso|hips|pelvis|neck|breast|belly|stomach|shoulder|clavicle|upper_?arm|bicep/i, limb = /forearm|lower_?arm|hand|leg|foot|thigh|shin|head|finger|thumb|toe/i;      // (the shoulders and the upper arms go with the torso: they are at the camera, and swept through the picture)
         scene.traverse(function (o) {
             if (!o.isSkinnedMesh || !o.skeleton) return;
             var list = [];
-            o.skeleton.bones.forEach(function (bone, i) { if (torso.test(bone.name) && !limb.test(bone.name) && list.length < CULL_MAX) list.push(i); });
+            o.skeleton.bones.forEach(function (bone, i) { if (torso.test(bone.name) && !limb.test(bone.name)) list.push(i); });
+            // (a Rigify rig: only the DEF- bones move the mesh, the rest are controls)
+            var def = list.filter(function (i) { return /^DEF-/.test(o.skeleton.bones[i].name); });
+            if (def.length) list = def;
+            list = list.slice(0, CULL_MAX);
             if (!list.length) return;
             var arr = new Float32Array(CULL_MAX).fill(-1);
             list.forEach(function (i, k) { arr[k] = i; });
