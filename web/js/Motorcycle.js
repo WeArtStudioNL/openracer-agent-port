@@ -35,7 +35,7 @@ OpenRacer.Motorcycle = function (settings) {
     this.maxLean = (s.max_lean_deg || 50) * DEG;
     this.balance = s.balance || 1;
     this.leanResponse = s.lean_response || 0.1;          // s: how fast the lean follows what is asked
-    this.camberThrust = s.camber_thrust !== undefined ? s.camber_thrust : 0.3;
+    this.camberThrust = s.camber_thrust !== undefined ? s.camber_thrust : 0.85;     // the part of load * tan(lean) that a leaned tyre gives by itself (a round tyre: nearly all of it)
     this.standUp = s.throttle_stand_up !== undefined ? s.throttle_stand_up : 0.18;
     this.cameraRollFactor = s.camera_roll !== undefined ? s.camera_roll : 0.45;
     this.keyRate = s.key_steer_rate || 2;                    // how much faster the steering keys bring the lean command than they turn the wheels of a car
@@ -50,6 +50,8 @@ OpenRacer.Motorcycle = function (settings) {
     this.counterRamp = s.counter_ramp !== undefined ? s.counter_ramp : 1.5;      // s in which it comes back
     this.fastFrom = s.fast_from !== undefined ? s.fast_from : 38;                  // m/s: from this speed the lean that the keys can ask for goes down
     this.gripG = s.grip_g !== undefined ? s.grip_g : 1.05;                        // the lateral g that the tyres give when nothing else is asked of them
+    this.frontComply = s.front_comply !== undefined ? s.front_comply : 3;            // how much the front wheel castors into its own slip on the brake (3: it keeps a quarter of the slip angle)
+    this.complied = 0;
     this.pushing = false;                                   // the rider walks the bike back (set by Car.js)
     this.command = 0;                                      // the lean that is asked (-1..1)
     this.targetLean = 0;                                   // what the rider takes (rad, left is positive)
@@ -100,7 +102,10 @@ OpenRacer.Motorcycle = function (settings) {
         // the left of the bike along the road: n x forward
         var lx = n.y * fwd.z - n.z * fwd.y, ly = n.z * fwd.x - n.x * fwd.z, lz = n.x * fwd.y - n.y * fwd.x, ll = Math.sqrt(lx * lx + ly * ly + lz * lz) || 1;
         lx /= ll; ly /= ll; lz /= ll;
-        return { lean: Math.atan2(up.x * lx + up.y * ly + up.z * lz, up.x * n.x + up.y * n.y + up.z * n.z), rate: -(v.wx * fx + v.wz * fz), fx: fx, fz: fz };
+        // The roll axis of the bike is its own forward (ax, ay, az), not the horizontal one (fx, fz): a torque about the horizontal axis on a slope, or with the nose down on the brake,
+        // has a part about the up of the bike, and that was a yaw of several hundred newton metres (the rider pulling the bike up on a climb swung its tail out)
+        var al = Math.sqrt(fwd.x * fwd.x + fwd.y * fwd.y + fwd.z * fwd.z) || 1, ax = fwd.x / al, ay = fwd.y / al, az = fwd.z / al;
+        return { lean: Math.atan2(up.x * lx + up.y * ly + up.z * lz, up.x * n.x + up.y * n.y + up.z * n.z), rate: -(v.wx * ax + v.wy * ay + v.wz * az), fx: fx, fz: fz, ax: ax, ay: ay, az: az, lx: lx, ly: ly, lz: lz };
     }
 
     // ---- hook: the angle of the front wheel (right is positive), from what the input asks for. delta: what the input gave (the angle of the wheel or the lock that is turned).
@@ -136,8 +141,9 @@ OpenRacer.Motorcycle = function (settings) {
         var leanNow = Math.max(-self.maxLean, Math.min(self.maxLean, state.lean));
         var phiNow = leanNow + eps * Math.min(1, Math.abs(leanNow) / (6 * DEG));
         var phi = Math.abs(phiNow);
-        var aSlip = G * Math.max(0, Math.tan(phi) - self.camberThrust * Math.sin(Math.abs(leanNow)));
-        var steady = -Math.sign(phiNow) * Math.atan(v.wheelbase * aSlip / Math.max(u * u, 1));
+        // (the whole of it: the front wheel points along the bend whatever part of the sideways force the camber of the tyres gives; the camber only makes the slip angles small)
+        var aBend = G * Math.tan(Math.min(1.05, phi));
+        var steady = -Math.sign(phiNow) * Math.atan(v.wheelbase * aBend / Math.max(u * u, 1));
         // countersteering: to start a lean to the left the wheel goes to the right for a moment, in proportion to what the lean still has to go
         var cLimit = Math.min(0.07, 5 / Math.max(u * u, 1));       // (at most about half a g of sideways push from it at any speed)
         var counter = Math.max(-cLimit, Math.min(cLimit, 0.3 * (target - state.lean))) * smooth(3, 10, Math.abs(u));
@@ -151,7 +157,16 @@ OpenRacer.Motorcycle = function (settings) {
         counter *= straight + (1 - straight) * pulse;
         var geometric = c * lock;                                  // at a walking pace the angle is the command
         var w = 1 - smooth(2, 5, Math.abs(u));
-        var wanted = w * geometric + (1 - w) * (steady + counter);
+        // The front wheel gives: its trail turns it towards where it goes (a wheel that is pushed sideways castors), so a sideways speed of the bike does not make a front tyre that is loaded on
+        // the brake and held straight push the nose round (a front at 90 % of the weight and a light rear is a car that spins). The wheel follows a part of its own slip angle, and the rear,
+        // behind the centre of gravity, is what keeps the bike straight.
+        var slipFront = 0.5 * (Math.atan(v.wheels[0].slipTan || 0) + Math.atan(v.wheels[1].slipTan || 0));
+        // (on the brake and upright only: that is where the front carries nearly everything; in a bend the camber of the tyres carries the bike and the front slip is part of the bend,
+        // and with the wheel free to castor there the yaw of the bike hunts)
+        var upright = 1 - smooth(8 * DEG, 20 * DEG, Math.abs(state.lean)), onBrake = smooth(0.05, 0.3, inp.brakePedal || 0);
+        var comply = Math.max(-0.12, Math.min(0.12, -self.frontComply * slipFront)) * smooth(3, 8, Math.abs(u)) * upright * onBrake;
+        self.complied += (comply - self.complied) * Math.min(1, dt / 0.04);
+        var wanted = w * geometric + (1 - w) * (steady + counter + self.complied);
         self.steer += (wanted - self.steer) * Math.min(1, dt / 0.05);
         return self.steer;
     };
@@ -186,19 +201,21 @@ OpenRacer.Motorcycle = function (settings) {
         var T = kp * (self.targetLean - state.lean) - kd * state.rate;                           // about the axis that leans it to the left
         var alive = 1 - Math.min(1, Math.max(0, (Math.abs(state.lean) - 1.15) / 0.25));         // past about 66 degrees the bike is going down: the rider lets go
         T = alive * Math.max(-6 * gh, Math.min(6 * gh, T));
-        torque.x -= state.fx * T; torque.z -= state.fz * T;
+        torque.x -= state.ax * T; torque.y -= state.ay * T; torque.z -= state.az * T;
         // the yaw that the steering did not ask for is damped
         var fast = smooth(1.5, 4.5, Math.abs(u));
         // the front wheel in the air (a wheelie): it does not steer, the lean does. A bike that leans turns at g tan(lean) / u, and the rider takes it round at that rate
         var frontLoad = ((v.wheels[0].weight || 0) + (v.wheels[1].weight || 0)) / Math.max(1, v.weight_distribution * v.mass * G);
         var lift = 1 - smooth(0.05, 0.5, frontLoad);
-        if (Math.abs(u) > 3) {
-            var yawErr = c.r - u * c.delta / v.wheelbase;
-            torque.y += (1 - lift) * Math.max(-1800, Math.min(1800, self.balance * (c.inertiaY / 0.12) * yawErr * fast));
-        }
-        if (lift > 0.001 && Math.abs(u) > 2) {
-            var rLean = -G * Math.tan(Math.max(-1.2, Math.min(1.2, state.lean))) / Math.max(Math.abs(u), 4);
-            torque.y += lift * Math.max(-1500, Math.min(1500, c.inertiaY * 6 * (c.r - rLean)));
+        self.dbg = { T: T, yawDamp: 0, yawLift: 0, lift: lift };
+        // The rider keeps the bike turning at the rate that its lean gives (a balanced bend: r = g tan(lean) / u): a torque about the vertical against the yaw that the tyres make on their own
+        // (a front that is loaded on the brake and a light rear would swing the tail out, as a car oversteers). With the front wheel in the air it is all there is.
+        if (Math.abs(u) > 2) {
+            var epsNow = Math.atan((self.riderMass / v.mass) * self.posture.lat / v.cgHeight);       // (the rider that hangs off: the lean of the whole)
+            var rLean = -G * Math.tan(Math.max(-1.2, Math.min(1.2, state.lean + epsNow))) / Math.max(Math.abs(u), 4);
+            var yawErr = c.r - rLean;
+            self.dbg.yawDamp = Math.max(-3000, Math.min(3000, self.balance * (c.inertiaY / 0.06) * yawErr * fast));
+            torque.y += self.dbg.yawDamp;
         }
         // no reverse gear: the rider walks the bike back (Car.js says when), slowly, with a small force
         if(self.pushing) {
@@ -209,11 +226,23 @@ OpenRacer.Motorcycle = function (settings) {
             var holdF = Math.min(700, v.mass * 4 * -u);
             force.x += state.fx * holdF; force.z += state.fz * holdF;
         }
-        // the camber thrust: the leaned tyres push the bike to the inside of the bend
-        var load = 0;
-        for (var i = 0; i < 4; i++) load += v.wheels[i].weight || 0;
-        var thrust = self.camberThrust * load * Math.sin(state.lean) * alive;
-        force.x += state.fz * thrust; force.z -= state.fx * thrust;                              // (the left of the bike is (fz, -fx))
+        // The camber thrust: a leaned tyre pushes the bike to the inside of the bend by itself, with its load times tan(lean) (a round tyre gives nearly all of the sideways force of a
+        // bend this way, so the slip angles stay small and a light rear does not step out). At the contact patch of every wheel, so that it is balanced front and rear by the loads and
+        // it rights the bike (a torque about the centre of gravity), as the real thing does.
+        // (the whole of it is shared between the front and the rear as the weight of the bike is at rest, not as the loads are now: the weight that the brake or the gas moves to one end
+        // would otherwise turn the camber thrust into a yaw, a bike that tightens its line hard when the throttle is shut at speed, and the rider lost it)
+        var camber = self.camberThrust * Math.tan(Math.max(-1.05, Math.min(1.05, state.lean))) * alive, loadAll = 0;
+        for (var i = 0; i < 4; i++) if (v.wheels[i].hasContact) loadAll += v.wheels[i].weight || 0;
+        for (var i = 0; i < 4; i++) {
+            var w = v.wheels[i];
+            if (!w.hasContact || !(w.weight > 0) || !w.center) continue;
+            var shareW = loadAll * 0.5 * (w.front ? v.weight_distribution : 1 - v.weight_distribution);
+            var fcx = camber * shareW * state.lx, fcy = camber * shareW * state.ly, fcz = camber * shareW * state.lz;
+            var n = w.normal || { nx: 0, ny: 1, nz: 0 };
+            var rx = w.center.x - n.nx * w.radius - v.px, ry = w.center.y - n.ny * w.radius - v.py, rz = w.center.z - n.nz * w.radius - v.pz;
+            force.x += fcx; force.y += fcy; force.z += fcz;
+            torque.x += ry * fcz - rz * fcy; torque.y += rz * fcx - rx * fcz; torque.z += rx * fcy - ry * fcx;
+        }
     };
 
     // ---- the rider on the bike: where he sits, from what the bike does, and what his weight does to the bike
@@ -243,8 +272,8 @@ OpenRacer.Motorcycle = function (settings) {
         rotate(v, p.lat, p.drop, p.long, dw);
         var gx = -accel.x, gy = -G - accel.y, gz = -accel.z;
         var tx = self.riderMass * (dw.y * gz - dw.z * gy), ty = self.riderMass * (dw.z * gx - dw.x * gz), tz = self.riderMass * (dw.x * gy - dw.y * gx);
-        var along = tx * state.fx + tz * state.fz;
-        torque.x += tx - along * state.fx; torque.y += ty; torque.z += tz - along * state.fz;
+        var along = tx * state.ax + ty * state.ay + tz * state.az;
+        torque.x += tx - along * state.ax; torque.y += ty - along * state.ay; torque.z += tz - along * state.az;
     };
 
     // the drag of the air: a rider that sits up (on the brake) has more of it, one that lies flat (on the throttle) has less
