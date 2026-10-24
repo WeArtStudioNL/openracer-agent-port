@@ -236,14 +236,14 @@ var TouchControls = (function() {
             root.classList.toggle("off", !visible);
             if(!visible) releaseAll();
         }
-        // a pedal builds up over a fraction of a second and lets go a little faster
+        // a pedal comes up as the keys do (the settings of the keyboard: the time and the curve of the throttle and of the brake), and lets go at once
         ["gas", "brake"].forEach(function(name) {
-            var p = pedals[name];
-            var target = p.id !== null ? 1 : 0;
-            var rate = target > p.value ? 5 : 12;
-            p.value += (target - p.value) * Math.min(1, rate * delta);
-            if(Math.abs(target - p.value) < 0.01) p.value = target;
-            (name === "gas" ? gasEl : brakeEl).fill.style.height = Math.round(p.value * 100) + "%";
+            var p = pedals[name], gas = name === "gas";
+            var time = (typeof Settings !== "undefined" && Settings.option(gas ? "keyThrottleTime" : "keyBrakeTime")) || (gas ? 0.5 : 0.4);
+            var curve = (typeof Settings !== "undefined" && Settings.option(gas ? "keyThrottleCurve" : "keyBrakeCurve")) || 1;
+            if(p.id !== null) { p.held = (p.held || 0) + delta; p.value = Math.pow(Math.min(1, p.held / time), curve); }
+            else { p.held = 0; p.value = 0; }
+            (gas ? gasEl : brakeEl).fill.style.height = Math.round(p.value * 100) + "%";
         });
         state.throttle = pedals.gas.value;
         state.brake = pedals.brake.value;
