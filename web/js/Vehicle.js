@@ -1607,14 +1607,33 @@ OpenRacer.Vehicle = function (parameters, input) {
             var used = Math.max(0, ws.restLengthWheel - ws.susLength);
             var progressive = self.springProgression > 0 ? self.springProgression * rateS * used * used / self.bumpTravel : 0;
             if(bumpS > 0 && xdotS > 2.5) self.soundImpact = Math.max(self.soundImpact || 0, Math.min(1, (xdotS - 2) / 6));       // (the bump stop hit hard)
-            var fs = rateS * comp[si] + progressive + damperS + bumpS + droopS + arbForce[si];
+            var fs, accel;
+            if(self.soloWheels) {
+                // A motorcycle: the damper (and the damping of the stops) is solved implicitly: it is stable at any strength. The one wheel of an end has twice the spring of a wheel
+                // of a pair, and the explicit damper rang at 240 Hz and blew up on a hard landing or on the brakes (c dt / m was past 2 in the stops).
+                var cTot = cUse + (ws.susLength < ws.minLength || ws.susLength > ws.freeLength ? stopDamping : 0);
+                var bumpSpring = ws.susLength < ws.minLength ? stopRate * (ws.minLength - ws.susLength) : 0, droopSpring = ws.susLength > ws.freeLength ? -stopRate * (ws.susLength - ws.freeLength) : 0;
+                var fs0 = rateS * comp[si] + progressive + bumpSpring + droopSpring + arbForce[si];
+                var accel0 = (fs0 - tyreLoad[si]) / self.unsprungMass + gDown - lastBodyAccDown;
+                ws.susVel = (ws.susVel + accel0 * dt) / (1 + cTot * dt / self.unsprungMass);
+                fs = fs0 - cTot * ws.susVel;
+                springForce[si] = self.wheelLost[si] ? 0 : fs;
+                ws.susLength += ws.susVel * dt;
+            } else {
+            fs = rateS * comp[si] + progressive + damperS + bumpS + droopS + arbForce[si];
             springForce[si] = self.wheelLost[si] ? 0 : fs;
             // the wheel: the spring pushes it out, the tyre pushes it in, gravity pulls it along the axis, and it rides with the mount
-            var accel = (fs - tyreLoad[si]) / self.unsprungMass + gDown - lastBodyAccDown;
+            accel = (fs - tyreLoad[si]) / self.unsprungMass + gDown - lastBodyAccDown;
             ws.susVel += accel * dt;
             ws.susLength += ws.susVel * dt;
+            }
             if(ws.susLength < 0.02) { ws.susLength = 0.02; if(ws.susVel < 0) ws.susVel = 0; }
             if(ws.susLength > ws.freeLength + 0.06) { ws.susLength = ws.freeLength + 0.06; if(ws.susVel > 0) ws.susVel = 0; }
+        }
+        // a motorcycle: the lost wheel of a pair goes with the live one, for what is drawn on it (the fork legs, the caliper and the mudguard hang on the model's wheel_FL, which is slot 1)
+        if(self.soloWheels) for(var sm = 0; sm < 2; sm++) {
+            var live = wheels[sm * 2], ghost = wheels[sm * 2 + 1];
+            ghost.susLength = live.susLength; ghost.susVel = live.susVel; ghost.omega = live.omega; ghost.spin = live.spin;
         }
 
         // two sums of forces: what acts on the body alone (gravity on it, the springs: it moves the sprung mass) and what acts on
