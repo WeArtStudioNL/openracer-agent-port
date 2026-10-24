@@ -268,7 +268,16 @@ var MainMenu = (function() {
             for(var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
             return (h >>> 0).toString(36);
         }
-        function key(car) { return "openracer.preview." + car.id + "." + stamp(car); }
+        // (the stamp is of what car.json says: a model that was exported again under the same name did not change it, and the old picture stayed. The model file's own size and date
+        // go into the key too, and a preview.webp that is older than the model is made again)
+        function key(car) { return "openracer.preview." + car.id + "." + stamp(car) + (car._modelTag || ""); }
+        var headCache = {};
+        function head(url) {
+            if(!headCache[url]) headCache[url] = fetch(url, { method: "HEAD", cache: "no-store" }).then(function(r) {
+                return r.ok ? { size: r.headers.get("content-length") || "", modified: Date.parse(r.headers.get("last-modified") || "") || 0 } : null;
+            }).catch(function() { return null; });
+            return headCache[url];
+        }
         function next() {
             if(busy || !queue.length) return;
             busy = true;
@@ -292,13 +301,23 @@ var MainMenu = (function() {
         function request(car, img) {
             img.style.visibility = "hidden";
             img.onload = function() { img.style.visibility = ""; };
-            var cached = null;
-            try { cached = window.localStorage.getItem(key(car)); } catch(e) { /* no storage */ }
-            if(cached) { img.src = cached; return; }
             function make() { queue.push({ car: car, img: img }); next(); }
-            if(OpenRacer.Garage && OpenRacer.Garage.sourceOf(car)) { make(); return; }
-            img.onerror = function() { img.onerror = null; make(); };
-            img.src = "cars/" + encodeURIComponent(car.id) + "/preview.webp?v=" + stamp(car);
+            var fromGarage = OpenRacer.Garage && OpenRacer.Garage.sourceOf(car);
+            var modelUrl = !fromGarage && car.model && typeof car.model.file === "string" ? car.model.file : null;
+            (modelUrl ? head(modelUrl) : Promise.resolve(null)).then(function(info) {
+                car._modelTag = info ? "." + info.size + "." + info.modified : "";
+                var cached = null;
+                try { cached = window.localStorage.getItem(key(car)); } catch(e) { /* no storage */ }
+                if(cached) { img.src = cached; return; }
+                if(fromGarage) { make(); return; }
+                var url = "cars/" + encodeURIComponent(car.id) + "/preview.webp";
+                // the file of the picture is used when it is not older than the model
+                head(url).then(function(pic) {
+                    if(!pic || (info && info.modified && pic.modified && pic.modified < info.modified)) { make(); return; }
+                    img.onerror = function() { img.onerror = null; make(); };
+                    img.src = url + "?v=" + stamp(car) + (car._modelTag || "");
+                });
+            });
         }
         return { request: request };
     })();
