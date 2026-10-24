@@ -13,6 +13,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 - The tyres squeal later on a motorcycle (the camber of its tyres carries a bend).
 - On the brakes the rider holds the bars harder (the hold on the yaw is up to three times as strong, 9 000 N m): with the rear nearly off the road the front alone turned the bike 14 degrees out of line in a second at 145 km/h.
 - A lowside: a bike that slides sideways past 15 degrees for half a second while it leans goes down (it crabbed along for seconds at the limit of the lean).
+- Steering at speed: the lean the keys can ask for at the top of the speed is 30 degrees (`fast_lean_deg`; it was 18, and the bike hardly steered at 200 km/h), and from 110 km/h the rider hangs off for a small lean already (fully at 180), so his weight to the inside turns the bike where it hardly leans.
 - The hands keep their turn on the grips when the rider hangs off a bend: the turn of a hand relative to its grip is found once, in his neutral posture, and kept (it was found again every frame from the arm that the posture of the moment gave, and the fingers pointed up in a bend).
 - A bike that is down slides with a steady 0.6 g of friction and the rider with 0.55 g, so they slide together (the bike lost its speed as a share of it, 3 g at first, and caught the rider up from behind at full speed; that was the rider that "shot off the bike").
 - The version is 2.2.0: the replay file is version 4 and the physics of a motorcycle changed; every browser loads the new scripts (the ?v= of the scripts is the version).

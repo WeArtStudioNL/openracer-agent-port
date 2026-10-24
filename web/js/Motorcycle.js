@@ -51,6 +51,7 @@ OpenRacer.Motorcycle = function (settings) {
     this.counterWait = s.counter_wait !== undefined ? s.counter_wait : 1.0;      // s after the brake before the countersteering starts to come back
     this.counterRamp = s.counter_ramp !== undefined ? s.counter_ramp : 1.5;      // s in which it comes back
     this.fastFrom = s.fast_from !== undefined ? s.fast_from : 38;                  // m/s: from this speed the lean that the keys can ask for goes down
+    this.fastLean = (s.fast_lean_deg !== undefined ? s.fast_lean_deg : 30) * DEG;   // the lean it can still ask for at fast_from + 22 m/s (it was 18 degrees: the bike hardly steered at 200 km/h)
     this.gripG = s.grip_g !== undefined ? s.grip_g : 1.05;                        // the lateral g that the tyres give when nothing else is asked of them
     this.frontComply = s.front_comply !== undefined ? s.front_comply : 3;            // how much the front wheel castors into its own slip on the brake (3: it keeps a quarter of the slip angle)
     this.complied = 0;
@@ -152,7 +153,7 @@ OpenRacer.Motorcycle = function (settings) {
         var eps = Math.atan(share * self.posture.lat / v.cgHeight);       // to the left: positive
         // at speed the tyres have to give a slip angle for every bit of lean, and the body crabs: past about 40 m/s the lean that is allowed goes down (to 18 degrees at 60 m/s), so that a key
         // held at 190 km/h is a gentle bend and not a slide
-        var speedMax = self.maxLean - (self.maxLean - 18 * DEG) * smooth(self.fastFrom, self.fastFrom + 22, Math.abs(u));
+        var speedMax = self.maxLean - (self.maxLean - self.fastLean) * smooth(self.fastFrom, self.fastFrom + 22, Math.abs(u));
         // the tyres have so much grip, and what they give along the bike (the engine, the air, the brake: how much the speed goes down) they cannot give sideways: the circle of grip
         var aLong = Math.max(0, -(accel.x * state.fx + accel.z * state.fz)), gripMax = self.gripG * G;
         speedMax = Math.min(speedMax, Math.atan(Math.sqrt(Math.max(0, gripMax * gripMax - aLong * aLong)) / G) + self.overLean);     // (a little past the grip: that is the lowside)
@@ -300,6 +301,7 @@ OpenRacer.Motorcycle = function (settings) {
             var lowside = self.slideTime > 0.5;
             if (Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) || (self.limp && Math.abs(u) < 0.5) || over || lowside || aMag > 3.5 * G || (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) || wall) {
                 self.crashed = true;
+                self.crashReason = Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) ? "lean" : (self.limp && Math.abs(u) < 0.5) ? "limp-still" : over ? "over" : lowside ? "lowside" : aMag > 3.5 * G ? "accel " + (aMag / G).toFixed(1) + "g" : (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) ? "lateral" : hit ? "hit " + (speedOld - speedNow).toFixed(1) : "wall";     // (for the debugging)
                 var before = wall && v.lastWall && v.lastWall.v ? v.lastWall.v : null;
                 self.crashSpeed = before ? { x: before[0], y: before[1], z: before[2] } : { x: v.vx, y: v.vy, z: v.vz };
             }
@@ -392,7 +394,9 @@ OpenRacer.Motorcycle = function (settings) {
         var tuck = i.thr * smooth(12, 35, fwdSpeed) * (1 - i.brk), sit = i.brk * smooth(4, 20, fwdSpeed);
         if(self.riderKey) { tuck = self.riderKey > 0 ? 1 : 0; sit = self.riderKey < 0 ? 1 : 0; }
         var bendT = smooth(8 * DEG, 40 * DEG, Math.abs(lean)) * smooth(5, 12, Math.abs(u));
-        var hang = Math.sign(lean) * bendT;
+        // at speed the rider hangs off for a small lean already (from 110 km/h, fully at 180): his weight to the inside turns the bike where it hardly leans at that speed
+        var hangT = Math.max(bendT, smooth(3 * DEG, 12 * DEG, Math.abs(lean)) * smooth(30, 50, Math.abs(u)));
+        var hang = Math.sign(lean) * hangT;
         var k = function (t) { return Math.min(1, dt / t); };
         p.tuck += (tuck - p.tuck) * k(0.35); p.sit += (sit - p.sit) * k(0.25);
         p.lat += (hang * self.maxHang - p.lat) * k(0.25); p.knee += (bendT - p.knee) * k(0.3);
