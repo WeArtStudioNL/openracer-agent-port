@@ -451,7 +451,7 @@ OpenRacer.Parts = (function () {
             for (var i = 0; i < parts.length; i++) {
                 var part = parts[i];
                 if (part.wheel !== undefined) {
-                    if (part.state === "held" && v.wheelLost && v.wheelLost[part.wheel]) startWheel(part);
+                    if (part.state === "held" && v.wheelLost && v.wheelLost[part.wheel] && !(v.soloWheels && (part.wheel === 1 || part.wheel === 3))) startWheel(part);
                     if (part.state !== "held") { moving = true; settle(part, dt); }
                     continue;
                 }

@@ -350,6 +350,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             w.b = (w.right ? 1 : -1) * track / 2;                  // to the right of it
             w.mass = this.mass * (w.front ? this.weight_distribution : 1 - this.weight_distribution) / 2;
             w.rate = w.front ? this.frontWheelRate : this.rearWheelRate;
+            if(this.soloWheels && (i === 0 || i === 2)) { w.mass *= 2; w.rate *= 2; }                         // (a motorcycle: the one wheel of the end carries it all, on the spring of both)
             w.staticLoad = w.mass * G;
             // free length: the spring is pushed in by the weight at rest, to the rest length
             w.restLengthWheel = this.restLength + (w.front ? this.rideFront : this.rideRear); // where the wheel sits at rest
@@ -636,6 +637,7 @@ OpenRacer.Vehicle = function (parameters, input) {
 
     // the share of the engine torque that every wheel gets (in the order of the wheels) when the differentials are open
     this.torqueShares = function () {
+        if(this.soloWheels) return this.driveType === "fwd" ? [1, 0, 0, 0] : this.driveType === "awd" ? [0.5, 0, 0.5, 0] : [0, 0, 1, 0];      // (a motorcycle: the one wheel of the end)
         if(this.driveType === "awd") {
             var f = Math.max(0, Math.min(1, this.centerSplit));
             return [f / 2, f / 2, (1 - f) / 2, (1 - f) / 2];
@@ -992,6 +994,10 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.wheelStrength = 0;
     this.wheelDamage = [0, 0, 0, 0];                  // 0 whole, 1 torn off
     this.wheelLost = [false, false, false, false];
+    // A motorcycle has two wheels: the second wheel of each pair (1 and 3) is a lost wheel for good: no road, no spring, no drive (torqueShares), no brake; the wheel that stays
+    // carries the whole end (layout: twice the mass and the rate of a wheel of a pair). The pair on a 4 cm track held the bike up at a standstill, as a sidecar does.
+    this.soloWheels = !!parameters.motorcycle;
+    if(this.soloWheels) this.wheelLost = [false, true, false, true];
     this.wheelSpinAtLoss = [0, 0, 0, 0];              // rad/s, for the wheel that flies off
     this.hubNode = [-1, -1, -1, -1];                  // the node of the shell that is the hub of a wheel (front wheels), CollisionProxy.js
     this.hubSphere = [-1, -1, -1, -1];
@@ -1050,7 +1056,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     // the bend of a wheel (a bent suspension arm and tie rod): toe in or out and a lean, to the side that the hit pushed it
     this.repairWheels = function () {
         for(var i = 0; i < 4; i++) {
-            this.wheelDamage[i] = 0; this.wheelLost[i] = false; this.wheels[i].toeBend = 0; this.wheels[i].camberBend = 0; this.wheels[i].damageGrip = 1;
+            this.wheelDamage[i] = 0; this.wheelLost[i] = this.soloWheels && (i === 1 || i === 3); this.wheels[i].toeBend = 0; this.wheels[i].camberBend = 0; this.wheels[i].damageGrip = 1;
             this.wheels[i].shiftX = 0; this.wheels[i].shiftZ = 0;
             if(this.hubSphere[i] >= 0 && this.proxy3 && this.proxy3[this.hubSphere[i]]) this.proxy3[this.hubSphere[i]].disabled = false;
         }
@@ -1558,7 +1564,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         // the anti-roll bars push the wheel that is pushed in more down, and the other up
         var arbF = arbFront * (comp[1] - comp[0]);       // front: left minus right
         var arbR = arbRear * (comp[2] - comp[3]);        // rear: left minus right
-        var arbForce = [-arbF, arbF, arbR, -arbR];      // on FR, FL, RL, RR (in the order of the wheels)
+        var arbForce = self.soloWheels ? [0, 0, 0, 0] : [-arbF, arbF, arbR, -arbR];      // on FR, FL, RL, RR (in the order of the wheels); a motorcycle has no bar
 
         // the spring, the damper, the bump stop and the anti-roll bar: the force between the body and the wheel (positive pushes
         // the wheel out, away from the body), and the wheel moves on it against the tyre
@@ -1718,7 +1724,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var axle = wheel.front ? 0 : 1;
                 var rollCentre = wheel.front ? self.rollCentreFront : self.rollCentreRear;
                 var trackWidth = wheel.front ? self.front_track : self.rear_track;
-                var geometric = (wheel.right ? 1 : -1) * axleFy[axle] * rollCentre / trackWidth;
+                var geometric = self.soloWheels ? 0 : (wheel.right ? 1 : -1) * axleFy[axle] * rollCentre / trackWidth;        // (one wheel on an axle: nothing to move the load to)
                 var fzGrip = Math.max(0, fz + geometric);
                 // camber: the lean of the wheel to the left (its static camber, and the lean of the body in roll); a wheel that
                 // leans pushes towards the side it leans to, as if it had a slip angle
@@ -1942,7 +1948,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             wheelDrive[0] -= cLock / 2; wheelDrive[1] -= cLock / 2; wheelDrive[2] += cLock / 2; wheelDrive[3] += cLock / 2;
         }
         // Between the wheels of an axle. Left and right are given by the order of the wheels: 1 and 0 (front), 2 and 3 (rear).
-        if(self.diffType === "lsd") {
+        if(self.diffType === "lsd" && !self.soloWheels) {
             // the extra locking under power is for getting going and for tight turns: at speed the car stays calm (see the stability at 150 km/h)
             var calm = 1 - smoothstep(8, 25, Math.abs(u));
             for(var ax = 0; ax < 2; ax++) {
@@ -1972,7 +1978,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         }
 
         // ---- locked: the wheels of an axle (welded), or the axles (locked centre) turn at the same speed. The speed they get keeps the angular momentum.
-        if(self.diffType === "welded") {
+        if(self.diffType === "welded" && !self.soloWheels) {
             for(var ax2 = 0; ax2 < 2; ax2++) {
                 var wl = wheels[ax2 === 0 ? 1 : 2], wr = wheels[ax2 === 0 ? 0 : 3];
                 if(!wl.driven) continue;

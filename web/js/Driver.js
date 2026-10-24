@@ -1002,9 +1002,16 @@ OpenRacer.Driver = function (config, parent, steering) {
         }
         for (key in P) {
             var pt = P[key], fl = r.groundY(pt.p.x, pt.p.z) + pt.r;
-            // a floor that is suddenly much higher is a wall or a kerb (a barrier beside the grass): he stops against it, instead of being lifted onto it in one step
-            pt.wall = pt.floor > -1e8 && fl > pt.floor + 0.3;
-            if (!pt.wall) pt.floor = fl;
+            // a floor that is suddenly much higher is a wall or a kerb (a barrier beside the grass, the side of a ramp): he bounces back off it, instead of being lifted onto it in
+            // one step (he was frozen where he stood before, for good, and a body half on a ramp hung in the air with its limbs stiff)
+            if (pt.floor > -1e8 && fl > pt.floor + 0.3) {
+                var bx = pt.p.x - pt.q.x, bz = pt.p.z - pt.q.z;
+                pt.p.x = pt.q.x - 0.3 * bx; pt.p.z = pt.q.z - 0.3 * bz;
+                pt.q.x = pt.p.x + 0.3 * bx; pt.q.z = pt.p.z + 0.3 * bz;
+                fl = r.groundY(pt.p.x, pt.p.z) + pt.r;
+                if (fl > pt.floor + 0.3) fl = pt.floor;                                  // (still against it: the old floor stays this frame)
+            }
+            pt.floor = fl;
         }
         var most = 0;
         if (!r.started) { r.started = true; for (key in P) P[key].q.copy(P[key].p).addScaledVector(P[key].v, -h); }      // (the speed in the length of the first substep)
@@ -1035,7 +1042,6 @@ OpenRacer.Driver = function (config, parent, steering) {
                 var touching = 0;
                 for (key in P) {
                     var g = P[key];
-                    if (g.wall) { g.p.x = g.q.x; g.p.z = g.q.z; }
                     if (g.p.y < g.floor) {
                         g.p.y = g.floor;
                         if (g.q.y < g.floor) g.q.y = g.floor; else g.q.y = g.floor + (g.q.y - g.floor) * 0.2;      // the fall is taken (a little bounce)

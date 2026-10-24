@@ -249,8 +249,9 @@ OpenRacer.Motorcycle = function (settings) {
     // in a bend the front brake stands the bike up, so it is hardly used (a rider uses the rear brake): from 8 to 30 degrees of lean it goes to a tenth
     this.brakeScale = function (v, wheel) {
         if (self.crashed) return 0;
-        if(!wheel.front) return self.rearBrake;
-        return self.frontBrake * (1 - 0.9 * smooth(8 * DEG, 30 * DEG, Math.abs(v.lean)));
+        var solo = v.soloWheels ? 2 : 1;                                   // (one wheel on an end has the brakes of both)
+        if(!wheel.front) return self.rearBrake * solo;
+        return self.frontBrake * (1 - 0.9 * smooth(8 * DEG, 30 * DEG, Math.abs(v.lean))) * solo;
     };
 
     // ---- hook: the body of the bike does not touch the road in a lean (it is no crash until the bike is nearly on its side)
