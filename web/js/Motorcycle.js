@@ -271,7 +271,8 @@ OpenRacer.Motorcycle = function (settings) {
     };
 
     // ---- hook: the body of the bike does not touch the road in a lean (it is no crash until the bike is nearly on its side)
-    this.keepBodyOff = function (v) { return !self.crashed && Math.abs(v.lean) < 1.15; };
+    // (a bike that lost its front or its rear wheel has nothing to stand on there: its spheres touch the road, or it falls through it)
+    this.keepBodyOff = function (v) { return !self.crashed && Math.abs(v.lean) < 1.15 && !(v.wheelLost && (v.wheelLost[0] || v.wheelLost[2])); };
 
     // ---- hook: the rider and the tyres; the forces and the torques of the physics are added to
     this.apply = function (v, force, torque, dt, c) {
@@ -304,9 +305,11 @@ OpenRacer.Motorcycle = function (settings) {
             // a spin: the bike turns about its vertical faster than 4 rad/s at speed (a jump landed on a lean: the front took the hit with the rear in the air, and the bike was
             // thrown round in a tenth of a second and went on backwards at 100 km/h)
             var spin = Math.abs(v.wy || 0) > 4 && Math.abs(u) > 5;
-            if (Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) || (self.limp && Math.abs(u) < 0.5) || over || lowside || spin || aMag > 3.5 * G || (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) || wall) {
+            // a wheel torn off (the soft body, Vehicle.js loseWheel): nobody rides a bike on one wheel
+            var lostWheel = !!(v.wheelLost && (v.wheelLost[0] || v.wheelLost[2]));
+            if (lostWheel || Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) || (self.limp && Math.abs(u) < 0.5) || over || lowside || spin || aMag > 3.5 * G || (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) || wall) {
                 self.crashed = true;
-                self.crashReason = Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) ? "lean" : (self.limp && Math.abs(u) < 0.5) ? "limp-still" : over ? "over" : lowside ? "lowside" : spin ? "spin" : aMag > 3.5 * G ? "accel " + (aMag / G).toFixed(1) + "g" : (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) ? "lateral" : hit ? "hit " + (speedOld - speedNow).toFixed(1) : "wall";     // (for the debugging)
+                self.crashReason = lostWheel ? "wheel" : Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) ? "lean" : (self.limp && Math.abs(u) < 0.5) ? "limp-still" : over ? "over" : lowside ? "lowside" : spin ? "spin" : aMag > 3.5 * G ? "accel " + (aMag / G).toFixed(1) + "g" : (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) ? "lateral" : hit ? "hit " + (speedOld - speedNow).toFixed(1) : "wall";     // (for the debugging)
                 var before = wall && v.lastWall && v.lastWall.v ? v.lastWall.v : null;
                 self.crashSpeed = before ? { x: before[0], y: before[1], z: before[2] } : { x: v.vx, y: v.vy, z: v.vz };
             }
