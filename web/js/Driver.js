@@ -783,8 +783,17 @@ OpenRacer.Driver = function (config, parent, steering) {
         keptParent = self.root.parent; keptPos.copy(self.root.position); keptQuat.copy(self.root.quaternion);
         var top = self.root; while (top.parent) top = top.parent;
         self.root.updateMatrixWorld(true);
+        // where the joints are now, in the pose he has (the particles start there, and their speed is measured from where they were a frame ago)
+        var B = self.bones, now = {}, wp = function (bone) { return now[bone.uuid] ? now[bone.uuid].clone() : bone.getWorldPosition(new V()); };
+        var parentQuat = new Q(), localNow = {}, parentOf = self.root.parent;
+        if (parentOf) parentOf.getWorldQuaternion(parentQuat);
+        [B.hips, B.armL[0], B.armL[1], B.armL[2], B.armR[0], B.armR[1], B.armR[2], B.legL[0], B.legL[1], B.legL[2], B.legR[0], B.legR[1], B.legR[2], B.head].forEach(function (bone) {
+            if (!bone) return;
+            now[bone.uuid] = bone.getWorldPosition(new V());
+            if (parentOf) localNow[bone.uuid] = parentOf.worldToLocal(now[bone.uuid].clone());
+        });
         top.attach(self.root);
-        // the limbs loose: every bone in its rest pose, and the particles where the joints are now
+        // the limbs loose: every bone in its rest pose (the skeleton is posed on the particles from here on)
         rest.forEach(function (q, bone) { bone.quaternion.copy(q); });
         self.root.updateMatrixWorld(true);
         var y0 = self.root.position.y;
@@ -792,7 +801,6 @@ OpenRacer.Driver = function (config, parent, steering) {
             if (ground && ground.firstHit) { var d = ground.firstHit(x, y0 + 20, z, 0, -1, 0, 100); if (d < 100) return y0 + 20 - d; }
             return y0 - 0.6;
         };
-        var B = self.bones, wp = function (bone) { return bone.getWorldPosition(new V()); };
         var P = {};
         P.hips = particle(wp(B.hips), 0.13);
         P.shL = particle(wp(B.armL[0]), 0.1); P.elL = particle(wp(B.armL[1]), 0.06); P.haL = particle(wp(B.armL[2]), 0.05);
@@ -811,17 +819,30 @@ OpenRacer.Driver = function (config, parent, steering) {
             mins.push({ a: P[c[0]], b: P[c[2]], len: len * (k < 2 ? 0.3 : 0.45) });            // an arm or a leg folds no further than this
         });
         // the frame of the torso in the space of the root (the root is put on the particles from it)
-        var toLocal = function (v) { return self.root.worldToLocal(v.clone()); };
-        var frame = { up: toLocal(P.chest.p).sub(toLocal(P.hips.p)).normalize(), side: toLocal(P.shL.p).sub(toLocal(P.shR.p)) };
+        // (from the bones in their rest pose, not from the particles: the posture bent the torso a little, and the skeleton is posed on the particles from the rest pose)
+        var toLocal = function (bone) { return self.root.worldToLocal(bone.getWorldPosition(new V())); }, restChest = toLocal(B.armL[0]).add(toLocal(B.armR[0])).multiplyScalar(0.5);
+        var frame = { up: restChest.clone().sub(toLocal(B.hips)).normalize(), side: toLocal(B.armL[0]).sub(toLocal(B.armR[0])) };
         frame.side.addScaledVector(frame.up, -frame.side.dot(frame.up)).normalize();
         // the speed: the bike's, a little upwards, and a tumble about the hips
-        var vel = velocity.clone(), spin = new V();
-        if (!options.onBike) {
-            vel.y += 2.5;
-            spin.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(2 + Math.min(6, vel.length() * 0.15));
+        // the speed of every part: the one it has, so that nothing is thrown harder than it was going: the speed of the bike at that place (its speed and its turn, from the physics:
+        // bike), and the rider's own movement on it (measured from where the joint was a frame ago, in the frame of the bike, at most 5 m/s); the speed given where there is no bike
+        var vel = velocity.clone(), vi = new V(), arm = new V(), bike = options.bike, jointOf = { hips: B.hips, shL: B.armL[0], elL: B.armL[1], haL: B.armL[2], shR: B.armR[0], elR: B.armR[1], haR: B.armR[2], hiL: B.legL[0], knL: B.legL[1], ftL: B.legL[2], hiR: B.legR[0], knR: B.legR[1], ftR: B.legR[2] };
+        for (var key in P) {
+            var bone = jointOf[key], was = bone && jointsBefore[bone.uuid], nowL = bone && localNow[bone.uuid];
+            P[key].v.copy(vel);
+            if (bike && typeof bike.wx === "number") {
+                arm.set(P[key].p.x - bike.px, P[key].p.y - bike.py, P[key].p.z - bike.pz);
+                P[key].v.set(bike.vx + (bike.wy * arm.z - bike.wz * arm.y), bike.vy + (bike.wz * arm.x - bike.wx * arm.z), bike.vz + (bike.wx * arm.y - bike.wy * arm.x));
+            }
+            if (was && nowL && jointsDt > 0 && !options.playback) {
+                vi.copy(nowL).sub(was).divideScalar(jointsDt);
+                var own = vi.length();
+                if (own > 5) vi.multiplyScalar(5 / own);
+                P[key].v.add(vi.applyQuaternion(parentQuat));
+            }
         }
-        var arm = new V(), vi = new V();
-        for (var key in P) { arm.subVectors(P[key].p, P.hips.p); P[key].v.crossVectors(spin, arm).add(vel); }
+        P.chest.v.copy(P.shL.v).add(P.shR.v).multiplyScalar(0.5);
+        P.head.v.copy(P.chest.v);
         ragdoll = { pts: P, sticks: sticks, mins: mins, groundY: groundY, frame: frame, asleep: 0, time: 0, started: false, bike: options.bike || null, playback: !!options.playback, spheres: new Float64Array(8 * 256), sphereCount: 0, centre: new V(), fresh: !!options.bike, seated: !!options.onBike };
         ragdoll.centre.copy(P.hips.p);
     };
@@ -851,6 +872,19 @@ OpenRacer.Driver = function (config, parent, steering) {
         self.root.scale.setScalar(1);
         rest.forEach(function (q, bone) { bone.quaternion.copy(q); });
     };
+    // where the joints were a frame ago (in the frame of the car), for the rider's own movement in the speed that every part of the ragdoll starts with
+    var jointsBefore = {}, jointsDt = 0;
+    function trackJoints(dt) {
+        var B = self.bones;
+        if (!B.hips || !self.complete()) return;
+        var parent = self.root.parent;
+        if (!parent) return;
+        [B.hips, B.armL[0], B.armL[1], B.armL[2], B.armR[0], B.armR[1], B.armR[2], B.legL[0], B.legL[1], B.legL[2], B.legR[0], B.legR[1], B.legR[2]].forEach(function (bone) {
+            var v = jointsBefore[bone.uuid] || (jointsBefore[bone.uuid] = new V());
+            parent.worldToLocal(bone.getWorldPosition(v));                       // (in the frame of the car: the rider's own movement, not the car's)
+        });
+        jointsDt = dt;
+    }
     var rgUp = new V(), rgSide = new V(), rgFwd = new V(), rgM = new THREE.Matrix4(), rgM0 = new THREE.Matrix4(), rgQ = new Q(), rgQ0 = new Q(), rgD = new V();
     // the spheres of the bike that are near the body this frame: [x, y, z, r, vx, vy, vz] each, from Vehicle.sphereWorld
     function bikeSpheres(r) {
@@ -978,6 +1012,9 @@ OpenRacer.Driver = function (config, parent, steering) {
                 q.q.copy(q.p);
                 q.p.x += vx * 0.998; q.p.y += vy * 0.998 - 9.81 * h * h; q.p.z += vz * 0.998;
             }
+            // the spheres of the bike go on with their speed within the frame (they are found once a frame; a bike at 25 m/s moves 10 cm a substep, and a particle held to a sphere that
+            // stood still for the frame was dragged back every substep: that was a ragdoll that shook at speed)
+            if (s > 0) for (var si2 = 0; si2 < r.sphereCount; si2++) { var o2 = 8 * si2; r.spheres[o2] += r.spheres[o2 + 4] * h; r.spheres[o2 + 1] += r.spheres[o2 + 5] * h; r.spheres[o2 + 2] += r.spheres[o2 + 6] * h; }
             for (var it = 0; it < 5; it++) {
                 if (r.sphereCount) for (key in P) bikeContact(P[key], r, h);
                 for (var i = 0; i < r.sticks.length; i++) {
@@ -1043,6 +1080,7 @@ OpenRacer.Driver = function (config, parent, steering) {
     this.update = function (dt, throttle, brake, state) {
         if (!self.model || !self.complete()) return;
         if (ragdoll) { ragdollStep(Math.min(0.05, dt || 0.016)); return; }
+        trackJoints(dt || 0.016);                                                   // (the pose of the last frame, before this one moves it)
         self.posture = (state && state.posture) || null;
         applyPosture();
         self.root.updateMatrixWorld(true);

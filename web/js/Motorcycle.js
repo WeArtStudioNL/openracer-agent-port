@@ -32,7 +32,9 @@ OpenRacer.Motorcycle = function (settings) {
     var G = 9.81, DEG = Math.PI / 180;
     var self = this;
     this.settings = s;
-    this.maxLean = (s.max_lean_deg || 50) * DEG;
+    this.maxLean = (s.max_lean_deg || 60) * DEG;
+    this.overLean = (s.over_lean_deg !== undefined ? s.over_lean_deg : 10) * DEG;   // how far past what the tyres hold the rider can lean it: past that the tyres let go (a lowside)
+    this.crashLean = (s.crash_lean_deg || 63) * DEG;                                   // from here the bike is down
     this.balance = s.balance || 1;
     this.leanResponse = s.lean_response || 0.1;          // s: how fast the lean follows what is asked
     this.camberThrust = s.camber_thrust !== undefined ? s.camber_thrust : 0.85;     // the part of load * tan(lean) that a leaned tyre gives by itself (a round tyre: nearly all of it)
@@ -143,7 +145,7 @@ OpenRacer.Motorcycle = function (settings) {
         var speedMax = self.maxLean - (self.maxLean - 18 * DEG) * smooth(self.fastFrom, self.fastFrom + 22, Math.abs(u));
         // the tyres have so much grip, and what they give along the bike (the engine, the air, the brake: how much the speed goes down) they cannot give sideways: the circle of grip
         var aLong = Math.max(0, -(accel.x * state.fx + accel.z * state.fz)), gripMax = self.gripG * G;
-        speedMax = Math.min(speedMax, Math.atan(Math.sqrt(Math.max(0, gripMax * gripMax - aLong * aLong)) / G));
+        speedMax = Math.min(speedMax, Math.atan(Math.sqrt(Math.max(0, gripMax * gripMax - aLong * aLong)) / G) + self.overLean);     // (a little past the grip: that is the lowside)
         var phiMax = speedMax + epsFull;
         var want = -c * Math.min(phiMax, cap) * fast;
         // at a standstill the rider puts the right foot down and the bike rests against it, a little to the right; on the gas the foot comes back up in two seconds
@@ -255,7 +257,7 @@ OpenRacer.Motorcycle = function (settings) {
             var old = hist[0], lost = Math.sqrt((v.vx - old.x) * (v.vx - old.x) + (v.vz - old.z) * (v.vz - old.z));
             var hit = lost > 8 && Math.sqrt(old.x * old.x + old.z * old.z) > 5.5;
             if (hit && !wall) { wall = true; v.lastWall = v.lastWall || {}; v.lastWall.v = [old.x, 0, old.z]; }
-            if (Math.abs(state.lean) > (self.limp ? 0.7 : 1.3) || aMag > 3.5 * G || (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) || wall) {
+            if (Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) || aMag > 3.5 * G || (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) || wall) {
                 self.crashed = true;
                 var before = wall && v.lastWall && v.lastWall.v ? v.lastWall.v : null;
                 self.crashSpeed = before ? { x: before[0], y: before[1], z: before[2] } : { x: v.vx, y: v.vy, z: v.vz };

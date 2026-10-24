@@ -14,6 +14,8 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 - The limp rider (the key 9) now brings the bike down: the castor of the front wheel is not quite enough to hold it, it leans within a second, he slides off past 30 degrees, and a bike with nobody on it goes down as a body; below 30 km/h it just falls over.
 - The crash limits are wider (a hard brake in a bend threw the rider at once): 3.5 g of acceleration (was 2.8), 3 g sideways (was 2.2), 74 degrees of lean (was 69), a hit of 8 m/s in a tenth of a second (was 6).
 - **ESC is off on a motorcycle**: it took the small angle of the front wheel in a bend for oversteer and braked the front, which broke the bike away on the brakes at speed.
+- **Every part starts with the speed it has**: the speed of the bike at that place (its speed and its turn) and the rider's own movement on it, measured from the frame before (at most 5 m/s); no kick upwards and no random tumble any more. The spheres of the bike move on with their speed within a frame (a rider held to a bike at 25 m/s shook, as the spheres stood still for the frame).
+- **Leaning too far is a lowside**: the rider can ask about 10 degrees more lean than the tyres hold (`over_lean_deg`), the tyres let go past that and the bike goes down past 63 degrees (`crash_lean_deg`; the default `max_lean_deg` is 60). Holding full lean at 110 or 160 km/h puts it down in about two seconds.
 - **The replay shows the ragdoll**: the places of the particles are recorded every sample while the rider is one, and a replay file (version 4) keeps them; a file from before opens as it did.
 
 **Car editor: orthographic view and standard views**
