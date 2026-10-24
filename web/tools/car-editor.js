@@ -631,7 +631,7 @@ function meanTyre(c) {
 function isBike() { return $("vehicleType").value === "motorcycle"; }
 // The type of the vehicle: a motorcycle shows only what a motorcycle has (the parts of the form marked carOnly go, the bikeOnly ones come), its wheels are one at each
 // end (the Front left and Rear left selects; the right slots are kept the same, the physics has a pair 4 cm apart), the drive is to the rear wheel through a welded diff
-const BIKE_DEFAULTS = { max_lean_deg: 52, fast_lean_deg: 30, rake_deg: 24.5, rider_mass: 80, hang_off: 0.3, max_lateral_g: 0.9, balance: 1 };
+const BIKE_DEFAULTS = { max_lean_deg: 52, fast_lean_deg: 30, rake_deg: 24.5, rider_mass: 80, hang_off: 0.3, max_lateral_g: 0.9, balance: 1, fork_dive: 1 };
 function applyTypeUI() {
     const bike = isBike();
     document.body.classList.toggle("bike", bike);
@@ -650,11 +650,11 @@ function syncBikeWheels() {
 function fillBike(m) {
     const v = Object.assign({}, BIKE_DEFAULTS, m || {});
     $("bikeMaxLean").value = v.max_lean_deg; $("bikeFastLean").value = v.fast_lean_deg; $("bikeRake").value = v.rake_deg;
-    $("bikeRiderMass").value = v.rider_mass; $("bikeHangOff").value = v.hang_off; $("bikeMaxLatG").value = v.max_lateral_g; $("bikeBalance").value = v.balance;
+    $("bikeRiderMass").value = v.rider_mass; $("bikeHangOff").value = v.hang_off; $("bikeMaxLatG").value = v.max_lateral_g; $("bikeBalance").value = v.balance; $("bikeForkDive").value = v.fork_dive;
 }
 function readBike() {
     const n = (id, key) => { const x = parseFloat($(id).value); return Number.isFinite(x) ? x : BIKE_DEFAULTS[key]; };
-    return { max_lean_deg: n("bikeMaxLean", "max_lean_deg"), fast_lean_deg: n("bikeFastLean", "fast_lean_deg"), rake_deg: n("bikeRake", "rake_deg"), rider_mass: n("bikeRiderMass", "rider_mass"), hang_off: n("bikeHangOff", "hang_off"), max_lateral_g: n("bikeMaxLatG", "max_lateral_g"), balance: n("bikeBalance", "balance") };
+    return { max_lean_deg: n("bikeMaxLean", "max_lean_deg"), fast_lean_deg: n("bikeFastLean", "fast_lean_deg"), rake_deg: n("bikeRake", "rake_deg"), rider_mass: n("bikeRiderMass", "rider_mass"), hang_off: n("bikeHangOff", "hang_off"), max_lateral_g: n("bikeMaxLatG", "max_lateral_g"), balance: n("bikeBalance", "balance"), fork_dive: n("bikeForkDive", "fork_dive") };
 }
 $("vehicleType").addEventListener("change", applyTypeUI);
 ["wFL", "wRL"].forEach((id) => $(id).addEventListener("change", syncBikeWheels));
@@ -2077,6 +2077,7 @@ async function startBench() {
     // the shell and the parts of the car, as the game makes them when it has loaded the model (CollisionProxy.js)
     bench.obj = { vehicle: v, wheels: v.wheels, config, bodyLift: null };
     try { OpenRacer.CollisionProxy.apply(bench.obj, model, bench.modelMid); } catch (e) { console.warn("soft body: " + e.message); }
+    if (OpenRacer.setForkGeometry) OpenRacer.setForkGeometry(v, model, config);
     bench.vehicle = v; bench.model = model; bench.input = input; bench.config = config; bench.script = null; bench.last = performance.now();
     syncBenchVisibility();
     if (driverEditor) driverEditor.attachToBench(model.tilt);       // the driver goes with the car that is tested

@@ -434,8 +434,18 @@ function findSwingarm(root, space, measured) {
     var length = Math.hypot(axle.y - pivot.y, axle.z - pivot.z);
     if(!(length > 0.1)) return null;
     var q = part.getWorldQuaternion(new THREE.Quaternion());
-    return { object: part, rest: part.quaternion.clone(), axis: new THREE.Vector3(1, 0, 0).applyQuaternion(q.invert()).normalize(), length: length, pivotZ: pivot.z, axleZ: axle.z };
+    // (the tangent of the arc of the axle, up: (ry, -rz) / length in (forward, up) when the pivot is in front of the axle; slope = forward over up)
+    var slope = pivot.z > axle.z ? (axle.y - pivot.y) / (pivot.z - axle.z) : 0;
+    return { object: part, rest: part.quaternion.clone(), axis: new THREE.Vector3(1, 0, 0).applyQuaternion(q.invert()).normalize(), length: length, pivotZ: pivot.z, axleZ: axle.z, slope: slope };
 }
+// The slope of the travel of the fork and of the swingarm for the physics (Vehicle.js, forkSlope and swingSlope): the fork from its axis, the swingarm from its pivot and the axle
+OpenRacer.setForkGeometry = function(vehicle, model, config) {
+    if(!vehicle || !model || !vehicle.soloWheels) return;
+    vehicle.forkSlope = model.head ? model.head.axis.z / model.head.axis.y : 0;
+    vehicle.swingSlope = model.swingarm ? model.swingarm.slope : 0;
+    var m = config && config.motorcycle;
+    vehicle.forkDive = m && m.fork_dive !== undefined ? Math.max(0, m.fork_dive) : 1;
+};
 OpenRacer.updateSwingarm = function(arm, rear, body) {
     if(!arm || !rear || !rear.object) return;
     var up = (rear.restLengthWheel || 0) - (rear.susLength || 0);                       // how far the wheel is up from where it sits at rest

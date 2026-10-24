@@ -1009,6 +1009,11 @@ OpenRacer.Vehicle = function (parameters, input) {
     // A motorcycle has two wheels: the second wheel of each pair (1 and 3) is a lost wheel for good: no road, no spring, no drive (torqueShares), no brake; the wheel that stays
     // carries the whole end (layout: twice the mass and the rate of a wheel of a pair). The pair on a 4 cm track held the bike up at a standstill, as a sidecar does.
     this.soloWheels = !!parameters.motorcycle;
+    // The geometry of the fork and of the swingarm of a motorcycle (Car.js sets them from the model): the wheel does not move straight up, it moves along the fork (up and back) and on
+    // the arc of the swingarm (the tangent of it). For a travel direction t (forward z, up y) a force on the wheel along the road, Fx, loads the spring with Fx t.z / t.y on top of the
+    // vertical force: under the brake the fork dives (forkSlope = -tan rake, so a force backwards gives a positive load), and on a swingarm whose pivot is above the axle the drive force
+    // lifts the rear (anti-squat). The body gets the same total force as before: only how far the spring is pushed in changes. forkDive scales it (car.json motorcycle.fork_dive, 0: off).
+    this.forkSlope = 0; this.swingSlope = 0; this.forkDive = 1;
     if(this.soloWheels) this.wheelLost = [false, true, false, true];
     this.wheelSpinAtLoss = [0, 0, 0, 0];              // rad/s, for the wheel that flies off
     this.hubNode = [-1, -1, -1, -1];                  // the node of the shell that is the hub of a wheel (front wheels), CollisionProxy.js
@@ -1616,10 +1621,13 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var cTot = cUse + (ws.susLength < ws.minLength || ws.susLength > ws.freeLength ? stopDamping : 0);
                 var bumpSpring = ws.susLength < ws.minLength ? stopRate * (ws.minLength - ws.susLength) : 0, droopSpring = ws.susLength > ws.freeLength ? -stopRate * (ws.susLength - ws.freeLength) : 0;
                 var fs0 = rateS * comp[si] + progressive + bumpSpring + droopSpring + arbForce[si];
-                var accel0 = (fs0 - tyreLoad[si]) / self.unsprungMass + gDown - lastBodyAccDown;
+                // the part of the road force along the wheel that goes along the travel (the force of the last step, a little smoothed: the brake and the ABS make it jump)
+                var slopeS = ws.front ? self.forkSlope : self.swingSlope, staticS = ws.staticLoad || 1500;
+                ws.feLoad = (ws.feLoad || 0) + (Math.max(-1.5 * staticS, Math.min(1.5 * staticS, self.forkDive * slopeS * (ws.fxLast || 0))) - (ws.feLoad || 0)) * Math.min(1, dt / 0.03);
+                var accel0 = (fs0 - tyreLoad[si] - ws.feLoad) / self.unsprungMass + gDown - lastBodyAccDown;
                 ws.susVel = (ws.susVel + accel0 * dt) / (1 + cTot * dt / self.unsprungMass);
                 fs = fs0 - cTot * ws.susVel;
-                springForce[si] = self.wheelLost[si] ? 0 : fs;
+                springForce[si] = self.wheelLost[si] ? 0 : fs - ws.feLoad;       // (the body gets the vertical force that the tyre gave: the rest goes through the rigid part of the fork)
                 ws.susLength += ws.susVel * dt;
             } else {
             fs = rateS * comp[si] + progressive + damperS + bumpS + droopS + arbForce[si];
@@ -1839,6 +1847,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 // a little damping on the slip speed keeps a nearly stationary wheel from ringing
                 fxW += 400 * Math.max(-0.3, Math.min(0.3, wheel.omega * wheel.radius - vl));
                 tyreTorque[iw] = -fxW * wheel.radius;
+                wheel.fxLast = fxW;                                       // (the forward force of the road on the wheel, for the geometry of the fork and the swingarm)
 
                 // rolling resistance (more on soft ground), not a torque on the wheel
                 var rr = wheel.rollingResistance * tc.rolling * (wheel.pressureRoll || 1) * (surface.drag ? surface.drag * (surface.loose && tc.looseRolling ? tc.looseRolling : 1) : (surface.static < 0.8 ? 4 * (surface.loose && tc.looseRolling ? tc.looseRolling : 1) : 1)) * fz * Math.tanh(vl / 0.3);

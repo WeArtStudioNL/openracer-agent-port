@@ -175,6 +175,7 @@ OpenRacer.Car = function( config, domElement ) {
         tobj.rig = model.rig || null; // the moving parts of the suspension and the steering of the model, when it has them
         tobj.head = model.head || null;   // the front end of a motorcycle that stays and turns (CarLoader.js)
         tobj.swingarm = model.swingarm || null;   // the swingarm of a motorcycle, which turns with the rear wheel (CarLoader.js)
+        if(OpenRacer.setForkGeometry) OpenRacer.setForkGeometry(tobj.vehicle, model, config);
         tobj.followModelWheels(model.measured);
         tobj.body.add(model.tilt);
         scene.add(tobj.body);
