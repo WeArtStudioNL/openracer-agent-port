@@ -6,7 +6,7 @@ A racing simulator that runs in the browser. It simulates the whole car (a body 
 
 **Join the community on [Discord](https://discord.gg/JFgHVFUagF)** to share setups, cars and tracks, ask for help and talk about development.
 
-Released under the GPLv3 License.
+Released under the GPLv3 License. Some models come from others under their own licence (Creative Commons): see [CREDITS.md](CREDITS.md).
 
 ## About this fork
 This is a fork of [digi-chris/OpenRacer](https://github.com/digi-chris/OpenRacer) by Chris Barnard, the open-source initiative that began the game: the demo Mustang, its first track and the first version of the driving model. This fork takes it much further: the vehicle physics, the race format, the input (including racing wheels with force feedback), the editors, the engine sound and the local garage were built here.
