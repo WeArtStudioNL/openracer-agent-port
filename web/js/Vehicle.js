@@ -685,7 +685,8 @@ OpenRacer.Vehicle = function (parameters, input) {
         this.drivelineRPM = Math.abs(drivenOmega) * ratio * 30 / Math.PI;
 
         // automatic gearbox
-        if(!inp.manualGearbox && !inp.reverse && !inp.neutral) {
+        // (not in a burnout of a motorcycle: the gear is held, the wheel is meant to spin)
+        if(!inp.manualGearbox && !inp.reverse && !inp.neutral && !(self.controller && self.controller.burnout > 0.5)) {
             var g = inp.current_gear;
             var thr = inp.throttle;
             // the engine speed the road speed asks for in this gear: spinning wheels must not cause a shift
@@ -1766,7 +1767,9 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var strip = Math.abs(vl) / 0.15 + 0.15;                                  // 1/s: how fast the strip is replaced (the patch is about 15 cm long) or cools
                 wheel.roadT += (((1 - SURFACE_SHARE) * burnt / ROAD_CAPACITY) - (wheel.roadT - self.ambient) * strip) * dt;
                 wheel.roadT = Math.max(self.ambient, Math.min(300, wheel.roadT));
-                var share = SURFACE_SHARE + 0.3 * Math.min(1, (wheel.roadT - self.ambient) / 150);
+                // a tyre that spins on a car that stands (a burnout) keeps its heat: the strip of road under it is not replaced and the rubber that melts stays on the tread
+                var spinHot = smoothstep(4, 14, wheel.omega * wheel.radius - vl) * (1 - smoothstep(1, 3, Math.abs(vl)));
+                var share = SURFACE_SHARE + 0.3 * Math.min(1, (wheel.roadT - self.ambient) / 150) + 0.3 * spinHot;
                 wheel.surfT += (share * burnt / SURFACE_CAPACITY - (wheel.surfT - wheel.temp) / SURFACE_TAU) * dt;
                 wheel.surfT = Math.max(wheel.temp, Math.min(330, wheel.surfT));
                 if(wheel.surface === "road" || wheel.surface === "track01") {

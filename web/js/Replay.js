@@ -387,7 +387,7 @@ OpenRacer.Replay = (function() {
         var w = rec.wheels;
         for(var k2 = 0; k2 < 4; k2++) {
             var wheel = v.wheels[k2];
-            if(v.wheelLost) v.wheelLost[k2] = w[5 * k2] > 0.5;
+            if(v.wheelLost) v.wheelLost[k2] = w[5 * k2] > 0.5 || (v.soloWheels && (k2 === 1 || k2 === 3));      // (a motorcycle: two wheels, also in a recording from before it had them)
             wheel.toeBend = w[5 * k2 + 1]; wheel.camberBend = w[5 * k2 + 2]; wheel.shiftX = w[5 * k2 + 3]; wheel.shiftZ = w[5 * k2 + 4];
         }
     }
@@ -1031,7 +1031,7 @@ OpenRacer.Replay = (function() {
             if(entry.live && v.softBody) {
                 v.softBody.syncDisplacement();
                 var w = entry.live.wheels;
-                for(var k = 0; k < 4; k++) { if(v.wheelLost) v.wheelLost[k] = w[5 * k] > 0.5; v.wheels[k].toeBend = w[5 * k + 1]; v.wheels[k].camberBend = w[5 * k + 2]; v.wheels[k].shiftX = w[5 * k + 3]; v.wheels[k].shiftZ = w[5 * k + 4]; }
+                for(var k = 0; k < 4; k++) { if(v.wheelLost) v.wheelLost[k] = w[5 * k] > 0.5 || (v.soloWheels && (k === 1 || k === 3)); v.wheels[k].toeBend = w[5 * k + 1]; v.wheels[k].camberBend = w[5 * k + 2]; v.wheels[k].shiftX = w[5 * k + 3]; v.wheels[k].shiftZ = w[5 * k + 4]; }
                 entry.live = null;
             }
         });
