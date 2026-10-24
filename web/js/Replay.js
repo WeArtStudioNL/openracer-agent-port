@@ -89,13 +89,22 @@ OpenRacer.Replay = (function() {
         v.vx = array[offset + P.vx]; v.vy = array[offset + P.vy]; v.vz = array[offset + P.vz];
         v.steerApplied = array[offset + P.steer];
         object.throttle = array[offset + P.throttle]; object.brakePedal = array[offset + P.brake];      // (the driver model works the pedals)
+        // the squeal of the tyres (the sound, EngineSound.setTyres): not recorded, so read from the sample: the slip of the body sideways (a spinning or a locked wheel is not seen:
+        // the spin is an angle that is interpolated, no speed can be read from it)
+        var fwd = rotateZ(v.qx, v.qy, v.qz, v.qw), u = v.vx * fwd.x + v.vz * fwd.z, side = -v.vx * fwd.z + v.vz * fwd.x, speed = Math.hypot(v.vx, v.vz);
+        var slipBody = speed > 3 ? Math.abs(Math.atan2(side, Math.max(Math.abs(u), 1))) : 0;
+        v.squeal = smoothstep(0.1, 0.3, slipBody) * smoothstep(3, 8, speed);
         for(var k = 0; k < 4; k++) {
             var w = v.wheels[k], o = offset + FIELDS + k * WHEEL_FIELDS;
             w.center.x = array[o]; w.center.y = array[o + 1]; w.center.z = array[o + 2];
             w.spin = array[o + 3];
             w.visualLength = array[o + 4];
+            w.squeal = v.wheelLost && v.wheelLost[k] ? 0 : v.squeal;
         }
     }
+    function smoothstep(lo, hi, x) { var t = Math.max(0, Math.min(1, (x - lo) / (hi - lo))); return t * t * (3 - 2 * t); }
+    var rotZTmp = { x: 0, y: 0, z: 0 };
+    function rotateZ(qx, qy, qz, qw) { rotZTmp.x = 2 * (qx * qz + qw * qy); rotZTmp.y = 2 * (qy * qz - qw * qx); rotZTmp.z = 1 - 2 * (qx * qx + qy * qy); return rotZTmp; }
 
     // ---- the soft body: the shell, the loose parts and the wheels that are bent or torn off (SOFTBODY.md, M4)
     //
@@ -416,6 +425,8 @@ OpenRacer.Replay = (function() {
             if(object.vehicle.controller && object.vehicle.controller.replayStep) object.vehicle.controller.replayStep(object.vehicle, delta || 0, object.throttle || 0, object.brakePedal || 0);
             showRider(entry, time);
             if(entry.player) object.updateVisuals(delta);
+            // the squeal of the tyres of the player (Car.update is not run in a replay, which is where the game feeds it)
+            if(entry.player && typeof EngineSound !== "undefined" && EngineSound.setTyres) EngineSound.setTyres(playing && !scrubbing ? object.vehicle.squeal || 0 : 0, Math.abs(object.vehicle.u || 0));
             else object.updateVisuals();
             if(i === 0) player = { rpm: scratch[P.rpm], throttle: scratch[P.throttle], brake: scratch[P.brake], gear: gearLabels[scratch[P.gear] | 0] || "", speed: Math.hypot(scratch[P.vx], scratch[P.vz]) };
         }

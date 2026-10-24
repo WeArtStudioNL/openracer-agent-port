@@ -11,6 +11,8 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 **After the first drive**
 - The brakes: the rear keeps at least 22 % of its load while a lean is asked for or the bike leans or slides (a rear with no load has no grip sideways), and both brakes come off as the slip of the bike grows past 5 degrees, as the cornering ABS of a modern bike does. A hard brake with a little steering at 180 km/h still slides; that goes deeper, into the rear tyre under the brakes, and is an open point.
 - The tyres squeal later on a motorcycle (the camber of its tyres carries a bend).
+- On the brakes the rider holds the bars harder (the hold on the yaw is up to three times as strong, 9 000 N m): with the rear nearly off the road the front alone turned the bike 14 degrees out of line in a second at 145 km/h.
+- A lowside: a bike that slides sideways past 15 degrees for half a second while it leans goes down (it crabbed along for seconds at the limit of the lean).
 - A bike that is down slides with a steady 0.6 g of friction and the rider with 0.55 g, so they slide together (the bike lost its speed as a share of it, 3 g at first, and caught the rider up from behind at full speed; that was the rider that "shot off the bike").
 - The version is 2.2.0-dev, so that every browser loads the new scripts (the ?v= of the scripts is the version).
 - The front of a wheelie comes down without the bounce: the fork and the shock of a motorcycle have no blow-off (the damper of a car lets go past 0.3 m/s, and the spring threw the bike 2.6 m/s back up after a wheelie to the vertical) and hold the rebound a quarter more. Their damper, and the damping of the stops, is solved implicitly, so it is stable at any strength: the one wheel of an end has twice the spring of a wheel of a pair, and the explicit damper rang at 240 Hz and blew up on a hard landing or on the brakes.
@@ -93,6 +95,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 - Every clip of the video editor has a camera of its own: the camera track (your keys, over the follow camera), or the follow, cockpit or cinematic camera of the game. A clip that is cut in two keeps it.
 - The speed of the free camera has a slider in the camera row of the video editor (it only had one in the replay bar).
 - The video editor has sound: the engine plays while the program or the source plays (the replay itself was not "playing" there, so the sound stayed paused).
+- The tyres squeal in a replay: the game fed the squeal from its own loop, which a replay does not run; now the replay reads it from the recording (the slip of the body, and the spin of the wheels against the speed) and feeds it.
 
 **Replay: the free camera and the video editor**
 - The free camera: Q and E tilt the picture, smoothly (the tilt is kept in a camera key, `roll`); Space goes up and Alt down (Shift and Control still work); Enter plays and pauses, in the replay and in the video editor (Space did, and it now moves the camera); a hint ("Mouse look · Escape for the UI") while the mouse looks around; and a third way to fix the camera to the car, **Fixed, sky up (K)**: it goes with the car's place but not with its turn (a camera key keeps it as `sky`).

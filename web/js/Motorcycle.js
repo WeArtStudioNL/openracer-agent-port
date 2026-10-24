@@ -62,6 +62,8 @@ OpenRacer.Motorcycle = function (settings) {
     this.limp = false;                                      // the rider has gone limp on the bike (a hit, or the key for it): no throttle, no steering, no balance; the bike rides on until his weight tips it over
     this.riderLoad = null;                                  // where the middle of the limp rider is (world, from Driver.ragdollCentre): his weight off the middle of the bike leans it
     this.burnout = 0;                                        // 0 to 1: a burnout is going on (brakeStep)
+    this.yawCap = 3000; this.yawCapBrake = 6000;             // N m: what the rider's hold on the yaw can give, and the extra on the brakes
+    this.slideTime = 0;                                      // s that the bike has slid sideways past 15 degrees while leaning: a lowside after half a second
     this.wallHit = 0;                                        // the last wall hit that was seen (Vehicle.impactTime), so that one hit crashes once
     var hist = [], now = 0;                                  // the speed of the last tenth of a second: a hit that the smoothed acceleration misses (a wall through the wheels, a kerb)
     this.pushing = false;                                   // the rider walks the bike back (set by Car.js)
@@ -292,7 +294,11 @@ OpenRacer.Motorcycle = function (settings) {
             if (hit && !wall) { wall = true; v.lastWall = v.lastWall || {}; v.lastWall.v = [old.x, 0, old.z]; }
             // a wheelie that went over: the bike on its back (its up more than 100 degrees from the road); up to there the tail scrapes and the rear brake can still bring it down
             var over = state.upN < -0.17;
-            if (Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) || (self.limp && Math.abs(u) < 0.5) || over || aMag > 3.5 * G || (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) || wall) {
+            // a lowside: the bike slides sideways past 15 degrees for half a second while it leans (the tyres have let go; it crabbed along for seconds at the limit of the lean)
+            var betaNow = Math.atan2(v.v || 0, Math.max(Math.abs(u), 1));
+            self.slideTime = Math.abs(betaNow) > 15 * DEG && Math.abs(state.lean) > 25 * DEG && Math.abs(u) > 5 ? self.slideTime + dt : 0;
+            var lowside = self.slideTime > 0.5;
+            if (Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) || (self.limp && Math.abs(u) < 0.5) || over || lowside || aMag > 3.5 * G || (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) || wall) {
                 self.crashed = true;
                 var before = wall && v.lastWall && v.lastWall.v ? v.lastWall.v : null;
                 self.crashSpeed = before ? { x: before[0], y: before[1], z: before[2] } : { x: v.vx, y: v.vy, z: v.vz };
@@ -344,7 +350,9 @@ OpenRacer.Motorcycle = function (settings) {
             var epsNow = Math.atan((self.riderMass / v.mass) * self.posture.lat / v.cgHeight);       // (the rider that hangs off: the lean of the whole)
             var rLean = -G * Math.tan(Math.max(-1.2, Math.min(1.2, state.lean + epsNow))) / Math.max(Math.abs(u), 4);
             var yawErr = c.r - rLean;
-            self.dbg.yawDamp = Math.max(-3000, Math.min(3000, self.balance * (c.inertiaY / 0.06) * yawErr * fast));
+            // (on the brakes the rider holds the bars harder: with the rear nearly off the road the front alone turned the bike 14 degrees out of line in a second at 145 km/h)
+            var yawCap = self.yawCap + self.yawCapBrake * smooth(0.2, 0.8, v.input.brakePedal || 0);
+            self.dbg.yawDamp = Math.max(-yawCap, Math.min(yawCap, self.balance * (c.inertiaY / 0.06) * yawErr * fast * (1 + 2 * smooth(0.2, 0.8, v.input.brakePedal || 0))));
             torque.y += self.dbg.yawDamp;
         }
         // no reverse gear: the rider walks the bike back (Car.js says when), slowly, with a small force
@@ -425,7 +433,7 @@ OpenRacer.Motorcycle = function (settings) {
 
     // ---- hook for the camera: it rolls with the lean, a part of it, smoothed. camera: the three.js camera, after it was placed
     // after a reset or a repair: the rider is back on the bike
-    this.recover = function () { hist.length = 0; self.crashed = false; self.limp = false; self.riderLoad = null; self.footDown = 0; self.targetLean = 0; self.steer = 0; self.wheelieScale = 1; vPrev = null; accel.x = accel.y = accel.z = 0; };
+    this.recover = function () { hist.length = 0; self.slideTime = 0; self.crashed = false; self.limp = false; self.riderLoad = null; self.footDown = 0; self.targetLean = 0; self.steer = 0; self.wheelieScale = 1; vPrev = null; accel.x = accel.y = accel.z = 0; };
 
     this.cameraRoll = function (camera, v, dt) {
         var classic = typeof Settings !== "undefined" && Settings.option("bikeCamera") === "classic";       // (the menu: the chase camera of a car, that does not roll)
