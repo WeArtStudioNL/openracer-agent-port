@@ -675,9 +675,12 @@ OpenRacer.Driver = function (config, parent, steering) {
     // the offset of the hand (so that the hand of the editor sits on its grip, and what is moved away from it is the offset)
     // (the body can load after the driver, so a driver that found no grips looks again, every half second)
     var riderTriedAt = -1e9, riderFound = null;
+    function under(object, root) { for (var o = object; o; o = o.parent) if (o === root) return true; return false; }
     this.isRider = function () {
+        var now = performance.now();
+        // (the parts found before may be gone: the car editor loaded another bike, or took the parts into another frame)
+        if (rider && now - riderTriedAt > 500) { riderTriedAt = now; if (!under(rider.gripL, self.parent) || !under(rider.pegL, self.parent)) { rider = null; riderRest = null; } }
         if (!rider) {
-            var now = performance.now();
             if (!riderTried || now - riderTriedAt > 500) { riderTried = true; riderTriedAt = now; rider = findRider(); if (rider) migratePivots(); }
         }
         return !!rider;
@@ -1286,7 +1289,10 @@ OpenRacer.Driver = function (config, parent, steering) {
     }
     this.dispose = function () { self.parent.remove(self.root); };
     // the figure goes to another frame (the car editor puts it in the frame of the car that is tested, which moves with the physics)
-    this.setParent = function (next) { self.parent.remove(self.root); self.parent = next; next.add(self.root); };
+    this.setParent = function (next) { self.parent.remove(self.root); self.parent = next; next.add(self.root); self.forgetRider(); };
+    // the places of a rider (the grips, the pegs, the levers) are looked for again: the frame he is in changed (the car editor puts him on the bench and back), or the model of the bike
+    // changed (the grips found before are not in the scene any more). The rest pose is recorded again with them.
+    this.forgetRider = function () { rider = null; riderRest = null; riderTried = false; };
 
     // loads the glb of the driver (url): the model goes into place when it has arrived
     this.load = function (url, manager, done, fail) {
