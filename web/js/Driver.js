@@ -1061,7 +1061,7 @@ OpenRacer.Driver = function (config, parent, steering) {
                 }
                 // the road takes the speed out of him: the whole body slows when a part of it is on the road (the sticks drag the rest along anyway; a slide of some 15 m from 70 km/h)
                 if (touching && it === 0) {
-                    var dv = 0.7 * 9.81 * h * h * Math.min(1, touching / 4);                         // (leathers on tarmac: about 0.7 g, less when he only touches with a hand)
+                    var dv = 0.55 * 9.81 * h * h * Math.min(1, touching / 4);                        // (leathers on tarmac: about 0.55 g, less when he only touches with a hand; the bike slides at about the same)
                     for (key in P) {
                         g = P[key];
                         var sx = g.p.x - g.q.x, sz = g.p.z - g.q.z, sp = Math.sqrt(sx * sx + sz * sz);

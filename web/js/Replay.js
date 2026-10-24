@@ -1048,6 +1048,14 @@ OpenRacer.Replay = (function() {
     api.afterFrame = null;                // function(time, delta): called at the end of every frame of the replay (the camera track)
     api.free = free;                      // the free camera (position and look in the frame of the world or of the car, fov, aim, parent, target)
     api.enterFree = enterFree; api.leaveFree = leaveFree; api.toggleAim = toggleAim; api.toggleParent = toggleParent; api.toggleSky = toggleSky; api.nextTarget = nextTarget;
+    // the camera of the game for a clip of the video editor: "follow", "cockpit", "cinematic", or "track" (the camera track, over the follow camera); not while the free camera is on
+    api.setGameCamera = function(mode) {
+        if(free.active) return;
+        if(mode === "cinematic") { if(!cine.active && cinemaCameras().length) enterCine(); return; }
+        if(cine.active) leaveCine();
+        if(mode === "cockpit") { if(Settings.option("camera") !== 3) Settings.setOption("camera", 3); }
+        else if(Settings.option("camera") !== 2) Settings.setOption("camera", 2);
+    };
     api.carCount = function() { return cars.length; };
     api.carBody = function(i) { var e = cars[i]; return e ? e.object.body : null; };
     api.pause = function() { playing = false; if(ui) ui.sync(); };
