@@ -1965,7 +1965,9 @@ async function startBench() {
     if (model.measured) {
         // the physics takes the wheelbase, the tracks and the tyre from the wheels of the model, as the game does
         const c = model.measured.centres;
-        v.retune({ wheelbase: (c.FR.z + c.FL.z) / 2 - (c.RL.z + c.RR.z) / 2, front_track: Math.abs(c.FR.x - c.FL.x), rear_track: Math.abs(c.RR.x - c.RL.x), tire_diameter: model.measured.diameter });
+        // (a motorcycle has no track: the physics gets 4 cm, as in the game; a track of 0 is a division by zero in the physics and the bench blew up with it)
+        const minTrack = isBike() ? 0.04 : 0;
+        v.retune({ wheelbase: (c.FR.z + c.FL.z) / 2 - (c.RL.z + c.RR.z) / 2, front_track: Math.max(minTrack, Math.abs(c.FR.x - c.FL.x)), rear_track: Math.max(minTrack, Math.abs(c.RR.x - c.RL.x)), tire_diameter: model.measured.diameter });
         bench.modelMid = new THREE.Vector3((c.FR.x + c.FL.x + c.RL.x + c.RR.x) / 4, (c.FR.y + c.FL.y + c.RL.y + c.RR.y) / 4, (c.FR.z + c.FL.z + c.RL.z + c.RR.z) / 4);
     }
     v.reset(0, 0, Math.PI / 2); // facing +z, the way the editor shows the car

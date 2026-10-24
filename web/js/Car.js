@@ -526,15 +526,21 @@ OpenRacer.Car = function( config, domElement ) {
             this.crashShown = true;
             var cs = v.controller.crashSpeed || { x: v.vx, y: v.vy, z: v.vz };
             if(this.driver && this.driver.crash) this.driver.crash(new THREE.Vector3(cs.x, cs.y, cs.z), v.ground);
-            var fixed = camera.position.clone(), look = new THREE.Vector3(), mid = new THREE.Vector3(), rider = new THREE.Vector3();
-            var self = this;
+            // the camera on a circle of 9 m round the bike, on the far side from the rider (the bike between the camera and the rider), a little up; it moves smoothly
+            var look = new THREE.Vector3(), rider = new THREE.Vector3(), wantPos = new THREE.Vector3(), dir = new THREE.Vector3(), aim = new THREE.Vector3();
+            var self = this, RADIUS = 9, HEIGHT = 3, first = true;
             this.cameraOverride = function(delta) {
                 look.copy(self.body.position);
-                if(self.driver && self.driver.root) { self.driver.root.getWorldPosition(rider); mid.copy(look).add(rider).multiplyScalar(0.5); } else mid.copy(look);
-                camera.position.copy(fixed);
-                camera.lookAt(mid);
-                var apart = self.driver && self.driver.root ? look.distanceTo(rider) : 0, away = fixed.distanceTo(mid);
-                var fov = Math.max(35, Math.min(80, 2 * Math.atan((apart * 0.6 + 4) / Math.max(3, away)) * 180 / Math.PI));
+                if(self.driver && self.driver.root) self.driver.root.getWorldPosition(rider); else rider.copy(look);
+                dir.copy(look).sub(rider); dir.y = 0;
+                if(dir.lengthSq() < 0.01) { dir.copy(camera.position).sub(look); dir.y = 0; }
+                if(dir.lengthSq() < 0.01) dir.set(1, 0, 0);
+                dir.normalize();
+                wantPos.copy(look).addScaledVector(dir, RADIUS); wantPos.y = look.y + HEIGHT;
+                if(first) { camera.position.copy(wantPos); first = false; } else camera.position.lerp(wantPos, 1 - Math.exp(-3 * Math.min(delta || 0.016, 0.1)));
+                aim.copy(look).lerp(rider, 0.35);
+                camera.lookAt(aim);
+                var apart = look.distanceTo(rider), fov = Math.max(40, Math.min(75, 2 * Math.atan((apart * 0.5 + 3) / Math.max(4, camera.position.distanceTo(aim))) * 180 / Math.PI));
                 if(Math.abs(camera.fov - fov) > 0.2) { camera.fov += (fov - camera.fov) * Math.min(1, (delta || 0.016) / 0.3); camera.updateProjectionMatrix(); }
                 return true;
             };
