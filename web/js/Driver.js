@@ -736,6 +736,12 @@ OpenRacer.Driver = function (config, parent, steering) {
             self.parent.worldToLocal(local.copy(rw));
             if (e[2] === "pegL" && rider.shifter && riderRest.tip) { bodyPos2(rider.shifter, riderRest.tip, tmp); local.add(tmp.sub(riderRest.tipAt)); }
             // pushing the bike back: the feet come off the pegs and shuffle along the ground, one after the other
+            // at a standstill the right foot is flat on the road beside the bike (and comes back up on the gas)
+            var footDown = state && state.footDown ? state.footDown : 0;
+            if (e[1] < 0 && footDown > 0.001 && walk < 0.5) {
+                tmp.set(local.x - 0.22, groundY + 0.02, local.z + 0.08);
+                local.lerp(tmp, footDown);
+            }
             if (walk > 0.001) {
                 var pegAt = local.clone();
                 var stride = Math.sin(walkPhase + (e[1] > 0 ? 0 : Math.PI)), lift = Math.max(0, Math.cos(walkPhase + (e[1] > 0 ? 0 : Math.PI)));

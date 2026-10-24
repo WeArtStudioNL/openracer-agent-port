@@ -52,6 +52,8 @@ OpenRacer.Motorcycle = function (settings) {
     this.gripG = s.grip_g !== undefined ? s.grip_g : 1.05;                        // the lateral g that the tyres give when nothing else is asked of them
     this.frontComply = s.front_comply !== undefined ? s.front_comply : 3;            // how much the front wheel castors into its own slip on the brake (3: it keeps a quarter of the slip angle)
     this.complied = 0;
+    this.footDown = 0;                                       // 0 to 1: the right foot of the rider on the road (a standstill)
+    this.footLean = (s.foot_lean_deg !== undefined ? s.foot_lean_deg : 7) * DEG;   // how far the bike rests to the right on the foot
     this.pushing = false;                                   // the rider walks the bike back (set by Car.js)
     this.command = 0;                                      // the lean that is asked (-1..1)
     this.targetLean = 0;                                   // what the rider takes (rad, left is positive)
@@ -128,6 +130,10 @@ OpenRacer.Motorcycle = function (settings) {
         speedMax = Math.min(speedMax, Math.atan(Math.sqrt(Math.max(0, gripMax * gripMax - aLong * aLong)) / G));
         var phiMax = speedMax + epsFull;
         var want = -c * Math.min(phiMax, cap) * fast;
+        // at a standstill the rider puts the right foot down and the bike rests against it, a little to the right; on the gas the foot comes back up in two seconds
+        var still = Math.abs(u) < 0.6 && (inp.throttle || 0) < 0.05 && !self.pushing;
+        self.footDown += ((still ? 1 : 0) - self.footDown) * Math.min(1, dt / (still ? 0.5 : 2.0));
+        want -= self.footLean * self.footDown * (1 - fast);
         var brake = Math.max(0, Math.min(1, inp.brakePedal || 0)), bend = smooth(8 * DEG, 30 * DEG, Math.abs(want));
         want *= 1 + self.cornerBrake * brake * bend;                  // the rear brake takes it deeper into the bend (the front brake is not used in a bend: brakeScale)
         want = Math.max(-phiMax, Math.min(phiMax, want));
