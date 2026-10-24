@@ -2349,6 +2349,7 @@ softBodyEditor = initSoftBody({
     $, THREE, scene, camera, renderer, controls, bench, status, startBench, stopBench,
     partChosen: showChosenPart,
     driverUnder: (e) => !!(driverEditor && driverEditor.under(e)),
+    hideDriver: (on) => { if (driverEditor) driverEditor.hide(on); },      // the figure is in the way of the nodes: hidden while they are edited
     nodeNames: () => state.nodes.map((n) => n.name),
     floorY: () => grid.position.y,
     root: () => state.root,

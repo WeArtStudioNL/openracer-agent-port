@@ -777,6 +777,7 @@ export function initSoftBody(api) {
         $("sbEdit").textContent = sb.edit ? "Stop editing nodes" : "Edit nodes";
         $("sbEdit").classList.toggle("accent", sb.edit);
         $("sbEditBox").style.display = sb.edit ? "" : "none";
+        if (api.hideDriver) api.hideDriver(sb.edit);
         showSelection();
     });
     $("sbResetNodes").addEventListener("click", async () => {
@@ -1688,7 +1689,7 @@ export function initSoftBody(api) {
     function onStop() {
         outline(null);                                    // none stays behind on the model of the bench or of the editor
         if (OpenRacer.SoftBodyMesh && api.root()) OpenRacer.SoftBodyMesh.restore(api.root());      // the model of the editor is not bent by the shell of the bench any more
-        if (!sb.restarting) { sb.edit = false; $("sbEdit").textContent = "Edit nodes"; $("sbEdit").classList.remove("accent"); $("sbEditBox").style.display = "none"; sb.sel.nodes.clear(); sb.sel.beam = null; }
+        if (!sb.restarting) { sb.edit = false; $("sbEdit").textContent = "Edit nodes"; $("sbEdit").classList.remove("accent"); $("sbEditBox").style.display = "none"; if (api.hideDriver) api.hideDriver(false); sb.sel.nodes.clear(); sb.sel.beam = null; }
         stopCrash();
         sb.savedGround = null;
         sb.pushMode = false; sb.pushArrow = null; $("sbPush").textContent = "Apply force"; $("sbPush").classList.remove("ghost");

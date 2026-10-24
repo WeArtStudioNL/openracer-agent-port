@@ -306,11 +306,19 @@ export function initDriver(api) {
     function setEnabled(on) {
         drv.enabled = on;
         el("drvEnabled").checked = on;
-        if (drv.driver) drv.driver.root.visible = on;
-        ring.visible = on && !!drv.driver; ringHit.visible = true;
-        for (const t of Object.values(targets)) t.visible = on && !!drv.driver;
+        if (drv.driver) drv.driver.root.visible = on && !drv.hidden;
+        ring.visible = on && !drv.hidden && !!drv.driver; ringHit.visible = true;
+        for (const t of Object.values(targets)) t.visible = on && !drv.hidden && !!drv.driver;
         if (!on) { drv.selected = null; attach(); if (api.steeringPreview) api.steeringPreview(null, null, null); }
         info();
+    }
+    // the figure out of the way for a while (the nodes of the soft body are edited): hidden, with its markers, until it is shown again
+    function hide(on) {
+        drv.hidden = on;
+        if (drv.hidden && drv.selected) { drv.selected = null; attach(); }
+        if (drv.driver) drv.driver.root.visible = drv.enabled && !on;
+        ring.visible = drv.enabled && !on && !!drv.driver;
+        for (const t of Object.values(targets)) t.visible = drv.enabled && !on && !!drv.driver;
     }
     function info() {
         el("drvInfo").textContent = !drv.driver ? "none" : (drv.enabled ? "on" : "off");
@@ -534,12 +542,12 @@ export function initDriver(api) {
     // is the driver (the figure or one of its nodes) under the pointer: then a click is for the driver and not for the car part behind it
     const underRay = new THREE.Raycaster();
     function under(e) {
-        if (!drv.driver || !drv.enabled) return false;
+        if (!drv.driver || !drv.enabled || drv.hidden) return false;
         const rect = renderer.domElement.getBoundingClientRect();
         underRay.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
         const objects = Object.values(targets).filter((m) => m.visible).concat([drv.driver.root]);
         return underRay.intersectObjects(objects, true).length > 0;
     }
 
-    return { read, fill, frame, under, attachToBench, detachFromBench, newFile, existingFile: () => drv.existingFile, deselect, saved: (path) => { drv.file = null; drv.existingFile = path; } };
+    return { read, fill, frame, under, hide, attachToBench, detachFromBench, newFile, existingFile: () => drv.existingFile, deselect, saved: (path) => { drv.file = null; drv.existingFile = path; } };
 }
