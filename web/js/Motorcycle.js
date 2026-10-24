@@ -235,7 +235,7 @@ OpenRacer.Motorcycle = function (settings) {
         var m = v.mass, w = v.wheels;
         var rearRatio = ((w[2].weight || 0) + (w[3].weight || 0)) / Math.max(1, (1 - v.weight_distribution) * m * G);
         // the front brake is let off as the rear wheel is nearly free of the road (it keeps a few percent of its load: the limit of the front brake), the rear brake goes with the load of the rear wheel
-        var target = Math.max(0, Math.min(1, (rearRatio - 0.10) / 0.18));
+        var target = Math.max(0, Math.min(1, (rearRatio - 0.06) / 0.16));                 // (the rear down to 6 %: a rider brakes right at the point where the rear comes up)
         self.frontBrake += (target - self.frontBrake) * Math.min(1, dt / (target < self.frontBrake ? 0.02 : 0.1));
         // (after a crest the rear wheel comes down hard and it spins faster than the road: the rear brake comes back slowly, so that it does not lock and slide)
         var rearTarget = Math.max(0, Math.min(1, rearRatio * 1.2));

@@ -649,6 +649,17 @@ OpenRacer.Vehicle = function (parameters, input) {
         return this.u;
     };
 
+    // An impulse (N s, world) at a point (world) from outside: the ragdoll of a rider that hits the bike (Driver.js). The speed and the turn of the body take it (the turn with the
+    // mean inertia: a nudge, not a collision solver).
+    this.applyImpulse = function (px, py, pz, jx, jy, jz) {
+        var m = this.mass || 1, I = (inertiaX + inertiaY + inertiaZ) / 3 || 1;
+        var jl = Math.sqrt(jx * jx + jy * jy + jz * jz), cap = 4 * m;                     // (never more than 4 m/s of speed from one impulse)
+        if(jl > cap) { jx *= cap / jl; jy *= cap / jl; jz *= cap / jl; }
+        this.vx += jx / m; this.vy += jy / m; this.vz += jz / m;
+        var rx = px - this.px, ry = py - this.py, rz = pz - this.pz;
+        this.wx += (ry * jz - rz * jy) / I; this.wy += (rz * jx - rx * jz) / I; this.wz += (rx * jy - ry * jx) / I;
+    };
+
     // the place and the orientation of the middle of the body model: the middle between the axles, at the height of the axles at rest
     this.getBodyPose = function (position, quaternion) {
         var offset = rotate(this.qx, this.qy, this.qz, this.qw, 0, this.wheels[0].radius - this.cgHeight, (this.af - this.ar) / 2, { x: 0, y: 0, z: 0 });

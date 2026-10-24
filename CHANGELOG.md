@@ -13,6 +13,9 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 - A burnout holds its gear (the automatic shifted up on the spinning wheel) and smokes within three or four seconds (a tyre that spins on a car that stands keeps its heat).
 - A replay of a motorcycle from before it had two wheels opens with two.
 
+- The ragdoll pushes the bike: where a solid sphere of the bike pushes a part of him out, the bike gets the impulse of that part (a fifteenth of the rider), capped; the seat he sits in does not. His head follows his neck (up to 50 degrees) instead of staying in its rest pose.
+- The front brake of a motorcycle lets the rear wheel come down to 6 % of its load before it eases (10 %): a rider brakes right at the point where the rear comes up.
+
 **Replay: the free camera and the video editor**
 - The free camera: Q and E tilt the picture, smoothly (the tilt is kept in a camera key, `roll`); Space goes up and Alt down (Shift and Control still work); Enter plays and pauses, in the replay and in the video editor (Space did, and it now moves the camera); a hint ("Mouse look · Escape for the UI") while the mouse looks around; and a third way to fix the camera to the car, **Fixed, sky up (K)**: it goes with the car's place but not with its turn (a camera key keeps it as `sky`).
 - The video editor: the speed ramp of a clip is drawn in the clip (the curve, on a scale from the slowest to the fastest) with its keys as dots. A click on a key shows that key alone in the inspector: its speed, and ease in and ease out (the speed arrives at the key, or leaves it, slowly). A key is dragged along the clip for when, and up and down for how fast.

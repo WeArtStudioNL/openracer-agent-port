@@ -773,7 +773,7 @@ OpenRacer.Driver = function (config, parent, steering) {
     // minimum), and the skeleton is posed on them every frame (the root on the hips and the chest, the arms and the legs with the inverse kinematics on the hand or the foot
     // with the elbow or the knee as the pole). He lies there until a reset or a repair puts him back on the bike.
     var ragdoll = null, keptParent = null, keptPos = new V(), keptQuat = new Q();
-    var RIGID = ["hips", "chest", "shL", "shR", "hiL", "hiR", "head"];
+    var RIGID = ["hips", "chest", "shL", "shR", "hiL", "hiR", "head"], PART_MASS = 80 / 15;      // (the rider of 80 kg over his fifteen particles)
     var ORDER = ["hips", "chest", "head", "shL", "elL", "haL", "shR", "elR", "haR", "hiL", "knL", "ftL", "hiR", "knR", "ftR"];     // the particles in a replay (Replay.js), 3 numbers each
     this.RAGDOLL_FLOATS = ORDER.length * 3;
     function particle(pos, r) { return { p: pos.clone(), q: pos.clone(), v: new V(), r: r, floor: -1e9, inside: null }; }      // inside: the spheres of the bike that it started in (not pushed out of those: he sits in the bike)      // q: the place a step before (Verlet); v: the speed to start with
@@ -913,7 +913,7 @@ OpenRacer.Driver = function (config, parent, steering) {
     var bikeTmp = new Float64Array(7);
     // a particle against the spheres of the bike: pushed out, its speed into the sphere taken away (the sphere's own speed is kept: he goes with the bike that he lies on), and some of
     // the speed along it (he does not slide off at once). Positions only, a step at a time: nothing can blow up at speed
-    function bikeContact(g, r, h) {
+    function bikeContact(g, r, h, first) {
         var S = r.spheres, n = r.sphereCount, hit = false;
         for (var i = 0; i < n; i++) {
             var o = 8 * i, dx = g.p.x - S[o], dy = g.p.y - S[o + 1], dz = g.p.z - S[o + 2], rr = S[o + 3] + g.r, d2 = dx * dx + dy * dy + dz * dz;
@@ -931,7 +931,16 @@ OpenRacer.Driver = function (config, parent, steering) {
             if (push !== 0) {
                 g.p.x += nx * push; g.p.y += ny * push; g.p.z += nz * push;
                 var vn = vx * nx + vy * ny + vz * nz;
-                if (push > 0 ? vn < 0 : vn > 0) { vx -= vn * nx; vy -= vn * ny; vz -= vn * nz; }
+                if (push > 0 ? vn < 0 : vn > 0) {
+                    vx -= vn * nx; vy -= vn * ny; vz -= vn * nz;
+                    // the bike feels it: the speed that the part lost into the sphere, as an impulse of the part's share of the rider (a solid sphere only, not the seat he sits in)
+                    // (the first pass of a substep only: the sticks put the part back in the sphere every pass, and the same hit was counted five times; and no more than 2 m/s of the
+                    // whole rider on the bike in a frame)
+                    if (first && was < 0 && r.bike && r.bike.applyImpulse && r.impulseLeft > 0) {
+                        var jn = Math.min(r.impulseLeft, Math.abs(vn) / h * PART_MASS); r.impulseLeft -= jn;
+                        r.bike.applyImpulse(S[o], S[o + 1], S[o + 2], -nx * jn, -ny * jn, -nz * jn);
+                    }
+                }
             }
             var f = Math.exp(-(was >= 0 && g.inside[was].hold ? 40 : 6) * h);        // the grip of the leathers on the bike (the seat holds him until his weight pulls him off it)
             vx *= f; vy *= f; vz *= f;
@@ -983,6 +992,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         var h = 1 / 240; r.acc = (r.acc || 0) + dt; var n = Math.min(12, Math.floor(r.acc / h)); r.acc -= n * h;
         if (!n) return;
         bikeSpheres(r);
+        r.impulseLeft = 80 * 2;                                                     // N s: what the rider may give the bike this frame
         if (r.fresh) {
             // the first step: the spheres that a particle is in now are the ones he sits in (the seat, the tank between the knees): they do not push him out
             r.fresh = false;
@@ -1025,7 +1035,7 @@ OpenRacer.Driver = function (config, parent, steering) {
             // stood still for the frame was dragged back every substep: that was a ragdoll that shook at speed)
             if (s > 0) for (var si2 = 0; si2 < r.sphereCount; si2++) { var o2 = 8 * si2; r.spheres[o2] += r.spheres[o2 + 4] * h; r.spheres[o2 + 1] += r.spheres[o2 + 5] * h; r.spheres[o2 + 2] += r.spheres[o2 + 6] * h; }
             for (var it = 0; it < 5; it++) {
-                if (r.sphereCount) for (key in P) bikeContact(P[key], r, h);
+                if (r.sphereCount) for (key in P) bikeContact(P[key], r, h, it === 0);
                 for (var i = 0; i < r.sticks.length; i++) {
                     var st = r.sticks[i]; rgD.subVectors(st.b.p, st.a.p);
                     var len = rgD.length(); if (len < 1e-6) continue;
@@ -1082,6 +1092,18 @@ OpenRacer.Driver = function (config, parent, steering) {
         self.root.updateMatrixWorld(true);
         solve(B.armL, P.haL.p, P.elL.p); solve(B.armR, P.haR.p, P.elR.p);
         solve(B.legL, P.ftL.p, P.knL.p); solve(B.legR, P.ftR.p, P.knR.p);
+        // the head follows the neck: the bone turned so that it points from the chest to the head particle (as far as a neck goes: 50 degrees)
+        if (B.head) {
+            B.head.quaternion.copy(rest.get(B.head));
+            B.head.updateMatrixWorld(true);
+            B.head.getWorldPosition(rgD);
+            rgUp.subVectors(rgD, P.chest.p); rgSide.subVectors(P.head.p, P.chest.p);
+            if (rgUp.lengthSq() > 1e-6 && rgSide.lengthSq() > 1e-6) {
+                var angle = rgUp.angleTo(rgSide);
+                if (angle > 0.87) rgSide.copy(rgUp).lerp(rgSide, 0.87 / angle);
+                rotateTo(B.head, rgUp.clone(), rgSide.clone());
+            }
+        }
         self.root.updateMatrixWorld(true);
     }
 
