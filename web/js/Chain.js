@@ -133,7 +133,7 @@ OpenRacer.Chain = (function () {
             at(pieces[j], Math.min(s, pieces[j].len), pt);
             var angle = Math.atan2(pt.dy, pt.dz);
             mt.makeTranslation(chain.x, pt.y, pt.z);
-            mr.makeRotationX(angle - phi0);
+            mr.makeRotationX(-(angle - phi0));                   // (a turn about x by t takes the z axis to the angle -t in the plane: the sign is the other way round)
             m.copy(mt).multiply(mr).multiply(chain.linkMatrix);
             chain.mesh.setMatrixAt(k, m);
         }
