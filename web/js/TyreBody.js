@@ -52,6 +52,8 @@ OpenRacer.TyreBody = function (wheel) {
     this.groundY = 0;
     this.maxDepth = 0;
     this.axleTorque = 0;              // Nm about the axle of the force of the road on the tyre
+    this.dampSlope = 0;               // N per m/s of slide: how much the friction along the tyre pushes back against a change of the speed of the slide (the damping of the samples that hold), for the
+                                      // wheel to take it implicitly (Vehicle.js): the damping of a car at a standstill is that of its whole weight, far more than a light wheel can take in one step
     this.used = 0;                    // how far the friction is towards its limit (1 is the limit)
 
     function build() {
@@ -174,7 +176,7 @@ OpenRacer.TyreBody = function (wheel) {
         self.maxDepth = maxDepth;
         self.normal.x = fnx; self.normal.y = fny; self.normal.z = fnz;
         self.friction.x = self.friction.y = self.friction.z = 0;
-        self.axleTorque = 0; self.slidingShare = 0; self.used = 0;
+        self.axleTorque = 0; self.slidingShare = 0; self.used = 0; self.dampSlope = 0;
         if(count === 0 || sumFn <= 0) { self.patch = 0; relaxOut(dt, omega * R); return false; }
         self.centre.x = cxs / sumFn; self.centre.y = cys / sumFn; self.centre.z = czs / sumFn;
         var nl = Math.sqrt(nxs * nxs + nys * nys + nzs * nzs) || 1;
@@ -191,7 +193,7 @@ OpenRacer.TyreBody = function (wheel) {
         var dampX = self.damping * 2 * Math.sqrt(springX * inertia) / R;
         var dampY = 0.15 * self.damping * 2 * Math.sqrt(self.stiffY * load / half * Math.max(5, wheel.mass || 20)) * 0.5;
         var speedHub = Math.max(Math.abs(omega * R), Math.sqrt(vel.x * vel.x + vel.y * vel.y + vel.z * vel.z));
-        var fxs = 0, fys = 0, fzs = 0, torque = 0, slideLoad = 0;
+        var fxs = 0, fys = 0, fzs = 0, torque = 0, slideLoad = 0, damped = 0;
         var surf = frictionOf(load, self.surface);
         for(var s = 0; s < S; s++) {
             if(!inContact[s]) continue;
@@ -229,7 +231,7 @@ OpenRacer.TyreBody = function (wheel) {
                 ux[s] *= scale; uy[s] *= scale;
                 fX *= scale; fY *= scale;
                 sliding[s] = 1; slideLoad += fnSample[s];
-            } else sliding[s] = 0;
+            } else { sliding[s] = 0; damped += dX * share; }
             var gx = fX * t1x + fY * t2x, gy = fX * t1y + fY * t2y, gz = fX * t1z + fY * t2z;
             fxs += gx; fys += gy; fzs += gz;
             // the torque about the axle of this force at this place
@@ -239,6 +241,7 @@ OpenRacer.TyreBody = function (wheel) {
         relaxOut(dt, omega * R);
         self.friction.x = fxs; self.friction.y = fys; self.friction.z = fzs;
         self.axleTorque = torque;
+        self.dampSlope = damped;
         self.slidingShare = slideLoad / load;
         var fm = Math.sqrt(fxs * fxs + fys * fys + fzs * fzs);
         self.used = fm / Math.max(1, surf.mu * load);

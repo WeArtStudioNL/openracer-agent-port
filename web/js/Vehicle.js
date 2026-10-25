@@ -1781,11 +1781,13 @@ OpenRacer.Vehicle = function (parameters, input) {
                 if(wheel.cylActive) {
                     // the tyre as a body of nodes and beams (TyreBody.js): the friction that its samples carry, along the wheel and across it
                     var tb = wheel.tyreBody;
+                    wheel.tyreSlope = tb.dampSlope * wheel.radius * wheel.radius;       // (Nm per rad/s: the damping of the grip, which the wheel takes implicitly below)
                     wheel.fx = tb.friction.x * fpx + tb.friction.y * fpy + tb.friction.z * fpz;
                     wheel.fy = tb.friction.x * lx + tb.friction.y * ly + tb.friction.z * lz;
                     wheel.s = tb.slidingShare < 0.05 ? tb.used / 0.92 : Math.max(tb.used / 0.92, 1 + 0.9 * tb.slidingShare);
                     wheel.slip = wheel.s > 1.15;
                 } else {
+                    wheel.tyreSlope = 0;
                     // the ring of nodes (NodeTyre.js): where there is no 3D road for the tyre body (a track with 2D physics), or when it is asked for
                     if(!wheel.nodeTyre) wheel.nodeTyre = new OpenRacer.NodeTyre(wheel, self.tyreNodes);
                     var friction = wheel.frictionFor(fzGrip, surface);
@@ -1885,6 +1887,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 newAxleFy[axle] += fyW;
             } else {
                 wheel.weight = 0;
+                wheel.tyreSlope = 0;
                 wheel.forwardSpeed = 0;
                 wheel.slipRatio *= 0.98;
                 wheel.slipTan *= 0.98;
@@ -2026,9 +2029,13 @@ OpenRacer.Vehicle = function (parameters, input) {
             // (a light wheel, a stiff tyre), and the wheel reversed every frame (the tyres of a bike jittered back and forth at a standstill)
             // (not while the engine drives the wheel: the tyre then holds the slip that balances the drive, and a wheel kept at the road speed has no slip and the drive goes through it: a
             // bike looped over backwards at the start)
-            var dOm = dt * tyreTorque[j] / wj.inertia, over = wj.omega - (wj.forwardSpeed || 0) / wj.radius;
+            // The damping of the grip is taken implicitly: the torque of the tyre falls as the wheel speeds up by tyreSlope per rad/s, so the step is divided by the inertia plus dt times that.
+            // The damping of a car at a standstill is that of its whole weight (TyreBody.js, restDamping): on a light wheel in one explicit step it turned the wheel past the road speed and
+            // back, and the wheels of a stadium truck rocked forwards and backwards at a standstill, with the force of the tyre flipping between its two limits every frame.
+            var iEff = wj.inertia + dt * (wj.tyreSlope || 0);
+            var dOm = dt * tyreTorque[j] / iEff, over = wj.omega - (wj.forwardSpeed || 0) / wj.radius;
             if(Math.abs(wheelDrive[j]) < 5 && over * dOm < 0 && Math.abs(dOm) > Math.abs(over)) dOm = -over;
-            var omegaFree = wj.omega + dOm + dt * wheelDrive[j] / wj.inertia;
+            var omegaFree = wj.omega + dOm + dt * wheelDrive[j] / iEff;
             var bt2 = brakeTorque[j];
             if(bt2 > 0) {
                 var dw = dt * bt2 / wj.inertia;
