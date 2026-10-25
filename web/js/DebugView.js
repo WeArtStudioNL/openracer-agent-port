@@ -109,13 +109,13 @@
                 seg(lines, w.contact.x, w.contact.y, w.contact.z, w.contact.x + n.nx * 0.5, w.contact.y + n.ny * 0.5, w.contact.z + n.nz * 0.5, CYAN);
             }
         }
-        // the tyre body (tyre model "cylinder", TyreBody.js): the nodes and the beams of every wheel, flattened where they touch the track; green where a node holds, red where it slides
+        // the tyre (TyreShell.js): the nodes and the beams of every wheel; green where a node holds, red where it slides
         for (i = 0; i < 4; i++) {
             var tbody = v.wheels[i].tyreBody;
             if (!tbody || !v.wheels[i].cylActive) continue;
             // the shell tyre (TyreShell.js): the outer shell as it is (nodes and the belt), the inner shell (the rim), and the beams between them coloured by their strain: dark where they are
             // slack, towards cyan as they are stretched, towards red as they are pushed in
-            if(tbody.shells) {
+            {
                 var sh = tbody.shells();
                 for (k = 0; k < sh.beams; k++) {
                     var ba = sh.a[k], bb = sh.b[k], inner = bb >= sh.count, cls = sh.bclass[k];
@@ -129,21 +129,6 @@
                 for (k = 0; k < sh.count; k++) {
                     push(points, sh.ox[k], sh.oy[k], sh.oz[k], sh.contact[k] ? (sh.sliding[k] ? RED : GREEN) : TEAL);
                     if(k % 2 === 0) push(points, sh.ix[k], sh.iy[k], sh.iz[k], WHITE);                                                  // the rim
-                }
-                continue;
-            }
-            var nd = tbody.nodes(), segsN = nd.segments, perRing = segsN * 2;
-            for (var r = 0; r < nd.rings; r++) {
-                for (k = 0; k < perRing; k += 2) {
-                    var i0 = r * perRing + k, i1 = r * perRing + (k + 2) % perRing, mid = i0 + 1;
-                    var colour2 = nd.contact[i0] ? (nd.sliding[i0] ? RED : GREEN) : TEAL;
-                    push(points, nd.x[i0], nd.y[i0], nd.z[i0], colour2);
-                    // the beam along the ring goes through the sample in the middle of it
-                    seg(lines, nd.x[i0], nd.y[i0], nd.z[i0], nd.x[mid], nd.y[mid], nd.z[mid], TEAL);
-                    seg(lines, nd.x[mid], nd.y[mid], nd.z[mid], nd.x[i1], nd.y[i1], nd.z[i1], TEAL);
-                    // the beam across to the next ring
-                    if (r + 1 < nd.rings) seg(lines, nd.x[i0], nd.y[i0], nd.z[i0], nd.x[i0 + perRing], nd.y[i0 + perRing], nd.z[i0 + perRing], TEAL);
-                    if (nd.contact[mid]) push(points, nd.x[mid], nd.y[mid], nd.z[mid], nd.sliding[mid] ? RED : GREEN);
                 }
             }
         }

@@ -2023,7 +2023,7 @@ function tuningValues(config) {
 // "Drop car" lets it fall from a height, The model is built the way the game
 // builds it (CarLoader.js: the wheels taken out, the suspension rig found), from the model and the settings as they are now.
 window.THREE = Object.assign({}, THREE, { GLTFLoader });
-const PHYSICS_SCRIPTS = ["Engine.js", "Wheel.js", "TyreBody.js", "TyreShell.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "CarLoader.js", "Ground.js", "CollisionProxy.js", "SoftBody.js", "SoftBodyMesh.js", "Parts.js"];
+const PHYSICS_SCRIPTS = ["Engine.js", "Wheel.js", "TyreShell.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "CarLoader.js", "Ground.js", "CollisionProxy.js", "SoftBody.js", "SoftBodyMesh.js", "Parts.js"];
 let physicsLoading = null;
 function loadPhysics() {
     if (!physicsLoading) {

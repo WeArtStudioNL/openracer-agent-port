@@ -337,7 +337,7 @@ OpenRacer.Car = function( config, domElement ) {
                 wheel.turn(i < 2 ? this.vehicle.steerApplied : 0);
                 wheel.object.children[0].children[0].rotation.x = wheel.spin;
                 // (the shell tyre: the tread of the model is pushed in as the nodes of the shell are, TyreDeform.js)
-                if(OpenRacer.TyreDeform && (this.vehicle.tyreModel === "shell" || wheel.deform)) OpenRacer.TyreDeform.update(wheel, this.vehicle.tyreModel === "shell" ? wheel.tyreBody : null);
+                if(OpenRacer.TyreDeform) OpenRacer.TyreDeform.update(wheel, wheel.tyreBody);
                 // (the wheel of the model of a bike is in slot 0; slot 1 is the ghost wheel without parts)
                 if(this.head && i === 0) OpenRacer.updateFork(this.head, wheel, this.body, this.vehicle.steerApplied);
                 if(this.swingarm && i === 2) OpenRacer.updateSwingarm(this.swingarm, wheel, this.body);
@@ -732,7 +732,7 @@ OpenRacer.Car = function( config, domElement ) {
             var metric = Settings.option("units") !== "imperial";
             // the surface of the tread of every tyre: grip below 180, gum from 180 (marbles from 150), smoke from 220, with the road under it
             var phaseOf = function(t) { return t >= 220 ? "smoke" : (t >= 180 ? "gum" : (t >= 150 ? "marbles" : "grip")); };
-            if(v.tyreDamage || v.tyreModel === "shell") debugOut("Tyre pressure: " + ["FR", "FL", "RL", "RR"].map(function(n, i) { var wh = v.wheels[i], bar = (wh.front ? v.pressureFront : v.pressureRear) - (wh.pressureLoss || 0); return n + " " + bar.toFixed(2) + " bar (" + (bar * 14.5038).toFixed(1) + " psi)" + (wh.tyreBody && wh.tyreBody.isShell && wh.cylActive ? ", in " + Math.round(wh.tyreBody.sag * 1000) + " mm" : "") + (wh.leak ? " LEAK" : ""); }).join(" | "));
+            debugOut("Tyre pressure: " + ["FR", "FL", "RL", "RR"].map(function(n, i) { var wh = v.wheels[i], bar = (wh.front ? v.pressureFront : v.pressureRear) - (wh.pressureLoss || 0); return n + " " + bar.toFixed(2) + " bar (" + (bar * 14.5038).toFixed(1) + " psi)" + (wh.tyreBody && wh.tyreBody.isShell && wh.cylActive ? ", in " + Math.round(wh.tyreBody.sag * 1000) + " mm" : "") + (wh.leak ? " LEAK" : ""); }).join(" | "));
             debugOut("Tread surface: " + ["FR", "FL", "RL", "RR"].map(function(n, i) { var wh = v.wheels[i]; return n + " " + Math.round(wh.surfT) + "° " + phaseOf(wh.surfT) + " (road " + Math.round(wh.roadT) + "°)"; }).join(" | "));
             debugOut(Math.round(v.u * (metric ? 3.6 : 2.2369362920544)) + (metric ? " km/h" : " mph") + " | Gear: " + this.gearLabel() + " (" + this.gearboxMode +
                 (this.clutchPedalPresent ? ", clutch pedal" : "") + ") | RPM: " + Math.round(this.engineRPM) +

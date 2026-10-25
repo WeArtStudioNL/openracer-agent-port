@@ -2,8 +2,7 @@
 /*
  * tyre-bench.js
  *
- * Description: A test bench for the tyre models alone, without the browser and without the car: it runs the shell tyre (TyreShell.js) and the cylinder
- *              tyre (TyreBody.js) on a flat road with a hub that is held where the bench wants it, and measures what a tyre test rig would, so that a
+ * Description: A test bench for the tyre models alone, without the browser and without the car: it runs the tyre (TyreShell.js) on a flat road with a hub that is held where the bench wants it, and measures what a tyre test rig would, so that a
  *              change to a tyre can be checked for odd numbers before it is felt in the game:
  *
  *                - the static curve: the load against the deflection (the stiffness, the patch), at the nominal pressure and at 0.6 and 1.4 times it;
@@ -19,9 +18,8 @@
  *              Every figure is held against the range of a real passenger car tyre (the references at the top of the script); what is outside is
  *              marked CHECK. The tyre is set up from a car (its radius, pressure, stiffness, the rings and nodes, the unsprung mass):
  *
- *                  node tools/tyre-bench.js                      the Mustang, both models
+ *                  node tools/tyre-bench.js                      the Mustang
  *                  node tools/tyre-bench.js stadium-truck        another car
- *                  node tools/tyre-bench.js --model shell        one model (shell | cylinder)
  *                  node tools/tyre-bench.js --quick              fewer points
  *                  node tools/tyre-bench.js --json               the figures as JSON
  *                  node tools/tyre-bench.js --tests slipx,relax  some of the tests (roll, slipx, slipy, camber, combined, relax, mass, cost; the static curve always)
@@ -71,7 +69,7 @@ const REF = {
 // ---- the tyre models in a sandbox (plain scripts that share the OpenRacer global)
 const sandbox = { OpenRacer: {}, console: console, Math: Math };
 vm.createContext(sandbox);
-for (const file of ["TyreBody.js", "TyreShell.js"]) vm.runInContext(fs.readFileSync(path.join(ROOT, "js", file), "utf8"), sandbox, { filename: file });
+for (const file of ["TyreShell.js"]) vm.runInContext(fs.readFileSync(path.join(ROOT, "js", file), "utf8"), sandbox, { filename: file });
 
 // a flat road at y = 0: one triangle, as Ground.js answers for it
 const road = {
@@ -98,9 +96,9 @@ function setup(config, model) {
     const front = ch.weight_distribution !== undefined ? ch.weight_distribution : 0.5;
     const staticLoad = mass * G * front / 2;
     const wheel = { radius: R, mass: unsprung, inertia: ch.wheel_inertia || 1.6, front: true };
-    const body = model === "shell" ? new sandbox.OpenRacer.TyreShell(wheel) : new sandbox.OpenRacer.TyreBody(wheel);
+    const body = new sandbox.OpenRacer.TyreShell(wheel);
     body.rings = sh.rings || 3;
-    body.segments = model === "shell" ? Math.max(48, Math.min(72, 2 * (sh.segments || 36))) : (sh.segments || 36);
+    body.segments = sh.segments || 36;
     body.width = sh.width || 0;
     body.stiffX = ty.stiff_x || 20; body.stiffY = (ty.stiff_y || 18) * 1.0;
     body.verticalStiffness = ch.tyre_rate || 220000 * Math.sqrt(light);
@@ -354,14 +352,14 @@ function bench(t, quick, tests) {
 // ---- the run
 const args = process.argv.slice(2);
 const json = args.includes("--json"), quick = args.includes("--quick");
-const modelArg = args.includes("--model") ? args[args.indexOf("--model") + 1] : "both";
+const modelArg = "shell";
 const verbose = args.includes("--verbose");
 const testsArg = args.includes("--tests") ? args[args.indexOf("--tests") + 1].split(",") : null;      // static is always run; roll,slipx,slipy,camber,combined,relax,mass,cost
 const sets = args.filter((a) => a.startsWith("--set=")).map((a) => a.slice(6).split("="));             // --set=beamDamping=0.3: a parameter of the tyre body
 const taken = [modelArg].concat(testsArg ? [testsArg.join(",")] : []);
 const carId = args.filter((a) => !a.startsWith("--") && taken.indexOf(a) < 0)[0] || "openracer-mustang";
 const config = loadCar(carId);
-const models = modelArg === "both" ? ["shell", "cylinder"] : [modelArg];
+const models = ["shell"];
 const results = {};
 for (const model of models) {
     const t = setup(config, model);

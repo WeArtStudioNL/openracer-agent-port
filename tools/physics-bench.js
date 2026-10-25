@@ -28,7 +28,7 @@ const sandbox = {
     console: console, Math: Math
 };
 vm.createContext(sandbox);
-for (const file of ["Engine.js", "Wheel.js", "TyreBody.js", "TyreShell.js", "Ground.js", "Vehicle.js", "Motorcycle.js", "Opponent.js"]) {
+for (const file of ["Engine.js", "Wheel.js", "TyreShell.js", "Ground.js", "Vehicle.js", "Motorcycle.js", "Opponent.js"]) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, "js", file), "utf8"), sandbox, { filename: file });
 }
 // the grip of the surfaces (Helpers.js needs the browser: only its table is taken)

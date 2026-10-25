@@ -107,7 +107,7 @@ OpenRacer.Wheel = function (parameters) {
     };
 
     // the friction coefficients of the tyre for a load on a surface (the grip with the compound, the temperature and the wear, the load sensitivity): the static one and the
-    // one of a sliding tyre; used by the tyre bodies (TyreShell.js, TyreBody.js)
+    // one of a sliding tyre; used by the tyre (TyreShell.js)
     this.frictionFor = function (load, surface) {
         var grip = surface.static * this.gripScale * (this.condition || 1) * (this.damageGrip === undefined ? 1 : this.damageGrip) * (this.compoundGrip === undefined ? 1 : this.compoundGrip) * (surface.loose && this.compoundLoose ? this.compoundLoose : 1);
         var mu = Math.min(1.4 * grip, Math.max(0.2 * grip, grip - this.loadSensitivity * (load - this.nominalLoad)));

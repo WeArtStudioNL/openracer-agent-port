@@ -159,8 +159,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     };
 
     this.tyreDamage = false;          // a hard hit can puncture a tyre: it leaks and loses its pressure (applyPressure, the grip and the stiffness follow)
-    this.tyreShell = { width: 0, rings: 3, segments: 36, inner_ratio: 0.62, carcass: 0 };      // the cylinder of the tyre (tyre model "cylinder", TyreBody.js): rings across the tread, nodes round the wheel, the width (m, 0: from the wheel)
-    this.tyreModel = "shell";         // the tyre: "shell" (two shells of nodes with beams between them and the air pressure, TyreShell.js: the tyre of every car) or "cylinder" (the older body of nodes and beams, TyreBody.js)
+    this.tyreShell = { width: 0, rings: 3, segments: 36, inner_ratio: 0.62, carcass: 0 };      // the tread of the tyre (TyreShell.js): rings across the tread, nodes round the wheel, the width (m, 0: from the wheel), the inner shell and the carcass
     this.tyreStiffX = 20;              // the stiffness of the tyre of nodes along and across (per N of load)
     this.tyreStiffY = 18;
     this.tcAllowance = 1;             // tuning: how much wheel spin the traction control allows, as a factor
@@ -519,7 +518,6 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.tyre_segments !== undefined) this.tyreShell.segments = t.tyre_segments;
         if(t.tyre_width !== undefined || t.tyre_rings !== undefined || t.tyre_segments !== undefined) for(var tb = 0; tb < 4; tb++) if(this.wheels[tb].tyreBody) { this.wheels[tb].tyreBody.width = this.tyreShell.width; this.wheels[tb].tyreBody.rings = this.tyreShell.rings; this.wheels[tb].tyreBody.segments = this.tyreShell.segments; }
         if(t.tyre_damage !== undefined) { this.tyreDamage = !!t.tyre_damage; if(!this.tyreDamage) this.repairTyres(); }
-        if(t.tyre_model !== undefined) { this.tyreModel = t.tyre_model === "cylinder" ? "cylinder" : "shell"; }
         if(t.tyre_inner_ratio !== undefined) this.tyreShell.inner_ratio = Math.max(0.3, Math.min(0.9, t.tyre_inner_ratio));
         if(t.tyre_carcass !== undefined) this.tyreShell.carcass = Math.max(0, t.tyre_carcass);
         if(t.tyre_stiff_x !== undefined) this.tyreStiffX = t.tyre_stiff_x;
@@ -1487,7 +1485,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             // reaches the road first. So a kerb or an edge lifts the wheel gradually as it rolls on to it, instead of all at once
             // when the middle passes it. The surface under the middle is the one that counts for the grip.
             var road = null, t = Infinity, surfaceRoad = null;
-            var cyl = ground3D && !self.wheelLost[i];       // the tyre is a body of nodes (TyreShell.js, TyreBody.js): it finds the road itself (a wheel that is lost has no tyre)
+            var cyl = ground3D && !self.wheelLost[i];       // the tyre is a body of nodes (TyreShell.js): it finds the road itself (a wheel that is lost has no tyre)
             // The wheel is a mass of its own (the unsprung mass) that hangs on the spring and the damper and stands on the tyre, which
             // is a stiff spring too. The road pushes the tyre in, the tyre pushes the wheel up, the wheel pushes the spring in, the
             // spring pushes the body: a kerb is taken up by the tyre and the wheel first and reaches the body softened, as it does
@@ -1510,7 +1508,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                     w.normal = road;
                     w.contact.x = mx + down.x * t; w.contact.y = my + down.y * t; w.contact.z = mz + down.z * t;
                     var penRate = w.susVel + mountDown;
-                    // (the tyre gets hard when it is pushed in a long way, as in TyreBody.js)
+                    // (the tyre gets hard when it is pushed in a long way)
                     var hard = pen > 0.22 * w.radius ? 1 + 10 * (pen - 0.22 * w.radius) / w.radius : 1;
                     tyreLoad[i] = Math.max(0, (w.tyreRate || self.tyreRate) * pen * hard + self.tyreDamping * penRate);
                     w.tyreDeflection = pen;  // how far the road pushes the tyre in (m)
@@ -1518,12 +1516,9 @@ OpenRacer.Vehicle = function (parameters, input) {
             }
             w.cylActive = false;
             if(cyl) {
-                // (the experiment, the shell tyre, when it is asked for and loaded: TyreShell.js; the other when it is switched back)
-                var wantShell = self.tyreModel === "shell" && !!OpenRacer.TyreShell;
-                if(w.tyreBody && !!w.tyreBody.isShell !== wantShell) w.tyreBody = null;
-                var body = w.tyreBody || (w.tyreBody = wantShell ? new OpenRacer.TyreShell(w) : new OpenRacer.TyreBody(w));
-                if(wantShell) { body.isShell = true; body.round = !!self.soloWheels; body.tyreMass = Math.max(1.5, 0.3 * self.unsprungMass); body.pressure = Math.max(0.15, (w.front ? self.pressureFront : self.pressureRear) - (w.pressureLoss || 0)); body.innerRatio = self.tyreShell.inner_ratio; body.carcass = self.tyreShell.carcass; }
-                body.rings = self.tyreShell.rings; body.segments = self.tyreShell.segments; body.width = self.tyreShell.width;      // (the shell tyre has more nodes: a patch of a few nodes was noisy)
+                var body = w.tyreBody || (w.tyreBody = new OpenRacer.TyreShell(w));
+                { body.isShell = true; body.round = !!self.soloWheels; body.tyreMass = Math.max(1.5, 0.3 * self.unsprungMass); body.pressure = Math.max(0.15, (w.front ? self.pressureFront : self.pressureRear) - (w.pressureLoss || 0)); body.innerRatio = self.tyreShell.inner_ratio; body.carcass = self.tyreShell.carcass; }
+                body.rings = self.tyreShell.rings; body.segments = self.tyreShell.segments; body.width = self.tyreShell.width;
                 body.stiffX = self.tyreStiffX; body.stiffY = self.tyreStiffY * self.corneringScale * (w.stiffnessBias || 1) * (w.pressureCorner || 1);
                 body.verticalStiffness = w.tyreRate || self.tyreRate; body.verticalDamping = self.tyreDamping; body.staticLoad = w.staticLoad || (self.mass * G / 4);
                 // the axes of the wheel: up (the suspension), forward in its plane (turned by the steering), and to the left
@@ -1770,7 +1765,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 wheel.lean = self.soloWheels ? 0 : leanLeft;            // (for the wheel of the model: it leans with the camber, Wheel.turn)
                 var surface = self.getSurface(wheel.surface);
                 if(wheel.cylActive) {
-                    // the tyre as a body of nodes and beams (TyreBody.js): the friction that its samples carry, along the wheel and across it
+                    // the tyre as a body of nodes and beams (TyreShell.js): the friction that its nodes carry, along the wheel and across it
                     var tb = wheel.tyreBody;
                     wheel.tyreSlope = tb.dampSlope * wheel.radius * wheel.radius;       // (Nm per rad/s: the damping of the grip, which the wheel takes implicitly below)
                     wheel.fx = tb.friction.x * fpx + tb.friction.y * fpy + tb.friction.z * fpz;
@@ -2016,7 +2011,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             // (not while the engine drives the wheel: the tyre then holds the slip that balances the drive, and a wheel kept at the road speed has no slip and the drive goes through it: a
             // bike looped over backwards at the start)
             // The damping of the grip is taken implicitly: the torque of the tyre falls as the wheel speeds up by tyreSlope per rad/s, so the step is divided by the inertia plus dt times that.
-            // The damping of a car at a standstill is that of its whole weight (TyreBody.js, restDamping): on a light wheel in one explicit step it turned the wheel past the road speed and
+            // The damping of a car at a standstill is that of its whole weight (the ring of nodes of before, restDamping): on a light wheel in one explicit step it turned the wheel past the road speed and
             // back, and the wheels of a stadium truck rocked forwards and backwards at a standstill, with the force of the tyre flipping between its two limits every frame.
             var iEff = wj.inertia + dt * (wj.tyreSlope || 0);
             var dOm = dt * tyreTorque[j] / iEff, over = wj.omega - (wj.forwardSpeed || 0) / wj.radius;

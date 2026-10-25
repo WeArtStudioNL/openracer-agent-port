@@ -54,7 +54,7 @@ The sound is the combustion model of the game, with parameters. New presets in `
 
 ## What it cannot do yet
 * A rider (no driver model; the driver editor has no bike seat).
-* The tyre is a cylinder: at a lean the contact patch moves to its edge. The camber thrust of a round tyre is a force of the controller, not of the tyre.
+* The tyre is the shell of nodes with a round crown: at a lean the contact patch moves to its shoulder. The camber thrust of a round tyre is a force of the controller, not of the tyre.
 * A wheelie and a stoppie are there (the springs and the weight transfer do them), but the rider does not catch them.
 * Crashes: after about 66 degrees the bike falls over and slides; the rider is not thrown off.
 * The suspension of the model (the fork that goes in) does not move; the physics does.
