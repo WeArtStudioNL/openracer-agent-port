@@ -884,6 +884,17 @@ OpenRacer.Driver = function (config, parent, steering) {
             var len = P[c[0]].p.distanceTo(P[c[1]].p) + P[c[1]].p.distanceTo(P[c[2]].p);
             mins.push({ a: P[c[0]], b: P[c[2]], len: len * (k < 2 ? 0.3 : 0.45) });            // an arm or a leg folds no further than this
         });
+        // the parts of him that keep out of each other: every pair of particles that no stick or fold limit joins (a leg through the other leg, a hand through the chest), each with a
+        // radius of at least 7 cm (the particles are the joints; the limbs between them are thicker than that)
+        var joined = {}, pairs = [];
+        sticks.concat(mins).forEach(function (st) { for (var k in P) for (var k2 in P) if ((P[k] === st.a && P[k2] === st.b) || (P[k] === st.b && P[k2] === st.a)) joined[k + "/" + k2] = true; });
+        var keys = Object.keys(P);
+        for (i = 0; i < keys.length; i++) for (j = i + 1; j < keys.length; j++) {
+            if (joined[keys[i] + "/" + keys[j]]) continue;
+            var ra = Math.max(0.07, P[keys[i]].r), rb = Math.max(0.07, P[keys[j]].r);
+            if (P[keys[i]].p.distanceTo(P[keys[j]].p) < ra + rb) continue;                      // (already closer than that in the pose on the bike: not these two)
+            pairs.push({ a: P[keys[i]], b: P[keys[j]], len: ra + rb });
+        }
         // the frame of the torso in the space of the root (the root is put on the particles from it)
         // (from the bones in their rest pose, not from the particles: the posture bent the torso a little, and the skeleton is posed on the particles from the rest pose)
         var toLocal = function (bone) { return self.root.worldToLocal(bone.getWorldPosition(new V())); }, restChest = toLocal(B.armL[0]).add(toLocal(B.armR[0])).multiplyScalar(0.5);
@@ -909,7 +920,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         }
         P.chest.v.copy(P.shL.v).add(P.shR.v).multiplyScalar(0.5);
         P.head.v.copy(P.chest.v);
-        ragdoll = { pts: P, sticks: sticks, mins: mins, groundY: groundY, frame: frame, asleep: 0, time: 0, started: false, bike: options.bike || null, playback: !!options.playback, spheres: new Float64Array(8 * 256), sphereCount: 0, centre: new V(), fresh: !!options.bike, seated: !!options.onBike };
+        ragdoll = { pts: P, sticks: sticks, mins: mins, pairs: pairs, groundY: groundY, frame: frame, asleep: 0, time: 0, started: false, bike: options.bike || null, playback: !!options.playback, spheres: new Float64Array(8 * 256), sphereCount: 0, centre: new V(), fresh: !!options.bike, seated: !!options.onBike };
         ragdoll.centre.copy(P.hips.p);
     };
     // the middle of the body (the world): what its weight does to a bike that he lies on (Motorcycle.js)
@@ -1023,21 +1034,40 @@ OpenRacer.Driver = function (config, parent, steering) {
     // the side axis of the body. It was the forward of the torso, which is along the thigh of a rider that sits, and of a rider that lies on the road it is anything: the knees
     // folded forwards there)
     var jLimb = new V(), jLat = new V();
+    // a particle moved to a limit: its old place goes with it (the move itself gives it no speed), and what speed it had into the limit is taken out. (The old place went 0.7 of the
+    // way, a bounce of 0.3 of the move: a limb held in a limit by another constraint (a stick, the road) was given that speed again every iteration, and the ragdoll pumped itself
+    // up to 13 m in the air after a crash)
+    // (and by no more than 2 cm an iteration: a limit that is not well defined (a leg along the side axis of the body, where its forward turns round with every little move) threw
+    // the knee from one side to the other, and the sticks passed that on to the rest of him as speed)
+    // (and never into the road: a particle on the road is moved along it. A knee that the limit pushed down and the road pushed up again every iteration, with the little bounce
+    // the road gives, was a motor that threw him 10 m in the air)
+    var jMove = new V();
+    function toLimit(pt, dir, move) {
+        move = Math.max(-0.02, Math.min(0.02, move));
+        jMove.copy(dir).multiplyScalar(move);
+        if (jMove.y < 0 && pt.p.y <= pt.floor + 0.002) jMove.y = 0;
+        pt.p.add(jMove); pt.q.add(jMove);
+        var vn = (pt.p.x - pt.q.x) * dir.x + (pt.p.y - pt.q.y) * dir.y + (pt.p.z - pt.q.z) * dir.z;
+        if (vn * move < 0) pt.q.addScaledVector(dir, vn);
+    }
     function hinge(a, mid, b, side, sign) {
         jLimb.subVectors(b.p, a.p);
+        var limbLen = jLimb.length(); if (limbLen < 1e-6) return;
         jDir.crossVectors(jLimb, side);
-        if (jDir.lengthSq() < 1e-8) return;
-        jDir.normalize();
+        // (the forward of the limb is not defined when the limb lies along the side axis of the body: the limit fades out from 25 degrees off it)
+        var sinA = jDir.length() / limbLen, w = Math.max(0, Math.min(1, (sinA - 0.25) / 0.25));
+        if (w <= 0) return;
+        jDir.divideScalar(jDir.length());
         jTmp.copy(a.p).add(b.p).multiplyScalar(0.5);
         var d = (mid.p.x - jTmp.x) * jDir.x + (mid.p.y - jTmp.y) * jDir.y + (mid.p.z - jTmp.z) * jDir.z;
         // (never quite straight: a limb that is clamped on to the line has no side for the skeleton to bend to (ragdollPose), and the knee of the model snapped forwards and back)
         var dMin = sign * 0.03;
-        if ((d - dMin) * sign < 0) { mid.p.addScaledVector(jDir, dMin - d); mid.q.addScaledVector(jDir, (dMin - d) * 0.7); d = dMin; }
+        if ((d - dMin) * sign < 0) { toLimit(mid, jDir, (dMin - d) * w); d += (dMin - d) * w; }
         // and the joint bends in its own plane: the middle of the limb may stand out sideways (about the axis of the limb, as a thigh turns at the hip) by no more than 35 degrees of
         // its bend (a knee that bent 128 degrees sideways)
         jLimb.normalize(); jLat.crossVectors(jLimb, jDir);
-        var lat = (mid.p.x - jTmp.x) * jLat.x + (mid.p.y - jTmp.y) * jLat.y + (mid.p.z - jTmp.z) * jLat.z, latMax = 0.7 * Math.abs(d);
-        if (Math.abs(lat) > latMax) { var fix = lat - Math.sign(lat) * latMax; mid.p.addScaledVector(jLat, -fix); mid.q.addScaledVector(jLat, -fix * 0.7); }
+        var lat = (mid.p.x - jTmp.x) * jLat.x + (mid.p.y - jTmp.y) * jLat.y + (mid.p.z - jTmp.z) * jLat.z, latMax = Math.max(0.05, 0.7 * Math.abs(d));
+        if (Math.abs(lat) > latMax) toLimit(mid, jLat, -(lat - Math.sign(lat) * latMax) * w);
     }
     function cone(root, end, rest, maxDeg) {
         jDir.subVectors(end.p, root.p);
@@ -1049,7 +1079,8 @@ OpenRacer.Driver = function (config, parent, steering) {
         jTmp.normalize();
         jDir.applyAxisAngle(jTmp, Math.acos(Math.max(-1, c)) - lim);
         jTmp.copy(root.p).addScaledVector(jDir, len).sub(end.p);
-        end.p.add(jTmp); end.q.addScaledVector(jTmp, 0.7);
+        var move = jTmp.length(); if (move < 1e-9) return;
+        toLimit(end, jTmp.divideScalar(move), move);
     }
     function jointLimits(P) {
         jUp.subVectors(P.chest.p, P.hips.p).normalize();
@@ -1127,6 +1158,13 @@ OpenRacer.Driver = function (config, parent, steering) {
                     mn.a.p.addScaledVector(rgD, corr); mn.b.p.addScaledVector(rgD, -corr);
                 }
                 jointLimits(P);
+                // the limbs keep out of each other (as a limit: no speed from the push, and the speed of the two towards each other taken out)
+                for (i = 0; i < r.pairs.length; i++) {
+                    var pr = r.pairs[i]; rgD.subVectors(pr.b.p, pr.a.p);
+                    len = rgD.length(); if (len >= pr.len || len < 1e-6) continue;
+                    rgD.divideScalar(len); var half = (pr.len - len) * 0.5;
+                    toLimit(pr.a, rgD, -half); toLimit(pr.b, rgD, half);
+                }
                 var touching = 0;
                 for (key in P) {
                     var g = P[key];
