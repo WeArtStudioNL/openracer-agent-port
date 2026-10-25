@@ -34,7 +34,7 @@ OpenRacer.Motorcycle = function (settings) {
     this.settings = s;
     this.maxLean = (s.max_lean_deg || 60) * DEG;
     this.overLean = (s.over_lean_deg !== undefined ? s.over_lean_deg : 10) * DEG;   // how far past what the tyres hold the rider can lean it: past that the tyres let go (a lowside)
-    this.crashLean = (s.crash_lean_deg || 63) * DEG;                                   // from here the bike is down
+    this.crashLean = (s.crash_lean_deg || 70) * DEG;                                   // from here the bike is down
     this.balance = s.balance || 1;
     this.leanResponse = s.lean_response || 0.1;          // s: how fast the lean follows what is asked
     this.camberThrust = s.camber_thrust !== undefined ? s.camber_thrust : 0.85;     // the part of load * tan(lean) that a leaned tyre gives by itself (a round tyre: nearly all of it)
@@ -321,7 +321,7 @@ OpenRacer.Motorcycle = function (settings) {
             // a lowside: the bike slides sideways past 15 degrees for half a second while it leans (the tyres have let go; it crabbed along for seconds at the limit of the lean)
             var betaNow = Math.atan2(v.v || 0, Math.max(Math.abs(u), 1));
             self.slideTime = Math.abs(betaNow) > 15 * DEG && Math.abs(state.lean) > 25 * DEG && Math.abs(u) > 5 ? self.slideTime + dt : 0;
-            var lowside = self.slideTime > 0.5;
+            var lowside = self.slideTime > 0.8;
             // a spin: the bike turns about its vertical faster than 4 rad/s at speed (a jump landed on a lean: the front took the hit with the rear in the air, and the bike was
             // thrown round in a tenth of a second and went on backwards at 100 km/h)
             var spin = Math.abs(v.wy || 0) > 4 && Math.abs(u) > 5;
@@ -355,17 +355,23 @@ OpenRacer.Motorcycle = function (settings) {
             }
             vPrev = null;
         }
-        var alive = 1 - Math.min(1, Math.max(0, (Math.abs(state.lean) - 1.15) / 0.25));         // past about 66 degrees the bike is going down: the rider lets go
+        // a landing: after a flight of a quarter second or more the rider braces for the touchdown, and for a short while after it he holds the bike harder (the balance and the
+        // yaw damping stronger): a bike that landed a little off line was thrown into a lean and a spin by the kick of the tyres and went down
+        // (Vehicle.js counts the flight: this runs on the road only)
+        if (v.lastFlight > 0.25 && v.lastFlight !== self.lastFlightSeen) { self.brace = 0.8; self.lastFlightSeen = v.lastFlight; }
+        if (self.brace > 0) self.brace -= dt;
+        var brace = self.brace > 0 ? 1 + 1.0 * Math.min(1, self.brace / 0.5) : 1;
+        var alive = 1 - Math.min(1, Math.max(0, (Math.abs(state.lean) - 1.2) / 0.25));         // past about 69 degrees the bike is going down: the rider lets go
         if (!self.limp) {                                                                        // (a limp rider: none of this; the tyres below still give their camber thrust)
         self.rider(v, torque, dt, u, state);
         var m = v.mass, gh = m * G * v.cgHeight;
         var kp = self.balance * 10 * gh, inertia = m * v.cgHeight * v.cgHeight + c.inertiaZ, kd = 1.5 * Math.sqrt(kp * inertia);
         // at a walking pace with the bars turned far the rider cannot hold the bike up: the balance fades and it leans into the turn and goes down (unless the foot is down: standing)
         var slowLock = (1 - smooth(2.0, 4.0, Math.abs(u))) * smooth(0.6, 0.95, Math.abs(self.command || 0)) * (1 - Math.max(self.footDown, self.footDownL));
-        kp *= 1 - 0.98 * slowLock; kd *= 1 - 0.8 * slowLock;
+        kp *= (1 - 0.98 * slowLock) * brace; kd *= (1 - 0.8 * slowLock) * brace;
         var T = kp * (self.targetLean - state.lean) - kd * state.rate;                           // about the axis that leans it to the left
         T -= slowLock * 0.5 * gh * Math.sign(self.command || 0);                              // (and it leans into the turn: a bike that crawls with the bars at the lock goes over to the inside; left is a negative command and a positive T)
-        T = alive * Math.max(-6 * gh, Math.min(6 * gh, T));
+        T = alive * Math.max(-6 * gh * brace, Math.min(6 * gh * brace, T));
         torque.x -= state.ax * T; torque.y -= state.ay * T; torque.z -= state.az * T;
         // the yaw that the steering did not ask for is damped
         var fast = smooth(1.5, 4.5, Math.abs(u));
@@ -380,8 +386,8 @@ OpenRacer.Motorcycle = function (settings) {
             var rLean = -G * Math.tan(Math.max(-1.2, Math.min(1.2, state.lean + epsNow))) / Math.max(Math.abs(u), 4);
             var yawErr = c.r - rLean;
             // (on the brakes the rider holds the bars harder: with the rear nearly off the road the front alone turned the bike 14 degrees out of line in a second at 145 km/h)
-            var yawCap = self.yawCap + self.yawCapBrake * smooth(0.2, 0.8, v.input.brakePedal || 0);
-            self.dbg.yawDamp = Math.max(-yawCap, Math.min(yawCap, self.balance * (c.inertiaY / 0.06) * yawErr * fast * (1 + 2 * smooth(0.2, 0.8, v.input.brakePedal || 0))));
+            var yawCap = (self.yawCap + self.yawCapBrake * smooth(0.2, 0.8, v.input.brakePedal || 0)) * brace;
+            self.dbg.yawDamp = Math.max(-yawCap, Math.min(yawCap, self.balance * (c.inertiaY / 0.06) * yawErr * fast * brace * (1 + 2 * smooth(0.2, 0.8, v.input.brakePedal || 0))));
             torque.y += self.dbg.yawDamp;
         }
         // no reverse gear: the rider walks the bike back (Car.js says when), slowly, with a small force
@@ -477,7 +483,7 @@ OpenRacer.Motorcycle = function (settings) {
 
     // ---- hook for the camera: it rolls with the lean, a part of it, smoothed. camera: the three.js camera, after it was placed
     // after a reset or a repair: the rider is back on the bike
-    this.recover = function () { hist.length = 0; self.slideTime = 0; self.crashed = false; self.limp = false; self.riderLoad = null; self.footDown = 0; self.footDownL = 0; self.footStill = false; self.footWait = 0; self.targetLean = 0; self.steer = 0; self.wheelieScale = 1; vPrev = null; accel.x = accel.y = accel.z = 0; };
+    this.recover = function () { hist.length = 0; self.slideTime = 0; self.crashed = false; self.limp = false; self.riderLoad = null; self.footDown = 0; self.footDownL = 0; self.footStill = false; self.footWait = 0; self.brace = 0; self.lastFlightSeen = 0; self.targetLean = 0; self.steer = 0; self.wheelieScale = 1; vPrev = null; accel.x = accel.y = accel.z = 0; };
 
     this.cameraRoll = function (camera, v, dt) {
         var classic = typeof Settings !== "undefined" && Settings.option("bikeCamera") === "classic";       // (the menu: the chase camera of a car, that does not roll)

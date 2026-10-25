@@ -1567,6 +1567,9 @@ OpenRacer.Vehicle = function (parameters, input) {
             compVelocity[i] = -w.susVel;
             w.suspensionLength = w.susLength;
         }
+        // how long the car has been in the air, and how long its last flight was (set at the touchdown; a motorcycle's rider braces after a flight)
+        if(!anyContact) self.airTime = (self.airTime || 0) + dt;
+        else { if(self.airborne) self.lastFlight = self.airTime || 0; self.airTime = 0; }
         self.airborne = !anyContact;
         // the anti-roll bars push the wheel that is pushed in more down, and the other up
         var arbF = arbFront * (comp[1] - comp[0]);       // front: left minus right
