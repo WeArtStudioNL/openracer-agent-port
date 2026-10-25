@@ -99,7 +99,7 @@ OpenRacer.Wheel = function (parameters) {
     this.turn = function (turnAngle) {
         this.turnAngle = turnAngle;
         // (a damaged wheel is bent: toe and camber, see Vehicle.js)
-        if(this.object) { this.object.children[0].rotation.y = -turnAngle - (this.toeBend || 0); this.object.children[0].rotation.z = this.camberBend || 0; }
+        if(this.object) { this.object.children[0].rotation.y = -turnAngle - (this.toeBend || 0); this.object.children[0].rotation.z = this.lean !== undefined ? -this.lean : (this.camberBend || 0); }     // (the camber: the lean to the left, with the roll of the body and the bend)
     };
 
     this.getWheelVelocity = function () {

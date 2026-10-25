@@ -33,9 +33,11 @@ OpenRacer.TyreShell = function (wheel) {
     var Nx, Ny, Nz;                                        // the outward normal of the shell at a node
     var blockList = [];
     var nearNode, nodeList;                                // 1 for a node that a triangle of the list can reach in this step (the others are not looked at), and the triangles that can
+    var Bx, By, Bz;                                        // per node: the stiffness times the speed of the anchors (a spring to a place that moves: the implicit step has to know where it goes)
+    var Kxx, Kxy, Kxz, Kyy, Kyz, Kzz, t1xA, t1yA, t1zA, t2xA, t2yA, t2zA, holdA;      // (and per node: the directions of its bristles and whether they hold, for the bend of the bristles after the step)                       // per node: the stiffness of its springs to anchors that move with the wheel or stand on the road (the cables, the shear, the road, the bristles), taken implicitly
     var eFn, eNx, eNy, eNz, tFn;                           // the load on a node from the samples between the nodes (and the sum of its own and those)
     var fnNode, cnx, cny, cnz, ctri, inContact, sliding, ux, uy;
-    var bA, bB, bL0, bLmin, bClass, bKind, bStrain;        // the beams: ends (outer 0..N-1, inner N..2N-1), rest length, length of the stop, class of stiffness, kind, strain of the last step
+    var bA, bB, bL0, bLmin, bClass, bKind, bStrain, bK, bDx, bDy, bDz;      // (bK, bD: the stiffness and the direction of a cable in this substep, for the force to the rim after the implicit step)        // the beams: ends (outer 0..N-1, inner N..2N-1), rest length, length of the stop, class of stiffness, kind, strain of the last step
     var beamCount = 0, started = false;
     var surfaceNames = [];
     var near = { x: 0, y: 0, z: 0 }, triNormal = { x: 0, y: 0, z: 0 };
@@ -44,7 +46,19 @@ OpenRacer.TyreShell = function (wheel) {
     var classK = [0, 0, 0, 0, 0], classL0Pre = 0;
 
     // set by Vehicle.js
-    this.forceFilter = 0.006;
+    this.forceFilter = 0.0015;         // s: the load that goes to the car is smoothed over this (a long one lagged behind the hop of a heavy wheel on a stiff tyre and fed it)
+    this.torsion = 0;                  // kNm/rad: the torsional stiffness of the tyre, the belt against the rim through the sidewall (a car tyre 10 to 30; 0: three times the bristle stiffness, the old rule)
+    this.beltMul = 0.25;               // the belt springs round the tyre and across it, as a multiple of the cable of the carcass
+    this.beltTwoSided = false;         // the belt pushes back when it is compressed too (a steel belt); false: a string, it only pulls
+    this.stepAngle = 0.7;              // the step of a node against its fastest ring (rad per substep): the number of substeps follows from it
+    this.lockedSpin = false;           // a test rig: the wheel is turned at the omega that is given, the tread does not turn it
+    this.roadStop = 0.5;               // the damper of the road can at most take this share of the speed of a node into the road in a substep (it is at this limit nearly always: it is the loss of the tread going in and out of the patch)
+    this.bristleDamping = 0.3;         // the damping of the bristles that hold a node on the road (of critical, per node)
+    this.shearDamping = 1.0;           // the damping of the shear springs of the tread along the wheel (of critical, per node): it is what damps the wheel against the tread (a wheel at a standstill swung back and forth with less)
+    this.shearDampingLat = 0.15;       // the same across the wheel: only against the ringing of a node (more would give a lateral force that grows with the speed)
+    this.round = false;                // a motorcycle tyre: a round crown (the outer rings lie a lot lower, and the profile is a circle), a car tyre is flat with a small shoulder
+    this.shoulder = 0;                 // how far the outer rings lie below the middle one (m; 0: 2 % of the width for a car, 30 % for a round tyre)
+    this.softShare = 1.8;             // the carcass goes slack (the air carries the node) at this share of the static deflection of the tyre (carcass 0: this rule; carcass > 0: that many mm)
     this.rings = 3; this.segments = 36; this.width = 0;
     this.stiffX = 20; this.stiffY = 18; this.damping = 0.8; this.restDamping = 2; this.stribeck = 8; this.tolerance = 0.004;
     this.verticalStiffness = 220000; this.verticalDamping = 3000; this.staticLoad = 3000;
@@ -54,8 +68,11 @@ OpenRacer.TyreShell = function (wheel) {
     this.tyreMass = 0;                 // kg of the outer shell (0: from the wheel)
     this.roadStiffness = 4;            // the stiffness of the road on a node as a multiple of the cable of the carcass
     this.roadDamping = 0.6;            // and its damping, as a share of the critical damping
+    this.implicit = false;             // the springs of a node to its anchors taken implicitly in its step (fewer substeps; an experiment: the force to the rim then lags the nodes, a wheel at a standstill swung by 3 rad/s)
+    this.theta = 0.6;                  // the implicit step of a node on its springs to anchors: 1 is backward Euler (it damps every fast motion, a rolling tyre lost a lot in it), 0.5 the trapezoid (no loss, no damping of the fastest ringing)
+    this.maxSubstep = 0.00022;          // s: the longest substep (the dampers are explicit, and the road is found per substep)
     this.maxSubsteps = 14;             // the most steps for one step of the car
-    this.beamDamping = 0.7;            // the damping of the beams, as a share of the critical damping of a node on it
+    this.beamDamping = 0.3;            // the damping of the beams, as a share of the critical damping of a node on it
     this.count = 0; this.contacts = 0; this.patch = 0; this.slidingShare = 0;
     this.normal = { x: 0, y: 0, z: 0 };
     this.friction = { x: 0, y: 0, z: 0 };
@@ -64,8 +81,9 @@ OpenRacer.TyreShell = function (wheel) {
     this.surface = "road"; this.mesh = ""; this.groundY = 0; this.maxDepth = 0; this.axleTorque = 0; this.used = 0; this.dampSlope = 0;
     this.sag = 0;                      // m: how far the tyre is pushed in at its lowest place (for the debug view and the HUD)
     this.substeps = 0;
+    this.omegaOut = undefined; this.omegaAvg = 0;        // the turn of the wheel at the end of the step, by the tread alone (the car adds the engine and the brake), and its mean over the step
 
-    function key() { return [Math.max(1, Math.min(5, Math.round(self.rings))), Math.max(8, Math.min(72, Math.round(self.segments))), self.width, wheel.radius, self.innerRatio].join(","); }
+    function key() { return [Math.max(1, Math.min(5, Math.round(self.rings))), Math.max(8, Math.min(72, Math.round(self.segments))), self.width, wheel.radius, self.innerRatio, self.round ? 1 : 0, self.shoulder].join(","); }
 
     function build() {
         rings = Math.max(1, Math.min(5, Math.round(self.rings)));
@@ -74,11 +92,11 @@ OpenRacer.TyreShell = function (wheel) {
         width = self.width > 0 ? self.width : Math.max(0.1, 0.7 * radius);
         N = rings * segs;
         nodeLat = new Float32Array(rings); nodeRad = new Float32Array(rings); innerLat = new Float32Array(rings); innerRad = new Float32Array(rings);
-        var shoulder = Math.min(0.03, 0.12 * width), ratio = Math.max(0.3, Math.min(0.9, self.innerRatio));
+        var shoulder = self.shoulder > 0 ? self.shoulder : (self.round ? 0.3 * width : 0.02 * width), ratio = Math.max(0.3, Math.min(0.9, self.innerRatio)), power = self.round ? 2 : 4;
         for(var j = 0; j < rings; j++) {
             var t = rings === 1 ? 0 : (j / (rings - 1)) * 2 - 1;
             nodeLat[j] = t * width / 2 * (rings === 1 ? 0 : 0.92);
-            nodeRad[j] = radius - shoulder * t * t * t * t;
+            nodeRad[j] = radius - shoulder * Math.pow(Math.abs(t), power);
             innerLat[j] = nodeLat[j] * 0.62;                                   // the rim is narrower than the tread
             innerRad[j] = radius * ratio;
         }
@@ -87,6 +105,9 @@ OpenRacer.TyreShell = function (wheel) {
         Ix = f64(); Iy = f64(); Iz = f64(); IVx = f64(); IVy = f64(); IVz = f64();
         Ox = f64(); Oy = f64(); Oz = f64(); OVx = f64(); OVy = f64(); OVz = f64(); Tx = f64(); Ty = f64(); Tz = f64(); Nx = f64(); Ny = f64(); Nz = f64();
         nearNode = new Uint8Array(N); nodeList = []; for(var il = 0; il < N; il++) nodeList.push([]);
+        t1xA = f64(); t1yA = f64(); t1zA = f64(); t2xA = f64(); t2yA = f64(); t2zA = f64(); holdA = new Uint8Array(N);
+        Bx = f64(); By = f64(); Bz = f64();
+        Kxx = f64(); Kxy = f64(); Kxz = f64(); Kyy = f64(); Kyz = f64(); Kzz = f64();
         eFn = f64(); eNx = f64(); eNy = f64(); eNz = f64(); tFn = f64();
         fnNode = new Float32Array(N); cnx = new Float32Array(N); cny = new Float32Array(N); cnz = new Float32Array(N);
         ctri = new Int32Array(N); inContact = new Uint8Array(N); sliding = new Uint8Array(N); ux = new Float32Array(N); uy = new Float32Array(N);
@@ -109,7 +130,7 @@ OpenRacer.TyreShell = function (wheel) {
         }
         beamCount = A.length;
         bA = Int32Array.from(A); bB = Int32Array.from(B); bL0 = Float64Array.from(L0); bLmin = Float64Array.from(LM); bClass = Uint8Array.from(CL); bKind = Uint8Array.from(KD);
-        bStrain = new Float32Array(beamCount);
+        bStrain = new Float32Array(beamCount); bK = new Float64Array(beamCount); bDx = new Float64Array(beamCount); bDy = new Float64Array(beamCount); bDz = new Float64Array(beamCount);
         self.count = N; self.builtFor = key(); started = false;
     }
 
@@ -198,23 +219,28 @@ OpenRacer.TyreShell = function (wheel) {
         var R = radius, mn = Math.max(0.01, (self.tyreMass > 0 ? self.tyreMass : 8) / N);     // the mass of a node (kg)
         // ---- the constants of the beams from the pressure and the stiffness
         var Pa = Math.max(0.15, self.pressure) * 1e5, An = (2 * Math.PI * R / segs) * (width / rings), pA = Pa * An;
-        var softness = self.carcass > 0 ? Math.max(0.003, self.carcass / 1000) : autoSoftness(R, pA, An);
+        // the softness of the carcass: how far a node goes in before its cable is slack and the air carries it; a share of the static deflection of the tyre (the stiffness of the tyre
+        // then follows the pressure: the cables and the air both do), or what the car says in mm
+        var softness = self.carcass > 0 ? Math.max(0.003, self.carcass / 1000) : Math.max(0.003, self.softShare * self.staticLoad / Math.max(1e4, self.verticalStiffness));
         var kr = pA / softness;                                               // the cable down to the rim: slack when the node is in by the softness of the carcass
         var spacing = 2 * Math.PI * R / segs, nominal = Math.max(4, rings * 0.19 / spacing);
-        var Kt = 3 * self.stiffX * self.staticLoad / 0.095, Ky = 3 * self.stiffY * self.staticLoad / 0.095;
+        var Kt = self.torsion > 0 ? self.torsion * 1000 / (R * R) : 3 * self.stiffX * self.staticLoad / 0.095, Ky = 3 * self.stiffY * self.staticLoad / 0.095;
         var inertia = wheel.inertia || 1.6;
-        Kt = Math.min(Kt, 0.25 * inertia / (R * R * dt * dt));                  // (a stiffer belt than the wheel can follow in one step would ring)
+        // (the wheel takes the stiffness of the tread implicitly, dampSlope below: the belt can be as stiff as the tyre says; a cap far out, against a step that is not one)
+        Kt = Math.min(Kt, 20 * inertia / (R * R * dt * dt));
         classK[CLASS_RADIAL] = kr;
         var kShearT = Kt / nominal, kShearL = Ky / nominal;
-        var cShearT = 2 * 0.7 * Math.sqrt(kShearT * mn), cShearL = 2 * 0.7 * Math.sqrt(kShearL * mn);
-        classK[CLASS_BELT] = 0.25 * kr; classK[CLASS_CROSS] = 0.25 * kr;
+        var cShearT = 2 * self.shearDamping * Math.sqrt(kShearT * mn), cShearL = 2 * self.shearDampingLat * Math.sqrt(kShearL * mn);
+        classK[CLASS_BELT] = self.beltMul * kr; classK[CLASS_CROSS] = self.beltMul * kr;
         var kg = self.roadStiffness * kr, kStop = 20 * kr, zeta = self.beamDamping;
         var hubx = hub.x, huby = hub.y, hubz = hub.z;
         // the number of steps: the fastest node (the road on it, and the beams) against a step of 0.9 rad; a node that is too light for the steps that we can afford is made heavier
-        var kSum = kg + kr + kShearT + kShearL + 2 * classK[CLASS_BELT] + 2 * classK[CLASS_CROSS];
+        // (the springs to the rim, to the place of the node on the wheel, to the road and the bristles are taken implicitly in the step of a node: they do not limit it; the beams
+        // between the nodes, the belt, are explicit, and the dampers; a node that is too light for the steps we can afford is made heavier, which the belt alone hardly asks)
+        var kSum = self.implicit ? 2 * classK[CLASS_BELT] + 2 * classK[CLASS_CROSS] : kg + kr + kShearT + kShearL + 2 * classK[CLASS_BELT] + 2 * classK[CLASS_CROSS];
         var stepMax = dt / self.maxSubsteps;
-        mn = Math.max(mn, 1.15 * kSum * (stepMax / 0.9) * (stepMax / 0.9));
-        var nWanted = Math.ceil(dt * Math.sqrt(kSum / mn) / 0.9), n = Math.max(2, Math.min(self.maxSubsteps, nWanted));
+        mn = Math.max(mn, 1.15 * kSum * (stepMax / self.stepAngle) * (stepMax / self.stepAngle));
+        var nWanted = Math.max(Math.ceil(dt * Math.sqrt(kSum / mn) / self.stepAngle), Math.ceil(dt / self.maxSubstep)), n = Math.max(2, Math.min(self.maxSubsteps, nWanted));
         self.substepsWanted = nWanted;
         self.substeps = n;
         var h = dt / n;
@@ -228,10 +254,17 @@ OpenRacer.TyreShell = function (wheel) {
         var tol = self.tolerance;
         var fHubX = 0, fHubY = 0, fHubZ = 0, torque = 0;
         // a force on a node of the rim: it goes to the hub (and its torque about the axle)
+        var hcx = hubx, hcy = huby, hcz = hubz;                              // the hub of the substep (the rim is placed along the path of the hub: the arm of a torque is from there)
         function rimForce(i, fx, fy, fz) {
             fHubX += fx; fHubY += fy; fHubZ += fz;
-            var rx = Ix[i] - hubx, ry = Iy[i] - huby, rz = Iz[i] - hubz;
+            var rx = Ix[i] - hcx, ry = Iy[i] - hcy, rz = Iz[i] - hcz;
             torque += L.x * (ry * fz - rz * fy) + L.y * (rz * fx - rx * fz) + L.z * (rx * fy - ry * fx);
+        }
+        // a spring of k along the unit direction d on node i, to an anchor: its stiffness k d d^T goes into the implicit step of the node
+        // (vax, vay, vaz: the speed of the anchor, when it moves: the rim, or the place of the node on the wheel)
+        function addK(i, k, dx, dy, dz, vax, vay, vaz) {
+            Kxx[i] += k * dx * dx; Kxy[i] += k * dx * dy; Kxz[i] += k * dx * dz; Kyy[i] += k * dy * dy; Kyz[i] += k * dy * dz; Kzz[i] += k * dz * dz;
+            if(vax !== undefined) { var kv = k * (vax * dx + vay * dy + vaz * dz); Bx[i] += kv * dx; By[i] += kv * dy; Bz[i] += kv * dz; }
         }
         var load0 = Math.max(self.staticLoad * 0.3, 1);
         var surf = frictionOf(Math.max(load0, loadPrev), self.surface);
@@ -258,13 +291,20 @@ OpenRacer.TyreShell = function (wheel) {
         }
         // ---- the steps
         var damped = 0;
+        // the wheel turns with the tread in the substeps: the tread holds the rim with a stiff grip that saturates within a few millimetres of turn, which one step of the car (3 ms) cannot
+        // follow (a wheel at a standstill was thrown back and forth between the two limits of the grip, 4 rad/s); so the shell turns the wheel itself with the torque of the tread, and the
+        // car adds what the engine and the brake do (omegaOut, Vehicle.js)
+        var omS = omega, omSum = 0, phS = phase - 0.5 * omega * dt, inertiaW = Math.max(0.05, wheel.inertia || 1.6);
+        var alongSum = 0;
         var maxDepth = 0, count = 0, sumFn = 0, slideLoad = 0, cxs = 0, cys = 0, czs = 0, nxs = 0, nys = 0, nzs = 0, minF = 1e9, maxF = -1e9, bestFn = 0, bestTri = -1, sag = 0;
         for(var s = 0; s < n; s++) {
             // (the path of the rim is centred on the hub of now, from half a step before to half a step after: the force of the step is then the force at the place where the car has the wheel; a path that ran ahead of the hub gave a force that led the motion, which is a negative damping)
-            var tc = h * (s + 1) - 0.5 * dt, ph = phase + omega * tc;
-            placeShells(hub.x + vel.x * tc, hub.y + vel.y * tc, hub.z + vel.z * tc, L, F, U, ph, omega, vel);
+            var tc = h * (s + 1) - 0.5 * dt, tq0 = torque;
+            phS += omS * h;
+            hcx = hub.x + vel.x * tc; hcy = hub.y + vel.y * tc; hcz = hub.z + vel.z * tc;
+            placeShells(hcx, hcy, hcz, L, F, U, phS, omS, vel);
             shellNormals(hubx, huby, hubz);
-            for(var i = 0; i < N; i++) { Fx[i] = Fy[i] = Fz[i] = 0; }
+            for(var i = 0; i < N; i++) { Fx[i] = Fy[i] = Fz[i] = 0; Kxx[i] = Kxy[i] = Kxz[i] = Kyy[i] = Kyz[i] = Kzz[i] = 0; Bx[i] = By[i] = Bz[i] = 0; holdA[i] = 0; }
             // the pressure: on the outer node, outwards, and the reaction on the rim node under it
             for(var ip = 0; ip < N; ip++) {
                 var fx = pA * Nx[ip], fy = pA * Ny[ip], fz = pA * Nz[ip];
@@ -285,14 +325,16 @@ OpenRacer.TyreShell = function (wheel) {
                 if(kind === 2) {
                     // the cable to the rim: it pulls (taut by the pressure at rest: its rest length is shorter by pA / k) and it goes slack when the node is in; the stop takes over deep in
                     var lSlack = L0 - pA / k, spring = 0;
-                    if(len > lSlack) spring = k * (len - lSlack);
-                    else if(len < bLmin[b]) spring = -kStop * (bLmin[b] - len);
+                    bK[b] = 0;
+                    if(len > lSlack) { spring = k * (len - lSlack); addK(a, k, dx, dy, dz, bvx, bvy, bvz); bK[b] = k; }
+                    else if(len < bLmin[b]) { spring = -kStop * (bLmin[b] - len); addK(a, kStop, dx, dy, dz, bvx, bvy, bvz); bK[b] = kStop; }
+                    bDx[b] = dx; bDy[b] = dy; bDz[b] = dz;
                     force = spring + zeta * 2 * Math.sqrt(k * mn) * vr;              // (the damper works whether the cable is taut or slack: the node has to be held in the patch)
                     bStrain[b] = (len - L0) / L0;
                 } else if(kind === 0) {
                     var s0 = len - L0;
-                    if(s0 > 0) force = k * s0 + zeta * 2 * Math.sqrt(k * mn) * vr; else force = 0;
-                    if(force < 0) force = 0;
+                    if(s0 > 0 || self.beltTwoSided) force = k * s0 + zeta * 2 * Math.sqrt(k * mn) * vr; else force = 0;
+                    if(force < 0 && !self.beltTwoSided) force = 0;
                     bStrain[b] = s0 / L0;
                 } else {
                     force = k * (len - L0) + zeta * 2 * Math.sqrt(k * mn * 0.5) * vr;
@@ -311,12 +353,13 @@ OpenRacer.TyreShell = function (wheel) {
                 var rvx = Vx[is2] - OVx[is2], rvy = Vy[is2] - OVy[is2], rvz = Vz[is2] - OVz[is2];
                 var vT = rvx * Tx[is2] + rvy * Ty[is2] + rvz * Tz[is2], vL = rvx * L.x + rvy * L.y + rvz * L.z;
                 var fT = -(kShearT * dT + cShearT * vT), fL = -(kShearL * dL + cShearL * vL);
+                addK(is2, kShearT, Tx[is2], Ty[is2], Tz[is2], OVx[is2], OVy[is2], OVz[is2]); addK(is2, kShearL, L.x, L.y, L.z, OVx[is2], OVy[is2], OVz[is2]);
                 var sx = fT * Tx[is2] + fL * L.x, sy = fT * Ty[is2] + fL * L.y, sz = fT * Tz[is2] + fL * L.z;
                 Fx[is2] += sx; Fy[is2] += sy; Fz[is2] += sz;
                 rimForce(is2, -sx, -sy, -sz);
             }
             // the road on the nodes: the stiff spring out of the triangle, and the bristles
-            count = 0; sumFn = 0; slideLoad = 0; maxDepth = 0; cxs = cys = czs = nxs = nys = nzs = 0; minF = 1e9; maxF = -1e9; bestFn = 0; bestTri = -1; sag = 0;
+            count = 0; sumFn = 0; slideLoad = 0; maxDepth = 0; cxs = cys = czs = nxs = nys = nzs = 0; minF = 1e9; maxF = -1e9; bestFn = 0; bestTri = -1; sag = 0; alongSum = 0;
             var load = Math.max(loadPrev, 1), springX = self.stiffX * load / halfPatch;
             // the road is felt at S places per span between two nodes (the nodes and the places between them on the straight line): a patch of two or three nodes would otherwise grow in jumps, and the
             // load of the tyre would jump with it; the spring of a span is shared out over its places, and the force of a place between goes to the two nodes beside it
@@ -331,11 +374,12 @@ OpenRacer.TyreShell = function (wheel) {
                     if(!contactAt(qx, qy, qz, hub, ground, nearNode[na] ? nodeList[na] : nodeList[nb2], tol)) continue;
                     var qvx = Vx[na] + (Vx[nb2] - Vx[na]) * tt, qvy = Vy[na] + (Vy[nb2] - Vy[na]) * tt, qvz = Vz[na] + (Vz[nb2] - Vz[na]) * tt;
                     var qvn = qvx * cNx + qvy * cNy + qvz * cNz;
-                    var qd = -self.roadDamping * 2 * Math.sqrt(kgS * mS) * qvn, qcap = 0.5 * mS * Math.abs(qvn) / h;
+                    var qd = -self.roadDamping * 2 * Math.sqrt(kgS * mS) * qvn, qcap = self.roadStop * mS * Math.abs(qvn) / h;
                     if(qd > qcap) qd = qcap; else if(qd < -qcap) qd = -qcap;
                     var qf = kgS * cDepth + qd;
                     if(qf <= 0) continue;
                     var fqx = qf * cNx, fqy = qf * cNy, fqz = qf * cNz, wa = 1 - tt;
+                    addK(na, kgS * wa * wa, cNx, cNy, cNz); addK(nb2, kgS * tt * tt, cNx, cNy, cNz);
                     Fx[na] += fqx * wa; Fy[na] += fqy * wa; Fz[na] += fqz * wa; Fx[nb2] += fqx * tt; Fy[nb2] += fqy * tt; Fz[nb2] += fqz * tt;
                     eFn[na] += qf * wa; eFn[nb2] += qf * tt;
                     eNx[na] += fqx * wa; eNy[na] += fqy * wa; eNz[na] += fqz * wa; eNx[nb2] += fqx * tt; eNy[nb2] += fqy * tt; eNz[nb2] += fqz * tt;
@@ -348,13 +392,14 @@ OpenRacer.TyreShell = function (wheel) {
                     depth = cDepth; nxg = cNx; nyg = cNy; nzg = cNz;
                     var vn = Vx[ig] * nxg + Vy[ig] * nyg + Vz[ig] * nzg;
                     // the spring of the road, and its damper, which can at most stop the node in a step (a stiff damper on a light node would ring)
-                    var dampF = -self.roadDamping * 2 * Math.sqrt(kgS * mS) * vn, dampCap = 0.5 * mS * Math.abs(vn) / h;
+                    var dampF = -self.roadDamping * 2 * Math.sqrt(kgS * mS) * vn, dampCap = self.roadStop * mS * Math.abs(vn) / h;
                     if(dampF > dampCap) dampF = dampCap; else if(dampF < -dampCap) dampF = -dampCap;
                     fnOwn = kgS * depth + dampF;
                     if(fnOwn < 0) fnOwn = 0;
+                    if(fnOwn > 0) addK(ig, kgS, nxg, nyg, nzg);
                 }
                 var fn = fnOwn + eFn[ig];
-                if(fn <= 0) { inContact[ig] = 0; sliding[ig] = 0; fnNode[ig] = 0; continue; }
+                if(fn <= 0) { inContact[ig] = 0; sliding[ig] = 0; fnNode[ig] = 0; ux[ig] = uy[ig] = 0; continue; }       // (a node off the road: its bristles are straight again; they kept their bend for the next time round)
                 if(fnOwn > 0) { Fx[ig] += fnOwn * nxg; Fy[ig] += fnOwn * nyg; Fz[ig] += fnOwn * nzg; }
                 // the direction of the load on the node: its own and that of the places beside it
                 var sxn = fnOwn * nxg + eNx[ig], syn = fnOwn * nyg + eNy[ig], szn = fnOwn * nzg + eNz[ig], sln = Math.sqrt(sxn * sxn + syn * syn + szn * szn) || 1;
@@ -368,6 +413,7 @@ OpenRacer.TyreShell = function (wheel) {
                 nxs += fn * nxg; nys += fn * nyg; nzs += fn * nzg;
                 var along = (Px[ig] - hub.x) * F.x + (Py[ig] - hub.y) * F.y + (Pz[ig] - hub.z) * F.z;
                 if(along < minF) minF = along; if(along > maxF) maxF = along;
+                alongSum += fn * along;
                 if(fn > bestFn) { bestFn = fn; bestTri = cTri; }
                 // the bristles: the speed of the tread over the road is the speed of the node
                 var dotN = F.x * nxg + F.y * nyg + F.z * nzg;
@@ -378,28 +424,60 @@ OpenRacer.TyreShell = function (wheel) {
                 var vnn = Vx[ig] * nxg + Vy[ig] * nyg + Vz[ig] * nzg;
                 var tvx = Vx[ig] - vnn * nxg, tvy = Vy[ig] - vnn * nyg, tvz = Vz[ig] - vnn * nzg;
                 var sxs = tvx * t1x + tvy * t1y + tvz * t1z, sys = tvx * t2x + tvy * t2y + tvz * t2z;
-                ux[ig] += sxs * h; uy[ig] += sys * h;
+                // (the bend of the bristles grows with the slide of the node: with the implicit step after it, with its speed then; the explicit step takes the slide of now, before the force)
+                if(!self.implicit) { ux[ig] += sxs * h; uy[ig] += sys * h; }
+                t1xA[ig] = t1x; t1yA[ig] = t1y; t1zA[ig] = t1z; t2xA[ig] = t2x; t2yA[ig] = t2y; t2zA[ig] = t2z;
                 var kx = self.stiffX * fn / halfPatch, ky = self.stiffY * fn / halfPatch;
                 var slideSpeed = Math.sqrt(sxs * sxs + sys * sys);
                 var muNow = surf.sliding + (surf.mu - surf.sliding) * Math.exp(-slideSpeed / self.stribeck);
-                var dX = 0.3 * 2 * Math.sqrt(kx * mn), dY = 0.3 * 2 * Math.sqrt(ky * mn);
+                var dX = self.bristleDamping * 2 * Math.sqrt(kx * mn), dY = self.bristleDamping * 2 * Math.sqrt(ky * mn);
                 var fX = -(kx * ux[ig]) - Math.sign(sxs) * Math.min(dX * Math.abs(sxs), 0.6 * mn * Math.abs(sxs) / h);
                 var fY = -(ky * uy[ig]) - Math.sign(sys) * Math.min(dY * Math.abs(sys), 0.6 * mn * Math.abs(sys) / h);
                 var mag = Math.sqrt(fX * fX + (fY / lateralGrip) * (fY / lateralGrip)), limit = muNow * fn;
-                if(mag > limit && mag > 0) { var sc = limit / mag; ux[ig] *= sc; uy[ig] *= sc; fX *= sc; fY *= sc; sliding[ig] = 1; slideLoad += fn; } else { sliding[ig] = 0; damped += Math.min(dX, 0.6 * mn / h) + 0.5 * kx * dt; }
+                if(mag > limit && mag > 0) { var sc = limit / mag; ux[ig] *= sc; uy[ig] *= sc; fX *= sc; fY *= sc; sliding[ig] = 1; slideLoad += fn; holdA[ig] = 1; } else { sliding[ig] = 0; holdA[ig] = 1; addK(ig, kx, t1x, t1y, t1z); addK(ig, ky, t2x, t2y, t2z); damped += Math.min(dX, 0.6 * mn / h) + cShearT + (kx * kShearT / (kx + kShearT)) * dt; }       // (what the wheel feels of a node that holds: the dampers, and the stiffness of the bristle and the shear spring in series, as it grows over a step)
                 Fx[ig] += fX * t1x + fY * t2x; Fy[ig] += fX * t1y + fY * t2y; Fz[ig] += fX * t1z + fY * t2z;
             }
             if(count > 0) halfPatch = Math.max(0.03, (maxF - minF) / 2 + spacing / 2);
             // the nodes
+            var hh = h * h, th = Math.max(0.5, Math.min(1, self.theta)), hhT = hh * th, hhR = hh * (1 - th);
             for(var im = 0; im < N; im++) {
-                Vx[im] += Fx[im] / mn * h; Vy[im] += Fy[im] / mn * h; Vz[im] += Fz[im] / mn * h;
+                // (mn I + theta h^2 K) v' = mn v + h F - (1 - theta) h^2 K v + h^2 K va: the springs to the anchors hold back the step as far as it would stretch them (the theta method)
+                var a11 = mn + hhT * Kxx[im], a12 = hhT * Kxy[im], a13 = hhT * Kxz[im], a22 = mn + hhT * Kyy[im], a23 = hhT * Kyz[im], a33 = mn + hhT * Kzz[im];
+                var kvx = Kxx[im] * Vx[im] + Kxy[im] * Vy[im] + Kxz[im] * Vz[im], kvy = Kxy[im] * Vx[im] + Kyy[im] * Vy[im] + Kyz[im] * Vz[im], kvz = Kxz[im] * Vx[im] + Kyz[im] * Vy[im] + Kzz[im] * Vz[im];
+                var b1 = mn * Vx[im] + h * Fx[im] + hh * Bx[im] - hhR * kvx, b2 = mn * Vy[im] + h * Fy[im] + hh * By[im] - hhR * kvy, b3 = mn * Vz[im] + h * Fz[im] + hh * Bz[im] - hhR * kvz;
+                var c11 = a22 * a33 - a23 * a23, c12 = a13 * a23 - a12 * a33, c13 = a12 * a23 - a13 * a22;
+                var det = a11 * c11 + a12 * c12 + a13 * c13;
+                if(self.implicit && det > 1e-12) {
+                    var c22 = a11 * a33 - a13 * a13, c23 = a12 * a13 - a11 * a23, c33 = a11 * a22 - a12 * a12;
+                    Vx[im] = (c11 * b1 + c12 * b2 + c13 * b3) / det; Vy[im] = (c12 * b1 + c22 * b2 + c23 * b3) / det; Vz[im] = (c13 * b1 + c23 * b2 + c33 * b3) / det;
+                } else { Vx[im] += Fx[im] / mn * h; Vy[im] += Fy[im] / mn * h; Vz[im] += Fz[im] / mn * h; }
                 Px[im] += Vx[im] * h; Py[im] += Vy[im] * h; Pz[im] += Vz[im] * h;
+                if(self.implicit && holdA[im]) { ux[im] += (Vx[im] * t1xA[im] + Vy[im] * t1yA[im] + Vz[im] * t1zA[im]) * h; uy[im] += (Vx[im] * t2xA[im] + Vy[im] * t2yA[im] + Vz[im] * t2zA[im]) * h; }
                 var ex = Px[im] - Ox[im], ey = Py[im] - Oy[im], ez = Pz[im] - Oz[im];
                 var e2 = ex * ex + ey * ey + ez * ez;
                 if(e2 > 0.04 * R * R) { var es = 0.2 * R / Math.sqrt(e2); Px[im] = Ox[im] + ex * es; Py[im] = Oy[im] + ey * es; Pz[im] = Oz[im] + ez * es; Vx[im] = OVx[im]; Vy[im] = OVy[im]; Vz[im] = OVz[im]; }
             }
+            // the implicit step: the nodes have moved against their springs to the rim and to their places on the wheel; the rim gets the force those springs have at the theta point of
+            // the step, not the one of its start (with the force of the start the rim lagged the nodes, and a wheel at a standstill swung by 3 rad/s)
+            if(self.implicit) {
+                var hT = h * th;
+                for(var bc = 0; bc < beamCount; bc++) {
+                    if(bKind[bc] !== 2 || bK[bc] === 0) continue;
+                    var na2 = bA[bc], nc2 = bB[bc] - N;
+                    var relC = ((Vx[na2] - IVx[nc2]) * bDx[bc] + (Vy[na2] - IVy[nc2]) * bDy[bc] + (Vz[na2] - IVz[nc2]) * bDz[bc]) * hT * bK[bc];
+                    rimForce(nc2, relC * bDx[bc], relC * bDy[bc], relC * bDz[bc]);
+                }
+                for(var ns = 0; ns < N; ns++) {
+                    var rvx2 = Vx[ns] - OVx[ns], rvy2 = Vy[ns] - OVy[ns], rvz2 = Vz[ns] - OVz[ns];
+                    var relT = (rvx2 * Tx[ns] + rvy2 * Ty[ns] + rvz2 * Tz[ns]) * hT * kShearT, relL = (rvx2 * L.x + rvy2 * L.y + rvz2 * L.z) * hT * kShearL;
+                    rimForce(ns, relT * Tx[ns] + relL * L.x, relT * Ty[ns] + relL * L.y, relT * Tz[ns] + relL * L.z);
+                }
+            }
+            if(!self.lockedSpin) omS += h * (torque - tq0) / inertiaW;
+            omSum += omS;
         }
-        phase += omega * dt;
+        self.omegaOut = omS; self.omegaAvg = omSum / n;
+        phase += self.omegaAvg * dt;
         frame.hx = hub.x + vel.x * 0.5 * dt; frame.hy = hub.y + vel.y * 0.5 * dt; frame.hz = hub.z + vel.z * 0.5 * dt;
         frame.fx = F.x; frame.fy = F.y; frame.fz = F.z; frame.ux = U.x; frame.uy = U.y; frame.uz = U.z; frame.ok = true;
         if(phase > 1e4 || phase < -1e4) phase %= (2 * Math.PI);
@@ -407,7 +485,7 @@ OpenRacer.TyreShell = function (wheel) {
         if(!(fHubX === fHubX && fHubY === fHubY && fHubZ === fHubZ) || Math.abs(fHubX) + Math.abs(fHubY) + Math.abs(fHubZ) > 1e7) { started = false; filtered = false; self.contacts = 0; self.normal.x = self.normal.y = self.normal.z = 0; self.friction.x = self.friction.y = self.friction.z = 0; loadPrev = 0; return false; }
         // ---- what the car gets: the force of the beams (and the air) on the rim, averaged over the steps
         // (the tyre has modes of its own, much faster than the wheel on its suspension; the car gets the force through a filter, which keeps those from being pushed through the wheel and back again)
-        var af = 1 - Math.exp(-dt / self.forceFilter);
+        var af = self.forceFilter > 0 ? 1 - Math.exp(-dt / self.forceFilter) : 1;
         if(!filtered || jumped) { fltX = fHubX / n; fltY = fHubY / n; fltZ = fHubZ / n; fltT = torque / n; filtered = true; }
         else { fltX += af * (fHubX / n - fltX); fltY += af * (fHubY / n - fltY); fltZ += af * (fHubZ / n - fltZ); fltT += af * (torque / n - fltT); }
         hubFx = fltX; hubFy = fltY; hubFz = fltZ; hubTorque = torque / n;      // (only the load is filtered: the friction and the torque go to the wheel as they are, a delay on the stiff grip of a wheel that spins would make it ring)
@@ -424,7 +502,12 @@ OpenRacer.TyreShell = function (wheel) {
         self.groundY = self.centre.y;
         self.surface = ground.surfaceOf(bestTri); self.mesh = ground.meshOf(bestTri);
         self.patch = 2 * halfPatch;
+        self.centreAlong = alongSum / sumFn;                      // where the load sits along the wheel, from the hub (m; ahead is positive: the pressure centre, which gives the rolling resistance)
         // the force on the hub: the part along the surface normal is the load, the rest the friction
+        // the damping of the tyre against the road (the car's tyre_damping, as the ray tyre has it): on the speed of the hub into the road; it holds the hop of the wheel on the tyre, which
+        // the nodes alone damp little (and the smoothing of the load lags behind it)
+        var vnHub = vel.x * self.surfaceNormal.x + vel.y * self.surfaceNormal.y + vel.z * self.surfaceNormal.z, cHub = (self.verticalDamping || 0) * Math.min(1, loadPrev / Math.max(1, 0.3 * self.staticLoad));
+        hubFx -= cHub * vnHub * self.surfaceNormal.x; hubFy -= cHub * vnHub * self.surfaceNormal.y; hubFz -= cHub * vnHub * self.surfaceNormal.z;
         var fn0 = hubFx * self.surfaceNormal.x + hubFy * self.surfaceNormal.y + hubFz * self.surfaceNormal.z;
         var fnRaw = rawX * self.surfaceNormal.x + rawY * self.surfaceNormal.y + rawZ * self.surfaceNormal.z;
         self.normal.x = self.surfaceNormal.x * fn0; self.normal.y = self.surfaceNormal.y * fn0; self.normal.z = self.surfaceNormal.z * fn0;

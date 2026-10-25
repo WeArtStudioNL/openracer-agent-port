@@ -40,7 +40,7 @@ OpenRacer.CarTuning = (function () {
             ["tyre_rings", "Tyre cylinder: rings of nodes across the tread", "", 1, 5, 1],
             ["tyre_segments", "Tyre cylinder: nodes round the wheel", "", 4, 72, 1],
             ["tyre_inner_ratio", "Tyre shell (experiment): radius of the inner shell, as a share of the tyre", "%", 30, 90, 1],
-            ["tyre_carcass", "Tyre shell (experiment): softness of the carcass (0: as stiff as the cylinder tyre; how far a node goes in before its beam is slack)", "mm", 0, 30, 0.5],
+            ["tyre_carcass", "Tyre shell (experiment): softness of the carcass, how far a node goes in before its cable is slack and the air carries it (0: 1.8 times the static deflection of the tyre, which gives it the stiffness of the car's tyre rate; a few mm is a very stiff tyre)", "mm", 0, 80, 0.5],
             ["tyre_nodes", "Tyre of nodes: nodes in the tread", "", 36, 180, 4],
             ["tyre_stiff_x", "Tyre of nodes: stiffness along the tyre (x load)", "", 8, 40, 0.5],
             ["tyre_stiff_y", "Tyre of nodes: stiffness across the tyre (x load)", "", 8, 40, 0.5],

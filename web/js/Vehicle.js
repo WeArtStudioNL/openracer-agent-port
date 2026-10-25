@@ -754,7 +754,7 @@ OpenRacer.Vehicle = function (parameters, input) {
 
     // ---- what the rest of the game wants to know, from the rigid body
     var axisX = { x: 0, y: 0, z: 0 }, axisY = { x: 0, y: 0, z: 0 }, axisZ = { x: 0, y: 0, z: 0 };
-    var cylF = { x: 0, y: 0, z: 0 }, cylL = { x: 0, y: 0, z: 0 }, cylHub = { x: 0, y: 0, z: 0 }, cylVel = { x: 0, y: 0, z: 0 }, wheelList = [[], [], [], []];
+    var cylF = { x: 0, y: 0, z: 0 }, cylL = { x: 0, y: 0, z: 0 }, cylU = { x: 0, y: 0, z: 0 }, cylHub = { x: 0, y: 0, z: 0 }, cylVel = { x: 0, y: 0, z: 0 }, wheelList = [[], [], [], []];
     this.updateOutputs = function () {
         rotate(this.qx, this.qy, this.qz, this.qw, 1, 0, 0, axisX);
         rotate(this.qx, this.qy, this.qz, this.qw, 0, 1, 0, axisY);
@@ -1478,6 +1478,9 @@ OpenRacer.Vehicle = function (parameters, input) {
         var down = { x: -axisY.x, y: -axisY.y, z: -axisY.z };
         var ground3D = !!(self.ground && self.ground.use3D);
         var anyContact = false;
+        // the roll of the body (positive: leaning to the right), for the camber of the wheels of the tyre bodies (as below for the ring of nodes)
+        rotateInverse(self.qx, self.qy, self.qz, self.qw, 0, 1, 0, tmpA);
+        var rollRightNow = Math.asin(Math.max(-1, Math.min(1, tmpA.x)));
         for(var i = 0; i < 4; i++) {
             var w = wheels[i];
             rotate(self.qx, self.qy, self.qz, self.qw, w.mount.x + (w.shiftX || 0), w.mount.y, w.mount.z + (w.shiftZ || 0), Rv);
@@ -1547,7 +1550,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var wantShell = self.tyreModel === "shell" && !!OpenRacer.TyreShell;
                 if(w.tyreBody && !!w.tyreBody.isShell !== wantShell) w.tyreBody = null;
                 var body = w.tyreBody || (w.tyreBody = wantShell ? new OpenRacer.TyreShell(w) : new OpenRacer.TyreBody(w));
-                if(wantShell) { body.isShell = true; body.tyreMass = Math.max(1.5, 0.3 * self.unsprungMass); body.pressure = Math.max(0.15, (w.front ? self.pressureFront : self.pressureRear) - (w.pressureLoss || 0)); body.innerRatio = self.tyreShell.inner_ratio; body.carcass = self.tyreShell.carcass; }
+                if(wantShell) { body.isShell = true; body.round = !!self.soloWheels; body.tyreMass = Math.max(1.5, 0.3 * self.unsprungMass); body.pressure = Math.max(0.15, (w.front ? self.pressureFront : self.pressureRear) - (w.pressureLoss || 0)); body.innerRatio = self.tyreShell.inner_ratio; body.carcass = self.tyreShell.carcass; }
                 body.rings = self.tyreShell.rings; body.segments = wantShell ? Math.max(48, Math.min(72, 2 * self.tyreShell.segments)) : self.tyreShell.segments; body.width = self.tyreShell.width;      // (the shell tyre has more nodes: a patch of a few nodes was noisy)
                 body.stiffX = self.tyreStiffX; body.stiffY = self.tyreStiffY * self.corneringScale * (w.stiffnessBias || 1) * (w.pressureCorner || 1);
                 body.verticalStiffness = w.tyreRate || self.tyreRate; body.verticalDamping = self.tyreDamping; body.staticLoad = w.staticLoad || (self.mass * G / 4);
@@ -1559,6 +1562,15 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var cfl = Math.sqrt(cfx * cfx + cfy * cfy + cfz * cfz) || 1; cfx /= cfl; cfy /= cfl; cfz /= cfl;
                 cylF.x = cfx; cylF.y = cfy; cylF.z = cfz;
                 cylL.x = axisY.y * cfz - axisY.z * cfy; cylL.y = axisY.z * cfx - axisY.x * cfz; cylL.z = axisY.x * cfy - axisY.y * cfx;
+                // the camber: the wheel leans to the left by its static camber less what the roll of the body takes (and a bent knuckle); the up of the tyre and its axle turn with it
+                // about its forward axis, so the shoulder on the side it leans to carries more, and the tread that goes round a leaning wheel is pulled sideways by the road: the camber
+                // thrust. (A motorcycle: its wheels lean with it and nothing more.)
+                var camberDeg = w.front ? self.camberFront : self.camberRear;
+                var lean = self.soloWheels ? 0 : (w.right ? -camberDeg : camberDeg) * Math.PI / 180 - rollRightNow * self.rollCamber - (w.camberBend || 0);
+                var cl = Math.cos(lean), sl = Math.sin(lean);
+                cylU.x = axisY.x * cl + cylL.x * sl; cylU.y = axisY.y * cl + cylL.y * sl; cylU.z = axisY.z * cl + cylL.z * sl;
+                cylL.x = cylL.x * cl - axisY.x * sl; cylL.y = cylL.y * cl - axisY.y * sl; cylL.z = cylL.z * cl - axisY.z * sl;
+                w.lean = lean;
                 cylHub.x = mx - axisY.x * w.susLength; cylHub.y = my - axisY.y * w.susLength; cylHub.z = mz - axisY.z * w.susLength;
                 cylVel.x = vmx + down.x * w.susVel; cylVel.y = vmy + down.y * w.susVel; cylVel.z = vmz + down.z * w.susVel;
                 ensureProxy();
@@ -1566,7 +1578,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var reach = w.radius + (body.width > 0 ? body.width : 0.7 * w.radius) / 2 + 0.12, wl = wheelList[i];
                 wl.length = 0;
                 for(var cc = 0; cc < candidates.length; cc++) if(self.ground.boxNear(candidates[cc], cylHub.x, cylHub.y, cylHub.z, reach)) wl.push(candidates[cc]);
-                var touched = body.step(dt, cylHub, cylVel, cylL, cylF, axisY, w.omega, self.ground, wl, function (load, name) { return w.frictionFor(load, self.getSurface(name)); }, w.lateralGrip, self.mass);
+                var touched = body.step(dt, cylHub, cylVel, cylL, cylF, cylU, w.omega, self.ground, wl, function (load, name) { return w.frictionFor(load, self.getSurface(name)); }, w.lateralGrip, self.mass);
                 if(touched) {
                     var up = body.normal.x * axisY.x + body.normal.y * axisY.y + body.normal.z * axisY.z + body.friction.x * axisY.x + body.friction.y * axisY.y + body.friction.z * axisY.z;
                     tyreLoad[i] = Math.max(0, up);
@@ -1783,6 +1795,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 // leans pushes towards the side it leans to, as if it had a slip angle
                 var camber = (wheel.front ? self.camberFront : self.camberRear) * Math.PI / 180;
                 var leanLeft = (wheel.right ? -camber : camber) - rollRight * self.rollCamber - (wheel.camberBend || 0);
+                wheel.lean = self.soloWheels ? 0 : leanLeft;            // (for the wheel of the model: it leans with the camber, Wheel.turn)
                 var surface = self.getSurface(wheel.surface);
                 if(wheel.cylActive) {
                     // the tyre as a body of nodes and beams (TyreBody.js): the friction that its samples carry, along the wheel and across it
@@ -1855,9 +1868,15 @@ OpenRacer.Vehicle = function (parameters, input) {
                 fyW = wheel.fy;
                 // the temperature and the wear: the power that the slip burns
                 self.wearStep(wheel, dt, Math.abs(fxW * (wheel.omega * wheel.radius - vl)) + Math.abs(fyW * vt), fz, vl, true);
-                // a little damping on the slip speed keeps a nearly stationary wheel from ringing
-                fxW += 400 * Math.max(-0.3, Math.min(0.3, wheel.omega * wheel.radius - vl));
-                tyreTorque[iw] = -fxW * wheel.radius;
+                // the shell tyre turns the wheel itself in its substeps (the grip of the tread saturates within a step of the car): the torque that gives the turn it found
+                var tbS = wheel.cylActive && wheel.tyreBody && wheel.tyreBody.isShell && wheel.tyreBody.omegaOut !== undefined ? wheel.tyreBody : null;
+                if(tbS) { tyreTorque[iw] = (tbS.omegaOut - wheel.omega) * wheel.inertia / dt; wheel.tyreSlope = 0; wheel.omegaFromTyre = true; }
+                else {
+                    // a little damping on the slip speed keeps a nearly stationary wheel from ringing
+                    fxW += 400 * Math.max(-0.3, Math.min(0.3, wheel.omega * wheel.radius - vl));
+                    tyreTorque[iw] = -fxW * wheel.radius;
+                    wheel.omegaFromTyre = false;
+                }
                 wheel.fxLast = fxW;                                       // (the forward force of the road on the wheel, for the geometry of the fork and the swingarm)
 
                 // rolling resistance (more on soft ground), not a torque on the wheel
@@ -2040,7 +2059,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             // back, and the wheels of a stadium truck rocked forwards and backwards at a standstill, with the force of the tyre flipping between its two limits every frame.
             var iEff = wj.inertia + dt * (wj.tyreSlope || 0);
             var dOm = dt * tyreTorque[j] / iEff, over = wj.omega - (wj.forwardSpeed || 0) / wj.radius;
-            if(Math.abs(wheelDrive[j]) < 5 && over * dOm < 0 && Math.abs(dOm) > Math.abs(over)) dOm = -over;
+            if(Math.abs(wheelDrive[j]) < 5 && !wj.omegaFromTyre && over * dOm < 0 && Math.abs(dOm) > Math.abs(over)) dOm = -over;       // (not the shell tyre: it turns the wheel itself)
             var omegaFree = wj.omega + dOm + dt * wheelDrive[j] / iEff;
             var bt2 = brakeTorque[j];
             if(bt2 > 0) {
