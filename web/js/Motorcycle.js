@@ -58,6 +58,7 @@ OpenRacer.Motorcycle = function (settings) {
     this.footDownL = 0; this.footStill = false; this.footWait = 0;       // the left foot (footDown is the right one), whether the bike is at a standstill, and the time since the feet should come up
     this.footDown = 0;                                       // 0 to 1: the right foot of the rider on the road (a standstill)
     this.noFoot = false;                                     // the car editor: the bike stands upright on its bench, the foot never goes down
+    this.airPitch = s.air_pitch !== undefined ? Math.max(0, s.air_pitch) : 1;      // in the air the wheels turn the bike: gas brings the nose up, the brake brings it down (a factor on the reaction of the wheels; 0: off)
     this.footLean = (s.foot_lean_deg !== undefined ? s.foot_lean_deg : 7) * DEG;   // how far the bike rests to the right on the foot
     this.wheelieScale = 1;                                  // the throttle that the wheelie control leaves (1: all of it)
     this.crashed = false;                                   // the bike is down: the rider is a ragdoll, the bike a body that slides, no input until a reset or a repair
@@ -218,7 +219,7 @@ OpenRacer.Motorcycle = function (settings) {
         if (self.crashed || self.limp) { self.wheelieScale = 0; return 0; }
         var on = typeof Settings === "undefined" || Settings.option("wheelieControl") !== false;
         var frontLoad = ((v.wheels[0].weight || 0) + (v.wheels[1].weight || 0)) / Math.max(1, v.weight_distribution * v.mass * G);
-        var want = on && Math.abs(v.u) > 0.5 && self.burnout < 0.5 ? Math.max(0.15, Math.min(1, (frontLoad - 0.08) / 0.3)) : 1;     // (not in a burnout: the front lifts a little there, and the cut let the engine fall to the clutch)
+        var want = on && !v.airborne && Math.abs(v.u) > 0.5 && self.burnout < 0.5 ? Math.max(0.15, Math.min(1, (frontLoad - 0.08) / 0.3)) : 1;      // (not in the air: the gas is what brings the nose up for the landing there)     // (not in a burnout: the front lifts a little there, and the cut let the engine fall to the clutch)
         self.wheelieScale += (want - self.wheelieScale) * Math.min(1, dt / (want < self.wheelieScale ? 0.03 : 0.25));
         // at a walking pace with the bars turned far the throttle is eased: the bike slows in the turn instead of driving on round it
         var slowLock = (1 - smooth(2.0, 4.0, Math.abs(v.u))) * smooth(0.6, 0.95, Math.abs(self.command || 0));

@@ -52,6 +52,8 @@ OpenRacer.TyreShell = function (wheel) {
     this.beltTwoSided = false;         // the belt pushes back when it is compressed too (a steel belt); false: a string, it only pulls
     this.stepAngle = 0.7;              // the step of a node against its fastest ring (rad per substep): the number of substeps follows from it
     this.lockedSpin = false;           // a test rig: the wheel is turned at the omega that is given, the tread does not turn it
+    this.rimStiffness = 1.5e6;         // N/m: the rim on the road (a landing that flattens the tyre)
+    this.rimDamping = 8000;            // N per m/s, on the way in
     this.roadStop = 0.5;               // the damper of the road can at most take this share of the speed of a node into the road in a substep (it is at this limit nearly always: it is the loss of the tread going in and out of the patch)
     this.bristleDamping = 0.3;         // the damping of the bristles that hold a node on the road (of critical, per node)
     this.shearDamping = 1.0;           // the damping of the shear springs of the tread along the wheel (of critical, per node): it is what damps the wheel against the tread (a wheel at a standstill swung back and forth with less)
@@ -163,7 +165,7 @@ OpenRacer.TyreShell = function (wheel) {
     }
 
     // the road at a place: the depth of the node in the nearest triangle that it is in, and the normal (as in TyreBody.js)
-    var cDepth = 0, cNx = 0, cNy = 0, cNz = 0, cTri = -1;
+    var cDepth = 0, cNx = 0, cNy = 0, cNz = 0, cTri = -1, upRef = { x: 0, y: 1, z: 0 };
     function contactAt(x, y, z, hub, ground, list, tol) {
         cDepth = 0; cTri = -1;
         for(var q = 0; q < list.length; q++) {
@@ -172,7 +174,11 @@ OpenRacer.TyreShell = function (wheel) {
             var d2 = ground.closest(t, x, y, z, near), dist = Math.sqrt(d2), mx, my, mz, dd;
             if(near.region === 0) {
                 ground.normalOf(t, triNormal);
-                var sideHub = (hub.x - near.x) * triNormal.x + (hub.y - near.y) * triNormal.y + (hub.z - near.z) * triNormal.z, sgn = sideHub >= 0 ? 1 : -1;
+                // the side of the triangle that pushes: the one the up of the wheel points to (a hub that is driven below the road in a hard landing would have turned the push
+                // the wrong way and let the wheel fall through); for a wall, where the up of the wheel lies along it, the side of the hub
+                var upN = upRef.x * triNormal.x + upRef.y * triNormal.y + upRef.z * triNormal.z, sgn;
+                if(Math.abs(upN) > 0.3) sgn = upN >= 0 ? 1 : -1;
+                else { var sideHub = (hub.x - near.x) * triNormal.x + (hub.y - near.y) * triNormal.y + (hub.z - near.z) * triNormal.z; sgn = sideHub >= 0 ? 1 : -1; }
                 mx = triNormal.x * sgn; my = triNormal.y * sgn; mz = triNormal.z * sgn;
                 dd = tol - ((x - near.x) * mx + (y - near.y) * my + (z - near.z) * mz);
             } else {
@@ -252,6 +258,7 @@ OpenRacer.TyreShell = function (wheel) {
             started = true;
         }
         var tol = self.tolerance;
+        upRef.x = U.x; upRef.y = U.y; upRef.z = U.z;
         var fHubX = 0, fHubY = 0, fHubZ = 0, torque = 0;
         // a force on a node of the rim: it goes to the hub (and its torque about the axle)
         var hcx = hubx, hcy = huby, hcz = hubz;                              // the hub of the substep (the rim is placed along the path of the hub: the arm of a torque is from there)
@@ -511,6 +518,16 @@ OpenRacer.TyreShell = function (wheel) {
         self.patch = 2 * halfPatch;
         self.centreAlong = alongSum / sumFn;                      // where the load sits along the wheel, from the hub (m; ahead is positive: the pressure centre, which gives the rolling resistance)
         // the force on the hub: the part along the surface normal is the load, the rest the friction
+        // the rim on the road: a landing that drives the hub down to the rim (the tyre flat, the nodes at their stops) is stopped by the rim itself, a very stiff spring with a
+        // damper on the hub along the normal of the surface; without it a hard landing on a motorcycle went through the road
+        var rimR = R * Math.max(0.3, Math.min(0.9, self.innerRatio)) + 0.01;
+        var hubH = (hub.x - self.centre.x) * self.surfaceNormal.x + (hub.y - self.centre.y) * self.surfaceNormal.y + (hub.z - self.centre.z) * self.surfaceNormal.z;
+        if(hubH < rimR) {
+            var vnRim = vel.x * self.surfaceNormal.x + vel.y * self.surfaceNormal.y + vel.z * self.surfaceNormal.z;
+            var fRim = self.rimStiffness * (rimR - hubH) - (vnRim < 0 ? self.rimDamping * vnRim : 0);
+            hubFx += fRim * self.surfaceNormal.x; hubFy += fRim * self.surfaceNormal.y; hubFz += fRim * self.surfaceNormal.z;
+            self.rimStrike = fRim;
+        } else self.rimStrike = 0;
         // the damping of the tyre against the road (the car's tyre_damping, as the ray tyre has it): on the speed of the hub into the road; it holds the hop of the wheel on the tyre, which
         // the nodes alone damp little (and the smoothing of the load lags behind it)
         var vnHub = vel.x * self.surfaceNormal.x + vel.y * self.surfaceNormal.y + vel.z * self.surfaceNormal.z, cHub = (self.verticalDamping || 0) * Math.min(1, loadPrev / Math.max(1, 0.3 * self.staticLoad));

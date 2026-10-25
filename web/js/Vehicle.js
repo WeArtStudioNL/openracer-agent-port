@@ -1550,7 +1550,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                     var up = body.normal.x * axisY.x + body.normal.y * axisY.y + body.normal.z * axisY.z + body.friction.x * axisY.x + body.friction.y * axisY.y + body.friction.z * axisY.z;
                     tyreLoad[i] = Math.max(0, up);
                     // (a motorcycle: a tyre carries no more than six times its static load; a leaned landing from a jump at 170 km/h pressed one in to 31 kN, and the bike was thrown over)
-                    if(self.soloWheels) tyreLoad[i] = Math.min(tyreLoad[i], 6 * (w.staticLoad || 1500));
+                    if(self.soloWheels) tyreLoad[i] = Math.min(tyreLoad[i], 25 * (w.staticLoad || 1500));       // (6 before: a landing from 3 m needs more than that, the bike went through the road)
                     // what is left of the pressing forces across the suspension (the side of a ramp, a wall, a slope) goes to the car at the hub
                     var nu = body.normal.x * axisY.x + body.normal.y * axisY.y + body.normal.z * axisY.z;
                     w.perpX = body.normal.x - nu * axisY.x; w.perpY = body.normal.y - nu * axisY.y; w.perpZ = body.normal.z - nu * axisY.z;
@@ -2005,6 +2005,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         }
 
         // ---- wheel speeds
+        var omegaWas = [wheels[0].omega, wheels[1].omega, wheels[2].omega, wheels[3].omega];
         for(var j = 0; j < 4; j++) {
             var wj = wheels[j];
             // The tyre can only bring the wheel to the speed of the road, not past it in one step: at a standstill the step of the tyre force is far more than the slip it answers
@@ -2027,6 +2028,14 @@ OpenRacer.Vehicle = function (parameters, input) {
             wj.omega = omegaFree;
         }
 
+        // ---- in the air the wheels turn the body: what spins a wheel up (the engine) or slows it (the brake) turns the body the other way, as the angular momentum is kept;
+        // a rider lands a jump nose up by opening the gas and nose down by braking (a motorcycle; the rear wheel of a bike is a fair share of its inertia in pitch)
+        if(self.airborne && self.controller && self.controller.airPitch > 0) {
+            var react = 0;
+            for(var ja = 0; ja < 4; ja++) if(!self.wheelLost[ja]) react -= wheels[ja].inertia * (wheels[ja].omega - omegaWas[ja]) / dt;
+            react *= self.controller.airPitch;
+            torque.x += react * axisX.x; torque.y += react * axisX.y; torque.z += react * axisX.z;
+        }
         // ---- locked: the wheels of an axle (welded), or the axles (locked centre) turn at the same speed. The speed they get keeps the angular momentum.
         if(self.diffType === "welded" && !self.soloWheels) {
             for(var ax2 = 0; ax2 < 2; ax2++) {
