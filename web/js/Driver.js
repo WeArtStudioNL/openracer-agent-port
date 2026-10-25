@@ -818,8 +818,10 @@ OpenRacer.Driver = function (config, parent, steering) {
             self.parent.localToWorld(pole.copy(tmp));
             solve(chain, world, pole);
             // the foot on the road: its toes turn from the front of the bike to the nearest point of the road (a little in front of the ankle, on the road)
+            // (the foot starts from its rest turn every frame: the turn of the toes is set on it, not added to the one of the frame before)
+            if (rest.get(chain[2])) chain[2].quaternion.copy(rest.get(chain[2]));
+            chain[2].updateMatrixWorld(true);
             if (feetDown[e[0]] > 0.001 && walk < 0.5) {
-                chain[2].updateMatrixWorld(true);
                 toeFwd.set(0, 0, 1).transformDirection(self.parent.matrixWorld);
                 toeDir.copy(toeFwd).multiplyScalar(0.12).y -= FOOT_ANKLE;
                 toeDir.normalize().lerp(toeFwd, 1 - feetDown[e[0]]).normalize();
