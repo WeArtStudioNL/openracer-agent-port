@@ -19,6 +19,9 @@
  *                                          per radian of the front wheels, 0.1 by default; negative slides it the other way)
  *     steer_tierod_FL                      a tie rod: the origin at the end on the rack, the other end on the upright; it follows both
  *     susp_axle_rear (or _front)           a live axle: the origin at its middle; it goes up and down with its two wheels and rolls
+ *     propshaft (or susp_propshaft,        the drive shaft of a car with drive to all wheels, from the differential at the front to the one
+ *     cardan, susp_driveshaft_center)      at the rear: it stays where it is and turns about its own length with the wheels (the speed of
+ *                                          the wheels, not geared up: a faster one only flickers on the screen)
  *
  *   All of them stay parts of the body (children of the model, not of a wheel). The rest pose of the model is the car at rest on
  *   its springs, so a part moves from where it is modelled.
@@ -33,6 +36,7 @@ OpenRacer.SuspensionRig = (function () {
     // what a part is, from its name: { kind, wheel } or null
     function classify(name) {
         var n = clean(name);
+        if(/^(susp)?(propshaft|cardan)/.test(n) || /^(susp)?driveshaft(center|centre|middle|prop)/.test(n)) return { kind: "prop" };
         if(n.indexOf("susp") !== 0 && n.indexOf("steer") !== 0) return null;
         if(n === "steerrack" || n === "susprack") return { kind: "rack" };
         var corner = n.slice(-2);
@@ -101,6 +105,11 @@ OpenRacer.SuspensionRig = (function () {
                 entry.restLength = Math.max(0.01, entry.restDir.length());
                 entry.restDir.normalize();
                 entry.holder.quaternion.setFromUnitVectors(Y, entry.restDir);
+            } else if(entry.kind === "prop") {
+                // it turns about its own length: the longest side of its box, about the middle of the box
+                var pbox = boxOf(p.node), pc = pbox.getCenter(new THREE.Vector3()), ps = pbox.getSize(new THREE.Vector3());
+                entry.axis = ps.x >= ps.y && ps.x >= ps.z ? LEFT.clone() : (ps.y >= ps.z ? UP.clone() : FORWARD.clone());
+                entry.holder.position.copy(pc);
             } else if(entry.kind === "arm") {
                 entry.far = farEnd(p.node, origin);
                 entry.armLength = Math.max(0.05, Math.abs(entry.far.x - origin.x));
@@ -140,6 +149,10 @@ OpenRacer.SuspensionRig = (function () {
                 var angle = Math.asin(Math.max(-1, Math.min(1, travel / p.armLength))) * p.side;
                 q.setFromAxisAngle(FORWARD, angle);
                 h.quaternion.copy(q).multiply(p.restQuaternion);
+            } else if(p.kind === "prop") {
+                var turn = 0;
+                for(var pk = 0; pk < 4; pk++) turn += vehicle.wheels[pk].spin || 0;
+                h.quaternion.setFromAxisAngle(p.axis, turn / 4);
             } else if(p.kind === "upright") {
                 h.position.set(p.origin.x, p.origin.y + travelOf(vehicle, p.wheel), p.origin.z);
                 if(p.wheel < 2) { q.setFromAxisAngle(UP, -steer); h.quaternion.copy(q).multiply(p.restQuaternion); }
