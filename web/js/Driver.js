@@ -1019,11 +1019,25 @@ OpenRacer.Driver = function (config, parent, steering) {
     // its root to its end), the upper arm within 120 degrees of hanging down and out, the thigh within 100 degrees of down and a little forward. A limb that is moved into a
     // limit is put at the limit, and most of its speed into it is taken out (no bounce off the limit)
     var jUp = new V(), jSide = new V(), jFwd = new V(), jRest = new V(), jDir = new V(), jTmp = new V(), DEG = Math.PI / 180;
-    function hinge(a, mid, b, dir, sign) {
+    // (the side of the line that counts is the one in the frame of the limb itself: the forward of the limb is the line from its root to its end crossed with the axis of the joint,
+    // the side axis of the body. It was the forward of the torso, which is along the thigh of a rider that sits, and of a rider that lies on the road it is anything: the knees
+    // folded forwards there)
+    var jLimb = new V(), jLat = new V();
+    function hinge(a, mid, b, side, sign) {
+        jLimb.subVectors(b.p, a.p);
+        jDir.crossVectors(jLimb, side);
+        if (jDir.lengthSq() < 1e-8) return;
+        jDir.normalize();
         jTmp.copy(a.p).add(b.p).multiplyScalar(0.5);
-        var d = (mid.p.x - jTmp.x) * dir.x + (mid.p.y - jTmp.y) * dir.y + (mid.p.z - jTmp.z) * dir.z;
-        if (d * sign >= 0) return;
-        mid.p.addScaledVector(dir, -d); mid.q.addScaledVector(dir, -d * 0.7);
+        var d = (mid.p.x - jTmp.x) * jDir.x + (mid.p.y - jTmp.y) * jDir.y + (mid.p.z - jTmp.z) * jDir.z;
+        // (never quite straight: a limb that is clamped on to the line has no side for the skeleton to bend to (ragdollPose), and the knee of the model snapped forwards and back)
+        var dMin = sign * 0.03;
+        if ((d - dMin) * sign < 0) { mid.p.addScaledVector(jDir, dMin - d); mid.q.addScaledVector(jDir, (dMin - d) * 0.7); d = dMin; }
+        // and the joint bends in its own plane: the middle of the limb may stand out sideways (about the axis of the limb, as a thigh turns at the hip) by no more than 35 degrees of
+        // its bend (a knee that bent 128 degrees sideways)
+        jLimb.normalize(); jLat.crossVectors(jLimb, jDir);
+        var lat = (mid.p.x - jTmp.x) * jLat.x + (mid.p.y - jTmp.y) * jLat.y + (mid.p.z - jTmp.z) * jLat.z, latMax = 0.7 * Math.abs(d);
+        if (Math.abs(lat) > latMax) { var fix = lat - Math.sign(lat) * latMax; mid.p.addScaledVector(jLat, -fix); mid.q.addScaledVector(jLat, -fix * 0.7); }
     }
     function cone(root, end, rest, maxDeg) {
         jDir.subVectors(end.p, root.p);
@@ -1041,8 +1055,8 @@ OpenRacer.Driver = function (config, parent, steering) {
         jUp.subVectors(P.chest.p, P.hips.p).normalize();
         jSide.subVectors(P.shL.p, P.shR.p); jSide.addScaledVector(jUp, -jSide.dot(jUp)).normalize();
         jFwd.crossVectors(jSide, jUp);
-        hinge(P.shL, P.elL, P.haL, jFwd, -1); hinge(P.shR, P.elR, P.haR, jFwd, -1);
-        hinge(P.hiL, P.knL, P.ftL, jFwd, 1); hinge(P.hiR, P.knR, P.ftR, jFwd, 1);
+        hinge(P.shL, P.elL, P.haL, jSide, -1); hinge(P.shR, P.elR, P.haR, jSide, -1);
+        hinge(P.hiL, P.knL, P.ftL, jSide, 1); hinge(P.hiR, P.knR, P.ftR, jSide, 1);
         jRest.copy(jUp).multiplyScalar(-0.8).addScaledVector(jSide, 0.6).normalize(); cone(P.shL, P.elL, jRest, 120);
         jRest.copy(jUp).multiplyScalar(-0.8).addScaledVector(jSide, -0.6).normalize(); cone(P.shR, P.elR, jRest, 120);
         jRest.copy(jUp).multiplyScalar(-1).addScaledVector(jFwd, 0.35).normalize(); cone(P.hiL, P.knL, jRest, 100); cone(P.hiR, P.knR, jRest, 100);
@@ -1142,6 +1156,12 @@ OpenRacer.Driver = function (config, parent, steering) {
         if (Math.sqrt(most) / h < 0.08 && !r.sphereCount) r.asleep += dt; else r.asleep = 0;
         ragdollPose();
     }
+    var rgPole = new V(), rgLimb = new V();
+    function limbPole(a, mid, b, side, sign) {
+        rgLimb.subVectors(b.p, a.p); rgPole.crossVectors(rgLimb, side);
+        if (rgPole.lengthSq() < 1e-8) return mid.p;
+        return rgPole.normalize().multiplyScalar(0.2 * sign).add(mid.p);
+    }
     // the skeleton on the particles
     function ragdollPose() {
         var r = ragdoll, P = r.pts, B = self.bones;
@@ -1154,8 +1174,10 @@ OpenRacer.Driver = function (config, parent, steering) {
         self.root.quaternion.copy(rgQ.multiply(rgQ0));
         self.root.position.copy(P.hips.p);
         self.root.updateMatrixWorld(true);
-        solve(B.armL, P.haL.p, P.elL.p); solve(B.armR, P.haR.p, P.elR.p);
-        solve(B.legL, P.ftL.p, P.knL.p); solve(B.legR, P.ftR.p, P.knR.p);
+        // (the pole of a limb is its middle particle, pushed out a little further to the side the joint bends to: the hip of the skeleton is not quite the hip particle, and a leg that is
+        // nearly straight had its pole on the line, so the knee of the model went to either side)
+        solve(B.armL, P.haL.p, limbPole(P.shL, P.elL, P.haL, rgSide, -1)); solve(B.armR, P.haR.p, limbPole(P.shR, P.elR, P.haR, rgSide, -1));
+        solve(B.legL, P.ftL.p, limbPole(P.hiL, P.knL, P.ftL, rgSide, 1)); solve(B.legR, P.ftR.p, limbPole(P.hiR, P.knR, P.ftR, rgSide, 1));
         // the head follows the neck: the bone turned so that it points from the chest to the head particle (as far as a neck goes: 50 degrees)
         if (B.head) {
             B.head.quaternion.copy(rest.get(B.head));
