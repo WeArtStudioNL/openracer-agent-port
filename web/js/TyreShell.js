@@ -203,7 +203,7 @@ OpenRacer.TyreShell = function (wheel) {
         var spacing = 2 * Math.PI * R / segs, nominal = Math.max(4, rings * 0.19 / spacing);
         var Kt = 3 * self.stiffX * self.staticLoad / 0.095, Ky = 3 * self.stiffY * self.staticLoad / 0.095;
         var inertia = wheel.inertia || 1.6;
-        Kt = Math.min(Kt, 0.8 * inertia / (R * R * dt * dt));                  // (a stiffer belt than the wheel can follow in one step would ring)
+        Kt = Math.min(Kt, 0.25 * inertia / (R * R * dt * dt));                  // (a stiffer belt than the wheel can follow in one step would ring)
         classK[CLASS_RADIAL] = kr;
         var kShearT = Kt / nominal, kShearL = Ky / nominal;
         var cShearT = 2 * 0.7 * Math.sqrt(kShearT * mn), cShearL = 2 * 0.7 * Math.sqrt(kShearL * mn);
@@ -257,6 +257,7 @@ OpenRacer.TyreShell = function (wheel) {
             nearNode[inr] = mine.length ? 1 : 0;
         }
         // ---- the steps
+        var damped = 0;
         var maxDepth = 0, count = 0, sumFn = 0, slideLoad = 0, cxs = 0, cys = 0, czs = 0, nxs = 0, nys = 0, nzs = 0, minF = 1e9, maxF = -1e9, bestFn = 0, bestTri = -1, sag = 0;
         for(var s = 0; s < n; s++) {
             // (the path of the rim is centred on the hub of now, from half a step before to half a step after: the force of the step is then the force at the place where the car has the wheel; a path that ran ahead of the hub gave a force that led the motion, which is a negative damping)
@@ -385,7 +386,7 @@ OpenRacer.TyreShell = function (wheel) {
                 var fX = -(kx * ux[ig]) - Math.sign(sxs) * Math.min(dX * Math.abs(sxs), 0.6 * mn * Math.abs(sxs) / h);
                 var fY = -(ky * uy[ig]) - Math.sign(sys) * Math.min(dY * Math.abs(sys), 0.6 * mn * Math.abs(sys) / h);
                 var mag = Math.sqrt(fX * fX + (fY / lateralGrip) * (fY / lateralGrip)), limit = muNow * fn;
-                if(mag > limit && mag > 0) { var sc = limit / mag; ux[ig] *= sc; uy[ig] *= sc; fX *= sc; fY *= sc; sliding[ig] = 1; slideLoad += fn; } else sliding[ig] = 0;
+                if(mag > limit && mag > 0) { var sc = limit / mag; ux[ig] *= sc; uy[ig] *= sc; fX *= sc; fY *= sc; sliding[ig] = 1; slideLoad += fn; } else { sliding[ig] = 0; damped += Math.min(dX, 0.6 * mn / h) + 0.5 * kx * dt; }
                 Fx[ig] += fX * t1x + fY * t2x; Fy[ig] += fX * t1y + fY * t2y; Fz[ig] += fX * t1z + fY * t2z;
             }
             if(count > 0) halfPatch = Math.max(0.03, (maxF - minF) / 2 + spacing / 2);
@@ -407,9 +408,10 @@ OpenRacer.TyreShell = function (wheel) {
         var af = 1 - Math.exp(-dt / self.forceFilter);
         if(!filtered || jumped) { fltX = fHubX / n; fltY = fHubY / n; fltZ = fHubZ / n; fltT = torque / n; filtered = true; }
         else { fltX += af * (fHubX / n - fltX); fltY += af * (fHubY / n - fltY); fltZ += af * (fHubZ / n - fltZ); fltT += af * (torque / n - fltT); }
-        hubFx = fltX; hubFy = fltY; hubFz = fltZ; hubTorque = fltT;
+        hubFx = fltX; hubFy = fltY; hubFz = fltZ; hubTorque = torque / n;      // (only the load is filtered: the friction and the torque go to the wheel as they are, a delay on the stiff grip of a wheel that spins would make it ring)
+        var rawX = fHubX / n, rawY = fHubY / n, rawZ = fHubZ / n;
         self.contacts = count; self.maxDepth = maxDepth; self.axleTorque = hubTorque;
-        self.dampSlope = 0;
+        self.dampSlope = damped / n;                                   // (N per m/s of slide, the damping and the stiffness of the bristles that hold: the car takes it implicitly in the speed of the wheel)
         // how far the tread is in: the lowest place of the outer shell against where it would be
         for(var is = 0; is < N; is++) if(inContact[is]) { var sd = Math.sqrt((Px[is] - Ox[is]) * (Px[is] - Ox[is]) + (Py[is] - Oy[is]) * (Py[is] - Oy[is]) + (Pz[is] - Oz[is]) * (Pz[is] - Oz[is])); if(sd > sag) sag = sd; }
         self.sag = sag;
@@ -422,8 +424,9 @@ OpenRacer.TyreShell = function (wheel) {
         self.patch = 2 * halfPatch;
         // the force on the hub: the part along the surface normal is the load, the rest the friction
         var fn0 = hubFx * self.surfaceNormal.x + hubFy * self.surfaceNormal.y + hubFz * self.surfaceNormal.z;
+        var fnRaw = rawX * self.surfaceNormal.x + rawY * self.surfaceNormal.y + rawZ * self.surfaceNormal.z;
         self.normal.x = self.surfaceNormal.x * fn0; self.normal.y = self.surfaceNormal.y * fn0; self.normal.z = self.surfaceNormal.z * fn0;
-        self.friction.x = hubFx - self.normal.x; self.friction.y = hubFy - self.normal.y; self.friction.z = hubFz - self.normal.z;
+        self.friction.x = rawX - self.surfaceNormal.x * fnRaw; self.friction.y = rawY - self.surfaceNormal.y * fnRaw; self.friction.z = rawZ - self.surfaceNormal.z * fnRaw;
         loadPrev = Math.max(0, fn0);
         self.slidingShare = slideLoad / Math.max(sumFn, 1);
         var fm = Math.sqrt(self.friction.x * self.friction.x + self.friction.y * self.friction.y + self.friction.z * self.friction.z);

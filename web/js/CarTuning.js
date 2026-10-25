@@ -38,7 +38,7 @@ OpenRacer.CarTuning = (function () {
             ["tyre_damage", "Tyre damage", "", 0, 0, 0],
             ["tyre_width", "Tyre cylinder: width (0: from the wheel)", "cm", 0, 40, 1],
             ["tyre_rings", "Tyre cylinder: rings of nodes across the tread", "", 1, 5, 1],
-            ["tyre_segments", "Tyre cylinder: nodes round the wheel", "", 8, 72, 1],
+            ["tyre_segments", "Tyre cylinder: nodes round the wheel", "", 4, 72, 1],
             ["tyre_inner_ratio", "Tyre shell (experiment): radius of the inner shell, as a share of the tyre", "%", 30, 90, 1],
             ["tyre_carcass", "Tyre shell (experiment): softness of the carcass (0: as stiff as the cylinder tyre; how far a node goes in before its beam is slack)", "mm", 0, 30, 0.5],
             ["tyre_nodes", "Tyre of nodes: nodes in the tread", "", 36, 180, 4],

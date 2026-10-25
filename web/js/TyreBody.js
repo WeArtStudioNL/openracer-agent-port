@@ -58,7 +58,7 @@ OpenRacer.TyreBody = function (wheel) {
 
     function build() {
         rings = Math.max(1, Math.min(5, Math.round(self.rings)));
-        segs = Math.max(8, Math.min(72, Math.round(self.segments)));
+        segs = Math.max(4, Math.min(72, Math.round(self.segments)));
         radius = wheel.radius;
         width = self.width > 0 ? self.width : Math.max(0.1, 0.7 * radius);
         N = rings * segs; S = rings * segs * 2;
@@ -98,7 +98,7 @@ OpenRacer.TyreBody = function (wheel) {
     // One step. hub: { x, y, z } (m), vel: { x, y, z } the speed of the hub (m/s), axes L, F, U (unit vectors), omega the turn of the wheel (rad/s, positive when the car goes forward),
     // ground: Ground.js, list: the triangles that are near the wheel, friction(load, name): { mu, sliding } of a surface, lateralGrip, inertia: the wheel
     this.step = function (dt, hub, vel, L, F, U, omega, ground, list, frictionOf, lateralGrip, carMass) {
-        if(!px || self.builtFor !== [Math.max(1, Math.min(5, Math.round(self.rings))), Math.max(8, Math.min(72, Math.round(self.segments))), self.width, wheel.radius].join(",")) build();
+        if(!px || self.builtFor !== [Math.max(1, Math.min(5, Math.round(self.rings))), Math.max(4, Math.min(72, Math.round(self.segments))), self.width, wheel.radius].join(",")) build();
         phase += omega * dt;
         if(phase > 1e4 || phase < -1e4) phase %= (2 * Math.PI);
         place(hub.x, hub.y, hub.z, L, F, U);
