@@ -160,4 +160,21 @@ OpenRacer.ExhaustFlames = function (scene, car) {
 
     this.refresh = function () { local = null; };           // the points of car.exhaust have changed (the car editor)
     this.clear = function () { age.fill(1e9); sprites.forEach(function (sp) { sp.visible = false; }); };
+
+    // ---- for the replay (Replay.js): every bang is recorded as it is made (Car.js: the time, the strength, how loud, the flame), and made again from the record:
+    // the flame at the pipes of the car as it stands in the replay, and the pop of the sound (when the replay plays)
+    this.car = null;                                     // the car (Car.js): its vehicle and its body, for the place of the pipes
+    this.recorder = null;                                // called with a row for every bang
+    this.replayLookback = 2;                             // seconds: a flame has gone by then
+    this.replayAdd = function (row) {
+        if (!this.car) return;
+        var event = { strength: row[1], loud: row[2], flame: row[3] };
+        this.emit(this.car.vehicle, event, this.car.body);
+        if (typeof EngineSound !== "undefined" && EngineSound.pop) EngineSound.pop(event.strength, event.loud);
+    };
+    this.replayStep = function (delta) { this.update(delta, typeof camera !== "undefined" ? camera : null); };
+    this.replayClear = function () { this.clear(); };
+    this.replaySnapshot = function () { return {}; };
+    this.replayRestore = function () { this.clear(); };
+    if (typeof OpenRacer !== "undefined" && OpenRacer.Replay && OpenRacer.Replay.attach) OpenRacer.Replay.attach("bangs", this);
 };

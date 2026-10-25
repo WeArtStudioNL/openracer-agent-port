@@ -163,6 +163,7 @@ OpenRacer.Car = function( config, domElement ) {
     var tyreSmoke = new OpenRacer.TyreSmoke(scene);
     var flames = new OpenRacer.ExhaustFlames(scene, { length: this.length, width: this.width, exhaust: config.exhaust, exhaustSystems: (config.sound && config.sound.engine_sim && config.sound.engine_sim.exhaust_systems) || 1,
         smoke: function(x, y, z, vx, vy, vz, diameter) { tyreSmoke.spawn(x, y, z, vx, vy, vz, 0.15, false, true, true); } });
+    flames.car = this;        // (the replay makes the bangs again at the pipes of this car)
     this.engine = this.vehicle.engine;
     EngineSound.setCar(config); // the engine sound of this car
     this.wheels = this.vehicle.wheels;
@@ -721,7 +722,10 @@ OpenRacer.Car = function( config, domElement ) {
         if(v.soundImpact > 0.12) EngineSound.impact(v.soundImpact);
         // the bangs of the exhaust (pops, anti-lag): the sound, and the flames
         var bangs = this.engine.events;
-        for(var bi = 0; bi < bangs.length; bi++) { EngineSound.pop(bangs[bi].strength, bangs[bi].loud); flames.emit(v, bangs[bi], this.body); }
+        for(var bi = 0; bi < bangs.length; bi++) {
+            EngineSound.pop(bangs[bi].strength, bangs[bi].loud); flames.emit(v, bangs[bi], this.body);
+            if(flames.recorder) flames.recorder(Float32Array.of(0, bangs[bi].strength, bangs[bi].loud, bangs[bi].flame || 0));      // for the replay (Replay.js)
+        }
         bangs.length = 0;
         flames.update(delta, camera);
 

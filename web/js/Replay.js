@@ -1244,7 +1244,7 @@ OpenRacer.Replay = (function() {
 
     var MAGIC = [0x4f, 0x52, 0x52, 0x50];          // "ORRP"
     var FORMAT = "openracer-replay", FILE_VERSION = 4;       // 4: the rider that is a ragdoll (a block of records after the effects); 3: the skid marks, the smoke and the marbles (a block of rows after the soft body); 2: the soft body (a block of records after the numbers); 1 files have none; all can still be opened
-    var EFFECT_FLOATS = { skid: 29, smoke: 18, marbles: 16 }, MAX_EFFECT_ROWS = 400000;    // the numbers in a row of every effect (SkidMarks.js, Smoke.js, Marbles.js)
+    var EFFECT_FLOATS = { skid: 29, smoke: 18, marbles: 16, bangs: 4 }, MAX_EFFECT_ROWS = 400000;    // the numbers in a row of every effect (SkidMarks.js, Smoke.js, Marbles.js, Flames.js)
     var MAX_FILE = 300 * 1024 * 1024, MAX_CARS = 12, MAX_SAMPLES = 108000;   // an hour
     var ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
 
