@@ -1018,7 +1018,7 @@ OpenRacer.Replay = (function() {
             if(videoButton) videoButton.textContent = "● Video";
             // a take (Take.js): the replay was only opened for the video, and closes again
             var closeAfter = video.closeAfter; video.closeAfter = false; video.until = undefined;
-            if(closeAfter) { document.body.classList.remove("replayClean"); if(ui && ui.bar) ui.bar.style.display = ""; setTimeout(function() { api.stop(); }, 50); }
+            if(closeAfter) { document.body.classList.remove("replayClean"); if(ui && ui.bar) ui.bar.style.display = ""; var done = video.onDone; video.onDone = null; setTimeout(function() { api.stop(); if(done) done(true); }, 50); }
             if(!blob.size) return;
             var stem = "openracer-" + String(currentTrack.id).replace(/[^A-Za-z0-9_-]/g, "") + "-" + new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13);
             function save(file, extension) {
@@ -1151,6 +1151,7 @@ OpenRacer.Replay = (function() {
     };
     api.clearCameraOverride = function() { cine.override = null; };      // (the video editor is left: the look ahead of the slider again)
     api.aspect = function() { return aspect; };
+    api.aspects = function() { return Object.keys(ASPECTS); };
     api.aspectInfo = function() { return ASPECTS[aspect]; };                // { ratio, width, height }: the size that the editor and a video are made in
     api.setAspect = setAspect;
     api.updateFrame = updateFrame;
@@ -1204,14 +1205,15 @@ OpenRacer.Replay = (function() {
 
     // To a time of the recording (seconds), for the tests
     // A take (Take.js): the replay is opened, the part from one time to another is played at normal speed and filmed (as the Video button), and the replay closes again
-    api.filmRange = function(fromTime, toTime) {
+    api.filmRange = function(fromTime, toTime, onDone) {
         if(api.active) return false;
-        if(!api.start()) return false;
+        if(!api.start()) { if(onDone) onDone(false); return false; }
+        video.onDone = onDone || null;
         if(ui && ui.bar) ui.bar.style.display = "none";
         document.body.classList.add("replayClean");
         video.from = Math.max(api.start_time(), fromTime); video.until = Math.min(api.end_time(), toTime); video.closeAfter = true;
         toggleVideo();
-        if(!video.recorder) { video.closeAfter = false; video.until = undefined; document.body.classList.remove("replayClean"); if(ui && ui.bar) ui.bar.style.display = ""; api.stop(); return false; }
+        if(!video.recorder) { video.closeAfter = false; video.until = undefined; document.body.classList.remove("replayClean"); if(ui && ui.bar) ui.bar.style.display = ""; var fail = video.onDone; video.onDone = null; api.stop(); if(fail) fail(false); return false; }
         return true;
     };
     api.seek = function(seconds) { t = Math.max(api.start_time(), Math.min(api.end_time(), seconds)); };
