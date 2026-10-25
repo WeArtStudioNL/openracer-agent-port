@@ -667,6 +667,31 @@ var Settings = (function() {
         return row;
     }
 
+    // a row with a dropdown of values of any kind: choices are [value, text]; onPick(value) when one is chosen (a dropdown, not a button that goes round:
+    // on a phone a button that only goes forward made the resolution step up until the page gave out)
+    function pickRow(label, current, choices, onPick) {
+        var row = document.createElement("div");
+        row.className = "row";
+        var l = document.createElement("div");
+        l.className = "label";
+        l.textContent = label;
+        row.appendChild(l);
+        var inputs = document.createElement("div");
+        inputs.className = "inputs";
+        var select = document.createElement("select");
+        select.style.cssText = "font: inherit; color: var(--head); background: var(--bg2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; cursor: pointer; max-width: 100%;";
+        choices.forEach(function(c, i) {
+            var o = document.createElement("option");
+            o.value = String(i); o.textContent = c[1];
+            if(c[0] === current) o.selected = true;
+            select.appendChild(o);
+        });
+        select.onchange = function() { var c = choices[parseInt(select.value, 10)]; if(c) onPick(c[0]); };
+        inputs.appendChild(select);
+        row.appendChild(inputs);
+        return row;
+    }
+
     // a row with a slider: the value is shown next to it, formatted by text(value)
     function sliderRow(label, name, min, max, step, text) {
         var row = document.createElement("div");
@@ -843,11 +868,11 @@ var Settings = (function() {
         // practice (no laps): another vehicle in place of this one; the page opens again with it, on the same track and with the same options
         if(typeof race !== "undefined" && race && race.options && !race.options.laps) {
             var here = new URLSearchParams(window.location.search).get("car");
-            var pickRow = optionRow("Vehicle: " + (here || "?"), "Change vehicle…", function() { chooseVehicle(here); });
-            page.appendChild(pickRow);
+            var vehicleRow = optionRow("Vehicle: " + (here || "?"), "Change vehicle…", function() { chooseVehicle(here); });
+            page.appendChild(vehicleRow);
             if(typeof Catalog !== "undefined") Catalog.load("cars").then(function(list) {
                 var now = list.filter(function(c) { return c.id === here; })[0];
-                if(now) pickRow.querySelector(".label").textContent = "Vehicle: " + (now.name || now.id);
+                if(now) vehicleRow.querySelector(".label").textContent = "Vehicle: " + (now.name || now.id);
             }).catch(function() { /* the id stays */ });
         }
         page.appendChild(optionRow("Traction control", options.tc ? "On" : "Off", function() { setOption("tc", !options.tc); }));
@@ -960,32 +985,29 @@ var Settings = (function() {
             gfxNote.className = "sub";
             gfxNote.textContent = "A preset sets all of these at once; changing one of them makes it Custom. The screen space effects (SSAO, SSGI) draw the scene a second time to find the surfaces, so they cost frames: try them one by one.";
             page.appendChild(gfxNote);
-            // the value of an option goes round a list of choices; any change makes the preset Custom
-            var gfxCycle = function(name, values) {
-                return function() {
-                    var next = values[(values.indexOf(options[name]) + 1) % values.length];
-                    setOption(name, next);
+            // a dropdown per option; any change makes the preset Custom
+            var gfxPick = function(name) {
+                return function(value) {
+                    setOption(name, value);
                     if(G.currentPreset() !== options.gfxPreset) setOption("gfxPreset", G.currentPreset());
                 };
             };
             var presetNames = { low: "Low", medium: "Medium", high: "High", ultra: "Ultra", custom: "Custom" };
-            var presetOrder = ["low", "medium", "high", "ultra"];
-            page.appendChild(optionRow("Preset", presetNames[G.currentPreset()] || "Custom", function() {
-                var at = presetOrder.indexOf(G.currentPreset());
-                G.applyPreset(presetOrder[(at + 1) % presetOrder.length]);
-            }));
-            page.appendChild(optionRow("Resolution", Math.round(options.gfxScale * 100) + "% of the screen", gfxCycle("gfxScale", [0.5, 0.75, 1, 1.25, 1.5])));
-            page.appendChild(optionRow("Anti-aliasing", options.gfxAA ? options.gfxAA + "× MSAA" : "Off", gfxCycle("gfxAA", [0, 2, 4, 8])));
+            var presetChoices = ["low", "medium", "high", "ultra"].map(function(k) { return [k, presetNames[k]]; });
+            if(G.currentPreset() === "custom") presetChoices.push(["custom", "Custom"]);
+            page.appendChild(pickRow("Preset", G.currentPreset(), presetChoices, function(name) { if(name !== "custom") G.applyPreset(name); }));
+            page.appendChild(pickRow("Resolution", options.gfxScale, [0.5, 0.75, 1, 1.25, 1.5].map(function(v) { return [v, Math.round(v * 100) + "% of the screen"]; }), gfxPick("gfxScale")));
+            page.appendChild(pickRow("Anti-aliasing", options.gfxAA, [0, 2, 4, 8].map(function(v) { return [v, v ? v + "\u00d7 MSAA" : "Off"]; }), gfxPick("gfxAA")));
             var shadowNames = ["Off", "Low", "Medium", "High", "Ultra"];
-            page.appendChild(optionRow("Shadows", shadowNames[options.gfxShadows] + (options.gfxShadows ? " (" + G.SHADOW_SIZES[options.gfxShadows] + ")" : ""), gfxCycle("gfxShadows", [0, 1, 2, 3, 4])));
+            page.appendChild(pickRow("Shadows", options.gfxShadows, [0, 1, 2, 3, 4].map(function(v) { return [v, shadowNames[v] + (v ? " (" + G.SHADOW_SIZES[v] + ")" : "")]; }), gfxPick("gfxShadows")));
             var reflectionNames = ["Off (still)", "Low (slow)", "High"];
-            page.appendChild(optionRow("Reflections", reflectionNames[options.gfxReflections], gfxCycle("gfxReflections", [0, 1, 2])));
+            page.appendChild(pickRow("Reflections", options.gfxReflections, [0, 1, 2].map(function(v) { return [v, reflectionNames[v]]; }), gfxPick("gfxReflections")));
             var effectNames = ["Off", "Low", "High"];
-            page.appendChild(optionRow("Ambient occlusion (SSAO)", effectNames[options.gfxAO], gfxCycle("gfxAO", [0, 1, 2])));
-            page.appendChild(optionRow("Global illumination (SSGI)", effectNames[options.gfxGI], gfxCycle("gfxGI", [0, 1, 2])));
-            page.appendChild(optionRow("Vignette", options.gfxVignette ? "On" : "Off", gfxCycle("gfxVignette", [false, true])));
+            page.appendChild(pickRow("Ambient occlusion (SSAO)", options.gfxAO, [0, 1, 2].map(function(v) { return [v, effectNames[v]]; }), gfxPick("gfxAO")));
+            page.appendChild(pickRow("Global illumination (SSGI)", options.gfxGI, [0, 1, 2].map(function(v) { return [v, effectNames[v]]; }), gfxPick("gfxGI")));
+            page.appendChild(pickRow("Vignette", !!options.gfxVignette, [[false, "Off"], [true, "On"]], gfxPick("gfxVignette")));
             page.appendChild(sliderRow("Smoke", "gfxSmoke", 0, 200, 10, function(v) { return v + "%"; }));
-            page.appendChild(optionRow("Draw distance", options.gfxDistance + " m", gfxCycle("gfxDistance", [500, 1000, 2000, 5000])));
+            page.appendChild(pickRow("Draw distance", options.gfxDistance, [500, 1000, 2000, 5000].map(function(v) { return [v, v + " m"]; }), gfxPick("gfxDistance")));
         }
         page = tabPage("Tools");
         page.appendChild(optionRow("Debug text", options.debug ? "On" : "Off", function() { setOption("debug", !options.debug); }));
