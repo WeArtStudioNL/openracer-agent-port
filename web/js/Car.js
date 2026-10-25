@@ -436,10 +436,11 @@ OpenRacer.Car = function( config, domElement ) {
     // side of it, against all the triangles of the track (Ground.firstHit); the camera comes in front of the nearest. It comes in at once and goes out again
     // smoothly, when the way is free.
     var camClear = 1, camTarget = new THREE.Vector3(), camDir = new THREE.Vector3(), camEnd = new THREE.Vector3(), camSide = new THREE.Vector3(), camUp = new THREE.Vector3(0, 1, 0);
-    function keepCameraInView(car, delta) {
+    // (target: what the camera looks at, when it is not the car; the crash camera looks at the rider)
+    function keepCameraInView(car, delta, target) {
         var ground = car.vehicle.ground;
         if(!ground || !ground.firstHit) return;
-        camTarget.copy(car.body.position); camTarget.y += 0.9;
+        if(target) camTarget.copy(target); else { camTarget.copy(car.body.position); camTarget.y += 0.9; }
         camDir.copy(camera.position).sub(camTarget);
         var length = camDir.length();
         if(length < 0.5) return;
@@ -572,27 +573,39 @@ OpenRacer.Car = function( config, domElement ) {
             var off = centre && (Math.hypot(centre.x - v.px, centre.z - v.pz) > 1.1 || centre.y - v.py < -0.3);
             if(off && !v.controller.crashed) { v.controller.crashed = true; v.controller.crashSpeed = { x: v.vx, y: v.vy, z: v.vz }; }
         }
-        // a motorcycle that goes down: the rider is thrown off and the camera stays where it is, looking at the two of them
+        // a motorcycle that goes down: the rider is thrown off and the camera follows him, parented to him with the sky up (it goes with his place, not with his tumble: the offset
+        // from him to the camera is kept as it was at the crash, between 2.5 and 5 m away and at least 1.2 m above him), smoothed, and it looks at him; it does not go through a wall
         if(v.controller && v.controller.crashed && !this.crashDown) {
             this.crashDown = true; this.crashShown = true;
             var cs = v.controller.crashSpeed || { x: v.vx, y: v.vy, z: v.vz };
             if(this.driver && this.driver.crash) this.driver.crash(new THREE.Vector3(cs.x, cs.y, cs.z), v.ground, { bike: v });
-            // the camera on a circle of 2.5 m round the bike, on the far side from the rider (the bike between the camera and the rider), a little up; it moves there smoothly from where it was
-            var look = new THREE.Vector3(), rider = new THREE.Vector3(), wantPos = new THREE.Vector3(), dir = new THREE.Vector3(), aim = new THREE.Vector3();
-            var self = this, RADIUS = 2.5, HEIGHT = 1.3;
+            var rider = new THREE.Vector3(), wantPos = new THREE.Vector3(), aim = new THREE.Vector3(), smoothPos = new THREE.Vector3(), offset = null;
+            var self = this, FOV = 50;
+            var riderAt = function() {
+                var c = self.driver && self.driver.ragdollCentre ? self.driver.ragdollCentre() : null;
+                if(c) rider.copy(c); else if(self.driver && self.driver.root) self.driver.root.getWorldPosition(rider); else rider.copy(self.body.position);
+                return rider;
+            };
             this.cameraOverride = function(delta) {
-                look.copy(self.body.position);
-                if(self.driver && self.driver.root) self.driver.root.getWorldPosition(rider); else rider.copy(look);
-                dir.copy(look).sub(rider); dir.y = 0;
-                if(dir.lengthSq() < 0.01) { dir.copy(camera.position).sub(look); dir.y = 0; }
-                if(dir.lengthSq() < 0.01) dir.set(1, 0, 0);
-                dir.normalize();
-                wantPos.copy(look).addScaledVector(dir, RADIUS); wantPos.y = look.y + HEIGHT;
-                camera.position.lerp(wantPos, 1 - Math.exp(-2 * Math.min(delta || 0.016, 0.1)));
-                aim.copy(look).lerp(rider, 0.35);
+                var dt = Math.min(delta || 0.016, 0.1);
+                riderAt();
+                if(!offset) {
+                    offset = camera.position.clone().sub(rider);
+                    var flat = Math.hypot(offset.x, offset.z);
+                    if(flat < 0.5) { offset.x = -v.vx; offset.z = -v.vz; flat = Math.hypot(offset.x, offset.z); if(flat < 0.5) { offset.x = 1; offset.z = 0; flat = 1; } }
+                    var want = Math.max(2.5, Math.min(5, flat)); offset.x *= want / flat; offset.z *= want / flat;
+                    offset.y = Math.max(1.2, Math.min(3, offset.y));
+                    aim.copy(rider); smoothPos.copy(camera.position);
+                }
+                wantPos.copy(rider).add(offset);
+                // (the smoothed place is kept apart from the camera: the wall check pulls the camera in from it, and a camera pulled in from where it was pulled in to last frame
+                // crept all the way on to the rider)
+                smoothPos.lerp(wantPos, 1 - Math.exp(-dt / 0.15));
+                camera.position.copy(smoothPos);
+                aim.lerp(rider, 1 - Math.exp(-dt / 0.2));
+                keepCameraInView(self, dt, aim);
                 camera.lookAt(aim);
-                var apart = look.distanceTo(rider), fov = Math.max(45, Math.min(80, 2 * Math.atan((apart * 0.5 + 2) / Math.max(2.5, camera.position.distanceTo(aim))) * 180 / Math.PI));
-                if(Math.abs(camera.fov - fov) > 0.2) { camera.fov += (fov - camera.fov) * Math.min(1, (delta || 0.016) / 0.3); camera.updateProjectionMatrix(); }
+                if(Math.abs(camera.fov - FOV) > 0.2) { camera.fov += (FOV - camera.fov) * Math.min(1, dt / 0.3); camera.updateProjectionMatrix(); }
                 return true;
             };
         }
