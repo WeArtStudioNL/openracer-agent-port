@@ -1887,7 +1887,8 @@ OpenRacer.Vehicle = function (parameters, input) {
                 if(wheel.absFactor > 0.98) wheel.abs = false;
             }
             var bt = brakePedal * wheel.maxBrakeTorque * wheel.absFactor * (self.controller ? self.controller.brakeScale(self, wheel) : 1);
-            if(!wheel.front) bt += handbrake * 1800;
+            // the handbrake: the rear wheels; a motorcycle has none, its handbrake key is the rear brake alone (the pedal works both brakes)
+            if(!wheel.front) bt = self.controller ? Math.max(bt, handbrake * wheel.maxBrakeTorque * wheel.absFactor) : bt + handbrake * 1800;
             if(inp.parkingLock) bt = Math.max(bt, 4000); // P: the parking lock holds all wheels
             if(self.transbrakeHeld && wheel.driven) bt = Math.max(bt, 4000); // the transbrake holds the driven wheels
             bt += escBrake[iw];

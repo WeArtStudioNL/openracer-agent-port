@@ -292,7 +292,8 @@ var Settings = (function() {
         var target = event.target;
         if(target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return;
         if(!paused) {
-            if(event.code === "Space" || event.code.indexOf("Arrow") === 0) event.preventDefault();
+            var freeCamTaken = typeof OpenRacer !== "undefined" && OpenRacer.FreeCam && OpenRacer.FreeCam.active && OpenRacer.FreeCam.takes[event.code];      // (Alt and Control move the free camera: not the menu of the browser)
+            if(event.code === "Space" || event.code.indexOf("Arrow") === 0 || freeCamTaken) event.preventDefault();
             keysDown[event.code] = true;
         }
     }, true);
@@ -848,7 +849,7 @@ var Settings = (function() {
         page.appendChild(sliderRow("Drag strip: \"Get ready\" before the lights", "dragReady", 0.5, 6, 0.5, function(v) { return v.toFixed(1) + " s"; }));
         page.appendChild(sliderRow("Drag strip: lights stay after the green", "dragGreen", 0.5, 5, 0.5, function(v) { return v.toFixed(1) + " s"; }));
         page.appendChild(optionRow("ESC (stability control)", options.esc ? "On" : "Off", function() { setOption("esc", !options.esc); }));
-        var cameraNames = ["Follow (smooth, FOV with speed)", "Cockpit", "Free camera (W A S D move, 1 2 down and up, Q E tilt, arrows turn, 3 4 speed, [ ] field of view; the car is not driven; P looks at the car, O moves with it)"];
+        var cameraNames = ["Follow (smooth, FOV with speed)", "Cockpit", "Free camera (W A S D move, Ctrl Alt up and down, the mouse looks, Q E roll, 3 4 speed, [ ] field of view; the arrows still drive; P looks at the car, O moves with it)"];
         page.appendChild(optionRow("Camera", cameraNames[options.camera - 2] || cameraNames[0], function() { setOption("camera", nextCamera(options.camera)); }));
         // a motorcycle: how it is steered, and the camera that follows it (to try what feels right)
         if(typeof car !== "undefined" && car && car.vehicle && car.vehicle.controller) {

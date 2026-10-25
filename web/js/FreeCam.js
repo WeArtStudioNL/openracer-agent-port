@@ -2,9 +2,10 @@
  * FreeCam.js
  *
  * Description: The fourth camera of the game (the camera switcher: follow, cockpit, free). The camera is not tied to the car: it is moved with the
- *              keys, which do not drive the car while this camera is on: W A S D move it (level, the way it looks), 1 and 2 take it down and up, Q and E
- *              tilt it, the left and right arrows turn it, 3 and 4 make it slower and faster (a tenth to three times), [ and ] narrow and widen the field
- *              of view. Two toggles, on the panel at the top right and on keys (actions of the settings menu): P, "freeCamAim", the camera looks at the
+ *              keys and the mouse, as the free camera of the replay: W A S D move it (level, the way it looks), Control and Alt take it up and down, the
+ *              mouse looks around (click the scene: the pointer is locked, Escape lets it go), Q and E roll the picture, 3 and 4 make it slower and faster
+ *              (a tenth to three times), [ and ] narrow and widen the field of view. These keys do not drive the car while this camera is on; the arrows
+ *              still do (and Space is the handbrake). Two toggles, on the panel at the top right and on keys (actions of the settings menu): P, "freeCamAim", the camera looks at the
  *              car (it keeps its place and turns to the car; the tilt and the turn wait while it does), and O, "freeCamFollow", the camera goes with the
  *              car (it keeps its place against the car, and its own direction).
  *              The camera is remembered per car (localStorage, openracer.freecam.<car>): its place, where it looks, the field of view, the speed and the two
@@ -19,19 +20,20 @@ OpenRacer.FreeCam = (function () {
     var aim = true;                                      // P: it looks at the car
     var speed = 1;                                       // 3 and 4: a factor on the speed, 0.1 to 3
     var pos = new THREE.Vector3(), lastCar = new THREE.Vector3(), vel = new THREE.Vector3(), want = new THREE.Vector3();
-    var yaw = 0, pitch = 0, fov = 60;
+    var yaw = 0, pitch = 0, roll = 0, rollT = 0, fov = 60;
+    var pointerLocked = false, mouseHint = null;
+    var LOOK_SENSITIVITY = 0.0022, ROLL_RATE = 0.9;
     var euler = new THREE.Euler(0, 0, 0, "YXZ");
     var placeBehind = false;
     var panel = null, followButton = null, aimButton = null, speedLabel = null;
     var carId = null, saveAt = 0;
-    var KEYS = { forward: "KeyW", back: "KeyS", left: "KeyA", right: "KeyD", down: "Digit1", up: "Digit2", slower: "Digit3", faster: "Digit4",
-        tiltUp: "KeyQ", tiltDown: "KeyE", turnLeft: "ArrowLeft", turnRight: "ArrowRight", fovNarrow: "BracketLeft", fovWide: "BracketRight" };
+    var KEYS = { forward: "KeyW", back: "KeyS", left: "KeyA", right: "KeyD", up: ["ControlLeft", "ControlRight"], down: ["AltLeft", "AltRight"], slower: "Digit3", faster: "Digit4",
+        rollLeft: "KeyQ", rollRight: "KeyE", fovNarrow: "BracketLeft", fovWide: "BracketRight" };
     // the keys this camera takes (Settings.js leaves them to it while it is on: they do not drive the car, mute the sound or save the reset place)
     var TAKEN = {};
-    Object.keys(KEYS).forEach(function (k) { TAKEN[KEYS[k]] = true; });
-    TAKEN.ArrowUp = TAKEN.ArrowDown = true;
+    Object.keys(KEYS).forEach(function (k) { [].concat(KEYS[k]).forEach(function (code) { TAKEN[code] = true; }); });
 
-    function key(name) { return Settings.keyDown(KEYS[name]) ? 1 : 0; }
+    function key(name) { var codes = [].concat(KEYS[name]); for (var i = 0; i < codes.length; i++) if (Settings.keyDown(codes[i])) return 1; return 0; }
 
     function buildPanel() {
         var style = document.createElement("style");
@@ -54,7 +56,7 @@ OpenRacer.FreeCam = (function () {
         panel.appendChild(title);
         var keys = document.createElement("div");
         keys.className = "keys";
-        keys.innerHTML = "<b>W A S D</b> move · <b>1 2</b> down, up<br><b>Q E</b> tilt · <b>← →</b> turn · <b>[ ]</b> field of view<br><b>3 4</b> slower, faster";
+        keys.innerHTML = "<b>W A S D</b> move · <b>Ctrl Alt</b> up, down<br><b>mouse</b> look (click the scene) · <b>Q E</b> roll<br><b>[ ]</b> field of view · <b>3 4</b> slower, faster";
         panel.appendChild(keys);
         speedLabel = title.querySelector("#freeCamSpeed");
         // the two toggles: on pointerup (the panel is dragged by its pointerdown, Movable.js, which took the click away from the buttons)
@@ -93,7 +95,7 @@ OpenRacer.FreeCam = (function () {
     function storageKey() { return "openracer.freecam." + (carId || "car"); }
     function save() {
         if (!carId) return;
-        try { window.localStorage.setItem(storageKey(), JSON.stringify({ x: pos.x, y: pos.y, z: pos.z, yaw: yaw, pitch: pitch, fov: fov, speed: speed, follow: follow, aim: aim,
+        try { window.localStorage.setItem(storageKey(), JSON.stringify({ x: pos.x, y: pos.y, z: pos.z, yaw: yaw, pitch: pitch, roll: roll, fov: fov, speed: speed, follow: follow, aim: aim,
             carX: lastCar.x, carY: lastCar.y, carZ: lastCar.z })); } catch (e) { /* no storage */ }
     }
     function restore(carPosition) {
@@ -103,7 +105,7 @@ OpenRacer.FreeCam = (function () {
             pos.set(s.x, s.y, s.z);
             // a camera that went with the car keeps its place against the car: it comes back there, wherever the car is now
             if (s.follow && isFinite(s.carX)) pos.add(carPosition).sub(new THREE.Vector3(s.carX, s.carY, s.carZ));
-            yaw = isFinite(s.yaw) ? s.yaw : 0; pitch = isFinite(s.pitch) ? s.pitch : 0; fov = isFinite(s.fov) ? s.fov : 60;
+            yaw = isFinite(s.yaw) ? s.yaw : 0; pitch = isFinite(s.pitch) ? s.pitch : 0; fov = isFinite(s.fov) ? s.fov : 60; roll = rollT = isFinite(s.roll) ? s.roll : 0;
             speed = isFinite(s.speed) ? Math.max(0.1, Math.min(3, s.speed)) : 1;
             follow = !!s.follow; aim = s.aim !== false;
             return true;
@@ -122,7 +124,7 @@ OpenRacer.FreeCam = (function () {
             pos.copy(camera.position);
             pos.y += 10;                                 // it starts 10 m higher than the camera that it came from
             euler.setFromQuaternion(camera.quaternion, "YXZ");
-            yaw = euler.y; pitch = euler.x;
+            yaw = euler.y; pitch = euler.x; roll = rollT = 0;
             fov = camera.fov;
             // the game starts with this camera (the choice is kept): the camera has not been put near the car yet, so it starts behind it, at the
             // first frame (the car has its direction by then)
@@ -136,6 +138,7 @@ OpenRacer.FreeCam = (function () {
     function leave() {
         if (active) save();
         active = false;
+        if (pointerLocked && document.exitPointerLock) document.exitPointerLock();
         if (panel) panel.style.display = "none";
     }
     window.addEventListener("beforeunload", function () { if (active) save(); });
@@ -154,10 +157,9 @@ OpenRacer.FreeCam = (function () {
         var mx = key("right") - key("left"), mz = key("forward") - key("back"), my = key("up") - key("down");
         var ds = key("faster") - key("slower");
         if (ds) { speed = Math.max(0.1, Math.min(3, speed * Math.exp(ds * SPEED_RATE * delta))); refreshUi(); }
-        if (!aim) {
-            yaw += (key("turnLeft") - key("turnRight")) * TURN_RATE * delta;
-            pitch = Math.max(-1.5, Math.min(1.5, pitch + (key("tiltUp") - key("tiltDown")) * TURN_RATE * delta));
-        }
+        // Q and E roll the picture (it eases to where it is going)
+        rollT = Math.max(-Math.PI, Math.min(Math.PI, rollT + (key("rollLeft") - key("rollRight")) * ROLL_RATE * delta));
+        roll += (rollT - roll) * (1 - Math.exp(-8 * delta));
         fov = Math.max(8, Math.min(110, fov + (key("fovWide") - key("fovNarrow")) * FOV_RATE * delta));
         // forward is level, the way the camera looks; the speed follows what is asked for, it does not jump to it
         var fx = -Math.sin(yaw), fz = -Math.cos(yaw);
@@ -178,7 +180,7 @@ OpenRacer.FreeCam = (function () {
             pitch += (wantPitch - pitch) * k;
         }
         camera.position.copy(pos);
-        euler.set(pitch, yaw, 0, "YXZ");
+        euler.set(pitch, yaw, roll, "YXZ");
         camera.quaternion.setFromEuler(euler);
         if (Math.abs(camera.fov - fov) > 0.01 || camera.near !== 0.3) {
             camera.fov = fov;
@@ -189,6 +191,28 @@ OpenRacer.FreeCam = (function () {
         saveAt += delta;
         if (saveAt > 2) { saveAt = 0; save(); }
     }
+
+    // the mouse: click the scene and it looks around like a first person view (Escape lets go of the mouse), as the free camera of the replay
+    document.addEventListener("mousedown", function (event) {
+        if (!active || aim || Settings.isPaused()) return;
+        if (typeof renderer === "undefined" || event.target !== renderer.domElement) return;
+        if (renderer.domElement.requestPointerLock) renderer.domElement.requestPointerLock();
+    });
+    document.addEventListener("pointerlockchange", function () {
+        pointerLocked = !!document.pointerLockElement && active;
+        if (!mouseHint) {
+            mouseHint = document.createElement("div");
+            mouseHint.textContent = "Mouse look · Escape for the UI";
+            mouseHint.style.cssText = "position:fixed;left:50%;top:14px;transform:translateX(-50%);padding:6px 12px;border-radius:8px;background:rgba(14,18,23,0.75);color:#fff;font:13px system-ui,sans-serif;z-index:950;pointer-events:none;display:none";
+            document.body.appendChild(mouseHint);
+        }
+        mouseHint.style.display = pointerLocked ? "" : "none";
+    });
+    document.addEventListener("mousemove", function (event) {
+        if (!active || aim || !pointerLocked) return;
+        yaw -= event.movementX * LOOK_SENSITIVITY;
+        pitch = Math.max(-1.5, Math.min(1.5, pitch - event.movementY * LOOK_SENSITIVITY));
+    });
 
     return { enter: enter, leave: leave, update: update, toggleFollow: toggleFollow, toggleAim: toggleAim, takes: TAKEN,
         get active() { return active; }, get follows() { return follow; }, get aims() { return aim; } };
