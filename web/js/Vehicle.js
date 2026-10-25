@@ -159,7 +159,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     };
 
     this.tyreDamage = false;          // a hard hit can puncture a tyre: it leaks and loses its pressure (applyPressure, the grip and the stiffness follow)
-    this.tyreShell = { width: 0, rings: 3, segments: 36 };      // the cylinder of the tyre (tyre model "cylinder", TyreBody.js): rings across the tread, nodes round the wheel, the width (m, 0: from the wheel)
+    this.tyreShell = { width: 0, rings: 3, segments: 36, inner_ratio: 0.62, carcass: 0 };      // the cylinder of the tyre (tyre model "cylinder", TyreBody.js): rings across the tread, nodes round the wheel, the width (m, 0: from the wheel)
     this.tyreModel = "cylinder";      // the tyre: "cylinder" (a body of nodes and beams, TyreBody.js: the way for every car) or "nodes" (a ring of nodes, NodeTyre.js, which is also what a track with 2D physics uses)
     this.tyreNodes = 72;               // the nodes of the tread of a tyre
     this.tyreStiffX = 20;              // the stiffness of the tyre of nodes along and across (per N of load)
@@ -520,7 +520,9 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.tyre_segments !== undefined) this.tyreShell.segments = t.tyre_segments;
         if(t.tyre_width !== undefined || t.tyre_rings !== undefined || t.tyre_segments !== undefined) for(var tb = 0; tb < 4; tb++) if(this.wheels[tb].tyreBody) { this.wheels[tb].tyreBody.width = this.tyreShell.width; this.wheels[tb].tyreBody.rings = this.tyreShell.rings; this.wheels[tb].tyreBody.segments = this.tyreShell.segments; }
         if(t.tyre_damage !== undefined) { this.tyreDamage = !!t.tyre_damage; if(!this.tyreDamage) this.repairTyres(); }
-        if(t.tyre_model !== undefined) { this.tyreModel = t.tyre_model === "nodes" ? "nodes" : "cylinder"; }
+        if(t.tyre_model !== undefined) { this.tyreModel = t.tyre_model === "nodes" ? "nodes" : (t.tyre_model === "shell" ? "shell" : "cylinder"); }
+        if(t.tyre_inner_ratio !== undefined) this.tyreShell.inner_ratio = Math.max(0.3, Math.min(0.9, t.tyre_inner_ratio));
+        if(t.tyre_carcass !== undefined) this.tyreShell.carcass = Math.max(0, t.tyre_carcass);
         if(t.tyre_nodes !== undefined && t.tyre_nodes !== this.tyreNodes) { this.tyreNodes = Math.max(24, Math.min(240, Math.round(t.tyre_nodes))); for(var tn = 0; tn < 4; tn++) this.wheels[tn].nodeTyre = null; }
         if(t.tyre_stiff_x !== undefined) this.tyreStiffX = t.tyre_stiff_x;
         if(t.tyre_stiff_y !== undefined) this.tyreStiffY = t.tyre_stiff_y;
@@ -1485,7 +1487,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             // when the middle passes it. The surface under the middle is the one that counts for the grip.
             var road = null, t = Infinity, surfaceRoad = null;
             w.profile[0] = w.profile[1] = w.profile[2] = w.profile[3] = w.profile[4] = NaN;
-            var cyl = self.tyreModel === "cylinder" && ground3D && !self.wheelLost[i];       // the tyre is a body of nodes (TyreBody.js): it finds the road itself
+            var cyl = self.tyreModel !== "nodes" && ground3D && !self.wheelLost[i];       // the tyre is a body of nodes (TyreBody.js): it finds the road itself
             for(var sk = -2; sk <= 2 && ground3D && !cyl; sk++) {
                 // the 3D physics: a ray along the axis of the suspension (down for the car, whichever way that is in the world), from a
                 // little above the mount, so a car on a wall or upside down feels the road under its wheels
@@ -1541,8 +1543,12 @@ OpenRacer.Vehicle = function (parameters, input) {
             }
             w.cylActive = false;
             if(cyl) {
-                var body = w.tyreBody || (w.tyreBody = new OpenRacer.TyreBody(w));
-                body.rings = self.tyreShell.rings; body.segments = self.tyreShell.segments; body.width = self.tyreShell.width;
+                // (the experiment, the shell tyre, when it is asked for and loaded: TyreShell.js; the other when it is switched back)
+                var wantShell = self.tyreModel === "shell" && !!OpenRacer.TyreShell;
+                if(w.tyreBody && !!w.tyreBody.isShell !== wantShell) w.tyreBody = null;
+                var body = w.tyreBody || (w.tyreBody = wantShell ? new OpenRacer.TyreShell(w) : new OpenRacer.TyreBody(w));
+                if(wantShell) { body.isShell = true; body.tyreMass = Math.max(1.5, 0.3 * self.unsprungMass); body.pressure = Math.max(0.15, (w.front ? self.pressureFront : self.pressureRear) - (w.pressureLoss || 0)); body.innerRatio = self.tyreShell.inner_ratio; body.carcass = self.tyreShell.carcass; }
+                body.rings = self.tyreShell.rings; body.segments = wantShell ? Math.max(48, Math.min(72, 2 * self.tyreShell.segments)) : self.tyreShell.segments; body.width = self.tyreShell.width;      // (the shell tyre has more nodes: a patch of a few nodes was noisy)
                 body.stiffX = self.tyreStiffX; body.stiffY = self.tyreStiffY * self.corneringScale * (w.stiffnessBias || 1) * (w.pressureCorner || 1);
                 body.verticalStiffness = w.tyreRate || self.tyreRate; body.verticalDamping = self.tyreDamping; body.staticLoad = w.staticLoad || (self.mass * G / 4);
                 // the axes of the wheel: up (the suspension), forward in its plane (turned by the steering), and to the left

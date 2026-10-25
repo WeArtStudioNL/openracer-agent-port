@@ -139,6 +139,25 @@
         for (i = 0; i < 4; i++) {
             var tbody = v.wheels[i].tyreBody;
             if (!tbody || !v.wheels[i].cylActive) continue;
+            // the shell tyre (TyreShell.js): the outer shell as it is (nodes and the belt), the inner shell (the rim), and the beams between them coloured by their strain: dark where they are
+            // slack, towards cyan as they are stretched, towards red as they are pushed in
+            if(tbody.shells) {
+                var sh = tbody.shells();
+                for (k = 0; k < sh.beams; k++) {
+                    var ba = sh.a[k], bb = sh.b[k], inner = bb >= sh.count, cls = sh.bclass[k];
+                    var ex = sh.ox[ba], ey = sh.oy[ba], ez = sh.oz[ba];
+                    var fx2 = inner ? sh.ix[bb - sh.count] : sh.ox[bb], fy2 = inner ? sh.iy[bb - sh.count] : sh.oy[bb], fz2 = inner ? sh.iz[bb - sh.count] : sh.oz[bb];
+                    var strain = sh.strain[k], tt = Math.max(-1, Math.min(1, strain / 0.12));
+                    var colourB = tt >= 0 ? [DIM[0] * (1 - tt) + 0.2 * tt, DIM[1] * (1 - tt) + 0.9 * tt, DIM[2] * (1 - tt) + 1 * tt] : [DIM[0] * (1 + tt) + 1 * -tt, DIM[1] * (1 + tt) + 0.2 * -tt, DIM[2] * (1 + tt) + 0.2 * -tt];
+                    if(cls === 0 && (k % 2 === 0 || Math.abs(strain) > 0.02)) seg(lines, ex, ey, ez, fx2, fy2, fz2, colourB);        // (the cables to the rim: every second one when they are at rest)
+                    else if(cls === 3 || cls === 4) seg(lines, ex, ey, ez, fx2, fy2, fz2, TEAL);                                       // the belt
+                }
+                for (k = 0; k < sh.count; k++) {
+                    push(points, sh.ox[k], sh.oy[k], sh.oz[k], sh.contact[k] ? (sh.sliding[k] ? RED : GREEN) : TEAL);
+                    if(k % 2 === 0) push(points, sh.ix[k], sh.iy[k], sh.iz[k], WHITE);                                                  // the rim
+                }
+                continue;
+            }
             var nd = tbody.nodes(), segsN = nd.segments, perRing = segsN * 2;
             for (var r = 0; r < nd.rings; r++) {
                 for (k = 0; k < perRing; k += 2) {

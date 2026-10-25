@@ -258,6 +258,9 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 ### Physics, tyres and engine
 
+**Tyre shell (experiment)**
+- Tyre model *Shell* (`tyres.model` "shell", *Tyre model* in the tuning menu, *Inner shell* and *Carcass softness* beside it, `tyres.shell.inner_ratio` and `carcass`): an outer shell of free nodes and an inner shell that follows the rim, joined by beams (cables that pull and are taut by the air pressure, belt and shear springs, a bump stop). The pressure (bar, per axle) pushes the outer nodes out and the rim back, so it changes the patch, the load and the deformation; the debug view shows both shells, the strain of the beams, the contact and the pressure in bar and psi. The road is felt at four places between each two nodes, and the force to the car passes a filter of 6 ms, which keeps the fast modes of the tyre from ringing through a light wheel (the Mustang flipped between 7000 and 0 N per frame without them). Checked on the Mustang, the stadium truck and the sports motorcycle: loads at rest and under acceleration and braking match the cylinder tyre. The tyre in the picture does not deform yet.
+
 **3D physics**
 - The road is no longer one height per place. Every triangle of the track is in a 3D grid, the wheels feel the road with rays along their own axis, and the body is a cloud of spheres, so a loop, a road on a wall or a bridge works: a car with enough speed goes up the wall of a loop, over the top upside down and lands on the exit.
 - The collision shape of a car is made from its model when the car loads (about 40 to 90 spheres), instead of a box.
