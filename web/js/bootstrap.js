@@ -71,6 +71,7 @@ var scripts = [
     "js/NodeTyre.js",
     "js/TyreBody.js",
     "js/TyreShell.js",
+    "js/TyreDeform.js",
     "js/Collision.js",
     "js/Ground.js",
     "js/Smoke.js",

@@ -400,6 +400,8 @@ OpenRacer.TyreShell = function (wheel) {
             }
         }
         phase += omega * dt;
+        frame.hx = hub.x + vel.x * 0.5 * dt; frame.hy = hub.y + vel.y * 0.5 * dt; frame.hz = hub.z + vel.z * 0.5 * dt;
+        frame.fx = F.x; frame.fy = F.y; frame.fz = F.z; frame.ux = U.x; frame.uy = U.y; frame.uz = U.z; frame.ok = true;
         if(phase > 1e4 || phase < -1e4) phase %= (2 * Math.PI);
         // a shell that has blown up (a number that is not one) starts again on the shape of the tyre, and the car gets nothing this step
         if(!(fHubX === fHubX && fHubY === fHubY && fHubZ === fHubZ) || Math.abs(fHubX) + Math.abs(fHubY) + Math.abs(fHubZ) > 1e7) { started = false; filtered = false; self.contacts = 0; self.normal.x = self.normal.y = self.normal.z = 0; self.friction.x = self.friction.y = self.friction.z = 0; loadPrev = 0; return false; }
@@ -433,7 +435,41 @@ OpenRacer.TyreShell = function (wheel) {
         self.used = fm / Math.max(1, surf.mu * Math.max(loadPrev, 1));
         return true;
     };
+    var frame = { ok: false, hx: 0, hy: 0, hz: 0, fx: 0, fy: 0, fz: 1, ux: 0, uy: 1, uz: 0 };       // where the hub and its axes were at the end of the last step
     var loadPrev = 0, filtered = false, fltX = 0, fltY = 0, fltZ = 0, fltT = 0;
+
+    // The deformation of the tread for the model of the tyre (TyreDeform.js): per ring and per place round the wheel (BINS), how far the outer node is pushed in from where it would be, in
+    // the frame of the wheel that does not spin (angle from the top, towards the front): out[ring * BINS + bin], in m, negative where the air pushes it out. Returns the number of rings (0: no data)
+    var BINS = 72;
+    var defW = null;
+    this.BINS = BINS;
+    this.deformation = function (out) {
+        if(!frame.ok || !Px) return 0;
+        if(!defW || defW.length < out.length) defW = new Float32Array(out.length);
+        for(var z = 0; z < rings * BINS; z++) { out[z] = 0; defW[z] = 0; }
+        for(var j = 0; j < rings; j++) for(var k = 0; k < segs; k++) {
+            var i = j * segs + k;
+            var qx = Px[i] - frame.hx, qy = Py[i] - frame.hy, qz = Pz[i] - frame.hz;
+            var y = qx * frame.ux + qy * frame.uy + qz * frame.uz, f = qx * frame.fx + qy * frame.fy + qz * frame.fz;
+            var ox = Ox[i] - frame.hx, oy = Oy[i] - frame.hy, oz = Oz[i] - frame.hz;
+            var yo = ox * frame.ux + oy * frame.uy + oz * frame.uz, fo = ox * frame.fx + oy * frame.fy + oz * frame.fz;
+            var d = Math.sqrt(yo * yo + fo * fo) - Math.sqrt(y * y + f * f);
+            var ang = Math.atan2(f, y); if(ang < 0) ang += 2 * Math.PI;
+            var t = ang / (2 * Math.PI) * BINS, b0 = Math.floor(t), fr = t - b0, b1 = (b0 + 1) % BINS; b0 = b0 % BINS;
+            out[j * BINS + b0] += d * (1 - fr); defW[j * BINS + b0] += 1 - fr;
+            out[j * BINS + b1] += d * fr; defW[j * BINS + b1] += fr;
+        }
+        for(var jj = 0; jj < rings; jj++) {
+            var base = jj * BINS;
+            for(var b = 0; b < BINS; b++) if(defW[base + b] > 0.05) out[base + b] /= defW[base + b];
+            // places no node reached (a gap by the turning of the nodes): from the neighbours
+            for(var b2 = 0; b2 < BINS; b2++) if(defW[base + b2] <= 0.05) {
+                var lo = (b2 + BINS - 1) % BINS, hi = (b2 + 1) % BINS;
+                out[base + b2] = 0.5 * (out[base + lo] + out[base + hi]);
+            }
+        }
+        return rings;
+    };
 
     // for the debug view: the nodes of the two shells, the beams and their strain
     this.shells = function () {
