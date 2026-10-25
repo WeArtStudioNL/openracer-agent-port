@@ -9,6 +9,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 ### Motorcycles
 
 **After the first drive**
+- A motorcycle gets going from a standstill with the bars at the lock: the throttle was eased to 8 % whenever the bars were turned far at a walking pace, from a standstill too, so a Supermoto with the bars turned could not move off; the ease comes in from 0.3 m/s and is full from 1.2 m/s.
 - **A hard landing no longer goes through the road.** The tyre gave at most six times its static load, which a landing from 3 m needs more than (25 now), and a hub driven below the road turned the push of the tyre the wrong way (the up of the wheel decides the side now); the rim itself stops the hub when the tyre is flat (`TyreShell.js`, a very stiff spring with a damper). The Supermoto 700 lands drops of 2, 3 and 5 m on the circuit and stands up again (it fell through at 3 m).
 - **The landing angle in the air** (`motorcycle.air_pitch`, 1): what spins the rear wheel up (the gas) or slows the wheels (the brakes) turns the bike the other way, as the angular momentum is kept: gas brings the nose up, the brake brings it down. The wheelie control does not cut the gas in the air any more.
 - The rear shock of a motorcycle (`rear_spring`, or `rear_shock`, `rear_damper`, `shock_rear`) goes with the swingarm: its upper end stays on the frame, its lower end goes round with the arm, and the part is turned and stretched between the two every frame (it stood still on the Supermoto 700).

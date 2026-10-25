@@ -222,7 +222,8 @@ OpenRacer.Motorcycle = function (settings) {
         var want = on && !v.airborne && Math.abs(v.u) > 0.5 && self.burnout < 0.5 ? Math.max(0.15, Math.min(1, (frontLoad - 0.08) / 0.3)) : 1;      // (not in the air: the gas is what brings the nose up for the landing there)     // (not in a burnout: the front lifts a little there, and the cut let the engine fall to the clutch)
         self.wheelieScale += (want - self.wheelieScale) * Math.min(1, dt / (want < self.wheelieScale ? 0.03 : 0.25));
         // at a walking pace with the bars turned far the throttle is eased: the bike slows in the turn instead of driving on round it
-        var slowLock = (1 - smooth(2.0, 4.0, Math.abs(v.u))) * smooth(0.6, 0.95, Math.abs(self.command || 0));
+        // (not from a standstill: with the bars at the lock the bike could not get going at all; the ease comes in once it walks)
+        var slowLock = smooth(0.3, 1.2, Math.abs(v.u)) * (1 - smooth(2.0, 4.0, Math.abs(v.u))) * smooth(0.6, 0.95, Math.abs(self.command || 0));
         return self.wheelieScale * (1 - 0.92 * slowLock);
     };
 
