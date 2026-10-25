@@ -1012,7 +1012,7 @@ OpenRacer.Driver = function (config, parent, steering) {
                     // (the first pass of a substep only: the sticks put the part back in the sphere every pass, and the same hit was counted five times; and no more than 2 m/s of the
                     // whole rider on the bike in a frame)
                     if (first && was < 0 && r.bike && r.bike.applyImpulse && r.impulseLeft > 0) {
-                        var jn = Math.min(r.impulseLeft, Math.abs(vn) / h * PART_MASS); r.impulseLeft -= jn;
+                        var jn = Math.min(r.impulseLeft, Math.abs(vn) / h * PART_MASS); r.impulseLeft -= jn; r.impulseUsed += jn;
                         r.bike.applyImpulse(S[o], S[o + 1], S[o + 2], -nx * jn, -ny * jn, -nz * jn);
                     }
                 }
@@ -1101,7 +1101,11 @@ OpenRacer.Driver = function (config, parent, steering) {
         var h = 1 / 240; r.acc = (r.acc || 0) + dt; var n = Math.min(12, Math.floor(r.acc / h)); r.acc -= n * h;
         if (!n) return;
         bikeSpheres(r);
-        r.impulseLeft = 80 * 2;                                                     // N s: what the rider may give the bike this frame
+        // N s: what the rider may give the bike this frame: in the first moments of the crash the hit itself (2 m/s of the whole rider), after that no more than half his weight
+        // over the frame, well under what the road holds the bike with (a rider wedged in the spheres of a bike that lies on the road was pushed back into them by his sticks every
+        // substep, and gave the bike 1.4 kN for seconds: the bike was shoved away and the two of them slid off together)
+        r.impulseLeft = r.time < 0.3 ? 80 * 2 : 40 * 9.81 * Math.min(dt, 0.1);
+        r.impulseUsed = 0;                                                          // (what he gave it this frame, for the debug view)
         if (r.fresh) {
             // the first step: the spheres that a particle is in now are the ones he sits in (the seat, the tank between the knees): they do not push him out
             r.fresh = false;
