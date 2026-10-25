@@ -304,7 +304,9 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
             // the changes to the materials that were made in the car editor
             OpenRacer.applyMaterialOverrides(THREE, [tilt].concat(wheelObjects), config.materials);
             var chain = OpenRacer.Chain ? OpenRacer.Chain.find(root, space, tilt, wheelObjects) : null;      // the drive chain, from one link of the model (Chain.js)
-            onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1, steeringWheel: steering, measured: measured, rig: rig, head: head, swingarm: head ? findSwingarm(root, space, measured) : null, chain: chain });
+            var swingarm = head ? findSwingarm(root, space, measured) : null;
+            if(swingarm) swingarm.shock = findRearShock(root, space, tilt, swingarm);                             // the rear shock between the frame and the swingarm
+            onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1, steeringWheel: steering, measured: measured, rig: rig, head: head, swingarm: swingarm, chain: chain });
         }
     }
 
@@ -457,6 +459,64 @@ function findSwingarm(root, space, measured) {
     var slope = pivot.z > axle.z ? (axle.y - pivot.y) / (pivot.z - axle.z) : 0;
     return { object: part, rest: part.quaternion.clone(), axis: new THREE.Vector3(1, 0, 0).applyQuaternion(q.invert()).normalize(), length: length, pivotZ: pivot.z, axleZ: axle.z, slope: slope };
 }
+// The rear shock of a motorcycle: a part called rear_spring (or rear_shock, rear_damper, shock_rear, ...) between the frame and the swingarm. Its long axis is measured from its
+// geometry: the end that is higher is the mount on the frame and stays, the other end is on the swingarm and goes round with it; every frame the part is turned and stretched
+// between the two (OpenRacer.updateSwingarm)
+function findRearShock(root, space, tilt, arm) {
+    var part = null;
+    root.traverse(function(child) { if(!part && /^(rear_?(spring|shock|damper|strut)|(spring|shock|damper|strut)_?rear)/i.test(String(child.name || ""))) part = child; });
+    if(!part) return null;
+    var mesh = null;
+    part.traverse(function(c) { if(!mesh && c.isMesh) mesh = c; });
+    if(!mesh || !mesh.geometry) return null;
+    var added = false;
+    if(tilt.parent !== space) { space.add(tilt); added = true; }
+    space.updateMatrixWorld(true);
+    mesh.geometry.computeBoundingBox();
+    var bb = mesh.geometry.boundingBox, size = bb.getSize(new THREE.Vector3()), centre = bb.getCenter(new THREE.Vector3());
+    var axis = size.x >= size.y && size.x >= size.z ? new THREE.Vector3(1, 0, 0) : (size.y >= size.z ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1));
+    var half = Math.max(size.x, size.y, size.z) / 2;
+    var e1 = centre.clone().addScaledVector(axis, half), e2 = centre.clone().addScaledVector(axis, -half);      // the two ends, in the frame of the mesh
+    var w1 = mesh.localToWorld(e1.clone()), w2 = mesh.localToWorld(e2.clone());
+    var topW = w1.y >= w2.y ? w1 : w2, botW = w1.y >= w2.y ? w2 : w1;
+    var topL = part.worldToLocal(topW.clone()), botL = part.worldToLocal(botW.clone());                           // in the frame of the part
+    var parent = part.parent;
+    var topT = tilt.worldToLocal(topW.clone());                                                                  // the mount on the frame, in the frame of the body (it stays there: the part may be a child of the swingarm in the model)
+    var botInArm = arm.object.worldToLocal(botW.clone());                                                        // the end on the swingarm, in the frame of the arm (it goes round with it)
+    var restLen = topL.distanceTo(botL);
+    if(added) space.remove(tilt);
+    if(!(restLen > 0.02)) return null;
+    var rest = new THREE.Matrix4().compose(part.position, part.quaternion, part.scale);
+    part.matrixAutoUpdate = false;
+    return { object: part, tilt: tilt, topL: topL, botL: botL, topT: topT, topP: new THREE.Vector3(), botInArm: botInArm, restLen: restLen, restQ: part.quaternion.clone(), restS: part.scale.clone(), rest: rest };
+}
+OpenRacer.updateRearShock = function(shock, arm) {
+    if(!shock || !arm || !arm.object) return;
+    var u = OpenRacer.updateRearShock;
+    u.v = u.v || new THREE.Vector3(); u.w = u.w || new THREE.Vector3(); u.d = u.d || new THREE.Vector3(); u.q = u.q || new THREE.Quaternion(); u.q2 = u.q2 || new THREE.Quaternion();
+    u.m = u.m || new THREE.Matrix4(); u.ms = u.ms || new THREE.Matrix4(); u.mb = u.mb || new THREE.Matrix4(); u.mt = u.mt || new THREE.Matrix4();
+    var part = shock.object, parent = part.parent;
+    arm.object.updateWorldMatrix(true, false); shock.tilt.updateWorldMatrix(true, false); parent.updateWorldMatrix(true, false);
+    parent.worldToLocal(shock.tilt.localToWorld(shock.topP.copy(shock.topT)));                                    // the mount on the frame, in the frame of the parent (which may move: a part of the arm)
+    var botNow = parent.worldToLocal(arm.object.localToWorld(u.w.copy(shock.botInArm)));                         // the end on the swingarm, now, in the frame of the parent
+    u.d.copy(botNow).sub(shock.topP);
+    var len = u.d.length();
+    if(len < 1e-4) return;
+    u.d.divideScalar(len);
+    // the axis of the part in the frame of the parent at rest, and the turn that takes it to the line between the two ends now
+    u.v.copy(shock.botL).sub(shock.topL).normalize().applyQuaternion(shock.restQ);
+    u.q.setFromUnitVectors(u.v, u.d).multiply(shock.restQ);
+    // the stretch along the axis of the part (in its own frame): a scale along that axis
+    var ax = u.w.copy(shock.botL).sub(shock.topL).normalize(), k = len / shock.restLen;
+    var b = u.mb.makeBasis(ax, Math.abs(ax.y) < 0.9 ? new THREE.Vector3(0, 1, 0).cross(ax).normalize() : new THREE.Vector3(1, 0, 0).cross(ax).normalize(), new THREE.Vector3());
+    var bx = new THREE.Vector3(), by = new THREE.Vector3(), bz = new THREE.Vector3(); b.extractBasis(bx, by, bz); bz.crossVectors(bx, by); b.makeBasis(bx, by, bz);
+    u.ms.makeScale(k, 1, 1);
+    u.m.copy(b).multiply(u.ms).multiply(u.mt.copy(b).transpose());                                               // S = B diag(k,1,1) B^T
+    // M = T(top) R S T(-topL): the top end of the part stays on the mount
+    part.matrix.makeRotationFromQuaternion(u.q).multiply(u.m).multiply(u.mt.makeTranslation(-shock.topL.x, -shock.topL.y, -shock.topL.z));
+    part.matrix.premultiply(u.ms.makeTranslation(shock.topP.x, shock.topP.y, shock.topP.z));
+    part.matrixWorldNeedsUpdate = true;
+};
 // The slope of the travel of the fork and of the swingarm for the physics (Vehicle.js, forkSlope and swingSlope): the fork from its axis, the swingarm from its pivot and the axle
 OpenRacer.setForkGeometry = function(vehicle, model, config) {
     if(!vehicle || !model || !vehicle.soloWheels) return;
@@ -476,6 +536,7 @@ OpenRacer.updateSwingarm = function(arm, rear, body) {
     OpenRacer.updateSwingarm.forward = OpenRacer.updateSwingarm.forward || new THREE.Vector3();
     OpenRacer.updateSwingarm.forward.set(0, 0, 1).applyQuaternion(body.quaternion).multiplyScalar(arm.length * (1 - Math.cos(a)) * (arm.pivotZ < arm.axleZ ? -1 : 1));
     rear.object.position.add(OpenRacer.updateSwingarm.forward);
+    if(arm.shock) OpenRacer.updateRearShock(arm.shock, arm);
 };
 
 // The front end of a motorcycle each frame: the head (the cylinders, the clamp, the handlebar) turns with the steering about the axis of the fork, the front wheel (with the

@@ -9,6 +9,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 ### Motorcycles
 
 **After the first drive**
+- The rear shock of a motorcycle (`rear_spring`, or `rear_shock`, `rear_damper`, `shock_rear`) goes with the swingarm: its upper end stays on the frame, its lower end goes round with the arm, and the part is turned and stretched between the two every frame (it stood still on the Supermoto 700).
 - The toes of the rider went through the floor at a standstill: they go down only so far that their tip is on the road, with the ankle 9 cm above it.
 - A motorcycle has no handbrake: the handbrake key (Space) is the rear brake alone (it locked the rear wheel with the handbrake of a car).
 - **Both feet down at a standstill, the bike upright.** The bike no longer rests against the right foot: both feet go down on the road under the pegs, the toes towards the nearest point of the road. Above 5 km/h (they go down again below 4) the feet go back to the pegs in a second, the left foot first and the right one a third of a second later.
