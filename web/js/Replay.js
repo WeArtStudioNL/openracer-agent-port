@@ -216,6 +216,9 @@ OpenRacer.Replay = (function() {
 
     function first() { return dropped * CHUNK; }
     function last() { return total - 1; }
+    api.sampleNow = function() { return total; };          // the sample that is recorded next (a take, Take.js: from here to there)
+    api.firstSample = function() { return first(); };
+    api.rate = RATE;
     api.start_time = function() { return first() * DT; };
     api.end_time = function() { return Math.max(first(), last()) * DT; };
     api.available = function() { return total > RATE; };    // a second or more
@@ -1013,6 +1016,9 @@ OpenRacer.Replay = (function() {
             if(video.stopCrop) { video.stopCrop(); video.stopCrop = null; }
             document.body.classList.remove("replayFilming");
             if(videoButton) videoButton.textContent = "● Video";
+            // a take (Take.js): the replay was only opened for the video, and closes again
+            var closeAfter = video.closeAfter; video.closeAfter = false; video.until = undefined;
+            if(closeAfter) { document.body.classList.remove("replayClean"); if(ui && ui.bar) ui.bar.style.display = ""; setTimeout(function() { api.stop(); }, 50); }
             if(!blob.size) return;
             var stem = "openracer-" + String(currentTrack.id).replace(/[^A-Za-z0-9_-]/g, "") + "-" + new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13);
             function save(file, extension) {
@@ -1033,8 +1039,8 @@ OpenRacer.Replay = (function() {
                 .then(function(mp4) { save(mp4, ".mp4"); done(); })
                 .catch(function() { save(blob, ".webm"); done(); });
         };
-        // from the start, at normal speed
-        t = api.start_time(); direction = 1; speed = 1; playing = true;
+        // from the start (or from where a take begins), at normal speed
+        t = video.from !== undefined ? video.from : api.start_time(); video.from = undefined; direction = 1; speed = 1; playing = true;
         if(ui) ui.sync();
         document.body.classList.add("replayFilming");
         videoButton.textContent = sound ? "■ Stop (recording)" : "■ Stop (recording, no sound: press a key first)";
@@ -1197,6 +1203,17 @@ OpenRacer.Replay = (function() {
     var headerOf = null;
 
     // To a time of the recording (seconds), for the tests
+    // A take (Take.js): the replay is opened, the part from one time to another is played at normal speed and filmed (as the Video button), and the replay closes again
+    api.filmRange = function(fromTime, toTime) {
+        if(api.active) return false;
+        if(!api.start()) return false;
+        if(ui && ui.bar) ui.bar.style.display = "none";
+        document.body.classList.add("replayClean");
+        video.from = Math.max(api.start_time(), fromTime); video.until = Math.min(api.end_time(), toTime); video.closeAfter = true;
+        toggleVideo();
+        if(!video.recorder) { video.closeAfter = false; video.until = undefined; document.body.classList.remove("replayClean"); if(ui && ui.bar) ui.bar.style.display = ""; api.stop(); return false; }
+        return true;
+    };
     api.seek = function(seconds) { t = Math.max(api.start_time(), Math.min(api.end_time(), seconds)); };
 
     // Once per frame while the replay is open, with the real time of the frame
@@ -1209,7 +1226,7 @@ OpenRacer.Replay = (function() {
         }
         show(t, delta);
         showEffects(t);
-        if(video.recorder && (!playing || t >= api.end_time() - 0.02)) stopVideo();      // (the end, or a pause: the video is done)
+        if(video.recorder && (!playing || t >= (video.until !== undefined ? video.until : api.end_time() - 0.02))) stopVideo();      // (the end, or a pause: the video is done)
         if(free.active) updateFree(delta);
         else if(cine.active) updateCine(delta);
         if(api.afterFrame) api.afterFrame(t, delta);
@@ -1232,28 +1249,31 @@ OpenRacer.Replay = (function() {
     // the bytes of a record: the sample (4), the displacements (16 bits each, to a multiple of four bytes), the parts and the wheels (32 bits each)
     function recordSize(info) { return 4 + Math.ceil(info.nodes * 3 * 2 / 4) * 4 + info.parts.length * PART_FLOATS * 4 + WHEEL_FLOATS * 4; }
 
-    function pack() {
-        var per = perSample(), n = total - first();
+    // (from, to: a part of the recording, in samples; without them the whole of it)
+    function pack(from, to) {
+        var per = perSample(), base = from === undefined ? first() : Math.max(first(), from), end = to === undefined ? total : Math.min(total, to), n = end - base;
         var data = new Float32Array(n * per);
         var pos = 0;
-        for(var c = 0; c < chunks.length; c++) {
-            var count = c === chunks.length - 1 ? fill : CHUNK;
-            data.set(chunks[c].subarray(0, count * per), pos);
-            pos += count * per;
+        for(var i = base; i < end; i++) {
+            var at0 = locate(i, 0);
+            data.set(at0.array.subarray(at0.offset, at0.offset + per), pos);
+            pos += per;
         }
-        // the soft body: per car the records that are still inside the recording, as a block of bytes after the numbers
-        var base = first();
+        var inRange = function(index) { return index >= base && index < end; };
+        // the soft body: per car the records that are inside the recording (and the part that is saved), as a block of bytes after the numbers
         var softInfo = cars.map(function(entry) {
             var soft = entry.soft;
             if(!soft || !soft.records.length) return null;
-            return { nodes: soft.nodes, parts: soft.names.slice(0, MAX_SOFT_PARTS), count: soft.records.length };
+            var kept = soft.records.filter(function(rec) { return inRange(rec.index); });
+            if(!kept.length) return null;
+            return { nodes: soft.nodes, parts: soft.names.slice(0, MAX_SOFT_PARTS), count: kept.length, kept: kept };
         });
         var softBytes = 0, sizes = softInfo.map(function(info) { if(!info) return 0; var size = recordSize(info); softBytes += size * info.count; return size; });
         var softBlob = new Uint8Array(softBytes), view = new DataView(softBlob.buffer), at = 0;
         cars.forEach(function(entry, c) {
             var info = softInfo[c];
             if(!info) return;
-            entry.soft.records.forEach(function(rec) {
+            info.kept.forEach(function(rec) {
                 view.setUint32(at, Math.max(0, rec.index - base), true);
                 for(var i = 0; i < rec.disp.length; i++) view.setInt16(at + 4 + 2 * i, rec.disp[i], true);
                 var o = at + 4 + Math.ceil(rec.disp.length * 2 / 4) * 4;
@@ -1264,11 +1284,13 @@ OpenRacer.Replay = (function() {
             });
         });
         // the skid marks, the smoke and the marbles: their rows (what was made, and when), with the times counted from the start of the recording
-        var T0 = api.start_time(), effectInfo = {}, effectBlocks = [], effectBytes = 0;
+        var T0 = base * DT, T1 = end * DT, effectInfo = {}, effectBlocks = [], effectBytes = 0;
         for(var effectName in EFFECT_FLOATS) {
             var effect = effects[effectName];
             if(!effect || !effect.rows.length) continue;
-            var floats = EFFECT_FLOATS[effectName], rows = effect.rows.slice(Math.max(0, effect.rows.length - MAX_EFFECT_ROWS)), block = new Float32Array(rows.length * floats);
+            var floats = EFFECT_FLOATS[effectName], rows = effect.rows.filter(function(row) { return row[0] >= T0 - 2 && row[0] <= T1; });
+            rows = rows.slice(Math.max(0, rows.length - MAX_EFFECT_ROWS));
+            var block = new Float32Array(rows.length * floats);
             for(var ri = 0; ri < rows.length; ri++) {
                 block.set(rows[ri].subarray(0, floats), ri * floats);
                 block[ri * floats] = Math.max(0, rows[ri][0] - T0);
@@ -1279,11 +1301,12 @@ OpenRacer.Replay = (function() {
             effectBytes += block.byteLength;
         }
         // the rider that is a ragdoll: per car its records (the sample, whether he is one, and the places of his particles), after the effects
-        var RIDER_SIZE = 4 + 4 + RIDER_FLOATS * 4, riderInfo = cars.map(function(entry) { return entry.rider && entry.rider.records.length ? entry.rider.records.length : 0; });
+        var riderKept = cars.map(function(entry) { return entry.rider ? entry.rider.records.filter(function(rec) { return inRange(rec.index); }) : []; });
+        var RIDER_SIZE = 4 + 4 + RIDER_FLOATS * 4, riderInfo = riderKept.map(function(list) { return list.length; });
         var riderBytes = riderInfo.reduce(function(a, b) { return a + b; }, 0) * RIDER_SIZE, riderBlob = new Uint8Array(riderBytes), riderView = new DataView(riderBlob.buffer), riderAt = 0;
         cars.forEach(function(entry, c) {
             if(!riderInfo[c]) return;
-            entry.rider.records.forEach(function(rec) {
+            riderKept[c].forEach(function(rec) {
                 riderView.setUint32(riderAt, Math.max(0, rec.index - base), true);
                 riderView.setFloat32(riderAt + 4, rec.pts ? 1 : 0, true);
                 for(var k = 0; k < RIDER_FLOATS; k++) riderView.setFloat32(riderAt + 8 + 4 * k, rec.pts ? rec.pts[k] : 0, true);
@@ -1593,10 +1616,10 @@ OpenRacer.Replay = (function() {
 
     // Saves the recording in the list of Replays; gives a promise of { bytes }
     var savedTotal = -1;
-    api.saveToLibrary = function() {
+    api.saveToLibrary = function(from, to) {
         if(!cars.length || total < 2) return Promise.reject(new Error("Nothing is recorded yet."));
-        var size = total, seconds = (total - first()) / RATE;
-        return gzip(pack()).then(function(bytes) {
+        var size = total, seconds = ((to === undefined ? total : to) - (from === undefined ? first() : from)) / RATE;
+        return gzip(pack(from, to)).then(function(bytes) {
             return libraryAdd(bytes, { created: new Date().toISOString(), track: { id: currentTrack.id, name: String(currentTrack.name || currentTrack.id) }, cars: cars.map(function(entry) { return String(entry.object.name || entry.object.config.name || entry.object.config.id); }), seconds: seconds, bytes: bytes.length });
         }).then(function() { savedTotal = size; return { bytes: 0 }; });
     };

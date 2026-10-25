@@ -94,6 +94,7 @@ var scripts = [
     "js/Tuning.js",
     "js/CameraTrack.js",
     "js/Replay.js",
+    "js/Take.js",
     "js/VideoEditor.js",
     "js/TouchControls.js",
     "js/controls.js",

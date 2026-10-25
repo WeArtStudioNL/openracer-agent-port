@@ -86,6 +86,7 @@ var Settings = (function() {
         { id: "photo", group: "Other", label: "Photo: save the picture of the game as a PNG (no HUD; use the free camera to frame it)", defaults: [key("F2")] },
         { id: "freeCamAim", group: "Other", label: "Free camera: look at the car or not", defaults: [key("KeyP")] },
         { id: "freeCamFollow", group: "Other", label: "Free camera: move with the car or stay here", defaults: [key("KeyO")] },
+        { id: "take", group: "Other", label: "Take: start a recording, and stop it (then: save it as a replay or a video)", defaults: [key("Digit5")] },
         { id: "cameraSwitch", group: "Other", label: "Switch camera (follow, cockpit, free)", defaults: [key("KeyT")] },
         { id: "toggleESC", group: "Other", label: "ESC (stability control) on/off", defaults: [key("KeyN")] },
         { id: "tuningMenu", group: "Other", label: "Tuning menu on/off", defaults: [key("KeyU")] },
@@ -1095,6 +1096,7 @@ var Settings = (function() {
     handlers.toggleESC = function() { setOption("esc", !options.esc); };
     handlers.cameraSwitch = function() { setOption("camera", nextCamera(options.camera)); };
     handlers.freeCamAim = function() { if(options.camera === 4 && typeof OpenRacer !== "undefined" && OpenRacer.FreeCam) OpenRacer.FreeCam.toggleAim(); };
+    handlers.take = function() { if(typeof OpenRacer !== "undefined" && OpenRacer.Take) OpenRacer.Take.toggle(); };
     handlers.freeCamFollow = function() { if(options.camera === 4 && typeof OpenRacer !== "undefined" && OpenRacer.FreeCam) OpenRacer.FreeCam.toggleFollow(); };
     handlers.tuningMenu = function() { Tuning.toggle(); };
     handlers.hudToggle = function() { setOption("hud", !options.hud); };
