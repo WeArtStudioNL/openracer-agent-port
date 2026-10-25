@@ -221,10 +221,10 @@ OpenRacer.Motorcycle = function (settings) {
         var frontLoad = ((v.wheels[0].weight || 0) + (v.wheels[1].weight || 0)) / Math.max(1, v.weight_distribution * v.mass * G);
         var want = on && !v.airborne && Math.abs(v.u) > 0.5 && self.burnout < 0.5 ? Math.max(0.15, Math.min(1, (frontLoad - 0.08) / 0.3)) : 1;      // (not in the air: the gas is what brings the nose up for the landing there)     // (not in a burnout: the front lifts a little there, and the cut let the engine fall to the clutch)
         self.wheelieScale += (want - self.wheelieScale) * Math.min(1, dt / (want < self.wheelieScale ? 0.03 : 0.25));
-        // at a walking pace with the bars turned far the throttle is eased: the bike slows in the turn instead of driving on round it
+        // at a walking pace with the bars turned far the throttle is eased to a third: the bike goes round the lock at a walking pace instead of driving on round it
         // (not from a standstill: with the bars at the lock the bike could not get going at all; the ease comes in once it walks)
         var slowLock = smooth(0.3, 1.2, Math.abs(v.u)) * (1 - smooth(2.0, 4.0, Math.abs(v.u))) * smooth(0.6, 0.95, Math.abs(self.command || 0));
-        return self.wheelieScale * (1 - 0.92 * slowLock);
+        return self.wheelieScale * (1 - 0.67 * slowLock);
     };
 
     // ---- hook: the brakes. brakeStep once per step of the physics, brakeScale for every wheel
@@ -366,11 +366,10 @@ OpenRacer.Motorcycle = function (settings) {
         self.rider(v, torque, dt, u, state);
         var m = v.mass, gh = m * G * v.cgHeight;
         var kp = self.balance * 10 * gh, inertia = m * v.cgHeight * v.cgHeight + c.inertiaZ, kd = 1.5 * Math.sqrt(kp * inertia);
-        // at a walking pace with the bars turned far the rider cannot hold the bike up: the balance fades and it leans into the turn and goes down (unless the foot is down: standing)
-        var slowLock = (1 - smooth(2.0, 4.0, Math.abs(u))) * smooth(0.6, 0.95, Math.abs(self.command || 0)) * (1 - Math.max(self.footDown, self.footDownL));
-        kp *= (1 - 0.98 * slowLock) * brace; kd *= (1 - 0.8 * slowLock) * brace;
+        // (a walking pace with the bars at the lock is a tight circle that the rider holds up, as he does in a U-turn: the balance used to fade there and the bike leaned in and went
+        // over, and with the feet up and down around 5 km/h that was a bike that fell to 58 degrees, was thrown round by its rear tyre, stood up and did it again every two seconds)
+        kp *= brace; kd *= brace;
         var T = kp * (self.targetLean - state.lean) - kd * state.rate;                           // about the axis that leans it to the left
-        T -= slowLock * 0.5 * gh * Math.sign(self.command || 0);                              // (and it leans into the turn: a bike that crawls with the bars at the lock goes over to the inside; left is a negative command and a positive T)
         T = alive * Math.max(-6 * gh * brace, Math.min(6 * gh * brace, T));
         torque.x -= state.ax * T; torque.y -= state.ay * T; torque.z -= state.az * T;
         // the yaw that the steering did not ask for is damped
