@@ -83,11 +83,11 @@ OpenRacer.TyreShell = function (wheel) {
     this.substeps = 0;
     this.omegaOut = undefined; this.omegaAvg = 0;        // the turn of the wheel at the end of the step, by the tread alone (the car adds the engine and the brake), and its mean over the step
 
-    function key() { return [Math.max(1, Math.min(5, Math.round(self.rings))), Math.max(8, Math.min(72, Math.round(self.segments))), self.width, wheel.radius, self.innerRatio, self.round ? 1 : 0, self.shoulder].join(","); }
+    function key() { return [Math.max(1, Math.min(5, Math.round(self.rings))), Math.max(4, Math.min(72, Math.round(self.segments))), self.width, wheel.radius, self.innerRatio, self.round ? 1 : 0, self.shoulder].join(","); }
 
     function build() {
         rings = Math.max(1, Math.min(5, Math.round(self.rings)));
-        segs = Math.max(8, Math.min(72, Math.round(self.segments)));
+        segs = Math.max(4, Math.min(72, Math.round(self.segments)));
         radius = wheel.radius;
         width = self.width > 0 ? self.width : Math.max(0.1, 0.7 * radius);
         N = rings * segs;
@@ -363,14 +363,21 @@ OpenRacer.TyreShell = function (wheel) {
             var load = Math.max(loadPrev, 1), springX = self.stiffX * load / halfPatch;
             // the road is felt at S places per span between two nodes (the nodes and the places between them on the straight line): a patch of two or three nodes would otherwise grow in jumps, and the
             // load of the tyre would jump with it; the spring of a span is shared out over its places, and the force of a place between goes to the two nodes beside it
-            var S = contactSamples, kgS = kg / S, mS = mn / S;
+            // (a tyre with few nodes is a polygon: the places between two nodes lie on the arc of the tyre, not on the chord, so a square or a hexagon still rolls round; the
+            // places are about 3 cm apart along the tread whatever the number of nodes)
+            var S = Math.max(contactSamples, Math.min(24, Math.ceil(72 / segs))), kgS = kg / S, mS = mn / S;
             for(var ie = 0; ie < N; ie++) { eFn[ie] = 0; eNx[ie] = eNy[ie] = eNz[ie] = 0; }
             for(var jr = 0; jr < rings; jr++) for(var kq = 0; kq < segs; kq++) {
                 var na = jr * segs + kq, nb2 = jr * segs + (kq + 1) % segs;
                 if(!nearNode[na] && !nearNode[nb2]) continue;
                 // (far from the road, both ends: nothing to look for)
+                var oax = Ox[na] - hcx, oay = Oy[na] - hcy, oaz = Oz[na] - hcz, obx = Ox[nb2] - hcx, oby = Oy[nb2] - hcy, obz = Oz[nb2] - hcz;
+                var ringR = Math.sqrt(oax * oax + oay * oay + oaz * oaz);
                 for(var m = 1; m < S; m++) {
                     var tt = m / S, qx = Px[na] + (Px[nb2] - Px[na]) * tt, qy = Py[na] + (Py[nb2] - Py[na]) * tt, qz = Pz[na] + (Pz[nb2] - Pz[na]) * tt;
+                    // the bulge of the arc over the chord between the two places of the nodes on the wheel, added to the place between the nodes as they are
+                    var lx = oax + (obx - oax) * tt, ly = oay + (oby - oay) * tt, lz = oaz + (obz - oaz) * tt, ll = Math.sqrt(lx * lx + ly * ly + lz * lz) || 1, bul = ringR / ll - 1;
+                    qx += lx * bul; qy += ly * bul; qz += lz * bul;
                     if(!contactAt(qx, qy, qz, hub, ground, nearNode[na] ? nodeList[na] : nodeList[nb2], tol)) continue;
                     var qvx = Vx[na] + (Vx[nb2] - Vx[na]) * tt, qvy = Vy[na] + (Vy[nb2] - Vy[na]) * tt, qvz = Vz[na] + (Vz[nb2] - Vz[na]) * tt;
                     var qvn = qvx * cNx + qvy * cNy + qvz * cNz;

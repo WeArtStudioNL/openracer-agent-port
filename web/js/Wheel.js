@@ -107,7 +107,7 @@ OpenRacer.Wheel = function (parameters) {
     };
 
     // the friction coefficients of the tyre for a load on a surface (the grip with the compound, the temperature and the wear, the load sensitivity): the static one and the
-    // one of a sliding tyre; used by the tyre bodies (TyreBody.js, NodeTyre.js)
+    // one of a sliding tyre; used by the tyre bodies (TyreShell.js, TyreBody.js)
     this.frictionFor = function (load, surface) {
         var grip = surface.static * this.gripScale * (this.condition || 1) * (this.damageGrip === undefined ? 1 : this.damageGrip) * (this.compoundGrip === undefined ? 1 : this.compoundGrip) * (surface.loose && this.compoundLoose ? this.compoundLoose : 1);
         var mu = Math.min(1.4 * grip, Math.max(0.2 * grip, grip - this.loadSensitivity * (load - this.nominalLoad)));
@@ -120,7 +120,5 @@ OpenRacer.Wheel = function (parameters) {
         return { mu: mu, sliding: mu * Math.min(0.98, ratio) * (1 - 0.45 * melt) };
     };
     this.spinSlide = 0;                                             // m/s that the tyre runs ahead of the road (Vehicle.js: omega r - the forward speed), for the friction of a tyre that spins
-    this.profile = [NaN, NaN, NaN, NaN, NaN];                       // the depth of the tyre in the road at five places along it (Vehicle.js, for the ring of nodes)
-    this.nodeTyre = null;                                           // the ring of nodes, where the tyre body cannot be used (tracks with 2D physics, Vehicle.js)
     this.leak = 0; this.pressureLoss = 0; this.leakTick = 0;      // a puncture (Vehicle.puncture): bar per second, bar lost so far
 };

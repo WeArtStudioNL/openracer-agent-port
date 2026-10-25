@@ -303,13 +303,12 @@ function buildCollisionWorld() {
 // other (a road over grass) the order of searchOrder decides.
 var groundWorld;
 
-// The physics of a track: "3d", the default (the wheels feel the road along their own axis and the body is a set of spheres, so a loop or a car
-// on a wall is possible) or "2d" (one height of the road per place, the walls as outlines on the ground). A track says it with "physics" in track.json.
+// The physics of a track is 3D: the wheels feel the road along their own axis with their tyre of nodes, and the body is a set of spheres, so a loop or a car on a
+// wall is possible. The old 2D physics (one height of the road per place, the walls as outlines on the ground, a ring of nodes as the tyre) is gone; a track
+// that asks for it with "physics": "2d" gets the 3D one, with a note in the console.
 function trackPhysics3D(track) {
-    var forced = new URLSearchParams(window.location.search).get("physics");     // ?physics=3d or 2d: to try a track with the other one
-    if(forced === "3d") return true;
-    if(forced === "2d") return false;
-    return !(track && track.physics === "2d");
+    if(track && track.physics === "2d") console.warn("TrackLoader: the 2D physics is gone, the track runs with the 3D physics");
+    return true;
 }
 
 function buildGroundWorld() {

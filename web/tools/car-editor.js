@@ -2023,7 +2023,7 @@ function tuningValues(config) {
 // "Drop car" lets it fall from a height, The model is built the way the game
 // builds it (CarLoader.js: the wheels taken out, the suspension rig found), from the model and the settings as they are now.
 window.THREE = Object.assign({}, THREE, { GLTFLoader });
-const PHYSICS_SCRIPTS = ["Engine.js", "Wheel.js", "NodeTyre.js", "TyreBody.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "CarLoader.js", "Ground.js", "CollisionProxy.js", "SoftBody.js", "SoftBodyMesh.js", "Parts.js"];
+const PHYSICS_SCRIPTS = ["Engine.js", "Wheel.js", "TyreBody.js", "TyreShell.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "CarLoader.js", "Ground.js", "CollisionProxy.js", "SoftBody.js", "SoftBodyMesh.js", "Parts.js"];
 let physicsLoading = null;
 function loadPhysics() {
     if (!physicsLoading) {
@@ -2038,7 +2038,7 @@ function loadPhysics() {
     return physicsLoading;
 }
 const bench = { vehicle: null, model: null, body: null, objects: [], last: 0, modelMid: null, grip: 1, gripBoost: 3 };      // grip: a factor on the grip of the road (1, but the crash test sets gripBoost for its run)
-const flatRoad = { query: () => ({ y: grid.position.y, nx: 0, ny: 1, nz: 0, surface: "road", mesh: "" }) };
+let flatRoad = null;                                     // the road of the bench: flat, at the height of the grid, with the triangles the tyre needs (OpenRacer.FlatGround, Ground.js)
 const roadGrip = () => ({ static: 1.2 * bench.grip, kinetic: 1.06 * bench.grip });
 
 async function startBench() {
@@ -2057,6 +2057,7 @@ async function startBench() {
     // is set to zero when it is nearly still)
     const input = { throttle: 0, brakePedal: 0, clutch: 0, clutchPedalPresent: false, handbrake: false, turnAngle: 0, neutral: true, reverse: false, manualGearbox: false, current_gear: 0, parkingLock: true };
     const v = new OpenRacer.Vehicle(OpenRacer.vehicleParams(config, roadGrip), input);
+    if (!flatRoad) flatRoad = new OpenRacer.FlatGround(grid.position.y, "road"); else flatRoad.setHeight(grid.position.y);
     v.ground = flatRoad;
     if (v.controller) v.controller.noFoot = true;     // (a motorcycle: upright on the bench, not resting on the foot of the rider as at a standstill in the game)
     bench.modelMid = null;

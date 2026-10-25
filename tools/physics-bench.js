@@ -28,7 +28,7 @@ const sandbox = {
     console: console, Math: Math
 };
 vm.createContext(sandbox);
-for (const file of ["Engine.js", "Wheel.js", "Vehicle.js", "Opponent.js"]) {
+for (const file of ["Engine.js", "Wheel.js", "TyreBody.js", "TyreShell.js", "Ground.js", "Vehicle.js", "Motorcycle.js", "Opponent.js"]) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, "js", file), "utf8"), sandbox, { filename: file });
 }
 // the grip of the surfaces (Helpers.js needs the browser: only its table is taken)
@@ -38,7 +38,8 @@ const uCoeff = vm.runInContext("(" + table[1] + ")", sandbox);
 const getSurface = (name) => uCoeff[name] || uCoeff.track01;
 
 // a flat road at y = 0
-const flatRoad = { query: () => ({ y: 0, nx: 0, ny: 1, nz: 0, surface: "road", mesh: "" }) };
+// a flat road at y = 0, with the triangles the tyre bodies need (OpenRacer.FlatGround, Ground.js)
+const flatRoad = new sandbox.OpenRacer.FlatGround(0, "road");
 
 const REFERENCE = {
     mustang: { "0-60 mph (s)": 6.5, "60-0 mph (m)": 40, "skidpad (g)": 0.8, "top speed (km/h)": 190 }

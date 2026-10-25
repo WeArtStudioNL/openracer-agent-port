@@ -405,3 +405,20 @@ OpenRacer.GroundWorld = function (cellSize) {
         return true;
     };
 };
+
+// A flat road at one height with the interface of the GroundWorld of a track (3D): for the test benches (the car editor, tools/physics-bench.js), where the
+// tyre bodies need triangles. One triangle, as big as the world, at height y; everything is "road".
+OpenRacer.FlatGround = function (y, surface) {
+    var Y = y || 0, name = surface || "road", big = 1e5;
+    this.use3D = true;
+    this.nearby = function (cx, cy, cz, radius, out) { out.length = 0; if(Math.abs(cy - Y) <= radius + 2) out.push(0); };
+    this.boxNear = function (t, cx, cy, cz, r) { return Math.abs(cy - Y) <= r; };
+    this.closest = function (t, px, py, pz, out) { out.x = px; out.y = Y; out.z = pz; out.region = 0; return (py - Y) * (py - Y); };
+    this.normalOf = function (t, out) { out.x = 0; out.y = 1; out.z = 0; };
+    this.surfaceOf = function () { return name; };
+    this.meshOf = function () { return ""; };
+    this.ray = function (ox, oy, oz, dx, dy, dz, maxT) { if(dy >= -1e-6) return null; var t = (oy - Y) / -dy; if(t < 0 || t > maxT) return null; return { t: t, y: Y, nx: 0, ny: 1, nz: 0, surface: name, mesh: "", triangle: 0 }; };
+    this.query = function () { return { y: Y, nx: 0, ny: 1, nz: 0, surface: name, mesh: "" }; };
+    this.setHeight = function (h) { Y = h; };
+    void big;
+};

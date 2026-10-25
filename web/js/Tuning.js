@@ -232,7 +232,7 @@ var Tuning = (function() {
         compound: ["Tyre compound", OpenRacer.TyreCompounds.map(function(k) { return [k.id, k.name]; })],
         center_diff: ["Centre differential", [["open", "Open"], ["lsd", "Limited slip"], ["locked", "Locked"]]],
         tyre_damage: ["Tyre damage", [["off", "Off"], ["on", "On (a hard hit can puncture a tyre: it loses its pressure)"]]],
-        tyre_model: ["Tyre model", [["cylinder", "Cylinder (a body of nodes and beams)"], ["shell", "Shell (experiment: an outer and an inner shell of nodes with beams between them, and the pressure)"], ["nodes", "Ring of nodes (a simple tyre, also used on tracks with 2D physics)"]]],
+        tyre_model: ["Tyre model", [["shell", "Shell (an outer and an inner shell of nodes with beams between them, and the air pressure)"], ["cylinder", "Cylinder (the older body of nodes and beams, without the pressure)"]]],
         antilag_mode: ["When", [["lift", "After lifting off the throttle"], ["launch", "Only with the two-step, the transbrake or the launch control"]]]
     };
 
