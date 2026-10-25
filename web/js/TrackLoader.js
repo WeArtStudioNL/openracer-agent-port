@@ -147,7 +147,7 @@ function loadScene() {
                                     //console.log("            material name: " + matName);
                                     //console.log("            texture name: " + textureName);
                                     //console.log("            texture file: " + textureFile);
-                                    var texture = textureLoader.load( trackFile(currentTrack.textures + textureFile) );
+                                    var texture = textureLoader.load( trackFile(currentTrack.textures + textureFile), shrinkForDevice );
                                     texture.colorSpace = THREE.SRGBColorSpace;
                                     var bumpTexture;
                                     if(textureName === "road") {
@@ -157,7 +157,7 @@ function loadScene() {
                                     }
                                     if(myArr.textures[textureName + "-bump"]) {
                                         //console.log("BUMP: " + myArr.textures[textureName + "-bump"].file);
-                                        bumpTexture = textureLoader.load( trackFile(currentTrack.textures + myArr.textures[textureName + "-bump"].file) );
+                                        bumpTexture = textureLoader.load( trackFile(currentTrack.textures + myArr.textures[textureName + "-bump"].file, shrinkForDevice) );
                                     }
                                     //console.log("            textureTile: " + textureTile);
                                     if(textureTile) {
@@ -301,6 +301,9 @@ function buildCollisionWorld() {
 
 // The road for the suspension of the car: the triangles of the drivable textures, in a grid, see Ground.js. Where roads lie over each
 // other (a road over grass) the order of searchOrder decides.
+// a texture of the track on a phone: drawn down to what the device can hold (TextureBudget.js)
+function shrinkForDevice(texture) { if(OpenRacer.shrinkTexture && OpenRacer.textureBudget && OpenRacer.textureBudget()) OpenRacer.shrinkTexture(texture, OpenRacer.textureBudget()); }
+
 var groundWorld;
 
 // The physics of a track is 3D: the wheels feel the road along their own axis with their tyre of nodes, and the body is a set of spheres, so a loop or a car on a
@@ -369,6 +372,7 @@ function trackRole(mesh, surfaces) {
 function loadGltfTrack(track) {
     var loader = new THREE.GLTFLoader(OpenRacer.Garage ? OpenRacer.Garage.manager(track) : undefined);
     loader.load(trackFile(track.model), function(gltf) {
+        if(OpenRacer.shrinkTextures && OpenRacer.textureBudget && OpenRacer.textureBudget()) OpenRacer.shrinkTextures(gltf.scene, OpenRacer.textureBudget());      // (a phone: smaller textures)
         gltf.scene.updateMatrixWorld(true);
         var surfaces = track.surfaces || {};
         var pieces = [];

@@ -41,6 +41,13 @@ var TouchControls = (function() {
             "body.touch { overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }" +
             "body.touch #hud { bottom: calc(210px + env(safe-area-inset-bottom)) !important; right: calc(14px + env(safe-area-inset-right)) !important; }" +
             "body.touch #hudHint { bottom: calc(170px + env(safe-area-inset-bottom)) !important; }" +
+            "body.touch #debugOut { display: none !important; }" +
+            "body.touch #hudBoost { bottom: calc(210px + env(safe-area-inset-bottom)) !important; }" +
+            // a phone: everything of the HUD smaller
+            "@media (max-width: 640px), (max-height: 480px) { body.touch #hudLaps { padding: 6px 10px 7px; min-width: 0; } body.touch #hudLaps .time { font-size: 22px; } body.touch #hudLaps .lap { font-size: 10px; } " +
+                "body.touch #hudLaps .last { font-size: 12px; } body.touch #hudLaps .keys { display: none; } body.touch #hudCar { width: 150px; top: 86px; font-size: 11px; padding: 6px 10px 7px; } body.touch #hudCar .tyre { height: 20px; } " +
+                "body.touch #hud { gap: 6px; } body.touch #hud .pills { gap: 5px; margin-bottom: 8px; } body.touch #hud .pill, body.touch #hud .pill.tap { font-size: 11px; min-width: 46px; padding: 6px 7px; } " +
+                "body.touch #hudHint { font-size: 12px; } body.touch #freeCam { transform: scale(0.8); transform-origin: right top; } }" +
             "#touch { position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 950; pointer-events: none; touch-action: none; " +
                 "font-family: Arial, sans-serif; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }" +
             "#touch.off { display: none; }" +
@@ -68,7 +75,7 @@ var TouchControls = (function() {
             // upright: the pedals take the width, so the buttons go in a row above them and the left side stays free for the steering
             "@media (orientation: portrait) { #touch .pedals { flex-wrap: wrap; justify-content: flex-end; width: 210px; } #touch .grid { order: -1; width: 100%; " +
                 "grid-template-columns: repeat(4, 1fr); justify-items: end; } #touch .btn { width: 46px; height: 46px; line-height: 42px; font-size: 12px; } " +
-                "body.touch #hud { bottom: calc(272px + env(safe-area-inset-bottom)) !important; } body.touch #hudHint { bottom: calc(232px + env(safe-area-inset-bottom)) !important; } }" +
+                "body.touch #hud, body.touch #hudBoost { bottom: calc(272px + env(safe-area-inset-bottom)) !important; } body.touch #hudHint { bottom: calc(232px + env(safe-area-inset-bottom)) !important; } }" +
             "@media (max-height: 420px) { #touch .gas { height: 140px; width: 96px; } #touch .brk { height: 104px; width: 80px; } #touch .btn { width: 46px; height: 46px; line-height: 42px; } " +
                 "#touch .grid { grid-template-columns: 46px 46px; } body.touch #hud { bottom: calc(138px + env(safe-area-inset-bottom)) !important; transform: scale(0.72); transform-origin: right bottom; } " +
                 "body.touch #hudHint { bottom: calc(120px + env(safe-area-inset-bottom)) !important; } }";

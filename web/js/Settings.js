@@ -134,6 +134,9 @@ var Settings = (function() {
         bindings = {};
         ACTIONS.forEach(function(a) { bindings[a.id] = clone(a.defaults); });
         options = clone(DEFAULT_OPTIONS);
+        // a phone or a tablet starts with the low graphics (the first time; what is chosen is kept)
+        var touchy = typeof OpenRacer !== "undefined" && OpenRacer.touchDevice ? OpenRacer.touchDevice() : false;
+        if(touchy) Object.assign(options, { gfxPreset: "low", gfxScale: 0.75, gfxAA: 0, gfxShadows: 1, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: false, gfxSmoke: 50, gfxDistance: 500 });
     }
 
     function load() {
@@ -414,6 +417,9 @@ var Settings = (function() {
             "#settingsMenu .add { padding: 3px 10px; }" +
             "#settingsMenu .top { display: flex; justify-content: space-between; align-items: flex-start; }" +
             "#settingsMenu .version { text-align: right; color: var(--muted); font-size: 12px; margin-top: 18px; }" +
+            "@media (max-width: 640px) { #settingsMenu { font-size: 14px; } #settingsMenu .panel { margin: 0; padding: 12px 14px 20px; border-radius: 0; min-height: 100%; box-sizing: border-box; } #settingsMenu h1 { font-size: 22px; } " +
+            "#settingsMenu .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 12px 0 6px; } #settingsMenu .tab { padding: 8px 10px; font-size: 13px; white-space: nowrap; flex: none; } " +
+            "#settingsMenu .label { width: 46%; font-size: 13px; } #settingsMenu .top { flex-wrap: wrap; gap: 8px; } }" +
             "#settingsMenu .tabs { display: flex; gap: 4px; margin: 18px 0 6px; border-bottom: 1px solid var(--line); }" +
             "#settingsMenu .tab { background: transparent; color: var(--muted); padding: 8px 14px; border-radius: 6px 6px 0 0; font-size: 15px; }" +
             "#settingsMenu .tab:hover { background: var(--bg2); color: #fff; }" +

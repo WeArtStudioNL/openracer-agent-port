@@ -303,6 +303,8 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
             });
             // the changes to the materials that were made in the car editor
             OpenRacer.applyMaterialOverrides(THREE, [tilt].concat(wheelObjects), config.materials);
+            // a phone: the textures drawn down to what it can hold (TextureBudget.js)
+            if(OpenRacer.shrinkTextures && OpenRacer.textureBudget && OpenRacer.textureBudget()) [tilt].concat(wheelObjects).forEach(function (object) { OpenRacer.shrinkTextures(object, OpenRacer.textureBudget()); });
             var chain = OpenRacer.Chain ? OpenRacer.Chain.find(root, space, tilt, wheelObjects) : null;      // the drive chain, from one link of the model (Chain.js)
             var swingarm = head ? findSwingarm(root, space, measured) : null;
             if(swingarm) swingarm.shock = findRearShock(root, space, tilt, swingarm);                             // the rear shock between the frame and the swingarm

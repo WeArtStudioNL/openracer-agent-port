@@ -1310,7 +1310,7 @@ OpenRacer.Driver = function (config, parent, steering) {
     // loads the glb of the driver (url): the model goes into place when it has arrived
     this.load = function (url, manager, done, fail) {
         var loader = new THREE.GLTFLoader(manager);
-        loader.load(url, function (gltf) { self.setModel(gltf.scene); if (done) done(self); }, undefined, function (e) { if (fail) fail(e); });
+        loader.load(url, function (gltf) { if (OpenRacer.shrinkTextures && OpenRacer.textureBudget && OpenRacer.textureBudget()) OpenRacer.shrinkTextures(gltf.scene, OpenRacer.textureBudget()); self.setModel(gltf.scene); if (done) done(self); }, undefined, function (e) { if (fail) fail(e); });
     };
 };
 

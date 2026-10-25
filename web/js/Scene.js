@@ -64,6 +64,7 @@ function updateScreenSize() {
 
 // A phone or a tablet (a touch screen is the main pointer). The desktop is not touched by anything that depends on this.
 function isTouchDevice() {
+    if(typeof OpenRacer !== "undefined" && OpenRacer.touchDevice) return OpenRacer.touchDevice();
     try { return window.matchMedia("(pointer: coarse)").matches; } catch(e) { return false; }
 }
 

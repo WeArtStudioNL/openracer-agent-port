@@ -110,6 +110,7 @@ var Hud = (function() {
         context = canvas.getContext("2d");
         boostCanvas = document.createElement("canvas");
         boostCanvas.id = "hudBoost";
+        boostCanvas.id = "hudBoost";
         boostCanvas.style.cssText = "position: fixed; bottom: 16px; z-index: 900; pointer-events: none; display: none;";
         document.body.appendChild(boostCanvas);
         boostContext = boostCanvas.getContext("2d");
@@ -176,7 +177,8 @@ var Hud = (function() {
 
     function resize() {
         ratio = window.devicePixelRatio || 1;
-        size = Math.round(Math.max(210, Math.min(330, Math.min(window.innerWidth, window.innerHeight) * 0.36)));
+        var small = typeof OpenRacer !== "undefined" && OpenRacer.touchDevice && OpenRacer.touchDevice() && Math.min(window.innerWidth, window.innerHeight) < 600;      // a phone: a smaller gauge
+        size = Math.round(Math.max(small ? 130 : 210, Math.min(330, Math.min(window.innerWidth, window.innerHeight) * (small ? 0.3 : 0.36))));
         canvas.style.width = size + "px";
         canvas.style.height = size + "px";
         canvas.width = Math.round(size * ratio);

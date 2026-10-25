@@ -189,6 +189,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 ### Menu, race, controls and extras
 
+- **A phone** (an iPhone 16 Plus: a HUD far too big in portrait, black textures and a page that ended): the textures of the car, the driver and the track models are drawn down to 1024 by 1024 on a touch device before they go to the graphics card (`TextureBudget.js`; the Supermoto 700 had two of 4096 and its driver one: hundreds of MB with the mipmaps), a phone starts on the *Low* graphics preset, and on a narrow screen the lap box, the tyre panel, the gauge (130 px instead of 210), the pills and the free camera panel are smaller, the settings menu fills the screen with tabs that scroll, and the debug text at the top is hidden. `?touch=1` in the address makes a desktop browser do the same, to try it.
 - **A vehicle selector in practice.** In practice (no laps) the *Car* tab of the Esc menu has *Change vehicle…*: a popup with every vehicle (the picture and the name, the one that is driven marked); a click on one replaces the vehicle that is driven, on the same track and with the same options (the page opens again with it).
 **Look and menu**
 - On a **touch screen the pills of the HUD are buttons**: a tap on TC, LC (launch control), ESC, ABS or 2S (two-step) switches it on or off, as its key does (the pill turns green or red). The pills are bigger to touch on a phone.
