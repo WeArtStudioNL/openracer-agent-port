@@ -651,7 +651,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         return offsetTmp.set(o ? o[0] || 0 : 0, o ? o[1] || 0 : 0, o ? o[2] || 0 : 0);
     }
     // the same for a foot: the pivot is the peg and an offset from it (feet.offset.left / right, in the frame of the peg)
-    var footTmp = new V(), feetDown = {}, FOOT_ANKLE = 0.09, toeFwd = new V(), toeDir = new V();       // (how far down each foot is, the height of the ankle over the road when the foot stands on its toes)
+    var footTmp = new V(), feetDown = {}, FOOT_ANKLE = 0.09, FOOT_LEN = 0.27, toeFwd = new V(), toeDir = new V();       // (how far down each foot is, the height of the ankle over the road when the foot stands on its toes)
     function footOffset(side) {
         var o = self.config.feet.offset && self.config.feet.offset[side];
         return footTmp.set(o ? o[0] || 0 : 0, o ? o[1] || 0 : 0, o ? o[2] || 0 : 0);
@@ -823,7 +823,8 @@ OpenRacer.Driver = function (config, parent, steering) {
             chain[2].updateMatrixWorld(true);
             if (feetDown[e[0]] > 0.001 && walk < 0.5) {
                 toeFwd.set(0, 0, 1).transformDirection(self.parent.matrixWorld);
-                toeDir.copy(toeFwd).multiplyScalar(0.12).y -= FOOT_ANKLE;
+                // (the toes go down so far that their tip is on the road, with the ankle FOOT_ANKLE above it: further and they went through the floor)
+                toeDir.copy(toeFwd).multiplyScalar(Math.sqrt(Math.max(0.01, FOOT_LEN * FOOT_LEN - FOOT_ANKLE * FOOT_ANKLE))).y -= FOOT_ANKLE;
                 toeDir.normalize().lerp(toeFwd, 1 - feetDown[e[0]]).normalize();
                 rotateTo(chain[2], toeFwd.clone(), toeDir.clone());
                 chain[2].updateMatrixWorld(true);
