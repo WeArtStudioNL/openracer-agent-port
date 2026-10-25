@@ -155,6 +155,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 ### Car editor and the driver
 
+- **A live axle on trailing arms with coilovers** (the new Trophy Truck model of the stadium truck): the suspension rig knows `rear_solid_differential` / `solid_axle_rear` as the axle, `trailing_arm_RL` and `upper_trailing_arm_RL` as trailing arms, and `coilover_cylinder_RL` / `damper_cylinder_RL` as a spring with parts inside it: the cylinder keeps its length, the piston (a child named `..._piston_RL`) slides along it with the travel and the coil (`..._coil_RL`) gets shorter and longer; a part inside a rig part is no part of its own.
 - A part called `sprocket_RL` (or `chainring_RL`, `spin_RL`; on a motorcycle `rear_sprocket`) spins with the wheel of that corner without being a wheel part: a sprocket lies outside the tyre and made the wheel bigger when it was one (the Supermoto 700).
 - **A drive chain from one link** (`Chain.js`): a model with `chain_link`, `front_sprocket` (on the engine) and `rear_sprocket` gets a chain: the link is drawn as many times as the chain is long (an InstancedMesh), every frame along the two strands and the arcs round the sprockets, in the plane of the sprockets, so it follows the swingarm; it moves with the rim of the rear sprocket and turns the front sprocket with it. The Supermoto 700: 73 links of 24.9 mm round sprockets of 71 and 244 mm. In the game and on the test bench of the car editor.
 **Car editor: orthographic view and standard views**

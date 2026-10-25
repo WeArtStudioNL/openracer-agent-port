@@ -76,11 +76,11 @@ A part of the model called `steeringwheel` turns with the steering (about its ow
 |---|---|---|---|
 | `susp_upperarm_FL`, `susp_lowerarm_FL` | a wishbone, a link | at the hinge on the chassis (between the two inboard bushings) | swings about the axis along the car with the travel of the wheel; its free end reaches the wheel |
 | `susp_upright_FL` | the upright, hub carrier, knuckle | at the middle of the wheel | goes up and down with the wheel and turns with the steering (it does not spin, so do not make it a wheel part) |
-| `susp_spring_FL`, `susp_damper_FL`, `susp_strut_FL` | a spring, a damper, a strut | at the end on the body (the top mount) | points to its other end and gets shorter and longer with the travel |
+| `susp_spring_FL`, `susp_damper_FL`, `susp_strut_FL` (or `coilover_cylinder_RL`, `damper_cylinder_RL`) | a spring, a damper, a strut | at the end on the body (the top mount) | points to its other end and gets shorter and longer with the travel. With parts inside it (children named `..._piston_RL`, `..._coil_RL`) the cylinder keeps its length: the piston slides along it with the travel and the coil gets shorter and longer about its own origin |
 | `steer_rack` | the steering rack | anywhere on it | slides across the car with the steering (`steering.rack_travel` in `car.json`, m per radian of the front wheels, 0.1 by default; negative slides it the other way) |
 | `steer_tierod_FL` | a tie rod | at the end on the rack | its other end sits on the upright and follows it, so it swings and stretches |
-| `susp_axle_rear` (or `_front`) | a live axle | at its middle | goes up and down with its two wheels and rolls with the difference |
-| `susp_trailingarm_RL` | a trailing arm (of a live axle or a trailing-arm suspension) | at the hinge on the chassis | swings about the axis across the car with the travel of its wheel |
+| `susp_axle_rear` (or `_front`, `solid_axle_rear`, `rear_solid_differential`) | a live axle | at its middle | goes up and down with its two wheels and rolls with the difference |
+| `susp_trailingarm_RL` (or `trailing_arm_RL`, `upper_trailing_arm_RL`) | a trailing arm (of a live axle or a trailing-arm suspension) | at the hinge on the chassis | swings about the axis across the car with the travel of its wheel |
 | `susp_panhard_rear` (or `_front`) | a Panhard rod | at the end on the chassis | its other end sits on the axle and follows it up, down and in roll |
 | `susp_driveshaft_RL` | a drive shaft (half shaft) of an independent rear | at the differential | its other end is the middle of the wheel: it swings and stretches with the travel |
 | `brake_caliper_FL` (or `caliper_FL`, `brake_FL`) | a brake caliper | anywhere | goes with the wheel and steers with it, but does not spin (so do not make it a wheel part; the disc is a wheel part and spins) |

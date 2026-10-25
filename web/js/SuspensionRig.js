@@ -37,10 +37,15 @@ OpenRacer.SuspensionRig = (function () {
     function classify(name) {
         var n = clean(name);
         if(/^(susp)?(propshaft|cardan)/.test(n) || /^(susp)?driveshaft(center|centre|middle|prop)/.test(n)) return { kind: "prop" };
-        if(n.indexOf("susp") !== 0 && n.indexOf("steer") !== 0) return null;
-        if(n === "steerrack" || n === "susprack") return { kind: "rack" };
         var corner = n.slice(-2);
         var wheel = CORNERS[corner];
+        // (a few parts are known without the susp_ in front: a live axle (solid_axle_rear, rear_solid_differential), a trailing arm (trailing_arm_RL, upper_trailing_arm_RL) and a
+        // coilover or a damper with the corner at the end (coilover_cylinder_RL, damper_cylinder_RL: its parts, the coil and the piston, are children of it and go with it))
+        if(n.indexOf("solidaxle") !== -1 || n.indexOf("liveaxle") !== -1 || /^(rear|front|back)?solid/.test(n) || /^axle/.test(n)) return { kind: "axle", rear: n.indexOf("front") === -1 };
+        if(wheel !== undefined && n.indexOf("trailing") !== -1) return { kind: "trailing", wheel: wheel };
+        if(wheel !== undefined && /^(coilover|damper|shock|strut|spring)/.test(n)) return { kind: "spring", wheel: wheel };
+        if(n.indexOf("susp") !== 0 && n.indexOf("steer") !== 0) return null;
+        if(n === "steerrack" || n === "susprack") return { kind: "rack" };
         if(n.indexOf("axle") !== -1) return { kind: "axle", rear: n.indexOf("rear") !== -1 || n.indexOf("back") !== -1 };
         if(n.indexOf("panhard") !== -1 || n.indexOf("watt") !== -1) return { kind: "panhard", rear: n.indexOf("front") === -1 };
         if(wheel === undefined) return null;
@@ -76,6 +81,25 @@ OpenRacer.SuspensionRig = (function () {
         return centre.clone().addScaledVector(dir, half);
     }
 
+    // The parts inside a spring or a damper (children of it): a piston (piston, rod, shaft) slides along the part with the travel, a coil (coil, spring) gets shorter and longer
+    // about its own origin, and the cylinder itself keeps its length. Without them the whole part is scaled. axis: the direction of the part, from the top mount to the far end
+    function innerParts(node, axis, restLength) {
+        var inner = [], wq = new THREE.Quaternion();
+        node.children.forEach(function (child) {
+            var n = clean(child.name), kind = /piston|rod|shaft/.test(n) ? "piston" : (/coil|spring/.test(n) ? "coil" : null);
+            if(!kind) return;
+            // the direction of the part in the frame of the child's parent (the move of the piston) and in the child's own frame (the axis the coil is scaled along)
+            node.getWorldQuaternion(wq);
+            var inParent = axis.clone().applyQuaternion(wq.clone().invert());
+            child.getWorldQuaternion(wq);
+            var own = axis.clone().applyQuaternion(wq.invert());
+            var scaleAxis = Math.abs(own.x) >= Math.abs(own.y) && Math.abs(own.x) >= Math.abs(own.z) ? "x" : (Math.abs(own.y) >= Math.abs(own.z) ? "y" : "z");
+            var along = Math.max(0, Math.min(1, child.position.dot(inParent) / Math.max(0.01, restLength)));      // where its origin is along the part: 0 the top mount, 1 the far end
+            inner.push({ node: child, kind: kind, rest: child.position.clone(), restScale: child.scale.clone(), inParent: inParent, scaleAxis: scaleAxis, along: along });
+        });
+        return inner.length ? inner : null;
+    }
+
     // Finds the parts under root (the model, already placed in the space of the body by CarLoader) and puts each in a holder in
     // tilt (the body) that is moved every frame. space holds tilt at the origin, so world positions are body positions.
     function find(root, space, tilt, config) {
@@ -84,6 +108,8 @@ OpenRacer.SuspensionRig = (function () {
             var what = classify(node.name);
             if(what) parts.push({ node: node, what: what });
         });
+        // (a part inside a part (the coil and the piston of a coilover) goes with its parent: it is not a part of its own)
+        parts = parts.filter(function (p) { for(var a = p.node.parent; a; a = a.parent) for(var k = 0; k < parts.length; k++) if(parts[k].node === a) return false; return true; });
         if(!parts.length) return null;
         space.updateMatrixWorld(true);
         var rig = { parts: [], rackTravel: (config.steering && config.steering.rack_travel !== undefined) ? config.steering.rack_travel : 0.1, rack: null, uprights: {} };
@@ -105,6 +131,7 @@ OpenRacer.SuspensionRig = (function () {
                 entry.restLength = Math.max(0.01, entry.restDir.length());
                 entry.restDir.normalize();
                 entry.holder.quaternion.setFromUnitVectors(Y, entry.restDir);
+                if(entry.kind === "spring") entry.inner = innerParts(p.node, entry.restDir, entry.restLength);
             } else if(entry.kind === "prop") {
                 // it turns about its own length: the longest side of its box, about the middle of the box
                 var pbox = boxOf(p.node), pc = pbox.getCenter(new THREE.Vector3()), ps = pbox.getSize(new THREE.Vector3());
@@ -162,7 +189,19 @@ OpenRacer.SuspensionRig = (function () {
                 tmp.sub(p.origin);
                 var length = tmp.length();
                 h.quaternion.setFromUnitVectors(Y, tmp2.copy(tmp).normalize());
-                h.scale.y = Math.max(0.2, length / p.restLength);
+                if(p.inner) {
+                    // the cylinder stays as it is; the piston slides along the part by the change of length, the coil gets that much shorter or longer about its own origin
+                    // (a coil's origin may be at either end of the part, or between: it moves with its share of the way down the part, and is scaled about it)
+                    var delta = length - p.restLength;
+                    for(var k = 0; k < p.inner.length; k++) {
+                        var part = p.inner[k];
+                        part.node.position.copy(part.rest).addScaledVector(part.inParent, delta * (part.kind === "piston" ? 1 : part.along));
+                        if(part.kind === "coil") {
+                            part.node.scale.copy(part.restScale);
+                            part.node.scale[part.scaleAxis] = part.restScale[part.scaleAxis] * Math.max(0.2, (p.restLength + delta) / p.restLength);
+                        }
+                    }
+                } else h.scale.y = Math.max(0.2, length / p.restLength);
             } else if(p.kind === "rack") {
                 h.position.set(p.origin.x + rackShift, p.origin.y, p.origin.z);
             } else if(p.kind === "tierod") {
