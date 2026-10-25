@@ -226,11 +226,15 @@ var Settings = (function() {
     // Looks at the inputs once per frame: which actions are held, and which have just been pressed
     function update() {
         var pads = currentPads();
+        var freeCam = typeof OpenRacer !== "undefined" && OpenRacer.FreeCam && OpenRacer.FreeCam.active && !replayOn() ? OpenRacer.FreeCam : null;
+        var freeCamTakes = freeCam ? freeCam.takes : null;
         for(var n = 0; n < ACTIONS.length; n++) {
             var id = ACTIONS[n].id;
             var list = bindings[id];
             var isDown = false;
             for(var i = 0; i < list.length; i++) {
+                // the keys of the free camera of the game are its own while it is on (W A S D and the rest move the camera, they do not drive the car)
+                if(list[i].d === "key" && freeCamTakes && freeCamTakes[list[i].code]) continue;
                 if(inputValue(list[i], pads) >= DIGITAL_LEVEL) { isDown = true; break; }
             }
             if(virtualDown[id]) isDown = true;
@@ -844,7 +848,7 @@ var Settings = (function() {
         page.appendChild(sliderRow("Drag strip: \"Get ready\" before the lights", "dragReady", 0.5, 6, 0.5, function(v) { return v.toFixed(1) + " s"; }));
         page.appendChild(sliderRow("Drag strip: lights stay after the green", "dragGreen", 0.5, 5, 0.5, function(v) { return v.toFixed(1) + " s"; }));
         page.appendChild(optionRow("ESC (stability control)", options.esc ? "On" : "Off", function() { setOption("esc", !options.esc); }));
-        var cameraNames = ["Follow (smooth, FOV with speed)", "Cockpit", "Free camera (buttons on the HUD, P looks at the car, O moves with it)"];
+        var cameraNames = ["Follow (smooth, FOV with speed)", "Cockpit", "Free camera (W A S D move, 1 2 down and up, Q E tilt, arrows turn, 3 4 speed, [ ] field of view; the car is not driven; P looks at the car, O moves with it)"];
         page.appendChild(optionRow("Camera", cameraNames[options.camera - 2] || cameraNames[0], function() { setOption("camera", nextCamera(options.camera)); }));
         // a motorcycle: how it is steered, and the camera that follows it (to try what feels right)
         if(typeof car !== "undefined" && car && car.vehicle && car.vehicle.controller) {
@@ -1114,6 +1118,7 @@ var Settings = (function() {
     return {
         update: update,
         isDown: isDown,
+        keyDown: function(code) { return !!keysDown[code] && !paused; },        // a key as it is, by its code (the free camera of the game)
         controllerAnalog: controllerAnalog,
         controllerPad: controllerPad,
         option: function(name) { return options[name]; },

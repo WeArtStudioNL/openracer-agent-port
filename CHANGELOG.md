@@ -117,6 +117,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 ### Replay, cameras and video
 
+- **The free camera of the game is on the keys and is remembered per car.** W A S D move it, 1 and 2 take it down and up, Q and E tilt it, the arrows turn it, 3 and 4 make it slower and faster (a tenth to three times, shown on the panel), [ and ] set the field of view; while it is on these keys do not drive the car, mute the sound or save the reset place. The move buttons of its panel are gone; the two toggles stay (P looks at the car, O moves with it) and work on a click now (the drag of the panel took the click). The camera is remembered per car (its place, where it looks, the field of view, the speed and the toggles): the next time the free camera is chosen for that car, also after a restart, it is back where it was; a camera that moved with the car comes back in its place against the car.
 **A camera per clip, and the speed of the free camera**
 - Every clip of the video editor has a camera of its own: the camera track (your keys, over the follow camera), or the follow, cockpit or cinematic camera of the game. A clip that is cut in two keeps it.
 - The speed of the free camera has a slider in the camera row of the video editor (it only had one in the replay bar).

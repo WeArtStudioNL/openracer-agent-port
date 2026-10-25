@@ -424,7 +424,7 @@ OpenRacer.Car = function( config, domElement ) {
         if(mode === 1) mode = 2;      // the fixed camera is gone (a saved choice of it becomes the following camera)
         // 4 is the free camera (FreeCam.js): it goes free from where the camera is now
         if(this.cameraMode === 4 && mode !== 4) OpenRacer.FreeCam.leave();
-        if(mode === 4 && this.cameraMode !== 4) OpenRacer.FreeCam.enter(camera, this.body.position);
+        if(mode === 4 && this.cameraMode !== 4) OpenRacer.FreeCam.enter(camera, this.body.position, config.id);
         this.cameraMode = mode;
         EngineSound.setInside(mode === 3);
         followYaw = null;
