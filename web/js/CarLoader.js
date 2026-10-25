@@ -223,10 +223,13 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
                 // wheel and steers with it, but it does not spin, so it hangs on the steering link of the chain. On a motorcycle the wheel of this slot was taken by an
                 // earlier slot (FR takes wheel_FL, FL has nothing of its own): its parts (brake_fork_leg_FL, brake_mudguard_FL) hang on that chain, the one that is drawn
                 // at the wheel; on their own slot they stood beside the wheel, by the track of the ghost wheel, and without the travel of the fork
-                var holder = sharesWith || chain, extra = calipersOf(slot);
-                if(holder !== chain && extra.length) { space.add(holder.object); holder.object.updateMatrixWorld(true); }      // (attach needs it in the space of the model)
+                // and a part that spins with the wheel without being a wheel part (a sprocket, a chain ring: sprocket_RL, rear_sprocket; it lies outside the tyre and would make the
+                // wheel bigger): it goes on the spin of the chain
+                var holder = sharesWith || chain, extra = calipersOf(slot), spinning = spinnersOf(slot);
+                if(holder !== chain && (extra.length || spinning.length)) { space.add(holder.object); holder.object.updateMatrixWorld(true); }      // (attach needs it in the space of the model)
                 extra.forEach(function (part) { holder.object.children[0].attach(part); });
-                if(holder !== chain && extra.length) space.remove(holder.object);
+                spinning.forEach(function (part) { holder.spin.attach(part); });
+                if(holder !== chain && (extra.length || spinning.length)) space.remove(holder.object);
                 space.remove(chain.object);
                 wheels.push(chain.object);
             });
@@ -315,6 +318,20 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
             if(/(caliper|brake)/.test(name) && name.slice(-2) === corner && !/disc|disk|rotor/.test(name)) found.push(child);
         });
         // a part inside another found part goes with it
+        return found.filter(function (part) { return !found.some(function (other) { return other !== part && isInside(part, other); }); });
+    }
+
+    // the parts that spin with the wheel of a slot but are not part of it: a sprocket or a chain ring (sprocket_RL, chainring_RL; a motorcycle: rear_sprocket for the rear wheel,
+    // front_sprocket for the front), or anything called spin_<slot>
+    function spinnersOf(slot) {
+        var found = [];
+        if(!calipersRoot) return found;
+        var corner = slot.toLowerCase(), end = corner.slice(0, 1) === "f" ? "front" : "rear";
+        calipersRoot.traverse(function (child) {
+            var name = (child.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            var mine = (/(sprocket|chainring|spin)/.test(name) && name.slice(-2) === corner) || name === end + "sprocket" || name === end + "chainring";
+            if(mine) found.push(child);
+        });
         return found.filter(function (part) { return !found.some(function (other) { return other !== part && isInside(part, other); }); });
     }
 

@@ -141,6 +141,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 ### Car editor and the driver
 
+- A part called `sprocket_RL` (or `chainring_RL`, `spin_RL`; on a motorcycle `rear_sprocket`, `front_sprocket`) spins with the wheel of that corner without being a wheel part: a sprocket lies outside the tyre and made the wheel bigger when it was one (the Supermoto 700).
 **Car editor: orthographic view and standard views**
 - A switch between perspective and orthographic (no perspective) in the view, and buttons for the standard views (left, right, top, bottom, front) at the distance the camera has: in the bar at the bottom left of the view, or with O and the numpad (4, 6, 8, 2, 5). The same camera is used, so the gizmos, picking and the other editors keep working. On the bench a motorcycle stands upright: it does not rest to the right on the foot of the rider, as it does at a standstill in the game. While the nodes of the soft body are edited the driver is hidden, with its markers, so that it is not in the way of the nodes.
 
