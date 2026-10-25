@@ -55,6 +55,7 @@ OpenRacer.Motorcycle = function (settings) {
     this.gripG = s.grip_g !== undefined ? s.grip_g : 1.05;                        // the lateral g that the tyres give when nothing else is asked of them
     this.frontComply = s.front_comply !== undefined ? s.front_comply : 3;            // how much the front wheel castors into its own slip on the brake (3: it keeps a quarter of the slip angle)
     this.complied = 0;
+    this.footDownL = 0; this.footStill = false; this.footWait = 0;       // the left foot (footDown is the right one), whether the bike is at a standstill, and the time since the feet should come up
     this.footDown = 0;                                       // 0 to 1: the right foot of the rider on the road (a standstill)
     this.noFoot = false;                                     // the car editor: the bike stands upright on its bench, the foot never goes down
     this.footLean = (s.foot_lean_deg !== undefined ? s.foot_lean_deg : 7) * DEG;   // how far the bike rests to the right on the foot
@@ -165,9 +166,7 @@ OpenRacer.Motorcycle = function (settings) {
         // (the foot comes up once the bike itself moves at 7 km/h, or when the nose is up more than 30 degrees (a wheelie): not on the throttle and not on the speed of the rear
         // wheel, so it stays down in a burnout; up and down in about a second. Whenever it should be down it reaches for the road: a wheelie that is braked to a walking pace
         // puts the right foot down towards the ground)
-        var still = !self.noFoot && Math.abs(u) < 7 / 3.6 && state.noseUp < 0.5 && !self.pushing;
-        self.footDown += ((still ? 1 : 0) - self.footDown) * Math.min(1, dt / 1.0);
-        want -= self.footLean * self.footDown * (1 - fast);
+        self.feetStep(dt, u, state.noseUp, !self.noFoot && !self.pushing, false);
         var brake = Math.max(0, Math.min(1, inp.brakePedal || 0)), bend = smooth(8 * DEG, 30 * DEG, Math.abs(want));
         want *= 1 + self.cornerBrake * brake * bend;                  // the rear brake takes it deeper into the bend (the front brake is not used in a bend: brakeScale)
         want = Math.max(-phiMax, Math.min(phiMax, want));
@@ -360,7 +359,7 @@ OpenRacer.Motorcycle = function (settings) {
         var m = v.mass, gh = m * G * v.cgHeight;
         var kp = self.balance * 10 * gh, inertia = m * v.cgHeight * v.cgHeight + c.inertiaZ, kd = 1.5 * Math.sqrt(kp * inertia);
         // at a walking pace with the bars turned far the rider cannot hold the bike up: the balance fades and it leans into the turn and goes down (unless the foot is down: standing)
-        var slowLock = (1 - smooth(2.0, 4.0, Math.abs(u))) * smooth(0.6, 0.95, Math.abs(self.command || 0)) * (1 - self.footDown);
+        var slowLock = (1 - smooth(2.0, 4.0, Math.abs(u))) * smooth(0.6, 0.95, Math.abs(self.command || 0)) * (1 - Math.max(self.footDown, self.footDownL));
         kp *= 1 - 0.98 * slowLock; kd *= 1 - 0.8 * slowLock;
         var T = kp * (self.targetLean - state.lean) - kd * state.rate;                           // about the axis that leans it to the left
         T -= slowLock * 0.5 * gh * Math.sign(self.command || 0);                              // (and it leans into the turn: a bike that crawls with the bars at the lock goes over to the inside; left is a negative command and a positive T)
@@ -414,6 +413,19 @@ OpenRacer.Motorcycle = function (settings) {
 
     // ---- the rider on the bike: where he sits, from what the bike does, and what his weight does to the bike
     var inputOf = function (v) { var i = v.input; return { thr: Math.max(0, Math.min(1, i.throttle || 0)), brk: Math.max(0, Math.min(1, i.brakePedal || 0)) }; };
+    // the feet at a standstill: the bike stays upright and both feet go down to the road (below 4 km/h; they stay down until 5 km/h); above 5 km/h they go back to the pegs in a second,
+    // the left foot first (over 0.7 s), the right foot a third of a second later (over 0.7 s)
+    this.feetStep = function (dt, u, noseUp, allowed, snap) {
+        var speed = Math.abs(u) * 3.6;
+        if (!allowed || noseUp >= 0.5 || speed > 5) self.footStill = false; else if (speed < 4) self.footStill = true;
+        if (snap) { self.footWait = 0; self.footDownL = self.footDown = self.footStill ? 1 : 0; return; }
+        if (self.footStill) { self.footWait = 0; self.footDownL = Math.min(1, self.footDownL + dt / 0.7); self.footDown = Math.min(1, self.footDown + dt / 0.7); }
+        else {
+            self.footWait += dt;
+            self.footDownL = Math.max(0, self.footDownL - dt / 0.7);
+            if (self.footWait > 0.3) self.footDown = Math.max(0, self.footDown - dt / 0.7);
+        }
+    };
     // the posture of the rider from what the bike does (also for a replay, which has no physics: the lean and the pedals of the recording)
     this.postureStep = function (dt, u, thr, brk, lean) {
         var p = self.posture, i = { thr: thr, brk: brk }, fwdSpeed = Math.max(0, u);
@@ -430,13 +442,12 @@ OpenRacer.Motorcycle = function (settings) {
         p.drop += ((-0.09 * tuck + 0.05 * sit) - p.drop) * k(0.3);
     };
     // a replay: the posture and the foot from the recording (the lean of the body, the speed and the pedals), nothing else
-    this.replayStep = function (v, dt, thr, brk) {
+    this.replayStep = function (v, dt, thr, brk, snap) {
         var state = leanOf(v, 0), u = v.u;
         v.lean = state.lean;
         self.targetLean = state.lean;
-        var still = Math.abs(u) < 7 / 3.6 && state.noseUp < 0.5;
-        self.footDown += ((still ? 1 : 0) - self.footDown) * Math.min(1, dt / 1.0);
-        self.postureStep(dt, u, thr, brk, state.lean);
+        self.feetStep(dt, u, state.noseUp, true, snap);
+        self.postureStep(snap ? 10 : dt, u, thr, brk, state.lean);
     };
     this.rider = function (v, torque, dt, u, state) {
         var p = self.posture, i = inputOf(v), fwdSpeed = Math.max(0, u);
@@ -464,7 +475,7 @@ OpenRacer.Motorcycle = function (settings) {
 
     // ---- hook for the camera: it rolls with the lean, a part of it, smoothed. camera: the three.js camera, after it was placed
     // after a reset or a repair: the rider is back on the bike
-    this.recover = function () { hist.length = 0; self.slideTime = 0; self.crashed = false; self.limp = false; self.riderLoad = null; self.footDown = 0; self.targetLean = 0; self.steer = 0; self.wheelieScale = 1; vPrev = null; accel.x = accel.y = accel.z = 0; };
+    this.recover = function () { hist.length = 0; self.slideTime = 0; self.crashed = false; self.limp = false; self.riderLoad = null; self.footDown = 0; self.footDownL = 0; self.footStill = false; self.footWait = 0; self.targetLean = 0; self.steer = 0; self.wheelieScale = 1; vPrev = null; accel.x = accel.y = accel.z = 0; };
 
     this.cameraRoll = function (camera, v, dt) {
         var classic = typeof Settings !== "undefined" && Settings.option("bikeCamera") === "classic";       // (the menu: the chase camera of a car, that does not roll)

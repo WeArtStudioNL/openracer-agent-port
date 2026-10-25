@@ -359,7 +359,7 @@ OpenRacer.Car = function( config, domElement ) {
             // (in a replay the gear is the recorded label: "N", "3", "D3", ...)
             var gearNow = this.current_gear, neutralNow = this.neutral, label = OpenRacer.Replay && OpenRacer.Replay.active ? this.replayGear : undefined;
             if(label !== undefined) { var m = /(\d+)$/.exec(label); neutralNow = label === "N"; gearNow = m ? parseInt(m[1], 10) - 1 : gearNow; }
-            this.driver.update(delta || 0.016, this.throttle, this.brakePedal, { gear: gearNow, neutral: neutralNow, push: !!this.pushBack, footDown: this.vehicle.controller ? this.vehicle.controller.footDown : 0, speed: this.vehicle.u, groundY: -this.tire_diameter / 2, roadY: roadY, posture: this.vehicle.controller ? this.vehicle.controller.posture : null });
+            this.driver.update(delta || 0.016, this.throttle, this.brakePedal, { gear: gearNow, neutral: neutralNow, push: !!this.pushBack, footDown: this.vehicle.controller ? this.vehicle.controller.footDown : 0, footDownL: this.vehicle.controller ? this.vehicle.controller.footDownL || 0 : 0, speed: this.vehicle.u, groundY: -this.tire_diameter / 2, roadY: roadY, posture: this.vehicle.controller ? this.vehicle.controller.posture : null });
         }
         // the checkpoint of the road under the rear wheel
         var rear = w[2];

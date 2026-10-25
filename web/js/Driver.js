@@ -651,7 +651,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         return offsetTmp.set(o ? o[0] || 0 : 0, o ? o[1] || 0 : 0, o ? o[2] || 0 : 0);
     }
     // the same for a foot: the pivot is the peg and an offset from it (feet.offset.left / right, in the frame of the peg)
-    var footTmp = new V();
+    var footTmp = new V(), feetDown = {}, FOOT_ANKLE = 0.09, toeFwd = new V(), toeDir = new V();       // (how far down each foot is, the height of the ankle over the road when the foot stands on its toes)
     function footOffset(side) {
         var o = self.config.feet.offset && self.config.feet.offset[side];
         return footTmp.set(o ? o[0] || 0 : 0, o ? o[1] || 0 : 0, o ? o[2] || 0 : 0);
@@ -787,14 +787,15 @@ OpenRacer.Driver = function (config, parent, steering) {
             self.parent.worldToLocal(local.copy(rw));
             if (e[2] === "pegL" && rider.shifter && riderRest.tip) { bodyPos2(rider.shifter, riderRest.tip, tmp); local.add(tmp.sub(riderRest.tipAt)); }
             // pushing the bike back: the feet come off the pegs and shuffle along the ground, one after the other
-            // at a standstill the right foot is flat on the road beside the bike (and comes back up on the gas)
-            var footDown = state && state.footDown ? state.footDown : 0;
-            if (e[1] < 0 && footDown > 0.001 && walk < 0.5) {
-                tmp.set(local.x - 0.22, groundY + 0.02, local.z + 0.08);
+            // at a standstill the bike is upright and both feet are down on the road, under the pegs, the toes towards the nearest point of the road (they come back to the pegs, the left one first)
+            var footDown = state ? (e[1] > 0 ? state.footDownL : state.footDown) || 0 : 0;
+            if (footDown > 0.001 && walk < 0.5) {
+                tmp.set(local.x + e[1] * 0.04, groundY + FOOT_ANKLE, local.z + 0.06);
                 // the road itself, where the bike is pitched (a wheelie braked to a walking pace: the foot reaches down for the road, as far as the leg goes)
-                if (state && typeof state.roadY === "number") { self.parent.localToWorld(tmp); tmp.y = state.roadY + 0.02; self.parent.worldToLocal(tmp); }
+                if (state && typeof state.roadY === "number") { self.parent.localToWorld(tmp); tmp.y = state.roadY + FOOT_ANKLE; self.parent.worldToLocal(tmp); }
                 local.lerp(tmp, footDown);
-            }
+                feetDown[e[0]] = footDown;
+            } else feetDown[e[0]] = 0;
             if (walk > 0.001) {
                 var pegAt = local.clone();
                 var stride = Math.sin(walkPhase + (e[1] > 0 ? 0 : Math.PI)), lift = Math.max(0, Math.cos(walkPhase + (e[1] > 0 ? 0 : Math.PI)));
@@ -816,6 +817,15 @@ OpenRacer.Driver = function (config, parent, steering) {
             (self.poles[e[0]] || (self.poles[e[0]] = new V())).copy(tmp);
             self.parent.localToWorld(pole.copy(tmp));
             solve(chain, world, pole);
+            // the foot on the road: its toes turn from the front of the bike to the nearest point of the road (a little in front of the ankle, on the road)
+            if (feetDown[e[0]] > 0.001 && walk < 0.5) {
+                chain[2].updateMatrixWorld(true);
+                toeFwd.set(0, 0, 1).transformDirection(self.parent.matrixWorld);
+                toeDir.copy(toeFwd).multiplyScalar(0.12).y -= FOOT_ANKLE;
+                toeDir.normalize().lerp(toeFwd, 1 - feetDown[e[0]]).normalize();
+                rotateTo(chain[2], toeFwd.clone(), toeDir.clone());
+                chain[2].updateMatrixWorld(true);
+            }
         });
     }
 

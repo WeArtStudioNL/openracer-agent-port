@@ -9,6 +9,8 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 ### Motorcycles
 
 **After the first drive**
+- **Both feet down at a standstill, the bike upright.** The bike no longer rests against the right foot: both feet go down on the road under the pegs, the toes towards the nearest point of the road. Above 5 km/h (they go down again below 4) the feet go back to the pegs in a second, the left foot first and the right one a third of a second later.
+- **The video editor shows the posture of the rider and the feet.** The lean forward and back (tuck, sit), the hanging off sideways and the feet were eased from the frame before, so a jump in time, a pause or a frame without a step in the editor left them where they were; they are the posture of the sample now after a jump.
 - The brakes: the rear keeps at least 22 % of its load while a lean is asked for or the bike leans or slides (a rear with no load has no grip sideways), and both brakes come off as the slip of the bike grows past 5 degrees, as the cornering ABS of a modern bike does. A hard brake with a little steering at 180 km/h still slides; that goes deeper, into the rear tyre under the brakes, and is an open point.
 - The tyres squeal later on a motorcycle (the camber of its tyres carries a bend).
 - On the brakes the rider holds the bars harder (the hold on the yaw is up to three times as strong, 9 000 N m): with the rear nearly off the road the front alone turned the bike 14 degrees out of line in a second at 145 km/h.

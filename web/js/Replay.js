@@ -423,7 +423,12 @@ OpenRacer.Replay = (function() {
             if(entry.soft) showSoft(entry, time);
             object.vehicle.updateOutputs();
             // a motorcycle: the rider's posture and the foot at a standstill from the recording (the physics does not run in a replay)
-            if(object.vehicle.controller && object.vehicle.controller.replayStep) object.vehicle.controller.replayStep(object.vehicle, delta || 0, object.throttle || 0, object.brakePedal || 0);
+            if(object.vehicle.controller && object.vehicle.controller.replayStep) {
+                // (a jump in time, a pause or a frame without a step: the posture and the feet are those of the sample, not eased from where they were)
+                var snap = !(delta > 0) || entry.shownAt === undefined || Math.abs(time - entry.shownAt) > Math.max(0.25, 4 * delta * (speed || 1));
+                entry.shownAt = time;
+                object.vehicle.controller.replayStep(object.vehicle, delta || 0, object.throttle || 0, object.brakePedal || 0, snap);
+            }
             showRider(entry, time);
             if(entry.player) object.updateVisuals(delta);
             // the squeal of the tyres of the player (Car.update is not run in a replay, which is where the game feeds it)
