@@ -31,6 +31,8 @@ OpenRacer.TyreShell = function (wheel) {
     var Ix, Iy, Iz, IVx, IVy, IVz;                         // the inner nodes: the same, but fixed to the wheel
     var Ox, Oy, Oz, OVx, OVy, OVz, Tx, Ty, Tz;              // where the outer nodes would be on a tyre that is not deformed, and the way along the tread there
     var Nx, Ny, Nz;                                        // the outward normal of the shell at a node
+    var blockList = [];
+    var nearNode, nodeList;                                // 1 for a node that a triangle of the list can reach in this step (the others are not looked at), and the triangles that can
     var eFn, eNx, eNy, eNz, tFn;                           // the load on a node from the samples between the nodes (and the sum of its own and those)
     var fnNode, cnx, cny, cnz, ctri, inContact, sliding, ux, uy;
     var bA, bB, bL0, bLmin, bClass, bKind, bStrain;        // the beams: ends (outer 0..N-1, inner N..2N-1), rest length, length of the stop, class of stiffness, kind, strain of the last step
@@ -84,6 +86,7 @@ OpenRacer.TyreShell = function (wheel) {
         Px = f64(); Py = f64(); Pz = f64(); Vx = f64(); Vy = f64(); Vz = f64(); Fx = f64(); Fy = f64(); Fz = f64();
         Ix = f64(); Iy = f64(); Iz = f64(); IVx = f64(); IVy = f64(); IVz = f64();
         Ox = f64(); Oy = f64(); Oz = f64(); OVx = f64(); OVy = f64(); OVz = f64(); Tx = f64(); Ty = f64(); Tz = f64(); Nx = f64(); Ny = f64(); Nz = f64();
+        nearNode = new Uint8Array(N); nodeList = []; for(var il = 0; il < N; il++) nodeList.push([]);
         eFn = f64(); eNx = f64(); eNy = f64(); eNz = f64(); tFn = f64();
         fnNode = new Float32Array(N); cnx = new Float32Array(N); cny = new Float32Array(N); cnz = new Float32Array(N);
         ctri = new Int32Array(N); inContact = new Uint8Array(N); sliding = new Uint8Array(N); ux = new Float32Array(N); uy = new Float32Array(N);
@@ -232,6 +235,27 @@ OpenRacer.TyreShell = function (wheel) {
         }
         var load0 = Math.max(self.staticLoad * 0.3, 1);
         var surf = frictionOf(Math.max(load0, loadPrev), self.surface);
+        // ---- the nodes that a triangle can reach in this step: a node with no triangle near it (by the way it goes in the step) is not tested against the road in the substeps, which
+        // are most of the nodes (the top of the wheel); next to a rail with many triangles this is what keeps the tyre cheap
+        // (first per block of six nodes round the wheel, over the tread: the triangles that can reach the block; then per node out of those)
+        var blockSize = 6, blocks = Math.ceil(segs / blockSize);
+        while(blockList.length < blocks) blockList.push([]);
+        for(var bl = 0; bl < blocks; bl++) {
+            var bx = 0, by = 0, bz = 0, bc = 0, bv = 0, k0 = bl * blockSize, k1 = Math.min(segs, k0 + blockSize);
+            for(var jb = 0; jb < rings; jb++) for(var kb = k0; kb < k1; kb++) { var ib = jb * segs + kb; bx += Px[ib]; by += Py[ib]; bz += Pz[ib]; bc++; var vb = Vx[ib] * Vx[ib] + Vy[ib] * Vy[ib] + Vz[ib] * Vz[ib]; if(vb > bv) bv = vb; }
+            bx /= bc; by /= bc; bz /= bc;
+            var rad = 0;
+            for(var jc = 0; jc < rings; jc++) for(var kc = k0; kc < k1; kc++) { var ic = jc * segs + kc, dxb = Px[ic] - bx, dyb = Py[ic] - by, dzb = Pz[ic] - bz, db = Math.sqrt(dxb * dxb + dyb * dyb + dzb * dzb); if(db > rad) rad = db; }
+            var reachB = rad * 1.05 + tol + 0.06 + 0.03 + 1.4 * dt * Math.sqrt(bv) * 1.2, bList = blockList[bl];
+            bList.length = 0;
+            for(var qb = 0; qb < list.length; qb++) if(ground.boxNear(list[qb], bx, by, bz, reachB)) bList.push(list[qb]);
+        }
+        for(var inr = 0; inr < N; inr++) {
+            var reachN = tol + 0.06 + 0.03 + 1.4 * dt * Math.sqrt(Vx[inr] * Vx[inr] + Vy[inr] * Vy[inr] + Vz[inr] * Vz[inr]), mine = nodeList[inr], fromBlock = blockList[Math.floor((inr % segs) / blockSize)];
+            mine.length = 0;
+            for(var qn = 0; qn < fromBlock.length; qn++) if(ground.boxNear(fromBlock[qn], Px[inr], Py[inr], Pz[inr], reachN)) mine.push(fromBlock[qn]);
+            nearNode[inr] = mine.length ? 1 : 0;
+        }
         // ---- the steps
         var maxDepth = 0, count = 0, sumFn = 0, slideLoad = 0, cxs = 0, cys = 0, czs = 0, nxs = 0, nys = 0, nzs = 0, minF = 1e9, maxF = -1e9, bestFn = 0, bestTri = -1, sag = 0;
         for(var s = 0; s < n; s++) {
@@ -299,10 +323,11 @@ OpenRacer.TyreShell = function (wheel) {
             for(var ie = 0; ie < N; ie++) { eFn[ie] = 0; eNx[ie] = eNy[ie] = eNz[ie] = 0; }
             for(var jr = 0; jr < rings; jr++) for(var kq = 0; kq < segs; kq++) {
                 var na = jr * segs + kq, nb2 = jr * segs + (kq + 1) % segs;
+                if(!nearNode[na] && !nearNode[nb2]) continue;
                 // (far from the road, both ends: nothing to look for)
                 for(var m = 1; m < S; m++) {
                     var tt = m / S, qx = Px[na] + (Px[nb2] - Px[na]) * tt, qy = Py[na] + (Py[nb2] - Py[na]) * tt, qz = Pz[na] + (Pz[nb2] - Pz[na]) * tt;
-                    if(!contactAt(qx, qy, qz, hub, ground, list, tol)) continue;
+                    if(!contactAt(qx, qy, qz, hub, ground, nearNode[na] ? nodeList[na] : nodeList[nb2], tol)) continue;
                     var qvx = Vx[na] + (Vx[nb2] - Vx[na]) * tt, qvy = Vy[na] + (Vy[nb2] - Vy[na]) * tt, qvz = Vz[na] + (Vz[nb2] - Vz[na]) * tt;
                     var qvn = qvx * cNx + qvy * cNy + qvz * cNz;
                     var qd = -self.roadDamping * 2 * Math.sqrt(kgS * mS) * qvn, qcap = 0.5 * mS * Math.abs(qvn) / h;
@@ -318,7 +343,7 @@ OpenRacer.TyreShell = function (wheel) {
             }
             for(var ig = 0; ig < N; ig++) {
                 var depth = 0, nxg = 0, nyg = 0, nzg = 0, fnOwn = 0;
-                if(contactAt(Px[ig], Py[ig], Pz[ig], hub, ground, list, tol)) {
+                if(nearNode[ig] && contactAt(Px[ig], Py[ig], Pz[ig], hub, ground, nodeList[ig], tol)) {
                     depth = cDepth; nxg = cNx; nyg = cNy; nzg = cNz;
                     var vn = Vx[ig] * nxg + Vy[ig] * nyg + Vz[ig] * nzg;
                     // the spring of the road, and its damper, which can at most stop the node in a step (a stiff damper on a light node would ring)
