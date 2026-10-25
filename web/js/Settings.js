@@ -564,6 +564,55 @@ var Settings = (function() {
         hint("");
     }
 
+    // a popup with every vehicle: a click on one replaces the one that is driven (the page opens again with it, the rest of the address as it is)
+    function chooseVehicle(currentId) {
+        if(typeof Catalog === "undefined") return;
+        var back = document.createElement("div");
+        back.style.cssText = "position: fixed; inset: 0; z-index: 100000; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center;";
+        var box = document.createElement("div");
+        box.style.cssText = "background: var(--bg2, #222); color: var(--head, #fff); border: 1px solid var(--line, #555); border-radius: 10px; padding: 16px; width: min(720px, 92vw); max-height: 82vh; overflow: auto; font: 15px sans-serif;";
+        var head = document.createElement("div");
+        head.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 18px;";
+        head.textContent = "Choose a vehicle";
+        var close = document.createElement("button");
+        close.textContent = "×";
+        close.style.cssText = "font: inherit; font-size: 22px; background: none; border: 0; color: inherit; cursor: pointer;";
+        head.appendChild(close);
+        box.appendChild(head);
+        var grid = document.createElement("div");
+        grid.style.cssText = "display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px;";
+        box.appendChild(grid);
+        back.appendChild(box);
+        document.body.appendChild(back);
+        function done() { if(back.parentNode) back.parentNode.removeChild(back); document.removeEventListener("keydown", onKey, true); }
+        function onKey(event) { if(event.code === "Escape") { event.stopPropagation(); event.preventDefault(); done(); } }
+        document.addEventListener("keydown", onKey, true);
+        close.onclick = done;
+        back.onclick = function(event) { if(event.target === back) done(); };
+        Catalog.load("cars").then(function(list) {
+            list.forEach(function(c) {
+                var card = document.createElement("button");
+                card.style.cssText = "display: flex; flex-direction: column; gap: 6px; align-items: stretch; text-align: left; font: inherit; color: inherit; background: var(--bg, #111); border: 2px solid " + (c.id === currentId ? "var(--accent, #4aa3ff)" : "var(--line, #555)") + "; border-radius: 8px; padding: 8px; cursor: pointer;";
+                var img = document.createElement("img");
+                img.src = "cars/" + encodeURIComponent(c.id) + "/preview.webp";
+                img.alt = "";
+                img.style.cssText = "width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 4px; background: #000;";
+                img.onerror = function() { img.style.visibility = "hidden"; };
+                var name = document.createElement("div");
+                name.textContent = c.name || c.id;
+                card.appendChild(img);
+                card.appendChild(name);
+                card.onclick = function() {
+                    if(c.id === currentId) { done(); return; }
+                    var query = new URLSearchParams(window.location.search);
+                    query.set("car", c.id);
+                    window.location.href = window.location.pathname + "?" + query.toString();
+                };
+                grid.appendChild(card);
+            });
+        }).catch(function(error) { grid.textContent = "Could not read the vehicles: " + error.message; });
+    }
+
     function optionRow(label, text, onClick) {
         var row = document.createElement("div");
         row.className = "row";
@@ -779,6 +828,16 @@ var Settings = (function() {
         }
 
         var page = tabPage("Car");
+        // practice (no laps): another vehicle in place of this one; the page opens again with it, on the same track and with the same options
+        if(typeof race !== "undefined" && race && race.options && !race.options.laps) {
+            var here = new URLSearchParams(window.location.search).get("car");
+            var pickRow = optionRow("Vehicle: " + (here || "?"), "Change vehicle…", function() { chooseVehicle(here); });
+            page.appendChild(pickRow);
+            if(typeof Catalog !== "undefined") Catalog.load("cars").then(function(list) {
+                var now = list.filter(function(c) { return c.id === here; })[0];
+                if(now) pickRow.querySelector(".label").textContent = "Vehicle: " + (now.name || now.id);
+            }).catch(function() { /* the id stays */ });
+        }
         page.appendChild(optionRow("Traction control", options.tc ? "On" : "Off", function() { setOption("tc", !options.tc); }));
         page.appendChild(optionRow("Two-step (the clutch in at a standstill holds the engine at the two-step speed)", options.twoStep ? "On" : "Off", function() { setOption("twoStep", !options.twoStep); }));
         page.appendChild(optionRow("Launch control (brake and full throttle at a standstill, let go of the brake)", options.launchControl ? "On" : "Off", function() { setOption("launchControl", !options.launchControl); }));
