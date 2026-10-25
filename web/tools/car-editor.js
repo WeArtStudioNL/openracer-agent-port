@@ -2023,7 +2023,7 @@ function tuningValues(config) {
 // "Drop car" lets it fall from a height, The model is built the way the game
 // builds it (CarLoader.js: the wheels taken out, the suspension rig found), from the model and the settings as they are now.
 window.THREE = Object.assign({}, THREE, { GLTFLoader });
-const PHYSICS_SCRIPTS = ["Engine.js", "Wheel.js", "TyreShell.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "CarLoader.js", "Ground.js", "CollisionProxy.js", "SoftBody.js", "SoftBodyMesh.js", "Parts.js"];
+const PHYSICS_SCRIPTS = ["Engine.js", "Wheel.js", "TyreShell.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "Chain.js", "CarLoader.js", "Ground.js", "CollisionProxy.js", "SoftBody.js", "SoftBodyMesh.js", "Parts.js"];
 let physicsLoading = null;
 function loadPhysics() {
     if (!physicsLoading) {
@@ -2143,6 +2143,7 @@ function benchFrame(now) {
         const drawn = { object, restLengthWheel: w.restLengthWheel, susLength: w.susLength, toeBend: w.toeBend };
         if (bench.model.head && i === 0) OpenRacer.updateFork(bench.model.head, drawn, body, v.steerApplied);
         if (bench.model.swingarm && i === 2) OpenRacer.updateSwingarm(bench.model.swingarm, drawn, body);
+        if (bench.model.chain && i === 2) OpenRacer.Chain.update(bench.model.chain, w.spin);
     });
     if (bench.model.rig) bench.model.rig.update(v);
     if (softBodyEditor) softBodyEditor.frame(dt);

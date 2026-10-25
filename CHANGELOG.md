@@ -141,7 +141,8 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 ### Car editor and the driver
 
-- A part called `sprocket_RL` (or `chainring_RL`, `spin_RL`; on a motorcycle `rear_sprocket`, `front_sprocket`) spins with the wheel of that corner without being a wheel part: a sprocket lies outside the tyre and made the wheel bigger when it was one (the Supermoto 700).
+- A part called `sprocket_RL` (or `chainring_RL`, `spin_RL`; on a motorcycle `rear_sprocket`) spins with the wheel of that corner without being a wheel part: a sprocket lies outside the tyre and made the wheel bigger when it was one (the Supermoto 700).
+- **A drive chain from one link** (`Chain.js`): a model with `chain_link`, `front_sprocket` (on the engine) and `rear_sprocket` gets a chain: the link is drawn as many times as the chain is long (an InstancedMesh), every frame along the two strands and the arcs round the sprockets, in the plane of the sprockets, so it follows the swingarm; it moves with the rim of the rear sprocket and turns the front sprocket with it. The Supermoto 700: 73 links of 24.9 mm round sprockets of 71 and 244 mm. In the game and on the test bench of the car editor.
 **Car editor: orthographic view and standard views**
 - A switch between perspective and orthographic (no perspective) in the view, and buttons for the standard views (left, right, top, bottom, front) at the distance the camera has: in the bar at the bottom left of the view, or with O and the numpad (4, 6, 8, 2, 5). The same camera is used, so the gizmos, picking and the other editors keep working. On the bench a motorcycle stands upright: it does not rest to the right on the foot of the rider, as it does at a standstill in the game. While the nodes of the soft body are edited the driver is hidden, with its markers, so that it is not in the way of the nodes.
 

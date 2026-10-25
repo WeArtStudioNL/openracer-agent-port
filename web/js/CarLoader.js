@@ -303,7 +303,8 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
             });
             // the changes to the materials that were made in the car editor
             OpenRacer.applyMaterialOverrides(THREE, [tilt].concat(wheelObjects), config.materials);
-            onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1, steeringWheel: steering, measured: measured, rig: rig, head: head, swingarm: head ? findSwingarm(root, space, measured) : null });
+            var chain = OpenRacer.Chain ? OpenRacer.Chain.find(root, space, tilt, wheelObjects) : null;      // the drive chain, from one link of the model (Chain.js)
+            onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1, steeringWheel: steering, measured: measured, rig: rig, head: head, swingarm: head ? findSwingarm(root, space, measured) : null, chain: chain });
         }
     }
 
@@ -329,7 +330,8 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
         var corner = slot.toLowerCase(), end = corner.slice(0, 1) === "f" ? "front" : "rear";
         calipersRoot.traverse(function (child) {
             var name = (child.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-            var mine = (/(sprocket|chainring|spin)/.test(name) && name.slice(-2) === corner) || name === end + "sprocket" || name === end + "chainring";
+            // (front_sprocket is on the engine, not on the front wheel: it is turned by the chain, Chain.js)
+            var mine = (/(sprocket|chainring|spin)/.test(name) && name.slice(-2) === corner) || (end === "rear" && (name === "rearsprocket" || name === "rearchainring"));
             if(mine) found.push(child);
         });
         return found.filter(function (part) { return !found.some(function (other) { return other !== part && isInside(part, other); }); });
