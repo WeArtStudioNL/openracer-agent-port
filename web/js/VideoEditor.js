@@ -347,8 +347,9 @@ OpenRacer.VideoEditor = (function () {
             "#vedit .monitors { flex: 1; min-height: 0; display: flex; gap: 10px; padding: 10px 12px; }" +
             "#vedit .mon { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; }" +
             "#vedit .mon .title { color: var(--muted, #8d97a3); letter-spacing: 1px; text-transform: uppercase; font-size: 11px; }" +
-            "#vedit .screen { position: relative; flex: 1; min-height: 0; background: #000; border: 1px solid var(--line, #2b333d); border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; }" +
-            "#vedit .screen canvas { width: 100% !important; height: 100% !important; object-fit: contain; display: block; }" +
+            "#vedit .screen { position: relative; flex: 1; min-height: 0; background: #07090b repeating-linear-gradient(135deg, rgba(255,255,255,.035) 0 6px, transparent 6px 12px); border: 1px solid var(--line, #2b333d); border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; }" +
+            "#vedit .screen canvas { width: auto !important; height: auto !important; max-width: 100%; max-height: 100%; display: block; background: #000; outline: 1px solid rgba(255, 138, 31, .75); }" +
+            "#vedit .aspects button.on { background: #ff8a1f; color: #1a1208; border-color: #ff8a1f; }" +
             "#vedit .screen .over { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #fff; text-shadow: 0 1px 6px #000; pointer-events: none; text-align: center; padding: 20px; }" +
             "#vedit .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }" +
             "#vedit .time { font-variant-numeric: tabular-nums; color: var(--head, #fff); min-width: 120px; }" +
@@ -397,6 +398,13 @@ OpenRacer.VideoEditor = (function () {
         el(top, "h1", "", "VIDEO EDITOR");
         ui = { root: root, message: el(top, "span", "msg", "") };
         el(top, "span", "spacer");
+        // the aspect of the picture (the passepartout of the monitors is what is outside of it): the video is made in it
+        var aspectBox = el(top, "span", "row aspects");
+        ui.aspectButtons = Object.keys({ "16:9": 1, "9:16": 1, "1:1": 1 }).map(function (name) {
+            var b = button(aspectBox, name, "The aspect of the picture, and of the video that is made of it (" + name + ")", function () { if (!recording) Replay.setAspect(name); });
+            b.dataset.aspect = name;
+            return b;
+        });
         ui.save = button(top, "Save as replay", "Cut, speeds and camera track as a new replay in the list of Replays (without smoke, skid marks and damage)", saveReplay);
         ui.video = button(top, "Save as mp4", "The result recorded from the start to the end, as a video file", saveVideo);
         ui.close = button(top, "Close", "Back to the main menu", function () { leave(); });
@@ -689,6 +697,7 @@ OpenRacer.VideoEditor = (function () {
         ui.video.disabled = !!recording || !state.clips.length;
         ui.save.disabled = !!recording || !state.clips.length;
         ui.video.textContent = recording ? "Recording…" : "Save as mp4";
+        if (ui.aspectButtons) ui.aspectButtons.forEach(function (b) { b.disabled = !!recording; });
         ui.close.disabled = !!recording;
         ui.insertButton.disabled = ui.insertButton.disabled || !!recording;
         updateSrcUi();
@@ -721,6 +730,20 @@ OpenRacer.VideoEditor = (function () {
         }
         renderer.render(scene, camera);
         srcCtx.drawImage(renderer.domElement, 0, 0, ui.srcCanvas.width, ui.srcCanvas.height);
+    }
+
+    // the picture has the aspect that was chosen: the render, the monitors and the video are all in it
+    function applyAspect() {
+        if (!Replay || !Replay.aspectInfo) return;
+        var A = Replay.aspectInfo(), name = Replay.aspect();
+        SCREEN_WIDTH = A.width; SCREEN_HEIGHT = A.height;
+        renderer.setSize(A.width, A.height, false);
+        camera.aspect = A.ratio; camera.updateProjectionMatrix();
+        if (useComposer && OpenRacer.Graphics) OpenRacer.Graphics.setSize(A.width, A.height);
+        var long = 640, w = A.ratio >= 1 ? long : Math.round(long * A.ratio), h = A.ratio >= 1 ? Math.round(long / A.ratio) : long;
+        if (ui && ui.srcCanvas) { ui.srcCanvas.width = w; ui.srcCanvas.height = h; }
+        if (ui && ui.aspectButtons) ui.aspectButtons.forEach(function (b) { b.className = b.dataset.aspect === name ? "on" : ""; b.disabled = !!recording; });
+        if (Replay.updateFrame) Replay.updateFrame();            // (the orange outline of the replay goes: this editor has its passepartout)
     }
 
     api.frame = function (delta) {
@@ -793,14 +816,12 @@ OpenRacer.VideoEditor = (function () {
         if (started) return;
         started = true;
         Replay = OpenRacer.Replay;
-        // the picture is 1280 x 720 whatever the window is: the same for the monitor and for the video
+        // the picture has the size of the aspect whatever the window is (1280 x 720, 720 x 1280 or 960 x 960): the same for the monitor and for the video
         window.onresize = function () {};
-        SCREEN_WIDTH = 1280; SCREEN_HEIGHT = 720;
         renderer.setPixelRatio(1);
-        renderer.setSize(1280, 720, false);
-        camera.aspect = 16 / 9; camera.updateProjectionMatrix();
-        if (useComposer && OpenRacer.Graphics) OpenRacer.Graphics.setSize(1280, 720);
         build();
+        applyAspect();
+        if (Replay.onAspect) Replay.onAspect(function () { if (!recording) applyAspect(); });
         var a = Replay.start_time();
         state.srcT = a;
         var h = Replay.header();
