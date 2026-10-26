@@ -6,57 +6,8 @@ var mX = 0;
 var mY = 0;
 var mLocation;
 
-window.onmousedown = function(e) {
-    // on a touch screen the touch controls drive (the mouse events that a tap makes are not a drag)
-    if(typeof TouchControls !== "undefined" && TouchControls.enabled()) return;
-    // a click in the settings menu is not driving
-    if(Settings.isPaused()) return;
-    if(e.target && e.target.closest && e.target.closest("#tuning")) return; // the tuning menu
-    mouseDown = true;
-    //console.log("mouseDown " + e.screenX + ", " + e.screenY);
-    mdX = e.screenX;
-    mdY = e.screenY;
-    
-    mLocation = document.createElement("div");
-    mLocation.id = "mLocation";
-    mLocation.className = "mouseStart";
-    mLocation.style.left = e.clientX + "px";
-    mLocation.style.top = e.clientY + "px";
-    document.body.appendChild(mLocation);
-};
-
-window.onmouseup = function() {
-    if(!mouseDown) return;
-    mouseDown = false;
-    car.throttle = 0;
-    car.brakePedal = 0;
-    document.body.removeChild(mLocation);
-};
-
-window.onmousemove = function(e) {
-    if(mouseDown) {
-        mX = e.screenX;
-        mY = e.screenY;
-        
-        var yDiff = (mdY - mY) / 200;
-        if(yDiff > 1) yDiff = 1;
-        if(yDiff < -1) yDiff = -1;
-        if(yDiff > 0) {
-            car.throttle = yDiff;
-            car.brakePedal = 0;
-        } else {
-            car.throttle = 0;
-            car.brakePedal = -yDiff;
-        }
-        
-        var xDiff = (mX - mdX) / 200;
-        if (xDiff > 1)
-            xDiff = 1;
-        if (xDiff < -1)
-            xDiff = -1;
-        car.turnAngle = car.maxTurn * Math.pow(xDiff, 2) * getSign(xDiff);
-    }
-};
+// (the mouse used to drive: hold the button and move, with a grey ring where it was pressed. That is gone: on a desktop the keys, a pad or a wheel drive,
+//  on a touch screen the touch controls; the mouse is for the free camera and the menus. mouseDown stays false: Car.js asks it.)
 
 // true while the regular gamepad is driving the throttle and brake
 var gamepadOwnsPedals = false;
