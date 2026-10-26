@@ -244,6 +244,7 @@ OpenRacer.PartsLibrary = (function () {
             node.quaternion.setFromUnitVectors(Y, d.normalize());
             if(rot[1]) node.quaternion.multiply(new Q().setFromAxisAngle(Y, rot[1] * DEG * s));         // (the turn of a stretched part is a roll about its own length)
             node.scale.set(s, length, 1);
+            node.userData.rigFar = far.clone();                                                        // (the exact far end, for the rig: the box of a slanted part reaches past it)
         } else {
             node.quaternion.setFromEuler(new THREE.Euler(rot[0] * DEG, rot[1] * DEG * s, rot[2] * DEG * s));
             node.scale.set(s, 1, 1);

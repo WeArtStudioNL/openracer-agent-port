@@ -128,14 +128,16 @@ OpenRacer.SuspensionRig = (function () {
             var entry = { kind: p.what.kind, wheel: p.what.wheel, rear: p.what.rear, origin: origin.clone(), holder: new THREE.Object3D() };
             entry.holder.name = "rig-" + p.node.name;
             entry.holder.position.copy(origin);
+            // (a part the parts library built says where its far end is exactly: the box of a slanted part reaches past it)
+            var exactFar = p.node.userData && p.node.userData.rigFar ? p.node.userData.rigFar.clone() : null;
             if(entry.kind === "trailing") {
                 // a trailing arm swings about the axis across the car: its length is along the car
-                entry.far = farEnd(p.node, origin);
+                entry.far = exactFar || farEnd(p.node, origin);
                 entry.armLength = Math.max(0.05, Math.abs(entry.far.z - origin.z));
                 entry.ahead = entry.far.z >= origin.z ? 1 : -1; // the free end ahead of (+z) or behind the hinge
             } else if(entry.kind === "spring" || entry.kind === "tierod" || entry.kind === "panhard" || entry.kind === "shaft" || entry.kind === "propaxle") {
                 // the holder's Y axis runs along the part, from its origin to its far end, so that scale.y makes it longer or shorter
-                entry.far = farEnd(p.node, origin);
+                entry.far = exactFar || farEnd(p.node, origin);
                 entry.restDir = entry.far.clone().sub(origin);
                 entry.restLength = Math.max(0.01, entry.restDir.length());
                 entry.restDir.normalize();
@@ -147,7 +149,7 @@ OpenRacer.SuspensionRig = (function () {
                 entry.axis = ps.x >= ps.y && ps.x >= ps.z ? LEFT.clone() : (ps.y >= ps.z ? UP.clone() : FORWARD.clone());
                 entry.holder.position.copy(pc);
             } else if(entry.kind === "arm") {
-                entry.far = farEnd(p.node, origin);
+                entry.far = exactFar || farEnd(p.node, origin);
                 entry.armLength = Math.max(0.05, Math.abs(entry.far.x - origin.x));
                 entry.side = entry.far.x >= origin.x ? 1 : -1; // the free end to the left (+x) or the right
             }
@@ -162,17 +164,33 @@ OpenRacer.SuspensionRig = (function () {
         // a spring (or a damper) whose far end sits on an arm of its wheel, between the hinge and the ball joint: it goes with the swing of the arm there, not with the whole
         // travel of the wheel (a coilover seated halfway along the lower wishbone moves half as far as the wheel; it looked as if it came loose from the arm). The lowest such
         // arm is taken (the spring sits on the lower arm).
+        // The same for a foot on a trailing arm (it swings about the axis across the car: the foot goes round the hinge by its distance along the car), and a foot on a live
+        // axle away from its middle goes up with the axle there (the mean travel of the two wheels, and the roll of the axle at that distance from the middle).
         rig.parts.forEach(function (p) {
             if(p.kind !== "spring" || p.strut) return;
-            var best = null;
+            var best = null, bestTrailing = null, axle = null;
+            rig.parts.forEach(function (a) { if(a.kind === "axle" && a.rear === (p.wheel >= 2)) axle = a; });
+            // (a foot within 15 cm of the axle along the car sits on the axle, whatever arm reaches there)
+            if(axle && Math.abs(p.far.z - axle.origin.z) < 0.15) { p.onAxle = axle; return; }
             rig.parts.forEach(function (a) {
-                if(a.kind !== "arm" || a.wheel !== p.wheel) return;
-                var lo = Math.min(a.origin.x, a.far.x), hi = Math.max(a.origin.x, a.far.x);
-                if(p.far.x < lo - 0.02 || p.far.x > hi + 0.02) return;
-                if(Math.abs(p.far.x - a.origin.x) < 0.03) return;                       // (at the hinge: it does not move with the arm)
-                if(!best || a.origin.y < best.origin.y) best = a;
+                if(a.wheel !== p.wheel) return;
+                if(a.kind === "arm") {
+                    var lo = Math.min(a.origin.x, a.far.x), hi = Math.max(a.origin.x, a.far.x);
+                    if(p.far.x < lo - 0.02 || p.far.x > hi + 0.02) return;
+                    if(Math.abs(p.far.x - a.origin.x) < 0.03) return;                       // (at the hinge: it does not move with the arm)
+                    if(!best || a.origin.y < best.origin.y) best = a;
+                } else if(a.kind === "trailing") {
+                    var zlo = Math.min(a.origin.z, a.far.z), zhi = Math.max(a.origin.z, a.far.z);
+                    if(p.far.z < zlo - 0.02 || p.far.z > zhi + 0.02) return;
+                    if(Math.abs(p.far.z - a.origin.z) < 0.03) return;
+                    // (the foot at the end of the arm on the axle is the axle's: the axle moves it; only a foot along the arm is the arm's)
+                    if(Math.abs(p.far.z - a.far.z) < 0.05) return;
+                    if(!bestTrailing || a.origin.y < bestTrailing.origin.y) bestTrailing = a;
+                }
             });
             if(best) p.onArm = best;
+            else if(bestTrailing) p.onTrailing = bestTrailing;
+            else if(axle) p.onAxle = axle;
         });
         rig.update = function (vehicle) { update(rig, vehicle); };
         rig.count = rig.parts.length;
@@ -212,6 +230,12 @@ OpenRacer.SuspensionRig = (function () {
                 if(p.onArm) {
                     var armAngle = Math.asin(Math.max(-1, Math.min(1, travelOf(vehicle, p.wheel) / p.onArm.armLength))) * p.onArm.side;
                     tmp.copy(p.far).sub(p.onArm.origin).applyAxisAngle(FORWARD, armAngle).add(p.onArm.origin);
+                } else if(p.onTrailing) {
+                    var tAngle = -p.onTrailing.ahead * Math.asin(Math.max(-1, Math.min(1, travelOf(vehicle, p.wheel) / p.onTrailing.armLength)));
+                    tmp.copy(p.far).sub(p.onTrailing.origin).applyAxisAngle(LEFT, tAngle).add(p.onTrailing.origin);
+                } else if(p.onAxle) {
+                    var sl = travelOf(vehicle, p.onAxle.rear ? 2 : 1), sr = travelOf(vehicle, p.onAxle.rear ? 3 : 0), sTrack = (p.onAxle.rear ? vehicle.rear_track : vehicle.front_track) || 1.5;
+                    tmp.copy(p.far); tmp.y += (sl + sr) / 2 + (sl - sr) / sTrack * p.far.x;
                 } else { tmp.copy(p.far); tmp.y += travelOf(vehicle, p.wheel); }
                 tmp.sub(p.origin);
                 var length = tmp.length();
