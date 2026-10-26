@@ -155,6 +155,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 ### Car editor and the driver
 
+- The coilover of the parts library stretched past its end: its cylinder, named `coilover`, was taken for the coil (the match on "coil") and scaled with the piston inside it, on top of the slide of the piston; and the slide of a piston in a part that is scaled along its length is divided by that scale now.
 - **Both ends of a part are mounts**: a stretched part of the parts library (an arm, a trailing arm, a coilover, a damper, a strut, a tie rod, the Panhard rod) has a gizmo at each end now, where it sits on the body and where its other end goes (the ball joint, the seat of the spring on the arm or the axle, the steering arm, the end of the arm on the axle); the other end was placed from the wheel and could not be set.
 - **Edit origins** (the Suspension and driveline card of the car editor): a mode in which a click in the view picks only the mounts of the parts library, through everything (the body of the car was in the way of a click on them), W moves, E turns, Escape leaves, and a *Save the car* button at the bottom of the view saves and leaves; the nodes of the driver and the parts of the model are not picked while it is on.
 - **The free camera starts fixed to the car**, in the game (I) and in the replay (L): a camera that stayed where it was while the car drove on was far away by the time it was chosen, and the car was out of the picture. The game remembers the toggle per car as before.

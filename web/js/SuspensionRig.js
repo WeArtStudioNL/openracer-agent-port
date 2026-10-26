@@ -88,16 +88,23 @@ OpenRacer.SuspensionRig = (function () {
         var inner = [], wq = new THREE.Quaternion();
         node.traverse(function (child) {
             if(child === node) return;
-            var n = clean(child.name), kind = /piston|rod|shaft/.test(n) ? "piston" : (/coil|spring/.test(n) ? "coil" : null);
+            // (not the cylinder itself: "coilover" is no coil, "strut" no spring; a child that holds a piston or a coil is the cylinder)
+            var n = clean(child.name), kind = /piston|rod|shaft/.test(n) ? "piston" : (/coil(?!over)|spring/.test(n) ? "coil" : null);
             if(!kind) return;
+            var holdsParts = false; child.traverse(function (g) { if(g !== child && /piston|rod|shaft|coil(?!over)|spring/.test(clean(g.name))) holdsParts = true; });
+            if(holdsParts) return;
             // the direction of the part in the frame of the child's parent (the move of the piston) and in the child's own frame (the axis the coil is scaled along)
             child.parent.getWorldQuaternion(wq);
             var inParent = axis.clone().applyQuaternion(wq.clone().invert());
             child.getWorldQuaternion(wq);
             var own = axis.clone().applyQuaternion(wq.invert());
             var scaleAxis = Math.abs(own.x) >= Math.abs(own.y) && Math.abs(own.x) >= Math.abs(own.z) ? "x" : (Math.abs(own.y) >= Math.abs(own.z) ? "y" : "z");
-            var along = Math.max(0, Math.min(1, child.position.dot(inParent) / Math.max(0.01, restLength)));      // where its origin is along the part: 0 the top mount, 1 the far end
-            inner.push({ node: child, kind: kind, rest: child.position.clone(), restScale: child.scale.clone(), inParent: inParent, scaleAxis: scaleAxis, along: along });
+            // a part that is scaled along its length (the parts library stretches a part of 1 m to the length it needs): a move in the frame of the parent is that many times
+            // longer in the world, so the piston is moved by the world length divided by it (the piston went past the end of the coilover: the stretch was counted twice)
+            child.parent.updateWorldMatrix(true, false);
+            var k = inParent.clone().applyMatrix3(new THREE.Matrix3().setFromMatrix4(child.parent.matrixWorld)).length() || 1;
+            var along = Math.max(0, Math.min(1, child.position.dot(inParent) * k / Math.max(0.01, restLength)));      // where its origin is along the part: 0 the top mount, 1 the far end
+            inner.push({ node: child, kind: kind, rest: child.position.clone(), restScale: child.scale.clone(), inParent: inParent, scaleAxis: scaleAxis, along: along, k: k });
         });
         return inner.length ? inner : null;
     }
@@ -199,7 +206,7 @@ OpenRacer.SuspensionRig = (function () {
                     var delta = length - p.restLength;
                     for(var k = 0; k < p.inner.length; k++) {
                         var part = p.inner[k];
-                        part.node.position.copy(part.rest).addScaledVector(part.inParent, delta * (part.kind === "piston" ? 1 : part.along));
+                        part.node.position.copy(part.rest).addScaledVector(part.inParent, delta / part.k * (part.kind === "piston" ? 1 : part.along));
                         if(part.kind === "coil") {
                             part.node.scale.copy(part.restScale);
                             part.node.scale[part.scaleAxis] = part.restScale[part.scaleAxis] * Math.max(0.2, (p.restLength + delta) / p.restLength);
