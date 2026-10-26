@@ -366,8 +366,12 @@ function setOrtho(on) {
     camera.updateProjectionMatrix();
     controls.update();
     $("viewOrtho").classList.toggle("accent", on);
-    $("viewOrtho").textContent = on ? "Ortho" : "Persp";
+    // the button shows the view it is in: a box with converging edges (perspective) or with parallel edges (orthographic)
+    $("viewOrtho").innerHTML = on ? VIEW_ICON_ORTHO : VIEW_ICON_PERSP;
+    $("viewOrtho").title = on ? "Orthographic view (no perspective); click for perspective (O)" : "Perspective view; click for orthographic (no perspective) (O)";
 }
+const VIEW_ICON_PERSP = '<svg width="18" height="16" viewBox="0 0 18 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2 14 L16 14 L12.5 5 L5.5 5 Z"/><path d="M5.5 5 L7 2 L11 2 L12.5 5"/><path d="M2 14 L7 2 M16 14 L11 2"/></svg>';
+const VIEW_ICON_ORTHO = '<svg width="18" height="16" viewBox="0 0 18 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M3 5 L10 2 L15 4 L15 11 L8 14 L3 12 Z"/><path d="M3 5 L8 7 L15 4 M8 7 L8 14"/></svg>';
 function standardView(dx, dy, dz) {
     const dist = Math.max(0.5, camera.position.distanceTo(controls.target));
     camera.position.set(controls.target.x + dx * dist, controls.target.y + dy * dist, controls.target.z + dz * dist + (dy ? 0.0001 : 0));
@@ -386,7 +390,7 @@ window.addEventListener("keydown", (e) => {
     else return;
     e.preventDefault();
 });
-$("viewOrtho").textContent = "Persp";
+$("viewOrtho").innerHTML = VIEW_ICON_PERSP;
 
 let viewLock = null;
 function resize() {
