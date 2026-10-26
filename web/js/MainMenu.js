@@ -108,6 +108,7 @@ var MainMenu = (function() {
             ".or-dialog h2, #replaysDialog h2, #garageDialog h2 { margin: 0 0 4px; font-size: 22px; color: var(--head); }" +
             ".or-dialog .note, #replaysDialog .note, #garageDialog .note { color: var(--muted); font-size: 14px; line-height: 1.5; margin: 0 0 14px; }" +
             "#garageDialog h3 { font-size: 12px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; margin: 16px 0 6px; }" +
+            "#garageDialog .titleRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 4px; padding-right: 90px; } #garageDialog .titleRow h2 { margin: 0 12px 0 0; }" +
             ".or-dialog .row, #replaysDialog .row, #garageDialog .row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; }" +
             "#replaysDialog .row .name, #garageDialog .row .name { flex: 1; min-width: 0; }" +
             "#replaysDialog .row .meta, #garageDialog .row .meta { color: var(--muted); font-size: 13px; }" +
@@ -394,9 +395,33 @@ var MainMenu = (function() {
             closeButton.textContent = "Close";
             closeButton.onclick = close;
             box.appendChild(closeButton);
-            box.insertAdjacentHTML("beforeend", "<h2>My garage</h2><p class=\"note\">Your own cars and tracks, kept in this browser. Export one as a zip to share it, or import a zip you were given.</p>");
+            // the title, with what one does with the garage: Load (open a car or a track in its editor), New (a new car or track) and Import (a zip)
+            var titleRow = document.createElement("div");
+            titleRow.className = "titleRow";
+            titleRow.innerHTML = "<h2>My garage</h2>";
+            var pick = function(title, note, carAction, trackAction) {
+                dialog("pickDialog", title, note, function(pbox, pclose) {
+                    var prow = document.createElement("div");
+                    prow.style.cssText = "display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px;";
+                    prow.appendChild(button("Car", "primary", function() { pclose(); carAction(); }));
+                    prow.appendChild(button("Track", "primary", function() { pclose(); trackAction(); }));
+                    prow.appendChild(button("Cancel", "ghost", pclose));
+                    pbox.appendChild(prow);
+                });
+            };
+            titleRow.appendChild(button("Load", "ghost", function() {
+                pick("Load", "Open a car or a track in its editor.", function() { window.location.href = "tools/car-editor.html"; }, function() { window.location.href = "tools/track-editor.html"; });
+            }));
+            titleRow.appendChild(button("New", "ghost", function() {
+                pick("New", "Make a new car or track from a model.", function() { window.location.href = "tools/car-editor.html?new=car"; }, function() { window.location.href = "tools/track-editor.html?new=1"; });
+            }));
+            var importTitle = button("Import", "ghost", function() { if(importInput) importInput.click(); });
+            titleRow.appendChild(importTitle);
+            box.appendChild(titleRow);
+            box.insertAdjacentHTML("beforeend", "<p class=\"note\">Your own cars and tracks, kept in this browser. Export one as a zip to share it, or import a zip you were given.</p>");
             status = document.createElement("div");
             status.className = "status";
+            var importInput = null;
 
             Promise.all([Garage.list("cars"), Garage.list("tracks"), Garage.usage()]).then(function(result) {
                 [["cars", "Cars", result[0]], ["tracks", "Tracks", result[1]]].forEach(function(section) {
@@ -459,7 +484,7 @@ var MainMenu = (function() {
                 box.insertAdjacentHTML("beforeend", "<h3>Import</h3>");
                 var actions = document.createElement("div");
                 actions.className = "actions";
-                var importInput = document.createElement("input");
+                importInput = document.createElement("input");
                 importInput.type = "file";
                 importInput.accept = ".zip,application/zip";
                 importInput.multiple = true;
@@ -836,18 +861,6 @@ var MainMenu = (function() {
         document.body.appendChild(shade);
     }
 
-    function showEditors() {
-        dialog("editorsDialog", "Create", "Make your own cars and tracks from a model.", function(box, close) {
-            var car = button("Car editor", "primary", function() { window.location.href = "tools/car-editor.html"; });
-            var track = button("Track editor", "primary", function() { window.location.href = "tools/track-editor.html"; });
-            var row = document.createElement("div");
-            row.style.cssText = "display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px;";
-            row.appendChild(car); row.appendChild(track);
-            row.appendChild(button("Close", "ghost", close));
-            box.appendChild(row);
-        });
-    }
-
     // the choices of a race that are not in the way: tyre wear and fuel, the ghost, the records and the cars that race
     function showMore() {
         dialog("moreDialog", "More race options", null, function(box, close) {
@@ -937,7 +950,6 @@ var MainMenu = (function() {
         links.className = "links";
         if(OpenRacer.Garage && OpenRacer.Garage.available()) links.appendChild(button("Garage", "ghost", showGarage));
         links.appendChild(button("Replays", "ghost", function() { showReplays(cars, tracks); }));
-        links.appendChild(button("Create", "ghost", showEditors));
         links.appendChild(button("Settings", "ghost", function() { Settings.toggleMenu(); }));
         box.appendChild(links);
         var foot = document.createElement("div");

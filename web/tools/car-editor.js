@@ -1925,6 +1925,7 @@ $("camDefaults").addEventListener("click", defaultCameras);
 document.querySelectorAll(".cam").forEach((el) => el.addEventListener("input", updateCameraMarkers));
 for (const id of ["length", "width", "height", "tyre"]) $(id).addEventListener("input", updateCameraMarkers);
 $("newCar").addEventListener("click", () => { newCar("car"); $("existing").value = ""; applyTypeUI(); });
+if (new URLSearchParams(window.location.search).get("new") === "car") { try { localStorage.removeItem("editor-last-car"); } catch (e) { /* no storage */ } }      // (New in the garage of the main menu: no car is loaded)
 $("newBike").addEventListener("click", () => {
     newCar("motorcycle"); $("existing").value = "";
     // what a motorcycle has by default (the CBR 600 of the game as a start): the mass without the rider, a tall centre of gravity, a 17 inch wheel, short gears

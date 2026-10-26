@@ -962,6 +962,7 @@ OpenRacer.Car = function( config, domElement ) {
             this.selector = next;
             return;
         }
+        if(this.cvt && this.parkingLock) return;                                 // (P is the top of the CVT's R N D P)
         if(this.reverse) {
             this.reverse = false;
             this.neutral = true;
@@ -970,6 +971,8 @@ OpenRacer.Car = function( config, domElement ) {
             this.current_gear = 0;
         } else if(!this.cvt && this.current_gear < this.gear_ratios.length - 1) {
             this.current_gear++;
+        } else if(this.cvt && standing) {
+            this.parkingLock = true; this.neutral = true;
         }
     };
 
@@ -983,6 +986,7 @@ OpenRacer.Car = function( config, domElement ) {
             this.selector = previous;
             return;
         }
+        if(this.cvt && this.parkingLock) { this.parkingLock = false; this.neutral = false; return; }      // (P down is D)
         if(this.reverse) {
             return;
         } else if(this.neutral) {
@@ -1000,6 +1004,16 @@ OpenRacer.Car = function( config, domElement ) {
     // The H-pattern shifter: gear is the gear it is in (0 is first gear), -1 for neutral; or reverse. Only in the manual mode.
     this.hShifter = function(gear, reverse) {
         if(this.gearboxMode !== "manual") return;
+        if(this.cvt) {
+            // a CVT with an H-pattern shifter: the first gate is D, the second P (the wheels locked), out of the gates is N, and reverse is R
+            var was = (this.reverse ? "R" : this.parkingLock ? "P" : this.neutral ? "N" : "D");
+            var now = reverse ? "R" : (gear === 0 ? "D" : (gear === 1 ? "P" : (gear < 0 ? "N" : was)));
+            if(now === "P" && Math.abs(this.vehicle.u) > 1.5) now = was;                // (not into park while the car moves)
+            if(now !== was) this.manualClutch = true;
+            this.reverse = now === "R"; this.parkingLock = now === "P"; this.neutral = now === "N" || now === "P";
+            this.current_gear = 0;
+            return;
+        }
         if(reverse !== this.reverse || (gear >= 0 && gear !== this.current_gear) || (gear < 0 && !reverse && !this.neutral)) {
             this.manualClutch = true; // the clutch pedal goes with the shifter
         }
@@ -1011,8 +1025,9 @@ OpenRacer.Car = function( config, domElement ) {
     // The gear as it is shown: P R N D (and the gear of the automatic) in automatic, 1, 2, ... N R otherwise
     this.gearLabel = function() {
         if(this.cvt) {
-            if(this.gearboxMode === "automatic") return this.reverse ? "R" : (this.selector === "D" ? "CVT" : this.selector);
-            return this.reverse ? "R" : (this.neutral ? "N" : "CVT");
+            // (a CVT has no gears: D is drive; with the H-shifter the first gate is D and the second is P)
+            if(this.gearboxMode === "automatic") return this.reverse ? "R" : this.selector;
+            return this.reverse ? "R" : (this.parkingLock ? "P" : (this.neutral ? "N" : "D"));
         }
         if(this.gearboxMode === "automatic") {
             if(this.selector === "D" && !this.reverse) return "D" + (this.current_gear + 1);
