@@ -193,8 +193,8 @@ var Hud = (function() {
         boostCanvas.style.height = small + "px";
         boostCanvas.width = Math.round(small * ratio);
         boostCanvas.height = Math.round(small * ratio);
-        boostCanvas.style.right = (16 + size - Math.round(small * 0.3)) + "px";      // top left of the gauge (the corner of its square is empty)
-        boostCanvas.style.bottom = (16 + Math.round(size * 0.78)) + "px";
+        boostCanvas.style.right = (16 + Math.round(size * 0.77)) + "px";             // top left of the gauge, its ring against the ring of the gauge
+        boostCanvas.style.bottom = (16 + Math.round(size * 0.72)) + "px";
     }
 
     function formatTime(seconds) {
@@ -401,7 +401,7 @@ var Hud = (function() {
         c.fillStyle = "#ffffff"; c.font = "bold " + Math.round(R * 0.3) + "px Arial";
         c.fillText((metric ? value : value * 14.5038).toFixed(metric ? 2 : 1), cx, cy + R * 0.12);
         c.fillStyle = "#8fa0b4"; c.font = Math.round(R * 0.13) + "px Arial";
-        c.fillText(metric ? "BOOST bar" : "BOOST psi", cx, cy + R * 0.42);
+        c.fillText(metric ? "bar" : "psi", cx, cy + R * 0.42);
         if(engine.alsActive) { c.fillStyle = flash ? "#ffb340" : "#ff6b62"; c.font = "bold " + Math.round(R * 0.13) + "px Arial"; c.fillText("ANTI-LAG", cx, cy + R * 0.62); }
     }
 
