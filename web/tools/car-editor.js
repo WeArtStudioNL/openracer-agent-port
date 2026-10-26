@@ -2279,6 +2279,70 @@ function stopBench() {
 }
 
 const benchPose = { x: 0, y: 0, z: 0 }, benchQuat = { x: 0, y: 0, z: 0, w: 1 }, benchUp = new THREE.Vector3();
+// ---- the nodes of the tyres (TyreShell.js) over the car of the bench while a tyre setting is being changed: the outer shell (green where a node holds the road, red where it
+// slides, teal in the air), the rim (white), the beams between them coloured by their strain and the belt (teal), as the debug view of the game (DebugView.js, the 0 key).
+// They appear when a tyre setting (the Tyres group of the Tuning card, the pressures too) gets the focus or is moved, and go when another input gets the focus.
+const TYRE_DEBUG_KEYS = new Set(["tyre_width", "tyre_rings", "tyre_segments", "tyre_inner_ratio", "tyre_carcass", "tyre_stiff_x", "tyre_stiff_y", "pressure_front", "pressure_rear"]);
+const tyreDebug = { group: null, points: null, lines: null, on: false };
+function tyreDebugLayer(kind) {
+    const geometry = new THREE.BufferGeometry();
+    const material = kind === "points" ? new THREE.PointsMaterial({ size: 6, sizeAttenuation: false, vertexColors: true, depthTest: false, transparent: true })
+        : new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false, transparent: true, opacity: 0.85 });
+    const object = kind === "points" ? new THREE.Points(geometry, material) : new THREE.LineSegments(geometry, material);
+    object.frustumCulled = false; object.renderOrder = 1000;
+    tyreDebug.group.add(object);
+    return { object, pos: [], col: [] };
+}
+function showTyreDebug(on) {
+    if (on === tyreDebug.on) return;
+    tyreDebug.on = on;
+    if (!tyreDebug.group) {
+        tyreDebug.group = new THREE.Group();
+        scene.add(tyreDebug.group);
+        tyreDebug.points = tyreDebugLayer("points");
+        tyreDebug.lines = tyreDebugLayer("lines");
+    }
+    tyreDebug.group.visible = on;
+    if (on && !bench.vehicle) startBench().catch((error) => status(error.message, "error"));      // (the nodes are those of the car on the bench)
+}
+function updateTyreDebug(v) {
+    if (!tyreDebug.on || !tyreDebug.group) return;
+    const GREEN = [0.3, 1, 0.4], RED = [1, 0.25, 0.2], TEAL = [0.3, 0.8, 0.8], WHITE = [1, 1, 1], DIM = [0.35, 0.4, 0.45];
+    const L = tyreDebug.lines, P = tyreDebug.points;
+    const push = (l, x, y, z, c) => { l.pos.push(x, y, z); l.col.push(c[0], c[1], c[2]); };
+    const seg = (ax, ay, az, bx, by, bz, c) => { push(L, ax, ay, az, c); push(L, bx, by, bz, c); };
+    for (let i = 0; i < 4; i++) {
+        const tbody = v.wheels[i].tyreBody;
+        if (!tbody || !tbody.shells || !v.wheels[i].cylActive) continue;
+        const sh = tbody.shells();
+        for (let k = 0; k < sh.beams; k++) {
+            const ba = sh.a[k], bb = sh.b[k], inner = bb >= sh.count, cls = sh.bclass[k];
+            const ex = sh.ox[ba], ey = sh.oy[ba], ez = sh.oz[ba];
+            const fx = inner ? sh.ix[bb - sh.count] : sh.ox[bb], fy = inner ? sh.iy[bb - sh.count] : sh.oy[bb], fz = inner ? sh.iz[bb - sh.count] : sh.oz[bb];
+            const strain = sh.strain[k], tt = Math.max(-1, Math.min(1, strain / 0.12));
+            const colour = tt >= 0 ? [DIM[0] * (1 - tt) + 0.2 * tt, DIM[1] * (1 - tt) + 0.9 * tt, DIM[2] * (1 - tt) + 1 * tt] : [DIM[0] * (1 + tt) + 1 * -tt, DIM[1] * (1 + tt) + 0.2 * -tt, DIM[2] * (1 + tt) + 0.2 * -tt];
+            if (cls === 0 && (k % 2 === 0 || Math.abs(strain) > 0.02)) seg(ex, ey, ez, fx, fy, fz, colour);
+            else if (cls === 3 || cls === 4) seg(ex, ey, ez, fx, fy, fz, TEAL);
+        }
+        for (let k = 0; k < sh.count; k++) {
+            push(P, sh.ox[k], sh.oy[k], sh.oz[k], sh.contact[k] ? (sh.sliding[k] ? RED : GREEN) : TEAL);
+            if (k % 2 === 0) push(P, sh.ix[k], sh.iy[k], sh.iz[k], WHITE);
+        }
+    }
+    [L, P].forEach((l) => {
+        const g = l.object.geometry;
+        g.setAttribute("position", new THREE.Float32BufferAttribute(l.pos, 3));
+        g.setAttribute("color", new THREE.Float32BufferAttribute(l.col, 3));
+        g.computeBoundingSphere();
+        l.pos.length = 0; l.col.length = 0;
+    });
+}
+// a tyre setting in use shows the nodes; the focus on any other input hides them
+function tyreDebugInput(target) { const item = target && target.closest ? target.closest(".tuneItem") : null; return !!(item && TYRE_DEBUG_KEYS.has(item.dataset.tuneKey)); }
+document.addEventListener("focusin", (e) => { showTyreDebug(tyreDebugInput(e.target)); });
+document.addEventListener("pointerdown", (e) => { if (tyreDebugInput(e.target)) showTyreDebug(true); }, true);
+document.addEventListener("input", (e) => { if (tyreDebugInput(e.target)) showTyreDebug(true); }, true);
+
 function benchFrame(now) {
     const v = bench.vehicle;
     if (!v) return;
@@ -2305,8 +2369,9 @@ function benchFrame(now) {
         if (v.soloWheels) object.position.add(new THREE.Vector3(w.b, 0, 0).applyQuaternion(body.quaternion));     // (a motorcycle: the wheel of the model is drawn in the middle, not 2 cm aside as the physics has it)
         object.quaternion.copy(body.quaternion);
         if (object.children[0]) {
-            object.children[0].rotation.y = -(i < 2 ? v.steerApplied : 0) - (w.toeBend || 0);   // the front wheels steer; a bent wheel points aside
-            object.children[0].rotation.z = w.camberBend || 0;
+            // the wheel as the physics has it: its steer with the toe and the Ackermann (steerNow), its lean with the camber and the roll (lean), and a bent wheel aside
+            object.children[0].rotation.y = -(w.steerNow !== undefined ? w.steerNow : (i < 2 ? v.steerApplied : 0)) - (w.toeBend || 0);
+            object.children[0].rotation.z = w.lean !== undefined ? -w.lean : (w.camberBend || 0);
             if (object.children[0].children[0]) object.children[0].children[0].rotation.x = w.spin;
         }
         // a motorcycle: the front wheel along the fork, the rear wheel on the swingarm (as in the game)
@@ -2316,6 +2381,7 @@ function benchFrame(now) {
         if (bench.model.swingarm && i === 2) OpenRacer.updateSwingarm(bench.model.swingarm, drawn, body);
         if (bench.model.chain && i === 2) OpenRacer.Chain.update(bench.model.chain, w.spin);
     });
+    updateTyreDebug(v);
     if (bench.model.rig) bench.model.rig.update(v);
     if (softBodyEditor) softBodyEditor.frame(dt);
 }
@@ -2582,7 +2648,7 @@ suspensionEditor = initSuspension({
     // Edit origins: everything else that can be picked or marks something in the view is hidden, so that only the points are seen
     hideOthers: (on) => { cameraMarkers.visible = !on; axes.visible = !on; arrow.visible = !on; helpers.visible = !on; exhaust.forEach((e) => { e.target.visible = !on; }); if (driverEditor && driverEditor.deselect) driverEditor.deselect(); }
 });
-window.__carEditorView = { camera, scene, renderer };          // (for the tests of the editor: where a point of the scene is on the screen)
+window.__carEditorView = { camera, scene, renderer, bench };          // (for the tests of the editor: where a point of the scene is on the screen)
 
 softBodyEditor = initSoftBody({
     $, THREE, scene, camera, renderer, controls, bench, status, startBench, stopBench,

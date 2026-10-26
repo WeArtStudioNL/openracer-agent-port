@@ -345,7 +345,7 @@ OpenRacer.Car = function( config, domElement ) {
                 // (a motorcycle: the physics has its pair of wheels 4 cm apart, the model has one wheel in the middle: it is drawn in the middle)
                 if(this.vehicle.soloWheels) wheel.object.position.add(soloShift.set(wheel.b, 0, 0).applyQuaternion(this.body.quaternion));
                 wheel.object.quaternion.copy(this.body.quaternion);
-                wheel.turn(i < 2 ? this.vehicle.steerApplied : 0);
+                wheel.turn(wheel.steerNow !== undefined ? wheel.steerNow : (i < 2 ? this.vehicle.steerApplied : 0));       // (the steer of this wheel with its toe and the Ackermann)
                 wheel.object.children[0].children[0].rotation.x = wheel.spin;
                 // (the shell tyre: the tread of the model is pushed in as the nodes of the shell are, TyreDeform.js)
                 if(OpenRacer.TyreDeform) OpenRacer.TyreDeform.update(wheel, wheel.tyreBody);
