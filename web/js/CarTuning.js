@@ -10,99 +10,99 @@
 OpenRacer.CarTuning = (function () {
     var GROUPS = [
         { name: "Chassis", items: [
-            ["mass", "Mass", "kg", 500, 4000, 10],
-            ["front_weight", "Weight on the front axle", "%", 30, 70, 0.5],
-            ["cg_height", "Height of the centre of gravity", "m", 0.25, 1.0, 0.01],
-            ["roll_front", "Roll stiffness at the front", "%", 30, 80, 1],
-            ["spring_front", "Front springs (wheel rate)", "N/mm", 10, 90, 1],
-            ["spring_rear", "Rear springs (wheel rate)", "N/mm", 10, 90, 1],
-            ["damping_front", "Front dampers", "%", 10, 100, 1],
-            ["damping_rear", "Rear dampers", "%", 10, 100, 1],
-            ["suspension_travel", "Suspension travel before the bump stop", "cm", 1, 80, 1],
-            ["suspension_length", "Room for the travel (the spring from the mount to the middle of the wheel)", "cm", 20, 100, 1],
-            ["spring_progression", "Progressive springs (extra stiffness at the end of the travel)", "%", 0, 400, 10],
-            ["damping_rebound", "Rebound damping (against compression damping)", "×", 1, 4, 0.1],
-            ["ride_front", "Ride height at the front (from the car as made)", "mm", -60, 80, 5],
-            ["ride_rear", "Ride height at the rear", "mm", -60, 80, 5],
-            ["roll_center_front", "Roll centre at the front", "cm", -5, 40, 1],
-            ["roll_center_rear", "Roll centre at the rear", "cm", -5, 40, 1],
-            ["toe_front", "Toe at the front (positive: toe-in)", "°", -1.5, 1.5, 0.05],
-            ["toe_rear", "Toe at the rear", "°", -1.5, 1.5, 0.05],
-            ["camber_front", "Camber at the front (negative: top in)", "°", -6, 3, 0.1],
-            ["camber_rear", "Camber at the rear", "°", -6, 3, 0.1],
-            ["roll_camber", "Camber lost in roll", "%", 0, 100, 5]
+            ["mass", "Mass", "kg", 300, 6000, 10],
+            ["front_weight", "Weight on the front axle", "%", 25, 75, 0.5],
+            ["cg_height", "Height of the centre of gravity", "m", 0.15, 1.5, 0.01],
+            ["roll_front", "Roll stiffness at the front", "%", 10, 90, 1],
+            ["spring_front", "Front springs (wheel rate)", "N/mm", 3, 200, 1],
+            ["spring_rear", "Rear springs (wheel rate)", "N/mm", 3, 200, 1],
+            ["damping_front", "Front dampers", "%", 5, 200, 1],
+            ["damping_rear", "Rear dampers", "%", 5, 200, 1],
+            ["suspension_travel", "Suspension travel before the bump stop", "cm", 1, 120, 1],
+            ["suspension_length", "Room for the travel (the spring from the mount to the middle of the wheel)", "cm", 10, 150, 1],
+            ["spring_progression", "Progressive springs (extra stiffness at the end of the travel)", "%", 0, 800, 10],
+            ["damping_rebound", "Rebound damping (against compression damping)", "×", 0.5, 6, 0.1],
+            ["ride_front", "Ride height at the front (from the car as made)", "mm", -150, 150, 5],
+            ["ride_rear", "Ride height at the rear", "mm", -150, 150, 5],
+            ["roll_center_front", "Roll centre at the front", "cm", -20, 60, 1],
+            ["roll_center_rear", "Roll centre at the rear", "cm", -20, 60, 1],
+            ["toe_front", "Toe at the front (positive: toe-in)", "°", -4, 4, 0.05],
+            ["toe_rear", "Toe at the rear", "°", -4, 4, 0.05],
+            ["camber_front", "Camber at the front (negative: top in)", "°", -12, 6, 0.1],
+            ["camber_rear", "Camber at the rear", "°", -12, 6, 0.1],
+            ["roll_camber", "Camber lost in roll", "%", 0, 150, 5]
         ] },
         { name: "Tyres", items: [
             ["compound", "Tyre compound", "", 0, 0, 0],
             ["tyre_damage", "Tyre damage", "", 0, 0, 0],
-            ["tyre_width", "Tyre: width of the tread (0: from the wheel)", "cm", 0, 40, 1],
+            ["tyre_width", "Tyre: width of the tread (0: from the wheel)", "cm", 0, 60, 1],
             ["tyre_rings", "Tyre: rings of nodes across the tread", "", 1, 5, 1],
             ["tyre_segments", "Tyre: nodes round the wheel (the sides of the tyre: 4 is a square, 6 a hexagon; fewer is cheaper, the road is still felt between the nodes)", "", 4, 72, 1],
             ["tyre_inner_ratio", "Tyre: radius of the inner shell (the rim), as a share of the tyre", "%", 30, 90, 1],
             ["tyre_carcass", "Tyre: softness of the carcass, how far a node goes in before its cable is slack and the air carries it (0: 1.8 times the static deflection of the tyre, which gives it the stiffness of the car's tyre rate; a few mm is a very stiff tyre)", "mm", 0, 80, 0.5],
-            ["tyre_stiff_x", "Tyre: stiffness of the tread along the tyre (x load)", "", 8, 40, 0.5],
-            ["tyre_stiff_y", "Tyre: stiffness of the tread across the tyre (x load)", "", 8, 40, 0.5],
-            ["grip", "Grip", "%", 50, 160, 1],
-            ["grip_balance", "Grip of the rear tyres (as a share of the front)", "%", 60, 140, 1],
-            ["cornering", "Stiffness against the slip angle", "%", 50, 160, 1],
-            ["pressure_front", "Tyre pressure at the front", "bar", 1.2, 3.5, 0.1],
-            ["pressure_rear", "Tyre pressure at the rear", "bar", 1.2, 3.5, 0.1],
-            ["rolling_resistance", "Rolling resistance", "", 0.005, 0.05, 0.001],
-            ["tyre_heating", "Heating up (wear and fuel on)", "%", 20, 400, 5],
-            ["tyre_life", "Life of the tyres", "%", 20, 500, 5]
+            ["tyre_stiff_x", "Tyre: stiffness of the tread along the tyre (x load)", "", 4, 60, 0.5],
+            ["tyre_stiff_y", "Tyre: stiffness of the tread across the tyre (x load)", "", 4, 60, 0.5],
+            ["grip", "Grip", "%", 20, 300, 1],
+            ["grip_balance", "Grip of the rear tyres (as a share of the front)", "%", 40, 200, 1],
+            ["cornering", "Stiffness against the slip angle", "%", 20, 300, 1],
+            ["pressure_front", "Tyre pressure at the front", "bar", 0.5, 6, 0.1],
+            ["pressure_rear", "Tyre pressure at the rear", "bar", 0.5, 6, 0.1],
+            ["rolling_resistance", "Rolling resistance", "", 0.002, 0.1, 0.001],
+            ["tyre_heating", "Heating up (wear and fuel on)", "%", 5, 800, 5],
+            ["tyre_life", "Life of the tyres", "%", 5, 1000, 5]
         ] },
         { name: "Fuel", items: [
-            ["tank", "Tank", "L", 10, 200, 1],
-            ["fuel_use", "Fuel use", "%", 20, 500, 5]
+            ["tank", "Tank", "L", 2, 400, 1],
+            ["fuel_use", "Fuel use", "%", 5, 1000, 5]
         ] },
         { name: "Engine", items: [
-            ["power", "Power", "%", 30, 250, 1],
-            ["idle_rpm", "Idle speed", "rpm", 500, 2000, 50],
-            ["limiter_rpm", "Rev limit", "rpm", 3000, 13000, 100],
-            ["limiter_hz", "Rev limiter: cuts per second", "Hz", 2, 40, 1],
-            ["engine_inertia", "Inertia of the engine", "kg m²", 0.05, 1.5, 0.01],
-            ["engine_braking", "Engine braking", "%", 20, 300, 5],
-            ["turbo_share", "Turbo: share of the torque that is boost (0: no turbo)", "%", 0, 90, 5],
-            ["turbo_spool", "Turbo: spool time (the lag)", "s", 0.05, 2, 0.05],
-            ["turbo_threshold", "Turbo: from", "rpm", 1000, 6000, 100],
-            ["turbo_boost", "Turbo: boost pressure at full boost (0: the share of the torque above is used)", "bar", 0, 6, 0.05],
-            ["turbo_intercooler", "Turbo: intercooler efficiency", "%", 0, 95, 1],
-            ["turbo_efficiency", "Turbo: compressor efficiency", "%", 55, 80, 1]
+            ["power", "Power", "%", 10, 500, 1],
+            ["idle_rpm", "Idle speed", "rpm", 300, 4000, 50],
+            ["limiter_rpm", "Rev limit", "rpm", 2000, 20000, 100],
+            ["limiter_hz", "Rev limiter: cuts per second", "Hz", 1, 60, 1],
+            ["engine_inertia", "Inertia of the engine", "kg m²", 0.01, 3, 0.01],
+            ["engine_braking", "Engine braking", "%", 0, 500, 5],
+            ["turbo_share", "Turbo: share of the torque that is boost (0: no turbo)", "%", 0, 95, 5],
+            ["turbo_spool", "Turbo: spool time (the lag)", "s", 0.02, 5, 0.05],
+            ["turbo_threshold", "Turbo: from", "rpm", 500, 10000, 100],
+            ["turbo_boost", "Turbo: boost pressure at full boost (0: the share of the torque above is used)", "bar", 0, 10, 0.05],
+            ["turbo_intercooler", "Turbo: intercooler efficiency", "%", 0, 99, 1],
+            ["turbo_efficiency", "Turbo: compressor efficiency", "%", 40, 90, 1]
         ] },
         { name: "Transmission", items: [
             ["drive", "Drive", "", 0, 0, 0],
-            ["final_drive", "Final drive", "", 1.5, 6.5, 0.05],
-            ["shift_time", "Shift time (without a clutch pedal)", "s", 0.05, 1.5, 0.01],
-            ["clutch_start_rpm", "Automatic clutch: starts to grip at", "rpm", 500, 6000, 50],
-            ["clutch_full_rpm", "Automatic clutch: grips fully at", "rpm", 600, 7000, 50],
+            ["final_drive", "Final drive", "", 1, 10, 0.05],
+            ["shift_time", "Shift time (without a clutch pedal)", "s", 0.02, 3, 0.01],
+            ["clutch_start_rpm", "Automatic clutch: starts to grip at", "rpm", 300, 10000, 50],
+            ["clutch_full_rpm", "Automatic clutch: grips fully at", "rpm", 400, 12000, 50],
             ["gearbox", "Gearbox", "", 0, 0, 0],
-            ["cvt_rpm", "CVT: engine speed at full throttle", "rpm", 1500, 12000, 100],
-            ["tc_stall_rpm", "Torque converter: stall speed", "rpm", 1000, 5000, 50],
-            ["tc_ratio", "Torque converter: torque ratio at stall", "", 1, 3, 0.05],
+            ["cvt_rpm", "CVT: engine speed at full throttle", "rpm", 1000, 20000, 100],
+            ["tc_stall_rpm", "Torque converter: stall speed", "rpm", 500, 8000, 50],
+            ["tc_ratio", "Torque converter: torque ratio at stall", "", 1, 4, 0.05],
             ["gears", "Gears (a CVT runs between the first and the last)", "", 0, 0, 0],
-            ["reverse_ratio", "Reverse", "", 1.0, 6.0, 0.05],
-            ["clutch", "Clutch capacity (x peak torque)", "", 1.0, 3.5, 0.05],
+            ["reverse_ratio", "Reverse", "", 0.5, 10, 0.05],
+            ["clutch", "Clutch capacity (x peak torque)", "", 0.5, 6, 0.05],
             ["diff", "Differential", "", 0, 0, 0],
-            ["diff_preload", "Limited slip: preload", "Nm", 0, 800, 10],
+            ["diff_preload", "Limited slip: preload", "Nm", 0, 2000, 10],
             ["diff_power", "Limited slip: lock under power", "%", 0, 100, 1],
             ["diff_coast", "Limited slip: lock off the throttle", "%", 0, 100, 1],
-            ["diff_lock", "Limited slip: build-up", "Nm/(rad/s)", 0, 400, 5],
+            ["diff_lock", "Limited slip: build-up", "Nm/(rad/s)", 0, 1000, 5],
             ["center_diff", "Centre differential (all wheel drive)", "", 0, 0, 0],
             ["center_split", "Torque to the front (all wheel drive)", "%", 0, 100, 1]
         ] },
         { name: "Brakes", items: [
-            ["brake_total", "Brakes: front and rear together (per side)", "Nm", 500, 7000, 50],
-            ["brake_bias", "Brake bias: the share of the front", "%", 40, 85, 1]
+            ["brake_total", "Brakes: front and rear together (per side)", "Nm", 100, 15000, 50],
+            ["brake_bias", "Brake bias: the share of the front", "%", 20, 95, 1]
         ] },
         { name: "Aerodynamics and steering", items: [
-            ["drag_coefficient", "Drag coefficient", "", 0.15, 1.2, 0.01],
-            ["downforce_front", "Downforce at the front axle at 100 km/h (negative: lift)", "N", -2000, 8000, 50],
-            ["downforce_rear", "Downforce at the rear axle at 100 km/h", "N", -2000, 8000, 50],
-            ["max_steer_deg", "Steering lock", "°", 10, 50, 1],
-            ["ackermann", "Ackermann (the inner wheel steers more)", "%", 0, 100, 5]
+            ["drag_coefficient", "Drag coefficient", "", 0.05, 2, 0.01],
+            ["downforce_front", "Downforce at the front axle at 100 km/h (negative: lift)", "N", -10000, 20000, 50],
+            ["downforce_rear", "Downforce at the rear axle at 100 km/h", "N", -10000, 20000, 50],
+            ["max_steer_deg", "Steering lock", "°", 5, 80, 1],
+            ["ackermann", "Ackermann (the inner wheel steers more)", "%", -50, 150, 5]
         ] },
         { name: "Engine sound", items: [
-            ["es_volume", "Volume", "", 0, 3, 0.05],
+            ["es_volume", "Volume", "", 0, 5, 0.05],
             ["es_convolution", "Through the exhaust (impulse response)", "", 0, 1, 0.05],
             ["es_audio_volume", "Exhaust volume", "", 0, 10, 0.1],
             ["es_hf_gain", "High frequency gain", "", 0, 0.2, 0.005],
@@ -142,36 +142,36 @@ OpenRacer.CarTuning = (function () {
     // the systems of the car: each has a tick (the car has it, or not) and its settings; a car that does not have one has no key for it and no light on the gauge
     var FEATURES = [
         { key: "tc", label: "Traction control", items: [
-            ["tc_allowance", "Wheel spin allowed", "%", 30, 400, 5]
+            ["tc_allowance", "Wheel spin allowed", "%", 5, 800, 5]
         ] },
         { key: "abs", label: "ABS", items: [] },
         { key: "esc", label: "Stability control (ESC)", items: [
-            ["esc_gain", "How hard it steps in", "%", 30, 250, 5]
+            ["esc_gain", "How hard it steps in", "%", 10, 400, 5]
         ] },
         { key: "launch_control", label: "Launch control", items: [
-            ["launch_rpm", "Engine speed", "rpm", 2000, 13000, 100]
+            ["launch_rpm", "Engine speed", "rpm", 1000, 20000, 100]
         ] },
         { key: "two_step", label: "Two-step (the key, or the clutch pedal at a standstill)", items: [
-            ["two_step_rpm", "Engine speed", "rpm", 2000, 13000, 100]
+            ["two_step_rpm", "Engine speed", "rpm", 1000, 20000, 100]
         ] },
         { key: "pops", label: "Pops and bangs (unburnt fuel burns in the exhaust)", items: [
             ["pops_amount", "How often (on the rev limiter and the two-step)", "%", 0, 100, 5],
             ["pops_overrun", "After lifting off the throttle: for", "s", 0, 4, 0.1],
             ["pops_rpm", "From an engine speed of", "rpm", 1000, 8000, 100],
-            ["pops_loud", "How loud", "%", 20, 300, 10],
-            ["pops_flames", "Flames from the exhaust", "%", 0, 200, 10]
+            ["pops_loud", "How loud", "%", 0, 500, 10],
+            ["pops_flames", "Flames from the exhaust", "%", 0, 400, 10]
         ] },
         { key: "antilag", label: "Anti-lag (keeps the turbo spinning off the throttle)", items: [
             ["antilag_mode", "When", "", 0, 0, 0],
-            ["antilag_boost", "Boost that is held", "%", 10, 100, 5],
+            ["antilag_boost", "Boost that is held", "%", 5, 100, 5],
             ["antilag_rpm", "Works from an engine speed of", "rpm", 1000, 8000, 100],
-            ["antilag_time", "Longest time that it works", "s", 0.5, 20, 0.5],
-            ["antilag_bangs", "Bangs and flames", "%", 0, 300, 10],
-            ["antilag_fuel", "Extra fuel use while it works", "%", 0, 300, 10]
+            ["antilag_time", "Longest time that it works", "s", 0.5, 60, 0.5],
+            ["antilag_bangs", "Bangs and flames", "%", 0, 500, 10],
+            ["antilag_fuel", "Extra fuel use while it works", "%", 0, 500, 10]
         ] },
         { key: "boost_gauge", label: "Boost gauge (the pressure of the turbo)", items: [
-            ["boost_full", "Boost pressure at full boost (when the turbo has no pressure of its own)", "bar", 0.2, 6, 0.05],
-            ["boost_scale", "The gauge goes up to", "bar", 0.5, 4, 0.5]
+            ["boost_full", "Boost pressure at full boost (when the turbo has no pressure of its own)", "bar", 0.1, 10, 0.05],
+            ["boost_scale", "The gauge goes up to", "bar", 0.5, 10, 0.5]
         ] }
     ];
     var FEATURE_DEFAULTS = {

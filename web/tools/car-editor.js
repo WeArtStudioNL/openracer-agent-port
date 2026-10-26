@@ -1972,7 +1972,50 @@ function tuningFromCar(car) {
     TUNING_KEYS.forEach((k) => { tuning[k] = all[k]; });
     tuning.compound = all.compound;                       // (not a number: the kind of tyre)
     Object.keys(OpenRacer.CarTuning.FEATURE_DEFAULTS).forEach((k) => { tuning[k] = all[k]; });     // the ticks of the systems and the extras, with their settings
+    tuningBase = Object.assign({}, tuning);
     renderTuningCard();
+}
+
+let tuningBase = {};                                  // the values of the car as it was loaded (the ↺ of a setting goes back to it)
+
+// a setting as a line (the label, a number, the unit, ↺) with a slider under it, as the tuning menu of the game has it (Tuning.js): the slider covers the range of the
+// table, the number takes anything up to twice that
+function tuneSlider(item, onChange) {
+    const [key, label, unit, min, max, step] = item;
+    const wrap = document.createElement("div");
+    wrap.className = "tuneItem";
+    wrap.dataset.tuneKey = key;
+    const line = document.createElement("div");
+    line.className = "tuneLine";
+    const text = document.createElement("span");
+    text.className = "tuneLabel";
+    text.textContent = label;
+    const number = document.createElement("input");
+    number.type = "number"; number.min = min; number.max = max; number.step = step; number.id = "tune_" + key;
+    const unitSpan = document.createElement("span");
+    unitSpan.className = "tuneUnit";
+    unitSpan.textContent = unit;
+    const reset = document.createElement("button");
+    reset.type = "button"; reset.className = "small ghost tuneReset"; reset.textContent = "↺"; reset.title = "Back to the value of the car as loaded";
+    line.appendChild(text); line.appendChild(number); line.appendChild(unitSpan); line.appendChild(reset);
+    const range = document.createElement("input");
+    range.type = "range"; range.min = min; range.max = max; range.step = step;
+    wrap.appendChild(line); wrap.appendChild(range);
+    const digits = step >= 1 ? 0 : (step >= 0.1 ? 1 : (step >= 0.01 ? 2 : 3));
+    const show = () => {
+        const v = Number.isFinite(tuning[key]) ? tuning[key] : min;
+        if (document.activeElement !== number) number.value = Number(v).toFixed(digits);
+        range.value = Math.min(max, Math.max(min, v));
+        const changed = Number.isFinite(tuningBase[key]) && Math.abs(tuningBase[key] - v) > 1e-9;
+        line.classList.toggle("changed", changed);
+        reset.style.visibility = changed ? "" : "hidden";
+    };
+    const set = (v) => { tuning[key] = v; show(); onChange(); };
+    range.addEventListener("input", () => set(parseFloat(range.value)));
+    number.addEventListener("change", () => { const v = parseFloat(number.value); if (Number.isFinite(v)) set(Math.min(max * 2, Math.max(min < 0 ? min * 2 : min / 2, v))); else show(); });
+    reset.addEventListener("click", () => { if (Number.isFinite(tuningBase[key])) set(tuningBase[key]); });
+    show();
+    return wrap;
 }
 
 function renderTuningCard() {
@@ -1981,55 +2024,41 @@ function renderTuningCard() {
     OpenRacer.CarTuning.GROUPS.forEach((group) => {
         const items = group.items.filter((item) => TUNING_KEYS.includes(item[0]));
         if (!items.length) return;
-        const head = document.createElement("div");
-        head.className = "group";
-        head.textContent = group.name;
-        box.appendChild(head);
+        const details = document.createElement("details");
+        details.className = "tuneGroup";
+        details.open = group.name === "Chassis";
+        const summary = document.createElement("summary");
+        summary.textContent = group.name;
+        details.appendChild(summary);
         if (group.name === "Tyres") {
             // the kind of tyre: a choice, not a number; it changes the grip, the working temperature, the wear and where the rubber smokes
-            const row = document.createElement("div");
-            row.className = "row";
-            const cell = document.createElement("div");
+            const wrap = document.createElement("div");
+            wrap.className = "tuneItem";
+            const line = document.createElement("div");
+            line.className = "tuneLine";
+            const text = document.createElement("span");
+            text.className = "tuneLabel";
+            text.textContent = "Tyre compound (grip, working temperature, wear, smoke)";
             const select = document.createElement("select");
             select.id = "tune_compound";
             OpenRacer.TyreCompounds.forEach((k) => { const o = document.createElement("option"); o.value = k.id; o.textContent = k.name; select.appendChild(o); });
             select.value = tuning.compound || "road";
             select.addEventListener("change", () => { tuning.compound = select.value; tuningChanged(); });
-            const hint = document.createElement("div");
-            hint.className = "hint";
-            hint.textContent = "Tyre compound (grip, working temperature, wear, smoke)";
-            cell.appendChild(select); cell.appendChild(hint);
-            row.appendChild(cell);
-            box.appendChild(row);
+            line.appendChild(text); line.appendChild(select);
+            wrap.appendChild(line);
+            details.appendChild(wrap);
         }
-        for (let i = 0; i < items.length; i += 3) {
-            const row = document.createElement("div");
-            row.className = "row";
-            items.slice(i, i + 3).forEach((item) => {
-                const [key, label, unit, min, max, step] = item;
-                const cell = document.createElement("div");
-                const input = document.createElement("input");
-                input.type = "number"; input.min = min; input.max = max; input.step = step; input.value = tuning[key];
-                input.id = "tune_" + key;
-                input.addEventListener("input", () => { tuning[key] = parseFloat(input.value); tuningChanged(); });
-                const hint = document.createElement("div");
-                hint.className = "hint";
-                hint.textContent = label + (unit ? " (" + unit + ")" : "");
-                cell.appendChild(input); cell.appendChild(hint);
-                cell.dataset.tuneKey = key;
-                row.appendChild(cell);
-            });
-            box.appendChild(row);
-        }
+        items.forEach((item) => { if (item[4] > item[3]) details.appendChild(tuneSlider(item, tuningChanged)); });
+        box.appendChild(details);
     });
     // the systems and the extras: a tick each, with their settings below it while it is ticked
-    const fhead = document.createElement("div");
-    fhead.className = "group";
-    fhead.textContent = "Systems and extras";
-    box.appendChild(fhead);
+    const features = document.createElement("details");
+    features.className = "tuneGroup";
+    features.innerHTML = "<summary>Systems and extras</summary>";
     OpenRacer.CarTuning.FEATURES.forEach((feature) => {
         const wrap = document.createElement("div");
         wrap.dataset.tuneFeature = feature.key;
+        wrap.className = "tuneFeature";
         const line = document.createElement("label");
         line.className = "check";
         const tick = document.createElement("input");
@@ -2037,38 +2066,31 @@ function renderTuningCard() {
         line.appendChild(tick); line.appendChild(document.createTextNode(" " + feature.label));
         wrap.appendChild(line);
         const inner = document.createElement("div");
+        inner.className = "tuneInner";
         inner.style.display = tick.checked ? "" : "none";
         tick.addEventListener("change", () => { tuning[feature.key + "_on"] = tick.checked; inner.style.display = tick.checked ? "" : "none"; tuningChanged(); });
-        for (let i = 0; i < feature.items.length; i += 3) {
-            const row = document.createElement("div");
-            row.className = "row";
-            feature.items.slice(i, i + 3).forEach((item) => {
-                const [key, label, unit, min, max, step] = item;
-                const cell = document.createElement("div");
-                if (max > min) {
-                    const input = document.createElement("input");
-                    input.type = "number"; input.min = min; input.max = max; input.step = step; input.value = tuning[key];
-                    input.id = "tune_" + key;
-                    input.addEventListener("input", () => { tuning[key] = parseFloat(input.value); tuningChanged(); });
-                    cell.appendChild(input);
-                } else {
-                    const sel = document.createElement("select");
-                    (key === "antilag_mode" ? [["lift", "After lifting off the throttle"], ["launch", "Only with the two-step, the transbrake or the launch control"]] : []).forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; sel.appendChild(o); });
-                    sel.value = tuning[key];
-                    sel.addEventListener("change", () => { tuning[key] = sel.value; tuningChanged(); });
-                    cell.appendChild(sel);
-                }
-                const hint = document.createElement("div");
-                hint.className = "hint";
-                hint.textContent = label + (unit ? " (" + unit + ")" : "");
-                cell.appendChild(hint);
-                row.appendChild(cell);
-            });
-            inner.appendChild(row);
-        }
+        feature.items.forEach((item) => {
+            const [key, label, unit, min, max] = item;
+            if (max > min) { inner.appendChild(tuneSlider(item, tuningChanged)); return; }
+            const w = document.createElement("div");
+            w.className = "tuneItem";
+            const l = document.createElement("div");
+            l.className = "tuneLine";
+            const t = document.createElement("span");
+            t.className = "tuneLabel";
+            t.textContent = label + (unit ? " (" + unit + ")" : "");
+            const sel = document.createElement("select");
+            (key === "antilag_mode" ? [["lift", "After lifting off the throttle"], ["launch", "Only with the two-step, the transbrake or the launch control"]] : []).forEach(([v, tx]) => { const o = document.createElement("option"); o.value = v; o.textContent = tx; sel.appendChild(o); });
+            sel.value = tuning[key];
+            sel.addEventListener("change", () => { tuning[key] = sel.value; tuningChanged(); });
+            l.appendChild(t); l.appendChild(sel);
+            w.appendChild(l);
+            inner.appendChild(w);
+        });
         wrap.appendChild(inner);
-        box.appendChild(wrap);
+        features.appendChild(wrap);
     });
+    box.appendChild(features);
     $("tuningInfo").textContent = TUNING_KEYS.length + " settings";
     syncTuningVisibility();
     renderSetups();
