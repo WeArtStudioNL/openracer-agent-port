@@ -503,6 +503,9 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.tc_stall_rpm !== undefined) this.tcStallRPM = t.tc_stall_rpm;
         if(t.tc_ratio !== undefined) this.tcRatio = t.tc_ratio;
         if(t.tc_lockup !== undefined) this.tcLockup = !!t.tc_lockup;
+        if(t.live_axle_front !== undefined) this.liveAxle.front = !!t.live_axle_front;      // (a suspension type changed in the tuning menu: Car.rebuild)
+        if(t.live_axle_rear !== undefined) this.liveAxle.rear = !!t.live_axle_rear;
+        if(t.efficiency !== undefined) this.driveEfficiency = t.efficiency;
         if(t.cvt_rpm !== undefined) this.cvtRPM = t.cvt_rpm;
         if(t.cvt_rate !== undefined) this.cvtRate = t.cvt_rate;
         if(t.cvt_low !== undefined) this.cvtLow = t.cvt_low;

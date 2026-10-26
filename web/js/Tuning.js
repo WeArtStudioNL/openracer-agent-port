@@ -38,9 +38,29 @@ var Tuning = (function() {
 
     // ---- the car follows the values
 
+    var rebuildSig = null, rebuildTimer = null, lastCurve = null;      // what the model of the car is built from, as it was last applied; the torque curve as last applied
+    function builtFrom(c) { return JSON.stringify([c.suspension, c.driveline, c.softbody, c.dimensions, c.steering_wheel && c.steering_wheel.degrees]); }
     function apply() {
         var v = values;
+        if(v.width > 0 && v.height > 0) car.frontal_area = v.width * v.height * 0.85;
         car.vehicle.retune(OpenRacer.CarTuning.toRetune(v, car.frontal_area, air_density));
+        // the rest of the car editor, live: the cameras, the steering wheel, the rider of a motorcycle, the torque curve, the sound; and the model built again for
+        // what it is built from (the suspension and the driveline of the parts library, the soft body, the size), half a second after the last change
+        var tuned = tunedConfig();
+        if(OpenRacer.cameraSettings) car.cameraSettings = OpenRacer.cameraSettings(tuned);
+        if(car.steeringWheel && v.steering_degrees > 0) car.steeringWheel.degrees = v.steering_degrees;
+        if(car.vehicle.controller && car.vehicle.controller.retune && tuned.motorcycle) car.vehicle.controller.retune(tuned.motorcycle);
+        var curve = tuned.engine && tuned.engine.torque_curve;
+        if(curve && car.engine && JSON.stringify(curve) !== JSON.stringify(lastCurve)) {
+            car.engine.torque_curve = curve.map(function(p) { return { rpm: p[0], nm: p[1] }; });
+            lastCurve = curve;
+        }
+        var sig = builtFrom(tuned);
+        if(rebuildSig !== null && sig !== rebuildSig && car.rebuild) {
+            clearTimeout(rebuildTimer);
+            rebuildTimer = setTimeout(function() { car.rebuild(tunedConfig()); message("The car is built again (the suspension, the driveline, the soft body, the size)."); }, 500);
+        }
+        rebuildSig = sig;
         car.mass = v.mass;
         car.final_drive = v.final_drive;
         car.Cd = v.drag_coefficient;
@@ -51,6 +71,8 @@ var Tuning = (function() {
         Object.keys(v).forEach(function(key) {
             if(key.indexOf("es_") === 0) sound[key.substring(3)] = v[key];
         });
+        if(v.sim_layout) sound.layout = v.sim_layout;
+        if(v.sim_ir) sound.ir = v.sim_ir;
         EngineSound.setParams(sound);
         updateInfo();
     }
@@ -235,8 +257,17 @@ var Tuning = (function() {
         compound: ["Tyre compound", OpenRacer.TyreCompounds.map(function(k) { return [k.id, k.name]; })],
         center_diff: ["Centre differential", [["open", "Open"], ["lsd", "Limited slip"], ["locked", "Locked"]]],
         tyre_damage: ["Tyre damage", [["off", "Off"], ["on", "On (a hard hit can puncture a tyre: it loses its pressure)"]]],
-        antilag_mode: ["When", [["lift", "After lifting off the throttle"], ["launch", "Only with the two-step, the transbrake or the launch control"]]]
+        antilag_mode: ["When", [["lift", "After lifting off the throttle"], ["launch", "Only with the two-step, the transbrake or the launch control"]]],
+        // the rest of the car editor (the lists are made when the menu is built: the tables they come from load after this file)
+        susp_front: ["Suspension at the front", function() { return partsTypes(); }],
+        susp_rear: ["Suspension at the rear", function() { return partsTypes(); }],
+        engine_place: ["Engine placement", [["front", "Front"], ["mid", "Mid"], ["rear", "Rear"]]],
+        tc_lockup: ["Torque converter: lock-up clutch", [["on", "On"], ["off", "Off"]]],
+        sb_enabled: ["The car dents (the shell of nodes)", [["on", "On"], ["off", "Off (a rigid body; the car is built again)"]]],
+        sim_layout: ["Engine layout (the sound)", function() { var L = OpenRacer.engineSimLayouts || {}; return Object.keys(L).map(function(id) { return [id, L[id].label || id]; }); }],
+        sim_ir: ["Exhaust of the sound", function() { return (OpenRacer.engineSimImpulseResponses || []).map(function(ir) { return [ir.id, ir.label || ir.id]; }); }]
     };
+    function partsTypes() { var T = OpenRacer.PartsLibrary && OpenRacer.PartsLibrary.TYPES || {}; return Object.keys(T).map(function(id) { return [id, T[id].label || id]; }); }
 
     function selectRow(key) {
         var item = document.createElement("div");
@@ -245,7 +276,8 @@ var Tuning = (function() {
         line.className = "line";
         line.innerHTML = "<span class=\"label\">" + SELECTS[key][0] + "</span>";
         var select = document.createElement("select");
-        select.innerHTML = SELECTS[key][1].map(function(o) { return "<option value=\"" + o[0] + "\">" + o[1] + "</option>"; }).join("");
+        var options = typeof SELECTS[key][1] === "function" ? SELECTS[key][1]() : SELECTS[key][1];
+        select.innerHTML = options.map(function(o) { return "<option value=\"" + o[0] + "\">" + o[1] + "</option>"; }).join("");
         select.style.width = "130px";
         select.addEventListener("change", function() { set(key, select.value); select.blur(); });
         line.appendChild(select);
@@ -472,6 +504,8 @@ var Tuning = (function() {
         base = fromConfig(config);
         values = clone(base);
         load();
+        rebuildSig = builtFrom(OpenRacer.CarTuning.toConfig(config, values));      // (what the car is built with now: a change from here builds it again)
+        lastCurve = config.engine && config.engine.torque_curve ? clone(config.engine.torque_curve) : null;
         controls = [];
         if(panel) panel.parentNode.removeChild(panel);
         build();

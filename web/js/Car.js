@@ -179,7 +179,7 @@ OpenRacer.Car = function( config, domElement ) {
     var placed = false; // set once the car has been put on the road
 
     // The model: the body (it pitches and rolls) and the four wheels, see CarLoader.js
-    OpenRacer.loadCarModel(config, function(model) {
+    var onModel = function(model) {
         tobj.bodyLift = model.bodyLift;
         tobj.steeringWheel = model.steeringWheel || null;
         tobj.rig = model.rig || null; // the moving parts of the suspension and the steering of the model, when it has them
@@ -207,7 +207,8 @@ OpenRacer.Car = function( config, domElement ) {
                 function() { tobj.driver = driver; },
                 function(error) { console.warn("The driver model could not be loaded: " + (error && error.message ? error.message : error)); });
         }
-    }, function(message) {
+    };
+    var onModelError = function(message) {
         tobj.loadError = message;
         console.error(message);
         var banner = document.createElement("div");
@@ -215,7 +216,23 @@ OpenRacer.Car = function( config, domElement ) {
             "padding: 10px 20px; background: rgba(160, 0, 0, 0.85); color: #ffffff; font-family: Arial;";
         banner.textContent = message;
         document.body.appendChild(banner);
-    });
+    };
+    OpenRacer.loadCarModel(config, onModel, onModelError);
+
+    // The car built again from another configuration (the tuning menu: a suspension type, the driveline, the soft body, the size): the old model goes, the physics keeps
+    // its place and its speed, and the model, the rig, the parts, the soft body and the driver come back from the new configuration, as at the start
+    this.rebuild = function(newConfig) {
+        config = newConfig;
+        tobj.config = newConfig;
+        tobj.bodyLoaded = false; tobj.wheelsLoaded = false;
+        while(tobj.body.children.length) tobj.body.remove(tobj.body.children[0]);
+        for(var i = 0; i < tobj.wheels.length; i++) { var o = tobj.wheels[i].object; if(o && o.parent) o.parent.remove(o); tobj.wheels[i].object = null; }
+        tobj.rig = null; tobj.softBodyMesh = null; tobj.parts = null; tobj.driver = null; tobj.steeringWheel = null; tobj.head = null; tobj.swingarm = null; tobj.chain = null;
+        tobj.vehicle.softBody = null; tobj.vehicle.parts = null;
+        tobj.vehicle.retune({ live_axle_front: !!(OpenRacer.PartsLibrary && OpenRacer.PartsLibrary.isLive(OpenRacer.PartsLibrary.typeOf(config, "front"))),
+            live_axle_rear: !!(OpenRacer.PartsLibrary && OpenRacer.PartsLibrary.isLive(OpenRacer.PartsLibrary.typeOf(config, "rear"))) });
+        OpenRacer.loadCarModel(config, onModel, onModelError);
+    };
 
     // The wheels of a glTF model say where the wheels are: the physics takes the wheelbase, the tracks and the tyre from them, and the body
     // is placed so that its wheel arches are over the wheels (whatever the origin of the model is), so the game shows the car the way

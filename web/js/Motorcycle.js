@@ -32,34 +32,39 @@ OpenRacer.Motorcycle = function (settings) {
     var G = 9.81, DEG = Math.PI / 180;
     var self = this;
     this.settings = s;
-    this.maxLean = (s.max_lean_deg || 60) * DEG;
-    this.overLean = (s.over_lean_deg !== undefined ? s.over_lean_deg : 10) * DEG;   // how far past what the tyres hold the rider can lean it: past that the tyres let go (a lowside)
-    this.crashLean = (s.crash_lean_deg || 78) * DEG;                                   // from here the bike is down (78: a powerslide is ridden out until the bike nearly lies on the road)
-    this.balance = s.balance || 1;
-    this.leanResponse = s.lean_response || 0.1;          // s: how fast the lean follows what is asked
-    this.camberThrust = s.camber_thrust !== undefined ? s.camber_thrust : 0.85;     // the part of load * tan(lean) that a leaned tyre gives by itself (a round tyre: nearly all of it)
-    this.standUp = s.throttle_stand_up !== undefined ? s.throttle_stand_up : 0.18;
-    this.cameraRollFactor = s.camera_roll !== undefined ? s.camera_roll : 0.45;
-    this.keyRate = s.key_steer_rate || 2;                    // how much faster the steering keys bring the lean command than they turn the wheels of a car
-    this.cornerBrake = s.corner_brake !== undefined ? s.corner_brake : 0.2;    // how much further the bike leans into the bend on the rear brake
-    this.riderMass = s.rider_mass !== undefined ? s.rider_mass : 80;
-    this.maxHang = s.hang_off !== undefined ? s.hang_off : 0.3;                    // m: how far the rider hangs off the seat to the inside of a bend
+    // the settings of the bike (car.json "motorcycle"; the tuning menu changes them while it rides: retune)
+    function readSettings() {
+        self.maxLean = (s.max_lean_deg || 60) * DEG;
+        self.overLean = (s.over_lean_deg !== undefined ? s.over_lean_deg : 10) * DEG;   // how far past what the tyres hold the rider can lean it: past that the tyres let go (a lowside)
+        self.crashLean = (s.crash_lean_deg || 78) * DEG;                                   // from here the bike is down (78: a powerslide is ridden out until the bike nearly lies on the road)
+        self.balance = s.balance || 1;
+        self.leanResponse = s.lean_response || 0.1;          // s: how fast the lean follows what is asked
+        self.camberThrust = s.camber_thrust !== undefined ? s.camber_thrust : 0.85;     // the part of load * tan(lean) that a leaned tyre gives by itself (a round tyre: nearly all of it)
+        self.standUp = s.throttle_stand_up !== undefined ? s.throttle_stand_up : 0.18;
+        self.cameraRollFactor = s.camera_roll !== undefined ? s.camera_roll : 0.45;
+        self.keyRate = s.key_steer_rate || 2;                    // how much faster the steering keys bring the lean command than they turn the wheels of a car
+        self.cornerBrake = s.corner_brake !== undefined ? s.corner_brake : 0.2;    // how much further the bike leans into the bend on the rear brake
+        self.riderMass = s.rider_mass !== undefined ? s.rider_mass : 80;
+        self.maxHang = s.hang_off !== undefined ? s.hang_off : 0.3;                    // m: how far the rider hangs off the seat to the inside of a bend
+        self.counterWait = s.counter_wait !== undefined ? s.counter_wait : 1.0;      // s after the brake before the countersteering starts to come back
+        self.counterRamp = s.counter_ramp !== undefined ? s.counter_ramp : 1.5;      // s in which it comes back
+        self.fastFrom = s.fast_from !== undefined ? s.fast_from : 38;                  // m/s: from this speed the lean that the keys can ask for goes down
+        self.fastLean = (s.fast_lean_deg !== undefined ? s.fast_lean_deg : 30) * DEG;   // the lean it can still ask for at fast_from + 22 m/s (it was 18 degrees: the bike hardly steered at 200 km/h)
+        self.gripG = s.grip_g !== undefined ? s.grip_g : 1.05;                        // the lateral g that the tyres give when nothing else is asked of them
+        self.frontComply = s.front_comply !== undefined ? s.front_comply : 3;            // how much the front wheel castors into its own slip on the brake (3: it keeps a quarter of the slip angle)
+        self.airPitch = s.air_pitch !== undefined ? Math.max(0, s.air_pitch) : 1;      // in the air the wheels turn the bike: gas brings the nose up, the brake brings it down (a factor on the reaction of the wheels; 0: off)
+        self.footLean = (s.foot_lean_deg !== undefined ? s.foot_lean_deg : 7) * DEG;   // how far the bike rests to the right on the foot
+    }
+    readSettings();
+    this.retune = function (changes) { Object.assign(s, changes || {}); self.settings = s; readSettings(); };
     this.posture = { lat: 0, long: 0, drop: 0, tuck: 0, sit: 0, knee: 0 };       // body space: lat to the left, long forward, drop up (m); tuck, sit, knee: 0 to 1
     var vPrev = null, accel = { x: 0, y: 0, z: 0 }, dw = { x: 0, y: 0, z: 0 };
     this.riderKey = 0;                                      // -1: the rider is put back, 1: forward (keys, set by Car.js)
     this.sinceBrake = 99; this.counterGain = 1;
-    this.counterWait = s.counter_wait !== undefined ? s.counter_wait : 1.0;      // s after the brake before the countersteering starts to come back
-    this.counterRamp = s.counter_ramp !== undefined ? s.counter_ramp : 1.5;      // s in which it comes back
-    this.fastFrom = s.fast_from !== undefined ? s.fast_from : 38;                  // m/s: from this speed the lean that the keys can ask for goes down
-    this.fastLean = (s.fast_lean_deg !== undefined ? s.fast_lean_deg : 30) * DEG;   // the lean it can still ask for at fast_from + 22 m/s (it was 18 degrees: the bike hardly steered at 200 km/h)
-    this.gripG = s.grip_g !== undefined ? s.grip_g : 1.05;                        // the lateral g that the tyres give when nothing else is asked of them
-    this.frontComply = s.front_comply !== undefined ? s.front_comply : 3;            // how much the front wheel castors into its own slip on the brake (3: it keeps a quarter of the slip angle)
     this.complied = 0;
     this.footDownL = 0; this.footStill = false; this.footWait = 0;       // the left foot (footDown is the right one), whether the bike is at a standstill, and the time since the feet should come up
     this.footDown = 0;                                       // 0 to 1: the right foot of the rider on the road (a standstill)
     this.noFoot = false;                                     // the car editor: the bike stands upright on its bench, the foot never goes down
-    this.airPitch = s.air_pitch !== undefined ? Math.max(0, s.air_pitch) : 1;      // in the air the wheels turn the bike: gas brings the nose up, the brake brings it down (a factor on the reaction of the wheels; 0: off)
-    this.footLean = (s.foot_lean_deg !== undefined ? s.foot_lean_deg : 7) * DEG;   // how far the bike rests to the right on the foot
     this.wheelieScale = 1;                                  // the throttle that the wheelie control leaves (1: all of it)
     this.crashed = false;                                   // the bike is down: the rider is a ragdoll, the bike a body that slides, no input until a reset or a repair
     this.limp = false;                                      // the rider has gone limp on the bike (a hit, or the key for it): no throttle, no steering, no balance; the bike rides on until his weight tips it over

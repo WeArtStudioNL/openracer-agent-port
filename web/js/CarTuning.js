@@ -67,7 +67,9 @@ OpenRacer.CarTuning = (function () {
             ["turbo_threshold", "Turbo: from", "rpm", 500, 10000, 100],
             ["turbo_boost", "Turbo: boost pressure at full boost (0: the share of the torque above is used)", "bar", 0, 10, 0.05],
             ["turbo_intercooler", "Turbo: intercooler efficiency", "%", 0, 99, 1],
-            ["turbo_efficiency", "Turbo: compressor efficiency", "%", 40, 90, 1]
+            ["turbo_efficiency", "Turbo: compressor efficiency", "%", 40, 90, 1],
+            ["gen_power", "Torque curve: peak power (a change makes a new curve)", "hp", 20, 3000, 5],
+            ["gen_peak_rpm", "Torque curve: peak power at", "rpm", 1500, 15000, 100]
         ] },
         { name: "Transmission", items: [
             ["drive", "Drive", "", 0, 0, 0],
@@ -101,7 +103,52 @@ OpenRacer.CarTuning = (function () {
             ["max_steer_deg", "Steering lock", "°", 5, 80, 1],
             ["ackermann", "Ackermann (the inner wheel steers more)", "%", -50, 150, 5]
         ] },
+        { name: "Suspension and driveline", items: [
+            ["susp_front", "Suspension at the front (the parts library; the car is built again)", "", 0, 0, 0],
+            ["susp_rear", "Suspension at the rear", "", 0, 0, 0],
+            ["engine_place", "Engine placement (the driveline)", "", 0, 0, 0],
+            ["efficiency", "Efficiency of the driveline", "", 0.5, 1, 0.01],
+            ["tc_lockup", "Torque converter: lock-up clutch", "", 0, 0, 0]
+        ] },
+        { name: "Size and steering wheel", items: [
+            ["length", "Length", "m", 1, 8, 0.01],
+            ["width", "Width", "m", 0.5, 3.5, 0.01],
+            ["height", "Height", "m", 0.4, 3.5, 0.01],
+            ["steering_degrees", "Steering wheel: lock to lock", "°", 90, 1440, 10]
+        ] },
+        { name: "Cameras", items: [
+            ["cam_follow_distance", "Follow camera: distance", "m", 1, 20, 0.1],
+            ["cam_follow_height", "Follow camera: height", "m", 0, 10, 0.05],
+            ["cam_follow_look_height", "Follow camera: looks at a height of", "m", -1, 5, 0.05],
+            ["cam_follow_look_z", "Follow camera: looks ahead of the car by", "m", -5, 5, 0.1],
+            ["cam_follow_smoothing", "Follow camera: smoothing", "", 0.2, 20, 0.1],
+            ["cam_follow_fov_standing", "Follow camera: field of view standing", "°", 20, 120, 1],
+            ["cam_follow_fov_fast", "Follow camera: field of view at speed", "°", 20, 140, 1],
+            ["cam_follow_fov_full_speed", "Follow camera: that field of view from", "km/h", 10, 400, 5],
+            ["cam_follow_dolly", "Follow camera: dolly with the speed", "", 0, 3, 0.05],
+            ["cam_cockpit_x", "Cockpit camera: to the left", "m", -1.5, 1.5, 0.01],
+            ["cam_cockpit_y", "Cockpit camera: height", "m", -1, 3, 0.01],
+            ["cam_cockpit_z", "Cockpit camera: forward", "m", -3, 3, 0.01],
+            ["cam_cockpit_fov", "Cockpit camera: field of view", "°", 30, 130, 1]
+        ] },
+        { name: "Soft body", items: [
+            ["sb_enabled", "The car dents (the shell of nodes; the car is built again)", "", 0, 0, 0],
+            ["sb_max_nodes", "Nodes of the shell at most", "", 10, 120, 5],
+            ["sb_wheel_strength", "A wheel comes off at a hit of (0: never)", "kN s", 0, 200, 1]
+        ] },
+        { name: "Motorcycle", items: [
+            ["bike_max_lean", "Lean at most", "°", 20, 75, 1],
+            ["bike_fast_lean", "Lean the keys can ask for at speed", "°", 5, 60, 1],
+            ["bike_rake", "Rake of the fork", "°", 15, 40, 0.5],
+            ["bike_rider_mass", "Rider", "kg", 30, 200, 1],
+            ["bike_hang_off", "The rider hangs off the seat by", "m", 0, 1, 0.02],
+            ["bike_max_lateral_g", "Lateral grip of the tyres", "g", 0.3, 2.5, 0.05],
+            ["bike_balance", "Balance of the rider", "", 0.1, 4, 0.05],
+            ["bike_fork_dive", "Dive of the fork on the brakes", "", 0, 3, 0.05]
+        ] },
         { name: "Engine sound", items: [
+            ["sim_layout", "Engine layout (the sound)", "", 0, 0, 0],
+            ["sim_ir", "Exhaust of the sound (impulse response)", "", 0, 0, 0],
             ["es_volume", "Volume", "", 0, 5, 0.05],
             ["es_convolution", "Through the exhaust (impulse response)", "", 0, 1, 0.05],
             ["es_audio_volume", "Exhaust volume", "", 0, 10, 0.1],
@@ -119,6 +166,23 @@ OpenRacer.CarTuning = (function () {
     // Which settings apply, from the values of the others: a setting that cannot do anything is not shown (the tuning menu of the game and the car editor): the CVT's engine speed
     // only with a CVT, the stall speed only with a torque converter, the clutch not with one, the limited slip's settings only with a limited slip, the centre differential only with
     // all wheel drive, the turbo's lag only with a turbo, and the anti-lag (an extra) only with a turbo
+    // the peak power of a torque curve ([[rpm, nm], ...]) in hp, and where it is; and a curve from a peak (the generator of the car editor: p = P (x + x² − x³), x = rpm / peak)
+    function peakOf(curve) {
+        if(!curve || curve.length < 2) return null;
+        var hp = 0, at = 0;
+        curve.forEach(function (p) { var rpm = Array.isArray(p) ? p[0] : p.rpm, nm = Array.isArray(p) ? p[1] : p.nm, h = nm * rpm * Math.PI / 30 / 745.7; if(h > hp) { hp = h; at = rpm; } });
+        return { hp: hp, rpm: at };
+    }
+    function generateCurve(hp, peakRpm, limiter) {
+        var watts = hp * 745.7, curve = [[0, 0]], limit = Math.max(limiter || 0, peakRpm * 1.1);
+        for(var rpm = 500; rpm <= limit + 600; rpm += 500) {
+            var x = rpm / peakRpm, p = watts * (x + x * x - x * x * x);
+            curve.push([rpm, Math.max(0, Math.round(p / (rpm * Math.PI / 30) * 10) / 10)]);
+        }
+        return curve;
+    }
+    var BIKE = { max_lean_deg: 52, fast_lean_deg: 30, rake_deg: 24.5, rider_mass: 80, hang_off: 0.3, max_lateral_g: 0.9, balance: 1, fork_dive: 1 };
+
     function visible(key, v) {
         var g = v.gearbox || "gears", lsd = v.diff === "lsd", awd = v.drive === "awd", turbo = v.turbo_share > 0 || v.turbo_boost > 0;
         switch(key) {
@@ -131,6 +195,9 @@ OpenRacer.CarTuning = (function () {
             case "center_split": return awd && v.center_diff !== "locked";
             case "turbo_spool": case "turbo_threshold": case "turbo_boost": return turbo;
             case "turbo_intercooler": case "turbo_efficiency": return v.turbo_boost > 0;
+            case "tc_lockup": return g === "torque-converter";
+            case "sb_max_nodes": case "sb_wheel_strength": return v.sb_enabled !== "off";
+            case "bike_max_lean": case "bike_fast_lean": case "bike_rake": case "bike_rider_mass": case "bike_hang_off": case "bike_max_lateral_g": case "bike_balance": case "bike_fork_dive": return v.vehicle_type === "motorcycle";
             default: return true;
         }
     }
@@ -198,6 +265,30 @@ OpenRacer.CarTuning = (function () {
             damping_rear: (ch.damping_rear !== undefined ? ch.damping_rear : 0.35) * 100,
             compound: tyres.compound || "road",
             tyre_damage: tyres.damage ? "on" : "off",
+            // the rest of the car editor (the tuning menu changes these too; Tuning.js builds the car again for what the model is built from)
+            vehicle_type: c.type === "motorcycle" ? "motorcycle" : "car",
+            susp_front: (c.suspension && c.suspension.front && c.suspension.front.type) || "model",
+            susp_rear: (c.suspension && c.suspension.rear && c.suspension.rear.type) || "model",
+            engine_place: (c.driveline && c.driveline.engine) || "front",
+            efficiency: c.drivetrain && c.drivetrain.efficiency !== undefined ? c.drivetrain.efficiency : 0.92,
+            tc_lockup: c.drivetrain && c.drivetrain.tc_lockup === false ? "off" : "on",
+            length: c.dimensions && c.dimensions.length || 4.5, width: c.dimensions && c.dimensions.width || 1.8, height: c.dimensions && c.dimensions.height || 1.4,
+            steering_degrees: (c.steering_wheel && c.steering_wheel.degrees) || 450,
+            gen_power: (function () { var pk = peakOf(c.engine && c.engine.torque_curve); return pk ? Math.round(pk.hp) : 200; })(),
+            gen_peak_rpm: (function () { var pk = peakOf(c.engine && c.engine.torque_curve); return pk ? pk.rpm : 6000; })(),
+            sb_enabled: c.softbody && c.softbody.enabled === false ? "off" : "on",
+            sb_max_nodes: (c.softbody && c.softbody.max_nodes) || 120,
+            sb_wheel_strength: c.softbody && c.softbody.wheel_strength !== undefined ? c.softbody.wheel_strength : 25,
+            bike_max_lean: (c.motorcycle || {}).max_lean_deg !== undefined ? c.motorcycle.max_lean_deg : BIKE.max_lean_deg,
+            bike_fast_lean: (c.motorcycle || {}).fast_lean_deg !== undefined ? c.motorcycle.fast_lean_deg : BIKE.fast_lean_deg,
+            bike_rake: (c.motorcycle || {}).rake_deg !== undefined ? c.motorcycle.rake_deg : BIKE.rake_deg,
+            bike_rider_mass: (c.motorcycle || {}).rider_mass !== undefined ? c.motorcycle.rider_mass : BIKE.rider_mass,
+            bike_hang_off: (c.motorcycle || {}).hang_off !== undefined ? c.motorcycle.hang_off : BIKE.hang_off,
+            bike_max_lateral_g: (c.motorcycle || {}).max_lateral_g !== undefined ? c.motorcycle.max_lateral_g : BIKE.max_lateral_g,
+            bike_balance: (c.motorcycle || {}).balance !== undefined ? c.motorcycle.balance : BIKE.balance,
+            bike_fork_dive: (c.motorcycle || {}).fork_dive !== undefined ? c.motorcycle.fork_dive : BIKE.fork_dive,
+            sim_layout: (c.sound && c.sound.engine_sim && c.sound.engine_sim.layout) || "",
+            sim_ir: (c.sound && c.sound.engine_sim && c.sound.engine_sim.ir) || "",
             tyre_width: tyres.shell && tyres.shell.width ? Math.round(tyres.shell.width * 100) : 0,
             tyre_rings: tyres.shell && tyres.shell.rings ? tyres.shell.rings : 3,
             tyre_segments: tyres.shell && tyres.shell.segments ? tyres.shell.segments : 36,
@@ -279,6 +370,7 @@ OpenRacer.CarTuning = (function () {
         var ex = c.extras || {};
         Object.keys(FEATURE_DEFAULTS).forEach(function (key) { v[key] = ex[key] !== undefined ? ex[key] : FEATURE_DEFAULTS[key]; });
         if(ex.boost_full === undefined && en.turbo && en.turbo.share) v.boost_full = Math.round(en.turbo.share * 20) / 10;
+        camerasOf(c, v);
         return v;
     }
 
@@ -307,6 +399,10 @@ OpenRacer.CarTuning = (function () {
             pressure_rear: v.pressure_rear,
             toe_front: v.toe_front,
             toe_rear: v.toe_rear,
+            efficiency: v.efficiency,
+            tc_lockup: v.tc_lockup === undefined ? undefined : v.tc_lockup !== "off",
+            live_axle_front: v.susp_front && OpenRacer.PartsLibrary ? OpenRacer.PartsLibrary.isLive(v.susp_front) : undefined,
+            live_axle_rear: v.susp_rear && OpenRacer.PartsLibrary ? OpenRacer.PartsLibrary.isLive(v.susp_rear) : undefined,
             rolling_resistance: v.rolling_resistance,
             tyre_heating: v.tyre_heating / 100,
             tyre_life: v.tyre_life / 100,
@@ -373,6 +469,18 @@ OpenRacer.CarTuning = (function () {
     }
 
     // a car configuration with the values in it (a copy; the id is left out, as car.json has none)
+    // the cameras of a configuration, in the values of the table (after fromConfig has made the rest)
+    function camerasOf(c, v) {
+        try {
+            var cams = OpenRacer.cameraSettings ? OpenRacer.cameraSettings(c) : null;
+            if(!cams) return;
+            var f = cams.follow, k = cams.cockpit;
+            v.cam_follow_distance = f.distance; v.cam_follow_height = f.height; v.cam_follow_look_height = f.look_height; v.cam_follow_look_z = f.look_z; v.cam_follow_smoothing = f.smoothing;
+            v.cam_follow_fov_standing = f.fov_standing; v.cam_follow_fov_fast = f.fov_fast; v.cam_follow_fov_full_speed = f.fov_full_speed; v.cam_follow_dolly = f.dolly;
+            v.cam_cockpit_x = k.position[0]; v.cam_cockpit_y = k.position[1]; v.cam_cockpit_z = k.position[2]; v.cam_cockpit_fov = k.fov;
+        } catch(e) { /* a configuration without dimensions: no cameras */ }
+    }
+
     function toConfig(c, v) {
         c = clone(c);
         c.chassis.mass = v.mass - (OpenRacer.Motorcycle ? OpenRacer.Motorcycle.riderMass(c) : 0);
@@ -441,6 +549,43 @@ OpenRacer.CarTuning = (function () {
         Object.keys(v).forEach(function(key) { if(key.indexOf("es_") === 0) sound[key.substring(3)] = v[key]; });
         c.sound = { engine_sim: Object.assign({}, (c.sound || {}).engine_sim, sound) };
         if(v.pops_on !== undefined) c.extras = extrasOf(v);        // (values from the car editor may not have them: the car keeps its own)
+        // the rest of the car editor (values from before these rows do not have them: the car keeps its own)
+        if(v.susp_front || v.susp_rear) {
+            c.suspension = Object.assign({}, c.suspension || {});
+            ["front", "rear"].forEach(function (axle) { var t = v["susp_" + axle]; if(t) c.suspension[axle] = Object.assign({}, c.suspension[axle] || {}, { type: t }); });
+        }
+        if(v.engine_place) c.driveline = Object.assign({}, c.driveline || {}, { engine: v.engine_place });
+        if(v.efficiency !== undefined) c.drivetrain.efficiency = v.efficiency;
+        if(v.tc_lockup !== undefined) c.drivetrain.tc_lockup = v.tc_lockup !== "off";
+        if(v.length > 0 && v.width > 0 && v.height > 0) c.dimensions = Object.assign({}, c.dimensions || {}, { length: v.length, width: v.width, height: v.height });
+        if(v.steering_degrees > 0) c.steering_wheel = Object.assign({}, c.steering_wheel || {}, { degrees: v.steering_degrees });
+        if(v.gen_power > 0 && v.gen_peak_rpm > 0) {
+            // a new curve only when the peak was moved: a curve drawn by hand in the car editor stays as it is
+            var pk = peakOf(c.engine.torque_curve);
+            if(!pk || Math.abs(pk.hp - v.gen_power) > 0.6 || Math.abs(pk.rpm - v.gen_peak_rpm) > 60) c.engine.torque_curve = generateCurve(v.gen_power, v.gen_peak_rpm, c.engine.limiter_rpm);
+        }
+        if(v.cam_follow_distance !== undefined) {
+            c.cameras = {
+                follow: { distance: v.cam_follow_distance, height: v.cam_follow_height, look_height: v.cam_follow_look_height, look_z: v.cam_follow_look_z, smoothing: v.cam_follow_smoothing,
+                    fov_standing: v.cam_follow_fov_standing, fov_fast: v.cam_follow_fov_fast, fov_full_speed: v.cam_follow_fov_full_speed, dolly: v.cam_follow_dolly },
+                cockpit: { position: [v.cam_cockpit_x, v.cam_cockpit_y, v.cam_cockpit_z], fov: v.cam_cockpit_fov }
+            };
+        }
+        if(v.sb_enabled !== undefined) {
+            c.softbody = Object.assign({}, c.softbody || {});
+            if(v.sb_enabled === "off") c.softbody.enabled = false; else delete c.softbody.enabled;
+            if(v.sb_max_nodes > 0) c.softbody.max_nodes = v.sb_max_nodes;
+            if(v.sb_wheel_strength !== undefined) c.softbody.wheel_strength = v.sb_wheel_strength;
+        }
+        if(c.type === "motorcycle" && v.bike_max_lean !== undefined) {
+            c.motorcycle = Object.assign({}, c.motorcycle || {}, { max_lean_deg: v.bike_max_lean, fast_lean_deg: v.bike_fast_lean, rake_deg: v.bike_rake, rider_mass: v.bike_rider_mass,
+                hang_off: v.bike_hang_off, max_lateral_g: v.bike_max_lateral_g, balance: v.bike_balance, fork_dive: v.bike_fork_dive });
+        }
+        if(v.sim_layout || v.sim_ir) {
+            c.sound = c.sound || {}; c.sound.engine_sim = Object.assign({}, c.sound.engine_sim || {});
+            if(v.sim_layout) c.sound.engine_sim.layout = v.sim_layout;
+            if(v.sim_ir) c.sound.engine_sim.ir = v.sim_ir;
+        }
         delete c.id;
         return c;
     }
