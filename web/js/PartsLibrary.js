@@ -18,11 +18,12 @@
  *              Every part is modelled for the LEFT side (+x); the right side is its mirror image. Where a part goes is a mount: a point (and a turn) in the frame of
  *              the car (x to the left, y up, z forward, the origin as the model has it) that the car editor shows as a gizmo, with a default from the wheels:
  *
- *                double-wishbone     upper_hinge, lower_hinge (the inboard hinges of the arms), spring_top (the top mount of the coilover; its other end sits on the
- *                                    lower arm), tierod_inner (the end of the tie rod on the rack, or of a toe link on the body), rack (the front)
- *                macpherson          lower_hinge, strut_top, tierod_inner, rack
- *                live-trailing       lower_hinge, upper_hinge (the hinges of the trailing arms on the body), spring_top, damper_top, panhard (the end of the rod on the body)
- *                live-leaf           leaf_front, leaf_rear (the hangers), damper_top
+ *                double-wishbone     upper_hinge, upper_ball, lower_hinge, lower_ball (the arms: the hinge on the body and the ball joint), spring_top, spring_bottom (the
+ *                                    coilover: its top mount and its seat on the lower arm), tierod_inner, tierod_outer (the tie rod: on the rack, on the steering arm), rack (the front)
+ *                macpherson          lower_hinge, lower_ball, strut_top, strut_bottom, tierod_inner, tierod_outer, rack
+ *                live-trailing       lower_hinge, lower_arm_end, upper_hinge, upper_arm_end (the trailing arms: on the body, on the axle), spring_top, spring_bottom, damper_top,
+ *                                    damper_bottom, panhard, panhard_axle (the rod: on the body, on the axle at the other side; these two are not mirrored)
+ *                live-leaf           leaf_front, leaf_rear (the hangers), damper_top, damper_bottom
  *                the driveline       engine, gearbox, diff_front, diff_rear (a differential of an independent axle that is driven; a live axle holds its own)
  *
  *              The parts are given the names that SuspensionRig.js moves (susp_lowerarm_FL, susp_spring_RL, susp_axle_rear, steer_rack, ...), so they move with the
@@ -48,14 +49,18 @@ OpenRacer.PartsLibrary = (function () {
     var TYPES = {
         "model": { label: "From the model (parts named susp_…)", files: [], mounts: [] },
         "none": { label: "None", files: [], mounts: [] },
-        "double-wishbone": { label: "Double wishbone", files: ["upperarm", "lowerarm", "upright", "coilover", "tierod"], mounts: ["upper_hinge", "lower_hinge", "spring_top", "tierod_inner", "rack"] },
-        "macpherson": { label: "MacPherson strut", files: ["lowerarm", "strut", "upright", "tierod"], mounts: ["lower_hinge", "strut_top", "tierod_inner", "rack"] },
-        "live-trailing": { label: "Live axle, trailing arms", files: ["axle", "trailingarm", "uppertrailingarm", "coilover", "damper", "panhard"], mounts: ["lower_hinge", "upper_hinge", "spring_top", "damper_top", "panhard"] },
-        "live-leaf": { label: "Live axle, leaf springs", files: ["axle", "leafspring", "damper"], mounts: ["leaf_front", "leaf_rear", "damper_top"] }
+    // (a stretched part has a mount at each end: where it sits on the body, and where its other end goes: the ball joint on the upright, the seat of the spring on the arm or the axle)
+        "double-wishbone": { label: "Double wishbone", files: ["upperarm", "lowerarm", "upright", "coilover", "tierod"], mounts: ["upper_hinge", "upper_ball", "lower_hinge", "lower_ball", "spring_top", "spring_bottom", "tierod_inner", "tierod_outer", "rack"] },
+        "macpherson": { label: "MacPherson strut", files: ["lowerarm", "strut", "upright", "tierod"], mounts: ["lower_hinge", "lower_ball", "strut_top", "strut_bottom", "tierod_inner", "tierod_outer", "rack"] },
+        "live-trailing": { label: "Live axle, trailing arms", files: ["axle", "trailingarm", "uppertrailingarm", "coilover", "damper", "panhard"], mounts: ["lower_hinge", "lower_arm_end", "upper_hinge", "upper_arm_end", "spring_top", "spring_bottom", "damper_top", "damper_bottom", "panhard", "panhard_axle"] },
+        "live-leaf": { label: "Live axle, leaf springs", files: ["axle", "leafspring", "damper"], mounts: ["leaf_front", "leaf_rear", "damper_top", "damper_bottom"] }
     };
     var MOUNT_LABELS = {
-        upper_hinge: "Upper arm hinge", lower_hinge: "Lower arm hinge", spring_top: "Spring top mount", strut_top: "Strut top mount", tierod_inner: "Tie rod, inner end",
-        rack: "Steering rack", damper_top: "Damper top mount", panhard: "Panhard rod, body end", leaf_front: "Leaf spring, front hanger", leaf_rear: "Leaf spring, rear hanger",
+        upper_hinge: "Upper arm: hinge on the body", upper_ball: "Upper arm: ball joint", lower_hinge: "Lower arm: hinge on the body", lower_ball: "Lower arm: ball joint",
+        spring_top: "Spring: top mount", spring_bottom: "Spring: bottom (seat)", strut_top: "Strut: top mount", strut_bottom: "Strut: foot on the upright",
+        tierod_inner: "Tie rod: inner end", tierod_outer: "Tie rod: outer end (steering arm)", rack: "Steering rack",
+        damper_top: "Damper: top mount", damper_bottom: "Damper: bottom (on the axle)", lower_arm_end: "Lower trailing arm: end on the axle", upper_arm_end: "Upper trailing arm: end on the axle",
+        panhard: "Panhard rod: end on the body", panhard_axle: "Panhard rod: end on the axle (the other side)", leaf_front: "Leaf spring: front hanger", leaf_rear: "Leaf spring: rear hanger",
         engine: "Engine", gearbox: "Gearbox", diff_front: "Front differential", diff_rear: "Rear differential"
     };
     var ENGINE = ["front", "mid", "rear"];
@@ -89,10 +94,16 @@ OpenRacer.PartsLibrary = (function () {
         var p;
         switch(name) {
             case "upper_hinge": p = [0.35 * xw, yw + 0.18, z]; break;
+            case "upper_ball": p = [xw - 0.12, yw + 0.17, z]; break;
             case "lower_hinge": p = [0.35 * xw, yw - 0.15, z]; break;
+            case "lower_ball": p = [xw - 0.12, yw - 0.17, z]; break;
             case "spring_top": p = [0.62 * xw, yw + 0.65, z]; break;
+            case "spring_bottom": p = [0.35 * xw + 0.75 * (xw - 0.12 - 0.35 * xw), yw - 0.15 + 0.75 * (-0.02), z]; break;       // (three quarters of the way out on the lower arm)
             case "strut_top": p = [0.75 * xw, yw + 0.7, z - 0.03]; break;
+            case "strut_bottom": p = [xw - 0.12, yw - 0.05, z]; break;
             case "tierod_inner": p = [0.25 * xw, yw, z + fwd * 0.18]; break;
+            case "tierod_outer": p = [xw - 0.12, yw, z + fwd * 0.14]; break;
+            case "damper_bottom": p = [0.55 * xw, yw, z - 0.1]; break;
             case "rack": p = [0, yw, z + 0.18]; break;
             case "damper_top": p = [0.5 * xw, yw + 0.7, z - 0.15]; break;
             case "panhard": p = [0.8 * xw, yw + 0.15, z - 0.15]; break;
@@ -105,9 +116,15 @@ OpenRacer.PartsLibrary = (function () {
     // the trailing arms of a live axle hang from hinges in front of it: the defaults differ from the independent ones
     function defaultLiveMount(name, axle, geo) {
         var g = geo[axle], xw = g.W.x, yw = g.W.y, z = g.W.z;
-        if(name === "lower_hinge") return { position: [0.7 * xw, yw + 0.05, z + 1.0], rotation: [0, 0, 0] };
-        if(name === "upper_hinge") return { position: [0.35 * xw, yw + 0.3, z + 1.0], rotation: [0, 0, 0] };
-        if(name === "spring_top") return { position: [0.7 * xw, yw + 0.75, z + 0.1], rotation: [0, 0, 0] };
+        var at = function (p) { return { position: p, rotation: [0, 0, 0] }; };
+        if(name === "lower_hinge") return at([0.7 * xw, yw + 0.05, z + 1.0]);
+        if(name === "lower_arm_end") return at([0.7 * xw, yw, z]);
+        if(name === "upper_hinge") return at([0.35 * xw, yw + 0.3, z + 1.0]);
+        if(name === "upper_arm_end") return at([0.35 * xw, yw + 0.25, z]);
+        if(name === "spring_top") return at([0.7 * xw, yw + 0.75, z + 0.1]);
+        if(name === "spring_bottom") return at([0.7 * xw, yw + 0.05, z]);
+        if(name === "damper_bottom") return at([0.55 * xw, yw + 0.05, z - 0.1]);
+        if(name === "panhard_axle") return at([-0.7 * xw, yw + 0.1, z - 0.15]);         // (the other side of the car: not mirrored)
         return defaultMount(name, axle, geo);
     }
     function resolveMounts(type, axle, set, geo) {
@@ -208,36 +225,28 @@ OpenRacer.PartsLibrary = (function () {
             var at = function (name) { return mirrored(mounts[name].position, side); };
             var m = function (name) { return mounts[name]; };
             if(type === "double-wishbone" || type === "macpherson") {
-                var lowerBall = W.clone().add(new V(-0.12 * side, -0.17, 0)), upperBall = W.clone().add(new V(-0.12 * side, 0.17, 0));
-                var steerArm = W.clone().add(new V(-0.12 * side, 0, tierodZ * 0.14));
-                place(out, type, "lowerarm", "susp_lowerarm_" + corner, at("lower_hinge"), lowerBall, m("lower_hinge"), mirror);
+                place(out, type, "lowerarm", "susp_lowerarm_" + corner, at("lower_hinge"), at("lower_ball"), m("lower_hinge"), mirror);
                 place(out, type, "upright", "susp_upright_" + corner, W, null, null, mirror);
-                place(out, type, "tierod", "steer_tierod_" + corner, at("tierod_inner"), steerArm, m("tierod_inner"), mirror);
+                place(out, type, "tierod", "steer_tierod_" + corner, at("tierod_inner"), at("tierod_outer"), m("tierod_inner"), mirror);
                 if(type === "double-wishbone") {
-                    place(out, type, "upperarm", "susp_upperarm_" + corner, at("upper_hinge"), upperBall, m("upper_hinge"), mirror);
-                    var seat = at("lower_hinge").lerp(lowerBall, 0.75);                                // the spring sits on the lower arm, three quarters of the way out
-                    place(out, type, "coilover", "susp_spring_" + corner, at("spring_top"), seat, m("spring_top"), mirror);
-                } else {
-                    var strutFoot = W.clone().add(new V(-0.12 * side, -0.05, 0));
-                    place(out, type, "strut", "susp_strut_" + corner, at("strut_top"), strutFoot, m("strut_top"), mirror);
-                }
+                    place(out, type, "upperarm", "susp_upperarm_" + corner, at("upper_hinge"), at("upper_ball"), m("upper_hinge"), mirror);
+                    place(out, type, "coilover", "susp_spring_" + corner, at("spring_top"), at("spring_bottom"), m("spring_top"), mirror);
+                } else place(out, type, "strut", "susp_strut_" + corner, at("strut_top"), at("strut_bottom"), m("strut_top"), mirror);
             } else if(type === "live-trailing") {
-                var lowerEnd = new V(at("lower_hinge").x, g.W.y, z), upperEnd = new V(at("upper_hinge").x, g.W.y + 0.25, z);
-                place(out, type, "trailingarm", "susp_trailingarm_" + corner, at("lower_hinge"), lowerEnd, m("lower_hinge"), mirror);
-                place(out, type, "uppertrailingarm", "susp_uppertrailingarm_" + corner, at("upper_hinge"), upperEnd, m("upper_hinge"), mirror);
-                place(out, type, "coilover", "susp_spring_" + corner, at("spring_top"), new V(at("spring_top").x, g.W.y + 0.05, z), m("spring_top"), mirror);
-                place(out, type, "damper", "susp_damper_" + corner, at("damper_top"), new V(at("damper_top").x * 1.1, g.W.y, z - 0.1), m("damper_top"), mirror);
+                place(out, type, "trailingarm", "susp_trailingarm_" + corner, at("lower_hinge"), at("lower_arm_end"), m("lower_hinge"), mirror);
+                place(out, type, "uppertrailingarm", "susp_uppertrailingarm_" + corner, at("upper_hinge"), at("upper_arm_end"), m("upper_hinge"), mirror);
+                place(out, type, "coilover", "susp_spring_" + corner, at("spring_top"), at("spring_bottom"), m("spring_top"), mirror);
+                place(out, type, "damper", "susp_damper_" + corner, at("damper_top"), at("damper_bottom"), m("damper_top"), mirror);
             } else if(type === "live-leaf") {
                 var lf = at("leaf_front"), lr = at("leaf_rear"), mid = lf.clone().add(lr).multiplyScalar(0.5);
                 var leaf = place(out, type, "leafspring", "susp_axle_leaf_" + axle + "_" + (mirror ? "right" : "left"), mid, null, m("leaf_front"), mirror);
                 if(leaf) leaf.scale.z = Math.max(0.2, Math.abs(lf.z - lr.z));
-                place(out, type, "damper", "susp_damper_" + corner, at("damper_top"), new V(at("damper_top").x * 1.15, g.W.y + 0.05, z - 0.1), m("damper_top"), mirror);
+                place(out, type, "damper", "susp_damper_" + corner, at("damper_top"), at("damper_bottom"), m("damper_top"), mirror);
             }
         });
         if(type === "live-trailing") {
-            // the Panhard rod: from the body on one side across to the axle on the other
-            var pb = mirrored(mounts.panhard.position, 1);
-            place(out, type, "panhard", "susp_panhard_" + axle, pb, new V(-0.7 * g.W.x, g.W.y + 0.1, pb.z), mounts.panhard, false);
+            // the Panhard rod: from the body on one side across to the axle on the other (its two mounts are as they are, not mirrored)
+            place(out, type, "panhard", "susp_panhard_" + axle, mirrored(mounts.panhard.position, 1), mirrored(mounts.panhard_axle.position, 1), mounts.panhard, false);
         }
         if(axle === "front" && !isLive(type)) place(out, "steering", "rack", "steer_rack", mirrored(mounts.rack.position, 1), null, mounts.rack, false);
     }
