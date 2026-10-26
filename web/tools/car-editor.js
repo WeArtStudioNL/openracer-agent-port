@@ -10,6 +10,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { installZoomToMouse } from "./zoom-to-mouse.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { initSoftBody } from "./softbody-editor.js";
@@ -342,6 +343,8 @@ function updateFlames(now) {
 // ---- the view: perspective or orthographic (the same camera object, so the gizmos, the picking and the other editors keep working: the flags that three.js looks at and the
 // projection are switched), and the standard views (left, right, top, bottom, front) at the distance the camera has
 let ortho = false, orthoHalf = 2;
+// the wheel zooms towards the point under the mouse (the model, else the floor) and the view then turns about it (zoom-to-mouse.js)
+installZoomToMouse({ THREE, camera, controls, renderer, targets: () => [pivot], isOrtho: () => ortho, floorY: () => grid.position.y });
 const perspectiveProjection = camera.updateProjectionMatrix.bind(camera);
 camera.updateProjectionMatrix = function () {
     if (!ortho) { perspectiveProjection(); return; }

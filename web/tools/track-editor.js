@@ -10,6 +10,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { installZoomToMouse } from "./zoom-to-mouse.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { createDesign } from "./track-design.js";
 import { buildTerrain, readHeights } from "./heightmap.js";
@@ -72,6 +73,8 @@ const markers = new THREE.Group(); // the start and the gates
 scene.add(markers);
 const objectLayer = new THREE.Group(); // the models of the objects, where they are placed
 scene.add(objectLayer);
+// the wheel zooms towards the point under the mouse (the track, its objects, else the floor) and the view then turns about it (zoom-to-mouse.js)
+installZoomToMouse({ THREE, camera, controls, renderer, targets: () => [trackGroup, objectLayer], floorY: () => 0 });
 // the objects of the track: models (glb) that were added, and where they stand. A model: { file (a Blob, when it was added now), name (the file in the folder of the track),
 // rigid, mass (kg, 0: from its size), scene (the loaded model) }
 const objectState = { models: new Map(), list: [], selected: null };
