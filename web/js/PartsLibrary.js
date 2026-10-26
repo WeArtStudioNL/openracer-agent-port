@@ -26,7 +26,8 @@
  *                live-trailing       lower_hinge, lower_arm_end, upper_hinge, upper_arm_end (the trailing arms: on the body, on the axle), spring_top, spring_bottom, damper_top,
  *                                    damper_bottom, panhard, panhard_axle (the rod: on the body, on the axle at the other side; these two are not mirrored)
  *                live-leaf           leaf_front, leaf_rear (the hangers), damper_top, damper_bottom
- *                the driveline       engine, gearbox, diff_front, diff_rear (a differential of an independent axle that is driven; a live axle holds its own)
+ *                the driveline       engine, gearbox, diff_front, diff_rear (a differential of an independent axle that is driven; a live axle holds its own),
+ *                                    prop_rear_start, prop_rear_end (the two ends of a propshaft: at the gearbox, at the differential or the axle; prop_front_... likewise)
  *
  *              The parts are given the names that SuspensionRig.js moves (susp_lowerarm_FL, susp_spring_RL, susp_axle_rear, steer_rack, ...), so they move with the
  *              travel of the wheels and the steering as the parts of a model do. A propshaft goes from the gearbox to every driven axle whose differential is more than
@@ -63,7 +64,9 @@ OpenRacer.PartsLibrary = (function () {
         tierod_inner: "Tie rod: inner end", tierod_outer: "Tie rod: outer end (steering arm)", rack: "Steering rack",
         damper_top: "Damper: top mount", damper_bottom: "Damper: bottom (on the axle)", lower_arm_end: "Lower trailing arm: end on the axle", upper_arm_end: "Upper trailing arm: end on the axle",
         panhard: "Panhard rod: end on the body", panhard_axle: "Panhard rod: end on the axle (the other side)", leaf_front: "Leaf spring: front hanger", leaf_rear: "Leaf spring: rear hanger",
-        engine: "Engine", gearbox: "Gearbox", diff_front: "Front differential", diff_rear: "Rear differential"
+        engine: "Engine", gearbox: "Gearbox", diff_front: "Front differential", diff_rear: "Rear differential",
+        prop_front_start: "Propshaft to the front: at the gearbox", prop_front_end: "Propshaft to the front: at the differential",
+        prop_rear_start: "Propshaft to the rear: at the gearbox", prop_rear_end: "Propshaft to the rear: at the differential"
     };
     var ENGINE = ["front", "mid", "rear"];
     var DRIVELINE_FILES = ["engine", "gearbox", "differential", "propshaft", "driveshaft"];
@@ -157,9 +160,21 @@ OpenRacer.PartsLibrary = (function () {
         });
         return out;
     }
-    function drivelineMountNames(config) {
+    // the propshaft to an axle: the gearbox is more than 0.4 m from the differential of that axle (or the middle of a live axle); both its ends are mounts
+    function propTo(config, axle, geo, set) {
+        var t = typeOf(config, axle);
+        if(!drivenAxles(config)[axle] || t === "model" || t === "none") return false;
+        var gb = mountValue("gearbox", config, geo, set), target = isLive(t) ? [0, geo[axle].W.y, geo[axle].W.z] : mountValue("diff_" + axle, config, geo, set);
+        return Math.hypot(gb[0] - target[0], gb[1] - target[1], gb[2] - target[2]) > 0.4;
+    }
+    function mountValue(name, config, geo, set) {
+        var m = set && set[name];
+        return m && m.position && m.position.length === 3 ? m.position : defaultDrivelineMount(name, config, geo).position;
+    }
+    function drivelineMountNames(config, geo, set) {
         var names = ["engine", "gearbox"], driven = drivenAxles(config);
         ["front", "rear"].forEach(function (axle) { var t = typeOf(config, axle); if(driven[axle] && t !== "model" && t !== "none" && !isLive(t)) names.push("diff_" + axle); });
+        if(geo) ["front", "rear"].forEach(function (axle) { if(propTo(config, axle, geo, set)) names.push("prop_" + axle + "_start", "prop_" + axle + "_end"); });
         return names;
     }
     function defaultDrivelineMount(name, config, geo) {
@@ -167,12 +182,15 @@ OpenRacer.PartsLibrary = (function () {
         if(name === "engine") p = place === "front" ? [0, yw + 0.35, zf - 0.35] : (place === "mid" ? [0, yw + 0.3, (zf + zr) / 2 - 0.4] : [0, yw + 0.3, zr - 0.2]);
         else if(name === "gearbox") p = place === "rear" ? [0, yw + 0.1, zr + 0.5] : (place === "front" ? [0, yw + 0.15, zf - 1.05] : [0, yw + 0.1, (zf + zr) / 2 - 1.1]);
         else if(name === "diff_front") p = [0, yw, zf];
+        else if(name === "diff_rear") p = [0, yw, zr];
+        else if(/^prop_(front|rear)_start$/.test(name)) p = mountValue("gearbox", config, geo, config.driveline && config.driveline.mounts).slice();
+        else if(/^prop_(front|rear)_end$/.test(name)) { var ax = name.indexOf("front") >= 0 ? "front" : "rear"; p = isLive(typeOf(config, ax)) ? [0, geo[ax].W.y, geo[ax].W.z] : mountValue("diff_" + ax, config, geo, config.driveline && config.driveline.mounts).slice(); }
         else p = [0, yw, zr];
         return { position: p, rotation: [0, 0, 0] };
     }
     function resolveDriveline(config, geo) {
         var set = config.driveline && config.driveline.mounts, out = {};
-        drivelineMountNames(config).forEach(function (name) {
+        drivelineMountNames(config, geo, set).forEach(function (name) {
             var d = defaultDrivelineMount(name, config, geo), m = set && set[name];
             out[name] = { position: m && m.position && m.position.length === 3 ? m.position.slice() : d.position, rotation: m && m.rotation && m.rotation.length === 3 ? m.rotation.slice() : d.rotation };
         });
@@ -292,7 +310,11 @@ OpenRacer.PartsLibrary = (function () {
                     place(out, "driveline", "driveshaft", "susp_driveshaft_" + corner, target, new V(g.W.x * side, g.W.y, g.W.z), null, side < 0);
                 });
             }
-            if(gearbox.distanceTo(target) > 0.4) place(out, "driveline", "propshaft", isLive(type) ? "susp_propshaft_" + axle : "propshaft_" + axle, gearbox, target, null, false);
+            // the propshaft between its two mounts (there when the gearbox is more than 0.4 m from the differential or the live axle)
+            if(dm["prop_" + axle + "_start"]) {
+                var ps = mirrored(dm["prop_" + axle + "_start"].position, 1), pe = mirrored(dm["prop_" + axle + "_end"].position, 1);
+                if(ps.distanceTo(pe) > 0.1) place(out, "driveline", "propshaft", isLive(type) ? "susp_propshaft_" + axle : "propshaft_" + axle, ps, pe, dm["prop_" + axle + "_start"], false);
+            }
         });
     }
 

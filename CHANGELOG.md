@@ -155,6 +155,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 ### Car editor and the driver
 
+- The two ends of a propshaft are mounts (`prop_rear_start` at the gearbox, `prop_rear_end` at the differential or the axle; the front likewise), so where a shaft leaves the gearbox and enters the axle can be set.
 - A spring or a damper whose foot sits on a wishbone goes round the hinge of the arm with it, not up and down by the whole travel of the wheel: a coilover seated halfway along the lower arm moves half as far as the wheel, and it looked as if it came loose from the arm.
 - **An eye per part of the parts library** in the Suspension and driveline card: orange is placed, grey is hidden (`hidden` of the axle or the driveline in `car.json`), so a car whose own model has its engine or its gearbox keeps those; the Move, Turn and Reset buttons of the mounts are icons.
 - The coilover of the parts library stretched past its end: its cylinder, named `coilover`, was taken for the coil (the match on "coil") and scaled with the piston inside it, on top of the slide of the piston; and the slide of a piston in a part that is scaled along its length is divided by that scale now.
