@@ -331,7 +331,7 @@ var Hud = (function() {
         }
         // the arc: TC, ESP, ABS and the text lights, spread along the bottom of the gauge
         var arcNames = ["TC", "ESC", "ABS", "P", "TB"].filter(function(n) { return pillStates[n]; });
-        var badge = R * 0.24, radius = R * 0.76, spread = 38 * Math.PI / 180, h = R * 0.13;
+        var badge = R * 0.24, radius = R * 0.77, spread = 27 * Math.PI / 180, h = R * 0.13;      // (close enough together to stay clear of the pedal arcs)
         c.font = "bold " + font + "px Arial";
         arcNames.forEach(function(n, i) {
             var a = Math.PI / 2 + ((arcNames.length - 1) / 2 - i) * spread;          // (the first on the left)
