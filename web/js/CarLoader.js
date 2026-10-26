@@ -287,13 +287,18 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
             tilt.add(pivot);
             // the moving parts of the suspension and the steering, when the model has them (SuspensionRig.js)
             var rig = null;
+            // the suspension and the driveline built from loose parts, when the car editor chose a type for an axle (PartsLibrary.js); they are placed in the frame of the car
+            var built = OpenRacer.PartsLibrary && measured ? OpenRacer.PartsLibrary.assemble(config, measured) : null;
+            if(built && built.missing.length) console.warn("PartsLibrary: missing " + built.missing.join(", "));
             if(OpenRacer.SuspensionRig) {
                 space.add(tilt);
+                if(built) space.add(built.group);
                 space.updateMatrixWorld(true);
-                rig = OpenRacer.SuspensionRig.find(root, space, tilt, config);
+                rig = OpenRacer.SuspensionRig.find(built ? [root, built.group] : root, space, tilt, config);
                 space.remove(tilt);
-                if(rig) console.log("CarLoader: suspension rig with " + rig.count + " parts");
-            }
+                if(built) { space.remove(built.group); tilt.add(built.group); }      // (what the rig did not take, the engine, the gearbox, a differential, stays on the body)
+                if(rig) console.log("CarLoader: suspension rig with " + rig.count + " parts" + (built && built.names.length ? " (" + built.names.length + " from the parts library)" : ""));
+            } else if(built) tilt.add(built.group);
             // glTF models are made of physically based materials: they are lit by and reflect the surroundings of the
             // scene (scene.environment, see MaterialLibrary.js)
             [tilt].concat(wheelObjects).forEach(function (object) {
@@ -440,10 +445,14 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
         return false;
     }
 
-    if(loadedRoot) {
-        try { build(loadedRoot.clone(true)); } catch(e) { console.error(e); onError("Could not use the model (" + e + ")"); }
-    } else if(model.type === "gltf") gltf();
-    else legacy();
+    var start = function () {
+        if(loadedRoot) {
+            try { build(loadedRoot.clone(true)); } catch(e) { console.error(e); onError("Could not use the model (" + e + ")"); }
+        } else if(model.type === "gltf") gltf();
+        else legacy();
+    };
+    // the loose parts of the suspension and the driveline first, when the car has them (PartsLibrary.js)
+    if(OpenRacer.PartsLibrary) OpenRacer.PartsLibrary.preload(config, OpenRacer.Garage ? OpenRacer.Garage.manager(config) : undefined, start); else start();
 };
 
 // The swingarm of a motorcycle: a part called swingarm (or swing_arm, rear_arm) turns about its own origin, the pivot on the frame, as the rear wheel goes up and down: the wheel is

@@ -14,6 +14,7 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { initSoftBody } from "./softbody-editor.js";
 import { initDriver } from "./driver-editor.js";
+import { initSuspension } from "./suspension-editor.js";
 
 const $ = (id) => document.getElementById(id);
 const SLOTS = ["FR", "FL", "RL", "RR"];
@@ -24,6 +25,7 @@ const FILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/;
 
 let softBodyEditor = null; // the Soft body card (softbody-editor.js), made at the end
 let driverEditor = null;   // the Driver card (driver-editor.js), made at the end
+let suspensionEditor = null;                 // the Suspension and driveline card (suspension-editor.js)
 const state = {
     files: new Map(),       // name -> File, the files that were picked
     mainFile: null,         // name of the glb or gltf among them
@@ -109,7 +111,7 @@ rotGizmo.setMode("rotate");
 rotGizmo.setSpace("local");
 rotGizmo.setSize(0.55);
 rotGizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !event.value; layers.dragging = event.value; if (!event.value) renderLayers(); });
-rotGizmo.addEventListener("objectChange", () => { renderLayers(); syncExhaustFields(); });
+rotGizmo.addEventListener("objectChange", () => { if (suspensionEditor && suspensionEditor.isMount(layers.selected)) { suspensionEditor.moved(layers.selected); return; } renderLayers(); syncExhaustFields(); });
 scene.add(typeof rotGizmo.getHelper === "function" ? rotGizmo.getHelper() : rotGizmo);
 
 // An exhaust point has two gizmos, one at a time (the buttons Move and Rotate of its window, or the W and E keys): the arrows move it, the rings turn it. Nothing is aligned
@@ -132,9 +134,14 @@ function syncExhaustFields() {
     exhaustFields.rot.forEach((input, i) => { if (document.activeElement !== input) input.value = Math.round([q.x, q.y, q.z][i] * d * 10) / 10; });
 }
 window.addEventListener("keydown", (e) => {
-    if (!layers.selected || !String(layers.selected).startsWith("ex") || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!layers.selected || e.ctrlKey || e.metaKey || e.altKey) return;
     const t = e.target && e.target.tagName;
     if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
+    if (suspensionEditor && suspensionEditor.isMount(layers.selected)) {
+        if (e.code === "KeyW") suspensionEditor.setMode("move"); else if (e.code === "KeyE") suspensionEditor.setMode("rotate");
+        return;
+    }
+    if (!String(layers.selected).startsWith("ex")) return;
     if (e.code === "KeyW") { exhaustMode = "move"; attachExhaustGizmo(); updateExhaustWindow(); }
     else if (e.code === "KeyE") { exhaustMode = "rotate"; attachExhaustGizmo(); updateExhaustWindow(); }
 });
@@ -682,6 +689,7 @@ function updateHelpers() {
     }
     const centres = wheelCenters();
     $("wheelInfo").textContent = centres ? "" : (wheelMode() === "model" ? "Every wheel needs at least one part." : "");
+    if (suspensionEditor) suspensionEditor.refresh(false);          // the mounts and the parts of the parts library follow the wheels
     const radius = (num("tyre") || 0.65) / 2;
     grid.position.y = wheelMode() === "model" && centres ? Math.min(...SLOTS.map((s) => centres[s].c.y - centres[s].size.y / 2)) : -radius;
     updateSpeedInfo();
@@ -941,6 +949,7 @@ function updateCameraMarkers() {
 function gizmoMoved() {
     const id = layers.selected;
     if (id && id.startsWith("ex")) { renderLayers(); return; }
+    if (suspensionEditor && suspensionEditor.isMount(id)) { suspensionEditor.moved(id); return; }
     const r = (num("tyre") || 0.65) / 2;
     const fix = (v) => Math.round(v * 100) / 100;
     if (id === "follow") {
@@ -976,6 +985,7 @@ function selectLayer(id) {
         if (sel === "model" && !state.root) { layers.selected = null; }
         else {
             if (sel.startsWith("ex")) attachExhaustGizmo();
+            else if (suspensionEditor && suspensionEditor.isMount(sel)) suspensionEditor.attachGizmo(sel);
             else {
                 gizmo.attach(gizmoTargets[sel]);
                 gizmo.showX = sel !== "follow" && sel !== "look"; // the cameras behind the car are in the middle
@@ -1017,6 +1027,7 @@ function showChosenPart(name) {
 }
 
 function renderLayers() {
+    if (suspensionEditor) suspensionEditor.refresh(false);          // (the mounts and the parts follow the wheels: nothing is rebuilt when nothing changed)
     const list = $("layerList");
     list.innerHTML = "";
     const centres = wheelCenters();
@@ -1548,6 +1559,7 @@ function buildConfig(id) {
         }
     }
     if (exhaust.length) config.exhaust = exhaustConfig();
+    if (suspensionEditor) Object.assign(config, suspensionEditor.read());          // the suspension and the driveline from the parts library
     const driverConfig = driverEditor && driverEditor.read();
     if (driverConfig) config.driver = driverConfig;
     if (softBodyEditor) {
@@ -1781,6 +1793,7 @@ function fill(car) {
     set("brakeFront", car.brakes.front); set("brakeRear", car.brakes.rear);
     fillCameras(OpenRacer.cameraSettings(car));
     loadExhaust(car.exhaust);
+    if (suspensionEditor) suspensionEditor.fill(car);
     if (softBodyEditor) softBodyEditor.fill(car);
     if (driverEditor) driverEditor.fill(car);
     fillEngineSim(OpenRacer.engineSimParams(car));
@@ -2023,7 +2036,7 @@ function tuningValues(config) {
 // "Drop car" lets it fall from a height, The model is built the way the game
 // builds it (CarLoader.js: the wheels taken out, the suspension rig found), from the model and the settings as they are now.
 window.THREE = Object.assign({}, THREE, { GLTFLoader });
-const PHYSICS_SCRIPTS = ["Engine.js", "Wheel.js", "TyreShell.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "Chain.js", "CarLoader.js", "Ground.js", "CollisionProxy.js", "SoftBody.js", "SoftBodyMesh.js", "Parts.js"];
+const PHYSICS_SCRIPTS = ["Engine.js", "Wheel.js", "TyreShell.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "PartsLibrary.js", "Chain.js", "CarLoader.js", "Ground.js", "CollisionProxy.js", "SoftBody.js", "SoftBodyMesh.js", "Parts.js"];
 let physicsLoading = null;
 function loadPhysics() {
     if (!physicsLoading) {
@@ -2083,6 +2096,7 @@ async function startBench() {
     syncBenchVisibility();
     if (driverEditor) driverEditor.attachToBench(model.tilt);       // the driver goes with the car that is tested
     pivot.visible = false; helpers.visible = false;
+    if (suspensionEditor) suspensionEditor.hide(true);
     $("testStop").style.display = "";
     status("Test: the car with the physics of the game" + (model.rig ? ", " + model.rig.count + " moving parts of the suspension" : "") + ". Stop test goes back to the model.", "ok");
     return v;
@@ -2104,6 +2118,7 @@ function stopBench() {
     bench.objects = []; bench.vehicle = null; bench.model = null; bench.script = null; bench.obj = null; bench.grip = 1;
     if (softBodyEditor) softBodyEditor.onStop();
     pivot.visible = true; helpers.visible = true;
+    if (suspensionEditor) suspensionEditor.hide(false);
     $("testStop").style.display = "none";
 }
 
@@ -2398,6 +2413,13 @@ driverEditor = initDriver({
     resolve: (file) => OpenRacer.Garage.resolve(state.existingCar, "../" + file),
     setDragging: (on) => { layers.dragging = on; },
     deselectLayers: () => { if (layers.selected) selectLayer(layers.selected); }
+});
+
+suspensionEditor = initSuspension({
+    $, THREE, scene, gizmo, rotGizmo, gizmoTargets, layers, selectLayer, wheelCenters,
+    driveValue: () => $("drive").value,
+    loadLibrary: () => loadPhysics(),
+    renderLayers: () => renderLayers()
 });
 
 softBodyEditor = initSoftBody({

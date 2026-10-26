@@ -112,6 +112,24 @@
             </div>
         </details>
 
+        <details class="card carOnly">
+            <summary>Suspension and driveline<span class="meta" id="suspInfo"></span></summary>
+            <div class="body">
+                <p class="sub">The suspension built from loose parts (web/parts/&lt;type&gt;/&lt;part&gt;.glb, see the README): pick a type for each axle, where the engine is, and drag the mounts in the view. The drive (front, rear, all) is in the Tuning card. "From the model" keeps the parts of your own model (named susp_…).</p>
+                <div class="row">
+                    <div><label>Front suspension</label><select id="suspFront"><option value="model">From the model</option><option value="none">None</option><option value="double-wishbone">Double wishbone</option><option value="macpherson">MacPherson strut</option><option value="live-trailing">Live axle, trailing arms</option><option value="live-leaf">Live axle, leaf springs</option></select></div>
+                    <div><label>Rear suspension</label><select id="suspRear"><option value="model">From the model</option><option value="none">None</option><option value="double-wishbone">Double wishbone</option><option value="macpherson">MacPherson strut</option><option value="live-trailing">Live axle, trailing arms</option><option value="live-leaf">Live axle, leaf springs</option></select></div>
+                </div>
+                <div class="row">
+                    <div><label>Engine</label><select id="enginePlace"><option value="front">In the front</option><option value="mid">In the middle</option><option value="rear">In the rear</option></select></div>
+                    <div><span class="hint" style="display:block; margin-top:26px">A propshaft runs from the gearbox to every driven axle that is more than 40 cm from it.</span></div>
+                </div>
+                <div id="suspMounts"></div>
+                <div class="hint" id="suspMissing"></div>
+                <p class="sub">A mount: W moves, E turns (as the exhaust points). The parts of a stretched kind (arms, springs, shafts) are aimed from their mount at their other end and stretched to it; a turn of such a mount rolls the part about its length.</p>
+            </div>
+        </details>
+
         <details class="card">
             <summary>Size, chassis and brakes</summary>
             <div class="body">

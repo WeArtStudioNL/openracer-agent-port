@@ -36,6 +36,7 @@ OpenRacer.SuspensionRig = (function () {
     // what a part is, from its name: { kind, wheel } or null
     function classify(name) {
         var n = clean(name);
+        if(/^susppropshaft(rear|front|back)/.test(n)) return { kind: "propaxle", rear: n.indexOf("front") === -1 };      // (a propshaft to a live axle: it follows the axle, PartsLibrary.js)
         if(/^(susp)?(propshaft|cardan)/.test(n) || /^(susp)?driveshaft(center|centre|middle|prop)/.test(n)) return { kind: "prop" };
         var corner = n.slice(-2);
         var wheel = CORNERS[corner];
@@ -85,11 +86,12 @@ OpenRacer.SuspensionRig = (function () {
     // about its own origin, and the cylinder itself keeps its length. Without them the whole part is scaled. axis: the direction of the part, from the top mount to the far end
     function innerParts(node, axis, restLength) {
         var inner = [], wq = new THREE.Quaternion();
-        node.children.forEach(function (child) {
+        node.traverse(function (child) {
+            if(child === node) return;
             var n = clean(child.name), kind = /piston|rod|shaft/.test(n) ? "piston" : (/coil|spring/.test(n) ? "coil" : null);
             if(!kind) return;
             // the direction of the part in the frame of the child's parent (the move of the piston) and in the child's own frame (the axis the coil is scaled along)
-            node.getWorldQuaternion(wq);
+            child.parent.getWorldQuaternion(wq);
             var inParent = axis.clone().applyQuaternion(wq.clone().invert());
             child.getWorldQuaternion(wq);
             var own = axis.clone().applyQuaternion(wq.invert());
@@ -103,11 +105,11 @@ OpenRacer.SuspensionRig = (function () {
     // Finds the parts under root (the model, already placed in the space of the body by CarLoader) and puts each in a holder in
     // tilt (the body) that is moved every frame. space holds tilt at the origin, so world positions are body positions.
     function find(root, space, tilt, config) {
-        var parts = [];
-        root.traverse(function (node) {
+        var parts = [], roots = Array.isArray(root) ? root : [root];        // (the model, and the parts the library built: PartsLibrary.js)
+        roots.forEach(function (r) { if(r) r.traverse(function (node) {
             var what = classify(node.name);
             if(what) parts.push({ node: node, what: what });
-        });
+        }); });
         // (a part inside a part (the coil and the piston of a coilover) goes with its parent: it is not a part of its own)
         parts = parts.filter(function (p) { for(var a = p.node.parent; a; a = a.parent) for(var k = 0; k < parts.length; k++) if(parts[k].node === a) return false; return true; });
         if(!parts.length) return null;
@@ -124,14 +126,14 @@ OpenRacer.SuspensionRig = (function () {
                 entry.far = farEnd(p.node, origin);
                 entry.armLength = Math.max(0.05, Math.abs(entry.far.z - origin.z));
                 entry.ahead = entry.far.z >= origin.z ? 1 : -1; // the free end ahead of (+z) or behind the hinge
-            } else if(entry.kind === "spring" || entry.kind === "tierod" || entry.kind === "panhard" || entry.kind === "shaft") {
+            } else if(entry.kind === "spring" || entry.kind === "tierod" || entry.kind === "panhard" || entry.kind === "shaft" || entry.kind === "propaxle") {
                 // the holder's Y axis runs along the part, from its origin to its far end, so that scale.y makes it longer or shorter
                 entry.far = farEnd(p.node, origin);
                 entry.restDir = entry.far.clone().sub(origin);
                 entry.restLength = Math.max(0.01, entry.restDir.length());
                 entry.restDir.normalize();
                 entry.holder.quaternion.setFromUnitVectors(Y, entry.restDir);
-                if(entry.kind === "spring") entry.inner = innerParts(p.node, entry.restDir, entry.restLength);
+                if(entry.kind === "spring") { entry.inner = innerParts(p.node, entry.restDir, entry.restLength); entry.strut = clean(p.node.name).indexOf("strut") !== -1; }
             } else if(entry.kind === "prop") {
                 // it turns about its own length: the longest side of its box, about the middle of the box
                 var pbox = boxOf(p.node), pc = pbox.getCenter(new THREE.Vector3()), ps = pbox.getSize(new THREE.Vector3());
@@ -189,6 +191,8 @@ OpenRacer.SuspensionRig = (function () {
                 tmp.sub(p.origin);
                 var length = tmp.length();
                 h.quaternion.setFromUnitVectors(Y, tmp2.copy(tmp).normalize());
+                // (a strut of a front wheel turns with the steering about its own length: its foot is clamped to the upright)
+                if(p.strut && p.wheel < 2) { q.setFromAxisAngle(Y, -steer); h.quaternion.multiply(q); }
                 if(p.inner) {
                     // the cylinder stays as it is; the piston slides along the part by the change of length, the coil gets that much shorter or longer about its own origin
                     // (a coil's origin may be at either end of the part, or between: it moves with its share of the way down the part, and is scaled about it)
@@ -242,11 +246,21 @@ OpenRacer.SuspensionRig = (function () {
                 h.quaternion.setFromUnitVectors(Y, tmp2.copy(tmp).normalize());
                 h.scale.y = Math.max(0.2, tmp.length() / p.restLength);
             } else if(p.kind === "axle") {
+                // (a part on the axle away from its middle, a leaf spring: it goes up with the roll of the axle at its distance from the middle)
                 var left = travelOf(vehicle, p.rear ? 2 : 1), right = travelOf(vehicle, p.rear ? 3 : 0);
-                var track = p.rear ? vehicle.rear_track : vehicle.front_track;
-                h.position.set(p.origin.x, p.origin.y + (left + right) / 2, p.origin.z);
-                q.setFromAxisAngle(FORWARD, Math.atan2(left - right, track || 1.5));
+                var track = (p.rear ? vehicle.rear_track : vehicle.front_track) || 1.5;
+                h.position.set(p.origin.x, p.origin.y + (left + right) / 2 + (left - right) / track * p.origin.x, p.origin.z);
+                q.setFromAxisAngle(FORWARD, Math.atan2(left - right, track));
                 h.quaternion.copy(q).multiply(p.restQuaternion);
+            } else if(p.kind === "propaxle") {
+                // from the gearbox to the middle of a live axle: the far end goes up and down with the axle, and the shaft turns about its length with the wheels
+                var al = travelOf(vehicle, p.rear ? 2 : 1), ar = travelOf(vehicle, p.rear ? 3 : 0);
+                tmp.copy(p.far); tmp.y += (al + ar) / 2;
+                tmp.sub(p.origin);
+                h.quaternion.setFromUnitVectors(Y, tmp2.copy(tmp).normalize());
+                var spin = ((vehicle.wheels[p.rear ? 2 : 1].spin || 0) + (vehicle.wheels[p.rear ? 3 : 0].spin || 0)) / 2;
+                q.setFromAxisAngle(Y, spin); h.quaternion.multiply(q);
+                h.scale.y = Math.max(0.2, tmp.length() / p.restLength);
             }
         }
     }
