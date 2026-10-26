@@ -375,16 +375,14 @@ function standardView(dx, dy, dz) {
     controls.update();
 }
 $("viewOrtho").addEventListener("click", () => setOrtho(!ortho));
-$("viewLeft").addEventListener("click", () => standardView(1, 0, 0));       // (x is the left of the car)
-$("viewRight").addEventListener("click", () => standardView(-1, 0, 0));
-$("viewTop").addEventListener("click", () => standardView(0, 1, 0));
-$("viewBottom").addEventListener("click", () => standardView(0, -1, 0));
-$("viewFront").addEventListener("click", () => standardView(0, 0, 1));
+// the views: a dropdown at the top right (x is the left of the car); it goes back to its heading after a choice, so the same view can be chosen again
+$("viewSelect").addEventListener("change", () => { const v = $("viewSelect").value; if (v) { const [x, y, z] = v.split(",").map(Number); standardView(x, y, z); } $("viewSelect").value = ""; $("viewSelect").blur(); });
 window.addEventListener("keydown", (e) => {
     if (/input|textarea|select/i.test((document.activeElement || {}).tagName || "")) return;
     if (e.key === "o" || e.key === "O") setOrtho(!ortho);
     else if (e.code === "Numpad4") standardView(1, 0, 0); else if (e.code === "Numpad6") standardView(-1, 0, 0);
     else if (e.code === "Numpad8") standardView(0, 1, 0); else if (e.code === "Numpad2") standardView(0, -1, 0); else if (e.code === "Numpad5") standardView(0, 0, 1);
+    else if (e.code === "Numpad1") standardView(0, 0, -1);
     else return;
     e.preventDefault();
 });
@@ -1210,11 +1208,13 @@ function renderThumbnail() {
 
 // the panel: hide, show, and resize by dragging its edge
 // the bars and the test buttons can be folded away, to see more of the car
-$("toggleSide").addEventListener("click", () => { $("side").classList.toggle("collapsed"); });
+// the tabs on the edges of the view fold the bars away and back; their caret points the way the bar will go
+function paintTabs() { $("toggleSide").textContent = $("side").classList.contains("collapsed") ? "›" : "‹"; $("toggleLayers").textContent = $("layers").classList.contains("hidden") ? "‹" : "›"; }
+$("toggleSide").addEventListener("click", () => { $("side").classList.toggle("collapsed"); paintTabs(); });
 $("toggleTests").addEventListener("click", () => { const box = $("testBar"); box.style.display = box.style.display === "none" ? "" : "none"; });
 $("toggleLayers").addEventListener("click", () => { $($("layers").classList.contains("hidden") ? "layersShow" : "layersHide").click(); });
-$("layersHide").addEventListener("click", () => { $("layers").classList.add("hidden"); $("layersOpen").style.display = ""; });
-$("layersShow").addEventListener("click", () => { $("layers").classList.remove("hidden"); $("layersOpen").style.display = "none"; });
+$("layersHide").addEventListener("click", () => { $("layers").classList.add("hidden"); $("layersOpen").style.display = ""; paintTabs(); });
+$("layersShow").addEventListener("click", () => { $("layers").classList.remove("hidden"); $("layersOpen").style.display = "none"; paintTabs(); });
 (function () {
     const handle = $("layersHandle"), panel = $("layers");
     let startX = 0, startWidth = 0;

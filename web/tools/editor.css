@@ -111,6 +111,13 @@ button:disabled { opacity: 0.45; cursor: default; }
 .float.top-right { top: 12px; right: 12px; }
 .float.bottom { bottom: 14px; left: 50%; transform: translateX(-50%); flex-wrap: wrap; justify-content: center; max-width: calc(100% - 24px); }
 .float.bottom-left { top: 12px; right: 12px; z-index: 6; padding: 5px 6px; gap: 5px; }
+#panelToggles { z-index: 6; padding: 5px 6px; gap: 5px; }
+#panelToggles select { height: 28px; padding: 2px 8px; font-size: 13px; border-radius: 8px; background: #14181d; color: var(--text, #d7dde3); border: 1px solid #2f3845; }
+/* the tabs that fold the side bars away and back: on the edge of the view, against the bar they belong to */
+.edgeTab { position: absolute; top: 50%; transform: translateY(-50%); z-index: 7; width: 16px; height: 64px; padding: 0; border: 1px solid #2f3845; background: #171b22e6; color: var(--muted, #8d97a3); font-size: 16px; line-height: 1; cursor: pointer; backdrop-filter: blur(8px); }
+.edgeTab:hover { color: var(--text, #d7dde3); background: #1f252e; }
+.edgeTab.left { left: 0; border-left: 0; border-radius: 0 8px 8px 0; }
+.edgeTab.right { right: 0; border-right: 0; border-radius: 8px 0 0 8px; }
 #layersOpen { display: none !important; }   /* the Right button of the toggles does it */
 #side.collapsed { display: none; }
 .float.bottom-right { bottom: 14px; right: 12px; }

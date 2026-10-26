@@ -374,17 +374,20 @@
     <div class="float bottom" id="crashBar" style="display:none">
         <button id="crashStop" class="small danger" title="Takes the wall away and puts the car back at its start">Stop crash test</button>
     </div>
-    <div class="float bottom-left" id="panelToggles">
-        <button class="small ghost" id="toggleSide" title="Hide or show the left bar">◧ Left</button>
+    <button class="edgeTab left" id="toggleSide" title="Hide or show the left bar">‹</button>
+    <button class="edgeTab right" id="toggleLayers" title="Hide or show the right bar">›</button>
+    <div class="float top-right" id="panelToggles">
         <button class="small ghost" id="toggleTests" title="Hide or show the test buttons">Tests</button>
-        <button class="small ghost" id="toggleLayers" title="Hide or show the right bar">Right ◨</button>
-        <span style="display:inline-block;width:10px"></span>
-        <button class="small ghost" id="viewOrtho" title="Orthographic (no perspective) or perspective view (O)">Ortho</button>
-        <button class="small ghost" id="viewLeft" title="From the left (numpad 4)">Left</button>
-        <button class="small ghost" id="viewRight" title="From the right (numpad 6)">Right</button>
-        <button class="small ghost" id="viewTop" title="From above (numpad 8)">Top</button>
-        <button class="small ghost" id="viewBottom" title="From below (numpad 2)">Bottom</button>
-        <button class="small ghost" id="viewFront" title="From the front (numpad 5)">Front</button>
+        <button class="small ghost" id="viewOrtho" title="Orthographic (no perspective) or perspective view (O)">Persp</button>
+        <select id="viewSelect" class="small" title="Look at the car from a side (numpad 4 6 8 2 5, 1 for the back)">
+            <option value="">View…</option>
+            <option value="1,0,0">Left</option>
+            <option value="-1,0,0">Right</option>
+            <option value="0,1,0">Top</option>
+            <option value="0,-1,0">Bottom</option>
+            <option value="0,0,1">Front</option>
+            <option value="0,0,-1">Back</option>
+        </select>
     </div>
     <div class="float top-right" id="layersOpen" style="display:none"><button class="small ghost" id="layersShow">Layers</button></div>
 </div>
