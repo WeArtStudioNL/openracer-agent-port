@@ -155,6 +155,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 ### Car editor and the driver
 
+- A CVT chosen in the tuning menu while the car is on the track shows D at once (the label read the file of the car, not what the tuning menu had set), and the belt moves a little faster (`cvt_rate` 1.8: the engine ran past its speed while the car accelerated hard).
 - **The garage of the main menu** has Load, New and Import beside its title (open a car or a track in its editor, make a new one, import a zip); the Create button is gone.
 - **A CVT** (the Drivetrain card of the car editor and the tuning menu, `drivetrain.gearbox`: gears or cvt): no gears but a ratio that goes smoothly between the first and the last gear ratio, chosen to hold the engine at the speed the throttle asks for (idle to `cvt_rpm` at full throttle, 85 % of the rev limit by default; a little above idle off the throttle, more on the brakes), the belt moving at a limited pace (`cvt_rate`). The HUD shows D (R, N, and P with the wheels locked): the paddles go R, N, D, P, and with the H-pattern shifter the first gate is D and the second is P.
 - **The wheels of a live axle lean with the axle** (the travel of its two wheels), not with the roll of the body and the static camber as the wheels of an independent axle do: they stood upright while the axle rolled under them. In the physics too: a rolled live axle cambers its tyres (`Vehicle.liveAxle`, from the type of the axle in the car editor).

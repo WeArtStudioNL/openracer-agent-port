@@ -76,7 +76,8 @@ OpenRacer.Car = function( config, domElement ) {
     this.gear_ratios = drivetrain.gear_ratios;
     this.final_drive = drivetrain.final_drive;
     this.current_gear = 0;
-    this.cvt = !!(config.drivetrain && config.drivetrain.gearbox === "cvt");      // a CVT: no gears to shift, the label says CVT
+    // a CVT: no gears to shift, the label says D (what the vehicle has now: the tuning menu changes it while the car is on the track)
+    Object.defineProperty(this, "cvt", { get: function() { return !!(this.vehicle && this.vehicle.gearbox === "cvt"); } });
     this.manualGearbox = false;     // the driver selects the gears (sequential and manual): no automatic shifting
     this.neutral = false;           // no drive while in neutral
     this.clutch = 0;                // clutch pedal: 0 = engaged, 1 = fully pressed
