@@ -104,15 +104,21 @@ OpenRacer.RacingLine.prototype.settle = function (ground) {
     if (!ground) return;
     this.points.forEach(function (p) {
         var road = ground.query(p.x, p.z, 1000, 0);
-        if (road) p.y = road.y;
+        if (road) { p.y = road.y; p.surface = road.surface; }
     });
 };
 
-// The speed a car can have at every point: limited by the bend there (lateral acceleration aLat, m/s^2) and by the braking (aBrake)
-// that the slower points ahead ask for
-OpenRacer.RacingLine.prototype.computeSpeeds = function (aLat, aBrake, vMax) {
-    var n = this.points.length;
+// The speed a car can have at every point: limited by the bend there (lateral acceleration aLat, m/s^2, on the road; gripOf(surface) gives the share of that
+// grip on another surface, sand or grass, when it is given), by the crest there (above the speed at which the car leaves the ground over the top of a dune
+// it flies, and lands where the line is not: a little of that is allowed) and by the braking (aBrake, scaled by the grip too) that the slower points ahead ask for
+OpenRacer.RacingLine.prototype.computeSpeeds = function (aLat, aBrake, vMax, gripOf) {
+    var n = this.points.length, G = 9.81, self = this;
     var speeds = new Float32Array(n);
+    var grip = new Float32Array(n);
+    for (var gi = 0; gi < n; gi++) grip[gi] = gripOf ? Math.max(0.25, Math.min(1, gripOf(this.points[gi].surface))) : 1;
+    // the height of the line, smoothed over five points (the road is sampled, and bumpy)
+    var height = new Float32Array(n);
+    for (var hi = 0; hi < n; hi++) { var sum = 0; for (var hk = -2; hk <= 2; hk++) sum += this.point(hi + hk).y || 0; height[hi] = sum / 5; }
     for (var i = 0; i < n; i++) {
         // the curvature from the point before and after (a circle through three points)
         var a = this.point(i - 2), b = this.point(i), c = this.point(i + 2);
@@ -120,7 +126,10 @@ OpenRacer.RacingLine.prototype.computeSpeeds = function (aLat, aBrake, vMax) {
         var cross = abx * bcz - abz * bcx;
         var lab = Math.hypot(abx, abz), lbc = Math.hypot(bcx, bcz), lac = Math.hypot(c.x - a.x, c.z - a.z);
         var curvature = (lab * lbc * lac) > 1e-6 ? Math.abs(2 * cross / (lab * lbc * lac)) : 0;
-        speeds[i] = curvature > 1e-4 ? Math.min(vMax, Math.sqrt(aLat / curvature)) : vMax;
+        speeds[i] = curvature > 1e-4 ? Math.min(vMax, Math.sqrt(aLat * grip[i] / curvature)) : vMax;
+        // the crest: the second derivative of the height along the line over six metres; the car leaves the ground at sqrt(g / curvature), a hop of 15 % over that is allowed
+        var h = 3, d2 = (height[(i + h) % n] - 2 * height[i] + height[((i - h) % n + n) % n]) / ((h * this.step) * (h * this.step));
+        if (this.closed && d2 < -1e-4) speeds[i] = Math.min(speeds[i], 1.15 * Math.sqrt(G / -d2));
         if (speeds[i] < 6) speeds[i] = 6;                 // (a bend tighter than that does not exist on a track; a kink of the line is not a reason to crawl)
     }
     // braking: going backwards, a point may not be faster than the next one allows
@@ -128,7 +137,7 @@ OpenRacer.RacingLine.prototype.computeSpeeds = function (aLat, aBrake, vMax) {
     for (var pass = 0; pass < passes; pass++) {
         for (var k = n - 1; k >= 0; k--) {
             var next = this.closed ? (k + 1) % n : Math.min(n - 1, k + 1);
-            var allowed = Math.sqrt(speeds[next] * speeds[next] + 2 * aBrake * this.step);
+            var allowed = Math.sqrt(speeds[next] * speeds[next] + 2 * aBrake * grip[k] * this.step);
             if (speeds[k] > allowed) speeds[k] = allowed;
         }
     }

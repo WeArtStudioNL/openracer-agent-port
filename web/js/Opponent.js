@@ -75,7 +75,9 @@ OpenRacer.Opponent = function (config, line, options) {
     this.loaded = false;
     this.steeringWheel = null;
     var modelMid = null;
-    var speeds = line ? line.computeSpeeds(9.81 * 1.05 * this.skill, 9.81 * 0.9 * this.skill, 90) : null;
+    // the speed of the line for this driver: the grip of the road times the skill, less on sand or grass (the surfaces of the track, Helpers.getSurface), and no flying off the crests
+    var roadGrip = typeof getSurface === "function" ? getSurface("road").static : 1;
+    var speeds = line ? line.computeSpeeds(9.81 * 1.05 * this.skill, 9.81 * 0.9 * this.skill, 90, function (name) { return typeof getSurface === "function" && name ? getSurface(name).static / roadGrip : 1; }) : null;
 
     // lap and position
     this.lineIndex = line ? line.nearest(0, 0) : 0;
@@ -219,6 +221,11 @@ OpenRacer.Opponent = function (config, line, options) {
         // pure pursuit: the steering angle that makes the car reach the point
         var dist = Math.hypot(dxT, dzT);
         var steer = Math.atan2(2 * v.wheelbase * Math.sin(wanted), Math.max(dist, 1));
+        // and a pull towards the line itself: pure pursuit on a point far ahead asks the geometric angle, and a car that slips (its tyres need their slip angles, or it
+        // understeers on sand) tracks a wider arc than that and drifts off the line without ever asking for more; up to 8 degrees for 5 m beside the line it should be on
+        var hereP = line.point(this.lineIndex), hx = hereP.x - (tz / tl) * aside - v.x, hz = hereP.z + (tx / tl) * aside - v.z;
+        var beside = -hx * Math.sin(v.psi) + hz * Math.cos(v.psi);                        // the line to the left of the car (m)
+        steer += Math.max(-0.14, Math.min(0.14, beside * 0.028));
         steer = Math.max(-this.maxTurn, Math.min(this.maxTurn, steer));
         smoothSteer += (steer - smoothSteer) * Math.min(1, delta / 0.08);
         this.turnAngle = smoothSteer;

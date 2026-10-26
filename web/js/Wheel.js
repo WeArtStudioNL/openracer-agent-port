@@ -123,7 +123,9 @@ OpenRacer.Wheel = function (parameters) {
     // the slip at the peak gives how far the tyre is towards its limit (s; 1 is the peak), a magic-formula curve gives the share of the peak force, which is the friction of frictionFor
     // times the load, against the slip. It costs a few lines of arithmetic per wheel per step, where the shell costs a few hundred nodes against the triangles of the road.
     this.tyreForce = function (kappa, tanAlpha, load, surface) {
-        var friction = this.frictionFor(load, surface);
+        // the friction at a tenth of the load: the shell asks frictionFor per node, each with a small share of the load, so its load sensitivity hardly bites; with the whole load
+        // in one call the simple tyre had a quarter less grip than the shell on the same car, and understeered off the racing line
+        var friction = this.frictionFor(load * 0.1, surface);
         var mu = friction.mu, slidingRatio = Math.min(0.98, friction.sliding / (mu || 1));
         var C = 2 - (2 / Math.PI) * Math.asin(slidingRatio);
         var peak = Math.tan(Math.PI / (2 * C));                                  // B x at the peak of the curve
