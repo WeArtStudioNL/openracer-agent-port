@@ -761,6 +761,7 @@ OpenRacer.Replay = (function() {
         free.aim = false;
         anglesFromWorld(free.quat);
         free.fov = free.fovT = camera.fov;
+        if(targetObject()) setParent("car");                   // it starts fixed to the car (L): a camera that stayed behind was far from a car that drove on
         updateCameraUi();
     }
 

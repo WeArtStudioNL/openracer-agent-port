@@ -152,11 +152,14 @@ OpenRacer.FreeCam = (function () {
             // the game starts with this camera (the choice is kept): the camera has not been put near the car yet, so it starts behind it, at the
             // first frame (the car has its direction by then)
             placeBehind = camera.position.distanceTo(carPosition) > 60;
+            // the first time the camera is fixed to the car (I): a camera that stayed where it was while the car drove on was far away by the time it was chosen
+            if (placeBehind) fixWhenPlaced = true; else setFixed(true);
         }
         panel.style.display = Settings.option("hud") ? "block" : "none";
         refreshUi();
         saveAt = 0;
     }
+    var fixWhenPlaced = false;
 
     function leave() {
         if (active) save();
@@ -210,6 +213,7 @@ OpenRacer.FreeCam = (function () {
             pos.copy(carPosition).addScaledVector(ahead, -8); pos.y += 10;
             yaw = carYaw + Math.PI; pitch = -0.15; fov = 50;
             lastCar.copy(carPosition);
+            if (fixWhenPlaced) { fixWhenPlaced = false; fixed = false; setFixed(true); refreshUi(); }
         }
         panel.style.display = Settings.option("hud") ? "block" : "none";      // the panel goes with the HUD
         var mx = key("right") - key("left"), mz = key("forward") - key("back"), my = key("up") - key("down");
