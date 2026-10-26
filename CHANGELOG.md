@@ -155,6 +155,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 ### Car editor and the driver
 
+- **The wheels of a live axle lean with the axle** (the travel of its two wheels), not with the roll of the body and the static camber as the wheels of an independent axle do: they stood upright while the axle rolled under them. In the physics too: a rolled live axle cambers its tyres (`Vehicle.liveAxle`, from the type of the axle in the car editor).
 - A trailing arm whose end sits on a live axle swings so that its end stays on the axle: the axle at that distance from its middle is at the mean travel of the two wheels plus its roll, less than the travel of the wheel for an arm that sits inboard (the upper arms near the differential came out of the axle when the car twisted).
 - The two ends of a propshaft are mounts (`prop_rear_start` at the gearbox, `prop_rear_end` at the differential or the axle; the front likewise), so where a shaft leaves the gearbox and enters the axle can be set.
 - A spring or a damper whose foot sits on a wishbone goes round the hinge of the arm with it, not up and down by the whole travel of the wheel: a coilover seated halfway along the lower arm moves half as far as the wheel, and it looked as if it came loose from the arm. The same for a foot on a trailing arm (it goes round the hinge by its distance along the car), and a foot on a live axle (within 15 cm of it along the car) goes up with the axle at its distance from the middle: the mean travel of the two wheels and the roll of the axle.

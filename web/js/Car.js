@@ -122,6 +122,9 @@ OpenRacer.Car = function( config, domElement ) {
         ackermann: chassis.ackermann,
         suspension_travel: chassis.suspension_travel, unsprung_mass: chassis.unsprung_mass, tyre_rate: chassis.tyre_rate, tyre_damping: chassis.tyre_damping, suspension_length: chassis.suspension_length, spring_progression: chassis.spring_progression, damping_rebound: chassis.damping_rebound,
         compound: config.tyres && config.tyres.compound,
+        // a live axle (the parts library, PartsLibrary.js): the two wheels of the axle lean with it, not with the roll of the body
+        live_axle_front: !!(OpenRacer.PartsLibrary && OpenRacer.PartsLibrary.isLive(OpenRacer.PartsLibrary.typeOf(config, "front"))),
+        live_axle_rear: !!(OpenRacer.PartsLibrary && OpenRacer.PartsLibrary.isLive(OpenRacer.PartsLibrary.typeOf(config, "rear"))),
         pressure_front: config.tyres && config.tyres.pressure_front, pressure_rear: config.tyres && config.tyres.pressure_rear,
         toe_front: chassis.toe_front, toe_rear: chassis.toe_rear,
         ride_front: chassis.ride_front,

@@ -104,6 +104,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.camberFront = parameters.camber_front || 0;
     this.camberRear = parameters.camber_rear || 0;
     this.rollCamber = parameters.roll_camber !== undefined ? parameters.roll_camber : 0.6;
+    this.liveAxle = { front: !!parameters.live_axle_front, rear: !!parameters.live_axle_rear };   // the wheels of a live axle lean with the axle (the travel of the two wheels), not with the roll of the body
     this.camberGain = 0.5;            // a degree of lean is worth this many degrees of slip angle (camber thrust)
     var axleFy = [0, 0];              // the lateral force of each axle in the last step, for the geometric load transfer
     this.gear_ratios = parameters.gear_ratios;
@@ -337,6 +338,11 @@ OpenRacer.Vehicle = function (parameters, input) {
     // ---- geometry that follows from the mass, the weight distribution and the springs
     var arbFront = 0, arbRear = 0;    // anti-roll bars: the force at a wheel per metre that the wheels are pushed in differently
     var inertiaX = 1, inertiaY = 1, inertiaZ = 1;
+    // the lean to the left of the two wheels of a live axle, from the travel of its wheels (the left wheel higher: the axle rolls and its wheels lean to the right)
+    this.axleLean = function (front) {
+        var l = this.wheels[front ? 1 : 2], r = this.wheels[front ? 0 : 3], track = (front ? this.front_track : this.rear_track) || 1.5;
+        return -Math.atan2((r.susLength || 0) - (l.susLength || 0), track);
+    };
     this.layout = function () {
         this.af = this.wheelbase * (1 - this.weight_distribution); // front axle to the centre of gravity
         this.ar = this.wheelbase * this.weight_distribution;       // rear axle to the centre of gravity
@@ -1534,6 +1540,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 // thrust. (A motorcycle: its wheels lean with it and nothing more.)
                 var camberDeg = w.front ? self.camberFront : self.camberRear;
                 var lean = self.soloWheels ? 0 : (w.right ? -camberDeg : camberDeg) * Math.PI / 180 - rollRightNow * self.rollCamber - (w.camberBend || 0);
+                if(!self.soloWheels && self.liveAxle[w.front ? "front" : "rear"]) lean = self.axleLean(w.front) - (w.camberBend || 0);
                 var cl = Math.cos(lean), sl = Math.sin(lean);
                 cylU.x = axisY.x * cl + cylL.x * sl; cylU.y = axisY.y * cl + cylL.y * sl; cylU.z = axisY.z * cl + cylL.z * sl;
                 cylL.x = cylL.x * cl - axisY.x * sl; cylL.y = cylL.y * cl - axisY.y * sl; cylL.z = cylL.z * cl - axisY.z * sl;
@@ -1765,6 +1772,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 // leans pushes towards the side it leans to, as if it had a slip angle
                 var camber = (wheel.front ? self.camberFront : self.camberRear) * Math.PI / 180;
                 var leanLeft = (wheel.right ? -camber : camber) - rollRight * self.rollCamber - (wheel.camberBend || 0);
+                if(self.liveAxle[wheel.front ? "front" : "rear"]) leanLeft = self.axleLean(wheel.front) - (wheel.camberBend || 0);
                 wheel.lean = self.soloWheels ? 0 : leanLeft;            // (for the wheel of the model: it leans with the camber, Wheel.turn)
                 var surface = self.getSurface(wheel.surface);
                 if(wheel.cylActive) {
