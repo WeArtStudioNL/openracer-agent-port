@@ -60,8 +60,6 @@ OpenRacer.CarTuning = (function () {
             ["idle_rpm", "Idle speed", "rpm", 500, 2000, 50],
             ["limiter_rpm", "Rev limit", "rpm", 3000, 13000, 100],
             ["limiter_hz", "Rev limiter: cuts per second", "Hz", 2, 40, 1],
-            ["two_step_rpm", "Two-step: engine speed (key held)", "rpm", 2000, 13000, 100],
-            ["launch_rpm", "Launch control: engine speed", "rpm", 2000, 13000, 100],
             ["engine_inertia", "Inertia of the engine", "kg m²", 0.05, 1.5, 0.01],
             ["engine_braking", "Engine braking", "%", 20, 300, 5],
             ["turbo_share", "Turbo: share of the torque that is boost (0: no turbo)", "%", 0, 90, 5],
@@ -103,10 +101,6 @@ OpenRacer.CarTuning = (function () {
             ["max_steer_deg", "Steering lock", "°", 10, 50, 1],
             ["ackermann", "Ackermann (the inner wheel steers more)", "%", 0, 100, 5]
         ] },
-        { name: "Assists", items: [
-            ["tc_allowance", "Traction control: wheel spin allowed", "%", 30, 400, 5],
-            ["esc_gain", "ESC: how hard it steps in", "%", 30, 250, 5]
-        ] },
         { name: "Engine sound", items: [
             ["es_volume", "Volume", "", 0, 3, 0.05],
             ["es_convolution", "Through the exhaust (impulse response)", "", 0, 1, 0.05],
@@ -145,7 +139,21 @@ OpenRacer.CarTuning = (function () {
         return true;
     }
 
+    // the systems of the car: each has a tick (the car has it, or not) and its settings; a car that does not have one has no key for it and no light on the gauge
     var FEATURES = [
+        { key: "tc", label: "Traction control", items: [
+            ["tc_allowance", "Wheel spin allowed", "%", 30, 400, 5]
+        ] },
+        { key: "abs", label: "ABS", items: [] },
+        { key: "esc", label: "Stability control (ESC)", items: [
+            ["esc_gain", "How hard it steps in", "%", 30, 250, 5]
+        ] },
+        { key: "launch_control", label: "Launch control", items: [
+            ["launch_rpm", "Engine speed", "rpm", 2000, 13000, 100]
+        ] },
+        { key: "two_step", label: "Two-step (the key, or the clutch pedal at a standstill)", items: [
+            ["two_step_rpm", "Engine speed", "rpm", 2000, 13000, 100]
+        ] },
         { key: "pops", label: "Pops and bangs (unburnt fuel burns in the exhaust)", items: [
             ["pops_amount", "How often (on the rev limiter and the two-step)", "%", 0, 100, 5],
             ["pops_overrun", "After lifting off the throttle: for", "s", 0, 4, 0.1],
@@ -167,6 +175,7 @@ OpenRacer.CarTuning = (function () {
         ] }
     ];
     var FEATURE_DEFAULTS = {
+        tc_on: true, abs_on: true, esc_on: true, launch_control_on: true, two_step_on: true,
         pops_on: false, pops_amount: 60, pops_overrun: 2, pops_rpm: 3000, pops_loud: 100, pops_flames: 100,
         antilag_on: false, antilag_mode: "lift", antilag_boost: 60, antilag_rpm: 3000, antilag_time: 5, antilag_bangs: 100, antilag_fuel: 60,
         boost_gauge_on: false, boost_full: 1, boost_scale: 2
@@ -351,6 +360,7 @@ OpenRacer.CarTuning = (function () {
             roll_camber: v.roll_camber / 100,
             tc_allowance: v.tc_allowance / 100,
             esc_gain: v.esc_gain / 100,
+            tc_fitted: v.tc_on !== false, abs_fitted: v.abs_on !== false, esc_fitted: v.esc_on !== false, launch_control_fitted: v.launch_control_on !== false, two_step_fitted: v.two_step_on !== false,
             extras: extrasOf(v)
         };
     }
@@ -439,6 +449,7 @@ OpenRacer.CarTuning = (function () {
     function keys() {
         var out = [];
         GROUPS.forEach(function (g) { g.items.forEach(function (item) { if(item[4] > item[3] && item[0].indexOf("es_") !== 0) out.push(item[0]); }); });
+        FEATURES.forEach(function (f) { f.items.forEach(function (item) { if(item[4] > item[3]) out.push(item[0]); }); });
         return out;
     }
 

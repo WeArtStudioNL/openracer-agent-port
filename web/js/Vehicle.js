@@ -165,6 +165,9 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.tyreStiffY = 18;
     this.tcAllowance = 1;             // tuning: how much wheel spin the traction control allows, as a factor
     this.escGain = 1;                 // tuning: how hard the stability control steps in, as a factor
+    // the systems the car has (the tuning menu); a system that is not fitted does nothing, whatever its key says
+    this.tcFitted = parameters.tc_fitted !== false; this.absFitted = parameters.abs_fitted !== false; this.escFitted = parameters.esc_fitted !== false;
+    this.launchControlFitted = parameters.launch_control_fitted !== false; this.twoStepFitted = parameters.two_step_fitted !== false;
     this.tcEnabled = false;           // traction control: takes power off when the driven wheels spin
     this.escEnabled = false;          // stability control (see step())
     this.absEnabled = true;
@@ -488,6 +491,11 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.toe_rear !== undefined) this.toeRear = t.toe_rear;
         this.applyPressure();
         if(t.shift_time !== undefined) this.shiftTime = t.shift_time;
+        if(t.tc_fitted !== undefined) this.tcFitted = !!t.tc_fitted;
+        if(t.abs_fitted !== undefined) this.absFitted = !!t.abs_fitted;
+        if(t.esc_fitted !== undefined) this.escFitted = !!t.esc_fitted;
+        if(t.launch_control_fitted !== undefined) this.launchControlFitted = !!t.launch_control_fitted;
+        if(t.two_step_fitted !== undefined) this.twoStepFitted = !!t.two_step_fitted;
         if(t.gearbox !== undefined) this.gearbox = ["cvt", "torque-converter", "dct", "amt", "imt"].indexOf(t.gearbox) >= 0 ? t.gearbox : "gears";
         if(t.tc_stall_rpm !== undefined) this.tcStallRPM = t.tc_stall_rpm;
         if(t.tc_ratio !== undefined) this.tcRatio = t.tc_ratio;
@@ -1477,7 +1485,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         var escBrake = [0, 0, 0, 0];
         var escCut = 0;
         // (not on a motorcycle: its front wheel is turned a little for a lot of yaw in a bend, which looks like oversteer to it, and a brake on the front in a bend throws a bike down)
-        if(self.escEnabled && !self.controller && !inp.handbrake && u > 5 && !self.airborne) {
+        if(self.escEnabled && self.escFitted && !self.controller && !inp.handbrake && u > 5 && !self.airborne) {
             var steady = u * delta / (L + self.understeerGradient * u * u); // the yaw rate that goes with the steering
             // the car follows a steering movement with a delay: a car that is only just starting to turn is not understeering
             self.yawWanted += (steady - self.yawWanted) * Math.min(1, dt / 0.25);
@@ -1722,7 +1730,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         var wasHeld = self.lcArmed || self.transbrakeHeld;
         var wasLC = self.lcArmed;
         self.transbrakeHeld = !!inp.transbrake && launchGear !== 0 && !self.airborne;
-        if(self.launchControlEnabled && launchGear > 0 && Math.abs(self.u) < 2) {
+        if(self.launchControlEnabled && self.launchControlFitted && launchGear > 0 && Math.abs(self.u) < 2) {
             // armed with the brake and full throttle; it stays armed while the brake and most of the throttle stay (so the pedals can move a little)
             self.lcArmed = self.lcArmed ? (inp.brakePedal > 0.15 && inp.throttle > 0.5) : (inp.brakePedal > 0.5 && inp.throttle > 0.7);
         } else {
@@ -1739,7 +1747,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         // The two-step (an option, on a key): with the clutch pedal in (or the two-step key, for a keyboard) at a standstill the engine is held at its own
         // lower limit, to launch from. Without a clutch pedal in use the clutch is opened too, and the launch is a ramp of the clutch when it is let go.
         var wasTwoStep = self.twoStepActive;
-        self.twoStepActive = Math.abs(self.u) < 3 && ((self.twoStepEnabled && inp.clutchAvailable && inp.clutch > 0.7) || !!inp.twoStep);        // the key always works, the clutch pedal only when the option is on
+        self.twoStepActive = self.twoStepFitted && Math.abs(self.u) < 3 && ((self.twoStepEnabled && inp.clutchAvailable && inp.clutch > 0.7) || !!inp.twoStep);        // the key always works, the clutch pedal only when the option is on
         if(wasTwoStep && !self.twoStepActive && inp.throttle > 0.3 && !inp.clutchPedalPresent) self.launchRelease = 0.15;
         engine.holdRPM = self.twoStepActive ? engine.twoStepRPM : (self.lcArmed ? engine.launchRPM : 0);
         engine.holding = self.lcArmed || self.transbrakeHeld || self.twoStepActive;
@@ -1945,7 +1953,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             }
 
             // brakes, with ABS
-            if(self.absEnabled && brakePedal > 0.05 && wheel.hasContact && wheel.slipRatio < -0.08 && wheel.s > 1.1 && Math.abs(vl) > 2) {
+            if(self.absEnabled && self.absFitted && brakePedal > 0.05 && wheel.hasContact && wheel.slipRatio < -0.08 && wheel.s > 1.1 && Math.abs(vl) > 2) {
                 wheel.absFactor = Math.max(0.05, wheel.absFactor - 15 * dt);
                 wheel.abs = true;
             } else {
@@ -1975,7 +1983,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         // saw-tooth at the edge, and the engine speed with it: the car stuttered under traction control instead of pulling in one stroke.
         var slipError = maxDrivenSlip - 1;
         // (not in a burnout of a motorcycle: the rear wheel is meant to spin there, and the throttle it cut let the clutch slip and the wheel stop after a moment)
-        if((self.tcEnabled && !(self.controller && self.controller.burnout > 0.5)) || self.launching > 0) {
+        if((self.tcEnabled && self.tcFitted && !(self.controller && self.controller.burnout > 0.5)) || self.launching > 0) {
             var rate = slipError > 0 ? -(4 + 8 * slipError) * Math.min(1, slipError * 4) : Math.min(1, -slipError * 6) + 1.5 * Math.max(0, Math.min(1, (-slipError - 0.5) / 0.4));
             self.tcFactor = Math.max(0.2, Math.min(1, self.tcFactor + dt * rate));
             if(slipError > 0.05) for(var ti = 0; ti < 4; ti++) if(wheels[ti].driven) wheels[ti].tc = true;

@@ -103,7 +103,8 @@ var MainMenu = (function() {
             ".or-badge, #mainMenu .badge { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; vertical-align: middle; " +
             "margin-left: 8px; padding: 2px 7px; border-radius: 10px; background: var(--line); color: var(--text); }" +
             // the windows (the replays, the garage, the jumps, more options, the editors)
-            "#replaysDialog, #garageDialog, #editorsDialog, #moreDialog { position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 3100; background: rgba(0, 0, 0, 0.7); display: flex; align-items: center; justify-content: center; }" +
+            "#replaysDialog, #garageDialog, #editorsDialog, #moreDialog, #pickDialog { position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 3100; background: rgba(0, 0, 0, 0.7); display: flex; align-items: center; justify-content: center; }" +
+            "#pickDialog { z-index: 3200; } #pickDialog .box { width: 420px; }" +                 /* (the Car or Track question of the garage: over the garage) */
             ".or-dialog .box, #replaysDialog .box, #garageDialog .box { width: 720px; max-width: calc(100% - 40px); max-height: calc(100% - 40px); overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 22px 26px; color: var(--text); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }" +
             ".or-dialog h2, #replaysDialog h2, #garageDialog h2 { margin: 0 0 4px; font-size: 22px; color: var(--head); }" +
             ".or-dialog .note, #replaysDialog .note, #garageDialog .note { color: var(--muted); font-size: 14px; line-height: 1.5; margin: 0 0 14px; }" +

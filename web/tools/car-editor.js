@@ -1966,6 +1966,7 @@ function tuningFromCar(car) {
     tuning = {};
     TUNING_KEYS.forEach((k) => { tuning[k] = all[k]; });
     tuning.compound = all.compound;                       // (not a number: the kind of tyre)
+    Object.keys(OpenRacer.CarTuning.FEATURE_DEFAULTS).forEach((k) => { tuning[k] = all[k]; });     // the ticks of the systems and the extras, with their settings
     renderTuningCard();
 }
 
@@ -2016,6 +2017,53 @@ function renderTuningCard() {
             box.appendChild(row);
         }
     });
+    // the systems and the extras: a tick each, with their settings below it while it is ticked
+    const fhead = document.createElement("div");
+    fhead.className = "group";
+    fhead.textContent = "Systems and extras";
+    box.appendChild(fhead);
+    OpenRacer.CarTuning.FEATURES.forEach((feature) => {
+        const wrap = document.createElement("div");
+        wrap.dataset.tuneFeature = feature.key;
+        const line = document.createElement("label");
+        line.className = "check";
+        const tick = document.createElement("input");
+        tick.type = "checkbox"; tick.id = "tune_" + feature.key + "_on"; tick.checked = tuning[feature.key + "_on"] !== false;
+        line.appendChild(tick); line.appendChild(document.createTextNode(" " + feature.label));
+        wrap.appendChild(line);
+        const inner = document.createElement("div");
+        inner.style.display = tick.checked ? "" : "none";
+        tick.addEventListener("change", () => { tuning[feature.key + "_on"] = tick.checked; inner.style.display = tick.checked ? "" : "none"; tuningChanged(); });
+        for (let i = 0; i < feature.items.length; i += 3) {
+            const row = document.createElement("div");
+            row.className = "row";
+            feature.items.slice(i, i + 3).forEach((item) => {
+                const [key, label, unit, min, max, step] = item;
+                const cell = document.createElement("div");
+                if (max > min) {
+                    const input = document.createElement("input");
+                    input.type = "number"; input.min = min; input.max = max; input.step = step; input.value = tuning[key];
+                    input.id = "tune_" + key;
+                    input.addEventListener("input", () => { tuning[key] = parseFloat(input.value); tuningChanged(); });
+                    cell.appendChild(input);
+                } else {
+                    const sel = document.createElement("select");
+                    (key === "antilag_mode" ? [["lift", "After lifting off the throttle"], ["launch", "Only with the two-step, the transbrake or the launch control"]] : []).forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; sel.appendChild(o); });
+                    sel.value = tuning[key];
+                    sel.addEventListener("change", () => { tuning[key] = sel.value; tuningChanged(); });
+                    cell.appendChild(sel);
+                }
+                const hint = document.createElement("div");
+                hint.className = "hint";
+                hint.textContent = label + (unit ? " (" + unit + ")" : "");
+                cell.appendChild(hint);
+                row.appendChild(cell);
+            });
+            inner.appendChild(row);
+        }
+        wrap.appendChild(inner);
+        box.appendChild(wrap);
+    });
     $("tuningInfo").textContent = TUNING_KEYS.length + " settings";
     syncTuningVisibility();
 }
@@ -2025,6 +2073,7 @@ function syncTuningVisibility() {
     const v = Object.assign({}, tuning, { drive: $("drive").value, diff: $("diff").value, center_diff: $("centerDiff").value, gearbox: $("gearbox").value });
     document.querySelectorAll("#tuningBox [data-tune-key], #tuningCard [data-tune-key], [data-tune-key]").forEach((cell) => { cell.style.display = OpenRacer.CarTuning.visible(cell.dataset.tuneKey, v) ? "" : "none"; });
     document.querySelectorAll("[data-tune-key]").forEach((cell) => { const row = cell.parentNode; if (row && row.classList.contains("row")) row.style.display = [...row.children].some((c) => c.style.display !== "none") ? "" : "none"; });
+    document.querySelectorAll("[data-tune-feature]").forEach((wrap) => { wrap.style.display = OpenRacer.CarTuning.visibleFeature(wrap.dataset.tuneFeature, v) ? "" : "none"; });
 }
 ["drive", "diff", "centerDiff", "gearbox"].forEach((id) => $(id).addEventListener("change", () => syncTuningVisibility()));
 

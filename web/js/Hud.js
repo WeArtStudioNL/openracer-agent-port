@@ -36,8 +36,9 @@ var Hud = (function() {
     var context = null;
     var lapPanel = null;
     var hintBar = null;
-    var pills = {};
-    var pillStates = {};
+    var pillStates = {};     // the state of every light: off, on, active, park
+    var lightRects = [];     // where the lights are on the gauge canvas (for a tap on a touch screen)
+    var LIGHT_ACTION = { TC: "toggleTC", LC: "toggleLaunch", ESC: "toggleESC", ABS: "toggleABS", "2S": "toggleTwoStep" };
     var size = 0;
     var ratio = 1;
     var flash = 0;
@@ -52,7 +53,7 @@ var Hud = (function() {
             "#hud .pills { display: flex; flex-direction: column; gap: 7px; margin-bottom: 14px; }" +
             "#hud .pill { min-width: 62px; padding: 5px 10px; border-radius: 7px; font-size: 15px; font-weight: bold; letter-spacing: 1px; text-align: center; color: #fff;" +
             " border: 2px solid; background: rgba(15, 18, 22, 0.72); transition: background 0.12s, border-color 0.12s, color 0.12s; }" +
-            "body.touch #hud .pill.tap { pointer-events: auto; cursor: pointer; touch-action: manipulation; padding: 9px 12px; min-width: 66px; }" +
+            "body.touch #hud canvas { pointer-events: auto; touch-action: manipulation; }" +
             "#hud .pill.off { border-color: #d9372f; color: #ff6b62; box-shadow: 0 0 8px rgba(217, 55, 47, 0.35); }" +
             "#hud .pill.on { border-color: #2eb35a; color: #52e085; box-shadow: 0 0 8px rgba(46, 179, 90, 0.35); }" +
             "#hud .pill.active { border-color: #f5c518; background: rgba(245, 197, 24, 0.9); color: #1a1500; box-shadow: 0 0 14px rgba(245, 197, 24, 0.8); }" +
@@ -85,26 +86,16 @@ var Hud = (function() {
         addStyle();
         container = document.createElement("div");
         container.id = "hud";
-        var pillColumn = document.createElement("div");
-        pillColumn.className = "pills";
-        ["TC", "LC", "ESC", "ABS", "P", "2S", "TB"].forEach(function(name) {
-            var pill = document.createElement("div");
-            pill.className = "pill off";
-            pill.textContent = name;
-            // on a touch screen the pills are buttons: they switch the aid on and off, as the keys do
-            var action = { TC: "toggleTC", LC: "toggleLaunch", ESC: "toggleESC", ABS: "toggleABS", "2S": "toggleTwoStep" }[name];
-            if(action) {
-                pill.className += " tap";
-                pill.tap = true;
-                pill.addEventListener("pointerdown", function(e) { if(!document.body.classList.contains("touch")) return; e.preventDefault(); e.stopPropagation(); Settings.trigger(action); });
-            }
-            pillColumn.appendChild(pill);
-            pills[name] = pill;
-        });
-        pills.P.style.display = "none"; // only while the parking lock holds the car
-        pills.TB.style.display = "none"; // only while the transbrake holds
-        container.appendChild(pillColumn);
+        // the lights of the systems (TC, LC, ESC, ABS, 2S; P and the transbrake while they hold) are drawn in the gauge: on a touch screen a tap on one switches the aid, as the keys do
         canvas = document.createElement("canvas");
+        canvas.addEventListener("pointerdown", function(e) {
+            if(!document.body.classList.contains("touch")) return;
+            var rect = canvas.getBoundingClientRect(), x = (e.clientX - rect.left) * ratio, y = (e.clientY - rect.top) * ratio;
+            for(var k = 0; k < lightRects.length; k++) {
+                var r = lightRects[k];
+                if(x >= r.x && x <= r.x + r.w && y >= r.y - r.h && y <= r.y + r.h * 2 && r.action) { e.preventDefault(); e.stopPropagation(); Settings.trigger(r.action); return; }
+            }
+        });
         container.appendChild(canvas);
         document.body.appendChild(container);
         context = canvas.getContext("2d");
@@ -168,12 +159,7 @@ var Hud = (function() {
         if(debug) debug.style.display = Settings.option("debug") ? "" : "none";
     }
 
-    function setPill(name, state) {
-        if(pillStates[name] === state) return;
-        pillStates[name] = state;
-        pills[name].className = "pill " + state + (pills[name].tap ? " tap" : "");
-        pills[name].title = name + " " + STATE_NAMES[state];
-    }
+    function setPill(name, state) { pillStates[name] = state; }
 
     function resize() {
         ratio = window.devicePixelRatio || 1;
@@ -188,7 +174,8 @@ var Hud = (function() {
         boostCanvas.style.height = small + "px";
         boostCanvas.width = Math.round(small * ratio);
         boostCanvas.height = Math.round(small * ratio);
-        boostCanvas.style.right = (16 + 80 + size) + "px";      // left of the pills and the gauge
+        boostCanvas.style.right = (16 + size - Math.round(small * 0.3)) + "px";      // top left of the gauge (the corner of its square is empty)
+        boostCanvas.style.bottom = (16 + Math.round(size * 0.78)) + "px";
     }
 
     function formatTime(seconds) {
@@ -298,6 +285,33 @@ var Hud = (function() {
         context.fillStyle = "#8fa0b4";
         context.font = Math.round(R * 0.085) + "px Arial";
         context.fillText((car.engineRPM / 1000).toFixed(1) + " x1000 rpm", cx, cy + R * 0.62);
+        drawLights(context, cx, cy, R);
+    }
+
+    // the lights of the systems in a row at the bottom of the gauge: red is off, green on, yellow working; only the systems the car has
+    var LIGHT_STYLE = { off: ["#d9372f", "rgba(20, 24, 30, 0.6)", "#ff6b62"], on: ["#2eb35a", "rgba(20, 24, 30, 0.6)", "#52e085"], active: ["#f5c518", "rgba(245, 197, 24, 0.9)", "#1a1500"], park: ["#d9372f", "rgba(217, 55, 47, 0.85)", "#ffffff"] };
+    function drawLights(c, cx, cy, R) {
+        var names = ["TC", "LC", "ESC", "ABS", "2S", "P", "TB"].filter(function(n) { return pillStates[n]; });
+        lightRects = [];
+        if(!names.length) return;
+        var h = R * 0.13, gap = R * 0.035, font = Math.round(R * 0.075);
+        c.font = "bold " + font + "px Arial";
+        var widths = names.map(function(n) { return Math.max(R * 0.2, c.measureText(n).width + R * 0.1); });
+        var total = widths.reduce(function(a, b) { return a + b; }, 0) + gap * (names.length - 1);
+        var x = cx - total / 2, y = cy + R * 0.76;
+        names.forEach(function(n, i) {
+            var st = LIGHT_STYLE[pillStates[n]] || LIGHT_STYLE.off, w = widths[i], r = h * 0.3;
+            c.beginPath();
+            c.moveTo(x + r, y); c.lineTo(x + w - r, y); c.quadraticCurveTo(x + w, y, x + w, y + r); c.lineTo(x + w, y + h - r); c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            c.lineTo(x + r, y + h); c.quadraticCurveTo(x, y + h, x, y + h - r); c.lineTo(x, y + r); c.quadraticCurveTo(x, y, x + r, y); c.closePath();
+            c.fillStyle = st[1]; c.fill();
+            c.lineWidth = Math.max(1, R * 0.012); c.strokeStyle = st[0]; c.stroke();
+            c.fillStyle = st[2]; c.textAlign = "center"; c.textBaseline = "middle";
+            c.fillText(n, x + w / 2, y + h / 2 + font * 0.05);
+            lightRects.push({ x: x, y: y, w: w, h: h, action: LIGHT_ACTION[n] });
+            x += w + gap;
+        });
+        c.textBaseline = "alphabetic";
     }
 
     // The boost gauge (an extra of the tuning menu): the pressure of the manifold from the vacuum of a closed throttle (-1 bar) to the full boost, with a mark for the peak
@@ -384,14 +398,14 @@ var Hud = (function() {
             if(car.wheels[i].abs) absWorking = true;
             if(car.wheels[i].tc) tcWorking = true;
         }
-        setPill("ABS", !v.absEnabled ? "off" : (absWorking ? "active" : "on"));
-        setPill("TC", !v.tcEnabled ? "off" : (tcWorking ? "active" : "on"));
-        setPill("ESC", !v.escEnabled ? "off" : (v.escLevel > 0.05 ? "active" : "on"));
-        setPill("LC", !v.launchControlEnabled ? "off" : (v.lcArmed || v.launching > 0 ? "active" : "on"));
-        setPill("2S", v.twoStepActive ? "active" : (!v.twoStepEnabled ? "off" : "on"));
-        pills.TB.style.display = v.transbrakeHeld ? "" : "none"; setPill("TB", "active");
-        pills.P.style.display = car.parkingLock ? "" : "none";
-        setPill("P", "park");
+        // (a system the car does not have has no light)
+        setPill("ABS", !v.absFitted ? null : (!v.absEnabled ? "off" : (absWorking ? "active" : "on")));
+        setPill("TC", !v.tcFitted ? null : (!v.tcEnabled ? "off" : (tcWorking ? "active" : "on")));
+        setPill("ESC", !v.escFitted ? null : (!v.escEnabled ? "off" : (v.escLevel > 0.05 ? "active" : "on")));
+        setPill("LC", !v.launchControlFitted ? null : (!v.launchControlEnabled ? "off" : (v.lcArmed || v.launching > 0 ? "active" : "on")));
+        setPill("2S", !v.twoStepFitted ? null : (v.twoStepActive ? "active" : (!v.twoStepEnabled ? "off" : "on")));
+        setPill("TB", v.transbrakeHeld ? "active" : null);
+        setPill("P", car.parkingLock ? "park" : null);
         var wanted = Math.round(Math.max(210, Math.min(330, Math.min(window.innerWidth, window.innerHeight) * 0.36)));
         if(wanted !== size) resize();
         drawGauge(car);
