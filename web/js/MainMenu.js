@@ -85,7 +85,9 @@ var MainMenu = (function() {
             // the tracks
             "#mainMenu .list , #pickDialog .list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }" +
             "@media (max-width: 800px) { #mainMenu .list , #pickDialog .list { grid-template-columns: 1fr; } }" +
-            "#mainMenu .card , #pickDialog .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; cursor: pointer; }" +
+            "#mainMenu .card , #pickDialog .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; cursor: pointer; display: flex; gap: 14px; align-items: center; }" +
+            "#mainMenu .card .thumb, #pickDialog .card .thumb { width: 150px; height: 84px; flex: none; border-radius: 8px; object-fit: cover; background: radial-gradient(circle at 50% 60%, #3a3f47 0%, #1b1f25 60%, #0d0f12 100%); }" +
+            "#mainMenu .card .text, #pickDialog .card .text { min-width: 0; flex: 1; }" +
             "#mainMenu .card:hover , #pickDialog .card:hover { border-color: var(--muted); }" +
             "#mainMenu .card.selected , #pickDialog .card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }" +
             "#mainMenu .card .name , #pickDialog .card .name { font-size: 18px; font-weight: 700; color: var(--head); }" +
@@ -258,7 +260,7 @@ var MainMenu = (function() {
                 renderer.domElement.toBlob(done, "image/webp", 0.88);
             })();
         }
-        return { add: add, clear: clear, still: still };
+        return { add: add, clear: clear, still: still, init: init };
     })();
 
     // The pictures of the cars in the menu: still, from the front at an angle. Once made they are kept: as a file of the car (preview.webp, when this server may write it)
@@ -357,6 +359,110 @@ var MainMenu = (function() {
         return div;
     }
 
+    // the start of the card of a track: its picture on the left, the name and the description in a column beside it (returned, for what a caller adds)
+    function trackCardStart(d, track) {
+        var thumb = document.createElement("img");
+        thumb.className = "thumb"; thumb.alt = ""; thumb.draggable = false;
+        d.appendChild(thumb);
+        var text = document.createElement("div");
+        text.className = "text";
+        var name = document.createElement("div");
+        name.className = "name";
+        name.textContent = track.name || track.id;
+        addBadge(name, track);
+        text.appendChild(name);
+        if(track.description) {
+            var info = document.createElement("div");
+            info.className = "info";
+            info.textContent = track.description;
+            text.appendChild(info);
+        }
+        d.appendChild(text);
+        trackPreviews.request(track, thumb);
+        return text;
+    }
+
+    // The pictures of the tracks: preview.webp of the track (the Thumbnail button of the track editor), else one made here from the start of the track, as the game shows it
+    // (the track is loaded into a scene of its own with TrackLoader.js and drawn once from a camera behind the start), kept in this browser and, when this server may write it,
+    // as the file of the track
+    var trackPreviews = (function() {
+        var queue = [], busy = false;
+        function stamp(track) {
+            var s = JSON.stringify([track.id, track.model, track.start, track.environment]), h = 0;
+            for(var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+            return (h >>> 0).toString(36);
+        }
+        function key(track) { return "openracer.trackpreview." + track.id + "." + stamp(track); }
+        function still(track, done) {
+            if(typeof loadTrack !== "function" || typeof THREE === "undefined") { done(null); return; }
+            showcase.init();                                      // (the renderer: the global of the game)
+            var sceneWas = scene, timer = null, finished = false;
+            var own = new THREE.Scene();
+            own.background = new THREE.Color(track.environment && track.environment.sky_horizon ? track.environment.sky_horizon : 0x9fc3e6);
+            // the lights of the game (Scene.js), which the track's environment sets (TrackLoader.applyTrackEnvironment): made here, where the game's scene does not exist
+            if(typeof sunLight === "undefined" || !sunLight) window.sunLight = new THREE.DirectionalLight(0xffffff, 0.7 * Math.PI);
+            if(typeof shadowLight === "undefined" || !shadowLight) window.shadowLight = new THREE.DirectionalLight(0xffffff, 0.5 * Math.PI);
+            if(typeof ambientLight === "undefined" || !ambientLight) window.ambientLight = new THREE.AmbientLight(0xffffff, Math.PI * 0.5);
+            if(typeof sunDirection === "undefined" || !sunDirection) window.sunDirection = new THREE.Vector3(40, 70, 40);
+            sunLight.position.set(200, 400, 150);
+            own.add(sunLight); own.add(ambientLight);
+            own.add(new THREE.HemisphereLight(0xffffff, 0x445566, 0.5));
+            scene = own;
+            trackObjects = { track: [], grass: [], ground: [], other: [] };
+            var finish = function(blob) { if(finished) return; finished = true; clearTimeout(timer); scene = sceneWas; done(blob); };
+            timer = setTimeout(function() { finish(null); }, 60000);
+            try {
+                loadTrack(track, function() {
+                    try {
+                        var start = track.start || { x: 0, z: 0, heading: 0 }, h = start.heading || 0;
+                        var fx = Math.sin(h), fz = Math.cos(h);
+                        // the height of the road at the start: a ray straight down through the scene
+                        var ray = new THREE.Raycaster(new THREE.Vector3(start.x, 2000, start.z), new THREE.Vector3(0, -1, 0));
+                        var hits = ray.intersectObjects(own.children, true), y = hits.length ? hits[0].point.y : 0;
+                        var cam = new THREE.PerspectiveCamera(50, 16 / 9, 0.5, 20000);
+                        cam.position.set(start.x - fx * 9, y + 3.2, start.z - fz * 9);
+                        cam.lookAt(start.x + fx * 30, y + 0.5, start.z + fz * 30);
+                        renderer.setSize(640, 360, false);
+                        renderer.setClearColor(own.background, 1);
+                        renderer.render(own, cam);
+                        renderer.domElement.toBlob(function(blob) { renderer.setClearColor(0x000000, 0); finish(blob); }, "image/webp", 0.86);
+                    } catch(e) { console.warn(e); finish(null); }
+                });
+            } catch(e) { console.warn(e); finish(null); }
+        }
+        function next() {
+            if(busy || !queue.length) return;
+            busy = true;
+            var job = queue.shift();
+            still(job.track, function(blob) {
+                busy = false;
+                if(blob) {
+                    var reader = new FileReader();
+                    reader.onload = function() {
+                        job.img.src = reader.result;
+                        try { window.localStorage.setItem(key(job.track), reader.result); } catch(e) { /* full */ }
+                    };
+                    reader.readAsDataURL(blob);
+                    if(!(OpenRacer.Garage && OpenRacer.Garage.sourceOf(job.track))) fetch("/api/tracks/" + encodeURIComponent(job.track.id) + "/preview.webp", { method: "PUT", body: blob }).catch(function() { /* not this server's to write */ });
+                }
+                next();
+            });
+        }
+        function request(track, img) {
+            img.style.visibility = "hidden";
+            img.onload = function() { img.style.visibility = ""; };
+            var cached = null;
+            try { cached = window.localStorage.getItem(key(track)); } catch(e) { /* no storage */ }
+            if(cached) { img.src = cached; return; }
+            var path = "tracks/" + encodeURIComponent(track.id) + "/preview.webp";
+            var url = OpenRacer.Garage ? OpenRacer.Garage.resolve(track, path) : path;
+            if(url === path) url += "?v=" + stamp(track);
+            img.onerror = function() { img.onerror = null; queue.push({ track: track, img: img }); next(); };
+            img.src = url;
+        }
+        return { request: request };
+    })();
+
     // "my garage" or "folder" after the name of a car or track that is not of the server (see Garage.js)
     function addBadge(name, item) {
         var source = OpenRacer.Garage ? OpenRacer.Garage.sourceOf(item) : null;
@@ -424,12 +530,7 @@ var MainMenu = (function() {
                         tracks.forEach(function(track) {
                             var d = document.createElement("div");
                             d.className = "card";
-                            var name = document.createElement("div");
-                            name.className = "name";
-                            name.textContent = track.name || track.id;
-                            addBadge(name, track);
-                            d.appendChild(name);
-                            if(track.description) { var info = document.createElement("div"); info.className = "info"; info.textContent = track.description; d.appendChild(info); }
+                            trackCardStart(d, track);
                             d.onclick = function() { window.location.href = "tools/track-editor.html?track=" + encodeURIComponent(track.id); };
                             list.appendChild(d);
                         });
@@ -1026,17 +1127,7 @@ var MainMenu = (function() {
         tracks.filter(function(t) { return t.id !== "skidpad"; }).forEach(function(track) {   // the skidpad is a way to play
             var d = document.createElement("div");
             d.className = "card" + (choice.track === track.id ? " selected" : "");
-            var name = document.createElement("div");
-            name.className = "name";
-            name.textContent = track.name || track.id;
-            addBadge(name, track);
-            d.appendChild(name);
-            if(track.description) {
-                var info = document.createElement("div");
-                info.className = "info";
-                info.textContent = track.description;
-                d.appendChild(info);
-            }
+            var column = trackCardStart(d, track);
             if(choice.track === track.id) {
                 var extra = document.createElement("div");
                 extra.className = "extra";
@@ -1046,7 +1137,7 @@ var MainMenu = (function() {
                 extra.appendChild(text);
                 extra.appendChild(button("Longest jumps", "ghost", function(e) { e.stopPropagation(); showJumps(); }));
                 if(track.dragstrip && OpenRacer.DragStrip) extra.appendChild(button("Drag top 50", "ghost", function(e) { e.stopPropagation(); OpenRacer.DragStrip.showTop(track); }));
-                d.appendChild(extra);
+                column.appendChild(extra);
             }
             d.onclick = function() { choice.track = track.id; remember(); render(); };
             d.ondblclick = goNext;

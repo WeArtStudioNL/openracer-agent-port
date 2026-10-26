@@ -351,6 +351,7 @@ function resize() {
 }
 window.addEventListener("resize", resize);
 resize();
+window.__trackEditorView = { scene, camera, renderer };          // (for the tests of the editor)
 (function loop() {
     requestAnimationFrame(loop);
     renderer.render(scene, camera);
@@ -412,7 +413,7 @@ function applyColours() {
     for (const [name, meshes] of state.parts) {
         for (const mesh of meshes) {
             if (name === state.selected) mesh.material = highlightMaterial;
-            else mesh.material = colour ? roleMaterials[state.roles[name]] : mesh.userData.original;
+            else mesh.material = (colour && roleMaterials[state.roles[name]]) || mesh.userData.original;      // (a role without a colour of its own, a zone: its own material)
         }
     }
 }
@@ -1329,6 +1330,42 @@ function newTrack() {
     status("A new track: draw it with nodes in the view, or import a model.", "ok");
 }
 
+// ---- the thumbnail: the track as the game shows it, from the camera as it stands, without the markers, the nodes, the gizmos and the line (everything in the scene that is
+// not the track itself, its objects, its sky and its lights is hidden for one frame); 640 by 360, saved with the track as preview.webp (the menu shows it on the track's card)
+function takeThumbnail() {
+    if (!state.root && !design.active()) { status("Load or draw a track first.", "error"); return; }
+    const keep = new Set([trackGroup, objectLayer, hemi, sun]);
+    if (sky) keep.add(sky);
+    const hidden = [];
+    scene.children.forEach((o) => { if (!keep.has(o) && o.visible) { o.visible = false; hidden.push(o); } });
+    // the track with its textures, as the game shows it: the colours of the roles and the highlight of a chosen part are off for the picture
+    const colourWas = $("colour").checked, selectedWas = state.selected;
+    $("colour").checked = false; state.selected = null; applyColours();
+    try {
+        renderer.render(scene, camera);
+        const out = document.createElement("canvas");
+        out.width = 640; out.height = 360;
+        const ctx = out.getContext("2d");
+        const src = renderer.domElement, sw = src.width, sh = src.height, want = 16 / 9;
+        // the middle of the view, cut to 16:9
+        let cw = sw, ch = Math.round(sw / want); if (ch > sh) { ch = sh; cw = Math.round(sh * want); }
+        ctx.drawImage(src, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, 640, 360);
+        out.toBlob((blob) => {
+            if (!blob) { status("The thumbnail could not be made.", "error"); return; }
+            state.thumbnail = blob;
+            const url = URL.createObjectURL(blob);
+            status("Thumbnail taken (640 x 360): it is saved with the track. ", "ok");
+            const img = document.createElement("img");
+            img.src = url; img.style.cssText = "height: 54px; border-radius: 6px; vertical-align: middle; margin-left: 8px;";
+            $("status").appendChild(img);
+        }, "image/webp", 0.86);
+    } finally {
+        hidden.forEach((o) => { o.visible = true; });
+        $("colour").checked = colourWas; state.selected = selectedWas; applyColours();
+    }
+}
+$("thumbnail").addEventListener("click", takeThumbnail);
+
 // ---- saving
 
 // Writes track.json (and files) through the server when it is there (serve.py), otherwise to the garage of this browser (Garage.js)
@@ -1369,6 +1406,7 @@ async function save() {
 
         const uploads = [];
         let oldModel = null;
+        if (state.thumbnail) uploads.push(["preview.webp", state.thumbnail]);            // the picture of the track for the menu (the Thumbnail button)
         if (design.active()) {
             if (design.toJSON().nodes.length < 3) throw new Error("A track needs at least three nodes.");
             status("Making the model of the track…");
