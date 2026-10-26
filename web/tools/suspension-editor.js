@@ -88,9 +88,10 @@ export function initSuspension(api) {
         let m = markers[id];
         if (m) return m;
         const target = new THREE.Object3D();
-        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 10), new THREE.MeshBasicMaterial({ color: COLOURS[grp], depthTest: false, transparent: true, opacity: 0.9 }));
+        // (small: a ball of 2 cm, so that the part under it is seen; it is drawn over everything, so it is found all the same)
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.021, 12, 10), new THREE.MeshBasicMaterial({ color: COLOURS[grp], depthTest: false, transparent: true, opacity: 0.9 }));
         ball.renderOrder = 999;
-        const axes = new THREE.AxesHelper(0.18);
+        const axes = new THREE.AxesHelper(0.1);
         axes.material.depthTest = false; axes.renderOrder = 999;
         target.add(ball, axes);
         ball.userData.layer = id;            // (a click on the ball in the view selects the mount: Edit origins)
@@ -221,7 +222,7 @@ export function initSuspension(api) {
         $("suspEdit").textContent = on ? "Editing origins… (Escape leaves)" : "Edit origins";
         $("originsBar").style.display = on ? "" : "none";
         $("testBar").style.display = on ? "none" : "";
-        for (const id in markers) { markers[id].ball.scale.setScalar(on ? 1.8 : 1); markers[id].target.visible = on && !hidden; }
+        for (const id in markers) markers[id].target.visible = on && !hidden;
         if (api.hideOthers) api.hideOthers(on);                                                       // (the cameras, the exhaust points, the wheel boxes and the axes go out of the way)
         if (!on && isMount(layers.selected)) { selectLayer(layers.selected); renderRows(); }          // (deselects, and the rows show it)
     }
