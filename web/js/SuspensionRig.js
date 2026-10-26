@@ -144,9 +144,13 @@ OpenRacer.SuspensionRig = (function () {
                 entry.holder.quaternion.setFromUnitVectors(Y, entry.restDir);
                 if(entry.kind === "spring") { entry.inner = innerParts(p.node, entry.restDir, entry.restLength); entry.strut = clean(p.node.name).indexOf("strut") !== -1; }
             } else if(entry.kind === "prop") {
-                // it turns about its own length: the longest side of its box, about the middle of the box
+                // it turns about its own length: the longest side of its box, about the middle of the box; a shaft the parts library built says where it runs exactly
+                // (a slanted shaft turned about the nearest axis of the car wobbled: its ends went round instead of staying at the gearbox and the differential)
                 var pbox = boxOf(p.node), pc = pbox.getCenter(new THREE.Vector3()), ps = pbox.getSize(new THREE.Vector3());
-                entry.axis = ps.x >= ps.y && ps.x >= ps.z ? LEFT.clone() : (ps.y >= ps.z ? UP.clone() : FORWARD.clone());
+                if(exactFar) {
+                    entry.axis = exactFar.clone().sub(origin).normalize();
+                    pc.copy(origin).add(exactFar).multiplyScalar(0.5);
+                } else entry.axis = ps.x >= ps.y && ps.x >= ps.z ? LEFT.clone() : (ps.y >= ps.z ? UP.clone() : FORWARD.clone());
                 entry.holder.position.copy(pc);
             } else if(entry.kind === "arm") {
                 entry.far = exactFar || farEnd(p.node, origin);
