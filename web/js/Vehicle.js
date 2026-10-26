@@ -196,7 +196,9 @@ OpenRacer.Vehicle = function (parameters, input) {
     // a dual-clutch gearbox (gearbox "dct"): the gears and the shifting as with a clutch, but the next gear waits on the other clutch, so a shift is a hand-over of 0.15 s at most
     // in which the drive never stops (the clutch keeps 40 % and goes to full as the engine is pulled to the new speed), with a short cut of the throttle on an upshift and a
     // blip on a downshift
-    var GEARBOXES = ["gears", "cvt", "torque-converter", "dct"];
+    // an automated manual (gearbox "amt"): the gears of a manual with a clutch and a shift that a robot does: slow (half a second at least) with the power off, and the shifting of
+    // an automatic. A manual with an automatic clutch (gearbox "imt"): the driver shifts, the clutch is never a pedal.
+    var GEARBOXES = ["gears", "cvt", "torque-converter", "dct", "amt", "imt"];
     this.gearbox = GEARBOXES.indexOf(parameters.gearbox) > 0 ? parameters.gearbox : "gears";
     this.shiftDuration = 0;                                  // how long the shift that is going on takes (s)
     this.shiftUp = false;                                    // the shift that is going on is an upshift
@@ -486,7 +488,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.toe_rear !== undefined) this.toeRear = t.toe_rear;
         this.applyPressure();
         if(t.shift_time !== undefined) this.shiftTime = t.shift_time;
-        if(t.gearbox !== undefined) this.gearbox = ["cvt", "torque-converter", "dct"].indexOf(t.gearbox) >= 0 ? t.gearbox : "gears";
+        if(t.gearbox !== undefined) this.gearbox = ["cvt", "torque-converter", "dct", "amt", "imt"].indexOf(t.gearbox) >= 0 ? t.gearbox : "gears";
         if(t.tc_stall_rpm !== undefined) this.tcStallRPM = t.tc_stall_rpm;
         if(t.tc_ratio !== undefined) this.tcRatio = t.tc_ratio;
         if(t.tc_lockup !== undefined) this.tcLockup = !!t.tc_lockup;
@@ -788,7 +790,10 @@ OpenRacer.Vehicle = function (parameters, input) {
             this.timeSinceShift = 0;
             this.shiftUp = key >= 0 && this.lastGearKey >= 0 && key > this.lastGearKey;
             // (a dual clutch: the next gear is already in, the shift is the hand-over between the two clutches)
-            if(!inp.clutchPedalPresent) { this.shiftDuration = this.gearbox === "dct" ? Math.max(0.08, Math.min(this.shiftTime, 0.15)) : this.shiftTime; this.shiftTimer = this.shiftDuration; }
+            if(!inp.clutchPedalPresent) {
+                this.shiftDuration = this.gearbox === "dct" ? Math.max(0.08, Math.min(this.shiftTime, 0.15)) : (this.gearbox === "amt" ? Math.max(0.5, this.shiftTime) : this.shiftTime);
+                this.shiftTimer = this.shiftDuration;
+            }
         }
         this.lastGearKey = key;
         if(this.shiftTimer > 0) this.shiftTimer -= delta;

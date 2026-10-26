@@ -292,7 +292,8 @@ var Hud = (function() {
         context.fillText(gear, cx, cy + R * 0.3);
         context.fillStyle = stalled ? "#ff5a4f" : "#8fa0b4";
         context.font = Math.round(R * 0.095) + "px Arial";
-        var mode = { automatic: "AUTO", sequential: "SEQ", manual: car.clutchPedalPresent ? "MAN · CLUTCH" : "MAN" }[car.gearboxMode];
+        var box = car.vehicle ? car.vehicle.gearbox : "gears";
+        var mode = { gears: car.clutchPedalPresent ? "MAN · CLUTCH" : "MAN", imt: "IMT", amt: "AMT", dct: "DCT", "torque-converter": "AUTO", cvt: "CVT" }[box] || (car.gearboxMode === "automatic" ? "AUTO" : "MAN");
         context.fillText(stalled ? "ENGINE OFF" : mode, cx, cy + R * 0.5);
         context.fillStyle = "#8fa0b4";
         context.font = Math.round(R * 0.085) + "px Arial";

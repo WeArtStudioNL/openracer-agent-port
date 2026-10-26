@@ -559,10 +559,14 @@ OpenRacer.Car = function( config, domElement ) {
         if(this.held) { this.brakePedal = 1; this.handbrake = true; this.accelerate = false; this.throttle = Math.min(this.throttle, 0.6); }
         else if(wasHeld) { this.brakePedal = 0; this.handbrake = false; this.brake = false; }   // GO: the brake of the grid is let go
         wasHeld = this.held;
-        // the clutch pedal works the clutch in the manual mode, once it is used or the shifter was moved
-        if(this.clutchAvailable && this.gearboxMode === "manual" && this.clutch > 0.08) this.manualClutch = true;
-        this.clutchPedalPresent = this.clutchAvailable && this.gearboxMode === "manual" && this.manualClutch;
         var v = this.vehicle;
+        // the mode of the gearbox follows the gearbox the car has (the tuning menu can change it on the track): a manual or an IMT is shifted by the driver, the others are automatics
+        var wantMode = this.modeForGearbox();
+        if(wantMode !== this.gearboxMode) this.setGearboxMode(wantMode);
+        // the clutch pedal works the clutch in the manual mode, once it is used or the shifter was moved (not with an IMT: its clutch is never a pedal)
+        var pedalBox = v.gearbox === "gears";
+        if(pedalBox && this.clutchAvailable && this.gearboxMode === "manual" && this.clutch > 0.08) this.manualClutch = true;
+        this.clutchPedalPresent = pedalBox && this.clutchAvailable && this.gearboxMode === "manual" && this.manualClutch;
 
         if(this.reset) {
             // one reset per key press: back to the saved place (the start when none was saved), in the state that the car is in
@@ -936,6 +940,11 @@ OpenRacer.Car = function( config, domElement ) {
     this.manualClutch = false;       // the clutch pedal was the last way of working the clutch
     this.parkingLock = false;        // automatic: P, the wheels are locked
 
+    // the mode that goes with the gearbox of the car: a manual (gears) and an IMT are shifted by the driver (the H-pattern shifter and the paddles), the rest are automatics (P R N D)
+    this.modeForGearbox = function() {
+        var g = this.vehicle ? this.vehicle.gearbox : "gears";
+        return g === "gears" || g === "imt" ? "manual" : "automatic";
+    };
     this.setGearboxMode = function(mode) {
         var was = this.gearboxMode;
         this.gearboxMode = mode;
@@ -1044,7 +1053,6 @@ OpenRacer.Car = function( config, domElement ) {
         else if(name === "twoStep") tobj.vehicle.twoStepEnabled = value;
         else if(name === "abs") tobj.vehicle.absEnabled = value;
         else if(name === "esc") tobj.vehicle.escEnabled = value;
-        else if(name === "gearbox") tobj.setGearboxMode(value);
         else if(name === "camera") tobj.setCameraMode(value);
     };
     applyOption("tc", Settings.option("tc"));
@@ -1053,7 +1061,7 @@ OpenRacer.Car = function( config, domElement ) {
     applyOption("abs", Settings.option("abs"));
     applyOption("esc", Settings.option("esc"));
     applyOption("camera", Settings.option("camera"));
-    applyOption("gearbox", Settings.option("gearbox"));
     Settings.onOptionChange(applyOption);
+    tobj.setGearboxMode(tobj.modeForGearbox());
 
 };

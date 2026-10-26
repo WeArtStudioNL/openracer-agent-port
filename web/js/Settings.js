@@ -63,7 +63,6 @@ var Settings = (function() {
         { id: "ragdoll", group: "Driving", label: "Motorcycle: the rider goes limp (a crash, to try it)", defaults: [key("Digit9")] },
         { id: "twoStep", group: "Driving", label: "Two-step: hold the engine at the two-step speed at a standstill (hold; works with the option off too)", defaults: [key("KeyQ")] },
         { id: "transbrake", group: "Driving", label: "Transbrake: hold the car with the engine free, let go to launch (hold)", defaults: [key("KeyF")] },
-        { id: "gearboxMode", group: "Gearbox", label: "Gearbox mode", defaults: [key("KeyG")] },
         { id: "shiftUp", group: "Gearbox", label: "Shift up", wheel: { profile: "shiftUp", steps: ["shiftUp"] }, defaults: [key("KeyX"), padButton(5)] },
         { id: "shiftDown", group: "Gearbox", label: "Shift down", wheel: { profile: "shiftDown", steps: ["shiftDown"] }, defaults: [key("KeyZ"), padButton(4)] },
         { id: "gear0", wheelOnly: true, group: "Gearbox", label: "H-shifter: gear 1", wheel: { profile: "gear0", steps: ["gear0"] }, defaults: [] },
@@ -104,7 +103,7 @@ var Settings = (function() {
     var actionsById = {};
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
-    var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, autoReverse: true, autoReversePedals: true, autoReverseSpeed: 3, dragReady: 2, dragGreen: 1.5, abs: true, gearbox: "automatic", sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 2, volume: 0.8,
+    var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, autoReverse: true, autoReversePedals: true, autoReverseSpeed: 3, dragReady: 2, dragGreen: 1.5, abs: true, sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 2, volume: 0.8,
         padSlow: 1.5, padAssist: true, keySteer: 1, keySlow: 1, keyAssist: true,
         // a motorcycle: the steering ("counter": countersteering to start a lean and the lean; "lean": the lean only) and the follow camera ("lean": it rolls with the bike; "classic": as a car)
         bikeSteering: "lean", bikeCamera: "lean", wheelieControl: true, bikeFastLean: 30,
@@ -312,10 +311,6 @@ var Settings = (function() {
 
     // ---- options
 
-    var GEARBOX_MODES = ["automatic", "sequential", "manual"];
-    function cycleGearbox() {
-        setOption("gearbox", GEARBOX_MODES[(GEARBOX_MODES.indexOf(options.gearbox) + 1) % GEARBOX_MODES.length]);
-    }
 
     function setOption(name, value) {
         options[name] = value;
@@ -891,8 +886,6 @@ var Settings = (function() {
             page.appendChild(sliderRow("Motorcycle: lean at top speed (the keys ask for less lean as the speed goes up; this is what is left at the top)", "bikeFastLean", 15, 45, 1, function(v) { return Math.round(v) + "°"; }));
         }
         page.appendChild(optionRow("ABS", options.abs ? "On" : "Off", function() { setOption("abs", !options.abs); }));
-        var gearboxNames = { automatic: "Automatic (P R N D)", sequential: "Sequential (paddles)", manual: "Manual (H-shifter, clutch)" };
-        page.appendChild(optionRow("Gearbox", gearboxNames[options.gearbox] || options.gearbox, function() { cycleGearbox(); }));
         page.appendChild(optionRow("Automatic: reverse with the brake key", options.autoReverse ? "On" : "Off", function() { setOption("autoReverse", !options.autoReverse); }));
         page.appendChild(optionRow("Automatic: reverse with the brake pedal (wheel, pad, touch)", options.autoReversePedals ? "On" : "Off", function() { setOption("autoReversePedals", !options.autoReversePedals); }));
         page.appendChild(sliderRow("Automatic: reverse below a speed of", "autoReverseSpeed", 1, 15, 1, function(v) { return v + " km/h"; }));
@@ -1120,7 +1113,6 @@ var Settings = (function() {
     handlers.toggleTwoStep = function() { setOption("twoStep", !options.twoStep); };
     handlers.toggleLaunch = function() { setOption("launchControl", !options.launchControl); };
     handlers.toggleABS = function() { setOption("abs", !options.abs); };
-    handlers.gearboxMode = function() { cycleGearbox(); };
     handlers.toggleESC = function() { setOption("esc", !options.esc); };
     handlers.cameraSwitch = function() { setOption("camera", nextCamera(options.camera)); };
     handlers.freeCamAim = function() { if(options.camera === 4 && typeof OpenRacer !== "undefined" && OpenRacer.FreeCam) OpenRacer.FreeCam.toggleAim(); };
