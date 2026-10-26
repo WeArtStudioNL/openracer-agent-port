@@ -175,12 +175,23 @@ export function initSuspension(api) {
             });
         });
         for (const id in markers) if (!keep[id]) { scene.remove(markers[id].target); delete gizmoTargets[id]; if (layers.selected === id) selectLayer(id); delete markers[id]; }
+        showSelected();
         const missing = L.missingFiles(cfg);
         missingBox.textContent = missing.length ? "Missing in web/parts: " + missing.join(", ") + " (the parts that are there are shown; add the files and load the car again)." : out.names.length + " parts placed from web/parts.";
         if (typeof renderLayers === "function") renderLayers();
     }
     // the rows again without rebuilding the parts (a selection changed)
     function renderRows() { signature = ""; refresh(true); }
+    // the bar of Edit origins names the selected point, in green
+    function showSelected() {
+        const m = markers[layers.selected], L = lib();
+        const el = $("originsName");
+        if (!el) return;
+        if (!m) { el.textContent = "No point selected"; el.style.color = "#8d97a3"; return; }
+        const side = m.group === "driveline" ? "" : (m.group === "front" ? "Front: " : "Rear: ");
+        el.textContent = side + ((L && L.MOUNT_LABELS[m.name]) || m.name) + (mode === "rotate" ? "  (turn)" : "  (move)");
+        el.style.color = "#37d67a";
+    }
 
     // ---- the gizmo of a mount
     function isMount(id) { return typeof id === "string" && id.indexOf("mt:") === 0; }
@@ -190,6 +201,7 @@ export function initSuspension(api) {
         if (!target) return;
         if (mode === "move") { gizmo.attach(target); gizmo.showX = gizmo.showY = gizmo.showZ = true; } else rotGizmo.attach(target);
         for (const k in markers) markers[k].ball.material.color.set(k === id ? 0xffffff : COLOURS[markers[k].group]);
+        showSelected();
     }
     // a mount was dragged: stored, and the parts rebuilt (at most ten times a second while it moves)
     function moved(id) {
