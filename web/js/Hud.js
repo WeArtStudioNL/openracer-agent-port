@@ -39,7 +39,7 @@ var Hud = (function() {
     var pillStates = {};     // the state of every light: off, on, active, park
     var lightRects = [];     // where the lights are on the gauge canvas (for a tap on a touch screen)
     var LIGHT_ACTION = { TC: "toggleTC", LC: "toggleLaunch", ESC: "toggleESC", ABS: "toggleABS", "2S": "toggleTwoStep" };
-    // the badges of the systems (web/images/HUD): grey when the system is in the car but idle, orange while it works; TC has its own badge for when it is switched off
+    // the badges of the systems (web/images/HUD): orange when the system is on, grey when it is switched off (TC has its own off badge), blinking while it works
     var BADGE_FILE = { TC: "tc", LC: "launch", ESC: "esc", ABS: "abs", "2S": "2step" };
     var badges = {};         // name -> { active, inactive, off } images
     var size = 0;
@@ -296,60 +296,60 @@ var Hud = (function() {
         context.fillStyle = stalled ? "#ff5a4f" : (gear.charAt(0) === "R" ? "#ffb340" : (gear.charAt(0) === "N" ? "#52e085" : (gear.charAt(0) === "P" ? "#ff6b62" : "#ffffff")));
         context.font = "bold " + Math.round(R * 0.26) + "px Arial";
         context.fillText(gear, cx, cy + R * 0.3);
-        context.fillStyle = stalled ? "#ff5a4f" : "#8fa0b4";
-        context.font = Math.round(R * 0.095) + "px Arial";
-        var box = car.vehicle ? car.vehicle.gearbox : "gears";
-        var mode = { gears: car.clutchPedalPresent ? "MAN · CLUTCH" : "MAN", imt: "IMT", amt: "AMT", dct: "DCT", "torque-converter": "AUTO", cvt: "CVT" }[box] || (car.gearboxMode === "automatic" ? "AUTO" : "MAN");
-        context.fillText(stalled ? "ENGINE OFF" : mode, cx, cy + R * 0.5);
-        context.fillStyle = "#8fa0b4";
-        context.font = Math.round(R * 0.085) + "px Arial";
-        context.fillText((car.engineRPM / 1000).toFixed(1) + " x1000 rpm", cx, cy + R * 0.62);
-        drawLights(context, cx, cy, R);
+        drawLights(context, cx, cy, R, stalled);
     }
 
-    // the badges of the systems in a row at the bottom of the gauge: the grey badge is a system that is in the car but idle, the orange one a system at work,
-    // a system switched off shows the off badge (TC) or the grey badge dimmed with OFF under it; only the systems the car has. P and TB stay text lights.
+    // the badges of the systems in the gauge: orange when the system is on, grey when it is switched off (TC has its own off badge), blinking while the system
+    // is at work; only the systems the car has. Launch control and the two-step (words) stand one above
+    // the other under the gear; TC, ESP and ABS (and P and TB while they hold, as text lights) stand on an arc along the bottom of the gauge.
     var LIGHT_STYLE = { off: ["#d9372f", "rgba(20, 24, 30, 0.6)", "#ff6b62"], on: ["#2eb35a", "rgba(20, 24, 30, 0.6)", "#52e085"], active: ["#f5c518", "rgba(245, 197, 24, 0.9)", "#1a1500"], park: ["#d9372f", "rgba(217, 55, 47, 0.85)", "#ffffff"] };
-    function drawLights(c, cx, cy, R) {
-        var names = ["TC", "LC", "ESC", "ABS", "2S", "P", "TB"].filter(function(n) { return pillStates[n]; });
+    function drawLights(c, cx, cy, R, stalled) {
         lightRects = [];
-        if(!names.length) return;
-        var h = R * 0.13, gap = R * 0.02, font = Math.round(R * 0.075), badge = R * 0.23;
+        var font = Math.round(R * 0.075);
+        c.textAlign = "center"; c.textBaseline = "middle";
+        // the picture of a badge in its state: orange when the system is on, grey when it is switched off (TC has its own off badge), and while the system
+        // is at work (the computer steps in) it blinks between the two
+        var blink = Math.floor(Date.now() / 125) % 2 === 0;
+        function picture(n, x, y, w) {
+            var state = pillStates[n], set = badges[n];
+            var img = state === "off" ? (set.off || set.inactive) : (state === "active" && blink ? set.inactive : set.active);
+            if(img) c.drawImage(img, x, y, w, w);
+        }
+        // launch control and the two-step, one above the other, where the gearbox mode used to be (ENGINE OFF takes their place while the engine is off)
+        if(stalled) {
+            c.fillStyle = "#ff5a4f"; c.font = Math.round(R * 0.095) + "px Arial";
+            c.fillText("ENGINE OFF", cx, cy + R * 0.53);
+        }
+        else {
+            var column = ["LC", "2S"].filter(function(n) { return pillStates[n]; }), wordW = R * 0.36, step = R * 0.1;
+            var top = cy + R * 0.53 - step * (column.length - 1) / 2;
+            column.forEach(function(n, i) {
+                var yc = top + i * step;
+                picture(n, cx - wordW / 2, yc - wordW / 2, wordW);
+                lightRects.push({ x: cx - wordW / 2, y: yc - step / 2, w: wordW, h: step, action: LIGHT_ACTION[n] });
+            });
+        }
+        // the arc: TC, ESP, ABS and the text lights, spread along the bottom of the gauge
+        var arcNames = ["TC", "ESC", "ABS", "P", "TB"].filter(function(n) { return pillStates[n]; });
+        var badge = R * 0.24, radius = R * 0.76, spread = 38 * Math.PI / 180, h = R * 0.13;
         c.font = "bold " + font + "px Arial";
-        var widths = names.map(function(n) { return badges[n] ? badge : Math.max(R * 0.2, c.measureText(n).width + R * 0.1); });
-        var total = widths.reduce(function(a, b) { return a + b; }, 0) + gap * (names.length - 1);
-        var x = cx - total / 2;
-        names.forEach(function(n, i) {
-            var w = widths[i], y = cy + R * 0.68;
+        arcNames.forEach(function(n, i) {
+            var a = Math.PI / 2 + ((arcNames.length - 1) / 2 - i) * spread;          // (the first on the left)
+            var xc = cx + Math.cos(a) * radius, yc = cy + Math.sin(a) * radius;
             if(badges[n]) {
-                var state = pillStates[n], set = badges[n];
-                var img = state === "active" ? set.active : (state === "off" && set.off ? set.off : set.inactive);
-                if(img) {
-                    if(state === "off" && !set.off) {
-                        // no badge of its own for off: the grey badge, smaller and dimmed, with OFF under it (as the TC badge has)
-                        c.globalAlpha = 0.45;
-                        c.drawImage(img, x + w * 0.12, y, w * 0.76, w * 0.76);
-                        c.globalAlpha = 1;
-                        c.fillStyle = "#f5a500"; c.font = "bold " + Math.round(w * 0.3) + "px Arial"; c.textAlign = "center"; c.textBaseline = "middle";
-                        c.fillText("OFF", x + w / 2, y + w * 0.86);
-                        c.font = "bold " + font + "px Arial";
-                    }
-                    else c.drawImage(img, x, y, w, w);
-                }
-                lightRects.push({ x: x, y: y, w: w, h: w, action: LIGHT_ACTION[n] });
-                x += w + gap;
+                picture(n, xc - badge / 2, yc - badge / 2, badge);
+                lightRects.push({ x: xc - badge / 2, y: yc - badge / 2, w: badge, h: badge, action: LIGHT_ACTION[n] });
                 return;
             }
-            var st = LIGHT_STYLE[pillStates[n]] || LIGHT_STYLE.off, r = h * 0.3, y = cy + R * 0.68 + (badge - h) / 2;
+            var st = LIGHT_STYLE[pillStates[n]] || LIGHT_STYLE.off, w = Math.max(R * 0.2, c.measureText(n).width + R * 0.1), r = h * 0.3, x = xc - w / 2, y = yc - h / 2;
             c.beginPath();
             c.moveTo(x + r, y); c.lineTo(x + w - r, y); c.quadraticCurveTo(x + w, y, x + w, y + r); c.lineTo(x + w, y + h - r); c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
             c.lineTo(x + r, y + h); c.quadraticCurveTo(x, y + h, x, y + h - r); c.lineTo(x, y + r); c.quadraticCurveTo(x, y, x + r, y); c.closePath();
             c.fillStyle = st[1]; c.fill();
             c.lineWidth = Math.max(1, R * 0.012); c.strokeStyle = st[0]; c.stroke();
-            c.fillStyle = st[2]; c.textAlign = "center"; c.textBaseline = "middle";
-            c.fillText(n, x + w / 2, y + h / 2 + font * 0.05);
+            c.fillStyle = st[2];
+            c.fillText(n, xc, yc + font * 0.05);
             lightRects.push({ x: x, y: y, w: w, h: h, action: LIGHT_ACTION[n] });
-            x += w + gap;
         });
         c.textBaseline = "alphabetic";
     }
