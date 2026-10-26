@@ -116,6 +116,7 @@ export function initSuspension(api) {
         const m = markers[id]; if (!m) return;
         // the end of the rack: only along the rack (x); its height and place along the car are the rack's. The rack: its end goes with it
         if (m.name === "rack_end") { const rack = markers["mt:" + m.group + ":rack"]; if (rack) { m.target.position.y = rack.target.position.y; m.target.position.z = rack.target.position.z; m.target.rotation.set(0, 0, 0); } }
+        if (m.name === "axle_end") { const was = m.lastStored || m.target.position; m.target.position.y = was.y; m.target.position.z = was.z; m.target.rotation.set(0, 0, 0); }       // (along the axle only; its height and place are the axle's)
         if (m.name === "rack") {
             const end = markers["mt:" + m.group + ":rack_end"];
             if (end) { const was = m.lastStored || m.target.position.clone(); end.target.position.add(m.target.position.clone().sub(was)); storeTarget(end); }
@@ -236,7 +237,7 @@ export function initSuspension(api) {
         gizmo.detach(); rotGizmo.detach();
         const target = gizmoTargets[id];
         if (!target) return;
-        const m = markers[id], endOnly = m && m.name === "rack_end";
+        const m = markers[id], endOnly = m && (m.name === "rack_end" || m.name === "axle_end");
         if (mode === "move" || endOnly) { gizmo.attach(target); gizmo.showX = true; gizmo.showY = gizmo.showZ = !endOnly; } else rotGizmo.attach(target);
         for (const k in markers) markers[k].ball.material.color.set(k === id ? 0xffffff : COLOURS[markers[k].group]);
         showSelected();
