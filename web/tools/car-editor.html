@@ -124,6 +124,7 @@
                     <div><label>Engine</label><select id="enginePlace"><option value="front">In the front</option><option value="mid">In the middle</option><option value="rear">In the rear</option></select></div>
                     <div><span class="hint" style="display:block; margin-top:26px">A propshaft runs from the gearbox to every driven axle that is more than 40 cm from it.</span></div>
                 </div>
+                <div class="buttons"><button id="suspEdit" class="small" title="Click the origin points in the view, through everything, to move (W) or turn (E) them; Escape leaves the mode">Edit origins</button></div>
                 <div id="suspMounts"></div>
                 <div class="hint" id="suspMissing"></div>
                 <p class="sub">A mount: W moves, E turns (as the exhaust points). The parts of a stretched kind (arms, springs, shafts) are aimed from their mount at their other end and stretched to it; a turn of such a mount rolls the part about its length.</p>
@@ -333,6 +334,11 @@
 <div id="view">
     <div id="hud"></div>
     <div id="toast"></div>
+    <div class="float bottom" id="originsBar" style="display:none">
+        <span class="hint">Edit origins: click a point (through everything), <b>W</b> moves it, <b>E</b> turns it, <b>Escape</b> leaves</span>
+        <button class="small ghost" id="originsCancel">Leave</button>
+        <button class="primary" id="originsSave" title="Save the car and leave the mode">Save the car</button>
+    </div>
     <div class="float bottom" id="testBar">
         <button id="testStop" class="small ghost" style="display:none" title="Stop test: back to the model as it is" aria-label="Stop test">↺</button>
         <div class="tabs">

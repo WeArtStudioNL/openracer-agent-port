@@ -12,7 +12,8 @@
  */
 
 export function initSuspension(api) {
-    const { $, THREE, scene, gizmo, rotGizmo, gizmoTargets, layers, selectLayer, wheelCenters, driveValue, loadLibrary, renderLayers } = api;
+    const { $, THREE, scene, gizmo, rotGizmo, gizmoTargets, layers, selectLayer, wheelCenters, driveValue, loadLibrary, renderLayers, save } = api;
+    let editing = false;                     // Edit origins: only the mounts can be clicked in the view, through everything
     const state = { front: { type: "model", mounts: {} }, rear: { type: "model", mounts: {} }, driveline: { engine: "front", mounts: {} } };
     const selects = { front: $("suspFront"), rear: $("suspRear"), engine: $("enginePlace") };
     const rows = $("suspMounts"), missingBox = $("suspMissing");
@@ -92,6 +93,7 @@ export function initSuspension(api) {
         const axes = new THREE.AxesHelper(0.18);
         axes.material.depthTest = false; axes.renderOrder = 999;
         target.add(ball, axes);
+        ball.userData.layer = id;            // (a click on the ball in the view selects the mount: Edit origins)
         target.userData.mount = { group: grp, name };
         scene.add(target);
         gizmoTargets[id] = target;
@@ -198,9 +200,33 @@ export function initSuspension(api) {
     function setMode(m) { mode = m; if (isMount(layers.selected)) { attachGizmo(layers.selected); renderRows(); } }
     function hide(on) { hidden = on; if (group) group.visible = !on; for (const id in markers) markers[id].target.visible = !on; }
 
+    // ---- Edit origins: a mode in which the balls of the mounts are the only things a click in the view picks (through the model), W and E as always, Escape leaves it,
+    // and a Save button at the bottom of the view saves the car and leaves it
+    function setEditing(on) {
+        if (on && !active()) { api.status && api.status("Pick a type of suspension first: there are no origins to edit.", "warn"); return; }
+        editing = on;
+        $("suspEdit").classList.toggle("accent", on);
+        $("suspEdit").textContent = on ? "Editing origins… (Escape leaves)" : "Edit origins";
+        $("originsBar").style.display = on ? "" : "none";
+        $("testBar").style.display = on ? "none" : "";
+        for (const id in markers) markers[id].ball.scale.setScalar(on ? 1.8 : 1);
+        if (!on && isMount(layers.selected)) { selectLayer(layers.selected); renderRows(); }          // (deselects, and the rows show it)
+    }
+    function pickables() { return Object.keys(markers).map((id) => markers[id].ball); }
+    $("suspEdit").addEventListener("click", () => setEditing(!editing));
+    $("originsCancel").addEventListener("click", () => setEditing(false));
+    $("originsSave").addEventListener("click", async () => { try { await save(); setEditing(false); } catch (e) { /* save says what went wrong */ } });
+    window.addEventListener("keydown", (e) => {
+        if (!editing || e.code !== "Escape") return;
+        const t = e.target && e.target.tagName;
+        if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
+        if (document.pointerLockElement) return;
+        setEditing(false);
+    });
+
     ["front", "rear"].forEach((axle) => selects[axle].addEventListener("change", () => { state[axle].type = selects[axle].value; refresh(true); }));
     selects.engine.addEventListener("change", () => { state.driveline.engine = selects.engine.value; refresh(true); });
     $("drive").addEventListener("change", () => refresh(false));
 
-    return { read, fill, refresh, isMount, attachGizmo, moved, setMode, hide, selected: () => (isMount(layers.selected) ? layers.selected : null) };
+    return { read, fill, refresh, isMount, attachGizmo, moved, setMode, hide, pickables, get editing() { return editing; }, selected: () => (isMount(layers.selected) ? layers.selected : null) };
 }

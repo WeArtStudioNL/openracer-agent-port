@@ -1151,6 +1151,12 @@ renderer.domElement.addEventListener("pointerup", (e) => {
     pickDown = null;
     const rect = renderer.domElement.getBoundingClientRect();
     pickRay.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
+    // Edit origins (the Suspension and driveline card): only the balls of the mounts are picked, through everything
+    if (suspensionEditor && suspensionEditor.editing) {
+        const mount = pickRay.intersectObjects(suspensionEditor.pickables(), false).find((h) => h.object.userData.layer);
+        if (mount && mount.object.userData.layer !== layers.selected) selectLayer(mount.object.userData.layer);
+        return;
+    }
     const hit = pickRay.intersectObjects(cameraMarkers.children.concat(exhaust.map((e) => e.pipe)), false).find((h) => h.object.userData.layer);
     if (hit && hit.object.userData.layer !== layers.selected) selectLayer(hit.object.userData.layer);
 });
@@ -2419,8 +2425,11 @@ suspensionEditor = initSuspension({
     $, THREE, scene, gizmo, rotGizmo, gizmoTargets, layers, selectLayer, wheelCenters,
     driveValue: () => $("drive").value,
     loadLibrary: () => loadPhysics(),
-    renderLayers: () => renderLayers()
+    renderLayers: () => renderLayers(),
+    save: () => save(),
+    status
 });
+window.__carEditorView = { camera, scene, renderer };          // (for the tests of the editor: where a point of the scene is on the screen)
 
 softBodyEditor = initSoftBody({
     $, THREE, scene, camera, renderer, controls, bench, status, startBench, stopBench,
