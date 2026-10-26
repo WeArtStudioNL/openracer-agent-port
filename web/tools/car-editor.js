@@ -1508,6 +1508,8 @@ function buildConfig(id) {
         },
         drivetrain: {
             drive: $("drive").value,
+            gearbox: $("gearbox").value === "cvt" ? "cvt" : "gears",
+            cvt_rpm: num("cvtRpm") > 0 ? num("cvtRpm") : undefined,
             diff: $("diff").value,
             diff_preload: Math.max(0, num("diffPreload") || 0),
             diff_power: Math.min(1, Math.max(0, (num("diffPower") || 0) / 100)),
@@ -1790,6 +1792,8 @@ function fill(car) {
     const d = car.drivetrain;
     set("steeringDegrees", (car.steering_wheel && car.steering_wheel.degrees) || 450);
     set("drive", d.drive); set("diff", d.diff || "lsd"); set("centerDiff", d.center_diff || "lsd");
+    set("gearbox", d.gearbox === "cvt" ? "cvt" : "gears"); $("cvtRpm").value = d.cvt_rpm || "";
+    $("cvtBox").style.visibility = d.gearbox === "cvt" ? "" : "hidden";
     set("diffPreload", d.diff_preload !== undefined ? d.diff_preload : 150);
     set("diffPower", Math.round((d.diff_power !== undefined ? d.diff_power : 0.3) * 100));
     set("diffCoast", Math.round((d.diff_coast !== undefined ? d.diff_coast : 0.1) * 100));
@@ -2033,6 +2037,8 @@ function formChanged() {
     } catch (error) { /* a field that is empty or not valid yet: the next change tries again */ }
 }
 for (const id of ["mass", "front", "cgHeight", "wheelbase", "frontTrack", "rearTrack", "tyre", "drag", "steer"]) $(id).addEventListener("input", formChanged);
+$("gearbox").addEventListener("change", () => { $("cvtBox").style.visibility = $("gearbox").value === "cvt" ? "" : "hidden"; formChanged(); });
+$("cvtRpm").addEventListener("input", formChanged);
 
 // all the values of the table for a configuration from the form: the form's own, with the card's on top
 function tuningValues(config) {

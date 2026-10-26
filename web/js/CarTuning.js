@@ -77,7 +77,9 @@ OpenRacer.CarTuning = (function () {
             ["shift_time", "Shift time (without a clutch pedal)", "s", 0.05, 1.5, 0.01],
             ["clutch_start_rpm", "Automatic clutch: starts to grip at", "rpm", 500, 6000, 50],
             ["clutch_full_rpm", "Automatic clutch: grips fully at", "rpm", 600, 7000, 50],
-            ["gears", "Gears", "", 0, 0, 0],
+            ["gearbox", "Gearbox", "", 0, 0, 0],
+            ["cvt_rpm", "CVT: engine speed at full throttle", "rpm", 1500, 12000, 100],
+            ["gears", "Gears (a CVT runs between the first and the last)", "", 0, 0, 0],
             ["reverse_ratio", "Reverse", "", 1.0, 6.0, 0.05],
             ["clutch", "Clutch capacity (x peak torque)", "", 1.0, 3.5, 0.05],
             ["diff", "Differential", "", 0, 0, 0],
@@ -188,6 +190,8 @@ OpenRacer.CarTuning = (function () {
             engine_inertia: en.inertia || 0.4,
             engine_braking: (en.braking_scale !== undefined ? en.braking_scale : 1) * 100,
             drive: dt.drive || "rwd",
+            gearbox: dt.gearbox === "cvt" ? "cvt" : "gears",
+            cvt_rpm: dt.cvt_rpm || Math.round((en.limiter_rpm || 6600) * 0.85 / 100) * 100,
             final_drive: dt.final_drive,
             reverse_ratio: dt.reverse_ratio || dt.gear_ratios[0],
             clutch: dt.clutch !== undefined ? dt.clutch : 1.5,
@@ -281,6 +285,7 @@ OpenRacer.CarTuning = (function () {
             engine_inertia: v.engine_inertia,
             engine_braking: v.engine_braking / 100,
             drive: v.drive,
+            gearbox: v.gearbox, cvt_rpm: v.cvt_rpm,
             final_drive: v.final_drive,
             gear_ratios: gears,
             reverse_ratio: v.reverse_ratio,
@@ -379,6 +384,8 @@ OpenRacer.CarTuning = (function () {
         c.drivetrain.shift_time = v.shift_time;
         c.drivetrain.clutch_start_rpm = v.clutch_start_rpm; c.drivetrain.clutch_full_rpm = Math.max(v.clutch_full_rpm, v.clutch_start_rpm + 50);
         c.drivetrain.drive = v.drive;
+        c.drivetrain.gearbox = v.gearbox === "cvt" ? "cvt" : "gears";
+        c.drivetrain.cvt_rpm = v.cvt_rpm;
         c.drivetrain.final_drive = v.final_drive;
         c.drivetrain.reverse_ratio = v.reverse_ratio;
         c.drivetrain.clutch = v.clutch;

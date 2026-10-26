@@ -186,6 +186,15 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.clutchStartRPM = parameters.clutch_start_rpm || 1050;      // the automatic clutch starts to grip here and grips fully at clutchFullRPM (a kart with a centrifugal clutch: later)
     this.clutchFullRPM = parameters.clutch_full_rpm || 2000;
     this.shiftTime = parameters.shift_time || 0.32; // how long a shift of the gearbox takes without a clutch pedal (s)
+    // a CVT (gearbox "cvt"): no gears but a ratio that goes smoothly between the first and the last of gear_ratios (cvt_low, cvt_high), chosen to hold the engine at the
+    // speed the throttle asks for (idle to cvt_rpm at full throttle; a little above idle off the throttle, more on the brakes: engine braking), the belt moving at a
+    // limited pace (cvt_rate: the ratio changes by at most e^rate a second)
+    this.gearbox = parameters.gearbox === "cvt" ? "cvt" : "gears";
+    this.cvtLow = parameters.cvt_low || parameters.gear_ratios[0];
+    this.cvtHigh = parameters.cvt_high || parameters.gear_ratios[parameters.gear_ratios.length - 1];
+    this.cvtRPM = parameters.cvt_rpm || 0;                 // (0: 85 % of the rev limit)
+    this.cvtRate = parameters.cvt_rate || 1.2;
+    this.cvtRatio = this.cvtLow;
     this.shiftTimer = 0;
     this.lastGearKey = null;
     this.timeSinceShift = 10;
@@ -462,6 +471,11 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.toe_rear !== undefined) this.toeRear = t.toe_rear;
         this.applyPressure();
         if(t.shift_time !== undefined) this.shiftTime = t.shift_time;
+        if(t.gearbox !== undefined) this.gearbox = t.gearbox === "cvt" ? "cvt" : "gears";
+        if(t.cvt_rpm !== undefined) this.cvtRPM = t.cvt_rpm;
+        if(t.cvt_rate !== undefined) this.cvtRate = t.cvt_rate;
+        if(t.cvt_low !== undefined) this.cvtLow = t.cvt_low;
+        if(t.cvt_high !== undefined) this.cvtHigh = t.cvt_high;
         if(t.clutch_start_rpm !== undefined) this.clutchStartRPM = t.clutch_start_rpm;
         if(t.clutch_full_rpm !== undefined) this.clutchFullRPM = Math.max(t.clutch_full_rpm, this.clutchStartRPM + 50);
         if(t.suspension_length !== undefined) this.restLength = Math.max(0.2, t.suspension_length);
@@ -635,6 +649,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(inp.neutral) return 0;
         var ratio = this.final_drive;
         if(inp.reverse) return -this.reverseRatio * ratio;
+        if(this.gearbox === "cvt") return this.cvtRatio * ratio;
         return this.gear_ratios[inp.current_gear] * ratio;
     };
 
@@ -702,9 +717,24 @@ OpenRacer.Vehicle = function (parameters, input) {
         for(var di = 0; di < 4; di++) drivenOmega += shares0[di] * this.wheels[di].omega;
         this.drivelineRPM = Math.abs(drivenOmega) * ratio * 30 / Math.PI;
 
+        // the CVT: the ratio that holds the engine at the speed the throttle asks for, from the speed of the road
+        if(this.gearbox === "cvt") {
+            if(this.gear_ratios.length) {
+                var cl = Math.max(this.cvtLow, this.cvtHigh), ch = Math.min(this.cvtLow, this.cvtHigh);
+                var idle = engine.idleRPM || 900, top = this.cvtRPM > 0 ? this.cvtRPM : engine.limiterRPM * 0.85;
+                var cthr = Math.max(0, Math.min(1, inp.throttle || 0)), cbrk = Math.max(0, Math.min(1, inp.brakePedal || 0));
+                var wantRPM = cthr > 0.05 ? idle + (top - idle) * Math.pow(cthr, 0.6) : idle + (top - idle) * (0.18 + 0.3 * cbrk);
+                var roadOmega = Math.max(0.5, Math.abs(this.u)) / this.wheels[0].radius;              // rad/s of the wheels from the speed of the road (not from spinning wheels)
+                var wantRatio = (wantRPM * Math.PI / 30) / (roadOmega * this.final_drive);
+                wantRatio = Math.max(ch, Math.min(cl, wantRatio));
+                var pace = Math.exp(this.cvtRate * delta);
+                this.cvtRatio = Math.max(this.cvtRatio / pace, Math.min(this.cvtRatio * pace, wantRatio));
+                if(inp.neutral || inp.reverse) this.cvtRatio = cl;
+            }
+        }
         // automatic gearbox
         // (not in a burnout of a motorcycle: the gear is held, the wheel is meant to spin)
-        if(!inp.manualGearbox && !inp.reverse && !inp.neutral && !(self.controller && self.controller.burnout > 0.5)) {
+        else if(!inp.manualGearbox && !inp.reverse && !inp.neutral && !(self.controller && self.controller.burnout > 0.5)) {
             var g = inp.current_gear;
             var thr = inp.throttle;
             // the engine speed the road speed asks for in this gear: spinning wheels must not cause a shift

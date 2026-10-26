@@ -216,7 +216,11 @@
                     <div id="splitBox"><label>Torque to the front (%)</label><input type="number" id="centerSplit" step="1" min="0" max="100" value="40"></div>
                 </div>
                 <div class="hint carOnly" id="diffInfo"></div>
-                <div><label>Gear ratios (1st, 2nd, … separated by commas)</label><input type="text" id="gears" value="3.6, 2.1, 1.4, 1.0, 0.8"></div>
+                <div class="row">
+                    <div><label>Gearbox</label><select id="gearbox"><option value="gears">Gears</option><option value="cvt">CVT (continuously variable)</option></select></div>
+                    <div id="cvtBox"><label>CVT: engine speed at full throttle (rpm)</label><input type="number" id="cvtRpm" step="100" min="1500" max="12000" placeholder="85 % of the rev limit"></div>
+                </div>
+                <div><label>Gear ratios (1st, 2nd, … separated by commas; a CVT runs between the first and the last)</label><input type="text" id="gears" value="3.6, 2.1, 1.4, 1.0, 0.8"></div>
                 <div class="row">
                     <div><input type="number" id="finalDrive" step="0.05" value="3.5"><div class="hint">final drive</div></div>
                     <div class="carOnly"><input type="number" id="reverse" step="0.05" value="3.4"><div class="hint">reverse ratio</div></div>

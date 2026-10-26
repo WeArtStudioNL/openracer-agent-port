@@ -76,6 +76,7 @@ OpenRacer.Car = function( config, domElement ) {
     this.gear_ratios = drivetrain.gear_ratios;
     this.final_drive = drivetrain.final_drive;
     this.current_gear = 0;
+    this.cvt = !!(config.drivetrain && config.drivetrain.gearbox === "cvt");      // a CVT: no gears to shift, the label says CVT
     this.manualGearbox = false;     // the driver selects the gears (sequential and manual): no automatic shifting
     this.neutral = false;           // no drive while in neutral
     this.clutch = 0;                // clutch pedal: 0 = engaged, 1 = fully pressed
@@ -154,6 +155,7 @@ OpenRacer.Car = function( config, domElement ) {
         diff_coast: drivetrain.diff_coast,
         center_diff: drivetrain.center_diff,
         center_split: drivetrain.center_split,
+        gearbox: drivetrain.gearbox, cvt_rpm: drivetrain.cvt_rpm, cvt_rate: drivetrain.cvt_rate, cvt_low: drivetrain.cvt_low, cvt_high: drivetrain.cvt_high,
         engine: config.engine,
         brake_front: config.brakes && config.brakes.front,
         brake_rear: config.brakes && config.brakes.rear,
@@ -966,7 +968,7 @@ OpenRacer.Car = function( config, domElement ) {
         } else if(this.neutral) {
             this.neutral = false;
             this.current_gear = 0;
-        } else if(this.current_gear < this.gear_ratios.length - 1) {
+        } else if(!this.cvt && this.current_gear < this.gear_ratios.length - 1) {
             this.current_gear++;
         }
     };
@@ -988,7 +990,7 @@ OpenRacer.Car = function( config, domElement ) {
                 this.neutral = false;
                 this.reverse = true;
             }
-        } else if(this.current_gear > 0) {
+        } else if(!this.cvt && this.current_gear > 0) {
             this.current_gear--;
         } else {
             this.neutral = true;
@@ -1008,6 +1010,10 @@ OpenRacer.Car = function( config, domElement ) {
 
     // The gear as it is shown: P R N D (and the gear of the automatic) in automatic, 1, 2, ... N R otherwise
     this.gearLabel = function() {
+        if(this.cvt) {
+            if(this.gearboxMode === "automatic") return this.reverse ? "R" : (this.selector === "D" ? "CVT" : this.selector);
+            return this.reverse ? "R" : (this.neutral ? "N" : "CVT");
+        }
         if(this.gearboxMode === "automatic") {
             if(this.selector === "D" && !this.reverse) return "D" + (this.current_gear + 1);
             return this.reverse ? "R" : this.selector;
