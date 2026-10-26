@@ -22,6 +22,7 @@ var Tuning = (function() {
     var values = {};         // the values that are in use
     var controls = [];       // { def, row, number, slider, reset }
     var info = null;
+    var setupSelect = null;  // the setups of the car (OpenRacer.Setups)
     var visible = false;
 
     // key, label, unit, minimum, maximum, step: the values are in the units of the menu (percent, N/mm, ...)
@@ -309,6 +310,47 @@ var Tuning = (function() {
         var messageLine = document.createElement("div");
         messageLine.className = "message";
         panel.appendChild(messageLine);
+        // the setups: named tunings of this car, kept in the browser (OpenRacer.Setups); the main menu offers them on the card of the car when there are two or more
+        var setupLine = document.createElement("div");
+        setupLine.className = "actions setups";
+        var setupLabel = document.createElement("span");
+        setupLabel.textContent = "Setup";
+        setupLabel.style.cssText = "align-self: center; color: var(--muted);";
+        setupSelect = document.createElement("select");
+        setupSelect.style.width = "150px";
+        setupSelect.onchange = function() {
+            var name = setupSelect.value;
+            values = clone(base);
+            if(name) { var saved = OpenRacer.Setups.get(config.id, name); if(saved) Object.keys(saved).forEach(function(key) { if(key in base) values[key] = saved[key]; }); }
+            OpenRacer.Setups.setActive(config.id, name || null);
+            apply(); store(); refresh();
+            message(name ? "Setup " + name + "." : "The car as it was made.");
+        };
+        var saveSetup = document.createElement("button");
+        saveSetup.textContent = "Save setup…";
+        saveSetup.onclick = function() {
+            var name = window.prompt("The name of this setup", setupSelect.value || "");
+            if(name === null) return;
+            name = name.trim().slice(0, 40);
+            if(!name) return;
+            OpenRacer.Setups.save(config.id, name, values);
+            refresh();
+            message("Setup " + name + " saved; the main menu offers it on the card of the car once there are two.");
+        };
+        var dropSetup = document.createElement("button");
+        dropSetup.textContent = "Delete";
+        dropSetup.onclick = function() {
+            var name = setupSelect.value;
+            if(!name) return;
+            OpenRacer.Setups.remove(config.id, name);
+            refresh();
+            message("Setup " + name + " deleted (the tuning on the car stays as it is).");
+        };
+        setupLine.appendChild(setupLabel);
+        setupLine.appendChild(setupSelect);
+        setupLine.appendChild(saveSetup);
+        setupLine.appendChild(dropSetup);
+        panel.appendChild(setupLine);
 
         GROUPS.forEach(function(group, index) {
             var details = document.createElement("details");
@@ -332,7 +374,27 @@ var Tuning = (function() {
         OpenRacer.Movable.make(panel, { key: "tuning" });
     }
 
+    // the list of the setups, with the one in use chosen (and "(changed)" when the tuning has moved away from it)
+    function refreshSetups() {
+        if(!setupSelect || !OpenRacer.Setups) return;
+        var names = OpenRacer.Setups.names(config.id), active = OpenRacer.Setups.active(config.id);
+        setupSelect.innerHTML = "";
+        var none = document.createElement("option");
+        none.value = ""; none.textContent = "The car as made";
+        setupSelect.appendChild(none);
+        names.forEach(function(name) {
+            var o = document.createElement("option");
+            o.value = name;
+            var saved = OpenRacer.Setups.get(config.id, name), same = true;
+            if(name === active && saved) Object.keys(saved).forEach(function(key) { if(key in base && JSON.stringify(saved[key]) !== JSON.stringify(values[key])) same = false; });
+            o.textContent = name + (name === active && !same ? " (changed)" : "");
+            setupSelect.appendChild(o);
+        });
+        setupSelect.value = active && names.indexOf(active) >= 0 ? active : "";
+    }
+
     function refresh() {
+        refreshSetups();
         var CT = OpenRacer.CarTuning;
         controls.forEach(function(c) {
             // the row of a setting that cannot do anything with the others as they are is hidden (CarTuning.visible)

@@ -2071,7 +2071,52 @@ function renderTuningCard() {
     });
     $("tuningInfo").textContent = TUNING_KEYS.length + " settings";
     syncTuningVisibility();
+    renderSetups();
 }
+
+// ---- the setups of the car (OpenRacer.Setups, shared with the tuning menu of the game): named tunings kept in this browser; a setup holds all the values of the table
+// (the form's and the card's), loading one fills the form and the card with them
+function renderSetups() {
+    const id = $("id").value.trim(), select = $("setupSelect");
+    const names = id && OpenRacer.Setups ? OpenRacer.Setups.names(id) : [];
+    $("setupRow").style.display = id ? "" : "none";
+    select.innerHTML = "";
+    [["", "The car as made"]].concat(names.map((n) => [n, n])).forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; select.appendChild(o); });
+    const active = id && OpenRacer.Setups ? OpenRacer.Setups.active(id) : null;
+    select.value = active && names.includes(active) ? active : "";
+}
+$("setupSelect").addEventListener("change", () => {
+    const id = $("id").value.trim(), name = $("setupSelect").value;
+    if (!id) return;
+    OpenRacer.Setups.setActive(id, name || null);
+    if (!name) return;
+    const saved = OpenRacer.Setups.get(id, name);
+    if (!saved) return;
+    try {
+        const config = OpenRacer.CarTuning.toConfig(buildConfig(id), saved);
+        config.id = id;
+        fill(config);                       // (the form and the card take the values; fill renders the card, which lists the setups again)
+        formChanged(); tuningChanged();
+        status("Setup " + name + " loaded into the form (save the car to keep it in car.json).");
+    } catch (error) { status("Could not load the setup: " + error.message); }
+});
+$("setupSave").addEventListener("click", () => {
+    const id = $("id").value.trim();
+    if (!id) { status("Give the car an id first."); return; }
+    let name = window.prompt("The name of this setup", $("setupSelect").value || "");
+    if (name === null) return;
+    name = name.trim().slice(0, 40);
+    if (!name) return;
+    try { OpenRacer.Setups.save(id, name, tuningValues(buildConfig(id))); renderSetups(); status("Setup " + name + " saved; the main menu offers it on the card of the car once there are two."); }
+    catch (error) { status("Could not save the setup: " + error.message); }
+});
+$("setupDelete").addEventListener("click", () => {
+    const id = $("id").value.trim(), name = $("setupSelect").value;
+    if (!id || !name) return;
+    OpenRacer.Setups.remove(id, name);
+    renderSetups();
+    status("Setup " + name + " deleted.");
+});
 
 // the settings that cannot do anything with the others as they are (the gearbox, the differential, the drive, the turbo) are hidden, as in the tuning menu of the game (CarTuning.visible)
 function syncTuningVisibility() {

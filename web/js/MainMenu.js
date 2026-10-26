@@ -78,6 +78,7 @@ var MainMenu = (function() {
             "#mainMenu .tile .over , #pickDialog .tile .over { position: absolute; left: 0; top: 0; right: 0; bottom: 0; padding: 12px 14px; pointer-events: none; display: flex; flex-direction: column; " +
             "text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9); background: linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0) 72%, rgba(0, 0, 0, 0.6) 100%); }" +
             "#mainMenu .tile .name , #pickDialog .tile .name { font-size: 18px; font-weight: 700; color: var(--head); }" +
+            "#mainMenu .tile select.setup { pointer-events: auto; align-self: flex-start; margin-top: 6px; max-width: 100%; background: rgba(15, 18, 22, 0.8); color: var(--head); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; font: inherit; font-size: 12px; }" +
             "#mainMenu .tile .bottom , #pickDialog .tile .bottom { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; }" +
             "#mainMenu .tile .hp , #pickDialog .tile .hp { font-size: 24px; font-weight: 700; line-height: 1; white-space: nowrap; color: var(--head); }" +
             "#mainMenu .tile .hp small , #pickDialog .tile .hp small { font-size: 11px; font-weight: normal; color: var(--muted); letter-spacing: 1px; margin-left: 4px; }" +
@@ -340,6 +341,24 @@ var MainMenu = (function() {
         name.textContent = car.name || car.id;
         addBadge(name, car);
         over.appendChild(name);
+        // the setups of the car (the tuning menu, the car editor; OpenRacer.Setups): a choice on the card when there are two or more; the one chosen goes on the car for the game
+        var setups = !onClick && OpenRacer.Setups ? OpenRacer.Setups.names(car.id) : [];
+        if(setups.length >= 2) {
+            var pick = document.createElement("select");
+            pick.className = "setup";
+            pick.title = "The setup of the car for this game";
+            [["", "Car as made"]].concat(setups.map(function(n) { return [n, n]; })).forEach(function(item) {
+                var o = document.createElement("option");
+                o.value = item[0]; o.textContent = item[1];
+                pick.appendChild(o);
+            });
+            pick.value = OpenRacer.Setups.active(car.id) || "";
+            pick.onclick = function(e) { e.stopPropagation(); };
+            pick.onpointerdown = function(e) { e.stopPropagation(); };
+            pick.ondblclick = function(e) { e.stopPropagation(); };
+            pick.onchange = function(e) { e.stopPropagation(); OpenRacer.Setups.use(car.id, pick.value || null); };
+            over.appendChild(pick);
+        }
         div.title = car.description || "";
         var bottom = document.createElement("div");
         bottom.className = "bottom";
