@@ -15,6 +15,8 @@
  *                the leaf spring     its origin at its middle, where it sits on the axle, 1 m long along Z (from -0.5 to +0.5); scaled from the front hanger to the rear
  *                a rigid part        at its own size, its origin at its mount: the upright (at the middle of the wheel), the rack, the engine, the gearbox, a differential
  *
+ *              A part can be hidden in the car editor (the eye of the card: "hidden": ["engine", "gearbox"] of the axle or the driveline in car.json), for a car
+ *              whose own model has that part.
  *              Every part is modelled for the LEFT side (+x); the right side is its mirror image. Where a part goes is a mount: a point (and a turn) in the frame of
  *              the car (x to the left, y up, z forward, the origin as the model has it) that the car editor shows as a gizmo, with a default from the wheels:
  *
@@ -65,6 +67,25 @@ OpenRacer.PartsLibrary = (function () {
     };
     var ENGINE = ["front", "mid", "rear"];
     var DRIVELINE_FILES = ["engine", "gearbox", "differential", "propshaft", "driveshaft"];
+    // the parts as the car editor names them, with an eye each: a part that is hidden is not placed (a car whose own model has its engine or its gearbox keeps those)
+    var PART_LABELS = {
+        upperarm: "Upper arm", lowerarm: "Lower arm", upright: "Upright", coilover: "Coilover", tierod: "Tie rod", strut: "Strut", rack: "Steering rack",
+        axle: "Axle", trailingarm: "Lower trailing arm", uppertrailingarm: "Upper trailing arm", damper: "Damper", panhard: "Panhard rod", leafspring: "Leaf spring",
+        engine: "Engine", gearbox: "Gearbox", differential: "Differential", propshaft: "Propshaft", driveshaft: "Driveshafts"
+    };
+    function hiddenOf(config, group) {
+        var h = group === "driveline" ? (config.driveline && config.driveline.hidden) : (config.suspension && config.suspension[group] && config.suspension[group].hidden);
+        return Array.isArray(h) ? h : [];
+    }
+    // the parts of a group of a car, for the editor: [{ file, label }]
+    function partsOf(config, group) {
+        if(group === "driveline") return DRIVELINE_FILES.map(function (f) { return { file: f, label: PART_LABELS[f] }; });
+        var t = typeOf(config, group);
+        if(t === "model" || t === "none") return [];
+        var files = TYPES[t].files.slice();
+        if(group === "front" && !isLive(t)) files.push("rack");
+        return files.map(function (f) { return { file: f, label: PART_LABELS[f] || f }; });
+    }
     var ORIGIN = new V(0, 0, 0);
 
     function isLive(type) { return type === "live-trailing" || type === "live-leaf"; }
@@ -190,6 +211,8 @@ OpenRacer.PartsLibrary = (function () {
 
     // ---- the assembly: the parts placed in the frame of the car. mirror: the right side (the part is the mirror image of the one on the left)
     function place(out, type, file, name, origin, far, mount, mirror) {
+        var group = type === "driveline" ? "driveline" : out.axle;
+        if(out.hidden[group] && out.hidden[group].indexOf(file) >= 0) return null;          // (hidden in the car editor: the car's own model has it)
         var t = template(type, file);
         if(!t) { if(out.missing.indexOf(type + "/" + file) < 0) out.missing.push(type + "/" + file); return null; }
         var node = new THREE.Object3D();
@@ -274,7 +297,7 @@ OpenRacer.PartsLibrary = (function () {
     }
 
     function assemble(config, measured) {
-        var out = { group: new THREE.Group(), names: [], missing: [] };
+        var out = { group: new THREE.Group(), names: [], missing: [], hidden: { front: hiddenOf(config, "front"), rear: hiddenOf(config, "rear"), driveline: hiddenOf(config, "driveline") }, axle: "front" };
         out.group.name = "parts-library";
         if(!measured || !measured.centres || !measured.centres.FL) return out;
         var geo = geometry(measured), driven = drivenAxles(config), any = false;
@@ -282,9 +305,11 @@ OpenRacer.PartsLibrary = (function () {
             var type = typeOf(config, axle);
             if(type === "model" || type === "none") return;
             any = true;
+            out.axle = axle;
             var s = config.suspension[axle];
             buildAxle(out, config, type, axle, resolveMounts(type, axle, s.mounts, geo), geo, driven[axle]);
         });
+        out.axle = "driveline";
         if(any) buildDriveline(out, config, geo);
         return out;
     }
@@ -305,7 +330,14 @@ OpenRacer.PartsLibrary = (function () {
 
     lib.TYPES = TYPES; lib.MOUNT_LABELS = MOUNT_LABELS; lib.ENGINE = ENGINE;
     lib.preload = preload; lib.assemble = assemble; lib.mountsOf = mountsOf; lib.filesFor = filesFor; lib.typeOf = typeOf; lib.isLive = isLive;
-    lib.missingFiles = function (config) { return filesFor(config).filter(function (f) { var e = cache[url(f.type, f.file)]; return !e || !e.scene; }).map(function (f) { return f.type + "/" + f.file + ".glb"; }); };
+    lib.missingFiles = function (config) {
+        return filesFor(config).filter(function (f) {
+            var group = f.type === "driveline" ? "driveline" : (f.type === "steering" ? "front" : (typeOf(config, "front") === f.type ? "front" : "rear"));
+            if(hiddenOf(config, group).indexOf(f.file) >= 0) return false;
+            var e = cache[url(f.type, f.file)]; return !e || !e.scene;
+        }).map(function (f) { return f.type + "/" + f.file + ".glb"; });
+    };
+    lib.partsOf = partsOf; lib.PART_LABELS = PART_LABELS;
     lib.url = url;
     return lib;
 })();

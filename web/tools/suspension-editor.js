@@ -14,7 +14,14 @@
 export function initSuspension(api) {
     const { $, THREE, scene, gizmo, rotGizmo, gizmoTargets, layers, selectLayer, wheelCenters, driveValue, loadLibrary, renderLayers, save } = api;
     let editing = false;                     // Edit origins: only the mounts can be clicked in the view, through everything
-    const state = { front: { type: "model", mounts: {} }, rear: { type: "model", mounts: {} }, driveline: { engine: "front", mounts: {} } };
+    const state = { front: { type: "model", mounts: {}, hidden: [] }, rear: { type: "model", mounts: {}, hidden: [] }, driveline: { engine: "front", mounts: {}, hidden: [] } };
+    // the buttons of a row are icons: move (arrows), turn (a circle arrow), reset (back to the default), and the eye of a part (orange: shown, grey: hidden)
+    const ICONS = {
+        move: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v14M1 8h14M8 1l-2 2M8 1l2 2M8 15l-2-2M8 15l2-2M1 8l2-2M1 8l2 2M15 8l-2-2M15 8l-2 2"/></svg>',
+        turn: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 1.5v3.5h-3.5"/></svg>',
+        reset: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9"/><path d="M2.5 1.5v3.5h3.5"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg>',
+        eye: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="2.2"/></svg>'
+    };
     const selects = { front: $("suspFront"), rear: $("suspRear"), engine: $("enginePlace") };
     const rows = $("suspMounts"), missingBox = $("suspMissing");
     let mode = "move";                       // what the gizmo of a mount does: move or rotate
@@ -32,8 +39,8 @@ export function initSuspension(api) {
     // the car as the library reads it: the types, the mounts of the chosen types, the drive
     function config() {
         const susp = {};
-        ["front", "rear"].forEach((axle) => { susp[axle] = { type: state[axle].type, mounts: state[axle].mounts[state[axle].type] || {} }; });
-        return { suspension: susp, driveline: { engine: state.driveline.engine, mounts: state.driveline.mounts }, drivetrain: { drive: driveValue() } };
+        ["front", "rear"].forEach((axle) => { susp[axle] = { type: state[axle].type, mounts: state[axle].mounts[state[axle].type] || {}, hidden: state[axle].hidden }; });
+        return { suspension: susp, driveline: { engine: state.driveline.engine, mounts: state.driveline.mounts, hidden: state.driveline.hidden }, drivetrain: { drive: driveValue() } };
     }
     function measured() {
         const c = wheelCenters();
@@ -52,10 +59,12 @@ export function initSuspension(api) {
                 const t = state[axle].type, entry = { type: t };
                 const m = state[axle].mounts[t];
                 if (m && Object.keys(m).length) entry.mounts = m;
+                if (state[axle].hidden.length) entry.hidden = state[axle].hidden.slice();
                 out.suspension[axle] = entry;
             });
             out.driveline = { engine: state.driveline.engine };
             if (Object.keys(state.driveline.mounts).length) out.driveline.mounts = state.driveline.mounts;
+            if (state.driveline.hidden.length) out.driveline.hidden = state.driveline.hidden.slice();
         }
         return out;
     }
@@ -66,11 +75,13 @@ export function initSuspension(api) {
             state[axle].type = t;
             state[axle].mounts = {};
             if (e.mounts) state[axle].mounts[t] = JSON.parse(JSON.stringify(e.mounts));
+            state[axle].hidden = Array.isArray(e.hidden) ? e.hidden.slice() : [];
             selects[axle].value = t;
         });
         const d = (car && car.driveline) || {};
         state.driveline.engine = ["front", "mid", "rear"].indexOf(d.engine) >= 0 ? d.engine : "front";
         state.driveline.mounts = d.mounts ? JSON.parse(JSON.stringify(d.mounts)) : {};
+        state.driveline.hidden = Array.isArray(d.hidden) ? d.hidden.slice() : [];
         selects.engine.value = state.driveline.engine;
         refresh(true);
     }
@@ -147,6 +158,19 @@ export function initSuspension(api) {
             head.className = "group";
             head.textContent = grp === "driveline" ? "Driveline" : (grp === "front" ? "Front suspension" : "Rear suspension") + " (the left side; the right is its mirror)";
             rows.appendChild(head);
+            // the parts of the group, an eye each: orange is placed, grey is hidden (the car's own model has that part)
+            const eyes = document.createElement("div");
+            eyes.style.cssText = "display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 2px 0 6px;";
+            L.partsOf(cfg, grp).forEach((part) => {
+                const hidden = state[grp].hidden.indexOf(part.file) >= 0;
+                const b = document.createElement("button");
+                b.className = "small ghost"; b.innerHTML = ICONS.eye + " " + part.label;
+                b.style.cssText = "display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; color: " + (hidden ? "#6b7480" : "#ff7a3d") + ";";
+                b.title = hidden ? "Hidden: the car's own model has this part. Click to place it from the parts library" : "Placed from the parts library. Click to hide it (the car's own model has it)";
+                b.addEventListener("click", () => { const h = state[grp].hidden, i = h.indexOf(part.file); if (i >= 0) h.splice(i, 1); else h.push(part.file); refresh(true); });
+                eyes.appendChild(b);
+            });
+            rows.appendChild(eyes);
             names.forEach((name) => {
                 const id = "mt:" + grp + ":" + name, mt = mounts[grp][name], m = marker(id, grp, name);
                 keep[id] = true;
@@ -165,11 +189,12 @@ export function initSuspension(api) {
                 label.textContent = (L.MOUNT_LABELS[name] || name) + "  (" + mt.position.map((v) => v.toFixed(2)).join(", ") + ")";
                 const set = (isSet) => isSet ? "" : " ghost";
                 const custom = grp === "driveline" ? !!state.driveline.mounts[name] : !!(state[grp].mounts[state[grp].type] && state[grp].mounts[state[grp].type][name]);
-                const bMove = document.createElement("button"); bMove.className = "small" + (layers.selected === id && mode === "move" ? "" : " ghost"); bMove.textContent = "Move";
+                const icon = (b, svg) => { b.innerHTML = svg; b.style.cssText = "display: inline-flex; align-items: center; padding: 4px 7px;"; };
+                const bMove = document.createElement("button"); bMove.className = "small" + (layers.selected === id && mode === "move" ? "" : " ghost"); icon(bMove, ICONS.move); bMove.title = "Move (W)";
                 bMove.addEventListener("click", () => { mode = "move"; if (layers.selected !== id) selectLayer(id); else attachGizmo(id); renderRows(); });
-                const bTurn = document.createElement("button"); bTurn.className = "small" + (layers.selected === id && mode === "rotate" ? "" : " ghost"); bTurn.textContent = "Turn";
+                const bTurn = document.createElement("button"); bTurn.className = "small" + (layers.selected === id && mode === "rotate" ? "" : " ghost"); icon(bTurn, ICONS.turn); bTurn.title = "Turn (E)";
                 bTurn.addEventListener("click", () => { mode = "rotate"; if (layers.selected !== id) selectLayer(id); else attachGizmo(id); renderRows(); });
-                const bReset = document.createElement("button"); bReset.className = "small ghost"; bReset.textContent = "Reset"; bReset.title = "Back to the default from the wheels"; bReset.style.opacity = custom ? 1 : 0.4;
+                const bReset = document.createElement("button"); bReset.className = "small ghost"; icon(bReset, ICONS.reset); bReset.title = "Back to the default from the wheels"; bReset.style.opacity = custom ? 1 : 0.4;
                 bReset.addEventListener("click", () => reset(id));
                 row.append(label, bMove, bTurn, bReset);
                 rows.appendChild(row);
