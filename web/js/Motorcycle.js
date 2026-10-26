@@ -34,7 +34,7 @@ OpenRacer.Motorcycle = function (settings) {
     this.settings = s;
     this.maxLean = (s.max_lean_deg || 60) * DEG;
     this.overLean = (s.over_lean_deg !== undefined ? s.over_lean_deg : 10) * DEG;   // how far past what the tyres hold the rider can lean it: past that the tyres let go (a lowside)
-    this.crashLean = (s.crash_lean_deg || 70) * DEG;                                   // from here the bike is down
+    this.crashLean = (s.crash_lean_deg || 78) * DEG;                                   // from here the bike is down (78: a powerslide is ridden out until the bike nearly lies on the road)
     this.balance = s.balance || 1;
     this.leanResponse = s.lean_response || 0.1;          // s: how fast the lean follows what is asked
     this.camberThrust = s.camber_thrust !== undefined ? s.camber_thrust : 0.85;     // the part of load * tan(lean) that a leaned tyre gives by itself (a round tyre: nearly all of it)
@@ -320,7 +320,10 @@ OpenRacer.Motorcycle = function (settings) {
             var over = state.upN < -0.17;
             // a lowside: the bike slides sideways past 15 degrees for half a second while it leans (the tyres have let go; it crabbed along for seconds at the limit of the lean)
             var betaNow = Math.atan2(v.v || 0, Math.max(Math.abs(u), 1));
-            self.slideTime = Math.abs(betaNow) > 15 * DEG && Math.abs(state.lean) > 25 * DEG && Math.abs(u) > 5 ? self.slideTime + dt : 0;
+            // (a powerslide is no lowside: the rear wheel spins under power and the rider holds the bike on the throttle, sliding as long as he likes; it goes down by the lean alone,
+            // at crashLean. A slide with the rear wheel rolling is the tyres letting go.)
+            var rear = v.wheels && v.wheels[2], powerslide = !!rear && c.throttle > 0.2 && rear.omega * rear.radius - (rear.forwardSpeed || u) > 1.5;
+            self.slideTime = Math.abs(betaNow) > 15 * DEG && Math.abs(state.lean) > 25 * DEG && Math.abs(u) > 5 && !powerslide ? self.slideTime + dt : 0;
             var lowside = self.slideTime > 0.8;
             // a spin: the bike turns about its vertical faster than 4 rad/s at speed (a jump landed on a lean: the front took the hit with the rear in the air, and the bike was
             // thrown round in a tenth of a second and went on backwards at 100 km/h)

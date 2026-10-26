@@ -19,6 +19,9 @@ OpenRacer.vehicleParams = function (config, getSurface) {
         tc_fitted: !(config.extras && config.extras.tc_on === false), abs_fitted: !(config.extras && config.extras.abs_on === false), esc_fitted: !(config.extras && config.extras.esc_on === false), launch_control_fitted: !(config.extras && config.extras.launch_control_on === false), two_step_fitted: !(config.extras && config.extras.two_step_on === false),
         compound: config.tyres && config.tyres.compound, pressure_front: config.tyres && config.tyres.pressure_front, pressure_rear: config.tyres && config.tyres.pressure_rear, roll_center_front: chassis.roll_center_front, roll_center_rear: chassis.roll_center_rear, camber_front: chassis.camber_front, camber_rear: chassis.camber_rear, roll_camber: chassis.roll_camber,
         motorcycle: config.type === "motorcycle" ? (config.motorcycle || {}) : null,
+        // a live axle (the suspension type of the parts library): its wheels lean with the axle, not with the roll of the body (the player's car gets this in Car.js)
+        live_axle_front: !!(OpenRacer.PartsLibrary && OpenRacer.PartsLibrary.isLive(OpenRacer.PartsLibrary.typeOf(config, "front"))),
+        live_axle_rear: !!(OpenRacer.PartsLibrary && OpenRacer.PartsLibrary.isLive(OpenRacer.PartsLibrary.typeOf(config, "rear"))),
         tire_diameter: chassis.tire_diameter, width: dimensions.width, length: dimensions.length, height: dimensions.height,
         Cdrag: 0.5 * chassis.drag_coefficient * dimensions.width * dimensions.height * 0.85 * 1.29,
         gear_ratios: drivetrain.gear_ratios.slice(), reverse_ratio: drivetrain.reverse_ratio, final_drive: drivetrain.final_drive, efficiency: drivetrain.efficiency,
@@ -146,6 +149,7 @@ OpenRacer.Opponent = function (config, line, options) {
 
     // ---- the driver
     var smoothSteer = 0;
+    var speedTrail = [];         // the speed over the road of the last frames, for a hard hit
     var aside = 0;               // how far to the side of the line it drives (m), to pass a car
     var asideTarget = 0;
     this.drive = function (delta, others) {
@@ -236,24 +240,57 @@ OpenRacer.Opponent = function (config, line, options) {
         if (speed < 0.5 && this.throttle > 0.3) { this.stuck = (this.stuck || 0) + delta; } else this.stuck = 0;
         if (this.stuck > 2.5) { this.reverse = true; this.throttle = 0.5; this.brakePedal = 0; this.turnAngle = -smoothSteer; if (this.stuck > 4.5) this.stuck = 0; }
         else this.reverse = false;
-        // lost: stuck for a long time (a rock, a dune), far from the line, or on its roof: put back on the line, facing along it, standing, in the state it is in
+        // A crash: a hard hit (a wall, another car: the body hit something at more than 30 km/h), the car on its side or its roof, or a wheel torn off. The car stands where it
+        // came to rest for a few seconds (the driver gathers himself), and is then put back, repaired, at the side of the track a little further along the line, standing and
+        // facing along it. Lost (stuck for a long time against a rock or in a dune, far from the line) goes the same way after seven seconds, and a car that fell out of the
+        // world (through the road, off the edge) at once.
         var here = line.point(this.lineIndex);
         var offLine = Math.hypot(here.x - v.x, here.z - v.z);
         var upY = 1 - 2 * (v.qx * v.qx + v.qz * v.qz);
-        if ((speed < 1.5 && this.throttle > 0.3 && !inLane) || offLine > 45 || upY < 0.25) this.lostFor = (this.lostFor || 0) + delta;
+        var wheelOff = v.wheelLost && (v.wheelLost[0] || v.wheelLost[1] || v.wheelLost[2] || v.wheelLost[3]);
+        // a hard hit: the speed over the road fell by more than 8 m/s within a fifth of a second (a wall, another car; a landing from a jump is not this: that is vertical)
+        var over = Math.hypot(v.vx, v.vz);
+        speedTrail.push(over); if (speedTrail.length > 7) speedTrail.shift();
+        var hardHit = speedTrail.length === 7 && speedTrail[0] - over > 8 && speedTrail[0] > 6;
+        if (hardHit) speedTrail.length = 0;
+        if ((speed < 1.5 && this.throttle > 0.3 && !inLane) || offLine > 45) this.lostFor = (this.lostFor || 0) + delta;
         else this.lostFor = Math.max(0, (this.lostFor || 0) - 2 * delta);
-        if (this.lostFor > 7 && !inLane) {
-            var ahead1 = line.point(this.lineIndex + 3), ahead2 = line.point(this.lineIndex + 4);
-            v.relocate(ahead1.x, ahead1.z, Math.atan2(ahead2.z - ahead1.z, ahead2.x - ahead1.x), null);
-            this.lostFor = 0; this.stuck = 0; smoothSteer = 0; this.reverse = false;
-            this.recovered = (this.recovered || 0) + 1;
+        this.overFor = upY < 0.25 ? (this.overFor || 0) + delta : 0;
+        if (v.py < here.y - 25) this.lostFor = 99;
+        if (!this.crashedAt && !inLane && (hardHit || this.overFor > 1 || wheelOff || this.lostFor > 7)) {
+            this.crashedAt = this.clock;
+            this.crashReason = hardHit ? "hit" : this.overFor > 1 ? "over" : wheelOff ? "wheel" : v.py < here.y - 25 ? "fell" : offLine > 45 ? "off line " + offLine.toFixed(0) + " m" : "stuck";      // (for the debugging)
+            this.crashWait = this.lostFor > 7 || v.py < here.y - 25 ? 0 : 3;        // (lost or fallen out: it waited long enough)
+            this.crashes = (this.crashes || 0) + 1;
         }
+    };
+
+    // Put back at the side of the track, repaired: the right of the line, a little further along it, where there is road (else on the line), facing along it, standing
+    this.putBack = function () {
+        var v = this.vehicle;
+        var at = line.point(this.lineIndex + 3), next = line.point(this.lineIndex + 4);
+        var dx = next.x - at.x, dz = next.z - at.z, len = Math.hypot(dx, dz) || 1;
+        dx /= len; dz /= len;
+        var x = at.x + dz * 3.5, z = at.z - dx * 3.5;                              // (3.5 m to the right: aside is negative to the right in drive)
+        var ground = typeof groundWorld !== "undefined" ? groundWorld : v.ground;
+        var road = ground && ground.query ? ground.query(x, z, at.y + 5, 10) : null;
+        if (!road || road.surface !== "road" && road.surface !== "track01" && road.surface !== (at.surface || "road")) { x = at.x + dz * 1.5; z = at.z - dx * 1.5; }
+        v.reset(x, z, Math.atan2(dz, dx));
+        this.lostFor = 0; this.overFor = 0; this.stuck = 0; smoothSteer = 0; this.reverse = false; speedTrail.length = 0;        // (the stop of the reset is no hit)
+        this.throttle = 0; this.brakePedal = 1; this.turnAngle = 0;
+        this.recovered = (this.recovered || 0) + 1;
+        this.updateVisuals();
     };
 
     this.update = function (delta, others) {
         if (!this.loaded) return;
         this.clock += delta;
-        this.drive(delta, others);
+        if (this.crashedAt) {
+            // crashed: it stands (no throttle, the brakes on, no steering) until the wait is over, then it is put back at the side of the track
+            this.throttle = 0; this.brakePedal = 1; this.turnAngle = 0; this.reverse = false;
+            if (this.clock - this.crashedAt >= this.crashWait) { this.crashedAt = 0; this.putBack(); }
+        }
+        else this.drive(delta, others);
         this.vehicle.updateControls(delta);
         this.vehicle.update(delta);
         this.pit.update(delta);

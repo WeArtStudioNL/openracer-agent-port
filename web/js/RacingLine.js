@@ -121,6 +121,7 @@ OpenRacer.RacingLine.prototype.computeSpeeds = function (aLat, aBrake, vMax) {
         var lab = Math.hypot(abx, abz), lbc = Math.hypot(bcx, bcz), lac = Math.hypot(c.x - a.x, c.z - a.z);
         var curvature = (lab * lbc * lac) > 1e-6 ? Math.abs(2 * cross / (lab * lbc * lac)) : 0;
         speeds[i] = curvature > 1e-4 ? Math.min(vMax, Math.sqrt(aLat / curvature)) : vMax;
+        if (speeds[i] < 6) speeds[i] = 6;                 // (a bend tighter than that does not exist on a track; a kink of the line is not a reason to crawl)
     }
     // braking: going backwards, a point may not be faster than the next one allows
     var passes = this.closed ? 2 : 1;
@@ -152,7 +153,33 @@ OpenRacer.RacingLine.fromDesign = function (design) {
 // The line of a lap that was driven (the samples of a ghost recording: { x, y, z } with the body position)
 OpenRacer.RacingLine.fromLap = function (samples) {
     if (!samples || samples.length < 10) return null;
-    return new OpenRacer.RacingLine(samples.map(function (s) { return { x: s.x, y: s.y, z: s.z }; }), true);
+    var line = new OpenRacer.RacingLine(samples.map(function (s) { return { x: s.x, y: s.y, z: s.z }; }), true);
+    // A lap is driven, not drawn: it wobbles, and where it is closed (the timing line) the end does not meet the start, since the car crosses the line
+    // somewhere else on the road a lap later. As it was, the closing gave the line a kink there, the speed profile read it as a hairpin, and every AI car
+    // braked to a crawl just past the start. The line is smoothed (a moving average over 10 m, four times, round the loop), which spreads the step at
+    // the joint into a gentle S and takes the wobble out.
+    line.smooth(5, 4);
+    return line;
+};
+
+// The points pulled towards their neighbours: a moving average over the 2 * half + 1 points round each one, passes times (a closed line wraps round)
+OpenRacer.RacingLine.prototype.smooth = function (half, passes) {
+    var n = this.points.length;
+    if (n < 2 * half + 3) return;
+    for (var pass = 0; pass < passes; pass++) {
+        var next = new Array(n);
+        for (var i = 0; i < n; i++) {
+            var sx = 0, sy = 0, sz = 0, count = 0;
+            for (var k = -half; k <= half; k++) {
+                var j = this.closed ? ((i + k) % n + n) % n : Math.max(0, Math.min(n - 1, i + k));
+                var p = this.points[j];
+                sx += p.x; sy += p.y; sz += p.z; count++;
+            }
+            next[i] = { x: sx / count, y: sy / count, z: sz / count, s: this.points[i].s };
+        }
+        this.points = next;
+    }
+    this.speeds = null;
 };
 
 // Saves a lap that was driven as "racing_line" of a track (track.json, through the server of start-server.sh, or else in the garage of
