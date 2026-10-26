@@ -2010,16 +2010,27 @@ function renderTuningCard() {
                 hint.className = "hint";
                 hint.textContent = label + (unit ? " (" + unit + ")" : "");
                 cell.appendChild(input); cell.appendChild(hint);
+                cell.dataset.tuneKey = key;
                 row.appendChild(cell);
             });
             box.appendChild(row);
         }
     });
     $("tuningInfo").textContent = TUNING_KEYS.length + " settings";
+    syncTuningVisibility();
 }
+
+// the settings that cannot do anything with the others as they are (the gearbox, the differential, the drive, the turbo) are hidden, as in the tuning menu of the game (CarTuning.visible)
+function syncTuningVisibility() {
+    const v = Object.assign({}, tuning, { drive: $("drive").value, diff: $("diff").value, center_diff: $("centerDiff").value, gearbox: $("gearbox").value });
+    document.querySelectorAll("#tuningBox [data-tune-key], #tuningCard [data-tune-key], [data-tune-key]").forEach((cell) => { cell.style.display = OpenRacer.CarTuning.visible(cell.dataset.tuneKey, v) ? "" : "none"; });
+    document.querySelectorAll("[data-tune-key]").forEach((cell) => { const row = cell.parentNode; if (row && row.classList.contains("row")) row.style.display = [...row.children].some((c) => c.style.display !== "none") ? "" : "none"; });
+}
+["drive", "diff", "centerDiff", "gearbox"].forEach((id) => $(id).addEventListener("change", () => syncTuningVisibility()));
 
 // a change goes to the car of the test bench at once
 function tuningChanged() {
+    syncTuningVisibility();
     if (!bench.vehicle || !bench.config) return;
     try {
         const config = OpenRacer.CarTuning.toConfig(bench.config, tuningValues(bench.config));

@@ -333,7 +333,13 @@ var Tuning = (function() {
     }
 
     function refresh() {
+        var CT = OpenRacer.CarTuning;
         controls.forEach(function(c) {
+            // the row of a setting that cannot do anything with the others as they are is hidden (CarTuning.visible)
+            if(c.line && c.line.parentNode && CT.visible) {
+                var shown = c.checkbox ? CT.visibleFeature(c.key.replace(/_on$/, ""), values) : CT.visible(c.key, values);
+                c.line.parentNode.style.display = shown ? "" : "none";
+            }
             if(c.range) {
                 var v = values[c.key];
                 // a value outside of the slider (typed in) widens it

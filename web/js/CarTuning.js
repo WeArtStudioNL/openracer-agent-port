@@ -122,6 +122,29 @@ OpenRacer.CarTuning = (function () {
 
     // The optional extras: each has a checkbox (key + "_on") that opens its settings in the tuning menu. The values are kept in car.json under "extras".
     // A select (antilag_mode) is made in Tuning.js.
+    // Which settings apply, from the values of the others: a setting that cannot do anything is not shown (the tuning menu of the game and the car editor): the CVT's engine speed
+    // only with a CVT, the stall speed only with a torque converter, the clutch not with one, the limited slip's settings only with a limited slip, the centre differential only with
+    // all wheel drive, the turbo's lag only with a turbo, and the anti-lag (an extra) only with a turbo
+    function visible(key, v) {
+        var g = v.gearbox || "gears", lsd = v.diff === "lsd", awd = v.drive === "awd", turbo = v.turbo_share > 0 || v.turbo_boost > 0;
+        switch(key) {
+            case "shift_time": return g !== "cvt";
+            case "clutch": case "clutch_start_rpm": case "clutch_full_rpm": return g !== "torque-converter";
+            case "cvt_rpm": return g === "cvt";
+            case "tc_stall_rpm": case "tc_ratio": return g === "torque-converter";
+            case "diff_preload": case "diff_power": case "diff_coast": case "diff_lock": return lsd;
+            case "center_diff": return awd;
+            case "center_split": return awd && v.center_diff !== "locked";
+            case "turbo_spool": case "turbo_threshold": case "turbo_boost": return turbo;
+            case "turbo_intercooler": case "turbo_efficiency": return v.turbo_boost > 0;
+            default: return true;
+        }
+    }
+    function visibleFeature(key, v) {
+        if(key === "antilag" || key === "boost_gauge") return v.turbo_share > 0 || v.turbo_boost > 0;
+        return true;
+    }
+
     var FEATURES = [
         { key: "pops", label: "Pops and bangs (unburnt fuel burns in the exhaust)", items: [
             ["pops_amount", "How often (on the rev limiter and the two-step)", "%", 0, 100, 5],
@@ -419,5 +442,7 @@ OpenRacer.CarTuning = (function () {
         return out;
     }
 
-    return { GROUPS: GROUPS, FEATURES: FEATURES, FEATURE_DEFAULTS: FEATURE_DEFAULTS, V100: V100, fromConfig: fromConfig, toRetune: toRetune, toConfig: toConfig, keys: keys };
+    // (visible and visibleFeature: see above)
+    return {
+        visible: visible, visibleFeature: visibleFeature, GROUPS: GROUPS, FEATURES: FEATURES, FEATURE_DEFAULTS: FEATURE_DEFAULTS, V100: V100, fromConfig: fromConfig, toRetune: toRetune, toConfig: toConfig, keys: keys };
 })();
