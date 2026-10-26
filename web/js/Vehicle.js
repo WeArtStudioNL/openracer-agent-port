@@ -49,7 +49,10 @@ OpenRacer.Vehicle = function (parameters, input) {
 
     // A motorcycle ("type": "motorcycle" in car.json, see MOTORCYCLE.md): the same physics, with a pair of wheels at both ends (no track between them), and a rider
     // who keeps the bike up: a torque about the long axis that holds the lean the corner asks for (a_lateral = g tan(lean)) and damps the fall
-    this.controller = parameters.motorcycle ? new OpenRacer.Motorcycle(parameters.motorcycle) : null;   // (Motorcycle.js; a car has none, and goes through none of its hooks)
+    this.controller = parameters.motorcycle ? new OpenRacer.Motorcycle(parameters.motorcycle) : null;
+    // the simple tyre (the AI cars, Opponent.js): rays along the suspension find the road and a slip curve gives the grip (Wheel.tyreForce), instead of the shell of nodes of
+    // TyreShell.js, which costs most of the time of a car; the car is otherwise the same (the suspension, the engine, the body, the soft body)
+    this.simpleTyres = !!parameters.simpleTyres;   // (Motorcycle.js; a car has none, and goes through none of its hooks)
     this.lean = 0;                    // how far the bike leans to the left (rad; negative: to the right)
     this.input = input; // throttle, brakePedal, clutch, clutchPedalPresent, handbrake, turnAngle, neutral, reverse, manualGearbox, current_gear
     this.mass = parameters.mass;
@@ -1554,7 +1557,22 @@ OpenRacer.Vehicle = function (parameters, input) {
             // reaches the road first. So a kerb or an edge lifts the wheel gradually as it rolls on to it, instead of all at once
             // when the middle passes it. The surface under the middle is the one that counts for the grip.
             var road = null, t = Infinity, surfaceRoad = null;
-            var cyl = ground3D && !self.wheelLost[i];       // the tyre is a body of nodes (TyreShell.js): it finds the road itself (a wheel that is lost has no tyre)
+            var cyl = ground3D && !self.wheelLost[i] && !self.simpleTyres;       // the tyre is a body of nodes (TyreShell.js): it finds the road itself (a wheel that is lost has no tyre)
+            if(ground3D && self.simpleTyres && !self.wheelLost[i]) {
+                // the simple tyre: the road is sampled ahead of and behind the middle of the wheel with rays along the axis of the suspension (down for the car, whichever way that is in
+                // the world) from a little above the mount, and the rim touches where it reaches the road first, so a kerb lifts the wheel gradually as it rolls on to it; the surface under
+                // the middle is the one that counts for the grip
+                var RISE = 0.3;
+                for(var sk = -2; sk <= 2; sk++) {
+                    var alongR = sk * 0.4 * w.radius;
+                    var hit = self.ground.ray(mx + axisZ.x * alongR + axisY.x * RISE, my + axisZ.y * alongR + axisY.y * RISE, mz + axisZ.z * alongR + axisY.z * RISE,
+                        down.x, down.y, down.z, RISE + w.freeLength + w.radius + 0.5, 0.17);
+                    if(!hit) continue;
+                    if(sk === 0) surfaceRoad = hit;
+                    var tR = hit.t - RISE + (w.radius - Math.sqrt(w.radius * w.radius - alongR * alongR));
+                    if(tR < t) { t = tR; road = hit; }
+                }
+            }
             // The wheel is a mass of its own (the unsprung mass) that hangs on the spring and the damper and stands on the tyre, which
             // is a stiff spring too. The road pushes the tyre in, the tyre pushes the wheel up, the wheel pushes the spring in, the
             // spring pushes the body: a kerb is taken up by the tyre and the wheel first and reaches the body softened, as it does
@@ -1846,6 +1864,10 @@ OpenRacer.Vehicle = function (parameters, input) {
                     wheel.fy = tb.friction.x * lx + tb.friction.y * ly + tb.friction.z * lz;
                     wheel.s = tb.slidingShare < 0.05 ? tb.used / 0.92 : Math.max(tb.used / 0.92, 1 + 0.9 * tb.slidingShare);
                     wheel.slip = wheel.s > 1.15;
+                } else if(self.simpleTyres) {
+                    // the simple tyre: the slip curve, with the camber as a little slip angle (Wheel.tyreForce)
+                    wheel.tyreForce(wheel.slipRatio, wheel.slipTan - self.camberGain * leanLeft * wheel.anglePeak / 0.15, fzGrip, surface);
+                    wheel.tyreSlope = 0;
                 } else { wheel.tyreSlope = 0; wheel.fx = 0; wheel.fy = 0; wheel.s = 0; wheel.slip = false; }      // (no tyre body on the road: a wheel that is lost)
                 // Smoke and squeal: the tyre slides (s is above 1 past the peak of the grip) at some speed over the road. The heat builds
                 // up the longer it slides, so the smoke gets thicker, and goes away slowly when it grips again.

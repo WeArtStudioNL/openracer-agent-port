@@ -119,6 +119,26 @@ OpenRacer.Wheel = function (parameters) {
         melt = melt * melt * (3 - 2 * melt);
         return { mu: mu, sliding: mu * Math.min(0.98, ratio) * (1 - 0.45 * melt) };
     };
+    // The simple tyre (the AI cars, Vehicle.simpleTyres): a slip curve instead of the shell of nodes. The slip (the ratio along the wheel, the tangent of the angle across it) in units of
+    // the slip at the peak gives how far the tyre is towards its limit (s; 1 is the peak), a magic-formula curve gives the share of the peak force, which is the friction of frictionFor
+    // times the load, against the slip. It costs a few lines of arithmetic per wheel per step, where the shell costs a few hundred nodes against the triangles of the road.
+    this.tyreForce = function (kappa, tanAlpha, load, surface) {
+        var friction = this.frictionFor(load, surface);
+        var mu = friction.mu, slidingRatio = Math.min(0.98, friction.sliding / (mu || 1));
+        var C = 2 - (2 / Math.PI) * Math.asin(slidingRatio);
+        var peak = Math.tan(Math.PI / (2 * C));                                  // B x at the peak of the curve
+        var sx = kappa / (this.slipPeak || 0.12), sy = tanAlpha / (this.anglePeak || 0.15);
+        var s = Math.sqrt(sx * sx + sy * sy);
+        this.s = s;
+        var b = peak * s;
+        var shape = s > 1e-9 ? ((this.shapeX || 0) * sx * sx + (this.shapeY || 0) * sy * sy) / (s * s) : 0;
+        var f = Math.sin(C * Math.atan(b - shape * (b - Math.atan(b))));       // 0..1: the share of the peak force
+        var dirX = s > 1e-9 ? sx / s : 0, dirY = s > 1e-9 ? sy / s : 0;
+        var D = mu * load;
+        this.fx = D * f * dirX;
+        this.fy = -D * (this.lateralGrip || 1) * f * dirY;
+        this.slip = s > 1.15;
+    };
     this.spinSlide = 0;                                             // m/s that the tyre runs ahead of the road (Vehicle.js: omega r - the forward speed), for the friction of a tyre that spins
     this.leak = 0; this.pressureLoss = 0; this.leakTick = 0;      // a puncture (Vehicle.puncture): bar per second, bar lost so far
 };

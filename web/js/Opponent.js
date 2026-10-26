@@ -47,7 +47,11 @@ OpenRacer.Opponent = function (config, line, options) {
     this.turnAngle = 0; this.neutral = false; this.reverse = false; this.manualGearbox = false; this.current_gear = 0; this.parkingLock = false;
     this.maxTurn = (config.chassis.max_steer_deg || 30) * Math.PI / 180;
 
-    this.vehicle = new OpenRacer.Vehicle(OpenRacer.vehicleParams(config, getSurface), this);
+    // the AI drives on the simple tyre (Vehicle.simpleTyres: rays and a slip curve): the shell of nodes of the player's tyres costs most of the time of a car, and with it every
+    // AI car cost as much as the player, and the frame rate fell with every car on the grid
+    var params = OpenRacer.vehicleParams(config, getSurface);
+    params.simpleTyres = options.shellTyres ? false : true;
+    this.vehicle = new OpenRacer.Vehicle(params, this);
     // the tyres, the power and the clutch as car.json has them (the player's car gets these through the tuning menu)
     var tyres = config.tyres || {}, engineConfig = config.engine || {}, assists = config.assists || {};
     this.vehicle.retune({
