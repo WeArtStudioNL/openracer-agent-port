@@ -2428,7 +2428,9 @@ suspensionEditor = initSuspension({
     loadLibrary: () => loadPhysics(),
     renderLayers: () => renderLayers(),
     save: () => save(),
-    status
+    status,
+    // Edit origins: everything else that can be picked or marks something in the view is hidden, so that only the points are seen
+    hideOthers: (on) => { cameraMarkers.visible = !on; axes.visible = !on; arrow.visible = !on; helpers.visible = !on; exhaust.forEach((e) => { e.target.visible = !on; }); if (driverEditor && driverEditor.deselect) driverEditor.deselect(); }
 });
 window.__carEditorView = { camera, scene, renderer };          // (for the tests of the editor: where a point of the scene is on the screen)
 

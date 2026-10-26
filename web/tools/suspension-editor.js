@@ -154,7 +154,7 @@ export function initSuspension(api) {
                     m.target.position.set(mt.position[0], mt.position[1], mt.position[2]);
                     m.target.rotation.set(mt.rotation[0] * D, mt.rotation[1] * D, mt.rotation[2] * D);
                 }
-                m.target.visible = !hidden;
+                m.target.visible = editing && !hidden;              // (the points are only shown while they are edited)
                 m.ball.material.color.set(layers.selected === id ? 0xffffff : COLOURS[grp]);
                 const row = document.createElement("div");
                 row.className = "row mount" + (layers.selected === id ? " selected" : "");
@@ -210,7 +210,7 @@ export function initSuspension(api) {
         timer = setTimeout(() => { timer = null; refresh(true); }, 100);
     }
     function setMode(m) { mode = m; if (isMount(layers.selected)) { attachGizmo(layers.selected); renderRows(); } }
-    function hide(on) { hidden = on; if (group) group.visible = !on; for (const id in markers) markers[id].target.visible = !on; }
+    function hide(on) { hidden = on; if (group) group.visible = !on; for (const id in markers) markers[id].target.visible = editing && !on; }
 
     // ---- Edit origins: a mode in which the balls of the mounts are the only things a click in the view picks (through the model), W and E as always, Escape leaves it,
     // and a Save button at the bottom of the view saves the car and leaves it
@@ -221,7 +221,8 @@ export function initSuspension(api) {
         $("suspEdit").textContent = on ? "Editing origins… (Escape leaves)" : "Edit origins";
         $("originsBar").style.display = on ? "" : "none";
         $("testBar").style.display = on ? "none" : "";
-        for (const id in markers) markers[id].ball.scale.setScalar(on ? 1.8 : 1);
+        for (const id in markers) { markers[id].ball.scale.setScalar(on ? 1.8 : 1); markers[id].target.visible = on && !hidden; }
+        if (api.hideOthers) api.hideOthers(on);                                                       // (the cameras, the exhaust points, the wheel boxes and the axes go out of the way)
         if (!on && isMount(layers.selected)) { selectLayer(layers.selected); renderRows(); }          // (deselects, and the rows show it)
     }
     function pickables() { return Object.keys(markers).map((id) => markers[id].ball); }
