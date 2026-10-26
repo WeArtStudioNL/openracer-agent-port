@@ -217,8 +217,13 @@
                 </div>
                 <div class="hint carOnly" id="diffInfo"></div>
                 <div class="row">
-                    <div><label>Gearbox</label><select id="gearbox"><option value="gears">Gears</option><option value="cvt">CVT (continuously variable)</option></select></div>
+                    <div><label>Gearbox</label><select id="gearbox"><option value="gears">Gears (a clutch)</option><option value="torque-converter">Automatic with a torque converter</option><option value="cvt">CVT (continuously variable)</option></select></div>
                     <div id="cvtBox"><label>CVT: engine speed at full throttle (rpm)</label><input type="number" id="cvtRpm" step="100" min="1500" max="12000" placeholder="85 % of the rev limit"></div>
+                </div>
+                <div class="row" id="tcBox">
+                    <div><label>Converter: stall speed (rpm)</label><input type="number" id="tcStall" step="50" min="1000" max="5000" placeholder="35 % of the rev limit"></div>
+                    <div><label>Converter: torque ratio at stall</label><input type="number" id="tcRatio" step="0.05" min="1" max="3" placeholder="1.9"></div>
+                    <div><label class="check" style="margin-top:22px"><input type="checkbox" id="tcLockup" checked> Lock-up clutch</label></div>
                 </div>
                 <div><label>Gear ratios (1st, 2nd, … separated by commas; a CVT runs between the first and the last)</label><input type="text" id="gears" value="3.6, 2.1, 1.4, 1.0, 0.8"></div>
                 <div class="row">

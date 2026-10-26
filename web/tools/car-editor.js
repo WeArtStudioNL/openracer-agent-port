@@ -1508,8 +1508,11 @@ function buildConfig(id) {
         },
         drivetrain: {
             drive: $("drive").value,
-            gearbox: $("gearbox").value === "cvt" ? "cvt" : "gears",
+            gearbox: ["cvt", "torque-converter"].includes($("gearbox").value) ? $("gearbox").value : "gears",
             cvt_rpm: num("cvtRpm") > 0 ? num("cvtRpm") : undefined,
+            tc_stall_rpm: num("tcStall") > 0 ? num("tcStall") : undefined,
+            tc_ratio: num("tcRatio") > 0 ? num("tcRatio") : undefined,
+            tc_lockup: $("tcLockup").checked,
             diff: $("diff").value,
             diff_preload: Math.max(0, num("diffPreload") || 0),
             diff_power: Math.min(1, Math.max(0, (num("diffPower") || 0) / 100)),
@@ -1792,8 +1795,9 @@ function fill(car) {
     const d = car.drivetrain;
     set("steeringDegrees", (car.steering_wheel && car.steering_wheel.degrees) || 450);
     set("drive", d.drive); set("diff", d.diff || "lsd"); set("centerDiff", d.center_diff || "lsd");
-    set("gearbox", d.gearbox === "cvt" ? "cvt" : "gears"); $("cvtRpm").value = d.cvt_rpm || "";
-    $("cvtBox").style.visibility = d.gearbox === "cvt" ? "" : "hidden";
+    set("gearbox", ["cvt", "torque-converter"].includes(d.gearbox) ? d.gearbox : "gears"); $("cvtRpm").value = d.cvt_rpm || "";
+    $("tcStall").value = d.tc_stall_rpm || ""; $("tcRatio").value = d.tc_ratio || ""; $("tcLockup").checked = d.tc_lockup !== false;
+    syncGearboxBoxes();
     set("diffPreload", d.diff_preload !== undefined ? d.diff_preload : 150);
     set("diffPower", Math.round((d.diff_power !== undefined ? d.diff_power : 0.3) * 100));
     set("diffCoast", Math.round((d.diff_coast !== undefined ? d.diff_coast : 0.1) * 100));
@@ -2038,8 +2042,11 @@ function formChanged() {
     } catch (error) { /* a field that is empty or not valid yet: the next change tries again */ }
 }
 for (const id of ["mass", "front", "cgHeight", "wheelbase", "frontTrack", "rearTrack", "tyre", "drag", "steer"]) $(id).addEventListener("input", formChanged);
-$("gearbox").addEventListener("change", () => { $("cvtBox").style.visibility = $("gearbox").value === "cvt" ? "" : "hidden"; formChanged(); });
-$("cvtRpm").addEventListener("input", formChanged);
+// the fields of the gearbox that is chosen
+function syncGearboxBoxes() { const g = $("gearbox").value; $("cvtBox").style.visibility = g === "cvt" ? "" : "hidden"; $("tcBox").style.display = g === "torque-converter" ? "" : "none"; }
+$("gearbox").addEventListener("change", () => { syncGearboxBoxes(); formChanged(); });
+for (const id of ["cvtRpm", "tcStall", "tcRatio"]) $(id).addEventListener("input", formChanged);
+$("tcLockup").addEventListener("change", formChanged);
 
 // all the values of the table for a configuration from the form: the form's own, with the card's on top
 function tuningValues(config) {

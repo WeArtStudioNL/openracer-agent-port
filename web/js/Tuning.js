@@ -228,7 +228,7 @@ var Tuning = (function() {
 
     var SELECTS = {
         drive: ["Drive", [["rwd", "Rear wheels"], ["fwd", "Front wheels"], ["awd", "All wheels"]]],
-        gearbox: ["Gearbox", [["gears", "Gears"], ["cvt", "CVT (continuously variable)"]]],
+        gearbox: ["Gearbox", [["gears", "Gears (a clutch)"], ["torque-converter", "Automatic with a torque converter"], ["cvt", "CVT (continuously variable)"]]],
         diff: ["Differential", [["open", "Open"], ["lsd", "Limited slip"], ["welded", "Welded (locked)"]]],
         compound: ["Tyre compound", OpenRacer.TyreCompounds.map(function(k) { return [k.id, k.name]; })],
         center_diff: ["Centre differential", [["open", "Open"], ["lsd", "Limited slip"], ["locked", "Locked"]]],
