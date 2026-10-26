@@ -68,29 +68,29 @@ var MainMenu = (function() {
             "#mainMenu .mode b { display: block; font-size: 20px; color: var(--head); margin-bottom: 6px; }" +
             "#mainMenu .mode span { color: var(--muted); font-size: 14px; line-height: 1.5; }" +
             // the cars: tiles with the turning model of the car on a dark gradient, the text over it
-            "#mainMenu .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }" +
-            "@media (max-width: 900px) { #mainMenu .tiles { grid-template-columns: repeat(2, 1fr); } }" +
-            "#mainMenu .tile { position: relative; aspect-ratio: 1; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; cursor: pointer; " +
+            "#mainMenu .tiles , #pickDialog .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }" +
+            "@media (max-width: 900px) { #mainMenu .tiles , #pickDialog .tiles { grid-template-columns: repeat(2, 1fr); } }" +
+            "#mainMenu .tile , #pickDialog .tile { position: relative; aspect-ratio: 1; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; cursor: pointer; " +
             "background: radial-gradient(circle at 50% 58%, #3a3f47 0%, #1b1f25 52%, #0d0f12 100%); }" +
-            "#mainMenu .tile:hover { border-color: var(--muted); }" +
-            "#mainMenu .tile.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset, 0 0 22px rgba(255, 90, 31, 0.28); }" +
-            "#mainMenu .tile img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: contain; display: block; }" +
-            "#mainMenu .tile .over { position: absolute; left: 0; top: 0; right: 0; bottom: 0; padding: 12px 14px; pointer-events: none; display: flex; flex-direction: column; " +
+            "#mainMenu .tile:hover , #pickDialog .tile:hover { border-color: var(--muted); }" +
+            "#mainMenu .tile.selected , #pickDialog .tile.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset, 0 0 22px rgba(255, 90, 31, 0.28); }" +
+            "#mainMenu .tile img , #pickDialog .tile img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: contain; display: block; }" +
+            "#mainMenu .tile .over , #pickDialog .tile .over { position: absolute; left: 0; top: 0; right: 0; bottom: 0; padding: 12px 14px; pointer-events: none; display: flex; flex-direction: column; " +
             "text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9); background: linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0) 72%, rgba(0, 0, 0, 0.6) 100%); }" +
-            "#mainMenu .tile .name { font-size: 18px; font-weight: 700; color: var(--head); }" +
-            "#mainMenu .tile .bottom { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; }" +
-            "#mainMenu .tile .hp { font-size: 24px; font-weight: 700; line-height: 1; white-space: nowrap; color: var(--head); }" +
-            "#mainMenu .tile .hp small { font-size: 11px; font-weight: normal; color: var(--muted); letter-spacing: 1px; margin-left: 4px; }" +
-            "#mainMenu .tile .specs { color: var(--muted); font-size: 12px; line-height: 1.3; }" +
+            "#mainMenu .tile .name , #pickDialog .tile .name { font-size: 18px; font-weight: 700; color: var(--head); }" +
+            "#mainMenu .tile .bottom , #pickDialog .tile .bottom { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; }" +
+            "#mainMenu .tile .hp , #pickDialog .tile .hp { font-size: 24px; font-weight: 700; line-height: 1; white-space: nowrap; color: var(--head); }" +
+            "#mainMenu .tile .hp small , #pickDialog .tile .hp small { font-size: 11px; font-weight: normal; color: var(--muted); letter-spacing: 1px; margin-left: 4px; }" +
+            "#mainMenu .tile .specs , #pickDialog .tile .specs { color: var(--muted); font-size: 12px; line-height: 1.3; }" +
             // the tracks
-            "#mainMenu .list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }" +
-            "@media (max-width: 800px) { #mainMenu .list { grid-template-columns: 1fr; } }" +
-            "#mainMenu .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; cursor: pointer; }" +
-            "#mainMenu .card:hover { border-color: var(--muted); }" +
-            "#mainMenu .card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }" +
-            "#mainMenu .card .name { font-size: 18px; font-weight: 700; color: var(--head); }" +
-            "#mainMenu .card .info { color: var(--muted); font-size: 14px; margin-top: 4px; line-height: 1.45; }" +
-            "#mainMenu .card .extra { margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); }" +
+            "#mainMenu .list , #pickDialog .list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }" +
+            "@media (max-width: 800px) { #mainMenu .list , #pickDialog .list { grid-template-columns: 1fr; } }" +
+            "#mainMenu .card , #pickDialog .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; cursor: pointer; }" +
+            "#mainMenu .card:hover , #pickDialog .card:hover { border-color: var(--muted); }" +
+            "#mainMenu .card.selected , #pickDialog .card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }" +
+            "#mainMenu .card .name , #pickDialog .card .name { font-size: 18px; font-weight: 700; color: var(--head); }" +
+            "#mainMenu .card .info , #pickDialog .card .info { color: var(--muted); font-size: 14px; margin-top: 4px; line-height: 1.45; }" +
+            "#mainMenu .card .extra , #pickDialog .card .extra { margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); }" +
             // the options of a race: a row with the choices as chips
             "#mainMenu .setting { display: flex; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }" +
             "#mainMenu .setting .label { width: 170px; color: var(--head); font-weight: 600; }" +
@@ -104,7 +104,7 @@ var MainMenu = (function() {
             "margin-left: 8px; padding: 2px 7px; border-radius: 10px; background: var(--line); color: var(--text); }" +
             // the windows (the replays, the garage, the jumps, more options, the editors)
             "#replaysDialog, #garageDialog, #editorsDialog, #moreDialog, #pickDialog { position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 3100; background: rgba(0, 0, 0, 0.7); display: flex; align-items: center; justify-content: center; }" +
-            "#pickDialog { z-index: 3200; } #pickDialog .box { width: 420px; }" +                 /* (the Car or Track question of the garage: over the garage) */
+            "#pickDialog { z-index: 3200; } #pickDialog .box { width: 420px; } #pickDialog.wide .box { width: 960px; } #pickDialog .tiles, #pickDialog .list { margin-top: 10px; }" +                 /* (the Car or Track question of the garage: over the garage) */
             ".or-dialog .box, #replaysDialog .box, #garageDialog .box { width: 720px; max-width: calc(100% - 40px); max-height: calc(100% - 40px); overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 22px 26px; color: var(--text); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }" +
             ".or-dialog h2, #replaysDialog h2, #garageDialog h2 { margin: 0 0 4px; font-size: 22px; color: var(--head); }" +
             ".or-dialog .note, #replaysDialog .note, #garageDialog .note { color: var(--muted); font-size: 14px; line-height: 1.5; margin: 0 0 14px; }" +
@@ -324,9 +324,9 @@ var MainMenu = (function() {
         return { request: request };
     })();
 
-    function carTile(car) {
+    function carTile(car, onClick) {
         var div = document.createElement("div");
-        div.className = "tile" + (choice.car === car.id ? " selected" : "");
+        div.className = "tile" + (!onClick && choice.car === car.id ? " selected" : "");
         var picture = document.createElement("img");
         picture.alt = "";
         picture.draggable = false;
@@ -352,7 +352,7 @@ var MainMenu = (function() {
         bottom.appendChild(hp);
         over.appendChild(bottom);
         div.appendChild(over);
-        div.onclick = function() { choice.car = car.id; remember(); goNext(); };      // (a click on a car goes on to the next step)
+        div.onclick = onClick || function() { choice.car = car.id; remember(); goNext(); };      // (a click on a car goes on to the next step)
         previews.request(car, picture);
         return div;
     }
@@ -410,8 +410,39 @@ var MainMenu = (function() {
                     pbox.appendChild(prow);
                 });
             };
+            var loadGrid = function(kind) {
+                dialog("pickDialog", kind === "cars" ? "Load a car" : "Load a track", kind === "cars" ? "Click the car to open it in the car editor." : "Click the track to open it in the track editor.", function(pbox, pclose) {
+                    if(pbox.parentNode) pbox.parentNode.className += " wide";          // (the dialog is not in the page yet while this runs)
+                    if(kind === "cars") {
+                        var tilesBox = document.createElement("div");
+                        tilesBox.className = "tiles";
+                        cars.forEach(function(c) { tilesBox.appendChild(carTile(c, function() { window.location.href = "tools/car-editor.html?car=" + encodeURIComponent(c.id); })); });
+                        pbox.appendChild(tilesBox);
+                    } else {
+                        var list = document.createElement("div");
+                        list.className = "list";
+                        tracks.forEach(function(track) {
+                            var d = document.createElement("div");
+                            d.className = "card";
+                            var name = document.createElement("div");
+                            name.className = "name";
+                            name.textContent = track.name || track.id;
+                            addBadge(name, track);
+                            d.appendChild(name);
+                            if(track.description) { var info = document.createElement("div"); info.className = "info"; info.textContent = track.description; d.appendChild(info); }
+                            d.onclick = function() { window.location.href = "tools/track-editor.html?track=" + encodeURIComponent(track.id); };
+                            list.appendChild(d);
+                        });
+                        pbox.appendChild(list);
+                    }
+                    var row = document.createElement("div");
+                    row.style.cssText = "display: flex; gap: 10px; margin-top: 12px;";
+                    row.appendChild(button("Cancel", "ghost", pclose));
+                    pbox.appendChild(row);
+                });
+            };
             titleRow.appendChild(button("Load", "ghost", function() {
-                pick("Load", "Open a car or a track in its editor.", function() { window.location.href = "tools/car-editor.html"; }, function() { window.location.href = "tools/track-editor.html"; });
+                pick("Load", "Open a car or a track in its editor.", function() { loadGrid("cars"); }, function() { loadGrid("tracks"); });
             }));
             titleRow.appendChild(button("New", "ghost", function() {
                 pick("New", "Make a new car or track from a model.", function() { window.location.href = "tools/car-editor.html?new=car"; }, function() { window.location.href = "tools/track-editor.html?new=1"; });

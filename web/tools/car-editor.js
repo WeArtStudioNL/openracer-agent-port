@@ -1949,6 +1949,8 @@ defaultCameras();
 refreshList().then(() => {
     let last = null;
     try { last = localStorage.getItem("editor-last-car"); } catch (e) { /* no storage */ }
+    const asked = new URLSearchParams(window.location.search).get("car");                  // (Load in the garage of the main menu: this car)
+    if (asked && state.cars.some((c) => c.id === asked)) last = asked;
     const id = state.cars.some((c) => c.id === last) ? last : (state.cars[0] && state.cars[0].id);      // the one of last time, else the first of the list
     if (id && !$("existing").value) { $("existing").value = id; loadExisting(); }
 });
