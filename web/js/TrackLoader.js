@@ -441,6 +441,32 @@ function loadGltfTrack(track) {
     });
 }
 
+// A static object of track.json (RigidObjects.js, kind "static": a model placed in the track editor that stands still and can be hit): its triangles join the walls
+// (the steep ones) and the 3D grid (all of them, as scenery), as a part of the track would; after the track is built. A decor object (kind "decor") is only drawn.
+OpenRacer.addStaticObject = function(object) {
+    if(!collisionWorld || !groundWorld) return;
+    var a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), ab = new THREE.Vector3(), ac = new THREE.Vector3();
+    var priority = searchOrder.length - 1, physics3D = !!groundWorld.use3D, added = 0;
+    object.updateMatrixWorld(true);
+    object.traverse(function(mesh) {
+        if(!mesh.isMesh || !mesh.geometry || !mesh.geometry.attributes.position) return;
+        var position = mesh.geometry.attributes.position, index = mesh.geometry.index, count = index ? index.count : position.count;
+        var at = function(i) { return index ? index.getX(i) : i; };
+        for(var t = 0; t + 2 < count; t += 3) {
+            a.fromBufferAttribute(position, at(t)).applyMatrix4(mesh.matrixWorld);
+            b.fromBufferAttribute(position, at(t + 1)).applyMatrix4(mesh.matrixWorld);
+            c.fromBufferAttribute(position, at(t + 2)).applyMatrix4(mesh.matrixWorld);
+            ab.subVectors(b, a); ac.subVectors(c, a); ab.cross(ac);
+            var length = ab.length();
+            if(length < 1e-9) continue;
+            if(Math.abs(ab.y / length) < collisionSteepness) collisionWorld.addTriangle(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+            if(physics3D) groundWorld.addTriangle3D(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, "scenery", mesh.name, priority, false);
+            added++;
+        }
+    });
+    return added;
+};
+
 // Decor that is only drawn (tyre walls, trees: the "other" meshes) is merged per material and per cell of 40 m, so that a track with thousands
 // of loose parts costs a few hundred draw calls instead of thousands. The loose meshes stay in trackObjects (the collision and the ground world
 // have been built from them) but leave the scene.

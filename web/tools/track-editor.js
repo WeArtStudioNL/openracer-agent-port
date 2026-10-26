@@ -76,7 +76,7 @@ scene.add(objectLayer);
 // the wheel zooms towards the point under the mouse (the track, its objects, else the floor) and the view then turns about it (zoom-to-mouse.js)
 installZoomToMouse({ THREE, camera, controls, renderer, targets: () => [trackGroup, objectLayer], floorY: () => 0 });
 // the objects of the track: models (glb) that were added, and where they stand. A model: { file (a Blob, when it was added now), name (the file in the folder of the track),
-// rigid, mass (kg, 0: from its size), scene (the loaded model) }
+// kind (rigid, static or decor), mass (kg, 0: from its size), scene (the loaded model) }
 const objectState = { models: new Map(), list: [], selected: null };
 const raycaster = new THREE.Raycaster();
 
@@ -817,7 +817,7 @@ async function addObjectModel(file) {
     let name = objectFileName(file.name);
     let k = 2;
     while (objectState.models.has(name)) name = name.replace(/(-\d+)?\.glb$/, "-" + (k++) + ".glb");
-    const model = { name, file, rigid: true, mass: 0, scene: null };
+    const model = { name, file, kind: "rigid", mass: 0, scene: null };
     const url = URL.createObjectURL(file);
     const ok = await loadObjectScene(model, url);
     URL.revokeObjectURL(url);
@@ -850,15 +850,15 @@ function renderObjects() {
         const title = document.createElement("span");
         title.textContent = name.replace(OBJECT_PREFIX, "").replace(/\.glb$/, "") + " (" + objectState.list.filter((o) => o.model === name).length + ")";
         title.style.fontWeight = objectState.selected === name ? "700" : "400";
-        const rigid = document.createElement("label");
-        rigid.style.cssText = "display:flex;align-items:center;gap:4px;font-size:12px";
-        const tick = document.createElement("input");
-        tick.type = "checkbox"; tick.checked = model.rigid;
-        tick.onchange = () => { model.rigid = tick.checked; mass.style.display = tick.checked ? "" : "none"; };
-        rigid.append(tick, "rigid");
+        // the kind: rigid (a body that is pushed over), static (stands still, can be hit), decor (only drawn: no collision, no physics)
+        const rigid = document.createElement("select");
+        rigid.title = "Rigid: a body that moves when it is hit. Static: stands still and is hit. Decor: only drawn, nothing collides with it.";
+        [["rigid", "Rigid"], ["static", "Static"], ["decor", "Decor"]].forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; rigid.appendChild(o); });
+        rigid.value = model.kind || (model.rigid === false ? "decor" : "rigid");
+        rigid.onchange = () => { model.kind = rigid.value; mass.style.display = rigid.value === "rigid" ? "" : "none"; };
         const mass = document.createElement("input");
         mass.type = "number"; mass.min = "0"; mass.step = "5"; mass.value = model.mass || ""; mass.placeholder = "kg (auto)";
-        mass.style.cssText = "width:80px" + (model.rigid ? "" : ";display:none");
+        mass.style.cssText = "width:80px" + ((model.kind || "rigid") === "rigid" ? "" : ";display:none");
         mass.onchange = () => { model.mass = Math.max(0, parseFloat(mass.value) || 0); };
         const place = document.createElement("button");
         place.className = "small";
@@ -903,7 +903,7 @@ async function loadObjects(track) {
         if (!spec.model || !isFinite(spec.x) || !isFinite(spec.z)) continue;
         let model = objectState.models.get(spec.model);
         if (!model) {
-            model = { name: spec.model, file: null, rigid: spec.rigid !== false, mass: spec.mass || 0, scene: null };
+            model = { name: spec.model, file: null, kind: spec.kind || (spec.rigid === false ? "decor" : "rigid"), mass: spec.mass || 0, scene: null };
             objectState.models.set(spec.model, model);
             await loadObjectScene(model, trackFile(track, spec.model));
         }
@@ -1445,7 +1445,9 @@ async function save() {
             if (!model) continue;
             if (!FILE_PATTERN.test(model.name)) throw new Error("The file name “" + model.name + "” has characters that are not allowed.");
             const spec = { model: model.name, x: +o.x.toFixed(3), z: +o.z.toFixed(3), y: +o.y.toFixed(3), heading: +(o.heading * 180 / Math.PI).toFixed(2) };
-            if (!model.rigid) spec.rigid = false; else if (model.mass > 0) spec.mass = model.mass;
+            const kind = model.kind || "rigid";
+            if (kind === "rigid") { if (model.mass > 0) spec.mass = model.mass; }
+            else { spec.kind = kind; if (kind === "decor") spec.rigid = false; }        // (rigid: false too, for an older game that only knows that)
             made.push(spec);
         }
         for (const model of objectState.models.values()) {

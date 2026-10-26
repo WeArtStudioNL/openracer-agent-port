@@ -310,17 +310,21 @@ OpenRacer.RigidObjects = (function () {
     }
 
     // an object of track.json that has a model (a glb of the track folder, made in the track editor): the model is placed with its origin on the road, and
-    // turned by the heading. A rigid one becomes a body whose shape is the hull of the model and whose pivot is the middle of its box; the other is only put there.
+    // turned by the heading. Its kind ("kind"; the older "rigid": false is decor): rigid becomes a body whose shape is the hull of the model and whose pivot is
+    // the middle of its box; static stands still and can be hit (its triangles join the walls and the 3D grid, TrackLoader.addStaticObject); decor is only
+    // drawn, no physics knows it
     function fromModel(spec, gltfScene, ground, density, out) {
         var heading = (spec.heading || 0) * Math.PI / 180;
         var y = spec.y;
         if (y === undefined) { var hit = ground && ground.query ? ground.query(spec.x, spec.z, 5000, 0) : null; y = hit ? hit.y : 0; }
         var inner = gltfScene.clone(true);
         inner.traverse(function (o) { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-        if (spec.rigid === false) {
+        var kind = spec.kind || (spec.rigid === false ? "decor" : "rigid");
+        if (kind !== "rigid") {
             inner.position.set(spec.x, y, spec.z);
             inner.rotation.y = -heading;
             scene.add(inner);
+            if (kind === "static" && OpenRacer.addStaticObject) OpenRacer.addStaticObject(inner);
             return;
         }
         inner.updateMatrixWorld(true);
