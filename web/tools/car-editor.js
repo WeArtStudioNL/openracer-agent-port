@@ -1548,7 +1548,7 @@ function buildConfig(id) {
     if (isBike()) { config.type = "motorcycle"; config.motorcycle = readBike(); config.drivetrain.drive = "rwd"; config.drivetrain.diff = "welded"; }
     // the settings of the Tuning card (the rest of the tuning menu) go into the configuration too
     const withTuning = OpenRacer.CarTuning.toConfig(config, tuningValues(config));
-    ["tyres", "fuel", "assists"].forEach((k) => { config[k] = withTuning[k]; });
+    ["tyres", "fuel", "assists", "extras"].forEach((k) => { if (withTuning[k] !== undefined) config[k] = withTuning[k]; });      // (extras: the pops, the anti-lag, the boost gauge of the card)
     Object.assign(config.chassis, withTuning.chassis);
     Object.assign(config.engine, withTuning.engine);
     Object.assign(config.drivetrain, withTuning.drivetrain);
@@ -1971,6 +1971,7 @@ function tuningFromCar(car) {
     tuning = {};
     TUNING_KEYS.forEach((k) => { tuning[k] = all[k]; });
     tuning.compound = all.compound;                       // (not a number: the kind of tyre)
+    tuning.tyre_damage = all.tyre_damage === "on" ? "on" : "off";     // (a word in the table, as the tuning menu has it)
     Object.keys(OpenRacer.CarTuning.FEATURE_DEFAULTS).forEach((k) => { tuning[k] = all[k]; });     // the ticks of the systems and the extras, with their settings
     tuningBase = Object.assign({}, tuning);
     renderTuningCard();
@@ -2049,6 +2050,16 @@ function renderTuningCard() {
             details.appendChild(wrap);
         }
         items.forEach((item) => { if (item[4] > item[3]) details.appendChild(tuneSlider(item, tuningChanged)); });
+        if (group.name === "Tyres") {
+            // a hard hit can puncture a tyre: a tick, as the tuning menu has it
+            const line = document.createElement("label");
+            line.className = "check";
+            const tick = document.createElement("input");
+            tick.type = "checkbox"; tick.id = "tune_tyre_damage"; tick.checked = tuning.tyre_damage === "on";
+            tick.addEventListener("change", () => { tuning.tyre_damage = tick.checked ? "on" : "off"; tuningChanged(); });
+            line.appendChild(tick); line.appendChild(document.createTextNode(" Tyre damage (a hard hit can puncture a tyre)"));
+            details.appendChild(line);
+        }
         box.appendChild(details);
     });
     // the systems and the extras: a tick each, with their settings below it while it is ticked
@@ -2111,15 +2122,21 @@ $("setupSelect").addEventListener("change", () => {
     const id = $("id").value.trim(), name = $("setupSelect").value;
     if (!id) return;
     OpenRacer.Setups.setActive(id, name || null);
-    if (!name) return;
-    const saved = OpenRacer.Setups.get(id, name);
-    if (!saved) return;
     try {
-        const config = OpenRacer.CarTuning.toConfig(buildConfig(id), saved);
-        config.id = id;
-        fill(config);                       // (the form and the card take the values; fill renders the card, which lists the setups again)
+        const base = state.existingCar && state.existingCar.id === id ? state.existingCar : null;
+        let config;
+        if (!name) {
+            if (!base) { status("The car as made is not here: this car is not saved yet."); return; }
+            config = JSON.parse(JSON.stringify(base));
+        } else {
+            const saved = OpenRacer.Setups.configOf(id, name, base || buildConfig(id));
+            if (!saved) return;
+            config = Object.assign({}, base || {}, saved, { id, model: base ? base.model : saved.model });
+        }
+        fill(config);                       // the whole form, the cards of the suspension, the driver and the soft body, and the Tuning card (which lists the setups again)
+        if (config.materials) { state.overrides = JSON.parse(JSON.stringify(config.materials)); Object.keys(state.overrides).forEach((n) => applyOverrides(n)); }
         formChanged(); tuningChanged();
-        status("Setup " + name + " loaded into the form (save the car to keep it in car.json).");
+        status(name ? "Setup " + name + " loaded into the form (save the car to keep it in car.json)." : "The car as made is back in the form.");
     } catch (error) { status("Could not load the setup: " + error.message); }
 });
 $("setupSave").addEventListener("click", () => {
@@ -2129,7 +2146,14 @@ $("setupSave").addEventListener("click", () => {
     if (name === null) return;
     name = name.trim().slice(0, 40);
     if (!name) return;
-    try { OpenRacer.Setups.save(id, name, tuningValues(buildConfig(id))); renderSetups(); status("Setup " + name + " saved; the main menu offers it on the card of the car once there are two."); }
+    try {
+        // the whole car as the form has it (buildConfig: the chassis, the tyres, the engine, the gearbox, the suspension and the parts, the driver, the soft body, the cameras,
+        // the sound, the exhaust), and the colours of the materials; the model stays the car's own
+        const config = buildConfig(id);
+        if (state.overrides && Object.keys(state.overrides).length) config.materials = JSON.parse(JSON.stringify(state.overrides));
+        delete config.model;
+        OpenRacer.Setups.save(id, name, config); renderSetups(); status("Setup " + name + " saved; the main menu offers it on the card of the car once there are two.");
+    }
     catch (error) { status("Could not save the setup: " + error.message); }
 });
 $("setupDelete").addEventListener("click", () => {
@@ -2185,6 +2209,7 @@ function tuningValues(config) {
     const values = OpenRacer.CarTuning.fromConfig(config);
     TUNING_KEYS.forEach((k) => { if (Number.isFinite(tuning[k])) values[k] = tuning[k]; });
     if (tuning.compound) values.compound = tuning.compound;
+    if (tuning.tyre_damage !== undefined) values.tyre_damage = tuning.tyre_damage;
     return values;
 }
 

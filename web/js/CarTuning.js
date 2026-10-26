@@ -458,26 +458,35 @@ OpenRacer.CarTuning = (function () {
         visible: visible, visibleFeature: visibleFeature, GROUPS: GROUPS, FEATURES: FEATURES, FEATURE_DEFAULTS: FEATURE_DEFAULTS, V100: V100, fromConfig: fromConfig, toRetune: toRetune, toConfig: toConfig, keys: keys };
 })();
 
-// The setups of a car: named tunings kept in this browser (localStorage "openracer.setups.<car id>": { setups: { name: values }, active: name }), saved and loaded
-// in the tuning menu of the game and in the Tuning card of the car editor; the main menu offers them on the card of a car that has two or more, and the one
-// that is chosen is put on the car for the next game: its values become the tuning that is kept for the car ("openracer.tuning.<car id>", Tuning.js reads it when
-// the game starts). A setup holds all the values of the table (CarTuning.keys and the systems), in the units of the menu.
+// The setups of a car: whole configurations of the car (everything car.json has but the model: the chassis, the tyres, the engine, the gearbox, the suspension and the parts,
+// the driver, the soft body, the cameras, the sound...), kept under a name in this browser (localStorage "openracer.setups.<car id>": { setups: { name: config }, active: name }).
+// The tuning menu of the game saves the car as it is tuned (its configuration with the tuning in it) and the car editor saves the car as the form has it; loading one in the
+// tuning menu takes the values of the table from it, loading one in the editor fills the form with all of it. The main menu offers the setups on the card of a car that has
+// two or more; the one that is chosen is the car of the next game: main.js lays its configuration over car.json (the model and the id stay those of the car).
 OpenRacer.Setups = (function () {
     var PREFIX = "openracer.setups.", CURRENT = "openracer.tuning.";
     function read(id) { try { var d = JSON.parse(window.localStorage.getItem(PREFIX + id)); if(d && d.setups) return d; } catch(e) {} return { setups: {}, active: null }; }
     function write(id, d) { try { if(Object.keys(d.setups).length) window.localStorage.setItem(PREFIX + id, JSON.stringify(d)); else window.localStorage.removeItem(PREFIX + id); } catch(e) {} }
+    function clone(x) { return JSON.parse(JSON.stringify(x)); }
     return {
         names: function (id) { return Object.keys(read(id).setups).sort(function (a, b) { return a.localeCompare(b); }); },
-        get: function (id, name) { var v = read(id).setups[name]; return v ? JSON.parse(JSON.stringify(v)) : null; },
+        get: function (id, name) { var v = read(id).setups[name]; return v ? clone(v) : null; },
+        // the configuration of a setup (a setup from before this form held the values of the table only: those are laid on the base configuration)
+        configOf: function (id, name, base) {
+            var v = read(id).setups[name];
+            if(!v) return null;
+            if(v.chassis) return clone(v);
+            return base && OpenRacer.CarTuning ? OpenRacer.CarTuning.toConfig(base, v) : null;
+        },
         active: function (id) { return read(id).active || null; },
-        save: function (id, name, values) { var d = read(id); d.setups[name] = JSON.parse(JSON.stringify(values)); d.active = name; write(id, d); },
+        save: function (id, name, config) { var d = read(id); d.setups[name] = clone(config); d.active = name; write(id, d); },
         remove: function (id, name) { var d = read(id); delete d.setups[name]; if(d.active === name) d.active = null; write(id, d); },
         setActive: function (id, name) { var d = read(id); d.active = name && d.setups[name] ? name : null; write(id, d); },
-        // the setup on the car for the next game (null: the car as it was made, the kept tuning is forgotten)
+        // the setup for the next game (null: the car as it was made); the tuning that was kept for the car is forgotten, the setup is the car from here
         use: function (id, name) {
-            var d = read(id), v = name ? d.setups[name] : null;
-            try { if(v) window.localStorage.setItem(CURRENT + id, JSON.stringify(v)); else window.localStorage.removeItem(CURRENT + id); } catch(e) {}
-            d.active = v ? name : null; write(id, d);
+            var d = read(id);
+            d.active = name && d.setups[name] ? name : null; write(id, d);
+            try { window.localStorage.removeItem(CURRENT + id); } catch(e) {}
         }
     };
 })();

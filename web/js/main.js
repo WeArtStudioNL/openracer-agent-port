@@ -52,6 +52,12 @@ function startGame(carId, trackId) {
             return;
         }
         carConfig = carFound;
+        carBaseConfig = carFound;
+        // the setup that was chosen for this car (the main menu, the tuning menu, the car editor; OpenRacer.Setups): its configuration laid over car.json, the model and the id of the car kept
+        if(OpenRacer.Setups) {
+            var setupName = OpenRacer.Setups.active(carId), setup = setupName ? OpenRacer.Setups.configOf(carId, setupName, carFound) : null;
+            if(setup) carConfig = Object.assign({}, carFound, setup, { id: carFound.id, model: carFound.model, preview: carFound.preview, folder: carFound.folder, source: carFound.source });
+        }
         race.allCars = result[0].filter(function(item) { return item.id !== carId; }).concat([carFound]);
         s = new RACER.Scene();
         s.init();
@@ -70,6 +76,7 @@ function escapeHtml(text) {
     return String(text).replace(/[&<>"']/g, function(c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; });
 }
 
+var carBaseConfig = null;      // the car as made (car.json), when a setup is laid over it
 var race = { opponents: [], ghost: null, line: null, options: null, allCars: [] };
 // damage on or off (the main menu, &damage=0|1): off, the cars are plain rigid bodies: no shell that dents (SoftBody.js), no parts or wheels that come off, no punctures.
 // Read here, before the cars load, since the shell is built when the model of a car arrives (CollisionProxy.apply)
@@ -102,7 +109,7 @@ function trackLoaded() {
     car = new OpenRacer.Car(carConfig);
     if(OpenRacer.RigidObjects) OpenRacer.RigidObjects.setup(currentTrack, typeof trackRigidPieces !== "undefined" ? trackRigidPieces : []);
     if(OpenRacer.GateMarkers) OpenRacer.GateMarkers.build(currentTrack);
-    Tuning.attach(car, carConfig); // the tuning menu, with the tuning that was kept for this car
+    Tuning.attach(car, carConfig, carBaseConfig); // the tuning menu, with the tuning that was kept for this car (and the car as made, for "the car as made" of the setups)
     telemetry = new OpenRacer.Telemetry({car: car, domElement: document.getElementById("telemetry")});
     setupRace();
 }

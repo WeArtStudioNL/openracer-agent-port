@@ -18,6 +18,7 @@ var Tuning = (function() {
     var panel = null;
     var car = null;
     var config = null;       // the configuration of the car as it was made (never changed by the tuning)
+    var original = null;     // the car as made (car.json), when the game started on a setup: "the car as made" of the setups
     var base = {};           // the values of the car as it was made, in the units of the menu
     var values = {};         // the values that are in use
     var controls = [];       // { def, row, number, slider, reset }
@@ -319,12 +320,15 @@ var Tuning = (function() {
         setupSelect = document.createElement("select");
         setupSelect.style.width = "150px";
         setupSelect.onchange = function() {
-            var name = setupSelect.value;
+            // the values of the table from the setup (its whole configuration; what the table does not have, the suspension and the parts, waits for the next start)
+            var name = setupSelect.value, from = name ? OpenRacer.Setups.configOf(config.id, name, config) : null;
             values = clone(base);
-            if(name) { var saved = OpenRacer.Setups.get(config.id, name); if(saved) Object.keys(saved).forEach(function(key) { if(key in base) values[key] = saved[key]; }); }
+            // (a setup laid over the car as made, as main.js lays it at the start: what the setup does not say, the car says)
+            var saved = fromConfig(from ? Object.assign({}, original, from) : original);
+            Object.keys(saved).forEach(function(key) { if(key in base) values[key] = saved[key]; });
             OpenRacer.Setups.setActive(config.id, name || null);
             apply(); store(); refresh();
-            message(name ? "Setup " + name + "." : "The car as it was made.");
+            message(name ? "Setup " + name + " (what the menu does not have, the suspension and the parts, comes at the next start)." : "The car as it was made (fully at the next start).");
         };
         var saveSetup = document.createElement("button");
         saveSetup.textContent = "Save setup…";
@@ -333,7 +337,7 @@ var Tuning = (function() {
             if(name === null) return;
             name = name.trim().slice(0, 40);
             if(!name) return;
-            OpenRacer.Setups.save(config.id, name, values);
+            OpenRacer.Setups.save(config.id, name, tunedConfig());           // (the whole car, as it is tuned)
             refresh();
             message("Setup " + name + " saved; the main menu offers it on the card of the car once there are two.");
         };
@@ -385,8 +389,8 @@ var Tuning = (function() {
         names.forEach(function(name) {
             var o = document.createElement("option");
             o.value = name;
-            var saved = OpenRacer.Setups.get(config.id, name), same = true;
-            if(name === active && saved) Object.keys(saved).forEach(function(key) { if(key in base && JSON.stringify(saved[key]) !== JSON.stringify(values[key])) same = false; });
+            var same = true;
+            if(name === active) { var cfg = OpenRacer.Setups.configOf(config.id, name, config), saved = cfg ? fromConfig(Object.assign({}, original, cfg)) : null; if(saved) Object.keys(saved).forEach(function(key) { if(key in base && JSON.stringify(saved[key]) !== JSON.stringify(values[key])) same = false; }); }
             o.textContent = name + (name === active && !same ? " (changed)" : "");
             setupSelect.appendChild(o);
         });
@@ -461,9 +465,10 @@ var Tuning = (function() {
     }
 
     // Makes the tuning menu for a car, and puts the tuning that was kept for it on the car
-    function attach(newCar, newConfig) {
+    function attach(newCar, newConfig, baseConfig) {
         car = newCar;
         config = clone(newConfig);
+        original = clone(baseConfig || newConfig);
         base = fromConfig(config);
         values = clone(base);
         load();
