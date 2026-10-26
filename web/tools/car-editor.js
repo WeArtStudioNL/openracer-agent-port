@@ -1508,7 +1508,7 @@ function buildConfig(id) {
         },
         drivetrain: {
             drive: $("drive").value,
-            gearbox: ["cvt", "torque-converter"].includes($("gearbox").value) ? $("gearbox").value : "gears",
+            gearbox: ["cvt", "torque-converter", "dct"].includes($("gearbox").value) ? $("gearbox").value : "gears",
             cvt_rpm: num("cvtRpm") > 0 ? num("cvtRpm") : undefined,
             tc_stall_rpm: num("tcStall") > 0 ? num("tcStall") : undefined,
             tc_ratio: num("tcRatio") > 0 ? num("tcRatio") : undefined,
@@ -1795,7 +1795,7 @@ function fill(car) {
     const d = car.drivetrain;
     set("steeringDegrees", (car.steering_wheel && car.steering_wheel.degrees) || 450);
     set("drive", d.drive); set("diff", d.diff || "lsd"); set("centerDiff", d.center_diff || "lsd");
-    set("gearbox", ["cvt", "torque-converter"].includes(d.gearbox) ? d.gearbox : "gears"); $("cvtRpm").value = d.cvt_rpm || "";
+    set("gearbox", ["cvt", "torque-converter", "dct"].includes(d.gearbox) ? d.gearbox : "gears"); $("cvtRpm").value = d.cvt_rpm || "";
     $("tcStall").value = d.tc_stall_rpm || ""; $("tcRatio").value = d.tc_ratio || ""; $("tcLockup").checked = d.tc_lockup !== false;
     syncGearboxBoxes();
     set("diffPreload", d.diff_preload !== undefined ? d.diff_preload : 150);

@@ -193,7 +193,13 @@ OpenRacer.Vehicle = function (parameters, input) {
     // engine takes C w_e^2 (1 - SR) (SR the speed ratio turbine/pump; C from tc_stall_rpm: the engine's peak torque holds it at that speed with the turbine still), the turbine
     // gives that times the torque ratio (tc_ratio at stall, 1 from a speed ratio of 0.85), a lock-up clutch closes above 25 km/h once the slip is small (tc_lockup), and at idle
     // the coupling is a sixth of itself, so the car creeps gently and the brakes hold it
-    this.gearbox = parameters.gearbox === "cvt" ? "cvt" : (parameters.gearbox === "torque-converter" ? "torque-converter" : "gears");
+    // a dual-clutch gearbox (gearbox "dct"): the gears and the shifting as with a clutch, but the next gear waits on the other clutch, so a shift is a hand-over of 0.15 s at most
+    // in which the drive never stops (the clutch keeps 40 % and goes to full as the engine is pulled to the new speed), with a short cut of the throttle on an upshift and a
+    // blip on a downshift
+    var GEARBOXES = ["gears", "cvt", "torque-converter", "dct"];
+    this.gearbox = GEARBOXES.indexOf(parameters.gearbox) > 0 ? parameters.gearbox : "gears";
+    this.shiftDuration = 0;                                  // how long the shift that is going on takes (s)
+    this.shiftUp = false;                                    // the shift that is going on is an upshift
     this.tcStallRPM = parameters.tc_stall_rpm || 0;          // (0: 35 % of the rev limit)
     this.tcRatio = parameters.tc_ratio || 1.9;
     this.tcLockup = parameters.tc_lockup !== false;
@@ -480,7 +486,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.toe_rear !== undefined) this.toeRear = t.toe_rear;
         this.applyPressure();
         if(t.shift_time !== undefined) this.shiftTime = t.shift_time;
-        if(t.gearbox !== undefined) this.gearbox = t.gearbox === "cvt" ? "cvt" : (t.gearbox === "torque-converter" ? "torque-converter" : "gears");
+        if(t.gearbox !== undefined) this.gearbox = ["cvt", "torque-converter", "dct"].indexOf(t.gearbox) >= 0 ? t.gearbox : "gears";
         if(t.tc_stall_rpm !== undefined) this.tcStallRPM = t.tc_stall_rpm;
         if(t.tc_ratio !== undefined) this.tcRatio = t.tc_ratio;
         if(t.tc_lockup !== undefined) this.tcLockup = !!t.tc_lockup;
@@ -780,7 +786,9 @@ OpenRacer.Vehicle = function (parameters, input) {
         var key = inp.neutral ? -1 : (inp.reverse ? -2 : inp.current_gear);
         if(this.lastGearKey !== null && key !== this.lastGearKey) {
             this.timeSinceShift = 0;
-            if(!inp.clutchPedalPresent) this.shiftTimer = this.shiftTime;
+            this.shiftUp = key >= 0 && this.lastGearKey >= 0 && key > this.lastGearKey;
+            // (a dual clutch: the next gear is already in, the shift is the hand-over between the two clutches)
+            if(!inp.clutchPedalPresent) { this.shiftDuration = this.gearbox === "dct" ? Math.max(0.08, Math.min(this.shiftTime, 0.15)) : this.shiftTime; this.shiftTimer = this.shiftDuration; }
         }
         this.lastGearKey = key;
         if(this.shiftTimer > 0) this.shiftTimer -= delta;
@@ -1977,7 +1985,10 @@ OpenRacer.Vehicle = function (parameters, input) {
         var shares = self.torqueShares(); // the share of the torque of every wheel with open differentials
         var throttle = inp.throttle * self.tcFactor * (1 - 0.85 * escCut) * (self.controller && self.controller.throttleScale ? self.controller.throttleScale(self, dt) : 1);
         // the gearbox takes the power off while it shifts
-        if(self.shiftTimer > 0) throttle *= self.gearbox === "torque-converter" ? 0.6 : 0.15;      // (a converter keeps the drive through a shift: less is taken off)
+        if(self.shiftTimer > 0) {
+            if(self.gearbox === "dct") throttle = self.shiftUp ? throttle * 0.35 : Math.max(throttle, 0.45);     // (a dual clutch: a short cut on the way up, a blip on the way down)
+            else throttle *= self.gearbox === "torque-converter" ? 0.6 : 0.15;                                   // (a converter keeps the drive through a shift: less is taken off)
+        }
         self.throttleUsed = throttle;                      // (for the debugging)
         engine.updateBoost(throttle, dt);
         var Te = engine.getNetTorque(throttle);
@@ -1993,7 +2004,8 @@ OpenRacer.Vehicle = function (parameters, input) {
             engagement = smoothstep(self.clutchStartRPM, self.clutchFullRPM, rpm);
             if(self.shiftTimer > 0) {
                 var ts = self.shiftTimer;
-                engagement = Math.min(engagement, ts > 0.14 ? 0 : 1 - smoothstep(0, 0.14, ts));
+                if(self.gearbox === "dct") engagement = Math.min(engagement, 0.4 + 0.6 * (1 - ts / Math.max(0.01, self.shiftDuration)));      // (the hand-over: never open)
+                else engagement = Math.min(engagement, ts > 0.14 ? 0 : 1 - smoothstep(0, 0.14, ts));
             }
         }
         if(self.lcArmed || self.transbrakeHeld || (self.twoStepActive && !inp.clutchPedalPresent)) engagement = 0;     // held for a launch: the engine turns free

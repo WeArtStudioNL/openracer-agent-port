@@ -192,7 +192,7 @@ OpenRacer.CarTuning = (function () {
             engine_inertia: en.inertia || 0.4,
             engine_braking: (en.braking_scale !== undefined ? en.braking_scale : 1) * 100,
             drive: dt.drive || "rwd",
-            gearbox: dt.gearbox === "cvt" || dt.gearbox === "torque-converter" ? dt.gearbox : "gears",
+            gearbox: ["cvt", "torque-converter", "dct"].indexOf(dt.gearbox) >= 0 ? dt.gearbox : "gears",
             cvt_rpm: dt.cvt_rpm || Math.round((en.limiter_rpm || 6600) * 0.85 / 100) * 100,
             tc_stall_rpm: dt.tc_stall_rpm || Math.round((en.limiter_rpm || 6600) * 0.35 / 50) * 50,
             tc_ratio: dt.tc_ratio || 1.9,
@@ -388,7 +388,7 @@ OpenRacer.CarTuning = (function () {
         c.drivetrain.shift_time = v.shift_time;
         c.drivetrain.clutch_start_rpm = v.clutch_start_rpm; c.drivetrain.clutch_full_rpm = Math.max(v.clutch_full_rpm, v.clutch_start_rpm + 50);
         c.drivetrain.drive = v.drive;
-        c.drivetrain.gearbox = v.gearbox === "cvt" || v.gearbox === "torque-converter" ? v.gearbox : "gears";
+        c.drivetrain.gearbox = ["cvt", "torque-converter", "dct"].indexOf(v.gearbox) >= 0 ? v.gearbox : "gears";
         c.drivetrain.cvt_rpm = v.cvt_rpm;
         c.drivetrain.tc_stall_rpm = v.tc_stall_rpm; c.drivetrain.tc_ratio = v.tc_ratio;
         c.drivetrain.final_drive = v.final_drive;
