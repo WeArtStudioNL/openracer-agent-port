@@ -548,6 +548,7 @@ export function initSoftBody(api) {
     let down = null, lasso = null;
     const savedMiddle = controls.mouseButtons.MIDDLE;
     renderer.domElement.addEventListener("pointerdown", (e) => {
+        if (api.pickLocked && api.pickLocked()) { down = null; return; }                              // (Edit origins of the suspension card: only its points are picked)
         if (e.button === 0 && !tc.axis && !rc.axis) down = { x: e.clientX, y: e.clientY };           // a press on a gizmo is no click on the model
         if (!sb.shown || !softBody()) return;
         if (e.button === 1) {
@@ -565,6 +566,7 @@ export function initSoftBody(api) {
         drawLasso();
     });
     renderer.domElement.addEventListener("pointerup", (e) => {
+        if (api.pickLocked && api.pickLocked()) { down = null; return; }
         if (lasso && e.button === 1) {
             const l = lasso; lasso = null;
             drawLasso();

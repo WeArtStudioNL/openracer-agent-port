@@ -421,6 +421,7 @@ export function initDriver(api) {
         if (!down || drv.dragging || Math.abs(e.clientX - down[0]) + Math.abs(e.clientY - down[1]) > 4) { down = null; return; }
         down = null;
         if (gizmo.axis) return;                                           // (the click was on the gizmo)
+        if (api.pickLocked && api.pickLocked()) return;                   // (Edit origins of the suspension card: only its points are picked)
         const rect = renderer.domElement.getBoundingClientRect();
         ray.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
         const markers = Object.entries(targets).filter(([, m]) => m.visible);

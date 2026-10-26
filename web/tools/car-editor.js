@@ -2418,7 +2418,8 @@ driverEditor = initDriver({
     steeringPreview,
     resolve: (file) => OpenRacer.Garage.resolve(state.existingCar, "../" + file),
     setDragging: (on) => { layers.dragging = on; },
-    deselectLayers: () => { if (layers.selected) selectLayer(layers.selected); }
+    deselectLayers: () => { if (layers.selected) selectLayer(layers.selected); },
+    pickLocked: () => !!(suspensionEditor && suspensionEditor.editing)        // (Edit origins: nothing else is picked in the view)
 });
 
 suspensionEditor = initSuspension({
@@ -2444,6 +2445,7 @@ softBodyEditor = initSoftBody({
     viewCenterX: () => { const r = view.getBoundingClientRect(); return r.left + r.width / 2; },
     lockView: (cx) => { viewLock = cx === null ? null : { cx }; resize(); },
     hideChrome: (on) => { cameraMarkers.visible = !on; axes.visible = !on; arrow.visible = !on; grid.visible = !on; bigGrid.visible = bigGrid.visible && !on; },
+    pickLocked: () => !!(suspensionEditor && suspensionEditor.editing),
     canSave: () => !!state.existingId && !!state.root,
     save: () => save(),
     frameModel
