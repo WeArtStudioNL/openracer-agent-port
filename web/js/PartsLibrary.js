@@ -13,7 +13,8 @@
  *                                    parts named ..._piston and ..._coil: the cylinder keeps its length, the piston slides and the coil gets shorter (SuspensionRig.js)
  *                the axle            its origin at its middle, 1 m long along X (from -0.5 to +0.5); scaled to the track less the width of the wheels
  *                the leaf spring     its origin at its middle, where it sits on the axle, 1 m long along Z (from -0.5 to +0.5); scaled from the front hanger to the rear
- *                a rigid part        at its own size, its origin at its mount: the upright (at the middle of the wheel), the rack, the engine, the gearbox, a differential
+ *                a rigid part        at its own size, its origin at its mount: the upright (at the middle of the wheel), the engine, the gearbox, a differential
+ *                the rack            its origin at its middle, 1 m wide along X; scaled to the width that its end mount (rack_end) gives
  *
  *              A part can be hidden in the car editor (the eye of the card: "hidden": ["engine", "gearbox"] of the axle or the driveline in car.json), for a car
  *              whose own model has that part.
@@ -53,15 +54,15 @@ OpenRacer.PartsLibrary = (function () {
         "model": { label: "From the model (parts named susp_…)", files: [], mounts: [] },
         "none": { label: "None", files: [], mounts: [] },
     // (a stretched part has a mount at each end: where it sits on the body, and where its other end goes: the ball joint on the upright, the seat of the spring on the arm or the axle)
-        "double-wishbone": { label: "Double wishbone", files: ["upperarm", "lowerarm", "upright", "coilover", "tierod"], mounts: ["upper_hinge", "upper_ball", "lower_hinge", "lower_ball", "spring_top", "spring_bottom", "tierod_inner", "tierod_outer", "rack"] },
-        "macpherson": { label: "MacPherson strut", files: ["lowerarm", "strut", "upright", "tierod"], mounts: ["lower_hinge", "lower_ball", "strut_top", "strut_bottom", "tierod_inner", "tierod_outer", "rack"] },
+        "double-wishbone": { label: "Double wishbone", files: ["upperarm", "lowerarm", "upright", "coilover", "tierod"], mounts: ["upper_hinge", "upper_ball", "lower_hinge", "lower_ball", "spring_top", "spring_bottom", "tierod_inner", "tierod_outer", "rack", "rack_end"] },
+        "macpherson": { label: "MacPherson strut", files: ["lowerarm", "strut", "upright", "tierod"], mounts: ["lower_hinge", "lower_ball", "strut_top", "strut_bottom", "tierod_inner", "tierod_outer", "rack", "rack_end"] },
         "live-trailing": { label: "Live axle, trailing arms", files: ["axle", "trailingarm", "uppertrailingarm", "coilover", "damper", "panhard"], mounts: ["lower_hinge", "lower_arm_end", "upper_hinge", "upper_arm_end", "spring_top", "spring_bottom", "damper_top", "damper_bottom", "panhard", "panhard_axle"] },
         "live-leaf": { label: "Live axle, leaf springs", files: ["axle", "leafspring", "damper"], mounts: ["leaf_front", "leaf_rear", "damper_top", "damper_bottom"] }
     };
     var MOUNT_LABELS = {
         upper_hinge: "Upper arm: hinge on the body", upper_ball: "Upper arm: ball joint", lower_hinge: "Lower arm: hinge on the body", lower_ball: "Lower arm: ball joint",
         spring_top: "Spring: top mount", spring_bottom: "Spring: bottom (seat)", strut_top: "Strut: top mount", strut_bottom: "Strut: foot on the upright",
-        tierod_inner: "Tie rod: inner end", tierod_outer: "Tie rod: outer end (steering arm)", rack: "Steering rack",
+        tierod_inner: "Tie rod: inner end", tierod_outer: "Tie rod: outer end (steering arm)", rack: "Steering rack (the middle)", rack_end: "Steering rack: end (the width; along the rack only)",
         damper_top: "Damper: top mount", damper_bottom: "Damper: bottom (on the axle)", lower_arm_end: "Lower trailing arm: end on the axle", upper_arm_end: "Upper trailing arm: end on the axle",
         panhard: "Panhard rod: end on the body", panhard_axle: "Panhard rod: end on the axle (the other side)", leaf_front: "Leaf spring: front hanger", leaf_rear: "Leaf spring: rear hanger",
         engine: "Engine", gearbox: "Gearbox", diff_front: "Front differential", diff_rear: "Rear differential",
@@ -111,7 +112,7 @@ OpenRacer.PartsLibrary = (function () {
     // ---- the mounts of an axle of a type: their defaults from the wheels, overridden by what the car editor set (the left side)
     function mountNames(type, axle) {
         var t = TYPES[type]; if(!t) return [];
-        return t.mounts.filter(function (m) { return m !== "rack" || axle === "front"; });
+        return t.mounts.filter(function (m) { return (m !== "rack" && m !== "rack_end") || axle === "front"; });
     }
     function defaultMount(name, axle, geo) {
         var g = geo[axle], xw = g.W.x, yw = g.W.y, z = g.W.z, fwd = axle === "front" ? 1 : -1;
@@ -129,6 +130,7 @@ OpenRacer.PartsLibrary = (function () {
             case "tierod_outer": p = [xw - 0.12, yw, z + fwd * 0.14]; break;
             case "damper_bottom": p = [0.55 * xw, yw, z - 0.1]; break;
             case "rack": p = [0, yw, z + 0.18]; break;
+            case "rack_end": p = [0.45 * xw, yw, z + 0.18]; break;                 // (the end of the rack: its width is twice this, from the middle)
             case "damper_top": p = [0.5 * xw, yw + 0.7, z - 0.15]; break;
             case "panhard": p = [0.8 * xw, yw + 0.15, z - 0.15]; break;
             case "leaf_front": p = [0.75 * xw, yw + 0.1, z + 0.6]; break;
@@ -158,6 +160,8 @@ OpenRacer.PartsLibrary = (function () {
             var m = set && set[name];
             out[name] = { position: m && m.position && m.position.length === 3 ? m.position.slice() : d.position, rotation: m && m.rotation && m.rotation.length === 3 ? m.rotation.slice() : d.rotation };
         });
+        // the end of the rack sits on the line of the rack: only its distance from the middle counts (the width), its height and its place along the car are the rack's
+        if(out.rack && out.rack_end) { out.rack_end.position = [out.rack.position[0] + Math.max(0.05, Math.abs(out.rack_end.position[0] - out.rack.position[0])), out.rack.position[1], out.rack.position[2]]; out.rack_end.rotation = [0, 0, 0]; }
         return out;
     }
     // the propshaft to an axle: the gearbox is more than 0.4 m from the differential of that axle (or the middle of a live axle); both its ends are mounts
@@ -290,7 +294,11 @@ OpenRacer.PartsLibrary = (function () {
             // the Panhard rod: from the body on one side across to the axle on the other (its two mounts are as they are, not mirrored)
             place(out, type, "panhard", "susp_panhard_" + axle, mirrored(mounts.panhard.position, 1), mirrored(mounts.panhard_axle.position, 1), mounts.panhard, false);
         }
-        if(axle === "front" && !isLive(type)) place(out, "steering", "rack", "steer_rack", mirrored(mounts.rack.position, 1), null, mounts.rack, false);
+        if(axle === "front" && !isLive(type)) {
+            // the rack: modelled 1 m wide along X about its middle, scaled to the width that its end mount gives (twice the distance from the middle)
+            var rackNode = place(out, "steering", "rack", "steer_rack", mirrored(mounts.rack.position, 1), null, mounts.rack, false);
+            if(rackNode && mounts.rack_end) rackNode.scale.x = Math.max(0.1, 2 * Math.abs(mounts.rack_end.position[0] - mounts.rack.position[0]));
+        }
     }
 
     function buildDriveline(out, config, geo) {

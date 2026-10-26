@@ -114,6 +114,16 @@ export function initSuspension(api) {
     }
     function store(id) {
         const m = markers[id]; if (!m) return;
+        // the end of the rack: only along the rack (x); its height and place along the car are the rack's. The rack: its end goes with it
+        if (m.name === "rack_end") { const rack = markers["mt:" + m.group + ":rack"]; if (rack) { m.target.position.y = rack.target.position.y; m.target.position.z = rack.target.position.z; m.target.rotation.set(0, 0, 0); } }
+        if (m.name === "rack") {
+            const end = markers["mt:" + m.group + ":rack_end"];
+            if (end) { const was = m.lastStored || m.target.position.clone(); end.target.position.add(m.target.position.clone().sub(was)); storeTarget(end); }
+        }
+        m.lastStored = m.target.position.clone();
+        storeTarget(m);
+    }
+    function storeTarget(m) {
         const p = m.target.position, r = m.target.rotation, fix = (v) => Math.round(v * 1000) / 1000;
         const entry = { position: [fix(p.x), fix(p.y), fix(p.z)], rotation: [Math.round(r.x / D * 10) / 10, Math.round(r.y / D * 10) / 10, Math.round(r.z / D * 10) / 10] };
         if (m.group === "driveline") state.driveline.mounts[m.name] = entry;
@@ -178,6 +188,7 @@ export function initSuspension(api) {
                 if (!dragging) {
                     m.target.position.set(mt.position[0], mt.position[1], mt.position[2]);
                     m.target.rotation.set(mt.rotation[0] * D, mt.rotation[1] * D, mt.rotation[2] * D);
+                    m.lastStored = m.target.position.clone();
                 }
                 m.target.visible = editing && !hidden;              // (the points are only shown while they are edited)
                 m.ball.material.color.set(layers.selected === id ? 0xffffff : COLOURS[grp]);
@@ -225,7 +236,8 @@ export function initSuspension(api) {
         gizmo.detach(); rotGizmo.detach();
         const target = gizmoTargets[id];
         if (!target) return;
-        if (mode === "move") { gizmo.attach(target); gizmo.showX = gizmo.showY = gizmo.showZ = true; } else rotGizmo.attach(target);
+        const m = markers[id], endOnly = m && m.name === "rack_end";
+        if (mode === "move" || endOnly) { gizmo.attach(target); gizmo.showX = true; gizmo.showY = gizmo.showZ = !endOnly; } else rotGizmo.attach(target);
         for (const k in markers) markers[k].ball.material.color.set(k === id ? 0xffffff : COLOURS[markers[k].group]);
         showSelected();
     }
