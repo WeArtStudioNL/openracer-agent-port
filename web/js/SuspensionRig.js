@@ -159,6 +159,21 @@ OpenRacer.SuspensionRig = (function () {
             if(entry.kind === "upright") rig.uprights[entry.wheel] = entry;
             rig.parts.push(entry);
         });
+        // a spring (or a damper) whose far end sits on an arm of its wheel, between the hinge and the ball joint: it goes with the swing of the arm there, not with the whole
+        // travel of the wheel (a coilover seated halfway along the lower wishbone moves half as far as the wheel; it looked as if it came loose from the arm). The lowest such
+        // arm is taken (the spring sits on the lower arm).
+        rig.parts.forEach(function (p) {
+            if(p.kind !== "spring" || p.strut) return;
+            var best = null;
+            rig.parts.forEach(function (a) {
+                if(a.kind !== "arm" || a.wheel !== p.wheel) return;
+                var lo = Math.min(a.origin.x, a.far.x), hi = Math.max(a.origin.x, a.far.x);
+                if(p.far.x < lo - 0.02 || p.far.x > hi + 0.02) return;
+                if(Math.abs(p.far.x - a.origin.x) < 0.03) return;                       // (at the hinge: it does not move with the arm)
+                if(!best || a.origin.y < best.origin.y) best = a;
+            });
+            if(best) p.onArm = best;
+        });
         rig.update = function (vehicle) { update(rig, vehicle); };
         rig.count = rig.parts.length;
         return rig;
@@ -193,8 +208,11 @@ OpenRacer.SuspensionRig = (function () {
                 h.position.set(p.origin.x, p.origin.y + travelOf(vehicle, p.wheel), p.origin.z);
                 if(p.wheel < 2) { q.setFromAxisAngle(UP, -steer); h.quaternion.copy(q).multiply(p.restQuaternion); }
             } else if(p.kind === "spring") {
-                // the far end goes with the wheel (its travel), the top mount stays on the body
-                tmp.copy(p.far); tmp.y += travelOf(vehicle, p.wheel);
+                // the far end goes with the wheel (its travel), the top mount stays on the body; seated on an arm, it goes round the hinge of the arm with it
+                if(p.onArm) {
+                    var armAngle = Math.asin(Math.max(-1, Math.min(1, travelOf(vehicle, p.wheel) / p.onArm.armLength))) * p.onArm.side;
+                    tmp.copy(p.far).sub(p.onArm.origin).applyAxisAngle(FORWARD, armAngle).add(p.onArm.origin);
+                } else { tmp.copy(p.far); tmp.y += travelOf(vehicle, p.wheel); }
                 tmp.sub(p.origin);
                 var length = tmp.length();
                 h.quaternion.setFromUnitVectors(Y, tmp2.copy(tmp).normalize());
