@@ -9,7 +9,7 @@
 var MainMenu = (function() {
     var STORAGE_KEY = "openracer.lastChoice";
     var RACE_KEY = "openracer.raceOptions";
-    var raceOptions = { ai: 0, difficulty: "normal", ghost: true, records: true, laps: 0, wear: 1 };
+    var raceOptions = { ai: 0, difficulty: "normal", ghost: true, records: true, laps: 0, wear: 1, damage: true };
     try { raceOptions = Object.assign(raceOptions, JSON.parse(window.localStorage.getItem(RACE_KEY)) || {}); } catch(e) { /* no storage */ }
     function rememberRace() { try { window.localStorage.setItem(RACE_KEY, JSON.stringify(raceOptions)); } catch(e) { /* no storage */ } }
     var element = null;
@@ -745,7 +745,7 @@ var MainMenu = (function() {
         remember();
         window.location.href = window.location.pathname + "?car=" + encodeURIComponent(choice.car) + "&track=" + encodeURIComponent(choice.track) +
             "&ai=" + raceOptions.ai + "&difficulty=" + raceOptions.difficulty + "&ghost=" + (raceOptions.ghost ? 1 : 0) + "&records=" + (raceOptions.records ? 1 : 0) +
-            "&laps=" + (raceOptions.laps || 0) + "&wear=" + (raceOptions.wear === undefined ? 1 : raceOptions.wear) + aiCarsParameter();
+            "&laps=" + (raceOptions.laps || 0) + "&wear=" + (raceOptions.wear === undefined ? 1 : raceOptions.wear) + "&damage=" + (raceOptions.damage === false ? 0 : 1) + aiCarsParameter();
     }
 
     // The longest jumps on the chosen track (JumpStats.js), with a button to start over
@@ -955,7 +955,7 @@ var MainMenu = (function() {
         if(!choice.car) return;
         remember();
         if(mode === "skidpad") {
-            window.location.href = window.location.pathname + "?car=" + encodeURIComponent(choice.car) + "&track=skidpad&mode=skidpad&ai=0&ghost=0&records=0&wear=0&surface=" + encodeURIComponent(skidSurface);
+            window.location.href = window.location.pathname + "?car=" + encodeURIComponent(choice.car) + "&track=skidpad&mode=skidpad&ai=0&ghost=0&records=0&wear=0&damage=" + (raceOptions.damage === false ? 0 : 1) + "&surface=" + encodeURIComponent(skidSurface);
             return;
         }
         if(!choice.track) return;
@@ -1015,6 +1015,7 @@ var MainMenu = (function() {
                 box.appendChild(row);
             }
             chips("Tyre wear and fuel", [[0, "Off"], [1, "On"], [3, "Fast"]], raceOptions.wear === undefined ? 1 : raceOptions.wear, function(v) { raceOptions.wear = v; });
+            chips("Damage", [[false, "Off"], [true, "On"]], raceOptions.damage !== false, function(v) { raceOptions.damage = v; });      // off: rigid cars, nothing dents or comes off
             chips("Ghost of your best lap", [[false, "Off"], [true, "On"]], !!raceOptions.ghost, function(v) { raceOptions.ghost = v; });
             chips("Save lap records", [[false, "Off"], [true, "On"]], !!raceOptions.records, function(v) { raceOptions.records = v; });
             if(cars.length > 1 && mode === "race") {
@@ -1160,6 +1161,22 @@ var MainMenu = (function() {
             });
             row.appendChild(group);
             group.appendChild(button("More options…", "ghost", showMore));
+            row.style.cssText = "padding-top: 0;";
+            inner.insertBefore(row, list);
+            // and the damage: on, or off for rigid cars that neither dent nor lose parts
+            row = document.createElement("div");
+            row.className = "setting";
+            row.innerHTML = "<span class=\"label\">Damage</span>";
+            group = document.createElement("div");
+            group.className = "chips";
+            [[true, "On"], [false, "Off"]].forEach(function(item) {
+                var c = document.createElement("button");
+                c.className = "chip" + (item[0] === (raceOptions.damage !== false) ? " on" : "");
+                c.textContent = item[1];
+                c.onclick = function() { raceOptions.damage = item[0]; rememberRace(); render(); };
+                group.appendChild(c);
+            });
+            row.appendChild(group);
             row.style.cssText = "margin-bottom: 14px; padding-top: 0;";
             inner.insertBefore(row, list);
         }
@@ -1211,6 +1228,7 @@ var MainMenu = (function() {
         setting("Laps", [[3, "3"], [5, "5"], [10, "10"], [25, "25"]], raceOptions.laps, function(v) { raceOptions.laps = v; });
         setting("Opponents", [[1, "1"], [2, "2"], [3, "3"], [5, "5"], [7, "7"]], raceOptions.ai, function(v) { raceOptions.ai = v; });
         setting("Difficulty", [["easy", "Easy"], ["normal", "Normal"], ["hard", "Hard"]], raceOptions.difficulty, function(v) { raceOptions.difficulty = v; });
+        setting("Damage", [[true, "On"], [false, "Off"]], raceOptions.damage !== false, function(v) { raceOptions.damage = v; });      // off: rigid cars, nothing dents or comes off
         var trackChosen = tracks.filter(function(t) { return t.id === choice.track; })[0];
         var hasLine = trackChosen && ((trackChosen.design && trackChosen.design.nodes) || (trackChosen.racing_line && trackChosen.racing_line.length > 10) ||
             (OpenRacer.Records && OpenRacer.Records.anyGhost(choice.track)));

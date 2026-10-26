@@ -156,7 +156,9 @@ OpenRacer.CollisionProxy = (function () {
             v.collisionSpheres = spheres;
             console.log("collision proxy: " + spheres.length + " spheres from the model");
             // the shell of the car that dents (SoftBody.js), and its model (SoftBodyMesh.js); car.json "softbody": { "enabled": false } leaves it out
-            if(cfg.enabled !== false && OpenRacer.SoftBody) {
+            // (damage off, main.js: the car is a rigid body, its spheres still touch the road and the walls; nothing dents, nothing comes off)
+            var damage = OpenRacer.damageEnabled !== false;
+            if(cfg.enabled !== false && OpenRacer.SoftBody && damage) {
                 v.softBody = new OpenRacer.SoftBody(v, spheres, cfg);
                 try { object.softBodyMesh = OpenRacer.SoftBodyMesh.attach(model.tilt, v.softBody, toVehicle, partGroups(object, model)); } catch(e) { console.warn("SoftBodyMesh: " + e.message); }
                 console.log("soft body: " + v.softBody.count + " nodes, " + v.softBody.beamCount + " beams");
@@ -201,7 +203,7 @@ OpenRacer.CollisionProxy = (function () {
             v.wheelStrength = v.softBody ? (cfg.wheel_strength !== undefined ? Math.max(0, cfg.wheel_strength) : 25) * 1000 : 0;
             // loose and hinged parts (Parts.js); car.json "parts": [{ object, mode, ... }]
             var partSpecs = (object.config && object.config.parts) || [];
-            if(OpenRacer.Parts && (partSpecs.length || v.wheelStrength > 0)) {
+            if(OpenRacer.Parts && damage && (partSpecs.length || v.wheelStrength > 0)) {
                 OpenRacer.Parts.create({
                     vehicle: v, softBody: v.softBody, softBodyMesh: object.softBodyMesh, spheres: spheres, specs: partSpecs,
                     root: model.tilt, toVehicle: toVehicle, wheelObjects: v.wheelStrength > 0 ? model.wheels : null

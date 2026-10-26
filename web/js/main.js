@@ -71,6 +71,9 @@ function escapeHtml(text) {
 }
 
 var race = { opponents: [], ghost: null, line: null, options: null, allCars: [] };
+// damage on or off (the main menu, &damage=0|1): off, the cars are plain rigid bodies: no shell that dents (SoftBody.js), no parts or wheels that come off, no punctures.
+// Read here, before the cars load, since the shell is built when the model of a car arrives (CollisionProxy.apply)
+OpenRacer.damageEnabled = new URLSearchParams(window.location.search).get("damage") !== "0";
 
 function raceOptionsFromQuery(query) {
     return {
@@ -81,6 +84,7 @@ function raceOptionsFromQuery(query) {
         laps: Math.max(0, Math.min(99, parseInt(query.get("laps") || "0", 10) || 0)), // 0: practice, no end
         aiCars: query.get("aicars") ? query.get("aicars").split(",").filter(Boolean) : null,        // the ids of the cars that may race against you (null: all)
         wear: Math.max(0, Math.min(5, parseFloat(query.get("wear") === null ? "1" : query.get("wear")) || 0)), // tyre wear and fuel: 0 off, 1 as it is, 3 fast
+        damage: query.get("damage") !== "0",                                   // off: the cars are rigid bodies (no dents, no parts or wheels off, no punctures)
         aiTyres: query.get("aitires") === "shell" ? "shell" : "simple"      // the tyre of the AI cars: the simple one (rays and a slip curve; Opponent.js), or the shell of the player's tyres, to compare
     };
 }
