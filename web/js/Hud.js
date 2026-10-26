@@ -39,6 +39,9 @@ var Hud = (function() {
     var pillStates = {};     // the state of every light: off, on, active, park
     var lightRects = [];     // where the lights are on the gauge canvas (for a tap on a touch screen)
     var LIGHT_ACTION = { TC: "toggleTC", LC: "toggleLaunch", ESC: "toggleESC", ABS: "toggleABS", "2S": "toggleTwoStep" };
+    // the badges of the systems (web/images/HUD): grey when the system is in the car but idle, orange while it works; TC has its own badge for when it is switched off
+    var BADGE_FILE = { TC: "tc", LC: "launch", ESC: "esc", ABS: "abs", "2S": "2step" };
+    var badges = {};         // name -> { active, inactive, off } images
     var size = 0;
     var ratio = 1;
     var flash = 0;
@@ -53,7 +56,8 @@ var Hud = (function() {
             "#hud .pills { display: flex; flex-direction: column; gap: 7px; margin-bottom: 14px; }" +
             "#hud .pill { min-width: 62px; padding: 5px 10px; border-radius: 7px; font-size: 15px; font-weight: bold; letter-spacing: 1px; text-align: center; color: #fff;" +
             " border: 2px solid; background: rgba(15, 18, 22, 0.72); transition: background 0.12s, border-color 0.12s, color 0.12s; }" +
-            "body.touch #hud canvas { pointer-events: auto; touch-action: manipulation; }" +
+            "#hud canvas { pointer-events: auto; }" +
+            "body.touch #hud canvas { touch-action: manipulation; }" +
             "#hud .pill.off { border-color: #d9372f; color: #ff6b62; box-shadow: 0 0 8px rgba(217, 55, 47, 0.35); }" +
             "#hud .pill.on { border-color: #2eb35a; color: #52e085; box-shadow: 0 0 8px rgba(46, 179, 90, 0.35); }" +
             "#hud .pill.active { border-color: #f5c518; background: rgba(245, 197, 24, 0.9); color: #1a1500; box-shadow: 0 0 14px rgba(245, 197, 24, 0.8); }" +
@@ -86,16 +90,31 @@ var Hud = (function() {
         addStyle();
         container = document.createElement("div");
         container.id = "hud";
-        // the lights of the systems (TC, LC, ESC, ABS, 2S; P and the transbrake while they hold) are drawn in the gauge: on a touch screen a tap on one switches the aid, as the keys do
+        // the badges of the systems (TC, LC, ESC, ABS, 2S; P and the transbrake while they hold) are drawn in the gauge: a click or a tap on one switches the aid, as the keys do
         canvas = document.createElement("canvas");
-        canvas.addEventListener("pointerdown", function(e) {
-            if(!document.body.classList.contains("touch")) return;
-            var rect = canvas.getBoundingClientRect(), x = (e.clientX - rect.left) * ratio, y = (e.clientY - rect.top) * ratio;
+        Object.keys(BADGE_FILE).forEach(function(n) {
+            var set = badges[n] = {};
+            ["active", "inactive", "off"].forEach(function(st) {
+                if(st === "off" && n !== "TC") return;
+                var img = new Image();
+                img.src = "images/HUD/" + BADGE_FILE[n] + "-" + st + ".png";
+                img.onload = function() { set[st] = img; };
+            });
+        });
+        function lightAt(e) {
+            var rect = canvas.getBoundingClientRect(), x = e.clientX - rect.left, y = e.clientY - rect.top;
+            var slack = document.body.classList.contains("touch") ? 0.5 : 0;       // (a finger is less exact than a mouse)
             for(var k = 0; k < lightRects.length; k++) {
                 var r = lightRects[k];
-                if(x >= r.x && x <= r.x + r.w && y >= r.y - r.h && y <= r.y + r.h * 2 && r.action) { e.preventDefault(); e.stopPropagation(); Settings.trigger(r.action); return; }
+                if(r.action && x >= r.x - r.w * slack * 0.3 && x <= r.x + r.w * (1 + slack * 0.3) && y >= r.y - r.h * slack && y <= r.y + r.h * (1 + slack)) return r;
             }
+            return null;
+        }
+        canvas.addEventListener("pointerdown", function(e) {
+            var r = lightAt(e);
+            if(r) { e.preventDefault(); e.stopPropagation(); Settings.trigger(r.action); }
         });
+        canvas.addEventListener("pointermove", function(e) { canvas.style.cursor = lightAt(e) ? "pointer" : ""; });
         container.appendChild(canvas);
         document.body.appendChild(container);
         context = canvas.getContext("2d");
@@ -288,19 +307,40 @@ var Hud = (function() {
         drawLights(context, cx, cy, R);
     }
 
-    // the lights of the systems in a row at the bottom of the gauge: red is off, green on, yellow working; only the systems the car has
+    // the badges of the systems in a row at the bottom of the gauge: the grey badge is a system that is in the car but idle, the orange one a system at work,
+    // a system switched off shows the off badge (TC) or the grey badge dimmed with OFF under it; only the systems the car has. P and TB stay text lights.
     var LIGHT_STYLE = { off: ["#d9372f", "rgba(20, 24, 30, 0.6)", "#ff6b62"], on: ["#2eb35a", "rgba(20, 24, 30, 0.6)", "#52e085"], active: ["#f5c518", "rgba(245, 197, 24, 0.9)", "#1a1500"], park: ["#d9372f", "rgba(217, 55, 47, 0.85)", "#ffffff"] };
     function drawLights(c, cx, cy, R) {
         var names = ["TC", "LC", "ESC", "ABS", "2S", "P", "TB"].filter(function(n) { return pillStates[n]; });
         lightRects = [];
         if(!names.length) return;
-        var h = R * 0.13, gap = R * 0.035, font = Math.round(R * 0.075);
+        var h = R * 0.13, gap = R * 0.02, font = Math.round(R * 0.075), badge = R * 0.23;
         c.font = "bold " + font + "px Arial";
-        var widths = names.map(function(n) { return Math.max(R * 0.2, c.measureText(n).width + R * 0.1); });
+        var widths = names.map(function(n) { return badges[n] ? badge : Math.max(R * 0.2, c.measureText(n).width + R * 0.1); });
         var total = widths.reduce(function(a, b) { return a + b; }, 0) + gap * (names.length - 1);
-        var x = cx - total / 2, y = cy + R * 0.76;
+        var x = cx - total / 2;
         names.forEach(function(n, i) {
-            var st = LIGHT_STYLE[pillStates[n]] || LIGHT_STYLE.off, w = widths[i], r = h * 0.3;
+            var w = widths[i], y = cy + R * 0.68;
+            if(badges[n]) {
+                var state = pillStates[n], set = badges[n];
+                var img = state === "active" ? set.active : (state === "off" && set.off ? set.off : set.inactive);
+                if(img) {
+                    if(state === "off" && !set.off) {
+                        // no badge of its own for off: the grey badge, smaller and dimmed, with OFF under it (as the TC badge has)
+                        c.globalAlpha = 0.45;
+                        c.drawImage(img, x + w * 0.12, y, w * 0.76, w * 0.76);
+                        c.globalAlpha = 1;
+                        c.fillStyle = "#f5a500"; c.font = "bold " + Math.round(w * 0.3) + "px Arial"; c.textAlign = "center"; c.textBaseline = "middle";
+                        c.fillText("OFF", x + w / 2, y + w * 0.86);
+                        c.font = "bold " + font + "px Arial";
+                    }
+                    else c.drawImage(img, x, y, w, w);
+                }
+                lightRects.push({ x: x, y: y, w: w, h: w, action: LIGHT_ACTION[n] });
+                x += w + gap;
+                return;
+            }
+            var st = LIGHT_STYLE[pillStates[n]] || LIGHT_STYLE.off, r = h * 0.3, y = cy + R * 0.68 + (badge - h) / 2;
             c.beginPath();
             c.moveTo(x + r, y); c.lineTo(x + w - r, y); c.quadraticCurveTo(x + w, y, x + w, y + r); c.lineTo(x + w, y + h - r); c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
             c.lineTo(x + r, y + h); c.quadraticCurveTo(x, y + h, x, y + h - r); c.lineTo(x, y + r); c.quadraticCurveTo(x, y, x + r, y); c.closePath();
