@@ -166,6 +166,12 @@ OpenRacer.SuspensionRig = (function () {
         // arm is taken (the spring sits on the lower arm).
         // The same for a foot on a trailing arm (it swings about the axis across the car: the foot goes round the hinge by its distance along the car), and a foot on a live
         // axle away from its middle goes up with the axle there (the mean travel of the two wheels, and the roll of the axle at that distance from the middle).
+        // A trailing arm whose end sits on a live axle swings so that its end stays on the axle: the axle is at the mean travel of its two wheels plus its roll at that distance
+        // from the middle, which is less than the travel of the wheel for an arm that sits inboard (an upper arm near the differential came out of the axle when the car twisted).
+        rig.parts.forEach(function (p) {
+            if(p.kind !== "trailing") return;
+            rig.parts.forEach(function (a) { if(a.kind === "axle" && a.rear === (p.wheel >= 2) && Math.abs(p.far.z - a.origin.z) < 0.15) p.onAxle = a; });
+        });
         rig.parts.forEach(function (p) {
             if(p.kind !== "spring" || p.strut) return;
             var best = null, bestTrailing = null, axle = null;
@@ -208,6 +214,11 @@ OpenRacer.SuspensionRig = (function () {
         return vehicle.restLength - length;
     }
 
+    // how far up a live axle is at a distance x from its middle: the mean travel of its two wheels, and its roll
+    function axleTravelAt(vehicle, axle, x) {
+        var l = travelOf(vehicle, axle.rear ? 2 : 1), r = travelOf(vehicle, axle.rear ? 3 : 0), track = (axle.rear ? vehicle.rear_track : vehicle.front_track) || 1.5;
+        return (l + r) / 2 + (l - r) / track * x;
+    }
     function update(rig, vehicle) {
         var steer = vehicle.steerApplied || 0;
         var rackShift = rig.rackTravel * steer; // along +x (to the left) for a steer to the right, with a positive travel
@@ -231,11 +242,11 @@ OpenRacer.SuspensionRig = (function () {
                     var armAngle = Math.asin(Math.max(-1, Math.min(1, travelOf(vehicle, p.wheel) / p.onArm.armLength))) * p.onArm.side;
                     tmp.copy(p.far).sub(p.onArm.origin).applyAxisAngle(FORWARD, armAngle).add(p.onArm.origin);
                 } else if(p.onTrailing) {
-                    var tAngle = -p.onTrailing.ahead * Math.asin(Math.max(-1, Math.min(1, travelOf(vehicle, p.wheel) / p.onTrailing.armLength)));
+                    var tt = p.onTrailing.onAxle ? axleTravelAt(vehicle, p.onTrailing.onAxle, p.onTrailing.far.x) : travelOf(vehicle, p.wheel);
+                    var tAngle = -p.onTrailing.ahead * Math.asin(Math.max(-1, Math.min(1, tt / p.onTrailing.armLength)));
                     tmp.copy(p.far).sub(p.onTrailing.origin).applyAxisAngle(LEFT, tAngle).add(p.onTrailing.origin);
                 } else if(p.onAxle) {
-                    var sl = travelOf(vehicle, p.onAxle.rear ? 2 : 1), sr = travelOf(vehicle, p.onAxle.rear ? 3 : 0), sTrack = (p.onAxle.rear ? vehicle.rear_track : vehicle.front_track) || 1.5;
-                    tmp.copy(p.far); tmp.y += (sl + sr) / 2 + (sl - sr) / sTrack * p.far.x;
+                    tmp.copy(p.far); tmp.y += axleTravelAt(vehicle, p.onAxle, p.far.x);
                 } else { tmp.copy(p.far); tmp.y += travelOf(vehicle, p.wheel); }
                 tmp.sub(p.origin);
                 var length = tmp.length();
@@ -273,8 +284,8 @@ OpenRacer.SuspensionRig = (function () {
                 h.quaternion.setFromUnitVectors(Y, tmp2.copy(tmp).normalize());
                 h.scale.y = Math.max(0.2, tmp.length() / p.restLength);
             } else if(p.kind === "trailing") {
-                // swings about the axis across the car: the free end goes up with the wheel
-                var tTravel = travelOf(vehicle, p.wheel);
+                // swings about the axis across the car: the free end goes up with the wheel (or with the axle, where it sits on one)
+                var tTravel = p.onAxle ? axleTravelAt(vehicle, p.onAxle, p.far.x) : travelOf(vehicle, p.wheel);
                 q.setFromAxisAngle(LEFT, -p.ahead * Math.asin(Math.max(-1, Math.min(1, tTravel / p.armLength))));
                 h.quaternion.copy(q).multiply(p.restQuaternion);
             } else if(p.kind === "shaft") {
