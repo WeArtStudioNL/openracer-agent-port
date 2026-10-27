@@ -28,9 +28,16 @@ export function installZoomToMouse(api) {
         const list = (targets ? targets() : []).filter(Boolean);
         const hits = list.length ? ray.intersectObjects(list, true).filter((h) => h.object.visible && !(h.object.isLine) && !(h.object.isSprite)) : [];
         let found = false;
+        // (the point on the ray nearest to the orbit centre: what the view is about when nothing is hit)
+        const along = Math.max(0, controls.target.clone().sub(ray.ray.origin).dot(ray.ray.direction));
+        const reach = 4 * Math.max(1, camera.position.distanceTo(controls.target));
         if (hits.length) { point.copy(hits[0].point); found = true; }
-        else if (floorY) { plane.constant = -floorY(); found = !!ray.ray.intersectPlane(plane, point); }
-        if (!found) point.copy(ray.ray.origin).addScaledVector(ray.ray.direction, camera.position.distanceTo(controls.target));
+        else if (floorY) {
+            // the floor, unless it lies far beyond the orbit centre (a view from the side sees it almost edge-on: the hit is hundreds of metres away and the view would fly there)
+            plane.constant = -floorY();
+            found = !!ray.ray.intersectPlane(plane, point) && point.distanceTo(ray.ray.origin) < along + reach;
+        }
+        if (!found) point.copy(ray.ray.origin).addScaledVector(ray.ray.direction, along);
         // a notch of the wheel is about 10 %; a trackpad gives many small steps
         const f = Math.min(2, Math.max(0.5, Math.exp(Math.max(-120, Math.min(120, e.deltaY)) * 0.0012)));
         if (isOrtho && isOrtho()) {
