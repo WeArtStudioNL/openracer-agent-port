@@ -264,6 +264,7 @@ var Tuning = (function() {
         compound: ["Tyre compound", OpenRacer.TyreCompounds.map(function(k) { return [k.id, k.name]; })],
         center_diff: ["Centre differential", [["open", "Open"], ["lsd", "Limited slip"], ["locked", "Locked"]]],
         tyre_damage: ["Tyre damage", [["off", "Off"], ["on", "On (a hard hit can puncture a tyre: it loses its pressure)"]]],
+        unsprung: ["Suspension", [["sprung", "Springs and dampers"], ["none", "None (a kart: the frame stands on its tyres)"]]],
         antilag_mode: ["When", [["lift", "After lifting off the throttle"], ["launch", "Only with the two-step, the transbrake or the launch control"]]],
         // the rest of the car editor (the lists are made when the menu is built: the tables they come from load after this file)
         susp_front: ["Suspension at the front", function() { return partsTypes(); }],
@@ -409,6 +410,40 @@ var Tuning = (function() {
             refresh();
             message("Setup " + name + " deleted (the tuning on the car stays as it is).");
         };
+        // a tune shared as a file: Export (the setup that is chosen, or the car as it is tuned now) and Import (a file: it is kept as a setup of this car and chosen)
+        var exportTune = document.createElement("button");
+        exportTune.textContent = "Export…";
+        exportTune.title = "The setup that is chosen (or the car as it is tuned now) as a file, to share";
+        exportTune.onclick = function() {
+            var name = setupSelect.value;
+            var cfg = name ? (OpenRacer.Setups.configOf(config.id, name, original) || tunedConfig()) : tunedConfig();
+            OpenRacer.Setups.exportFile(config.id, name || ((config.name || config.id) + " as tuned"), name ? Object.assign({}, original, cfg) : cfg);
+            message("Tune " + (name || "as tuned now") + " saved as a file (in your downloads).");
+        };
+        var importTune = document.createElement("button");
+        importTune.textContent = "Import…";
+        importTune.title = "A tune file of someone else: it becomes a setup of this car, and is chosen";
+        var importInput = document.createElement("input");
+        importInput.type = "file"; importInput.accept = ".json,application/json"; importInput.style.display = "none";
+        importInput.onchange = function() {
+            var file = importInput.files && importInput.files[0];
+            importInput.value = "";
+            if(!file) return;
+            file.text().then(function(text) {
+                var tune = OpenRacer.Setups.parseFile(text);
+                if(tune instanceof Error) { message(tune.message); return; }
+                var name = window.prompt("The name of this tune" + (tune.car && tune.car !== config.id ? " (it was made for " + tune.car + ")" : ""), tune.name);
+                if(name === null) return;
+                name = name.trim().slice(0, 40) || tune.name;
+                OpenRacer.Setups.save(config.id, name, Object.assign({}, original, tune.config));
+                setupSelect.value = name;
+                refreshSetups();
+                setupSelect.value = name;
+                setupSelect.onchange();
+                message("Tune " + name + " imported and chosen" + (tune.car && tune.car !== config.id ? " (it was made for " + tune.car + ": mind the wheels and the parts)" : "") + ".");
+            });
+        };
+        importTune.onclick = function() { importInput.click(); };
         var close = document.createElement("button");
         close.textContent = "Close";
         close.onclick = function() { setVisible(false); };
@@ -417,6 +452,9 @@ var Tuning = (function() {
         setupLine.appendChild(saveSetup);
         setupLine.appendChild(saveNew);
         setupLine.appendChild(dropSetup);
+        setupLine.appendChild(exportTune);
+        setupLine.appendChild(importTune);
+        setupLine.appendChild(importInput);
         setupLine.appendChild(close);
         panel.appendChild(setupLine);
         setupButtons = { save: saveSetup, drop: dropSetup };

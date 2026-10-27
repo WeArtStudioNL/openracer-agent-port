@@ -22,6 +22,7 @@ OpenRacer.CarTuning = (function () {
             ["spring_rear", "Rear springs (wheel rate)", "N/mm", 3, 200, 1],
             ["damping_front", "Front dampers", "%", 5, 200, 1],
             ["damping_rear", "Rear dampers", "%", 5, 200, 1],
+            ["unsprung", "Suspension (none: a kart, the frame stands on its tyres)", "", 0, 0, 0],
             ["suspension_travel", "Suspension travel before the bump stop", "cm", 1, 120, 1],
             ["suspension_length", "Room for the travel (the spring from the mount to the middle of the wheel)", "cm", 10, 150, 1],
             ["spring_progression", "Progressive springs (extra stiffness at the end of the travel)", "%", 0, 800, 10],
@@ -206,6 +207,8 @@ OpenRacer.CarTuning = (function () {
             case "turbo_intercooler": case "turbo_efficiency": return v.turbo_boost > 0;
             case "tc_lockup": return g === "torque-converter";
             case "sb_max_nodes": case "sb_wheel_strength": return v.sb_enabled !== "off";
+            // no suspension: the springs, the dampers, the travel, the progression, the rebound and the ride height do nothing (the tyre is the spring; the roll stiffness and the roll centres still work)
+            case "spring_front": case "spring_rear": case "damping_front": case "damping_rear": case "suspension_travel": case "suspension_length": case "spring_progression": case "damping_rebound": case "ride_front": case "ride_rear": return v.unsprung !== "none";
             case "bike_max_lean": case "bike_fast_lean": case "bike_rake": case "bike_rider_mass": case "bike_hang_off": case "bike_max_lateral_g": case "bike_balance": case "bike_fork_dive": return v.vehicle_type === "motorcycle";
             default: return true;
         }
@@ -354,6 +357,7 @@ OpenRacer.CarTuning = (function () {
             shift_time: dt.shift_time || 0.32,
             clutch_start_rpm: dt.clutch_start_rpm || 1050,
             clutch_full_rpm: dt.clutch_full_rpm || 2000,
+            unsprung: ch.unsprung ? "none" : "sprung",
             suspension_travel: Math.round((ch.suspension_travel || 0.09) * 100),
             suspension_length: Math.round((ch.suspension_length || 0.28) * 100),
             spring_progression: Math.round((ch.spring_progression || 0) * 100),
@@ -458,6 +462,7 @@ OpenRacer.CarTuning = (function () {
             turbo_intercooler: v.turbo_intercooler / 100,
             turbo_efficiency: v.turbo_efficiency / 100,
             suspension_travel: v.suspension_travel / 100,
+            unsprung: v.unsprung === "none",
             suspension_length: v.suspension_length / 100,
             spring_progression: v.spring_progression / 100,
             damping_rebound: v.damping_rebound,
@@ -512,6 +517,7 @@ OpenRacer.CarTuning = (function () {
         delete c.chassis.downforce;
         c.chassis.ackermann = v.ackermann / 100;
         c.chassis.suspension_travel = v.suspension_travel / 100;
+        c.chassis.unsprung = v.unsprung === "none";
         c.chassis.suspension_length = v.suspension_length / 100;
         c.chassis.spring_progression = v.spring_progression / 100;
         c.chassis.damping_rebound = v.damping_rebound;
@@ -661,6 +667,26 @@ OpenRacer.Setups = (function () {
         save: function (id, name, config) { var d = read(id); d.setups[name] = clone(config); d.active = name; delete d.thumbs; write(id, d); },
         remove: function (id, name) { var d = read(id); delete d.setups[name]; if(d.active === name) d.active = null; write(id, d); },
         setActive: function (id, name) { var d = read(id); d.active = name && d.setups[name] ? name : null; write(id, d); },
+        // a tune as a file, to share: { "openracer-tune": 1, car, name, saved, config }; the name of the file is <car>-<name>.openracer-tune.json
+        exportFile: function (id, name, config) {
+            var data = { "openracer-tune": 1, car: id, name: name, saved: new Date().toISOString(), config: clone(config) };
+            delete data.config.model; delete data.config.id;
+            var blob = new Blob([JSON.stringify(data, null, 1)], { type: "application/json" });
+            var safe = function (t) { return String(t).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "tune"; };
+            var url = URL.createObjectURL(blob), link = document.createElement("a");
+            link.href = url; link.download = safe(id) + "-" + safe(name) + ".openracer-tune.json";
+            document.body.appendChild(link); link.click(); link.remove();
+            setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+        },
+        // the text of such a file read: { name, car, config }, or an Error with what is wrong (the car of the file is only a note: a tune is laid over the car it is imported on)
+        parseFile: function (text) {
+            var data;
+            try { data = JSON.parse(text); } catch (e) { return new Error("This is not a tune file (no JSON)."); }
+            if(!data || data["openracer-tune"] !== 1 || !data.config || typeof data.config !== "object") return new Error("This is not an OpenRacer tune file.");
+            if(!data.config.chassis && !data.config.drivetrain && !data.config.tyres) return new Error("The tune file has no car in it.");
+            var config = clone(data.config); delete config.model; delete config.id;
+            return { name: String(data.name || "Imported tune").slice(0, 40), car: data.car ? String(data.car) : "", config: config };
+        },
         // the setup for the next game (null: the car as it was made); the tuning that was kept for the car is forgotten, the setup is the car from here
         use: function (id, name) {
             var d = read(id);

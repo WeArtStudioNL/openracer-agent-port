@@ -134,6 +134,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.rideFront = parameters.ride_front || 0;
     this.rideRear = parameters.ride_rear || 0;
     this.bumpTravel = Math.min(parameters.suspension_travel || 0.09, Math.max(0.05, (parameters.suspension_length || 0.28) - 0.05)); // how much further the spring can go in before the bump stop (m)
+    this.unsprung = !!parameters.unsprung;   // no suspension (a kart: the frame stands on its tyres): the wheel is fixed at its rest length and the load of the tyre goes straight into the body; the tyre is the only spring
     this.groundClearance = 0.13;      // of the underside of the body at rest (m)
 
     this.engine = new OpenRacer.Engine(parameters.engine);
@@ -521,6 +522,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.clutch_full_rpm !== undefined) this.clutchFullRPM = Math.max(t.clutch_full_rpm, this.clutchStartRPM + 50);
         if(t.suspension_length !== undefined) this.restLength = Math.max(0.2, t.suspension_length);
         if(t.suspension_travel !== undefined) this.bumpTravel = Math.max(0.01, Math.min(t.suspension_travel, this.restLength - 0.05));
+        if(t.unsprung !== undefined) this.unsprung = !!t.unsprung;
         if(t.spring_progression !== undefined) this.springProgression = Math.max(0, t.spring_progression);
         if(t.damping_rebound !== undefined) this.reboundFactor = Math.max(1, t.damping_rebound);
         if(t.ride_front !== undefined) this.rideFront = t.ride_front;
@@ -1759,6 +1761,11 @@ OpenRacer.Vehicle = function (parameters, input) {
                 fs = fs0 - cTot * ws.susVel;
                 springForce[si] = self.wheelLost[si] ? 0 : fs - ws.feLoad;       // (the body gets the vertical force that the tyre gave: the rest goes through the rigid part of the fork)
                 ws.susLength += ws.susVel * dt;
+            } else if(self.unsprung) {
+                // no suspension: the wheel does not move along the axis, the body gets what the tyre gives (the tyre is the spring; a kart frame flexes a little, which is left out)
+                ws.susLength = ws.restLengthWheel !== undefined ? ws.restLengthWheel : self.restLength; ws.susVel = 0;
+                fs = tyreLoad[si];
+                springForce[si] = self.wheelLost[si] ? 0 : fs;
             } else {
             fs = rateS * comp[si] + progressive + damperS + bumpS + droopS + arbForce[si];
             springForce[si] = self.wheelLost[si] ? 0 : fs;

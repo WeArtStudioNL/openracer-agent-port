@@ -56,6 +56,9 @@
             <button class="primary" id="save" title="Save the car (car.json)">Save the car</button>
             <button id="setupSave" type="button" title="Keep the car as the form has it as a new tune (a name is asked)">+ New tune</button>
             <button class="ghost" id="setupDelete" type="button" title="Delete this tune">✕</button>
+            <button class="ghost" id="tuneExport" type="button" title="The tune that is chosen (or the car as the form has it) as a file, to share">Export</button>
+            <button class="ghost" id="tuneImport" type="button" title="A tune file of someone else: it becomes a tune of this car and goes into the form">Import…</button>
+            <input type="file" id="tuneImportFile" accept=".json,application/json" style="display:none">
         </div>
     </header>
     <div id="scroll">
@@ -181,6 +184,7 @@
                 </div>
                 <div class="row">
                     <div style="flex:1"><label>Suspension travel before the bump stop: <b id="travelLabel">9 cm</b></label><input type="range" id="travel" min="1" max="80" value="9" step="1" style="width:100%"></div>
+                    <div><label>&nbsp;</label><label class="check" title="No suspension: the wheels are fixed to the frame and the tyres are the only springs (a kart)"><input type="checkbox" id="unsprung"> No suspension (a kart)</label></div>
                 </div>
                 <div class="row">
                     <div><input type="number" id="wheelbase" step="0.01" value="2.7"><div class="hint">wheelbase (m)</div></div>

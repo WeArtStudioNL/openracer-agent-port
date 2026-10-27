@@ -1526,6 +1526,7 @@ function buildConfig(id) {
             weight_distribution: Math.min(0.9, Math.max(0.1, need("front", "The front weight") / 100)),
             cg_height: need("cgHeight", "The height of the centre of gravity"),
             suspension_travel: Math.max(0.01, (parseFloat($("travel").value) || 9) / 100),
+            unsprung: $("unsprung").checked,
             tire_diameter: need("tyre", "The tyre diameter"),
             drag_coefficient: need("drag", "The drag coefficient"),
             max_steer_deg: need("steer", "The steering lock")
@@ -1812,6 +1813,7 @@ function fill(car) {
     const c = car.chassis;
     set("mass", c.mass); set("front", +(c.weight_distribution * 100).toFixed(2)); set("cgHeight", c.cg_height);
     set("travel", Math.round((c.suspension_travel || 0.09) * 100)); $("travelLabel").textContent = $("travel").value + " cm";
+    $("unsprung").checked = !!c.unsprung;
     set("wheelbase", c.wheelbase); set("frontTrack", c.front_track); set("rearTrack", c.rear_track);
     set("tyre", c.tire_diameter); set("drag", c.drag_coefficient); set("steer", c.max_steer_deg);
     $("vehicleType").value = car.type === "motorcycle" ? "motorcycle" : "car";
@@ -2304,6 +2306,34 @@ $("setupSave").addEventListener("click", () => {
     try { saveTune(id, name); status("Tune " + name + " saved; the main menu asks which tune to drive."); }
     catch (error) { status("Could not save the tune: " + error.message); }
 });
+// a tune as a file, to share: Export (the tune that is chosen, or the car as the form has it), Import (a file becomes a tune of this car and goes into the form)
+$("tuneExport").addEventListener("click", () => {
+    const id = $("id").value.trim(), name = $("setupSelect").value;
+    if (!id) { status("Give the car an id first."); return; }
+    try {
+        const config = name ? OpenRacer.Setups.get(id, name) : (() => { const c = buildConfig(id); if (state.overrides && Object.keys(state.overrides).length) c.materials = JSON.parse(JSON.stringify(state.overrides)); return c; })();
+        if (!config) { status("The tune is not here any more."); return; }
+        OpenRacer.Setups.exportFile(id, name || ($("name").value.trim() || id) + " as in the editor", config);
+        status("Tune " + (name || "as in the editor") + " saved as a file (in your downloads).", "ok");
+    } catch (error) { status("Could not export the tune: " + error.message, "error"); }
+});
+$("tuneImport").addEventListener("click", () => $("tuneImportFile").click());
+$("tuneImportFile").addEventListener("change", async () => {
+    const file = $("tuneImportFile").files && $("tuneImportFile").files[0];
+    $("tuneImportFile").value = "";
+    const id = $("id").value.trim();
+    if (!file || !id) { if (!id) status("Give the car an id first."); return; }
+    const tune = OpenRacer.Setups.parseFile(await file.text());
+    if (tune instanceof Error) { status(tune.message, "error"); return; }
+    let name = window.prompt("The name of this tune" + (tune.car && tune.car !== id ? " (it was made for " + tune.car + ")" : ""), tune.name);
+    if (name === null) return;
+    name = name.trim().slice(0, 40) || tune.name;
+    OpenRacer.Setups.save(id, name, tune.config);
+    renderSetups();
+    $("setupSelect").value = name;
+    $("setupSelect").dispatchEvent(new Event("change"));
+    status("Tune " + name + " imported and loaded into the form" + (tune.car && tune.car !== id ? " (it was made for " + tune.car + ": mind the wheels and the parts)" : "") + ".", "ok");
+});
 $("setupDelete").addEventListener("click", () => {
     const id = $("id").value.trim(), name = $("setupSelect").value;
     if (!id || !name) return;
@@ -2527,6 +2557,12 @@ function benchFrame(now) {
     if (!bench.vehicle) return;                       // the script has ended the test
     if (bench.driving) driveFrame(dt);
     v.update(dt);
+    // the shell is being edited: the car is held where it is (something that pushes it, a tune that rolls, would take the nodes away from under the pointer); the shell itself goes on
+    if (softBodyEditor && softBodyEditor.holding && softBodyEditor.holding()) {
+        if (!bench.held) bench.held = { px: v.px, py: v.py, pz: v.pz, qx: v.qx, qy: v.qy, qz: v.qz, qw: v.qw };
+        v.px = bench.held.px; v.py = bench.held.py; v.pz = bench.held.pz; v.qx = bench.held.qx; v.qy = bench.held.qy; v.qz = bench.held.qz; v.qw = bench.held.qw;
+        v.vx = v.vy = v.vz = 0; v.wx = v.wy = v.wz = 0;
+    } else bench.held = null;
     v.getBodyPose(benchPose, benchQuat);
     const body = bench.body;
     body.quaternion.set(benchQuat.x, benchQuat.y, benchQuat.z, benchQuat.w);
@@ -2694,6 +2730,7 @@ $("testStop").addEventListener("click", stopBench);
 $("testDropHeight").addEventListener("input", () => { $("testDropLabel").textContent = parseFloat($("testDropHeight").value).toFixed(1) + " m"; });
 $("testTilt").addEventListener("input", () => { $("testTiltLabel").textContent = $("testTilt").value + "°"; });
 // the travel of the suspension: shown, and put on the car of the test bench at once
+$("unsprung").addEventListener("change", () => { if (bench.vehicle) bench.vehicle.retune({ unsprung: $("unsprung").checked }); syncTuningVisibility(); });
 $("travel").addEventListener("input", () => {
     $("travelLabel").textContent = $("travel").value + " cm";
     if (bench.vehicle) bench.vehicle.retune({ suspension_travel: parseFloat($("travel").value) / 100 });

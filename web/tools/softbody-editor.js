@@ -1726,5 +1726,7 @@ export function initSoftBody(api) {
         return sb.wallRun.peak > 3 && speed < 0.5 * sb.wallRun.peak;
     }
 
-    return { read, fill, frame, addWall, removeWall, wallHit, steerAhead, onStop, changed, debug: { sb, tc, rc, camera, controls, showSelection, surfaceAt, looseOf, renderer } };
+    // the car is held still while the shell is shown and nothing is run on it (no crash test, no push, no drive, no shake): the nodes stay under the pointer
+    function holding() { return !!(sb.shown && !sb.crash && !sb.pushMode && !bench.driving && !bench.script && !bench.shake); }
+    return { read, fill, frame, addWall, removeWall, wallHit, steerAhead, onStop, changed, holding, debug: { sb, tc, rc, camera, controls, showSelection, surfaceAt, looseOf, renderer } };
 }
