@@ -906,13 +906,14 @@ var MainMenu = (function() {
                     name.textContent = item.name ? item.name + " · " + item.track.name : item.track.name;
                     var meta = document.createElement("div");
                     meta.className = "meta";
-                    meta.textContent = (item.cars || []).slice(0, 3).join(", ") + ((item.cars || []).length > 3 ? " …" : "") + " · " + format(item.seconds) + " · " + new Date(item.created).toLocaleString() + " · " + size(item.bytes);
+                    meta.textContent = (item.cars || []).slice(0, 3).join(", ") + ((item.cars || []).length > 3 ? " …" : "") + " · " + format(item.seconds) + " · " + new Date(item.created).toLocaleString() + " · " + size(item.bytes) + (item.edit ? " · edited" : "");
                     text.appendChild(name);
                     text.appendChild(meta);
                     row.appendChild(text);
                     var watch = document.createElement("button");
                     watch.className = "primary";
                     watch.textContent = "Watch";
+                    if(item.edit) watch.title = "Play the edit that was made of this replay in the video editor (Edit goes on with it; the recording itself stays the source)";
                     watch.onclick = function() {
                         problem.textContent = "";
                         OpenRacer.Replay.library.open(item.id, carList, trackList).then(function(ids) {
@@ -932,7 +933,7 @@ var MainMenu = (function() {
                     edit.title = "Open the replay in the video editor: cut it, change the speed, place the camera";
                     edit.onclick = function() {
                         problem.textContent = "";
-                        OpenRacer.Replay.library.open(item.id, carList, trackList).then(function(ids) {
+                        OpenRacer.Replay.library.open(item.id, carList, trackList, { source: true }).then(function(ids) {
                             window.location.href = window.location.pathname + "?car=" + encodeURIComponent(ids.car) + "&track=" + encodeURIComponent(ids.track) + "&editor=1";
                         }).catch(function(error) { problem.textContent = error.message || "This replay could not be opened."; });
                     };

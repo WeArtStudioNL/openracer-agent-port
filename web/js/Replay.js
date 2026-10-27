@@ -1515,8 +1515,10 @@ OpenRacer.Replay = (function() {
         if(file.size > MAX_FILE) return Promise.reject(new Error("This file is too large to be a replay."));
         return file.arrayBuffer().then(function(buffer) { return api.openBuffer(buffer, carList, trackList); });
     };
-    api.openBuffer = function(buffer, carList, trackList) {
+    // extra: fields that go with the replay to the page that shows it (libraryId: the entry of Replays it came from; project: the clips and the camera track of the video editor)
+    api.openBuffer = function(buffer, carList, trackList, extra) {
         return parse(buffer).then(function(parsed) {
+            if(extra) for(var key in extra) parsed[key] = extra[key];
             var h = parsed.header;
             var has = function(list, id) { return list.some(function(item) { return item.id === id; }); };
             var missingCars = h.cars.filter(function(c) { return !has(carList, c.id); });
@@ -1595,6 +1597,7 @@ OpenRacer.Replay = (function() {
                     var tx = db.transaction(["library", "blobs"], "readwrite");
                     tx.objectStore("library").delete(id);
                     tx.objectStore("blobs").delete(id);
+                    tx.objectStore("blobs").delete(id + ":edit");
                     tx.oncomplete = function() { db.close(); resolve(); };
                     tx.onerror = function() { db.close(); reject(tx.error); };
                 });
@@ -1625,9 +1628,53 @@ OpenRacer.Replay = (function() {
                 setTimeout(function() { URL.revokeObjectURL(url); }, 30000);
             });
         },
-        // to watch: like opening a file (the ids of the car and the track for the address of the game)
-        open: function(id, carList, trackList) {
-            return api.library.bytes(id).then(function(bytes) { return api.openBuffer(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), carList, trackList); });
+        // one entry of the list
+        get: function(id) {
+            return database().then(function(db) {
+                return new Promise(function(resolve, reject) {
+                    var get = db.transaction("library").objectStore("library").get(id);
+                    get.onsuccess = function() { db.close(); resolve(get.result || null); };
+                    get.onerror = function() { db.close(); reject(get.error); };
+                });
+            });
+        },
+        // to watch: like opening a file (the ids of the car and the track for the address of the game). A replay with an edit (the video editor saved its clips with it) plays
+        // the edit; with { source: true } (Edit) the recording itself opens, with the project of the editor to go on with
+        open: function(id, carList, trackList, opts) {
+            var source = !!(opts && opts.source);
+            return api.library.get(id).then(function(meta) {
+                var key = !source && meta && meta.edit ? id + ":edit" : id;
+                return api.library.bytes(key).then(function(bytes) {
+                    var extra = { libraryId: id, project: source && meta ? (meta.project || null) : null, isEdit: key !== id };
+                    return api.openBuffer(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), carList, trackList, extra);
+                });
+            });
+        },
+        // the video editor saves its work with a replay: the project (the clips with their keys, the camera track) and the edit as it plays (editBytes, a baked replay).
+        // id: the entry of the list; null when the replay is not in the list yet (opened from the game): the recording that is loaded goes into the list first. Gives the id
+        saveProject: function(id, project, editBytes, editSeconds) {
+            var ensure = id ? Promise.resolve(id) : gzip(pack()).then(function(bytes) {
+                return libraryAdd(bytes, { created: new Date().toISOString(), track: { id: currentTrack.id, name: String(currentTrack.name || currentTrack.id) },
+                    cars: cars.map(function(entry) { return String(entry.object.name || entry.object.config.name || entry.object.config.id); }), seconds: (last() - first()) / RATE, bytes: bytes.length });
+            });
+            return ensure.then(function(theId) {
+                return database().then(function(db) {
+                    return new Promise(function(resolve, reject) {
+                        var tx = db.transaction(["library", "blobs"], "readwrite"), store = tx.objectStore("library");
+                        var get = store.get(theId);
+                        get.onsuccess = function() {
+                            var meta = get.result;
+                            if(!meta) { tx.abort(); reject(new Error("This replay is no longer in Replays.")); return; }
+                            meta.project = project; meta.edit = true; meta.editSeconds = editSeconds; meta.edited = new Date().toISOString();
+                            store.put(meta);
+                            tx.objectStore("blobs").put(editBytes, theId + ":edit");
+                        };
+                        tx.oncomplete = function() { db.close(); resolve(theId); };
+                        tx.onerror = function() { db.close(); reject(tx.error); };
+                        tx.onabort = function() { db.close(); reject(tx.error || new Error("The edit could not be kept (is the storage of the browser full?).")); };
+                    });
+                });
+            });
         }
     };
 
@@ -1685,6 +1732,9 @@ OpenRacer.Replay = (function() {
     api.load = function(parsed, objects) {
         var per = objects.length * STRIDE, n = parsed.header.samples;
         headerOf = parsed.header;
+        api.libraryId = parsed.libraryId || null;         // the entry of Replays this came from (the video editor saves its project there)
+        api.project = parsed.project || null;             // the clips and the camera track of the video editor, to go on with
+        api.isEdit = !!parsed.isEdit;
         cars = objects.map(function(object, i) { return { object: object, player: i === 0, soft: parsed.soft && parsed.soft[i] ? parsed.soft[i] : null, rider: parsed.rider && parsed.rider[i] ? parsed.rider[i] : null }; });
         gearLabels = parsed.header.gears;
         chunks = [];
