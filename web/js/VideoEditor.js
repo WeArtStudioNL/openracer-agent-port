@@ -656,7 +656,7 @@ OpenRacer.VideoEditor = (function () {
         // the fixed shot of the free camera: taken from the free camera as it is (Take camera), and the free camera can be put there again to move it (Go to shot)
         var freeBox = el(box, "span", "");
         freeBox.style.display = (clip.cam === "free") ? "" : "none";
-        button(freeBox, "Take camera", "The shot of this clip is the free camera as it is now (fly it with the Free camera button first; Parent to car makes the shot go with the car)", function () { takeFree(clip); touch(); });
+        button(freeBox, "Take camera", "The shot of this clip is the free camera as it is now (fly it with the Free camera button first; Parent to car makes the shot go with the car); the free camera is left, so that the clips show their own cameras", function () { takeFree(clip); touch(); });
         button(freeBox, "Go to shot", "Put the free camera where the shot of this clip is, to move it and take it again", function () {
             if (!clip.freeKey) { say("This clip has no shot yet: Take camera."); return; }
             if (!Replay.free.active) Replay.enterFree();
@@ -770,10 +770,13 @@ OpenRacer.VideoEditor = (function () {
         updateButtons();
     }
     // the fixed shot of a clip: a key of the camera track made from the free camera as it is now (t 0: it is applied on its own)
+    // (the free camera is left afterwards: while it is on, the program shows it in every clip; Go to shot turns it on again to move the shot)
     function takeFree(clip) {
-        if (!Replay.free.active) { Replay.enterFree(); state.finalPlaying = false; updateButtons(); }
+        if (!Replay.free.active) { Replay.enterFree(); state.finalPlaying = false; }
         clip.freeKey = OpenRacer.CameraTrack.fromFree(Replay.free, 0);
-        say("The shot of clip " + (state.clips.indexOf(clip) + 1) + " is the camera as it is now" + (clip.freeKey.parent ? " (it goes with the car)" : "") + ".");
+        Replay.leaveFree();
+        updateButtons();
+        say("The shot of clip " + (state.clips.indexOf(clip) + 1) + " is the camera as it was" + (clip.freeKey.parent ? " (it goes with the car)" : "") + ". Go to shot puts the free camera back on it.");
     }
     function keyHere() {
         if (!Replay.free.active) { Replay.enterFree(); state.finalPlaying = false; }
