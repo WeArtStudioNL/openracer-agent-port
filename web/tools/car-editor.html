@@ -115,6 +115,17 @@
                     </div>
                     <div class="buttons"><button id="guessWheels" class="small">Find the wheels by their names and places</button></div>
                 </div>
+                <div class="group">Rims and tyres from the wheel library</div>
+                <p class="sub">A rim or a tyre of <code>web/wheels/wheels.json</code> takes the place of the wheel parts of its axle (their middle is the hub). A tyre of the library brings its own shell (the rings and nodes of the tread, the inner shell, the carcass): the shell sliders of the Tuning card then do nothing for that axle.</p>
+                <div class="row">
+                    <div><label>Front rim</label><select id="libRimFront"><option value="">From the model</option></select></div>
+                    <div><label>Front tyre</label><select id="libTyreFront"><option value="">From the model</option></select></div>
+                </div>
+                <div class="row">
+                    <div><label>Rear rim</label><select id="libRimRear"><option value="">From the model</option></select></div>
+                    <div><label>Rear tyre</label><select id="libTyreRear"><option value="">From the model</option></select></div>
+                </div>
+                <div class="hint" id="libInfo"></div>
                 <div class="carOnly">
                 <div class="group">Steering wheel</div>
                 <div class="hint" id="steeringInfo">No model loaded.</div>
@@ -609,6 +620,7 @@
 <script src="../js/Wheel.js"></script>
 <script src="../js/Motorcycle.js"></script>
 <script src="../js/CarTuning.js"></script>
+<script src="../js/WheelLibrary.js"></script>
 <script src="../js/Smoke.js"></script>
 <script src="../js/Flames.js"></script>
 <script src="../js/Driver.js"></script>

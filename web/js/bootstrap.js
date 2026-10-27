@@ -48,6 +48,7 @@ var scripts = [
     "js/TrackEnvironment.js",
     "js/SuspensionRig.js",
     "js/PartsLibrary.js",
+    "js/WheelLibrary.js",
     "js/TextureBudget.js",
     "js/Chain.js",
     "js/CarLoader.js",

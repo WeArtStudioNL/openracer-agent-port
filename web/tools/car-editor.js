@@ -38,6 +38,7 @@ const state = {
     materials: [],          // the materials of the model
     overrides: {},          // changes to the materials: material name -> { field: value }
     nodes: [],              // the named nodes of the model
+    pendingLibrary: null,   // the rims and the tyres of the wheel library of a car that is loaded before the catalogue is (WheelLibrary.js)
     root: null,
     curve: [[0, 0], [300, 80], [1000, 180], [2000, 230], [3000, 250], [4000, 255], [5000, 250], [6000, 225], [7000, 170]],
     idEdited: false,
@@ -73,6 +74,11 @@ scene.add(arrow);
 const pivot = new THREE.Group(); // holds the model with the turn, scale and offset of the car
 scene.add(pivot);
 const helpers = new THREE.Group();
+const libPreview = new THREE.Group();                 // the rims and the tyres of the wheel library, drawn at the wheels of the model (WheelLibrary.js)
+libPreview.name = "wheel library preview";
+scene.add(libPreview);
+let libHidden = [];                                   // the wheel parts of the model that the preview stands in for
+const LIB_SELECTS = { front: { rim: "libRimFront", tyre: "libTyreFront" }, rear: { rim: "libRimRear", tyre: "libTyreRear" } };
 scene.add(helpers);
 const cameraMarkers = new THREE.Group(); // where the cameras of the game are
 scene.add(cameraMarkers);
@@ -688,6 +694,7 @@ function wheelMode() {
 
 function updateHelpers() {
     helpers.clear();
+    updateLibraryPreview();
     for (const slot of SLOTS) {
         const box = wheelMode() === "model" ? wheelBox(slot) : null;
         if (box) helpers.add(new THREE.Box3Helper(box, SLOT_COLORS[slot]));
@@ -1576,6 +1583,8 @@ function buildConfig(id) {
             config.wheels.nodes[slot] = names;
         }
     }
+    const library = libraryChoice();
+    if (library) config.wheels.library = library;                           // the rims and the tyres of the wheel library (WheelLibrary.js)
     if (exhaust.length) config.exhaust = exhaustConfig();
     if (suspensionEditor) Object.assign(config, suspensionEditor.read());          // the suspension and the driveline from the parts library
     const driverConfig = driverEditor && driverEditor.read();
@@ -1842,6 +1851,7 @@ function loadExisting() {
         const o = m.offset || [0, 0, 0];
         $("offsetX").value = o[0]; $("offsetY").value = o[1]; $("offsetZ").value = o[2];
         const wheels = car.wheels || { mode: "default" };
+        setLibraryChoice(wheels.library || null);
         document.querySelector("input[name=wheelMode][value=" + wheels.mode + "]").checked = true;
         $("wheelSelects").style.display = wheels.mode === "model" ? "" : "none";
         loadFromUrl("../" + m.file, m.file, car);
@@ -1910,6 +1920,89 @@ document.querySelectorAll("[data-turn]").forEach((button) => button.addEventList
 }));
 $("fit").addEventListener("click", fit);
 $("guessWheels").addEventListener("click", guessWheels);
+
+// ---- the wheel library (WheelLibrary.js, web/wheels/wheels.json): a rim and a tyre per axle in place of the wheel parts of the model
+OpenRacer.WheelLibrary.base = "../";
+OpenRacer.WheelLibrary.load().then(() => {
+    for (const axle of ["front", "rear"]) {
+        for (const kind of ["rim", "tyre"]) {
+            const select = $(LIB_SELECTS[axle][kind]);
+            const list = kind === "rim" ? OpenRacer.WheelLibrary.rims() : OpenRacer.WheelLibrary.tyres();
+            for (const entry of list) {
+                const option = document.createElement("option");
+                option.value = entry.id;
+                option.textContent = entry.name || entry.id;
+                select.appendChild(option);
+            }
+        }
+    }
+    if (!OpenRacer.WheelLibrary.rims().length && !OpenRacer.WheelLibrary.tyres().length) $("libInfo").textContent = "No wheel library found (web/wheels/wheels.json): tools/make-wheels.py writes a set of examples.";
+    if (state.pendingLibrary) setLibraryChoice(state.pendingLibrary);
+    updateLibraryPreview();
+});
+// what is chosen: { front: { rim, tyre }, rear: { rim, tyre } } without the empty ones, or null
+function libraryChoice() {
+    const out = {};
+    for (const axle of ["front", "rear"]) {
+        const entry = {};
+        for (const kind of ["rim", "tyre"]) { const v = $(LIB_SELECTS[axle][kind]).value; if (v) entry[kind] = v; }
+        if (Object.keys(entry).length) out[axle] = entry;
+    }
+    return Object.keys(out).length ? out : null;
+}
+function setLibraryChoice(library) {
+    state.pendingLibrary = library;
+    const cfg = { wheels: { library: library || {} } };
+    for (const axle of ["front", "rear"]) {
+        const c = OpenRacer.WheelLibrary.choiceOf(cfg, axle);
+        for (const kind of ["rim", "tyre"]) {
+            const select = $(LIB_SELECTS[axle][kind]);
+            select.value = [...select.options].some((o) => o.value === c[kind]) ? c[kind] : "";
+        }
+    }
+    syncTuningVisibility();
+}
+// the preview: the wheel parts of the model of an axle on the library are hidden and the rim and the tyre of the library are drawn at their middle (or, without wheel parts, where car.json puts the wheels)
+function updateLibraryPreview() {
+    libHidden.forEach((p) => { p.visible = true; });
+    libHidden = [];
+    libPreview.clear();
+    const library = libraryChoice();
+    const lines = [];
+    if (!library) { $("libInfo").textContent = ""; return; }
+    const cfg = { type: $("vehicleType") ? $("vehicleType").value : "car", wheels: { library } };
+    OpenRacer.WheelLibrary.preload(cfg, undefined, () => {
+        if (JSON.stringify(libraryChoice()) !== JSON.stringify(library)) return;          // (changed again while the files loaded)
+        libHidden.forEach((p) => { p.visible = true; });
+        libHidden = [];
+        libPreview.clear();
+        const bike = cfg.type === "motorcycle";
+        for (const slot of SLOTS) {
+            if (bike && (slot === "FR" || slot === "RR")) continue;
+            const wheel = OpenRacer.WheelLibrary.wheelFor(cfg, slot);
+            if (!wheel) continue;
+            let centre = null;
+            if (wheelMode() === "model") {
+                const box = wheelBox(slot);
+                if (box) { centre = box.getCenter(new THREE.Vector3()); wheelParts(slot).forEach((p) => { p.visible = false; libHidden.push(p); }); }
+            }
+            if (!centre) {
+                const front = slot[0] === "F", left = slot[1] === "L", track = (front ? num("frontTrack") : num("rearTrack")) || 1.5;
+                centre = new THREE.Vector3((bike ? 0 : (left ? 1 : -1) * track / 2), 0, (front ? 1 : -1) * ((num("wheelbase") || 2.6) / 2));
+            }
+            if (wheel.offset) centre.x += (slot[1] === "L" ? 1 : -1) * wheel.offset;
+            wheel.object.position.copy(centre);
+            libPreview.add(wheel.object);
+        }
+        for (const axle of ["front", "rear"]) {
+            const shell = OpenRacer.WheelLibrary.shellOf(cfg, axle);
+            if (shell) lines.push(axle + ": tyre " + (shell.diameter * 1000).toFixed(0) + " mm across, " + (shell.width * 1000).toFixed(0) + " mm wide, shell " + (shell.rings || 3) + " rings × " + (shell.segments || 36) + " nodes, inner shell " + Math.round((shell.inner_ratio || 0.62) * 100) + " %, carcass " + (shell.carcass || 0) + " mm");
+        }
+        $("libInfo").style.whiteSpace = "pre-line";
+        $("libInfo").textContent = lines.join("\n");
+    });
+}
+Object.values(LIB_SELECTS).forEach((axle) => Object.values(axle).forEach((id) => $(id).addEventListener("change", () => { state.pendingLibrary = null; updateLibraryPreview(); syncTuningVisibility(); })));
 for (const slot of SLOTS) $("w" + slot).addEventListener("change", updateHelpers);
 document.querySelectorAll("input[name=wheelMode]").forEach((radio) => radio.addEventListener("change", () => {
     $("wheelSelects").style.display = wheelMode() === "model" ? "" : "none";
@@ -2171,7 +2264,8 @@ $("setupDelete").addEventListener("click", () => {
 
 // the settings that cannot do anything with the others as they are (the gearbox, the differential, the drive, the turbo) are hidden, as in the tuning menu of the game (CarTuning.visible)
 function syncTuningVisibility() {
-    const v = Object.assign({}, tuning, { drive: $("drive").value, diff: $("diff").value, center_diff: $("centerDiff").value, gearbox: $("gearbox").value });
+    const v = Object.assign({}, tuning, { drive: $("drive").value, diff: $("diff").value, center_diff: $("centerDiff").value, gearbox: $("gearbox").value },
+        { rim_front: $("libRimFront").value, tyre_front: $("libTyreFront").value, rim_rear: $("libRimRear").value, tyre_rear: $("libTyreRear").value });
     document.querySelectorAll("#tuningBox [data-tune-key], #tuningCard [data-tune-key], [data-tune-key]").forEach((cell) => { cell.style.display = OpenRacer.CarTuning.visible(cell.dataset.tuneKey, v) ? "" : "none"; });
     document.querySelectorAll("[data-tune-key]").forEach((cell) => { const row = cell.parentNode; if (row && row.classList.contains("row")) row.style.display = [...row.children].some((c) => c.style.display !== "none") ? "" : "none"; });
     document.querySelectorAll("[data-tune-feature]").forEach((wrap) => { wrap.style.display = OpenRacer.CarTuning.visibleFeature(wrap.dataset.tuneFeature, v) ? "" : "none"; });

@@ -188,6 +188,9 @@ OpenRacer.Car = function( config, domElement ) {
         tobj.chain = model.chain || null;         // the drive chain of a motorcycle (Chain.js)   // the swingarm of a motorcycle, which turns with the rear wheel (CarLoader.js)
         if(OpenRacer.setForkGeometry) OpenRacer.setForkGeometry(tobj.vehicle, model, config);
         tobj.followModelWheels(model.measured);
+        // a tyre of the wheel library brings its own shell (WheelLibrary.js): the wheel of the physics takes it over the car's tyres.shell (Vehicle.tyreShellOf)
+        var specs = model.tyreSpecs || {};
+        for(var si = 0; si < tobj.vehicle.wheels.length; si++) { var vw = tobj.vehicle.wheels[si]; vw.tyreSpec = specs[vw.name] || (vw.name === "FR" && specs.FL) || (vw.name === "RR" && specs.RL) || null; }
         tobj.body.add(model.tilt);
         scene.add(tobj.body);
         shadowLight.target = tobj.body;

@@ -27,7 +27,8 @@
  *                        model after that is the height of the wheel axles, in the middle between the axles.
  *                        The wheels are nodes of the model (wheels.nodes: for each wheel the names of the nodes that
  *                        belong to it), which are taken out of the body so that they can steer and spin; or, without
- *                        such nodes, the wheel of the original demo is used four times.
+ *                        such nodes, the wheel of the original demo is used four times. A rim or a tyre of the wheel library (WheelLibrary.js, "wheels.library")
+ *                        takes the place of the wheel parts of its axle, at their middle (or at the wheelbase and the tracks of car.json without wheel parts).
  *
  *   The result: { tilt: the object for the body (it pitches and rolls with the car), wheels: four objects in the
  *   order of Vehicle.js (front right, front left, rear left, rear right), bodyLift: how far the origin of the body
@@ -189,9 +190,16 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
 
         var takenAt = {}, takenBy = {};   // the parts that the slots have taken (by name): where they were, and the chain that holds them
         var measured = null; // the centres and the size of the wheels of the model, in the space of the body
-        if(complete) {
+        var WL = OpenRacer.WheelLibrary, tyreSpecs = {};     // the rims and the tyres of the wheel library (WheelLibrary.js), and the shell of a library tyre per slot
+        var libraryOnly = !!(WL && WL.uses(config) && !complete);          // (no wheel parts in the model: the wheels of the library stand where car.json puts the wheels)
+        if(complete || libraryOnly) {
             measured = { centres: {}, diameter: 0 };
+            if(libraryOnly) { nodes = { FR: [], FL: [], RL: [], RR: [] }; if(config.wheels && config.wheels.mode === "model") console.warn("CarLoader: not every wheel has parts of the model; the wheels of the library stand at the wheelbase and the tracks of car.json"); }
+            var ch = config.chassis || {}, hubOf = { FR: [-(ch.front_track || 1.5) / 2, 0, (ch.wheelbase || 2.6) / 2], FL: [(ch.front_track || 1.5) / 2, 0, (ch.wheelbase || 2.6) / 2],
+                RL: [(ch.rear_track || 1.5) / 2, 0, -(ch.wheelbase || 2.6) / 2], RR: [-(ch.rear_track || 1.5) / 2, 0, -(ch.wheelbase || 2.6) / 2] };
             SLOTS.forEach(function (slot) {
+                var libWheel = WL ? WL.wheelFor(config, slot) : null;
+                var ghost = libraryOnly && config.type === "motorcycle" && (slot === "FR" || slot === "RR");      // (a motorcycle: one wheel at each end, the other slot is a dot)
                 var parts = nodes[slot].map(function (name) { return root.getObjectByName(name); }).filter(Boolean);
                 // a part that is inside another part goes with it
                 parts = parts.filter(function (part) {
@@ -204,10 +212,18 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
                 if(!parts.length && again.length) {
                     box.setFromCenterAndSize(takenAt[again[0]], new THREE.Vector3(0.001, 0.001, 0.001));
                     sharesWith = takenBy[again[0]] || null;
+                    libWheel = null;                                             // (a motorcycle: the slot shares the wheel of an earlier slot)
                 } else {
-                    parts.forEach(function (part) { box.expandByObject(part); });
+                    if(libraryOnly) { box.setFromCenterAndSize(new THREE.Vector3(ghost ? 0 : hubOf[slot][0], hubOf[slot][1], hubOf[slot][2]), new THREE.Vector3(0.001, 0.001, 0.001)); if(ghost) libWheel = null; }
+                    else parts.forEach(function (part) { box.expandByObject(part); });
                     var middle = box.getCenter(new THREE.Vector3());
                     nodes[slot].forEach(function (name) { takenAt[name] = middle; });
+                    // a rim or a tyre of the library: it takes the place of the parts of the model (their middle is the hub, moved out by the offset of the rim), at its own size
+                    if(libWheel) {
+                        if(libWheel.offset) middle.x += (slot === "FL" || slot === "RL" ? 1 : -1) * libWheel.offset;
+                        box.setFromCenterAndSize(middle, new THREE.Vector3(Math.max(0.001, libWheel.width), Math.max(0.001, libWheel.diameter), Math.max(0.001, libWheel.diameter)));
+                        if(libWheel.shell) tyreSpecs[slot] = libWheel.shell;
+                    }
                 }
                 measured.centres[slot] = box.getCenter(new THREE.Vector3());
                 (measured.sizes = measured.sizes || []).push(box.getSize(new THREE.Vector3()).y);
@@ -217,7 +233,8 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
                 space.add(chain.object);
                 chain.object.updateMatrixWorld(true);
                 // attach keeps the place of a part in the world: it ends up around the middle of the wheel
-                parts.forEach(function (part) { chain.spin.attach(part); });
+                if(libWheel) { parts.forEach(function (part) { if(part.parent) part.parent.remove(part); }); chain.spin.add(libWheel.object); }
+                else parts.forEach(function (part) { chain.spin.attach(part); });
                 nodes[slot].forEach(function (name) { if(!takenBy[name]) takenBy[name] = chain; });
                 // the brake caliper of this wheel (a part called brake_caliper_FL or the like, not a wheel part): it goes with the
                 // wheel and steers with it, but it does not spin, so it hangs on the steering link of the chain. On a motorcycle the wheel of this slot was taken by an
@@ -313,7 +330,7 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
             var chain = OpenRacer.Chain ? OpenRacer.Chain.find(root, space, tilt, wheelObjects) : null;      // the drive chain, from one link of the model (Chain.js)
             var swingarm = head ? findSwingarm(root, space, measured) : null;
             if(swingarm) swingarm.shock = findRearShock(root, space, tilt, swingarm);                             // the rear shock between the frame and the swingarm
-            onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1, steeringWheel: steering, measured: measured, rig: rig, head: head, swingarm: swingarm, chain: chain });
+            onLoad({ tilt: tilt, wheels: wheelObjects, bodyLift: 1, steeringWheel: steering, measured: measured, rig: rig, head: head, swingarm: swingarm, chain: chain, tyreSpecs: tyreSpecs });
         }
     }
 
@@ -451,8 +468,10 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
         } else if(model.type === "gltf") gltf();
         else legacy();
     };
-    // the loose parts of the suspension and the driveline first, when the car has them (PartsLibrary.js)
-    if(OpenRacer.PartsLibrary) OpenRacer.PartsLibrary.preload(config, OpenRacer.Garage ? OpenRacer.Garage.manager(config) : undefined, start); else start();
+    // the loose parts of the suspension and the driveline first, when the car has them (PartsLibrary.js), and the rims and the tyres of the wheel library (WheelLibrary.js)
+    var manager = OpenRacer.Garage ? OpenRacer.Garage.manager(config) : undefined;
+    var afterParts = function () { if(OpenRacer.WheelLibrary) OpenRacer.WheelLibrary.preload(config, manager, start); else start(); };
+    if(OpenRacer.PartsLibrary) OpenRacer.PartsLibrary.preload(config, manager, afterParts); else afterParts();
 };
 
 // The swingarm of a motorcycle: a part called swingarm (or swing_arm, rear_arm) turns about its own origin, the pivot on the frame, as the rear wheel goes up and down: the wheel is

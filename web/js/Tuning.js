@@ -39,7 +39,7 @@ var Tuning = (function() {
     // ---- the car follows the values
 
     var rebuildSig = null, rebuildTimer = null, lastCurve = null;      // what the model of the car is built from, as it was last applied; the torque curve as last applied
-    function builtFrom(c) { return JSON.stringify([c.suspension, c.driveline, c.softbody, c.dimensions, c.steering_wheel && c.steering_wheel.degrees]); }
+    function builtFrom(c) { return JSON.stringify([c.suspension, c.driveline, c.softbody, c.dimensions, c.steering_wheel && c.steering_wheel.degrees, c.wheels && c.wheels.library]); }
     function apply() {
         var v = values;
         if(v.width > 0 && v.height > 0) car.frontal_area = v.width * v.height * 0.85;
@@ -58,7 +58,7 @@ var Tuning = (function() {
         var sig = builtFrom(tuned);
         if(rebuildSig !== null && sig !== rebuildSig && car.rebuild) {
             clearTimeout(rebuildTimer);
-            rebuildTimer = setTimeout(function() { car.rebuild(tunedConfig()); message("The car is built again (the suspension, the driveline, the soft body, the size)."); }, 500);
+            rebuildTimer = setTimeout(function() { car.rebuild(tunedConfig()); message("The car is built again (the suspension, the driveline, the wheels, the soft body, the size)."); }, 500);
         }
         rebuildSig = sig;
         car.mass = v.mass;
@@ -264,10 +264,16 @@ var Tuning = (function() {
         engine_place: ["Engine placement", [["front", "Front"], ["mid", "Mid"], ["rear", "Rear"]]],
         tc_lockup: ["Torque converter: lock-up clutch", [["on", "On"], ["off", "Off"]]],
         sb_enabled: ["The car dents (the shell of nodes)", [["on", "On"], ["off", "Off (a rigid body; the car is built again)"]]],
+        rim_front: ["Rim at the front (the wheel library; the car is built again)", function() { return libraryList("rims"); }],
+        tyre_front: ["Tyre at the front (it brings its own shell)", function() { return libraryList("tyres"); }],
+        rim_rear: ["Rim at the rear", function() { return libraryList("rims"); }],
+        tyre_rear: ["Tyre at the rear", function() { return libraryList("tyres"); }],
         sim_layout: ["Engine layout (the sound)", function() { var L = OpenRacer.engineSimLayouts || {}; return Object.keys(L).map(function(id) { return [id, L[id].label || id]; }); }],
         sim_ir: ["Exhaust of the sound", function() { return (OpenRacer.engineSimImpulseResponses || []).map(function(ir) { return [ir.id, ir.label || ir.id]; }); }]
     };
     function partsTypes() { var T = OpenRacer.PartsLibrary && OpenRacer.PartsLibrary.TYPES || {}; return Object.keys(T).map(function(id) { return [id, T[id].label || id]; }); }
+    // the rims or the tyres of the wheel library (WheelLibrary.js; wheels/wheels.json), with "the wheel of the model" first
+    function libraryList(kind) { var L = OpenRacer.WheelLibrary, list = L ? L[kind]() : []; return [["", kind === "rims" ? "From the model" : "From the model (tyres.shell of the car)"]].concat(list.map(function(e) { return [e.id, e.name || e.id]; })); }
 
     function selectRow(key) {
         var item = document.createElement("div");
@@ -461,10 +467,21 @@ var Tuning = (function() {
     // The configuration of the car with the tuning in it
     function tunedConfig() { return OpenRacer.CarTuning.toConfig(config, values); }
 
+    // the lists that are made when the menu is built can grow after it (the wheel library loads with the car): made again when the menu opens
+    function refreshSelectLists() {
+        controls.forEach(function(c) {
+            if(!c.select || typeof SELECTS[c.key][1] !== "function") return;
+            var options = SELECTS[c.key][1]();
+            var html = options.map(function(o) { return "<option value=\"" + o[0] + "\">" + o[1] + "</option>"; }).join("");
+            if(html !== c.select.innerHTML) { var was = c.select.value; c.select.innerHTML = html; c.select.value = was; }
+        });
+    }
+
     function setVisible(show) {
         visible = show;
         panel.style.display = show ? "block" : "none";
         if(show) {
+            refreshSelectLists();
             refresh();
             message("");
         } else if(document.activeElement && document.activeElement.blur) {
@@ -480,7 +497,7 @@ var Tuning = (function() {
         base = fromConfig(config);
         values = clone(base);
         load();
-        rebuildSig = builtFrom(OpenRacer.CarTuning.toConfig(config, values));      // (what the car is built with now: a change from here builds it again)
+        rebuildSig = builtFrom(OpenRacer.CarTuning.toConfig(config, base));        // (what the car is built with now, the car as loaded: a tuning that was kept with another suspension, other wheels or another soft body builds it again, below in apply)
         lastCurve = config.engine && config.engine.torque_curve ? clone(config.engine.torque_curve) : null;
         controls = [];
         if(panel) panel.parentNode.removeChild(panel);

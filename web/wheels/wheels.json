@@ -1,0 +1,127 @@
+{
+  "rims": [
+    {
+      "id": "steel-16",
+      "name": "Steel 16\"",
+      "file": "rims/steel-16.glb"
+    },
+    {
+      "id": "alloy-17",
+      "name": "Alloy 17\", ten spokes",
+      "file": "rims/alloy-17.glb"
+    },
+    {
+      "id": "alloy-18",
+      "name": "Alloy 18\", five spokes",
+      "file": "rims/alloy-18.glb"
+    },
+    {
+      "id": "black-18",
+      "name": "Black alloy 18\", five spokes",
+      "file": "rims/black-18.glb"
+    },
+    {
+      "id": "beadlock-17",
+      "name": "Beadlock 17\" (off-road)",
+      "file": "rims/beadlock-17.glb"
+    },
+    {
+      "id": "moto-17",
+      "name": "Motorcycle 17\", five spokes",
+      "file": "rims/moto-17.glb"
+    }
+  ],
+  "tyres": [
+    {
+      "id": "road-205-55-16",
+      "name": "Road 205/55 R16",
+      "file": "tyres/road-205-55-16.glb",
+      "width": 0.205,
+      "diameter": 0.6319,
+      "shell": {
+        "rings": 3,
+        "segments": 36,
+        "inner_ratio": 0.643,
+        "carcass": 0
+      }
+    },
+    {
+      "id": "sport-245-40-18",
+      "name": "Sport 245/40 R18",
+      "file": "tyres/sport-245-40-18.glb",
+      "width": 0.245,
+      "diameter": 0.6532,
+      "shell": {
+        "rings": 3,
+        "segments": 36,
+        "inner_ratio": 0.7,
+        "carcass": 0
+      }
+    },
+    {
+      "id": "semi-slick-265-35-18",
+      "name": "Semi-slick 265/35 R18",
+      "file": "tyres/semi-slick-265-35-18.glb",
+      "width": 0.265,
+      "diameter": 0.6427,
+      "shell": {
+        "rings": 4,
+        "segments": 24,
+        "inner_ratio": 0.711,
+        "carcass": 0
+      }
+    },
+    {
+      "id": "slick-300-660-18",
+      "name": "Slick 300/660 R18",
+      "file": "tyres/slick-300-660-18.glb",
+      "width": 0.3,
+      "diameter": 0.66,
+      "shell": {
+        "rings": 4,
+        "segments": 10,
+        "inner_ratio": 0.693,
+        "carcass": 0
+      }
+    },
+    {
+      "id": "offroad-35-12.5-17",
+      "name": "Off-road 35x12.5 R17",
+      "file": "tyres/offroad-35-12.5-17.glb",
+      "width": 0.3175,
+      "diameter": 0.889,
+      "shell": {
+        "rings": 4,
+        "segments": 20,
+        "inner_ratio": 0.486,
+        "carcass": 3
+      }
+    },
+    {
+      "id": "moto-120-70-17",
+      "name": "Motorcycle front 120/70 R17",
+      "file": "tyres/moto-120-70-17.glb",
+      "width": 0.12,
+      "diameter": 0.5998,
+      "shell": {
+        "rings": 5,
+        "segments": 72,
+        "inner_ratio": 0.72,
+        "carcass": 0
+      }
+    },
+    {
+      "id": "moto-180-55-17",
+      "name": "Motorcycle rear 180/55 R17",
+      "file": "tyres/moto-180-55-17.glb",
+      "width": 0.18,
+      "diameter": 0.6298,
+      "shell": {
+        "rings": 4,
+        "segments": 28,
+        "inner_ratio": 0.686,
+        "carcass": 0
+      }
+    }
+  ]
+}

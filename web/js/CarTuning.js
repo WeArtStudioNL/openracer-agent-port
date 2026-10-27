@@ -35,6 +35,11 @@ OpenRacer.CarTuning = (function () {
         { name: "Tyres", items: [
             ["compound", "Tyre compound", "", 0, 0, 0],
             ["tyre_damage", "Tyre damage", "", 0, 0, 0],
+            // the rims and the tyres of the wheel library (WheelLibrary.js; selects: the car is built again). A tyre of the library brings its own shell: the shell sliders go
+            ["rim_front", "Rim at the front (the wheel library)", "", 0, 0, 0],
+            ["tyre_front", "Tyre at the front (the wheel library; it brings its own shell)", "", 0, 0, 0],
+            ["rim_rear", "Rim at the rear", "", 0, 0, 0],
+            ["tyre_rear", "Tyre at the rear", "", 0, 0, 0],
             ["tyre_width", "Tyre: width of the tread (0: from the wheel)", "cm", 0, 60, 1],
             ["tyre_rings", "Tyre: rings of nodes across the tread", "", 1, 5, 1],
             ["tyre_segments", "Tyre: nodes round the wheel (the sides of the tyre: 4 is a square, 6 a hexagon; fewer is cheaper, the road is still felt between the nodes)", "", 4, 72, 1],
@@ -197,6 +202,8 @@ OpenRacer.CarTuning = (function () {
             case "turbo_intercooler": case "turbo_efficiency": return v.turbo_boost > 0;
             case "tc_lockup": return g === "torque-converter";
             case "sb_max_nodes": case "sb_wheel_strength": return v.sb_enabled !== "off";
+            // the shell of a tyre of the wheel library is the tyre's own: the sliders only work for an axle on the tyres of the model
+            case "tyre_width": case "tyre_rings": case "tyre_segments": case "tyre_inner_ratio": case "tyre_carcass": return !(v.tyre_front && v.tyre_rear);
             case "bike_max_lean": case "bike_fast_lean": case "bike_rake": case "bike_rider_mass": case "bike_hang_off": case "bike_max_lateral_g": case "bike_balance": case "bike_fork_dive": return v.vehicle_type === "motorcycle";
             default: return true;
         }
@@ -252,6 +259,9 @@ OpenRacer.CarTuning = (function () {
     var V100 = (100 / 3.6) * (100 / 3.6); // (m/s)^2 at 100 km/h: the downforce in the menu is the force at that speed
 
     // the values of a car configuration, in the units of the menu
+    // what car.json chose from the wheel library for an axle ({ rim, tyre } ids, "" for none; WheelLibrary.js)
+    function libChoice(c, axle) { return OpenRacer.WheelLibrary ? OpenRacer.WheelLibrary.choiceOf(c, axle) : { rim: "", tyre: "" }; }
+
     function fromConfig(c) {
         var ch = c.chassis, dt = c.drivetrain, en = c.engine || {}, tyres = c.tyres || {}, assists = c.assists || {};
         var v = {
@@ -265,6 +275,7 @@ OpenRacer.CarTuning = (function () {
             damping_rear: (ch.damping_rear !== undefined ? ch.damping_rear : 0.35) * 100,
             compound: tyres.compound || "road",
             tyre_damage: tyres.damage ? "on" : "off",
+            rim_front: libChoice(c, "front").rim, tyre_front: libChoice(c, "front").tyre, rim_rear: libChoice(c, "rear").rim, tyre_rear: libChoice(c, "rear").tyre,
             // the rest of the car editor (the tuning menu changes these too; Tuning.js builds the car again for what the model is built from)
             vehicle_type: c.type === "motorcycle" ? "motorcycle" : "car",
             susp_front: (c.suspension && c.suspension.front && c.suspension.front.type) || "model",
@@ -555,6 +566,18 @@ OpenRacer.CarTuning = (function () {
             ["front", "rear"].forEach(function (axle) { var t = v["susp_" + axle]; if(t) c.suspension[axle] = Object.assign({}, c.suspension[axle] || {}, { type: t }); });
         }
         if(v.engine_place) c.driveline = Object.assign({}, c.driveline || {}, { engine: v.engine_place });
+        // the rims and the tyres of the wheel library (none chosen: the wheels of the model)
+        if(v.rim_front !== undefined || v.tyre_front !== undefined || v.rim_rear !== undefined || v.tyre_rear !== undefined) {
+            var library = {};
+            ["front", "rear"].forEach(function (axle) {
+                var r = v["rim_" + axle] || "", t = v["tyre_" + axle] || "", entry = {};
+                if(r) entry.rim = r;
+                if(t) entry.tyre = t;
+                if(r || t) library[axle] = entry;
+            });
+            c.wheels = Object.assign({}, c.wheels || { mode: "default" });
+            if(Object.keys(library).length) c.wheels.library = library; else delete c.wheels.library;
+        }
         if(v.efficiency !== undefined) c.drivetrain.efficiency = v.efficiency;
         if(v.tc_lockup !== undefined) c.drivetrain.tc_lockup = v.tc_lockup !== "off";
         if(v.length > 0 && v.width > 0 && v.height > 0) c.dimensions = Object.assign({}, c.dimensions || {}, { length: v.length, width: v.width, height: v.height });

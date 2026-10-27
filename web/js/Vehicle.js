@@ -164,6 +164,13 @@ OpenRacer.Vehicle = function (parameters, input) {
 
     this.tyreDamage = false;          // a hard hit can puncture a tyre: it leaks and loses its pressure (applyPressure, the grip and the stiffness follow)
     this.tyreShell = { width: 0, rings: 3, segments: 36, inner_ratio: 0.62, carcass: 0 };      // the tread of the tyre (TyreShell.js): rings across the tread, nodes round the wheel, the width (m, 0: from the wheel), the inner shell and the carcass
+    // the shell of one wheel: its own (wheel.tyreSpec, a tyre of the wheel library: WheelLibrary.js, set by Car.js) where it says, the shared one for the rest
+    this.tyreShellOf = function (w) {
+        var s = this.tyreShell, t = w.tyreSpec;
+        if(!t) return s;
+        return { width: t.width > 0 ? t.width : s.width, rings: t.rings > 0 ? t.rings : s.rings, segments: t.segments > 0 ? t.segments : s.segments,
+            inner_ratio: t.inner_ratio > 0 ? Math.max(0.3, Math.min(0.9, t.inner_ratio)) : s.inner_ratio, carcass: t.carcass !== undefined && t.carcass !== null ? Math.max(0, t.carcass) : s.carcass };
+    };
     this.tyreStiffX = 20;              // the stiffness of the tyre of nodes along and across (per N of load)
     this.tyreStiffY = 18;
     this.tcAllowance = 1;             // tuning: how much wheel spin the traction control allows, as a factor
@@ -570,7 +577,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.tyre_width !== undefined) this.tyreShell.width = Math.max(0, t.tyre_width) / 100;
         if(t.tyre_rings !== undefined) this.tyreShell.rings = t.tyre_rings;
         if(t.tyre_segments !== undefined) this.tyreShell.segments = t.tyre_segments;
-        if(t.tyre_width !== undefined || t.tyre_rings !== undefined || t.tyre_segments !== undefined) for(var tb = 0; tb < 4; tb++) if(this.wheels[tb].tyreBody) { this.wheels[tb].tyreBody.width = this.tyreShell.width; this.wheels[tb].tyreBody.rings = this.tyreShell.rings; this.wheels[tb].tyreBody.segments = this.tyreShell.segments; }
+        if(t.tyre_width !== undefined || t.tyre_rings !== undefined || t.tyre_segments !== undefined) for(var tb = 0; tb < 4; tb++) if(this.wheels[tb].tyreBody) { var tsb = this.tyreShellOf(this.wheels[tb]); this.wheels[tb].tyreBody.width = tsb.width; this.wheels[tb].tyreBody.rings = tsb.rings; this.wheels[tb].tyreBody.segments = tsb.segments; }
         if(t.tyre_damage !== undefined) { this.tyreDamage = !!t.tyre_damage; if(!this.tyreDamage) this.repairTyres(); }
         if(t.tyre_inner_ratio !== undefined) this.tyreShell.inner_ratio = Math.max(0.3, Math.min(0.9, t.tyre_inner_ratio));
         if(t.tyre_carcass !== undefined) this.tyreShell.carcass = Math.max(0, t.tyre_carcass);
@@ -1607,8 +1614,9 @@ OpenRacer.Vehicle = function (parameters, input) {
             w.cylActive = false;
             if(cyl) {
                 var body = w.tyreBody || (w.tyreBody = new OpenRacer.TyreShell(w));
-                { body.isShell = true; body.round = !!self.soloWheels; body.tyreMass = Math.max(1.5, 0.3 * self.unsprungMass); body.pressure = Math.max(0.15, (w.front ? self.pressureFront : self.pressureRear) - (w.pressureLoss || 0)); body.innerRatio = self.tyreShell.inner_ratio; body.carcass = self.tyreShell.carcass; }
-                body.rings = self.tyreShell.rings; body.segments = self.tyreShell.segments; body.width = self.tyreShell.width;
+                var shellOf = self.tyreShellOf(w);
+                { body.isShell = true; body.round = !!self.soloWheels; body.tyreMass = Math.max(1.5, 0.3 * self.unsprungMass); body.pressure = Math.max(0.15, (w.front ? self.pressureFront : self.pressureRear) - (w.pressureLoss || 0)); body.innerRatio = shellOf.inner_ratio; body.carcass = shellOf.carcass; }
+                body.rings = shellOf.rings; body.segments = shellOf.segments; body.width = shellOf.width;
                 body.stiffX = self.tyreStiffX; body.stiffY = self.tyreStiffY * self.corneringScale * (w.stiffnessBias || 1) * (w.pressureCorner || 1);
                 body.verticalStiffness = w.tyreRate || self.tyreRate; body.verticalDamping = self.tyreDamping; body.staticLoad = w.staticLoad || (self.mass * G / 4);
                 // the axes of the wheel: up (the suspension), forward in its plane (turned by the steering), and to the left
