@@ -2063,7 +2063,7 @@ $("newBike").addEventListener("click", () => {
 $("save").addEventListener("click", () => {
     const name = $("setupSelect").value, id = $("id").value.trim();
     if (!name) { save(); return; }
-    try { saveTune(id, name); $("setupSelect").value = name; updateTuneButtons(); status("Tune " + name + " saved (car.json is not written; choose The car as made and Save the car for that)."); }
+    try { saveTune(id, name); $("setupSelect").value = name; updateTuneButtons(); status("Tune " + name + " saved (car.json is not written; choose Default and Save the car for that)."); }
     catch (error) { status("Could not save the tune: " + error.message); }
 });
 $("delete").addEventListener("click", deleteCar);
@@ -2242,7 +2242,7 @@ function renderSetups() {
     const id = $("id").value.trim(), select = $("setupSelect");
     const names = id && OpenRacer.Setups ? OpenRacer.Setups.names(id) : [];
     select.innerHTML = "";
-    [["", "The car as made"]].concat(names.map((n) => [n, n])).forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; select.appendChild(o); });
+    [["", "Default (the car as made)"]].concat(names.map((n) => [n, n])).forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; select.appendChild(o); });
     const active = id && OpenRacer.Setups ? OpenRacer.Setups.active(id) : null;
     select.value = active && names.includes(active) ? active : "";
     select.disabled = !id;
@@ -2277,7 +2277,7 @@ $("setupSelect").addEventListener("change", () => {
         const base = state.existingCar && state.existingCar.id === id ? state.existingCar : null;
         let config;
         if (!name) {
-            if (!base) { status("The car as made is not here: this car is not saved yet."); return; }
+            if (!base) { status("Default is not here: this car is not saved yet."); return; }
             config = JSON.parse(JSON.stringify(base));
         } else {
             const saved = OpenRacer.Setups.configOf(id, name, base || buildConfig(id));
@@ -2291,7 +2291,7 @@ $("setupSelect").addEventListener("change", () => {
         formChanged(); tuningChanged();
         $("setupSelect").value = name;      // (fill lists the tunes again)
         updateTuneButtons();
-        status(name ? "Tune " + name + " loaded into the form (Save tune keeps changes in it; Save the car writes car.json)." : "The car as made is back in the form.");
+        status(name ? "Tune " + name + " loaded into the form (Save tune keeps changes in it; Save the car writes car.json)." : "Default, the car as made, is back in the form.");
     } catch (error) { status("Could not load the tune: " + error.message); }
 });
 $("setupSave").addEventListener("click", () => {
@@ -2301,7 +2301,7 @@ $("setupSave").addEventListener("click", () => {
     if (name === null) return;
     name = name.trim().slice(0, 40);
     if (!name) return;
-    try { saveTune(id, name); status("Tune " + name + " saved; the main menu asks which tune to drive once there are two."); }
+    try { saveTune(id, name); status("Tune " + name + " saved; the main menu asks which tune to drive."); }
     catch (error) { status("Could not save the tune: " + error.message); }
 });
 $("setupDelete").addEventListener("click", () => {

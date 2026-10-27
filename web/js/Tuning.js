@@ -5,7 +5,7 @@
  *              tyres, engine, gears, brakes, aerodynamics, assists and the engine sound). The menu is shown or hidden with
  *              a key (U by default, it can be changed in the settings menu). The tuning of a car is kept in this browser;
  *              the setups (OpenRacer.Setups) keep the car under a name: Save overwrites the setup that is chosen, Save as new… asks
- *              a name; "The car as made" is car.json, which the car editor writes.
+ *              a name; "Default" is car.json, the car as made, which the car editor writes.
  *
  *              The values that are not in the configuration of a car have a default (the factory values of this game); they
  *              are added to car.json when the tuning is saved: chassis.roll_front, chassis.spring_front/spring_rear,
@@ -398,7 +398,7 @@ var Tuning = (function() {
             if(!name) return;
             OpenRacer.Setups.save(config.id, name, tunedConfig());
             refresh();
-            message("Setup " + name + " saved; the main menu asks which tune to drive once there are two.");
+            message("Setup " + name + " saved; the main menu asks which tune to drive.");
         };
         var dropSetup = document.createElement("button");
         dropSetup.textContent = "Delete";
@@ -450,7 +450,7 @@ var Tuning = (function() {
         var names = OpenRacer.Setups.names(config.id), active = OpenRacer.Setups.active(config.id);
         setupSelect.innerHTML = "";
         var none = document.createElement("option");
-        none.value = ""; none.textContent = "The car as made";
+        none.value = ""; none.textContent = "Default (the car as made)";
         setupSelect.appendChild(none);
         names.forEach(function(name) {
             var o = document.createElement("option");
