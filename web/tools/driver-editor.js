@@ -523,8 +523,8 @@ export function initDriver(api) {
 
     // the test of the car (the physics of the game): the figure and the wheel it holds go with the car that is tested, in its frame, and the nodes are hidden; when the test stops they go back
     function attachToBench(parent) {
+        drv.benchParent = parent;           // (also before the figure has loaded: a tune loaded into the form makes a new figure, which goes on the bench when it arrives)
         if (!drv.driver) return;
-        drv.benchParent = parent;
         drv.driver.setParent(parent);
         parent.add(wheelPivot);
         for (const t of Object.values(targets)) t.visible = false;

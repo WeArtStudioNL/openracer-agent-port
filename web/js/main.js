@@ -57,6 +57,8 @@ function startGame(carId, trackId) {
         if(OpenRacer.Setups) {
             var setupName = OpenRacer.Setups.active(carId), setup = setupName ? OpenRacer.Setups.configOf(carId, setupName, carFound) : null;
             if(setup) carConfig = Object.assign({}, carFound, setup, { id: carFound.id, model: carFound.model, preview: carFound.preview, folder: carFound.folder, source: carFound.source });
+            // (a setup from the car editor has the driver without his file, which is the car's: the file of car.json)
+            if(setup && carConfig.driver && !carConfig.driver.file && carFound.driver && carFound.driver.file) carConfig.driver = Object.assign({}, carConfig.driver, { file: carFound.driver.file });
         }
         race.allCars = result[0].filter(function(item) { return item.id !== carId; }).concat([carFound]);
         s = new RACER.Scene();

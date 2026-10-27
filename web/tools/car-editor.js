@@ -1861,6 +1861,7 @@ function loadExisting() {
     if (activeTune) {
         const saved = OpenRacer.Setups.configOf(car.id, activeTune, car);
         if (saved) shown = Object.assign({}, car, saved, { id: car.id, model: car.model });
+        if (shown.driver && !shown.driver.file && car.driver && car.driver.file) shown.driver = Object.assign({}, shown.driver, { file: car.driver.file });
     }
     fill(shown);
     state.overrides = JSON.parse(JSON.stringify(shown.materials || car.materials || {}));
@@ -2027,7 +2028,7 @@ function updateLibraryPreview() {
         $("libInfo").textContent = lines.join("\n");
     });
 }
-Object.values(LIB_SELECTS).forEach((axle) => Object.values(axle).forEach((id) => $(id).addEventListener("change", () => { state.pendingLibrary = null; updateLibraryPreview(); syncTuningVisibility(); })));
+Object.values(LIB_SELECTS).forEach((axle) => Object.values(axle).forEach((id) => $(id).addEventListener("change", () => { state.pendingLibrary = null; updateLibraryPreview(); syncTuningVisibility(); if (bench.vehicle) restartBench(); })));
 for (const slot of SLOTS) $("w" + slot).addEventListener("change", updateHelpers);
 document.querySelectorAll("input[name=wheelMode]").forEach((radio) => radio.addEventListener("change", () => {
     $("wheelSelects").style.display = wheelMode() === "model" ? "" : "none";
@@ -2260,6 +2261,11 @@ function saveTune(id, name) {
     const config = buildConfig(id);
     if (state.overrides && Object.keys(state.overrides).length) config.materials = JSON.parse(JSON.stringify(state.overrides));
     delete config.model;
+    // the driver: the form gives no file (save() writes it with the car); the tune takes the file the car has, a driver that is not saved with the car yet cannot be in a tune
+    if (config.driver) {
+        const kept = (driverEditor && driverEditor.existingFile()) || (state.existingCar && state.existingCar.driver && state.existingCar.driver.file) || "";
+        if (kept) config.driver.file = kept; else delete config.driver;
+    }
     const view = window.__carEditorView, thumb = view ? OpenRacer.Setups.snapshot(view.renderer, view.scene, view.camera) : null;
     OpenRacer.Setups.save(id, name, config, thumb);
     renderSetups();
@@ -2278,8 +2284,10 @@ $("setupSelect").addEventListener("change", () => {
             const saved = OpenRacer.Setups.configOf(id, name, base || buildConfig(id));
             if (!saved) return;
             config = Object.assign({}, base || {}, saved, { id, model: base ? base.model : saved.model });
+            if (config.driver && !config.driver.file && base && base.driver && base.driver.file) config.driver = Object.assign({}, config.driver, { file: base.driver.file });
         }
-        fill(config);                       // the whole form, the cards of the suspension, the driver and the soft body, and the Tuning card (which lists the setups again)
+        fill(config);
+        if (bench.vehicle) restartBench();              // (the car on the bench is built again from the tune, a metre up)                       // the whole form, the cards of the suspension, the driver and the soft body, and the Tuning card (which lists the setups again)
         if (config.materials) { state.overrides = JSON.parse(JSON.stringify(config.materials)); Object.keys(state.overrides).forEach((n) => applyOverrides(n)); }
         formChanged(); tuningChanged();
         $("setupSelect").value = name;      // (fill lists the tunes again)
@@ -2552,6 +2560,7 @@ function benchFrame(now) {
     updateTyreDebug(v);
     if (bench.model.rig) bench.model.rig.update(v);
     if (softBodyEditor) softBodyEditor.frame(dt);
+    if (bench.driving) followCar(v);
 }
 
 function placeForDrop(v, height, tiltDegrees) {
@@ -2718,14 +2727,35 @@ async function toggleDrive() {
     try {
         if (bench.driving) { stopDriving(); return; }
         const v = bench.vehicle || await startBench();
-        bench.script = null;
-        bench.driving = { throttle: 0, brake: 0, turn: 0, sequential: false };
-        bench.input.parkingLock = false; bench.input.neutral = false; bench.input.reverse = false; bench.input.current_gear = 0; bench.input.manualGearbox = false;
-        bigGrid.visible = true; bigGrid.position.y = grid.position.y - 0.001;
-        $("testDrive").textContent = "Stop driving"; $("testReset").style.display = "";
+        beginDriving();
         status("Drive: arrows or WASD, space is the handbrake, R puts the car back at the start. Automatic; X/E and Z/Q shift and make it sequential.", "ok");
         if (!preview.playing) await playSound();
     } catch (error) { status(error.message, "error"); }
+}
+function beginDriving() {
+    bench.script = null;
+    bench.driving = { throttle: 0, brake: 0, turn: 0, sequential: false };
+    bench.input.parkingLock = false; bench.input.neutral = false; bench.input.reverse = false; bench.input.current_gear = 0; bench.input.manualGearbox = false;
+    bigGrid.visible = true; bigGrid.position.y = grid.position.y - 0.001;
+    $("testDrive").textContent = "Stop driving"; $("testReset").style.display = "";
+}
+// the car on the bench built again from the form as it is now (another tune, other rims and tyres): where it stood, with its heading, a metre up so that a car of
+// another size does not start in the floor; the drive goes on
+let restarting = null;
+async function restartBench() {
+    if (!bench.vehicle || restarting) return;
+    const old = bench.vehicle, x = old.x, z = old.z, heading = Number.isFinite(old.psi) ? old.psi : Math.PI / 2, driving = !!bench.driving;
+    restarting = (async () => {
+        try {
+            const v = await startBench();
+            v.reset(x, z, heading);
+            v.py += 1;
+            if (driving) { beginDriving(); if (!preview.playing) await playSound(); }        // (the stop of the old bench stopped the engine sound too)
+            status("The car is built again from the form" + (driving ? ", the drive goes on" : "") + ".", "ok");
+        } catch (error) { status(error.message, "error"); }
+        restarting = null;
+    })();
+    await restarting;
 }
 
 // a shift while driving: the gearbox is automatic until the first shift, then sequential (X or E up, Z or Q down, as in the game);
@@ -2786,7 +2816,9 @@ function driveFrame(dt) {
     else d.turn = Math.max(-lock, Math.min(lock, d.turn + dir * rate * dt));
     inp.turnAngle = d.turn;
     if (preview.playing) { $("soundRpm").value = Math.round(v.engine.getRPM()); $("soundThrottle").value = Math.round(inp.throttle * 100); soundSliders(); }
-    // the camera follows: its target is the car, and it keeps its distance
+}
+// the camera follows the car: its target is the car, and it keeps its distance (after the step of the physics, so that the car does not jump against the camera)
+function followCar(v) {
     const offset = camera.position.clone().sub(controls.target);
     controls.target.set(v.x, grid.position.y + 0.6, v.z);
     camera.position.copy(controls.target).add(offset);

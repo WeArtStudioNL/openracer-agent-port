@@ -62,9 +62,12 @@ OpenRacer.Replay = (function() {
         return i;
     }
 
-    function write(array, offset, entry) {
+    // lag (s): how far the frame is past the instant of the sample (the samples are 1/30 s apart, the frames are not): the places are taken back along the speed
+    // to that instant, else a sample is up to a frame late and the car jitters in a replay, most from a camera that stands still
+    function write(array, offset, entry, lag) {
         var object = entry.object, v = object.vehicle;
-        array[offset + P.px] = v.px; array[offset + P.py] = v.py; array[offset + P.pz] = v.pz;
+        lag = lag > 0 ? Math.min(lag, DT) : 0;
+        array[offset + P.px] = v.px - v.vx * lag; array[offset + P.py] = v.py - v.vy * lag; array[offset + P.pz] = v.pz - v.vz * lag;
         array[offset + P.qx] = v.qx; array[offset + P.qy] = v.qy; array[offset + P.qz] = v.qz; array[offset + P.qw] = v.qw;
         array[offset + P.vx] = v.vx; array[offset + P.vy] = v.vy; array[offset + P.vz] = v.vz;
         array[offset + P.steer] = v.steerApplied || 0;
@@ -75,7 +78,7 @@ OpenRacer.Replay = (function() {
         array[offset + P.present] = isReady(object) ? 1 : 0;
         for(var k = 0; k < 4; k++) {
             var w = v.wheels[k], o = offset + FIELDS + k * WHEEL_FIELDS;
-            array[o] = w.center.x; array[o + 1] = w.center.y; array[o + 2] = w.center.z;
+            array[o] = w.center.x - v.vx * lag; array[o + 1] = w.center.y - v.vy * lag; array[o + 2] = w.center.z - v.vz * lag;
             array[o + 3] = w.spin;
             array[o + 4] = w.visualLength !== undefined ? w.visualLength : (w.susLength !== undefined ? w.susLength : v.restLength);
         }
@@ -191,7 +194,7 @@ OpenRacer.Replay = (function() {
         return true;
     }
 
-    function push() {
+    function push(lag) {
         if(!chunks.length || fill === CHUNK) {
             chunks.push(new Float32Array(CHUNK * perSample()));
             fill = 0;
@@ -199,7 +202,7 @@ OpenRacer.Replay = (function() {
         }
         var chunk = chunks[chunks.length - 1];
         var base = fill * perSample();
-        for(var i = 0; i < cars.length; i++) { write(chunk, base + i * STRIDE, cars[i]); recordSoft(cars[i], total); recordRider(cars[i], total); }
+        for(var i = 0; i < cars.length; i++) { write(chunk, base + i * STRIDE, cars[i], lag); recordSoft(cars[i], total); recordRider(cars[i], total); }
         fill++;
         total++;
     }
@@ -210,7 +213,7 @@ OpenRacer.Replay = (function() {
         if(!cars.length && !init()) return;
         accumulated += delta;
         var n = 0;
-        while(accumulated >= DT && n < 4) { accumulated -= DT; push(); n++; }
+        while(accumulated >= DT && n < 4) { accumulated -= DT; push(accumulated); n++; }      // (accumulated: how far this frame is past the instant of the sample)
         if(accumulated > DT) accumulated = 0;
     };
 
