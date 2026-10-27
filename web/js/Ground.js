@@ -445,6 +445,11 @@ OpenRacer.FlatGround = function (y, surface) {
     this.meshOf = function () { return ""; };
     this.ray = function (ox, oy, oz, dx, dy, dz, maxT) { if(dy >= -1e-6) return null; var t = (oy - Y) / -dy; if(t < 0 || t > maxT) return null; return { t: t, y: Y, nx: 0, ny: 1, nz: 0, surface: name, mesh: "", triangle: 0 }; };
     this.query = function () { return { y: Y, nx: 0, ny: 1, nz: 0, surface: name, mesh: "" }; };
+    // (a line through a point of the floor runs inside it as far as it goes: the floor is never a low wall)
+    this.lineRange = function (t, px, py, pz, ux, uy, uz, out) { out[0] = -big; out[1] = big; return true; };
+    // the one triangle, as big as the world (a part that falls on the floor, Parts.js; the marbles)
+    this.vertices = function (t, out) { out[0] = -big; out[1] = Y; out[2] = -big; out[3] = big; out[4] = Y; out[5] = -big; out[6] = 0; out[7] = Y; out[8] = big; return out; };
+    // how far a ray goes before the floor (Infinity when it does not reach it)
+    this.firstHit = function (ox, oy, oz, dx, dy, dz, maxT) { if(Math.abs(dy) < 1e-9) return Infinity; var t = (Y - oy) / dy; return t >= 0 && t <= maxT ? t : Infinity; };
     this.setHeight = function (h) { Y = h; };
-    void big;
 };
