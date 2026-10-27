@@ -388,11 +388,25 @@ function standardView(dx, dy, dz) {
     controls.update();
 }
 $("viewOrtho").addEventListener("click", () => setOrtho(!ortho));
+// the view back to its standard: perspective, the camera upright and unzoomed, looking at the model from the front left (a scroll beside every surface can send it far away)
+function resetView() {
+    setOrtho(false);
+    camera.up.set(0, 1, 0);
+    camera.zoom = 1;
+    camera.near = 0.05; camera.far = 200;
+    controls.target.set(0, 0.4, 0);
+    camera.position.set(-5, 3, 6);
+    camera.updateProjectionMatrix();
+    controls.update();
+    if (state.root) frameModel();
+}
+$("viewReset").addEventListener("click", resetView);
 // the views: a dropdown at the top right (x is the left of the car); it goes back to its heading after a choice, so the same view can be chosen again
 $("viewSelect").addEventListener("change", () => { const v = $("viewSelect").value; if (v) { const [x, y, z] = v.split(",").map(Number); standardView(x, y, z); } $("viewSelect").value = ""; $("viewSelect").blur(); });
 window.addEventListener("keydown", (e) => {
     if (/input|textarea|select/i.test((document.activeElement || {}).tagName || "")) return;
     if (e.key === "o" || e.key === "O") setOrtho(!ortho);
+    else if (e.key === "Home") resetView();
     else if (e.code === "Numpad4") standardView(1, 0, 0); else if (e.code === "Numpad6") standardView(-1, 0, 0);
     else if (e.code === "Numpad8") standardView(0, 1, 0); else if (e.code === "Numpad2") standardView(0, -1, 0); else if (e.code === "Numpad5") standardView(0, 0, 1);
     else if (e.code === "Numpad1") standardView(0, 0, -1);
