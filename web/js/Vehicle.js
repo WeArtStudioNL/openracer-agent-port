@@ -1924,9 +1924,10 @@ OpenRacer.Vehicle = function (parameters, input) {
                 }
                 wheel.hadContact = true;
                 // (a motorcycle squeals later: the camber of its tyres carries a bend, and its tyres read as used before they slide)
-                var sqLo = self.controller ? 1.7 : 1.2;
+                // (it starts at the peak of the grip, s = 1, where the tread begins to slide, and from a slide of under a metre a second: a tyre at the limit is heard before it lets go)
+                var sqLo = self.controller ? 1.5 : 1.0;
                 wheel.squeal = (wheel.surface === "road" || wheel.surface === "track01") && fz > 200
-                    ? smoothstep(sqLo, sqLo + 1, wheel.s) * (1 - 0.4 * smoothstep(2.5, 4, wheel.s)) * smoothstep(self.controller ? 2 : 1.2, 5, slideSpeed) : 0;
+                    ? smoothstep(sqLo, sqLo + 1, wheel.s) * (1 - 0.4 * smoothstep(2.5, 4, wheel.s)) * smoothstep(self.controller ? 1.6 : 0.8, 5, slideSpeed) : 0;
                 fxW = wheel.fx;
                 fyW = wheel.fy;
                 // the temperature and the wear: the power that the slip burns

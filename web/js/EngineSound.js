@@ -148,7 +148,7 @@ var EngineSound = (function() {
             // amount 0..1 (how hard the tyres slide), speed in m/s
             set: function(amount, speed, loudness, now) {
                 // a tyre that only starts to slide is silent: the sound comes in from a good slide (above 0.2) and is soft at first, and it comes in slowly (not a squeak at every touch of the limit)
-                amount = Math.max(0, (amount - 0.2) / 0.8);
+                amount = Math.max(0, (amount - 0.1) / 0.9);          // (a small dead zone: the first of the slide is heard, a tyre that only works hard is not)
                 loudness *= 0.75;
                 var base = 640 + Math.min(1, speed / 40) * 420 + amount * 90;
                 oscillators.forEach(function(o) { o.osc.frequency.setTargetAtTime(base * o.ratio, now, 0.08); });
