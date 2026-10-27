@@ -1844,6 +1844,7 @@ function fill(car) {
     stopPreview();
     engineSimChanged();
     renderCurve();
+    setLibraryChoice(car.wheels && car.wheels.library || null);            // the rims and the tyres of the wheel library of this car or tune
 }
 
 function loadExisting() {
@@ -1975,6 +1976,7 @@ function setLibraryChoice(library) {
         }
     }
     syncTuningVisibility();
+    updateLibraryPreview();                 // (a tune loaded into the form: its rims and tyres show at once)
 }
 // the preview: the wheel parts of the model of an axle on the library are hidden and the rim and the tyre of the library are drawn at their middle (or, without wheel parts, where car.json puts the wheels)
 function updateLibraryPreview() {
@@ -2050,7 +2052,12 @@ $("newBike").addEventListener("click", () => {
     set("brakeFront", 1200); set("brakeRear", 250); set("gears", "2.75, 2, 1.667, 1.444, 1.304, 1.208"); set("finalDrive", 6); set("length", 2.0); set("width", 0.72); set("height", 1.1); set("wheelbase", 1.4);
     applyTypeUI();
 });
-$("save").addEventListener("click", save);
+$("save").addEventListener("click", () => {
+    const name = $("setupSelect").value, id = $("id").value.trim();
+    if (!name) { save(); return; }
+    try { saveTune(id, name); $("setupSelect").value = name; updateTuneButtons(); status("Tune " + name + " saved (car.json is not written; choose The car as made and Save the car for that)."); }
+    catch (error) { status("Could not save the tune: " + error.message); }
+});
 $("delete").addEventListener("click", deleteCar);
 
 initEngineSim();
@@ -2226,11 +2233,29 @@ function renderTuningCard() {
 function renderSetups() {
     const id = $("id").value.trim(), select = $("setupSelect");
     const names = id && OpenRacer.Setups ? OpenRacer.Setups.names(id) : [];
-    $("setupRow").style.display = id ? "" : "none";
     select.innerHTML = "";
     [["", "The car as made"]].concat(names.map((n) => [n, n])).forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; select.appendChild(o); });
     const active = id && OpenRacer.Setups ? OpenRacer.Setups.active(id) : null;
     select.value = active && names.includes(active) ? active : "";
+    select.disabled = !id;
+    updateTuneButtons();
+}
+// the Save button writes to what the list says: the car (car.json) or the tune that is chosen; a tune can be deleted
+function updateTuneButtons() {
+    const name = $("setupSelect").value;
+    $("save").textContent = name ? "Save tune" : "Save the car";
+    $("save").title = name ? "Overwrite the tune " + name + " with the car as the form has it (car.json is not written)" : "Save the car (car.json)";
+    $("setupDelete").style.display = name ? "" : "none";
+}
+// the car as the form has it, kept as a tune under a name (buildConfig: the chassis, the tyres, the engine, the gearbox, the suspension and the parts, the driver, the soft body,
+// the cameras, the sound, the exhaust, the rims and the tyres), with the colours of the materials and a picture of the view; the model stays the car's own
+function saveTune(id, name) {
+    const config = buildConfig(id);
+    if (state.overrides && Object.keys(state.overrides).length) config.materials = JSON.parse(JSON.stringify(state.overrides));
+    delete config.model;
+    const view = window.__carEditorView, thumb = view ? OpenRacer.Setups.snapshot(view.renderer, view.scene, view.camera) : null;
+    OpenRacer.Setups.save(id, name, config, thumb);
+    renderSetups();
 }
 $("setupSelect").addEventListener("change", () => {
     const id = $("id").value.trim(), name = $("setupSelect").value;
@@ -2250,33 +2275,28 @@ $("setupSelect").addEventListener("change", () => {
         fill(config);                       // the whole form, the cards of the suspension, the driver and the soft body, and the Tuning card (which lists the setups again)
         if (config.materials) { state.overrides = JSON.parse(JSON.stringify(config.materials)); Object.keys(state.overrides).forEach((n) => applyOverrides(n)); }
         formChanged(); tuningChanged();
-        status(name ? "Setup " + name + " loaded into the form (save the car to keep it in car.json)." : "The car as made is back in the form.");
-    } catch (error) { status("Could not load the setup: " + error.message); }
+        $("setupSelect").value = name;      // (fill lists the tunes again)
+        updateTuneButtons();
+        status(name ? "Tune " + name + " loaded into the form (Save tune keeps changes in it; Save the car writes car.json)." : "The car as made is back in the form.");
+    } catch (error) { status("Could not load the tune: " + error.message); }
 });
 $("setupSave").addEventListener("click", () => {
     const id = $("id").value.trim();
     if (!id) { status("Give the car an id first."); return; }
-    let name = window.prompt("The name of this setup", $("setupSelect").value || "");
+    let name = window.prompt("The name of the new tune", "");
     if (name === null) return;
     name = name.trim().slice(0, 40);
     if (!name) return;
-    try {
-        // the whole car as the form has it (buildConfig: the chassis, the tyres, the engine, the gearbox, the suspension and the parts, the driver, the soft body, the cameras,
-        // the sound, the exhaust), and the colours of the materials; the model stays the car's own
-        const config = buildConfig(id);
-        if (state.overrides && Object.keys(state.overrides).length) config.materials = JSON.parse(JSON.stringify(state.overrides));
-        delete config.model;
-        const view = window.__carEditorView, thumb = view ? OpenRacer.Setups.snapshot(view.renderer, view.scene, view.camera) : null;
-        OpenRacer.Setups.save(id, name, config, thumb); renderSetups(); status("Setup " + name + " saved; the main menu asks which tune to drive once there are two.");
-    }
-    catch (error) { status("Could not save the setup: " + error.message); }
+    try { saveTune(id, name); status("Tune " + name + " saved; the main menu asks which tune to drive once there are two."); }
+    catch (error) { status("Could not save the tune: " + error.message); }
 });
 $("setupDelete").addEventListener("click", () => {
     const id = $("id").value.trim(), name = $("setupSelect").value;
     if (!id || !name) return;
+    if (!window.confirm("Delete the tune " + name + "?")) return;
     OpenRacer.Setups.remove(id, name);
     renderSetups();
-    status("Setup " + name + " deleted.");
+    status("Tune " + name + " deleted.");
 });
 
 // the settings that cannot do anything with the others as they are (the gearbox, the differential, the drive, the turbo) are hidden, as in the tuning menu of the game (CarTuning.visible)

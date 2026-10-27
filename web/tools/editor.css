@@ -33,7 +33,11 @@ b { font-weight: 600; }
 
 /* ---- the side bar */
 #side { width: 420px; flex: none; display: flex; flex-direction: column; background: var(--side); border-right: 1px solid var(--line); min-height: 0; }
-#side header { padding: 14px 18px 10px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; }
+#side header { padding: 14px 18px 10px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+#side header .headline { display: flex; align-items: center; gap: 12px; }
+#side header .tunebar { display: flex; align-items: center; gap: 6px; }
+#side header .tunebar select { flex: 1; min-width: 0; }
+#side header .tunebar button { flex: none; padding: 6px 10px; font-size: 12.5px; }
 #side header h1 { font-size: 17px; font-weight: 600; margin: 0; flex: 1; letter-spacing: 0.2px; display: flex; align-items: center; gap: 10px; }
 #side header h1 i { width: 14px; height: 14px; border-radius: 3px; background: linear-gradient(135deg, #ff5a1f, #ffb020); transform: skewX(-14deg); display: inline-block; flex: none; }
 #side header a { font-size: 13px; color: var(--muted); }

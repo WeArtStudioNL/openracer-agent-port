@@ -45,9 +45,18 @@
 <body>
 <div id="side">
     <header>
-        <h1><i></i>Car editor</h1>
-        <a href="track-editor.html">Track editor</a>
-        <a href="../index.html">← Game</a>
+        <div class="headline">
+            <h1><i></i>Car editor</h1>
+            <a href="track-editor.html">Track editor</a>
+            <a href="../index.html">← Game</a>
+        </div>
+        <!-- the tunes (setups) of the car: the car as made (car.json) and the tunes kept in this browser (OpenRacer.Setups); Save writes to what is chosen -->
+        <div class="tunebar" id="setupRow">
+            <select id="setupSelect" title="The tune of the car: the car as made is car.json, a tune is a setup kept in this browser (the main menu asks which to drive once there are two)"></select>
+            <button class="primary" id="save" title="Save the car (car.json)">Save the car</button>
+            <button id="setupSave" type="button" title="Keep the car as the form has it as a new tune (a name is asked)">+ New tune</button>
+            <button class="ghost" id="setupDelete" type="button" title="Delete this tune">✕</button>
+        </div>
     </header>
     <div id="scroll">
 
@@ -221,7 +230,6 @@
             <summary>Tuning<span class="meta" id="tuningInfo"></span></summary>
             <div class="body">
                 <p class="sub">Everything else the tuning menu of the game has: the suspension, the tyres, the fuel, the engine, the gearbox, the aerodynamics and the assists. The same table (<code>CarTuning.js</code>), so what you set here is what the game drives; it works at once on the car of the test bench.</p>
-                <div class="row" id="setupRow"><div><label>Setup</label><select id="setupSelect"></select><div class="hint">A named tuning of this car, kept in this browser; the main menu offers the setups on the card of the car once there are two</div></div><div><label>&nbsp;</label><button class="small" id="setupSave" type="button">Save setup…</button> <button class="small ghost" id="setupDelete" type="button">Delete</button></div></div>
                 <div id="tuningFields"></div>
             </div>
         </details>
@@ -363,7 +371,6 @@
         <div id="status"></div>
         <button class="danger" id="delete" style="display:none">Delete</button>
         <button id="saveDrive" title="Save the car and drive it">Save and drive</button>
-        <button class="primary" id="save">Save the car</button>
     </footer>
 </div>
 
