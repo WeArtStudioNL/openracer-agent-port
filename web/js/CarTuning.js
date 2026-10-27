@@ -657,21 +657,9 @@ OpenRacer.Setups = (function () {
             return base && OpenRacer.CarTuning ? OpenRacer.CarTuning.toConfig(base, v) : null;
         },
         active: function (id) { return read(id).active || null; },
-        // thumb: a picture of the car as it is (a data URL from snapshot), shown on the tile of the setup in the main menu; without one the picture of the car is shown
-        save: function (id, name, config, thumb) { var d = read(id); d.setups[name] = clone(config); d.active = name; d.thumbs = d.thumbs || {}; if(thumb) d.thumbs[name] = thumb; write(id, d); },
-        thumb: function (id, name) { var d = read(id); return d.thumbs && d.thumbs[name] || null; },
-        remove: function (id, name) { var d = read(id); delete d.setups[name]; if(d.thumbs) delete d.thumbs[name]; if(d.active === name) d.active = null; write(id, d); },
-        // a small picture of what a renderer shows (320 x 180, cut to fit, a JPEG data URL), for the thumbnail of a setup; null when it cannot be made
-        snapshot: function (renderer, scene, camera) {
-            try {
-                if(scene && camera) renderer.render(scene, camera);           // (a fresh frame: the drawing buffer may be gone after the last one was shown)
-                var src = renderer.domElement, W = 320, H = 180, c = document.createElement("canvas");
-                c.width = W; c.height = H;
-                var s = Math.max(W / src.width, H / src.height), w = src.width * s, h = src.height * s;
-                c.getContext("2d").drawImage(src, (W - w) / 2, (H - h) / 2, w, h);
-                return c.toDataURL("image/jpeg", 0.75);
-            } catch(e) { return null; }
-        },
+        // (the picture of a setup on its tile in the main menu is drawn by the menu from the configuration: MainMenu.js, requestTune)
+        save: function (id, name, config) { var d = read(id); d.setups[name] = clone(config); d.active = name; delete d.thumbs; write(id, d); },
+        remove: function (id, name) { var d = read(id); delete d.setups[name]; if(d.active === name) d.active = null; write(id, d); },
         setActive: function (id, name) { var d = read(id); d.active = name && d.setups[name] ? name : null; write(id, d); },
         // the setup for the next game (null: the car as it was made); the tuning that was kept for the car is forgotten, the setup is the car from here
         use: function (id, name) {

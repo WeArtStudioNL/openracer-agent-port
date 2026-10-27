@@ -184,10 +184,13 @@ var MainMenu = (function() {
             }
         }
 
+        // (a tune of a car has a key of its own, car._previewKey: the car with the rims, the tyres, the parts and the colours of the tune)
         function modelOf(car) {
-            if(models[car.id]) return models[car.id];
-            var entry = models[car.id] = { object: null, radius: car.chassis.tire_diameter / 2, length: (car.dimensions && car.dimensions.length) || 4.5 };
+            var key = car._previewKey || car.id;
+            if(models[key]) return models[key];
+            var entry = models[key] = { object: null, radius: car.chassis.tire_diameter / 2, length: (car.dimensions && car.dimensions.length) || 4.5 };
             OpenRacer.loadCarModel(car, function(model) {
+                if(car.colors && OpenRacer.applyCarColors) OpenRacer.applyCarColors([model.tilt].concat(model.wheels), car.colors);
                 var object = new THREE.Group();
                 var r = entry.radius;
                 model.tilt.position.y = ((model.bodyLift || 1) - 1) * r;
@@ -293,13 +296,14 @@ var MainMenu = (function() {
                     var reader = new FileReader();
                     reader.onload = function() {
                         job.img.src = reader.result;
-                        try { window.localStorage.setItem(key(job.car), reader.result); } catch(e) { /* full */ }
+                        try { window.localStorage.setItem(job.key || key(job.car), reader.result); } catch(e) { /* full */ }
                     };
                     reader.readAsDataURL(blob);
-                    if(!(OpenRacer.Garage && OpenRacer.Garage.sourceOf(job.car))) {
+                    // (the picture of the car goes to the server as preview.webp; the picture of a tune stays in this browser)
+                    if(!job.key && !(OpenRacer.Garage && OpenRacer.Garage.sourceOf(job.car))) {
                         fetch("/api/cars/" + encodeURIComponent(job.car.id) + "/preview.webp", { method: "PUT", body: blob }).catch(function() { /* not this server's to write */ });
                     }
-                }
+                } else if(job.fallback) job.fallback();
                 next();
             });
         }
@@ -324,7 +328,28 @@ var MainMenu = (function() {
                 });
             });
         }
-        return { request: request };
+        // the picture of a tune: the car with the tune laid over it (its rims and tyres, its parts, its colours), drawn like the picture of the car; kept in this browser
+        // under the tune and what it is, and made again when the tune changes
+        function requestTune(car, name, img) {
+            var setup = OpenRacer.Setups.configOf(car.id, name, car);
+            if(!setup) { request(car, img); return; }
+            var cfg = Object.assign({}, car, setup, { id: car.id, model: car.model, preview: car.preview, folder: car.folder, source: car.source });
+            if(cfg.driver && !cfg.driver.file && car.driver && car.driver.file) cfg.driver = Object.assign({}, cfg.driver, { file: car.driver.file });
+            var s = JSON.stringify([stamp(car), setup.wheels, setup.colors, setup.materials, setup.suspension, setup.driveline, setup.dimensions, setup.chassis && setup.chassis.tire_diameter]), h = 0;
+            for(var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+            cfg._previewKey = car.id + "|" + name;
+            var prefix = "openracer.preview." + car.id + ".tune." + encodeURIComponent(name) + ".", k = prefix + (h >>> 0).toString(36);
+            img.style.visibility = "hidden";
+            img.onload = function() { img.style.visibility = ""; };
+            var cached = null;
+            try { cached = window.localStorage.getItem(k); } catch(e) { /* no storage */ }
+            if(cached) { img.src = cached; return; }
+            // (the old pictures of this tune go: a tune that is saved often would fill the storage)
+            try { Object.keys(window.localStorage).forEach(function(key) { if(key.indexOf(prefix) === 0 && key !== k) window.localStorage.removeItem(key); }); } catch(e) { /* no storage */ }
+            queue.push({ car: cfg, img: img, key: k, fallback: function() { request(car, img); } });
+            next();
+        }
+        return { request: request, requestTune: requestTune };
     })();
 
     function carTile(car, onClick) {
@@ -1141,8 +1166,7 @@ var MainMenu = (function() {
             picture.alt = "";
             picture.draggable = false;
             div.appendChild(picture);
-            var thumb = name ? OpenRacer.Setups.thumb(car.id, name) : null;
-            if(thumb) picture.src = thumb; else previews.request(car, picture);
+            if(name) previews.requestTune(car, name, picture); else previews.request(car, picture);
             var over = document.createElement("div");
             over.className = "over";
             var label = document.createElement("div");

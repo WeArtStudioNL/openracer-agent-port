@@ -242,37 +242,9 @@ OpenRacer.Car = function( config, domElement ) {
     // the model called body (its own name, a parent's or its material's; not the soft body), the rims every mesh called rim (a wheel part of the model, a rim of the
     // wheel library). The material of such a mesh is made its own the first time (the model shares materials), and its colour as made is kept to go back to.
     this.colors = null;
-    var BODY_NAME = /body/i, RIM_NAME = /(^|[^a-z])rims?([^a-z]|$)/i;
-    function kindOf(mesh, stopAt) {
-        var names = [], o = mesh;
-        while(o && o !== stopAt) { if(o.name) names.push(o.name); o = o.parent; }
-        [].concat(mesh.material || []).forEach(function(m) { if(m && m.name) names.push(m.name); });
-        for(var i = 0; i < names.length; i++) {
-            if(RIM_NAME.test(names[i])) return "rim";
-            if(BODY_NAME.test(names[i]) && !/soft/i.test(names[i])) return "body";
-        }
-        return null;
-    }
     this.setColors = function(colors) {
         tobj.colors = colors && (colors.body || colors.rim) ? { body: colors.body || null, rim: colors.rim || null } : null;
-        var roots = [tobj.body].concat(tobj.wheels.map(function(w) { return w.object; })).filter(Boolean);
-        roots.forEach(function(root) {
-            root.traverse(function(mesh) {
-                if(!mesh.isMesh || !mesh.material) return;
-                var kind = kindOf(mesh, root.parent);
-                if(!kind) return;
-                var want = colors ? colors[kind] : null;
-                if(!want && !mesh.userData.colorAsMade) return;
-                if(!mesh.userData.colorAsMade) {
-                    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(function(m) { return m.clone(); }) : mesh.material.clone();
-                    mesh.userData.colorAsMade = [].concat(mesh.material).map(function(m) { return m.color ? m.color.getHex() : null; });
-                }
-                [].concat(mesh.material).forEach(function(m, i) {
-                    if(!m.color) return;
-                    if(want) m.color.set(want); else if(mesh.userData.colorAsMade[i] !== null) m.color.setHex(mesh.userData.colorAsMade[i]);
-                });
-            });
-        });
+        OpenRacer.applyCarColors([tobj.body].concat(tobj.wheels.map(function(w) { return w.object; })).filter(Boolean), colors);
     };
 
     // The wheels of a glTF model say where the wheels are: the physics takes the wheelbase, the tracks and the tyre from them, and the body
@@ -1126,3 +1098,39 @@ OpenRacer.Car = function( config, domElement ) {
     tobj.setGearboxMode(tobj.modeForGearbox());
 
 };
+// The colours of a car on its model (Car.setColors, and the pictures of the tunes in the main menu): roots are the body and the wheels, colors { body, rim } (a CSS colour each, or null
+// for the colour of the model). The body is every mesh called body (its own name, a parent's up to the root, or its material's; not the soft body), the rims every mesh called rim
+// (a wheel part of the model, a rim of the wheel library). The material of such a mesh is made its own the first time (the model shares materials), and its colour as made is kept.
+OpenRacer.applyCarColors = (function() {
+    var BODY_NAME = /body/i, RIM_NAME = /(^|[^a-z])rims?([^a-z]|$)/i;
+    function kindOf(mesh, stopAt) {
+        var names = [], o = mesh;
+        while(o && o !== stopAt) { if(o.name) names.push(o.name); o = o.parent; }
+        [].concat(mesh.material || []).forEach(function(m) { if(m && m.name) names.push(m.name); });
+        for(var i = 0; i < names.length; i++) {
+            if(RIM_NAME.test(names[i])) return "rim";
+            if(BODY_NAME.test(names[i]) && !/soft/i.test(names[i])) return "body";
+        }
+        return null;
+    }
+    return function(roots, colors) {
+        roots.forEach(function(root) {
+            if(!root) return;
+            root.traverse(function(mesh) {
+                if(!mesh.isMesh || !mesh.material) return;
+                var kind = kindOf(mesh, root.parent);
+                if(!kind) return;
+                var want = colors ? colors[kind] : null;
+                if(!want && !mesh.userData.colorAsMade) return;
+                if(!mesh.userData.colorAsMade) {
+                    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(function(m) { return m.clone(); }) : mesh.material.clone();
+                    mesh.userData.colorAsMade = [].concat(mesh.material).map(function(m) { return m.color ? m.color.getHex() : null; });
+                }
+                [].concat(mesh.material).forEach(function(m, i) {
+                    if(!m.color) return;
+                    if(want) m.color.set(want); else if(mesh.userData.colorAsMade[i] !== null) m.color.setHex(mesh.userData.colorAsMade[i]);
+                });
+            });
+        });
+    };
+})();

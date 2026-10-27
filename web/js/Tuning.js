@@ -385,7 +385,7 @@ var Tuning = (function() {
         saveSetup.onclick = function() {
             var name = setupSelect.value;
             if(!name) { message("Choose a setup to overwrite, or Save as new…"); return; }
-            OpenRacer.Setups.save(config.id, name, tunedConfig(), snapshot());           // (the whole car, as it is tuned, with a picture of it)
+            OpenRacer.Setups.save(config.id, name, tunedConfig());           // (the whole car, as it is tuned; the main menu draws its picture)
             refresh();
             message("Setup " + name + " saved.");
         };
@@ -396,7 +396,7 @@ var Tuning = (function() {
             if(name === null) return;
             name = name.trim().slice(0, 40);
             if(!name) return;
-            OpenRacer.Setups.save(config.id, name, tunedConfig(), snapshot());
+            OpenRacer.Setups.save(config.id, name, tunedConfig());
             refresh();
             message("Setup " + name + " saved; the main menu asks which tune to drive once there are two.");
         };
@@ -531,8 +531,7 @@ var Tuning = (function() {
 
     // The configuration of the car with the tuning in it
     function tunedConfig() { return OpenRacer.CarTuning.toConfig(config, values); }
-    // a picture of the game as it is, for the tile of a setup in the main menu (the globals of Scene.js)
-    function snapshot() { return typeof renderer !== "undefined" && renderer ? OpenRacer.Setups.snapshot(renderer, typeof scene !== "undefined" ? scene : null, typeof camera !== "undefined" ? camera : null) : null; }
+
 
     // the lists that are made when the menu is built can grow after it (the wheel library loads with the car): made again when the menu opens
     function refreshSelectLists() {

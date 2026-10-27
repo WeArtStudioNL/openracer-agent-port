@@ -2266,8 +2266,7 @@ function saveTune(id, name) {
         const kept = (driverEditor && driverEditor.existingFile()) || (state.existingCar && state.existingCar.driver && state.existingCar.driver.file) || "";
         if (kept) config.driver.file = kept; else delete config.driver;
     }
-    const view = window.__carEditorView, thumb = view ? OpenRacer.Setups.snapshot(view.renderer, view.scene, view.camera) : null;
-    OpenRacer.Setups.save(id, name, config, thumb);
+    OpenRacer.Setups.save(id, name, config);            // (the main menu draws the picture of the tune itself)
     renderSetups();
 }
 $("setupSelect").addEventListener("change", () => {
