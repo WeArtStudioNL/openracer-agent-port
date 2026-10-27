@@ -607,8 +607,46 @@ OpenRacer.Vehicle = function (parameters, input) {
         var fx = axisZ.x, fz = axisZ.z;
         if(fx * fx + fz * fz > 0.09) heading = Math.atan2(fz, fx);          // (a car that stands on its nose or tail has no heading from its front: it keeps the last one)
         var x = this.px, z = this.pz;
-        this.reset(x, z, heading);
-        this.py += 0.3;
+        this.reset(x, z, heading);                                           // (reset puts it on its wheels on the road there: standOnWheels, a ray under every wheel; it fell 30 cm before)
+    };
+
+    // The car put on its wheels where it is, with the heading it has: a ray down under every wheel finds the road there, the body is laid on the plane through the four
+    // (the pitch and the roll of the road), at the height at which the wheels sit on their springs at rest. On a crest, a bank or a slope the wheels then stand on the
+    // road instead of the body standing level with two wheels in the ground and two in the air (a drop from a height was the other way to get there).
+    this.standOnWheels = function (psi) {
+        var angle = Math.PI / 2 - psi, baseY = this.py - this.cgHeight - (this.rideFront + this.rideRear) / 2;      // (the road under the middle, as reset and relocate found it)
+        var ex = Math.cos(psi), ez = Math.sin(psi);                          // forward on the ground, from the heading, and the left of the body (its +x: the yaw of reset turns (1, 0, 0) to (sin psi, 0, -cos psi))
+        var lx = ez, lz = -ex;
+        var pts = [], i, w;
+        for(i = 0; i < 4; i++) {
+            w = this.wheels[i];
+            var ax = w.mount.z, aLeft = w.mount.x;                           // the mount: z forward, x to the left, in the frame of the body
+            var wx = this.px + ex * ax + lx * aLeft, wz = this.pz + ez * ax + lz * aLeft;
+            var road = roadAt(wx, wz, baseY + 2, 3);
+            pts.push({ x: wx, y: road ? road.y : baseY, z: wz, rest: w.restLengthWheel !== undefined ? w.restLengthWheel : this.restLength });
+        }
+        // the plane through the four: its normal from the two diagonals (pointing up), its height at the middle
+        var d1x = pts[2].x - pts[0].x, d1y = pts[2].y - pts[0].y, d1z = pts[2].z - pts[0].z;
+        var d2x = pts[3].x - pts[1].x, d2y = pts[3].y - pts[1].y, d2z = pts[3].z - pts[1].z;
+        var nx = d1y * d2z - d1z * d2y, ny = d1z * d2x - d1x * d2z, nz = d1x * d2y - d1y * d2x, nl = Math.sqrt(nx * nx + ny * ny + nz * nz);
+        if(nl < 1e-6 || Math.abs(ny / nl) < 0.5) { nx = 0; ny = 1; nz = 0; nl = 1; }                       // (a wall or nonsense: level)
+        nx /= nl; ny /= nl; nz /= nl; if(ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
+        var meanY = (pts[0].y + pts[1].y + pts[2].y + pts[3].y) / 4;
+        // the body: the heading about the up of the road, and the up of the body along the normal (the shortest turn from (0, 1, 0) to the normal, after the yaw)
+        var yq = { x: 0, y: Math.sin(angle / 2), z: 0, w: Math.cos(angle / 2) };
+        var cx = nz, cy = 0, cz = -nx, dot = ny;                              // (0,1,0) x n, and (0,1,0) . n
+        var tw = 1 + dot, tl = Math.sqrt(cx * cx + cz * cz + tw * tw) || 1;
+        var tq = { x: cx / tl, y: cy / tl, z: cz / tl, w: tw / tl };
+        // q = tq * yq
+        this.qw = tq.w * yq.w - tq.x * yq.x - tq.y * yq.y - tq.z * yq.z;
+        this.qx = tq.w * yq.x + tq.x * yq.w + tq.y * yq.z - tq.z * yq.y;
+        this.qy = tq.w * yq.y - tq.x * yq.z + tq.y * yq.w + tq.z * yq.x;
+        this.qz = tq.w * yq.z + tq.x * yq.y - tq.y * yq.x + tq.z * yq.w;
+        // the height: the middle of the body above the plane by what a wheel at rest needs (its centre a radius above the road, the mount its rest length above that), along the normal
+        var lift = this.cgHeight + (this.rideFront + this.rideRear) / 2;
+        this.px += nx * lift - 0; this.pz += nz * lift - 0;
+        this.py = meanY + ny * lift + 0.02;
+        for(i = 0; i < 4; i++) { w = this.wheels[i]; w.susLength = pts[i].rest; w.susVel = 0; }
     };
 
     // Where the car is (for a place to come back to): { x, z, psi (the heading), py (the height of the body, null when the car is not on its wheels) }
@@ -631,6 +669,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         this.wx = this.wy = this.wz = 0;
         this.ax = this.ay = 0;
         this.suspensionHistory = null;
+        if((py === null || py === undefined) && road) this.standOnWheels(psi);      // (on the road there: a ray under every wheel, the body on their plane)
         // the engine at idle with the clutch open (it kept its speed, and in gear it spun the wheels up again the moment the car was put down)
         this.engine.omega = this.engine.idleRPM * Math.PI / 30;
         this.clutchEngagement = 0;
@@ -661,6 +700,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         this.vx = this.vy = this.vz = 0;
         this.wx = this.wy = this.wz = 0;
         this.repair();
+        if(road) this.standOnWheels(psi);                                    // (on the road there: a ray under every wheel, the body on their plane)
         this.ax = this.ay = 0;
         this.suspensionHistory = null;
         for(var i = 0; i < 4; i++) {

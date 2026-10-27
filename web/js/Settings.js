@@ -76,7 +76,7 @@ var Settings = (function() {
         { id: "reverseGear", wheelOnly: true, group: "Gearbox", label: "H-shifter: reverse", wheel: { profile: "reverseGear", steps: ["reverse"] }, defaults: [] },
         { id: "resetCar", group: "Other", label: "Reset the car to the saved position (without one: the nearest point of the racing line, or of the line from the last gate to the next; else the start), as it is: the damage and the tyres stay", defaults: [key("KeyR"), padButton(3)] },
         { id: "saveResetPosition", group: "Other", label: "Save the place of the car for the reset", defaults: [key("Digit4")] },
-        { id: "repairCar", group: "Other", label: "Repair the car and put it on its wheels where it is, 30 cm above the road (body, parts, wheels, tyres)", defaults: [key("Backspace")] },
+        { id: "repairCar", group: "Other", label: "Repair the car and put it on its wheels where it is, on the road under every wheel (body, parts, wheels, tyres)", defaults: [key("Backspace")] },
         { id: "cameraLeft", group: "Other", label: "Camera left", defaults: [key("BracketLeft")] },
         { id: "cameraRight", group: "Other", label: "Camera right", defaults: [key("BracketRight")] },
         { id: "cameraReset", group: "Other", label: "Camera behind the car", defaults: [key("Backquote")] },

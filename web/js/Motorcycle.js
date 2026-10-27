@@ -328,15 +328,18 @@ OpenRacer.Motorcycle = function (settings) {
             // (a powerslide is no lowside: the rear wheel spins under power and the rider holds the bike on the throttle, sliding as long as he likes; it goes down by the lean alone,
             // at crashLean. A slide with the rear wheel rolling is the tyres letting go.)
             var rear = v.wheels && v.wheels[2], powerslide = !!rear && c.throttle > 0.2 && rear.omega * rear.radius - (rear.forwardSpeed || u) > 1.5;
-            self.slideTime = Math.abs(betaNow) > 15 * DEG && Math.abs(state.lean) > 25 * DEG && Math.abs(u) > 5 && !powerslide ? self.slideTime + dt : 0;
-            var lowside = self.slideTime > 0.8;
+            // (a slide of more than 25 degrees for two seconds, leaning, without power: backing it in, the rear sliding at 45 degrees for a second with the gas shut, is ridden out)
+            self.slideTime = Math.abs(betaNow) > 25 * DEG && Math.abs(state.lean) > 25 * DEG && Math.abs(u) > 5 && !powerslide ? self.slideTime + dt : 0;
+            var lowside = self.slideTime > 2.0;
             // a spin: the bike turns about its vertical faster than 4 rad/s at speed (a jump landed on a lean: the front took the hit with the rear in the air, and the bike was
             // thrown round in a tenth of a second and went on backwards at 100 km/h)
             var spin = Math.abs(v.wy || 0) > 4 && Math.abs(u) > 5;
             // (a wheel torn off is no crash by itself: the rider can hold the bike up on its fork or its swingarm, which touch the road (keepBodyOff); it goes down when it leans)
-            if (Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) || (self.limp && Math.abs(u) < 0.5) || over || lowside || spin || aMag > 3.5 * G || (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) || wall) {
+            // (an acceleration alone is no crash: the tyres that bite again after a long slide give 4 to 8 g sideways for a moment, and that threw the rider off a slide he had held
+            // at 53 degrees; a hit is the body of the bike against something (wall) or a loss of speed (hit). Only a blow of more than 7 g counts by itself.)
+            if (Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) || (self.limp && Math.abs(u) < 0.5) || over || lowside || spin || aMag > 7 * G || wall) {
                 self.crashed = true;
-                self.crashReason = Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) ? "lean" : (self.limp && Math.abs(u) < 0.5) ? "limp-still" : over ? "over" : lowside ? "lowside" : spin ? "spin" : aMag > 3.5 * G ? "accel " + (aMag / G).toFixed(1) + "g" : (Math.abs(aLat) > 3 * G && Math.abs(u) > 5) ? "lateral" : hit ? "hit " + (speedOld - speedNow).toFixed(1) : "wall";     // (for the debugging)
+                self.crashReason = Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) ? "lean" : (self.limp && Math.abs(u) < 0.5) ? "limp-still" : over ? "over" : lowside ? "lowside" : spin ? "spin" : aMag > 7 * G ? "accel " + (aMag / G).toFixed(1) + "g" : hit ? "hit " + (speedOld - speedNow).toFixed(1) : "wall";     // (for the debugging)
                 var before = wall && v.lastWall && v.lastWall.v ? v.lastWall.v : null;
                 self.crashSpeed = before ? { x: before[0], y: before[1], z: before[2] } : { x: v.vx, y: v.vy, z: v.vz };
             }
