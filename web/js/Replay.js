@@ -1222,6 +1222,17 @@ OpenRacer.Replay = (function() {
     };
     api.seek = function(seconds) { t = Math.max(api.start_time(), Math.min(api.end_time(), seconds)); };
 
+    // the zoom of a file of the video editor on the camera of the frame: its field of view divided by it. What was set last time is taken back first (a camera that only sets its
+    // field of view when it changes would see the zoomed one as its own), so the zoom never compounds
+    var fileZoomBase = null, fileZoomLast = null;
+    function applyFileZoom(zoom) {
+        if(fileZoomLast !== null && camera.fov === fileZoomLast) camera.fov = fileZoomBase;
+        fileZoomBase = camera.fov;
+        camera.fov = Math.max(2, Math.min(150, fileZoomBase / zoom));
+        fileZoomLast = camera.fov;
+        camera.updateProjectionMatrix();
+    }
+
     // Once per frame while the replay is open, with the real time of the frame
     api.frame = function(delta) {
         if(!api.active) return;
@@ -1690,6 +1701,16 @@ OpenRacer.Replay = (function() {
         if(!api.editor && parsed.header.camera && parsed.header.camera.length && OpenRacer.CameraTrack) {
             var cameraKeys = parsed.header.camera;
             api.afterFrame = function(time) { if(!free.active && !cine.active) OpenRacer.CameraTrack.apply(cameraKeys, time, camera, api.carBody); };
+        }
+        // the zoom of the clips of the video editor (one per sample): on top of whichever camera shows the frame
+        var zoomRows = parsed.header.zoom;
+        if(!api.editor && Array.isArray(zoomRows) && zoomRows.length) {
+            var before = api.afterFrame;
+            api.afterFrame = function(time, delta) {
+                if(before) before(time, delta);
+                var z = zoomRows[Math.max(0, Math.min(zoomRows.length - 1, Math.round(time / DT)))];
+                applyFileZoom(isFinite(z) && z > 0 ? z : 1);
+            };
         }
         // the skid marks, the smoke and the marbles of the file: their objects are made (the game does not drive, so nobody has asked for them), and get the rows
         if(OpenRacer.skidMarks) OpenRacer.skidMarks();

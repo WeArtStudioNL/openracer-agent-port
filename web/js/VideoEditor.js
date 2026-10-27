@@ -7,7 +7,8 @@
  *   Left monitor: the source replay, with a scrubber, play, and an In and an Out marker (I and O). "Insert at playhead" puts the part between the markers in the timeline where the playhead
  *                 is (a clip that is there is cut in two), "Add to end" puts it after the last clip.
  *   Right monitor: the result, played from the timeline (the same picture as the game makes, 1280 x 720). Play (Space) and scrub; the timeline has a ruler, the clips and the camera track.
- *   Clips:        a clip has a speed (0.05 to 8), and keys for a ramp (speed changes smoothly between the keys, along the clip). The inspector under the timeline has them.
+ *   Clips:        a clip has a speed (0.05 to 8), and keys for a ramp (speed changes smoothly between the keys, along the clip); and a zoom (0.5 to 4: the field of view of its camera
+ *                 divided by it), with keys of its own the same way. The inspector under the timeline has them.
  *   Camera track: the free camera of the replay (the button Free camera: WASD or the arrows, Shift and Control, the mouse after a click, [ and ] for the zoom), with "Parent to car" (the camera goes
  *                 with the car) and "Point at car" (it keeps looking at it). "Key here" puts a key at the playhead; between keys the camera moves smoothly (CameraTrack.js). Without keys the
  *                 camera of the game follows the car.
@@ -19,9 +20,10 @@ OpenRacer.VideoEditor = (function () {
     var api = { active: false };
     var DT = 1 / 30, STEP = 1 / 60;                               // the samples of a replay, and the steps of the table of a clip
     var MIN_SPEED = 0.05, MAX_SPEED = 8;
+    var MIN_ZOOM = 0.5, MAX_ZOOM = 4;                              // the zoom of a clip: the field of view of its camera divided by it (2 is twice as close, 0.5 twice as wide)
 
     var Replay = null;
-    var state = { clips: [], camera: [], T: 0, srcT: 0, srcIn: null, srcOut: null, selected: -1, selectedKey: -1, selectedCam: -1, finalPlaying: false, srcPlaying: false, dirty: false, scale: 40 };
+    var state = { clips: [], camera: [], T: 0, srcT: 0, srcIn: null, srcOut: null, selected: -1, selectedKey: -1, selectedZoomKey: -1, selectedCam: -1, finalPlaying: false, srcPlaying: false, dirty: false, scale: 40 };
     var ui = null, recording = null, scrubbing = null, srcCtx = null;
     var started = false;
 
@@ -50,45 +52,67 @@ OpenRacer.VideoEditor = (function () {
     // ---- the clips: a source part, and a speed that may change along it
 
     // between two keys the speed goes from the one to the other: straight, or eased (a key with "ease out" leaves its speed slowly, one with "ease in" arrives at it slowly)
-    function speedAtOffset(clip, offset) {
-        var keys = clip.keys;
-        if (!keys.length) return clip.speed;
-        if (offset <= keys[0].at) return keys[0].speed;
+    // a value that is keyed along a clip (the speed of the ramp, the zoom): the value of the clip without keys, else between the keys, eased where a key says so
+    function keyedAt(keys, plain, field, offset) {
+        if (!keys.length) return plain;
+        if (offset <= keys[0].at) return keys[0][field];
         for (var i = 1; i < keys.length; i++) {
             if (offset <= keys[i].at) {
                 var a = keys[i - 1], b = keys[i], f = (offset - a.at) / Math.max(1e-6, b.at - a.at);
                 if (a.easeOut && b.easeIn) f = f * f * (3 - 2 * f);
                 else if (a.easeOut) f = f * f;
                 else if (b.easeIn) f = 1 - (1 - f) * (1 - f);
-                return a.speed + (b.speed - a.speed) * f;
+                return a[field] + (b[field] - a[field]) * f;
             }
         }
-        return keys[keys.length - 1].speed;
+        return keys[keys.length - 1][field];
+    }
+    function speedAtOffset(clip, offset) { return keyedAt(clip.keys, clip.speed, "speed", offset); }
+    function nearKey(keys, offset) { for (var i = 0; i < keys.length; i++) if (Math.abs(keys[i].at - offset) < 0.02) return i; return -1; }
+    function zoomAtOffset(clip, offset) { return keyedAt(clip.zoomKeys || [], clip.zoom || 1, "zoom", offset); }
+    // the keys of a kind at a split: the ones before go with the first part, the ones after with the second, and both parts get a key at the cut with the value there
+    function splitKeys(keys, offset, field, valueHere) {
+        var A = [], B = [];
+        keys.forEach(function (k) { var c = { at: k.at < offset ? k.at : k.at - offset, easeIn: k.easeIn, easeOut: k.easeOut }; c[field] = k[field]; (k.at < offset ? A : B).push(c); });
+        if (keys.length) { var ka = { at: offset }, kb = { at: 0 }; ka[field] = kb[field] = valueHere; A.push(ka); B.unshift(kb); }
+        return { a: A, b: B };
     }
     // the ramp of a clip drawn in its block: the speed curve (a log scale from the slowest to the fastest), and the keys as dots that can be clicked (the inspector shows that key) and dragged
     // (along: when it is; up and down: how fast)
     var RAMP_TOP = 3, RAMP_H = 30;
-    function rampY(speed) { return RAMP_TOP + (1 - (Math.log(clamp(speed, MIN_SPEED, MAX_SPEED)) - Math.log(MIN_SPEED)) / (Math.log(MAX_SPEED) - Math.log(MIN_SPEED))) * RAMP_H; }
-    function rampSpeed(y) { return clamp(Math.exp(Math.log(MIN_SPEED) + (1 - (y - RAMP_TOP) / RAMP_H) * (Math.log(MAX_SPEED) - Math.log(MIN_SPEED))), MIN_SPEED, MAX_SPEED); }
+    function scaleY(value, lo, hi) { return RAMP_TOP + (1 - (Math.log(clamp(value, lo, hi)) - Math.log(lo)) / (Math.log(hi) - Math.log(lo))) * RAMP_H; }
+    function scaleValue(y, lo, hi) { return clamp(Math.exp(Math.log(lo) + (1 - (y - RAMP_TOP) / RAMP_H) * (Math.log(hi) - Math.log(lo))), lo, hi); }
+    function rampY(speed) { return scaleY(speed, MIN_SPEED, MAX_SPEED); }
+    function rampSpeed(y) { return scaleValue(y, MIN_SPEED, MAX_SPEED); }
+    // the two kinds of keys in a clip: the ramp of the speed (yellow) and the zoom (blue), each a curve and dots
+    var KINDS = {
+        speed: { keys: "keys", field: "speed", plain: "speed", selected: "selectedKey", lo: MIN_SPEED, hi: MAX_SPEED, colour: "#ffd04d", cls: "rk", label: "×", what: "the speed", at: speedAtOffset },
+        zoom: { keys: "zoomKeys", field: "zoom", plain: "zoom", selected: "selectedZoomKey", lo: MIN_ZOOM, hi: MAX_ZOOM, colour: "#5ec8ff", cls: "zk", label: "zoom ×", what: "the zoom", at: zoomAtOffset }
+    };
     function drawRamp(block, clip, index) {
-        if (!clip.keys.length) return;
+        ["speed", "zoom"].forEach(function (kind) { drawKeyed(block, clip, index, KINDS[kind]); });
+    }
+    function drawKeyed(block, clip, index, K) {
+        var keys = clip[K.keys] || [];
+        if (!keys.length) return;
         var width = Math.max(6, clip.duration * state.scale - 2), svgNS = "http://www.w3.org/2000/svg";
         var svg = document.createElementNS(svgNS, "svg");
         svg.setAttribute("class", "ramp"); svg.setAttribute("width", width); svg.setAttribute("height", RAMP_TOP * 2 + RAMP_H);
         var points = [], length = clip.out - clip.in;
         for (var x = 0; x <= width; x += 3) {
             var offset = offsetAt(clip, clamp(x / state.scale, 0, clip.duration));
-            points.push(x + "," + rampY(speedAtOffset(clip, offset)).toFixed(1));
+            points.push(x + "," + scaleY(K.at(clip, offset), K.lo, K.hi).toFixed(1));
         }
         var line = document.createElementNS(svgNS, "polyline");
-        line.setAttribute("points", points.join(" ")); line.setAttribute("fill", "none"); line.setAttribute("stroke", "#ffd04d"); line.setAttribute("stroke-width", "1.5");
+        line.setAttribute("points", points.join(" ")); line.setAttribute("fill", "none"); line.setAttribute("stroke", K.colour); line.setAttribute("stroke-width", "1.5");
         svg.appendChild(line);
         block.appendChild(svg);
-        clip.keys.forEach(function (k, ki) {
-            var d = el(block, "div", "rk" + (index === state.selected && ki === state.selectedKey ? " sel" : ""));
+        keys.forEach(function (k, ki) {
+            var d = el(block, "div", K.cls + (index === state.selected && ki === state[K.selected] ? " sel" : ""));
             d.style.left = timeAtOffset(clip, k.at) * state.scale + "px";
-            d.style.top = rampY(k.speed) + "px";
-            d.title = "×" + round(k.speed, 2) + " at " + fmt(clip.in + k.at) + " (click: this key; drag: move it, up and down for the speed)";
+            d.style.top = scaleY(k[K.field], K.lo, K.hi) + "px";
+            d.title = K.label + round(k[K.field], 2) + " at " + fmt(clip.in + k.at) + " (click: this key; drag: move it, up and down for " + K.what + ")";
+            var select = function () { state.selected = index; state.selectedKey = -1; state.selectedZoomKey = -1; state.selectedZoomKey = -1; state[K.selected] = keys.indexOf(k); };
             d.addEventListener("pointerdown", function (event) {
                 event.stopPropagation(); event.preventDefault();
                 var rect = block.getBoundingClientRect(), moved = false, startX = event.clientX, startY = event.clientY;
@@ -98,14 +122,14 @@ OpenRacer.VideoEditor = (function () {
                     moved = true;
                     var f = clamp((e.clientX - rect.left) / state.scale, 0, clip.duration);
                     k.at = clamp(offsetAt(clip, f), 0, length);
-                    k.speed = round(rampSpeed(e.clientY - rect.top), 2);
+                    k[K.field] = round(scaleValue(e.clientY - rect.top, K.lo, K.hi), 2);
                     prepare(clip);
-                    state.selected = index; state.selectedKey = clip.keys.indexOf(k);
+                    select();
                     renderTimeline(); renderInspector();
                 };
                 var up = function () {
                     d.removeEventListener("pointermove", move); d.removeEventListener("pointerup", up); d.removeEventListener("pointercancel", up);
-                    state.selected = index; state.selectedKey = clip.keys.indexOf(k);
+                    select();
                     if (moved) touch(); else { renderTimeline(); renderInspector(); }
                 };
                 d.addEventListener("pointermove", move); d.addEventListener("pointerup", up); d.addEventListener("pointercancel", up);
@@ -117,6 +141,7 @@ OpenRacer.VideoEditor = (function () {
     // the table of a clip: the time in the timeline at every step of the source (the integral of 1 / speed)
     function prepare(clip) {
         clip.keys.sort(function (a, b) { return a.at - b.at; });
+        if (clip.zoomKeys) clip.zoomKeys.sort(function (a, b) { return a.at - b.at; });
         var length = clip.out - clip.in, n = Math.max(1, Math.ceil(length / STEP)), acc = new Float64Array(n + 1);
         for (var i = 0; i < n; i++) {
             var a = i * STEP, b = Math.min(length, (i + 1) * STEP);
@@ -127,7 +152,7 @@ OpenRacer.VideoEditor = (function () {
         clip.duration = acc[n];
     }
     function newClip(a, b, speed, keys, cam) {
-        var clip = { in: a, out: b, speed: speed || 1, keys: keys || [], cam: cam || "track" };      // cam: the camera of this clip: "track" (the camera track), "follow", "cockpit", "cinematic"
+        var clip = { in: a, out: b, speed: speed || 1, keys: keys || [], cam: cam || "track", zoom: 1, zoomKeys: [] };      // cam: the camera of this clip: "track" (the camera track), "follow", "cockpit", "cinematic"; zoom: on top of the camera, with its own keys
         prepare(clip);
         return clip;
     }
@@ -192,7 +217,7 @@ OpenRacer.VideoEditor = (function () {
         }
         clips = state.clips;
         clips.splice(index, 0, part);
-        state.selected = index; state.selectedKey = -1;
+        state.selected = index; state.selectedKey = -1; state.selectedZoomKey = -1;
         // the playhead goes to the start of what was put in
         state.T = starts()[index];
         touch();
@@ -202,14 +227,13 @@ OpenRacer.VideoEditor = (function () {
     function splitClip(index, f) {
         var clip = state.clips[index];
         if (f <= 0.02 || f >= clip.duration - 0.02) return false;
-        var offset = offsetAt(clip, f), keysA = [], keysB = [];
-        var speedHere = speedAtOffset(clip, offset);
-        clip.keys.forEach(function (k) {
-            if (k.at < offset) keysA.push({ at: k.at, speed: k.speed }); else keysB.push({ at: k.at - offset, speed: k.speed });
-        });
-        if (clip.keys.length) { keysA.push({ at: offset, speed: speedHere }); keysB.unshift({ at: 0, speed: speedHere }); }
-        var a = newClip(clip.in, clip.in + offset, clip.speed, keysA, clip.cam), b = newClip(clip.in + offset, clip.out, clip.speed, keysB, clip.cam);
+        var offset = offsetAt(clip, f);
+        var sp = splitKeys(clip.keys, offset, "speed", speedAtOffset(clip, offset)), zm = splitKeys(clip.zoomKeys || [], offset, "zoom", zoomAtOffset(clip, offset));
+        var a = newClip(clip.in, clip.in + offset, clip.speed, sp.a, clip.cam), b = newClip(clip.in + offset, clip.out, clip.speed, sp.b, clip.cam);
         a.lead = b.lead = clip.lead || 0;
+        a.zoom = b.zoom = clip.zoom || 1;
+        a.zoomKeys = zm.a; b.zoomKeys = zm.b;
+        prepare(a); prepare(b);
         state.clips.splice(index, 1, a, b);
         return true;
     }
@@ -218,7 +242,7 @@ OpenRacer.VideoEditor = (function () {
         if (index < 0 || index >= state.clips.length) return;
         state.clips.splice(index, 1);
         state.selected = Math.min(state.selected, state.clips.length - 1);
-        state.selectedKey = -1;
+        state.selectedKey = -1; state.selectedZoomKey = -1;
         state.T = Math.min(state.T, total());
         touch();
     }
@@ -269,9 +293,12 @@ OpenRacer.VideoEditor = (function () {
         askName("Save as replay", "The name in the list of Replays (main menu).", "My edit", "Save").then(function (name) {
             if (!name) return;
             var N = Math.floor(total() / DT) + 1, times = new Array(N);
-            for (var i = 0; i < N; i++) times[i] = mapFinal(Math.min(total(), i * DT)).src;
+            var zooms = new Array(N), anyZoom = false;
+            for (var i = 0; i < N; i++) { var mm = mapFinal(Math.min(total(), i * DT)); times[i] = mm.src; zooms[i] = round(mm.clip ? zoomAtOffset(mm.clip, mm.src - mm.clip.in) : 1, 3); if (zooms[i] !== 1) anyZoom = true; }
             ui.save.disabled = true; ui.save.textContent = "Saving…";
-            Replay.bake(times, { camera: OpenRacer.CameraTrack.clean(state.camera), name: name }).then(function (baked) {
+            var extra = { camera: OpenRacer.CameraTrack.clean(state.camera), name: name };
+            if (anyZoom) extra.zoom = zooms;                                  // (the zoom of the clips, one per sample: Replay.js lays it on the camera when the file is played)
+            Replay.bake(times, extra).then(function (baked) {
                 return Replay.keepBaked(name, baked);
             }).then(function () {
                 state.dirty = false;
@@ -372,6 +399,8 @@ OpenRacer.VideoEditor = (function () {
             "#vedit .clip .ramp { position: absolute; left: 0; top: 0; pointer-events: none; }" +
             "#vedit .clip .rk { position: absolute; width: 9px; height: 9px; background: #ffd04d; border: 1px solid #0e1217; border-radius: 50%; transform: translate(-5px, -5px); cursor: grab; touch-action: none; }" +
             "#vedit .clip .rk.sel { background: var(--accent, #ff5a1f); width: 11px; height: 11px; transform: translate(-6px, -6px); }" +
+            "#vedit .clip .zk { position: absolute; width: 9px; height: 9px; background: #5ec8ff; border: 1px solid #0e1217; border-radius: 2px; transform: translate(-5px, -5px) rotate(45deg); cursor: grab; touch-action: none; }" +
+            "#vedit .clip .zk.sel { background: var(--accent, #ff5a1f); width: 11px; height: 11px; transform: translate(-6px, -6px) rotate(45deg); }" +
             "#vedit .ck { position: absolute; top: 22px; width: 14px; height: 14px; background: #37d67a; border: 1px solid #0e1217; transform: translateX(-7px) rotate(45deg); cursor: pointer; }" +
             "#vedit .ck.sel { background: var(--accent, #ff5a1f); }" +
             "#vedit .ck.parent { border-radius: 50%; } " +
@@ -528,7 +557,7 @@ OpenRacer.VideoEditor = (function () {
             el(block, "div", "l1", (i + 1) + " · " + fmt(clip.in) + " – " + fmt(clip.out));
             el(block, "div", "l2", clip.keys.length ? "ramp, " + clip.keys.length + " keys · " + round(clip.duration, 2) + " s" : "×" + round(clip.speed, 2) + " · " + round(clip.duration, 2) + " s");
             drawRamp(block, clip, i);
-            block.onclick = function () { state.selected = i; state.selectedKey = -1; renderTimeline(); renderInspector(); };
+            block.onclick = function () { state.selected = i; state.selectedKey = -1; state.selectedZoomKey = -1; renderTimeline(); renderInspector(); };
         });
         // the camera keys
         Array.prototype.slice.call(ui.laneCam.querySelectorAll(".ck")).forEach(function (n) { n.remove(); });
@@ -554,6 +583,24 @@ OpenRacer.VideoEditor = (function () {
         box.innerHTML = "";
         var clip = state.clips[state.selected];
         if (!clip) { el(box, "span", "hint", "Select a clip to change its speed, or to make a ramp with keys. A camera key: click it in the camera lane."); return; }
+        var zkey = (clip.zoomKeys || [])[state.selectedZoomKey];
+        if (zkey) {
+            // one key of the zoom: its value, and how the zoom comes to it and leaves it
+            el(box, "span", "hint", "Zoom key at " + fmt(clip.in + zkey.at) + " · zoom ×");
+            var zs = el(box, "input"); zs.type = "number"; zs.step = "0.05"; zs.min = String(MIN_ZOOM); zs.max = String(MAX_ZOOM); zs.value = String(round(zkey.zoom, 2));
+            zs.addEventListener("keydown", function (e) { e.stopPropagation(); });
+            zs.onchange = function () { zkey.zoom = clamp(parseFloat(zs.value) || 1, MIN_ZOOM, MAX_ZOOM); prepare(clip); touch(); };
+            var zIn = el(box, "label", "hint"); var zci = el(zIn, "input"); zci.type = "checkbox"; zci.checked = !!zkey.easeIn; zIn.appendChild(document.createTextNode(" ease in"));
+            zIn.title = "The zoom arrives at this key slowly";
+            zci.onchange = function () { zkey.easeIn = zci.checked; touch(); };
+            var zOut = el(box, "label", "hint"); var zco = el(zOut, "input"); zco.type = "checkbox"; zco.checked = !!zkey.easeOut; zOut.appendChild(document.createTextNode(" ease out"));
+            zOut.title = "The zoom leaves this key slowly";
+            zco.onchange = function () { zkey.easeOut = zco.checked; touch(); };
+            button(box, "Delete key", "Delete this key of the zoom", function () { clip.zoomKeys.splice(state.selectedZoomKey, 1); state.selectedZoomKey = -1; if (clip.zoomKeys.length < 2) { clip.zoom = clip.zoomKeys.length ? clip.zoomKeys[0].zoom : clip.zoom; clip.zoomKeys = []; } touch(); });
+            el(box, "span", "sep");
+            el(box, "span", "hint", "Click the clip for the clip itself. Drag a key along for when, up and down for the zoom.");
+            return;
+        }
         var key = clip.keys[state.selectedKey];
         if (key) {
             // one key of the ramp: its speed, and how the speed comes to it and leaves it
@@ -567,7 +614,7 @@ OpenRacer.VideoEditor = (function () {
             var easeOut = el(box, "label", "hint"); var co = el(easeOut, "input"); co.type = "checkbox"; co.checked = !!key.easeOut; easeOut.appendChild(document.createTextNode(" ease out"));
             easeOut.title = "The speed leaves this key slowly";
             co.onchange = function () { key.easeOut = co.checked; prepare(clip); touch(); };
-            button(box, "Delete key", "Delete this key of the ramp", function () { clip.keys.splice(state.selectedKey, 1); state.selectedKey = -1; if (clip.keys.length < 2) { clip.speed = clip.keys.length ? clip.keys[0].speed : clip.speed; clip.keys = []; } prepare(clip); touch(); });
+            button(box, "Delete key", "Delete this key of the ramp", function () { clip.keys.splice(state.selectedKey, 1); state.selectedKey = -1; state.selectedZoomKey = -1; if (clip.keys.length < 2) { clip.speed = clip.keys.length ? clip.keys[0].speed : clip.speed; clip.keys = []; } prepare(clip); touch(); });
             el(box, "span", "sep");
             el(box, "span", "hint", "Click the clip for the clip itself. Drag a key along for when, up and down for how fast.");
             return;
@@ -599,11 +646,34 @@ OpenRacer.VideoEditor = (function () {
             if (f < 0 || f > clip.duration) { say("Put the playhead inside this clip first."); return; }
             var offset = offsetAt(clip, f), now = speedAtOffset(clip, offset);
             if (!clip.keys.length) { clip.keys.push({ at: 0, speed: clip.speed }); clip.keys.push({ at: clip.out - clip.in, speed: clip.speed }); }
-            clip.keys.push({ at: offset, speed: round(now, 2) });
-            prepare(clip); touch();
+            var near = nearKey(clip.keys, offset);
+            if (near < 0) { clip.keys.push({ at: offset, speed: round(now, 2) }); prepare(clip); near = clip.keys.findIndex(function (k) { return k.at === offset; }); }
+            state.selectedKey = near; state.selectedZoomKey = -1;              // (a key where one is already: that one)
+            touch();
         });
         if (clip.keys.length) button(box, "Remove ramp", "Back to one speed", function () { clip.speed = round(speedAtOffset(clip, 0), 2); clip.keys = []; prepare(clip); touch(); });
         if (clip.keys.length) el(box, "span", "hint", "The ramp is drawn in the clip: click a key for its speed and its ease, drag it to move it.");
+        el(box, "span", "sep");
+        // the zoom of the clip: on top of its camera (the field of view divided by it), one value or keys along the clip
+        var zk = clip.zoomKeys || [];
+        el(box, "span", "hint", zk.length ? "zoom from the keys" : "zoom ×");
+        var zoom = el(box, "input"); zoom.type = "number"; zoom.step = "0.05"; zoom.min = String(MIN_ZOOM); zoom.max = String(MAX_ZOOM); zoom.value = String(round(clip.zoom || 1, 2)); zoom.style.width = "60px";
+        zoom.title = "The zoom of this clip, on top of its camera: 2 is twice as close (half the field of view), 0.5 twice as wide; 1 is the camera as it is";
+        zoom.disabled = zk.length > 0;
+        zoom.addEventListener("keydown", function (e) { e.stopPropagation(); });
+        zoom.onchange = function () { clip.zoom = clamp(parseFloat(zoom.value) || 1, MIN_ZOOM, MAX_ZOOM); touch(); };
+        button(box, "Add zoom key at playhead", "A zoom key at the playhead (inside this clip): the zoom changes smoothly between the keys", function () {
+            var at = starts()[state.selected], f = state.T - at;
+            if (f < 0 || f > clip.duration) { say("Put the playhead inside this clip first."); return; }
+            var offset = offsetAt(clip, f), now = zoomAtOffset(clip, offset);
+            if (!clip.zoomKeys) clip.zoomKeys = [];
+            if (!clip.zoomKeys.length) { clip.zoomKeys.push({ at: 0, zoom: clip.zoom || 1 }); clip.zoomKeys.push({ at: clip.out - clip.in, zoom: clip.zoom || 1 }); }
+            var nearZ = nearKey(clip.zoomKeys, offset);
+            if (nearZ < 0) { clip.zoomKeys.push({ at: offset, zoom: round(now, 2) }); prepare(clip); nearZ = clip.zoomKeys.findIndex(function (k) { return k.at === offset; }); }
+            state.selectedZoomKey = nearZ; state.selectedKey = -1;
+            touch();
+        });
+        if (zk.length) button(box, "Remove zoom keys", "Back to one zoom", function () { clip.zoom = round(zoomAtOffset(clip, 0), 2); clip.zoomKeys = []; touch(); });
         el(box, "span", "sep");
         button(box, "Split at playhead", "Cut the clip in two at the playhead", function () {
             var at = starts()[state.selected];
@@ -746,6 +816,19 @@ OpenRacer.VideoEditor = (function () {
         if (Replay.updateFrame) Replay.updateFrame();            // (the orange outline of the replay goes: this editor has its passepartout)
     }
 
+    // the zoom of a clip on the camera of the frame: its field of view divided by the zoom. The cameras set the field of view in their own way (every frame, or only when it
+    // changes), so what was set last time is taken back first: the zoom never compounds
+    var zoomBase = null, zoomLast = null;
+    function applyZoom(zoom) {
+        if (zoomLast !== null && camera.fov === zoomLast) camera.fov = zoomBase;
+        zoomBase = camera.fov;
+        zoom = clamp(zoom || 1, MIN_ZOOM, MAX_ZOOM);
+        camera.fov = Math.max(2, Math.min(150, zoomBase / zoom));
+        zoomLast = camera.fov;
+        camera.updateProjectionMatrix();
+    }
+    api.zoomAt = function (T) { var m = mapFinal(T); return m && m.clip ? zoomAtOffset(m.clip, m.src - m.clip.in) : 1; };
+
     api.frame = function (delta) {
         delta = Math.min(0.1, delta);
         if (!ui) return;
@@ -770,6 +853,7 @@ OpenRacer.VideoEditor = (function () {
         var clipCam = m && m.clip && m.clip.cam && m.clip.cam !== "track" ? m.clip.cam : "track";
         if (Replay.setGameCamera) Replay.setGameCamera(clipCam, m && m.clip ? m.clip.lead : undefined);
         if (!Replay.free.active && clipCam === "track" && state.camera.length) OpenRacer.CameraTrack.apply(state.camera, state.T, camera, Replay.carBody);
+        applyZoom(m && m.clip ? zoomAtOffset(m.clip, m.src - m.clip.in) : 1);
         ui.time.textContent = fmt(state.T) + " / " + fmt(length) + (m && m.clip ? "   ×" + round(speedAtOffset(m.clip, m.src - m.clip.in), 2) : "");
         placeHead();
         // the playhead stays in view while it plays
