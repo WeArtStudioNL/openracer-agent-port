@@ -439,7 +439,7 @@ OpenRacer.Replay = (function() {
             if(entry.player) object.updateVisuals(delta);
             // the squeal of the tyres of the player (Car.update is not run in a replay, which is where the game feeds it)
             if(entry.player && typeof EngineSound !== "undefined" && EngineSound.setTyres) EngineSound.setTyres(playing && !scrubbing ? object.vehicle.squeal || 0 : 0, Math.abs(object.vehicle.u || 0));
-            else object.updateVisuals();
+            else object.updateVisuals(delta);
             if(i === 0) player = { rpm: scratch[P.rpm], throttle: scratch[P.throttle], brake: scratch[P.brake], gear: gearLabels[scratch[P.gear] | 0] || "", speed: Math.hypot(scratch[P.vx], scratch[P.vz]) };
         }
     }

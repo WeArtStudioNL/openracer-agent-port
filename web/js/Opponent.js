@@ -107,19 +107,11 @@ OpenRacer.Opponent = function (config, line, options) {
             self.wheels[i].object = model.wheels[i];
             scene.add(model.wheels[i]);
         }
-        if (self.color) {
-            // another colour for the body, so the cars can be told apart
-            model.tilt.traverse(function (child) {
-                if (!child.isMesh) return;
-                var materials = Array.isArray(child.material) ? child.material : [child.material];
-                materials.forEach(function (m) {
-                    if (m.color && (m.name === "" || /body|paint|car|lak/i.test(m.name) || materials.length === 1)) {
-                        var copy = m.clone();
-                        copy.color.set(self.color);
-                        if (Array.isArray(child.material)) child.material[materials.indexOf(m)] = copy; else child.material = copy;
-                    }
-                });
-            });
+        if (self.color && OpenRacer.applyCarColors) {
+            // another colour for the body, so the cars can be told apart: only the meshes of the model that are called body (as the body colour of the tuning menu, Car.js); a model
+            // without such a mesh keeps its own colours
+            var hex = ("000000" + (self.color & 0xffffff).toString(16)).slice(-6);
+            OpenRacer.applyCarColors([model.tilt], { body: "#" + hex, rim: null });
         }
         if (model.measured) {
             var c = model.measured.centres;
@@ -133,6 +125,15 @@ OpenRacer.Opponent = function (config, line, options) {
         }
         self.bodyLift = model.bodyLift;
         OpenRacer.CollisionProxy.apply(self, model, modelMid);
+        // the driver of the car (car.json "driver", Driver.js): a dummy that holds the steering wheel and works the pedals, as in the player's car (Car.js); it is made after the colour
+        // above, which is for the body
+        var driverConfig = config.driver;
+        if (driverConfig && driverConfig.enabled && driverConfig.file && OpenRacer.Driver) {
+            var driver = new OpenRacer.Driver(driverConfig, model.tilt, model.steeringWheel);
+            driver.load(OpenRacer.Garage ? OpenRacer.Garage.resolve(config, driverConfig.file) : driverConfig.file, OpenRacer.Garage ? OpenRacer.Garage.manager(config) : undefined,
+                function () { self.driver = driver; },
+                function (error) { console.warn("The driver model of " + self.name + " could not be loaded: " + (error && error.message ? error.message : error)); });
+        }
         self.loaded = true;
         if (self.pending) { self.place(self.pending.x, self.pending.z, self.pending.heading); self.pending = null; }
     }, function (message) { console.error("Opponent: " + message); });
@@ -363,6 +364,16 @@ OpenRacer.Opponent = function (config, line, options) {
         if (this.steeringWheel) {
             var sw = this.steeringWheel;
             sw.object.quaternion.setFromAxisAngle(sw.axis, -v.steerApplied * (sw.degrees * Math.PI / 180) / this.maxTurn);
+            sw.angle = -v.steerApplied * (sw.degrees * Math.PI / 180) / this.maxTurn;
+        }
+        // the driver: the hands on the steering wheel, the feet on the pedals (in a replay the pedals and the gear are those of the recording)
+        if (this.driver) {
+            var rearWheel = w[2], roadY = rearWheel && rearWheel.hasContact && rearWheel.center ? rearWheel.center.y - rearWheel.radius : undefined;
+            var gearNow = this.current_gear, neutralNow = this.neutral, label = OpenRacer.Replay && OpenRacer.Replay.active ? this.replayGear : undefined;
+            if (label !== undefined) { var m = /(\d+)$/.exec(label); neutralNow = label === "N"; gearNow = m ? parseInt(m[1], 10) - 1 : gearNow; }
+            var controller = v.controller;
+            this.driver.update(delta || 0.016, this.throttle, this.brakePedal, { gear: gearNow, neutral: neutralNow, push: false, footDown: controller ? controller.footDown : 0, footDownL: controller ? controller.footDownL || 0 : 0,
+                speed: v.u, groundY: -(this.config.chassis.tire_diameter || 0.6) / 2, roadY: roadY, posture: controller ? controller.posture : null });
         }
     };
 };
