@@ -43,6 +43,7 @@ var Tuning = (function() {
     function apply() {
         var v = values;
         if(v.width > 0 && v.height > 0) car.frontal_area = v.width * v.height * 0.85;
+        if(car.setColors) car.setColors({ body: v.body_color || null, rim: v.rim_color || null });
         car.vehicle.retune(OpenRacer.CarTuning.toRetune(v, car.frontal_area, air_density));
         // the rest of the car editor, live: the cameras, the steering wheel, the rider of a motorcycle, the torque curve, the sound; and the model built again for
         // what it is built from (the suspension and the driveline of the parts library, the soft body, the size), half a second after the last change
@@ -277,6 +278,30 @@ var Tuning = (function() {
         sim_layout: ["Engine layout (the sound)", function() { var L = OpenRacer.engineSimLayouts || {}; return Object.keys(L).map(function(id) { return [id, L[id].label || id]; }); }],
         sim_ir: ["Exhaust of the sound", function() { return (OpenRacer.engineSimImpulseResponses || []).map(function(ir) { return [ir.id, ir.label || ir.id]; }); }]
     };
+    // the colour pickers (CarTuning.js: body_color, rim_color): a picker and a button back to the car as made
+    var COLORS = { body_color: "Colour of the body (the meshes called body)", rim_color: "Colour of the rims" };
+    function colorRow(key) {
+        var item = document.createElement("div");
+        item.className = "item";
+        var line = document.createElement("div");
+        line.className = "line";
+        line.innerHTML = "<span class=\"label\">" + COLORS[key] + "</span>";
+        var input = document.createElement("input");
+        input.type = "color";
+        input.style.cssText = "width: 44px; height: 26px; padding: 0 2px; border: 1px solid var(--line); border-radius: 5px; background: transparent; cursor: pointer;";
+        input.addEventListener("input", function() { set(key, input.value); });
+        input.addEventListener("change", function() { input.blur(); });
+        var reset = document.createElement("button");
+        reset.className = "small";
+        reset.textContent = "↺";
+        reset.title = "The colour of the model";
+        reset.addEventListener("click", function() { set(key, ""); });
+        line.appendChild(input);
+        line.appendChild(reset);
+        item.appendChild(line);
+        controls.push({ key: key, color: input, line: line });
+        return item;
+    }
     function partsTypes() { var T = OpenRacer.PartsLibrary && OpenRacer.PartsLibrary.TYPES || {}; return Object.keys(T).map(function(id) { return [id, T[id].label || id]; }); }
     // the rims or the tyres of the wheel library (WheelLibrary.js; wheels/wheels.json), with "the wheel of the model" first
     function libraryList(kind) { var L = OpenRacer.WheelLibrary, list = L ? L[kind]() : []; return [["", kind === "rims" ? "From the model" : "From the model (tyres.shell of the car)"]].concat(list.map(function(e) { return [e.id, e.name || e.id]; })); }
@@ -360,7 +385,7 @@ var Tuning = (function() {
         saveSetup.onclick = function() {
             var name = setupSelect.value;
             if(!name) { message("Choose a setup to overwrite, or Save as new…"); return; }
-            OpenRacer.Setups.save(config.id, name, tunedConfig());           // (the whole car, as it is tuned)
+            OpenRacer.Setups.save(config.id, name, tunedConfig(), snapshot());           // (the whole car, as it is tuned, with a picture of it)
             refresh();
             message("Setup " + name + " saved.");
         };
@@ -371,9 +396,9 @@ var Tuning = (function() {
             if(name === null) return;
             name = name.trim().slice(0, 40);
             if(!name) return;
-            OpenRacer.Setups.save(config.id, name, tunedConfig());
+            OpenRacer.Setups.save(config.id, name, tunedConfig(), snapshot());
             refresh();
-            message("Setup " + name + " saved; the main menu offers it on the card of the car once there are two.");
+            message("Setup " + name + " saved; the main menu asks which tune to drive once there are two.");
         };
         var dropSetup = document.createElement("button");
         dropSetup.textContent = "Delete";
@@ -404,6 +429,7 @@ var Tuning = (function() {
             details.appendChild(summary);
             group.items.forEach(function(def) {
                 if(SELECTS[def[0]]) details.appendChild(selectRow(def[0]));
+                else if(COLORS[def[0]]) details.appendChild(colorRow(def[0]));
                 else if(def[0] === "gears") details.appendChild(gearsRow());
                 else details.appendChild(slider(def));
             });
@@ -489,6 +515,11 @@ var Tuning = (function() {
             } else if(c.select) {
                 c.select.value = values[c.key];
                 c.line.classList.toggle("changed", changed(c.key));
+            } else if(c.color) {
+                if(document.activeElement !== c.color) c.color.value = values[c.key] || "#888888";
+                c.color.style.opacity = values[c.key] ? "" : 0.45;
+                c.color.title = values[c.key] ? values[c.key] : "The colour of the model (click to choose one)";
+                c.line.classList.toggle("changed", changed(c.key));
             } else if(c.checkbox) {
                 c.checkbox.checked = !!values[c.key];
                 c.inner.style.display = values[c.key] ? "block" : "none";
@@ -500,6 +531,8 @@ var Tuning = (function() {
 
     // The configuration of the car with the tuning in it
     function tunedConfig() { return OpenRacer.CarTuning.toConfig(config, values); }
+    // a picture of the game as it is, for the tile of a setup in the main menu (the globals of Scene.js)
+    function snapshot() { return typeof renderer !== "undefined" && renderer ? OpenRacer.Setups.snapshot(renderer, typeof scene !== "undefined" ? scene : null, typeof camera !== "undefined" ? camera : null) : null; }
 
     // the lists that are made when the menu is built can grow after it (the wheel library loads with the car): made again when the menu opens
     function refreshSelectLists() {

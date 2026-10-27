@@ -341,24 +341,6 @@ var MainMenu = (function() {
         name.textContent = car.name || car.id;
         addBadge(name, car);
         over.appendChild(name);
-        // the setups of the car (the tuning menu, the car editor; OpenRacer.Setups): a choice on the card when there are two or more; the one chosen goes on the car for the game
-        var setups = !onClick && OpenRacer.Setups ? OpenRacer.Setups.names(car.id) : [];
-        if(setups.length >= 2) {
-            var pick = document.createElement("select");
-            pick.className = "setup";
-            pick.title = "The setup of the car for this game";
-            [["", "Car as made"]].concat(setups.map(function(n) { return [n, n]; })).forEach(function(item) {
-                var o = document.createElement("option");
-                o.value = item[0]; o.textContent = item[1];
-                pick.appendChild(o);
-            });
-            pick.value = OpenRacer.Setups.active(car.id) || "";
-            pick.onclick = function(e) { e.stopPropagation(); };
-            pick.onpointerdown = function(e) { e.stopPropagation(); };
-            pick.ondblclick = function(e) { e.stopPropagation(); };
-            pick.onchange = function(e) { e.stopPropagation(); OpenRacer.Setups.use(car.id, pick.value || null); };
-            over.appendChild(pick);
-        }
         div.title = car.description || "";
         var bottom = document.createElement("div");
         bottom.className = "bottom";
@@ -945,13 +927,17 @@ var MainMenu = (function() {
     var MODE_KEY = "openracer.mode";
     var mode = "free";
     try { mode = window.localStorage.getItem(MODE_KEY) || "free"; } catch(e) { /* no storage */ }
-    var STEP_NAMES = { mode: "Play", car: "Car", track: "Track", race: "Race", surface: "Ground" };
+    var STEP_NAMES = { mode: "Play", car: "Car", tune: "Tune", track: "Track", race: "Race", surface: "Ground" };
     var SURFACE_KEY = "openracer.skidSurface";
     var skidSurface = "road";
     try { skidSurface = window.localStorage.getItem(SURFACE_KEY) || "road"; } catch(e) { /* no storage */ }
 
+    // the setups (tunes) of the car that is chosen (the tuning menu, the car editor; OpenRacer.Setups): a step of its own when there are two or more
+    function tunesOf() { return choice.car && OpenRacer.Setups ? OpenRacer.Setups.names(choice.car) : []; }
     function stepsOf() {
-        return mode === "race" ? ["mode", "car", "track", "race"] : (mode === "skidpad" ? ["mode", "car", "surface"] : ["mode", "car", "track"]);
+        var steps = mode === "race" ? ["mode", "car", "track", "race"] : (mode === "skidpad" ? ["mode", "car", "surface"] : ["mode", "car", "track"]);
+        if(tunesOf().length >= 2) steps.splice(2, 0, "tune");
+        return steps;
     }
     function go(next) { screen = next; render(); var page = element.querySelector(".page"); if(page) page.scrollTop = 0; }
     function setMode(value) {
@@ -1140,6 +1126,50 @@ var MainMenu = (function() {
         inner.appendChild(tilesBox);
     }
 
+    // the tunes of the car: the car as made and every setup, each with its picture (the one taken when it was saved, or the picture of the car)
+    function tuneStep(inner) {
+        inner.innerHTML = "<h2>Choose your tune</h2><div class=\"sub\">Click a tune to go on. A tune is a setup saved in the tuning menu or the car editor; the car as made is car.json.</div>";
+        var car = cars.filter(function(c) { return c.id === choice.car; })[0];
+        if(!car) return;
+        var tilesBox = document.createElement("div");
+        tilesBox.className = "tiles";
+        var active = OpenRacer.Setups.active(car.id) || "";
+        [""].concat(tunesOf()).forEach(function(name) {
+            var div = document.createElement("div");
+            div.className = "tile" + (active === name ? " selected" : "");
+            var picture = document.createElement("img");
+            picture.alt = "";
+            picture.draggable = false;
+            div.appendChild(picture);
+            var thumb = name ? OpenRacer.Setups.thumb(car.id, name) : null;
+            if(thumb) picture.src = thumb; else previews.request(car, picture);
+            var over = document.createElement("div");
+            over.className = "over";
+            var label = document.createElement("div");
+            label.className = "name";
+            label.textContent = name || "The car as made";
+            over.appendChild(label);
+            var bottom = document.createElement("div");
+            bottom.className = "bottom";
+            var specs = document.createElement("div");
+            specs.className = "specs";
+            var cfg = name ? OpenRacer.Setups.configOf(car.id, name, car) : car;
+            if(!cfg || !cfg.chassis) cfg = car;
+            specs.textContent = carSpecs(cfg);
+            bottom.appendChild(specs);
+            var power = cfg ? carPower(cfg) : null;
+            var hp = document.createElement("div");
+            hp.className = "hp";
+            hp.innerHTML = (power || "?") + "<small>HP</small>";
+            bottom.appendChild(hp);
+            over.appendChild(bottom);
+            div.appendChild(over);
+            div.onclick = function() { OpenRacer.Setups.use(car.id, name || null); goNext(); };
+            tilesBox.appendChild(div);
+        });
+        inner.appendChild(tilesBox);
+    }
+
     function trackStep(inner) {
         inner.innerHTML = "<h2>Choose the track</h2><div class=\"sub\">Double-click a track to go on.</div>";
         var list = document.createElement("div");
@@ -1269,6 +1299,7 @@ var MainMenu = (function() {
         var parts = [];
         if(screen !== "mode") parts.push({ free: "Free drive", race: "Race", skidpad: "Skidpad" }[mode]);
         if(car && screen !== "mode" && screen !== "car") parts.push(car.name || car.id);
+        if(car && OpenRacer.Setups && tunesOf().length >= 2 && screen !== "mode" && screen !== "car" && screen !== "tune") parts.push(OpenRacer.Setups.active(car.id) || "The car as made");
         if(mode === "skidpad" && screen === "surface") parts.push((SKIDPAD_SURFACES.filter(function(s) { return s.id === skidSurface; })[0] || {}).name || "Asphalt");
         else if(car && screen === "car") parts.push(car.name || car.id);
         if(track && mode !== "skidpad" && (screen === "track" || screen === "race")) parts.push(track.name || track.id);
@@ -1320,6 +1351,7 @@ var MainMenu = (function() {
         page.appendChild(inner);
         if(screen === "mode") modeStep(inner);
         else if(screen === "car") carStep(inner);
+        else if(screen === "tune") tuneStep(inner);
         else if(screen === "track") trackStep(inner);
         else if(screen === "race") raceStep(inner);
         else if(screen === "surface") surfaceStep(inner);

@@ -2252,7 +2252,8 @@ $("setupSave").addEventListener("click", () => {
         const config = buildConfig(id);
         if (state.overrides && Object.keys(state.overrides).length) config.materials = JSON.parse(JSON.stringify(state.overrides));
         delete config.model;
-        OpenRacer.Setups.save(id, name, config); renderSetups(); status("Setup " + name + " saved; the main menu offers it on the card of the car once there are two.");
+        const view = window.__carEditorView, thumb = view ? OpenRacer.Setups.snapshot(view.renderer, view.scene, view.camera) : null;
+        OpenRacer.Setups.save(id, name, config, thumb); renderSetups(); status("Setup " + name + " saved; the main menu asks which tune to drive once there are two.");
     }
     catch (error) { status("Could not save the setup: " + error.message); }
 });

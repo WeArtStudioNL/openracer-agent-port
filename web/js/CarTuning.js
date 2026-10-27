@@ -10,6 +10,10 @@
 OpenRacer.CarTuning = (function () {
     var GROUPS = [
         { name: "Chassis", items: [
+            // the colours of the car: the meshes of the model called body and the rims (the wheels of the model called rim, the rims of the wheel library); a colour picker
+            // in the tuning menu (Tuning.js), "" is the car as made (the colours of the model)
+            ["body_color", "Colour of the body (the meshes called body)", "", 0, 0, 0],
+            ["rim_color", "Colour of the rims", "", 0, 0, 0],
             ["mass", "Mass", "kg", 300, 6000, 10],
             ["front_weight", "Weight on the front axle", "%", 25, 75, 0.5],
             ["cg_height", "Height of the centre of gravity", "m", 0.15, 1.5, 0.01],
@@ -274,6 +278,7 @@ OpenRacer.CarTuning = (function () {
             compound: tyres.compound || "road",
             tyre_damage: tyres.damage ? "on" : "off",
             rim_front: libChoice(c, "front").rim, tyre_front: libChoice(c, "front").tyre, rim_rear: libChoice(c, "rear").rim, tyre_rear: libChoice(c, "rear").tyre,
+            body_color: (c.colors && c.colors.body) || "", rim_color: (c.colors && c.colors.rim) || "",
             // the rest of the car editor (the tuning menu changes these too; Tuning.js builds the car again for what the model is built from)
             vehicle_type: c.type === "motorcycle" ? "motorcycle" : "car",
             susp_front: (c.suspension && c.suspension.front && c.suspension.front.type) || "model",
@@ -564,6 +569,13 @@ OpenRacer.CarTuning = (function () {
             ["front", "rear"].forEach(function (axle) { var t = v["susp_" + axle]; if(t) c.suspension[axle] = Object.assign({}, c.suspension[axle] || {}, { type: t }); });
         }
         if(v.engine_place) c.driveline = Object.assign({}, c.driveline || {}, { engine: v.engine_place });
+        // the colours of the body and the rims (none: the colours of the model)
+        if(v.body_color !== undefined || v.rim_color !== undefined) {
+            var colors = {};
+            if(v.body_color) colors.body = v.body_color;
+            if(v.rim_color) colors.rim = v.rim_color;
+            if(Object.keys(colors).length) c.colors = colors; else delete c.colors;
+        }
         // the rims and the tyres of the wheel library (none chosen: the wheels of the model)
         if(v.rim_front !== undefined || v.tyre_front !== undefined || v.rim_rear !== undefined || v.tyre_rear !== undefined) {
             var library = {};
@@ -645,8 +657,21 @@ OpenRacer.Setups = (function () {
             return base && OpenRacer.CarTuning ? OpenRacer.CarTuning.toConfig(base, v) : null;
         },
         active: function (id) { return read(id).active || null; },
-        save: function (id, name, config) { var d = read(id); d.setups[name] = clone(config); d.active = name; write(id, d); },
-        remove: function (id, name) { var d = read(id); delete d.setups[name]; if(d.active === name) d.active = null; write(id, d); },
+        // thumb: a picture of the car as it is (a data URL from snapshot), shown on the tile of the setup in the main menu; without one the picture of the car is shown
+        save: function (id, name, config, thumb) { var d = read(id); d.setups[name] = clone(config); d.active = name; d.thumbs = d.thumbs || {}; if(thumb) d.thumbs[name] = thumb; write(id, d); },
+        thumb: function (id, name) { var d = read(id); return d.thumbs && d.thumbs[name] || null; },
+        remove: function (id, name) { var d = read(id); delete d.setups[name]; if(d.thumbs) delete d.thumbs[name]; if(d.active === name) d.active = null; write(id, d); },
+        // a small picture of what a renderer shows (320 x 180, cut to fit, a JPEG data URL), for the thumbnail of a setup; null when it cannot be made
+        snapshot: function (renderer, scene, camera) {
+            try {
+                if(scene && camera) renderer.render(scene, camera);           // (a fresh frame: the drawing buffer may be gone after the last one was shown)
+                var src = renderer.domElement, W = 320, H = 180, c = document.createElement("canvas");
+                c.width = W; c.height = H;
+                var s = Math.max(W / src.width, H / src.height), w = src.width * s, h = src.height * s;
+                c.getContext("2d").drawImage(src, (W - w) / 2, (H - h) / 2, w, h);
+                return c.toDataURL("image/jpeg", 0.75);
+            } catch(e) { return null; }
+        },
         setActive: function (id, name) { var d = read(id); d.active = name && d.setups[name] ? name : null; write(id, d); },
         // the setup for the next game (null: the car as it was made); the tuning that was kept for the car is forgotten, the setup is the car from here
         use: function (id, name) {
