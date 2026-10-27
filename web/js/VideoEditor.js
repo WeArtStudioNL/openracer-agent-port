@@ -7,7 +7,7 @@
  *   Left monitor: the source replay, with a scrubber, play, and an In and an Out marker (I and O). "Insert at playhead" puts the part between the markers in the timeline where the playhead
  *                 is (a clip that is there is cut in two), "Add to end" puts it after the last clip.
  *   Right monitor: the result, played from the timeline (the same picture as the game makes, 1280 x 720). Play (Space) and scrub; the timeline has a ruler, the clips and the camera track.
- *   Clips:        a clip has a speed (0.05 to 8), and keys for a ramp (speed changes smoothly between the keys, along the clip); and a zoom (0.5 to 4: the field of view of its camera
+ *   Clips:        a clip is trimmed with the handles at its edges (its In or Out earlier or later in the source); it has a speed (0.05 to 8), and keys for a ramp (speed changes smoothly between the keys, along the clip); and a zoom (0.5 to 4: the field of view of its camera
  *                 divided by it), with keys of its own the same way. The inspector under the timeline has them.
  *   Camera track: the free camera of the replay (the button Free camera: WASD or the arrows, Shift and Control, the mouse after a click, [ and ] for the zoom), with "Parent to car" (the camera goes
  *                 with the car) and "Point at car" (it keeps looking at it). "Key here" puts a key at the playhead; between keys the camera moves smoothly (CameraTrack.js). Without keys the
@@ -425,6 +425,10 @@ OpenRacer.VideoEditor = (function () {
             "#vedit .clip .ramp { position: absolute; left: 0; top: 0; pointer-events: none; }" +
             "#vedit .clip .rk { position: absolute; width: 9px; height: 9px; background: #ffd04d; border: 1px solid #0e1217; border-radius: 50%; transform: translate(-5px, -5px); cursor: grab; touch-action: none; }" +
             "#vedit .clip .rk.sel { background: var(--accent, #ff5a1f); width: 11px; height: 11px; transform: translate(-6px, -6px); }" +
+            "#vedit .clip .trim { position: absolute; top: 0; bottom: 0; width: 9px; cursor: ew-resize; touch-action: none; z-index: 2; }" +
+            "#vedit .clip .trim.l { left: 0; border-left: 3px solid rgba(255, 255, 255, 0.35); border-radius: 5px 0 0 5px; }" +
+            "#vedit .clip .trim.r { right: 0; border-right: 3px solid rgba(255, 255, 255, 0.35); border-radius: 0 5px 5px 0; }" +
+            "#vedit .clip .trim:hover, #vedit .clip.sel .trim { border-color: var(--accent, #ff5a1f); }" +
             "#vedit .clip .zk { position: absolute; width: 9px; height: 9px; background: #5ec8ff; border: 1px solid #0e1217; border-radius: 2px; transform: translate(-5px, -5px) rotate(45deg); cursor: grab; touch-action: none; }" +
             "#vedit .clip .zk.sel { background: var(--accent, #ff5a1f); width: 11px; height: 11px; transform: translate(-6px, -6px) rotate(45deg); }" +
             "#vedit .ck { position: absolute; top: 22px; width: 14px; height: 14px; background: #37d67a; border: 1px solid #0e1217; transform: translateX(-7px) rotate(45deg); cursor: pointer; }" +
@@ -563,6 +567,52 @@ OpenRacer.VideoEditor = (function () {
         renderTimeline();
     }
 
+    // A handle at the start and at the end of a clip: dragged, it takes the clip's In or Out along in the source (as far as the source goes, and a tenth of a second of clip
+    // stays), so a clip is lengthened or shortened in the timeline; the keys of the ramp and the zoom keep their place in the source. The clips after it move with it.
+    var MIN_CLIP = 0.1;
+    function trimHandle(block, clip, index, side) {
+        var h = el(block, "div", "trim " + side);
+        h.title = side === "l" ? "Drag: the start of the clip earlier or later in the source" : "Drag: the end of the clip earlier or later in the source";
+        h.addEventListener("click", function (event) { event.stopPropagation(); });
+        h.addEventListener("pointerdown", function (event) {
+            event.stopPropagation(); event.preventDefault();
+            var startX = event.clientX, in0 = clip.in, out0 = clip.out, moved = false;
+            var keys0 = clip.keys.map(function (k) { return Object.assign({}, k); }), zoom0 = (clip.zoomKeys || []).map(function (k) { return Object.assign({}, k); });
+            // (the moves come to the window: the timeline is drawn again while it is dragged, and this handle with it)
+            var a = Replay.start_time(), b = Replay.end_time();
+            var move = function (e) {
+                var dx = e.clientX - startX;
+                if (!moved && Math.abs(dx) < 2) return;
+                moved = true;
+                // the pixels of the timeline are time in the program: in the source they count by the speed at that end of the clip
+                if (side === "l") {
+                    var dIn = dx / state.scale * speedAtOffset(clip, 0);
+                    var newIn = clamp(in0 + dIn, a, out0 - MIN_CLIP), shift = newIn - in0;
+                    clip.in = newIn;
+                    clip.keys = keys0.map(function (k) { return Object.assign({}, k, { at: k.at - shift }); }).filter(function (k) { return k.at >= -1e-6 && k.at <= clip.out - clip.in + 1e-6; });
+                    clip.zoomKeys = zoom0.map(function (k) { return Object.assign({}, k, { at: k.at - shift }); }).filter(function (k) { return k.at >= -1e-6 && k.at <= clip.out - clip.in + 1e-6; });
+                } else {
+                    var dOut = dx / state.scale * speedAtOffset(clip, out0 - in0);
+                    clip.out = clamp(out0 + dOut, in0 + MIN_CLIP, b);
+                    clip.keys = keys0.filter(function (k) { return k.at <= clip.out - clip.in + 1e-6; });
+                    clip.zoomKeys = zoom0.filter(function (k) { return k.at <= clip.out - clip.in + 1e-6; });
+                }
+                // one key left of a kind is no ramp: its value is the clip's
+                if (clip.keys.length === 1) { clip.speed = clip.keys[0].speed; clip.keys = []; }
+                if (clip.zoomKeys.length === 1) { clip.zoom = clip.zoomKeys[0].zoom; clip.zoomKeys = []; }
+                prepare(clip);
+                state.selected = index; state.selectedKey = -1; state.selectedZoomKey = -1;
+                say("Clip " + (index + 1) + ": " + fmt(clip.in) + " – " + fmt(clip.out) + " · " + round(clip.duration, 2) + " s");
+                renderTimeline(); renderInspector();
+            };
+            var up = function () {
+                window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up);
+                if (moved) { state.T = Math.min(state.T, total()); touch(); }
+            };
+            window.addEventListener("pointermove", move); window.addEventListener("pointerup", up); window.addEventListener("pointercancel", up);
+        });
+    }
+
     function renderTimeline() {
         if (!ui) return;
         var length = total(), width = Math.max(ui.scroller.clientWidth, (length + 4) * state.scale);
@@ -587,6 +637,7 @@ OpenRacer.VideoEditor = (function () {
             el(block, "div", "l2", clip.keys.length ? "ramp, " + clip.keys.length + " keys · " + round(clip.duration, 2) + " s" : "×" + round(clip.speed, 2) + " · " + round(clip.duration, 2) + " s");
             drawRamp(block, clip, i);
             block.onclick = function () { state.selected = i; state.selectedKey = -1; state.selectedZoomKey = -1; renderTimeline(); renderInspector(); };
+            trimHandle(block, clip, i, "l"); trimHandle(block, clip, i, "r");
         });
         // the camera keys
         Array.prototype.slice.call(ui.laneCam.querySelectorAll(".ck")).forEach(function (n) { n.remove(); });
