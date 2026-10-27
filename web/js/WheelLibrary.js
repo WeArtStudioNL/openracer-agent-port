@@ -12,7 +12,8 @@
  *              the middle of the wheel of the model of the car, or, without wheel parts, at the wheelbase and the tracks of car.json); the wheel turns about X and the
  *              tread lies in the Y-Z plane; modelled for the LEFT side of the car (+X is outwards, the face of the rim), the right side is turned half a turn about Y;
  *              at real size, in metres: the diameter and the width of the tyre and the diameter of the rim are measured from the file ("width" and "diameter" of a tyre
- *              in the catalogue override the measure). "offset" of a rim (m) moves the rim and the tyre outwards (the track with it). tools/make-wheels.py writes a set
+ *              in the catalogue override the measure); "flip": true turns a file round that was modelled for the right side. "offset" of a rim (m) moves the rim and the
+ *              tyre outwards (the track with it). tools/make-wheels.py writes a set
  *              of plain examples.
  *
  *              The SHELL of the tyre (TyreShell.js: the rings of nodes across the tread, the nodes round the wheel, the radius of the inner shell as a share of the tyre,
@@ -105,6 +106,20 @@ OpenRacer.WheelLibrary = (function () {
         });
     }
     function entryFile(entry) { var e = entry && cache[url(entry.file)]; return e && e.scene ? e : null; }
+    // what is wrong with the choice of a car, for a message: ids that are not in the catalogue, files that did not load
+    function problems(config) {
+        var out = [];
+        ["front", "rear"].forEach(function (axle) {
+            var c = choiceOf(config, axle);
+            [["rim", rim(c.rim), c.rim], ["tyre", tyre(c.tyre), c.tyre]].forEach(function (k) {
+                if(!k[2]) return;
+                if(!k[1]) { out.push("no " + k[0] + " '" + k[2] + "' in wheels.json"); return; }
+                var e = cache[url(k[1].file)];
+                if(e && e.error) out.push(k[0] + " '" + k[2] + "': the file wheels/" + k[1].file + " did not load");
+            });
+        });
+        return out;
+    }
 
     // the shell of the tyre of an axle: what the catalogue says, the width and the inner shell from the files when they are loaded
     function shellOf(config, axle) {
@@ -128,8 +143,9 @@ OpenRacer.WheelLibrary = (function () {
         var inner = new THREE.Object3D();
         inner.name = (c.rim || "") + (c.rim && c.tyre ? " + " : "") + (c.tyre || "");
         if(!LEFT[slot]) inner.rotation.y = Math.PI;          // (modelled for the left side: +X outwards)
-        if(rf) { var rc = rf.scene.clone(true); rc.name = "rim_" + slot; inner.add(rc); }
-        if(tf) { var tc = tf.scene.clone(true); tc.name = "tyre_" + slot; inner.add(tc); }
+        // ("flip": true in the catalogue: the file was modelled for the right side, it is turned round)
+        if(rf) { var rc = rf.scene.clone(true); rc.name = "rim_" + slot; if(r.flip) rc.rotation.y = Math.PI; inner.add(rc); }
+        if(tf) { var tc = tf.scene.clone(true); tc.name = "tyre_" + slot; if(t.flip) tc.rotation.y = Math.PI; inner.add(tc); }
         object.add(inner);
         object.traverse(function (child) { if(child.isMesh) { child.castShadow = true; child.receiveShadow = false; } });
         var shell = shellOf(config, axle);
@@ -140,6 +156,6 @@ OpenRacer.WheelLibrary = (function () {
 
     lib.load = load; lib.rims = rims; lib.tyres = tyres; lib.rim = rim; lib.tyre = tyre; lib.choiceOf = choiceOf; lib.uses = uses; lib.usesAxle = usesAxle;
     lib.preload = preload; lib.wheelFor = wheelFor; lib.shellOf = shellOf; lib.filesFor = filesFor;
-    lib.ready = function () { return loaded; };
+    lib.ready = function () { return loaded; }; lib.problems = problems;
     return lib;
 })();

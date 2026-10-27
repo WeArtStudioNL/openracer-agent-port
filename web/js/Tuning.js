@@ -58,7 +58,13 @@ var Tuning = (function() {
         var sig = builtFrom(tuned);
         if(rebuildSig !== null && sig !== rebuildSig && car.rebuild) {
             clearTimeout(rebuildTimer);
-            rebuildTimer = setTimeout(function() { car.rebuild(tunedConfig()); message("The car is built again (the suspension, the driveline, the wheels, the soft body, the size)."); }, 500);
+            rebuildTimer = setTimeout(function() {
+                var cfg = tunedConfig();
+                car.rebuild(cfg);
+                message("The car is built again (the suspension, the driveline, the wheels, the soft body, the size).");
+                // a rim or a tyre of the wheel library that is not there: said here, not only in the console (the files load with the car: looked at a moment later)
+                setTimeout(function() { var bad = OpenRacer.WheelLibrary && OpenRacer.WheelLibrary.problems(cfg); if(bad && bad.length) message("Wheel library: " + bad.join("; ") + ". The wheels of the model are used."); }, 1500);
+            }, 500);
         }
         rebuildSig = sig;
         car.mass = v.mass;

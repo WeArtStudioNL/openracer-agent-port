@@ -1998,6 +1998,8 @@ function updateLibraryPreview() {
             const shell = OpenRacer.WheelLibrary.shellOf(cfg, axle);
             if (shell) lines.push(axle + ": tyre " + (shell.diameter * 1000).toFixed(0) + " mm across, " + (shell.width * 1000).toFixed(0) + " mm wide, shell " + (shell.rings || 3) + " rings × " + (shell.segments || 36) + " nodes, inner shell " + Math.round((shell.inner_ratio || 0.62) * 100) + " %, carcass " + (shell.carcass || 0) + " mm");
         }
+        const bad = OpenRacer.WheelLibrary.problems(cfg);
+        if (bad.length) lines.push("Not found: " + bad.join("; ") + " (check \"file\" in web/wheels/wheels.json; the wheels of the model are used).");
         $("libInfo").style.whiteSpace = "pre-line";
         $("libInfo").textContent = lines.join("\n");
     });
