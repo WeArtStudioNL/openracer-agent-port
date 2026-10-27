@@ -11,7 +11,8 @@
  *                 divided by it), with keys of its own the same way. The inspector under the timeline has them.
  *   Camera track: the free camera of the replay (the button Free camera: WASD or the arrows, Shift and Control, the mouse after a click, [ and ] for the zoom), with "Parent to car" (the camera goes
  *                 with the car) and "Point at car" (it keeps looking at it). "Key here" puts a key at the playhead; between keys the camera moves smoothly (CameraTrack.js). Without keys the
- *                 camera of the game follows the car.
+ *                 camera of the game follows the car. A clip can have the free camera as a fixed shot instead (camera "Free camera": Take camera takes it as it is, Go to shot puts
+ *                 the free camera back there), or one of the cameras of the game (follow, cockpit, cinematic).
  *   Save:         "Save as replay" (a new replay in the list of Replays, with the clips cut and the speeds applied, and the camera track in it; the smoke, the skid marks and the damage are
  *                 not in it) and "Save as mp4" (the right monitor recorded from the start to the end, without sound). Both ask for a name.
  */
@@ -232,6 +233,7 @@ OpenRacer.VideoEditor = (function () {
         var a = newClip(clip.in, clip.in + offset, clip.speed, sp.a, clip.cam), b = newClip(clip.in + offset, clip.out, clip.speed, sp.b, clip.cam);
         a.lead = b.lead = clip.lead || 0;
         a.zoom = b.zoom = clip.zoom || 1;
+        if (clip.freeKey) { a.freeKey = JSON.parse(JSON.stringify(clip.freeKey)); b.freeKey = JSON.parse(JSON.stringify(clip.freeKey)); }
         a.zoomKeys = zm.a; b.zoomKeys = zm.b;
         prepare(a); prepare(b);
         state.clips.splice(index, 1, a, b);
@@ -296,7 +298,7 @@ OpenRacer.VideoEditor = (function () {
             var zooms = new Array(N), anyZoom = false;
             for (var i = 0; i < N; i++) { var mm = mapFinal(Math.min(total(), i * DT)); times[i] = mm.src; zooms[i] = round(mm.clip ? zoomAtOffset(mm.clip, mm.src - mm.clip.in) : 1, 3); if (zooms[i] !== 1) anyZoom = true; }
             ui.save.disabled = true; ui.save.textContent = "Saving…";
-            var extra = { camera: OpenRacer.CameraTrack.clean(state.camera), name: name };
+            var extra = { camera: OpenRacer.CameraTrack.clean(bakedCamera()), name: name };
             if (anyZoom) extra.zoom = zooms;                                  // (the zoom of the clips, one per sample: Replay.js lays it on the camera when the file is played)
             Replay.bake(times, extra).then(function (baked) {
                 return Replay.keepBaked(name, baked);
@@ -305,6 +307,30 @@ OpenRacer.VideoEditor = (function () {
                 say("Saved as \"" + name + "\" in Replays.");
             }).catch(function (error) { console.error(error); say(error.message || "The replay could not be saved."); }).then(function () { ui.save.disabled = false; ui.save.textContent = "Save as replay"; });
         });
+    }
+
+    // the camera track for a replay that is saved: the keys of the track, and for every clip with a fixed shot a key at its start (a cut) and at its end; where the track goes on
+    // after such a clip, a key with the track as it is there, a cut too, so that the shot does not slide into it
+    var bakeCam = new THREE.PerspectiveCamera(50, 1, 0.1, 100), bakeEuler = new THREE.Euler(0, 0, 0, "YXZ");
+    function bakedCamera() {
+        var keys = state.camera.slice(), at = 0, EPS = 0.001;
+        state.clips.forEach(function (clip) {
+            var T0 = at, T1 = at + clip.duration;
+            at = T1;
+            if (clip.cam !== "free" || !clip.freeKey) return;
+            // the keys of the track inside the clip give way to the shot
+            keys = keys.filter(function (k) { return k.t < T0 - EPS || k.t > T1 + EPS; });
+            var start = Object.assign({}, clip.freeKey, { t: round(T0, 3), cut: true }), end = Object.assign({}, clip.freeKey, { t: round(Math.max(T0, T1 - EPS), 3) });
+            keys.push(start, end);
+            // the track after the clip: a key there as the track has it, a cut (the next clip may be the track; a game camera there is not in a file anyway)
+            if (state.camera.some(function (k) { return k.t > T1; })) {
+                OpenRacer.CameraTrack.apply(state.camera, T1, bakeCam, Replay.carBody);
+                bakeEuler.setFromQuaternion(bakeCam.quaternion, "YXZ");
+                keys.push({ t: round(T1 + EPS, 3), pos: [bakeCam.position.x, bakeCam.position.y, bakeCam.position.z], yaw: bakeEuler.y, pitch: bakeEuler.x, roll: bakeEuler.z, fov: bakeCam.fov, parent: false, sky: false, aim: false, target: 0, cut: true });
+            }
+        });
+        keys.sort(function (a, b) { return a.t - b.t; });
+        return keys;
     }
 
     function download(blob, filename) {
@@ -404,7 +430,8 @@ OpenRacer.VideoEditor = (function () {
             "#vedit .ck { position: absolute; top: 22px; width: 14px; height: 14px; background: #37d67a; border: 1px solid #0e1217; transform: translateX(-7px) rotate(45deg); cursor: pointer; }" +
             "#vedit .ck.sel { background: var(--accent, #ff5a1f); }" +
             "#vedit .ck.parent { border-radius: 50%; } " +
-            "#vedit .head { position: absolute; top: 0; width: 0; height: 100%; border-left: 2px solid #ff4d4d; pointer-events: none; z-index: 5; }" +
+            "#vedit .head { position: absolute; top: 0; width: 12px; margin-left: -6px; height: 100%; background: linear-gradient(to right, transparent 5px, #ff4d4d 5px, #ff4d4d 7px, transparent 7px); cursor: ew-resize; z-index: 5; touch-action: none; }" +
+            "#vedit .head::before { content: ''; position: absolute; left: 1px; top: 0; width: 10px; height: 10px; background: #ff4d4d; border-radius: 0 0 5px 5px; }" +
             "#vedit .inspector { min-height: 62px; flex-shrink: 0; padding: 6px 12px 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; overflow-y: auto; }" +
             "#vedit .inspector .sep { width: 1px; height: 22px; background: var(--line, #2b333d); margin: 0 4px; }" +
             "#vedit .inspector .rkrow { display: inline-flex; gap: 4px; align-items: center; padding: 2px 6px; border: 1px solid var(--line, #2b333d); border-radius: 6px; }" +
@@ -506,13 +533,15 @@ OpenRacer.VideoEditor = (function () {
         ui.laneCam = el(ui.inner, "div", "lane"); ui.laneCam.style.top = "78px"; ui.laneCam.style.height = "50px";
         el(ui.laneCam, "div", "name", "CAMERA");
         ui.head = el(ui.inner, "div", "head");
+        // the playhead: a click in the lanes puts it there, and it is dragged (from the lanes, or by its own head, also over a clip); the moves come to the window, the pointer may leave the timeline
         var down = function (event) {
             if (event.target.closest && (event.target.closest(".clip") || event.target.closest(".ck"))) return;
+            event.preventDefault();
             scrubbing = true; state.finalPlaying = false; moveHead(event);
-            ui.scroller.setPointerCapture && ui.scroller.setPointerCapture(event.pointerId);
         };
         ui.inner.addEventListener("pointerdown", down);
-        ui.inner.addEventListener("pointermove", function (event) { if (scrubbing) moveHead(event); });
+        ui.head.addEventListener("pointerdown", function (event) { event.stopPropagation(); event.preventDefault(); scrubbing = true; state.finalPlaying = false; });
+        window.addEventListener("pointermove", function (event) { if (scrubbing) moveHead(event); });
         window.addEventListener("pointerup", function () { scrubbing = null; });
         ui.inspector = el(tl, "div", "inspector");
 
@@ -622,8 +651,18 @@ OpenRacer.VideoEditor = (function () {
         el(box, "span", "hint", "Clip " + (state.selected + 1) + ":");
         el(box, "span", "hint", "camera");
         var camSel = el(box, "select");
-        [["track", "Camera track"], ["follow", "Follow"], ["cockpit", "Cockpit"], ["cinematic", "Cinematic"]].forEach(function (o) { var opt = el(camSel, "option", "", o[1]); opt.value = o[0]; if ((clip.cam || "track") === o[0]) opt.selected = true; });
-        camSel.title = "The camera of this clip: the camera track (your keys, over the follow camera), or one of the cameras of the game";
+        [["track", "Camera track"], ["free", "Free camera (a fixed shot)"], ["follow", "Follow"], ["cockpit", "Cockpit"], ["cinematic", "Cinematic"]].forEach(function (o) { var opt = el(camSel, "option", "", o[1]); opt.value = o[0]; if ((clip.cam || "track") === o[0]) opt.selected = true; });
+        camSel.title = "The camera of this clip: the camera track (your keys, over the follow camera), the free camera as a fixed shot (where you put it; parented to the car when Parent to car is on), or one of the cameras of the game";
+        // the fixed shot of the free camera: taken from the free camera as it is (Take camera), and the free camera can be put there again to move it (Go to shot)
+        var freeBox = el(box, "span", "");
+        freeBox.style.display = (clip.cam === "free") ? "" : "none";
+        button(freeBox, "Take camera", "The shot of this clip is the free camera as it is now (fly it with the Free camera button first; Parent to car makes the shot go with the car)", function () { takeFree(clip); touch(); });
+        button(freeBox, "Go to shot", "Put the free camera where the shot of this clip is, to move it and take it again", function () {
+            if (!clip.freeKey) { say("This clip has no shot yet: Take camera."); return; }
+            if (!Replay.free.active) Replay.enterFree();
+            OpenRacer.CameraTrack.toFree(Replay.free, clip.freeKey, camera);
+            state.finalPlaying = false; updateButtons();
+        });
         camSel.addEventListener("keydown", function (e) { e.stopPropagation(); });
         // the cinematic camera of this clip looks at the car, or this many metres ahead of it
         var leadBox = el(box, "span", "");
@@ -634,7 +673,13 @@ OpenRacer.VideoEditor = (function () {
         leadIn.addEventListener("keydown", function (e) { e.stopPropagation(); });
         leadIn.onchange = function () { var v = parseFloat(leadIn.value); clip.lead = isFinite(v) ? Math.max(0, Math.min(40, v)) : 0; leadIn.value = String(clip.lead); touch(); };
         el(leadBox, "span", "hint", " m");
-        camSel.onchange = function () { clip.cam = camSel.value; leadBox.style.display = clip.cam === "cinematic" ? "" : "none"; touch(); };
+        camSel.onchange = function () {
+            clip.cam = camSel.value;
+            leadBox.style.display = clip.cam === "cinematic" ? "" : "none";
+            freeBox.style.display = clip.cam === "free" ? "" : "none";
+            if (clip.cam === "free" && !clip.freeKey) takeFree(clip);            // (the shot is the free camera as it is now)
+            touch();
+        };
         el(box, "span", "hint", clip.keys.length ? "speed from the ramp keys" : "speed");
         var speed = el(box, "input"); speed.type = "number"; speed.step = "0.05"; speed.min = String(MIN_SPEED); speed.max = String(MAX_SPEED); speed.value = String(round(clip.speed, 2));
         speed.disabled = clip.keys.length > 0;
@@ -723,6 +768,12 @@ OpenRacer.VideoEditor = (function () {
         Replay.enterFree();
         state.finalPlaying = false;
         updateButtons();
+    }
+    // the fixed shot of a clip: a key of the camera track made from the free camera as it is now (t 0: it is applied on its own)
+    function takeFree(clip) {
+        if (!Replay.free.active) { Replay.enterFree(); state.finalPlaying = false; updateButtons(); }
+        clip.freeKey = OpenRacer.CameraTrack.fromFree(Replay.free, 0);
+        say("The shot of clip " + (state.clips.indexOf(clip) + 1) + " is the camera as it is now" + (clip.freeKey.parent ? " (it goes with the car)" : "") + ".");
     }
     function keyHere() {
         if (!Replay.free.active) { Replay.enterFree(); state.finalPlaying = false; }
@@ -853,6 +904,7 @@ OpenRacer.VideoEditor = (function () {
         var clipCam = m && m.clip && m.clip.cam && m.clip.cam !== "track" ? m.clip.cam : "track";
         if (Replay.setGameCamera) Replay.setGameCamera(clipCam, m && m.clip ? m.clip.lead : undefined);
         if (!Replay.free.active && clipCam === "track" && state.camera.length) OpenRacer.CameraTrack.apply(state.camera, state.T, camera, Replay.carBody);
+        if (!Replay.free.active && clipCam === "free" && m.clip.freeKey) OpenRacer.CameraTrack.apply([m.clip.freeKey], 0, camera, Replay.carBody);      // (the fixed shot of the clip)
         applyZoom(m && m.clip ? zoomAtOffset(m.clip, m.src - m.clip.in) : 1);
         ui.time.textContent = fmt(state.T) + " / " + fmt(length) + (m && m.clip ? "   ×" + round(speedAtOffset(m.clip, m.src - m.clip.in), 2) : "");
         placeHead();

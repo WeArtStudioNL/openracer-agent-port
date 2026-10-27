@@ -12,6 +12,7 @@
  *                sky      with parent: the camera goes with the car's place only and keeps the sky up (pos is an offset in the world)
  *                aim      the camera points at the car (a little above its middle) wherever it is
  *                target   the car (0 is the player, 1 and up the opponents)
+ *                cut      the camera does not move to this key from the one before it: it holds that one and jumps here at t (a fixed shot of a clip of the video editor)
  *              Between two keys the camera moves smoothly (slow at both ends): the place, the look and the field of view. Before the first and after the last it stays at those.
  *              The same code is used by the editor and by the replay that is opened from a file (Replay.afterFrame).
  */
@@ -32,7 +33,8 @@ OpenRacer.CameraTrack = (function () {
             if (!k || !Array.isArray(k.pos) || k.pos.length !== 3 || !k.pos.every(function (x) { return typeof x === "number" && isFinite(x) && Math.abs(x) < 1e6; })) continue;
             out.push({
                 t: Math.max(0, finite(k.t, 0)), pos: k.pos.slice(), yaw: finite(k.yaw, 0), pitch: Math.max(-1.55, Math.min(1.55, finite(k.pitch, 0))), roll: Math.max(-Math.PI, Math.min(Math.PI, finite(k.roll, 0))),
-                fov: Math.max(8, Math.min(110, finite(k.fov, 60))), parent: !!k.parent, sky: !!k.parent && !!k.sky, aim: !!k.aim, target: Math.max(0, Math.min(11, Math.floor(finite(k.target, 0))))
+                fov: Math.max(8, Math.min(110, finite(k.fov, 60))), parent: !!k.parent, sky: !!k.parent && !!k.sky, aim: !!k.aim, target: Math.max(0, Math.min(11, Math.floor(finite(k.target, 0)))),
+                cut: !!k.cut
             });
         }
         out.sort(function (a, b) { return a.t - b.t; });
@@ -66,7 +68,7 @@ OpenRacer.CameraTrack = (function () {
         var a = keys[i], b = keys[Math.min(n - 1, i + 1)];
         pose(a, bodyOf(a.target), tmpPos, tmpQuat);
         var fov = a.fov;
-        if (b !== a && time > a.t) {
+        if (b !== a && time > a.t && !b.cut) {                // (a key that is a cut: the camera holds the key before it, and jumps at the cut)
             var f = smooth((time - a.t) / Math.max(1e-6, b.t - a.t));
             pose(b, bodyOf(b.target), tmpPos2, tmpQuat2);
             tmpPos.lerp(tmpPos2, f);
