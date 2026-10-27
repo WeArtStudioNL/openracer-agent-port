@@ -9,7 +9,7 @@
 var MainMenu = (function() {
     var STORAGE_KEY = "openracer.lastChoice";
     var RACE_KEY = "openracer.raceOptions";
-    var raceOptions = { ai: 0, difficulty: "normal", ghost: true, records: true, laps: 0, wear: 1, damage: true };
+    var raceOptions = { ai: 0, difficulty: "normal", ghost: true, records: true, laps: 0, wear: 1, damage: true, opp: [] };
     try { raceOptions = Object.assign(raceOptions, JSON.parse(window.localStorage.getItem(RACE_KEY)) || {}); } catch(e) { /* no storage */ }
     function rememberRace() { try { window.localStorage.setItem(RACE_KEY, JSON.stringify(raceOptions)); } catch(e) { /* no storage */ } }
     var element = null;
@@ -83,6 +83,13 @@ var MainMenu = (function() {
             "#mainMenu .tile .hp , #pickDialog .tile .hp { font-size: 24px; font-weight: 700; line-height: 1; white-space: nowrap; color: var(--head); }" +
             "#mainMenu .tile .hp small , #pickDialog .tile .hp small { font-size: 11px; font-weight: normal; color: var(--muted); letter-spacing: 1px; margin-left: 4px; }" +
             "#mainMenu .tile .specs , #pickDialog .tile .specs { color: var(--muted); font-size: 12px; line-height: 1.3; }" +
+            // the opponents of a race: the places of the grid, the empty ones with a +, and the buttons (copy, remove) on a car that is in it
+            "#mainMenu .tile.empty { display: flex; align-items: center; justify-content: center; border-style: dashed; color: var(--muted); font-size: 56px; font-weight: 300; background: transparent; }" +
+            "#mainMenu .tile.empty:hover { color: var(--head); }" +
+            "#mainMenu .opps .tile .over { padding-right: 84px; }" +
+            "#mainMenu .tile .acts { position: absolute; right: 8px; top: 8px; display: flex; gap: 6px; z-index: 2; }" +
+            "#mainMenu .tile .acts button { width: 30px; height: 30px; border-radius: 15px; border: 1px solid var(--line); background: rgba(15, 18, 22, 0.85); color: var(--head); font-size: 15px; line-height: 1; cursor: pointer; padding: 0; }" +
+            "#mainMenu .tile .acts button:hover { border-color: var(--accent); color: #fff; }" +
             // the tracks
             "#mainMenu .list , #pickDialog .list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }" +
             "@media (max-width: 800px) { #mainMenu .list , #pickDialog .list { grid-template-columns: 1fr; } }" +
@@ -769,8 +776,9 @@ var MainMenu = (function() {
     function start() {
         if(!choice.car || !choice.track) return;
         remember();
+        var chosen = mode === "race" ? oppList() : [];
         window.location.href = window.location.pathname + "?car=" + encodeURIComponent(choice.car) + "&track=" + encodeURIComponent(choice.track) +
-            "&ai=" + raceOptions.ai + "&difficulty=" + raceOptions.difficulty + "&ghost=" + (raceOptions.ghost ? 1 : 0) + "&records=" + (raceOptions.records ? 1 : 0) +
+            "&ai=" + (chosen.length || raceOptions.ai) + (chosen.length ? "&opp=" + chosen.map(function(o) { return encodeURIComponent(o.car) + (o.tune ? "~" + encodeURIComponent(o.tune) : ""); }).join(",") : "") + "&difficulty=" + raceOptions.difficulty + "&ghost=" + (raceOptions.ghost ? 1 : 0) + "&records=" + (raceOptions.records ? 1 : 0) +
             "&laps=" + (raceOptions.laps || 0) + "&wear=" + (raceOptions.wear === undefined ? 1 : raceOptions.wear) + "&damage=" + (raceOptions.damage === false ? 0 : 1) + aiCarsParameter();
     }
 
@@ -953,7 +961,8 @@ var MainMenu = (function() {
     var MODE_KEY = "openracer.mode";
     var mode = "free";
     try { mode = window.localStorage.getItem(MODE_KEY) || "free"; } catch(e) { /* no storage */ }
-    var STEP_NAMES = { mode: "Play", car: "Car", tune: "Tune", track: "Track", race: "Race", surface: "Ground" };
+    var STEP_NAMES = { mode: "Play", car: "Car", tune: "Tune", track: "Track", race: "Race", opponents: "Opponents", surface: "Ground" };
+    var oppPick = null;                  // while a car is added on the Opponents page: { stage: "car" } or { stage: "tune", car: id }
     var SURFACE_KEY = "openracer.skidSurface";
     var skidSurface = "road";
     try { skidSurface = window.localStorage.getItem(SURFACE_KEY) || "road"; } catch(e) { /* no storage */ }
@@ -961,11 +970,11 @@ var MainMenu = (function() {
     // the setups (tunes) of the car that is chosen (the tuning menu, the car editor; OpenRacer.Setups): a step of its own as soon as there is one (Default, the car as made, and the tune)
     function tunesOf() { return choice.car && OpenRacer.Setups ? OpenRacer.Setups.names(choice.car) : []; }
     function stepsOf() {
-        var steps = mode === "race" ? ["mode", "car", "track", "race"] : (mode === "skidpad" ? ["mode", "car", "surface"] : ["mode", "car", "track"]);
+        var steps = mode === "race" ? ["mode", "car", "track", "race", "opponents"] : (mode === "skidpad" ? ["mode", "car", "surface"] : ["mode", "car", "track"]);
         if(tunesOf().length >= 1) steps.splice(2, 0, "tune");
         return steps;
     }
-    function go(next) { screen = next; render(); var page = element.querySelector(".page"); if(page) page.scrollTop = 0; }
+    function go(next) { screen = next; oppPick = null; render(); var page = element.querySelector(".page"); if(page) page.scrollTop = 0; }
     function setMode(value) {
         mode = value;
         try { window.localStorage.setItem(MODE_KEY, mode); } catch(e) { /* no storage */ }
@@ -977,6 +986,7 @@ var MainMenu = (function() {
         if(at === steps.length - 1) begin(); else go(steps[at + 1]);
     }
     function goBack() {
+        if(oppPick) { oppPick = null; render(); return; }          // (adding an opponent: back to the grid)
         var steps = stepsOf(), at = steps.indexOf(screen);
         go(at <= 0 ? "home" : steps[at - 1]);
     }
@@ -1157,10 +1167,13 @@ var MainMenu = (function() {
         inner.innerHTML = "<h2>Choose your tune</h2><div class=\"sub\">Click a tune to go on. A tune is a setup saved in the tuning menu or the car editor; Default is the car as made (car.json).</div>";
         var car = cars.filter(function(c) { return c.id === choice.car; })[0];
         if(!car) return;
+        tuneTiles(inner, car, OpenRacer.Setups.active(car.id) || "", function(name) { OpenRacer.Setups.use(car.id, name || null); goNext(); });
+    }
+    // the tiles of the tunes of a car (Default and every setup), each with its picture; onPick(name) with "" for Default
+    function tuneTiles(inner, car, active, onPick) {
         var tilesBox = document.createElement("div");
         tilesBox.className = "tiles";
-        var active = OpenRacer.Setups.active(car.id) || "";
-        [""].concat(tunesOf()).forEach(function(name) {
+        [""].concat(OpenRacer.Setups.names(car.id)).forEach(function(name) {
             var div = document.createElement("div");
             div.className = "tile" + (active === name ? " selected" : "");
             var picture = document.createElement("img");
@@ -1189,7 +1202,7 @@ var MainMenu = (function() {
             bottom.appendChild(hp);
             over.appendChild(bottom);
             div.appendChild(over);
-            div.onclick = function() { OpenRacer.Setups.use(car.id, name || null); goNext(); };
+            div.onclick = function() { onPick(name); };
             tilesBox.appendChild(div);
         });
         inner.appendChild(tilesBox);
@@ -1318,6 +1331,91 @@ var MainMenu = (function() {
         inner.appendChild(more);
     }
 
+    // ---- the opponents: a grid of the places (as many as Opponents says, 4 in a row); a + adds a car (the way the car is chosen, then the tune when it has one), the copy button adds
+    // the same car again. Nothing chosen: the cars of the garage take the places, as before
+    function oppList() {
+        var list = Array.isArray(raceOptions.opp) ? raceOptions.opp : [];
+        return list.filter(function(o) { return o && cars.some(function(c) { return c.id === o.car; }) && (!o.tune || OpenRacer.Setups.names(o.car).indexOf(o.tune) >= 0); }).slice(0, raceOptions.ai);
+    }
+    function oppAdd(carId, tune) {
+        var list = oppList();
+        if(list.length >= raceOptions.ai) return;
+        raceOptions.opp = list.concat([{ car: carId, tune: tune || "" }]);
+        rememberRace();
+    }
+    function opponentsStep(inner) {
+        if(oppPick && oppPick.stage === "car") {
+            inner.innerHTML = "<h2>Add an opponent</h2><div class=\"sub\">Click a car to add it.</div>";
+            var carTiles = document.createElement("div");
+            carTiles.className = "tiles";
+            showcase.clear();
+            cars.forEach(function(car) {
+                carTiles.appendChild(carTile(car, function() {
+                    if(OpenRacer.Setups.names(car.id).length >= 1) { oppPick = { stage: "tune", car: car.id }; render(); }
+                    else { oppAdd(car.id, ""); oppPick = null; render(); }
+                }));
+            });
+            inner.appendChild(carTiles);
+            return;
+        }
+        if(oppPick && oppPick.stage === "tune") {
+            var picked = cars.filter(function(c) { return c.id === oppPick.car; })[0];
+            inner.innerHTML = "<h2>Choose the tune</h2><div class=\"sub\">Click a tune of this car to add it. Default is the car as made.</div>";
+            if(picked) tuneTiles(inner, picked, null, function(name) { oppAdd(picked.id, name); oppPick = null; render(); });
+            return;
+        }
+        var max = raceOptions.ai, list = oppList();
+        inner.innerHTML = "<h2>Choose your opponents</h2><div class=\"sub\">Up to " + max + ". Click + to add a car; the copy button on a car adds the same one again. Without a choice the cars of the garage take the places.</div>";
+        var grid = document.createElement("div");
+        grid.className = "tiles opps";
+        list.forEach(function(o, index) {
+            var car = cars.filter(function(c) { return c.id === o.car; })[0];
+            var div = document.createElement("div");
+            div.className = "tile";
+            var picture = document.createElement("img");
+            picture.alt = "";
+            picture.draggable = false;
+            div.appendChild(picture);
+            if(o.tune) previews.requestTune(car, o.tune, picture); else previews.request(car, picture);
+            var over = document.createElement("div");
+            over.className = "over";
+            var label = document.createElement("div");
+            label.className = "name";
+            label.textContent = car.name || car.id;
+            over.appendChild(label);
+            var tuneLine = document.createElement("div");
+            tuneLine.className = "specs";
+            tuneLine.textContent = o.tune || "Default";
+            over.appendChild(tuneLine);
+            div.appendChild(over);
+            var acts = document.createElement("div");
+            acts.className = "acts";
+            if(list.length < max) {
+                var copy = document.createElement("button");
+                copy.textContent = "⧉";
+                copy.title = "Add the same car again";
+                copy.onclick = function(e) { e.stopPropagation(); oppAdd(o.car, o.tune); render(); };
+                acts.appendChild(copy);
+            }
+            var remove = document.createElement("button");
+            remove.textContent = "✕";
+            remove.title = "Remove this opponent";
+            remove.onclick = function(e) { e.stopPropagation(); raceOptions.opp = list.filter(function(x, i) { return i !== index; }); rememberRace(); render(); };
+            acts.appendChild(remove);
+            div.appendChild(acts);
+            grid.appendChild(div);
+        });
+        for(var i = list.length; i < max; i++) {
+            var empty = document.createElement("div");
+            empty.className = "tile empty";
+            empty.textContent = "+";
+            empty.title = "Add an opponent";
+            empty.onclick = function() { oppPick = { stage: "car" }; render(); };
+            grid.appendChild(empty);
+        }
+        inner.appendChild(grid);
+    }
+
     function summary() {
         var car = cars.filter(function(c) { return c.id === choice.car; })[0];
         var track = tracks.filter(function(t) { return t.id === choice.track; })[0];
@@ -1329,6 +1427,7 @@ var MainMenu = (function() {
         else if(car && screen === "car") parts.push(car.name || car.id);
         if(track && mode !== "skidpad" && (screen === "track" || screen === "race")) parts.push(track.name || track.id);
         if(screen === "race") parts.push(raceOptions.laps + " laps, " + raceOptions.ai + " opponents");
+        if(screen === "opponents") parts.push(raceOptions.laps + " laps, " + (oppList().length || raceOptions.ai) + " opponents" + (oppList().length ? "" : " (from the garage)"));
         return parts;
     }
 
@@ -1379,6 +1478,7 @@ var MainMenu = (function() {
         else if(screen === "tune") tuneStep(inner);
         else if(screen === "track") trackStep(inner);
         else if(screen === "race") raceStep(inner);
+        else if(screen === "opponents") opponentsStep(inner);
         else if(screen === "surface") surfaceStep(inner);
 
         var bar = document.createElement("div");
@@ -1393,7 +1493,7 @@ var MainMenu = (function() {
             sum.appendChild(b);
         });
         bar.appendChild(sum);
-        if(screen !== "mode") {
+        if(screen !== "mode" && !oppPick) {
             var steps2 = stepsOf();
             var last = steps2.indexOf(screen) === steps2.length - 1;
             var next = button(last ? (mode === "skidpad" ? "Start" : "Start ▶") : "Next ›", "primary", goNext);
@@ -1455,7 +1555,7 @@ var MainMenu = (function() {
         document.body.appendChild(element);
         window.addEventListener("keydown", function(event) {
             if(document.querySelector(".or-dialog, #replaysDialog, #garageDialog, #settingsMenu")) return;
-            if(event.code === "Enter") { if(screen === "home") go("mode"); else if(screen !== "mode") goNext(); }
+            if(event.code === "Enter") { if(screen === "home") go("mode"); else if(screen !== "mode" && !oppPick) goNext(); }
             else if(event.code === "Escape" && screen !== "home") goBack();
         });
         if(!importFromAddress()) load();

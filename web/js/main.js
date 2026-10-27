@@ -56,11 +56,7 @@ function startGame(carId, trackId) {
         // the setup that was chosen for this car (the main menu, the tuning menu, the car editor; OpenRacer.Setups): its configuration laid over car.json, the model and the id of the car kept
         if(OpenRacer.Setups) {
             var setupName = OpenRacer.Setups.active(carId), setup = setupName ? OpenRacer.Setups.configOf(carId, setupName, carFound) : null;
-            if(setup) carConfig = Object.assign({}, carFound, setup, { id: carFound.id, model: carFound.model, preview: carFound.preview, folder: carFound.folder, source: carFound.source });
-            // (a layout of the shell without the centre of gravity it was drawn at: it was drawn for the car as made, car.json; CollisionProxy shifts it to the centre of the setup)
-            if(setup && carConfig.softbody && carConfig.softbody.layout && !isFinite(carConfig.softbody.layout_cg) && carFound.chassis) carConfig.softbody = Object.assign({}, carConfig.softbody, { layout_cg: carFound.chassis.cg_height, layout_radius: carFound.chassis.tire_diameter / 2 });
-            // (a setup from the car editor has the driver without his file, which is the car's: the file of car.json)
-            if(setup && carConfig.driver && !carConfig.driver.file && carFound.driver && carFound.driver.file) carConfig.driver = Object.assign({}, carConfig.driver, { file: carFound.driver.file });
+            if(setup) carConfig = withTune(carFound, setupName);
         }
         race.allCars = result[0].filter(function(item) { return item.id !== carId; }).concat([carFound]);
         s = new RACER.Scene();
@@ -86,6 +82,18 @@ var race = { opponents: [], ghost: null, line: null, options: null, allCars: [] 
 // Read here, before the cars load, since the shell is built when the model of a car arrives (CollisionProxy.apply)
 OpenRacer.damageEnabled = new URLSearchParams(window.location.search).get("damage") !== "0";
 
+// a car with a setup (tune) of it laid over car.json, the model and the id of the car kept; the car as it is when there is no such setup
+function withTune(base, setupName) {
+    var setup = setupName && OpenRacer.Setups ? OpenRacer.Setups.configOf(base.id, setupName, base) : null;
+    if(!setup) return base;
+    var config = Object.assign({}, base, setup, { id: base.id, model: base.model, preview: base.preview, folder: base.folder, source: base.source });
+    // (a layout of the shell without the centre of gravity it was drawn at: it was drawn for the car as made, car.json; CollisionProxy shifts it to the centre of the setup)
+    if(config.softbody && config.softbody.layout && !isFinite(config.softbody.layout_cg) && base.chassis) config.softbody = Object.assign({}, config.softbody, { layout_cg: base.chassis.cg_height, layout_radius: base.chassis.tire_diameter / 2 });
+    // (a setup from the car editor has the driver without his file, which is the car's: the file of car.json)
+    if(config.driver && !config.driver.file && base.driver && base.driver.file) config.driver = Object.assign({}, config.driver, { file: base.driver.file });
+    return config;
+}
+
 function raceOptionsFromQuery(query) {
     return {
         ai: Math.max(0, Math.min(7, parseInt(query.get("ai") || "0", 10) || 0)),
@@ -93,6 +101,7 @@ function raceOptionsFromQuery(query) {
         ghost: query.get("ghost") !== "0",
         records: query.get("records") !== "0",
         laps: Math.max(0, Math.min(99, parseInt(query.get("laps") || "0", 10) || 0)), // 0: practice, no end
+        opp: (query.get("opp") || "").split(",").filter(Boolean).slice(0, 7).map(function(item) { var at = item.indexOf("~"); return at < 0 ? { car: decodeURIComponent(item), tune: "" } : { car: decodeURIComponent(item.slice(0, at)), tune: decodeURIComponent(item.slice(at + 1)) }; }),   // the opponents that were chosen in the main menu: [{ car, tune }] (empty: the cars of aicars, or all)
         aiCars: query.get("aicars") ? query.get("aicars").split(",").filter(Boolean) : null,        // the ids of the cars that may race against you (null: all)
         wear: Math.max(0, Math.min(5, parseFloat(query.get("wear") === null ? "1" : query.get("wear")) || 0)), // tyre wear and fuel: 0 off, 1 as it is, 3 fast
         damage: query.get("damage") !== "0",                                   // off: the cars are rigid bodies (no dents, no parts or wheels off, no punctures)
@@ -165,6 +174,8 @@ function setupRace() {
         if(options.aiCars) { var chosen = cars.filter(function(c) { return options.aiCars.indexOf(c.id) >= 0; }); if(chosen.length) cars = chosen; }
         for(var i = 0; i < options.ai; i++) {
             var config = cars[i % cars.length];
+            var chosen = options.opp && options.opp[i] ? race.allCars.filter(function(c) { return c.id === options.opp[i].car; })[0] : null;
+            if(chosen) config = withTune(chosen, options.opp[i].tune);
             var opponent = new OpenRacer.Opponent(config, race.line, { skill: skill * (1 - 0.04 * (i % 3)), color: colours[i % colours.length], name: (config.name || config.id) + " " + (i + 1), shellTyres: options.aiTyres === "shell" });
             opponent.vehicle.wearEnabled = options.wear > 0;
             opponent.vehicle.wearScale = options.wear || 1;
