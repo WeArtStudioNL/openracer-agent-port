@@ -202,8 +202,6 @@ OpenRacer.CarTuning = (function () {
             case "turbo_intercooler": case "turbo_efficiency": return v.turbo_boost > 0;
             case "tc_lockup": return g === "torque-converter";
             case "sb_max_nodes": case "sb_wheel_strength": return v.sb_enabled !== "off";
-            // the shell of a tyre of the wheel library is the tyre's own: the sliders only work for an axle on the tyres of the model
-            case "tyre_width": case "tyre_rings": case "tyre_segments": case "tyre_inner_ratio": case "tyre_carcass": return !(v.tyre_front && v.tyre_rear);
             case "bike_max_lean": case "bike_fast_lean": case "bike_rake": case "bike_rider_mass": case "bike_hang_off": case "bike_max_lateral_g": case "bike_balance": case "bike_fork_dive": return v.vehicle_type === "motorcycle";
             default: return true;
         }

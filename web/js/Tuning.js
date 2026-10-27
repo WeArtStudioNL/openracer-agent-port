@@ -438,10 +438,38 @@ var Tuning = (function() {
         if(setupButtons) { var none = !setupSelect.value; setupButtons.save.disabled = none; setupButtons.drop.disabled = none; setupButtons.save.style.opacity = setupButtons.drop.style.opacity = none ? 0.45 : 1; }
     }
 
+    // The shell of a tyre of the wheel library is the tyre's own (WheelLibrary.js): with a library tyre on both axles the shell sliders show the tyre's values and are
+    // grey (front; the rear in the note below the tyres), with a tyre of the model on one axle they work for that axle
+    var SHELL_KEYS = { tyre_width: ["width", 100], tyre_rings: ["rings", 1], tyre_segments: ["segments", 1], tyre_inner_ratio: ["inner_ratio", 100], tyre_carcass: ["carcass", 1] };
+    var shellNote = null;
+    function libraryShell(axle) {
+        var L = OpenRacer.WheelLibrary;
+        if(!L || !values["tyre_" + axle]) return null;
+        var s = L.shellOf(tunedConfig(), axle);
+        if(!s) return null;
+        var d = car.vehicle.tyreShell;        // (what the tyre does not say, the car's shared shell gives)
+        return { width: s.width > 0 ? s.width : d.width, rings: s.rings > 0 ? s.rings : d.rings, segments: s.segments > 0 ? s.segments : d.segments, inner_ratio: s.inner_ratio > 0 ? s.inner_ratio : d.inner_ratio, carcass: s.carcass !== undefined && s.carcass !== null ? s.carcass : d.carcass };
+    }
+    function shellText(s) { return (s.width > 0 ? Math.round(s.width * 100) + " cm wide, " : "") + s.rings + " rings × " + s.segments + " nodes, inner shell " + Math.round(s.inner_ratio * 100) + " %, carcass " + s.carcass + " mm"; }
+
     function refresh() {
         refreshSetups();
         var CT = OpenRacer.CarTuning;
+        var shellFront = libraryShell("front"), shellRear = libraryShell("rear"), shellLocked = !!(shellFront && shellRear);
+        if(!shellNote) { var after = controls.filter(function(c) { return c.key === "tyre_rear"; })[0]; if(after && after.line.parentNode) { shellNote = document.createElement("div"); shellNote.id = "tuningShellNote"; shellNote.style.cssText = "font-size:12px; color:var(--accent2); margin:2px 0 6px"; after.line.parentNode.parentNode.insertBefore(shellNote, after.line.parentNode.nextSibling); } }
+        if(shellNote) {
+            var parts = [];
+            if(shellFront) parts.push("front: " + shellText(shellFront));
+            if(shellRear) parts.push("rear: " + shellText(shellRear));
+            shellNote.textContent = parts.length ? "The shell of a library tyre is set on the tyre (wheels/wheels.json): " + parts.join("; ") + (shellLocked ? "." : ". The shell sliders work for the other axle.") : "";
+            shellNote.style.display = parts.length ? "" : "none";
+        }
         controls.forEach(function(c) {
+            if(c.range && SHELL_KEYS[c.key]) {
+                c.range.disabled = c.number.disabled = shellLocked;
+                c.line.style.opacity = shellLocked ? 0.55 : "";
+                if(shellLocked) { var sv = shellFront[SHELL_KEYS[c.key][0]] * SHELL_KEYS[c.key][1]; c.range.min = Math.min(c.def[3], sv); c.range.max = Math.max(c.def[4], sv); c.range.value = sv; c.number.value = format(c.def, sv); c.line.classList.remove("changed"); return; }
+            }
             // the row of a setting that cannot do anything with the others as they are is hidden (CarTuning.visible)
             if(c.line && c.line.parentNode && CT.visible) {
                 var shown = c.checkbox ? CT.visibleFeature(c.key.replace(/_on$/, ""), values) : CT.visible(c.key, values);
