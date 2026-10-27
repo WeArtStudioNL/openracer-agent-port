@@ -174,6 +174,12 @@ var EngineSound = (function() {
     function level() {
         return (muted || paused) ? 0 : volume;
     }
+    // the loudness to the nodes at once (a pause or a mute without another update: a replay that stops kept the engine at its last tone, since the gain was only set from update)
+    function applyLevel() {
+        if(!ctx || ctx.state !== "running") return;
+        if(output) output.gain.setTargetAtTime(level(), ctx.currentTime, 0.05);
+        if(squeal && (paused || muted)) squeal.mute(ctx.currentTime);
+    }
 
     function start() {
         enabledByUser = true;
@@ -353,8 +359,8 @@ var EngineSound = (function() {
         setGround: setGround,
         impact: impact,
         status: status,
-        setMuted: function(value) { muted = value; },
-        setPaused: function(value) { paused = value; },
+        setMuted: function(value) { muted = value; applyLevel(); },
+        setPaused: function(value) { paused = value; applyLevel(); },
         setVolume: function(value) { volume = value; },
         // the sound parameters of a car (its configuration, "sound.engine_sim"); also while the engine runs, for tuning
         setCar: function(config) {
