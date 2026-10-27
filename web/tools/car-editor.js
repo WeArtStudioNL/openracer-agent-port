@@ -1855,8 +1855,15 @@ function loadExisting() {
     state.existingId = car.id;
     state.existingModel = car.model;
     state.existingCar = car;
-    fill(car);
-    state.overrides = JSON.parse(JSON.stringify(car.materials || {}));
+    // the tune that is chosen for this car (the main menu, the tuning menu, this editor: OpenRacer.Setups) goes into the form at once, as choosing it in the list does
+    const activeTune = OpenRacer.Setups ? OpenRacer.Setups.active(car.id) : null;
+    let shown = car;
+    if (activeTune) {
+        const saved = OpenRacer.Setups.configOf(car.id, activeTune, car);
+        if (saved) shown = Object.assign({}, car, saved, { id: car.id, model: car.model });
+    }
+    fill(shown);
+    state.overrides = JSON.parse(JSON.stringify(shown.materials || car.materials || {}));
     state.autoGlass = !car.materials; // a car that was made before the materials could be set gets see-through glass as a suggestion
     $("delete").style.display = "";
     if (car.model.type === "gltf") {
@@ -1865,7 +1872,7 @@ function loadExisting() {
         $("scale").value = m.scale || 1;
         const o = m.offset || [0, 0, 0];
         $("offsetX").value = o[0]; $("offsetY").value = o[1]; $("offsetZ").value = o[2];
-        const wheels = car.wheels || { mode: "default" };
+        const wheels = shown.wheels || car.wheels || { mode: "default" };
         setLibraryChoice(wheels.library || null);
         document.querySelector("input[name=wheelMode][value=" + wheels.mode + "]").checked = true;
         $("wheelSelects").style.display = wheels.mode === "model" ? "" : "none";
@@ -1889,7 +1896,7 @@ function loadExisting() {
     }
     $("editing").textContent = "Editing " + (car.name || car.id) + " (cars/" + car.id + "). Saving overwrites it; change the id to save a copy.";
     $("modelNote").textContent = "To update the model of this car pick a new .glb here: the rest of the car is kept (the transform, the wheels and the material changes where the new model still fits them).";
-    status("Loaded " + (car.name || car.id) + ".");
+    status("Loaded " + (car.name || car.id) + (activeTune && shown !== car ? " with the tune " + activeTune : "") + ".");
 }
 
 function newCar(type) {
