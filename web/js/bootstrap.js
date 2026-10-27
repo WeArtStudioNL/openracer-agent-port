@@ -66,6 +66,7 @@ var scripts = [
     "js/Records.js",
     "js/JumpStats.js",
     "js/GateMarkers.js",
+    "js/TrackMarks.js",
     "js/RigidObjects.js",
     "js/Ghost.js",
     "js/Opponent.js",

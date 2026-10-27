@@ -77,13 +77,9 @@
         <details class="card" open>
             <summary>Start and lap gates<span class="meta" id="gateNote"></span></summary>
             <div class="body">
-                <p class="sub">Use the tools in the view: click on the road and drag in the direction that the car drives. The first gate is the finish line.</p>
-                <label>Start x / z / heading (°; 0 = towards +x, 90 = towards +z)</label>
-                <div class="row">
-                    <input type="number" id="startX" step="0.1">
-                    <input type="number" id="startZ" step="0.1">
-                    <input type="number" id="startHeading" step="1" value="0">
-                </div>
+                <p class="sub">Use the tools in the view: click on the road and drag in the direction that the car drives. <b>Grid box</b> places the next box of the start grid: box 1 is the start of the player, 2 to 8 are for the opponents of a race. The first gate is the finish line.</p>
+                <div id="gridList"></div>
+                <div class="buttons"><button class="small ghost" id="gridClear">Clear the grid</button></div>
                 <div class="row">
                     <div><label>Width of new gates (m)</label><input type="number" id="gateWidth" value="24" min="2" step="1"></div>
                     <div><label>&nbsp;</label><button class="small ghost" id="gateAtStart" style="width:100%">Gate 1 at the start</button></div>
@@ -93,6 +89,13 @@
             </div>
         </details>
 
+        <details class="card">
+            <summary>Pit area<span class="meta" id="pitNote"></span></summary>
+            <div class="body">
+                <p class="sub">A surface on the ground that is the pit lane: inside it a car that stands still is serviced (fuel, tyres), and the AI drives through it for its stops. Choose <b>Pit area</b> in the toolbar and click the corners on the ground, in order round the area; the shape closes itself. The last point can be taken back.</p>
+                <div class="buttons"><button class="small ghost" id="pitUndo">Undo the last point</button><button class="small danger" id="pitClear">Clear the pit area</button></div>
+            </div>
+        </details>
         <details class="card" open>
             <summary>Objects<span class="meta" id="objectNote"></span></summary>
             <div class="body">
@@ -195,7 +198,8 @@
     <div id="toast"></div>
     <div class="float bottom" id="modes">
         <button data-mode="view" class="active">Look</button>
-        <button data-mode="start">Place start</button>
+        <button data-mode="grid">Grid box</button>
+        <button data-mode="pit">Pit area</button>
         <button data-mode="gate">Add gate</button>
         <button data-mode="drag">Drag strip</button>
         <button data-mode="object">Place object</button>

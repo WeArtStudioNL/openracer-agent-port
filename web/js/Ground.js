@@ -36,6 +36,22 @@ OpenRacer.GroundWorld = function (cellSize) {
     var meshes = [];         // names of the meshes
     var meshOf = [];
     var cells = {};
+    // the pit areas of the track (track.json "pit": a polygon on the ground, drawn in the track editor): a place inside one is the pit lane, whatever the road there is
+    // called (the surface "track01", which Pit.js and Opponent.js know as the pit lane)
+    var pitAreas = [];
+    var PIT = "track01";
+    this.setPitAreas = function (polygons) { pitAreas = (polygons || []).filter(function (p) { return Array.isArray(p) && p.length >= 3; }); };
+    function inPolygon(poly, x, z) {
+        var inside = false;
+        for(var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            var xi = poly[i][0], zi = poly[i][1], xj = poly[j][0], zj = poly[j][1];
+            if(((zi > z) !== (zj > z)) && (x < (xj - xi) * (z - zi) / ((zj - zi) || 1e-12) + xi)) inside = !inside;
+        }
+        return inside;
+    }
+    this.inPit = function (x, z) { for(var i = 0; i < pitAreas.length; i++) if(inPolygon(pitAreas[i], x, z)) return true; return false; };
+    var inPit = this.inPit;
+    function pitSurface(x, z, surface) { return pitAreas.length && surface !== "wall" && inPit(x, z) ? PIT : surface; }
 
     function surfaceIndex(name) {
         var i = surfaces.indexOf(name);
@@ -82,10 +98,20 @@ OpenRacer.GroundWorld = function (cellSize) {
     this.centroidsOf = function (surface) {
         var index = surfaces.indexOf(surface);
         var out = [];
-        if(index < 0) return out;
-        for(var t = 0; t < tri.length; t += 14) {
+        if(index >= 0) for(var t = 0; t < tri.length; t += 14) {
             if(tri[t + 13] !== index) continue;
             out.push({ x: (tri[t] + tri[t + 2] + tri[t + 4]) / 3, y: (tri[t + 6] + tri[t + 7] + tri[t + 8]) / 3, z: (tri[t + 1] + tri[t + 3] + tri[t + 5]) / 3 });
+        }
+        // the pit areas: points on a grid inside the polygon, on the road there (for the line of the AI through the pit lane, Pit.js)
+        if(surface === PIT) for(var p = 0; p < pitAreas.length; p++) {
+            var poly = pitAreas[p], minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+            poly.forEach(function (q) { minX = Math.min(minX, q[0]); maxX = Math.max(maxX, q[0]); minZ = Math.min(minZ, q[1]); maxZ = Math.max(maxZ, q[1]); });
+            var step = Math.max(1.5, Math.min(3, Math.max(maxX - minX, maxZ - minZ) / 40));
+            for(var x = minX + step / 2; x < maxX; x += step) for(var z = minZ + step / 2; z < maxZ; z += step) {
+                if(!inPolygon(poly, x, z)) continue;
+                var road = this.query(x, z, 1e4, 1e4);
+                if(road) out.push({ x: x, y: road.y, z: z });
+            }
         }
         return out;
     };
@@ -123,7 +149,7 @@ OpenRacer.GroundWorld = function (cellSize) {
             }
         }
         if(best < 0) return null;
-        return { y: bestY, nx: tri[best + 9], ny: tri[best + 10], nz: tri[best + 11], surface: surfaces[tri[best + 13]], mesh: meshes[meshOf[bestMesh]] };
+        return { y: bestY, nx: tri[best + 9], ny: tri[best + 10], nz: tri[best + 11], surface: pitSurface(x, z, surfaces[tri[best + 13]]), mesh: meshes[meshOf[bestMesh]] };
     };
     var bestMesh = 0;
 
@@ -250,7 +276,7 @@ OpenRacer.GroundWorld = function (cellSize) {
         var bnx = data3[ob + 9], bny = data3[ob + 10], bnz = data3[ob + 11];
         if(bnx * dx + bny * dy + bnz * dz > 0) { bnx = -bnx; bny = -bny; bnz = -bnz; }
         return { t: bestT, x: ox + dx * bestT, y: oy + dy * bestT, z: oz + dz * bestT, nx: bnx, ny: bny, nz: bnz,
-            surface: surfaces[meta3[best * 3]], mesh: meshes[meta3[best * 3 + 1]] };
+            surface: pitSurface(ox + dx * bestT, oz + dz * bestT, surfaces[meta3[best * 3]]), mesh: meshes[meta3[best * 3 + 1]] };
     };
 
     // How far along a ray (a direction of unit length) the first triangle of any kind is (the road, a kerb, a wall, a fence; from both sides), not further than

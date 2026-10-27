@@ -111,6 +111,7 @@ function trackLoaded() {
     car = new OpenRacer.Car(carConfig);
     if(OpenRacer.RigidObjects) OpenRacer.RigidObjects.setup(currentTrack, typeof trackRigidPieces !== "undefined" ? trackRigidPieces : []);
     if(OpenRacer.GateMarkers) OpenRacer.GateMarkers.build(currentTrack);
+    if(OpenRacer.TrackMarks) OpenRacer.TrackMarks.build(currentTrack);      // the pit area and the grid boxes of the track editor, drawn on the road
     Tuning.attach(car, carConfig, carBaseConfig); // the tuning menu, with the tuning that was kept for this car (and the car as made, for "the car as made" of the setups)
     telemetry = new OpenRacer.Telemetry({car: car, domElement: document.getElementById("telemetry")});
     setupRace();
@@ -155,7 +156,7 @@ function setupRace() {
         }
         var skill = { easy: 0.7, normal: 0.85, hard: 1.0 }[options.difficulty] || 0.85;
         var colours = [0xd94a3d, 0x3d7bd9, 0xe3b53a, 0x3fae5a, 0xf0f0f0, 0x8a4fd1, 0xf07a2a];
-        var start = track.start;
+        var start = track.start, grid = Array.isArray(track.grid) ? track.grid : [];      // the grid boxes of the track editor: box 1 is the start, the others are for the opponents
         var startIndex = race.line.nearest(start.x, start.z);
         race.line.origin = startIndex; // the laps of the line are counted from the start
         var cars = race.allCars.length ? race.allCars : [carConfig];
@@ -168,12 +169,16 @@ function setupRace() {
             if(options.wear > 0) opponent.vehicle.freshTyres(60);
             opponent.pitLane = race.pitLane;
             opponent.raceLaps = options.laps;
-            // on the grid ahead of the player, two by two
-            var index = startIndex + Math.round((7 * (i + 1) + 4) / race.line.step);
-            var p = race.line.point(index), next = race.line.point(index + 1);
-            var heading = Math.atan2(next.z - p.z, next.x - p.x);
-            var side = (i % 2 === 0 ? 1 : -1) * 2.2;
-            opponent.place(p.x - Math.sin(heading) * side, p.z + Math.cos(heading) * side, heading);
+            var box = grid[i + 1];
+            if(box && isFinite(box.x) && isFinite(box.z)) opponent.place(box.x, box.z, box.heading || 0);      // its own grid box
+            else {
+                // no box for it: on the grid ahead of the player, two by two, along the racing line
+                var index = startIndex + Math.round((7 * (i + 1) + 4) / race.line.step);
+                var p = race.line.point(index), next = race.line.point(index + 1);
+                var heading = Math.atan2(next.z - p.z, next.x - p.x);
+                var side = (i % 2 === 0 ? 1 : -1) * 2.2;
+                opponent.place(p.x - Math.sin(heading) * side, p.z + Math.cos(heading) * side, heading);
+            }
             race.opponents.push(opponent);
         }
         car.raceCount = race.opponents.length + 1;

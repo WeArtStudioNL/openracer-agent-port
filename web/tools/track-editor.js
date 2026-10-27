@@ -32,7 +32,9 @@ const state = {
     parts: new Map(),     // name of a part -> the meshes with that name
     roles: {},            // name of a part -> role
     selected: null,       // name of the selected part
-    start: null,          // { x, y, z, heading }
+    start: null,          // { x, y, z, heading }: box 1 of the grid (kept for the gates and the line; track.json "start")
+    grid: [],             // the start grid: up to eight boxes [{ x, y, z, heading }], box 1 the player, 2 to 8 the opponents (track.json "grid")
+    pit: null,            // the pit area: { points: [{ x, y, z }] }, a polygon on the ground (track.json "pit": { "polygon": [[x, z], ...] })
     gates: [],            // [{ x, y, z, heading, width }]
     cameras: [],          // the cinematic cameras of the replay: [{ x, y, z, range: { x, z, r } }] (y is the height in the world; range: the circle on the floor where the camera is used, set by hand or not)
     camSel: -1,           // the chosen camera
@@ -644,6 +646,8 @@ async function loadLegacyTrack(track) {
 
 // ---- the start and the gates
 
+const GRID_MAX = 8, BOX_W = 2.4, BOX_L = 5.0;
+function syncStart() { const b = state.grid[0]; state.start = b ? { x: b.x, y: b.y, z: b.z, heading: b.heading } : null; }
 function groundY(x, z, hint) {
     raycaster.set(new THREE.Vector3(x, (hint === undefined ? 10000 : hint + 50), z), new THREE.Vector3(0, -1, 0));
     const hits = raycaster.intersectObjects(trackGroup.children, true).filter((h) => DRIVABLE[state.roles[h.object.name || ""]]);
@@ -654,6 +658,18 @@ function heading(degrees) {
     return degrees * Math.PI / 180;
 }
 
+function numberLabel(n, x, y, z, colour) {
+    const c = document.createElement("canvas"); c.width = 64; c.height = 64;
+    const ctx = c.getContext("2d");
+    ctx.font = "bold 44px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.lineWidth = 6; ctx.strokeStyle = "rgba(0,0,0,0.7)"; ctx.strokeText(String(n), 32, 34);
+    ctx.fillStyle = "#" + colour.toString(16).padStart(6, "0"); ctx.fillText(String(n), 32, 34);
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
+    sprite.position.set(x, y + 1.2 * state.markerScale, z);
+    sprite.scale.setScalar(1.6 * state.markerScale);
+    sprite.renderOrder = 999;
+    return sprite;
+}
 function makeArrow(x, y, z, h, colour, length) {
     return new THREE.ArrowHelper(new THREE.Vector3(Math.cos(h), 0, Math.sin(h)), new THREE.Vector3(x, y + 0.6, z), length, colour, length * 0.3, length * 0.2);
 }
@@ -662,18 +678,39 @@ function updateMarkers() {
     markers.clear();
     showObjects();
     const k = state.markerScale;
-    if (state.start) {
-        const s = state.start;
-        markers.add(makeArrow(s.x, s.y, s.z, s.heading, 0xffd04d, 9 * k));
-        const body = new THREE.Mesh(new THREE.BoxGeometry(4.8, 1.2, 1.9), new THREE.MeshBasicMaterial({ color: 0xffd04d, wireframe: true }));
-        body.position.set(s.x, s.y + 0.8, s.z);
-        body.rotation.y = Math.PI / 2 - s.heading;
-        body.scale.setScalar(k);
-        markers.add(body);
-        $("startX").value = s.x.toFixed(2);
-        $("startZ").value = s.z.toFixed(2);
-        $("startHeading").value = (s.heading * 180 / Math.PI).toFixed(1);
+    // the grid: a box on the road per place, box 1 (the start) in yellow with its arrow, the others in white, each with its number
+    state.grid.forEach((b, i) => {
+        const colour = i === 0 ? 0xffd04d : 0xffffff;
+        const c = Math.cos(b.heading), sn = Math.sin(b.heading), ax = c * BOX_L / 2, az = sn * BOX_L / 2, bx = -sn * BOX_W / 2, bz = c * BOX_W / 2;
+        const corners = [[b.x - ax + bx, b.z - az + bz], [b.x + ax + bx, b.z + az + bz], [b.x + ax - bx, b.z + az - bz], [b.x - ax - bx, b.z - az - bz]];
+        const pts = corners.concat([corners[0]]).map((q) => new THREE.Vector3(q[0], groundY(q[0], q[1], b.y) + 0.08, q[1]));
+        const loop = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: colour, depthTest: false }));
+        loop.renderOrder = 996;
+        markers.add(loop);
+        markers.add(makeArrow(b.x, b.y, b.z, b.heading, colour, (i === 0 ? 6 : 3.5) * k));
+        markers.add(numberLabel(i + 1, b.x, b.y + 0.1, b.z, colour));
+    });
+    if (state.pit && state.pit.points.length) {
+        const P = state.pit.points;
+        if (P.length >= 3) {
+            const shape = new THREE.Shape(P.map((q) => new THREE.Vector2(q.x, q.z)));
+            const geometry = new THREE.ShapeGeometry(shape), pos = geometry.attributes.position;
+            for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), z = pos.getY(i); pos.setXYZ(i, x, groundY(x, z, P[0].y) + 0.06, z); }
+            const fill = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0x5a7fa8, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 }));
+            markers.add(fill);
+        }
+        const ring = P.concat(P.length >= 3 ? [P[0]] : []).map((q) => new THREE.Vector3(q.x, q.y + 0.1, q.z));
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(ring), new THREE.LineBasicMaterial({ color: 0x9cc8ff, depthTest: false }));
+        line.renderOrder = 996;
+        markers.add(line);
+        P.forEach((q, i) => {
+            const dot = new THREE.Mesh(new THREE.SphereGeometry(0.35 * k, 10, 8), new THREE.MeshBasicMaterial({ color: i === P.length - 1 ? 0xffd04d : 0x9cc8ff, depthTest: false }));
+            dot.position.set(q.x, q.y + 0.2, q.z);
+            dot.renderOrder = 997;
+            markers.add(dot);
+        });
     }
+    renderGrid(); renderPit();
     state.gates.forEach((gate, i) => {
         const colour = i === 0 ? 0x4ed88a : 0x4db8ff;
         const material = () => new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false });
@@ -917,6 +954,31 @@ function resetObjects() {
     renderObjects(); updateMarkers();
 }
 
+function renderGrid() {
+    const list = $("gridList");
+    if (!list) return;
+    list.innerHTML = "";
+    state.grid.forEach((b, i) => {
+        const row = document.createElement("div");
+        row.className = "gate";
+        const text = document.createElement("span");
+        text.textContent = (i === 0 ? "Box 1 (the start)" : "Box " + (i + 1)) + ": " + b.x.toFixed(1) + ", " + b.z.toFixed(1) + ", " + (b.heading * 180 / Math.PI).toFixed(0) + "°";
+        const remove = document.createElement("button");
+        remove.className = "small danger";
+        remove.textContent = "Remove";
+        remove.onclick = () => { state.grid.splice(i, 1); syncStart(); updateMarkers(); };
+        row.appendChild(text);
+        row.appendChild(remove);
+        list.appendChild(row);
+    });
+    if (!state.grid.length) { const none = document.createElement("div"); none.className = "hint"; none.textContent = "No grid yet: place box 1 with the Grid box tool (it is the start of the track)."; list.appendChild(none); }
+}
+function renderPit() {
+    const note = $("pitNote");
+    if (!note) return;
+    const n = state.pit ? state.pit.points.length : 0;
+    note.textContent = n ? n + " points" + (n < 3 ? " (three at least)" : "") : "none";
+}
 function renderGates() {
     const list = $("gates");
     list.innerHTML = "";
@@ -972,13 +1034,16 @@ function renderCameras() {
     $("cameraNote").textContent = state.cameras.length ? state.cameras.length + " cameras" : "none";
 }
 
-function readStartFields() {
-    const x = parseFloat($("startX").value), z = parseFloat($("startZ").value), h = parseFloat($("startHeading").value) || 0;
-    if (!isFinite(x) || !isFinite(z)) return;
-    state.start = { x, z, y: groundY(x, z, state.start ? state.start.y : undefined), heading: heading(h) };
+// the grid and the pit area: their buttons
+$("gridClear").onclick = () => { state.grid = []; syncStart(); updateMarkers(); };
+$("pitUndo").onclick = () => { if (state.pit && state.pit.points.length) { state.pit.points.pop(); if (!state.pit.points.length) state.pit = null; updateMarkers(); } };
+$("pitClear").onclick = () => { state.pit = null; updateMarkers(); };
+function addPitPoint(point) {
+    if (!state.pit) state.pit = { points: [] };
+    state.pit.points.push({ x: point.x, y: point.y, z: point.z });
     updateMarkers();
+    status("Pit area: " + state.pit.points.length + " points" + (state.pit.points.length < 3 ? ", click the next corner" : "") + ".", "ok");
 }
-["startX", "startZ", "startHeading"].forEach((id) => $(id).addEventListener("change", readStartFields));
 
 // the design of a track without a model: nodes, heights, widths and prefabs (see track-design.js)
 const design = createDesign({
@@ -1002,7 +1067,8 @@ function setMode(mode) {
     state.mode = mode;
     $("dragWindow").style.display = mode === "drag" ? "block" : "none";
     for (const button of document.querySelectorAll("#modes button")) button.classList.toggle("active", button.dataset.mode === mode);
-    $("hud").textContent = (design && design.hudText(mode)) || (mode === "start" ? "Place start: click on the road and drag in the direction that the car drives."
+    $("hud").textContent = (design && design.hudText(mode)) || (mode === "grid" ? "Grid box: click on the road where box " + Math.min(GRID_MAX, state.grid.length + 1) + " is and drag in the direction that the car faces (box 1 is the start of the player, 2 to 8 the opponents)."
+        : mode === "pit" ? "Pit area: click the corners of the area on the ground, in order round it; the shape closes itself. Undo the last point in the Pit area card."
         : mode === "gate" ? "Add gate: click on the road and drag in the direction that the car drives through the gate."
         : mode === "camera" ? "Add camera: click on the road or beside it, the camera is put above that place (set the height in the list). Click a camera in Look to choose it and move it with the gizmo; the button above it changes its range."
         : mode === "object" ? "Place object: click on the road (or the ground) where the object stands, and drag to turn it. Add a model with + in the Objects card first."
@@ -1040,7 +1106,7 @@ renderer.domElement.addEventListener("pointerdown", (event) => {
             return;
         }
     }
-    if ((state.mode === "start" || state.mode === "gate" || state.mode === "drag" || state.mode === "camera" || state.mode === "object") && !moveGizmo.axis && !turnGizmo.axis) {
+    if ((state.mode === "grid" || state.mode === "pit" || state.mode === "gate" || state.mode === "drag" || state.mode === "camera" || state.mode === "object") && !moveGizmo.axis && !turnGizmo.axis) {
         const hit = roadHit(event);
         if (hit) {
             drag.hit = hit;
@@ -1069,7 +1135,7 @@ renderer.domElement.addEventListener("pointermove", (event) => {
     const ray = pointerRay(event).ray;
     const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -drag.hit.point.y);
     const p = ray.intersectPlane(plane, new THREE.Vector3());
-    if (p && Math.hypot(p.x - drag.hit.point.x, p.z - drag.hit.point.z) > 0.5) {
+    if (p && state.mode !== "pit" && Math.hypot(p.x - drag.hit.point.x, p.z - drag.hit.point.z) > 0.5) {
         drag.heading = Math.atan2(p.z - drag.hit.point.z, p.x - drag.hit.point.x);
         place(drag, true);
     }
@@ -1078,8 +1144,12 @@ renderer.domElement.addEventListener("pointermove", (event) => {
 function place(d, preview) {
     const point = d.hit.point;
     const h = d.heading === undefined ? (state.start ? state.start.heading : 0) : d.heading;
-    if (state.mode === "start") {
-        state.start = { x: point.x, y: point.y, z: point.z, heading: h };
+    if (state.mode === "grid") {
+        if (preview && d.added) state.grid.pop();
+        if (state.grid.length >= GRID_MAX) { status("The grid has its " + GRID_MAX + " boxes: remove one in the card first.", "error"); d.added = true; return; }
+        state.grid.push({ x: point.x, y: point.y, z: point.z, heading: h });
+        d.added = true;
+        syncStart();
     } else if (state.mode === "drag") {
         state.drag = { x: point.x, y: point.y, z: point.z, heading: h, width: Math.max(3, parseFloat($("dragWidth").value) || 12), length: dragLength() };
         d.added = true;
@@ -1112,8 +1182,8 @@ renderer.domElement.addEventListener("pointerup", (event) => {
         if (hits.length) { selectCamera(hits[0].object.userData.camera, state.camRange && state.camSel === hits[0].object.userData.camera); return; }
     }
     if (d.hit) {
-        if (!d.added && state.mode === "start") place(d, false);
-        else if (!d.added && (state.mode === "gate" || state.mode === "drag" || state.mode === "camera" || state.mode === "object")) place(d, false);
+        if (state.mode === "pit") { if (!d.moved) addPitPoint(d.hit.point); }
+        else if (!d.added && (state.mode === "grid" || state.mode === "gate" || state.mode === "drag" || state.mode === "camera" || state.mode === "object")) place(d, false);
         return;
     }
     if (lineEdit.editing && !d.moved && !lineEdit.dragging) {
@@ -1131,7 +1201,7 @@ renderer.domElement.addEventListener("pointerup", (event) => {
 
 $("topView").onclick = topView;
 $("gateAtStart").onclick = () => {
-    if (!state.start) { status("Place the start first.", "error"); return; }
+    if (!state.start) { status("Place box 1 of the grid first (the start).", "error"); return; }
     const s = state.start;
     const width = Math.max(2, parseFloat($("gateWidth").value) || 24);
     // the finish line is a few metres in front of the start, so that the first gate is passed at the start of the first lap
@@ -1265,7 +1335,12 @@ async function loadExisting() {
     fillEnv(OpenRacer.environmentOf(track));
     $("envOn").checked = !!(track.model || track.environment);
     applyEnv();
-    state.start = track.start ? { x: track.start.x, y: 0, z: track.start.z, heading: track.start.heading || 0 } : null;
+    // the grid: the boxes of the file, or box 1 from the start of a track from before the grid
+    state.grid = Array.isArray(track.grid) && track.grid.length ? track.grid.filter((b) => b && isFinite(b.x) && isFinite(b.z)).slice(0, GRID_MAX).map((b) => ({ x: b.x, y: 0, z: b.z, heading: b.heading || 0 }))
+        : (track.start ? [{ x: track.start.x, y: 0, z: track.start.z, heading: track.start.heading || 0 }] : []);
+    syncStart();
+    state.pit = track.pit && Array.isArray(track.pit.polygon) ? { points: track.pit.polygon.filter((q) => Array.isArray(q) && isFinite(q[0]) && isFinite(q[1])).map((q) => ({ x: q[0], y: 0, z: q[1] })) } : null;
+    if (state.pit && !state.pit.points.length) state.pit = null;
     state.gates = [];
     state.cameras = [];
     $("delete").style.display = "";
@@ -1276,7 +1351,9 @@ async function loadExisting() {
         else if (track.model) { stopDesign(); await loadGltfTrack(track); }
         else { stopDesign(); await loadLegacyTrack(track); }
         // the heights of the start and the gates come from the road
-        if (state.start) state.start.y = groundY(state.start.x, state.start.z);
+        state.grid.forEach((b) => { b.y = groundY(b.x, b.z); });
+        syncStart();
+        if (state.pit) state.pit.points.forEach((q) => { q.y = groundY(q.x, q.z); });
         $("showGates").checked = !!track.show_gates;
         state.gates = (track.gates || []).map((g) => ({ x: g.x, y: groundY(g.x, g.z), z: g.z, heading: g.heading, width: g.width || 24 }));
         state.cameras = (track.cameras || []).filter((c) => isFinite(c.x) && isFinite(c.z)).map((c) => {
@@ -1302,6 +1379,8 @@ function newTrack() {
     state.files = new Map();
     state.mainFile = null;
     state.start = null;
+    state.grid = [];
+    state.pit = null;
     state.gates = [];
     $("showGates").checked = true;
     state.cameras = [];
@@ -1382,7 +1461,7 @@ async function save() {
         const id = $("id").value.trim() || slug(name);
         if (!name) throw new Error("Give the track a name.");
         if (!ID_PATTERN.test(id)) throw new Error("The id may only have lower case letters, digits, - and _.");
-        if (!state.start) throw new Error("Place the start of the track on the road.");
+        if (!state.start) throw new Error("Place box 1 of the grid on the road: it is the start of the track.");
         if (!state.root && !design.active()) throw new Error("Import a model first, or draw the track with nodes.");
         if (state.tracks.some((t) => t.id === id) && id !== state.existingId &&
             !(await OpenRacerDialog.ask({ title: "Replace the track “" + id + "”?", text: "There already is a track with this id.", ok: "Replace" }))) return;
@@ -1392,7 +1471,10 @@ async function save() {
         delete config.id;
         config.name = name;
         config.description = $("description").value.trim();
-        config.start = { x: +state.start.x.toFixed(3), z: +state.start.z.toFixed(3), heading: +state.start.heading.toFixed(5) };
+        config.start = { x: +state.start.x.toFixed(3), z: +state.start.z.toFixed(3), heading: +state.start.heading.toFixed(5) };      // (box 1 of the grid: the start, as before the grid)
+        config.grid = state.grid.map((b) => ({ x: +b.x.toFixed(3), z: +b.z.toFixed(3), heading: +b.heading.toFixed(5) }));
+        if (state.pit && state.pit.points.length >= 3) config.pit = { polygon: state.pit.points.map((q) => [+q.x.toFixed(2), +q.z.toFixed(2)]) };
+        else delete config.pit;
         if (state.gates.length) {
             config.gates = state.gates.map((g) => ({ x: +g.x.toFixed(3), z: +g.z.toFixed(3), heading: +g.heading.toFixed(5), width: g.width, y: +g.y.toFixed(2) }));
             if ($("showGates").checked) config.show_gates = true; else delete config.show_gates;

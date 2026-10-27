@@ -318,6 +318,8 @@ function buildGroundWorld() {
     var physics3D = trackPhysics3D(currentTrack);
     groundWorld = new OpenRacer.GroundWorld(5);
     groundWorld.use3D = physics3D;
+    // the pit area of the track editor (track.json "pit": { "polygon": [[x, z], ...] }): inside it the road is the pit lane (Pit.js)
+    if(currentTrack && currentTrack.pit && Array.isArray(currentTrack.pit.polygon)) groundWorld.setPitAreas([currentTrack.pit.polygon]);
     var a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
     for(var k = 0; k < searchOrder.length; k++) {
         var meshes = trackObjects[searchOrder[k]];
