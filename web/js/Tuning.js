@@ -39,7 +39,8 @@ var Tuning = (function() {
     // ---- the car follows the values
 
     var rebuildSig = null, rebuildTimer = null, lastCurve = null;      // what the model of the car is built from, as it was last applied; the torque curve as last applied
-    function builtFrom(c) { return JSON.stringify([c.suspension, c.driveline, c.softbody, c.dimensions, c.steering_wheel && c.steering_wheel.degrees, c.wheels && c.wheels.library]); }
+    // (the centre of gravity and the tyre are in it: the shell of the car sits on the centre of gravity, CollisionProxy.js)
+    function builtFrom(c) { return JSON.stringify([c.suspension, c.driveline, c.softbody, c.dimensions, c.steering_wheel && c.steering_wheel.degrees, c.wheels && c.wheels.library, c.chassis && c.chassis.cg_height, c.chassis && c.chassis.tire_diameter]); }
     function apply() {
         var v = values;
         if(v.width > 0 && v.height > 0) car.frontal_area = v.width * v.height * 0.85;

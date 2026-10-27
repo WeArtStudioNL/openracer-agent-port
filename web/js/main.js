@@ -57,6 +57,8 @@ function startGame(carId, trackId) {
         if(OpenRacer.Setups) {
             var setupName = OpenRacer.Setups.active(carId), setup = setupName ? OpenRacer.Setups.configOf(carId, setupName, carFound) : null;
             if(setup) carConfig = Object.assign({}, carFound, setup, { id: carFound.id, model: carFound.model, preview: carFound.preview, folder: carFound.folder, source: carFound.source });
+            // (a layout of the shell without the centre of gravity it was drawn at: it was drawn for the car as made, car.json; CollisionProxy shifts it to the centre of the setup)
+            if(setup && carConfig.softbody && carConfig.softbody.layout && !isFinite(carConfig.softbody.layout_cg) && carFound.chassis) carConfig.softbody = Object.assign({}, carConfig.softbody, { layout_cg: carFound.chassis.cg_height, layout_radius: carFound.chassis.tire_diameter / 2 });
             // (a setup from the car editor has the driver without his file, which is the car's: the file of car.json)
             if(setup && carConfig.driver && !carConfig.driver.file && carFound.driver && carFound.driver.file) carConfig.driver = Object.assign({}, carConfig.driver, { file: carFound.driver.file });
         }

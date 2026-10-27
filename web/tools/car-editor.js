@@ -1607,6 +1607,8 @@ function buildConfig(id) {
     if (softBodyEditor) {
         const soft = softBodyEditor.read();
         if (soft.softbody) config.softbody = soft.softbody;
+        // (the layout of the shell is in the frame of the body: the centre of gravity and the tyre it was drawn at go with it, so a tune with another centre keeps the shell on the model)
+        if (config.softbody && config.softbody.layout) { config.softbody.layout_cg = config.chassis.cg_height; config.softbody.layout_radius = config.chassis.tire_diameter / 2; }
         if (soft.parts) config.parts = soft.parts;
     }
     return config;
@@ -1864,6 +1866,7 @@ function loadExisting() {
         const saved = OpenRacer.Setups.configOf(car.id, activeTune, car);
         if (saved) shown = Object.assign({}, car, saved, { id: car.id, model: car.model });
         if (shown.driver && !shown.driver.file && car.driver && car.driver.file) shown.driver = Object.assign({}, shown.driver, { file: car.driver.file });
+        if (shown.softbody && shown.softbody.layout && !isFinite(shown.softbody.layout_cg) && car.chassis) shown.softbody = Object.assign({}, shown.softbody, { layout_cg: car.chassis.cg_height, layout_radius: car.chassis.tire_diameter / 2 });
     }
     fill(shown);
     state.overrides = JSON.parse(JSON.stringify(shown.materials || car.materials || {}));
@@ -2286,6 +2289,7 @@ $("setupSelect").addEventListener("change", () => {
             if (!saved) return;
             config = Object.assign({}, base || {}, saved, { id, model: base ? base.model : saved.model });
             if (config.driver && !config.driver.file && base && base.driver && base.driver.file) config.driver = Object.assign({}, config.driver, { file: base.driver.file });
+            if (config.softbody && config.softbody.layout && !isFinite(config.softbody.layout_cg) && base && base.chassis) config.softbody = Object.assign({}, config.softbody, { layout_cg: base.chassis.cg_height, layout_radius: base.chassis.tire_diameter / 2 });      // (a layout drawn for the car as made)
         }
         fill(config);
         if (bench.vehicle) restartBench();              // (the car on the bench is built again from the tune, a metre up)                       // the whole form, the cards of the suspension, the driver and the soft body, and the Tuning card (which lists the setups again)
@@ -2730,6 +2734,7 @@ $("testStop").addEventListener("click", stopBench);
 $("testDropHeight").addEventListener("input", () => { $("testDropLabel").textContent = parseFloat($("testDropHeight").value).toFixed(1) + " m"; });
 $("testTilt").addEventListener("input", () => { $("testTiltLabel").textContent = $("testTilt").value + "°"; });
 // the travel of the suspension: shown, and put on the car of the test bench at once
+$("cgHeight").addEventListener("change", () => { if (bench.vehicle) restartBench(); });        // (the shell sits on the centre of gravity: the car on the bench is built again)
 $("unsprung").addEventListener("change", () => { if (bench.vehicle) bench.vehicle.retune({ unsprung: $("unsprung").checked }); syncTuningVisibility(); });
 $("travel").addEventListener("input", () => {
     $("travelLabel").textContent = $("travel").value + " cm";

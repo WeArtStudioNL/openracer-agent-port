@@ -1767,11 +1767,18 @@ OpenRacer.Vehicle = function (parameters, input) {
                 fs = tyreLoad[si];
                 springForce[si] = self.wheelLost[si] ? 0 : fs;
             } else {
-            fs = rateS * comp[si] + progressive + damperS + bumpS + droopS + arbForce[si];
-            springForce[si] = self.wheelLost[si] ? 0 : fs;
+            // The damper, and the damping of the stops, solved implicitly (as for a motorcycle above): stable at any strength. The explicit damper took c dt / m past 2 in the
+            // bump stop of a light wheel on a stiff spring (a kart: 8 kg on 50 kN/m, the stop at twelve times that) and the car was thrown hundreds of metres into the air.
+            // The digressive damper is kept as the secant of its curve at the speed of this step (its force over the speed), so its knee and its blow-off stay
+            var cEff = Math.abs(xdotS) > 1e-4 ? Math.abs(damperS / xdotS) : cUse;
+            var cTotC = cEff + (ws.susLength < ws.minLength || ws.susLength > ws.freeLength ? stopDamping : 0);
+            var bumpSpringC = ws.susLength < ws.minLength ? stopRate * (ws.minLength - ws.susLength) : 0, droopSpringC = ws.susLength > ws.freeLength ? -stopRate * (ws.susLength - ws.freeLength) : 0;
+            var fs0C = rateS * comp[si] + progressive + bumpSpringC + droopSpringC + arbForce[si];
             // the wheel: the spring pushes it out, the tyre pushes it in, gravity pulls it along the axis, and it rides with the mount
-            accel = (fs - tyreLoad[si]) / self.unsprungMass + gDown - lastBodyAccDown;
-            ws.susVel += accel * dt;
+            var accel0C = (fs0C - tyreLoad[si]) / self.unsprungMass + gDown - lastBodyAccDown;
+            ws.susVel = (ws.susVel + accel0C * dt) / (1 + cTotC * dt / self.unsprungMass);
+            fs = fs0C - cTotC * ws.susVel;
+            springForce[si] = self.wheelLost[si] ? 0 : fs;
             ws.susLength += ws.susVel * dt;
             }
             if(ws.susLength < 0.02) { ws.susLength = 0.02; if(ws.susVel < 0) ws.susVel = 0; }

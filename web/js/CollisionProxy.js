@@ -53,7 +53,9 @@ OpenRacer.CollisionProxy = (function () {
         }
         if(!spheres || spheres.length < 8) return null;
         // the wheels stick out of the body: a sphere on each, smaller than the wheel, so the road is felt by the suspension and not by this
-        if(wheels) wheels.forEach(function (w, wi) { spheres.push({ x: w.x, y: w.y, z: w.z, r: Math.max(0.12, 0.55 * w.radius), wheel: true, wheelIndex: wi }); });
+        // (the sphere of a wheel: a little over half its radius, 6 cm at least. It was 12 cm at least: on a kart wheel of 13 cm that sphere nearly filled the tyre, its underside hung
+        // 1.5 cm over the road, and the kart rode on its hubs with the tyres barely loaded as soon as it sagged a little)
+        if(wheels) wheels.forEach(function (w, wi) { spheres.push({ x: w.x, y: w.y, z: w.z, r: Math.max(0.06, 0.55 * w.radius), wheel: true, wheelIndex: wi }); });
         return spheres;
     }
 
@@ -112,20 +114,48 @@ OpenRacer.CollisionProxy = (function () {
         var wheels = object.wheels.map(function (w) {
             return { x: w.mount.x, y: w.radius - v.cgHeight, z: w.mount.z, radius: w.radius };   // the axle is one radius above the road at rest
         });
+        // The ground clearance of the car: the underside of its model above the road (the lowest corner of the boxes of the parts of the body, in the frame of the car), or
+        // chassis.ground_clearance when car.json says it. It was 13 cm for every car (Vehicle.js): a kart with its floor at 3 cm had the nodes of its floor cut back to the
+        // smallest radius and standing 3 cm into the road, and rode on them with its wheels in the air
+        var clearance = object.config && object.config.chassis && isFinite(object.config.chassis.ground_clearance) ? object.config.chassis.ground_clearance : null;
+        if(clearance === null && model.tilt) {
+            var lowest = Infinity, corner = new THREE.Vector3(), box = new THREE.Box3();
+            model.tilt.updateMatrixWorld(true);
+            model.tilt.traverse(function (child) {
+                if(!child.isMesh || !child.geometry) return;
+                if(!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+                var b = child.geometry.boundingBox;
+                for(var ci = 0; ci < 8; ci++) {
+                    corner.set(ci & 1 ? b.max.x : b.min.x, ci & 2 ? b.max.y : b.min.y, ci & 4 ? b.max.z : b.min.z).applyMatrix4(child.matrixWorld);
+                    model.tilt.worldToLocal(corner);
+                    toVehicle(corner);
+                    if(corner.y < lowest) lowest = corner.y;
+                }
+            });
+            if(isFinite(lowest)) clearance = lowest + v.cgHeight;
+        }
+        if(clearance !== null && isFinite(clearance)) v.groundClearance = Math.max(0.02, Math.min(0.6, clearance));
         var spheres = null;
         var maxNodes = object.config && object.config.softbody && object.config.softbody.max_nodes;    // car.json "softbody": { "max_nodes": 60 }
         try { spheres = fromModel(model.tilt, toVehicle, wheels, maxNodes); } catch (e) { console.warn("CollisionProxy: " + e.message); }
         // car.json "softbody": { "layout": [{ x, y, z, r }] }: the nodes as the maker of the car set them in the editor, instead of the ones made from the model
         var layout = object.config && object.config.softbody && object.config.softbody.layout;
         if(spheres && layout && layout.length) {
+            // The layout is in the frame of the body: its up runs from the centre of gravity, and the body sits at the centre of gravity's height above the road. Drawn at one
+            // centre of gravity (softbody.layout_cg, the car editor writes it) and used with another (a tune that lowers the car's centre of gravity), the whole shell would
+            // move by the difference against the road and the model (a kart whose centre went down 11 cm stood on its floor nodes with its wheels in the air): the nodes are
+            // shifted back by it, and by a change of the tyre radius, which moves the axle against the centre the other way
+            var cfgSoft = object.config.softbody;
+            var shift = (isFinite(cfgSoft.layout_cg) ? cfgSoft.layout_cg - v.cgHeight : 0) + (isFinite(cfgSoft.layout_radius) ? radius - cfgSoft.layout_radius : 0);
             var own = layout.slice(0, 200).filter(function (n) { return isFinite(n.x) && isFinite(n.y) && isFinite(n.z) && n.r > 0; })
                 .map(function (n) {
                     // a node must not reach below the underside of the car (the ground clearance): a big node low in the car would stand on the road with
                     // the wheels (the car rode on its nodes, and hovered over bumps with its wheels barely loaded), so its radius is cut to what is above that
-                    var r = Math.min(0.6, Math.max(0.05, n.r));
+                    var r = Math.min(0.6, Math.max(0.05, n.r)), y = n.y + shift;
                     var floor = -v.cgHeight + (v.groundClearance || 0);
-                    if(n.y - r < floor) r = Math.max(0.05, n.y - floor);
-                    return { x: n.x, y: n.y, z: n.z, r: r, part: typeof n.part === "string" ? n.part : null };
+                    // (a node at the floor becomes small rather than standing through it: 2 cm at least, and its middle at least that far above the floor)
+                    if(y - r < floor) { if(y < floor + 0.02) y = floor + 0.02; r = Math.max(0.02, Math.min(r, y - floor)); }
+                    return { x: n.x, y: y, z: n.z, r: r, part: typeof n.part === "string" ? n.part : null };
                 });
             if(own.length >= 3) spheres = own.concat(spheres.filter(function (sp) { return sp.wheel; }));
         }
