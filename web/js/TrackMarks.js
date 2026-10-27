@@ -3,7 +3,7 @@
  *
  * Description: What the track editor paints on the road of a track, drawn in the game: the pit area ("pit" in track.json: a polygon on the ground, inside which the road
  *              is the pit lane, Pit.js) as a translucent surface with a line round it, and the grid boxes ("grid": up to eight boxes, each { x, z, heading }; box 1 is
- *              the start of the player, the others are where the opponents stand at the start of a race) as four white corners on the road (short angles, no numbers).
+ *              the start of the player, the others are where the opponents stand at the start of a race) as two white side lines on the road with a short stub across at the front corners (no numbers).
  *              The heights come from the ground of the track (groundWorld, TrackLoader.js), a little above the road so that they lie on it.
  *
  *              OpenRacer.TrackMarks.build(track)   makes them for the track that is loaded (after the ground world is built); nothing without a pit or a grid
@@ -58,14 +58,14 @@ OpenRacer.TrackMarks = (function () {
         grid.forEach(function (b, i) {
             var h = b.heading || 0, c = Math.cos(h), s = Math.sin(h);           // along the box (the way the car faces) and across it
             var ax = c * BOX_L / 2, az = s * BOX_L / 2, bx = -s * BOX_W / 2, bz = c * BOX_W / 2;
-            // the box: only its four corners, as short angles (as the grid boxes of a real track), no numbers; each leg reaches half a line width past the corner so that the angle is closed
-            var W = 0.18, legL = 1.0, legW = 0.7, ex = W / 2;
+            // the box: the two long sides as straight lines and a short stub across at each front corner (the back is open), no numbers; the lines reach half a line width past
+            // the corner so that the angle is closed
+            var W = 0.18, stub = 0.35, ex = W / 2;
             var material = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, side: THREE.DoubleSide });
-            [[-1, 1], [-1, -1], [1, 1], [1, -1]].forEach(function (k) {
-                var cx = b.x + k[0] * ax + k[1] * bx, cz = b.z + k[0] * az + k[1] * bz;                // the corner
-                var ux = -k[0] * c, uz = -k[0] * s, vx = -k[1] * (-s), vz = -k[1] * c;               // from the corner along the box, and across it, both pointing in
-                var long = [[cx - ux * ex, cz - uz * ex], [cx + ux * legL, cz + uz * legL]];
-                var across = [[cx - vx * ex, cz - vz * ex], [cx + vx * legW, cz + vz * legW]];
+            [1, -1].forEach(function (side) {
+                var fx = b.x + ax + side * bx, fz = b.z + az + side * bz, rx = b.x - ax + side * bx, rz = b.z - az + side * bz;      // front and rear end of this side
+                var long = [[rx, rz], [fx + c * ex, fz + s * ex]];
+                var across = [[fx - side * (-s) * ex, fz - side * c * ex], [fx - side * (-s) * stub, fz - side * c * stub]];          // from the corner towards the middle
                 [long, across].forEach(function (line) { var m = new THREE.Mesh(strip(line, W, 0), material); m.renderOrder = 2; group.add(m); });
             });
         });
