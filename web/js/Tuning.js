@@ -4,8 +4,8 @@
  * Description: The tuning menu: sliders and fields to change the car while it drives (mass and weight distribution, grip of the
  *              tyres, engine, gears, brakes, aerodynamics, assists and the engine sound). The menu is shown or hidden with
  *              a key (U by default, it can be changed in the settings menu). The tuning of a car is kept in this browser;
- *              "Save to the car" writes it to the car (cars/<id>/car.json with start-server.sh, otherwise the garage of this
- *              browser, see Garage.js), "Reset" goes back to the car as it was made.
+ *              the setups (OpenRacer.Setups) keep the car under a name: Save overwrites the setup that is chosen, Save as new… asks
+ *              a name; "The car as made" is car.json, which the car editor writes.
  *
  *              The values that are not in the configuration of a car have a default (the factory values of this game); they
  *              are added to car.json when the tuning is saved: chassis.roll_front, chassis.spring_front/spring_rear,
@@ -23,7 +23,7 @@ var Tuning = (function() {
     var values = {};         // the values that are in use
     var controls = [];       // { def, row, number, slider, reset }
     var info = null;
-    var setupSelect = null;  // the setups of the car (OpenRacer.Setups)
+    var setupSelect = null, setupButtons = null;  // the setups of the car (OpenRacer.Setups): the list, Save and Delete (they go grey for "the car as made")
     var visible = false;
 
     // key, label, unit, minimum, maximum, step: the values are in the units of the menu (percent, N/mm, ...)
@@ -318,32 +318,11 @@ var Tuning = (function() {
         info = document.createElement("div");
         info.className = "info";
         panel.appendChild(info);
-        var actions = document.createElement("div");
-        actions.className = "actions";
-        var resetAll = document.createElement("button");
-        resetAll.textContent = "Reset to the car";
-        resetAll.onclick = function() {
-            values = clone(base);
-            apply();
-            store();
-            refresh();
-            message("Back to the values of the car.");
-        };
-        var save = document.createElement("button");
-        save.className = "save";
-        save.textContent = "Save to the car";
-        save.onclick = saveToCar;
-        var close = document.createElement("button");
-        close.textContent = "Close";
-        close.onclick = function() { setVisible(false); };
-        actions.appendChild(resetAll);
-        actions.appendChild(save);
-        actions.appendChild(close);
-        panel.appendChild(actions);
         var messageLine = document.createElement("div");
         messageLine.className = "message";
         panel.appendChild(messageLine);
-        // the setups: named tunings of this car, kept in the browser (OpenRacer.Setups); the main menu offers them on the card of the car when there are two or more
+        // the setups: the car under a name, kept in the browser (OpenRacer.Setups; the main menu offers them on the card of the car when there are two or more): the list,
+        // Save (the setup that is chosen is overwritten with the car as it is now), Save as new… (a name is asked), Delete; "The car as made" is car.json, which the car editor writes
         var setupLine = document.createElement("div");
         setupLine.className = "actions setups";
         var setupLabel = document.createElement("span");
@@ -363,13 +342,24 @@ var Tuning = (function() {
             message(name ? "Setup " + name + " (what the menu does not have, the suspension and the parts, comes at the next start)." : "The car as it was made (fully at the next start).");
         };
         var saveSetup = document.createElement("button");
-        saveSetup.textContent = "Save setup…";
+        saveSetup.className = "save";
+        saveSetup.textContent = "Save";
+        saveSetup.title = "The setup that is chosen is overwritten with the car as it is now";
         saveSetup.onclick = function() {
-            var name = window.prompt("The name of this setup", setupSelect.value || "");
+            var name = setupSelect.value;
+            if(!name) { message("Choose a setup to overwrite, or Save as new…"); return; }
+            OpenRacer.Setups.save(config.id, name, tunedConfig());           // (the whole car, as it is tuned)
+            refresh();
+            message("Setup " + name + " saved.");
+        };
+        var saveNew = document.createElement("button");
+        saveNew.textContent = "Save as new…";
+        saveNew.onclick = function() {
+            var name = window.prompt("The name of the new setup", "");
             if(name === null) return;
             name = name.trim().slice(0, 40);
             if(!name) return;
-            OpenRacer.Setups.save(config.id, name, tunedConfig());           // (the whole car, as it is tuned)
+            OpenRacer.Setups.save(config.id, name, tunedConfig());
             refresh();
             message("Setup " + name + " saved; the main menu offers it on the card of the car once there are two.");
         };
@@ -382,11 +372,17 @@ var Tuning = (function() {
             refresh();
             message("Setup " + name + " deleted (the tuning on the car stays as it is).");
         };
+        var close = document.createElement("button");
+        close.textContent = "Close";
+        close.onclick = function() { setVisible(false); };
         setupLine.appendChild(setupLabel);
         setupLine.appendChild(setupSelect);
         setupLine.appendChild(saveSetup);
+        setupLine.appendChild(saveNew);
         setupLine.appendChild(dropSetup);
+        setupLine.appendChild(close);
         panel.appendChild(setupLine);
+        setupButtons = { save: saveSetup, drop: dropSetup };
 
         GROUPS.forEach(function(group, index) {
             var details = document.createElement("details");
@@ -427,6 +423,7 @@ var Tuning = (function() {
             setupSelect.appendChild(o);
         });
         setupSelect.value = active && names.indexOf(active) >= 0 ? active : "";
+        if(setupButtons) { var none = !setupSelect.value; setupButtons.save.disabled = none; setupButtons.drop.disabled = none; setupButtons.save.style.opacity = setupButtons.drop.style.opacity = none ? 0.45 : 1; }
     }
 
     function refresh() {
@@ -463,27 +460,6 @@ var Tuning = (function() {
 
     // The configuration of the car with the tuning in it
     function tunedConfig() { return OpenRacer.CarTuning.toConfig(config, values); }
-
-    function saveToCar() {
-        OpenRacerDialog.ask({ title: "Write this tuning to the car?", text: "The car as it was made is overwritten (cars/" + config.id + "/car.json). Without the server of start-server.sh it goes to the garage of this browser instead.", ok: "Write it" }).then(function(yes) { if(yes) writeTuning(); });
-    }
-
-    function writeTuning() {
-        var tuned = tunedConfig();
-        // the server when it is there (serve.py), otherwise the garage of this browser (Garage.js)
-        OpenRacer.Garage.store("cars", config.id, tuned, {}, {}).then(function(result) {
-            // the car is the way it is tuned now
-            tuned.id = config.id;
-            config = tuned;
-            base = fromConfig(config);
-            values = clone(base);
-            store();
-            refresh();
-            message(result.where === "server" ? "Saved to cars/" + config.id + "." : "Saved to your garage in this browser (the server does not save).");
-        }).catch(function(error) {
-            message("Could not save: " + error.message);
-        });
-    }
 
     function setVisible(show) {
         visible = show;
