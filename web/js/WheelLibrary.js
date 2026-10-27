@@ -93,16 +93,20 @@ OpenRacer.WheelLibrary = (function () {
     function preload(config, manager, done) {
         load().then(function () {
             if(!uses(config)) { done(); return; }
-            var files = filesFor(config).filter(function (f) { return !cache[url(f)]; });
-            var left = files.length;
-            if(!left) { done(); return; }
-            var loader = new THREE.GLTFLoader(manager);
-            files.forEach(function (f) {
+            // every file once: a file that is loading already (another car, the preview of the car editor) is waited for, not asked for again and not taken as there
+            var waits = filesFor(config).map(function (f) {
                 var u = url(f);
-                cache[u] = { loading: true };
-                loader.load(u, function (gltf) { gltf.scene.updateMatrixWorld(true); cache[u] = { scene: gltf.scene, size: measure(gltf.scene) }; if(--left === 0) done(); },
-                    undefined, function (error) { cache[u] = { error: error || true }; console.warn("WheelLibrary: no " + u); if(--left === 0) done(); });
+                if(cache[u] && cache[u].promise) return cache[u].promise;
+                var entry = { loading: true };
+                entry.promise = new Promise(function (resolve) {
+                    var loader = new THREE.GLTFLoader(manager);
+                    loader.load(u, function (gltf) { gltf.scene.updateMatrixWorld(true); entry.scene = gltf.scene; entry.size = measure(gltf.scene); entry.loading = false; resolve(); },
+                        undefined, function (error) { entry.error = error || true; entry.loading = false; console.warn("WheelLibrary: no " + u); resolve(); });
+                });
+                cache[u] = entry;
+                return entry.promise;
             });
+            Promise.all(waits).then(function () { done(); });
         });
     }
     function entryFile(entry) { var e = entry && cache[url(entry.file)]; return e && e.scene ? e : null; }

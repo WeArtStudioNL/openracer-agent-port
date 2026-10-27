@@ -2412,7 +2412,7 @@ async function startBench() {
     bench.vehicle = v; bench.model = model; bench.input = input; bench.config = config; bench.script = null; bench.last = performance.now();
     syncBenchVisibility();
     if (driverEditor) driverEditor.attachToBench(model.tilt);       // the driver goes with the car that is tested
-    pivot.visible = false; helpers.visible = false;
+    pivot.visible = false; helpers.visible = false; libPreview.visible = false;          // (the bench builds the car as the game does, with its own library wheels)
     if (suspensionEditor) suspensionEditor.hide(true);
     $("testStop").style.display = "";
     status("Test: the car with the physics of the game" + (model.rig ? ", " + model.rig.count + " moving parts of the suspension" : "") + ". Stop test goes back to the model.", "ok");
@@ -2434,7 +2434,7 @@ function stopBench() {
     if (bench.driving) stopDriving();
     bench.objects = []; bench.vehicle = null; bench.model = null; bench.script = null; bench.obj = null; bench.grip = 1;
     if (softBodyEditor) softBodyEditor.onStop();
-    pivot.visible = true; helpers.visible = true;
+    pivot.visible = true; helpers.visible = true; libPreview.visible = true;
     if (suspensionEditor) suspensionEditor.hide(false);
     $("testStop").style.display = "none";
 }
