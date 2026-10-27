@@ -222,8 +222,14 @@ OpenRacer.GroundWorld = function (cellSize) {
     // ray counts (a road is the same road from both sides); a hit that is nearly along the surface (the cosine between the ray and the
     // normal is less than minFacing) is no road. Where several surfaces are at about the same distance (a road over grass) the one with
     // the lowest priority is taken. Gives { t, x, y, z, nx, ny, nz, surface, mesh } (the normal faces the ray), or null.
+    // what the simulation asks of the triangles, counted per frame (Scene.js shows it in the debug text and resets it): rays and the triangles they test, the spheres of the
+    // shell (nearby) and the triangles they bring, the exact tests (closest), and the most triangles that one ray tested (a ray through a thick bundle of triangles is the lag)
+    this.stats = { rays: 0, rayTris: 0, rayMax: 0, nearby: 0, nearbyTris: 0, closest: 0 };
+    var stats = this.stats;
     this.ray = function (ox, oy, oz, dx, dy, dz, maxT, minFacing) {
         if(!count3) return null;
+        stats.rays++;
+        var rayStart = stats.rayTris;
         minFacing = minFacing === undefined ? 0.17 : minFacing;
         var ex = ox + dx * maxT, ey = oy + dy * maxT, ez = oz + dz * maxT;
         var i0 = Math.floor(Math.min(ox, ex) / CELL3), i1 = Math.floor(Math.max(ox, ex) / CELL3);
@@ -240,6 +246,7 @@ OpenRacer.GroundWorld = function (cellSize) {
                         var t = list[q];
                         if(stamp3[t] === stampValue) continue;
                         stamp3[t] = stampValue;
+                        stats.rayTris++;
                         var m = t * 3 + 2;
                         if((meta3[m] & (1 << 20)) === 0) continue;
                         var o = t * 12;
@@ -271,6 +278,7 @@ OpenRacer.GroundWorld = function (cellSize) {
                 }
             }
         }
+        if(stats.rayTris - rayStart > stats.rayMax) stats.rayMax = stats.rayTris - rayStart;
         if(best < 0) return null;
         var ob = best * 12;
         var bnx = data3[ob + 9], bny = data3[ob + 10], bnz = data3[ob + 11];
@@ -322,6 +330,7 @@ OpenRacer.GroundWorld = function (cellSize) {
     // The triangles (all, drivable or not) whose box touches a sphere, as a list of numbers in out
     this.nearby = function (cx, cy, cz, radius, out) {
         out.length = 0;
+        stats.nearby++;
         var i0 = Math.floor((cx - radius) / CELL3), i1 = Math.floor((cx + radius) / CELL3);
         var j0 = Math.floor((cy - radius) / CELL3), j1 = Math.floor((cy + radius) / CELL3);
         var k0 = Math.floor((cz - radius) / CELL3), k1 = Math.floor((cz + radius) / CELL3);
@@ -342,6 +351,7 @@ OpenRacer.GroundWorld = function (cellSize) {
                 }
             }
         }
+        stats.nearbyTris += out.length;
         return out;
     };
 
@@ -353,6 +363,7 @@ OpenRacer.GroundWorld = function (cellSize) {
 
     // The point of triangle t that is nearest to p: into out as { x, y, z }; gives the squared distance
     this.closest = function (t, px, py, pz, out) {
+        stats.closest++;
         var o = t * 12;
         var ax = data3[o], ay = data3[o + 1], az = data3[o + 2];
         var abx = data3[o + 3], aby = data3[o + 4], abz = data3[o + 5], acx = data3[o + 6], acy = data3[o + 7], acz = data3[o + 8];

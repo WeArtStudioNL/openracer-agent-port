@@ -266,5 +266,11 @@ function render() {
     if(fps > 0) {
         debugOut("FPS: " + fps + " (" + processingSplit + ")");
     }
+    // what the simulation asked of the triangles of the track in this frame (Ground.js stats): lag on a place of a track is mostly many triangles in a few cells
+    if(typeof groundWorld !== "undefined" && groundWorld && groundWorld.stats) {
+        var gs = groundWorld.stats;
+        if(fps > 0) debugOut("Sim triangles: rays " + gs.rays + " tested " + gs.rayTris + " (most for one ray " + gs.rayMax + ") | shell spheres " + gs.nearby + " gave " + gs.nearbyTris + ", exact tests " + gs.closest);
+        gs.rays = gs.rayTris = gs.rayMax = gs.nearby = gs.nearbyTris = gs.closest = 0;
+    }
     //camera.position.z += 0.1;
 };

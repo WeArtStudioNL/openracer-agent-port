@@ -352,6 +352,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 ### Physics, tyres and engine
 
+- **Triangles in the debug text:** a line *Sim triangles* under the FPS shows what the simulation asks of the triangles of the track in a frame: the rays of the wheels and how many triangles they test (and the most that one ray tests), the spheres of the shell and the triangles they bring, and the exact distance tests. A place with lag shows up as a high number there (many triangles in a few cells of the grid).
 **The shell tyre**
 - **The shell is the tyre of every car.** The older cylinder body without the air pressure (TyreBody.js) is gone with the *Tyre model* setting (`tyres.model` in car.json is not read any more). The ring of nodes (NodeTyre.js, tyre model "nodes") and the 2D physics of a track are gone, with the ray tyre of the old physics, the *Tyre of nodes* settings and the `?physics=2d` switch; a track that says `"physics": "2d"` runs with the 3D physics. The test benches (the car editor, tools/physics-bench.js) run on a flat road with the triangles the tyre needs (`OpenRacer.FlatGround`).
 - *Tyre: nodes round the wheel* is what the tyre gets, from 4 (a square) to 72; the shell doubled the setting and took at least 48, so the slider did nothing below 24. Fewer nodes cost less (the road is felt at four places between each two nodes); the settings are named *Tyre: ...* instead of *Tyre cylinder: ...* and *Tyre shell (experiment): ...*.
