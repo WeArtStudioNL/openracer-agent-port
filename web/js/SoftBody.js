@@ -210,10 +210,11 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         this.version++;
     };
 
-    // The car is put somewhere else and stands still: the elastic bending and the movement of the nodes stop, the permanent bending stays
+    // The car is put somewhere else and stands still: the movement of the nodes stops, the shape stays as it is (the nodes live in the frame of the body, so a move of the
+    // body takes them along; the elastic bending is left too: taken away, the nodes stood where the yielded beams no longer fitted and hung slack until they found a new rest)
     this.settle = function () {
-        u.fill(0); w.fill(0); f.fill(0);
-        for (var n = 0; n < 3 * N; n++) this.displacement[n] = q[n];
+        w.fill(0); f.fill(0);
+        for (var n = 0; n < 3 * N; n++) this.displacement[n] = u[n] + q[n];
         this.version++;
     };
 
