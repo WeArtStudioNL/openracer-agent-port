@@ -89,7 +89,11 @@ OpenRacer.Debris = function (scene, capacity) {
         droplet: { shape: 2, size: [0.012, 0.03], rate: 1, fly: 1 }
     };
 
-    function spawn(x, y, z, vx, vy, vz, kind) {
+    var KINDS = ["grass", "clod", "sand", "gravel", "mud", "ground", "snow", "water", "droplet"];     // (the number of a kind in the record of the replay)
+    var self = this;
+    this.recorder = null;                                 // called with a row for every piece that is made (Replay.js)
+    function spawn(x, y, z, vx, vy, vz, kind, fixed) {
+        if (limit <= 0) { limit = Math.min(capacity, 6000); geometry.setDrawRange(0, limit); }
         if (next >= limit) next = 0;
         var i = next, look = LOOK[kind] || LOOK.ground;
         next = (next + 1) % limit;
@@ -98,10 +102,13 @@ OpenRacer.Debris = function (scene, capacity) {
         positions[i * 3] = x; positions[i * 3 + 1] = y; positions[i * 3 + 2] = z;
         vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz;
         colours[i * 3] = c[0]; colours[i * 3 + 1] = c[1]; colours[i * 3 + 2] = c[2];
-        sizes[i] = look.size[0] + Math.random() * (look.size[1] - look.size[0]); alphas[i] = 1;
-        shapes[i] = look.shape; tilts[i] = (Math.random() - 0.5) * 1.2;
-        age[i] = 0; life[i] = 0.7 + Math.random() * 0.9; floor[i] = y - 0.02; lying[i] = 0;
+        sizes[i] = fixed ? fixed.size : look.size[0] + Math.random() * (look.size[1] - look.size[0]); alphas[i] = 1;
+        shapes[i] = look.shape; tilts[i] = fixed ? fixed.tilt : (Math.random() - 0.5) * 1.2;
+        age[i] = 0; life[i] = fixed ? fixed.life : 0.7 + Math.random() * 0.9; floor[i] = y - 0.02; lying[i] = 0;
+        if (fixed) { c = fixed.colour; colours[i * 3] = c[0]; colours[i * 3 + 1] = c[1]; colours[i * 3 + 2] = c[2]; }
         pendingNew = true;
+        // the replay keeps what is made: the place, the speed, the kind, the size, the life, the tilt and the colour (so that it is made again as it was)
+        if (self.recorder && !fixed) self.recorder(Float32Array.of(0, x, y, z, vx, vy, vz, KINDS.indexOf(kind), sizes[i], life[i], tilts[i], colours[i * 3], colours[i * 3 + 1], colours[i * 3 + 2]));
     }
 
     var fwd = new THREE.Vector3(), lft = new THREE.Vector3(), sprayCarry = [0, 0, 0, 0];
@@ -176,6 +183,10 @@ OpenRacer.Debris = function (scene, capacity) {
             from.x = cx; from.y = cy; from.z = cz;
             last[w] = from;
         }
+        integrate(delta);
+    };
+    // the pieces fly, come down, lie and go
+    function integrate(delta) {
         if (alive === 0 && !pendingNew) return;
         alive = 0;
         var drag = Math.exp(-0.7 * delta);
@@ -200,8 +211,20 @@ OpenRacer.Debris = function (scene, capacity) {
         positionAttribute.needsUpdate = colourAttribute.needsUpdate = sizeAttribute.needsUpdate = alphaAttribute.needsUpdate = true;
         velocityAttribute.needsUpdate = shapeAttribute.needsUpdate = tiltAttribute.needsUpdate = true;
         pendingNew = false;
-    };
+    }
 
+    // ---- for the replay (Replay.js): it records the pieces as they are made, and makes them again from the record (they fly and fall by the same code)
+    var state = [positions, colours, sizes, alphas, vel, shapes, tilts, age, life, floor, lying, quick];
+    this.replayLookback = 20;                             // seconds: a piece that lay has gone by then
+    this.replayAdd = function (row) {
+        spawn(row[1], row[2], row[3], row[4], row[5], row[6], KINDS[row[7]] || "ground", { size: row[8], life: row[9], tilt: row[10], colour: [row[11], row[12], row[13]] });
+    };
+    this.replayStep = function (delta) { material.uniforms.aspect.value = window.innerWidth / Math.max(1, window.innerHeight); integrate(delta); };
+    this.replaySnapshot = function () { return { arrays: state.map(function (a) { return a.slice(); }), next: next }; };
+    this.replayRestore = function (snap) { for (var k = 0; k < state.length; k++) state[k].set(snap.arrays[k]); next = snap.next; pendingNew = true; };
+    if (typeof OpenRacer !== "undefined" && OpenRacer.Replay && OpenRacer.Replay.attach) OpenRacer.Replay.attach("debris", this);
+
+    this.replayClear = function () { this.clear(); };
     this.clear = function () {
         age.fill(1e9); alphas.fill(0); sizes.fill(0); lying.fill(0); quick.fill(0);
         alphaAttribute.needsUpdate = sizeAttribute.needsUpdate = true;

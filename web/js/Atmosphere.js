@@ -132,7 +132,9 @@ OpenRacer.Atmosphere = (function () {
 
     function smooth(a, b, x) { var t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
     function colour(hex) { return new THREE.Color(hex); }
-    function opt(name) { return Settings.option(name); }
+    // (in a replay the options of the recording are used, not those of the menu: override is set by the replay)
+    var override = null;
+    function opt(name) { return override && override[name] !== undefined ? override[name] : Settings.option(name); }
 
     // what the weather does: the share of the sun and of the light of the sky that is left, how grey the sky gets, the clouds (how much of the sky they cover), the softness of the
     // shadows, the view (near, far of the fog; null: none), and what falls
@@ -419,7 +421,9 @@ OpenRacer.Atmosphere = (function () {
     // every frame: rain wets the road in about 40 s and it dries in about 3 minutes; snow covers the ground in about 2.5 minutes and melts in about 7 (rain melts it in 2)
     function update(delta, vehicles) {
         if (!attached) return;
+        if (OpenRacer.Replay && (OpenRacer.Replay.active || OpenRacer.Replay.viewer)) return;       // (a replay plays what was recorded: replayTick)
         delta = Math.min(delta || 0, 0.25);
+        recordAtmosphere(delta);
         snowWork(delta, vehicles);
         if (opt("gfxGround") !== "auto") { groundOverride(); return; }
         var kind = opt("gfxWeather"), snowing = kind === "snow", raining = kind === "rain";
@@ -440,7 +444,7 @@ OpenRacer.Atmosphere = (function () {
     // gets the snow that is left at its place (wheel.localSnow): bare ground has its grip back.
     var qCar = new THREE.Quaternion(), vFwd = new THREE.Vector3();
     var rings = [];                                   // the rings of the wheels in a puddle: { x, z, age, amp }; the shader shows twelve
-    function addRing(x, z, amp) { if (rings.length >= 12) rings.shift(); rings.push({ x: x, z: z, age: 0, amp: amp }); }
+    function addRing(x, z, amp, age) { if (rings.length >= 12) rings.shift(); rings.push({ x: x, z: z, age: age || 0, amp: amp }); }
     function snowWork(delta, vehicles) {
         // the time of the rain on the water, whether it rains, and the rings that grow and fade
         ground.uniforms.uTime.value = (performance.now() / 1000) % 3600;
@@ -465,6 +469,9 @@ OpenRacer.Atmosphere = (function () {
                         var along = (k / (steps - 1) - 0.5) * length * 0.9;
                         paintClear(vehicle.px + vFwd.x * along, vehicle.pz + vFwd.z * along, width * 0.5, 0.55 * delta);
                     }
+                    // (the replay: the heat of this car every tenth of a second, as a place, a direction, a length and a width)
+                    vehicle.heatRec = (vehicle.heatRec || 0) + delta;
+                    if (vehicle.heatRec > 0.1 && groundRecord.recorder) { vehicle.heatRec = 0; groundRecord.recorder(Float32Array.of(0, 1, vehicle.px, vehicle.pz, vFwd.x, vFwd.z, length, width)); }
                 }
             }
             for (var w = 0; w < vehicle.wheels.length; w++) {
@@ -473,11 +480,14 @@ OpenRacer.Atmosphere = (function () {
                 // the water at the wheel (a puddle): the grip is less in it, and a wheel in it that goes fast makes rings, bigger the faster it goes
                 var water = ground.puddle > 0.05 ? puddleAt(c.x, c.z) : 0, speed = Math.hypot(vehicle.vx || 0, vehicle.vz || 0);
                 wheel.localWater = water;
-                if (water > 0.3 && speed > 2.5) { wheel.ringTime = (wheel.ringTime || 0) + delta; if (wheel.ringTime > 0.07) { wheel.ringTime = 0; addRing(c.x, c.z, Math.min(1, speed / 24) * water); } }
+                if (water > 0.3 && speed > 2.5) { wheel.ringTime = (wheel.ringTime || 0) + delta; if (wheel.ringTime > 0.07) { wheel.ringTime = 0; var amp = Math.min(1, speed / 24) * water; addRing(c.x, c.z, amp); if (groundRecord.recorder) groundRecord.recorder(Float32Array.of(0, 2, c.x, c.z, amp, 0, 0, 0)); } }
                 if (snow > 0.03) {
                     var slip = Math.hypot((wheel.forwardSpeed || 0) - (wheel.omega || 0) * (wheel.radius || 0.3), (wheel.slipTan || 0) * Math.max(Math.abs(wheel.forwardSpeed || 0), 1.5));
                     var scrape = Math.max(0, Math.min(1, (slip - 1) / 5));
-                    paintClear(c.x, c.z, 0.16, (3 + 7 * scrape) * delta);                // (a tyre that rolls takes a little, one that slides takes it away)
+                    paintClear(c.x, c.z, 0.16, (3 + 7 * scrape) * delta);
+                    // (the replay: what a wheel takes away, added up over a tenth of a second, at the place where it is then)
+                    wheel.snowRec = (wheel.snowRec || 0) + (3 + 7 * scrape) * delta; wheel.snowRecT = (wheel.snowRecT || 0) + delta;
+                    if (wheel.snowRecT > 0.1 && groundRecord.recorder) { groundRecord.recorder(Float32Array.of(0, 0, c.x, c.z, 0.16, wheel.snowRec, 0, 0)); wheel.snowRec = 0; wheel.snowRecT = 0; }                // (a tyre that rolls takes a little, one that slides takes it away)
                 }
                 var onRoad = wheel.surface === "road" || wheel.surface === "track01" || wheel.surface === "wet";
                 wheel.localSnow = snow * (1 - clearAt(c.x, c.z)) * (onRoad ? 1 - ground.roadMelt : 1);
@@ -496,7 +506,75 @@ OpenRacer.Atmosphere = (function () {
         if (clearDirty) { clearUploaded += delta; if (clearUploaded > 0.05 || !clearTexture) { uploadClear(); clearUploaded = 0; } }
     }
 
+    // ---- for the replay (Replay.js). Two kinds of record: "atmos" (the hour, the sun, the moon, the weather and the ground: once a second and when something changes) and "ground" (what
+    // the cars did to the ground: the snow that a wheel scraped or packed, the heat of a car, the rings of a wheel in a puddle). In the replay they are made again from the records:
+    // the weather and the ground by the state of the row, the snow by the same scraping on the same places.
+    var WEATHER_NAMES = ["clear", "cloudy", "fog", "rain", "snow"], GROUND_NAMES = ["auto", "dry", "wet", "snow"];
+    var atmosRecord = { recorder: null, replayLookback: 0 }, groundRecord = { recorder: null, replayLookback: 0 };
+    var lastAtmos = "", atmosClock = 0;
+    function recordAtmosphere(delta) {
+        if (!atmosRecord.recorder) return;
+        atmosClock += delta;
+        var key = [opt("gfxTime"), opt("gfxSunAzimuth"), opt("gfxMoon"), opt("gfxWeather"), opt("gfxGround")].join("|");
+        if (key === lastAtmos && atmosClock < 1) return;
+        lastAtmos = key; atmosClock = 0;
+        atmosRecord.recorder(Float32Array.of(0, opt("gfxTime"), opt("gfxSunAzimuth"), opt("gfxMoon"), Math.max(0, WEATHER_NAMES.indexOf(opt("gfxWeather"))), Math.max(0, GROUND_NAMES.indexOf(opt("gfxGround"))),
+            ground.wet, ground.snow, ground.puddle, ground.roadMelt));
+    }
+    function applyRow(row) {
+        override = { gfxTime: row[1], gfxSunAzimuth: row[2], gfxMoon: row[3], gfxWeather: WEATHER_NAMES[row[4]] || "clear", gfxGround: "replay" };
+        ground.wet = row[6]; ground.snow = row[7]; ground.puddle = row[8]; ground.roadMelt = row[9];
+        pushGround(true);
+        apply();
+    }
+    atmosRecord.replayAdd = applyRow;
+    atmosRecord.replayStep = function () {};
+    atmosRecord.replayClear = function () {};
+    // a jump in the replay: the state of the last row before the time
+    atmosRecord.replayRebuild = function (rows, end) { if (rows.length) applyRow(rows[Math.max(0, end - 1)]); };
+    atmosRecord.replaySnapshot = function () { return { wet: ground.wet, snow: ground.snow, puddle: ground.puddle, roadMelt: ground.roadMelt }; };
+    atmosRecord.replayRestore = function (snap) { override = null; ground.wet = snap.wet; ground.snow = snap.snow; ground.puddle = snap.puddle; ground.roadMelt = snap.roadMelt; pushGround(true); apply(); };
+
+    function replayTick(delta, vehicle) {
+        delta = Math.min(delta || 0, 0.25);
+        ground.uniforms.uTime.value = (performance.now() / 1000) % 3600;
+        ground.uniforms.uRain.value += ((opt("gfxWeather") === "rain" ? 1 : 0) - ground.uniforms.uRain.value) * Math.min(1, delta * 0.5);
+        for (var q = rings.length - 1; q >= 0; q--) { rings[q].age += delta; if (rings[q].age > 1.6) rings.splice(q, 1); }
+        for (var u = 0; u < 12; u++) { var slot = ground.uniforms.uRip.value[u], ring = rings[u]; if (ring) slot.set(ring.x, ring.z, ring.age, ring.amp); else slot.set(0, 0, 99, 0); }
+        if (vehicle && isFinite(vehicle.px)) moveClearWindow(vehicle.px, vehicle.pz);
+        if (clearDirty) { clearUploaded += delta; if (clearUploaded > 0.05 || !clearTexture) { uploadClear(); clearUploaded = 0; } }
+    }
+    function replayGround(row) {
+        if (row[1] === 0) paintClear(row[2], row[3], row[4], row[5]);
+        else if (row[1] === 1) {
+            var length = row[6], width = row[7], steps = Math.max(2, Math.round(length / 0.7));
+            for (var k = 0; k < steps; k++) { var along = (k / (steps - 1) - 0.5) * length * 0.9; paintClear(row[2] + row[4] * along, row[3] + row[5] * along, width * 0.5, 0.055); }
+        } else addRing(row[2], row[3], row[4]);
+    }
+    groundRecord.replayAdd = replayGround;
+    groundRecord.replayStep = replayTick;
+    groundRecord.replayClear = function () {};
+    // a jump: the snow as the cars left it at that time (every scrape and every bit of heat until then), and the rings of the last seconds
+    groundRecord.replayRebuild = function (rows, end, time, vehicle) {
+        tiles.clear(); clearData.fill(0); rings.length = 0; clearCells.set = false;
+        if (vehicle && isFinite(vehicle.px)) moveClearWindow(vehicle.px, vehicle.pz);
+        for (var i = 0; i < end; i++) {
+            var row = rows[i];
+            if (row[1] === 2) { if (time - row[0] < 1.6) addRing(row[2], row[3], row[4], time - row[0]); }
+            else replayGround(row);
+        }
+        clearDirty = true;
+        replayTick(0, vehicle);
+    };
+    groundRecord.replaySnapshot = function () { var copy = new Map(); tiles.forEach(function (tile, key) { copy.set(key, tile.slice()); }); return { tiles: copy }; };
+    groundRecord.replayRestore = function (snap) {
+        tiles = snap.tiles; clearData.fill(0); rings.length = 0;
+        if (clearCells.set) fillWindow(clearCells.x - CLEAR_N / 2 + 1, clearCells.x + CLEAR_N / 2 - 1, clearCells.z - CLEAR_N / 2 + 1, clearCells.z + CLEAR_N / 2 - 1);
+        clearDirty = true;
+    };
+
     function attach(env) {
+        if (OpenRacer.Replay && OpenRacer.Replay.attach) { OpenRacer.Replay.attach("atmos", atmosRecord); OpenRacer.Replay.attach("ground", groundRecord); }
         base = env || null;
         if (!attached || !sky || !sky.parent) {
             sky = makeSky();

@@ -1258,8 +1258,8 @@ OpenRacer.Replay = (function() {
     // ---- a file: save and open
 
     var MAGIC = [0x4f, 0x52, 0x52, 0x50];          // "ORRP"
-    var FORMAT = "openracer-replay", FILE_VERSION = 4;       // 4: the rider that is a ragdoll (a block of records after the effects); 3: the skid marks, the smoke and the marbles (a block of rows after the soft body); 2: the soft body (a block of records after the numbers); 1 files have none; all can still be opened
-    var EFFECT_FLOATS = { skid: 29, smoke: 18, marbles: 16, bangs: 4 }, MAX_EFFECT_ROWS = 400000;    // the numbers in a row of every effect (SkidMarks.js, Smoke.js, Marbles.js, Flames.js)
+    var FORMAT = "openracer-replay", FILE_VERSION = 5;       // 4: the rider that is a ragdoll (a block of records after the effects); 3: the skid marks, the smoke and the marbles (a block of rows after the soft body); 2: the soft body (a block of records after the numbers); 1 files have none; all can still be opened
+    var EFFECT_FLOATS = { skid: 29, smoke: 18, marbles: 16, bangs: 4, debris: 14, ground: 8, atmos: 10 }, MAX_EFFECT_ROWS = 400000;    // the numbers in a row of every effect (SkidMarks.js, Smoke.js, Marbles.js, Flames.js)
     var MAX_FILE = 300 * 1024 * 1024, MAX_CARS = 12, MAX_SAMPLES = 108000;   // an hour
     var ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
 
@@ -1402,7 +1402,7 @@ OpenRacer.Replay = (function() {
         var header;
         try { header = JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + headerLength))); } catch(e) { throw bad("This replay file is damaged."); }
         if(!header || header.format !== FORMAT) throw bad("This is not an OpenRacer replay.");
-        if((header.version !== FILE_VERSION && header.version !== 3 && header.version !== 2 && header.version !== 1) || header.stride !== STRIDE || header.rate !== RATE) throw bad("This replay was made with another version of OpenRacer (" + String(header.game || "?").slice(0, 20) + ") and cannot be opened by this one.");
+        if((header.version !== FILE_VERSION && header.version !== 4 && header.version !== 3 && header.version !== 2 && header.version !== 1) || header.stride !== STRIDE || header.rate !== RATE) throw bad("This replay was made with another version of OpenRacer (" + String(header.game || "?").slice(0, 20) + ") and cannot be opened by this one.");
         if(!header.track || !ID_PATTERN.test(String(header.track.id)) || !Array.isArray(header.cars) || header.cars.length < 1 || header.cars.length > MAX_CARS) throw bad("This replay file is damaged.");
         for(var i = 0; i < header.cars.length; i++) {
             var c = header.cars[i];
