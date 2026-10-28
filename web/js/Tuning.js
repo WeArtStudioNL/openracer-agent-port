@@ -479,6 +479,55 @@ var Tuning = (function() {
         extras.innerHTML = "<summary>Extras</summary>";
         OpenRacer.CarTuning.FEATURES.forEach(function(feature) { extras.appendChild(featureRow(feature)); });
         panel.appendChild(extras);
+        // the mirrors (Mirrors.js): the turn and the tilt of every glass, kept as options of the game (they are not part of a tune: where you want to look is yours); filled when the group is opened,
+        // since the model of the car may not be there yet when the menu is made
+        var mirrorGroup = document.createElement("details");
+        mirrorGroup.open = false;
+        mirrorGroup.innerHTML = "<summary>Mirrors</summary>";
+        var mirrorBody = document.createElement("div");
+        mirrorGroup.appendChild(mirrorBody);
+        function fillMirrors() {
+            mirrorBody.innerHTML = "";
+            var list = car && car.mirrors ? car.mirrors : [], sides = [];
+            list.forEach(function(m) { if(sides.indexOf(m.side) < 0) sides.push(m.side); });
+            if(!sides.length) {
+                var none = document.createElement("div");
+                none.className = "item";
+                none.style.cssText = "color: var(--muted); font-size: 13px; padding: 6px 2px;";
+                none.textContent = "This car has no mirror glass that can be aimed (a mesh with the material \"mirror\").";
+                mirrorBody.appendChild(none);
+                return;
+            }
+            var names = { Left: "Left mirror", Right: "Right mirror", Centre: "Mirror inside" };
+            sides.forEach(function(side) {
+                [["Yaw", "turn (positive " + (side === "Centre" ? "to the left" : "outwards") + ")"], ["Tilt", "tilt (positive up)"]].forEach(function(kind) {
+                    var name = "mirror" + side + kind[0], item = document.createElement("div");
+                    item.className = "item";
+                    var line = document.createElement("div");
+                    line.className = "line";
+                    var label = document.createElement("span");
+                    label.className = "label";
+                    label.textContent = names[side] + ": " + kind[1];
+                    var input = document.createElement("input");
+                    input.type = "range"; input.min = -25; input.max = 25; input.step = 1; input.value = Settings.option(name) || 0;
+                    input.style.cssText = "flex: 1; min-width: 80px;";
+                    var text = document.createElement("span");
+                    text.style.cssText = "min-width: 38px; text-align: right;";
+                    text.textContent = input.value + "\u00b0";
+                    input.addEventListener("input", function() { Settings.setOption(name, parseFloat(input.value)); text.textContent = input.value + "\u00b0"; });
+                    var reset = document.createElement("button");
+                    reset.className = "small";
+                    reset.textContent = "\u21ba";
+                    reset.title = "As the model has it";
+                    reset.addEventListener("click", function() { Settings.setOption(name, 0); input.value = 0; text.textContent = "0\u00b0"; });
+                    line.appendChild(label); line.appendChild(input); line.appendChild(text); line.appendChild(reset);
+                    item.appendChild(line);
+                    mirrorBody.appendChild(item);
+                });
+            });
+        }
+        mirrorGroup.addEventListener("toggle", function() { if(mirrorGroup.open) fillMirrors(); });
+        panel.appendChild(mirrorGroup);
         document.body.appendChild(panel);
         OpenRacer.Movable.make(panel, { key: "tuning" });
     }
