@@ -261,6 +261,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 **The torque curve**
 - **The torque curve of the car editor has a scale at the left**: torque (Nm) and power (hp) share one vertical scale, with lines at steps of 1, 2 or 5 times a power of ten (0, 10, 20, 30 ... or 0, 50, 100, 150 ...) so that there are at most seven and the highest curve always fits.
+- **No suspension and the type None are one setting.** In the car editor *No suspension (a kart)* and the suspension type *None* on both axles follow each other: the box on sets None on both, None on both sets the box, and a type that is not None switches the box off. A kart with no parts had springs and dampers (`chassis.unsprung` was off).
 
 ### Track editor
 

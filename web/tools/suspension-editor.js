@@ -276,7 +276,30 @@ export function initSuspension(api) {
         setEditing(false);
     });
 
-    ["front", "rear"].forEach((axle) => selects[axle].addEventListener("change", () => { state[axle].type = selects[axle].value; refresh(true); }));
+    // "No suspension (a kart)" and the type None on both axles are one thing: the one follows the other (a kart with no parts still had springs)
+    const unsprungBox = $("unsprung");
+    let linking = false;
+    const setUnsprung = (on) => { if (!unsprungBox || unsprungBox.checked === on) return; unsprungBox.checked = on; unsprungBox.dispatchEvent(new Event("change")); };
+    ["front", "rear"].forEach((axle) => selects[axle].addEventListener("change", () => {
+        state[axle].type = selects[axle].value;
+        if (!linking) {
+            const none = selects.front.value === "none" && selects.rear.value === "none";
+            linking = true;        // (the checkbox follows the selects here, not the other way round)
+            if (none) setUnsprung(true); else if (unsprungBox && unsprungBox.checked && selects[axle].value !== "none") setUnsprung(false);
+            linking = false;
+        }
+        refresh(true);
+    }));
+    if (unsprungBox) unsprungBox.addEventListener("change", () => {
+        if (linking) return;
+        linking = true;
+        ["front", "rear"].forEach((axle) => {
+            if (unsprungBox.checked && selects[axle].value !== "none") { selects[axle].value = "none"; state[axle].type = "none"; }
+            else if (!unsprungBox.checked && selects[axle].value === "none") { selects[axle].value = "model"; state[axle].type = "model"; }
+        });
+        linking = false;
+        refresh(true);
+    });
     selects.engine.addEventListener("change", () => { state.driveline.engine = selects.engine.value; refresh(true); });
     $("drive").addEventListener("change", () => refresh(false));
 
