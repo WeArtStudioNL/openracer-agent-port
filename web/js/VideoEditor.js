@@ -16,7 +16,7 @@
  *   Save:         "Save" keeps the work with the replay in Replays (the clips with their keys and the camera track, and the edit as it plays): Watch then plays the edit, Edit goes on
  *                 where it was, and the recording itself stays the source in the left monitor. "Save as replay" makes a new replay in the list of Replays (with the clips cut and the
  *                 speeds applied, and the camera track in it; the smoke, the skid marks and the damage are not in it) and "Save as mp4" records the right monitor from the start to
- *                 the end, without sound. Both of those ask for a name.
+ *                 the end, with the sound of the engine. Both of those ask for a name.
  */
 
 OpenRacer.VideoEditor = (function () {
@@ -390,10 +390,14 @@ OpenRacer.VideoEditor = (function () {
         var types = ["video/mp4;codecs=avc1.640028", "video/mp4;codecs=avc1.42E01E", "video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
         var type = types.filter(function (t) { return MediaRecorder.isTypeSupported(t); })[0];
         if (!type) { say("This browser cannot make a video."); return; }
-        askName("Save as mp4", "The name of the video. It is recorded in real time from the start to the end, without sound.", "My video", "Record").then(function (name) {
+        askName("Save as mp4", "The name of the video. It is recorded in real time from the start to the end, with the sound of the engine (press a key or click once first, so that the browser starts the sound).", "My video", "Record").then(function (name) {
             if (!name) return;
             if (Replay.free.active) Replay.leaveFree();
             var stream = canvas.captureStream(60), chunks = [];
+            // the sound of the replay (the engine and the tyres, what EngineSound plays) goes into the video, when the browser has started it
+            var sound = typeof EngineSound !== "undefined" && EngineSound.recordingStream ? EngineSound.recordingStream() : null;
+            if (sound) sound.getAudioTracks().forEach(function (track) { stream.addTrack(track); });
+            else say("No sound in this video: the browser has not started it (press a key or click first, then record again).");
             var recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 12000000 });
             recorder.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
             recorder.onstop = function () {
@@ -1028,7 +1032,7 @@ OpenRacer.VideoEditor = (function () {
         // the program
         var m = mapFinal(state.T);
         Replay.seek(m ? m.src : state.srcT);
-        Replay.editorPlaying = !!(state.finalPlaying || state.srcPlaying) && !recording;
+        Replay.editorPlaying = !!(state.finalPlaying || (state.srcPlaying && !recording));      // (while recording, only the program is heard)
         Replay.frame(delta);
         var clipCam = m && m.clip && m.clip.cam && m.clip.cam !== "track" ? m.clip.cam : "track";
         if (Replay.setGameCamera) Replay.setGameCamera(clipCam, m && m.clip ? leadAtOffset(m.clip, m.src - m.clip.in) : undefined);
