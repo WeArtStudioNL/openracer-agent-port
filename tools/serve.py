@@ -8,6 +8,8 @@
   DELETE /api/cars/<id>/<file>          removes one file of a car (the old model when it is replaced); local connections only
   PUT    /api/tracks/<id>/<file>        the same for a track (track.json, the model, textures; <file> may be images/<name>)
   DELETE /api/tracks/<id>[/<file>]      removes a track, or one file of it
+  PUT    /api/objects/<file>            writes a file of the library of models of the track editor (web/objects/: a glb, its picture, objects.json); local connections only
+  DELETE /api/objects/<file>            removes one of them
   GET    /api/convert                   {"ffmpeg": true} when ffmpeg is installed here
   POST   /api/convert/mp4               a video (webm) in the body, the same video as mp4 (H.264) back, made by ffmpeg; local connections only
 
@@ -147,6 +149,17 @@ class Handler(SimpleHTTPRequestHandler):
             with open(target, "rb") as f:
                 shutil.copyfileobj(f, self.wfile)
 
+    def object_path(self, parts):
+        """web/objects/<file> for ["api", "objects", "<file>"], or None: only models (glb), pictures (webp, png) and the list (objects.json), no folders."""
+        if len(parts) != 3 or parts[1] != "objects":
+            return None
+        name = parts[2]
+        if not FILE_PATTERN.match(name) or name.startswith("."):
+            return None
+        if not (name == "objects.json" or name.lower().endswith((".glb", ".webp", ".png"))):
+            return None
+        return os.path.join(ROOT, "objects", name)
+
     def item_path(self, parts):
         """web/<cars|tracks>/<id>[/<file>] for the parts of an API path, or None if they are not valid.
         A file of a track may be in the folder images/ of the track."""
@@ -169,8 +182,8 @@ class Handler(SimpleHTTPRequestHandler):
         parts = unquote(urlparse(self.path).path).strip("/").split("/")
         if parts[:1] != ["api"] or not self.is_local():
             return self.send_json({"error": "not allowed"}, 403)
-        target = self.item_path(parts)
-        if target is None or len(parts) < 4:
+        target = self.object_path(parts) or self.item_path(parts)
+        if target is None or (len(parts) < 4 and parts[1] != "objects"):
             return self.send_json({"error": "bad path"}, 400)
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -197,6 +210,12 @@ class Handler(SimpleHTTPRequestHandler):
         parts = unquote(urlparse(self.path).path).strip("/").split("/")
         if parts[:1] != ["api"] or not self.is_local():
             return self.send_json({"error": "not allowed"}, 403)
+        library = self.object_path(parts)
+        if library is not None:
+            if not os.path.isfile(library):
+                return self.send_json({"error": "no such file"}, 404)
+            os.remove(library)
+            return self.send_json({"ok": True})
         target = self.item_path(parts)
         if target is not None and len(parts) >= 4:
             # one file; the configuration itself is only removed with the whole car or track

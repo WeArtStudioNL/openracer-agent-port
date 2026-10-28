@@ -103,9 +103,10 @@
         <details class="card" open>
             <summary>Objects<span class="meta" id="objectNote"></span></summary>
             <div class="body">
-                <p class="sub">Your own models (glb) to put in the track: a barrel, a block, a tree. Add one with +, then click <b>Place</b>, press on the road and drag to say which way it faces. The origin of the model is put at the middle of its base (or keep the origin of the file: the select). Choose a placed object in the Layers panel (or click it in the view): <b>W</b> moves, <b>E</b> turns, <b>R</b> scales, Delete takes it away. A <b>rigid</b> object sleeps until a car hits it, then it is pushed and falls; a model that is not rigid stays where it is.</p>
+                <p class="sub">The <b>library</b> of your own models (glb: a barrel, a block, a tree), the same in every track (the folder <code>objects/</code>: it needs the server, <code>start-server.sh</code>). <b>Click a model</b> and you are placing it: press on the road and drag to say which way it faces; <b>Escape</b> goes back to Look. Add a new one with +; it is kept in the library with its picture. Choose a placed object in the Layers panel (or click it in the view): <b>W</b> moves, <b>E</b> turns, <b>R</b> scales, Delete takes it away. The origin of a model is put at the middle of its base (or keep the origin of the file); a <b>rigid</b> object sleeps until a car hits it, then it is pushed and falls; a model that is not rigid stays where it is. Its settings are below the library.</p>
+                <div id="objectLibrary" class="libgrid"></div>
+                <button class="small" id="objectAdd" title="Add a glb model to the library">+ Add a model to the library</button>
                 <div id="objectModels"></div>
-                <button class="small" id="objectAdd" title="Add a glb model">+ Add a model</button>
                 <input type="file" id="objectFile" accept=".glb,model/gltf-binary" style="display:none" multiple>
                 <div id="objectList"></div>
             </div>
@@ -182,6 +183,8 @@
         <div id="eventList" class="eventList"></div>
         <div style="padding: 8px 14px 2px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #7f90a5;">Objects <span id="objectGizmoMode" style="text-transform: none; letter-spacing: 0; color: #ffd04d;"></span></div>
         <div id="objectLayers" class="eventList" style="max-height: 180px; overflow-y: auto;"></div>
+        <div style="padding: 8px 14px 2px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #7f90a5;">Gates</div>
+        <div id="gateLayers" class="eventList" style="max-height: 150px; overflow-y: auto;"></div>
     </div>
     <div id="dragWindow" style="display:none; position: absolute; right: 16px; top: 70px; width: 270px; padding: 10px 12px 12px; background: rgba(22, 27, 34, 0.94); border: 1px solid #323c4a; border-radius: 10px; color: #dfe6ef; font-size: 12.5px; z-index: 6;">
         <div style="display: flex; justify-content: space-between; align-items: center; font-weight: bold; margin-bottom: 6px;"><span>Drag strip</span><button class="small ghost" id="dragClose" title="Close">×</button></div>

@@ -82,6 +82,8 @@ installZoomToMouse({ THREE, camera, controls, renderer, targets: () => [trackGro
 // the objects of the track: models (glb) that were added, and where they stand. A model: { file (a Blob, when it was added now), name (the file in the folder of the track),
 // kind (rigid, static or decor), mass (kg, 0: from its size), scene (the loaded model) }
 const objectState = { models: new Map(), list: [], selected: null };
+const library = { items: [] };                       // the library of models, the same for every track (objects/objects.json: [{ id, name, file, thumb, kind, mass }])
+const gateUi = { selected: -1, dragging: false, width0: 24 };           // the gate that is chosen (the layers panel, a click in the view): its gizmo moves, turns and widens it
 const raycaster = new THREE.Raycaster();
 
 // ---- the cinematic cameras: a click chooses one, a gizmo moves it, and the button above it changes its range (a circle on the floor: the middle moves it, the node on the edge sets the radius)
@@ -762,11 +764,13 @@ function updateMarkers() {
             markers.add(dot);
         });
     }
-    renderGrid(); renderPit();
+    renderGrid(); renderPit(); renderGateLayers(); syncGateTarget();
     state.gates.forEach((gate, i) => {
-        const colour = i === 0 ? 0x4ed88a : 0x4db8ff;
-        const material = () => new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false });
+        const chosen = i === gateUi.selected;
+        const colour = chosen ? 0xffd04d : (i === 0 ? 0x4ed88a : 0x4db8ff);
+        const material = () => new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: chosen ? 0.6 : 0.45, side: THREE.DoubleSide, depthWrite: false });
         const wall = new THREE.Mesh(new THREE.PlaneGeometry(gate.width, 4), material());
+        wall.userData.gateIndex = i;
         wall.position.set(gate.x, gate.y + 2, gate.z);
         wall.rotation.y = Math.atan2(Math.cos(gate.heading), Math.sin(gate.heading));
         markers.add(wall);
@@ -775,6 +779,7 @@ function updateMarkers() {
         strip.rotation.x = -Math.PI / 2;
         strip.rotation.z = Math.atan2(-Math.cos(gate.heading), -Math.sin(gate.heading)); // across the road
         strip.position.set(gate.x, gate.y + 0.3, gate.z);
+        strip.userData.gateIndex = i;
         markers.add(strip);
         markers.add(makeArrow(gate.x, gate.y, gate.z, gate.heading, colour, 5 * k));
     });
@@ -905,21 +910,29 @@ function loadObjectScene(model, url) {
     }, undefined, () => { model.scene = null; resolve(false); }));
 }
 
-// a model that was picked: it is shown, and it is the one that Place puts down
-async function addObjectModel(file) {
-    let name = objectFileName(file.name);
+// the model of a glb (a file or a blob) for this track, loaded, with its origin at the middle of its base; name: the file in the folder of the track (null: from the file name)
+async function makeObjectModel(file, name, kind, mass) {
+    name = name || objectFileName(file.name || "object");
     let k = 2;
-    while (objectState.models.has(name)) name = name.replace(/(-\d+)?\.glb$/, "-" + (k++) + ".glb");
-    const model = { name, file, kind: "rigid", mass: 0, scene: null, origin: "base", pivot: null, base: null };
+    if (!arguments[1]) while (objectState.models.has(name)) name = name.replace(/(-\d+)?\.glb$/, "-" + (k++) + ".glb");
+    const model = { name, file, kind: kind || "rigid", mass: mass || 0, scene: null, origin: "base", pivot: null, base: null };
     const url = URL.createObjectURL(file);
     const ok = await loadObjectScene(model, url);
     URL.revokeObjectURL(url);
-    if (!ok) { status("The file “" + file.name + "” could not be read as a glb.", "error"); return; }
+    if (!ok) return null;
     model.pivot = model.base ? model.base.clone() : null;          // (the origin of a model that is added: the middle of its base)
-    objectState.models.set(name, model);
-    objectState.selected = name;
+    return model;
+}
+// a model that was picked with +: it goes in the library (the same in every track) with a picture, and in this track, and you are placing it
+async function addObjectModel(file) {
+    const model = await makeObjectModel(file);
+    if (!model) { status("The file “" + file.name + "” could not be read as a glb.", "error"); return; }
+    objectState.models.set(model.name, model);
+    try { await keepInLibrary(model, file.name); status("Model added to the library. Press on the road and drag to say which way it faces; Escape goes back to Look.", "ok"); }
+    catch (error) { status("The model is in this track, but not in the library: " + error.message, "error"); }
+    objectState.selected = model.name;
     renderObjects();
-    status("Model added, with its origin at the middle of its base. Choose Place object in the toolbar and click on the road.", "ok");
+    setMode("object");
 }
 
 // an object of the track as it stands: the turn about the vertical (the heading), the tilt (pitch about x, roll about z) and the scale; the same order as the game (RigidObjects.js)
@@ -973,6 +986,7 @@ function objectGizmoMoved() {
     showObjects();
 }
 function selectObject(i) {
+    if (i >= 0 && gateUi.selected >= 0) selectGate(-1);
     objectGizmo.detach();
     objectUi.selected = objectState.list[i] ? i : -1;
     if (objectUi.selected >= 0) { applyObjectTransform(objectTarget, objectState.list[objectUi.selected]); objectGizmo.attach(objectTarget); setObjectGizmoMode(objectGizmo.mode || "translate"); }
@@ -983,21 +997,81 @@ function selectObject(i) {
 function setObjectGizmoMode(mode) {
     objectGizmo.setMode(mode);
     objectGizmo.setSpace(mode === "translate" ? "world" : "local");
+    gateGizmo.setMode(mode);
+    gateGizmo.setSpace(mode === "translate" ? "world" : "local");
+    // a gate only moves, turns about the vertical and widens (the scale along its width)
+    gateGizmo.showX = mode !== "rotate"; gateGizmo.showY = mode !== "scale"; gateGizmo.showZ = mode === "translate";
     const names = { translate: "Move (W)", rotate: "Turn (E)", scale: "Scale (R)" };
     const hint = $("objectGizmoMode");
     if (hint) hint.textContent = names[mode];
 }
 window.addEventListener("keydown", (event) => {
     const t = event.target && event.target.tagName;
-    if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT" || objectUi.selected < 0) return;
+    if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT" || (objectUi.selected < 0 && gateUi.selected < 0)) return;
     if (event.code === "KeyW") setObjectGizmoMode("translate");
     else if (event.code === "KeyE") setObjectGizmoMode("rotate");
     else if (event.code === "KeyR") setObjectGizmoMode("scale");
-    else if (event.code === "Delete" || event.code === "Backspace") { objectState.list.splice(objectUi.selected, 1); selectObject(-1); updateMarkers(); }
-    else if (event.code === "Escape") selectObject(-1);
+    else if (event.code === "Delete" || event.code === "Backspace") {
+        if (gateUi.selected >= 0) { state.gates.splice(gateUi.selected, 1); selectGate(-1); updateMarkers(); }
+        else { objectState.list.splice(objectUi.selected, 1); selectObject(-1); updateMarkers(); }
+    }
     else return;
     event.preventDefault();
 });
+// ---- the gates as layers: chosen in the layers panel or by a click on one in the view; the gizmo moves it (W), turns it about the vertical (E) and makes it wider or narrower (R)
+const gateTarget = new THREE.Object3D();
+scene.add(gateTarget);
+const gateGizmo = new TransformControls(camera, renderer.domElement);
+gateGizmo.setSize(0.9);
+gateGizmo.addEventListener("dragging-changed", (event) => {
+    controls.enabled = !event.value; gateUi.dragging = event.value;
+    const g = state.gates[gateUi.selected];
+    if (event.value && g) gateUi.width0 = g.width;
+    if (!event.value) { gateTarget.scale.set(1, 1, 1); syncGateTarget(); renderGates(); }
+});
+gateGizmo.addEventListener("objectChange", () => {
+    const g = state.gates[gateUi.selected];
+    if (!g) return;
+    g.x = gateTarget.position.x; g.y = gateTarget.position.y; g.z = gateTarget.position.z;
+    g.heading = -2 * Math.atan2(gateTarget.quaternion.y, gateTarget.quaternion.w);           // (the heading goes from +x towards +z, a turn about y goes the other way)
+    if (Math.abs(gateTarget.scale.x - 1) > 1e-4) g.width = Math.max(2, Math.min(400, Math.round(gateUi.width0 * gateTarget.scale.x * 10) / 10));
+    updateMarkers();
+});
+scene.add(typeof gateGizmo.getHelper === "function" ? gateGizmo.getHelper() : gateGizmo);
+function syncGateTarget() {
+    const g = state.gates[gateUi.selected];
+    if (!g || gateUi.dragging) return;
+    gateTarget.position.set(g.x, g.y, g.z);
+    gateTarget.rotation.set(0, -g.heading, 0);
+    gateTarget.scale.set(1, 1, 1);
+}
+function selectGate(i) {
+    gateGizmo.detach();
+    gateUi.selected = state.gates[i] ? i : -1;
+    if (gateUi.selected >= 0) {
+        if (objectUi.selected >= 0) selectObject(-1);
+        syncGateTarget();
+        gateGizmo.attach(gateTarget);
+        setObjectGizmoMode(objectGizmo.mode || "translate");
+    }
+    updateMarkers();
+}
+function renderGateLayers() {
+    const list = $("gateLayers");
+    if (!list) return;
+    list.innerHTML = "";
+    state.gates.forEach((g, i) => {
+        const row = document.createElement("div");
+        row.className = "layer" + (gateUi.selected === i ? " selected" : "");
+        row.innerHTML = "<i></i><span></span><span class=\"meta\"></span>";
+        row.children[1].textContent = i === 0 ? "Gate 1 (finish)" : "Gate " + (i + 1);
+        row.children[2].textContent = g.width + " m";
+        row.title = "Choose it: W moves, E turns, R makes it wider, Delete takes it away";
+        row.onclick = () => selectGate(gateUi.selected === i ? -1 : i);
+        list.appendChild(row);
+    });
+    if (!state.gates.length) { const none = document.createElement("div"); none.style.cssText = "padding: 4px 14px; color: #66727f;"; none.textContent = "none placed"; list.appendChild(none); }
+}
 function objectIndexOf(object) {
     for (let n = object; n; n = n.parent) if (n.userData && n.userData.objectIndex !== undefined) return n.userData.objectIndex;
     return -1;
@@ -1006,7 +1080,8 @@ function objectIndexOf(object) {
 function renderObjects() {
     const holder = $("objectModels");
     holder.innerHTML = "";
-    for (const [name, model] of objectState.models) {
+    renderLibrary();
+    for (const [name, model] of (objectState.models.has(objectState.selected) ? [[objectState.selected, objectState.models.get(objectState.selected)]] : [])) {
         const row = document.createElement("div");
         row.className = "gate";
         row.style.flexWrap = "wrap";
@@ -1018,11 +1093,11 @@ function renderObjects() {
         rigid.title = "Rigid: a body that moves when it is hit. Static: stands still and is hit. Decor: only drawn, nothing collides with it.";
         [["rigid", "Rigid"], ["static", "Static"], ["decor", "Decor"]].forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; rigid.appendChild(o); });
         rigid.value = model.kind || (model.rigid === false ? "decor" : "rigid");
-        rigid.onchange = () => { model.kind = rigid.value; mass.style.display = rigid.value === "rigid" ? "" : "none"; };
+        rigid.onchange = () => { model.kind = rigid.value; mass.style.display = rigid.value === "rigid" ? "" : "none"; libraryRemember(model); };
         const mass = document.createElement("input");
         mass.type = "number"; mass.min = "0"; mass.step = "5"; mass.value = model.mass || ""; mass.placeholder = "kg (auto)";
         mass.style.cssText = "width:80px" + ((model.kind || "rigid") === "rigid" ? "" : ";display:none");
-        mass.onchange = () => { model.mass = Math.max(0, parseFloat(mass.value) || 0); };
+        mass.onchange = () => { model.mass = Math.max(0, parseFloat(mass.value) || 0); libraryRemember(model); };
         // the origin: the middle of the base of the model (the object stands where it is clicked, whatever the origin of the file is), or the origin of the file as it is
         const origin = document.createElement("select");
         origin.title = "Where the object stands on the place that you click: the middle of its base, or the origin of the file as it is";
@@ -1035,7 +1110,7 @@ function renderObjects() {
         place.onclick = () => { objectState.selected = name; renderObjects(); setMode("object"); };
         const remove = document.createElement("button");
         remove.className = "small danger";
-        remove.textContent = "Remove";
+        remove.textContent = "Remove from the track";
         remove.onclick = async () => {
             if (objectState.list.some((o) => o.model === name) && !(await OpenRacerDialog.ask({ title: "Remove this model?", text: "The objects that stand in the track go too.", ok: "Remove", danger: true }))) return;
             objectState.models.delete(name);
@@ -1044,7 +1119,7 @@ function renderObjects() {
             objectGizmo.detach(); objectUi.selected = -1;
             renderObjects(); updateMarkers();
         };
-        row.append(title, origin, rigid, mass, place, remove);
+        row.append(title, origin, rigid, mass, remove);
         holder.appendChild(row);
     }
     // the objects that stand in the track: in the card, and as layers in the panel of the view (choose one: the gizmo shows, W moves, E turns, R scales; Delete takes it away)
@@ -1083,6 +1158,144 @@ function renderObjects() {
 }
 $("objectAdd").onclick = () => $("objectFile").click();
 $("objectFile").onchange = async (e) => { for (const f of e.target.files) await addObjectModel(f); $("objectFile").value = ""; };
+
+// ---- the library of models (objects/: a glb and a picture of every model, and objects.json): the same for every track. A click on a model puts it in this track and you are
+// placing it (press on the road and drag for the way it faces); Escape goes back to Look. Written through the server (serve.py, start-server.sh).
+const LIB_URL = "../objects/", LIB_API = "../api/objects/";
+async function libraryPut(name, blob) {
+    const r = await fetch(LIB_API + encodeURIComponent(name), { method: "PUT", body: blob });
+    if (!r.ok) throw new Error("the server did not take “" + name + "” (is it running with start-server.sh?)");
+}
+async function libraryIndex() { await libraryPut("objects.json", new Blob([JSON.stringify({ objects: library.items }, null, 1)], { type: "application/json" })); }
+async function loadLibrary() {
+    try {
+        const r = await fetch(LIB_URL + "objects.json", { cache: "no-store" });
+        library.items = r.ok ? ((await r.json()).objects || []).filter((e) => e && e.id && e.file) : [];
+    } catch (e) { library.items = []; }
+    renderLibrary();
+}
+// a picture of a model: 192 pixels, see-through, from a corner above
+let thumbRenderer = null;
+function thumbOf(object) {
+    if (!thumbRenderer) {
+        thumbRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+        thumbRenderer.setSize(192, 192, false);
+        thumbRenderer.setClearColor(0x000000, 0);
+    }
+    const sc = new THREE.Scene();
+    sc.add(new THREE.HemisphereLight(0xffffff, 0x667788, 1.6));
+    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+    sun.position.set(3, 5, 4);
+    sc.add(sun);
+    const copy = object.clone(true);
+    sc.add(copy);
+    copy.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(copy), size = box.getSize(new THREE.Vector3()), centre = box.getCenter(new THREE.Vector3());
+    const radius = Math.max(size.length() / 2, 0.01);
+    const cam = new THREE.PerspectiveCamera(30, 1, radius * 0.05, radius * 20);
+    cam.position.copy(centre).add(new THREE.Vector3(1, 0.75, 1.2).normalize().multiplyScalar(radius / Math.sin(15 * Math.PI / 180) * 1.02));
+    cam.lookAt(centre);
+    thumbRenderer.render(sc, cam);
+    return thumbRenderer.domElement.toDataURL("image/webp", 0.9);
+}
+// the model of a track in the library: its glb and its picture to the server, and in the list
+async function keepInLibrary(model, fileName) {
+    const base = (fileName || model.name.replace(OBJECT_PREFIX, "")).replace(/\.[^.]*$/, "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "").slice(0, 60) || "object";
+    let id = base.toLowerCase(), k = 2;
+    while (library.items.some((e) => e.id === id)) id = base.toLowerCase() + "-" + (k++);
+    let blob = model.file;
+    if (!blob && state.existingTrack) blob = await (await fetch(trackFile(state.existingTrack, model.name))).blob();
+    if (!blob) throw new Error("the file of the model is not here");
+    const thumb = await (await fetch(thumbOf(model.scene))).blob();
+    const entry = { id, name: base, file: id + ".glb", thumb: id + ".webp", kind: model.kind || "rigid", mass: model.mass || 0 };
+    await libraryPut(entry.file, blob);
+    await libraryPut(entry.thumb, thumb);
+    library.items.push(entry);
+    await libraryIndex();
+    model.library = id;
+    renderLibrary();
+}
+// what a model of the library says (kind, mass) is kept when it is changed below the library
+let libraryTimer = null;
+function libraryRemember(model) {
+    const entry = library.items.find((e) => e.id === model.library);
+    if (!entry) return;
+    entry.kind = model.kind; entry.mass = model.mass || 0;
+    clearTimeout(libraryTimer);
+    libraryTimer = setTimeout(() => libraryIndex().catch(() => {}), 600);
+}
+async function useLibraryModel(entry) {
+    let name = OBJECT_PREFIX + entry.id + ".glb";
+    for (const [other, m] of objectState.models) if (m.library === entry.id) name = other;          // (the model is in the track already, under the name that it was added with)
+    if (!objectState.models.has(name)) {
+        let blob;
+        try { blob = await (await fetch(LIB_URL + entry.file, { cache: "no-store" })).blob(); } catch (e) { blob = null; }
+        const model = blob ? await makeObjectModel(blob, name, entry.kind, entry.mass) : null;
+        if (!model) { status("The model “" + entry.name + "” of the library could not be read.", "error"); return; }
+        model.library = entry.id;
+        objectState.models.set(name, model);
+    }
+    objectState.selected = name;
+    renderObjects();
+    setMode("object");
+    status("Placing “" + entry.name + "”: press on the road and drag to say which way it faces. Escape goes back to Look.", "ok");
+}
+function renderLibrary() {
+    const holder = $("objectLibrary");
+    if (!holder) return;
+    holder.innerHTML = "";
+    const inLibrary = new Set(library.items.map((e) => OBJECT_PREFIX + e.id + ".glb"));
+    const tile = (name, picture, local) => {
+        const div = document.createElement("div");
+        div.className = "libtile" + (local ? " local" : "") + (objectState.selected === (local ? local.name : name) && state.mode === "object" ? " on" : "");
+        div.style.backgroundImage = "url(" + picture + ")";
+        const label = document.createElement("div");
+        label.className = "name";
+        label.textContent = name;
+        div.appendChild(label);
+        return div;
+    };
+    library.items.forEach((entry) => {
+        const div = tile(entry.name, LIB_URL + entry.thumb, null);
+        const used = [...objectState.models].find(([, m]) => m.library === entry.id);
+        if (used && objectState.selected === used[0] && state.mode === "object") div.classList.add("on");
+        div.title = entry.name + ": click to place it in the track";
+        div.onclick = () => useLibraryModel(entry);
+        const x = document.createElement("button");
+        x.className = "x"; x.textContent = "×"; x.title = "Take it out of the library (the tracks that use it keep their copy)";
+        x.onclick = async (e) => {
+            e.stopPropagation();
+            if (!(await OpenRacerDialog.ask({ title: "Take “" + entry.name + "” out of the library?", text: "The tracks that use it keep their own copy.", ok: "Remove", danger: true }))) return;
+            try {
+                await fetch(LIB_API + encodeURIComponent(entry.file), { method: "DELETE" });
+                await fetch(LIB_API + encodeURIComponent(entry.thumb), { method: "DELETE" });
+                library.items = library.items.filter((o) => o !== entry);
+                await libraryIndex();
+            } catch (error) { status("Could not remove it: " + error.message, "error"); }
+            renderLibrary();
+        };
+        div.appendChild(x);
+        holder.appendChild(div);
+    });
+    // the models that this track has and the library has not (a track from before the library): they can be placed too, and kept in the library
+    for (const [name, model] of objectState.models) {
+        if (inLibrary.has(name) || model.library || !model.scene) continue;
+        if (!model.thumbUrl) { try { model.thumbUrl = thumbOf(model.scene); } catch (e) { model.thumbUrl = ""; } }
+        const div = tile(name.replace(OBJECT_PREFIX, "").replace(/\.glb$/, ""), model.thumbUrl, model);
+        div.title = "A model of this track: click to place it. The button keeps it in the library.";
+        div.onclick = () => { objectState.selected = name; renderObjects(); setMode("object"); };
+        const badge = document.createElement("div");
+        badge.className = "badge"; badge.textContent = "track";
+        div.appendChild(badge);
+        const keep = document.createElement("button");
+        keep.className = "x"; keep.textContent = "+"; keep.title = "Keep it in the library";
+        keep.onclick = async (e) => { e.stopPropagation(); try { await keepInLibrary(model); status("Kept in the library.", "ok"); } catch (error) { status("Could not keep it: " + error.message, "error"); } };
+        div.appendChild(keep);
+        holder.appendChild(div);
+    }
+    if (!holder.children.length) { const none = document.createElement("div"); none.className = "hint"; none.style.gridColumn = "1 / -1"; none.textContent = "The library is empty: add a model with +."; holder.appendChild(none); }
+}
+loadLibrary();
 
 // the objects of a track that is opened: the models that its objects use are loaded from its folder
 async function loadObjects(track) {
@@ -1249,6 +1462,7 @@ function stopDesign() {
 
 function setMode(mode) {
     state.mode = mode;
+    if (typeof renderLibrary === "function") renderLibrary();
     $("dragWindow").style.display = mode === "drag" ? "block" : "none";
     for (const button of document.querySelectorAll("#modes button")) button.classList.toggle("active", button.dataset.mode === mode);
     $("hud").textContent = (design && design.hudText(mode)) || (mode === "grid" ? "Grid box: click on the road where box " + Math.min(GRID_MAX, state.grid.length + 1) + " is and drag in the direction that the car faces (box 1 is the start of the player, 2 to 8 the opponents)."
@@ -1390,9 +1604,11 @@ renderer.domElement.addEventListener("pointerup", (event) => {
         if (!event.shiftKey) { selectLineNode(-1); return; }
     }
     if (state.mode === "view" && !d.moved && !lineEdit.editing && !(design && design.active()) && !objectGizmo.axis) {
-        // an object that is clicked is chosen (its gizmo shows); else the part of the model under the pointer
+        // an object that is clicked is chosen (its gizmo shows); a gate too; else the part of the model under the pointer
         const objectHit = pointerRay(event).intersectObjects(objectLayer.children, true)[0];
         if (objectHit && objectIndexOf(objectHit.object) >= 0) { selectObject(objectIndexOf(objectHit.object)); return; }
+        const gateHit = pointerRay(event).intersectObjects(markers.children, false).find((h) => h.object.userData.gateIndex !== undefined);
+        if (gateHit) { selectGate(gateHit.object.userData.gateIndex); return; }
         const hit = pointerRay(event).intersectObjects(trackGroup.children, true)[0];
         if (hit) selectPart(hit.object.name || "", true);
     }
@@ -1542,7 +1758,7 @@ async function loadExisting() {
     state.pitLine = track.pit && Array.isArray(track.pit.line) ? track.pit.line.filter((q) => Array.isArray(q) && isFinite(q[0]) && isFinite(q[1])).map((q) => ({ x: q[0], y: 0, z: q[1] })) : [];
     state.pit = track.pit && Array.isArray(track.pit.polygon) ? { points: track.pit.polygon.filter((q) => Array.isArray(q) && isFinite(q[0]) && isFinite(q[1])).map((q) => ({ x: q[0], y: 0, z: q[1] })) } : null;
     if (state.pit && !state.pit.points.length) state.pit = null;
-    state.gates = [];
+    state.gates = []; gateGizmo.detach(); gateUi.selected = -1;
     state.cameras = [];
     $("delete").style.display = "";
     $("editing").textContent = "Changing the track “" + id + "”. Saving overwrites it.";
@@ -1558,6 +1774,7 @@ async function loadExisting() {
         state.pitBoxes.forEach((b) => { b.y = groundY(b.x, b.z); });
         state.pitLine.forEach((q) => { q.y = groundY(q.x, q.z); });
         $("showGates").checked = !!track.show_gates;
+        gateGizmo.detach(); gateUi.selected = -1;
         state.gates = (track.gates || []).map((g) => ({ x: g.x, y: groundY(g.x, g.z), z: g.z, heading: g.heading, width: g.width || 24 }));
         state.cameras = (track.cameras || []).filter((c) => isFinite(c.x) && isFinite(c.z)).map((c) => {
             const camera = { x: c.x, y: isFinite(c.y) ? c.y : groundY(c.x, c.z) + 3, z: c.z };
@@ -1586,7 +1803,7 @@ function newTrack() {
     state.pit = null;
     state.pitBoxes = [];
     state.pitLine = [];
-    state.gates = [];
+    state.gates = []; gateGizmo.detach(); gateUi.selected = -1;
     $("showGates").checked = true;
     state.cameras = [];
     resetObjects();
@@ -2035,3 +2252,15 @@ fillEnv(OpenRacer.environmentDefaults());
 applyEnv();
 updateLineNote();
 openFromAddress().then(() => { if (!new URLSearchParams(window.location.search).get("track")) startDialog(); });
+
+// Escape: always back to Look, with nothing chosen (objects, gates, the drag strip, a camera)
+window.addEventListener("keydown", (event) => {
+    if (event.code !== "Escape") return;
+    const t = event.target && event.target.tagName;
+    if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
+    selectObject(-1);
+    selectGate(-1);
+    if (eventLayers.selected) selectEvent(eventLayers.selected);
+    if (state.camSel >= 0) selectCamera(-1);
+    if (state.mode !== "view" && !lineEdit.editing) setMode("view");
+});
