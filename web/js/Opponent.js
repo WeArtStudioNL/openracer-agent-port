@@ -6,6 +6,10 @@
  *              keeps to the speed that the line allows there, brakes for the bends ahead, moves aside for a car in front and backs off
  *              when it is right behind one. The assists are on and the gearbox is automatic. The cars bump into each other
  *              (collideCars). The difficulty sets how close to the limit of the tyres it drives.
+ *
+ *              Options { vehicle, noModel }: the driver of a car that is not an AI car. With a vehicle it drives that vehicle (the player's after the finish of a race: Car.autopilot): its
+ *              own physics and model are not made (noModel), only drive() is used, which sets throttle, brakePedal and turnAngle; paceFactor (1: as fast as the line allows; 0.5: half)
+ *              scales the speed.
  */
 
 OpenRacer.vehicleParams = function (config, getSurface) {
@@ -54,10 +58,10 @@ OpenRacer.Opponent = function (config, line, options) {
     // AI car cost as much as the player, and the frame rate fell with every car on the grid
     var params = OpenRacer.vehicleParams(config, getSurface);
     params.simpleTyres = options.shellTyres ? false : true;
-    this.vehicle = new OpenRacer.Vehicle(params, this);
+    this.vehicle = options.vehicle || new OpenRacer.Vehicle(params, this);
     // the tyres, the power and the clutch as car.json has them (the player's car gets these through the tuning menu)
     var tyres = config.tyres || {}, engineConfig = config.engine || {}, assists = config.assists || {};
-    this.vehicle.retune({
+    if (!options.vehicle) this.vehicle.retune({
         grip: tyres.grip !== undefined ? tyres.grip : 1, grip_balance: tyres.grip_balance !== undefined ? tyres.grip_balance : 1,
         cornering: tyres.cornering !== undefined ? tyres.cornering : 1, rolling_resistance: tyres.rolling_resistance !== undefined ? tyres.rolling_resistance : 0.015,
         pressure_front: tyres.pressure_front || 2.2, pressure_rear: tyres.pressure_rear || 2.2,
@@ -65,11 +69,13 @@ OpenRacer.Opponent = function (config, line, options) {
         clutch: config.drivetrain.clutch !== undefined ? config.drivetrain.clutch : 1.5,
         tc_allowance: assists.tc_allowance !== undefined ? assists.tc_allowance : 1, esc_gain: assists.esc_gain !== undefined ? assists.esc_gain : 1
     });
-    this.vehicle.collision = collisionWorld;
-    this.vehicle.ground = groundWorld;
-    this.vehicle.tcEnabled = true;
-    this.vehicle.absEnabled = true;
-    this.vehicle.escEnabled = true;
+    if (!options.vehicle) {
+        this.vehicle.collision = collisionWorld;
+        this.vehicle.ground = groundWorld;
+        this.vehicle.tcEnabled = true;
+        this.vehicle.absEnabled = true;
+        this.vehicle.escEnabled = true;
+    }
     this.wheels = this.vehicle.wheels;
     this.body = new THREE.Object3D();
     this.loaded = false;
@@ -98,6 +104,8 @@ OpenRacer.Opponent = function (config, line, options) {
     this.raceLaps = 0;           // the laps of the race (0: no end), for the decision to pit
     this.pitLane = null;         // the pit lane of the track (Pit.js), when it has one
     this.pitBox = null;          // the pit box of this car ({ x, z, heading }, from the track editor): it drives to it and stops in it
+    this.paceFactor = 1;         // the share of the speed that the line allows that it drives (the player's car after a race: 0.5)
+    this.paceCap = Infinity;     // the most it drives (m/s; the player's car after a race: half of the top speed that the player reached)
     this.pitPhase = 0;           // 0.5 on the racing line, slowing down for the start of the pit line; 1 on its way to the box and in it, 2 on its way back to the racing line
     this.pitPath = null;         // the pit line of the track (OpenRacer.PitPath, drawn in the track editor): the path to the box, with a speed of its own
     var pitIdx = 0, pitStopIdx = -1;
@@ -108,7 +116,7 @@ OpenRacer.Opponent = function (config, line, options) {
     var lastFraction = 0;
     var maxFraction = 0;
 
-    OpenRacer.loadCarModel(config, function (model) {
+    if (!options.noModel) OpenRacer.loadCarModel(config, function (model) {
         self.body.add(model.tilt);
         scene.add(self.body);
         self.steeringWheel = model.steeringWheel || null;
@@ -302,7 +310,7 @@ OpenRacer.Opponent = function (config, line, options) {
         // the speed the line allows here and a little ahead (the brakes need a moment)
         var allowed = Infinity;
         for (var j = 0; j <= 4; j++) allowed = Math.min(allowed, speeds[((this.lineIndex + j) % n + n) % n]);
-        allowed *= holdBack;
+        allowed = Math.min(allowed * holdBack * this.paceFactor, this.paceCap);
         if (inLane) allowed = Math.min(allowed, 16);        // the pit lane: slowly
         if (boxMode) allowed = Math.min(allowed, boxSpeed);      // to the box and back: slowly
         if (atStop) allowed = 0;                            // at the box, until the stop is done

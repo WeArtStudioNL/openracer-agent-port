@@ -835,6 +835,15 @@ OpenRacer.Replay = (function() {
         }
     }
 
+    // the cinematic camera outside a replay: the game after a race (main.js) puts the camera of the track on the car; true when it has set the camera (a track without cameras: false)
+    api.liveCine = function(delta) {
+        if(!cinemaCameras().length || !cars.length) return false;
+        if(!cine.active) { cine.active = true; cine.index = -1; cine.liveOnly = true; }
+        updateCine(delta || 0.016);
+        return true;
+    };
+    api.liveCineOff = function() { if(cine.liveOnly) { cine.active = false; cine.liveOnly = false; } };
+
     function toggleAim() {
         free.aim = !free.aim;
         if(!free.aim) anglesFromWorld(free.quat);     // the look goes on from where it points

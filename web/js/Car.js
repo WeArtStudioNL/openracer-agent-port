@@ -592,7 +592,9 @@ OpenRacer.Car = function( config, domElement ) {
 
     // ---- main loop
 
-    var soloShift = new THREE.Vector3();
+    var soloShift = new THREE.Vector3(), shiftClock = 0;
+    this.autopilot = null;           // an AI driver that has the pedals and the wheel (Opponent.js with a vehicle: the player's car after the finish of a race, main.js)
+    this.autopilotOthers = null;     // a function that gives the vehicles of the other cars, for the passing
     this.update = function( delta, showDebug ) {
         if(!this.isReady()) return;
         if(!placed) {
@@ -758,6 +760,23 @@ OpenRacer.Car = function( config, domElement ) {
         this.turnAngle = Math.max(-this.maxTurn, Math.min(this.maxTurn, this.turnAngle));
         this.lastWritten = this.turnAngle;
 
+        // The autopilot (after a race, main.js): an AI driver (Opponent.js, driving this vehicle) takes the pedals and the wheel; what was pressed is not used. A manual gearbox is shifted by it.
+        if(this.autopilot) {
+            var pilot = this.autopilot, others = this.autopilotOthers ? this.autopilotOthers() : [];
+            if(pilot.drive) pilot.drive(delta, others);
+            this.throttle = pilot.throttle; this.brakePedal = pilot.brakePedal;
+            this.turnAngle = Math.max(-this.maxTurn, Math.min(this.maxTurn, pilot.turnAngle));
+            this.handbrake = false; this.reverse = false; this.neutral = false; this.parkingLock = false; this.selector = "D";
+            this.accelerate = this.brake = this.turnLeft = this.turnRight = false;
+            if(this.gearboxMode === "manual" && v.gearbox === "gears") {
+                shiftClock += delta;
+                if(shiftClock > 0.5) {
+                    var rpmNow = this.engine.getRPM(), top = this.engine.limiterRPM || 6500;
+                    if(rpmNow > top * 0.92 && this.current_gear < v.gear_ratios.length - 1) { this.shiftUp(); shiftClock = 0; }
+                    else if(rpmNow < top * 0.38 && this.current_gear > 0 && v.u > 3) { this.shiftDown(); shiftClock = 0; }
+                }
+            }
+        }
         // The same reverse for analog pedals (a wheel, the triggers of a pad, the touch pedals): the brake pedal held at a standstill is the gas of the reverse,
         // the gas pedal is the brake; for the physics the two values are swapped, and put back after it
         var swapPedals = false;

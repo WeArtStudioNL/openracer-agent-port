@@ -324,8 +324,27 @@ function updateRaceFlow(delta) {
         race.state = "finished";
         car.racePosition = standings().map(function(r) { return r.player; }).indexOf(true) + 1; // the place stays the one of the finish
         showResults();
+        startAutopilot();
     }
     if(race.state === "finished") renderResults();
+}
+
+// After the finish: the player no longer drives. An AI driver takes the car, at half the speed that the line allows, and the camera is the cinematic one of the track (when it has
+// cameras; else the camera of the game stays). Race again and Main menu are in the results.
+function startAutopilot() {
+    if(car.autopilot) return;
+    if(race.line) {
+        var pilot = new OpenRacer.Opponent(carConfig, race.line, { vehicle: car.vehicle, noModel: true, skill: 0.85 });
+        pilot.paceFactor = 0.5;
+        pilot.paceCap = Math.max(3, 0.5 * (race.playerTop || 20));            // half of the line's speed in the bends and half of the top speed that you reached on the straights
+        pilot.raceLaps = 0;
+        pilot.lineIndex = race.line.nearest(car.vehicle.x, car.vehicle.z);
+        car.autopilot = pilot;
+        car.autopilotOthers = function() { return race.opponents.map(function(o) { return o.vehicle; }); };
+    } else {
+        car.autopilot = { throttle: 0, brakePedal: 0.6, turnAngle: 0 };            // (no racing line to drive: it brakes to a stop)
+    }
+    car.cameraOverride = function(delta) { return OpenRacer.Replay && OpenRacer.Replay.liveCine ? OpenRacer.Replay.liveCine(delta) : false; };
 }
 
 // The results: the cars that are in, by their time; the others by how far they are, still running
@@ -523,6 +542,7 @@ function startSkidpad() {
 var playerLineIndex = null, playerLineLaps = 0, playerLastFraction = 0, playerMaxFraction = 0;
 function updateRace(delta) {
     if(!race.ghost) return;
+    if(!race.playerFinished) race.playerTop = Math.max(race.playerTop || 0, Math.abs(car.vehicle.u));          // (the top speed of the player in this race: after the finish the car goes at half of it)
     var vehicles = [car.vehicle].concat(race.opponents.map(function(o) { return o.vehicle; }));
     if(OpenRacer.Atmosphere) OpenRacer.Atmosphere.update(delta, vehicles);       // (the ground gets wet in the rain and white in the snow, and dries and melts again)
     race.opponents.forEach(function(o) { o.update(delta, vehicles); });
