@@ -146,6 +146,7 @@ function setupRace() {
         // the line runs the way the track is driven: the direction of the start
         var heading = race.line.headingAt(track.start.x, track.start.z);
         if(Math.cos(heading - (track.start.heading || 0)) < 0) race.line.reverse();
+        if(new URLSearchParams(window.location.search).get("cut") !== "0") race.line.shorten(groundWorld);        // (the AI cuts the bends within the road)
     }
 
     race.ghost = new OpenRacer.Ghost(carConfig, track.id);

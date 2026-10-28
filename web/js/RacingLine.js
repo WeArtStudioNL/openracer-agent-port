@@ -108,6 +108,45 @@ OpenRacer.RacingLine.prototype.settle = function (ground) {
     });
 };
 
+// A line drawn along the middle of the road is not the quickest way round: this moves every point sideways, within the road (the ground there is the surface of the
+// line, up to 'margin' metres from its edge), to the smoothest line there is (a bend cut, a straight kept straight). The points are probed to either side every half
+// metre, up to 'reach' metres; a point with no room (a one-lane stretch, a bridge) stays where it is
+OpenRacer.RacingLine.prototype.shorten = function (ground, margin, reach) {
+    var n = this.points.length;
+    if (!ground || n < 8) return;
+    margin = margin === undefined ? 1.1 : margin; reach = reach || 6;
+    var base = this.points.map(function (p) { return { x: p.x, z: p.z }; });
+    var nx = new Float32Array(n), nz = new Float32Array(n), left = new Float32Array(n), right = new Float32Array(n);
+    var self = this;
+    for (var i = 0; i < n; i++) {
+        var a = base[(i + n - 1) % n], b = base[(i + 1) % n];
+        var tx = b.x - a.x, tz = b.z - a.z, tl = Math.hypot(tx, tz) || 1;
+        nx[i] = -tz / tl; nz[i] = tx / tl;                      // to the left of the direction of the line
+        var p = this.points[i];
+        for (var side = -1; side <= 1; side += 2) {
+            var room = 0;
+            for (var d = 0.5; d <= reach; d += 0.5) {
+                var q = ground.query(base[i].x + nx[i] * d * side, base[i].z + nz[i] * d * side, (p.y || 0) + 0.5, 0.6);
+                if (!q || q.surface !== p.surface || Math.abs(q.y - (p.y || 0)) > 0.5) break;
+                room = d;
+            }
+            if (side < 0) right[i] = Math.max(0, room - margin); else left[i] = Math.max(0, room - margin);
+        }
+    }
+    var off = new Float32Array(n);
+    for (var it = 0; it < 300; it++) {
+        for (var k = 0; k < n; k++) {
+            var pa = (k + n - 1) % n, pb = (k + 1) % n;
+            var ax = base[pa].x + nx[pa] * off[pa], az = base[pa].z + nz[pa] * off[pa], bx = base[pb].x + nx[pb] * off[pb], bz = base[pb].z + nz[pb] * off[pb];
+            var wantX = (ax + bx) / 2 - base[k].x, wantZ = (az + bz) / 2 - base[k].z;
+            var want = wantX * nx[k] + wantZ * nz[k];
+            off[k] = Math.max(-right[k], Math.min(left[k], off[k] + (want - off[k]) * 0.5));
+        }
+    }
+    for (var m = 0; m < n; m++) { this.points[m].x = base[m].x + nx[m] * off[m]; this.points[m].z = base[m].z + nz[m] * off[m]; }
+    this.settle(ground);
+};
+
 // The speed a car can have at every point: limited by the bend there (lateral acceleration aLat, m/s^2, on the road; gripOf(surface) gives the share of that
 // grip on another surface, sand or grass, when it is given), by the crest there (above the speed at which the car leaves the ground over the top of a dune
 // it flies, and lands where the line is not: a little of that is allowed) and by the braking (aBrake, scaled by the grip too) that the slower points ahead ask for
