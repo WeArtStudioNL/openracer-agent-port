@@ -317,12 +317,20 @@ OpenRacer.RigidObjects = (function () {
         var heading = (spec.heading || 0) * Math.PI / 180;
         var y = spec.y;
         if (y === undefined) { var hit = ground && ground.query ? ground.query(spec.x, spec.z, 5000, 0) : null; y = hit ? hit.y : 0; }
-        var inner = gltfScene.clone(true);
-        inner.traverse(function (o) { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+        var model = gltfScene.clone(true);
+        model.traverse(function (o) { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+        // the origin of the model: "pivot" (the track editor puts it at the middle of the base of the model, so that the object stands where it was clicked, whatever the origin of the
+        // file is), and the scale and the tilt of the object: "scale" (a number, or [x, y, z]), "pitch" and "roll" (degrees; the heading is the turn about the vertical)
+        var inner = new THREE.Group();
+        if (Array.isArray(spec.pivot) && spec.pivot.length === 3) model.position.set(-spec.pivot[0], -spec.pivot[1], -spec.pivot[2]);
+        inner.add(model);
+        if (typeof spec.scale === "number" && spec.scale > 0) inner.scale.setScalar(spec.scale);
+        else if (Array.isArray(spec.scale) && spec.scale.length === 3) inner.scale.set(spec.scale[0] || 1, spec.scale[1] || 1, spec.scale[2] || 1);
+        var turn = new THREE.Quaternion().setFromEuler(new THREE.Euler((spec.pitch || 0) * Math.PI / 180, -heading, (spec.roll || 0) * Math.PI / 180, "YXZ"));
         var kind = spec.kind || (spec.rigid === false ? "decor" : "rigid");
         if (kind !== "rigid") {
             inner.position.set(spec.x, y, spec.z);
-            inner.rotation.y = -heading;
+            inner.quaternion.copy(turn);
             scene.add(inner);
             if (kind === "static" && OpenRacer.addStaticObject) OpenRacer.addStaticObject(inner);
             return;
@@ -343,7 +351,7 @@ OpenRacer.RigidObjects = (function () {
         var holder = new THREE.Group();
         inner.position.set(-centre.x, -centre.y, -centre.z);
         holder.add(inner);
-        holder.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -heading);
+        holder.quaternion.copy(turn);
         var middle = centre.clone().applyQuaternion(holder.quaternion);
         holder.position.set(spec.x + middle.x, y + middle.y, spec.z + middle.z);
         var mass = spec.mass || Math.max(1, size.x * size.y * size.z * density);

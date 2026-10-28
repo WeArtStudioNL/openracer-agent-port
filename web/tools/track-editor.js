@@ -845,6 +845,10 @@ function loadObjectScene(model, url) {
     return new Promise((resolve) => new GLTFLoader(OpenRacer.Garage.manager(state.existingTrack || { id: "" }, THREE)).load(url, (gltf) => {
         gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
         model.scene = gltf.scene;
+        // the middle of the base of the model (in the space of the file): where an object stands when it is clicked on the road, whatever the origin of the file is
+        gltf.scene.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(gltf.scene);
+        model.base = box.isEmpty() ? null : new THREE.Vector3((box.min.x + box.max.x) / 2, box.min.y, (box.min.z + box.max.z) / 2);
         resolve(true);
     }, undefined, () => { model.scene = null; resolve(false); }));
 }
@@ -854,27 +858,97 @@ async function addObjectModel(file) {
     let name = objectFileName(file.name);
     let k = 2;
     while (objectState.models.has(name)) name = name.replace(/(-\d+)?\.glb$/, "-" + (k++) + ".glb");
-    const model = { name, file, kind: "rigid", mass: 0, scene: null };
+    const model = { name, file, kind: "rigid", mass: 0, scene: null, origin: "base", pivot: null, base: null };
     const url = URL.createObjectURL(file);
     const ok = await loadObjectScene(model, url);
     URL.revokeObjectURL(url);
     if (!ok) { status("The file “" + file.name + "” could not be read as a glb.", "error"); return; }
+    model.pivot = model.base ? model.base.clone() : null;          // (the origin of a model that is added: the middle of its base)
     objectState.models.set(name, model);
     objectState.selected = name;
     renderObjects();
-    status("Model added. Choose Place object in the toolbar and click on the road.", "ok");
+    status("Model added, with its origin at the middle of its base. Choose Place object in the toolbar and click on the road.", "ok");
 }
 
+// an object of the track as it stands: the turn about the vertical (the heading), the tilt (pitch about x, roll about z) and the scale; the same order as the game (RigidObjects.js)
+function applyObjectTransform(g, o) {
+    g.position.set(o.x, o.y, o.z);
+    g.rotation.set(o.pitch || 0, -o.heading, o.roll || 0, "YXZ");
+    g.scale.set(o.sx || 1, o.sy || 1, o.sz || 1);
+}
+function newObject(model, x, y, z, heading) { return { model, x, y, z, heading, pitch: 0, roll: 0, sx: 1, sy: 1, sz: 1 }; }
+let objectBox = null;
 function showObjects() {
     objectLayer.clear();
-    for (const o of objectState.list) {
+    objectState.list.forEach((o, i) => {
         const model = objectState.models.get(o.model);
-        if (!model || !model.scene) continue;
+        if (!model || !model.scene) return;
         const copy = model.scene.clone(true);
-        copy.position.set(o.x, o.y, o.z);
-        copy.rotation.y = -o.heading;
-        objectLayer.add(copy);
-    }
+        if (model.pivot) copy.position.set(-model.pivot.x, -model.pivot.y, -model.pivot.z);
+        const holder = new THREE.Group();
+        holder.add(copy);
+        applyObjectTransform(holder, o);
+        holder.userData.objectIndex = i;
+        objectLayer.add(holder);
+    });
+    if (objectBox) { scene.remove(objectBox); objectBox.dispose(); objectBox = null; }
+    const chosen = objectLayer.children.find((g) => g.userData.objectIndex === objectUi.selected);
+    if (chosen) { objectBox = new THREE.BoxHelper(chosen, 0xffd04d); scene.add(objectBox); }
+    syncObjectTarget();
+}
+
+// ---- the objects as layers: one is chosen in the list (or by a click on it in the view) and shown with a gizmo: W moves, E turns, R scales
+const objectUi = { selected: -1, dragging: false };
+const objectTarget = new THREE.Object3D();
+scene.add(objectTarget);
+const objectGizmo = new TransformControls(camera, renderer.domElement);
+objectGizmo.setSize(0.9);
+objectGizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !event.value; objectUi.dragging = event.value; if (!event.value) renderObjects(); });
+objectGizmo.addEventListener("objectChange", () => objectGizmoMoved());
+scene.add(typeof objectGizmo.getHelper === "function" ? objectGizmo.getHelper() : objectGizmo);
+function syncObjectTarget() {
+    const o = objectState.list[objectUi.selected];
+    if (!o || objectUi.dragging) return;
+    applyObjectTransform(objectTarget, o);
+}
+function objectGizmoMoved() {
+    const o = objectState.list[objectUi.selected];
+    if (!o) return;
+    o.x = objectTarget.position.x; o.y = objectTarget.position.y; o.z = objectTarget.position.z;
+    const e = new THREE.Euler().setFromQuaternion(objectTarget.quaternion, "YXZ");
+    o.pitch = e.x; o.heading = -e.y; o.roll = e.z;
+    o.sx = Math.max(0.01, objectTarget.scale.x); o.sy = Math.max(0.01, objectTarget.scale.y); o.sz = Math.max(0.01, objectTarget.scale.z);
+    showObjects();
+}
+function selectObject(i) {
+    objectGizmo.detach();
+    objectUi.selected = objectState.list[i] ? i : -1;
+    if (objectUi.selected >= 0) { applyObjectTransform(objectTarget, objectState.list[objectUi.selected]); objectGizmo.attach(objectTarget); setObjectGizmoMode(objectGizmo.mode || "translate"); }
+    if (objectUi.selected < 0 && $("objectGizmoMode")) $("objectGizmoMode").textContent = "";
+    showObjects();
+    renderObjects();
+}
+function setObjectGizmoMode(mode) {
+    objectGizmo.setMode(mode);
+    objectGizmo.setSpace(mode === "translate" ? "world" : "local");
+    const names = { translate: "Move (W)", rotate: "Turn (E)", scale: "Scale (R)" };
+    const hint = $("objectGizmoMode");
+    if (hint) hint.textContent = names[mode];
+}
+window.addEventListener("keydown", (event) => {
+    const t = event.target && event.target.tagName;
+    if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT" || objectUi.selected < 0) return;
+    if (event.code === "KeyW") setObjectGizmoMode("translate");
+    else if (event.code === "KeyE") setObjectGizmoMode("rotate");
+    else if (event.code === "KeyR") setObjectGizmoMode("scale");
+    else if (event.code === "Delete" || event.code === "Backspace") { objectState.list.splice(objectUi.selected, 1); selectObject(-1); updateMarkers(); }
+    else if (event.code === "Escape") selectObject(-1);
+    else return;
+    event.preventDefault();
+});
+function objectIndexOf(object) {
+    for (let n = object; n; n = n.parent) if (n.userData && n.userData.objectIndex !== undefined) return n.userData.objectIndex;
+    return -1;
 }
 
 function renderObjects() {
@@ -897,6 +971,12 @@ function renderObjects() {
         mass.type = "number"; mass.min = "0"; mass.step = "5"; mass.value = model.mass || ""; mass.placeholder = "kg (auto)";
         mass.style.cssText = "width:80px" + ((model.kind || "rigid") === "rigid" ? "" : ";display:none");
         mass.onchange = () => { model.mass = Math.max(0, parseFloat(mass.value) || 0); };
+        // the origin: the middle of the base of the model (the object stands where it is clicked, whatever the origin of the file is), or the origin of the file as it is
+        const origin = document.createElement("select");
+        origin.title = "Where the object stands on the place that you click: the middle of its base, or the origin of the file as it is";
+        [["base", "Origin: middle of the base"], ["file", "Origin: as in the file"]].forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; origin.appendChild(o); });
+        origin.value = model.pivot ? "base" : "file";
+        origin.onchange = () => { model.pivot = origin.value === "base" && model.base ? model.base.clone() : null; showObjects(); updateMarkers(); };
         const place = document.createElement("button");
         place.className = "small";
         place.textContent = "Place";
@@ -909,25 +989,44 @@ function renderObjects() {
             objectState.models.delete(name);
             objectState.list = objectState.list.filter((o) => o.model !== name);
             if (objectState.selected === name) objectState.selected = null;
+            objectGizmo.detach(); objectUi.selected = -1;
             renderObjects(); updateMarkers();
         };
-        row.append(title, rigid, mass, place, remove);
+        row.append(title, origin, rigid, mass, place, remove);
         holder.appendChild(row);
     }
-    const list = $("objectList");
-    list.innerHTML = "";
-    objectState.list.forEach((o, i) => {
-        const row = document.createElement("div");
-        row.className = "gate";
-        const text = document.createElement("span");
-        text.textContent = o.model.replace(OBJECT_PREFIX, "").replace(/\.glb$/, "") + ": " + o.x.toFixed(0) + ", " + o.z.toFixed(0);
-        const remove = document.createElement("button");
-        remove.className = "small danger";
-        remove.textContent = "Remove";
-        remove.onclick = () => { objectState.list.splice(i, 1); renderObjects(); updateMarkers(); };
-        row.append(text, remove);
-        list.appendChild(row);
-    });
+    // the objects that stand in the track: in the card, and as layers in the panel of the view (choose one: the gizmo shows, W moves, E turns, R scales; Delete takes it away)
+    const layerList = $("objectLayers");
+    for (const list of [$("objectList"), layerList]) {
+        if (!list) continue;
+        list.innerHTML = "";
+        objectState.list.forEach((o, i) => {
+            const row = document.createElement("div");
+            const name = o.model.replace(OBJECT_PREFIX, "").replace(/\.glb$/, "");
+            if (list === layerList) {
+                row.className = "layer" + (objectUi.selected === i ? " selected" : "");
+                row.innerHTML = "<i></i><span></span><span class=\"meta\"></span>";
+                row.children[1].textContent = name;
+                row.children[2].textContent = o.x.toFixed(0) + ", " + o.z.toFixed(0);
+                row.title = "Choose it: W moves, E turns, R scales, Delete takes it away";
+                row.onclick = () => selectObject(objectUi.selected === i ? -1 : i);
+            } else {
+                row.className = "gate";
+                const text = document.createElement("span");
+                text.textContent = name + ": " + o.x.toFixed(0) + ", " + o.z.toFixed(0);
+                text.style.cursor = "pointer";
+                text.style.fontWeight = objectUi.selected === i ? "700" : "400";
+                text.onclick = () => selectObject(objectUi.selected === i ? -1 : i);
+                const remove = document.createElement("button");
+                remove.className = "small danger";
+                remove.textContent = "Remove";
+                remove.onclick = () => { objectState.list.splice(i, 1); selectObject(-1); updateMarkers(); };
+                row.append(text, remove);
+            }
+            list.appendChild(row);
+        });
+    }
+    if (layerList && !objectState.list.length) { const none = document.createElement("div"); none.style.cssText = "padding: 4px 14px; color: #66727f;"; none.textContent = "none placed"; layerList.appendChild(none); }
     $("objectNote").textContent = objectState.list.length ? objectState.list.length + " placed" : (objectState.models.size ? objectState.models.size + " models" : "none");
 }
 $("objectAdd").onclick = () => $("objectFile").click();
@@ -935,21 +1034,26 @@ $("objectFile").onchange = async (e) => { for (const f of e.target.files) await 
 
 // the objects of a track that is opened: the models that its objects use are loaded from its folder
 async function loadObjects(track) {
+    objectGizmo.detach(); objectUi.selected = -1;
     objectState.models = new Map(); objectState.list = []; objectState.selected = null;
     for (const spec of track.objects || []) {
         if (!spec.model || !isFinite(spec.x) || !isFinite(spec.z)) continue;
         let model = objectState.models.get(spec.model);
         if (!model) {
-            model = { name: spec.model, file: null, kind: spec.kind || (spec.rigid === false ? "decor" : "rigid"), mass: spec.mass || 0, scene: null };
+            model = { name: spec.model, file: null, kind: spec.kind || (spec.rigid === false ? "decor" : "rigid"), mass: spec.mass || 0, scene: null, origin: "file", pivot: null, base: null };
             objectState.models.set(spec.model, model);
             await loadObjectScene(model, trackFile(track, spec.model));
+            if (Array.isArray(spec.pivot) && spec.pivot.length === 3 && spec.pivot.every(isFinite)) model.pivot = new THREE.Vector3(spec.pivot[0], spec.pivot[1], spec.pivot[2]);
         }
-        objectState.list.push({ model: spec.model, x: spec.x, y: isFinite(spec.y) ? spec.y : groundY(spec.x, spec.z), z: spec.z, heading: (spec.heading || 0) * Math.PI / 180 });
+        const scale = typeof spec.scale === "number" ? [spec.scale, spec.scale, spec.scale] : (Array.isArray(spec.scale) && spec.scale.length === 3 ? spec.scale : [1, 1, 1]);
+        objectState.list.push({ model: spec.model, x: spec.x, y: isFinite(spec.y) ? spec.y : groundY(spec.x, spec.z), z: spec.z, heading: (spec.heading || 0) * Math.PI / 180,
+            pitch: (spec.pitch || 0) * Math.PI / 180, roll: (spec.roll || 0) * Math.PI / 180, sx: scale[0] || 1, sy: scale[1] || 1, sz: scale[2] || 1 });
     }
     renderObjects(); updateMarkers();
 }
 
 function resetObjects() {
+    objectGizmo.detach(); objectUi.selected = -1;
     objectState.models = new Map(); objectState.list = []; objectState.selected = null;
     renderObjects(); updateMarkers();
 }
@@ -1106,7 +1210,7 @@ renderer.domElement.addEventListener("pointerdown", (event) => {
             return;
         }
     }
-    if ((state.mode === "grid" || state.mode === "pit" || state.mode === "gate" || state.mode === "drag" || state.mode === "camera" || state.mode === "object") && !moveGizmo.axis && !turnGizmo.axis) {
+    if ((state.mode === "grid" || state.mode === "pit" || state.mode === "gate" || state.mode === "drag" || state.mode === "camera" || state.mode === "object") && !moveGizmo.axis && !turnGizmo.axis && !objectGizmo.axis) {
         const hit = roadHit(event);
         if (hit) {
             drag.hit = hit;
@@ -1159,7 +1263,7 @@ function place(d, preview) {
     } else if (state.mode === "object") {
         if (!objectState.selected || !objectState.models.has(objectState.selected)) { status("Add a model with + in the Objects card and choose Place first.", "error"); d.added = true; return; }
         if (preview && d.added) objectState.list.pop();
-        objectState.list.push({ model: objectState.selected, x: point.x, y: point.y, z: point.z, heading: h });
+        objectState.list.push(newObject(objectState.selected, point.x, point.y, point.z, h));
         d.added = true;
         renderObjects();
     } else if (state.mode === "gate") {
@@ -1193,7 +1297,10 @@ renderer.domElement.addEventListener("pointerup", (event) => {
         if (road) { addLineNodeAt(road.point.x, road.point.z); return; }
         if (!event.shiftKey) { selectLineNode(-1); return; }
     }
-    if (state.mode === "view" && !d.moved && !lineEdit.editing && !(design && design.active())) {
+    if (state.mode === "view" && !d.moved && !lineEdit.editing && !(design && design.active()) && !objectGizmo.axis) {
+        // an object that is clicked is chosen (its gizmo shows); else the part of the model under the pointer
+        const objectHit = pointerRay(event).intersectObjects(objectLayer.children, true)[0];
+        if (objectHit && objectIndexOf(objectHit.object) >= 0) { selectObject(objectIndexOf(objectHit.object)); return; }
         const hit = pointerRay(event).intersectObjects(trackGroup.children, true)[0];
         if (hit) selectPart(hit.object.name || "", true);
     }
@@ -1527,6 +1634,11 @@ async function save() {
             if (!model) continue;
             if (!FILE_PATTERN.test(model.name)) throw new Error("The file name “" + model.name + "” has characters that are not allowed.");
             const spec = { model: model.name, x: +o.x.toFixed(3), z: +o.z.toFixed(3), y: +o.y.toFixed(3), heading: +(o.heading * 180 / Math.PI).toFixed(2) };
+            if (model.pivot) spec.pivot = [+model.pivot.x.toFixed(4), +model.pivot.y.toFixed(4), +model.pivot.z.toFixed(4)];
+            if (Math.abs(o.pitch || 0) > 1e-4) spec.pitch = +(o.pitch * 180 / Math.PI).toFixed(2);
+            if (Math.abs(o.roll || 0) > 1e-4) spec.roll = +(o.roll * 180 / Math.PI).toFixed(2);
+            const sc = [o.sx || 1, o.sy || 1, o.sz || 1].map((v) => +v.toFixed(4));
+            if (Math.abs(sc[0] - 1) > 1e-4 || Math.abs(sc[1] - 1) > 1e-4 || Math.abs(sc[2] - 1) > 1e-4) spec.scale = (sc[0] === sc[1] && sc[1] === sc[2]) ? sc[0] : sc;
             const kind = model.kind || "rigid";
             if (kind === "rigid") { if (model.mass > 0) spec.mass = model.mass; }
             else { spec.kind = kind; if (kind === "decor") spec.rigid = false; }        // (rigid: false too, for an older game that only knows that)
