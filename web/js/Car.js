@@ -127,7 +127,7 @@ OpenRacer.Car = function( config, domElement ) {
         downforce_front: chassis.downforce_front,
         downforce_rear: chassis.downforce_rear,
         ackermann: chassis.ackermann,
-        suspension_travel: chassis.suspension_travel, unsprung_mass: chassis.unsprung_mass, tyre_rate: chassis.tyre_rate, tyre_damping: chassis.tyre_damping, suspension_length: chassis.suspension_length, spring_progression: chassis.spring_progression, damping_rebound: chassis.damping_rebound,
+        suspension_travel: chassis.suspension_travel, unsprung: !!chassis.unsprung, frame_torsion: chassis.frame_torsion, unsprung_mass: chassis.unsprung_mass, tyre_rate: chassis.tyre_rate, tyre_damping: chassis.tyre_damping, suspension_length: chassis.suspension_length, spring_progression: chassis.spring_progression, damping_rebound: chassis.damping_rebound,
         compound: config.tyres && config.tyres.compound,
         // the systems the car has (the tuning menu: a tick each; a car without one has no key and no light for it)
         tc_fitted: !(config.extras && config.extras.tc_on === false), abs_fitted: !(config.extras && config.extras.abs_on === false), esc_fitted: !(config.extras && config.extras.esc_on === false),

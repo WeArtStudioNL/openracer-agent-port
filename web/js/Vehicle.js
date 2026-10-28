@@ -134,6 +134,8 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.rideFront = parameters.ride_front || 0;
     this.rideRear = parameters.ride_rear || 0;
     this.bumpTravel = Math.min(parameters.suspension_travel || 0.09, Math.max(0.05, (parameters.suspension_length || 0.28) - 0.05)); // how much further the spring can go in before the bump stop (m)
+    this.frameTorsion = parameters.frame_torsion > 0 ? parameters.frame_torsion : 0;   // N m per degree of twist between the front axle and the rear axle of a car without suspension (0: a rigid frame); the frame twists and the wheels of the lighter diagonal give way, like a kart frame
+    this.frameTwist = 0;                                                                // rad, positive when the front axle rolls to the left against the rear
     this.unsprung = !!parameters.unsprung;   // no suspension (a kart: the frame stands on its tyres): the wheel is fixed at its rest length and the load of the tyre goes straight into the body; the tyre is the only spring
     this.groundClearance = 0.13;      // of the underside of the body at rest (m)
 
@@ -526,6 +528,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.suspension_length !== undefined) this.restLength = Math.max(0.2, t.suspension_length);
         if(t.suspension_travel !== undefined) this.bumpTravel = Math.max(0.01, Math.min(t.suspension_travel, this.restLength - 0.05));
         if(t.unsprung !== undefined) this.unsprung = !!t.unsprung;
+        if(t.frame_torsion !== undefined) this.frameTorsion = Math.max(0, t.frame_torsion);
         if(t.spring_progression !== undefined) this.springProgression = Math.max(0, t.spring_progression);
         if(t.damping_rebound !== undefined) this.reboundFactor = Math.max(1, t.damping_rebound);
         if(t.ride_front !== undefined) this.rideFront = t.ride_front;
@@ -1724,6 +1727,16 @@ OpenRacer.Vehicle = function (parameters, input) {
         // the spring, the damper, the bump stop and the anti-roll bar: the force between the body and the wheel (positive pushes
         // the wheel out, away from the body), and the wheel moves on it against the tyre
         var mBody = m - 4 * self.unsprungMass;
+        // A frame without suspension that is not rigid (a kart): the roll moment of the front axle and the one of the rear axle differ, and the difference goes through the frame as a torque
+        // that twists it; the twist (a little smoothed, the frame has its own damping) moves the wheels along their axes, so the wheel of the lighter diagonal gives way and the load
+        // evens out (a stiff frame lifts the inner rear wheel, a soft one keeps all four on the road)
+        var frameFlex = 0;
+        if(self.unsprung && self.frameTorsion > 0 && !self.soloWheels) {
+            var momentF = (tyreLoad[1] - tyreLoad[0]) * self.front_track, momentR = (tyreLoad[2] - tyreLoad[3]) * self.rear_track;
+            var twistTarget = Math.max(-0.05, Math.min(0.05, (momentF - momentR) / 2 / (self.frameTorsion * 180 / Math.PI)));
+            self.frameTwist += (twistTarget - self.frameTwist) * Math.min(1, dt / 0.02);
+            frameFlex = self.frameTwist;
+        } else self.frameTwist = 0;
         var gDown = G * axisY.y;                          // the pull of gravity on a wheel along the suspension, outwards
         for(var si = 0; si < 4; si++) {
             var ws = wheels[si];
@@ -1766,8 +1779,10 @@ OpenRacer.Vehicle = function (parameters, input) {
                 springForce[si] = self.wheelLost[si] ? 0 : fs - ws.feLoad;       // (the body gets the vertical force that the tyre gave: the rest goes through the rigid part of the fork)
                 ws.susLength += ws.susVel * dt;
             } else if(self.unsprung) {
-                // no suspension: the wheel does not move along the axis, the body gets what the tyre gives (the tyre is the spring; a kart frame flexes a little, which is left out)
+                // no suspension: the wheel does not move along the axis, the body gets what the tyre gives (the tyre is the spring)
                 ws.susLength = ws.restLengthWheel !== undefined ? ws.restLengthWheel : self.restLength; ws.susVel = 0;
+                // the frame twists: the wheel is moved along the axis by the twist (the front axle one way, the rear the other, and the left wheel against the right)
+                if(frameFlex) ws.susLength -= frameFlex * (ws.front ? 1 : -1) * (ws.right ? -1 : 1) * (ws.front ? self.front_track : self.rear_track) / 4;
                 fs = tyreLoad[si];
                 springForce[si] = self.wheelLost[si] ? 0 : fs;
             } else {

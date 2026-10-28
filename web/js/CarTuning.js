@@ -23,6 +23,7 @@ OpenRacer.CarTuning = (function () {
             ["damping_front", "Front dampers", "%", 5, 200, 1],
             ["damping_rear", "Rear dampers", "%", 5, 200, 1],
             ["unsprung", "Suspension (none: a kart, the frame stands on its tyres)", "", 0, 0, 0],
+            ["frame_torsion", "Frame stiffness against twisting (a kart: 0 is a rigid frame)", "N·m/°", 0, 2000, 10],
             ["suspension_travel", "Suspension travel before the bump stop", "cm", 1, 120, 1],
             ["suspension_length", "Room for the travel (the spring from the mount to the middle of the wheel)", "cm", 10, 150, 1],
             ["spring_progression", "Progressive springs (extra stiffness at the end of the travel)", "%", 0, 800, 10],
@@ -208,6 +209,7 @@ OpenRacer.CarTuning = (function () {
             case "tc_lockup": return g === "torque-converter";
             case "sb_max_nodes": case "sb_wheel_strength": return v.sb_enabled !== "off";
             // no suspension: the springs, the dampers, the travel, the progression, the rebound and the ride height do nothing (the tyre is the spring; the roll stiffness and the roll centres still work)
+            case "frame_torsion": return v.unsprung === "none";
             case "spring_front": case "spring_rear": case "damping_front": case "damping_rear": case "suspension_travel": case "suspension_length": case "spring_progression": case "damping_rebound": case "ride_front": case "ride_rear": return v.unsprung !== "none";
             case "bike_max_lean": case "bike_fast_lean": case "bike_rake": case "bike_rider_mass": case "bike_hang_off": case "bike_max_lateral_g": case "bike_balance": case "bike_fork_dive": return v.vehicle_type === "motorcycle";
             default: return true;
@@ -358,6 +360,7 @@ OpenRacer.CarTuning = (function () {
             clutch_start_rpm: dt.clutch_start_rpm || 1050,
             clutch_full_rpm: dt.clutch_full_rpm || 2000,
             unsprung: ch.unsprung ? "none" : "sprung",
+            frame_torsion: Math.round(ch.frame_torsion || 0),
             suspension_travel: Math.round((ch.suspension_travel || 0.09) * 100),
             suspension_length: Math.round((ch.suspension_length || 0.28) * 100),
             spring_progression: Math.round((ch.spring_progression || 0) * 100),
@@ -463,6 +466,7 @@ OpenRacer.CarTuning = (function () {
             turbo_efficiency: v.turbo_efficiency / 100,
             suspension_travel: v.suspension_travel / 100,
             unsprung: v.unsprung === "none",
+            frame_torsion: v.frame_torsion,
             suspension_length: v.suspension_length / 100,
             spring_progression: v.spring_progression / 100,
             damping_rebound: v.damping_rebound,
@@ -518,6 +522,7 @@ OpenRacer.CarTuning = (function () {
         c.chassis.ackermann = v.ackermann / 100;
         c.chassis.suspension_travel = v.suspension_travel / 100;
         c.chassis.unsprung = v.unsprung === "none";
+        if (v.frame_torsion > 0) c.chassis.frame_torsion = v.frame_torsion; else delete c.chassis.frame_torsion;
         c.chassis.suspension_length = v.suspension_length / 100;
         c.chassis.spring_progression = v.spring_progression / 100;
         c.chassis.damping_rebound = v.damping_rebound;
