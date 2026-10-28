@@ -135,6 +135,8 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.rideRear = parameters.ride_rear || 0;
     this.bumpTravel = Math.min(parameters.suspension_travel || 0.09, Math.max(0.05, (parameters.suspension_length || 0.28) - 0.05)); // how much further the spring can go in before the bump stop (m)
     this.frameTorsion = parameters.frame_torsion > 0 ? parameters.frame_torsion : 0;   // N m per degree of twist between the front axle and the rear axle of a car without suspension (0: a rigid frame); the frame twists and the wheels of the lighter diagonal give way, like a kart frame
+    this.innerLift = parameters.inner_lift > 0 ? parameters.inner_lift : 0;             // m: how far the inner rear wheel of a stiff kart frame is pulled up in a fast bend (a rigid rear axle without a differential and a frame that twists; 0: none)
+    this.innerLiftNow = 0;
     this.frameTwist = 0;                                                                // rad, positive when the front axle rolls to the left against the rear
     this.unsprung = !!parameters.unsprung;   // no suspension (a kart: the frame stands on its tyres): the wheel is fixed at its rest length and the load of the tyre goes straight into the body; the tyre is the only spring
     this.groundClearance = 0.13;      // of the underside of the body at rest (m)
@@ -528,6 +530,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.suspension_length !== undefined) this.restLength = Math.max(0.2, t.suspension_length);
         if(t.suspension_travel !== undefined) this.bumpTravel = Math.max(0.01, Math.min(t.suspension_travel, this.restLength - 0.05));
         if(t.unsprung !== undefined) this.unsprung = !!t.unsprung;
+        if(t.inner_lift !== undefined) this.innerLift = Math.max(0, t.inner_lift);
         if(t.frame_torsion !== undefined) this.frameTorsion = Math.max(0, t.frame_torsion);
         if(t.spring_progression !== undefined) this.springProgression = Math.max(0, t.spring_progression);
         if(t.damping_rebound !== undefined) this.reboundFactor = Math.max(1, t.damping_rebound);
@@ -1737,6 +1740,13 @@ OpenRacer.Vehicle = function (parameters, input) {
             self.frameTwist += (twistTarget - self.frameTwist) * Math.min(1, dt / 0.02);
             frameFlex = self.frameTwist;
         } else self.frameTwist = 0;
+        // the inner rear wheel lifts in a fast bend: the more lateral acceleration, the more it is pulled up, to the full lift at 0.8 g (a little smoothed)
+        var liftWheel = -1, liftTo = 0;
+        if(self.unsprung && self.innerLift > 0 && !self.soloWheels) {
+            liftTo = self.innerLift * smoothstep(0.2, 0.8, Math.abs(self.ay) / G);
+            liftWheel = self.ay > 0 ? 3 : 2;               // (the rear wheel on the inside of the bend)
+        }
+        self.innerLiftNow += (liftTo - self.innerLiftNow) * Math.min(1, dt / 0.05);
         var gDown = G * axisY.y;                          // the pull of gravity on a wheel along the suspension, outwards
         for(var si = 0; si < 4; si++) {
             var ws = wheels[si];
@@ -1783,6 +1793,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 ws.susLength = ws.restLengthWheel !== undefined ? ws.restLengthWheel : self.restLength; ws.susVel = 0;
                 // the frame twists: the wheel is moved along the axis by the twist (the front axle one way, the rear the other, and the left wheel against the right)
                 if(frameFlex) ws.susLength -= frameFlex * (ws.front ? 1 : -1) * (ws.right ? -1 : 1) * (ws.front ? self.front_track : self.rear_track) / 4;
+                if(si === liftWheel) ws.susLength -= self.innerLiftNow;
                 fs = tyreLoad[si];
                 springForce[si] = self.wheelLost[si] ? 0 : fs;
             } else {
