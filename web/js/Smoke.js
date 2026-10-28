@@ -222,7 +222,12 @@ OpenRacer.TyreSmoke = function(scene, capacity) {
             var wheel = wheels[w];
             if(amount > 0 && wheel.smoke > 0.02 && wheel.hasContact) {
                 var dust = wheel.surface !== "road" && wheel.surface !== "track01";
-                if(dust) dustTint = (typeof getSurface === "function" && getSurface(wheel.surface).dust) || DUST;
+                if(dust) {
+                    dustTint = (typeof getSurface === "function" && getSurface(wheel.surface).dust) || DUST;
+                    // snow on sand or grass: a little white in the dust (the more snow, the more)
+                    var snowHere = Math.min(0.8, (wheel.localSnow || 0) * 0.8);
+                    if(snowHere > 0.03) dustTint = [dustTint[0] + (0.95 - dustTint[0]) * snowHere, dustTint[1] + (0.97 - dustTint[1]) * snowHere, dustTint[2] + (1 - dustTint[2]) * snowHere];
+                }
                 var cx = wheel.contact.x, cy = wheel.contact.y, cz = wheel.contact.z;
                 var from = last[w];
                 if(!from || Math.hypot(cx - from.x, cz - from.z) > 6) from = { x: cx, y: cy, z: cz, carry: 0, fine: 0 };
