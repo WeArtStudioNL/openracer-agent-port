@@ -2260,6 +2260,7 @@ window.addEventListener("keydown", (event) => {
     if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
     selectObject(-1);
     selectGate(-1);
+    if (state.selected !== null && state.selected !== undefined) selectPart(null);          // (the part of the model that is yellow: chosen by a click in Look)
     if (eventLayers.selected) selectEvent(eventLayers.selected);
     if (state.camSel >= 0) selectCamera(-1);
     if (state.mode !== "view" && !lineEdit.editing) setMode("view");
