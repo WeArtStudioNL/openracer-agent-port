@@ -442,7 +442,7 @@ OpenRacer.Graphics = (function () {
     function changed(name) {
         if (!ctx || applying || name === "gfxPreset") return;
         if (name === "gfxScale") { applyScale(); build(); }
-        else if (name === "gfxDebris") { /* (Debris.js reads it) */ }
+        else if (name.indexOf("gfxDebris") === 0) { /* (Debris.js reads them) */ }
         else if (name === "gfxSmoke") { if (currentPreset() !== opt("gfxPreset")) Settings.setOption("gfxPreset", currentPreset()); }       // (Smoke.js reads it)
         else if (name === "gfxDistance") { applyDistance(); if (currentPreset() !== opt("gfxPreset")) Settings.setOption("gfxPreset", currentPreset()); }
         else if (name === "gfxShadows") applyShadows();

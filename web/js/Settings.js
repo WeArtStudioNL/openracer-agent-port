@@ -113,7 +113,7 @@ var Settings = (function() {
         // the graphics (Graphics.js): a preset is a set of these
         gfxPreset: "high", gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000, gfxAniso: 8, gfxSharpen: 1,
         // the look and the atmosphere (Graphics.js, Atmosphere.js): the tone mapping, the exposure, the contrast and the saturation; the hour (-1: as the track) and the weather
-        mirrorLeftYaw: 0, mirrorLeftTilt: 0, mirrorRightYaw: 0, mirrorRightTilt: 0, mirrorCentreYaw: 0, mirrorCentreTilt: 0, gfxDebris: 100, gfxTone: "neutral", gfxExposure: 0.9, gfxContrast: 1.05, gfxSaturation: 1, gfxTime: 14, gfxWeather: "clear", gfxSunAzimuth: 40, gfxMoon: 1, gfxGround: "auto" };
+        mirrorLeftYaw: 0, mirrorLeftTilt: 0, mirrorRightYaw: 0, mirrorRightTilt: 0, mirrorCentreYaw: 0, mirrorCentreTilt: 0, gfxDebrisRate: 1, gfxDebrisScale: 1, gfxDebrisMax: 6000, gfxTone: "neutral", gfxExposure: 0.9, gfxContrast: 1.05, gfxSaturation: 1, gfxTime: 14, gfxWeather: "clear", gfxSunAzimuth: 40, gfxMoon: 1, gfxGround: "auto" };
 
     var bindings = {};      // action id -> list of inputs
     var options = {};
@@ -715,6 +715,27 @@ var Settings = (function() {
         return row;
     }
 
+    // a number that is typed (no upper limit): the value is kept when it is a number of at least min
+    function numberRow(label, name, min, step) {
+        var row = document.createElement("div");
+        row.className = "row";
+        var l = document.createElement("div");
+        l.className = "label";
+        l.textContent = label;
+        row.appendChild(l);
+        var inputs = document.createElement("div");
+        inputs.className = "inputs";
+        var input = document.createElement("input");
+        input.type = "number"; input.min = min; input.step = step;
+        input.value = options[name];
+        input.style.cssText = "width: 110px;";
+        input.addEventListener("keydown", function(e) { e.stopPropagation(); });
+        input.onchange = function() { var v = parseFloat(input.value); if(isFinite(v) && v >= min) setOption(name, v); else input.value = options[name]; };
+        inputs.appendChild(input);
+        row.appendChild(inputs);
+        return row;
+    }
+
     // The curve of an easing: a slider from 0.3 to 3 and the shape of the curve (the value that the pedal has, from 0 to 1, over the time that the key is held)
     function curveRow(label, name) {
         var row = sliderRow(label, name, 0.3, 3, 0.1, function(v) {
@@ -1043,7 +1064,9 @@ var Settings = (function() {
             page.appendChild(atmoNote);
             section("Effects");
             page.appendChild(sliderRow("Smoke", "gfxSmoke", 0, 200, 10, function(v) { return v + "%"; }));
-            page.appendChild(sliderRow("Debris (grass, sand and snow that the wheels throw up)", "gfxDebris", 0, 200, 10, function(v) { return v ? v + "%" : "Off"; }));
+            page.appendChild(numberRow("Debris: spawn rate (grass, sand and snow that the wheels throw up; 1 is normal, 0 is none, any number)", "gfxDebrisRate", 0, 0.1));
+            page.appendChild(sliderRow("Debris: size (1 is normal)", "gfxDebrisScale", 0, 5, 0.1, function(v) { return v.toFixed(1) + "\u00d7"; }));
+            page.appendChild(sliderRow("Debris: most pieces at once (they stay on the ground for a while)", "gfxDebrisMax", 500, 20000, 500, function(v) { return v + " pieces"; }));
         }
         page = tabPage("Tools");
         page.appendChild(optionRow("Debug text", options.debug ? "On" : "Off", function() { setOption("debug", !options.debug); }));

@@ -10,7 +10,7 @@
  *              sideways. A driven wheel that spins throws them backwards, away from the way that it points; a wheel that slides sideways throws them the way the slide goes. The faster the
  *              slip, the more there are and the further they fly. They are made along the path of the tyre, as the smoke is.
  *
- *              The Debris option of the Graphics page (gfxDebris, a percentage; 0 is off) sets the number. A replay does not make them (the replay has what was recorded of the smoke).
+ *              Three options of the Graphics page: gfxDebrisRate (how many are made: 1 is as it was, 0 is none, any number), gfxDebrisScale (the size, 0 to 5 times) and gfxDebrisMax (the most pieces at once; they stay on the ground for a while after they came down, then go). A replay does not make them (the replay has what was recorded of the smoke).
  *
  *              var debris = new OpenRacer.Debris(scene);   debris.update(delta, vehicle);   debris.clear();
  * Author:      Glenn Hofman
@@ -19,10 +19,12 @@
  */
 
 OpenRacer.Debris = function (scene, capacity) {
-    capacity = capacity || 4000;
+    capacity = capacity || 20000;                          // the most that the option allows (gfxDebrisMax); the number that is used is the option
     var positions = new Float32Array(capacity * 3), colours = new Float32Array(capacity * 3), sizes = new Float32Array(capacity), alphas = new Float32Array(capacity);
     var vel = new Float32Array(capacity * 3), shapes = new Float32Array(capacity), tilts = new Float32Array(capacity);
     var age = new Float32Array(capacity).fill(1e9), life = new Float32Array(capacity).fill(1), floor = new Float32Array(capacity);
+    var lying = new Uint8Array(capacity);                  // 1 for a piece that has come down and stays on the ground a while
+    var limit = 0;
     var next = 0, alive = 0, pendingNew = true, last = [null, null, null, null], carry = [0, 0, 0, 0];
 
     var geometry = new THREE.BufferGeometry();
@@ -38,14 +40,14 @@ OpenRacer.Debris = function (scene, capacity) {
     geometry.setAttribute("tilt", tiltAttribute);
     // shape: 0 an angular chunk, 1 a thin blade (turned along the way that it flies on the screen), 2 a round grain or clump
     var material = new THREE.ShaderMaterial({
-        uniforms: { light: { value: 1 }, scale: { value: 600 }, aspect: { value: 1 } },
+        uniforms: { light: { value: 1 }, scale: { value: 600 }, aspect: { value: 1 }, sizeScale: { value: 1 } },
         vertexShader: "attribute vec3 colour; attribute float size; attribute float alpha; attribute vec3 velocity; attribute float shape; attribute float tilt;" +
-            "uniform float scale; uniform float aspect; varying vec3 vColour; varying float vAlpha; varying float vShape; varying float vAngle;" +
+            "uniform float scale; uniform float aspect; uniform float sizeScale; varying vec3 vColour; varying float vAlpha; varying float vShape; varying float vAngle;" +
             "void main() { vColour = colour; vAlpha = alpha; vShape = shape;" +
             "vec4 mv = modelViewMatrix * vec4(position, 1.0);" +
             "vec4 p0 = projectionMatrix * mv; vec4 p1 = projectionMatrix * (mv + vec4(mat3(modelViewMatrix) * velocity * 0.05, 0.0));" +
             "vec2 d = p1.xy / p1.w - p0.xy / p0.w; d.x *= aspect; vAngle = (length(d) > 1e-5 ? atan(d.y, d.x) : 0.0) + tilt;" +        // (the way that it flies, on the screen, and a little of its own)
-            "gl_PointSize = max(shape > 0.5 && shape < 1.5 ? 4.0 : 1.5, size * scale / max(0.5, -mv.z)); gl_Position = p0; }",
+            "gl_PointSize = max(shape > 0.5 && shape < 1.5 ? 4.0 : 1.5, size * sizeScale * scale / max(0.5, -mv.z)); gl_Position = p0; }",
         fragmentShader: "uniform float light; varying vec3 vColour; varying float vAlpha; varying float vShape; varying float vAngle;" +
             "void main() { vec2 c = gl_PointCoord - 0.5; c.y = -c.y; float a;" +
             "if (vShape < 0.5) a = smoothstep(0.5, 0.36, max(abs(c.x), abs(c.y)));" +
@@ -84,15 +86,16 @@ OpenRacer.Debris = function (scene, capacity) {
     };
 
     function spawn(x, y, z, vx, vy, vz, kind) {
+        if (next >= limit) next = 0;
         var i = next, look = LOOK[kind] || LOOK.ground;
-        next = (next + 1) % capacity;
+        next = (next + 1) % limit;
         var shade = SHADES[kind] || SHADES.ground, c = shade[Math.floor(Math.random() * shade.length)];
         positions[i * 3] = x; positions[i * 3 + 1] = y; positions[i * 3 + 2] = z;
         vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz;
         colours[i * 3] = c[0]; colours[i * 3 + 1] = c[1]; colours[i * 3 + 2] = c[2];
         sizes[i] = look.size[0] + Math.random() * (look.size[1] - look.size[0]); alphas[i] = 1;
         shapes[i] = look.shape; tilts[i] = (Math.random() - 0.5) * 1.2;
-        age[i] = 0; life[i] = 0.7 + Math.random() * 0.9; floor[i] = y - 0.02;
+        age[i] = 0; life[i] = 0.7 + Math.random() * 0.9; floor[i] = y - 0.02; lying[i] = 0;
         pendingNew = true;
     }
 
@@ -101,7 +104,15 @@ OpenRacer.Debris = function (scene, capacity) {
     // The pieces that fly: gravity and a little drag; one that comes down to the height where it began stays a moment and goes
     this.update = function (delta, vehicle) {
         delta = Math.min(delta || 0, 0.05);
-        var amount = typeof Settings !== "undefined" && Settings.option("gfxDebris") !== undefined ? Math.max(0, Settings.option("gfxDebris") / 100) : 1;
+        // the options: how many are made (1 is normal, 0 is none, any number), how big (1 is normal), and the most at once
+        var amount = typeof Settings !== "undefined" && Settings.option("gfxDebrisRate") !== undefined ? Math.max(0, Settings.option("gfxDebrisRate")) : 1;
+        var sizeScale = typeof Settings !== "undefined" && Settings.option("gfxDebrisScale") !== undefined ? Math.max(0, Settings.option("gfxDebrisScale")) : 1;
+        var newLimit = typeof Settings !== "undefined" && Settings.option("gfxDebrisMax") > 0 ? Math.min(capacity, Math.max(100, Math.round(Settings.option("gfxDebrisMax")))) : 6000;
+        if (newLimit < limit) { for (var k = newLimit; k < limit; k++) { age[k] = 1e9; alphas[k] = 0; sizes[k] = 0; } pendingNew = true; }
+        limit = newLimit;
+        geometry.setDrawRange(0, limit);
+        points.visible = sizeScale > 0;
+        material.uniforms.sizeScale.value = sizeScale;
         var wheels = vehicle.wheels, snow = OpenRacer.Atmosphere ? OpenRacer.Atmosphere.info().snow : 0;
         for (var w = 0; w < 4; w++) {
             var wheel = wheels[w];
@@ -124,7 +135,7 @@ OpenRacer.Debris = function (scene, capacity) {
             var main = snowy && (!loose || Math.random() < snow) ? "snow" : (SHADES[surface] ? surface : "ground");
             var rate = (LOOK[main] || LOOK.ground).rate;
             carry[w] += (70 + 330 * strength) * rate * amount * delta;
-            var count = Math.min(120, Math.floor(carry[w]));
+            var count = Math.min(Math.ceil(120 * Math.max(1, amount)), Math.floor(carry[w]));
             carry[w] = Math.min(carry[w] - count, 1);
             var cx = contact.x, cy = contact.y, cz = contact.z, from = last[w] || { x: cx, y: cy, z: cz };
             if (Math.hypot(cx - from.x, cz - from.z) > 5) { from.x = cx; from.y = cy; from.z = cz; }
@@ -144,13 +155,18 @@ OpenRacer.Debris = function (scene, capacity) {
         if (alive === 0 && !pendingNew) return;
         alive = 0;
         var drag = Math.exp(-0.7 * delta);
-        for (var i = 0; i < capacity; i++) {
+        for (var i = 0; i < limit; i++) {
             if (age[i] >= life[i]) { if (alphas[i] !== 0) { alphas[i] = 0; sizes[i] = 0; } continue; }
             age[i] += delta;
-            vel[i * 3] *= drag; vel[i * 3 + 2] *= drag; vel[i * 3 + 1] = vel[i * 3 + 1] * drag - 9.8 * delta;
-            positions[i * 3] += vel[i * 3] * delta; positions[i * 3 + 1] += vel[i * 3 + 1] * delta; positions[i * 3 + 2] += vel[i * 3 + 2] * delta;
-            if (positions[i * 3 + 1] < floor[i]) { positions[i * 3 + 1] = floor[i]; vel[i * 3] = vel[i * 3 + 1] = vel[i * 3 + 2] = 0; age[i] = Math.max(age[i], life[i] - 0.25); }   // (landed: gone in a moment)
-            alphas[i] = Math.min(1, (life[i] - age[i]) / 0.25);
+            if (!lying[i]) {
+                vel[i * 3] *= drag; vel[i * 3 + 2] *= drag; vel[i * 3 + 1] = vel[i * 3 + 1] * drag - 9.8 * delta;
+                positions[i * 3] += vel[i * 3] * delta; positions[i * 3 + 1] += vel[i * 3 + 1] * delta; positions[i * 3 + 2] += vel[i * 3 + 2] * delta;
+                if (positions[i * 3 + 1] < floor[i]) {                  // it has come down: it stays where it is for a while (5 to 14 s), then goes
+                    positions[i * 3 + 1] = floor[i]; vel[i * 3] = vel[i * 3 + 1] = vel[i * 3 + 2] = 0;
+                    lying[i] = 1; life[i] = age[i] + 5 + Math.random() * 9;
+                }
+            }
+            alphas[i] = Math.min(1, (life[i] - age[i]) / (lying[i] ? 1.5 : 0.25));
             alive++;
         }
         // the light on them: as bright as the light of the scene (a night, or the weather, makes them dark as well)
@@ -163,7 +179,7 @@ OpenRacer.Debris = function (scene, capacity) {
     };
 
     this.clear = function () {
-        age.fill(1e9); alphas.fill(0); sizes.fill(0);
+        age.fill(1e9); alphas.fill(0); sizes.fill(0); lying.fill(0);
         alphaAttribute.needsUpdate = sizeAttribute.needsUpdate = true;
         last = [null, null, null, null]; alive = 0;
     };
