@@ -79,6 +79,7 @@ var scripts = [
     "js/Collision.js",
     "js/Ground.js",
     "js/Smoke.js",
+    "js/Debris.js",
     "js/SkidMarks.js",
     "js/Marbles.js",
     "js/Flames.js",

@@ -170,6 +170,7 @@ OpenRacer.Car = function( config, domElement ) {
     this.vehicle.ground = groundWorld;
     this.pit = new OpenRacer.PitStop(this.vehicle); // the pit stop on the pit lane (Pit.js), when the race has wear and fuel
     var tyreSmoke = new OpenRacer.TyreSmoke(scene);
+    var debris = OpenRacer.Debris ? new OpenRacer.Debris(scene) : null;          // the grass, sand and snow that a slipping wheel throws up (Debris.js)
     var flames = new OpenRacer.ExhaustFlames(scene, { length: this.length, width: this.width, exhaust: config.exhaust, exhaustSystems: (config.sound && config.sound.engine_sim && config.sound.engine_sim.exhaust_systems) || 1,
         smoke: function(x, y, z, vx, vy, vz, diameter) { tyreSmoke.spawn(x, y, z, vx, vy, vz, 0.15, false, true, true); } });
     flames.car = this;        // (the replay makes the bangs again at the pipes of this car)
@@ -276,6 +277,7 @@ OpenRacer.Car = function( config, domElement ) {
         var v = this.vehicle;
         v.reset(x, z, heading);
         tyreSmoke.clear();
+        if(debris) debris.clear();
         flames.clear();
         if(OpenRacer.DragStrip) OpenRacer.DragStrip.reset();
         lastGateX = null; // a jump of the car is no crossing of a gate
@@ -321,6 +323,7 @@ OpenRacer.Car = function( config, domElement ) {
         var v = this.vehicle, p = savedReset || this.nearestOnTrack() || { x: startX, z: startZ, psi: startHeading, py: null };
         v.relocate(p.x, p.z, p.psi, p.py);
         tyreSmoke.clear();
+        if(debris) debris.clear();
         flames.clear();
         if(OpenRacer.DragStrip) OpenRacer.DragStrip.reset();
         lastGateX = null; // a jump of the car is no crossing of a gate
@@ -411,6 +414,7 @@ OpenRacer.Car = function( config, domElement ) {
 
         if(!(OpenRacer.Replay && OpenRacer.Replay.active)) {   // a replay does not make new smoke and marks from the state of the physics
             tyreSmoke.update(delta, v, camera);
+            if(debris) debris.update(delta, v);
             var marks = OpenRacer.skidMarks && OpenRacer.skidMarks();
             if(marks) marks.update(v); // the rubber a sliding tyre leaves on the road (SkidMarks.js)
             var pellets = OpenRacer.marbles && OpenRacer.marbles();

@@ -112,7 +112,7 @@ var Settings = (function() {
         // the graphics (Graphics.js): a preset is a set of these
         gfxPreset: "high", gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000, gfxAniso: 8, gfxSharpen: 1,
         // the look and the atmosphere (Graphics.js, Atmosphere.js): the tone mapping, the exposure, the contrast and the saturation; the hour (-1: as the track) and the weather
-        gfxReflectFrames: 0, gfxEnvEvery: 0, gfxTone: "neutral", gfxExposure: 0.9, gfxContrast: 1.05, gfxSaturation: 1, gfxTime: 14, gfxWeather: "clear", gfxSunAzimuth: 40, gfxMoon: 1, gfxGround: "auto" };
+        gfxDebris: 100, gfxReflectFrames: 0, gfxEnvEvery: 0, gfxTone: "neutral", gfxExposure: 0.9, gfxContrast: 1.05, gfxSaturation: 1, gfxTime: 14, gfxWeather: "clear", gfxSunAzimuth: 40, gfxMoon: 1, gfxGround: "auto" };
 
     var bindings = {};      // action id -> list of inputs
     var options = {};
@@ -1032,6 +1032,7 @@ var Settings = (function() {
             page.appendChild(atmoNote);
             section("Effects");
             page.appendChild(sliderRow("Smoke", "gfxSmoke", 0, 200, 10, function(v) { return v + "%"; }));
+            page.appendChild(sliderRow("Debris (grass, sand and snow that the wheels throw up)", "gfxDebris", 0, 200, 10, function(v) { return v ? v + "%" : "Off"; }));
         }
         page = tabPage("Tools");
         page.appendChild(optionRow("Debug text", options.debug ? "On" : "Off", function() { setOption("debug", !options.debug); }));
