@@ -224,7 +224,7 @@ function render() {
     onEnterFrame();
     var afterCalc = Date.now();
     if(enableCubeCamera && car && car.isReady()) {   // the reflections wait until the car and its wheels have loaded
-        if(cubeCount > cubeUpdate) {
+        if(cubeCount >= cubeUpdate) {          // (cubeUpdate frames between two updates: 1 is every frame; it was > before, which was every other frame)
             //console.log("cub");
             cubeCamera.position.copy(car.body.position);
 
