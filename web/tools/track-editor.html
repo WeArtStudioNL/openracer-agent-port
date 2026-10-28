@@ -90,10 +90,14 @@
         </details>
 
         <details class="card">
-            <summary>Pit area<span class="meta" id="pitNote"></span></summary>
+            <summary>Pit boxes<span class="meta" id="pitNote"></span></summary>
             <div class="body">
-                <p class="sub">A surface on the ground that is the pit lane: inside it a car that stands still is serviced (fuel, tyres), and the AI drives through it for its stops. Choose <b>Pit area</b> in the toolbar and click the corners on the ground, in order round the area; the shape closes itself. The last point can be taken back.</p>
-                <div class="buttons"><button class="small ghost" id="pitUndo">Undo the last point</button><button class="small danger" id="pitClear">Clear the pit area</button></div>
+                <p class="sub">A box of 4 by 8 metres for every player, yellow and see-through in the game, so that everybody knows which box is theirs. Choose <b>Pit box</b> in the toolbar, click on the road (or beside it) where the box is and drag in the direction that the car faces. Box 1 is the box of the player, 2 to 8 are those of the opponents, in the order of the grid. A car that stands still with all four wheels inside its box is serviced (fuel and tyres); the AI drives to its box and back. Without a box of its own (fewer boxes than cars) a car can use any box.</p>
+                <div id="pitList"></div>
+                <div class="buttons"><button class="small danger" id="pitClear">Clear the pit boxes</button></div>
+                <p class="sub" style="margin-top:12px"><b>Pit line</b>: the path that the AI cars follow to their box and back, so that they know where to slow down and do not follow the racing line into the wall. Choose <b>Pit line</b> in the toolbar and click on the road, in the order that a car drives: the first point on the racing line where the pit lane starts, then through the pit lane past the boxes (the line should pass through the middle of every box: the car stops at the point of the line that is nearest to its box), and the last point back on the racing line. The line is smoothed; a point every 5 to 15 metres is enough.</p>
+                <div id="pitLineNote" class="hint"></div>
+                <div class="buttons"><button class="small ghost" id="pitLineUndo">Undo the last point</button><button class="small danger" id="pitLineClear">Clear the pit line</button></div>
             </div>
         </details>
         <details class="card" open>
@@ -201,7 +205,8 @@
     <div class="float bottom" id="modes">
         <button data-mode="view" class="active">Look</button>
         <button data-mode="grid">Grid box</button>
-        <button data-mode="pit">Pit area</button>
+        <button data-mode="pitbox">Pit box</button>
+        <button data-mode="pitline">Pit line</button>
         <button data-mode="gate">Add gate</button>
         <button data-mode="drag">Drag strip</button>
         <button data-mode="object">Place object</button>

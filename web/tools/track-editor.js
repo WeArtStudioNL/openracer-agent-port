@@ -34,7 +34,9 @@ const state = {
     selected: null,       // name of the selected part
     start: null,          // { x, y, z, heading }: box 1 of the grid (kept for the gates and the line; track.json "start")
     grid: [],             // the start grid: up to eight boxes [{ x, y, z, heading }], box 1 the player, 2 to 8 the opponents (track.json "grid")
-    pit: null,            // the pit area: { points: [{ x, y, z }] }, a polygon on the ground (track.json "pit": { "polygon": [[x, z], ...] })
+    pit: null,            // the older pit area: { points: [{ x, y, z }] }, a polygon on the ground (track.json "pit": { "polygon": [[x, z], ...] }); it is kept as it is, no longer drawn by hand
+    pitLine: [],          // the path of the AI through the pit lane: [{ x, y, z }] in the order that a car drives (track.json "pit": { "line": [[x, z], ...] })
+    pitBoxes: [],         // the pit boxes: [{ x, y, z, heading }], one for every player (track.json "pit": { "boxes": [{ x, z, heading }] }); 4 m by 8 m
     gates: [],            // [{ x, y, z, heading, width }]
     cameras: [],          // the cinematic cameras of the replay: [{ x, y, z, range: { x, z, r } }] (y is the height in the world; range: the circle on the floor where the camera is used, set by hand or not)
     camSel: -1,           // the chosen camera
@@ -646,7 +648,7 @@ async function loadLegacyTrack(track) {
 
 // ---- the start and the gates
 
-const GRID_MAX = 8, BOX_W = 2.4, BOX_L = 5.0;
+const GRID_MAX = 8, BOX_W = 2.4, BOX_L = 5.0, PIT_W = 4, PIT_L = 8;
 function syncStart() { const b = state.grid[0]; state.start = b ? { x: b.x, y: b.y, z: b.z, heading: b.heading } : null; }
 function groundY(x, z, hint) {
     raycaster.set(new THREE.Vector3(x, (hint === undefined ? 10000 : hint + 50), z), new THREE.Vector3(0, -1, 0));
@@ -690,6 +692,38 @@ function updateMarkers() {
         markers.add(makeArrow(b.x, b.y, b.z, b.heading, colour, (i === 0 ? 6 : 3.5) * k));
         markers.add(numberLabel(i + 1, b.x, b.y + 0.1, b.z, colour));
     });
+    // the pit boxes: yellow and see-through, 4 by 8 m, with the arrow of the way that the car faces and its number
+    state.pitBoxes.forEach((b, i) => {
+        const c = Math.cos(b.heading), sn = Math.sin(b.heading), ax = c * PIT_L / 2, az = sn * PIT_L / 2, bx = -sn * PIT_W / 2, bz = c * PIT_W / 2;
+        const corners = [[b.x - ax + bx, b.z - az + bz], [b.x + ax + bx, b.z + az + bz], [b.x + ax - bx, b.z + az - bz], [b.x - ax - bx, b.z - az - bz]];
+        const y = (q) => groundY(q[0], q[1], b.y) + 0.07;
+        const quad = new THREE.BufferGeometry();
+        quad.setAttribute("position", new THREE.Float32BufferAttribute([].concat(...[0, 1, 2, 0, 2, 3].map((k) => [corners[k][0], y(corners[k]), corners[k][1]])), 3));
+        const fill = new THREE.Mesh(quad, new THREE.MeshBasicMaterial({ color: 0xffd23c, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 }));
+        fill.renderOrder = 995;
+        markers.add(fill);
+        const pts = corners.concat([corners[0]]).map((q) => new THREE.Vector3(q[0], y(q) + 0.02, q[1]));
+        const loop = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xffe066, depthTest: false }));
+        loop.renderOrder = 996;
+        markers.add(loop);
+        markers.add(makeArrow(b.x, b.y, b.z, b.heading, 0xffd04d, 3.5 * k));
+        markers.add(numberLabel(i + 1, b.x, b.y + 0.1, b.z, 0xffd04d));
+    });
+    // the pit line: orange, a smooth curve through the points with an arrow on every one, the first point in green (the start on the racing line) and the last in red
+    if (state.pitLine.length) {
+        const L = state.pitLine;
+        const smooth = L.length >= 3 ? new THREE.CatmullRomCurve3(L.map((q) => new THREE.Vector3(q.x, q.y + 0.25, q.z)), false, "centripetal").getPoints(L.length * 12) : L.map((q) => new THREE.Vector3(q.x, q.y + 0.25, q.z));
+        const curve = new THREE.Line(new THREE.BufferGeometry().setFromPoints(smooth), new THREE.LineBasicMaterial({ color: 0xff9a2e, depthTest: false }));
+        curve.renderOrder = 996;
+        markers.add(curve);
+        L.forEach((q, i) => {
+            const dot = new THREE.Mesh(new THREE.SphereGeometry(0.4 * k, 10, 8), new THREE.MeshBasicMaterial({ color: i === 0 ? 0x4ed88a : (i === L.length - 1 ? 0xff5a4a : 0xff9a2e), depthTest: false }));
+            dot.position.set(q.x, q.y + 0.3, q.z);
+            dot.renderOrder = 997;
+            markers.add(dot);
+            if (i < L.length - 1) markers.add(makeArrow(q.x, q.y, q.z, Math.atan2(L[i + 1].z - q.z, L[i + 1].x - q.x), 0xff9a2e, 2.2 * k));
+        });
+    }
     if (state.pit && state.pit.points.length) {
         const P = state.pit.points;
         if (P.length >= 3) {
@@ -1078,10 +1112,44 @@ function renderGrid() {
     if (!state.grid.length) { const none = document.createElement("div"); none.className = "hint"; none.textContent = "No grid yet: place box 1 with the Grid box tool (it is the start of the track)."; list.appendChild(none); }
 }
 function renderPit() {
-    const note = $("pitNote");
+    const note = $("pitNote"), list = $("pitList");
     if (!note) return;
-    const n = state.pit ? state.pit.points.length : 0;
-    note.textContent = n ? n + " points" + (n < 3 ? " (three at least)" : "") : "none";
+    const n = state.pitBoxes.length, old = state.pit ? state.pit.points.length : 0;
+    note.textContent = n ? n + " box" + (n > 1 ? "es" : "") + (state.pitLine.length ? " + line" : "") : (old ? "old area" : (state.pitLine.length ? "line" : "none"));
+    if (!list) return;
+    list.innerHTML = "";
+    state.pitBoxes.forEach((b, i) => {
+        const row = document.createElement("div");
+        row.className = "gate";
+        const text = document.createElement("span");
+        text.textContent = (i === 0 ? "Box 1 (the player)" : "Box " + (i + 1)) + ": " + b.x.toFixed(1) + ", " + b.z.toFixed(1) + ", " + (b.heading * 180 / Math.PI).toFixed(0) + "°";
+        const remove = document.createElement("button");
+        remove.className = "small danger";
+        remove.textContent = "Remove";
+        remove.onclick = () => { state.pitBoxes.splice(i, 1); updateMarkers(); };
+        row.append(text, remove);
+        list.appendChild(row);
+    });
+    if (!n) { const none = document.createElement("div"); none.className = "hint"; none.textContent = "No pit boxes yet: place box 1 (the player's) with the Pit box tool."; list.appendChild(none); }
+    const lineNote = $("pitLineNote");
+    if (lineNote) {
+        const m = state.pitLine.length;
+        let length = 0;
+        for (let q = 1; q < m; q++) length += Math.hypot(state.pitLine[q].x - state.pitLine[q - 1].x, state.pitLine[q].z - state.pitLine[q - 1].z);
+        lineNote.textContent = m ? "Pit line: " + m + " points, " + Math.round(length) + " m" + (m < 2 ? " (two at least)" : "") : "No pit line yet: the AI drives straight to its box without one.";
+    }
+    if (old) {
+        const row = document.createElement("div");
+        row.className = "gate";
+        const text = document.createElement("span");
+        text.textContent = "The old pit area (" + old + " points) is still in the track";
+        const remove = document.createElement("button");
+        remove.className = "small danger";
+        remove.textContent = "Remove";
+        remove.onclick = () => { state.pit = null; updateMarkers(); };
+        row.append(text, remove);
+        list.appendChild(row);
+    }
 }
 function renderGates() {
     const list = $("gates");
@@ -1140,15 +1208,9 @@ function renderCameras() {
 
 // the grid and the pit area: their buttons
 $("gridClear").onclick = () => { state.grid = []; syncStart(); updateMarkers(); };
-$("pitUndo").onclick = () => { if (state.pit && state.pit.points.length) { state.pit.points.pop(); if (!state.pit.points.length) state.pit = null; updateMarkers(); } };
-$("pitClear").onclick = () => { state.pit = null; updateMarkers(); };
-function addPitPoint(point) {
-    if (!state.pit) state.pit = { points: [] };
-    state.pit.points.push({ x: point.x, y: point.y, z: point.z });
-    updateMarkers();
-    status("Pit area: " + state.pit.points.length + " points" + (state.pit.points.length < 3 ? ", click the next corner" : "") + ".", "ok");
-}
-
+$("pitClear").onclick = () => { state.pitBoxes = []; updateMarkers(); };
+$("pitLineUndo").onclick = () => { state.pitLine.pop(); updateMarkers(); };
+$("pitLineClear").onclick = () => { state.pitLine = []; updateMarkers(); };
 // the design of a track without a model: nodes, heights, widths and prefabs (see track-design.js)
 const design = createDesign({
     scene, trackGroup, camera, renderer, controls, state, registerMesh, applyColours, renderParts, updateMarkers, frameTrack, status, $,
@@ -1172,7 +1234,8 @@ function setMode(mode) {
     $("dragWindow").style.display = mode === "drag" ? "block" : "none";
     for (const button of document.querySelectorAll("#modes button")) button.classList.toggle("active", button.dataset.mode === mode);
     $("hud").textContent = (design && design.hudText(mode)) || (mode === "grid" ? "Grid box: click on the road where box " + Math.min(GRID_MAX, state.grid.length + 1) + " is and drag in the direction that the car faces (box 1 is the start of the player, 2 to 8 the opponents)."
-        : mode === "pit" ? "Pit area: click the corners of the area on the ground, in order round it; the shape closes itself. Undo the last point in the Pit area card."
+        : mode === "pitline" ? "Pit line: click on the road, in the order that a car drives: the first point on the racing line where the pit lane starts, then through the pit lane through the middle of every box, and the last point back on the racing line. Undo the last point in the Pit boxes card."
+        : mode === "pitbox" ? "Pit box: click on the road where the box of a player is (4 by 8 m) and drag in the direction that the car faces. Box 1 is the player's, 2 to 8 the opponents', as the grid."
         : mode === "gate" ? "Add gate: click on the road and drag in the direction that the car drives through the gate."
         : mode === "camera" ? "Add camera: click on the road or beside it, the camera is put above that place (set the height in the list). Click a camera in Look to choose it and move it with the gizmo; the button above it changes its range."
         : mode === "object" ? "Place object: click on the road (or the ground) where the object stands, and drag to turn it. Add a model with + in the Objects card first."
@@ -1210,7 +1273,7 @@ renderer.domElement.addEventListener("pointerdown", (event) => {
             return;
         }
     }
-    if ((state.mode === "grid" || state.mode === "pit" || state.mode === "gate" || state.mode === "drag" || state.mode === "camera" || state.mode === "object") && !moveGizmo.axis && !turnGizmo.axis && !objectGizmo.axis) {
+    if ((state.mode === "grid" || state.mode === "pitbox" || state.mode === "pitline" || state.mode === "gate" || state.mode === "drag" || state.mode === "camera" || state.mode === "object") && !moveGizmo.axis && !turnGizmo.axis && !objectGizmo.axis) {
         const hit = roadHit(event);
         if (hit) {
             drag.hit = hit;
@@ -1239,7 +1302,7 @@ renderer.domElement.addEventListener("pointermove", (event) => {
     const ray = pointerRay(event).ray;
     const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -drag.hit.point.y);
     const p = ray.intersectPlane(plane, new THREE.Vector3());
-    if (p && state.mode !== "pit" && Math.hypot(p.x - drag.hit.point.x, p.z - drag.hit.point.z) > 0.5) {
+    if (p && Math.hypot(p.x - drag.hit.point.x, p.z - drag.hit.point.z) > 0.5) {
         drag.heading = Math.atan2(p.z - drag.hit.point.z, p.x - drag.hit.point.x);
         place(drag, true);
     }
@@ -1254,6 +1317,12 @@ function place(d, preview) {
         state.grid.push({ x: point.x, y: point.y, z: point.z, heading: h });
         d.added = true;
         syncStart();
+    } else if (state.mode === "pitbox") {
+        if (preview && d.added) state.pitBoxes.pop();
+        if (state.pitBoxes.length >= GRID_MAX) { status("There are " + GRID_MAX + " pit boxes: remove one in the card first.", "error"); d.added = true; return; }
+        state.pitBoxes.push({ x: point.x, y: point.y, z: point.z, heading: h });
+        d.added = true;
+        renderPit();
     } else if (state.mode === "drag") {
         state.drag = { x: point.x, y: point.y, z: point.z, heading: h, width: Math.max(3, parseFloat($("dragWidth").value) || 12), length: dragLength() };
         d.added = true;
@@ -1286,8 +1355,8 @@ renderer.domElement.addEventListener("pointerup", (event) => {
         if (hits.length) { selectCamera(hits[0].object.userData.camera, state.camRange && state.camSel === hits[0].object.userData.camera); return; }
     }
     if (d.hit) {
-        if (state.mode === "pit") { if (!d.moved) addPitPoint(d.hit.point); }
-        else if (!d.added && (state.mode === "grid" || state.mode === "gate" || state.mode === "drag" || state.mode === "camera" || state.mode === "object")) place(d, false);
+        if (state.mode === "pitline") { if (!d.moved) { state.pitLine.push({ x: d.hit.point.x, y: d.hit.point.y, z: d.hit.point.z }); updateMarkers(); } }
+        else if (!d.added && (state.mode === "grid" || state.mode === "pitbox" || state.mode === "gate" || state.mode === "drag" || state.mode === "camera" || state.mode === "object")) place(d, false);
         return;
     }
     if (lineEdit.editing && !d.moved && !lineEdit.dragging) {
@@ -1446,6 +1515,8 @@ async function loadExisting() {
     state.grid = Array.isArray(track.grid) && track.grid.length ? track.grid.filter((b) => b && isFinite(b.x) && isFinite(b.z)).slice(0, GRID_MAX).map((b) => ({ x: b.x, y: 0, z: b.z, heading: b.heading || 0 }))
         : (track.start ? [{ x: track.start.x, y: 0, z: track.start.z, heading: track.start.heading || 0 }] : []);
     syncStart();
+    state.pitBoxes = track.pit && Array.isArray(track.pit.boxes) ? track.pit.boxes.filter((b) => b && isFinite(b.x) && isFinite(b.z)).slice(0, GRID_MAX).map((b) => ({ x: b.x, y: 0, z: b.z, heading: b.heading || 0 })) : [];
+    state.pitLine = track.pit && Array.isArray(track.pit.line) ? track.pit.line.filter((q) => Array.isArray(q) && isFinite(q[0]) && isFinite(q[1])).map((q) => ({ x: q[0], y: 0, z: q[1] })) : [];
     state.pit = track.pit && Array.isArray(track.pit.polygon) ? { points: track.pit.polygon.filter((q) => Array.isArray(q) && isFinite(q[0]) && isFinite(q[1])).map((q) => ({ x: q[0], y: 0, z: q[1] })) } : null;
     if (state.pit && !state.pit.points.length) state.pit = null;
     state.gates = [];
@@ -1461,6 +1532,8 @@ async function loadExisting() {
         state.grid.forEach((b) => { b.y = groundY(b.x, b.z); });
         syncStart();
         if (state.pit) state.pit.points.forEach((q) => { q.y = groundY(q.x, q.z); });
+        state.pitBoxes.forEach((b) => { b.y = groundY(b.x, b.z); });
+        state.pitLine.forEach((q) => { q.y = groundY(q.x, q.z); });
         $("showGates").checked = !!track.show_gates;
         state.gates = (track.gates || []).map((g) => ({ x: g.x, y: groundY(g.x, g.z), z: g.z, heading: g.heading, width: g.width || 24 }));
         state.cameras = (track.cameras || []).filter((c) => isFinite(c.x) && isFinite(c.z)).map((c) => {
@@ -1488,6 +1561,8 @@ function newTrack() {
     state.start = null;
     state.grid = [];
     state.pit = null;
+    state.pitBoxes = [];
+    state.pitLine = [];
     state.gates = [];
     $("showGates").checked = true;
     state.cameras = [];
@@ -1580,8 +1655,11 @@ async function save() {
         config.description = $("description").value.trim();
         config.start = { x: +state.start.x.toFixed(3), z: +state.start.z.toFixed(3), heading: +state.start.heading.toFixed(5) };      // (box 1 of the grid: the start, as before the grid)
         config.grid = state.grid.map((b) => ({ x: +b.x.toFixed(3), z: +b.z.toFixed(3), heading: +b.heading.toFixed(5) }));
-        if (state.pit && state.pit.points.length >= 3) config.pit = { polygon: state.pit.points.map((q) => [+q.x.toFixed(2), +q.z.toFixed(2)]) };
-        else delete config.pit;
+        const pit = {};
+        if (state.pitBoxes.length) pit.boxes = state.pitBoxes.map((b) => ({ x: +b.x.toFixed(3), z: +b.z.toFixed(3), heading: +b.heading.toFixed(5) }));
+        if (state.pit && state.pit.points.length >= 3) pit.polygon = state.pit.points.map((q) => [+q.x.toFixed(2), +q.z.toFixed(2)]);
+        if (state.pitLine.length >= 2) pit.line = state.pitLine.map((q) => [+q.x.toFixed(2), +q.z.toFixed(2)]);
+        if (pit.boxes || pit.polygon || pit.line) config.pit = pit; else delete config.pit;
         if (state.gates.length) {
             config.gates = state.gates.map((g) => ({ x: +g.x.toFixed(3), z: +g.z.toFixed(3), heading: +g.heading.toFixed(5), width: g.width, y: +g.y.toFixed(2) }));
             if ($("showGates").checked) config.show_gates = true; else delete config.show_gates;

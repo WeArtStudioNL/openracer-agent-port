@@ -157,7 +157,10 @@ function setupRace() {
     car.vehicle.wearScale = options.wear || 1;
     if(options.wear > 0) car.vehicle.freshTyres(60);
     race.pitLane = race.line ? OpenRacer.PitLane.build(groundWorld, race.line) : null;
-    if(options.wear > 0 && !race.pitLane) banner(race.line ? "This track has no pit lane: no pit stops here, mind the tyres and the fuel." : "No racing line: the AI cannot find the pit lane.");
+    race.pitBoxes = OpenRacer.PitStop.boxesOf(track);                 // the pit boxes of the track editor: the player has the first, the AI cars the next ones
+    car.pit.boxes = race.pitBoxes; car.pit.boxIndex = race.pitBoxes.length ? 0 : -1;
+    race.pitPath = race.line ? OpenRacer.PitPath.build(OpenRacer.PitPath.pointsOf(track), race.line) : null;       // the pit line of the track editor, for the AI
+    if(options.wear > 0 && !race.pitLane && !race.pitBoxes.length) banner(race.line ? "This track has no pit lane: no pit stops here, mind the tyres and the fuel." : "No racing line: the AI cannot find the pit lane.");
     if(options.ghost && !race.ghost.best) banner("No best lap yet with this car on this track: the ghost appears from the next start, after a lap.");
 
     if(options.ai > 0) {
@@ -181,6 +184,9 @@ function setupRace() {
             opponent.vehicle.wearScale = options.wear || 1;
             if(options.wear > 0) opponent.vehicle.freshTyres(60);
             opponent.pitLane = race.pitLane;
+            opponent.pit.boxes = race.pitBoxes; opponent.pit.boxIndex = race.pitBoxes.length ? i + 1 : -1;
+            opponent.pitBox = race.pitBoxes[i + 1] || null;
+            opponent.pitPath = race.pitPath;                      // (its own box: it drives to it; without one it uses the pit lane, if the track has one)
             opponent.raceLaps = options.laps;
             var box = grid[i + 1];
             if(box && isFinite(box.x) && isFinite(box.z)) opponent.place(box.x, box.z, box.heading || 0);      // its own grid box

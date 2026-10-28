@@ -97,6 +97,10 @@ OpenRacer.Opponent = function (config, line, options) {
     this.finished = false;       // the race is done: it slows down and pulls aside
     this.raceLaps = 0;           // the laps of the race (0: no end), for the decision to pit
     this.pitLane = null;         // the pit lane of the track (Pit.js), when it has one
+    this.pitBox = null;          // the pit box of this car ({ x, z, heading }, from the track editor): it drives to it and stops in it
+    this.pitPhase = 0;           // 0.5 on the racing line, slowing down for the start of the pit line; 1 on its way to the box and in it, 2 on its way back to the racing line
+    this.pitPath = null;         // the pit line of the track (OpenRacer.PitPath, drawn in the track editor): the path to the box, with a speed of its own
+    var pitIdx = 0, pitStopIdx = -1;
     this.pit = new OpenRacer.PitStop(this.vehicle);
     this.pitting = false;        // on its way through the pit lane
     this.pitStops = 0;
@@ -190,9 +194,65 @@ OpenRacer.Opponent = function (config, line, options) {
         }
         if (this.finished) asideTarget = -3; // done: to the right, out of the way
 
-        // the pit: in when the tyres are worn or the fuel will not last, through the lane at a walking pace, a stop in the middle
-        var lane = this.pitLane, inLane = false, atStop = false;
-        if (lane && v.wearEnabled) {
+        // the pit box: when the tyres are worn or the fuel will not last, and the box is within 70 m ahead along the line, it drives to the box (a staging point on the axis of the box
+        // first, then the middle), stops with the wheels inside it until the stop is done, and goes back to the line
+        var box = this.pitBox, boxMode = false, boxTarget = null, boxNext = null, boxSpeed = 16, atStop = false;
+        if (box && v.wearEnabled) {
+            var lapsLeftB = this.raceLaps ? this.raceLaps - this.lapsCompleted : 99;
+            var fuelNeededB = fuelPerLap !== null ? fuelPerLap * (lapsLeftB + 0.4) : v.tank * 0.12;
+            var needB = !this.finished && lapsLeftB >= 1 && ((v.maxWear() > 0.75 && lapsLeftB >= 2) || v.fuel < fuelNeededB);
+            if (!this.pitPath && !this.pitting && needB) {
+                var boxLine = line.nearest(box.x, box.z), toBoxLine = ((boxLine - this.lineIndex) % n + n) % n * line.step;
+                if (toBoxLine < 70) { this.pitting = true; this.pitPhase = 1; }
+            }
+            var path = this.pitPath;
+            if (path && !this.pitting && needB) {
+                // the pit line: from 120 m before its start the car is on its way: slowing down along the racing line for the start of the line (at the speed of the pit lane there)
+                var toEntry = ((path.entry - this.lineIndex) % n + n) % n * line.step;
+                if (toEntry < 120) { this.pitting = true; this.pitPhase = 0.5; pitStopIdx = path.nearest(box.x, box.z); pitIdx = 0; }
+            }
+            if (path && this.pitting) {
+                boxMode = true; asideTarget = 0;
+                var PIT_SPEED = 16, BRAKE = 3.5;                                       // m/s: the speed in the pit lane; m/s2: how hard it brakes for the stop and for the start
+                if (this.pitPhase === 0.5) {
+                    var toStart = ((path.entry - this.lineIndex) % n + n) % n * line.step, p0 = path.point(0);
+                    boxSpeed = Math.sqrt(PIT_SPEED * PIT_SPEED + 2 * BRAKE * Math.max(0, toStart - 2));
+                    if (toStart < 6 || Math.hypot(p0.x - v.x, p0.z - v.z) < 7) { this.pitPhase = 1; pitIdx = path.nearest(v.x, v.z); }
+                }
+                if (this.pitPhase === 1 || this.pitPhase === 2) {
+                    pitIdx = path.nearest(v.x, v.z, pitIdx);
+                    var lookP = Math.max(4, Math.min(12, 2 + speed * 0.55)), ti = Math.min(path.count - 1, pitIdx + Math.round(lookP / path.step));
+                    boxTarget = path.point(ti); boxNext = path.point(ti + 1);
+                    var distStop = (pitStopIdx - pitIdx) * path.step;
+                    if (this.pitPhase === 1 && this.pit.done) this.pitPhase = 2;
+                    if (this.pitPhase === 1) {
+                        boxSpeed = Math.min(PIT_SPEED, Math.sqrt(2 * BRAKE * Math.max(0, distStop - 0.2)) + 0.7);
+                        if (distStop < 0.8 && speed < 2 && !this.pit.done) { atStop = true; boxSpeed = 0; }
+                    } else {
+                        boxSpeed = PIT_SPEED;
+                        if (pitIdx >= path.count - 3) { this.pitting = false; this.pitPhase = 0; this.pitStops++; boxMode = false; boxTarget = null; }
+                    }
+                }
+            } else if (!path && this.pitting) {
+                boxMode = true; asideTarget = 0;
+                var bf = Math.cos(box.heading), bg = Math.sin(box.heading);
+                var rx = v.x - box.x, rz = v.z - box.z, distB = Math.hypot(rx, rz), alongB = rx * bf + rz * bg;
+                if (this.pitPhase === 1 && this.pit.done) this.pitPhase = 2;
+                if (this.pitPhase === 1) {
+                    if (alongB < -9 && distB > 10) { boxTarget = { x: box.x - bf * 9, z: box.z - bg * 9 }; boxNext = { x: box.x, z: box.z }; boxSpeed = Math.min(16, 3 + (distB - 9) * 0.7); }
+                    else { boxTarget = { x: box.x, z: box.z }; boxNext = { x: box.x + bf, z: box.z + bg }; boxSpeed = Math.min(12, 1.5 + distB * 0.9); }
+                    if (distB < 1.3 && speed < 3 && !this.pit.done) { atStop = true; boxSpeed = 0; }
+                } else {
+                    // back to the line: the normal point ahead on it, slowly until it is on it again
+                    var here0 = line.point(this.lineIndex), offB = Math.hypot(here0.x - v.x, here0.z - v.z);
+                    boxSpeed = 14;
+                    if (offB < 3.5 && distB > 12) { this.pitting = false; this.pitPhase = 0; this.pitStops++; boxMode = false; }
+                }
+            }
+        }
+        // the pit lane (a track without boxes): in when the tyres are worn or the fuel will not last, through the lane at a walking pace, a stop in the middle
+        var lane = this.pitLane, inLane = false;
+        if (lane && !box && v.wearEnabled) {
             var lapsLeft = this.raceLaps ? this.raceLaps - this.lapsCompleted : 99;
             var fuelNeeded = fuelPerLap !== null ? fuelPerLap * (lapsLeft + 0.4) : v.tank * 0.12;
             var need = !this.finished && lapsLeft >= 1 && ((v.maxWear() > 0.75 && lapsLeft >= 2) || v.fuel < fuelNeeded);
@@ -220,6 +280,7 @@ OpenRacer.Opponent = function (config, line, options) {
             target = lane.pointAt(this.lineIndex + Math.round(look / line.step));
             next = lane.pointAt(this.lineIndex + Math.round(look / line.step) + 1);
         }
+        if (boxMode && boxTarget) { target = boxTarget; next = boxNext; aside = 0; }
         var tx = next.x - target.x, tz = next.z - target.z, tl = Math.hypot(tx, tz) || 1;
         var ax = target.x - (tz / tl) * aside, az = target.z + (tx / tl) * aside; // to the left of the line
         var dxT = ax - v.x, dzT = az - v.z;
@@ -243,6 +304,7 @@ OpenRacer.Opponent = function (config, line, options) {
         for (var j = 0; j <= 4; j++) allowed = Math.min(allowed, speeds[((this.lineIndex + j) % n + n) % n]);
         allowed *= holdBack;
         if (inLane) allowed = Math.min(allowed, 16);        // the pit lane: slowly
+        if (boxMode) allowed = Math.min(allowed, boxSpeed);      // to the box and back: slowly
         if (atStop) allowed = 0;                            // at the box, until the stop is done
         if (this.finished) allowed = 0; // slows down and stops
         var error = allowed - speed;
@@ -268,11 +330,11 @@ OpenRacer.Opponent = function (config, line, options) {
         speedTrail.push(over); if (speedTrail.length > 7) speedTrail.shift();
         var hardHit = speedTrail.length === 7 && speedTrail[0] - over > 8 && speedTrail[0] > 6;
         if (hardHit) speedTrail.length = 0;
-        if ((speed < 1.5 && this.throttle > 0.3 && !inLane) || offLine > 45) this.lostFor = (this.lostFor || 0) + delta;
+        if ((speed < 1.5 && this.throttle > 0.3 && !inLane && !boxMode) || (offLine > 45 && !boxMode)) this.lostFor = (this.lostFor || 0) + delta;
         else this.lostFor = Math.max(0, (this.lostFor || 0) - 2 * delta);
         this.overFor = upY < 0.25 ? (this.overFor || 0) + delta : 0;
         if (v.py < here.y - 25) this.lostFor = 99;
-        if (!this.crashedAt && !inLane && (hardHit || this.overFor > 1 || wheelOff || this.lostFor > 7)) {
+        if (!this.crashedAt && !inLane && !boxMode && (hardHit || this.overFor > 1 || wheelOff || this.lostFor > 7)) {
             this.crashedAt = this.clock;
             this.crashReason = hardHit ? "hit" : this.overFor > 1 ? "over" : wheelOff ? "wheel" : v.py < here.y - 25 ? "fell" : offLine > 45 ? "off line " + offLine.toFixed(0) + " m" : "stuck";      // (for the debugging)
             this.crashWait = this.lostFor > 7 || v.py < here.y - 25 ? 0 : 3;        // (lost or fallen out: it waited long enough)

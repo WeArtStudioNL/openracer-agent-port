@@ -1,8 +1,9 @@
 /*
  * TrackMarks.js
  *
- * Description: What the track editor paints on the road of a track, drawn in the game: the pit area ("pit" in track.json: a polygon on the ground, inside which the road
- *              is the pit lane, Pit.js) as a translucent surface with a line round it, and the grid boxes ("grid": up to eight boxes, each { x, z, heading }; box 1 is
+ * Description: What the track editor paints on the road of a track, drawn in the game: the pit boxes ("pit": { "boxes": [{ x, z, heading }] } in track.json: a box of 4 by 8 m
+ *              for every player, yellow and see-through, with a line round it; a car that stands in its box is serviced, Pit.js), the older pit area ("pit": { "polygon" }, a polygon on
+ *              the ground, inside which the road is the pit lane) as a translucent surface with a line round it, and the grid boxes ("grid": up to eight boxes, each { x, z, heading }; box 1 is
  *              the start of the player, the others are where the opponents stand at the start of a race) as two white side lines on the road joined by a line across the front (no numbers).
  *              The heights come from the ground of the track (groundWorld, TrackLoader.js), a little above the road so that they lie on it.
  *
@@ -38,8 +39,9 @@ OpenRacer.TrackMarks = (function () {
         if (group) { scene.remove(group); group = null; }
         if (!track) return;
         var pit = track.pit && Array.isArray(track.pit.polygon) && track.pit.polygon.length >= 3 ? track.pit.polygon : null;
+        var pitBoxes = OpenRacer.PitStop && OpenRacer.PitStop.boxesOf ? OpenRacer.PitStop.boxesOf(track) : [];
         var grid = Array.isArray(track.grid) ? track.grid.filter(function (b) { return b && isFinite(b.x) && isFinite(b.z); }) : [];
-        if (!pit && !grid.length) return;
+        if (!pit && !grid.length && !pitBoxes.length) return;
         group = new THREE.Group();
         group.name = "track marks";
         if (pit) {
@@ -55,6 +57,27 @@ OpenRacer.TrackMarks = (function () {
             var edge = pit.map(function (p) { return [p[0], p[1]]; }); edge.push(edge[0]);
             group.add(new THREE.Mesh(strip(edge, 0.25, 0), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 })));
         }
+        // the pit boxes: a lattice of squares of half a metre over the 4 by 8 m, with the height of the road at every corner, so that it lies on a slope too
+        pitBoxes.forEach(function (b) {
+            var W = OpenRacer.PitStop.BOX_W, L = OpenRacer.PitStop.BOX_L, c = Math.cos(b.heading), s = Math.sin(b.heading), nx = Math.round(W / 0.5), nz = Math.round(L / 0.5);
+            var positions = [], indices = [];
+            for (var j = 0; j <= nz; j++) for (var i2 = 0; i2 <= nx; i2++) {
+                var u = (j / nz - 0.5) * L, w = (i2 / nx - 0.5) * W, x = b.x + c * u - s * w, z = b.z + s * u + c * w;
+                positions.push(x, heightAt(x, z, 0) + LIFT * 1.5, z);
+            }
+            for (var j2 = 0; j2 < nz; j2++) for (var i3 = 0; i3 < nx; i3++) { var a0 = j2 * (nx + 1) + i3; indices.push(a0, a0 + 1, a0 + nx + 1, a0 + 1, a0 + nx + 2, a0 + nx + 1); }
+            var geometry = new THREE.BufferGeometry();
+            geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+            geometry.setIndex(indices);
+            var fill = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0xffd23c, transparent: true, opacity: 0.32, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, side: THREE.DoubleSide, fog: false }));
+            fill.renderOrder = 1;
+            group.add(fill);
+            var ring = [[b.x - c * L / 2 + s * W / 2, b.z - s * L / 2 - c * W / 2], [b.x + c * L / 2 + s * W / 2, b.z + s * L / 2 - c * W / 2], [b.x + c * L / 2 - s * W / 2, b.z + s * L / 2 + c * W / 2], [b.x - c * L / 2 - s * W / 2, b.z - s * L / 2 + c * W / 2]];
+            ring.push(ring[0]);
+            var edgeMesh = new THREE.Mesh(strip(ring, 0.2, 0), new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.85, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, side: THREE.DoubleSide, fog: false }));
+            edgeMesh.renderOrder = 2;
+            group.add(edgeMesh);
+        });
         grid.forEach(function (b, i) {
             var h = b.heading || 0, c = Math.cos(h), s = Math.sin(h);           // along the box (the way the car faces) and across it
             var ax = c * BOX_L / 2, az = s * BOX_L / 2, bx = -s * BOX_W / 2, bz = c * BOX_W / 2;
