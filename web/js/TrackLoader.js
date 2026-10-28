@@ -508,7 +508,14 @@ function mergeScenery() {
 // The sky and the light of the track (see TrackEnvironment.js). A glTF track always gets them (a sky of colours if it says nothing),
 // a track of the old format only if it has an environment: its sky is a part of its model.
 function applyTrackEnvironment(track) {
-    if(!track.model && !track.environment) return;
+    if(!track.model && !track.environment) {
+        // a track of the old format: the sky of the game (Atmosphere.js) takes the place of its own clouds, and the weather and the ground go on its surfaces
+        if(OpenRacer.Atmosphere) {
+            scene.children.forEach(function(o) { if(o.isMesh && /^clouds?$/i.test(o.name || "")) o.visible = false; });
+            OpenRacer.Atmosphere.attach(OpenRacer.environmentDefaults());
+        }
+        return;
+    }
     var env = OpenRacer.environmentOf(track);
     // the sky, the light, the weather and the ground are the same on every track (Atmosphere.js): the track only gives how bright its materials like the light
     if(OpenRacer.Atmosphere) { OpenRacer.Atmosphere.attach(env); return; }

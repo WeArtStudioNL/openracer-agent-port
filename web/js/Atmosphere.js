@@ -212,7 +212,7 @@ OpenRacer.Atmosphere = (function () {
 
     // ---- the ground: the surfaces of the track get a wet and a snow look from two numbers (shared by all of them, set every frame)
     function patchMaterial(m) {
-        if (!m || m.userData.groundPatched || !m.isMeshStandardMaterial) return;
+        if (!m || m.userData.groundPatched || !(m.isMeshStandardMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial)) return;     // (the tracks of the old format have Lambert and Phong materials: they get the white of the snow and the dark of the wet, not the shine)
         m.userData.groundPatched = true;
         var previous = m.onBeforeCompile;
         m.onBeforeCompile = function (shader, renderer) {
