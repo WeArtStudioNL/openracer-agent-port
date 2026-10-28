@@ -664,10 +664,11 @@ OpenRacer.Vehicle = function (parameters, input) {
 
     // Puts the car somewhere standing still and on its wheels, in the state it is in: the damage, the tyres (heat, wear, pressure) and the engine stay as they are, only the place, the
     // movement and the springs are reset. py: the height of the body there (null: on the road)
-    this.relocate = function (x, z, psi, py) {
+    // (hintY: the height of the road that is meant, where there are roads above one another, a bridge or a tunnel: the road within a metre of it is taken, not the highest one)
+    this.relocate = function (x, z, psi, py, hintY) {
         var angle = Math.PI / 2 - psi;
         this.qx = 0; this.qy = Math.sin(angle / 2); this.qz = 0; this.qw = Math.cos(angle / 2);
-        var road = roadAt(x, z, 1000, 0);
+        var road = (hintY !== undefined && hintY !== null && isFinite(hintY) ? roadAt(x, z, hintY, 0.9) : null) || roadAt(x, z, 1000, 0);
         this.px = x; this.pz = z;
         this.py = py === null || py === undefined ? (road ? road.y : 0) + this.cgHeight + (this.rideFront + this.rideRear) / 2 : py + 0.05;
         this.vx = this.vy = this.vz = 0;

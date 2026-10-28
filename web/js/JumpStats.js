@@ -54,6 +54,7 @@ OpenRacer.JumpStats = (function () {
     }
 
     // every frame, with the vehicle of the player, the time of the frame and the id of the track
+    function cancel() { state.air = 0; state.takeoff = null; }
     function update(v, delta, trackId, carName) {
         if (v.airborne) {
             if (state.air === 0) { state.takeoff = { x: v.px, y: v.py, z: v.pz }; state.maxY = v.py; }
@@ -61,7 +62,8 @@ OpenRacer.JumpStats = (function () {
             if (v.py > state.maxY) state.maxY = v.py;
             return;
         }
-        if (state.air >= MIN_AIR && state.takeoff && isFinite(v.px)) {
+        // (a fall out of the world, or a jump that ended in a reset, is no jump)
+        if (state.air >= MIN_AIR && state.takeoff && isFinite(v.px) && v.py > state.takeoff.y - 40) {
             var distance = Math.hypot(v.px - state.takeoff.x, v.pz - state.takeoff.z);
             var height = state.maxY - Math.min(state.takeoff.y, v.py);       // (the top of the jump above the lower of the two places)
             var old = best(trackId);
@@ -74,5 +76,5 @@ OpenRacer.JumpStats = (function () {
         state.takeoff = null;
     }
 
-    return { update: update, best: best, top: top, clear: clear };
+    return { update: update, cancel: cancel, best: best, top: top, clear: clear };
 })();

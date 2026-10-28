@@ -490,8 +490,12 @@ var Settings = (function() {
             return;
         }
         // an input belongs to one action: take it from the others
+        var taken = [];
         ACTIONS.forEach(function(other) {
-            if(other.id !== action.id) bindings[other.id] = bindings[other.id].filter(function(existing) { return !same(existing, input); });
+            if(other.id === action.id) return;
+            var kept = bindings[other.id].filter(function(existing) { return !same(existing, input); });
+            if(kept.length !== bindings[other.id].length) taken.push(other.label.replace(/\s*\(.*$/, "").replace(/,.*$/, ""));
+            bindings[other.id] = kept;
         });
         var target = replaceIndex !== null && replaceIndex !== undefined ? bindings[action.id][replaceIndex] : null;
         var list = bindings[action.id].filter(function(existing) { return existing === target || !same(existing, input); });
@@ -499,7 +503,7 @@ var Settings = (function() {
         else list.push(input);
         bindings[action.id] = list;
         save();
-        hint("");
+        hint(taken.length ? "That input was used for " + taken.join(" and ") + ": it is moved to " + action.label.replace(/\s*\(.*$/, "") + "." : "");
     }
 
     // the gears of the shifter that the car does not have are not shown

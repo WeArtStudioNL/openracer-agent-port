@@ -255,7 +255,7 @@ function beginFlyby() {
     window.addEventListener("pointerdown", skip);
     state.pointerdown = skip;
     var note = document.createElement("div");
-    note.textContent = "Press Enter to skip";
+    note.textContent = "Press Enter to skip the fly-by";
     note.style.cssText = "position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 1001; color: var(--muted); font: 14px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; text-shadow: 0 1px 4px #000; pointer-events: none;";
     document.body.appendChild(note);
     state.note = note;
@@ -283,7 +283,7 @@ function endFlyby() {
     race.countdown = 4;
     var overlay = document.createElement("div");
     overlay.id = "raceOverlay";
-    overlay.style.cssText = "position: absolute; top: 18%; left: 50%; transform: translateX(-50%); z-index: 1001; font: bold 96px Arial; " +
+    overlay.style.cssText = "position: absolute; top: 9%; left: 50%; transform: translateX(-50%); z-index: 1001; font: bold 120px Arial; -webkit-text-stroke: 3px rgba(0, 0, 0, 0.55); paint-order: stroke fill; " +
         "color: #ffffff; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7); pointer-events: none;";
     document.body.appendChild(overlay);
     race.overlay = overlay;
@@ -303,12 +303,14 @@ function updateRaceFlow(delta) {
         var n = Math.ceil(race.countdown - 1);
         race.overlay.textContent = n > 0 ? String(n) : "GO!";
         race.overlay.style.color = n > 0 ? (n === 1 ? "var(--accent2)" : "#ffffff") : "#5be07a";
+        race.overlay.style.textShadow = "0 3px 16px rgba(0, 0, 0, 0.85)";
         if(race.countdown <= 1 && car.held) {
             // GO: the clocks of the race start here
             car.held = false;
             car.brakePedal = 0; car.handbrake = false;
             race.opponents.forEach(function(o) { o.held = false; o.goClock = o.clock; });
             race.goClock = car.clock;
+            if(!car.lapStarted) car.lapStartTime = car.clock;      // (the first lap is timed from GO until the line is crossed)
         }
         if(race.countdown <= 0) { race.state = "racing"; race.overlay.remove(); }
         return;

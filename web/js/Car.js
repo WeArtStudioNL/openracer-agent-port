@@ -304,6 +304,10 @@ OpenRacer.Car = function( config, domElement ) {
     try { var stored = JSON.parse(window.localStorage.getItem(resetKey)); if(stored && isFinite(stored.x) && isFinite(stored.z) && isFinite(stored.psi)) savedReset = stored; } catch(e) { /* no storage */ }
     this.saveResetPosition = function() {
         savedReset = this.vehicle.pose();
+        // (the car it was saved with, and the road under it: the height of the body belongs to that car, another car is put on the road there)
+        savedReset.car = config.id;
+        var under = this.vehicle.ground ? this.vehicle.ground.query(this.vehicle.px, this.vehicle.pz, this.vehicle.py, 0.9) : null;
+        savedReset.gy = under ? under.y : null;
         try { window.localStorage.setItem(resetKey, JSON.stringify(savedReset)); } catch(e) { /* no storage */ }
         var note = document.createElement("div");
         note.style.cssText = "position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1001; padding: 8px 18px; background: rgba(20, 24, 31, 0.85); color: #fff; font-family: Arial; border-radius: 6px;";
@@ -318,7 +322,7 @@ OpenRacer.Car = function( config, domElement ) {
         var v = this.vehicle, line = typeof race !== "undefined" && race && race.line;
         if(line && line.count && line.count() > 1) {
             var pt = line.point(line.nearest(v.px, v.pz));
-            return { x: pt.x, z: pt.z, psi: line.headingAt(v.px, v.pz), py: null };
+            return { x: pt.x, z: pt.z, psi: line.headingAt(v.px, v.pz), py: null, gy: pt.y };
         }
         if(trackGates.length > 1 && lastCrossedGate !== null) {
             var g = trackGates[lastCrossedGate], n = trackGates[(lastCrossedGate + 1) % trackGates.length];
@@ -328,9 +332,12 @@ OpenRacer.Car = function( config, domElement ) {
         }
         return null;
     };
+    var fallMinY = null, fallFor = 0;
     this.returnToSaved = function() {
+        if(OpenRacer.JumpStats) OpenRacer.JumpStats.cancel();
         var v = this.vehicle, p = savedReset || this.nearestOnTrack() || { x: startX, z: startZ, psi: startHeading, py: null };
-        v.relocate(p.x, p.z, p.psi, p.py);
+        var samePlace = p.car === config.id;       // (a place saved before this was kept has no car: it is put on the road)
+        v.relocate(p.x, p.z, p.psi, samePlace ? p.py : null, p.gy);
         tyreSmoke.clear();
         if(debris) debris.clear();
         flames.clear();
@@ -616,6 +623,13 @@ OpenRacer.Car = function( config, domElement ) {
         if(pedalBox && this.clutchAvailable && this.gearboxMode === "manual" && this.clutch > 0.08) this.manualClutch = true;
         this.clutchPedalPresent = pedalBox && this.clutchAvailable && this.gearboxMode === "manual" && this.manualClutch;
 
+        // out of the world (over the edge of the model, through a wall): half a second below everything that is the track, and the car goes back by itself, as the reset key does it
+        if(fallMinY === null) {
+            fallMinY = -40;
+            var fl = typeof race !== "undefined" && race && race.line;
+            if(fl && fl.count && fl.count() > 1) { var lowest = 1e9; for(var fi = 0; fi < fl.count(); fi++) lowest = Math.min(lowest, fl.point(fi).y || 0); fallMinY = Math.min(-40, lowest - 25); }
+        }
+        if(v.py < fallMinY && !this.reset) { fallFor += delta; if(fallFor > 0.5) { this.reset = true; } } else if(v.py >= fallMinY) fallFor = 0;
         if(this.reset) {
             // one reset per key press: back to the saved place (the start when none was saved), in the state that the car is in
             this.reset = false;
