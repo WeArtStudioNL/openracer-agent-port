@@ -897,7 +897,7 @@ var MainMenu = (function() {
     var MODE_KEY = "openracer.mode";
     var mode = "free";
     try { mode = window.localStorage.getItem(MODE_KEY) || "free"; } catch(e) { /* no storage */ }
-    var STEP_NAMES = { mode: "Play", car: "Car", tune: "Tune", track: "Track", race: "Race", opponents: "Opponents", surface: "Ground" };
+    var STEP_NAMES = { mode: "Play", car: "Car", tune: "Tune", track: "Track", weather: "Weather", race: "Race", opponents: "Opponents", surface: "Ground" };
     var oppPick = null;                  // while a car is added on the Opponents page: { stage: "car" } or { stage: "tune", car: id }
     var SURFACE_KEY = "openracer.skidSurface";
     var skidSurface = "road";
@@ -906,7 +906,7 @@ var MainMenu = (function() {
     // the setups (tunes) of the car that is chosen (the tuning menu, the car editor; OpenRacer.Setups): a step of its own as soon as there is one (Default, the car as made, and the tune)
     function tunesOf() { return choice.car && OpenRacer.Setups ? OpenRacer.Setups.names(choice.car) : []; }
     function stepsOf() {
-        var steps = mode === "race" ? ["mode", "car", "track", "race", "opponents"] : (mode === "skidpad" ? ["mode", "car", "surface"] : ["mode", "car", "track"]);
+        var steps = mode === "race" ? ["mode", "car", "track", "weather", "race", "opponents"] : (mode === "skidpad" ? ["mode", "car", "surface"] : ["mode", "car", "track", "weather"]);
         if(tunesOf().length >= 1) steps.splice(2, 0, "tune");
         return steps;
     }
@@ -1226,6 +1226,44 @@ var MainMenu = (function() {
         inner.appendChild(grid);
     }
 
+    // the weather for this race or drive: the weather, the time of day and the ground, the same options as the Graphics page of the Escape menu (what is chosen here stays there)
+    function weatherStep(inner) {
+        inner.innerHTML = "<h2>Choose the weather</h2><div class=\"sub\">For this " + (mode === "race" ? "race" : "drive") + ". You can change it in the Escape menu (Graphics) while you drive.</div>";
+        function pick(label, items, option) {
+            var row = document.createElement("div");
+            row.className = "setting";
+            var l = document.createElement("span");
+            l.className = "label";
+            l.textContent = label;
+            row.appendChild(l);
+            var group = document.createElement("div");
+            group.className = "chips";
+            var current = typeof Settings !== "undefined" ? Settings.option(option) : null;
+            items.forEach(function(item) {
+                var c = document.createElement("button");
+                c.className = "chip" + (item[0] === current ? " on" : "");
+                c.textContent = item[1];
+                c.onclick = function() {
+                    if(typeof Settings !== "undefined") {
+                        Settings.setOption(option, item[0]);
+                        if(option === "gfxWeather") Settings.setOption("gfxGround", "auto");        // (a new weather brings its own ground: rain wets the road, snow covers it)
+                    }
+                    render();
+                };
+                group.appendChild(c);
+            });
+            row.appendChild(group);
+            inner.appendChild(row);
+        }
+        pick("Weather", [["clear", "Clear"], ["cloudy", "Cloudy"], ["fog", "Fog"], ["rain", "Rain"], ["snow", "Snow"]], "gfxWeather");
+        pick("Time of day", [[5.25, "Dawn"], [8, "Morning"], [12, "Noon"], [15, "Afternoon"], [17.5, "Evening"], [19, "Sunset"], [20.25, "Dusk"], [23.5, "Night"]], "gfxTime");
+        pick("Ground", [["auto", "Follows the weather"], ["dry", "Dry"], ["wet", "Wet"], ["snow", "Snow"]], "gfxGround");
+        var hint = document.createElement("div");
+        hint.className = "hint";
+        hint.textContent = "Rain wets the road and snow lies on it: both give less grip, and the AI drives slower. There are no headlights yet: the night is dark.";
+        inner.appendChild(hint);
+    }
+
     function raceStep(inner) {
         inner.innerHTML = "<h2>Set up the race</h2><div class=\"sub\">A race starts from a standing start, with a countdown.</div>";
         function setting(label, items, current, apply) {
@@ -1360,7 +1398,7 @@ var MainMenu = (function() {
         if(car && OpenRacer.Setups && tunesOf().length >= 1 && screen !== "mode" && screen !== "car" && screen !== "tune") parts.push(OpenRacer.Setups.active(car.id) || "Default");
         if(mode === "skidpad" && screen === "surface") parts.push((SKIDPAD_SURFACES.filter(function(s) { return s.id === skidSurface; })[0] || {}).name || "Asphalt");
         else if(car && screen === "car") parts.push(car.name || car.id);
-        if(track && mode !== "skidpad" && (screen === "track" || screen === "race")) parts.push(track.name || track.id);
+        if(track && mode !== "skidpad" && (screen === "track" || screen === "weather" || screen === "race")) parts.push(track.name || track.id);
         if(screen === "race") parts.push(raceOptions.laps + " laps, " + raceOptions.ai + " opponents");
         if(screen === "opponents") parts.push(raceOptions.laps + " laps, " + (oppList().length || raceOptions.ai) + " opponents" + (oppList().length ? "" : " (from the garage)"));
         return parts;
@@ -1412,6 +1450,7 @@ var MainMenu = (function() {
         else if(screen === "car") carStep(inner);
         else if(screen === "tune") tuneStep(inner);
         else if(screen === "track") trackStep(inner);
+        else if(screen === "weather") weatherStep(inner);
         else if(screen === "race") raceStep(inner);
         else if(screen === "opponents") opponentsStep(inner);
         else if(screen === "surface") surfaceStep(inner);
