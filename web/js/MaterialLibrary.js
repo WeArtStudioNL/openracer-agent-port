@@ -46,8 +46,7 @@ mlib.body.push( [ "Chrome", new THREE.MeshPhongMaterial( { color: 0xffffff, spec
 // shows the surroundings of the car is filtered by roughness (PMREM) and used as the lighting of the scene (scene.environment),
 // which only physically based materials use. The materials of the track and of the original cars are not changed by it.
 function updateEnvironment() {
-    var target = environmentGenerator.fromCubemap(cubeTarget.texture);
-    if(environmentTarget) environmentTarget.dispose();
-    environmentTarget = target;
-    scene.environment = target.texture;
+    // (into the same target every time: no new textures to make and to throw away, which is why it can be done often)
+    environmentTarget = environmentGenerator.fromCubemap(cubeTarget.texture, environmentTarget);
+    scene.environment = environmentTarget.texture;
 }

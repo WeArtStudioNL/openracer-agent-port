@@ -34,7 +34,7 @@ var camera;
 var cubeUpdate = 2;
 var cubeCount = 0;
 var environmentCount = 0;
-var ENVIRONMENT_EVERY = 12; // the lighting of the physically based materials is made again after this many cube map updates
+var ENVIRONMENT_EVERY = 3; // the lighting of the physically based materials is made again after this many cube map updates (12 made the glTF cars follow the surroundings only about once a second)
 var TONE_MAPPINGS = { none: THREE.NoToneMapping, neutral: THREE.NeutralToneMapping, agx: THREE.AgXToneMapping, aces: THREE.ACESFilmicToneMapping };
 
 function applyToneMapping(name) {
@@ -102,7 +102,7 @@ RACER.Scene = function (parameters, domElement) {
         // with post-processing the anti-aliasing is done on the buffer of the composer
         renderer = new THREE.WebGLRenderer( { antialias: !useComposer } );
         renderer.setPixelRatio( pickPixelRatio() );
-        applyToneMapping(Settings.option("toneMapping"));
+        applyToneMapping(Settings.option("gfxTone"));
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         // when the browser takes the graphics away (too little memory on the video card), the picture can go wrong without any error: say so
@@ -271,6 +271,11 @@ function render() {
         var gs = groundWorld.stats;
         if(fps > 0) debugOut("Sim triangles: rays " + gs.rays + " tested " + gs.rayTris + " (most for one ray " + gs.rayMax + ") | shell spheres " + gs.nearby + " gave " + gs.nearbyTris + ", box tests " + gs.boxes + ", exact tests " + gs.closest);
         gs.rays = gs.rayTris = gs.rayMax = gs.nearby = gs.nearbyTris = gs.closest = gs.boxes = 0;
+    }
+    // what a tyre of the player costs: the nodes of its shell and the small steps that it takes in a step of the physics (the cost of the road tests goes with both)
+    if(fps > 0 && typeof car !== "undefined" && car && car.vehicle && car.vehicle.wheels) {
+        var shell = car.vehicle.wheels[0] && car.vehicle.wheels[0].tyreBody;
+        if(shell && shell.substeps) debugOut("Tyre shell: " + shell.rings + " rings x " + shell.segments + " segments = " + (shell.rings * shell.segments) + " nodes a tyre, " + shell.substeps + " substeps in a step of 3 ms");
     }
     //camera.position.z += 0.1;
 };

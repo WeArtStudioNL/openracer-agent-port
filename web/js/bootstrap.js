@@ -55,6 +55,7 @@ var scripts = [
     "js/MaterialLibrary.js",
     "js/TrackLoader.js",
     "js/Graphics.js",
+    "js/Atmosphere.js",
     "js/Scene.js",
     "js/EnvironmentExport.js",
     "js/SoftBody.js",

@@ -160,6 +160,8 @@ The road used to be a height field (`GroundWorld.query(x, z)`: one height per pl
 
 Next to it, `web/tools/physics-check.html` (open it from the server) runs the physics inside the game for the cars you pick: the ride height, a landing from 3 m and from 10 m, the wheels on a straight at 30 m/s (a wheel that flickers) and a bend (the yaw against the steering), and marks what is outside the limits.
 
+**Look and atmosphere:** the Graphics page of the settings menu has the tone mapping, the exposure, the contrast and the saturation (against an overblown picture), the *time of day* (as the track, or dawn to night with an hour slider) and the *weather* (clear, cloudy, fog, rain; looks only, the grip does not change), *anisotropic filtering* and *sharpening*. Time of day and weather work on tracks that have an `environment` in track.json.
+
 **Performance:** the graphics settings have a *draw distance* (500 to 5000 m; the presets set it) and AI cars more than 450 m from the camera are not drawn. **F2** saves the picture of the game as a PNG.
 
 ## Tyre bench
@@ -263,7 +265,7 @@ WebHID exists in Chrome and Edge. The wheel is chosen once with *Wheel with forc
 The game and Blender light a car differently, so a car never looks exactly the same, but it can come close. What matters:
 
 * **Materials:** use the Principled BSDF with the inputs that glTF has (base colour, metallic, roughness, normal, emission, alpha, clear coat, transmission). Other shaders (many glass shaders) do not survive the export and arrive as opaque white metal; set them right in the car editor (*Materials*), or use a Principled BSDF with *Transmission* and a low roughness for glass.
-* **Colour management** (Render properties): the game shows the colours as they come ("Standard") unless the *Tone mapping* option of the settings menu is set to AgX/ACES/Neutral. Use the same in Blender: view transform *Standard* with the Tone mapping of the game off, or *AgX* with AgX. Look *None*, gamma 1. The game brightens the picture by 20% at the end (x1.2, which is +0.26 exposure in Blender).
+* **Colour management** (Render properties): the game uses the tone mapping of the Graphics page of the settings menu (Neutral by default; AgX, ACES or Off). Use the same in Blender: view transform *Standard* with the Tone mapping of the game off, or *AgX* with AgX. Look *None*, gamma 1. The game brightens the picture by 20% at the end (x1.2, which is +0.26 exposure in Blender).
 * **Lighting:** the car is lit by the surroundings of the track (the sky and the ground are reflected), by three lights and by a bit of ambient light. Save the surroundings in the game (**Esc**, *Surroundings for Blender*) as `openracer-environment.hdr`, and use it as the world (Environment Texture, strength 1). Add the lights: a sun of strength 2.2 from (350, -250, 75), a sun of strength 1.6 from (40, -40, 70) that casts the shadow and one of strength 3.1 from (500, 0, 1000) (positions in Blender axes; these are the lights of the game).
 * **Render engine:** EEVEE, without screen space reflections / ray tracing (the game reflects only the surroundings), without bloom and ambient occlusion; soft shadows; 64 samples. The game has a 35 degree vertical field of view on the fixed camera (a lens of 38 mm on a 24 mm high sensor), and a slight vignette that is left out.
 * **The car itself:** y up, forward along +Z in the game (Blender exports a car that looks towards -Y correctly), the origin where you like (the car editor moves it), the wheels as separate parts with their own names.

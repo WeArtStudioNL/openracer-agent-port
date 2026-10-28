@@ -511,7 +511,8 @@ function applyTrackEnvironment(track) {
     if(!track.model && !track.environment) return;
     var env = OpenRacer.environmentOf(track);
     var texture = env.sky_image ? textureLoader.load(trackFile(env.sky_image)) : null;
-    scene.add(OpenRacer.makeSky(THREE, env, texture));
+    var skyMesh = OpenRacer.makeSky(THREE, env, texture);
+    scene.add(skyMesh);
 
     var sun = OpenRacer.sunVector(env, 1000);
     sunLight.position.set(sun.x, sun.y, sun.z);
@@ -531,4 +532,6 @@ function applyTrackEnvironment(track) {
         scene.fog = null;
         renderer.setClearColor(env.sky_horizon, 1);
     }
+    // the time of day and the weather of the options, laid over this environment (Atmosphere.js)
+    if(OpenRacer.Atmosphere) OpenRacer.Atmosphere.set(env, skyMesh);
 }

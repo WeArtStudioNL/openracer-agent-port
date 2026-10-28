@@ -19,11 +19,12 @@
 
 OpenRacer.Graphics = (function () {
     var PRESETS = {
-        low: { gfxScale: 0.75, gfxAA: 0, gfxShadows: 1, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: false, gfxSmoke: 50, gfxDistance: 500 },
-        medium: { gfxScale: 1, gfxAA: 2, gfxShadows: 2, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 75, gfxDistance: 1000 },
-        high: { gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000 },
-        ultra: { gfxScale: 1, gfxAA: 4, gfxShadows: 3, gfxReflections: 2, gfxAO: 2, gfxGI: 1, gfxVignette: true, gfxSmoke: 100, gfxDistance: 5000 }
+        low: { gfxScale: 0.75, gfxAA: 0, gfxShadows: 1, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: false, gfxSmoke: 50, gfxDistance: 500, gfxAniso: 2, gfxSharpen: 0 },
+        medium: { gfxScale: 1, gfxAA: 2, gfxShadows: 2, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 75, gfxDistance: 1000, gfxAniso: 4, gfxSharpen: 0 },
+        high: { gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000, gfxAniso: 8, gfxSharpen: 1 },
+        ultra: { gfxScale: 1, gfxAA: 4, gfxShadows: 3, gfxReflections: 2, gfxAO: 2, gfxGI: 1, gfxVignette: true, gfxSmoke: 100, gfxDistance: 5000, gfxAniso: 16, gfxSharpen: 2 }
     };
+    var SHARPEN = [0, 0.18, 0.35, 0.55];                  // the strength of the sharpening (gfxSharpen: Off, Low, Medium, High)
     var SHADOW_SIZES = [0, 512, 1024, 2048, 4096];
     var REFLECTION_EVERY = [0, 8, 2];                     // the frames between two updates of the reflections (0: not at all)
 
@@ -269,6 +270,30 @@ OpenRacer.Graphics = (function () {
         }
     }
 
+    // ---- the look: the exposure, the contrast and the saturation, in the linear picture before the tone mapping (the exposure has to be here: the tone mapping None has none of its own)
+    var GradeShader = {
+        uniforms: { tDiffuse: { value: null }, exposure: { value: 1 }, contrast: { value: 1 }, saturation: { value: 1 } },
+        vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+        fragmentShader: "uniform sampler2D tDiffuse; uniform float exposure; uniform float contrast; uniform float saturation; varying vec2 vUv;" +
+            "void main() { vec4 c = texture2D(tDiffuse, vUv); vec3 rgb = c.rgb * exposure;" +
+            "float l = dot(rgb, vec3(0.2126, 0.7152, 0.0722)); rgb = mix(vec3(l), rgb, saturation);" +                       // (the saturation about the grey of the same brightness)
+            "rgb = 0.18 * pow(max(rgb / 0.18, vec3(0.0)), vec3(contrast));" +                                                  // (the contrast about the middle grey)
+            "gl_FragColor = vec4(rgb, c.a); }"
+    };
+    // ---- the last step, on the picture of the screen: a sharpening (the picture minus the blur of its four neighbours, a little of it added back; cheap, and the picture of a
+    // resolution below 100% or of an anti-aliasing is soft) and a fine noise of less than one level of the eight bits, which takes the bands out of the gradients of the sky
+    var SharpenShader = {
+        uniforms: { tDiffuse: { value: null }, texel: { value: new THREE.Vector2(1 / 1920, 1 / 1080) }, strength: { value: 0.3 } },
+        vertexShader: GradeShader.vertexShader,
+        fragmentShader: "uniform sampler2D tDiffuse; uniform vec2 texel; uniform float strength; varying vec2 vUv;" +
+            "float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }" +
+            "void main() { vec3 c = texture2D(tDiffuse, vUv).rgb;" +
+            "vec3 blur = 0.25 * (texture2D(tDiffuse, vUv + vec2(texel.x, 0.0)).rgb + texture2D(tDiffuse, vUv - vec2(texel.x, 0.0)).rgb + texture2D(tDiffuse, vUv + vec2(0.0, texel.y)).rgb + texture2D(tDiffuse, vUv - vec2(0.0, texel.y)).rgb);" +
+            "vec3 sharp = clamp(c + (c - blur) * strength * 2.0, vec3(0.0), vec3(1.0));" +
+            "float n = (hash(gl_FragCoord.xy) - 0.5) / 255.0;" +
+            "gl_FragColor = vec4(sharp + n, 1.0); }"
+    };
+
     function build() {
         var renderer = ctx.renderer, scene = ctx.scene, camera = ctx.camera;
         if (ctx.composer) disposePasses();
@@ -315,10 +340,9 @@ OpenRacer.Graphics = (function () {
         if (passes.gbuffer) { camera.layers.disable(1); passes.smoke = new SmokePass(scene, camera, passes.gbuffer, width, height); composer.addPass(passes.smoke); }
         else camera.layers.enable(1);
 
-        var effectColor = new THREE.ShaderPass(THREE.ColorCorrectionShader);
-        effectColor.uniforms["mulRGB"].value.set(1.2, 1.2, 1.2);
-        effectColor.uniforms["powRGB"].value.set(1.1, 1.1, 1.1);
-        composer.addPass(effectColor);
+        passes.grade = new THREE.ShaderPass(GradeShader);
+        composer.addPass(passes.grade);
+        applyLook();
         if (opt("gfxVignette")) {
             var effectVignette = new THREE.ShaderPass(THREE.VignetteShader);
             effectVignette.uniforms["darkness"].value = 1.2;
@@ -326,6 +350,15 @@ OpenRacer.Graphics = (function () {
         }
         // converts the picture to the colours of the screen
         composer.addPass(new THREE.OutputPass());
+        var sharpen = SHARPEN[opt("gfxSharpen")] || 0;
+        if (sharpen > 0) {
+            var finish = new THREE.ShaderPass(SharpenShader);
+            finish.uniforms["strength"].value = sharpen;
+            finish.uniforms["texel"].value.set(1 / width, 1 / height);
+            finish.setSize = function (w, h) { this.uniforms["texel"].value.set(1 / w, 1 / h); };
+            passes.finish = finish;
+            composer.addPass(finish);
+        }
         ctx.composer = composer;
         ctx.onComposer(composer);
         return composer;
@@ -347,6 +380,30 @@ OpenRacer.Graphics = (function () {
         var every = REFLECTION_EVERY[opt("gfxReflections")];
         ctx.reflections(every);
     }
+    // the tone mapping, the exposure, the contrast and the saturation (the picture is not made again: the numbers go to the pass)
+    function applyLook() {
+        if (typeof applyToneMapping === "function") applyToneMapping(opt("gfxTone"));
+        if (passes.grade) {
+            passes.grade.uniforms["exposure"].value = opt("gfxExposure");
+            passes.grade.uniforms["contrast"].value = opt("gfxContrast");
+            passes.grade.uniforms["saturation"].value = opt("gfxSaturation");
+        }
+    }
+    // the sharpness of the textures at a slant (the road ahead of the car): every texture that is made from now on, and the ones that are there
+    function applyAniso() {
+        var level = Math.min(opt("gfxAniso") || 1, ctx.renderer.capabilities.getMaxAnisotropy());
+        THREE.Texture.DEFAULT_ANISOTROPY = level;
+        var seen = new Set();
+        ctx.scene.traverse(function (o) {
+            if (!o.material) return;
+            (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) {
+                for (var key in m) {
+                    var t = m[key];
+                    if (t && t.isTexture && !seen.has(t)) { seen.add(t); if (t.anisotropy !== level && !t.isCubeTexture && !t.isRenderTargetTexture) { t.anisotropy = level; t.needsUpdate = true; } }
+                }
+            });
+        });
+    }
     function applyDistance() {
         ctx.camera.far = opt("gfxDistance") || 5000;
         ctx.camera.updateProjectionMatrix();
@@ -363,6 +420,7 @@ OpenRacer.Graphics = (function () {
         applyShadows();
         applyReflections();
         applyDistance();
+        applyAniso();
         return build();
     }
 
@@ -384,6 +442,9 @@ OpenRacer.Graphics = (function () {
         else if (name === "gfxDistance") { applyDistance(); if (currentPreset() !== opt("gfxPreset")) Settings.setOption("gfxPreset", currentPreset()); }
         else if (name === "gfxShadows") applyShadows();
         else if (name === "gfxReflections") applyReflections();
+        else if (name === "gfxTone" || name === "gfxExposure" || name === "gfxContrast" || name === "gfxSaturation") applyLook();
+        else if (name === "gfxAniso") { applyAniso(); if (currentPreset() !== opt("gfxPreset")) Settings.setOption("gfxPreset", currentPreset()); }
+        else if (name === "gfxTime" || name === "gfxWeather") { if (OpenRacer.Atmosphere) OpenRacer.Atmosphere.apply(); }
         else build();       // the anti-aliasing, the screen space effects, the vignette
     }
 
@@ -395,7 +456,7 @@ OpenRacer.Graphics = (function () {
         for (var k in p) Settings.setOption(k, p[k]);
         Settings.setOption("gfxPreset", name);
         applying = false;
-        applyScale(); applyShadows(); applyReflections(); applyDistance(); build();
+        applyScale(); applyShadows(); applyReflections(); applyDistance(); applyAniso(); build();
     }
 
     function setSize(width, height) {

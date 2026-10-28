@@ -103,14 +103,16 @@ var Settings = (function() {
     var actionsById = {};
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
-    var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, autoReverse: true, autoReversePedals: true, autoReverseSpeed: 3, dragReady: 2, dragGreen: 1.5, abs: true, sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, toneMapping: "none", hud: true, units: "metric", debug: false, esc: true, camera: 2, volume: 0.8,
+    var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, autoReverse: true, autoReversePedals: true, autoReverseSpeed: 3, dragReady: 2, dragGreen: 1.5, abs: true, sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, hud: true, units: "metric", debug: false, esc: true, camera: 2, volume: 0.8,
         padSlow: 1.5, padAssist: true, keySteer: 1, keySlow: 1, keyAssist: true,
         // a motorcycle: the steering ("counter": countersteering to start a lean and the lean; "lean": the lean only) and the follow camera ("lean": it rolls with the bike; "classic": as a car)
         bikeSteering: "lean", bikeCamera: "lean", wheelieControl: true, bikeFastLean: 30,
         // the easing of the keys: the time that a key takes to bring the pedal or the wheels to the full value (s), and the curve of it (1 straight, below 1 quick at first, above 1 slow at first)
         keyThrottleTime: 0.5, keyThrottleCurve: 0.6, keyBrakeTime: 0.4, keyBrakeCurve: 0.6, keySteerTime: 0.9, keySteerCurve: 1,
         // the graphics (Graphics.js): a preset is a set of these
-        gfxPreset: "high", gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000 };
+        gfxPreset: "high", gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000, gfxAniso: 8, gfxSharpen: 1,
+        // the look and the atmosphere (Graphics.js, Atmosphere.js): the tone mapping, the exposure, the contrast and the saturation; the hour (-1: as the track) and the weather
+        gfxTone: "neutral", gfxExposure: 0.9, gfxContrast: 1.05, gfxSaturation: 1, gfxTime: -1, gfxWeather: "clear" };
 
     var bindings = {};      // action id -> list of inputs
     var options = {};
@@ -135,7 +137,7 @@ var Settings = (function() {
         options = clone(DEFAULT_OPTIONS);
         // a phone or a tablet starts with the low graphics (the first time; what is chosen is kept)
         var touchy = typeof OpenRacer !== "undefined" && OpenRacer.touchDevice ? OpenRacer.touchDevice() : false;
-        if(touchy) Object.assign(options, { gfxPreset: "low", gfxScale: 0.75, gfxAA: 0, gfxShadows: 1, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: false, gfxSmoke: 50, gfxDistance: 500 });
+        if(touchy) Object.assign(options, { gfxPreset: "low", gfxScale: 0.75, gfxAA: 0, gfxShadows: 1, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: false, gfxSmoke: 50, gfxDistance: 500, gfxAniso: 2, gfxSharpen: 0 });
     }
 
     function load() {
@@ -989,8 +991,14 @@ var Settings = (function() {
             var presetChoices = ["low", "medium", "high", "ultra"].map(function(k) { return [k, presetNames[k]]; });
             if(G.currentPreset() === "custom") presetChoices.push(["custom", "Custom"]);
             page.appendChild(pickRow("Preset", G.currentPreset(), presetChoices, function(name) { if(name !== "custom") G.applyPreset(name); }));
+            var section = function(title) { var h = document.createElement("h2"); h.textContent = title; page.appendChild(h); };
+            section("Picture");
             page.appendChild(pickRow("Resolution", options.gfxScale, [0.5, 0.75, 1, 1.25, 1.5].map(function(v) { return [v, Math.round(v * 100) + "% of the screen"]; }), gfxPick("gfxScale")));
             page.appendChild(pickRow("Anti-aliasing", options.gfxAA, [0, 2, 4, 8].map(function(v) { return [v, v ? v + "\u00d7 MSAA" : "Off"]; }), gfxPick("gfxAA")));
+            page.appendChild(pickRow("Texture sharpness at a slant (anisotropic)", options.gfxAniso, [1, 2, 4, 8, 16].map(function(v) { return [v, v === 1 ? "Off" : v + "\u00d7"]; }), gfxPick("gfxAniso")));
+            page.appendChild(pickRow("Sharpening", options.gfxSharpen, [[0, "Off"], [1, "Low"], [2, "Medium"], [3, "High"]], gfxPick("gfxSharpen")));
+            page.appendChild(pickRow("Draw distance", options.gfxDistance, [500, 1000, 2000, 5000].map(function(v) { return [v, v + " m"]; }), gfxPick("gfxDistance")));
+            section("Light and shadow");
             var shadowNames = ["Off", "Low", "Medium", "High", "Ultra"];
             page.appendChild(pickRow("Shadows", options.gfxShadows, [0, 1, 2, 3, 4].map(function(v) { return [v, shadowNames[v] + (v ? " (" + G.SHADOW_SIZES[v] + ")" : "")]; }), gfxPick("gfxShadows")));
             var reflectionNames = ["Off (still)", "Low (slow)", "High"];
@@ -998,9 +1006,25 @@ var Settings = (function() {
             var effectNames = ["Off", "Low", "High"];
             page.appendChild(pickRow("Ambient occlusion (SSAO)", options.gfxAO, [0, 1, 2].map(function(v) { return [v, effectNames[v]]; }), gfxPick("gfxAO")));
             page.appendChild(pickRow("Global illumination (SSGI)", options.gfxGI, [0, 1, 2].map(function(v) { return [v, effectNames[v]]; }), gfxPick("gfxGI")));
+            section("Look");
+            var toneNames = { none: "Off (clips the bright parts)", neutral: "Neutral (true colours)", agx: "AgX (soft, a little flat)", aces: "ACES (film, strong contrast)" };
+            page.appendChild(pickRow("Tone mapping", options.gfxTone, ["neutral", "agx", "aces", "none"].map(function(k) { return [k, toneNames[k]]; }), function(v) { setOption("gfxTone", v); }));
+            page.appendChild(sliderRow("Exposure (the brightness of the picture)", "gfxExposure", 0.4, 1.6, 0.05, function(v) { return v.toFixed(2); }));
+            page.appendChild(sliderRow("Contrast", "gfxContrast", 0.7, 1.4, 0.05, function(v) { return v.toFixed(2); }));
+            page.appendChild(sliderRow("Saturation", "gfxSaturation", 0, 1.6, 0.05, function(v) { return v.toFixed(2); }));
             page.appendChild(pickRow("Vignette", !!options.gfxVignette, [[false, "Off"], [true, "On"]], gfxPick("gfxVignette")));
+            section("Atmosphere");
+            var timeNames = [[-1, "As the track"], [5.25, "Dawn"], [8, "Morning"], [12, "Noon"], [15, "Afternoon"], [17.5, "Evening"], [19, "Sunset"], [20.25, "Dusk"], [23.5, "Night"]];
+            page.appendChild(pickRow("Time of day", options.gfxTime, timeNames, function(v) { setOption("gfxTime", v); }));
+            page.appendChild(sliderRow("Hour (fine; drag to set)", "gfxTime", 0, 24, 0.25, function(v) { if(v < 0) return "as the track"; var h = Math.floor(v), m = Math.round((v - h) * 60); return h + ":" + (m < 10 ? "0" : "") + m; }));
+            var weatherNames = { clear: "Clear", cloudy: "Cloudy", fog: "Fog", rain: "Rain" };
+            page.appendChild(pickRow("Weather (how it looks: the grip does not change)", options.gfxWeather, ["clear", "cloudy", "fog", "rain"].map(function(k) { return [k, weatherNames[k]]; }), function(v) { setOption("gfxWeather", v); }));
+            var atmoNote = document.createElement("div");
+            atmoNote.className = "sub";
+            atmoNote.textContent = "Time of day and weather work on tracks with an environment of their own (track.json, the track editor). There are no headlights yet: the night is dark.";
+            page.appendChild(atmoNote);
+            section("Effects");
             page.appendChild(sliderRow("Smoke", "gfxSmoke", 0, 200, 10, function(v) { return v + "%"; }));
-            page.appendChild(pickRow("Draw distance", options.gfxDistance, [500, 1000, 2000, 5000].map(function(v) { return [v, v + " m"]; }), gfxPick("gfxDistance")));
         }
         page = tabPage("Tools");
         page.appendChild(optionRow("Debug text", options.debug ? "On" : "Off", function() { setOption("debug", !options.debug); }));
@@ -1028,11 +1052,7 @@ var Settings = (function() {
         page.appendChild(optionRow("Surroundings for Blender", "Save as HDR", function() {
             if(typeof EnvironmentExport !== "undefined" && window.car) EnvironmentExport.download();
         }));
-        var toneNames = { none: "Off", neutral: "Neutral", agx: "AgX", aces: "ACES" };
-        var toneOrder = ["none", "neutral", "agx", "aces"];
         page = tabPage("Display and sound");
-        page.appendChild(optionRow("Tone mapping", toneNames[options.toneMapping] || "Off",
-            function() { setOption("toneMapping", toneOrder[(toneOrder.indexOf(options.toneMapping) + 1) % toneOrder.length]); }));
         page.appendChild(optionRow("Engine volume", Math.round(options.volume * 100) + "%", function() {
             var steps = [0.2, 0.4, 0.6, 0.8, 1, 1.3];
             var next = steps.find(function(v) { return v > options.volume + 0.01; });
