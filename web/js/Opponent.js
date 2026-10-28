@@ -92,7 +92,7 @@ OpenRacer.Opponent = function (config, line, options) {
     var learnCap = 1.1 + 0.5 * Math.max(0, Math.min(1, (self.skill - 0.7) / 0.3));
     this.learnFactor = function () { return learn; };
     var learnSavedLap = 0;
-    function learnKey() { return "openracer.ai." + (typeof currentTrack !== "undefined" && currentTrack && currentTrack.id || "track") + "." + (config.id || "car") + "." + self.name; }
+    function learnKey() { return "openracer.ai." + (typeof currentTrack !== "undefined" && currentTrack && currentTrack.id || "track") + "." + (config.id || "car") + "." + self.name + "." + (line && line.points.length ? Math.round(line.points[0].x) + "," + Math.round(line.points[0].z) + "," + line.points.length : ""); }
     function learnEnd(seg, off, crashed) {
         if (!learn) return;
         var k = ((seg % learn.length) + learn.length) % learn.length;
