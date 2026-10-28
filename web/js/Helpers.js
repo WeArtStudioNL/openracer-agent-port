@@ -115,14 +115,17 @@ function setGroundCondition(wet, snow) {
     groundWet = Math.max(0, Math.min(1, wet)); groundSnow = Math.max(0, Math.min(1, snow));
     surfaceCache = {};
 }
-function getSurface(name) {
+// snow: how much snow lies at the wheel (0 to 1; where the snow was scraped or melted away the grip is back); left out, it is the snow of the whole ground
+function getSurface(name, snow) {
     var key = uCoeff[name] ? name : "track01";
-    if(groundWet < 0.005 && groundSnow < 0.005) return uCoeff[key];
-    var cached = surfaceCache[key];
+    var level = snow === undefined ? groundSnow : snow;
+    if(groundWet < 0.005 && level < 0.005) return uCoeff[key];
+    var step = Math.max(0, Math.min(20, Math.round(level * 20))), cacheKey = key + step;
+    var cached = surfaceCache[cacheKey];
     if(cached) return cached;
-    var base = uCoeff[key], factor = (1 - (WET_LOSS[key] || 0) * groundWet) * (1 - (SNOW_LOSS[key] || 0) * groundSnow);
+    var base = uCoeff[key], factor = (1 - (WET_LOSS[key] || 0) * groundWet) * (1 - (SNOW_LOSS[key] || 0) * step / 20);
     cached = Object.assign({}, base, { static: base.static * factor, kinetic: base.kinetic * factor });
-    surfaceCache[key] = cached;
+    surfaceCache[cacheKey] = cached;
     return cached;
 }
 

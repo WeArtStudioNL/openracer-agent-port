@@ -72,7 +72,7 @@ OpenRacer.Debris = function (scene, capacity) {
         gravel: shades([[0.8, 0.7, 0.54], [0.7, 0.6, 0.45], [0.86, 0.78, 0.62], [0.6, 0.52, 0.4], [0.66, 0.64, 0.6]]),
         mud: shades([[0.28, 0.2, 0.13], [0.2, 0.14, 0.09], [0.36, 0.26, 0.16]]),
         ground: shades([[0.55, 0.43, 0.3], [0.46, 0.36, 0.24], [0.62, 0.5, 0.36]]),
-        snow: shades([[0.95, 0.97, 1.0], [0.86, 0.9, 0.97], [1.0, 1.0, 1.0]])
+        snow: shades([[1.0, 1.0, 1.0], [0.92, 0.95, 1.0], [1.0, 1.0, 1.0]]).map(function (c) { return [c[0] * 2.2, c[1] * 2.2, c[2] * 2.2]; })       // (bright: lighter than the snow, which is itself lit)
     };
     // what each kind looks like: the shape, the size (m: the length of a blade, the width of the rest), the number made compared with the rest, how far they fly
     var LOOK = {
@@ -82,7 +82,7 @@ OpenRacer.Debris = function (scene, capacity) {
         gravel: { shape: 0, size: [0.012, 0.03], rate: 2, fly: 0.9 },
         mud: { shape: 2, size: [0.03, 0.07], rate: 0.9, fly: 0.7 },
         ground: { shape: 2, size: [0.02, 0.045], rate: 1.2, fly: 0.9 },
-        snow: { shape: 2, size: [0.02, 0.05], rate: 1.5, fly: 0.9 }
+        snow: { shape: 2, size: [0.01, 0.026], rate: 1.1, fly: 0.9 }
     };
 
     function spawn(x, y, z, vx, vy, vz, kind) {

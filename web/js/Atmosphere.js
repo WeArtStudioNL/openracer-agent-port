@@ -19,6 +19,7 @@
  *              OpenRacer.Atmosphere.apply()       after an option changed
  *              OpenRacer.Atmosphere.update(dt)    every frame: the ground changes with the weather
  *              OpenRacer.Atmosphere.info()        { wet, snow, grip, weather, hour } for the debug text
+ *              OpenRacer.Atmosphere.snowAt(x, z)  the snow at a place, after what the cars took away (0 to 1)
  * Author:      Glenn Hofman
  * Date:        2026-10-28
  * License:     MIT
@@ -26,7 +27,54 @@
 
 OpenRacer.Atmosphere = (function () {
     var base = null, sky = null, rain = null, snowfall = null, fog = null, fogWas = null, attached = false, lastWeather = null;
-    var ground = { wet: 0, snow: 0, lastGrip: -1, uniforms: { uWet: { value: 0 }, uSnow: { value: 0 } } };
+    var ground = { wet: 0, snow: 0, lastGrip: -1, uniforms: { uWet: { value: 0 }, uSnow: { value: 0 }, uClear: { value: null }, uClearCentre: { value: new THREE.Vector2() }, uClearSize: { value: 128 } } };
+
+    // ---- where the snow has been scraped or melted away: a map of 512 by 512 cells of 25 cm (128 m round the car, wrapping round: a cell that the window leaves is made snowy again). A
+    // cell has a number from 0 (snow) to 1 (bare): a tyre that slides scrapes it hard, a tyre that rolls takes a little, and the car itself, with the heat of the engine and the
+    // exhaust under it, melts the snow it is over (more the longer it stays there, and every time that it comes by). The map goes to the shader (the white of the snow) and the grip at the
+    // wheel (wheel.localSnow). While it snows the bare cells fill up again, slowly.
+    var CLEAR_N = 512, CLEAR_CELL = 0.25, CLEAR_SIZE = CLEAR_N * CLEAR_CELL;
+    var clearData = new Uint8Array(CLEAR_N * CLEAR_N), clearCells = { x: 0, z: 0, set: false }, clearDirty = false, clearUploaded = 0, clearTexture = null, clearDecay = 0;
+    function clearAt(x, z) {
+        var i = Math.floor(x / CLEAR_CELL), j = Math.floor(z / CLEAR_CELL);
+        if (Math.abs(i - clearCells.x) > CLEAR_N * 0.46 || Math.abs(j - clearCells.z) > CLEAR_N * 0.46) return 0;
+        return clearData[(((j % CLEAR_N) + CLEAR_N) % CLEAR_N) * CLEAR_N + (((i % CLEAR_N) + CLEAR_N) % CLEAR_N)] / 255;
+    }
+    // the window follows the car: the columns and rows that come into it are made snowy again
+    function moveClearWindow(x, z) {
+        var ci = Math.floor(x / CLEAR_CELL), cj = Math.floor(z / CLEAR_CELL), half = CLEAR_N / 2;
+        if (!clearCells.set || Math.abs(ci - clearCells.x) >= CLEAR_N || Math.abs(cj - clearCells.z) >= CLEAR_N) { clearData.fill(0); clearCells.x = ci; clearCells.z = cj; clearCells.set = true; clearDirty = true; return; }
+        var di = ci - clearCells.x, dj = cj - clearCells.z;
+        for (var a = 1; a <= Math.abs(di); a++) { var col = (((di > 0 ? clearCells.x + half + a : clearCells.x - half - a + 1) % CLEAR_N) + CLEAR_N) % CLEAR_N; for (var r = 0; r < CLEAR_N; r++) clearData[r * CLEAR_N + col] = 0; }
+        for (var b = 1; b <= Math.abs(dj); b++) { var row = (((dj > 0 ? clearCells.z + half + b : clearCells.z - half - b + 1) % CLEAR_N) + CLEAR_N) % CLEAR_N; for (var c = 0; c < CLEAR_N; c++) clearData[row * CLEAR_N + c] = 0; }
+        if (di || dj) { clearCells.x = ci; clearCells.z = cj; clearDirty = true; }
+    }
+    // a disc of a radius (m) round a place: every cell in it gets more bare, most at the middle
+    function paintClear(x, z, radius, amount) {
+        if (amount <= 0) return;
+        var i0 = Math.floor((x - radius) / CLEAR_CELL), i1 = Math.floor((x + radius) / CLEAR_CELL), j0 = Math.floor((z - radius) / CLEAR_CELL), j1 = Math.floor((z + radius) / CLEAR_CELL);
+        for (var j = j0; j <= j1; j++) for (var i = i0; i <= i1; i++) {
+            var dx = (i + 0.5) * CLEAR_CELL - x, dz = (j + 0.5) * CLEAR_CELL - z, d2 = (dx * dx + dz * dz) / (radius * radius);
+            if (d2 > 1) continue;
+            var index = (((j % CLEAR_N) + CLEAR_N) % CLEAR_N) * CLEAR_N + (((i % CLEAR_N) + CLEAR_N) % CLEAR_N);
+            var value = clearData[index] + amount * (1.3 - d2) * 255;
+            clearData[index] = value > 255 ? 255 : value;
+        }
+        clearDirty = true;
+    }
+    function uploadClear() {
+        if (!clearTexture) {
+            clearTexture = new THREE.DataTexture(clearData, CLEAR_N, CLEAR_N, THREE.RedFormat, THREE.UnsignedByteType);
+            clearTexture.minFilter = clearTexture.magFilter = THREE.LinearFilter;
+            clearTexture.wrapS = clearTexture.wrapT = THREE.RepeatWrapping;
+            clearTexture.generateMipmaps = false;
+            ground.uniforms.uClear.value = clearTexture;
+        }
+        ground.uniforms.uClearCentre.value.set(clearCells.x * CLEAR_CELL, clearCells.z * CLEAR_CELL);
+        ground.uniforms.uClearSize.value = CLEAR_SIZE;
+        clearTexture.needsUpdate = true;
+        clearDirty = false;
+    }
 
     function smooth(a, b, x) { var t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
     function colour(hex) { return new THREE.Color(hex); }
@@ -116,19 +164,21 @@ OpenRacer.Atmosphere = (function () {
         m.onBeforeCompile = function (shader, renderer) {
             if (previous) previous.call(m, shader, renderer);
             shader.uniforms.uWet = ground.uniforms.uWet; shader.uniforms.uSnow = ground.uniforms.uSnow;
+            shader.uniforms.uClear = ground.uniforms.uClear; shader.uniforms.uClearCentre = ground.uniforms.uClearCentre; shader.uniforms.uClearSize = ground.uniforms.uClearSize;
             shader.vertexShader = shader.vertexShader
                 .replace("#include <common>", "#include <common>\nvarying vec3 vGroundNormal; varying vec3 vGroundPos;")
                 .replace("#include <begin_vertex>", "#include <begin_vertex>\nvGroundNormal = normalize(mat3(modelMatrix) * objectNormal); vGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;");
             shader.fragmentShader = shader.fragmentShader
-                .replace("#include <common>", "#include <common>\nuniform float uWet; uniform float uSnow; varying vec3 vGroundNormal; varying vec3 vGroundPos;\n" +
+                .replace("#include <common>", "#include <common>\nuniform float uWet; uniform float uSnow; uniform sampler2D uClear; uniform vec2 uClearCentre; uniform float uClearSize; varying vec3 vGroundNormal; varying vec3 vGroundPos;\n" +
                     "float gHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\n" +
                     "float gNoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(gHash(i), gHash(i + vec2(1.0, 0.0)), f.x), mix(gHash(i + vec2(0.0, 1.0)), gHash(i + vec2(1.0, 1.0)), f.x), f.y); }")
                 .replace("#include <color_fragment>", "#include <color_fragment>\n" +
                     "float gUp = clamp(normalize(vGroundNormal).y, 0.0, 1.0);\n" +
                     "float gFlat = smoothstep(0.45, 0.85, gUp);\n" +
-                    "float gSnow = 0.0;\n" +
-                    "if (uSnow > 0.003) { float gn = 0.55 * gNoise(vGroundPos.xz * 0.6) + 0.3 * gNoise(vGroundPos.xz * 2.7) + 0.15 * gNoise(vGroundPos.xz * 11.0); gSnow = smoothstep(0.0, 0.35, uSnow * 1.25 - gn * 0.55) * gFlat; }\n" +
-                    "float gWet = uWet * smoothstep(0.35, 0.8, gUp) * (1.0 - gSnow);\n" +
+                    "float gSnow = 0.0; float gClear = 0.0;\n" +
+                    "if (uSnow > 0.003) { vec2 gd = abs(vGroundPos.xz - uClearCentre); float gIn = 1.0 - smoothstep(0.36 * uClearSize, 0.46 * uClearSize, max(gd.x, gd.y)); gClear = texture2D(uClear, vGroundPos.xz / uClearSize).r * gIn;\n" +
+                    "  float gn = 0.55 * gNoise(vGroundPos.xz * 0.6) + 0.3 * gNoise(vGroundPos.xz * 2.7) + 0.15 * gNoise(vGroundPos.xz * 11.0); gSnow = smoothstep(0.0, 0.35, uSnow * (1.0 - gClear) * 1.25 - gn * 0.55) * gFlat; }\n" +
+                    "float gWet = clamp(uWet + uSnow * gClear * 0.8, 0.0, 1.0) * smoothstep(0.35, 0.8, gUp) * (1.0 - gSnow);\n" +
                     "diffuseColor.rgb *= mix(1.0, 0.58, gWet);\n" +
                     "diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.8, 0.84, 0.9) * (0.9 + 0.2 * gNoise(vGroundPos.xz * 30.0)), gSnow * 0.93);")
                 .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.16, gWet); roughnessFactor = mix(roughnessFactor, 0.88, gSnow);");
@@ -162,9 +212,9 @@ OpenRacer.Atmosphere = (function () {
             "p.y = cam.y - 8.0 + mod(p.y - fall, 28.0);" +
             "p.x = cam.x + mod(p.x - cam.x + 20.0, 40.0) - 20.0; p.z = cam.z + mod(p.z - cam.z + 20.0, 40.0) - 20.0;" +
             (rainy ? "p.y += tail * 0.9; p.x += tail * 0.08; vFade = 1.0 - tail * 0.7; gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0); }"
-                   : "p.x += sin(time * 0.7 + position.z) * 0.6 * speed; p.z += cos(time * 0.6 + position.x) * 0.5 * speed; vFade = 0.55 + 0.45 * tail; vec4 mv = viewMatrix * vec4(p, 1.0); gl_PointSize = (2.2 + 2.0 * tail) * 300.0 / max(1.0, -mv.z); gl_Position = projectionMatrix * mv; }");
+                   : "p.x += sin(time * 0.7 + position.z) * 0.6 * speed; p.z += cos(time * 0.6 + position.x) * 0.5 * speed; vFade = 0.6 + 0.4 * tail; vec4 mv = viewMatrix * vec4(p, 1.0); gl_PointSize = clamp((0.012 + 0.016 * tail) * 600.0 / max(0.6, -mv.z), 1.4, 9.0); gl_Position = projectionMatrix * mv; }");
         var fragment = rainy ? "uniform vec3 colour; varying float vFade; void main() { gl_FragColor = vec4(colour, 0.5 * vFade); }"
-            : "uniform vec3 colour; varying float vFade; void main() { vec2 c = gl_PointCoord - 0.5; float a = smoothstep(0.5, 0.15, length(c)); gl_FragColor = vec4(colour, 0.85 * a * vFade); }";
+            : "uniform vec3 colour; varying float vFade; void main() { vec2 c = gl_PointCoord - 0.5; float a = smoothstep(0.5, 0.15, length(c)); gl_FragColor = vec4(colour * 2.6, 0.95 * a * vFade); }";
         var material = new THREE.ShaderMaterial({
             uniforms: { cam: { value: new THREE.Vector3() }, time: { value: 0 }, colour: { value: new THREE.Color(rainy ? "#c9d3de" : "#ffffff") } },
             vertexShader: vertex, fragmentShader: fragment, transparent: true, depthWrite: false, fog: false
@@ -293,9 +343,10 @@ OpenRacer.Atmosphere = (function () {
         if (force || Math.abs(grip - ground.lastGrip) > 0.004) { ground.lastGrip = grip; if (typeof setGroundCondition === "function") setGroundCondition(ground.wet, ground.snow); }
     }
     // every frame: rain wets the road in about 40 s and it dries in about 3 minutes; snow covers the ground in about 2.5 minutes and melts in about 7 (rain melts it in 2)
-    function update(delta) {
+    function update(delta, vehicles) {
         if (!attached) return;
         delta = Math.min(delta || 0, 0.25);
+        snowWork(delta, vehicles);
         if (opt("gfxGround") !== "auto") { groundOverride(); return; }
         var kind = opt("gfxWeather"), snowing = kind === "snow", raining = kind === "rain";
         if (raining) { ground.wet = Math.min(1, ground.wet + delta / 40); ground.snow = Math.max(0, ground.snow - delta / 120); }
@@ -306,6 +357,48 @@ OpenRacer.Atmosphere = (function () {
         }
         if (snowing) ground.wet = Math.max(0, ground.wet - delta / 20);
         pushGround(false);
+    }
+
+    // The snow that the cars take away, and the snow at the wheel: a tyre that slips scrapes it, a tyre that rolls packs a little away, and the heat under the car melts it. The wheel
+    // gets the snow that is left at its place (wheel.localSnow): bare ground has its grip back.
+    var qCar = new THREE.Quaternion(), vFwd = new THREE.Vector3();
+    function snowWork(delta, vehicles) {
+        if (!vehicles || !vehicles.length) return;
+        var snow = ground.snow, lead = vehicles[0];
+        if (lead && isFinite(lead.px)) moveClearWindow(lead.px, lead.pz);
+        for (var v = 0; v < vehicles.length; v++) {
+            var vehicle = vehicles[v];
+            if (!vehicle || !vehicle.wheels) continue;
+            if (snow > 0.03 && v < 8) {
+                // the heat of the engine and the exhaust under the car: discs along its length, melting for as long as the car is there
+                qCar.set(vehicle.qx, vehicle.qy, vehicle.qz, vehicle.qw);
+                vFwd.set(0, 0, 1).applyQuaternion(qCar); vFwd.y = 0;
+                if (vFwd.lengthSq() > 1e-6) {
+                    vFwd.normalize();
+                    var length = vehicle.length || 4, width = Math.max(0.8, (vehicle.front_track || 1.4) * 0.85), steps = Math.max(2, Math.round(length / 0.7));
+                    for (var k = 0; k < steps; k++) {
+                        var along = (k / (steps - 1) - 0.5) * length * 0.9;
+                        paintClear(vehicle.px + vFwd.x * along, vehicle.pz + vFwd.z * along, width * 0.5, 0.55 * delta);
+                    }
+                }
+            }
+            for (var w = 0; w < vehicle.wheels.length; w++) {
+                var wheel = vehicle.wheels[w], c = wheel.hasContact && wheel.contact ? wheel.contact : null;
+                if (!c) { wheel.localSnow = snow; continue; }
+                if (snow > 0.03) {
+                    var slip = Math.hypot((wheel.forwardSpeed || 0) - (wheel.omega || 0) * (wheel.radius || 0.3), (wheel.slipTan || 0) * Math.max(Math.abs(wheel.forwardSpeed || 0), 1.5));
+                    var scrape = Math.max(0, Math.min(1, (slip - 1) / 5));
+                    paintClear(c.x, c.z, 0.16, (1.2 + 7 * scrape) * delta);                // (a tyre that rolls takes a little, one that slides takes it away)
+                }
+                wheel.localSnow = snow * (1 - clearAt(c.x, c.z));
+            }
+        }
+        // while it snows the bare cells fill up again, in about a minute and a half
+        if (ground.uniforms.uSnow.value > 0 && opt("gfxWeather") === "snow") {
+            clearDecay += delta;
+            if (clearDecay > 0.5) { var step = Math.max(1, Math.round(255 * clearDecay / 90)); for (var i = 0; i < clearData.length; i++) if (clearData[i]) clearData[i] = clearData[i] > step ? clearData[i] - step : 0; clearDecay = 0; clearDirty = true; }
+        }
+        if (clearDirty) { clearUploaded += delta; if (clearUploaded > 0.05 || !clearTexture) { uploadClear(); clearUploaded = 0; } }
     }
 
     function attach(env) {
@@ -321,5 +414,8 @@ OpenRacer.Atmosphere = (function () {
 
     function info() { return { wet: ground.wet, snow: ground.snow, grip: ground.lastGrip < 0 ? 1 : ground.lastGrip, weather: opt("gfxWeather"), hour: hourNow() }; }
 
-    return { attach: attach, apply: apply, update: update, info: info, WEATHER: WEATHER };
+    // the snow that lies at a place (0 to 1), with what the cars took away
+    function snowAt(x, z) { return ground.snow * (1 - clearAt(x, z)); }
+
+    return { attach: attach, apply: apply, update: update, info: info, snowAt: snowAt, WEATHER: WEATHER };
 })();
