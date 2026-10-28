@@ -15,6 +15,7 @@ var carConfig;
 Settings.onOptionChange(function(name, value) {
     if(name === "sound") EngineSound.setMuted(!value);
     else if(name === "volume") EngineSound.setVolume(value);
+    else if(name.indexOf("mirror") === 0 && typeof car !== "undefined" && car && car.mirrors && OpenRacer.Mirrors) OpenRacer.Mirrors.aim(car.mirrors);
     else if(name.indexOf("gfx") === 0 && OpenRacer.Graphics) OpenRacer.Graphics.changed(name);
 });
 EngineSound.setMuted(!Settings.option("sound"));

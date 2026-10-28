@@ -194,6 +194,9 @@ OpenRacer.Car = function( config, domElement ) {
         for(var si = 0; si < tobj.vehicle.wheels.length; si++) { var vw = tobj.vehicle.wheels[si]; vw.tyreSpec = specs[vw.name] || (vw.name === "FR" && specs.FL) || (vw.name === "RR" && specs.RL) || null; }
         tobj.body.add(model.tilt);
         scene.add(tobj.body);
+        // the glass of the mirrors that can be aimed (Mirrors.js; the Car page of the settings menu)
+        tobj.mirrors = OpenRacer.Mirrors ? OpenRacer.Mirrors.find(model.tilt) : [];
+        if(OpenRacer.Mirrors) OpenRacer.Mirrors.aim(tobj.mirrors);
         shadowLight.target = tobj.body;
         tobj.bodyLoaded = true;
         for(var i = 0; i < tobj.wheels.length; i++) {

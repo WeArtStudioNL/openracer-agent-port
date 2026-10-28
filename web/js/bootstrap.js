@@ -80,6 +80,7 @@ var scripts = [
     "js/Ground.js",
     "js/Smoke.js",
     "js/Debris.js",
+    "js/Mirrors.js",
     "js/SkidMarks.js",
     "js/Marbles.js",
     "js/Flames.js",
