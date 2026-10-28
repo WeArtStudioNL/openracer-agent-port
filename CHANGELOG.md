@@ -369,6 +369,8 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 **Panels**
 - The tuning menu, the free camera panel, the replay bar and its speed box, and the exhaust window of the car editor can be moved (drag a part that is not a control) and scaled (the bottom right corner); where they are is kept in the browser.
+- **The AI uses the grip of its car and its gearbox.** The speed of the racing line came from a fixed 1.05 g and 0.9 g braking (a kart on semislicks holds 1.2 g, and the player was seen at 1.27 g while hard AI cars stayed under 0.9 g); it is the `tyres.grip` of the car now (hard: 1.1 times that). The AI vehicle was built without the gearbox of car.json (`gearbox`, `cvt_*`, `tc_*`), so a kart with a CVT drove in a fixed ratio; it has them now. The bend radius of the racing line is taken over 8 m instead of 4 m, so a kink in a hand-drawn line is no reason to crawl.
+- **Tyres of a small car warm up.** The heat capacity and the cooling of a tyre (those of a car tyre: 20 kJ/K, 40 W/K) go with the cube of its radius, so a kart tyre (it stayed at 55 degrees and cooled down on every lap) is at 80 degrees after two minutes of hard driving.
 
 ### Physics, tyres and engine
 

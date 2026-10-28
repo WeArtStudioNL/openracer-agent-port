@@ -345,8 +345,11 @@ OpenRacer.Vehicle = function (parameters, input) {
         // the power of the slip (tens of kW in a bend at the limit) and the flexing under the load heat the tyre; the air cools
         // it (W/K, more the faster); the tread has a heat capacity of about 20 kJ/K, so it takes a minute or two to come up
         var heatIn = (slidePower + (contact ? fz * Math.abs(v) * 0.025 : 0)) * this.tyreHeating * tc.heating * (w.pressureRoll || 1);
-        var cooling = (40 + 3 * Math.abs(v)) * (w.temp - this.ambient);
-        w.temp += (heatIn - cooling) / 20000 * dt;
+        // (the numbers are those of a car tyre, a radius of 0.315 m: a smaller tyre has less rubber to heat and less surface to cool by about the cube of its radius, which is
+        // also how its load goes, so a kart tyre comes up to temperature on a lap like a car tyre does, instead of staying cold)
+        var size = Math.max(0.04, Math.min(2, Math.pow((w.radius || 0.315) / 0.315, 3)));
+        var cooling = (40 + 3 * Math.abs(v)) * size * (w.temp - this.ambient);
+        w.temp += (heatIn - cooling) / (20000 * size) * dt;
         var overheated = Math.min(2, Math.max(0, (w.temp - (tc.optimum + tc.window)) / 30));
         // a powerful car spins its wheels a lot: the slip when driving off counts less than a slide through a bend
         var counted = Math.abs(v) < 8 ? slidePower * 0.35 : slidePower;

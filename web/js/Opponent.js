@@ -31,6 +31,8 @@ OpenRacer.vehicleParams = function (config, getSurface) {
         gear_ratios: drivetrain.gear_ratios.slice(), reverse_ratio: drivetrain.reverse_ratio, final_drive: drivetrain.final_drive, efficiency: drivetrain.efficiency,
         shift_time: drivetrain.shift_time,
         clutch_start_rpm: drivetrain.clutch_start_rpm, clutch_full_rpm: drivetrain.clutch_full_rpm,
+        gearbox: drivetrain.gearbox, cvt_rpm: drivetrain.cvt_rpm, cvt_rate: drivetrain.cvt_rate, cvt_low: drivetrain.cvt_low, cvt_high: drivetrain.cvt_high,
+        tc_stall_rpm: drivetrain.tc_stall_rpm, tc_ratio: drivetrain.tc_ratio, tc_lockup: drivetrain.tc_lockup,
         drive: drivetrain.drive, diff: drivetrain.diff, diff_preload: drivetrain.diff_preload, diff_lock: drivetrain.diff_lock, diff_power: drivetrain.diff_power,
         diff_coast: drivetrain.diff_coast, center_diff: drivetrain.center_diff, center_split: drivetrain.center_split,
         engine: config.engine, brake_front: config.brakes && config.brakes.front, brake_rear: config.brakes && config.brakes.rear,
@@ -84,11 +86,12 @@ OpenRacer.Opponent = function (config, line, options) {
     // the speed of the line for this driver: the grip of the road times the skill, less on sand or grass (the surfaces of the track, Helpers.getSurface), and no flying off the crests
     // (the grip of the road as it is now: in the rain or on snow the line is driven slower; the speeds are made again when the grip has changed)
     var speeds = null, speedsGrip = -1;
+    var carGrip = Math.max(0.8, Math.min(2, (config && config.tyres && config.tyres.grip) || 1.2));    // (the grip of the tyres of the car: a kart on semislicks holds 1.2 g, a car on road tyres less)
     function buildSpeeds() {
         var roadGrip = typeof getSurface === "function" ? getSurface("road").static : 1;
         var wetness = roadGrip / 1.2;                                // (1 on a dry road)
         speedsGrip = roadGrip;
-        speeds = line ? line.computeSpeeds(9.81 * 1.05 * self.skill * wetness, 9.81 * 0.9 * self.skill * wetness, 90, function (name) { return typeof getSurface === "function" && name ? getSurface(name).static / roadGrip : 1; }) : null;
+        speeds = line ? line.computeSpeeds(9.81 * carGrip * 1.1 * self.skill * wetness, 9.81 * carGrip * 0.95 * self.skill * wetness, 90, function (name) { return typeof getSurface === "function" && name ? getSurface(name).static / roadGrip : 1; }) : null;
     }
     buildSpeeds();
 

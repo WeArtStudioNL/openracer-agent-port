@@ -121,7 +121,7 @@ OpenRacer.RacingLine.prototype.computeSpeeds = function (aLat, aBrake, vMax, gri
     for (var hi = 0; hi < n; hi++) { var sum = 0; for (var hk = -2; hk <= 2; hk++) sum += this.point(hi + hk).y || 0; height[hi] = sum / 5; }
     for (var i = 0; i < n; i++) {
         // the curvature from the point before and after (a circle through three points)
-        var a = this.point(i - 2), b = this.point(i), c = this.point(i + 2);
+        var a = this.point(i - 4), b = this.point(i), c = this.point(i + 4);
         var abx = b.x - a.x, abz = b.z - a.z, bcx = c.x - b.x, bcz = c.z - b.z;
         var cross = abx * bcz - abz * bcx;
         var lab = Math.hypot(abx, abz), lbc = Math.hypot(bcx, bcz), lac = Math.hypot(c.x - a.x, c.z - a.z);
