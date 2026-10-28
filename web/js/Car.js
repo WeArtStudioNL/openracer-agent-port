@@ -83,6 +83,11 @@ OpenRacer.Car = function( config, domElement ) {
     this.clutch = 0;                // clutch pedal: 0 = engaged, 1 = fully pressed
     this.clutchPedalPresent = false; // the clutch pedal works the clutch (manual mode, used last); otherwise the clutch is automatic
     this.handbrake = false;
+    this.parkingBrake = false;       // the parking brake: a handbrake that stays on until the key is pressed again (the parkingBrake action of the settings)
+    this.toggleParkingBrake = function() {
+        this.parkingBrake = !this.parkingBrake;
+        if(typeof banner === "function") banner("Parking brake " + (this.parkingBrake ? "on" : "off"));
+    };
     this.engineRPM = (config.engine && config.engine.idle_rpm) || 900; // engine speed, for the dashboard and the engine sound
 
     this.accelerate = false;
@@ -278,6 +283,7 @@ OpenRacer.Car = function( config, domElement ) {
     // Puts the car on the road at a position, standing still
     this.place = function(x, z, heading) {
         var v = this.vehicle;
+        this.parkingBrake = false;                  // (a car that is put back has the parking brake off)
         v.reset(x, z, heading);
         tyreSmoke.clear();
         if(debris) debris.clear();
@@ -930,7 +936,7 @@ OpenRacer.Car = function( config, domElement ) {
         if(this.autoReverse) { this.accelerate = rawDown; this.brake = rawUp; }
         this.turnLeft = Settings.isDown("steerLeft");
         this.turnRight = Settings.isDown("steerRight");
-        this.handbrake = Settings.isDown("handbrake");
+        this.handbrake = Settings.isDown("handbrake") || this.parkingBrake;
         this.twoStep = Settings.isDown("twoStep");
         this.transbrake = Settings.isDown("transbrake");
         this.cameraLeft = Settings.isDown("cameraLeft");

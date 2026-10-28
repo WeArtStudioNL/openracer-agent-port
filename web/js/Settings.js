@@ -57,6 +57,7 @@ var Settings = (function() {
         { id: "steerWheel", wheelOnly: true, group: "Driving", label: "Steering wheel", wheel: { profile: "steer", steps: ["steerLeft", "steerRight"] }, defaults: [] },
         { id: "clutch", wheelOnly: true, group: "Driving", label: "Clutch", wheel: { profile: "clutch", steps: ["clutch"] }, defaults: [] },
         { id: "handbrake", group: "Driving", label: "Handbrake", defaults: [key("Space"), padButton(0)] },
+        { id: "parkingBrake", group: "Driving", label: "Parking brake on/off (it stays on until you press it again; P is for the free camera too: then that goes first)", defaults: [key("KeyP")] },
         { id: "reverse", group: "Driving", label: "Reverse (hold)", defaults: [key("Period")] },
         { id: "riderBack", group: "Driving", label: "Motorcycle: rider back, < (hold)", defaults: [key("Comma")] },
         { id: "riderForward", group: "Driving", label: "Motorcycle: rider forward, > (hold)", defaults: [key("Period")] },
@@ -1153,6 +1154,7 @@ var Settings = (function() {
     handlers.toggleABS = function() { setOption("abs", !options.abs); };
     handlers.toggleESC = function() { setOption("esc", !options.esc); };
     handlers.cameraSwitch = function() { setOption("camera", nextCamera(options.camera)); };
+    handlers.parkingBrake = function() { if(options.camera === 4) return; if(window.car && window.car.toggleParkingBrake) window.car.toggleParkingBrake(); };     // (the free camera has P for its aim)
     handlers.freeCamAim = function() { if(options.camera === 4 && typeof OpenRacer !== "undefined" && OpenRacer.FreeCam) OpenRacer.FreeCam.toggleAim(); };
     handlers.take = function() { if(typeof OpenRacer !== "undefined" && OpenRacer.Take) OpenRacer.Take.toggle(); };
     handlers.freeCamFollow = function() { if(options.camera === 4 && typeof OpenRacer !== "undefined" && OpenRacer.FreeCam) OpenRacer.FreeCam.toggleFollow(); };

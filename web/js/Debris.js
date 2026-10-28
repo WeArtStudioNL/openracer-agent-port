@@ -2,7 +2,8 @@
  * Debris.js
  *
  * Description: Small pieces of grass, sand, gravel, mud, earth and snow that a wheel throws up from loose ground. Next to the dust of Smoke.js (the cloud) these are the bits that fly
- *              and fall: points with a speed and the gravity, in one draw call, with the colours of the surface (a few shades of each).
+ *              and fall: points with a speed and the gravity, in one draw call, each with the shape of what it is: a thin green blade for grass (turned along the way that it flies, with
+ *              now and then a clod of earth), many tiny round grains for sand, angular chunks for gravel, clumps for mud and earth, and soft flakes for snow.
  *
  *              A wheel on a loose surface (Helpers.js, uCoeff "loose": grass, sand, gravel, mud, earth), or on any surface under snow, throws them when its tyre slips against the ground.
  *              The direction is the way that the tread moves against the ground: the speed of the tread along the wheel (the turn of the wheel against the speed of the car) and the slide
@@ -18,24 +19,40 @@
  */
 
 OpenRacer.Debris = function (scene, capacity) {
-    capacity = capacity || 1600;
+    capacity = capacity || 4000;
     var positions = new Float32Array(capacity * 3), colours = new Float32Array(capacity * 3), sizes = new Float32Array(capacity), alphas = new Float32Array(capacity);
-    var vel = new Float32Array(capacity * 3), age = new Float32Array(capacity).fill(1e9), life = new Float32Array(capacity).fill(1), floor = new Float32Array(capacity), spin = new Float32Array(capacity);
+    var vel = new Float32Array(capacity * 3), shapes = new Float32Array(capacity), tilts = new Float32Array(capacity);
+    var age = new Float32Array(capacity).fill(1e9), life = new Float32Array(capacity).fill(1), floor = new Float32Array(capacity);
     var next = 0, alive = 0, pendingNew = true, last = [null, null, null, null], carry = [0, 0, 0, 0];
 
     var geometry = new THREE.BufferGeometry();
-    var positionAttribute = new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage), colourAttribute = new THREE.BufferAttribute(colours, 3).setUsage(THREE.DynamicDrawUsage);
-    var sizeAttribute = new THREE.BufferAttribute(sizes, 1).setUsage(THREE.DynamicDrawUsage), alphaAttribute = new THREE.BufferAttribute(alphas, 1).setUsage(THREE.DynamicDrawUsage);
+    function dynamic(array, n) { return new THREE.BufferAttribute(array, n).setUsage(THREE.DynamicDrawUsage); }
+    var positionAttribute = dynamic(positions, 3), colourAttribute = dynamic(colours, 3), sizeAttribute = dynamic(sizes, 1), alphaAttribute = dynamic(alphas, 1);
+    var velocityAttribute = dynamic(vel, 3), shapeAttribute = dynamic(shapes, 1), tiltAttribute = dynamic(tilts, 1);
     geometry.setAttribute("position", positionAttribute);
     geometry.setAttribute("colour", colourAttribute);
     geometry.setAttribute("size", sizeAttribute);
     geometry.setAttribute("alpha", alphaAttribute);
+    geometry.setAttribute("velocity", velocityAttribute);
+    geometry.setAttribute("shape", shapeAttribute);
+    geometry.setAttribute("tilt", tiltAttribute);
+    // shape: 0 an angular chunk, 1 a thin blade (turned along the way that it flies on the screen), 2 a round grain or clump
     var material = new THREE.ShaderMaterial({
-        uniforms: { light: { value: 1 }, scale: { value: 600 } },
-        vertexShader: "attribute vec3 colour; attribute float size; attribute float alpha; uniform float scale; varying vec3 vColour; varying float vAlpha;" +
-            "void main() { vColour = colour; vAlpha = alpha; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = max(1.5, size * scale / max(0.5, -mv.z)); gl_Position = projectionMatrix * mv; }",
-        fragmentShader: "uniform float light; varying vec3 vColour; varying float vAlpha;" +
-            "void main() { vec2 c = gl_PointCoord - 0.5; float a = smoothstep(0.5, 0.35, max(abs(c.x), abs(c.y))); if (a * vAlpha < 0.02) discard; gl_FragColor = vec4(vColour * light, a * vAlpha); }",
+        uniforms: { light: { value: 1 }, scale: { value: 600 }, aspect: { value: 1 } },
+        vertexShader: "attribute vec3 colour; attribute float size; attribute float alpha; attribute vec3 velocity; attribute float shape; attribute float tilt;" +
+            "uniform float scale; uniform float aspect; varying vec3 vColour; varying float vAlpha; varying float vShape; varying float vAngle;" +
+            "void main() { vColour = colour; vAlpha = alpha; vShape = shape;" +
+            "vec4 mv = modelViewMatrix * vec4(position, 1.0);" +
+            "vec4 p0 = projectionMatrix * mv; vec4 p1 = projectionMatrix * (mv + vec4(mat3(modelViewMatrix) * velocity * 0.05, 0.0));" +
+            "vec2 d = p1.xy / p1.w - p0.xy / p0.w; d.x *= aspect; vAngle = (length(d) > 1e-5 ? atan(d.y, d.x) : 0.0) + tilt;" +        // (the way that it flies, on the screen, and a little of its own)
+            "gl_PointSize = max(shape > 0.5 && shape < 1.5 ? 4.0 : 1.5, size * scale / max(0.5, -mv.z)); gl_Position = p0; }",
+        fragmentShader: "uniform float light; varying vec3 vColour; varying float vAlpha; varying float vShape; varying float vAngle;" +
+            "void main() { vec2 c = gl_PointCoord - 0.5; c.y = -c.y; float a;" +
+            "if (vShape < 0.5) a = smoothstep(0.5, 0.36, max(abs(c.x), abs(c.y)));" +
+            "else if (vShape < 1.5) { float cs = cos(vAngle), sn = sin(vAngle); vec2 r = vec2(c.x * cs + c.y * sn, -c.x * sn + c.y * cs);" +
+            "  float w = 0.035 + 0.07 * (1.0 - abs(r.x) * 2.0); a = smoothstep(w, w * 0.35, abs(r.y)) * smoothstep(0.5, 0.4, abs(r.x)); }" +      // (a blade: thin, wider in the middle, with a point at both ends)
+            "else a = smoothstep(0.5, 0.2, length(c));" +
+            "if (a * vAlpha < 0.02) discard; gl_FragColor = vec4(vColour * light, a * vAlpha); }",
         transparent: true, depthWrite: false, fog: false
     });
     var points = new THREE.Points(geometry, material);
@@ -47,24 +64,35 @@ OpenRacer.Debris = function (scene, capacity) {
     // the colours of the pieces of every surface: a few shades (as sRGB; the picture wants them linear)
     function shades(list) { return list.map(function (c) { return [Math.pow(c[0], 2.2), Math.pow(c[1], 2.2), Math.pow(c[2], 2.2)]; }); }
     var SHADES = {
-        grass: shades([[0.24, 0.42, 0.1], [0.34, 0.54, 0.14], [0.2, 0.34, 0.08], [0.32, 0.24, 0.12], [0.4, 0.5, 0.2]]),
-        sand: shades([[0.86, 0.72, 0.5], [0.78, 0.64, 0.42], [0.92, 0.8, 0.6]]),
-        gravel: shades([[0.55, 0.52, 0.48], [0.44, 0.42, 0.4], [0.66, 0.62, 0.56]]),
+        grass: shades([[0.22, 0.46, 0.08], [0.3, 0.56, 0.1], [0.4, 0.62, 0.14], [0.18, 0.38, 0.07], [0.5, 0.6, 0.18], [0.3, 0.5, 0.1]]),       // blades: a few greens, some dry and yellow
+        clod: shades([[0.32, 0.24, 0.13], [0.26, 0.19, 0.1], [0.4, 0.3, 0.18]]),
+        sand: shades([[0.88, 0.74, 0.52], [0.8, 0.66, 0.44], [0.93, 0.82, 0.62], [0.74, 0.6, 0.4], [0.96, 0.88, 0.72]]),
+        gravel: shades([[0.8, 0.7, 0.54], [0.7, 0.6, 0.45], [0.86, 0.78, 0.62], [0.6, 0.52, 0.4], [0.66, 0.64, 0.6]]),
         mud: shades([[0.28, 0.2, 0.13], [0.2, 0.14, 0.09], [0.36, 0.26, 0.16]]),
         ground: shades([[0.55, 0.43, 0.3], [0.46, 0.36, 0.24], [0.62, 0.5, 0.36]]),
         snow: shades([[0.95, 0.97, 1.0], [0.86, 0.9, 0.97], [1.0, 1.0, 1.0]])
     };
+    // what each kind looks like: the shape, the size (m: the length of a blade, the width of the rest), the number made compared with the rest, how far they fly
+    var LOOK = {
+        grass: { shape: 1, size: [0.1, 0.2], rate: 1.3, fly: 1 },
+        clod: { shape: 2, size: [0.025, 0.05], rate: 1, fly: 0.8 },
+        sand: { shape: 2, size: [0.008, 0.02], rate: 3.2, fly: 1 },
+        gravel: { shape: 0, size: [0.012, 0.03], rate: 2, fly: 0.9 },
+        mud: { shape: 2, size: [0.03, 0.07], rate: 0.9, fly: 0.7 },
+        ground: { shape: 2, size: [0.02, 0.045], rate: 1.2, fly: 0.9 },
+        snow: { shape: 2, size: [0.02, 0.05], rate: 1.5, fly: 0.9 }
+    };
 
-    function spawn(x, y, z, vx, vy, vz, kind, size) {
-        var i = next;
+    function spawn(x, y, z, vx, vy, vz, kind) {
+        var i = next, look = LOOK[kind] || LOOK.ground;
         next = (next + 1) % capacity;
         var shade = SHADES[kind] || SHADES.ground, c = shade[Math.floor(Math.random() * shade.length)];
         positions[i * 3] = x; positions[i * 3 + 1] = y; positions[i * 3 + 2] = z;
         vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz;
         colours[i * 3] = c[0]; colours[i * 3 + 1] = c[1]; colours[i * 3 + 2] = c[2];
-        sizes[i] = size; alphas[i] = 1;
+        sizes[i] = look.size[0] + Math.random() * (look.size[1] - look.size[0]); alphas[i] = 1;
+        shapes[i] = look.shape; tilts[i] = (Math.random() - 0.5) * 1.2;
         age[i] = 0; life[i] = 0.7 + Math.random() * 0.9; floor[i] = y - 0.02;
-        spin[i] = Math.random();
         pendingNew = true;
     }
 
@@ -93,30 +121,29 @@ OpenRacer.Debris = function (scene, capacity) {
             var slip = Math.hypot(along, across);
             if (slip < 1.2) { last[w] = null; continue; }
             var strength = Math.min(1, (slip - 1.0) / 6);
-            var load = wheel.load !== undefined ? Math.min(1, Math.max(0, wheel.load / 1500)) : 1;
-            if (wheel.load !== undefined && wheel.load < 50) { last[w] = null; continue; }      // (a wheel in the air throws nothing)
-            var kind = snowy && (!loose || Math.random() < snow) ? "snow" : (surface === "grass" ? "grass" : (SHADES[surface] ? surface : "ground"));
-            carry[w] += (70 + 330 * strength) * (0.4 + 0.6 * Math.max(load, 0.3)) * amount * delta;
-            var count = Math.floor(carry[w]);
-            carry[w] -= count;
+            var main = snowy && (!loose || Math.random() < snow) ? "snow" : (SHADES[surface] ? surface : "ground");
+            var rate = (LOOK[main] || LOOK.ground).rate;
+            carry[w] += (70 + 330 * strength) * rate * amount * delta;
+            var count = Math.min(120, Math.floor(carry[w]));
+            carry[w] = Math.min(carry[w] - count, 1);
             var cx = contact.x, cy = contact.y, cz = contact.z, from = last[w] || { x: cx, y: cy, z: cz };
             if (Math.hypot(cx - from.x, cz - from.z) > 5) { from.x = cx; from.y = cy; from.z = cz; }
             // the direction of the throw: the way that the tread moves against the ground
             var dx = (fwd.x * along + lft.x * across) / slip, dz = (fwd.z * along + lft.z * across) / slip;
             var speed = Math.min(11, 1.5 + slip * 0.9);
             for (var n = 0; n < count; n++) {
-                var f = (n + Math.random()) / Math.max(1, count), spreadAngle = (Math.random() - 0.5) * 0.9, ca = Math.cos(spreadAngle), sa = Math.sin(spreadAngle);
-                var rx = dx * ca - dz * sa, rz = dx * sa + dz * ca, v = speed * (0.35 + Math.random() * 0.75);
+                var kind = main === "grass" && Math.random() < 0.12 ? "clod" : main;                 // (a clod of earth now and then between the blades)
+                var look = LOOK[kind], f = (n + Math.random()) / Math.max(1, count), spreadAngle = (Math.random() - 0.5) * 0.9, ca = Math.cos(spreadAngle), sa = Math.sin(spreadAngle);
+                var rx = dx * ca - dz * sa, rz = dx * sa + dz * ca, v = speed * look.fly * (0.35 + Math.random() * 0.75);
                 spawn(from.x + (cx - from.x) * f + (Math.random() - 0.5) * 0.12, from.y + (cy - from.y) * f + 0.03, from.z + (cz - from.z) * f + (Math.random() - 0.5) * 0.12,
-                    rx * v + vehicle.vx * 0.5, 1.4 + Math.random() * (1.5 + strength * 3.2), rz * v + vehicle.vz * 0.5,
-                    kind, 0.035 + Math.random() * 0.05 * (kind === "sand" ? 0.6 : 1.3));
+                    rx * v + vehicle.vx * 0.5, 1.4 + Math.random() * (1.5 + strength * 3.2), rz * v + vehicle.vz * 0.5, kind);
             }
             from.x = cx; from.y = cy; from.z = cz;
             last[w] = from;
         }
         if (alive === 0 && !pendingNew) return;
         alive = 0;
-        var drag = Math.exp(-0.7 * delta), fade = 0;
+        var drag = Math.exp(-0.7 * delta);
         for (var i = 0; i < capacity; i++) {
             if (age[i] >= life[i]) { if (alphas[i] !== 0) { alphas[i] = 0; sizes[i] = 0; } continue; }
             age[i] += delta;
@@ -129,9 +156,12 @@ OpenRacer.Debris = function (scene, capacity) {
         // the light on them: as bright as the light of the scene (a night, or the weather, makes them dark as well)
         var lum = typeof ambientLight !== "undefined" && typeof sunLight !== "undefined" ? (ambientLight.intensity + 0.7 * sunLight.intensity) / (Math.PI * 1.6) : 1;
         material.uniforms.light.value = Math.max(0.08, Math.min(1, lum));
+        material.uniforms.aspect.value = window.innerWidth / Math.max(1, window.innerHeight);
         positionAttribute.needsUpdate = colourAttribute.needsUpdate = sizeAttribute.needsUpdate = alphaAttribute.needsUpdate = true;
+        velocityAttribute.needsUpdate = shapeAttribute.needsUpdate = tiltAttribute.needsUpdate = true;
         pendingNew = false;
     };
+
     this.clear = function () {
         age.fill(1e9); alphas.fill(0); sizes.fill(0);
         alphaAttribute.needsUpdate = sizeAttribute.needsUpdate = true;
