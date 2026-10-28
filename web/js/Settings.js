@@ -113,7 +113,7 @@ var Settings = (function() {
         // the graphics (Graphics.js): a preset is a set of these
         gfxPreset: "high", gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000, gfxAniso: 8, gfxSharpen: 1,
         // the look and the atmosphere (Graphics.js, Atmosphere.js): the tone mapping, the exposure, the contrast and the saturation; the hour (-1: as the track) and the weather
-        mirrorLeftYaw: 0, mirrorLeftTilt: 0, mirrorRightYaw: 0, mirrorRightTilt: 0, mirrorCentreYaw: 0, mirrorCentreTilt: 0, gfxReflectFrames: 0, gfxEnvEvery: 0, gfxDebrisRate: 1, gfxDebrisScale: 1, gfxDebrisMax: 6000, gfxTone: "neutral", gfxExposure: 0.9, gfxContrast: 1.05, gfxSaturation: 1, gfxTime: 14, gfxWeather: "clear", gfxSunAzimuth: 40, gfxMoon: 1, gfxGround: "auto" };
+        mirrorLeftYaw: 0, mirrorLeftTilt: 0, mirrorRightYaw: 0, mirrorRightTilt: 0, mirrorCentreYaw: 0, mirrorCentreTilt: 0, gfxDebrisRate: 1, gfxDebrisScale: 1, gfxDebrisMax: 6000, gfxTone: "neutral", gfxExposure: 0.9, gfxContrast: 1.05, gfxSaturation: 1, gfxTime: 14, gfxWeather: "clear", gfxSunAzimuth: 40, gfxMoon: 1, gfxGround: "auto" };
 
     var bindings = {};      // action id -> list of inputs
     var options = {};
@@ -1038,9 +1038,6 @@ var Settings = (function() {
             page.appendChild(pickRow("Shadows", options.gfxShadows, [0, 1, 2, 3, 4].map(function(v) { return [v, shadowNames[v] + (v ? " (" + G.SHADOW_SIZES[v] + ")" : "")]; }), gfxPick("gfxShadows")));
             var reflectionNames = ["Off (still)", "Low (slow)", "High"];
             page.appendChild(pickRow("Reflections", options.gfxReflections, [0, 1, 2].map(function(v) { return [v, reflectionNames[v]]; }), gfxPick("gfxReflections")));
-            // (to test: how often the reflections are made again; 0 is what the Reflections option says)
-            page.appendChild(pickRow("Reflections: update every (frames; 1 is every frame)", options.gfxReflectFrames, [[0, "As Reflections says (High: every frame, Low: every 8th)"]].concat([1, 2, 3, 4, 6, 8, 16, 32, 60].map(function(v) { return [v, v === 1 ? "every frame" : "every " + v + " frames"]; })), function(v) { setOption("gfxReflectFrames", v); }));
-            page.appendChild(pickRow("Car lighting from the reflections: every (updates of the reflections)", options.gfxEnvEvery, [[0, "As Reflections says (High: every update, Low: every 3rd)"]].concat([1, 2, 3, 4, 6, 12, 24].map(function(v) { return [v, v === 1 ? "every update" : "every " + v + " updates"]; })), function(v) { setOption("gfxEnvEvery", v); }));
             var effectNames = ["Off", "Low", "High"];
             page.appendChild(pickRow("Ambient occlusion (SSAO)", options.gfxAO, [0, 1, 2].map(function(v) { return [v, effectNames[v]]; }), gfxPick("gfxAO")));
             page.appendChild(pickRow("Global illumination (SSGI)", options.gfxGI, [0, 1, 2].map(function(v) { return [v, effectNames[v]]; }), gfxPick("gfxGI")));

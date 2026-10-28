@@ -379,12 +379,10 @@ OpenRacer.Graphics = (function () {
     }
     // the reflections: the cube map of the surroundings is made again every so many frames, and the lighting of the glTF cars (the filtered cube map) after every so many of
     // those updates: High does both all the time (the mirrors and the paint follow the surroundings), Low is slow
-    // (to test: gfxReflectFrames and gfxEnvEvery take the place of what the level says; 0 is what the level says. Off stays off)
     function applyReflections() {
-        var level = opt("gfxReflections"), every = REFLECTION_EVERY[level], own = opt("gfxReflectFrames"), envOwn = opt("gfxEnvEvery");
-        if (every > 0 && own > 0) every = own;
-        ctx.reflections(every);
-        ENVIRONMENT_EVERY = envOwn > 0 ? envOwn : (ENVIRONMENT_UPDATES[level] || 3);
+        var level = opt("gfxReflections");
+        ctx.reflections(REFLECTION_EVERY[level]);
+        ENVIRONMENT_EVERY = ENVIRONMENT_UPDATES[level] || 3;
     }
     // the tone mapping, the exposure, the contrast and the saturation (the picture is not made again: the numbers go to the pass)
     function applyLook() {
@@ -448,7 +446,7 @@ OpenRacer.Graphics = (function () {
         else if (name === "gfxSmoke") { if (currentPreset() !== opt("gfxPreset")) Settings.setOption("gfxPreset", currentPreset()); }       // (Smoke.js reads it)
         else if (name === "gfxDistance") { applyDistance(); if (currentPreset() !== opt("gfxPreset")) Settings.setOption("gfxPreset", currentPreset()); }
         else if (name === "gfxShadows") applyShadows();
-        else if (name === "gfxReflections" || name === "gfxReflectFrames" || name === "gfxEnvEvery") applyReflections();
+        else if (name === "gfxReflections") applyReflections();
         else if (name === "gfxTone" || name === "gfxExposure" || name === "gfxContrast" || name === "gfxSaturation") applyLook();
         else if (name === "gfxAniso") { applyAniso(); if (currentPreset() !== opt("gfxPreset")) Settings.setOption("gfxPreset", currentPreset()); }
         else if (name === "gfxTime" || name === "gfxWeather" || name === "gfxSunAzimuth" || name === "gfxMoon" || name === "gfxGround") { if (OpenRacer.Atmosphere) OpenRacer.Atmosphere.apply(); }
