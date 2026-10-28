@@ -160,7 +160,7 @@ The road used to be a height field (`GroundWorld.query(x, z)`: one height per pl
 
 Next to it, `web/tools/physics-check.html` (open it from the server) runs the physics inside the game for the cars you pick: the ride height, a landing from 3 m and from 10 m, the wheels on a straight at 30 m/s (a wheel that flickers) and a bend (the yaw against the steering), and marks what is outside the limits.
 
-**Look and atmosphere:** the Graphics page of the settings menu has the tone mapping, the exposure, the contrast and the saturation (against an overblown picture), the *time of day* (as the track, or dawn to night with an hour slider) and the *weather* (clear, cloudy, fog, rain; looks only, the grip does not change), *anisotropic filtering* and *sharpening*. Time of day and weather work on tracks that have an `environment` in track.json.
+**Look and atmosphere:** the Graphics page of the settings menu has the tone mapping, the exposure, the contrast and the saturation (against an overblown picture), *anisotropic filtering* and *sharpening*, and an atmosphere that is the same on every track: the *time of day* (dawn to night, with an hour slider), the direction of the sun, the phase of the moon, the *weather* (clear, cloudy, fog, rain, snow) and the *ground*. Rain wets the road and snow lies on it and stays; both give less grip (snow most) for you and for the AI, which drives slower. Tracks of the old format with a sky in their model keep their own sky.
 
 **Performance:** the graphics settings have a *draw distance* (500 to 5000 m; the presets set it) and AI cars more than 450 m from the camera are not drawn. **F2** saves the picture of the game as a PNG.
 

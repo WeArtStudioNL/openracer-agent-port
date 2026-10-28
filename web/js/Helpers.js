@@ -106,8 +106,24 @@ var uCoeff = {
     "ground": { static: 0.7, kinetic: 0.58, loose: true, dust: [0.66, 0.55, 0.4] }       // (dirt)
 };
 
+// The ground condition (Atmosphere.js: rain wets the road, snow lies on it): the grip of a surface is less by what the wet and the snow take from it, per surface (road and kerb lose most;
+// loose ground, which is not smooth to start with, loses less). The numbers are what a dry value becomes at a fully wet (WET) or a fully snow covered (SNOW) ground.
+var groundWet = 0, groundSnow = 0, surfaceCache = {};
+var WET_LOSS = { road: 0.28, track01: 0.28, grass: 0.2, ground: 0.2, sand: 0.08, gravel: 0.1, mud: 0, wet: 0 };
+var SNOW_LOSS = { road: 0.62, track01: 0.62, wet: 0.62, grass: 0.42, ground: 0.42, sand: 0.35, gravel: 0.45, mud: 0.25 };
+function setGroundCondition(wet, snow) {
+    groundWet = Math.max(0, Math.min(1, wet)); groundSnow = Math.max(0, Math.min(1, snow));
+    surfaceCache = {};
+}
 function getSurface(name) {
-    return uCoeff[name] || uCoeff["track01"];
+    var key = uCoeff[name] ? name : "track01";
+    if(groundWet < 0.005 && groundSnow < 0.005) return uCoeff[key];
+    var cached = surfaceCache[key];
+    if(cached) return cached;
+    var base = uCoeff[key], factor = (1 - (WET_LOSS[key] || 0) * groundWet) * (1 - (SNOW_LOSS[key] || 0) * groundSnow);
+    cached = Object.assign({}, base, { static: base.static * factor, kinetic: base.kinetic * factor });
+    surfaceCache[key] = cached;
+    return cached;
 }
 
 // Converts a model in the old three.js JSON format (version 3, as exported from 3ds Max) to a

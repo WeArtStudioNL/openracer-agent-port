@@ -517,6 +517,7 @@ var playerLineIndex = null, playerLineLaps = 0, playerLastFraction = 0, playerMa
 function updateRace(delta) {
     if(!race.ghost) return;
     var vehicles = [car.vehicle].concat(race.opponents.map(function(o) { return o.vehicle; }));
+    if(OpenRacer.Atmosphere) OpenRacer.Atmosphere.update(delta);       // (the ground gets wet in the rain and white in the snow, and dries and melts again)
     race.opponents.forEach(function(o) { o.update(delta, vehicles); });
     if(race.opponents.length) OpenRacer.collideCars(vehicles);
     if(OpenRacer.RigidObjects) OpenRacer.RigidObjects.update(delta, vehicles);

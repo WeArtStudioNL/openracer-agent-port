@@ -510,6 +510,8 @@ function mergeScenery() {
 function applyTrackEnvironment(track) {
     if(!track.model && !track.environment) return;
     var env = OpenRacer.environmentOf(track);
+    // the sky, the light, the weather and the ground are the same on every track (Atmosphere.js): the track only gives how bright its materials like the light
+    if(OpenRacer.Atmosphere) { OpenRacer.Atmosphere.attach(env); return; }
     var texture = env.sky_image ? textureLoader.load(trackFile(env.sky_image)) : null;
     var skyMesh = OpenRacer.makeSky(THREE, env, texture);
     scene.add(skyMesh);
@@ -532,6 +534,4 @@ function applyTrackEnvironment(track) {
         scene.fog = null;
         renderer.setClearColor(env.sky_horizon, 1);
     }
-    // the time of day and the weather of the options, laid over this environment (Atmosphere.js)
-    if(OpenRacer.Atmosphere) OpenRacer.Atmosphere.set(env, skyMesh);
 }

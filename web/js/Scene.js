@@ -272,6 +272,11 @@ function render() {
         if(fps > 0) debugOut("Sim triangles: rays " + gs.rays + " tested " + gs.rayTris + " (most for one ray " + gs.rayMax + ") | shell spheres " + gs.nearby + " gave " + gs.nearbyTris + ", box tests " + gs.boxes + ", exact tests " + gs.closest);
         gs.rays = gs.rayTris = gs.rayMax = gs.nearby = gs.nearbyTris = gs.closest = gs.boxes = 0;
     }
+    // the ground condition (Atmosphere.js): wet and snow, and the grip that is left
+    if(fps > 0 && OpenRacer.Atmosphere) {
+        var ai = OpenRacer.Atmosphere.info();
+        if(ai.wet > 0.01 || ai.snow > 0.01) debugOut("Ground: wet " + Math.round(ai.wet * 100) + "%, snow " + Math.round(ai.snow * 100) + "%, the grip of the road " + Math.round(getSurface("road").static / 1.2 * 100) + "% of dry");
+    }
     // what a tyre of the player costs: the nodes of its shell and the small steps that it takes in a step of the physics (the cost of the road tests goes with both)
     if(fps > 0 && typeof car !== "undefined" && car && car.vehicle && car.vehicle.wheels) {
         var shell = car.vehicle.wheels[0] && car.vehicle.wheels[0].tyreBody;

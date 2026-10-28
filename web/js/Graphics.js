@@ -444,7 +444,7 @@ OpenRacer.Graphics = (function () {
         else if (name === "gfxReflections") applyReflections();
         else if (name === "gfxTone" || name === "gfxExposure" || name === "gfxContrast" || name === "gfxSaturation") applyLook();
         else if (name === "gfxAniso") { applyAniso(); if (currentPreset() !== opt("gfxPreset")) Settings.setOption("gfxPreset", currentPreset()); }
-        else if (name === "gfxTime" || name === "gfxWeather") { if (OpenRacer.Atmosphere) OpenRacer.Atmosphere.apply(); }
+        else if (name === "gfxTime" || name === "gfxWeather" || name === "gfxSunAzimuth" || name === "gfxMoon" || name === "gfxGround") { if (OpenRacer.Atmosphere) OpenRacer.Atmosphere.apply(); }
         else build();       // the anti-aliasing, the screen space effects, the vignette
     }
 

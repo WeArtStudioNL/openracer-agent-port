@@ -76,8 +76,15 @@ OpenRacer.Opponent = function (config, line, options) {
     this.steeringWheel = null;
     var modelMid = null;
     // the speed of the line for this driver: the grip of the road times the skill, less on sand or grass (the surfaces of the track, Helpers.getSurface), and no flying off the crests
-    var roadGrip = typeof getSurface === "function" ? getSurface("road").static : 1;
-    var speeds = line ? line.computeSpeeds(9.81 * 1.05 * this.skill, 9.81 * 0.9 * this.skill, 90, function (name) { return typeof getSurface === "function" && name ? getSurface(name).static / roadGrip : 1; }) : null;
+    // (the grip of the road as it is now: in the rain or on snow the line is driven slower; the speeds are made again when the grip has changed)
+    var speeds = null, speedsGrip = -1;
+    function buildSpeeds() {
+        var roadGrip = typeof getSurface === "function" ? getSurface("road").static : 1;
+        var wetness = roadGrip / 1.2;                                // (1 on a dry road)
+        speedsGrip = roadGrip;
+        speeds = line ? line.computeSpeeds(9.81 * 1.05 * self.skill * wetness, 9.81 * 0.9 * self.skill * wetness, 90, function (name) { return typeof getSurface === "function" && name ? getSurface(name).static / roadGrip : 1; }) : null;
+    }
+    buildSpeeds();
 
     // lap and position
     this.lineIndex = line ? line.nearest(0, 0) : 0;
@@ -293,6 +300,7 @@ OpenRacer.Opponent = function (config, line, options) {
     this.update = function (delta, others) {
         if (!this.loaded) return;
         this.clock += delta;
+        if (line && typeof getSurface === "function" && Math.abs(getSurface("road").static - speedsGrip) > 0.03) buildSpeeds();
         if (this.crashedAt) {
             // crashed: it stands (no throttle, the brakes on, no steering) until the wait is over, then it is put back at the side of the track
             this.throttle = 0; this.brakePedal = 1; this.turnAngle = 0; this.reverse = false;

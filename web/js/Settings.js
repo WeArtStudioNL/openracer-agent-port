@@ -112,7 +112,7 @@ var Settings = (function() {
         // the graphics (Graphics.js): a preset is a set of these
         gfxPreset: "high", gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000, gfxAniso: 8, gfxSharpen: 1,
         // the look and the atmosphere (Graphics.js, Atmosphere.js): the tone mapping, the exposure, the contrast and the saturation; the hour (-1: as the track) and the weather
-        gfxTone: "neutral", gfxExposure: 0.9, gfxContrast: 1.05, gfxSaturation: 1, gfxTime: -1, gfxWeather: "clear" };
+        gfxTone: "neutral", gfxExposure: 0.9, gfxContrast: 1.05, gfxSaturation: 1, gfxTime: 14, gfxWeather: "clear", gfxSunAzimuth: 40, gfxMoon: 1, gfxGround: "auto" };
 
     var bindings = {};      // action id -> list of inputs
     var options = {};
@@ -1014,14 +1014,18 @@ var Settings = (function() {
             page.appendChild(sliderRow("Saturation", "gfxSaturation", 0, 1.6, 0.05, function(v) { return v.toFixed(2); }));
             page.appendChild(pickRow("Vignette", !!options.gfxVignette, [[false, "Off"], [true, "On"]], gfxPick("gfxVignette")));
             section("Atmosphere");
-            var timeNames = [[-1, "As the track"], [5.25, "Dawn"], [8, "Morning"], [12, "Noon"], [15, "Afternoon"], [17.5, "Evening"], [19, "Sunset"], [20.25, "Dusk"], [23.5, "Night"]];
+            var timeNames = [[5.25, "Dawn"], [8, "Morning"], [12, "Noon"], [15, "Afternoon"], [17.5, "Evening"], [19, "Sunset"], [20.25, "Dusk"], [23.5, "Night"]];
             page.appendChild(pickRow("Time of day", options.gfxTime, timeNames, function(v) { setOption("gfxTime", v); }));
-            page.appendChild(sliderRow("Hour (fine; drag to set)", "gfxTime", 0, 24, 0.25, function(v) { if(v < 0) return "as the track"; var h = Math.floor(v), m = Math.round((v - h) * 60); return h + ":" + (m < 10 ? "0" : "") + m; }));
-            var weatherNames = { clear: "Clear", cloudy: "Cloudy", fog: "Fog", rain: "Rain" };
-            page.appendChild(pickRow("Weather (how it looks: the grip does not change)", options.gfxWeather, ["clear", "cloudy", "fog", "rain"].map(function(k) { return [k, weatherNames[k]]; }), function(v) { setOption("gfxWeather", v); }));
+            page.appendChild(sliderRow("Hour (fine)", "gfxTime", 0, 24, 0.25, function(v) { var h = Math.floor(v), m = Math.round((v - h) * 60); return h + ":" + (m < 10 ? "0" : "") + m; }));
+            page.appendChild(sliderRow("Sun direction (where it is at noon)", "gfxSunAzimuth", 0, 355, 5, function(v) { return Math.round(v) + "\u00b0"; }));
+            page.appendChild(pickRow("Moon", options.gfxMoon, [[0, "New"], [0.25, "Crescent"], [0.5, "Half"], [0.75, "Gibbous"], [1, "Full"]], function(v) { setOption("gfxMoon", v); }));
+            var weatherNames = { clear: "Clear", cloudy: "Cloudy", fog: "Fog", rain: "Rain", snow: "Snow" };
+            page.appendChild(pickRow("Weather", options.gfxWeather, ["clear", "cloudy", "fog", "rain", "snow"].map(function(k) { return [k, weatherNames[k]]; }), function(v) { setOption("gfxWeather", v); }));
+            var groundNames = { auto: "Follows the weather", dry: "Dry", wet: "Wet", snow: "Snow" };
+            page.appendChild(pickRow("Ground", options.gfxGround, ["auto", "dry", "wet", "snow"].map(function(k) { return [k, groundNames[k]]; }), function(v) { setOption("gfxGround", v); }));
             var atmoNote = document.createElement("div");
             atmoNote.className = "sub";
-            atmoNote.textContent = "Time of day and weather work on tracks with an environment of their own (track.json, the track editor). There are no headlights yet: the night is dark.";
+            atmoNote.textContent = "The sky is the same on every track. Rain wets the road and snow lies on it and stays: both give less grip (the AI drives slower), snow most. Wet comes in about 40 seconds and dries in a few minutes; snow builds up in a few minutes and melts slowly. There are no headlights yet: the night is dark.";
             page.appendChild(atmoNote);
             section("Effects");
             page.appendChild(sliderRow("Smoke", "gfxSmoke", 0, 200, 10, function(v) { return v + "%"; }));
