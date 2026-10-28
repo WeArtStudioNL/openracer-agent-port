@@ -93,3 +93,10 @@ OpenRacer.Records = (function () {
 
     return { ofTrack: ofTrack, best: best, lap: lap, ghost: ghost, keepGhost: keepGhost, anyGhost: anyGhost, dragRuns: dragRuns, dragRun: dragRun, forget: forget, format: format };
 })();
+
+// The jump records of an older version are gone: what it kept in the browser goes too
+(function () {
+    try {
+        Object.keys(window.localStorage).filter(function (k) { return /^openracer\.jumps?\./.test(k); }).forEach(function (k) { window.localStorage.removeItem(k); });
+    } catch (e) { /* no storage */ }
+})();

@@ -334,7 +334,6 @@ OpenRacer.Car = function( config, domElement ) {
     };
     var fallMinY = null, fallFor = 0;
     this.returnToSaved = function() {
-        if(OpenRacer.JumpStats) OpenRacer.JumpStats.cancel();
         var v = this.vehicle, p = savedReset || this.nearestOnTrack() || { x: startX, z: startZ, psi: startHeading, py: null };
         var samePlace = p.car === config.id;       // (a place saved before this was kept has no car: it is put on the road)
         v.relocate(p.x, p.z, p.psi, samePlace ? p.py : null, p.gy);
