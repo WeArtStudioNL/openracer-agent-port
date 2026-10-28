@@ -114,7 +114,7 @@ OpenRacer.RacingLine.prototype.settle = function (ground) {
 OpenRacer.RacingLine.prototype.shorten = function (ground, margin, reach) {
     var n = this.points.length;
     if (!ground || n < 8) return;
-    margin = margin === undefined ? 1.1 : margin; reach = reach || 6;
+    margin = margin === undefined ? 0.8 : margin; reach = reach || 6;
     var base = this.points.map(function (p) { return { x: p.x, z: p.z }; });
     var nx = new Float32Array(n), nz = new Float32Array(n), left = new Float32Array(n), right = new Float32Array(n);
     var self = this;
