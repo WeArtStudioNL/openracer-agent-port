@@ -27,38 +27,75 @@
 
 OpenRacer.Atmosphere = (function () {
     var base = null, sky = null, rain = null, snowfall = null, fog = null, fogWas = null, attached = false, lastWeather = null;
-    var ground = { wet: 0, snow: 0, lastGrip: -1, uniforms: { uWet: { value: 0 }, uSnow: { value: 0 }, uClear: { value: null }, uClearCentre: { value: new THREE.Vector2() }, uClearSize: { value: 128 } } };
+    var ground = { wet: 0, snow: 0, lastGrip: -1, uniforms: { uWet: { value: 0 }, uSnow: { value: 0 }, uClear: { value: null }, uClearCentre: { value: new THREE.Vector2() }, uClearSize: { value: 128 },
+        uPuddle: { value: 0 }, uTime: { value: 0 }, uRain: { value: 0 }, uRip: { value: [] } }, puddle: 0 };
+    for (var ri = 0; ri < 12; ri++) ground.uniforms.uRip.value.push(new THREE.Vector4(0, 0, 99, 0));         // (the rings of the wheels in a puddle: x, z, age, strength)
 
-    // ---- where the snow has been scraped or melted away: a map of 512 by 512 cells of 25 cm (128 m round the car, wrapping round: a cell that the window leaves is made snowy again). A
-    // cell has a number from 0 (snow) to 1 (bare): a tyre that slides scrapes it hard, a tyre that rolls takes a little, and the car itself, with the heat of the engine and the
-    // exhaust under it, melts the snow it is over (more the longer it stays there, and every time that it comes by). The map goes to the shader (the white of the snow) and the grip at the
-    // wheel (wheel.localSnow). While it snows the bare cells fill up again, slowly.
-    var CLEAR_N = 512, CLEAR_CELL = 0.25, CLEAR_SIZE = CLEAR_N * CLEAR_CELL;
+    // ---- where the snow has been scraped or melted away. Every place that a car has been at is kept in tiles of 25.6 m (cells of 40 cm, a number from 0, snow, to 1, bare): they are kept
+    // all the time, so the snow does not come back when you drive away and return. A window of 1024 by 1024 cells (410 m) round the car is the copy that goes to the shader (wrapping round;
+    // the strips that come into it are filled from the tiles), and the grip at a wheel reads the tiles. A tyre that slides scrapes the snow hard, a tyre that rolls takes a little, and the
+    // car itself, with the heat of the engine and the exhaust under it, melts the snow it is over (more the longer it stays there, and every time that it comes by). While it snows the
+    // bare cells fill up again, slowly.
+    var CLEAR_N = 1024, CLEAR_CELL = 0.4, CLEAR_SIZE = CLEAR_N * CLEAR_CELL, TILE = 64;
     var clearData = new Uint8Array(CLEAR_N * CLEAR_N), clearCells = { x: 0, z: 0, set: false }, clearDirty = false, clearUploaded = 0, clearTexture = null, clearDecay = 0;
-    function clearAt(x, z) {
-        var i = Math.floor(x / CLEAR_CELL), j = Math.floor(z / CLEAR_CELL);
-        if (Math.abs(i - clearCells.x) > CLEAR_N * 0.46 || Math.abs(j - clearCells.z) > CLEAR_N * 0.46) return 0;
-        return clearData[(((j % CLEAR_N) + CLEAR_N) % CLEAR_N) * CLEAR_N + (((i % CLEAR_N) + CLEAR_N) % CLEAR_N)] / 255;
+    var tiles = new Map();
+    function tileKey(ti, tj) { return ti + "," + tj; }
+    function wrap(n) { return ((n % CLEAR_N) + CLEAR_N) % CLEAR_N; }
+    function inWindow(i, j) { return Math.abs(i - clearCells.x) < CLEAR_N / 2 && Math.abs(j - clearCells.z) < CLEAR_N / 2; }
+    function cellValue(i, j) {
+        var tile = tiles.get(tileKey(Math.floor(i / TILE), Math.floor(j / TILE)));
+        return tile ? tile[(((j % TILE) + TILE) % TILE) * TILE + (((i % TILE) + TILE) % TILE)] : 0;
     }
-    // the window follows the car: the columns and rows that come into it are made snowy again
+    function clearAt(x, z) { return cellValue(Math.floor(x / CLEAR_CELL), Math.floor(z / CLEAR_CELL)) / 255; }
+    function cellAdd(i, j, add) {
+        var ti = Math.floor(i / TILE), tj = Math.floor(j / TILE), key = tileKey(ti, tj), tile = tiles.get(key);
+        if (!tile) { tile = new Uint8Array(TILE * TILE); tiles.set(key, tile); }
+        var index = (((j % TILE) + TILE) % TILE) * TILE + (((i % TILE) + TILE) % TILE), value = tile[index] + add;
+        if (value > 255) value = 255;
+        tile[index] = value;
+        if (inWindow(i, j)) clearData[wrap(j) * CLEAR_N + wrap(i)] = value;
+    }
+    // the cells of a block of the world (cell numbers, both ends in) from the tiles into the window
+    function fillWindow(i0, i1, j0, j1) {
+        for (var j = j0; j <= j1; j++) for (var i = i0; i <= i1; i++) clearData[wrap(j) * CLEAR_N + wrap(i)] = 0;
+        tiles.forEach(function (tile, key) {
+            var parts = key.split(","), ti = +parts[0], tj = +parts[1], ti0 = ti * TILE, tj0 = tj * TILE;
+            if (ti0 > i1 || ti0 + TILE - 1 < i0 || tj0 > j1 || tj0 + TILE - 1 < j0) return;
+            for (var r = Math.max(j0, tj0); r <= Math.min(j1, tj0 + TILE - 1); r++) for (var c = Math.max(i0, ti0); c <= Math.min(i1, ti0 + TILE - 1); c++) {
+                var value = tile[(r - tj0) * TILE + (c - ti0)];
+                if (value) clearData[wrap(r) * CLEAR_N + wrap(c)] = value;
+            }
+        });
+    }
+    // the window follows the car: the strips that come into it are filled from the tiles
     function moveClearWindow(x, z) {
         var ci = Math.floor(x / CLEAR_CELL), cj = Math.floor(z / CLEAR_CELL), half = CLEAR_N / 2;
-        if (!clearCells.set || Math.abs(ci - clearCells.x) >= CLEAR_N || Math.abs(cj - clearCells.z) >= CLEAR_N) { clearData.fill(0); clearCells.x = ci; clearCells.z = cj; clearCells.set = true; clearDirty = true; return; }
+        if (!clearCells.set || Math.abs(ci - clearCells.x) >= half || Math.abs(cj - clearCells.z) >= half) {
+            clearCells.x = ci; clearCells.z = cj; clearCells.set = true;
+            fillWindow(ci - half + 1, ci + half - 1, cj - half + 1, cj + half - 1);
+            clearDirty = true;
+            return;
+        }
         var di = ci - clearCells.x, dj = cj - clearCells.z;
-        for (var a = 1; a <= Math.abs(di); a++) { var col = (((di > 0 ? clearCells.x + half + a : clearCells.x - half - a + 1) % CLEAR_N) + CLEAR_N) % CLEAR_N; for (var r = 0; r < CLEAR_N; r++) clearData[r * CLEAR_N + col] = 0; }
-        for (var b = 1; b <= Math.abs(dj); b++) { var row = (((dj > 0 ? clearCells.z + half + b : clearCells.z - half - b + 1) % CLEAR_N) + CLEAR_N) % CLEAR_N; for (var c = 0; c < CLEAR_N; c++) clearData[row * CLEAR_N + c] = 0; }
-        if (di || dj) { clearCells.x = ci; clearCells.z = cj; clearDirty = true; }
+        if (!di && !dj) return;
+        var oldX = clearCells.x, oldZ = clearCells.z;
+        clearCells.x = ci; clearCells.z = cj;
+        if (di > 0) fillWindow(oldX + half, ci + half - 1, cj - half + 1, cj + half - 1);
+        else if (di < 0) fillWindow(ci - half + 1, oldX - half, cj - half + 1, cj + half - 1);
+        if (dj > 0) fillWindow(ci - half + 1, ci + half - 1, oldZ + half, cj + half - 1);
+        else if (dj < 0) fillWindow(ci - half + 1, ci + half - 1, cj - half + 1, oldZ - half);
+        clearDirty = true;
     }
-    // a disc of a radius (m) round a place: every cell in it gets more bare, most at the middle
+    // a disc of a radius (m) round a place: every cell in it gets more bare, most at the middle (a disc is at least one cell wide)
     function paintClear(x, z, radius, amount) {
         if (amount <= 0) return;
+        radius = Math.max(radius, CLEAR_CELL * 0.6);
         var i0 = Math.floor((x - radius) / CLEAR_CELL), i1 = Math.floor((x + radius) / CLEAR_CELL), j0 = Math.floor((z - radius) / CLEAR_CELL), j1 = Math.floor((z + radius) / CLEAR_CELL);
         for (var j = j0; j <= j1; j++) for (var i = i0; i <= i1; i++) {
             var dx = (i + 0.5) * CLEAR_CELL - x, dz = (j + 0.5) * CLEAR_CELL - z, d2 = (dx * dx + dz * dz) / (radius * radius);
             if (d2 > 1) continue;
-            var index = (((j % CLEAR_N) + CLEAR_N) % CLEAR_N) * CLEAR_N + (((i % CLEAR_N) + CLEAR_N) % CLEAR_N);
-            var value = clearData[index] + amount * (1.3 - d2) * 255;
-            clearData[index] = value > 255 ? 255 : value;
+            var add = amount * (1.3 - d2) * 255;
+            cellAdd(i, j, add < 1 ? (Math.random() < add ? 1 : 0) : add);          // (a small amount is a chance of one step: the bytes would round it away)
         }
         clearDirty = true;
     }
@@ -70,10 +107,27 @@ OpenRacer.Atmosphere = (function () {
             clearTexture.generateMipmaps = false;
             ground.uniforms.uClear.value = clearTexture;
         }
-        ground.uniforms.uClearCentre.value.set(clearCells.x * CLEAR_CELL, clearCells.z * CLEAR_CELL);
+        ground.uniforms.uClearCentre.value.set((clearCells.x + 0.5) * CLEAR_CELL, (clearCells.z + 0.5) * CLEAR_CELL);
         ground.uniforms.uClearSize.value = CLEAR_SIZE;
         clearTexture.needsUpdate = true;
         clearDirty = false;
+    }
+
+    // ---- the puddles: a pattern of blobs over the ground that the rain fills (the "level" of the puddles, 0 to 1, goes up in the rain and down when it dries: they grow and shrink).
+    // The shader and this function make the same pattern (a hash with whole numbers, the same in both), so the wheel knows where the water is.
+    function ihash(x, y) { var h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263)) >>> 0; h = Math.imul((h ^ (h >>> 13)) >>> 0, 1274126177) >>> 0; h = (h ^ (h >>> 16)) >>> 0; return (h & 0xFFFFFF) / 16777216; }
+    function vnoise(x, y) {
+        var ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
+        fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+        var a = ihash(ix, iy), b = ihash(ix + 1, iy), c = ihash(ix, iy + 1), d = ihash(ix + 1, iy + 1);
+        return (a + (b - a) * fx) + ((c + (d - c) * fx) - (a + (b - a) * fx)) * fy;
+    }
+    function smoothstep(a, b, x) { var t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+    function puddleAt(x, z) {
+        var level = ground.puddle;
+        if (level < 0.01) return 0;
+        var n = 0.6 * vnoise(x / 5.0, z / 5.0) + 0.4 * vnoise(x / 1.9 + 31.7, z / 1.9 + 11.3), t = 0.8 - 0.22 * level;
+        return smoothstep(t, t + 0.04, n) * smoothstep(0, 0.2, level);
     }
 
     function smooth(a, b, x) { var t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
@@ -165,11 +219,18 @@ OpenRacer.Atmosphere = (function () {
             if (previous) previous.call(m, shader, renderer);
             shader.uniforms.uWet = ground.uniforms.uWet; shader.uniforms.uSnow = ground.uniforms.uSnow;
             shader.uniforms.uClear = ground.uniforms.uClear; shader.uniforms.uClearCentre = ground.uniforms.uClearCentre; shader.uniforms.uClearSize = ground.uniforms.uClearSize;
+            shader.uniforms.uPuddle = ground.uniforms.uPuddle; shader.uniforms.uTime = ground.uniforms.uTime; shader.uniforms.uRain = ground.uniforms.uRain; shader.uniforms.uRip = ground.uniforms.uRip;
             shader.vertexShader = shader.vertexShader
                 .replace("#include <common>", "#include <common>\nvarying vec3 vGroundNormal; varying vec3 vGroundPos;")
                 .replace("#include <begin_vertex>", "#include <begin_vertex>\nvGroundNormal = normalize(mat3(modelMatrix) * objectNormal); vGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;");
             shader.fragmentShader = shader.fragmentShader
-                .replace("#include <common>", "#include <common>\nuniform float uWet; uniform float uSnow; uniform sampler2D uClear; uniform vec2 uClearCentre; uniform float uClearSize; varying vec3 vGroundNormal; varying vec3 vGroundPos;\n" +
+                .replace("#include <common>", "#include <common>\nuniform float uWet; uniform float uSnow; uniform sampler2D uClear; uniform vec2 uClearCentre; uniform float uClearSize; uniform float uPuddle; uniform float uTime; uniform float uRain; uniform vec4 uRip[12]; varying vec3 vGroundNormal; varying vec3 vGroundPos;\n" +
+                    // (the pattern of the puddles: the same hash with whole numbers as Atmosphere.js, so that the wheel knows where the water is)
+                    "float gIHash(ivec2 c) { uint h = uint(c.x) * 374761393u + uint(c.y) * 668265263u; h = (h ^ (h >> 13u)) * 1274126177u; h = h ^ (h >> 16u); return float(h & 0xFFFFFFu) / 16777216.0; }\n" +
+                    "float gVn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); ivec2 c = ivec2(i); return mix(mix(gIHash(c), gIHash(c + ivec2(1, 0)), f.x), mix(gIHash(c + ivec2(0, 1)), gIHash(c + ivec2(1, 1)), f.x), f.y); }\n" +
+                    "float gPuddleMask(vec2 p) { float n = 0.6 * gVn(p / 5.0) + 0.4 * gVn(p / 1.9 + vec2(31.7, 11.3)); float t = 0.8 - 0.22 * uPuddle; return smoothstep(t, t + 0.04, n) * smoothstep(0.0, 0.2, uPuddle); }\n" +
+                    // (the slope of the rings of the water: a ring that grows from a place, the width and the height of it from the strength)
+                    "vec2 gRing(vec2 p, vec2 c, float r, float width, float strength) { vec2 d = p - c; float len = max(length(d), 0.001); float w = exp(-pow((len - r) / width, 2.0)); return d / len * ((len - r) / width) * w * strength; }\n" +
                     "float gHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\n" +
                     "float gNoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(gHash(i), gHash(i + vec2(1.0, 0.0)), f.x), mix(gHash(i + vec2(0.0, 1.0)), gHash(i + vec2(1.0, 1.0)), f.x), f.y); }")
                 .replace("#include <color_fragment>", "#include <color_fragment>\n" +
@@ -179,9 +240,19 @@ OpenRacer.Atmosphere = (function () {
                     "if (uSnow > 0.003) { vec2 gd = abs(vGroundPos.xz - uClearCentre); float gIn = 1.0 - smoothstep(0.36 * uClearSize, 0.46 * uClearSize, max(gd.x, gd.y)); gClear = texture2D(uClear, vGroundPos.xz / uClearSize).r * gIn;\n" +
                     "  float gn = 0.55 * gNoise(vGroundPos.xz * 0.6) + 0.3 * gNoise(vGroundPos.xz * 2.7) + 0.15 * gNoise(vGroundPos.xz * 11.0); gSnow = smoothstep(0.0, 0.35, uSnow * (1.0 - gClear) * 1.25 - gn * 0.55) * gFlat; }\n" +
                     "float gWet = clamp(uWet + uSnow * gClear * 0.8, 0.0, 1.0) * smoothstep(0.35, 0.8, gUp) * (1.0 - gSnow);\n" +
+                    // the puddles: on flat, dark and grey ground (asphalt, not grass or kerbs) where the pattern says so, not under snow
+                    "float gPud = 0.0; vec2 gRipple = vec2(0.0);\n" +
+                    "if (uPuddle > 0.01) { float gLum = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)); float gMx = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b)), gMn = min(diffuseColor.r, min(diffuseColor.g, diffuseColor.b));\n" +
+                    "  float gAsphalt = (1.0 - smoothstep(0.3, 0.5, gLum)) * (1.0 - smoothstep(0.25, 0.45, (gMx - gMn) / max(gMx, 0.001)));\n" +
+                    "  gPud = gPuddleMask(vGroundPos.xz) * smoothstep(0.93, 0.985, gUp) * gAsphalt * (1.0 - gSnow);\n" +
+                    "  if (gPud > 0.02) {\n" +
+                    "    for (int k = 0; k < 12; k++) { vec4 rp = uRip[k]; if (rp.z < 1.6) gRipple += gRing(vGroundPos.xz, rp.xy, rp.z * (1.4 + 3.0 * rp.w), 0.09 + 0.12 * rp.w, rp.w * (1.0 - rp.z / 1.6)); }\n" +
+                    "    if (uRain > 0.01) { vec2 gc = floor(vGroundPos.xz / 0.9); float gr = gIHash(ivec2(gc)); float ph = fract(uTime * 0.8 + gr * 7.0); vec2 ctr = (gc + 0.5 + (vec2(gr, fract(gr * 13.7)) - 0.5) * 0.3) * 0.9; gRipple += gRing(vGroundPos.xz, ctr, ph * 0.4, 0.05, (1.0 - ph) * uRain * 0.6); } }\n" +
+                    "  gWet = max(gWet, gPud); diffuseColor.rgb *= mix(1.0, 0.7, gPud); }\n" +
                     "diffuseColor.rgb *= mix(1.0, 0.58, gWet);\n" +
                     "diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.8, 0.84, 0.9) * (0.9 + 0.2 * gNoise(vGroundPos.xz * 30.0)), gSnow * 0.93);")
-                .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.16, gWet); roughnessFactor = mix(roughnessFactor, 0.88, gSnow);");
+                .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.16, gWet); roughnessFactor = mix(roughnessFactor, 0.88, gSnow); roughnessFactor = mix(roughnessFactor, 0.02, gPud);")
+                .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\nif (gPud > 0.02) normal = normalize(normal + (viewMatrix * vec4(gRipple.x, 0.0, gRipple.y, 0.0)).xyz * 0.45 * gPud);");
         };
         m.customProgramCacheKey = function () { return "ground"; };
         m.needsUpdate = true;
@@ -326,19 +397,20 @@ OpenRacer.Atmosphere = (function () {
     function startGround(kind) {
         ground.wet = kind === "rain" ? 0.9 : 0;
         ground.snow = kind === "snow" ? 0.55 : 0;
+        ground.puddle = kind === "rain" ? 0.6 : 0;
         pushGround(true);
     }
     // fixed by the option: dry, wet or snow set the ground at once; auto leaves it to the weather
     function groundOverride() {
         var g = opt("gfxGround");
-        if (g === "dry") { ground.wet = 0; ground.snow = 0; }
-        else if (g === "wet") { ground.wet = 1; ground.snow = 0; }
-        else if (g === "snow") { ground.wet = 0; ground.snow = 1; }
+        if (g === "dry") { ground.wet = 0; ground.snow = 0; ground.puddle = 0; }
+        else if (g === "wet") { ground.wet = 1; ground.snow = 0; ground.puddle = 0.7; }
+        else if (g === "snow") { ground.wet = 0; ground.snow = 1; ground.puddle = 0; }
         else return;
         pushGround(true);
     }
     function pushGround(force) {
-        ground.uniforms.uWet.value = ground.wet; ground.uniforms.uSnow.value = ground.snow;
+        ground.uniforms.uWet.value = ground.wet; ground.uniforms.uSnow.value = ground.snow; ground.uniforms.uPuddle.value = ground.puddle;
         var grip = (1 - 0.28 * ground.wet) * (1 - 0.62 * ground.snow);
         if (force || Math.abs(grip - ground.lastGrip) > 0.004) { ground.lastGrip = grip; if (typeof setGroundCondition === "function") setGroundCondition(ground.wet, ground.snow); }
     }
@@ -349,6 +421,8 @@ OpenRacer.Atmosphere = (function () {
         snowWork(delta, vehicles);
         if (opt("gfxGround") !== "auto") { groundOverride(); return; }
         var kind = opt("gfxWeather"), snowing = kind === "snow", raining = kind === "rain";
+        // the puddles fill in about a minute and a half of rain and are gone again in about 7 minutes
+        ground.puddle = raining ? Math.min(1, ground.puddle + delta / 90) : Math.max(0, ground.puddle - delta / 420);
         if (raining) { ground.wet = Math.min(1, ground.wet + delta / 40); ground.snow = Math.max(0, ground.snow - delta / 120); }
         else {
             ground.wet = Math.max(0, ground.wet - delta / 180);
@@ -362,7 +436,15 @@ OpenRacer.Atmosphere = (function () {
     // The snow that the cars take away, and the snow at the wheel: a tyre that slips scrapes it, a tyre that rolls packs a little away, and the heat under the car melts it. The wheel
     // gets the snow that is left at its place (wheel.localSnow): bare ground has its grip back.
     var qCar = new THREE.Quaternion(), vFwd = new THREE.Vector3();
+    var rings = [];                                   // the rings of the wheels in a puddle: { x, z, age, amp }; the shader shows twelve
+    function addRing(x, z, amp) { if (rings.length >= 12) rings.shift(); rings.push({ x: x, z: z, age: 0, amp: amp }); }
     function snowWork(delta, vehicles) {
+        // the time of the rain on the water, whether it rains, and the rings that grow and fade
+        ground.uniforms.uTime.value = (performance.now() / 1000) % 3600;
+        var rainNow = opt("gfxWeather") === "rain" ? 1 : 0;
+        ground.uniforms.uRain.value += (rainNow - ground.uniforms.uRain.value) * Math.min(1, delta * 0.5);
+        for (var q = rings.length - 1; q >= 0; q--) { rings[q].age += delta; if (rings[q].age > 1.6) rings.splice(q, 1); }
+        for (var u = 0; u < 12; u++) { var slot = ground.uniforms.uRip.value[u], ring = rings[u]; if (ring) slot.set(ring.x, ring.z, ring.age, ring.amp); else slot.set(0, 0, 99, 0); }
         if (!vehicles || !vehicles.length) return;
         var snow = ground.snow, lead = vehicles[0];
         if (lead && isFinite(lead.px)) moveClearWindow(lead.px, lead.pz);
@@ -384,7 +466,11 @@ OpenRacer.Atmosphere = (function () {
             }
             for (var w = 0; w < vehicle.wheels.length; w++) {
                 var wheel = vehicle.wheels[w], c = wheel.hasContact && wheel.contact ? wheel.contact : null;
-                if (!c) { wheel.localSnow = snow; continue; }
+                if (!c) { wheel.localSnow = snow; wheel.localWater = 0; continue; }
+                // the water at the wheel (a puddle): the grip is less in it, and a wheel in it that goes fast makes rings, bigger the faster it goes
+                var water = ground.puddle > 0.05 ? puddleAt(c.x, c.z) : 0, speed = Math.hypot(vehicle.vx || 0, vehicle.vz || 0);
+                wheel.localWater = water;
+                if (water > 0.3 && speed > 2.5) { wheel.ringTime = (wheel.ringTime || 0) + delta; if (wheel.ringTime > 0.07) { wheel.ringTime = 0; addRing(c.x, c.z, Math.min(1, speed / 24) * water); } }
                 if (snow > 0.03) {
                     var slip = Math.hypot((wheel.forwardSpeed || 0) - (wheel.omega || 0) * (wheel.radius || 0.3), (wheel.slipTan || 0) * Math.max(Math.abs(wheel.forwardSpeed || 0), 1.5));
                     var scrape = Math.max(0, Math.min(1, (slip - 1) / 5));
@@ -396,7 +482,12 @@ OpenRacer.Atmosphere = (function () {
         // while it snows the bare cells fill up again, in about a minute and a half
         if (ground.uniforms.uSnow.value > 0 && opt("gfxWeather") === "snow") {
             clearDecay += delta;
-            if (clearDecay > 0.5) { var step = Math.max(1, Math.round(255 * clearDecay / 90)); for (var i = 0; i < clearData.length; i++) if (clearData[i]) clearData[i] = clearData[i] > step ? clearData[i] - step : 0; clearDecay = 0; clearDirty = true; }
+            if (clearDecay > 0.5) {
+                var step = Math.max(1, Math.round(255 * clearDecay / 90));
+                for (var i = 0; i < clearData.length; i++) if (clearData[i]) clearData[i] = clearData[i] > step ? clearData[i] - step : 0;
+                tiles.forEach(function (tile) { for (var t = 0; t < tile.length; t++) if (tile[t]) tile[t] = tile[t] > step ? tile[t] - step : 0; });
+                clearDecay = 0; clearDirty = true;
+            }
         }
         if (clearDirty) { clearUploaded += delta; if (clearUploaded > 0.05 || !clearTexture) { uploadClear(); clearUploaded = 0; } }
     }
@@ -412,10 +503,10 @@ OpenRacer.Atmosphere = (function () {
         apply();
     }
 
-    function info() { return { wet: ground.wet, snow: ground.snow, grip: ground.lastGrip < 0 ? 1 : ground.lastGrip, weather: opt("gfxWeather"), hour: hourNow() }; }
+    function info() { return { puddle: ground.puddle, wet: ground.wet, snow: ground.snow, grip: ground.lastGrip < 0 ? 1 : ground.lastGrip, weather: opt("gfxWeather"), hour: hourNow() }; }
 
     // the snow that lies at a place (0 to 1), with what the cars took away
     function snowAt(x, z) { return ground.snow * (1 - clearAt(x, z)); }
 
-    return { attach: attach, apply: apply, update: update, info: info, snowAt: snowAt, WEATHER: WEATHER };
+    return { attach: attach, apply: apply, update: update, info: info, snowAt: snowAt, puddleAt: puddleAt, WEATHER: WEATHER };
 })();

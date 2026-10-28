@@ -1686,7 +1686,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var reach = w.radius + (body.width > 0 ? body.width : 0.7 * w.radius) / 2 + 0.12, wl = wheelList[i];
                 wl.length = 0;
                 for(var cc = 0; cc < candidates.length; cc++) if(self.ground.boxNear(candidates[cc], cylHub.x, cylHub.y, cylHub.z, reach)) wl.push(candidates[cc]);
-                var touched = body.step(dt, cylHub, cylVel, cylL, cylF, cylU, w.omega, self.ground, wl, function (load, name) { return w.frictionFor(load, self.getSurface(name, w.localSnow)); }, w.lateralGrip, self.mass);
+                var touched = body.step(dt, cylHub, cylVel, cylL, cylF, cylU, w.omega, self.ground, wl, function (load, name) { return w.frictionFor(load, self.getSurface(name, w.localSnow, w.localWater)); }, w.lateralGrip, self.mass);
                 if(touched) {
                     var up = body.normal.x * axisY.x + body.normal.y * axisY.y + body.normal.z * axisY.z + body.friction.x * axisY.x + body.friction.y * axisY.y + body.friction.z * axisY.z;
                     tyreLoad[i] = Math.max(0, up);
@@ -1920,7 +1920,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var leanLeft = (wheel.right ? -camber : camber) - rollRight * self.rollCamber - (wheel.camberBend || 0);
                 if(self.liveAxle[wheel.front ? "front" : "rear"]) leanLeft = self.axleLean(wheel.front) - (wheel.camberBend || 0);
                 wheel.lean = self.soloWheels ? 0 : leanLeft;            // (for the wheel of the model: it leans with the camber, Wheel.turn)
-                var surface = self.getSurface(wheel.surface, wheel.localSnow);
+                var surface = self.getSurface(wheel.surface, wheel.localSnow, wheel.localWater);
                 if(wheel.cylActive) {
                     // the tyre as a body of nodes and beams (TyreShell.js): the friction that its nodes carry, along the wheel and across it
                     var tb = wheel.tyreBody;

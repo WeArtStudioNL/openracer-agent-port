@@ -116,14 +116,16 @@ function setGroundCondition(wet, snow) {
     surfaceCache = {};
 }
 // snow: how much snow lies at the wheel (0 to 1; where the snow was scraped or melted away the grip is back); left out, it is the snow of the whole ground
-function getSurface(name, snow) {
+// water: how deep the water is at the wheel (a puddle, 0 to 1): the wet is then at least that much more than the wet of the ground (a puddle loses more grip than a wet road)
+function getSurface(name, snow, water) {
     var key = uCoeff[name] ? name : "track01";
     var level = snow === undefined ? groundSnow : snow;
-    if(groundWet < 0.005 && level < 0.005) return uCoeff[key];
-    var step = Math.max(0, Math.min(20, Math.round(level * 20))), cacheKey = key + step;
+    var wet = water > 0 ? Math.max(groundWet, Math.min(1.5, water * 1.5)) : groundWet;
+    if(wet < 0.005 && level < 0.005) return uCoeff[key];
+    var step = Math.max(0, Math.min(20, Math.round(level * 20))), wetStep = Math.max(0, Math.min(30, Math.round(wet * 20))), cacheKey = key + step + "w" + wetStep;
     var cached = surfaceCache[cacheKey];
     if(cached) return cached;
-    var base = uCoeff[key], factor = (1 - (WET_LOSS[key] || 0) * groundWet) * (1 - (SNOW_LOSS[key] || 0) * step / 20);
+    var base = uCoeff[key], factor = (1 - (WET_LOSS[key] || 0) * wetStep / 20) * (1 - (SNOW_LOSS[key] || 0) * step / 20);
     cached = Object.assign({}, base, { static: base.static * factor, kinetic: base.kinetic * factor });
     surfaceCache[cacheKey] = cached;
     return cached;

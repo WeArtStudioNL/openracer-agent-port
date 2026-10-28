@@ -23,6 +23,7 @@ OpenRacer.Debris = function (scene, capacity) {
     var positions = new Float32Array(capacity * 3), colours = new Float32Array(capacity * 3), sizes = new Float32Array(capacity), alphas = new Float32Array(capacity);
     var vel = new Float32Array(capacity * 3), shapes = new Float32Array(capacity), tilts = new Float32Array(capacity);
     var age = new Float32Array(capacity).fill(1e9), life = new Float32Array(capacity).fill(1), floor = new Float32Array(capacity);
+    var quick = new Uint8Array(capacity);                  // 1 for water: it is gone soon after it came down
     var lying = new Uint8Array(capacity);                  // 1 for a piece that has come down and stays on the ground a while
     var limit = 0;
     var next = 0, alive = 0, pendingNew = true, last = [null, null, null, null], carry = [0, 0, 0, 0];
@@ -72,6 +73,7 @@ OpenRacer.Debris = function (scene, capacity) {
         gravel: shades([[0.8, 0.7, 0.54], [0.7, 0.6, 0.45], [0.86, 0.78, 0.62], [0.6, 0.52, 0.4], [0.66, 0.64, 0.6]]),
         mud: shades([[0.28, 0.2, 0.13], [0.2, 0.14, 0.09], [0.36, 0.26, 0.16]]),
         ground: shades([[0.55, 0.43, 0.3], [0.46, 0.36, 0.24], [0.62, 0.5, 0.36]]),
+        water: shades([[0.95, 0.97, 1.0], [0.78, 0.83, 0.9], [0.62, 0.68, 0.76], [0.88, 0.9, 0.94]]).map(function (c) { return [c[0] * 1.7, c[1] * 1.7, c[2] * 1.7]; }),      // spray: white and grey
         snow: shades([[1.0, 1.0, 1.0], [0.92, 0.95, 1.0], [1.0, 1.0, 1.0]]).map(function (c) { return [c[0] * 2.2, c[1] * 2.2, c[2] * 2.2]; })       // (bright: lighter than the snow, which is itself lit)
     };
     // what each kind looks like: the shape, the size (m: the length of a blade, the width of the rest), the number made compared with the rest, how far they fly
@@ -82,14 +84,17 @@ OpenRacer.Debris = function (scene, capacity) {
         gravel: { shape: 0, size: [0.012, 0.03], rate: 2, fly: 0.9 },
         mud: { shape: 2, size: [0.03, 0.07], rate: 0.9, fly: 0.7 },
         ground: { shape: 2, size: [0.02, 0.045], rate: 1.2, fly: 0.9 },
-        snow: { shape: 2, size: [0.01, 0.026], rate: 1.1, fly: 0.9 }
+        snow: { shape: 2, size: [0.01, 0.026], rate: 1.1, fly: 0.9 },
+        water: { shape: 1, size: [0.05, 0.12], rate: 1, fly: 1 },
+        droplet: { shape: 2, size: [0.012, 0.03], rate: 1, fly: 1 }
     };
 
     function spawn(x, y, z, vx, vy, vz, kind) {
         if (next >= limit) next = 0;
         var i = next, look = LOOK[kind] || LOOK.ground;
         next = (next + 1) % limit;
-        var shade = SHADES[kind] || SHADES.ground, c = shade[Math.floor(Math.random() * shade.length)];
+        var shade = SHADES[kind === "droplet" ? "water" : kind] || SHADES.ground, c = shade[Math.floor(Math.random() * shade.length)];
+        quick[i] = kind === "water" || kind === "droplet" ? 1 : 0;
         positions[i * 3] = x; positions[i * 3 + 1] = y; positions[i * 3 + 2] = z;
         vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz;
         colours[i * 3] = c[0]; colours[i * 3 + 1] = c[1]; colours[i * 3 + 2] = c[2];
@@ -99,7 +104,23 @@ OpenRacer.Debris = function (scene, capacity) {
         pendingNew = true;
     }
 
-    var fwd = new THREE.Vector3(), lft = new THREE.Vector3();
+    var fwd = new THREE.Vector3(), lft = new THREE.Vector3(), sprayCarry = [0, 0, 0, 0];
+    function spray(w, wheel, contact, vehicle, puddle, speed, amount, delta) {
+        fwd.set(wheel.heading.x, 0, wheel.heading.z);
+        if (fwd.lengthSq() < 1e-6) return;
+        fwd.normalize(); lft.set(fwd.z, 0, -fwd.x);
+        var side = wheel.right ? -1 : 1;                                       // (outwards: away from the car)
+        sprayCarry[w] += Math.min(500, (30 + 12 * speed) * puddle) * amount * delta;
+        var count = Math.min(100, Math.floor(sprayCarry[w]));
+        sprayCarry[w] = Math.min(sprayCarry[w] - count, 1);
+        for (var n = 0; n < count; n++) {
+            var kind = Math.random() < 0.65 ? "water" : "droplet";
+            var out = (0.8 + 0.3 * speed) * (0.4 + Math.random() * 0.8), ahead = speed * (Math.random() * 0.25 - 0.08), up = 1.0 + 0.1 * speed * Math.random() + Math.random() * 1.6;
+            var jitter = (Math.random() - 0.5) * 0.5;
+            spawn(contact.x + lft.x * side * (Math.random() * 0.1) + (Math.random() - 0.5) * 0.1, contact.y + 0.03, contact.z + lft.z * side * (Math.random() * 0.1) + (Math.random() - 0.5) * 0.1,
+                lft.x * side * out + fwd.x * (ahead + jitter) + vehicle.vx * 0.4, Math.min(5, up), lft.z * side * out + fwd.z * (ahead + jitter) + vehicle.vz * 0.4, kind);
+        }
+    }
 
     // The pieces that fly: gravity and a little drag; one that comes down to the height where it began stays a moment and goes
     this.update = function (delta, vehicle) {
@@ -118,6 +139,9 @@ OpenRacer.Debris = function (scene, capacity) {
             var wheel = wheels[w];
             var surface = wheel.surface, info = typeof getSurface === "function" ? getSurface(surface) : null, loose = !!(info && info.loose), snowy = snow > 0.35;
             var contact = wheel.hasContact && wheel.contact ? wheel.contact : null;
+            // water: a wheel in a puddle that goes fast throws it up and to the sides (the more the faster), white and grey blades and droplets that fall again at once
+            var puddleHere = wheel.localWater || 0, driving = Math.hypot(vehicle.vx, vehicle.vz);
+            if (amount > 0 && contact && puddleHere > 0.3 && driving > 3 && snow < 0.3 && wheel.heading) spray(w, wheel, contact, vehicle, puddleHere, driving, amount, delta);
             if (amount <= 0 || !contact || !(loose || snowy)) { last[w] = null; continue; }
             // the way that the tread moves against the ground, in the frame of the wheel: along it (the turn against the speed of the car; backwards for a wheel that spins) and
             // across it (the slide: where the car goes sideways)
@@ -163,10 +187,10 @@ OpenRacer.Debris = function (scene, capacity) {
                 positions[i * 3] += vel[i * 3] * delta; positions[i * 3 + 1] += vel[i * 3 + 1] * delta; positions[i * 3 + 2] += vel[i * 3 + 2] * delta;
                 if (positions[i * 3 + 1] < floor[i]) {                  // it has come down: it stays where it is for a while (5 to 14 s), then goes
                     positions[i * 3 + 1] = floor[i]; vel[i * 3] = vel[i * 3 + 1] = vel[i * 3 + 2] = 0;
-                    lying[i] = 1; life[i] = age[i] + 5 + Math.random() * 9;
+                    lying[i] = 1; life[i] = quick[i] ? age[i] + 0.15 : age[i] + 5 + Math.random() * 9;
                 }
             }
-            alphas[i] = Math.min(1, (life[i] - age[i]) / (lying[i] ? 1.5 : 0.25));
+            alphas[i] = Math.min(1, (life[i] - age[i]) / (lying[i] && !quick[i] ? 1.5 : 0.25));
             alive++;
         }
         // the light on them: as bright as the light of the scene (a night, or the weather, makes them dark as well)
@@ -179,7 +203,7 @@ OpenRacer.Debris = function (scene, capacity) {
     };
 
     this.clear = function () {
-        age.fill(1e9); alphas.fill(0); sizes.fill(0); lying.fill(0);
+        age.fill(1e9); alphas.fill(0); sizes.fill(0); lying.fill(0); quick.fill(0);
         alphaAttribute.needsUpdate = sizeAttribute.needsUpdate = true;
         last = [null, null, null, null]; alive = 0;
     };
