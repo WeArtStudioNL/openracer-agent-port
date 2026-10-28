@@ -224,7 +224,7 @@ OpenRacer.GroundWorld = function (cellSize) {
     // the lowest priority is taken. Gives { t, x, y, z, nx, ny, nz, surface, mesh } (the normal faces the ray), or null.
     // what the simulation asks of the triangles, counted per frame (Scene.js shows it in the debug text and resets it): rays and the triangles they test, the spheres of the
     // shell (nearby) and the triangles they bring, the exact tests (closest), and the most triangles that one ray tested (a ray through a thick bundle of triangles is the lag)
-    this.stats = { rays: 0, rayTris: 0, rayMax: 0, nearby: 0, nearbyTris: 0, closest: 0 };
+    this.stats = { rays: 0, rayTris: 0, rayMax: 0, nearby: 0, nearbyTris: 0, closest: 0, boxes: 0 };
     var stats = this.stats;
     this.ray = function (ox, oy, oz, dx, dy, dz, maxT, minFacing) {
         if(!count3) return null;
@@ -357,6 +357,7 @@ OpenRacer.GroundWorld = function (cellSize) {
 
     // Is the sphere (c, r) near the box of triangle t? (a cheap test before the exact one)
     this.boxNear = function (t, cx, cy, cz, r) {
+        stats.boxes++;
         var b = t * 6;
         return !(box3[b] > cx + r || box3[b + 3] < cx - r || box3[b + 1] > cy + r || box3[b + 4] < cy - r || box3[b + 2] > cz + r || box3[b + 5] < cz - r);
     };
