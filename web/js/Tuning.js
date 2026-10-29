@@ -44,7 +44,7 @@ var Tuning = (function() {
     function apply() {
         var v = values;
         if(v.width > 0 && v.height > 0) car.frontal_area = v.width * v.height * 0.85;
-        if(car.setColors) car.setColors({ body: v.body_color || null, rim: v.rim_color || null });
+        if(car.setColors) car.setColors({ body: v.body_color || null, rim: v.rim_color || null, bodyFinish: v.body_finish || "", rimFinish: v.rim_finish || "" });
         car.vehicle.retune(OpenRacer.CarTuning.toRetune(v, car.frontal_area, air_density));
         // the rest of the car editor, live: the cameras, the steering wheel, the rider of a motorcycle, the torque curve, the sound; and the model built again for
         // what it is built from (the suspension and the driveline of the parts library, the soft body, the size), half a second after the last change
@@ -293,6 +293,8 @@ var Tuning = (function() {
         tyre_front: ["Tyre at the front (it brings its own shell)", function() { return libraryList("tyres"); }],
         rim_rear: ["Rim at the rear", function() { return libraryList("rims"); }],
         tyre_rear: ["Tyre at the rear", function() { return libraryList("tyres"); }],
+        body_finish: ["Finish of the body", function() { var F = OpenRacer.carFinishes || {}; return Object.keys(F).map(function(id) { return [id, F[id].label]; }); }],
+        rim_finish: ["Finish of the rims", function() { var F = OpenRacer.carFinishes || {}; return Object.keys(F).map(function(id) { return [id, F[id].label]; }); }],
         sim_layout: ["Engine layout (the sound)", function() { var L = OpenRacer.engineSimLayouts || {}; return Object.keys(L).map(function(id) { return [id, L[id].label || id]; }); }],
         sim_ir: ["Exhaust of the sound", function() { return (OpenRacer.engineSimImpulseResponses || []).map(function(ir) { return [ir.id, ir.label || ir.id]; }); }]
     };

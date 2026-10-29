@@ -252,7 +252,7 @@ OpenRacer.Car = function( config, domElement ) {
     // wheel library). The material of such a mesh is made its own the first time (the model shares materials), and its colour as made is kept to go back to.
     this.colors = null;
     this.setColors = function(colors) {
-        tobj.colors = colors && (colors.body || colors.rim) ? { body: colors.body || null, rim: colors.rim || null } : null;
+        tobj.colors = colors && (colors.body || colors.rim || colors.bodyFinish || colors.rimFinish) ? { body: colors.body || null, rim: colors.rim || null, bodyFinish: colors.bodyFinish || "", rimFinish: colors.rimFinish || "" } : null;
         OpenRacer.applyCarColors([tobj.body].concat(tobj.wheels.map(function(w) { return w.object; })).filter(Boolean), colors);
     };
 
@@ -1178,6 +1178,18 @@ OpenRacer.Car = function( config, domElement ) {
 // The colours of a car on its model (Car.setColors, and the pictures of the tunes in the main menu): roots are the body and the wheels, colors { body, rim } (a CSS colour each, or null
 // for the colour of the model). The body is every mesh called body (its own name, a parent's up to the root, or its material's; not the soft body), the rims every mesh called rim
 // (a wheel part of the model, a rim of the wheel library). The material of such a mesh is made its own the first time (the model shares materials), and its colour as made is kept.
+OpenRacer.carFinishes = {
+    "": { label: "As the model" },
+    gloss: { label: "Gloss", roughness: 0.22, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.03 },
+    satin: { label: "Satin", roughness: 0.5, metalness: 0.12, clearcoat: 0.25, clearcoatRoughness: 0.35 },
+    matte: { label: "Matte", roughness: 0.92, metalness: 0, clearcoat: 0 },
+    metallic: { label: "Metallic", roughness: 0.33, metalness: 0.75, clearcoat: 1, clearcoatRoughness: 0.05 },
+    pearl: { label: "Pearl (the colour shifts)", roughness: 0.28, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.04, iridescence: 1, iridescenceIOR: 1.8, iridescenceThicknessRange: [250, 650] },
+    flake: { label: "Metal flake (sparkle)", roughness: 0.38, metalness: 0.9, clearcoat: 1, clearcoatRoughness: 0.06, flakes: true },
+    candy: { label: "Candy (deep and glassy)", roughness: 0.15, metalness: 0.85, clearcoat: 1, clearcoatRoughness: 0.02 },
+    chrome: { label: "Chrome", roughness: 0.04, metalness: 1, clearcoat: 0 },
+    brushed: { label: "Brushed metal", roughness: 0.42, metalness: 1, clearcoat: 0 }
+};
 OpenRacer.applyCarColors = (function() {
     var BODY_NAME = /body/i, RIM_NAME = /(^|[^a-z])rims?([^a-z]|$)/i;
     function kindOf(mesh, stopAt) {
@@ -1190,23 +1202,54 @@ OpenRacer.applyCarColors = (function() {
         }
         return null;
     }
+    // the little mirrors of a metal flake paint: a normal map of random tilts, made once
+    var flakeMap = null;
+    function flakes() {
+        if(flakeMap) return flakeMap;
+        var size = 256, canvas = document.createElement("canvas");
+        canvas.width = canvas.height = size;
+        var g = canvas.getContext("2d"), image = g.createImageData(size, size);
+        for(var i = 0; i < size * size; i++) {
+            var a = Math.random() * 2 * Math.PI, tilt = Math.pow(Math.random(), 0.6);        // (most of the flakes tilt, a few lie flat)
+            image.data[i * 4] = 128 + Math.cos(a) * 127 * tilt; image.data[i * 4 + 1] = 128 + Math.sin(a) * 127 * tilt; image.data[i * 4 + 2] = 255; image.data[i * 4 + 3] = 255;
+        }
+        g.putImageData(image, 0, 0);
+        flakeMap = new THREE.CanvasTexture(canvas);
+        flakeMap.wrapS = flakeMap.wrapT = THREE.RepeatWrapping;
+        flakeMap.repeat.set(64, 64);
+        return flakeMap;
+    }
+    // a material of the model with a colour and a finish (a paint: roughness, metal, a clear coat, a pearl or flakes); the colour of the model when none is given
+    function style(material, colour, finishName) {
+        if(!material.isMeshStandardMaterial) { var plain = material.clone(); if(colour && plain.color) plain.color.set(colour); return plain; }
+        var styled = new THREE.MeshPhysicalMaterial();
+        THREE.MeshStandardMaterial.prototype.copy.call(styled, material);
+        if(colour) styled.color.set(colour);
+        var f = OpenRacer.carFinishes[finishName];
+        if(f && finishName) {
+            styled.roughness = f.roughness; styled.metalness = f.metalness; styled.clearcoat = f.clearcoat; styled.clearcoatRoughness = f.clearcoatRoughness || 0;
+            if(f.iridescence) { styled.iridescence = f.iridescence; styled.iridescenceIOR = f.iridescenceIOR; styled.iridescenceThicknessRange = f.iridescenceThicknessRange; }
+            if(f.flakes) { styled.normalMap = flakes(); styled.normalScale.set(0.45, 0.45); }
+            styled.roughnessMap = null; styled.metalnessMap = null;                 // (the finish decides, not the maps of the model)
+            styled.envMapIntensity = Math.max(styled.envMapIntensity || 1, 1.2);
+        }
+        styled.needsUpdate = true;
+        return styled;
+    }
     return function(roots, colors) {
         roots.forEach(function(root) {
             if(!root) return;
             root.traverse(function(mesh) {
                 if(!mesh.isMesh || !mesh.material) return;
-                var kind = kindOf(mesh, root.parent);
+                var kind = mesh.userData.colorKind !== undefined ? mesh.userData.colorKind : (mesh.userData.colorKind = kindOf(mesh, root.parent));
                 if(!kind) return;
-                var want = colors ? colors[kind] : null;
-                if(!want && !mesh.userData.colorAsMade) return;
-                if(!mesh.userData.colorAsMade) {
-                    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(function(m) { return m.clone(); }) : mesh.material.clone();
-                    mesh.userData.colorAsMade = [].concat(mesh.material).map(function(m) { return m.color ? m.color.getHex() : null; });
-                }
-                [].concat(mesh.material).forEach(function(m, i) {
-                    if(!m.color) return;
-                    if(want) m.color.set(want); else if(mesh.userData.colorAsMade[i] !== null) m.color.setHex(mesh.userData.colorAsMade[i]);
-                });
+                var colour = colors ? colors[kind] : null, finish = colors ? colors[kind + "Finish"] : null, ud = mesh.userData;
+                if(!colour && !finish && !ud.asMade) return;
+                if(!ud.asMade) { ud.asMadeIsArray = Array.isArray(mesh.material); ud.asMade = [].concat(mesh.material); }
+                if(ud.styled) { ud.styled.forEach(function(m) { m.dispose(); }); ud.styled = null; }
+                if(!colour && !finish) { mesh.material = ud.asMadeIsArray ? ud.asMade.slice() : ud.asMade[0]; return; }
+                ud.styled = ud.asMade.map(function(m) { return style(m, colour, finish); });
+                mesh.material = ud.asMadeIsArray ? ud.styled : ud.styled[0];
             });
         });
     };

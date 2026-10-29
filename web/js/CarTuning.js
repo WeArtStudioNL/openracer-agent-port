@@ -14,6 +14,8 @@ OpenRacer.CarTuning = (function () {
             // in the tuning menu (Tuning.js), "" is the car as made (the colours of the model)
             ["body_color", "Colour of the body (the meshes called body)", "", 0, 0, 0],
             ["rim_color", "Colour of the rims", "", 0, 0, 0],
+            ["body_finish", "Finish of the body", "", 0, 0, 0],
+            ["rim_finish", "Finish of the rims", "", 0, 0, 0],
             ["mass", "Mass", "kg", 300, 6000, 10],
             ["front_weight", "Weight on the front axle", "%", 25, 75, 0.5],
             ["cg_height", "Height of the centre of gravity", "m", 0.15, 1.5, 0.01],
@@ -284,7 +286,7 @@ OpenRacer.CarTuning = (function () {
             compound: tyres.compound || "road",
             tyre_damage: tyres.damage ? "on" : "off",
             rim_front: libChoice(c, "front").rim, tyre_front: libChoice(c, "front").tyre, rim_rear: libChoice(c, "rear").rim, tyre_rear: libChoice(c, "rear").tyre,
-            body_color: (c.colors && c.colors.body) || "", rim_color: (c.colors && c.colors.rim) || "",
+            body_color: (c.colors && c.colors.body) || "", rim_color: (c.colors && c.colors.rim) || "", body_finish: (c.colors && c.colors.bodyFinish) || "", rim_finish: (c.colors && c.colors.rimFinish) || "",
             // the rest of the car editor (the tuning menu changes these too; Tuning.js builds the car again for what the model is built from)
             vehicle_type: c.type === "motorcycle" ? "motorcycle" : "car",
             susp_front: (c.suspension && c.suspension.front && c.suspension.front.type) || "model",
@@ -587,10 +589,12 @@ OpenRacer.CarTuning = (function () {
         }
         if(v.engine_place) c.driveline = Object.assign({}, c.driveline || {}, { engine: v.engine_place });
         // the colours of the body and the rims (none: the colours of the model)
-        if(v.body_color !== undefined || v.rim_color !== undefined) {
+        if(v.body_color !== undefined || v.rim_color !== undefined || v.body_finish !== undefined || v.rim_finish !== undefined) {
             var colors = {};
             if(v.body_color) colors.body = v.body_color;
             if(v.rim_color) colors.rim = v.rim_color;
+            if(v.body_finish) colors.bodyFinish = v.body_finish;
+            if(v.rim_finish) colors.rimFinish = v.rim_finish;
             if(Object.keys(colors).length) c.colors = colors; else delete c.colors;
         }
         // the rims and the tyres of the wheel library (none chosen: the wheels of the model)

@@ -31,6 +31,10 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### Finishes of the paint and the rims
+
+- **The body and the rims have a finish next to their colour** (tuning menu of the game, Chassis settings): Gloss, Satin, Matte, Metallic, Pearl (the colour shifts with the angle: an iridescent clear coat), Metal flake (a sparkle from a normal map of tiny mirrors), Candy (deep and glassy), Chrome and Brushed metal. The finish sets the roughness, the metal and the clear coat; the colour stays the colour of the picker (or of the model). They are kept in the tune (`colors.bodyFinish`, `colors.rimFinish`) and shown in the pictures of the main menu. Only meshes called body or rim take them (the other parts of a model keep their paint).
+
 ### Tyres
 
 - **Drag slick** (*Drag slick (straight line)*): the most grip in a straight line (1.7, the slick has 1.45), half the stiffness across the tyre (`lateral`: 0.5, so it is poor in a bend), warms up and wears fast. In a test from a standstill on the road it reaches 100 km/h in 5.0 s against 5.6 s for the slick. A kind of tyre may now have a `lateral` factor for the stiffness against the slip angle.
