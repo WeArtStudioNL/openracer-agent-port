@@ -1550,6 +1550,7 @@ function readBuild() {
 // what is shown for the build that is (or is not) there
 function applyBuildUi() {
     const has = !!state.build;
+    updateBuildLimits();
     $("bBuild").hidden = !has;
     $("bNumbers").hidden = has; $("bTypical").hidden = has;
     const type = $("bInduction").value;
@@ -1567,6 +1568,7 @@ function applyBuildUi() {
 }
 function recomputeBuild() {
     if (!state.build) { state.buildResult = null; applyBuildUi(); return; }
+    for (let i = 0; i < 3 && updateBuildLimits(); i++);        // (a value that the others do not allow any more is pulled in)
     state.build = readBuild();
     const res = EB.compute(state.build, num("limiter") || 7000, num("idle") || 850);
     state.buildResult = res;
@@ -1604,9 +1606,52 @@ $("bBlock").addEventListener("change", () => {
 document.querySelectorAll(".b").forEach((el) => el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => {
     if (!state.build) return;
     if (el.id === "bInduction") fillBuildVariants();
+    if (el.type === "number" && el.min !== "" && el.max !== "") { const v = parseFloat(el.value); if (Number.isFinite(v) && (v < +el.min || v > +el.max)) el.value = Math.min(+el.max, Math.max(+el.min, v)); }     // (a number typed beyond what is possible)
     syncSoundFromBuild(readBuild(), false);
     recomputeBuild();
 }));
+
+// ---- sliders for the build, with limits that follow from the other settings (EngineBuild.limits): a bore that the stroke does not allow, a compression that the fuel cannot take
+const LIMIT_FIELDS = { bBore: "bore", bStroke: "stroke", bCompression: "compression", bCam: "cam", bIntakeFlow: "intake", bExhaustFlow: "exhaust", bPrimary: "primary", bExhaustLen: "exhaustLen",
+    bLambda: "lambda", bBoost: "boost", bTemp: "temp", bAltitude: "altitude", idle: "idle", limiter: "limiter", inertia: "inertia" };
+function initBuildSliders() {
+    for (const id of Object.keys(LIMIT_FIELDS)) {
+        const n = $(id), r = document.createElement("input");
+        r.type = "range"; r.id = id + "Slider"; r.className = "bslider"; r.step = n.step || "any"; r.setAttribute("aria-label", n.getAttribute("aria-label") || id);
+        n.parentNode.insertBefore(r, n.nextSibling);
+        r.addEventListener("input", () => { n.value = r.value; n.dispatchEvent(new Event("input", { bubbles: true })); });
+        n.addEventListener("input", () => { r.value = n.value; });
+    }
+}
+const OWN_LIMITS = { idle: [300, 4000], limiter: [1500, 20000], inertia: [0.01, 3] };
+function updateBuildLimits() {
+    const own = !state.build;
+    let lim = null, changed = false;
+    if (!own) { try { lim = EB.limits(readBuild(), num("limiter") || 7000, num("idle") || 850); } catch (e) { lim = null; } }
+    if (!own && !lim) return false;
+    for (const [id, key] of Object.entries(LIMIT_FIELDS)) {
+        const n = $(id), r = $(id + "Slider");
+        if (own && !OWN_LIMITS[key]) continue;
+        const [lo, hi, why] = own ? OWN_LIMITS[key] : lim[key];
+        const low = Math.min(lo, hi), high = Math.max(lo, hi);
+        n.min = r.min = low; n.max = r.max = high; n.title = r.title = why || "";
+        const v = parseFloat(n.value);
+        if (Number.isFinite(v) && (v < low || v > high)) { n.value = Math.min(high, Math.max(low, v)); changed = true; }
+        r.value = n.value;
+    }
+    if (lim) {
+        [...$("bValves").options].forEach((o) => { o.disabled = !lim.valves.includes(parseInt(o.value, 10)); });
+        if ($("bValves").selectedOptions[0] && $("bValves").selectedOptions[0].disabled) { $("bValves").value = String(lim.valves[lim.valves.length - 1]); changed = true; }
+        [...$("bSize").options].forEach((o) => { o.disabled = !lim.turboSizes.includes(o.value); });
+        if ($("bSize").selectedOptions[0] && $("bSize").selectedOptions[0].disabled) { $("bSize").value = lim.turboSizes[lim.turboSizes.length - 1]; changed = true; }
+        if ($("bInduction").value === "turbo") {
+            [...$("bVariant").options].forEach((o) => { o.disabled = !lim.turboVariants.includes(o.value); });
+            if ($("bVariant").selectedOptions[0] && $("bVariant").selectedOptions[0].disabled) { $("bVariant").value = "single"; changed = true; }
+        }
+    }
+    return changed;
+}
+initBuildSliders();
 initBuildUi();
 
 // ---- the dyno: a full-throttle pull on a dry road, measured at the wheels; only the chart shows it

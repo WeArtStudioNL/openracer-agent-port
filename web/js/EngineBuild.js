@@ -181,6 +181,51 @@ OpenRacer.EngineBuild = (function () {
             spool: Math.round({ small: 0.5, medium: 0.8, large: 1.2 }[ind.size || "medium"] * variant.lag * 20) / 20 };
     }
 
-    return { turboSpec: turboSpec, CYLINDERS: CYLINDERS, FUELS: FUELS, INTERCOOLERS: INTERCOOLERS, TURBO_SIZES: TURBO_SIZES, TURBO_VARIANTS: TURBO_VARIANTS, SUPERCHARGERS: SUPERCHARGERS,
+    // how far a setting can go with the others as they are: [min, max, why] for every field of the build, and what a turbo or supercharger can be
+    var BOOST_CAP = { turbo: 3.0, roots: 1.0, screw: 1.5, centrifugal: 1.5 };
+    function chargeFactor(b, boost) {                          // the knock factor of a charge: pressure ratio and heat (as at()), at a middle rpm
+        var ind = b.induction || {};
+        if (!(boost > 0) || !ind.type || ind.type === "none") return 1;
+        var pr = 1 + boost / 1.013, eff = compressorEfficiency(b, 5000), ic = INTERCOOLERS[ind.intercooler] ? INTERCOOLERS[ind.intercooler].value : 0.65;
+        var out = T0 * (1 + (Math.pow(pr, 0.286) - 1) / eff), manifold = out - ic * (out - T0);
+        return Math.pow(pr, 0.4) * Math.pow(manifold / T0, 0.8);
+    }
+    function round(x, step) { return Math.round(x / step) * step; }
+    function limits(b, limiter, idle) {
+        var bore = b.bore, stroke = b.stroke, valves = b.valves || 4, vdL = displacement(b), ind = b.induction || { type: "none" };
+        var fuel = FUELS[b.fuel] || FUELS.pump95, knockLimit = fuel.knock + Math.max(0, 1 - (b.lambda || 0.9)) * 8, kiMax = knockLimit + 3;
+        var intakeMax = 0.036 * bore * bore * (0.85 + 0.075 * valves), intakeMin = 0.012 * bore * bore;
+        var strokeMax = Math.min(130, bore * 1.5, 28 * 30000 / Math.max(2000, limiter)), strokeMin = Math.max(30, bore * 0.45);
+        var crMax = 16, cap = 3;
+        if (ind.type && ind.type !== "none") {
+            cap = ind.type === "turbo" ? BOOST_CAP.turbo : (BOOST_CAP[ind.variant] || 1.5);
+            crMax = Math.min(16, kiMax / chargeFactor(b, ind.boost));
+        } else crMax = Math.min(16, kiMax);
+        var boostMax = cap;
+        for (var x = 0.1; x <= cap + 1e-9; x += 0.05) if ((b.compression || 10) * chargeFactor(Object.assign({}, b, { induction: Object.assign({}, ind, { boost: x }) }), x) > kiMax) { boostMax = Math.max(0.1, x - 0.05); break; }
+        var camMax = valves >= 4 ? 290 : valves === 3 ? 265 : 250;
+        var intake = b.intake_flow || 200;
+        return {
+            bore: [Math.max(40, stroke / 1.5), Math.min(120, stroke / 0.45), "The bore against the stroke: between 0.45 and 1.5 times"],
+            stroke: [strokeMin, strokeMax, "The stroke against the bore, and the piston speed at the rev limit (28 m/s at most)"],
+            compression: [7, round(Math.max(7.5, crMax) - 0.05, 0.1), "The most that " + fuel.label.toLowerCase() + " allows without knock" + (ind.type !== "none" ? " with this boost" : "")],
+            cam: [200, camMax, valves < 4 ? "A cam with " + valves + " valves per cylinder is limited to " + camMax + "°" : "The longest cam that still runs"],
+            intake: [Math.round(intakeMin), Math.round(intakeMax), valves + " valves in a bore of " + bore + " mm flow at most this much"],
+            exhaust: [Math.round(intake * 0.5), Math.round(intake), "An exhaust flows less than the inlet"],
+            primary: [0.15, Math.min(1.5, (b.exhaust_length || 2) - 0.2), "The header is shorter than the whole exhaust"],
+            exhaustLen: [Math.max(0.5, (b.primary_length || 0.4) + 0.2), 4, "The whole exhaust is longer than the header"],
+            lambda: [0.75, 1.1, "Richer than 0.75 does not burn, leaner than 1.1 runs hot"],
+            boost: [0.1, round(boostMax, 0.05), ind.type === "turbo" ? "A turbo up to " + BOOST_CAP.turbo + " bar; the compression and the fuel (knock) may allow less" : "This kind of supercharger can give up to " + (BOOST_CAP[ind.variant] || 1.5) + " bar; the compression and the fuel (knock) may allow less"],
+            temp: [-20, 45, "Air of a dyno room"], altitude: [0, 4000, "Altitude of the dyno"],
+            idle: [400, Math.max(500, Math.min(1500, Math.floor(limiter * 0.35 / 50) * 50)), "The idle speed of an engine: 400 to 1500 rpm"],
+            limiter: [Math.max(2500, (idle || 850) * 3), Math.floor(Math.min(20000, 28 * 30000 / stroke) / 100) * 100, "The piston speed at the rev limit stays under 28 m/s (the stroke)"],
+            inertia: [0.02, Math.round((0.35 * vdL + 0.6) * 100) / 100, "A flywheel in proportion to the engine"],
+            valves: [2, 3, 4, 5].filter(function (v) { return bore >= (v === 5 ? 65 : v === 4 ? 50 : v === 3 ? 55 : 0); }),
+            turboSizes: ["small", "medium", "large"].filter(function (z) { return vdL >= (z === "large" ? 1.5 : z === "medium" ? 0.6 : 0); }),
+            turboVariants: Object.keys(TURBO_VARIANTS).filter(function (v) { return v !== "twin" || vdL >= 1.2; })
+        };
+    }
+
+    return { limits: limits, turboSpec: turboSpec, CYLINDERS: CYLINDERS, FUELS: FUELS, INTERCOOLERS: INTERCOOLERS, TURBO_SIZES: TURBO_SIZES, TURBO_VARIANTS: TURBO_VARIANTS, SUPERCHARGERS: SUPERCHARGERS,
         compute: compute, fromPreset: fromPreset, prepare: prepare, at: at, correction: correction, airDensity: airDensity, displacement: displacement, cylinders: cylinders };
 })();

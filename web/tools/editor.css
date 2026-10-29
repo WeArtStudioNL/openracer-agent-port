@@ -303,3 +303,4 @@ button.dirty::after { content: " ●"; color: #ffd04d; }
 #chartHelp { opacity: .8; }
 #engineSimple[hidden], #engineAdvanced[hidden], #chartHelp[hidden] { display: none !important; }
 .dynorow { display: flex; align-items: center; gap: 10px; margin: 6px 0 8px; } .dynorow .hint { flex: 1; min-width: 0; }
+.bslider { width: 100%; margin: 2px 0 0; }
