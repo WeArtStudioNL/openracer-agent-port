@@ -867,7 +867,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var engineRpm = this.engine.getRPM();
                 // (or the engine sits on the limiter with the throttle open, whatever the wheels do: a powerful car with its wheels spinning by 20% never got the 1.2 times and
                 // stayed in the gear on the limiter, in a drag race for seconds)
-                var spinning = ((engineRpm >= limit * 0.8 && engineRpm > rpm * 1.2 + 300) || engineRpm >= limit * 0.97) && thr > 0.5 && this.u > 1 && this.engine.holdRPM <= 0;
+                var spinning = ((engineRpm >= limit * 0.8 && engineRpm > rpm * 1.1 + 100) || engineRpm >= limit * 0.97) && thr > 0.5 && this.u > 1 && this.engine.holdRPM <= 0;
                 this.limiterTime = spinning ? (this.limiterTime || 0) + delta : Math.max(0, (this.limiterTime || 0) - delta * 0.3);
                 this.noDownshift = Math.max(0, (this.noDownshift || 0) - delta);
                 if(g < gears - 1 && this.limiterTime > 0.35) {

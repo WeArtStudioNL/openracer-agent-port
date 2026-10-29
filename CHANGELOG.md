@@ -20,6 +20,10 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **An automatic gearbox shifts up when the engine sits on the rev limiter with the throttle open.** It only did so when the wheels spun by more than 20% and 300 rpm, so a powerful car whose wheels spun by about 20% (the V12 rebuild with a final drive of 6.5 on slicks) stayed in the gear on the limiter for seconds: 5 s in 2nd gear at 100 km/h in a test, now 2 s. The shift comes after the engine has been at 97% of the limiter for a third of a second.
 
+### Automatic gearbox: wheels that spin at speed
+
+- A powerful rear wheel drive car (the i30 drag tune: 640 N m on 40% of the weight on the rear) kept spinning its tyres past their grip at 190 km/h. The engine ran 14% faster than the road, which was too little for the gearbox to see it as a spin, and below the shift speed of the road, so it stayed in third for as long as the spin lasted. Now an engine speed of 10% over the road (from 80% of the limiter, with the throttle open) counts, after a third of a second it shifts up.
+
 ### Automatic gearbox: lifting the throttle
 
 - **The downshift is at the speed of the torque band.** It was at a part of the rev limit (23% with the throttle off: 2415 rpm for a limit of 10500, with a peak torque at 5500), far too low for a car that revs high. Now the automatic shifts down when the engine falls below 60% of the engine speed of the peak torque with the throttle off, up to 90% with the throttle wide open (the more you ask, the earlier it kicks down), so that it lands near the peak torque (a 2.6/1.79 step from 3300 rpm lands at about 4800). To keep it from hunting the shift up is not lower than 125% of the peak torque speed, also with the throttle off, and the shift down stays below the speed where it would go back up. Measured on a lift at 95 km/h in 4th: shifts down at about 3300 rpm each time (4th to 3rd, 3rd to 2nd, 2nd to 1st), instead of at 2000.
