@@ -314,6 +314,32 @@ function trackPhysics3D(track) {
     return true;
 }
 
+// the pieces of a triangle: cut into four (by the middles of its sides) again and again until its longest side is under maxEdge (0: not cut)
+function eachPiece(ax, ay, az, bx, by, bz, cx, cy, cz, maxEdge, emit) {
+    if(!(maxEdge > 0)) { emit(ax, ay, az, bx, by, bz, cx, cy, cz); return; }
+    var ab = (bx - ax) * (bx - ax) + (by - ay) * (by - ay) + (bz - az) * (bz - az), bc = (cx - bx) * (cx - bx) + (cy - by) * (cy - by) + (cz - bz) * (cz - bz), ca = (ax - cx) * (ax - cx) + (ay - cy) * (ay - cy) + (az - cz) * (az - cz);
+    if(Math.max(ab, bc, ca) <= maxEdge * maxEdge) { emit(ax, ay, az, bx, by, bz, cx, cy, cz); return; }
+    var mx = (ax + bx) / 2, my = (ay + by) / 2, mz = (az + bz) / 2, nx = (bx + cx) / 2, ny = (by + cy) / 2, nz = (bz + cz) / 2, ox = (cx + ax) / 2, oy = (cy + ay) / 2, oz = (cz + az) / 2;
+    eachPiece(ax, ay, az, mx, my, mz, ox, oy, oz, maxEdge, emit);
+    eachPiece(mx, my, mz, bx, by, bz, nx, ny, nz, maxEdge, emit);
+    eachPiece(ox, oy, oz, nx, ny, nz, cx, cy, cz, maxEdge, emit);
+    eachPiece(mx, my, mz, nx, ny, nz, ox, oy, oz, maxEdge, emit);
+}
+// the longest side that a mesh of the road may keep: 8 m, more when the cutting would give too many triangles (a field of 600 m in a few big triangles)
+function edgeLimit(position, index, offset) {
+    var p = new THREE.Vector3(), q = new THREE.Vector3(), r = new THREE.Vector3();
+    var longest = [];
+    for(var t = 0; t < index.count; t += 3) {
+        p.fromBufferAttribute(position, index.getX(t)); q.fromBufferAttribute(position, index.getX(t + 1)); r.fromBufferAttribute(position, index.getX(t + 2));
+        longest.push(Math.max(p.distanceTo(q), q.distanceTo(r), r.distanceTo(p)));
+    }
+    for(var edge = 8; edge < 400; edge *= 1.5) {
+        var total = 0;
+        for(var i = 0; i < longest.length; i++) total += longest[i] > edge ? Math.pow(4, Math.ceil(Math.log(longest[i] / edge) / Math.LN2)) : 1;
+        if(total <= 40000) return edge;
+    }
+    return 0;
+}
 function buildGroundWorld() {
     var physics3D = trackPhysics3D(currentTrack);
     groundWorld = new OpenRacer.GroundWorld(5);
@@ -334,12 +360,17 @@ function buildGroundWorld() {
             var offset = mesh.position;
             var box = drivable ? null : propBox(mesh);
             if(box) { boxTriangles(box, offset, function(ax, ay, az, bx, by, bz, cx, cy, cz) { groundWorld.addTriangle3D(ax, ay, az, bx, by, bz, cx, cy, cz, texture, mesh.name, k, false); }); continue; }
+            // (a big triangle of the road, a pad of 130 m made of 256 spokes, has a box that holds the whole pad: every node of a tyre on it tests every spoke, and the frame rate goes down
+            // to a few; the road is cut into pieces that the boxes can tell apart, as small as the number of triangles allows)
+            var maxEdge = drivable ? edgeLimit(position, index, offset) : 0;
             for(var t = 0; t < index.count; t += 3) {
                 a.fromBufferAttribute(position, index.getX(t)).add(offset);
                 b.fromBufferAttribute(position, index.getX(t + 1)).add(offset);
                 c.fromBufferAttribute(position, index.getX(t + 2)).add(offset);
-                if(drivable) groundWorld.addTriangle(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, texture, mesh.name, k);
-                if(physics3D) groundWorld.addTriangle3D(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, texture, mesh.name, k, drivable);
+                eachPiece(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, maxEdge, function(ax, ay, az, bx, by, bz, cx, cy, cz) {
+                    if(drivable) groundWorld.addTriangle(ax, ay, az, bx, by, bz, cx, cy, cz, texture, mesh.name, k);
+                    if(physics3D) groundWorld.addTriangle3D(ax, ay, az, bx, by, bz, cx, cy, cz, texture, mesh.name, k, drivable);
+                });
             }
         }
     }

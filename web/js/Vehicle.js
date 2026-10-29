@@ -349,6 +349,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         w.sizeFactor = a;
         w.nominalLoad = w.baseNominalLoad * Math.pow(a, 0.9);
         w.loadSensitivity = w.baseLoadSensitivity / Math.pow(a, 0.9);
+        // (the height of the sidewall, the space between the shells, needs nothing here: the shell of nodes has it from the inner shell, and a tall sidewall already gives way and a low one is stiff)
         w.sizeRoll = Math.pow(Math.max(0.5, Math.min(2, wr)), 0.25);
         w.sizeCorner = Math.pow(Math.max(0.5, Math.min(2, wr)), 0.35);
         w.sizeHeat = sized ? Math.max(0.5, Math.min(2.5, wr)) : 1;
