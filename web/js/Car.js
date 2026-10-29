@@ -160,7 +160,7 @@ OpenRacer.Car = function( config, domElement ) {
         diff: drivetrain.diff,
         diff_preload: drivetrain.diff_preload,
         diff_lock: drivetrain.diff_lock,
-        diff_power: drivetrain.diff_power,
+        diff_power: drivetrain.diff_power, shift_style: drivetrain.shift_style,
         diff_coast: drivetrain.diff_coast,
         center_diff: drivetrain.center_diff,
         center_split: drivetrain.center_split,
@@ -1053,7 +1053,7 @@ OpenRacer.Car = function( config, domElement ) {
     // the mode that goes with the gearbox of the car: a manual (gears) and an IMT are shifted by the driver (the H-pattern shifter and the paddles), the rest are automatics (P R N D)
     this.modeForGearbox = function() {
         var g = this.vehicle ? this.vehicle.gearbox : "gears";
-        return g === "gears" || g === "imt" ? "manual" : "automatic";
+        return g === "gears" || g === "imt" || (this.vehicle && this.vehicle.shiftStyle === "manual" && g !== "cvt") ? "manual" : "automatic";
     };
     this.setGearboxMode = function(mode) {
         var was = this.gearboxMode;

@@ -35,6 +35,13 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### More transmissions
+
+- A new choice Transmission in the Drivetrain card of the tuning menu sets a whole gearbox: the gearbox, its gears, the reverse, the shift time and (an automatic) the converter. 5 and 6-speed manuals, a 6-speed sequential (no clutch pedal, 0.06 s shifts), a 7-speed dual clutch, a 6-speed automated manual, a 3-speed (TH400), a 4, 6 and 8-speed automatic, and for the drag strip: a 2-speed (Powerglide) and a 3-speed drag automatic, and a 3-speed that you shift yourself. The number of gears can be changed with the − and + beside Gear ratios.
+- A new Shift pattern for the automatics (converter, dual clutch, automated manual): Normal, Sport (holds the gears longer), Drag (up at the rev limiter, no kick down) and Manual (you shift with the paddles or the keys, the gearbox does not).
+- An automatic with a converter no longer shifts up at launch because its engine runs faster than the road (that is the converter, not wheel spin).
+- The white start line of the drag strip lies lower on the road and is not drawn over the bottom of a tyre that stands on it.
+
 ### Saved setups are not orange or "(changed)" any more
 
 - The orange values of the tuning menu now mean "different from the setup that is chosen" (when there is none: from the car as it was made), so after Save nothing is orange until you change something. The reset arrow of a value still goes back to the car as it was made.

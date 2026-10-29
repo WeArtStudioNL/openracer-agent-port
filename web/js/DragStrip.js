@@ -122,11 +122,11 @@ OpenRacer.DragStrip = (function () {
             if (!hit && lastY === null) return false;          // (the road under the start line is not known yet)
             var y = hit ? hit.y : lastY;
             lastY = y;
-            var material = new THREE.MeshBasicMaterial({ color: 0xffffff, map: textured ? checker() : null, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, side: THREE.DoubleSide });
+            var material = new THREE.MeshBasicMaterial({ color: 0xffffff, map: textured ? checker() : null, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1.5, polygonOffsetUnits: -1.5, side: THREE.DoubleSide });       // (not more: a strong offset draws the line over the lower part of a tyre that stands on it, as if the line held the tyre)
             var mesh = new THREE.Mesh(new THREE.PlaneGeometry(strip.width, textured ? 1.2 : 0.35), material);
             mesh.rotation.x = -Math.PI / 2;
             mesh.rotation.z = Math.atan2(-strip.dx, -strip.dz);
-            mesh.position.set(x, y + 0.04, z);
+            mesh.position.set(x, y + 0.012, z);
             mesh.renderOrder = 3;
             mesh.userData.noGBuffer = true;
             group.add(mesh);

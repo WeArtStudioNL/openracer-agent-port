@@ -220,6 +220,10 @@ OpenRacer.Vehicle = function (parameters, input) {
     // an automatic. A manual with an automatic clutch (gearbox "imt"): the driver shifts, the clutch is never a pedal.
     var GEARBOXES = ["gears", "cvt", "torque-converter", "dct", "amt", "imt"];
     this.gearbox = GEARBOXES.indexOf(parameters.gearbox) > 0 ? parameters.gearbox : "gears";
+    // how an automatic shifts (drivetrain.shift_style): "normal", "sport" (holds the gears longer), "drag" (up at the rev limiter, no kick down: a drag race automatic) or "manual" (the driver
+    // shifts: the paddles, the keys; the gearbox does not shift by itself)
+    var SHIFT_STYLES = ["normal", "sport", "drag", "manual"];
+    this.shiftStyle = SHIFT_STYLES.indexOf(parameters.shift_style) >= 0 ? parameters.shift_style : "normal";
     this.shiftDuration = 0;                                  // how long the shift that is going on takes (s)
     this.shiftUp = false;                                    // the shift that is going on is an upshift
     this.tcStallRPM = parameters.tc_stall_rpm || 0;          // (0: 35 % of the rev limit)
@@ -576,10 +580,12 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.engine_inertia !== undefined) engine.inertia = t.engine_inertia;
         if(t.final_drive !== undefined) this.final_drive = t.final_drive;
         if(t.reverse_ratio !== undefined) this.reverseRatio = t.reverse_ratio;
-        if(t.gear_ratios !== undefined) {
-            // the same array is used by the car and by the controls: change it in place
-            for(i = 0; i < t.gear_ratios.length && i < this.gear_ratios.length; i++) this.gear_ratios[i] = t.gear_ratios[i];
+        if(t.gear_ratios !== undefined && t.gear_ratios.length) {
+            // the same array is used by the car and by the controls: change it in place (also when the gearbox has more or fewer gears)
+            this.gear_ratios.length = t.gear_ratios.length;
+            for(i = 0; i < t.gear_ratios.length; i++) this.gear_ratios[i] = t.gear_ratios[i];
         }
+        if(t.shift_style !== undefined) this.shiftStyle = SHIFT_STYLES.indexOf(t.shift_style) >= 0 ? t.shift_style : "normal";
         if(t.clutch !== undefined) this.clutchCapacity = t.clutch * engine.getPeakTorque() * engine.torqueScale;
         else if(t.power !== undefined) this.clutchCapacity = 1.5 * engine.getPeakTorque() * engine.torqueScale;
         if(t.diff_preload !== undefined) this.lockTorque = t.diff_preload;
@@ -756,7 +762,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         var ratio = this.final_drive;
         if(inp.reverse) return -this.reverseRatio * ratio;
         if(this.gearbox === "cvt") return this.cvtRatio * ratio;
-        return this.gear_ratios[inp.current_gear] * ratio;
+        return (this.gear_ratios[inp.current_gear] || this.gear_ratios[this.gear_ratios.length - 1]) * ratio;
     };
 
     // the driven wheels: left and right
@@ -814,6 +820,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         var inp = this.input;
         var engine = this.engine;
         var gears = this.gear_ratios.length;
+        if(inp.current_gear > gears - 1) inp.current_gear = Math.max(0, gears - 1);      // (a gearbox with fewer gears than the one the car was in)
         var ratio = Math.abs(this.getGearRatio());
         this.timeSinceShift += delta;
 
@@ -864,10 +871,19 @@ OpenRacer.Vehicle = function (parameters, input) {
                 // The engine near the rev limiter with the throttle open while the car moves and the wheels spin faster than the road asks (a lot of power in a low
                 // gear: the speed of the road does not reach the shift speed): after a moment it shifts up, as an automatic does at the redline. The time is
                 // kept leaky, because the engine speed jumps about with the spinning wheels and the limiter.
+                // the pattern of the gearbox: sport holds the gears longer, drag goes up at the rev limiter and does not kick down (the driver of a drag race holds the gear to the end)
+                if(this.shiftStyle === "sport") {
+                    upRPM = Math.max(upRPM, limit * (0.62 + 0.3 * thr));
+                    downRPM = Math.min(Math.max(downRPM, limit * (0.3 + 0.2 * thr)), upRPM / Math.max(1, prevRatio) * 0.9);
+                } else if(this.shiftStyle === "drag") {
+                    upRPM = limit * 0.965;
+                    downRPM = limit * 0.12;
+                }
                 var engineRpm = this.engine.getRPM();
                 // (or the engine sits on the limiter with the throttle open, whatever the wheels do: a powerful car with its wheels spinning by 20% never got the 1.2 times and
                 // stayed in the gear on the limiter, in a drag race for seconds)
-                var spinning = ((engineRpm >= limit * 0.8 && engineRpm > rpm * 1.1 + 100) || engineRpm >= limit * 0.97) && thr > 0.5 && this.u > 1 && this.engine.holdRPM <= 0;
+                var slipping = this.gearbox === "torque-converter" && this.tcLock < 0.9;           // (the engine of a converter runs faster than the road by itself: that is not a spin of the tyres)
+                var spinning = ((engineRpm >= limit * 0.8 && engineRpm > rpm * 1.1 + 100 && !slipping) || engineRpm >= limit * 0.97) && thr > 0.5 && this.u > 1 && this.engine.holdRPM <= 0;
                 this.limiterTime = spinning ? (this.limiterTime || 0) + delta : Math.max(0, (this.limiterTime || 0) - delta * 0.3);
                 this.noDownshift = Math.max(0, (this.noDownshift || 0) - delta);
                 if(g < gears - 1 && this.limiterTime > 0.35) {

@@ -131,7 +131,8 @@ var Tuning = (function() {
     function load() {
         try {
             var stored = JSON.parse(window.localStorage.getItem(storageKey()));
-            if(stored) Object.keys(stored).forEach(function(key) { if(key in base) values[key] = stored[key]; });
+            if(stored) Object.keys(stored).forEach(function(key) { if(key in base || /^gear\d+$/.test(key)) values[key] = stored[key]; });
+            OpenRacer.CarTuning.normaliseGears(values);       // (a gearbox with more or fewer gears than the car had: the keys of the gears follow the count)
         } catch(e) {}
     }
 
@@ -259,16 +260,14 @@ var Tuning = (function() {
         return item;
     }
 
-    function gearsRow() {
-        var item = document.createElement("div");
-        item.className = "item";
-        var line = document.createElement("div");
-        line.className = "line";
-        line.innerHTML = "<span class=\"label\">Gear ratios</span>";
-        item.appendChild(line);
-        var grid = document.createElement("div");
-        grid.className = "gears";
-        car.gear_ratios.forEach(function(ratio, i) {
+    var gearGrid = null;
+    // the boxes of the gear ratios: one for every gear of the values (gear_count), made again when the number of gears changes
+    function buildGearGrid() {
+        if(!gearGrid) return;
+        controls = controls.filter(function(c) { return !(c.gear && /^gear\d+$/.test(c.key)); });
+        gearGrid.innerHTML = "";
+        var n = OpenRacer.CarTuning.gearsOf(values).length;
+        for(var gi = 0; gi < n; gi++) (function(i) {
             var wrap = document.createElement("div");
             var label = document.createElement("label");
             label.textContent = "Gear " + (i + 1);
@@ -284,15 +283,94 @@ var Tuning = (function() {
             });
             wrap.appendChild(label);
             wrap.appendChild(input);
-            grid.appendChild(wrap);
+            gearGrid.appendChild(wrap);
             controls.push({ key: "gear" + i, input: input, gear: true });
+        })(gi);
+    }
+    // one more or one fewer gear (the last one is dropped; a new one is a little lower than the last)
+    function gearCount(delta) {
+        var gears = OpenRacer.CarTuning.gearsOf(values), n = Math.max(1, Math.min(10, gears.length + delta));
+        if(n === gears.length) return;
+        values.gear_count = n;
+        OpenRacer.CarTuning.normaliseGears(values);
+        buildGearGrid();
+        apply(); store(); refresh();
+    }
+    function gearsRow() {
+        var item = document.createElement("div");
+        item.className = "item";
+        var line = document.createElement("div");
+        line.className = "line";
+        line.innerHTML = "<span class=\"label\">Gear ratios</span>";
+        var counter = document.createElement("span");
+        counter.style.cssText = "display: inline-flex; gap: 4px;";
+        [["−", -1, "One gear fewer"], ["+", 1, "One gear more"]].forEach(function(b) {
+            var button = document.createElement("button");
+            button.type = "button"; button.textContent = b[0]; button.title = b[2]; button.style.cssText = "padding: 1px 9px;";
+            button.addEventListener("click", function() { gearCount(b[1]); });
+            counter.appendChild(button);
         });
-        item.appendChild(grid);
+        line.appendChild(counter);
+        item.appendChild(line);
+        gearGrid = document.createElement("div");
+        gearGrid.className = "gears";
+        item.appendChild(gearGrid);
+        buildGearGrid();
+        return item;
+    }
+
+    // The transmissions to choose from: a gearbox with its gears, how it shifts and (for the automatics) its converter. Choosing one sets those values (the final drive stays: it
+    // belongs to the car); they can be changed after. Only the ones that make sense with the choice are kept apart: the gears of a drag race automatic are two or three.
+    var TRANSMISSIONS = [
+        ["manual5", "5-speed manual (a clutch pedal)", { gearbox: "gears", gears: [3.55, 2.05, 1.38, 1.03, 0.82], reverse: 3.4, shift_time: 0.25 }],
+        ["manual6", "6-speed manual (a clutch pedal)", { gearbox: "gears", gears: [3.62, 2.19, 1.52, 1.14, 0.92, 0.76], reverse: 3.5, shift_time: 0.25 }],
+        ["sequential6", "6-speed sequential (no clutch pedal, quick shifts)", { gearbox: "imt", gears: [2.9, 2.0, 1.5, 1.2, 1.0, 0.84], reverse: 3.2, shift_time: 0.06 }],
+        ["dct7", "7-speed dual clutch (DCT)", { gearbox: "dct", gears: [3.8, 2.4, 1.7, 1.3, 1.0, 0.8, 0.65], reverse: 3.6, shift_time: 0.12, shift_style: "normal" }],
+        ["amt6", "6-speed automated manual (AMT)", { gearbox: "amt", gears: [3.62, 2.19, 1.52, 1.14, 0.92, 0.76], reverse: 3.5, shift_time: 0.6, shift_style: "normal" }],
+        ["auto3", "3-speed automatic (TH400)", { gearbox: "torque-converter", gears: [2.48, 1.48, 1.0], reverse: 2.08, shift_time: 0.45, tc_stall_rpm: 2400, tc_ratio: 2.1, tc_lockup: "on", shift_style: "normal" }],
+        ["auto4", "4-speed automatic", { gearbox: "torque-converter", gears: [2.84, 1.55, 1.0, 0.7], reverse: 2.3, shift_time: 0.4, tc_stall_rpm: 2300, tc_ratio: 2.0, tc_lockup: "on", shift_style: "normal" }],
+        ["auto6", "6-speed automatic", { gearbox: "torque-converter", gears: [4.17, 2.34, 1.52, 1.14, 0.87, 0.69], reverse: 3.4, shift_time: 0.3, tc_stall_rpm: 2200, tc_ratio: 1.9, tc_lockup: "on", shift_style: "normal" }],
+        ["auto8", "8-speed automatic (sport)", { gearbox: "torque-converter", gears: [4.7, 3.13, 2.1, 1.67, 1.29, 1.0, 0.84, 0.67], reverse: 3.5, shift_time: 0.2, tc_stall_rpm: 2000, tc_ratio: 1.7, tc_lockup: "on", shift_style: "sport" }],
+        ["drag2", "Drag automatic, 2-speed (Powerglide)", { gearbox: "torque-converter", gears: [1.76, 1.0], reverse: 1.8, shift_time: 0.3, tc_stall_rpm: 3800, tc_ratio: 2.3, tc_lockup: "off", shift_style: "drag" }],
+        ["drag3", "Drag automatic, 3-speed (race TH400)", { gearbox: "torque-converter", gears: [2.48, 1.48, 1.0], reverse: 2.08, shift_time: 0.3, tc_stall_rpm: 4200, tc_ratio: 2.4, tc_lockup: "off", shift_style: "drag" }],
+        ["drag3m", "Drag automatic, 3-speed, you shift (paddles, keys)", { gearbox: "torque-converter", gears: [2.48, 1.48, 1.0], reverse: 2.08, shift_time: 0.25, tc_stall_rpm: 4200, tc_ratio: 2.4, tc_lockup: "off", shift_style: "manual" }]
+    ];
+    function transmissionRow() {
+        var item = document.createElement("div");
+        item.className = "item";
+        var line = document.createElement("div");
+        line.className = "line";
+        line.innerHTML = "<span class=\"label\">Transmission</span>";
+        var select = document.createElement("select");
+        select.title = "Sets the gearbox, its gears, the shifting and the converter of a kind of transmission. The values can be changed after.";
+        select.innerHTML = "<option value=\"\">Choose a transmission…</option>" + TRANSMISSIONS.map(function(t) { return "<option value=\"" + t[0] + "\">" + t[1] + "</option>"; }).join("");
+        select.style.width = "170px";
+        select.addEventListener("change", function() {
+            var t = TRANSMISSIONS.filter(function(x) { return x[0] === select.value; })[0];
+            select.value = "";
+            select.blur();
+            if(!t) return;
+            var p = t[2];
+            values.gearbox = p.gearbox;
+            values.gear_count = p.gears.length;
+            p.gears.forEach(function(r, i) { values["gear" + i] = r; });
+            values.reverse_ratio = p.reverse;
+            values.shift_time = p.shift_time;
+            ["tc_stall_rpm", "tc_ratio", "tc_lockup", "shift_style"].forEach(function(k) { if(p[k] !== undefined) values[k] = p[k]; });
+            if(p.shift_style === undefined) values.shift_style = "normal";
+            OpenRacer.CarTuning.normaliseGears(values);
+            buildGearGrid();
+            apply(); store(); refresh();
+            message(t[1] + ".");
+        });
+        line.appendChild(select);
+        item.appendChild(line);
         return item;
     }
 
     var SELECTS = {
         drive: ["Drive", [["rwd", "Rear wheels"], ["fwd", "Front wheels"], ["awd", "All wheels"]]],
+        shift_style: ["Shift pattern", [["normal", "Normal"], ["sport", "Sport (holds the gears)"], ["drag", "Drag (up at the rev limiter, no kick down)"], ["manual", "Manual (you shift, it does not)"]]],
         gearbox: ["Gearbox", [["gears", "Manual (a clutch pedal)"], ["imt", "Manual with an automatic clutch (IMT)"], ["amt", "Automated manual (AMT)"], ["dct", "Dual clutch (DCT)"], ["torque-converter", "Automatic with a torque converter"], ["cvt", "CVT (continuously variable)"]]],
         diff: ["Differential", [["open", "Open"], ["lsd", "Limited slip"], ["welded", "Welded (locked)"]]],
         compound: ["Tyre compound", OpenRacer.TyreCompounds.map(function(k) { return [k.id, k.name]; })],
@@ -583,6 +661,7 @@ var Tuning = (function() {
                 count++;
                 var target = fineKeys.indexOf(def[0]) >= 0 ? fine : details;
                 if(target === fine) fineCount++;
+                if(def[0] === "gearbox") target.appendChild(transmissionRow());
                 if(SELECTS[def[0]]) target.appendChild(selectRow(def[0]));
                 else if(COLORS[def[0]]) target.appendChild(colorRow(def[0]));
                 else if(def[0] === "gears") target.appendChild(gearsRow());

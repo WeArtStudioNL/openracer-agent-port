@@ -98,6 +98,7 @@ OpenRacer.CarTuning = (function () {
             ["clutch_start_rpm", "Automatic clutch: starts to grip at", "rpm", 300, 10000, 50],
             ["clutch_full_rpm", "Automatic clutch: grips fully at", "rpm", 400, 12000, 50],
             ["gearbox", "Gearbox", "", 0, 0, 0],
+            ["shift_style", "Shift pattern (automatic gearboxes)", "", 0, 0, 0],
             ["cvt_rpm", "CVT: engine speed at full throttle", "rpm", 1000, 20000, 100],
             ["tc_stall_rpm", "Torque converter: stall speed", "rpm", 500, 8000, 50],
             ["tc_ratio", "Torque converter: torque ratio at stall", "", 1, 4, 0.05],
@@ -214,6 +215,7 @@ OpenRacer.CarTuning = (function () {
             case "turbo_spool": case "turbo_threshold": case "turbo_boost": return turbo;
             case "turbo_intercooler": case "turbo_efficiency": return v.turbo_boost > 0;
             case "tc_lockup": return g === "torque-converter";
+            case "shift_style": return g === "torque-converter" || g === "dct" || g === "amt";
             case "sb_max_nodes": case "sb_wheel_strength": return v.sb_enabled !== "off";
             case "body_flake": case "body_pattern": case "body_uv": return v.body_finish === "flake";
             case "rim_flake": case "rim_pattern": case "rim_uv": return v.rim_finish === "flake";
@@ -351,6 +353,8 @@ OpenRacer.CarTuning = (function () {
             cvt_rpm: dt.cvt_rpm || Math.round((en.limiter_rpm || 6600) * 0.85 / 100) * 100,
             tc_stall_rpm: dt.tc_stall_rpm || Math.round((en.limiter_rpm || 6600) * 0.35 / 50) * 50,
             tc_ratio: dt.tc_ratio || 1.9,
+            shift_style: ["sport", "drag", "manual"].indexOf(dt.shift_style) >= 0 ? dt.shift_style : "normal",
+            gear_count: dt.gear_ratios.length,
             final_drive: dt.final_drive,
             reverse_ratio: dt.reverse_ratio || dt.gear_ratios[0],
             clutch: dt.clutch !== undefined ? dt.clutch : 1.5,
@@ -409,10 +413,25 @@ OpenRacer.CarTuning = (function () {
         return v;
     }
 
+    // the gear ratios of the values: gear_count of them (gear0, gear1, ...); a missing one is the one before it, a little lower
+    function gearsOf(v) {
+        var n = Math.max(1, Math.min(12, Math.round(v.gear_count || 0)));
+        if(!v.gear_count) { n = 0; while(v["gear" + n] !== undefined) n++; }
+        var out = [];
+        for(var i = 0; i < n; i++) out.push(v["gear" + i] !== undefined ? v["gear" + i] : (out.length ? Math.max(0.3, out[out.length - 1] * 0.82) : 3));
+        return out;
+    }
+    // puts the keys gear0... in order with gear_count (the extra ones go, the missing ones are made)
+    function normaliseGears(v) {
+        var n = gearsOf(v);
+        Object.keys(v).forEach(function(k) { if(/^gear\d+$/.test(k)) delete v[k]; });
+        n.forEach(function(r, i) { v["gear" + i] = r; });
+        v.gear_count = n.length;
+    }
+
     // the settings for Vehicle.retune from the values; the drag needs the frontal area of the car and the density of the air
     function toRetune(v, frontalArea, airDensity) {
-        var gears = [];
-        for(var i = 0; v["gear" + i] !== undefined; i++) gears.push(v["gear" + i]);
+        var gears = gearsOf(v);
         return {
             mass: v.mass,
             weight_distribution: v.front_weight / 100,
@@ -451,7 +470,7 @@ OpenRacer.CarTuning = (function () {
             engine_inertia: v.engine_inertia,
             engine_braking: v.engine_braking / 100,
             drive: v.drive,
-            gearbox: v.gearbox, cvt_rpm: v.cvt_rpm, tc_stall_rpm: v.tc_stall_rpm, tc_ratio: v.tc_ratio,
+            gearbox: v.gearbox, shift_style: v.shift_style, cvt_rpm: v.cvt_rpm, tc_stall_rpm: v.tc_stall_rpm, tc_ratio: v.tc_ratio,
             final_drive: v.final_drive,
             gear_ratios: gears,
             reverse_ratio: v.reverse_ratio,
@@ -584,7 +603,8 @@ OpenRacer.CarTuning = (function () {
         c.drivetrain.diff_coast = v.diff_coast / 100;
         c.drivetrain.diff_preload = v.diff_preload;
         c.drivetrain.diff_lock = v.diff_lock;
-        c.drivetrain.gear_ratios = c.drivetrain.gear_ratios.map(function(r, i) { return v["gear" + i]; });
+        c.drivetrain.gear_ratios = gearsOf(v);
+        if(v.shift_style && v.shift_style !== "normal") c.drivetrain.shift_style = v.shift_style; else delete c.drivetrain.shift_style;
         c.brakes = { front: Math.round(v.brake_total * v.brake_bias / 100), rear: Math.round(v.brake_total * (1 - v.brake_bias / 100)) };
         c.assists = { tc_allowance: v.tc_allowance / 100, esc_gain: v.esc_gain / 100 };
         var sound = {};
@@ -691,7 +711,7 @@ OpenRacer.CarTuning = (function () {
     // the settings of the tyre that lie on top of the kind of tyre (the compound sets the grip, the heat, the wear and the rolling resistance): they are folded away in a part of their own
     var TYRE_FINE = ["tyre_stiff_x", "tyre_stiff_y", "grip", "grip_balance", "cornering", "rolling_resistance", "tyre_heating", "tyre_life"];
     return {
-        TYRE_FINE: TYRE_FINE, CARDS: CARDS, visible: visible, visibleFeature: visibleFeature, GROUPS: GROUPS, FEATURES: FEATURES, FEATURE_DEFAULTS: FEATURE_DEFAULTS, V100: V100, fromConfig: fromConfig, toRetune: toRetune, toConfig: toConfig, keys: keys };
+        TYRE_FINE: TYRE_FINE, CARDS: CARDS, visible: visible, visibleFeature: visibleFeature, GROUPS: GROUPS, FEATURES: FEATURES, FEATURE_DEFAULTS: FEATURE_DEFAULTS, V100: V100, gearsOf: gearsOf, normaliseGears: normaliseGears, fromConfig: fromConfig, toRetune: toRetune, toConfig: toConfig, keys: keys };
 })();
 
 // The setups of a car: whole configurations of the car (everything car.json has but the model: the chassis, the tyres, the engine, the gearbox, the suspension and the parts,
