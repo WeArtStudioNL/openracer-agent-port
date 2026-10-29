@@ -35,6 +35,10 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### The dyno chart stays in view in the tuning menu
+
+- In the tuning menu of the game the chart and Run dyno of the Engine card are pinned at the left of the menu while the card is open (as in the car editor), so they do not scroll away with the settings. The cross in the corner of the chart folds the Engine card. It follows the menu when that is moved, and on a window narrower than 1000 px the chart stays in the card.
+
 ### Pictures of the cars and the tunes on the ground
 
 - The pictures of the cars and the tunes in the menu show the car as it stands on the road: lower or higher by the ride height of the front and the rear axle, tilted when the two differ, and with the arms, the uprights and the springs of the suspension in that place. Older pictures (preview.webp from before this) are made again.

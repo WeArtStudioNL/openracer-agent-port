@@ -172,6 +172,9 @@ var Tuning = (function() {
             "#tuning .ebu { margin: 4px 0 8px; } #tuning .ebuItem { margin: 5px 0 8px; } #tuning .ebuItem select { width: 100%; } #tuning .ebuLine { display: flex; align-items: center; gap: 6px; } #tuning .ebuLabel { flex: 1; }" +
             "#tuning .ebuRange { width: 100%; margin: 2px 0 0; } #tuning .ebuInfo { color: var(--muted); font-size: 12px; margin: 2px 0 8px; line-height: 1.4; }" +
             "#tuning .ebuGroup { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin: 10px 0 2px; } #tuning .ebuChart { width: 100%; height: auto; aspect-ratio: 800 / 360; background: #12161c; border: 1px solid var(--line); border-radius: 8px; }" +
+            "#tuning .ebuPanel { position: relative; } #tuning .ebuPanelClose { display: none; position: absolute; top: 6px; right: 6px; z-index: 2; width: 28px; height: 28px; padding: 0; align-items: center; justify-content: center; }" +
+            "#tuning .ebuPanel.pinned { position: fixed; top: 10px; width: 440px; box-sizing: border-box; z-index: 1501; background: rgba(24, 29, 35, 0.96); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 4px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5); }" +
+            "#tuning .ebuPanel.pinned .ebuPanelClose { display: inline-flex; } #tuning .ebuPanel.pinned .ebuChart { border: 0; }" +
             "#tuning .ebuLegend, #tuning .ebuDynoInfo { color: var(--muted); font-size: 11.5px; } #tuning .ebuDyno { display: flex; align-items: center; gap: 8px; margin: 6px 0 8px; } #tuning .ebu input[type=number] { width: 84px; }" +
             "#tuning .gears { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 8px; }" +
             "#tuning .gears label { font-size: 11px; color: var(--muted); display: block; } #tuning .gears input { width: 100%; box-sizing: border-box; }";
@@ -380,7 +383,29 @@ var Tuning = (function() {
         var b = values.engine_build;
         buildResult = b && OpenRacer.EngineBuild ? OpenRacer.EngineBuild.compute(b, values.limiter_rpm, values.idle_rpm) : null;
     }
+    // The chart and Run dyno of the Engine card stand next to the menu (at its left) while the card is open, so they do not scroll away with the settings (as in the car editor);
+    // not on a narrow window. The menu can be moved, so the place is looked at now and then while it is there.
+    var engineCard = null, engineChartTimer = null;
+    function placeEngineChart() {
+        var chart = engineUi && engineUi.panel;
+        if(!chart || !engineCard) return;
+        var rect = panel ? panel.getBoundingClientRect() : null;
+        var pinned = engineCard.open && panel && panel.style.display !== "none" && window.innerWidth >= 1000 && rect && rect.left > 460;
+        chart.classList.toggle("pinned", !!pinned);
+        if(pinned) {
+            chart.style.right = Math.round(window.innerWidth - rect.left + 12) + "px";
+            chart.style.top = Math.round(Math.max(10, rect.top)) + "px";
+            chart.style.maxWidth = Math.round(rect.left - 24) + "px";
+            if(!engineChartTimer) engineChartTimer = setInterval(placeEngineChart, 300);
+        } else {
+            chart.style.right = chart.style.top = chart.style.maxWidth = "";
+            if(engineChartTimer) { clearInterval(engineChartTimer); engineChartTimer = null; }
+        }
+    }
+    window.addEventListener("resize", placeEngineChart);
+
     var engineHost = {
+        closeCard: function() { if(engineCard) engineCard.open = false; },
         build: function() { return values.engine_build || null; },
         setBuild: function(b) {
             values.engine_build = JSON.parse(JSON.stringify(b));
@@ -568,7 +593,7 @@ var Tuning = (function() {
             summary.appendChild(meta);
             wrap.appendChild(summary);
             cardMeta[card.name] = meta;
-            if(card.name === "Engine" && OpenRacer.EngineBuildUI && OpenRacer.EngineBuild) { engineUi = OpenRacer.EngineBuildUI.create(engineHost); wrap.appendChild(engineUi.element); }
+            if(card.name === "Engine" && OpenRacer.EngineBuildUI && OpenRacer.EngineBuild) { engineUi = OpenRacer.EngineBuildUI.create(engineHost); wrap.appendChild(engineUi.element); engineCard = wrap; wrap.addEventListener("toggle", placeEngineChart); }
             var content = 0;
             (card.groups || []).forEach(function(name) {
                 var group = GROUPS.filter(function(g) { return g.name === name; })[0];

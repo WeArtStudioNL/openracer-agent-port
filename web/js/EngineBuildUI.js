@@ -56,9 +56,14 @@ OpenRacer.EngineBuildUI = (function () {
         exhaustSelect.innerHTML = "<option value='custom'>Custom (as it was set before)</option>" + Object.keys(OpenRacer.engineSimExhausts).map(function(id) { var e = OpenRacer.engineSimExhausts[id]; return "<option value='" + id + "'>" + e.label + " · " + e.hint + "</option>"; }).join("");
 
         // ---- the chart and Run dyno
-        var canvas = el("canvas", "ebuChart", null, element); canvas.width = 800; canvas.height = 360;
-        var legend = el("div", "ebuLegend", "torque (Nm) · power (hp)", element);
-        var dynoLine = el("div", "ebuDyno", null, element);
+        // (the chart and Run dyno are one piece, so the menu can pin it next to itself while the card is open: host.closeCard folds the card from the cross of the piece)
+        var panel = el("div", "ebuPanel", null, element);
+        var panelClose = el("button", "ebuPanelClose", null, panel); panelClose.type = "button"; panelClose.title = "Close the engine card";
+        panelClose.innerHTML = OpenRacer.icon ? OpenRacer.icon("x", 16) : "×";
+        panelClose.addEventListener("click", function() { if(host.closeCard) host.closeCard(); });
+        var canvas = el("canvas", "ebuChart", null, panel); canvas.width = 800; canvas.height = 360;
+        var legend = el("div", "ebuLegend", "torque (Nm) · power (hp)", panel);
+        var dynoLine = el("div", "ebuDyno", null, panel);
         var dynoButton = el("button", null, "▶ Run dyno", dynoLine); dynoButton.type = "button";
         var dynoInfo = el("span", "ebuDynoInfo", null, dynoLine);
 
@@ -246,7 +251,7 @@ OpenRacer.EngineBuildUI = (function () {
                 : "This car has an old torque curve. Choose an engine block to build its engine: the curve then follows from it.";
             draw();
         }
-        return { element: element, update: update, read: read, limits: limits, clearDyno: clearDyno };
+        return { element: element, panel: panel, update: update, read: read, limits: limits, clearDyno: clearDyno };
     }
     return { create: create, defaultExhaust: defaultExhaust };
 })();
