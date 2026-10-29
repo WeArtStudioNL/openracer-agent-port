@@ -153,7 +153,7 @@ dialog .content .sub { margin-bottom: 4px; }
 table { width: 100%; border-collapse: collapse; }
 td, th { padding: 3px 4px; text-align: left; font-weight: normal; color: var(--muted); font-size: 12.5px; }
 td input { height: 28px; padding: 3px 7px; }
-canvas#chart { width: 100%; height: 170px; background: #12161c; border: 1px solid #323b48; border-radius: 8px; }
+canvas#chart { width: 100%; height: auto; aspect-ratio: 800 / 360; touch-action: none; background: #12161c; border: 1px solid #323b48; border-radius: 8px; }
 .material { border-bottom: 1px solid var(--line); padding: 8px 0 10px; }
 .material .head { display: flex; gap: 6px; align-items: center; }
 .material .head b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
@@ -294,3 +294,11 @@ button.dirty::after { content: " ●"; color: #ffd04d; }
 #side header .tunebar .saveto, #side header .tunebar .summary { flex: 1 1 100%; font-size: 12px; opacity: .75; }
 #side header .tunebar .summary:empty { display: none; }
 @media (pointer: coarse) { #side button, #side select, #side input[type=number], #side input[type=text], #side summary { min-height: 34px; } }
+
+/* the two modes of a card (Simple | Advanced) */
+.seg { display: inline-flex; border: 1px solid #323b48; border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+.seg button { border: 0; border-radius: 0; background: transparent; padding: 5px 14px; }
+.seg button.on { background: var(--accent, #ff6a2b); color: #fff; }
+#curve { width: 100%; } #curve input { width: 100%; min-width: 0; }
+#chartHelp { opacity: .8; }
+#engineSimple[hidden], #engineAdvanced[hidden], #chartHelp[hidden] { display: none !important; }

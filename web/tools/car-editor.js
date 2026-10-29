@@ -1451,7 +1451,7 @@ function drawChart() {
     const maxY = Math.ceil(top / step) * step;
     const left = 62, bottom = h - 24, plotW = w - left - 4, plotH = bottom - 8;
     const X = (rpm) => left + rpm / maxRpm * plotW, Y = (v) => bottom - v / maxY * plotH;
-    g.font = "20px Arial";
+    g.font = "24px Arial";
     g.lineWidth = 1;
     // the horizontal lines, with the numbers at the left
     for (let v = 0; v <= maxY + 1e-9; v += step) {
@@ -1478,7 +1478,92 @@ function drawChart() {
     const peak = state.curve.reduce((best, p) => (power(p[0], p[1]) > best.hp ? { hp: power(p[0], p[1]), rpm: p[0] } : best), { hp: 0, rpm: 0 });
     const torque = Math.max(0, ...state.curve.map((p) => p[1]));
     $("peakInfo").textContent = Math.round(peak.hp) + " hp at " + peak.rpm + " rpm, " + Math.round(torque) + " Nm";
+    chartGeo = { left, bottom, plotW, plotH, maxRpm, maxY, w, h };
+    if (curveAdvanced) {
+        g.fillStyle = "#ff9f43"; g.strokeStyle = "#12161c"; g.lineWidth = 3;
+        state.curve.forEach((p) => { g.beginPath(); g.arc(X(p[0]), Y(p[1]), p === dragPoint ? 11 : 8, 0, Math.PI * 2); g.fill(); g.stroke(); });
+    }
+    if (document.activeElement !== $("simpleHp")) $("simpleHp").value = Math.round(peak.hp) || "";
+    if (document.activeElement !== $("simpleRpm")) $("simpleRpm").value = num("limiter") || "";
 }
+
+// ---- the engine card: Simple (power and max rpm) or Advanced (draw the curve in the chart)
+let curveAdvanced = false, chartGeo = null, dragPoint = null;
+try { curveAdvanced = localStorage.getItem("editor-engine-advanced") === "1"; } catch (e) { /* no storage */ }
+function setEngineMode(advanced) {
+    curveAdvanced = advanced;
+    try { localStorage.setItem("editor-engine-advanced", advanced ? "1" : "0"); } catch (e) { /* no storage */ }
+    $("engineAdvanced").hidden = !advanced; $("engineSimple").hidden = advanced; $("chartHelp").hidden = !advanced;
+    $("engineMode").querySelectorAll("button").forEach((b) => b.classList.toggle("on", (b.dataset.mode === "advanced") === advanced));
+    $("chart").style.cursor = advanced ? "crosshair" : "default";
+    drawChart();
+}
+$("engineMode").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setEngineMode(b.dataset.mode === "advanced"); });
+const engineEdited = () => { renderCurve(); updateSpeedInfo(); $("chart").dispatchEvent(new Event("input", { bubbles: true })); $("chart").dispatchEvent(new Event("change", { bubbles: true })); };
+// the power: the curve keeps its shape and is scaled
+$("simpleHp").addEventListener("change", () => {
+    const want = num("simpleHp"), now = state.curve.reduce((m, p) => Math.max(m, power(p[0], p[1])), 0);
+    if (!(want > 0) || !(now > 0)) return;
+    const f = want / now;
+    state.curve.forEach((p) => { p[1] = Math.round(p[1] * f * 10) / 10; });
+    engineEdited();
+});
+// the max rpm: the curve is stretched along the rpm axis with the rev limit
+$("simpleRpm").addEventListener("change", () => {
+    const want = num("simpleRpm"), now = num("limiter");
+    if (!(want > 1000) || !(now > 0)) return;
+    const f = want / now;
+    state.curve.forEach((p, i) => { if (i > 0) p[0] = Math.round(p[0] * f / 10) * 10; });
+    $("limiter").value = Math.round(want);
+    $("limiter").dispatchEvent(new Event("input", { bubbles: true }));
+    engineEdited();
+});
+// drawing in the chart: drag a dot, click to add one, double-click a dot to remove it
+function chartPoint(e) {
+    const r = $("chart").getBoundingClientRect(), k = $("chart").width / r.width;
+    return { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k };
+}
+function chartNear(pt) {
+    if (!chartGeo) return null;
+    const { left, bottom, plotW, plotH, maxRpm, maxY } = chartGeo;
+    let best = null, bestD = 22;
+    for (const p of state.curve) {
+        const d = Math.hypot(left + p[0] / maxRpm * plotW - pt.x, bottom - p[1] / maxY * plotH - pt.y);
+        if (d < bestD) { best = p; bestD = d; }
+    }
+    return best;
+}
+function chartValue(pt) {
+    const { left, bottom, plotW, plotH, maxRpm, maxY } = chartGeo;
+    return [Math.max(0, Math.round((pt.x - left) / plotW * maxRpm / 50) * 50), Math.max(0, Math.round((bottom - pt.y) / plotH * maxY * 2) / 2)];
+}
+$("chart").addEventListener("pointerdown", (e) => {
+    if (!curveAdvanced || !chartGeo) return;
+    const pt = chartPoint(e);
+    let hit = chartNear(pt);
+    if (!hit) { hit = chartValue(pt); state.curve.push(hit); state.curve.sort((a, b) => a[0] - b[0]); }
+    dragPoint = hit;
+    $("chart").setPointerCapture(e.pointerId);
+    drawChart();
+});
+$("chart").addEventListener("pointermove", (e) => {
+    if (!curveAdvanced || !chartGeo) return;
+    const pt = chartPoint(e);
+    if (!dragPoint) { $("chart").style.cursor = chartNear(pt) ? "grab" : "crosshair"; return; }
+    const v = chartValue(pt);
+    if (dragPoint !== state.curve[0]) dragPoint[0] = v[0];
+    dragPoint[1] = v[1];
+    state.curve.sort((a, b) => a[0] - b[0]);
+    drawChart();
+});
+$("chart").addEventListener("pointerup", () => { if (!dragPoint) return; dragPoint = null; engineEdited(); });
+$("chart").addEventListener("dblclick", (e) => {
+    if (!curveAdvanced) return;
+    const hit = chartNear(chartPoint(e));
+    if (!hit || state.curve.length <= 3 || hit === state.curve[0]) return;
+    state.curve.splice(state.curve.indexOf(hit), 1);
+    engineEdited();
+});
 
 // a typical curve for a petrol engine from its peak power: P = Pmax (x + x^2 - x^3) with x = rpm / rpm at the peak
 function generateCurve() {
@@ -2115,6 +2200,7 @@ $("delete").addEventListener("click", deleteCar);
 
 initEngineSim();
 renderCurve();
+setEngineMode(curveAdvanced);
 updateSpeedInfo();
 defaultCameras();
 // the car that was open last time is open again: no choosing in the list first

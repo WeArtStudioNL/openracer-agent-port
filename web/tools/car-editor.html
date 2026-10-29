@@ -283,14 +283,32 @@
         <details class="card">
             <summary>Engine<span class="meta" id="peakInfo"></span></summary>
             <div class="body">
-                <div class="row">
-                    <div><input type="number" id="idle" step="50" value="850"><div class="hint">idle (rpm)</div></div>
-                    <div><input type="number" id="limiter" step="100" value="6800"><div class="hint">rev limit (rpm)</div></div>
-                    <div><input type="number" id="inertia" step="0.05" value="0.3"><div class="hint">inertia (kg m²)</div></div>
+                <div class="seg" id="engineMode" role="group" aria-label="Engine settings">
+                    <button type="button" data-mode="simple" class="on">Simple</button><button type="button" data-mode="advanced">Advanced</button>
                 </div>
-                <div class="modal-link">
-                    <span class="hint">The torque curve at full throttle, with a chart.</span>
-                    <button class="small" data-open="dlgCurve">Torque curve…</button>
+                <div class="row" id="engineSimple">
+                    <div><input type="number" id="simpleHp" step="5" min="1" aria-label="Power (hp)"><div class="hint">power (hp)</div></div>
+                    <div><input type="number" id="simpleRpm" step="100" min="2000" aria-label="Max rpm"><div class="hint">max rpm</div></div>
+                </div>
+                <canvas id="chart" width="800" height="360"></canvas>
+                <div class="legend hint"><span><i style="background:#ff9f43"></i>torque (Nm)</span><span><i style="background:#54a0ff"></i>power (hp)</span><span id="chartHelp" hidden>drag the dots · click to add · double-click a dot to remove</span></div>
+                <div id="engineAdvanced" hidden>
+                    <div class="row">
+                        <div><input type="number" id="idle" step="50" value="850"><div class="hint">idle (rpm)</div></div>
+                        <div><input type="number" id="limiter" step="100" value="6800"><div class="hint">rev limit (rpm)</div></div>
+                        <div><input type="number" id="inertia" step="0.05" value="0.3"><div class="hint">inertia (kg m²)</div></div>
+                    </div>
+                    <details class="inner"><summary>Numbers</summary>
+                        <table id="curve"><thead><tr><th>rpm</th><th>Nm</th><th>hp</th><th></th></tr></thead><tbody></tbody></table>
+                        <div class="buttons"><button class="small ghost" id="addPoint">Add a point</button></div>
+                    </details>
+                    <details class="inner"><summary>A typical curve from the peak power</summary>
+                        <div class="row">
+                            <div><input type="number" id="genPower" value="250" step="5"><div class="hint">peak power (hp)</div></div>
+                            <div><input type="number" id="genRpm" value="5500" step="100"><div class="hint">at (rpm)</div></div>
+                            <div><button id="generate" style="width:100%">Generate</button></div>
+                        </div>
+                    </details>
                 </div>
             </div>
         </details>
@@ -464,22 +482,6 @@
     </div>
     <p class="hint" id="layerHint">Drag the arrows in the view to move it</p>
 </aside>
-
-<dialog id="dlgCurve">
-    <div class="head"><h3>Torque at full throttle</h3><button class="close" data-close>×</button></div>
-    <div class="content">
-        <canvas id="chart" width="800" height="300"></canvas>
-        <div class="legend hint"><span><i style="background:#ff9f43"></i>torque</span><span><i style="background:#54a0ff"></i>power</span></div>
-        <table id="curve"><thead><tr><th>rpm</th><th>Nm</th><th>hp</th><th></th></tr></thead><tbody></tbody></table>
-        <div class="buttons"><button class="small ghost" id="addPoint">Add a point</button></div>
-        <div class="group">A typical curve from the peak power</div>
-        <div class="row">
-            <div><input type="number" id="genPower" value="250" step="5"><div class="hint">peak power (hp)</div></div>
-            <div><input type="number" id="genRpm" value="5500" step="100"><div class="hint">at (rpm)</div></div>
-            <div><button id="generate" style="width:100%">Generate</button></div>
-        </div>
-    </div>
-</dialog>
 
 <dialog id="dlgCameras">
     <div class="head"><h3>Cameras</h3><button class="close" data-close>×</button></div>
