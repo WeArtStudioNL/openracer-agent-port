@@ -35,6 +35,10 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### Drag strip: the quarter mile time
+
+- When the car passes the quarter mile (or the finish, when the strip is shorter) the time and the speed show at the top, in the middle, for a moment: it fades in, stays for four seconds and fades out.
+
 ### Recording a take
 
 - A take (the record button, the 5 key) first asks for the picture (16:9, 9:16 or 1:1) and what to make: a video (mp4) or a replay, and whether the HUD goes away while it runs. Then a count of five seconds, with the frame of the picture and the dark passepartout already in the window, and a blinking red dot with the time at the top right of the frame when it runs.

@@ -326,6 +326,33 @@ OpenRacer.DragStrip = (function () {
         if (OpenRacer.Movable && !movableDone) { OpenRacer.Movable.make(hud, { key: "dragstrip", handle: hud }); movableDone = true; }
     }
 
+    // the time of the quarter mile at the top, in the middle, for a moment: it fades in, stays, and fades out (a finish nearer than a quarter mile has its own time)
+    var flash = null, flashTimers = [];
+    function flashTime(r) {
+        if (!flash) {
+            var style = document.createElement("style");
+            style.textContent =
+                "#dragFlash { position: fixed; left: 50%; top: max(150px, 24vh); transform: translateX(-50%); z-index: 960; pointer-events: none; opacity: 0; transition: opacity 0.5s ease; text-align: center; " +
+                "padding: 8px 22px 10px; border-radius: 12px; background: rgba(14, 18, 23, 0.78); color: #fff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }" +
+                "#dragFlash.show { opacity: 1; } #dragFlash.out { transition-duration: 0.9s; }" +
+                "#dragFlash .what { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: #9fb0c4; }" +
+                "#dragFlash .time { font-size: 40px; font-weight: bold; font-variant-numeric: tabular-nums; line-height: 1.15; }" +
+                "#dragFlash .speed { font-size: 14px; color: #7ee7a0; font-variant-numeric: tabular-nums; }";
+            document.head.appendChild(style);
+            flash = document.createElement("div");
+            flash.id = "dragFlash";
+            document.body.appendChild(flash);
+        }
+        flashTimers.forEach(clearTimeout); flashTimers = [];
+        var metric = Settings.option("units") !== "imperial";
+        flash.innerHTML = "<div class=\"what\">" + r.label + "</div><div class=\"time\">" + r.time.toFixed(3) + " s</div><div class=\"speed\">" +
+            Math.round(r.speed * (metric ? 3.6 : 2.2369362920544)) + (metric ? " km/h" : " mph") + "</div>";
+        flash.classList.remove("out");
+        void flash.offsetWidth;                                    // (the fade starts from nothing again, also when the last one was still there)
+        flash.classList.add("show");
+        flashTimers.push(setTimeout(function () { flash.classList.add("out"); flash.classList.remove("show"); }, 4500));
+    }
+
     function lamp(kind, on) { return "<div class=\"lamp " + kind + (on ? " on" : "") + "\"></div>"; }
     function distanceText(s, metric) {
         var d = -s;
@@ -429,6 +456,7 @@ OpenRacer.DragStrip = (function () {
                             k = Math.max(0, Math.min(1, k));
                             r.time = prevT + (clock - prevT) * k - t0;
                             r.speed = prevV + (forwardSpeed - prevV) * k;
+                            if (r.label === "1/4 mile" || (r.finish && strip.length < 402)) flashTime(r);
                         }
                     }
                     if (s >= strip.length) { state = "finished"; finishRun(car); }
