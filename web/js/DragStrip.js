@@ -332,7 +332,7 @@ OpenRacer.DragStrip = (function () {
         if (!flash) {
             var style = document.createElement("style");
             style.textContent =
-                "#dragFlash { position: fixed; left: 50%; top: max(150px, 24vh); transform: translateX(-50%); z-index: 960; pointer-events: none; opacity: 0; transition: opacity 0.5s ease; text-align: center; " +
+                "#dragFlash { position: fixed; left: 50%; top: calc(10px + env(safe-area-inset-top)); transform: translateX(-50%); z-index: 960; pointer-events: none; opacity: 0; transition: opacity 0.5s ease; text-align: center; " +
                 "padding: 8px 22px 10px; border-radius: 12px; background: rgba(14, 18, 23, 0.78); color: #fff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }" +
                 "#dragFlash.show { opacity: 1; } #dragFlash.out { transition-duration: 0.9s; }" +
                 "#dragFlash .what { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: #9fb0c4; }" +

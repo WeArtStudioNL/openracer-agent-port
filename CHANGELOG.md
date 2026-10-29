@@ -35,9 +35,13 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### Pictures of the cars and the tunes on the ground
+
+- The pictures of the cars and the tunes in the menu show the car as it stands on the road: lower or higher by the ride height of the front and the rear axle, tilted when the two differ, and with the arms, the uprights and the springs of the suspension in that place. Older pictures (preview.webp from before this) are made again.
+
 ### Drag strip: the quarter mile time
 
-- When the car passes the quarter mile (or the finish, when the strip is shorter) the time and the speed show at the top, in the middle, for a moment: it fades in, stays for four seconds and fades out.
+- When the car passes the quarter mile (or the finish, when the strip is shorter) the time and the speed show at the top edge, in the middle, with a small margin, for a moment: it fades in, stays for four seconds and fades out.
 
 ### Recording a take
 

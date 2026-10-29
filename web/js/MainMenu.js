@@ -209,7 +209,24 @@ var MainMenu = (function() {
                 var object = new THREE.Group();
                 var r = entry.radius;
                 model.tilt.position.y = ((model.bodyLift || 1) - 1) * r;
-                object.add(model.tilt);
+                // The car as it stands on the road (the game puts it there by the ride height of the axles): the body lower or higher against the wheels, and tilted when the front
+                // and the rear differ, and the moving parts of the suspension (arms, uprights, springs) follow it. The springs carry the car at rest, so there is no sag to add.
+                var pose = new THREE.Group();
+                pose.add(model.tilt);
+                object.add(pose);
+                var ch = car.chassis || {}, rideF = ch.ride_front || 0, rideR = ch.ride_rear || 0;
+                if(car.type !== "motorcycle" && (rideF || rideR)) {
+                    pose.position.y = (rideF + rideR) / 2;
+                    pose.rotation.x = Math.atan((rideR - rideF) / Math.max(1, ch.wheelbase || 2.5));
+                }
+                if(model.rig && model.rig.update && car.type !== "motorcycle") {
+                    try {
+                        var rest = ch.suspension_length || 0.28;
+                        var lengths = [rest + rideF, rest + rideF, rest + rideR, rest + rideR];
+                        model.rig.update({ restLength: rest, steerApplied: 0, front_track: ch.front_track, rear_track: ch.rear_track, wheelbase: ch.wheelbase,
+                            wheels: lengths.map(function(l) { return { susLength: l, spin: 0, steerNow: 0 }; }) }, model.wheels.map(function(w) { return { object: w }; }));
+                    } catch(e) { console.warn("Showcase: the suspension was not posed: " + e.message); }
+                }
                 var c = model.measured && model.measured.centres;
                 var wb = car.chassis.wheelbase, ft = car.chassis.front_track, rt = car.chassis.rear_track;
                 var places = c ? [c.FR, c.FL, c.RL, c.RR] : [{ x: -ft / 2, y: 0, z: wb / 2 }, { x: ft / 2, y: 0, z: wb / 2 }, { x: rt / 2, y: 0, z: -wb / 2 }, { x: -rt / 2, y: 0, z: -wb / 2 }];
@@ -286,6 +303,7 @@ var MainMenu = (function() {
     // and in this browser (localStorage), so the next time they are there at once. The car editor takes the file away when the car is saved again.
     var previews = (function() {
         var queue = [], busy = false;
+        var POSE_EPOCH = Date.parse("2026-10-29T19:00:00Z");         // (a preview.webp from before the pictures showed the ride height is made again)
         function stamp(car) {
             var s = JSON.stringify([car.id, car.model, car.chassis, car.dimensions]), h = 0;
             for(var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
@@ -293,7 +311,7 @@ var MainMenu = (function() {
         }
         // (the stamp is of what car.json says: a model that was exported again under the same name did not change it, and the old picture stayed. The model file's own size and date
         // go into the key too, and a preview.webp that is older than the model is made again)
-        function key(car) { return "openracer.preview." + car.id + "." + stamp(car) + (car._modelTag || ""); }
+        function key(car) { return "openracer.preview.p2." + car.id + "." + stamp(car) + (car._modelTag || ""); }       // (p2: the car in its ride height, with its suspension)
         var headCache = {};
         function head(url) {
             if(!headCache[url]) headCache[url] = fetch(url, { method: "HEAD", cache: "no-store" }).then(function(r) {
@@ -337,7 +355,7 @@ var MainMenu = (function() {
                 var url = "cars/" + encodeURIComponent(car.id) + "/preview.webp";
                 // the file of the picture is used when it is not older than the model
                 head(url).then(function(pic) {
-                    if(!pic || (info && info.modified && pic.modified && pic.modified < info.modified)) { make(); return; }
+                    if(!pic || (info && info.modified && pic.modified && pic.modified < info.modified) || (pic.modified && pic.modified < POSE_EPOCH)) { make(); return; }
                     img.onerror = function() { img.onerror = null; make(); };
                     img.src = url + "?v=" + stamp(car) + (car._modelTag || "");
                 });
@@ -350,7 +368,7 @@ var MainMenu = (function() {
             if(!setup) { request(car, img); return; }
             var cfg = Object.assign({}, car, setup, { id: car.id, model: car.model, preview: car.preview, folder: car.folder, source: car.source });
             if(cfg.driver && !cfg.driver.file && car.driver && car.driver.file) cfg.driver = Object.assign({}, cfg.driver, { file: car.driver.file });
-            var s = JSON.stringify([stamp(car), setup.wheels, setup.colors, setup.materials, setup.suspension, setup.driveline, setup.dimensions, setup.chassis && setup.chassis.tire_diameter]), h = 0;
+            var s = JSON.stringify([stamp(car), setup.wheels, setup.colors, setup.materials, setup.suspension, setup.driveline, setup.dimensions, setup.chassis && [setup.chassis.tire_diameter, setup.chassis.ride_front, setup.chassis.ride_rear, setup.chassis.suspension_length, setup.chassis.wheelbase], "p2"]), h = 0;
             for(var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
             cfg._previewKey = car.id + "|" + name;
             var prefix = "openracer.preview." + car.id + ".tune." + encodeURIComponent(name) + ".", k = prefix + (h >>> 0).toString(36);
