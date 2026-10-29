@@ -107,7 +107,7 @@
                         <input type="number" id="offsetY" value="0" step="0.01">
                         <input type="number" id="offsetZ" value="0" step="0.01">
                     </div>
-                    <div class="buttons"><button id="fit" class="accent small">Fit to the wheels and the floor</button><span class="hint">The origin has to be at axle height, between the axles.</span></div>
+                    <div class="buttons"><button id="fit" class="accent small">Fit to the wheels and the floor</button><span class="hint">Origin: axle height, between the axles</span></div>
                 </div>
             </div>
         </details>
@@ -138,6 +138,7 @@
                     <div><label>Front rim</label><select id="libRimFront"><option value="">From the model</option></select></div>
                     <div><label>Front tyre</label><select id="libTyreFront"><option value="">From the model</option></select></div>
                 </div>
+                <div class="buttons"><button type="button" class="small ghost" id="libSame" title="Give the rear axle the rim and the tyre of the front axle">Rear = front</button></div>
                 <div class="row">
                     <div><label>Rear rim</label><select id="libRimRear"><option value="">From the model</option></select></div>
                     <div><label>Rear tyre</label><select id="libTyreRear"><option value="">From the model</option></select></div>
@@ -151,7 +152,7 @@
                     <div><span class="hint" style="display:block; margin-top:26px">A part called <b>steeringwheel</b> turns with the steering.</span></div>
                 </div>
                 </div>
-                <div class="bikeOnly hint">The front end of a motorcycle is found by name: <b>steerhead_…</b> turns with the steering, <b>brake_…_FL</b> goes with the front wheel along the fork, <b>swingarm</b> turns with the rear wheel, and the rider takes <b>grip_L/R</b>, <b>footpeg_L/R</b>, <b>frontbrake_R</b>, <b>clutch_L</b> and <b>shifter_L</b> (see MOTORCYCLE.md).</div>
+                <div class="tipline"><span>Front end found by name (steerhead_…)</span><button type="button" class="info" data-tip="The front end of a motorcycle is found by name: steerhead_… turns with the steering, brake_…_FL goes with the front wheel along the fork, swingarm turns with the rear wheel, and the rider takes grip_L/R, footpeg_L/R, frontbrake_R, clutch_L and shifter_L (see MOTORCYCLE.md)." aria-label="More information">i</button></div>
             </div>
         </details>
 
@@ -165,7 +166,7 @@
                 </div>
                 <div class="row">
                     <div><label>Engine</label><select id="enginePlace"><option value="front">In the front</option><option value="mid">In the middle</option><option value="rear">In the rear</option></select></div>
-                    <div><span class="hint" style="display:block; margin-top:26px">A propshaft runs from the gearbox to every driven axle that is more than 40 cm from it.</span></div>
+                    <div><span class="hint" style="display:block; margin-top:26px">Propshaft to every driven axle over 40 cm away</span></div>
                 </div>
                 <div class="buttons"><button id="suspEdit" class="small" title="Click the origin points in the view, through everything, to move (W) or turn (E) them; Escape leaves the mode">Edit origins</button></div>
                 <div id="suspMounts"></div>
@@ -230,18 +231,13 @@
                 </div>
                 <div class="row">
                     <div><input type="number" id="bikeBalance" step="0.1" min="0" max="3" value="1"><div class="hint">balance (the strength of the rider's lean control)</div></div>
-                    <div><input type="number" id="bikeForkDive" step="0.1" min="0" max="2" value="1"><div class="hint">fork and swingarm geometry (1: as the model, 0: off; the fork dives under the brake)</div></div><div></div>
+                    <div><input type="number" id="bikeForkDive" step="0.1" min="0" max="2" value="1"><div class="hint">fork geometry (1: the model, 0: off)</div></div><div></div>
                 </div>
             </div>
         </details>
 
-        <details class="card">
-            <summary>Tuning<span class="meta" id="tuningInfo"></span></summary>
-            <div class="body">
-                <div class="tipline"><span>The settings of the tuning menu</span><button type="button" class="info" data-tip="Everything else the tuning menu of the game has: the suspension, the tyres, the fuel, the engine, the gearbox, the aerodynamics and the assists. The same table (CarTuning.js), so what you set here is what the game drives; it works at once on the car of the test bench." aria-label="More information">i</button></div>
-                <div id="tuningFields"></div>
-            </div>
-        </details>
+        <span id="tuningInfo" hidden></span>
+        <div id="tuningFields" hidden></div>
 
         <details class="card">
             <summary>Drivetrain<span class="meta" id="speedInfo"></span></summary>
@@ -269,7 +265,7 @@
                     <div><label>Converter: torque ratio at stall</label><input type="number" id="tcRatio" step="0.05" min="1" max="3" placeholder="1.9"></div>
                     <div><label class="check" style="margin-top:22px"><input type="checkbox" id="tcLockup" checked> Lock-up clutch</label></div>
                 </div>
-                <div><label>Gear ratios (1st, 2nd, … separated by commas; a CVT runs between the first and the last)</label><input type="text" id="gears" value="3.6, 2.1, 1.4, 1.0, 0.8"></div>
+                <div><label>Gear ratios (1st, 2nd, … comma separated)</label><input type="text" id="gears" value="3.6, 2.1, 1.4, 1.0, 0.8"></div>
                 <div class="row">
                     <div><input type="number" id="finalDrive" step="0.05" value="3.5"><div class="hint">final drive</div></div>
                     <div class="carOnly"><input type="number" id="reverse" step="0.05" value="3.4"><div class="hint">reverse ratio</div></div>
@@ -306,10 +302,15 @@
                     <div class="fixed" style="width:90px"><label>How much</label><input type="number" class="es" data-key="convolution" step="0.05" min="0" max="1"></div>
                 </div>
                 <div class="modal-link">
-                    <span class="hint">The cylinders, the camshaft, the ports and the exhaust, and the mix of engine-sim.</span>
+                    <span class="hint">Cylinders, camshaft, ports and exhaust</span>
                     <button class="small" data-open="dlgSound">All settings…</button>
                 </div>
             </div>
+        </details>
+
+        <details class="card" id="assistsCard">
+            <summary>Assists and extras<span class="meta" id="assistsInfo"></span></summary>
+            <div class="body"></div>
         </details>
 
         <details class="card">
@@ -317,7 +318,7 @@
             <div class="body">
                 <div class="legend hint"><span><i style="background:#4d8dff"></i>1 fixed</span><span><i style="background:#37d67a"></i>2 follow</span><span><i style="background:#ff9f43"></i>3 cockpit</span></div>
                 <div class="modal-link">
-                    <span class="hint">Where the three cameras of the game are for this car; the dots in the view show them.</span>
+                    <span class="hint">The three cameras; the dots in the view show them</span>
                     <button class="small" data-open="dlgCameras">Cameras…</button>
                 </div>
             </div>
@@ -326,11 +327,11 @@
         <details class="card">
             <summary>Soft body<span class="meta" id="sbInfo"></span></summary>
             <div class="body">
-                <div class="tipline"><span>Dents, breaks, loose parts</span><button type="button" class="info" data-tip="The shell of the car: nodes and beams made from the model that dent, with a yield force and a break force, and parts that swing on a hinge or come loose. Show the shell, click a node or a beam in the view and set what it can take." aria-label="More information">i</button></div>
+                <div class="tipline"><span id="sbLine">Dents, breaks, loose parts</span><button type="button" class="info" data-tip="The shell of the car: nodes and beams made from the model that dent, with a yield force and a break force, and parts that swing on a hinge or come loose. Show the shell, click a node or a beam in the view and set what it can take." aria-label="More information">i</button></div>
                 <label class="check"><input type="checkbox" id="sbEnabled" checked> The car dents</label>
                 <div class="row">
                     <button class="small accent" id="sbShow">Show the shell</button>
-                    <button class="small" data-open="dlgSoftBody">Material and strengths…</button>
+                    <button class="small" data-open="dlgSoftBody" title="The material of the shell and the strength of anchors, beams and contacts">Strengths…</button>
                     <button class="small" id="sbPartsOpen" title="The parts panel stays open next to the view, so you can select nodes while it is open">Parts…</button>
                 </div>
                 <div class="group">Selection</div>
@@ -369,7 +370,7 @@
             <summary>Materials</summary>
             <div class="body">
                 <div class="modal-link">
-                    <span class="hint">Set a material right that did not arrive as it looked in Blender (glass, paint, chrome…).</span>
+                    <span class="hint">Fix glass, paint or chrome that arrived wrong</span>
                     <button class="small" data-open="dlgMaterials">Materials…</button>
                 </div>
             </div>
@@ -377,6 +378,7 @@
 
     </div>
     <footer class="bar">
+        <button type="button" id="changes" class="ghost" title="What is different from the last saved version" hidden>Changes</button>
         <button type="button" id="ready" class="ghost" title="What is missing before you can save"></button>
         <div id="status"></div>
         <button class="danger" id="delete" style="display:none">Delete</button>
@@ -449,11 +451,12 @@
 <aside id="layers">
     <div class="handle" id="layersHandle" title="Drag to resize"></div>
     <div class="head"><h3>Layers</h3><button class="close" id="layersHide" title="Hide">×</button></div>
+    <input type="search" id="layerSearch" placeholder="Find a part…" title="Find a part of the model by its name" style="margin:0 10px 6px;width:calc(100% - 20px)">
     <div id="layerList"></div>
     <div id="thumb">
         <div class="label" id="thumbLabel">Select a camera to see what it sees.</div>
     </div>
-    <p class="hint" id="layerHint">Select a camera or the model and drag the arrows in the view to move it. The fields follow.</p>
+    <p class="hint" id="layerHint">Drag the arrows in the view to move it</p>
 </aside>
 
 <dialog id="dlgCurve">
@@ -584,7 +587,7 @@
                 <div><input type="number" class="es" data-key="burn_duration" step="1" min="15" max="120"><div class="hint">burn (crank °)</div></div>
                 <div><input type="number" class="es" data-key="burn_randomness" step="0.05" min="0" max="1"><div class="hint">burn randomness</div></div>
             </div>
-            <div class="group">Camshaft (durations in crank degrees at 50 thou, lift in mm, lobe centres from TDC)</div>
+            <div class="group">Camshaft (duration in crank °, lift in mm, lobes from TDC)</div>
             <div class="row">
                 <div><input type="number" class="es" data-key="intake_duration" step="2" min="150" max="330"><div class="hint">intake duration</div></div>
                 <div><input type="number" class="es" data-key="intake_lift" step="0.1" min="3" max="20"><div class="hint">intake lift</div></div>
@@ -623,7 +626,7 @@
                 <div><input type="number" class="es" data-key="audio_volume" step="0.1" min="0" max="10"><div class="hint">exhaust volume</div></div>
                 <div><input type="number" class="es" data-key="simulation_frequency" step="1000" min="4000" max="40000"><div class="hint">simulation (Hz)</div></div>
             </div>
-            <div><label>Ignition timing (rpm:degrees of advance, separated by commas)</label><input type="text" class="es" data-key="timing" id="esTiming"></div>
+            <div><label>Ignition timing (rpm:degrees, comma separated)</label><input type="text" class="es" data-key="timing" id="esTiming"></div>
         </div>
     </div>
 </dialog>

@@ -1150,16 +1150,20 @@ function renderLayers() {
         // only the parents are shown, the objects inside them fold out with the arrow (all folded when a model is loaded)
         if (partsFor !== state.nodes) { partsFor = state.nodes; expandedParts.clear(); }
         let hiddenFrom = Infinity;                       // the depth of the folded parent that hides the rows below it
+        const find = $("layerSearch").value.trim().toLowerCase();                // (a search shows every part with that in its name, folded or not)
         state.nodes.forEach((node, index) => {
+            if (find) { if (!node.name.toLowerCase().includes(find)) return; }
+            else {
             if (node.depth > hiddenFrom) return;
             hiddenFrom = Infinity;
-            const hasChildren = index + 1 < state.nodes.length && state.nodes[index + 1].depth > node.depth;
+            }
+            const hasChildren = !find && index + 1 < state.nodes.length && state.nodes[index + 1].depth > node.depth;
             const open = expandedParts.has(node.name);
             if (hasChildren && !open) hiddenFrom = node.depth;
             const row = document.createElement("div");
             row.className = "layer part" + (node.name === chosenPart ? " selected" : "");
             row.dataset.part = node.name;
-            row.style.paddingLeft = (6 + Math.min(node.depth, 6) * 10) + "px";
+            row.style.paddingLeft = (6 + Math.min(find ? 0 : node.depth, 6) * 10) + "px";
             const arrow = document.createElement("button");
             arrow.className = "eye";
             arrow.style.cssText = "margin-left: 0; width: 18px; flex: none; opacity: " + (hasChildren ? 1 : 0) + ";";
@@ -1506,7 +1510,8 @@ function updateSpeedInfo() {
         drivetrain: { gear_ratios: gears, final_drive: final, gearbox: $("gearbox").value },
         engine: { limiter_rpm: limiter, torque_curve: state.curve.slice().sort((a, b) => a[0] - b[0]) }
     });
-    $("speedInfo").textContent = (top > 0 ? "Top speed about " + Math.round(top * 3.6) + " km/h. " : "") + "At the rev limit: " + gears.map((g, i) => (i + 1) + ": " + Math.round(speed(g)) + " km/h").join("   ");
+    $("speedInfo").textContent = top > 0 ? "Top speed ~" + Math.round(top * 3.6) + " km/h" : "";
+    $("speedInfo").title = "At the rev limit: " + gears.map((g, i) => "gear " + (i + 1) + ": " + Math.round(speed(g)) + " km/h").join(", ");
 }
 
 function parseGears() {
@@ -2156,6 +2161,14 @@ function tuneSlider(item, onChange) {
     const reset = document.createElement("button");
     reset.type = "button"; reset.className = "small ghost tuneReset"; reset.textContent = "↺"; reset.title = "Back to the value of the car as loaded";
     line.appendChild(text); line.appendChild(number); line.appendChild(unitSpan); line.appendChild(reset);
+    // a setting of the rear that has a front twin: a button gives it the value of the front
+    const twin = key.endsWith("_rear") ? key.replace(/_rear$/, "_front") : null;
+    if (twin && TUNING_KEYS.includes(twin)) {
+        const same = document.createElement("button");
+        same.type = "button"; same.className = "small ghost"; same.textContent = "= front"; same.title = "The value of the front";
+        same.addEventListener("click", () => { if (Number.isFinite(tuning[twin])) { tuning[key] = tuning[twin]; show(); onChange(); } });
+        line.insertBefore(same, reset);
+    }
     const range = document.createElement("input");
     range.type = "range"; range.min = min; range.max = max; range.step = step;
     wrap.appendChild(line); wrap.appendChild(range);
@@ -2176,17 +2189,25 @@ function tuneSlider(item, onChange) {
     return wrap;
 }
 
+// where a group of the tuning table lives: in the card of what it is about (the table is the one of the game's tuning menu, CarTuning.js)
+const TUNING_HOMES = { "Chassis": "Chassis", "Brakes": "Chassis", "Aerodynamics and steering": "Chassis", "Size and steering wheel": "Chassis", "Tyres": "Wheels", "Fuel": "Engine", "Engine": "Engine",
+    "Transmission": "Drivetrain", "Suspension and driveline": "Suspension and driveline", "Systems and extras": "Assists and extras" };
+function cardBodyOf(name) {
+    const card = [...document.querySelectorAll("#side details.card")].find((c) => c.querySelector("summary").firstChild.textContent.trim() === name);
+    return card ? card.querySelector(".body") : $("tuningFields");
+}
 function renderTuningCard() {
-    const box = $("tuningFields");
-    box.innerHTML = "";
+    // (the groups are built again: the old ones go first)
+    document.querySelectorAll("#side details.tuneGroup").forEach((g) => g.remove());
     OpenRacer.CarTuning.GROUPS.forEach((group) => {
         const items = group.items.filter((item) => TUNING_KEYS.includes(item[0]));
         if (!items.length) return;
         const details = document.createElement("details");
         details.className = "tuneGroup";
-        details.open = group.name === "Chassis";
+        details.open = false;
         const summary = document.createElement("summary");
-        summary.textContent = group.name;
+        // (a group called as its card: "Engine" in the Engine card)
+        summary.textContent = TUNING_HOMES[group.name] === group.name ? group.name + " settings" : group.name;
         details.appendChild(summary);
         if (group.name === "Tyres") {
             // the kind of tyre: a choice, not a number; it changes the grip, the working temperature, the wear and where the rubber smokes
@@ -2217,7 +2238,7 @@ function renderTuningCard() {
             line.appendChild(tick); line.appendChild(document.createTextNode(" Tyre damage (a hard hit can puncture a tyre)"));
             details.appendChild(line);
         }
-        box.appendChild(details);
+        cardBodyOf(TUNING_HOMES[group.name] || "Chassis").appendChild(details);
     });
     // the systems and the extras: a tick each, with their settings below it while it is ticked
     const features = document.createElement("details");
@@ -2258,8 +2279,9 @@ function renderTuningCard() {
         wrap.appendChild(inner);
         features.appendChild(wrap);
     });
-    box.appendChild(features);
-    $("tuningInfo").textContent = TUNING_KEYS.length + " settings";
+    cardBodyOf("Assists and extras").appendChild(features);
+    features.open = true;
+    features.querySelector("summary").style.display = "none";
     syncTuningVisibility();
     renderSetups();
 }
@@ -2938,6 +2960,7 @@ let dirty = false;
 function setDirty(on) {
     dirty = on;
     for (const id of ["save", "saveDrive"]) $(id).classList.toggle("dirty", on);
+    $("changes").hidden = !on || !state.existingCar;
     refreshReady();
 }
 $("side").addEventListener("input", (e) => { if (!e.target.closest("#setupRow, #existing, #copyCar")) setDirty(true); }, true);
@@ -2954,6 +2977,7 @@ function problems() {
     else if (wheelMode() === "model" && state.root && !wheelCenters()) list.push("Pick the parts of all four wheels");
     for (const [id, label] of [["mass", "mass"], ["wheelbase", "wheelbase"], ["tyre", "tyre diameter"]]) if (!(num(id) > 0)) list.push("Fill in the " + label);
     if (state.curve.length < 3) list.push("The engine needs a torque curve");
+    for (const w of modelWarnings()) list.push(w);
     return list;
 }
 function refreshReady() {
@@ -2961,6 +2985,7 @@ function refreshReady() {
     el.textContent = list.length ? "⚠ " + list.length + " to fix" : "✓ Ready";
     el.title = list.join("\n") || "Nothing is missing";
     el.style.color = list.length ? "var(--warn)" : "var(--muted)";
+    $("sbLine").textContent = state.nodes.some((n) => /^(softbody|shell)?beams?$/i.test(n.name.replace(/[^a-z]/gi, ""))) ? "Shell from the beams of the model" : "Dents, breaks, loose parts";
 }
 $("ready").addEventListener("click", () => { const list = problems(); status(list.length ? list.join(" · ") : "Nothing is missing.", list.length ? "error" : "ok"); });
 setInterval(refreshReady, 1000);
@@ -2984,3 +3009,120 @@ $("copyCar").addEventListener("click", () => {
     status("Saving now makes a new car: " + $("id").value + ". Change the name first if you like.", "ok");
 });
 refreshReady();
+
+// ---- the parts of the model that are called wrong: found when a model is loaded and listed in the ready check
+var RIG_NAME = /^(susp(upperarm|lowerarm|arm|wishbone|link|trailingarm|trailing|upright|hub|knuckle|spring|damper|strut|shock|coilover|driveshaft|halfshaft|shaft)[a-z]*(fl|fr|rl|rr)|steertierod[a-z]*(fl|fr|rl|rr)|steerrack|susprack|susp(axle|panhard|watt)[a-z]*(rear|front|back)?|[a-z]*trailing[a-z]*(fl|fr|rl|rr)|(coilover|damper|shock|strut|spring)cylinder[a-z]*(fl|fr|rl|rr)|(rear|front|back)?solid[a-z]*|[a-z]*(solid|live)axle[a-z]*|axle[a-z]*)$/i;
+var namesFor = null, namesFound = [];
+function modelWarnings() {
+    if (namesFor === state.nodes) return namesFound;
+    namesFor = state.nodes;
+    const out = [];
+    if (state.root) pivot.updateMatrixWorld(true);
+    const all = state.root ? new THREE.Box3().setFromObject(pivot) : null;
+    const middle = all ? all.getCenter(new THREE.Vector3()).z : 0;
+    for (const node of state.nodes) {
+        const plain = node.name.replace(/[^a-z0-9]/gi, "");
+        if (/trierod/i.test(plain)) out.push("“" + node.name + "”: tierod, not trierod");
+        else if (/^(susp|steer(?!ing|wheel))/i.test(plain) && !RIG_NAME.test(plain)) out.push("“" + node.name + "” is not a part the suspension knows");
+        if (/(fl|fr|rl|rr)\d{3}$/i.test(plain) && /^(wheel|susp|steer|brake)/i.test(plain)) out.push("“" + node.name + "” ends in .001: give it a corner (FL, FR, RL, RR)");
+        const corner = /(caliper|brake)/i.test(plain) && !/disc|disk|rotor/i.test(plain) ? plain.slice(-2).toLowerCase() : "";
+        if (["fl", "fr", "rl", "rr"].includes(corner)) {
+            const box = new THREE.Box3().setFromObject(node.object);
+            if (!box.isEmpty()) {
+                const front = box.getCenter(new THREE.Vector3()).z > middle;
+                if (front !== (corner[0] === "f")) out.push("“" + node.name + "” sits at the " + (front ? "front" : "rear") + " but is named for the " + (corner[0] === "f" ? "front" : "rear") + " (it would follow that wheel)");
+            }
+        }
+    }
+    namesFound = out.slice(0, 8);
+    return namesFound;
+}
+
+// ---- undo: the form, the tuning card, the torque curve and the materials as they were before the last change (Ctrl or Cmd + Z; Shift for redo)
+const undoStack = [], redoStack = [];
+let restoring = false, lastShot = null;
+const fieldList = () => [...document.querySelectorAll("#side input, #side select, #side textarea")].filter((e) => (e.id || e.name) && e.type !== "file" && !e.closest(".tuneItem, #setupRow") && !["existing", "layerSearch"].includes(e.id));
+function snapshot() {
+    const fields = {};
+    for (const e of fieldList()) {
+        const key = e.type === "radio" ? "r:" + e.name + ":" + e.value : e.id;
+        fields[key] = e.type === "checkbox" || e.type === "radio" ? e.checked : (e.multiple ? [...e.selectedOptions].map((o) => o.value) : e.value);
+    }
+    return { fields, tuning: Object.assign({}, tuning), curve: state.curve.map((p) => p.slice()), overrides: JSON.parse(JSON.stringify(state.overrides || {})) };
+}
+function restore(shot) {
+    restoring = true;
+    try {
+        for (const e of fieldList()) {
+            const key = e.type === "radio" ? "r:" + e.name + ":" + e.value : e.id;
+            if (!(key in shot.fields)) continue;
+            const v = shot.fields[key];
+            const now = e.type === "checkbox" || e.type === "radio" ? e.checked : (e.multiple ? [...e.selectedOptions].map((o) => o.value) : e.value);
+            if (JSON.stringify(now) === JSON.stringify(v)) continue;
+            if (e.type === "checkbox" || e.type === "radio") e.checked = v;
+            else if (e.multiple) [...e.options].forEach((o) => { o.selected = v.includes(o.value); });
+            else e.value = v;
+            e.dispatchEvent(new Event("input", { bubbles: true }));
+            e.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        tuning = Object.assign({}, shot.tuning);
+        state.curve = shot.curve.map((p) => p.slice());
+        state.overrides = JSON.parse(JSON.stringify(shot.overrides));
+        renderTuningCard(); renderCurve(); drawChart(); renderMaterials(); updateHelpers(); formChanged(); tuningChanged();
+    } finally { restoring = false; }
+    lastShot = snapshot();
+}
+function remember() {
+    if (restoring) return;
+    if (lastShot) { undoStack.push(lastShot); if (undoStack.length > 60) undoStack.shift(); redoStack.length = 0; }
+    lastShot = snapshot();
+}
+$("side").addEventListener("change", remember, true);
+$("side").addEventListener("click", (e) => { if (e.target.closest("button")) setTimeout(() => { if (!restoring && lastShot && JSON.stringify(snapshot()) !== JSON.stringify(lastShot)) remember(); }, 50); }, true);
+window.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== "z") return;
+    if (e.target.closest && e.target.closest("input[type=text], input[type=search], input[type=number], textarea")) return;       // (a field has its own undo)
+    e.preventDefault();
+    const from = e.shiftKey ? redoStack : undoStack, to = e.shiftKey ? undoStack : redoStack;
+    if (!from.length) { status(e.shiftKey ? "Nothing to redo." : "Nothing to undo."); return; }
+    to.push(snapshot());
+    restore(from.pop());
+    setDirty(true);
+    status(e.shiftKey ? "Redone." : "Undone.", "ok");
+});
+setTimeout(() => { lastShot = snapshot(); }, 1500);
+
+// ---- what is different from the last saved version
+function flat(object, path, out) {
+    if (Array.isArray(object) || (object && typeof object === "object")) {
+        const keys = new Set([...(Array.isArray(object) ? object.map((_, i) => i) : Object.keys(object))]);
+        for (const k of keys) flat(object[k], path ? path + (Array.isArray(object) ? "[" + k + "]" : "." + k) : String(k), out);
+    } else out[path] = object;
+    return out;
+}
+function differences() {
+    const before = state.existingCar;
+    if (!before) return null;
+    const now = buildConfig(state.existingId || ($("id").value.trim() || slug($("name").value)));
+    const skip = /^(model|softbody|driver|materials|id|wheels\.nodes|sound|cameras|exhaust|suspension|driveline)/;
+    const a = flat(JSON.parse(JSON.stringify(before)), "", {}), b = flat(JSON.parse(JSON.stringify(now)), "", {}), out = [];
+    for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+        if (skip.test(k)) continue;
+        const x = a[k], y = b[k];
+        if (x === undefined && y === undefined) continue;
+        if (typeof x === "number" && typeof y === "number" && Math.abs(x - y) < 1e-6 * Math.max(1, Math.abs(x))) continue;
+        if (x !== y) out.push(k + ": " + (x === undefined ? "–" : x) + " → " + (y === undefined ? "–" : y));
+    }
+    return out;
+}
+$("changes").addEventListener("click", () => {
+    let list;
+    try { list = differences(); } catch (e) { status(e.message, "error"); return; }
+    if (list === null) { status("This car is not saved yet."); return; }
+    status(list.length ? list.length + " changed: " + list.slice(0, 6).join(" · ") + (list.length > 6 ? " · …" : "") : "Nothing in the settings is different from the saved car.", "ok");
+});
+$("layerSearch").addEventListener("input", () => renderLayers());
+$("libSame").addEventListener("click", () => {
+    $("libRimRear").value = $("libRimFront").value; $("libTyreRear").value = $("libTyreFront").value;
+    $("libRimRear").dispatchEvent(new Event("change", { bubbles: true })); $("libTyreRear").dispatchEvent(new Event("change", { bubbles: true }));
+});
