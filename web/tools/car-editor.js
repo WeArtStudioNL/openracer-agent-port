@@ -1654,7 +1654,7 @@ function updateBuildLimits() {
 initBuildSliders();
 initBuildUi();
 
-// ---- the dyno: a full-throttle pull on a dry road, measured at the wheels; only the chart shows it
+// ---- the dyno: a full-throttle pull, measured at the wheels; only the chart shows it
 let dyno = null, dynoFrame = 0;
 let dynoSound = false, dynoRamp = 0;       // the engine sound was started by the dyno run (and stops with it)
 // the run is over: the throttle closes and the engine drops back to idle (the engine braking is quick at first, then it settles), then the sound stops
@@ -1672,7 +1672,7 @@ function dynoSoundOff() {
     };
     dynoRamp = requestAnimationFrame(step);
 }
-function clearDyno() { if (!dyno) return; cancelAnimationFrame(dynoFrame); dynoSoundOff(); dyno = null; $("dynoInfo").textContent = ""; }
+function clearDyno() { if (!dyno) return; cancelAnimationFrame(dynoFrame); dynoSoundOff(); dyno = null; $("runDyno").disabled = false; $("dynoInfo").textContent = ""; }
 function dynoPull() {
     const gears = parseGears(), final = num("finalDrive"), limit = num("limiter"), r = (num("tyre") || 0.65) / 2, mass = num("mass") || 1000;
     if (!gears.length || !(final > 0) || !(limit > 0) || state.curve.length < 2) return null;
@@ -1686,19 +1686,16 @@ function dynoPull() {
         for (let i = 1; i < curve.length; i++) if (rpm <= curve[i][0]) { const a = curve[i - 1], b = curve[i], f = b[0] > a[0] ? (rpm - a[0]) / (b[0] - a[0]) : 0; return (a[1] + (b[1] - a[1]) * f) * room; }
         return 0;
     };
-    const area = (num("width") || 1.8) * (num("height") || 1.3) * 0.85, cd = num("drag") || 0.35;
-    const front = (num("front") || 50) / 100, drive = $("drive").value;
-    const share = drive === "awd" ? 1 : drive === "fwd" ? front : 1 - front + 0.08;          // (the weight on the driven wheels, with the weight that moves back under power)
-    const traction = 1.0 * mass * 9.81 * Math.min(1, share);                                  // (dry asphalt)
+    // a chassis dyno holds the car still on its rollers: no air drag and no loss of grip, only the drivetrain (the efficiency) and the rolling of the tyres count
+    const rolling = 0.012 * mass * 9.81;
     const meff = mass + (num("inertia") || 0.3) * G * G / (r * r);
     let rpm = Math.max(num("idle") * 1.4 || 1200, limit * 0.25), v = rpm * Math.PI / 30 * r / G, lastRpm = -1e9;
     const points = [];
     for (let t = 0; t < 120 && rpm < limit; t += 0.01) {
-        const drive_f = Math.min(torqueAt(rpm) * G * eff / r, traction);
-        const net = drive_f - 0.012 * mass * 9.81 - 0.5 * 1.29 * cd * area * v * v;
-        if (rpm - lastRpm >= 50) { points.push({ rpm, boost: boostAt(rpm), nm: Math.max(0, (drive_f - 0.012 * mass * 9.81 - 0.5 * 1.29 * cd * area * v * v) * r / G), hp: Math.max(0, (drive_f - 0.012 * mass * 9.81 - 0.5 * 1.29 * cd * area * v * v) * v / 745.7) }); lastRpm = rpm; }
+        const net = torqueAt(rpm) * G * eff / r - rolling;
+        if (rpm - lastRpm >= 50) { points.push({ rpm, boost: boostAt(rpm), nm: Math.max(0, net * r / G), hp: Math.max(0, net * v / 745.7) }); lastRpm = rpm; }
         if (net <= 0 && rpm > curve[1][0]) break;
-        v += net / meff * 0.01;
+        v += Math.max(net, 0) / meff * 0.01 + 0.002;
         rpm = v * 30 / Math.PI * G / r;
     }
     return points.length > 3 ? { points, gear: gears.indexOf(ratio) + 1, room } : null;
@@ -1718,8 +1715,9 @@ $("runDyno").addEventListener("click", () => {
     const start = performance.now(), duration = 4500;
     const step = (now) => {
         if (!dyno) { $("runDyno").disabled = false; return; }
-        const f = Math.min(1, (now - start) / duration);
+        const f = Math.max(0, Math.min(1, (now - start) / duration));      // (the first frame can be stamped before the start)
         dyno.upTo = Math.floor(f * (dyno.points.length - 1));
+        if (!dyno.points[dyno.upTo]) { clearDyno(); return; }
         if (preview.playing) { $("soundRpm").value = dyno.points[dyno.upTo].rpm; $("soundThrottle").value = 100; soundSliders(); }
         drawChart();
         if (f < 1) { dynoFrame = requestAnimationFrame(step); return; }
