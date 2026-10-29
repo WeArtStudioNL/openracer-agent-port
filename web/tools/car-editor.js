@@ -501,6 +501,7 @@ function setModel(root, isNew, replace) {
     state.root = root;
     pivot.add(root);
     state.materials = OpenRacer.prepareMaterials(THREE, root);
+    setTimeout(applyPaint, 0);                                   // (the paint of the tuning card, on the new model)
     if (replace) {
         // the materials that the new model still has keep their changes; the others are dropped
         const names = new Set(state.materials.map((m) => m.name));
@@ -836,8 +837,10 @@ function chassisFromWheels() {
 
 // ---- materials
 
+let paintTimer = 0;
 function applyOverrides(name) {
     state.materials.filter((m) => m.name === name).forEach((m) => OpenRacer.applyMaterialOverride(m, state.overrides[name]));
+    clearTimeout(paintTimer); paintTimer = setTimeout(() => applyPaint(), 0);      // (the paint of the tuning card is laid on the material again)
 }
 
 function renderMaterials() {
@@ -1852,7 +1855,8 @@ function buildConfig(id) {
     if (isBike()) { config.type = "motorcycle"; config.motorcycle = readBike(); config.drivetrain.drive = "rwd"; config.drivetrain.diff = "welded"; }
     // the settings of the Tuning card (the rest of the tuning menu) go into the configuration too
     const withTuning = OpenRacer.CarTuning.toConfig(config, tuningValues(config));
-    ["tyres", "fuel", "assists", "extras"].forEach((k) => { if (withTuning[k] !== undefined) config[k] = withTuning[k]; });      // (extras: the pops, the anti-lag, the boost gauge of the card)
+    ["tyres", "fuel", "assists", "extras"].forEach((k) => { if (withTuning[k] !== undefined) config[k] = withTuning[k]; });
+    if (withTuning.colors) config.colors = withTuning.colors; else delete config.colors;      // (the paint of the body and the rims)      // (extras: the pops, the anti-lag, the boost gauge of the card)
     Object.assign(config.chassis, withTuning.chassis);
     Object.assign(config.engine, withTuning.engine);
     Object.assign(config.drivetrain, withTuning.drivetrain);
@@ -2427,7 +2431,7 @@ refreshList().then(() => {
 const EDITOR_HAS = new Set(["mass", "front_weight", "cg_height", "drag_coefficient", "max_steer_deg", "idle_rpm", "limiter_rpm", "engine_inertia",
     "final_drive", "reverse_ratio", "brake_total", "brake_bias", "diff_preload", "diff_power", "diff_coast", "center_split", "suspension_travel",
     // (the rows of the tuning menu that the form has as its own cards)
-    "efficiency", "length", "width", "height", "steering_degrees", "gen_power", "gen_peak_rpm", "body_flake", "rim_flake", "sb_max_nodes", "sb_wheel_strength",
+    "efficiency", "length", "width", "height", "steering_degrees", "gen_power", "gen_peak_rpm", "sb_max_nodes", "sb_wheel_strength",
     "cam_follow_distance", "cam_follow_height", "cam_follow_look_height", "cam_follow_look_z", "cam_follow_smoothing", "cam_follow_fov_standing", "cam_follow_fov_fast", "cam_follow_fov_full_speed", "cam_follow_dolly",
     "cam_cockpit_x", "cam_cockpit_y", "cam_cockpit_z", "cam_cockpit_fov",
     "bike_max_lean", "bike_fast_lean", "bike_rake", "bike_rider_mass", "bike_hang_off", "bike_max_lateral_g", "bike_balance", "bike_fork_dive"]);
@@ -2441,9 +2445,60 @@ function tuningFromCar(car) {
     TUNING_KEYS.forEach((k) => { tuning[k] = all[k]; });
     tuning.compound = all.compound;                       // (not a number: the kind of tyre)
     tuning.tyre_damage = all.tyre_damage === "on" ? "on" : "off";     // (a word in the table, as the tuning menu has it)
+    PAINT_WORDS.forEach((k) => { tuning[k] = all[k]; });               // (the paint: colours as text, the finish and the pattern as words)
     Object.keys(OpenRacer.CarTuning.FEATURE_DEFAULTS).forEach((k) => { tuning[k] = all[k]; });     // the ticks of the systems and the extras, with their settings
     tuningBase = Object.assign({}, tuning);
     renderTuningCard();
+}
+
+// ---- the paint: the colour and the finish of the body (the material carpaint) and of the rims (rimpaint), as in the tuning menu of the game (CarColors.js)
+const PAINT_WORDS = ["body_color", "rim_color", "body_finish", "rim_finish", "body_pattern", "rim_pattern"], PAINT_KEYS = ["body_flake", "rim_flake"];
+function applyPaint() {
+    if (!state.root || !OpenRacer.applyCarColors) return;
+    const t = tuning;
+    OpenRacer.applyCarColors([state.root], {
+        body: t.body_color || null, rim: t.rim_color || null, bodyFinish: t.body_finish || "", rimFinish: t.rim_finish || "",
+        bodyFlake: t.body_flake || 100, rimFlake: t.rim_flake || 100, bodyPattern: t.body_pattern || "noise", rimPattern: t.rim_pattern || "noise"
+    });
+}
+function paintSection() {
+    const details = document.createElement("details");
+    details.className = "inner";
+    details.open = false;
+    details.innerHTML = "<summary title='Only the materials called carpaint (the body) and rimpaint (the rims) of the model are painted'>Paint (the materials carpaint and rimpaint)</summary>";
+    const row = (labelText, control) => {
+        const wrap = document.createElement("div"); wrap.className = "tuneItem";
+        const line = document.createElement("div"); line.className = "tuneLine";
+        const text = document.createElement("span"); text.className = "tuneLabel"; text.textContent = labelText;
+        line.appendChild(text); line.appendChild(control); wrap.appendChild(line); details.appendChild(wrap);
+        return wrap;
+    };
+    const changed = () => { tuningChanged(); setDirty(true); };
+    for (const part of ["body", "rim"]) {
+        const label = part === "body" ? "body" : "rims";
+        const colour = document.createElement("input"); colour.type = "color";
+        colour.value = tuning[part + "_color"] || "#888888"; colour.style.opacity = tuning[part + "_color"] ? "" : 0.45;
+        colour.addEventListener("input", () => { tuning[part + "_color"] = colour.value; colour.style.opacity = ""; changed(); });
+        const reset = document.createElement("button"); reset.type = "button"; reset.className = "small ghost"; reset.textContent = "↺"; reset.title = "The colour of the model";
+        reset.addEventListener("click", () => { tuning[part + "_color"] = ""; colour.style.opacity = 0.45; changed(); });
+        const box = document.createElement("span"); box.appendChild(colour); box.appendChild(reset);
+        row("Colour of the " + label, box);
+        const finish = document.createElement("select");
+        Object.entries(OpenRacer.carFinishes).forEach(([id, f]) => { const o = document.createElement("option"); o.value = id; o.textContent = f.label; finish.appendChild(o); });
+        finish.value = tuning[part + "_finish"] || "";
+        row("Finish of the " + label, finish);
+        const pattern = document.createElement("select");
+        Object.entries(OpenRacer.carFlakePatterns).forEach(([id, name]) => { const o = document.createElement("option"); o.value = id; o.textContent = name; pattern.appendChild(o); });
+        pattern.value = tuning[part + "_pattern"] || "noise";
+        const patternRow = row("Flake pattern of the " + label, pattern);
+        const size = tuneSlider(["" + part + "_flake", "Flake size of the " + label + " (metal flake)", "%", 25, 400, 5], changed);
+        details.appendChild(size);
+        const showFlake = () => { const on = finish.value === "flake"; patternRow.style.display = on ? "" : "none"; size.style.display = on ? "" : "none"; };
+        finish.addEventListener("change", () => { tuning[part + "_finish"] = finish.value; showFlake(); changed(); });
+        pattern.addEventListener("change", () => { tuning[part + "_pattern"] = pattern.value; changed(); });
+        showFlake();
+    }
+    return details;
 }
 
 let tuningBase = {};                                  // the values of the car as it was loaded (the ↺ of a setting goes back to it)
@@ -2539,7 +2594,8 @@ function renderTuningCard() {
         const fine = document.createElement("details");
         fine.className = "inner";
         fine.innerHTML = "<summary title='The kind of tyre sets most of these: change them only to move away from it'>Fine-tune the tyre (on top of the kind)</summary>";
-        items.forEach((item) => { if (item[4] > item[3]) (fineKeys.includes(item[0]) ? fine : details).appendChild(tuneSlider(item, tuningChanged)); });
+        if (group.name === "Chassis") details.appendChild(paintSection());
+        items.forEach((item) => { if (item[4] > item[3] && !PAINT_KEYS.includes(item[0])) (fineKeys.includes(item[0]) ? fine : details).appendChild(tuneSlider(item, tuningChanged)); });
         if (fine.children.length > 1) details.appendChild(fine);
         if (group.name === "Tyres") {
             // a hard hit can puncture a tyre: a tick, as the tuning menu has it
@@ -2719,6 +2775,7 @@ function syncTuningVisibility() {
 // a change goes to the car of the test bench at once
 function tuningChanged() {
     syncTuningVisibility();
+    applyPaint();
     if (!bench.vehicle || !bench.config) return;
     try {
         const config = OpenRacer.CarTuning.toConfig(bench.config, tuningValues(bench.config));
@@ -2753,6 +2810,7 @@ function tuningValues(config) {
     TUNING_KEYS.forEach((k) => { if (Number.isFinite(tuning[k])) values[k] = tuning[k]; });
     if (tuning.compound) values.compound = tuning.compound;
     if (tuning.tyre_damage !== undefined) values.tyre_damage = tuning.tyre_damage;
+    PAINT_WORDS.forEach((k) => { if (tuning[k] !== undefined) values[k] = tuning[k]; });
     return values;
 }
 

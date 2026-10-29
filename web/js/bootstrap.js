@@ -62,6 +62,7 @@ var scripts = [
     "js/SoftBodyMesh.js",
     "js/Parts.js",
     "js/CollisionProxy.js",
+    "js/CarColors.js",
     "js/Car.js",
     "js/RacingLine.js",
     "js/Records.js",
