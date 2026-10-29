@@ -40,6 +40,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 ### Free camera panel
 
+- Space takes the free camera up and Alt takes it down (Z and X still do). Space is not the handbrake while the free camera is on.
 - Every setting has a slider and every toggle a button: speed, the smoothing of the movement (new: how fast the camera follows the keys, up to direct), the smoothing of the mouse look, the field of view, the tilt itself (with a Level button), the speed of the tilt (new) and the smoothing of the tilt (new). They are remembered per car. The title moves the panel; the keys are folded away under Keys.
 
 ### Touch controls and the HUD editor

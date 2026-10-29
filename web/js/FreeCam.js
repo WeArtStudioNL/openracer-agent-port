@@ -2,10 +2,10 @@
  * FreeCam.js
  *
  * Description: The fourth camera of the game (the camera switcher: follow, cockpit, free). The camera is not tied to the car: it is moved with the
- *              keys and the mouse, as the free camera of the replay: W A S D move it (W goes the way it looks, also up and down with the look), Z and X take it up and down, the
+ *              keys and the mouse, as the free camera of the replay: W A S D move it (W goes the way it looks, also up and down with the look), Space and Z take it up, Alt and X down, the
  *              mouse looks around (click the scene: the pointer is locked, Escape lets it go), Q and E roll the picture, 3 and 4 make it slower and faster
  *              (a hundredth to three times), [ and ] narrow and widen the field of view. These keys do not drive the car while this camera is on; the arrows
- *              still do (and Space is the handbrake). Two toggles, on the panel at the top right and on keys (actions of the settings menu): P, "freeCamAim", the camera looks at the
+ *              still do (Space takes the camera up, so it is not the handbrake while this camera is on). Two toggles, on the panel at the top right and on keys (actions of the settings menu): P, "freeCamAim", the camera looks at the
  *              car (it keeps its place and turns to the car; the tilt and the turn wait while it does), and O, "freeCamFollow", the camera goes with the
  *              car (it keeps its place against the car, and its own direction), and I, "freeCamFixed", the camera is fixed to the car as a part of it (its
  *              place and its turn go with the car; the keys then move it in the frame of the car). Fixed to the car or moving with it, the camera does not
@@ -40,7 +40,7 @@ OpenRacer.FreeCam = (function () {
     var placeBehind = false;
     var panel = null, followButton = null, aimButton = null, fixedButton = null, speedLabel = null;
     var carId = null, saveAt = 0;
-    var KEYS = { forward: "KeyW", back: "KeyS", left: "KeyA", right: "KeyD", up: ["KeyZ"], down: ["KeyX"], slower: "Digit3", faster: "Digit4", lookSlower: "Digit7", lookFaster: "Digit8",
+    var KEYS = { forward: "KeyW", back: "KeyS", left: "KeyA", right: "KeyD", up: ["KeyZ", "Space"], down: ["KeyX", "AltLeft", "AltRight"], slower: "Digit3", faster: "Digit4", lookSlower: "Digit7", lookFaster: "Digit8",
         rollLeft: "KeyQ", rollRight: "KeyE", fovNarrow: "BracketLeft", fovWide: "BracketRight", fixedToggle: "KeyI" };
     // the keys this camera takes (Settings.js leaves them to it while it is on: they do not drive the car, mute the sound or save the reset place)
     var TAKEN = {};
@@ -76,7 +76,7 @@ OpenRacer.FreeCam = (function () {
         speedLabel = title.querySelector("#freeCamSpeed");
         var keys = document.createElement("details");
         keys.className = "keys";
-        keys.innerHTML = "<summary>Keys</summary><b>W A S D</b> move · <b>Z X</b> up, down<br><b>mouse</b> look (click the scene) · <b>Q E</b> tilt<br><b>[ ]</b> field of view · <b>3 4</b> slower, faster · <b>7 8</b> mouse look smoother, sharper";
+        keys.innerHTML = "<summary>Keys</summary><b>W A S D</b> move · <b>Space Z</b> up · <b>Alt X</b> down<br><b>mouse</b> look (click the scene) · <b>Q E</b> tilt<br><b>[ ]</b> field of view · <b>3 4</b> slower, faster · <b>7 8</b> mouse look smoother, sharper";
         panel.appendChild(keys);
         function button(onClick, icon) {
             var b = document.createElement("button");
