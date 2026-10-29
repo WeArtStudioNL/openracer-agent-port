@@ -206,6 +206,7 @@ var MainMenu = (function() {
             var entry = models[key] = { object: null, radius: car.chassis.tire_diameter / 2, length: (car.dimensions && car.dimensions.length) || 4.5 };
             OpenRacer.loadCarModel(car, function(model) {
                 if(car.colors && OpenRacer.applyCarColors) OpenRacer.applyCarColors([model.tilt].concat(model.wheels), car.colors);
+                if(OpenRacer.CollisionProxy && OpenRacer.CollisionProxy.hideBeams) OpenRacer.CollisionProxy.hideBeams(model.tilt);          // (the drawing of the shell is not part of the car)
                 var object = new THREE.Group();
                 var r = entry.radius;
                 model.tilt.position.y = ((model.bodyLift || 1) - 1) * r;

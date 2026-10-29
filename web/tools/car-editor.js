@@ -2058,7 +2058,21 @@ async function openTestDialog() {
     $("testStart").onclick = () => startTest(picked);
     $("dlgTest").showModal();
 }
+// what the panels save after a change: the tune that is chosen, or the car (car.json) when it is the Default
+async function saveCurrent() {
+    const tune = $("setupSelect").value;
+    if (!tune) return save();
+    try { saveTune($("id").value.trim(), tune); setDirty(false); return true; } catch (error) { status("Could not save the tune: " + error.message); return false; }
+}
 async function saveAndDrive() {
+    // (a tune that is chosen is what is saved, as the Save button does: car.json, the Default, is not written)
+    const tune = $("setupSelect").value;
+    if (tune) {
+        try { saveTune($("id").value.trim(), tune); $("setupSelect").value = tune; updateTuneButtons(); setDirty(false); status("Tune " + tune + " saved (car.json is not written)."); }
+        catch (error) { status("Could not save the tune: " + error.message); return; }
+        openTestDialog();
+        return;
+    }
     if (!(await save())) return;
     openTestDialog();
 }
@@ -3425,7 +3439,7 @@ suspensionEditor = initSuspension({
     driveValue: () => $("drive").value,
     loadLibrary: () => loadPhysics(),
     renderLayers: () => renderLayers(),
-    save: () => save(),
+    save: () => saveCurrent(),
     status,
     // Edit origins: everything else that can be picked or marks something in the view is hidden, so that only the points are seen
     hideOthers: (on) => { cameraMarkers.visible = !on; axes.visible = !on; arrow.visible = !on; helpers.visible = !on; exhaust.forEach((e) => { e.target.visible = !on; }); if (driverEditor && driverEditor.deselect) driverEditor.deselect(); }
@@ -3447,7 +3461,7 @@ softBodyEditor = initSoftBody({
     hideChrome: (on) => { cameraMarkers.visible = !on; axes.visible = !on; arrow.visible = !on; grid.visible = !on; bigGrid.visible = bigGrid.visible && !on; },
     pickLocked: () => !!(suspensionEditor && suspensionEditor.editing),
     canSave: () => !!state.existingId && !!state.root,
-    save: () => save(),
+    save: () => saveCurrent(),
     frameModel
 });
 

@@ -297,5 +297,8 @@ OpenRacer.CollisionProxy = (function () {
         return spheres;
     }
 
-    return { fromModel: fromModel, apply: apply };
+    // the object "beams" of a model is a drawing of the shell: never seen (the menu and the pictures of the tunes hide it too)
+    function hideBeams(root) { var h = root ? findBeams(root) : null; if(h) h.visible = false; return !!h; }
+
+    return { fromModel: fromModel, apply: apply, hideBeams: hideBeams };
 })();
