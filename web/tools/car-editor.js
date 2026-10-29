@@ -708,8 +708,18 @@ function wheelCenters() {
     return centres;
 }
 
-function wheelMode() {
+function wheelRadio() {
     return document.querySelector("input[name=wheelMode]:checked").value;
+}
+// a model without wheels (its parts of a wheel are not chosen) whose two axles have a rim of the wheel library: the wheels are the library's, put where the form says (the wheelbase and the
+// tracks of the Chassis card), as with the demo wheel; the test and the shell of the car work then too
+function libraryOnly() {
+    if (wheelRadio() !== "model") return false;
+    if (SLOTS.some((slot) => $("w" + slot).selectedOptions.length)) return false;
+    return !!($("libRimFront").value && $("libRimRear").value);
+}
+function wheelMode() {
+    return libraryOnly() ? "default" : wheelRadio();
 }
 
 function updateHelpers() {
@@ -720,7 +730,7 @@ function updateHelpers() {
         if (box) helpers.add(new THREE.Box3Helper(box, SLOT_COLORS[slot]));
     }
     const centres = wheelCenters();
-    $("wheelInfo").textContent = wheelMode() === "model" ? (centres ? "4 of 4 found" : "") : "demo wheel";
+    $("wheelInfo").textContent = wheelMode() === "model" ? (centres ? "4 of 4 found" : "") : (libraryOnly() ? "rims of the library" : "demo wheel");
     // a chip for each wheel: the parts that it has, or that it has none
     const chips = $("wheelChips");
     chips.innerHTML = "";
@@ -2376,10 +2386,10 @@ function updateLibraryPreview() {
         $("libInfo").textContent = lines.join("\n");
     });
 }
-Object.values(LIB_SELECTS).forEach((axle) => Object.values(axle).forEach((id) => $(id).addEventListener("change", () => { state.pendingLibrary = null; updateLibraryPreview(); syncTuningVisibility(); if (bench.vehicle) restartBench(); })));
+Object.values(LIB_SELECTS).forEach((axle) => Object.values(axle).forEach((id) => $(id).addEventListener("change", () => { state.pendingLibrary = null; updateHelpers(); syncTuningVisibility(); if (bench.vehicle) restartBench(); })));
 for (const slot of SLOTS) $("w" + slot).addEventListener("change", updateHelpers);
 document.querySelectorAll("input[name=wheelMode]").forEach((radio) => radio.addEventListener("change", () => {
-    $("wheelSelects").style.display = wheelMode() === "model" ? "" : "none";
+    $("wheelSelects").style.display = wheelRadio() === "model" ? "" : "none";
     updateHelpers();
 }));
 $("sizeFromModel").addEventListener("click", sizeFromModel);
@@ -2852,7 +2862,7 @@ const roadGrip = () => ({ static: 1.2 * bench.grip, kinetic: 1.06 * bench.grip }
 
 async function startBench() {
     if (!state.root) throw new Error("Load a model first.");
-    if (wheelMode() !== "model") throw new Error("The test needs the wheels of the model: select the parts of every wheel.");
+    if (wheelMode() !== "model" && !libraryOnly()) throw new Error("The test needs the wheels of the model, or a rim of the wheel library on both axles: select the parts of every wheel.");
     await loadPhysics();
     const config = buildConfig("test");
     config.id = "test";
