@@ -1485,7 +1485,11 @@ function drawChart() {
 // ---- the engine build: the torque curve comes from the block, the cam, the inlet and the exhaust, the fuel and the turbo or supercharger (EngineBuild.js)
 const EB = OpenRacer.EngineBuild;
 function fillSelect(select, entries, labelOf) { select.innerHTML = Object.keys(entries).map((k) => "<option value='" + k + "'>" + labelOf(entries[k]) + "</option>").join(""); }
+// the exhaust of the Engine card is the impulse response of the engine sound (kept in the hidden field of the sound card)
+function syncExhaustSelect() { const ir = $("esIr").value; if ($("bExhaustSound").value !== ir) $("bExhaustSound").value = ir; }
 function initBuildUi() {
+    $("bExhaustSound").innerHTML = OpenRacer.engineSimImpulseResponses.map((ir) => "<option value='" + ir.id + "'>" + ir.label + "</option>").join("");
+    $("bExhaustSound").addEventListener("change", () => { $("esIr").value = $("bExhaustSound").value; $("esIr").dispatchEvent(new Event("change", { bubbles: true })); });
     $("bBlock").innerHTML = "<option value=''>Choose an engine block…</option>" + Object.keys(OpenRacer.engineSimPresets).map((n) => "<option>" + n + "</option>").join("");
     fillSelect($("bFuel"), EB.FUELS, (f) => f.label);
     fillSelect($("bIntercooler"), EB.INTERCOOLERS, (i) => i.label);
@@ -1560,6 +1564,7 @@ function syncSoundFromBuild(build, wholePreset) {
     Object.assign(p, { bore: build.bore, stroke: build.stroke, compression_ratio: build.compression, intake_duration: build.cam_duration, exhaust_duration: Math.max(180, build.cam_duration - 4),
         intake_flow: build.intake_flow, exhaust_flow: build.exhaust_flow, primary_length: build.primary_length, exhaust_length: build.exhaust_length });
     fillEngineSim(p);
+    syncExhaustSelect();
     engineSimChanged();
 }
 $("bBlock").addEventListener("change", () => {
@@ -2117,6 +2122,7 @@ function fill(car) {
     if (softBodyEditor) softBodyEditor.fill(car);
     if (driverEditor) driverEditor.fill(car);
     fillEngineSim(OpenRacer.engineSimParams(car));
+    syncExhaustSelect();
     stopPreview();
     engineSimChanged();
     renderCurve();
@@ -2343,6 +2349,7 @@ $("save").addEventListener("click", () => {
 $("delete").addEventListener("click", deleteCar);
 
 initEngineSim();
+syncExhaustSelect();
 renderCurve();
 setEngineMode(curveAdvanced);
 updateSpeedInfo();

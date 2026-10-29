@@ -43,12 +43,12 @@ OpenRacer.engineSimLayouts = {
 
 // The impulse responses of exhausts that come with the game (web/sounds/ir, from engine-sim, MIT license)
 OpenRacer.engineSimImpulseResponses = [
-    { id: "smooth_39", label: "Smooth (the default of engine-sim)", file: "smooth_39.wav" },
-    { id: "minimal_muffling_01", label: "Minimal muffling 1", file: "minimal_muffling_01.wav" },
-    { id: "minimal_muffling_02", label: "Minimal muffling 2", file: "minimal_muffling_02.wav" },
-    { id: "minimal_muffling_03", label: "Minimal muffling 3", file: "minimal_muffling_03.wav" },
+    { id: "smooth_39", label: "Smooth", file: "smooth_39.wav" },
+    { id: "minimal_muffling_01", label: "Open exhaust 1", file: "minimal_muffling_01.wav" },
+    { id: "minimal_muffling_02", label: "Open exhaust 2", file: "minimal_muffling_02.wav" },
+    { id: "minimal_muffling_03", label: "Open exhaust 3", file: "minimal_muffling_03.wav" },
     { id: "mild_exhaust", label: "Mild exhaust", file: "mild_exhaust.wav" },
-    { id: "sharp_01", label: "Sharp", file: "sharp_01.wav" }
+    { id: "sharp_01", label: "Sharp (race)", file: "sharp_01.wav" }
 ];
 
 OpenRacer.engineSimPresets = {

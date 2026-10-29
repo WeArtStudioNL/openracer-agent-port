@@ -285,6 +285,7 @@
             <div class="body">
                 <div><label>Engine block</label><select id="bBlock" title="The block gives the cylinders, bore, stroke, cam, inlet and exhaust; the torque curve is worked out from the build and measured with Run dyno"></select></div>
                 <div class="hint" id="bInfo"></div>
+                <div><label>Exhaust</label><select id="bExhaustSound" title="How the exhaust sounds: the engine sound follows the block and this choice"></select></div>
                 <div class="seg" id="engineMode" role="group" aria-label="Engine settings">
                     <button type="button" data-mode="simple" class="on">Simple</button><button type="button" data-mode="advanced">Advanced</button>
                 </div>
@@ -354,16 +355,16 @@
             <summary>Engine sound</summary>
             <div class="body">
                 <div class="tipline"><span>Press Play in the view to listen</span><button type="button" class="info" data-tip="The gas in every cylinder is simulated and the pressure in the exhaust is played through the recorded impulse response of an exhaust (after engine-sim). Press Play in the view to listen while you change the settings." aria-label="More information">i</button></div>
-                <div class="row">
-                    <div><label>Preset</label><select id="esPreset"></select></div>
-                    <div><label>Layout</label><select id="esLayout" class="es" data-key="layout"></select></div>
+                <div style="display:none">
+                    <select id="esPreset"></select>
+                    <select id="esLayout" class="es" data-key="layout"></select>
+                    <select class="es" data-key="impulse_response" id="esIr"></select>
                 </div>
                 <div class="row">
-                    <div><label>Exhaust (impulse response)</label><select class="es" data-key="impulse_response" id="esIr"></select></div>
-                    <div class="fixed" style="width:90px"><label>How much</label><input type="number" class="es" data-key="convolution" step="0.05" min="0" max="1"></div>
+                    <div class="fixed" style="width:120px"><label>Exhaust effect</label><input type="number" class="es" data-key="convolution" step="0.05" min="0" max="1"></div>
                 </div>
                 <div class="modal-link">
-                    <span class="hint">Cylinders, camshaft, ports and exhaust</span>
+                    <span class="hint">The sound follows the engine block and the exhaust of the Engine card</span>
                     <button class="small" data-open="dlgSound">All settings…</button>
                 </div>
             </div>
