@@ -39,6 +39,10 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - A rim of the wheel library now brings a custom tyre, made from the numbers (width, diameter, height of the sidewall, rubber), for the front and the rear axle apart; the tyres of the library are no longer chosen (a car that has one keeps it). The height of the sidewall is new: the rim takes what is left of the diameter. It works in the tuning menu and in the car editor, where the rim and the tyre of the front and the rear axle follow the sliders at once (the tyre in the view, the shell of the bench car when the sliders rest) and are saved with the car.
 
+### The car editor: the wheelbase and the tracks are live; no tyre diameter
+
+- For a car whose wheels are the library's (or the model's rim and tyre), the wheelbase and the front and rear track of the Chassis card move the wheels in the view and on the bench as you type. The tyre diameter of the Chassis card is gone for such a car: it is the mean of the diameters of the tyre of the front and the tyre of the rear (the Tyres settings), and follows them.
+
 ### The rim and the tyre of the model
 
 - A model with objects called **rim** and **tyre** (or tire; a number after the name is allowed) can have them as its wheels: the car editor has a checkbox *Use the rim and the tyre of the model* (only when the model has them; the rims of the library are then not chosen). The two objects are the wheel of every corner and are fitted to the tyre settings: the rim to the inner shell, the tyre stretched between the inner and the outer shell with its section kept (the height of the sidewall, the width and the diameter of the Tyres settings), turned for the side of the car. They are not seen themselves and not part of the shell. The tyre of the library is gone from the editor: a tyre is always made from the numbers (a car that had one is made again with a custom tyre when it is saved).

@@ -713,6 +713,7 @@ function wheelRadio() {
 }
 // a model without wheels (its parts of a wheel are not chosen) whose two axles have a rim of the wheel library: the wheels are the library's, put where the form says (the wheelbase and the
 // tracks of the Chassis card), as with the demo wheel; the test and the shell of the car work then too
+function noWheelParts() { return SLOTS.every((slot) => !$("w" + slot).selectedOptions.length); }
 function libraryOnly() {
     if (wheelRadio() !== "model") return false;
     if (SLOTS.some((slot) => $("w" + slot).selectedOptions.length)) return false;
@@ -2342,6 +2343,7 @@ function setLibraryChoice(library) {
     }
     $("libUseModel").checked = ["front", "rear"].some((axle) => OpenRacer.WheelLibrary.choiceOf(cfg, axle).model);
     syncTuningVisibility();
+    syncTyreField();
     updateLibraryPreview();                 // (a tune loaded into the form: its rims and tyres show at once)
 }
 // the preview: the wheel parts of the model of an axle on the library are hidden and the rim and the tyre of the library are drawn at their middle (or, without wheel parts, where car.json puts the wheels)
@@ -2387,7 +2389,7 @@ function updateLibraryPreview() {
         $("libInfo").textContent = lines.join("\n");
     });
 }
-Object.values(LIB_SELECTS).forEach((axle) => Object.values(axle).forEach((id) => $(id).addEventListener("change", () => { state.pendingLibrary = null; updateHelpers(); syncTuningVisibility(); if (bench.vehicle) restartBench(); })));
+Object.values(LIB_SELECTS).forEach((axle) => Object.values(axle).forEach((id) => $(id).addEventListener("change", () => { state.pendingLibrary = null; updateHelpers(); syncTuningVisibility(); syncTyreField(); if (bench.vehicle) restartBench(); })));
 $("libUseModel").addEventListener("change", () => { state.pendingLibrary = null; librarySig = ""; updateHelpers(); syncTuningVisibility(); tuningChanged(); setDirty(true); if (bench.vehicle) restartBench(); });
 for (const slot of SLOTS) $("w" + slot).addEventListener("change", updateHelpers);
 document.querySelectorAll("input[name=wheelMode]").forEach((radio) => radio.addEventListener("change", () => {
@@ -2796,13 +2798,21 @@ function syncTuningVisibility() {
 
 // a change goes to the car of the test bench at once
 let librarySig = "", libraryBenchTimer = 0;
+// the tyres are made from the numbers of the Tyres settings (a diameter for each axle): the tyre diameter of the Chassis card is then their mean, and not asked for
+function syncTyreField() {
+    const lib = libraryChoice(), both = !!(lib && lib.front && lib.rear && lib.front.custom && lib.rear.custom);
+    $("tyre").parentNode.style.display = both ? "none" : "";
+    if (!both) return;
+    const d = ((lib.front.custom.diameter + lib.rear.custom.diameter) / 2).toFixed(3);
+    if (parseFloat($("tyre").value) !== parseFloat(d)) { $("tyre").value = d; $("tyre").dispatchEvent(new Event("input", { bubbles: true })); }
+}
 function tuningChanged() {
     syncTuningVisibility();
     applyPaint();
     // (the tyre of a rim of the library follows the width, the diameter, the sidewall and the rubber at once)
     const sig = JSON.stringify(libraryChoice());
     if (sig !== librarySig) {
-        librarySig = sig; updateLibraryPreview();
+        librarySig = sig; updateLibraryPreview(); syncTyreField();
         // (the shell of the bench is made from the tyre when the car is built: the car of the bench is built again when the sliders rest)
         clearTimeout(libraryBenchTimer); libraryBenchTimer = setTimeout(() => { if (bench.vehicle) restartBench(); }, 500);
     }
@@ -2823,11 +2833,13 @@ function formChanged() {
         const area = config.dimensions.width * config.dimensions.height * 0.85;
         const retune = OpenRacer.CarTuning.toRetune(tuningValues(config), area, 1.29);
         // the wheels of the model give the wheelbase, the tracks and the tyre (startBench); without them the form does
-        if (!bench.model.measured) Object.assign(retune, { wheelbase: config.chassis.wheelbase, front_track: config.chassis.front_track, rear_track: config.chassis.rear_track, tire_diameter: config.chassis.tire_diameter });
+        if (!bench.model.measured || (noWheelParts() && libraryChoice())) Object.assign(retune, { wheelbase: config.chassis.wheelbase, front_track: config.chassis.front_track, rear_track: config.chassis.rear_track, tire_diameter: config.chassis.tire_diameter });
         bench.vehicle.retune(retune);
     } catch (error) { /* a field that is empty or not valid yet: the next change tries again */ }
 }
 for (const id of ["mass", "front", "cgHeight", "wheelbase", "frontTrack", "rearTrack", "tyre", "drag", "steer"]) $(id).addEventListener("input", formChanged);
+// (the wheels of the library stand where the wheelbase and the tracks say: they follow them at once, in the view and on the bench)
+for (const id of ["wheelbase", "frontTrack", "rearTrack"]) $(id).addEventListener("input", () => { if (noWheelParts() && libraryChoice()) updateLibraryPreview(); });
 // the fields of the gearbox that is chosen
 function syncGearboxBoxes() { const g = $("gearbox").value; $("cvtBox").style.visibility = g === "cvt" ? "" : "hidden"; $("tcBox").style.display = g === "torque-converter" ? "" : "none"; }
 $("gearbox").addEventListener("change", () => { syncGearboxBoxes(); formChanged(); });
