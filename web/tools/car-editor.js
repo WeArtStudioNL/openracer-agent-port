@@ -79,6 +79,9 @@ const helpers = new THREE.Group();
 const libPreview = new THREE.Group();                 // the rims and the tyres of the wheel library, drawn at the wheels of the model (WheelLibrary.js)
 libPreview.name = "wheel library preview";
 scene.add(libPreview);
+const tyreStatic = new THREE.Group();                 // the nodes of the tyres drawn from the settings, while no test runs (refreshStaticTyres)
+tyreStatic.name = "tyre shell preview";
+scene.add(tyreStatic);
 let libHidden = [];                                   // the wheel parts of the model that the preview stands in for
 const LIB_SELECTS = { front: { rim: "libRimFront", tyre: "libTyreFront" }, rear: { rim: "libRimRear", tyre: "libTyreRear" } };
 scene.add(helpers);
@@ -2389,10 +2392,11 @@ function updateLibraryPreview() {
         if (bad.length) lines.push("Not found: " + bad.join("; ") + " (check \"file\" in web/wheels/wheels.json; the wheels of the model are used).");
         $("libInfo").style.whiteSpace = "pre-line";
         $("libInfo").textContent = lines.join("\n");
+        refreshStaticTyres();
     });
 }
 Object.values(LIB_SELECTS).forEach((axle) => Object.values(axle).forEach((id) => $(id).addEventListener("change", () => { state.pendingLibrary = null; updateHelpers(); syncTuningVisibility(); syncTyreField(); if (bench.vehicle) restartBench(); })));
-$("libUseModel").addEventListener("change", () => { state.pendingLibrary = null; librarySig = ""; updateHelpers(); syncTuningVisibility(); tuningChanged(); setDirty(true); if (bench.vehicle) restartBench(); });
+$("libUseModel").addEventListener("change", () => { state.pendingLibrary = null; librarySig = ""; updateHelpers(); syncTuningVisibility(); tuningChanged(); setDirty(true); });
 for (const slot of SLOTS) $("w" + slot).addEventListener("change", updateHelpers);
 document.querySelectorAll("input[name=wheelMode]").forEach((radio) => radio.addEventListener("change", () => {
     $("wheelSelects").style.display = wheelRadio() === "model" ? "" : "none";
@@ -2802,7 +2806,7 @@ function syncTuningVisibility() {
 ["drive", "diff", "centerDiff", "gearbox"].forEach((id) => $(id).addEventListener("change", () => syncTuningVisibility()));
 
 // a change goes to the car of the test bench at once
-let librarySig = "", libraryBenchTimer = 0;
+let librarySig = "";
 // the tyres are made from the numbers of the Tyres settings (a diameter for each axle): the tyre diameter of the Chassis card is then their mean, and not asked for
 function syncTyreField() {
     const lib = libraryChoice(), both = !!(lib && lib.front && lib.rear && lib.front.custom && lib.rear.custom);
@@ -2818,8 +2822,6 @@ function tuningChanged() {
     const sig = JSON.stringify(libraryChoice());
     if (sig !== librarySig) {
         librarySig = sig; updateLibraryPreview(); syncTyreField();
-        // (the shell of the bench is made from the tyre when the car is built: the car of the bench is built again when the sliders rest)
-        clearTimeout(libraryBenchTimer); libraryBenchTimer = setTimeout(() => { if (bench.vehicle) restartBench(); }, 500);
     }
     if (!bench.vehicle || !bench.config) return;
     try {
@@ -2829,6 +2831,13 @@ function tuningChanged() {
     } catch (error) { console.warn(error); }
 }
 
+// the diameters of the wheels from the tyres of the axles: front, front, rear, rear (null: the same for all)
+function libraryWheelSizes() {
+    const lib = libraryChoice();
+    if (!lib || !lib.front || !lib.rear || !lib.front.custom || !lib.rear.custom) return null;
+    const f = lib.front.custom.diameter, r = lib.rear.custom.diameter;
+    return [f, f, r, r];
+}
 // the form of the car (mass, weight on the front, centre of gravity, size of the wheels and the axles, drag) goes to the car of the bench at
 // once too, as the Tuning card does: before, only a new test showed it
 function formChanged() {
@@ -2838,16 +2847,14 @@ function formChanged() {
         const area = config.dimensions.width * config.dimensions.height * 0.85;
         const retune = OpenRacer.CarTuning.toRetune(tuningValues(config), area, 1.29);
         // the wheels of the model give the wheelbase, the tracks and the tyre (startBench); without them the form does
-        if (!bench.model.measured || (noWheelParts() && libraryChoice())) Object.assign(retune, { wheelbase: config.chassis.wheelbase + config.chassis.front_axle_offset - config.chassis.rear_axle_offset, front_track: config.chassis.front_track, rear_track: config.chassis.rear_track, tire_diameter: config.chassis.tire_diameter });
+        if (!bench.model.measured || (noWheelParts() && libraryChoice())) Object.assign(retune, { wheelbase: config.chassis.wheelbase + config.chassis.front_axle_offset - config.chassis.rear_axle_offset, front_track: config.chassis.front_track, rear_track: config.chassis.rear_track, tire_diameter: config.chassis.tire_diameter, wheel_diameters: libraryWheelSizes() });
         bench.vehicle.retune(retune);
     } catch (error) { /* a field that is empty or not valid yet: the next change tries again */ }
 }
 for (const id of ["mass", "front", "cgHeight", "wheelbase", "frontTrack", "rearTrack", "tyre", "drag", "steer"]) $(id).addEventListener("input", formChanged);
 // (the wheels of the library stand where the wheelbase and the tracks say: they follow them at once, in the view and on the bench)
 for (const id of ["wheelbase", "frontTrack", "rearTrack", "frontOffset", "rearOffset"]) $(id).addEventListener("input", () => { if (noWheelParts() && libraryChoice()) updateLibraryPreview(); });
-// (the body of the bench stands against the middle of the wheels: with the offsets the car of the bench is built again when the numbers rest)
-let offsetTimer = 0;
-for (const id of ["frontOffset", "rearOffset"]) $(id).addEventListener("input", () => { clearTimeout(offsetTimer); offsetTimer = setTimeout(() => { if (bench.vehicle) restartBench(); }, 500); });
+
 // the fields of the gearbox that is chosen
 function syncGearboxBoxes() { const g = $("gearbox").value; $("cvtBox").style.visibility = g === "cvt" ? "" : "hidden"; $("tcBox").style.display = g === "torque-converter" ? "" : "none"; }
 $("gearbox").addEventListener("change", () => { syncGearboxBoxes(); formChanged(); });
@@ -2886,6 +2893,12 @@ const bench = { vehicle: null, model: null, body: null, objects: [], last: 0, mo
 let flatRoad = null;                                     // the road of the bench: flat, at the height of the grid, with the triangles the tyre needs (OpenRacer.FlatGround, Ground.js)
 const roadGrip = () => ({ static: 1.2 * bench.grip, kinetic: 1.06 * bench.grip });
 
+// the diameters of the four wheels when the axles have tyres of another size (as Car.js does): every wheel gets its own, or the front wheels got the size of the rear ones
+function benchWheelSizes(measured) {
+    const sizes = !isBike() && measured.sizes && measured.sizes.length === 4 ? measured.sizes.slice() : null;
+    if (sizes && Math.abs(sizes[0] - sizes[2]) < 0.004 && Math.abs(sizes[1] - sizes[3]) < 0.004 && Math.abs(sizes[0] - sizes[1]) < 0.004) return null;
+    return sizes;
+}
 async function startBench() {
     if (!state.root) throw new Error("Load a model first.");
     if (wheelMode() !== "model" && !($("libRimFront").value && $("libRimRear").value)) throw new Error("The test needs the wheels of the model, or a rim of the wheel library on both axles: select the parts of every wheel.");
@@ -2911,7 +2924,7 @@ async function startBench() {
         const c = model.measured.centres;
         // (a motorcycle has no track: the physics gets 4 cm, as in the game; a track of 0 is a division by zero in the physics and the bench blew up with it)
         const minTrack = isBike() ? 0.04 : 0;
-        v.retune({ wheelbase: (c.FR.z + c.FL.z) / 2 - (c.RL.z + c.RR.z) / 2, front_track: Math.max(minTrack, Math.abs(c.FR.x - c.FL.x)), rear_track: Math.max(minTrack, Math.abs(c.RR.x - c.RL.x)), tire_diameter: model.measured.diameter });
+        v.retune({ wheelbase: (c.FR.z + c.FL.z) / 2 - (c.RL.z + c.RR.z) / 2, front_track: Math.max(minTrack, Math.abs(c.FR.x - c.FL.x)), rear_track: Math.max(minTrack, Math.abs(c.RR.x - c.RL.x)), tire_diameter: model.measured.diameter, wheel_diameters: benchWheelSizes(model.measured) });
         bench.modelMid = new THREE.Vector3((c.FR.x + c.FL.x + c.RL.x + c.RR.x) / 4, (c.FR.y + c.FL.y + c.RL.y + c.RR.y) / 4, (c.FR.z + c.FL.z + c.RL.z + c.RR.z) / 4);
     }
     v.reset(0, 0, Math.PI / 2); // facing +z, the way the editor shows the car
@@ -2929,6 +2942,7 @@ async function startBench() {
     applyPaint();                                           // (the colour of the Paint settings on the car of the bench)
     if (driverEditor) driverEditor.attachToBench(model.tilt);       // the driver goes with the car that is tested
     pivot.visible = false; helpers.visible = false; libPreview.visible = false;          // (the bench builds the car as the game does, with its own library wheels)
+    refreshStaticTyres();
     if (suspensionEditor) suspensionEditor.hide(true);
     $("testStop").style.display = "";
     status("Test: the car with the physics of the game" + (model.rig ? ", " + model.rig.count + " moving parts of the suspension" : "") + ". Stop test goes back to the model.", "ok");
@@ -2951,6 +2965,7 @@ function stopBench() {
     bench.objects = []; bench.vehicle = null; bench.model = null; bench.script = null; bench.obj = null; bench.grip = 1;
     if (softBodyEditor) softBodyEditor.onStop();
     pivot.visible = true; helpers.visible = true; libPreview.visible = true;
+    refreshStaticTyres();
     if (suspensionEditor) suspensionEditor.hide(false);
     $("testStop").style.display = "none";
 }
@@ -2970,6 +2985,46 @@ function tyreDebugLayer(kind) {
     tyreDebug.group.add(object);
     return { object, pos: [], col: [] };
 }
+// The nodes of the tyres of the wheels of the library as the settings make them (the outer shell, the inner shell, the beams across and between them): drawn without a test, so that
+// changing a tyre setting does not start the physics and drop the car; the real nodes of the bench show once a test runs
+function refreshStaticTyres() {
+    while (tyreStatic.children.length) { const c = tyreStatic.children.pop(); if (c.geometry) c.geometry.dispose(); }
+    const lib = libraryChoice();
+    tyreStatic.visible = !!(tyreDebug.on && !bench.vehicle && lib);
+    if (!tyreStatic.visible) return;
+    const teal = new THREE.Color(0.3, 0.8, 0.8), dim = new THREE.Color(0.35, 0.4, 0.45);
+    libPreview.children.forEach((wheel) => {
+        const m = /^wheel_([FR])[LR]_library$/.exec(wheel.name);
+        const spec = m && lib[m[1] === "F" ? "front" : "rear"] && lib[m[1] === "F" ? "front" : "rear"].custom;
+        if (!spec) return;
+        const R = spec.diameter / 2, Ri = R * spec.inner_ratio, rings = Math.max(1, spec.rings || 3), segs = Math.max(4, spec.segments || 36), half = spec.width * 0.45;
+        const outer = [], inner = [], linePos = [], lineCol = [], pointPos = [];
+        const at = (j) => (rings > 1 ? (j / (rings - 1) - 0.5) * 2 * half : 0);
+        for (let j = 0; j < rings; j++) for (let k = 0; k < segs; k++) {
+            const a = 2 * Math.PI * k / segs, c = Math.cos(a), sn = Math.sin(a);
+            outer.push([at(j), R * c, R * sn]); inner.push([at(j) * 0.8, Ri * c, Ri * sn]);
+        }
+        const seg = (a, b, col) => { linePos.push(a[0], a[1], a[2], b[0], b[1], b[2]); lineCol.push(col.r, col.g, col.b, col.r, col.g, col.b); };
+        for (let j = 0; j < rings; j++) for (let k = 0; k < segs; k++) {
+            const i = j * segs + k, next = j * segs + (k + 1) % segs;
+            seg(outer[i], outer[next], teal);
+            seg(inner[i], inner[next], dim);
+            if (j + 1 < rings) seg(outer[i], outer[i + segs], teal);
+            if (k % 2 === 0) seg(outer[i], inner[i], dim);
+            pointPos.push(...outer[i]);
+        }
+        const group = new THREE.Group();
+        group.position.copy(wheel.position);
+        const lg = new THREE.BufferGeometry();
+        lg.setAttribute("position", new THREE.Float32BufferAttribute(linePos, 3)); lg.setAttribute("color", new THREE.Float32BufferAttribute(lineCol, 3));
+        group.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false, transparent: true })));
+        const pg = new THREE.BufferGeometry();
+        pg.setAttribute("position", new THREE.Float32BufferAttribute(pointPos, 3));
+        group.add(new THREE.Points(pg, new THREE.PointsMaterial({ color: 0x4dd0d0, size: 0.03, depthTest: false })));
+        group.renderOrder = 10;
+        tyreStatic.add(group);
+    });
+}
 function showTyreDebug(on) {
     if (on === tyreDebug.on) return;
     tyreDebug.on = on;
@@ -2980,7 +3035,9 @@ function showTyreDebug(on) {
         tyreDebug.lines = tyreDebugLayer("lines");
     }
     tyreDebug.group.visible = on;
-    if (on && !bench.vehicle) startBench().catch((error) => status(error.message, "error"));      // (the nodes are those of the car on the bench)
+    refreshStaticTyres();
+    // (the nodes of the wheels of the library are drawn from the settings; the nodes of a car on the bench show only when a test runs. The wheels of the model have no settings to draw from)
+    if (on && !bench.vehicle && !libraryChoice()) startBench().catch((error) => status(error.message, "error"));
 }
 function updateTyreDebug(v) {
     if (!tyreDebug.on || !tyreDebug.group) return;
