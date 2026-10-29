@@ -694,13 +694,19 @@ var WheelControls = (function() {
         if(Math.abs(steer) > deadZone || ownsSteer) {
             if(Math.abs(steer) > deadZone) {
                 var range = Settings.option("wheelRange") || 1;
+                // the steering lock of the car: the wheel turns as far as the steering wheel of the car does (its lock to lock, from the options) and the force feedback stops it there
+                var matched = false;
+                if(Settings.option("wheelMatch") && car.steeringLockDegrees) { range = Math.min(range, 2 * car.steeringLockDegrees() / (Settings.option("wheelDegrees") || 900)); matched = true; }
                 // the dead zone is taken off, so that the steering starts from zero and does not jump when the wheel leaves it
                 var eased = (Math.abs(steer) - deadZone) / (1 - deadZone) * (steer < 0 ? -1 : 1);
                 car.turnAngle = car.maxTurn * clamp(eased / range, -1, 1);
+                // how far the wheel is at the stop (1: at the lock): the force feedback pushes it back past that
+                if(car.vehicle) car.vehicle.wheelStop = matched ? eased / range : 0;
                 ownsSteer = true;
             } else {
                 // back in the middle: straight ahead, not the last small angle that was above the dead zone
                 car.turnAngle = 0;
+                if(car.vehicle) car.vehicle.wheelStop = 0;
                 ownsSteer = false;
             }
         }

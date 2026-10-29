@@ -122,6 +122,14 @@ var ForceFeedback = (function() {
             vibration += Math.abs(impactLeft);
             impactLeft *= Math.exp(-dt * 7);
         }
+        // the hard stop of the steering: past the lock of the car (vehicle.wheelStop is the position of the wheel as a part of it, WheelControls.js, with "Match the steering lock of
+        // the car") the wheel is pushed back with all the force, over the last 3 percent before the lock and 3 more past it, as the end stop of a kart that the column runs into
+        var stop = vehicle.wheelStop || 0;
+        if(Math.abs(stop) > 0.97) {
+            var wall = clamp((Math.abs(stop) - 0.97) / 0.06, 0, 1);
+            torque = torque * (1 - wall) - Math.sign(stop) * wall;
+            vibration += 0.3 * wall;
+        }
         // the engine shakes the wheel a little at idle
         if(vehicle.engine && vehicle.engine.running && speed < 1) torque += 0.02 * road * Math.sin(phase * 2 * Math.PI * vehicle.engine.getRPM() / 60);
         return { torque: clamp(torque, -1, 1), vibration: clamp(vibration, 0, 1) };

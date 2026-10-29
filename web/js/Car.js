@@ -332,6 +332,17 @@ OpenRacer.Car = function( config, domElement ) {
         }
         return null;
     };
+    // how far the steering wheel turns from the middle to the lock, in degrees: a model with fixed tie rods stops where the rods do (the angle of the column at the lock of the
+    // wheels, SuspensionRig.js), another car where steering_wheel.degrees of car.json says (450 without: a wheel of 900 degrees from lock to lock). Force feedback and the
+    // wheel (the options "match the lock of the car") use it.
+    var lockDegrees = null;
+    this.steeringLockDegrees = function() {
+        if(lockDegrees === null) {
+            var fromRig = this.rig && this.rig.lockAngle ? this.rig.lockAngle(this.vehicle, this.maxTurn) : null;
+            lockDegrees = fromRig ? fromRig * 180 / Math.PI : (this.steeringWheel && this.steeringWheel.degrees > 0 ? this.steeringWheel.degrees : 450);
+        }
+        return lockDegrees;
+    };
     var fallMinY = null, fallFor = 0;
     this.returnToSaved = function() {
         var v = this.vehicle, p = savedReset || this.nearestOnTrack() || { x: startX, z: startZ, psi: startHeading, py: null };

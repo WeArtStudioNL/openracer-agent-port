@@ -223,6 +223,7 @@ OpenRacer.SuspensionRig = (function () {
             else if(axle) p.onAxle = axle;
         });
         rig.update = function (vehicle, wheels) { update(rig, vehicle, wheels); };
+        rig.lockAngle = function (vehicle, maxTurn) { return lockAngle(rig, vehicle, maxTurn); };
         rig.count = rig.parts.length;
         return rig;
     }
@@ -290,14 +291,28 @@ OpenRacer.SuspensionRig = (function () {
         return out;
     }
 
+    // (a fixed tie rod, from the steering column: found once)
+    function initRods(rig) {
+        if(rig.rods !== undefined) return;
+        rig.rods = rig.rack || !rig.column ? [] : rig.parts.filter(function (p) { return p.kind === "tierod" && p.wheel < 2 && rig.uprights[p.wheel]; });
+        rig.rods.forEach(function (p) { p.farNow = new THREE.Vector3(); });
+    }
+    // the angle of the steering column (radians) at the lock of the front wheels, or null without fixed tie rods: the steering of a kart stops there
+    function lockAngle(rig, vehicle, maxTurn) {
+        initRods(rig);
+        if(!rig.rods.length) return null;
+        var saved = [rig.columnKey, rig.columnAngle, rig.columnError];
+        var fake = { restLength: vehicle.restLength, steerApplied: maxTurn, wheels: [{ steerNow: maxTurn }, { steerNow: maxTurn }] };
+        rig.columnKey = null;
+        var angle = Math.abs(fitColumn(rig, fake));
+        rig.columnKey = saved[0]; rig.columnAngle = saved[1]; rig.columnError = saved[2];
+        return angle;
+    }
+
     function update(rig, vehicle, wheels) {
         var steer = vehicle.steerApplied || 0;
         var rackShift = rig.rackTravel * steer; // along +x (to the left) for a steer to the right, with a positive travel
-        // (a fixed tie rod, from the steering column: found once)
-        if(rig.rods === undefined) {
-            rig.rods = rig.rack || !rig.column ? [] : rig.parts.filter(function (p) { return p.kind === "tierod" && p.wheel < 2 && rig.uprights[p.wheel]; });
-            rig.rods.forEach(function (p) { p.farNow = new THREE.Vector3(); });
-        }
+        initRods(rig);
         var columnAngle = rig.rods.length ? fitColumn(rig, vehicle) : undefined;
         // (the wheel turns about the pin of its upright, not about its own middle: the hub moves along an arc; the part of the model that is the upright does the same)
         if(wheels && rig.hubs) {

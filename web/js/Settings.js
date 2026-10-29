@@ -104,7 +104,7 @@ var Settings = (function() {
     var actionsById = {};
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
-    var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, autoReverse: true, autoReversePedals: true, autoReverseSpeed: 3, dragReady: 2, dragGreen: 1.5, abs: true, sound: true, wheelRange: 1, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, hud: true, units: "metric", debug: false, esc: true, camera: 2, volume: 0.8,
+    var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, autoReverse: true, autoReversePedals: true, autoReverseSpeed: 3, dragReady: 2, dragGreen: 1.5, abs: true, sound: true, wheelRange: 1, wheelMatch: false, wheelDegrees: 900, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, hud: true, units: "metric", debug: false, esc: true, camera: 2, volume: 0.8,
         padSlow: 1.5, padAssist: true, keySteer: 1, keySlow: 1, keyAssist: true,
         // a motorcycle: the steering ("counter": countersteering to start a lean and the lean; "lean": the lean only) and the follow camera ("lean": it rolls with the bike; "classic": as a car)
         bikeSteering: "lean", bikeCamera: "lean", wheelieControl: true, bikeFastLean: 30,
@@ -961,6 +961,12 @@ var Settings = (function() {
         page = tabPage("Wheel");
         page.appendChild(optionRow("Wheel steering range", Math.round(options.wheelRange * 100) + "%",
             function() { setOption("wheelRange", options.wheelRange > 0.9 ? 0.75 : (options.wheelRange > 0.6 ? 0.5 : 1)); }));
+        // the lock of the car: a kart with a steering of 108 degrees from lock to lock is turned by 108 degrees of the wheel, and the force feedback stops the wheel there (a hard stop)
+        var wheelLocks = [270, 360, 540, 720, 900, 1080];
+        page.appendChild(optionRow("Steering lock of the wheel", options.wheelDegrees + "° from lock to lock",
+            function() { setOption("wheelDegrees", wheelLocks[(wheelLocks.indexOf(options.wheelDegrees) + 1) % wheelLocks.length]); }));
+        page.appendChild(optionRow("Match the steering lock of the car", options.wheelMatch ? "On: the wheel turns as far as the steering wheel of the car, then the force feedback stops it" : "Off: the whole range of the wheel is the lock",
+            function() { setOption("wheelMatch", !options.wheelMatch); }));
         // the part of the range around the middle of the wheel in which the steering stays straight (in percent of the range, one way)
         var deadzones = [0, 0.5, 1, 2, 3, 5];
         page.appendChild(optionRow("Wheel dead zone", options.wheelDeadzone + "%" + (options.wheelDeadzone === 0 ? " (none)" : ""),
