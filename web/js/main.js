@@ -610,12 +610,25 @@ function onEnterFrame() {
         var d = (now - lastFrameTime) / 1000;
         lastFrameTime = now;
         if(d > 0.1) d = 0.1; // after a pause of the browser (another tab, no focus) the game goes on from here, it does not catch up
+        // a machine that cannot simulate in real time: a frame of 0.1 s is 34 steps of the car, which takes longer yet, so the next frame is longer again and the game fell to 6 frames
+        // a second at 290 km/h (the shell of the tyre costs more with the speed). The game now takes a step of time that the physics can do in 40 ms: it runs in slow motion, everything
+        // (the timers, the replay, the sound) with it, and the frames stay smooth
+        if(d > simLimit) d = simLimit;
+        var simStart = performance.now();
         car.update(d, true);
+        var simMs = performance.now() - simStart;
+        if(d > 0.004) {
+            var perSecond = simMs / d;                                    // (ms of physics for one second of game)
+            simCost += (perSecond > simCost ? 0.25 : 0.05) * (perSecond - simCost);
+            simLimit = Math.max(0.016, Math.min(0.1, 40 / simCost));
+        }
         if(OpenRacer.GateMarkers) OpenRacer.GateMarkers.update(car);
         updateRace(d);
         if(OpenRacer.Replay) OpenRacer.Replay.record(d);   // everything is recorded from the start, for the replay
     }
 }
+
+var simCost = 0, simLimit = 0.1;       // (see the frame: ms of physics for a second of game, and the longest step of game time for a frame)
 
 var query = new URLSearchParams(window.location.search);
 if(query.get("car") && query.get("track")) {

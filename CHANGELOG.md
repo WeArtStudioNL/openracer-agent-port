@@ -39,6 +39,10 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - A tyre that turned fast grew by centimetres (the soft cables to the rim had to carry the whole pull of the turn, `m w^2 r` on a node, and a tyre of a low pressure has soft cables): the patch got long, the pressure centre ran ahead of the hub and the rolling resistance was a third of the load at 190 km/h. A car stopped at about 190 km/h whatever its power. The belt of a real tyre carries that pull; the cable of a node that is off the road is now taut for it, so the tyre keeps its shape. The Hyundai i30 (135 hp) now reaches 220 km/h instead of 175.
 
+### A machine that cannot keep up runs in slow motion, not at 6 frames a second
+
+- A frame of up to 0.1 s was simulated in steps of 3 ms, all of them; when that took longer than the frame the next frame was longer yet, and at 290 km/h (where the tyre shell costs more) the game fell to 6 frames a second. The game now takes the step of game time that the physics can do in 40 ms (from the cost of the last frames), at the least 16 ms: a machine that is too slow runs the game in slow motion, with the timers, the replay and the sound with it, and the frames stay smooth. A machine that keeps up is not touched.
+
 ### The skidpad no longer runs at a few frames a second
 
 - The pad of the skidpad is 256 long spokes of 65 m: the box of every spoke holds the whole pad, so every node of a tyre on it tested every spoke (millions of tests a second, 5 to 8 frames a second anywhere on the pad, not only on the white line). The road of a track is now cut into pieces of at most 8 m for the ground (more when a mesh would then get over 40000 triangles), and the pad runs at 120 frames a second. This holds for every track with big triangles of road.
