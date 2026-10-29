@@ -44,7 +44,7 @@ var Tuning = (function() {
     function apply() {
         var v = values;
         if(v.width > 0 && v.height > 0) car.frontal_area = v.width * v.height * 0.85;
-        if(car.setColors) car.setColors({ body: v.body_color || null, rim: v.rim_color || null, bodyFinish: v.body_finish || "", rimFinish: v.rim_finish || "" });
+        if(car.setColors) car.setColors({ body: v.body_color || null, rim: v.rim_color || null, bodyFinish: v.body_finish || "", rimFinish: v.rim_finish || "", bodyFlake: v.body_flake || 100, rimFlake: v.rim_flake || 100 });
         car.vehicle.retune(OpenRacer.CarTuning.toRetune(v, car.frontal_area, air_density));
         // the rest of the car editor, live: the cameras, the steering wheel, the rider of a motorcycle, the torque curve, the sound; and the model built again for
         // what it is built from (the suspension and the driveline of the parts library, the soft body, the size), half a second after the last change

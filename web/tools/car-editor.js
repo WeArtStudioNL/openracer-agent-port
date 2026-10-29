@@ -2427,7 +2427,7 @@ refreshList().then(() => {
 const EDITOR_HAS = new Set(["mass", "front_weight", "cg_height", "drag_coefficient", "max_steer_deg", "idle_rpm", "limiter_rpm", "engine_inertia",
     "final_drive", "reverse_ratio", "brake_total", "brake_bias", "diff_preload", "diff_power", "diff_coast", "center_split", "suspension_travel",
     // (the rows of the tuning menu that the form has as its own cards)
-    "efficiency", "length", "width", "height", "steering_degrees", "gen_power", "gen_peak_rpm", "sb_max_nodes", "sb_wheel_strength",
+    "efficiency", "length", "width", "height", "steering_degrees", "gen_power", "gen_peak_rpm", "body_flake", "rim_flake", "sb_max_nodes", "sb_wheel_strength",
     "cam_follow_distance", "cam_follow_height", "cam_follow_look_height", "cam_follow_look_z", "cam_follow_smoothing", "cam_follow_fov_standing", "cam_follow_fov_fast", "cam_follow_fov_full_speed", "cam_follow_dolly",
     "cam_cockpit_x", "cam_cockpit_y", "cam_cockpit_z", "cam_cockpit_fov",
     "bike_max_lean", "bike_fast_lean", "bike_rake", "bike_rider_mass", "bike_hang_off", "bike_max_lateral_g", "bike_balance", "bike_fork_dive"]);

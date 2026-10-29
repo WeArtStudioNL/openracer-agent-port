@@ -37,7 +37,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 ### Finishes of the paint and the rims
 
-- **The body and the rims have a finish next to their colour** (tuning menu of the game, Chassis settings): Gloss, Satin, Matte, Metallic, Pearl (the colour shifts with the angle: an iridescent clear coat), Metal flake (a sparkle from a normal map of tiny mirrors), Candy (deep and glassy), Chrome and Brushed metal. The finish sets the roughness, the metal and the clear coat; the colour stays the colour of the picker (or of the model). They are kept in the tune (`colors.bodyFinish`, `colors.rimFinish`) and shown in the pictures of the main menu. Only meshes called body or rim take them (the other parts of a model keep their paint).
+- **The body and the rims have a finish next to their colour** (tuning menu of the game, Chassis settings): Gloss, Satin, Matte, Metallic, Pearl (the colour shifts with the angle: an iridescent clear coat), Metal flake (a sparkle from a normal map of tiny mirrors), Candy (deep and glassy), Chrome and Brushed metal. The finish sets the roughness, the metal and the clear coat; the colour stays the colour of the picker (or of the model). They are kept in the tune (`colors.bodyFinish`, `colors.rimFinish`) and shown in the pictures of the main menu. Only meshes called body or rim take them (the other parts of a model keep their paint). With *Metal flake* a *Flake size* row shows (25 to 400%, for the body and for the rims separately).
 
 ### Tyres
 

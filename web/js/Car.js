@@ -252,7 +252,7 @@ OpenRacer.Car = function( config, domElement ) {
     // wheel library). The material of such a mesh is made its own the first time (the model shares materials), and its colour as made is kept to go back to.
     this.colors = null;
     this.setColors = function(colors) {
-        tobj.colors = colors && (colors.body || colors.rim || colors.bodyFinish || colors.rimFinish) ? { body: colors.body || null, rim: colors.rim || null, bodyFinish: colors.bodyFinish || "", rimFinish: colors.rimFinish || "" } : null;
+        tobj.colors = colors && (colors.body || colors.rim || colors.bodyFinish || colors.rimFinish) ? { body: colors.body || null, rim: colors.rim || null, bodyFinish: colors.bodyFinish || "", rimFinish: colors.rimFinish || "", bodyFlake: colors.bodyFlake || 100, rimFlake: colors.rimFlake || 100 } : null;
         OpenRacer.applyCarColors([tobj.body].concat(tobj.wheels.map(function(w) { return w.object; })).filter(Boolean), colors);
     };
 
@@ -1220,7 +1220,7 @@ OpenRacer.applyCarColors = (function() {
         return flakeMap;
     }
     // a material of the model with a colour and a finish (a paint: roughness, metal, a clear coat, a pearl or flakes); the colour of the model when none is given
-    function style(material, colour, finishName) {
+    function style(material, colour, finishName, flakeSize) {
         if(!material.isMeshStandardMaterial) { var plain = material.clone(); if(colour && plain.color) plain.color.set(colour); return plain; }
         var styled = new THREE.MeshPhysicalMaterial();
         THREE.MeshStandardMaterial.prototype.copy.call(styled, material);
@@ -1229,7 +1229,12 @@ OpenRacer.applyCarColors = (function() {
         if(f && finishName) {
             styled.roughness = f.roughness; styled.metalness = f.metalness; styled.clearcoat = f.clearcoat; styled.clearcoatRoughness = f.clearcoatRoughness || 0;
             if(f.iridescence) { styled.iridescence = f.iridescence; styled.iridescenceIOR = f.iridescenceIOR; styled.iridescenceThicknessRange = f.iridescenceThicknessRange; }
-            if(f.flakes) { styled.normalMap = flakes(); styled.normalScale.set(0.45, 0.45); }
+            if(f.flakes) {
+                // the size of the flakes (100%: the normal size): a bigger flake is a smaller repeat of the map; every material has its own copy of the texture (its repeat)
+                var map = flakes().clone(), size = Math.max(25, Math.min(400, flakeSize || 100));
+                map.repeat.set(64 * 100 / size, 64 * 100 / size); map.needsUpdate = true;
+                styled.normalMap = map; styled.normalScale.set(0.45, 0.45);
+            }
             styled.roughnessMap = null; styled.metalnessMap = null;                 // (the finish decides, not the maps of the model)
             styled.envMapIntensity = Math.max(styled.envMapIntensity || 1, 1.2);
         }
@@ -1246,9 +1251,9 @@ OpenRacer.applyCarColors = (function() {
                 var colour = colors ? colors[kind] : null, finish = colors ? colors[kind + "Finish"] : null, ud = mesh.userData;
                 if(!colour && !finish && !ud.asMade) return;
                 if(!ud.asMade) { ud.asMadeIsArray = Array.isArray(mesh.material); ud.asMade = [].concat(mesh.material); }
-                if(ud.styled) { ud.styled.forEach(function(m) { m.dispose(); }); ud.styled = null; }
+                if(ud.styled) { ud.styled.forEach(function(m) { if(m.normalMap && m.normalMap !== (ud.asMade[0] && ud.asMade[0].normalMap)) m.normalMap.dispose(); m.dispose(); }); ud.styled = null; }
                 if(!colour && !finish) { mesh.material = ud.asMadeIsArray ? ud.asMade.slice() : ud.asMade[0]; return; }
-                ud.styled = ud.asMade.map(function(m) { return style(m, colour, finish); });
+                ud.styled = ud.asMade.map(function(m) { return style(m, colour, finish, colors ? colors[kind + "Flake"] : 100); });
                 mesh.material = ud.asMadeIsArray ? ud.styled : ud.styled[0];
             });
         });
