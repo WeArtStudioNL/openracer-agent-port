@@ -405,6 +405,10 @@ var Tuning = (function() {
     window.addEventListener("resize", placeEngineChart);
 
     var engineHost = {
+        turbo: function() {
+            var share = (values.turbo_share || 0) / 100, bar = values.turbo_boost || 0;
+            return { share: share, bar: bar, threshold: values.turbo_threshold || 2500, efficiency: (values.turbo_efficiency || 70) / 100, intercooler: (values.turbo_intercooler !== undefined ? values.turbo_intercooler : 75) / 100 };
+        },
         closeCard: function() { if(engineCard) engineCard.open = false; },
         build: function() { return values.engine_build || null; },
         setBuild: function(b) {

@@ -35,6 +35,11 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### No Power % any more; the turbo in the chart
+
+- The Power % of the tuning menu and of the car editor is gone: no setting makes an engine stronger than its build is. A tune file or a setup that has a power scale of its own gets the scale of the car again.
+- The chart of the Engine card has two dotted lines over the solid ones: the engine with the turbo as the game runs it at wide open throttle (the share of the torque that comes with boost, from what speed, or the boost pressure). So a turbo setting that takes torque away at low speed is seen, not only felt.
+
 ### The dyno chart stays in view in the tuning menu
 
 - In the tuning menu of the game the chart and Run dyno of the Engine card are pinned at the left of the menu while the card is open (as in the car editor), so they do not scroll away with the settings. The cross in the corner of the chart folds the Engine card. It follows the menu when that is moved, and on a window narrower than 1000 px the chart stays in the card.

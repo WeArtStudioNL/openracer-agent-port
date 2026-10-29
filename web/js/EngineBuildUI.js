@@ -63,6 +63,7 @@ OpenRacer.EngineBuildUI = (function () {
         panelClose.addEventListener("click", function() { if(host.closeCard) host.closeCard(); });
         var canvas = el("canvas", "ebuChart", null, panel); canvas.width = 800; canvas.height = 360;
         var legend = el("div", "ebuLegend", "torque (Nm) · power (hp)", panel);
+        legend.title = "The solid lines are the engine of the build; the dotted lines are the same with the turbo of the settings (the share of the torque that comes with boost, from what speed), as the game runs it";
         var dynoLine = el("div", "ebuDyno", null, panel);
         var dynoButton = el("button", null, "▶ Run dyno", dynoLine); dynoButton.type = "button";
         var dynoInfo = el("span", "ebuDynoInfo", null, dynoLine);
@@ -166,11 +167,30 @@ OpenRacer.EngineBuildUI = (function () {
             g.textAlign = "left"; g.textBaseline = "alphabetic"; g.strokeStyle = "#2c3541"; g.fillStyle = "#6f7d92";
             for(var r = 0; r <= maxRpm; r += 1000) { g.beginPath(); g.moveTo(X(r), 0); g.lineTo(X(r), bottom); g.stroke(); g.fillText(r / 1000 + "k", X(r) + 3, h - 4); }
             function line(color, value, pts, dashed) {
-                g.setLineDash(dashed ? [10, 7] : []); g.strokeStyle = color; g.lineWidth = 3; g.beginPath();
+                g.setLineDash(dashed ? (Array.isArray(dashed) ? dashed : [10, 7]) : []); g.strokeStyle = color; g.lineWidth = 3; g.beginPath();
                 pts.forEach(function(p, i) { var x = X(p.rpm !== undefined ? p.rpm : p[0]), y = Y(value(p)); if(i === 0) g.moveTo(x, y); else g.lineTo(x, y); });
                 g.stroke(); g.setLineDash([]);
             }
             line("#ff9f43", function(p) { return p[1]; }, curve); line("#54a0ff", function(p) { return power(p[0], p[1]); }, curve);
+            // The turbo as the game runs it (Engine.js), with the throttle wide open and the boost built up: the part of the torque that comes with boost is there from the "from" speed up
+            // over 2000 rpm; a boost pressure counts as the factor of the air that the compressor puts in. Dotted, over the curve of the build, when the turbo settings of the menu say something.
+            var turbo = host.turbo ? host.turbo() : null;
+            if(turbo && (turbo.share > 0 || turbo.bar > 0)) {
+                var factor = function(rpm) {
+                    var b = Math.max(0, Math.min(1, (rpm - turbo.threshold) / 2000));
+                    if(turbo.bar > 0) {
+                        var bar = b * turbo.bar, T0 = 293.15, ratio = 1 + bar;
+                        var out = T0 * (1 + (Math.pow(ratio, 0.286) - 1) / Math.max(0.3, turbo.efficiency)), manifold = out - turbo.intercooler * (out - T0);
+                        return bar <= 0 ? 1 : ratio * (T0 / manifold) * (1 - 0.035 * bar);
+                    }
+                    return 1 - turbo.share * (1 - b);
+                };
+                var built = curve.map(function(p) { return [p[0], p[1] * factor(p[0])]; });
+                g.globalAlpha = 0.75;
+                g.lineCap = "round";
+                line("#ffd29a", function(p) { return p[1]; }, built, [2, 7]); line("#a9cdff", function(p) { return power(p[0], p[1]); }, built, [2, 7]);
+                g.globalAlpha = 1; g.lineCap = "butt"; g.setLineDash([]);
+            }
             if(dyno) {
                 var shown = dyno.points.slice(0, dyno.upTo + 1);
                 if(shown.length) { line("#ffd29a", function(p) { return p.nm; }, shown, true); line("#a9cdff", function(p) { return p.hp; }, shown, true); }

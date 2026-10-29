@@ -77,7 +77,6 @@ OpenRacer.CarTuning = (function () {
             ["fuel_use", "Fuel use", "%", 5, 1000, 5]
         ] },
         { name: "Engine", items: [
-            ["power", "Power", "%", 10, 500, 1],
             ["idle_rpm", "Idle speed", "rpm", 300, 4000, 50],
             ["limiter_rpm", "Rev limit", "rpm", 2000, 20000, 100],
             ["limiter_hz", "Rev limiter: cuts per second", "Hz", 1, 60, 1],
@@ -340,7 +339,6 @@ OpenRacer.CarTuning = (function () {
             tank: (c.fuel && c.fuel.tank) || 60,
             fuel_use: (c.fuel && c.fuel.use !== undefined ? c.fuel.use : 1) * 100,
             rolling_resistance: tyres.rolling_resistance !== undefined ? tyres.rolling_resistance : 0.015,
-            power: (en.power_scale !== undefined ? en.power_scale : 1) * 100,
             idle_rpm: en.idle_rpm || 900,
             limiter_rpm: en.limiter_rpm || 6600,
             limiter_hz: en.limiter_hz || 12,
@@ -445,7 +443,6 @@ OpenRacer.CarTuning = (function () {
             tyre_life: v.tyre_life / 100,
             tank: v.tank,
             fuel_use: v.fuel_use / 100,
-            power: v.power / 100,
             idle_rpm: v.idle_rpm,
             limiter_rpm: v.limiter_rpm,
             limiter_hz: v.limiter_hz,
@@ -558,7 +555,6 @@ OpenRacer.CarTuning = (function () {
         if(!(v.tyre_width_rear > 0)) delete c.tyres.shell.width_rear; else c.tyres.shell.width_rear = v.tyre_width_rear / 100;
         c.fuel = { tank: v.tank, use: v.fuel_use / 100 };
         c.engine = c.engine || {};
-        c.engine.power_scale = v.power / 100;
         c.engine.braking_scale = v.engine_braking / 100;
         c.engine.idle_rpm = v.idle_rpm;
         c.engine.limiter_rpm = v.limiter_rpm;
@@ -723,7 +719,8 @@ OpenRacer.Setups = (function () {
         configOf: function (id, name, base) {
             var v = read(id).setups[name];
             if(!v) return null;
-            if(v.chassis) return clone(v);
+            // (no setting makes the engine stronger than the car is: the power scale of a setup is the one of the car)
+            if(v.chassis) { var out = clone(v); if(out.engine) { if(base && base.engine && base.engine.power_scale !== undefined) out.engine.power_scale = base.engine.power_scale; else delete out.engine.power_scale; } return out; }
             return base && OpenRacer.CarTuning ? OpenRacer.CarTuning.toConfig(base, v) : null;
         },
         active: function (id) { return read(id).active || null; },
@@ -748,7 +745,7 @@ OpenRacer.Setups = (function () {
             try { data = JSON.parse(text); } catch (e) { return new Error("This is not a tune file (no JSON)."); }
             if(!data || data["openracer-tune"] !== 1 || !data.config || typeof data.config !== "object") return new Error("This is not an OpenRacer tune file.");
             if(!data.config.chassis && !data.config.drivetrain && !data.config.tyres) return new Error("The tune file has no car in it.");
-            var config = clone(data.config); delete config.model; delete config.id;
+            var config = clone(data.config); delete config.model; delete config.id; if(config.engine) delete config.engine.power_scale;
             return { name: String(data.name || "Imported tune").slice(0, 40), car: data.car ? String(data.car) : "", config: config };
         },
         // the setup for the next game (null: the car as it was made); the tuning that was kept for the car is forgotten, the setup is the car from here
