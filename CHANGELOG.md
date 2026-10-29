@@ -38,6 +38,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 ### More transmissions
 
 - A new choice Transmission in the Drivetrain card of the tuning menu sets a whole gearbox: the gearbox, its gears, the reverse, the shift time and (an automatic) the converter. 5 and 6-speed manuals, a 6-speed sequential (no clutch pedal, 0.06 s shifts), a 7-speed dual clutch, a 6-speed automated manual, a 3-speed (TH400), a 4, 6 and 8-speed automatic, and for the drag strip: a 2-speed (Powerglide) and a 3-speed drag automatic, and a 3-speed that you shift yourself. The number of gears can be changed with the − and + beside Gear ratios.
+- The gear ratios come with the transmission and show as one line ("8 gears · 4.70 … 0.67"); the final drive stays set below it. Advanced opens the ratio of every gear and the − and + for the number of gears (remembered), Simple closes them again.
 - A new Shift pattern for the automatics (converter, dual clutch, automated manual): Normal, Sport (holds the gears longer), Drag (up at the rev limiter, no kick down) and Manual (you shift with the paddles or the keys, the gearbox does not).
 - An automatic with a converter no longer shifts up at launch because its engine runs faster than the road (that is the converter, not wheel spin).
 - The white start line of the drag strip lies lower on the road and is not drawn over the bottom of a tyre that stands on it.

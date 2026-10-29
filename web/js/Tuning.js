@@ -260,7 +260,7 @@ var Tuning = (function() {
         return item;
     }
 
-    var gearGrid = null;
+    var gearGrid = null, gearsSummary = null;
     // the boxes of the gear ratios: one for every gear of the values (gear_count), made again when the number of gears changes
     function buildGearGrid() {
         if(!gearGrid) return;
@@ -286,6 +286,7 @@ var Tuning = (function() {
             gearGrid.appendChild(wrap);
             controls.push({ key: "gear" + i, input: input, gear: true });
         })(gi);
+        if(gearsSummary) gearsSummary();
     }
     // one more or one fewer gear (the last one is dropped; a new one is a little lower than the last)
     function gearCount(delta) {
@@ -302,6 +303,11 @@ var Tuning = (function() {
         var line = document.createElement("div");
         line.className = "line";
         line.innerHTML = "<span class=\"label\">Gear ratios</span>";
+        // the ratios come with the transmission that is chosen; the final drive is set below. Advanced opens them gear by gear (and the number of gears).
+        var advanced = false;
+        try { advanced = window.localStorage.getItem("openracer.tuning.advancedGears") === "1"; } catch(e) { /* no storage */ }
+        var summary = document.createElement("span");
+        summary.style.cssText = "color: var(--muted); font-size: 11.5px; margin-left: 8px; flex: 1;";
         var counter = document.createElement("span");
         counter.style.cssText = "display: inline-flex; gap: 4px;";
         [["−", -1, "One gear fewer"], ["+", 1, "One gear more"]].forEach(function(b) {
@@ -310,12 +316,32 @@ var Tuning = (function() {
             button.addEventListener("click", function() { gearCount(b[1]); });
             counter.appendChild(button);
         });
+        var toggle = document.createElement("button");
+        toggle.type = "button"; toggle.style.cssText = "padding: 1px 9px;";
+        line.appendChild(summary);
         line.appendChild(counter);
+        line.appendChild(toggle);
         item.appendChild(line);
         gearGrid = document.createElement("div");
         gearGrid.className = "gears";
         item.appendChild(gearGrid);
+        gearsSummary = function() {
+            var g = OpenRacer.CarTuning.gearsOf(values);
+            summary.textContent = g.length + " gears · " + g[0].toFixed(2) + " … " + g[g.length - 1].toFixed(2);
+        };
+        function show() {
+            gearGrid.style.display = counter.style.display = advanced ? "" : "none";
+            toggle.textContent = advanced ? "Simple" : "Advanced";
+            toggle.title = advanced ? "Hide the ratios of the gears" : "Set the ratio of every gear, and the number of gears";
+        }
+        toggle.addEventListener("click", function() {
+            advanced = !advanced;
+            try { window.localStorage.setItem("openracer.tuning.advancedGears", advanced ? "1" : "0"); } catch(e) { /* no storage */ }
+            show();
+        });
+        show();
         buildGearGrid();
+        gearsSummary();
         return item;
     }
 
@@ -790,6 +816,7 @@ var Tuning = (function() {
 
     function refresh() {
         refreshSetups();
+        if(gearsSummary) gearsSummary();
         var CT = OpenRacer.CarTuning;
         var shellFront = libraryShell("front"), shellRear = libraryShell("rear"), shellLocked = !!(shellFront && shellRear);
         if(!shellNote) { var after = controls.filter(function(c) { return c.key === "tyre_rear"; })[0]; if(after && after.line.parentNode) { shellNote = document.createElement("div"); shellNote.id = "tuningShellNote"; shellNote.style.cssText = "font-size:12px; color:var(--accent2); margin:2px 0 6px"; after.line.parentNode.parentNode.insertBefore(shellNote, after.line.parentNode.nextSibling); } }
