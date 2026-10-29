@@ -39,6 +39,10 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - A rim of the wheel library now brings a custom tyre, made from the numbers (width, diameter, height of the sidewall, rubber), for the front and the rear axle apart; the tyres of the library are no longer chosen (a car that has one keeps it). The height of the sidewall is new: the rim takes what is left of the diameter. It works in the tuning menu and in the car editor, where the rim and the tyre of the front and the rear axle follow the sliders at once (the tyre in the view, the shell of the bench car when the sliders rest) and are saved with the car.
 
+### The car editor: the paint stays on the car of the test
+
+- The colour, the finish and the flakes of the Paint settings are laid on the car of the bench too: the colour went back to the one of the model at Drop car and Drive (the car of the bench is a copy with its own materials).
+
 ### The car editor: axle offsets and sliders
 
 - *Front axle offset* and *rear axle offset* (Chassis card, m, forward is positive) for a car whose axles are not the same way from the middle of the model: the wheels of the library stand there in the view, on the bench and in the game (`chassis.front_axle_offset`, `rear_axle_offset`). The wheelbase stays the distance between the axles when both are 0.

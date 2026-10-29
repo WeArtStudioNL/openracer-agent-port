@@ -2472,7 +2472,10 @@ const PAINT_WORDS = ["body_color", "rim_color", "body_finish", "rim_finish", "bo
 function applyPaint() {
     if (!state.root || !OpenRacer.applyCarColors) return;
     const t = tuning;
-    OpenRacer.applyCarColors([state.root], {
+    // (the car of the bench is a copy of the model with its own materials: it gets the paint too, or the colour went back to the one of the model at Drop car and Drive)
+    const roots = [state.root];
+    try { if (bench.body) roots.push(bench.body, ...(bench.model ? bench.model.wheels : [])); } catch (e) { /* the bench is not made yet */ }
+    OpenRacer.applyCarColors(roots, {
         body: t.body_color || null, rim: t.rim_color || null, bodyFinish: t.body_finish || "", rimFinish: t.rim_finish || "",
         bodyFlake: t.body_flake || 100, rimFlake: t.rim_flake || 100, bodyPattern: t.body_pattern || "noise", rimPattern: t.rim_pattern || "noise", bodyUv: t.body_uv || "model", rimUv: t.rim_uv || "model"
     });
@@ -2923,6 +2926,7 @@ async function startBench() {
     if (OpenRacer.setForkGeometry) OpenRacer.setForkGeometry(v, model, config);
     bench.vehicle = v; bench.model = model; bench.input = input; bench.config = config; bench.script = null; bench.last = performance.now();
     syncBenchVisibility();
+    applyPaint();                                           // (the colour of the Paint settings on the car of the bench)
     if (driverEditor) driverEditor.attachToBench(model.tilt);       // the driver goes with the car that is tested
     pivot.visible = false; helpers.visible = false; libPreview.visible = false;          // (the bench builds the car as the game does, with its own library wheels)
     if (suspensionEditor) suspensionEditor.hide(true);
