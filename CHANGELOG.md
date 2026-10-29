@@ -31,6 +31,10 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### Camber in roll
+
+- The wheels leaned further over than the body in a corner (the "camber lost in roll" was added to the lean of the body instead of taken from it), so a car that rolled had wheels that looked very crooked. Now the wheels lean back against the roll: with 60% (the default) the wheels of a body that rolls 10° stand 4° from the road. This also changes the camber thrust a little, in the right direction.
+
 ### Floating windows: a drag handle
 
 - The free camera panel, the replay bar and info box, the drag strip box, the track editor drag window and the exhaust window of the car editor are now moved by a handle (their title or header), like the tuning menu, so the rest scrolls with a finger on a phone without moving the window.

@@ -1721,7 +1721,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 // about its forward axis, so the shoulder on the side it leans to carries more, and the tread that goes round a leaning wheel is pulled sideways by the road: the camber
                 // thrust. (A motorcycle: its wheels lean with it and nothing more.)
                 var camberDeg = w.front ? self.camberFront : self.camberRear;
-                var lean = self.soloWheels ? 0 : (w.right ? -camberDeg : camberDeg) * Math.PI / 180 - rollRightNow * self.rollCamber - (w.camberBend || 0);
+                var lean = self.soloWheels ? 0 : (w.right ? -camberDeg : camberDeg) * Math.PI / 180 + rollRightNow * self.rollCamber - (w.camberBend || 0);
                 if(!self.soloWheels && self.liveAxle[w.front ? "front" : "rear"]) lean = self.axleLean(w.front) - (w.camberBend || 0);
                 var cl = Math.cos(lean), sl = Math.sin(lean);
                 cylU.x = axisY.x * cl + cylL.x * sl; cylU.y = axisY.y * cl + cylL.y * sl; cylU.z = axisY.z * cl + cylL.z * sl;
@@ -1985,7 +1985,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 // camber: the lean of the wheel to the left (its static camber, and the lean of the body in roll); a wheel that
                 // leans pushes towards the side it leans to, as if it had a slip angle
                 var camber = (wheel.front ? self.camberFront : self.camberRear) * Math.PI / 180;
-                var leanLeft = (wheel.right ? -camber : camber) - rollRight * self.rollCamber - (wheel.camberBend || 0);
+                var leanLeft = (wheel.right ? -camber : camber) + rollRight * self.rollCamber - (wheel.camberBend || 0);
                 if(self.liveAxle[wheel.front ? "front" : "rear"]) leanLeft = self.axleLean(wheel.front) - (wheel.camberBend || 0);
                 wheel.lean = self.soloWheels ? 0 : leanLeft;            // (for the wheel of the model: it leans with the camber, Wheel.turn)
                 var surface = self.getSurface(wheel.surface, wheel.localSnow, wheel.localWater);
