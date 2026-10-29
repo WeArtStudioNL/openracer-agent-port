@@ -86,7 +86,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             w.pressureCorner = Math.max(0.7, Math.min(1.25, 1 + 0.15 * (p - 2.2)));   // the stiffness of the sidewall against the slip angle
             w.pressureRoll = Math.sqrt(2.2 / p);                            // rolling resistance and heat
             w.tyreRate = this.tyreRate * Math.pow(p / 2.2, 0.8);            // the stiffness of the tyre as a spring
-            w.anglePeak = this.baseAnglePeak / (this.corneringScale * w.stiffnessBias * w.pressureCorner);
+            w.anglePeak = this.baseAnglePeak / (this.corneringScale * ((tc && tc.lateral) || 1) * w.stiffnessBias * w.pressureCorner);
             w.condition = (w.condition || 1); // taken up with the wear in wearStep
         }
     };
@@ -332,6 +332,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         this.compound = at;
         tc = list[at];
         for(var i = 0; i < 4; i++) { var w = this.wheels[i]; w.compoundGrip = tc.grip; w.compoundLoose = tc.looseGrip || 1; w.compoundLooseSlide = tc.looseSlide || 0; w.condition = conditionOf(w) * (w.pressureGrip || 1); }
+        if(this.applyPressure) this.applyPressure();          // (the stiffness against the slip angle depends on the kind of tyre)
     };
     this.tyreKind = function () { return tc; };
     this.setCompound(parameters.compound);
@@ -1706,7 +1707,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var shellOf = self.tyreShellOf(w);
                 { body.isShell = true; body.round = !!self.soloWheels; body.tyreMass = Math.max(1.5, 0.3 * self.unsprungMass); body.pressure = Math.max(0.15, (w.front ? self.pressureFront : self.pressureRear) - (w.pressureLoss || 0)); body.innerRatio = shellOf.inner_ratio; body.carcass = shellOf.carcass; }
                 body.rings = shellOf.rings; body.segments = shellOf.segments; body.width = shellOf.width;
-                body.stiffX = self.tyreStiffX; body.stiffY = self.tyreStiffY * self.corneringScale * (w.stiffnessBias || 1) * (w.pressureCorner || 1);
+                body.stiffX = self.tyreStiffX; body.stiffY = self.tyreStiffY * self.corneringScale * ((tc && tc.lateral) || 1) * (w.stiffnessBias || 1) * (w.pressureCorner || 1);
                 body.verticalStiffness = w.tyreRate || self.tyreRate; body.verticalDamping = self.tyreDamping; body.staticLoad = w.staticLoad || (self.mass * G / 4);
                 // the axes of the wheel: up (the suspension), forward in its plane (turned by the steering), and to the left
                 var ca = Math.cos(wheelAngle[i]), sa = Math.sin(wheelAngle[i]);

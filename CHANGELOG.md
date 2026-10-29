@@ -31,6 +31,11 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### Tyres
+
+- **Drag slick** (*Drag slick (straight line)*): the most grip in a straight line (1.7, the slick has 1.45), half the stiffness across the tyre (`lateral`: 0.5, so it is poor in a bend), warms up and wears fast. In a test from a standstill on the road it reaches 100 km/h in 5.0 s against 5.6 s for the slick. A kind of tyre may now have a `lateral` factor for the stiffness against the slip angle.
+- The settings of the tyre on top of its kind (the stiffness of the tread, the grip, the grip of the rear, the stiffness against the slip angle, the rolling resistance, the heating up and the life) are folded away in *Fine-tune the tyre (on top of the kind)*, in the car editor and in the tuning menu; the kind, the pressures and the sizes stay on top.
+
 ### Traction control
 
 - **Traction control holds worn tyres too.** It could only take the power down to a fifth of the pedal; with a big engine on worn or hot tyres, or on loose ground, that was still too much and the driven wheels kept spinning (3 times the torque, worn tyres on sand: the driven wheel turned 50 times the allowance). A wheel that spins far past the allowance now takes the power all the way off (the floor falls from a fifth to nothing between 1.3 and 2.5 times the allowance). The same test now holds it at about twice the allowance; at normal power nothing changes.

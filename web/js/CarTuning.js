@@ -669,8 +669,10 @@ OpenRacer.CarTuning = (function () {
         { name: "Soft body", groups: ["Soft body"] },
         { name: "Motorcycle", groups: ["Motorcycle"] }
     ];
+    // the settings of the tyre that lie on top of the kind of tyre (the compound sets the grip, the heat, the wear and the rolling resistance): they are folded away in a part of their own
+    var TYRE_FINE = ["tyre_stiff_x", "tyre_stiff_y", "grip", "grip_balance", "cornering", "rolling_resistance", "tyre_heating", "tyre_life"];
     return {
-        CARDS: CARDS, visible: visible, visibleFeature: visibleFeature, GROUPS: GROUPS, FEATURES: FEATURES, FEATURE_DEFAULTS: FEATURE_DEFAULTS, V100: V100, fromConfig: fromConfig, toRetune: toRetune, toConfig: toConfig, keys: keys };
+        TYRE_FINE: TYRE_FINE, CARDS: CARDS, visible: visible, visibleFeature: visibleFeature, GROUPS: GROUPS, FEATURES: FEATURES, FEATURE_DEFAULTS: FEATURE_DEFAULTS, V100: V100, fromConfig: fromConfig, toRetune: toRetune, toConfig: toConfig, keys: keys };
 })();
 
 // The setups of a car: whole configurations of the car (everything car.json has but the model: the chassis, the tyres, the engine, the gearbox, the suspension and the parts,

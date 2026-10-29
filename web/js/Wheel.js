@@ -39,7 +39,10 @@ OpenRacer.TyreCompounds = [
     { id: "slick", name: "Slick (race)", grip: 1.45, optimum: 100, window: 10, cold: 30, coldLoss: 0.4, heating: 1.5, life: 0.3, rolling: 1.15, smoke: -20 },
     { id: "winter", name: "Winter (soft, cold)", grip: 0.9, optimum: 55, window: 25, cold: 55, coldLoss: 0.2, heating: 0.9, life: 1.2, rolling: 1.1, smoke: -10 },
     // knobbly: less grip on tarmac, a lot more on grass and ground (sand, dirt: the surfaces that give way), where it also digs in less (looseRolling: the rolling resistance there)
-    { id: "offroad", name: "Off-road (knobbly)", grip: 0.82, looseGrip: 1.7, looseRolling: 0.6, looseSlide: 0.97, optimum: 70, window: 25, cold: 60, coldLoss: 0.15, heating: 0.9, life: 0.9, rolling: 1.25, smoke: 5 }
+    { id: "offroad", name: "Off-road (knobbly)", grip: 0.82, looseGrip: 1.7, looseRolling: 0.6, looseSlide: 0.97, optimum: 70, window: 25, cold: 60, coldLoss: 0.15, heating: 0.9, life: 0.9, rolling: 1.25, smoke: 5 },
+    // for the drag strip: the most grip in a straight line (soft, warm from the burnout, heats and wears fast), and little across the tyre: it is a poor tyre in a bend (lateral: the stiffness
+    // against the slip angle as a factor)
+    { id: "drag", name: "Drag slick (straight line)", grip: 1.7, lateral: 0.5, optimum: 85, window: 20, cold: 28, coldLoss: 0.45, heating: 1.4, life: 0.18, rolling: 1.4, smoke: -24 }
 ];
 
 OpenRacer.Wheel = function (parameters) {

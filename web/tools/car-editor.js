@@ -2534,7 +2534,13 @@ function renderTuningCard() {
             wrap.appendChild(line);
             details.appendChild(wrap);
         }
-        items.forEach((item) => { if (item[4] > item[3]) details.appendChild(tuneSlider(item, tuningChanged)); });
+        // (the settings of the tyre on top of its kind: folded away in a part of their own)
+        const fineKeys = group.name === "Tyres" ? OpenRacer.CarTuning.TYRE_FINE : [];
+        const fine = document.createElement("details");
+        fine.className = "inner";
+        fine.innerHTML = "<summary title='The kind of tyre sets most of these: change them only to move away from it'>Fine-tune the tyre (on top of the kind)</summary>";
+        items.forEach((item) => { if (item[4] > item[3]) (fineKeys.includes(item[0]) ? fine : details).appendChild(tuneSlider(item, tuningChanged)); });
+        if (fine.children.length > 1) details.appendChild(fine);
         if (group.name === "Tyres") {
             // a hard hit can puncture a tyre: a tick, as the tuning menu has it
             const line = document.createElement("label");

@@ -519,14 +519,22 @@ var Tuning = (function() {
             summary.textContent = group.name === card.name ? group.name + " settings" : group.name;
             details.appendChild(summary);
             var count = 0;
+            // (the settings of the tyre on top of its kind are folded away in a part of their own)
+            var fineKeys = group.name === "Tyres" ? OpenRacer.CarTuning.TYRE_FINE : [];
+            var fine = document.createElement("details");
+            fine.innerHTML = "<summary title=\"The kind of tyre sets most of these: change them only to move away from it\">Fine-tune the tyre (on top of the kind)</summary>";
+            var fineCount = 0;
             group.items.forEach(function(def) {
                 if(HIDDEN[def[0]]) return;
                 count++;
-                if(SELECTS[def[0]]) details.appendChild(selectRow(def[0]));
-                else if(COLORS[def[0]]) details.appendChild(colorRow(def[0]));
-                else if(def[0] === "gears") details.appendChild(gearsRow());
-                else details.appendChild(slider(def));
+                var target = fineKeys.indexOf(def[0]) >= 0 ? fine : details;
+                if(target === fine) fineCount++;
+                if(SELECTS[def[0]]) target.appendChild(selectRow(def[0]));
+                else if(COLORS[def[0]]) target.appendChild(colorRow(def[0]));
+                else if(def[0] === "gears") target.appendChild(gearsRow());
+                else target.appendChild(slider(def));
             });
+            if(fineCount) details.appendChild(fine);
             return count ? details : null;
         }
         var cardList = OpenRacer.CarTuning.CARDS.slice();
