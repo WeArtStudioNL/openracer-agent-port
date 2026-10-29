@@ -14,6 +14,10 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - The tuning menu has the cards of the car editor, with the same names and in the same order: Wheels, Suspension and driveline, Chassis, Drivetrain, Engine, Engine sound, Assists and extras, Cameras, Soft body (and Motorcycle, and the Mirrors of the game). Every card holds its groups (Chassis: Chassis settings, Brakes, Aerodynamics and steering, Size and steering wheel; Engine: Fuel, Engine settings), the card Engine shows the power and the card Drivetrain the top speed. The structure is one list for both (`OpenRacer.CarTuning.CARDS`). The torque-curve rows (peak power and its rpm) are gone from the menu: the curve follows from the engine that is built in the editor.
 
+### Automatic gearbox: the limiter
+
+- **An automatic gearbox shifts up when the engine sits on the rev limiter with the throttle open.** It only did so when the wheels spun by more than 20% and 300 rpm, so a powerful car whose wheels spun by about 20% (the V12 rebuild with a final drive of 6.5 on slicks) stayed in the gear on the limiter for seconds: 5 s in 2nd gear at 100 km/h in a test, now 2 s. The shift comes after the engine has been at 97% of the limiter for a third of a second.
+
 ### Automatic gearbox: lifting the throttle
 
 - **The engine speed no longer drops to idle when you lift off.** The automatic clutch closed with the engine speed only, so a lifted throttle let the engine fall below the closing speed (2000 rpm in the V12 rebuild), the clutch opened, and the engine dropped to idle while the car still ran at speed. It now also counts the engine speed that the wheels ask for: the clutch stays closed while the car rolls in gear, the engine follows the wheels down (it brakes) and only lets go when the car is too slow for the gear.
