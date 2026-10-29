@@ -79,8 +79,10 @@ var Tuning = (function() {
         Object.keys(v).forEach(function(key) {
             if(key.indexOf("es_") === 0) sound[key.substring(3)] = v[key];
         });
-        if(v.sim_layout) sound.layout = v.sim_layout;
-        if(v.sim_ir) sound.ir = v.sim_ir;
+        // the exhaust of the sound, and (for an engine that is built) what the sound has of the build: the layout, the bore and the stroke, the cam, the flows and the lengths
+        if(v.exhaust_type) sound.exhaust_type = v.exhaust_type;
+        var tunedSound = tuned.sound && tuned.sound.engine_sim;
+        if(tunedSound && v.engine_build) ["layout", "bore", "stroke", "compression_ratio", "intake_duration", "exhaust_duration", "intake_flow", "exhaust_flow", "primary_length", "exhaust_length"].forEach(function(k) { if(tunedSound[k] !== undefined) sound[k] = tunedSound[k]; });
         EngineSound.setParams(sound);
         updateInfo();
     }
@@ -164,6 +166,10 @@ var Tuning = (function() {
             "#tuning .message { color: var(--accent2); min-height: 16px; margin-top: 4px; }" +
             "#tuning .featureLine { cursor: pointer; margin: 6px 0 2px; } #tuning .featureLine input { margin: 0; }" +
             "#tuning .featureBox { display: none; margin: 4px 0 8px 10px; padding-left: 10px; border-left: 2px solid var(--line); }" +
+            "#tuning .ebu { margin: 4px 0 8px; } #tuning .ebuItem { margin: 5px 0 8px; } #tuning .ebuItem select { width: 100%; } #tuning .ebuLine { display: flex; align-items: center; gap: 6px; } #tuning .ebuLabel { flex: 1; }" +
+            "#tuning .ebuRange { width: 100%; margin: 2px 0 0; } #tuning .ebuInfo { color: var(--muted); font-size: 12px; margin: 2px 0 8px; line-height: 1.4; }" +
+            "#tuning .ebuGroup { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin: 10px 0 2px; } #tuning .ebuChart { width: 100%; height: auto; aspect-ratio: 800 / 360; background: #12161c; border: 1px solid var(--line); border-radius: 8px; }" +
+            "#tuning .ebuLegend, #tuning .ebuDynoInfo { color: var(--muted); font-size: 11.5px; } #tuning .ebuDyno { display: flex; align-items: center; gap: 8px; margin: 6px 0 8px; } #tuning .ebu input[type=number] { width: 84px; }" +
             "#tuning .gears { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 8px; }" +
             "#tuning .gears label { font-size: 11px; color: var(--muted); display: block; } #tuning .gears input { width: 100%; box-sizing: border-box; }";
         document.head.appendChild(style);
@@ -358,7 +364,37 @@ var Tuning = (function() {
         return wrap;
     }
 
-    var cardMeta = {};
+    var cardMeta = {}, engineUi = null, buildResult = null;
+
+    // the engine that is built (EngineBuild.js) for the piece of the Engine card (EngineBuildUI.js): what it works on is in the values of the menu
+    function workOutBuild() {
+        var b = values.engine_build;
+        buildResult = b && OpenRacer.EngineBuild ? OpenRacer.EngineBuild.compute(b, values.limiter_rpm, values.idle_rpm) : null;
+    }
+    var engineHost = {
+        build: function() { return values.engine_build || null; },
+        setBuild: function(b) {
+            values.engine_build = JSON.parse(JSON.stringify(b));
+            workOutBuild();
+            // the turbo of the game follows the build (as in the car editor): the share of the torque that is boost, the lag, the intercooler; a supercharger has no lag
+            var EB = OpenRacer.EngineBuild, spec = EB.turboSpec(b), ind = b.induction || {};
+            values.turbo_share = spec && buildResult ? Math.round(buildResult.boostShare * 100 / 5) * 5 : 0;
+            values.turbo_boost = 0;
+            if(spec) { values.turbo_spool = spec.spool; values.turbo_threshold = spec.threshold; values.turbo_intercooler = Math.round(EB.INTERCOOLERS[ind.intercooler].value * 100); values.turbo_efficiency = 72; values.boost_full = ind.boost; }
+            apply(); store(); refresh();
+        },
+        exhaust: function() { return values.exhaust_type || "custom"; },
+        setExhaust: function(type) { values.exhaust_type = type; apply(); store(); refresh(); },
+        speeds: function() { return { idle: values.idle_rpm, limiter: values.limiter_rpm }; },
+        setLimiter: function(rpm) { values.limiter_rpm = rpm; },
+        curve: function() { var t = tunedConfig(); return t.engine && t.engine.torque_curve; },
+        result: function() { return buildResult; },
+        driveline: function() {
+            var t = tunedConfig();
+            return { gears: t.drivetrain.gear_ratios, final_drive: t.drivetrain.final_drive, tyre: t.chassis.tire_diameter, mass: t.chassis.mass, efficiency: t.drivetrain.efficiency, inertia: t.engine.inertia, power: t.engine.power_scale };
+        }
+    };
+
     function build() {
         addStyle();
         panel = document.createElement("div");
@@ -510,6 +546,7 @@ var Tuning = (function() {
             summary.appendChild(meta);
             wrap.appendChild(summary);
             cardMeta[card.name] = meta;
+            if(card.name === "Engine" && OpenRacer.EngineBuildUI && OpenRacer.EngineBuild) { engineUi = OpenRacer.EngineBuildUI.create(engineHost); wrap.appendChild(engineUi.element); }
             var content = 0;
             (card.groups || []).forEach(function(name) {
                 var group = GROUPS.filter(function(g) { return g.name === name; })[0];
@@ -519,7 +556,7 @@ var Tuning = (function() {
             if(card.features) {
                 OpenRacer.CarTuning.FEATURES.forEach(function(feature) { wrap.appendChild(featureRow(feature)); content++; });
             }
-            if(content) panel.appendChild(wrap);
+            if(content || (card.name === "Engine" && engineUi)) panel.appendChild(wrap);
         });
         // the mirrors (Mirrors.js): the turn and the tilt of every glass, kept as options of the game (they are not part of a tune: where you want to look is yours); filled when the group is opened,
         // since the model of the car may not be there yet when the menu is made
@@ -657,6 +694,8 @@ var Tuning = (function() {
                 c.line.classList.toggle("changed", changed(c.key));
             }
         });
+        workOutBuild();
+        if(engineUi) engineUi.update();
         updateInfo();
     }
 
@@ -697,6 +736,7 @@ var Tuning = (function() {
         rebuildSig = builtFrom(OpenRacer.CarTuning.toConfig(config, base));        // (what the car is built with now, the car as loaded: a tuning that was kept with another suspension, other wheels or another soft body builds it again, below in apply)
         lastCurve = config.engine && config.engine.torque_curve ? clone(config.engine.torque_curve) : null;
         controls = [];
+        engineUi = null;
         if(panel) panel.parentNode.removeChild(panel);
         build();
         apply();

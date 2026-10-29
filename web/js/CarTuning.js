@@ -160,8 +160,6 @@ OpenRacer.CarTuning = (function () {
             ["bike_fork_dive", "Dive of the fork on the brakes", "", 0, 3, 0.05]
         ] },
         { name: "Engine sound", items: [
-            ["sim_layout", "Engine layout (the sound)", "", 0, 0, 0],
-            ["sim_ir", "Exhaust of the sound (impulse response)", "", 0, 0, 0],
             ["es_volume", "Volume", "", 0, 5, 0.05],
             ["es_convolution", "Through the exhaust (impulse response)", "", 0, 1, 0.05],
             ["es_audio_volume", "Exhaust volume", "", 0, 10, 0.1],
@@ -210,6 +208,7 @@ OpenRacer.CarTuning = (function () {
             case "turbo_intercooler": case "turbo_efficiency": return v.turbo_boost > 0;
             case "tc_lockup": return g === "torque-converter";
             case "sb_max_nodes": case "sb_wheel_strength": return v.sb_enabled !== "off";
+            case "es_exhaust_length": case "es_primary_length": return !v.engine_build;      // (the built engine has them)
             // no suspension: the springs, the dampers, the travel, the progression, the rebound and the ride height do nothing (the tyre is the spring; the roll stiffness and the roll centres still work)
             case "frame_torsion": case "inner_lift": return v.unsprung === "none";
             case "spring_front": case "spring_rear": case "damping_front": case "damping_rear": case "suspension_travel": case "suspension_length": case "spring_progression": case "damping_rebound": case "ride_front": case "ride_rear": return v.unsprung !== "none";
@@ -308,8 +307,8 @@ OpenRacer.CarTuning = (function () {
             bike_max_lateral_g: (c.motorcycle || {}).max_lateral_g !== undefined ? c.motorcycle.max_lateral_g : BIKE.max_lateral_g,
             bike_balance: (c.motorcycle || {}).balance !== undefined ? c.motorcycle.balance : BIKE.balance,
             bike_fork_dive: (c.motorcycle || {}).fork_dive !== undefined ? c.motorcycle.fork_dive : BIKE.fork_dive,
-            sim_layout: (c.sound && c.sound.engine_sim && c.sound.engine_sim.layout) || "",
-            sim_ir: (c.sound && c.sound.engine_sim && c.sound.engine_sim.ir) || "",
+            engine_build: (c.engine && c.engine.build) || null,                    // the engine as it is built (EngineBuild.js); an object, not a number of the menu
+            exhaust_type: (c.sound && c.sound.engine_sim && c.sound.engine_sim.exhaust_type) || "custom",
             tyre_width: tyres.shell && tyres.shell.width ? Math.round(tyres.shell.width * 100) : 0,
             tyre_width_rear: tyres.shell && tyres.shell.width_rear ? Math.round(tyres.shell.width_rear * 100) : 0,
             tyre_rings: tyres.shell && tyres.shell.rings ? tyres.shell.rings : 3,
@@ -632,10 +631,16 @@ OpenRacer.CarTuning = (function () {
             c.motorcycle = Object.assign({}, c.motorcycle || {}, { max_lean_deg: v.bike_max_lean, fast_lean_deg: v.bike_fast_lean, rake_deg: v.bike_rake, rider_mass: v.bike_rider_mass,
                 hang_off: v.bike_hang_off, max_lateral_g: v.bike_max_lateral_g, balance: v.bike_balance, fork_dive: v.bike_fork_dive });
         }
-        if(v.sim_layout || v.sim_ir) {
-            c.sound = c.sound || {}; c.sound.engine_sim = Object.assign({}, c.sound.engine_sim || {});
-            if(v.sim_layout) c.sound.engine_sim.layout = v.sim_layout;
-            if(v.sim_ir) c.sound.engine_sim.ir = v.sim_ir;
+        // the exhaust of the sound, and the engine that is built: the torque curve follows from the build, and so do the settings of the sound that the build has too
+        c.sound = c.sound || {}; c.sound.engine_sim = Object.assign({}, c.sound.engine_sim || {});
+        if(v.exhaust_type) c.sound.engine_sim.exhaust_type = v.exhaust_type;
+        if(v.engine_build && OpenRacer.EngineBuild) {
+            var b = JSON.parse(JSON.stringify(v.engine_build));
+            c.engine.build = b;
+            c.engine.torque_curve = OpenRacer.EngineBuild.compute(b, c.engine.limiter_rpm, c.engine.idle_rpm).curve;
+            if(OpenRacer.engineSimPresets[b.block]) c.sound.engine_sim.layout = OpenRacer.engineSimPresets[b.block].layout;
+            Object.assign(c.sound.engine_sim, { bore: b.bore, stroke: b.stroke, compression_ratio: b.compression, intake_duration: b.cam_duration, exhaust_duration: Math.max(180, b.cam_duration - 4),
+                intake_flow: b.intake_flow, exhaust_flow: b.exhaust_flow, primary_length: b.primary_length, exhaust_length: b.exhaust_length });
         }
         delete c.id;
         return c;

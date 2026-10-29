@@ -12,6 +12,8 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 ### The tuning menu of the game follows the car editor
 
+- **The Engine card of the game builds the engine too:** the block, the exhaust, the chart of the torque curve with *Run dyno*, and the settings of the build (bore and stroke, compression, cam, valves, flows and lengths, fuel and mixture, turbo or supercharger, the dyno room) as sliders with limits that follow from each other, as in the editor (`EngineBuildUI.js`, one piece of the page; the model is `EngineBuild.js`). The torque curve, the turbo and the sound (layout, bore, stroke, cam, flows, exhaust) follow the build live and are kept in the tune. The old rows for the layout and the impulse response of the sound are gone from the menu.
+
 - The tuning menu has the cards of the car editor, with the same names and in the same order: Wheels, Suspension and driveline, Chassis, Drivetrain, Engine, Engine sound, Assists and extras, Cameras, Soft body (and Motorcycle, and the Mirrors of the game). Every card holds its groups (Chassis: Chassis settings, Brakes, Aerodynamics and steering, Size and steering wheel; Engine: Fuel, Engine settings), the card Engine shows the power and the card Drivetrain the top speed. The structure is one list for both (`OpenRacer.CarTuning.CARDS`). The torque-curve rows (peak power and its rpm) are gone from the menu: the curve follows from the engine that is built in the editor.
 
 ### Automatic gearbox: the limiter
