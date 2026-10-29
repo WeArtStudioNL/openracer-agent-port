@@ -13,7 +13,7 @@
  *              - The times and the speeds are only shown at the end, on the time slip, for the standard distances within the length (60 ft, 330 ft,
  *                1/8 mile, 1000 ft, 1/4 mile, ...) and the finish.
  *              At the finish a time slip slides in from the top at the right of the screen, with the times on it; the cross or Escape closes it.
- *              The lines on the road are drawn: a white start line and a chequered finish line. The lights are on a tree: a pole beside the strip, ten metres past the start line, with
+ *              The lines on the road are drawn: a white start line and a chequered finish line. The lights are on a tree: a pole in the middle of the strip, twelve metres past the start line, with
  *              glowing lamps (pre-stage, stage, three ambers, green and red); the HUD only has the text (the distance to the line and what to do).
  */
 
@@ -39,7 +39,7 @@ OpenRacer.DragStrip = (function () {
         state = "idle"; lines = null;
     }
 
-    // The tree: a pole beside the strip, a little behind the start line's far side, with a dark head that faces the cars at the line. Its lights are materials that glow: an emissive
+    // The tree: a pole in the middle of the strip, with a dark head that faces the cars at the line. Its lights are materials that glow: an emissive
     // colour that goes up with the light, and a soft additive halo (a sprite) round the lit lamp.
     var treeLamps = null, treeKey = "";
     var LAMP_COLOURS = { white: 0xffffff, amber: 0xffb81c, green: 0x2ee26a, red: 0xff3b30 };
@@ -51,8 +51,8 @@ OpenRacer.DragStrip = (function () {
         var t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
     }
     function buildTree(group, v) {
-        // beside the strip on the left of the driver, ten metres past the start line
-        var along = 10, side = strip.width / 2 + 1.6, sx = strip.dz, sz = -strip.dx;
+        // in the middle of the strip, twelve metres past the start line (it is a picture: a car drives through it)
+        var along = 12, side = 0, sx = strip.dz, sz = -strip.dx;
         var x = strip.x + strip.dx * along + sx * side, z = strip.z + strip.dz * along + sz * side;
         var hit = v.ground.query(x, z, v.py + 5, 40), y = hit ? hit.y : v.py - v.cgHeight;
         var tree = new THREE.Group();

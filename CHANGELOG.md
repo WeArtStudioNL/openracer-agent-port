@@ -43,9 +43,9 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - The pictures of the cars and the tunes in the menu show the car as it stands on the road: lower or higher by the ride height of the front and the rear axle, tilted when the two differ, and with the arms, the uprights and the springs of the suspension in that place. Older pictures (preview.webp from before this) are made again.
 
-### Drag strip: a tree beside the strip
+### Drag strip: a tree in the middle of the strip
 
-- The lights are no longer in the HUD: on every drag strip a tree stands beside the strip, ten metres past the start line, a real pole with a dark head that faces the cars at the line. Two columns of lamps (pre-stage, stage, three ambers, green, red) are materials that light up with an emissive colour and a soft glow round the lamp.
+- The lights are no longer in the HUD: on every drag strip a tree stands in the middle of the strip, twelve metres past the start line, a pole with a dark head that faces the cars at the line. Two columns of lamps (pre-stage, stage, three ambers, green, red) are materials that light up with an emissive colour and a soft glow round the lamp.
 - The text of the HUD (the distance to the line and what to do) is bigger, in the middle of the screen without a box behind it, and cannot be moved any more.
 
 ### Drag strip: the quarter mile time
