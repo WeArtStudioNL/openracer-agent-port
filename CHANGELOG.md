@@ -31,6 +31,10 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### The rev counter
+
+- **The dial of the rev counter ends at the rev limit.** The dial went to the next full thousand (7000 for a limit of 6300), so the red zone, which ends at the limit, stopped short of the end of the ring. Now the ring runs to the limit, the numbers stand at the thousands below it, and the red zone is at the end.
+
 ### Finishes of the paint and the rims
 
 - **The body and the rims have a finish next to their colour** (tuning menu of the game, Chassis settings): Gloss, Satin, Matte, Metallic, Pearl (the colour shifts with the angle: an iridescent clear coat), Metal flake (a sparkle from a normal map of tiny mirrors), Candy (deep and glassy), Chrome and Brushed metal. The finish sets the roughness, the metal and the clear coat; the colour stays the colour of the picker (or of the model). They are kept in the tune (`colors.bodyFinish`, `colors.rimFinish`) and shown in the pictures of the main menu. Only meshes called body or rim take them (the other parts of a model keep their paint).

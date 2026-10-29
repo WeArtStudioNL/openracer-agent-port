@@ -221,8 +221,9 @@ var Hud = (function() {
         var cx = s / 2, cy = s / 2, R = s / 2 - 3;
         var engine = car.engine;
         var limit = engine.limiterRPM;
-        var top = Math.ceil(limit / 1000);
-        var scale = top * 1000;
+        // the dial ends at the rev limit (the red zone runs to the end of the ring); the numbers are at the thousands below it
+        var top = Math.floor(limit / 1000);
+        var scale = limit;
         var rpm = Math.min(car.engineRPM, scale);
         var fraction = rpm / scale;
 
@@ -254,7 +255,7 @@ var Hud = (function() {
         context.font = "bold " + Math.round(R * 0.12) + "px Arial";
         context.textAlign = "center";
         context.textBaseline = "middle";
-        for(var i = 0; i <= top * 2; i++) {
+        for(var i = 0; i * 500 <= limit + 1; i++) {
             var f = i * 500 / scale;
             var a = angle(f);
             var major = i % 2 === 0;
