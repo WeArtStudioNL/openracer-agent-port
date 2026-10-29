@@ -35,6 +35,10 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### Tyres no longer balloon at speed
+
+- A tyre that turned fast grew by centimetres (the soft cables to the rim had to carry the whole pull of the turn, `m w^2 r` on a node, and a tyre of a low pressure has soft cables): the patch got long, the pressure centre ran ahead of the hub and the rolling resistance was a third of the load at 190 km/h. A car stopped at about 190 km/h whatever its power. The belt of a real tyre carries that pull; the cable of a node that is off the road is now taut for it, so the tyre keeps its shape. The Hyundai i30 (135 hp) now reaches 220 km/h instead of 175.
+
 ### The skidpad no longer runs at a few frames a second
 
 - The pad of the skidpad is 256 long spokes of 65 m: the box of every spoke holds the whole pad, so every node of a tyre on it tested every spoke (millions of tests a second, 5 to 8 frames a second anywhere on the pad, not only on the white line). The road of a track is now cut into pieces of at most 8 m for the ground (more when a mesh would then get over 40000 triangles), and the pad runs at 120 frames a second. This holds for every track with big triangles of road.

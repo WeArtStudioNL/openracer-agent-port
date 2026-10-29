@@ -331,7 +331,11 @@ OpenRacer.TyreShell = function (wheel) {
                 var vr = (bvx - avx) * dx + (bvy - avy) * dy + (bvz - avz) * dz;
                 if(kind === 2) {
                     // the cable to the rim: it pulls (taut by the pressure at rest: its rest length is shorter by pA / k) and it goes slack when the node is in; the stop takes over deep in
-                    var lSlack = L0 - pA / k, spring = 0;
+                    // (the belt of a real tyre is all but inextensible and carries the pull of the turn: m w^2 r on a node that is off the road; the cables here are soft, and a tyre of a low pressure grew by centimetres at 190 km/h,
+                    // which made the patch long and the rolling resistance a third of the load. The cable is taut for that pull, as it is for the pressure; a node on the road has lost it)
+                    var cfPull = 0;
+                    if(!inContact[a] && omS * omS > 1) { var crx = Ox[a] - hcx, cry = Oy[a] - hcy, crz = Oz[a] - hcz, cax = crx * L.x + cry * L.y + crz * L.z; crx -= cax * L.x; cry -= cax * L.y; crz -= cax * L.z; cfPull = mn * omS * omS * Math.sqrt(crx * crx + cry * cry + crz * crz); }
+                    var lSlack = L0 - (pA + cfPull) / k, spring = 0;
                     bK[b] = 0;
                     if(len > lSlack) { spring = k * (len - lSlack); addK(a, k, dx, dy, dz, bvx, bvy, bvz); bK[b] = k; }
                     else if(len < bLmin[b]) { spring = -kStop * (bLmin[b] - len); addK(a, kStop, dx, dy, dz, bvx, bvy, bvz); bK[b] = kStop; }
