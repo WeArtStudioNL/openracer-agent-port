@@ -18,7 +18,7 @@
  *              Cameras: Follow and Cockpit are those of the game; Free is a camera that is moved by hand: WASD or the arrows move it,
  *              Z and X (also Shift and Control) up and down, the mouse (click the scene) or the right stick looks around like a first person view, [ and ]
  *              change the field of view. F aims the camera at the car (and the mouse look rests), L fixes the camera to the car, so that it
- *              goes with it, Tab chooses another car. All movements, the look and the zoom are smoothed and damped; a slider (0.1 to 3)
+ *              goes with it, Tab chooses another car. All movements, the look and the zoom are smoothed and damped; a slider (0.01 to 3)
  *              sets how fast they are.
  *
  *              Keys in the replay: Enter pause/play, left and right arrow 5 seconds back and forward (in Free they move the camera),
@@ -632,14 +632,16 @@ OpenRacer.Replay = (function() {
         carButton = button(cameraRow, "Car", "The car that the camera follows (Tab)", function() { nextTarget(); });
         carButton.style.display = cars.length > 1 ? "" : "none";
         freeRow = el(bar, "div", "row freecam");
-        var speedLabel = el(freeRow, "span", "label", "Speed " + free.speed.toFixed(1) + "×");
+        var speedText = function(v) { return "Speed " + v.toFixed(v < 0.1 ? 2 : 1) + "×"; };
+        var speedLabel = el(freeRow, "span", "label", speedText(free.speed));
         var speedSlider = el(freeRow, "input");
-        speedSlider.type = "range"; speedSlider.min = "0.1"; speedSlider.max = "3"; speedSlider.step = "0.1"; speedSlider.value = String(free.speed);
+        // (a slider along a scale that doubles at every step: from 0.01 to 3 times, the slow ones can be hit too)
+        speedSlider.type = "range"; speedSlider.min = "0"; speedSlider.max = "1"; speedSlider.step = "0.002"; speedSlider.value = String(Math.log(free.speed / 0.01) / Math.log(300));
         speedSlider.title = "How fast the free camera moves, looks and zooms";
         speedSlider.setAttribute("aria-label", "Speed of the free camera");
         speedSlider.addEventListener("input", function() {
-            free.speed = parseFloat(speedSlider.value);
-            speedLabel.textContent = "Speed " + free.speed.toFixed(1) + "×";
+            free.speed = 0.01 * Math.pow(300, parseFloat(speedSlider.value));
+            speedLabel.textContent = speedText(free.speed);
             try { localStorage.setItem("openracer.replay.freeSpeed", String(free.speed)); } catch(e) { /* no storage */ }
         });
         speedSlider.addEventListener("keydown", function(e) { if(/^Arrow/.test(e.code)) e.stopPropagation(); });
@@ -735,7 +737,7 @@ OpenRacer.Replay = (function() {
         sky: false,                                    // K: fixed to the car with the sky up (it goes with the car's place, not with its turn)
         target: 0                                      // the car (Tab chooses)
     };
-    try { var storedSpeed = parseFloat(localStorage.getItem("openracer.replay.freeSpeed")); if(storedSpeed >= 0.1 && storedSpeed <= 3) free.speed = storedSpeed; } catch(e) { /* no storage */ }
+    try { var storedSpeed = parseFloat(localStorage.getItem("openracer.replay.freeSpeed")); if(storedSpeed >= 0.01 && storedSpeed <= 3) free.speed = storedSpeed; } catch(e) { /* no storage */ }
     var keys = {};
     var BASE_SPEED = 12, VERTICAL_SPEED = 8, FOV_RATE = 40, LOOK_SENSITIVITY = 0.0022, STICK_LOOK = 2.4, ROLL_RATE = 1.0;
     var tmpQ = new THREE.Quaternion(), tmpQ2 = new THREE.Quaternion(), tmpV = V3(0, 0, 0), tmpV2 = V3(0, 0, 0), tmpV3 = V3(0, 0, 0), tmpE = new THREE.Euler(0, 0, 0, "YXZ"), tmpM = new THREE.Matrix4();

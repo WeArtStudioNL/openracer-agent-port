@@ -4,7 +4,7 @@
  * Description: The fourth camera of the game (the camera switcher: follow, cockpit, free). The camera is not tied to the car: it is moved with the
  *              keys and the mouse, as the free camera of the replay: W A S D move it (W goes the way it looks, also up and down with the look), Z and X take it up and down, the
  *              mouse looks around (click the scene: the pointer is locked, Escape lets it go), Q and E roll the picture, 3 and 4 make it slower and faster
- *              (a tenth to three times), [ and ] narrow and widen the field of view. These keys do not drive the car while this camera is on; the arrows
+ *              (a hundredth to three times), [ and ] narrow and widen the field of view. These keys do not drive the car while this camera is on; the arrows
  *              still do (and Space is the handbrake). Two toggles, on the panel at the top right and on keys (actions of the settings menu): P, "freeCamAim", the camera looks at the
  *              car (it keeps its place and turns to the car; the tilt and the turn wait while it does), and O, "freeCamFollow", the camera goes with the
  *              car (it keeps its place against the car, and its own direction), and I, "freeCamFixed", the camera is fixed to the car as a part of it (its
@@ -21,7 +21,7 @@ OpenRacer.FreeCam = (function () {
     var follow = false;                                  // O: the place goes with the car
     var aim = true;                                      // P: it looks at the car
     var fixed = false;                                   // I: fixed to the car: pos, yaw, pitch and roll are in the frame of the car
-    var speed = 1;                                       // 3 and 4: a factor on the speed, 0.1 to 3
+    var speed = 1;                                       // 3 and 4: a factor on the speed, 0.01 to 3
     var carRef = null;
     var tmpW = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpQ2 = new THREE.Quaternion(), tmpE = new THREE.Euler(0, 0, 0, "YXZ"), tmpM = new THREE.Matrix4();
     var pos = new THREE.Vector3(), lastCar = new THREE.Vector3(), vel = new THREE.Vector3(), want = new THREE.Vector3();
@@ -90,7 +90,7 @@ OpenRacer.FreeCam = (function () {
         followButton.classList.toggle("on", follow);
         fixedButton.textContent = fixed ? "Fixed to the car (I)" : "Fix to the car (I)";
         fixedButton.classList.toggle("on", fixed);
-        speedLabel.textContent = "speed " + speed.toFixed(1) + "×";
+        speedLabel.textContent = "speed " + speed.toFixed(speed < 0.1 ? 2 : 1) + "×";
     }
 
     function toggleFollow() { follow = !follow; if (follow && fixed) setFixed(false); refreshUi(); save(); }
@@ -129,7 +129,7 @@ OpenRacer.FreeCam = (function () {
             // a camera that went with the car keeps its place against the car: it comes back there, wherever the car is now
             if (s.follow && isFinite(s.carX)) pos.add(carPosition).sub(new THREE.Vector3(s.carX, s.carY, s.carZ));
             yaw = isFinite(s.yaw) ? s.yaw : 0; pitch = isFinite(s.pitch) ? s.pitch : 0; fov = isFinite(s.fov) ? s.fov : 60; roll = rollT = isFinite(s.roll) ? s.roll : 0;
-            speed = isFinite(s.speed) ? Math.max(0.1, Math.min(3, s.speed)) : 1;
+            speed = isFinite(s.speed) ? Math.max(0.01, Math.min(3, s.speed)) : 1;
             follow = !!s.follow; aim = s.aim !== false; fixed = !!s.fixed;
             return true;
         } catch (e) { return false; }
@@ -218,7 +218,7 @@ OpenRacer.FreeCam = (function () {
         panel.style.display = Settings.option("hud") ? "block" : "none";      // the panel goes with the HUD
         var mx = key("right") - key("left"), mz = key("forward") - key("back"), my = key("up") - key("down");
         var ds = key("faster") - key("slower");
-        if (ds) { speed = Math.max(0.1, Math.min(3, speed * Math.exp(ds * SPEED_RATE * delta))); refreshUi(); }
+        if (ds) { speed = Math.max(0.01, Math.min(3, speed * Math.exp(ds * SPEED_RATE * delta))); refreshUi(); }
         // Q and E roll the picture (it eases to where it is going)
         rollT = Math.max(-Math.PI, Math.min(Math.PI, rollT + (key("rollLeft") - key("rollRight")) * ROLL_RATE * delta));
         roll += (rollT - roll) * (1 - Math.exp(-8 * delta));
