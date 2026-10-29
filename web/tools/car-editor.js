@@ -3381,6 +3381,7 @@ $("libSame").addEventListener("click", () => {
         panel.classList.toggle("pinned", pinned);
         if (pinned) panel.style.left = ($("side").getBoundingClientRect().right + 12) + "px"; else panel.style.left = "";
     };
+    $("enginePanelClose").addEventListener("click", () => { card.open = false; });
     card.addEventListener("toggle", place);
     window.addEventListener("resize", place);
     if (window.ResizeObserver) new ResizeObserver(place).observe($("side"));

@@ -308,3 +308,6 @@ button.dirty::after { content: " ●"; color: #ffd04d; }
 /* the chart and Run dyno of the Engine card stay next to the sidebar while the card is open (so the settings can be changed while the chart is in view) */
 #enginePanel.pinned { position: fixed; top: 12px; width: 440px; max-width: calc(100vw - 460px); z-index: 6; box-sizing: border-box; background: #171b22ee; border: 1px solid #2f3845; border-radius: 12px; box-shadow: 0 6px 24px #0008; backdrop-filter: blur(8px); padding: 10px 12px; }
 #enginePanel.pinned canvas#chart { border: 0; }
+.panelClose { display: none; position: absolute; top: 6px; right: 8px; width: 26px; height: 26px; padding: 0; line-height: 1; font-size: 20px; border-radius: 8px; z-index: 2; background: #232a34; border: 1px solid #323b48; color: var(--text, #e6e9ee); cursor: pointer; }
+#enginePanel.pinned .panelClose { display: block; }
+#enginePanel.pinned .panelClose:hover { background: #2f3845; }

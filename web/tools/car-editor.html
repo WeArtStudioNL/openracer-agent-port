@@ -293,6 +293,7 @@
                     <div><input type="number" id="simpleRpm" step="100" min="2000" aria-label="Max rpm"><div class="hint">max rpm</div></div>
                 </div>
                 <div id="enginePanel">
+                    <button type="button" class="panelClose" id="enginePanelClose" title="Close the chart and fold the Engine card" aria-label="Close the chart and fold the Engine card">×</button>
                     <canvas id="chart" width="800" height="360"></canvas>
                     <div class="legend hint"><span><i style="background:#ff9f43"></i>torque (Nm)</span><span><i style="background:#54a0ff"></i>power (hp)</span></div>
                     <div class="dynorow"><button type="button" class="small" id="runDyno" title="A full-throttle pull in the gear closest to 1:1, measured at the wheels of a car that stands on rollers: the drivetrain (efficiency) and the rolling of the tyres count, air drag and grip do not. Only the chart changes.">▶ Run dyno</button><span class="hint" id="dynoInfo"></span></div>
