@@ -1413,34 +1413,6 @@ function power(rpm, nm) {
 function renderCurve() {
     clearDyno();
     state.curve.sort((a, b) => a[0] - b[0]);
-    const body = $("curve").querySelector("tbody");
-    body.innerHTML = "";
-    state.curve.forEach((point, index) => {
-        const row = document.createElement("tr");
-        const cell = (value, field) => {
-            const td = document.createElement("td");
-            const input = document.createElement("input");
-            input.type = "number";
-            input.value = value;
-            input.step = field === 0 ? 100 : 5;
-            input.onchange = () => { state.curve[index][field] = parseFloat(input.value) || 0; renderCurve(); };
-            td.appendChild(input);
-            return td;
-        };
-        row.appendChild(cell(point[0], 0));
-        row.appendChild(cell(point[1], 1));
-        const hp = document.createElement("td");
-        hp.textContent = Math.round(power(point[0], point[1]));
-        row.appendChild(hp);
-        const del = document.createElement("td");
-        const button = document.createElement("button");
-        button.className = "small";
-        button.textContent = "✕";
-        button.onclick = () => { state.curve.splice(index, 1); renderCurve(); };
-        del.appendChild(button);
-        row.appendChild(del);
-        body.appendChild(row);
-    });
     drawChart();
 }
 
@@ -1505,10 +1477,6 @@ function drawChart() {
     const torque = Math.max(0, ...state.curve.map((p) => p[1]));
     $("peakInfo").textContent = Math.round(peak.hp) + " hp at " + peak.rpm + " rpm, " + Math.round(torque) + " Nm" + (dynoBest && dyno && dyno.upTo >= dyno.points.length - 1 ? " · " + Math.round(dynoBest.hp) + " hp at the wheels" : "");
     chartGeo = { left, bottom, plotW, plotH, maxRpm, maxY, w, h };
-    if (curveAdvanced && !state.build) {
-        g.fillStyle = "#ff9f43"; g.strokeStyle = "#12161c"; g.lineWidth = 3;
-        state.curve.forEach((p) => { g.beginPath(); g.arc(X(p[0]), Y(p[1]), p === dragPoint ? 11 : 8, 0, Math.PI * 2); g.fill(); g.stroke(); });
-    }
     if (document.activeElement !== $("simpleHp")) $("simpleHp").value = Math.round(peak.hp) || "";
     if (document.activeElement !== $("simpleRpm")) $("simpleRpm").value = num("limiter") || "";
 }
@@ -1518,7 +1486,7 @@ function drawChart() {
 const EB = OpenRacer.EngineBuild;
 function fillSelect(select, entries, labelOf) { select.innerHTML = Object.keys(entries).map((k) => "<option value='" + k + "'>" + labelOf(entries[k]) + "</option>").join(""); }
 function initBuildUi() {
-    $("bBlock").innerHTML = "<option value=''>Own curve (no build)</option>" + Object.keys(OpenRacer.engineSimPresets).map((n) => "<option>" + n + "</option>").join("");
+    $("bBlock").innerHTML = "<option value=''>Choose an engine block…</option>" + Object.keys(OpenRacer.engineSimPresets).map((n) => "<option>" + n + "</option>").join("");
     fillSelect($("bFuel"), EB.FUELS, (f) => f.label);
     fillSelect($("bIntercooler"), EB.INTERCOOLERS, (i) => i.label);
     fillSelect($("bSize"), EB.TURBO_SIZES, (t) => t.label);
@@ -1552,19 +1520,20 @@ function applyBuildUi() {
     const has = !!state.build;
     updateBuildLimits();
     $("bBuild").hidden = !has;
-    $("bNumbers").hidden = has; $("bTypical").hidden = has;
     const type = $("bInduction").value;
     $("bVariantBox").style.display = type === "none" ? "none" : "";
     $("bBoostRow").style.display = type === "none" ? "none" : "";
     $("bSizeBox").style.display = type === "turbo" ? "" : "none";
-    for (const id of ["simpleHp", "simpleRpm"]) { $(id).disabled = has; $(id).title = has ? "The engine is built in Advanced: the power follows from it" : ""; }
-    $("chartHelp").hidden = !curveAdvanced || has;
-    $("chart").style.cursor = curveAdvanced && !has ? "crosshair" : "default";
+    $("simpleHp").disabled = true;
+    $("simpleRpm").disabled = !has; $("simpleRpm").title = has ? "The rev limit of the engine" : "Choose an engine block first";
+    const placeholder = $("bBlock").options[0];
+    placeholder.disabled = has;
+    if (!has) $("bBlock").value = "";
     const res = state.buildResult;
     $("bInfo").textContent = has && res
         ? res.displacement.toFixed(1) + " L, " + res.cylinders + " cylinders · " + Math.round(res.peakPower) + " hp at " + res.peakPowerRpm + " rpm · piston speed at the limit " + res.pistonSpeedAtLimit.toFixed(0) + " m/s" +
           (res.pistonSpeedAtLimit > 25 ? " (too fast for the engine to last)" : "") + (res.knock > 0.03 ? " · knock: " + Math.round(res.knock * 100) + "% of the torque is lost, use better fuel or less boost" : "")
-        : "The torque curve is the car's own. Choose a block to build the engine: the curve then follows from it.";
+        : "This car still has an old torque curve that cannot be changed. Choose an engine block to build its engine: the curve then follows from it.";
 }
 function recomputeBuild() {
     if (!state.build) { state.buildResult = null; applyBuildUi(); return; }
@@ -1595,7 +1564,7 @@ function syncSoundFromBuild(build, wholePreset) {
 }
 $("bBlock").addEventListener("change", () => {
     const name = $("bBlock").value;
-    if (!name) { state.build = null; state.buildResult = null; applyBuildUi(); renderCurve(); return; }
+    if (!name) return;
     const build = EB.fromPreset(name, OpenRacer.engineSimPresets[name]);
     state.build = build; showBuild(build);
     const lim = EB.compute(build, 9000, num("idle") || 850).suggestedLimiter;
@@ -1733,99 +1702,26 @@ $("runDyno").addEventListener("click", () => {
 });
 
 // ---- the engine card: Simple (power and max rpm) or Advanced (draw the curve in the chart)
-let curveAdvanced = false, chartGeo = null, dragPoint = null;
+let curveAdvanced = false, chartGeo = null;
 try { curveAdvanced = localStorage.getItem("editor-engine-advanced") === "1"; } catch (e) { /* no storage */ }
 function setEngineMode(advanced) {
     curveAdvanced = advanced;
     try { localStorage.setItem("editor-engine-advanced", advanced ? "1" : "0"); } catch (e) { /* no storage */ }
-    $("engineAdvanced").hidden = !advanced; $("engineSimple").hidden = advanced; $("chartHelp").hidden = !advanced;
+    $("engineAdvanced").hidden = !advanced; $("engineSimple").hidden = advanced;
     $("engineMode").querySelectorAll("button").forEach((b) => b.classList.toggle("on", (b.dataset.mode === "advanced") === advanced));
     applyBuildUi();
     drawChart();
 }
 $("engineMode").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setEngineMode(b.dataset.mode === "advanced"); });
-const engineEdited = () => { renderCurve(); updateSpeedInfo(); $("chart").dispatchEvent(new Event("input", { bubbles: true })); $("chart").dispatchEvent(new Event("change", { bubbles: true })); };
-// the power: the curve keeps its shape and is scaled
-$("simpleHp").addEventListener("change", () => {
-    const want = num("simpleHp"), now = state.curve.reduce((m, p) => Math.max(m, power(p[0], p[1])), 0);
-    if (!(want > 0) || !(now > 0)) return;
-    const f = want / now;
-    state.curve.forEach((p) => { p[1] = Math.round(p[1] * f * 10) / 10; });
-    engineEdited();
-});
-// the max rpm: the curve is stretched along the rpm axis with the rev limit
+// Simple: the max rpm is the rev limit of the build (the torque curve follows from the engine and is not drawn or stretched by hand)
 $("simpleRpm").addEventListener("change", () => {
-    const want = num("simpleRpm"), now = num("limiter");
-    if (!(want > 1000) || !(now > 0)) return;
-    const f = want / now;
-    state.curve.forEach((p, i) => { if (i > 0) p[0] = Math.round(p[0] * f / 10) * 10; });
+    if (!state.build) return;
+    const want = num("simpleRpm");
+    if (!(want > 1000)) return;
     $("limiter").value = Math.round(want);
     $("limiter").dispatchEvent(new Event("input", { bubbles: true }));
-    engineEdited();
+    $("limiter").dispatchEvent(new Event("change", { bubbles: true }));
 });
-// drawing in the chart: drag a dot, click to add one, double-click a dot to remove it
-function chartPoint(e) {
-    const r = $("chart").getBoundingClientRect(), k = $("chart").width / r.width;
-    return { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k };
-}
-function chartNear(pt) {
-    if (!chartGeo) return null;
-    const { left, bottom, plotW, plotH, maxRpm, maxY } = chartGeo;
-    let best = null, bestD = 22;
-    for (const p of state.curve) {
-        const d = Math.hypot(left + p[0] / maxRpm * plotW - pt.x, bottom - p[1] / maxY * plotH - pt.y);
-        if (d < bestD) { best = p; bestD = d; }
-    }
-    return best;
-}
-function chartValue(pt) {
-    const { left, bottom, plotW, plotH, maxRpm, maxY } = chartGeo;
-    return [Math.max(0, Math.round((pt.x - left) / plotW * maxRpm / 50) * 50), Math.max(0, Math.round((bottom - pt.y) / plotH * maxY * 2) / 2)];
-}
-$("chart").addEventListener("pointerdown", (e) => {
-    if (!curveAdvanced || !chartGeo || state.build) return;
-    const pt = chartPoint(e);
-    let hit = chartNear(pt);
-    if (!hit) { hit = chartValue(pt); state.curve.push(hit); state.curve.sort((a, b) => a[0] - b[0]); }
-    dragPoint = hit;
-    $("chart").setPointerCapture(e.pointerId);
-    drawChart();
-});
-$("chart").addEventListener("pointermove", (e) => {
-    if (!curveAdvanced || !chartGeo || state.build) return;
-    const pt = chartPoint(e);
-    if (!dragPoint) { $("chart").style.cursor = chartNear(pt) ? "grab" : "crosshair"; return; }
-    const v = chartValue(pt);
-    if (dragPoint !== state.curve[0]) dragPoint[0] = v[0];
-    dragPoint[1] = v[1];
-    clearDyno();
-    state.curve.sort((a, b) => a[0] - b[0]);
-    drawChart();
-});
-$("chart").addEventListener("pointerup", () => { if (!dragPoint) return; dragPoint = null; engineEdited(); });
-$("chart").addEventListener("dblclick", (e) => {
-    if (!curveAdvanced || state.build) return;
-    const hit = chartNear(chartPoint(e));
-    if (!hit || state.curve.length <= 3 || hit === state.curve[0]) return;
-    state.curve.splice(state.curve.indexOf(hit), 1);
-    engineEdited();
-});
-
-// a typical curve for a petrol engine from its peak power: P = Pmax (x + x^2 - x^3) with x = rpm / rpm at the peak
-function generateCurve() {
-    const hp = num("genPower"), peakRpm = num("genRpm");
-    if (!(hp > 0 && peakRpm > 1000)) { status("Give the peak power and the rpm where it is.", "error"); return; }
-    const watts = hp * 745.7;
-    const curve = [[0, 0]];
-    const limit = Math.max(num("limiter") || 0, peakRpm * 1.1);
-    for (let rpm = 500; rpm <= limit + 600; rpm += 500) {
-        const x = rpm / peakRpm;
-        const p = watts * (x + x * x - x * x * x);
-        curve.push([rpm, Math.max(0, Math.round(p / (rpm * Math.PI / 30) * 10) / 10)]);
-    }
-    state.curve = curve;
-    renderCurve();
-}
 
 function updateSpeedInfo() {
     const gears = parseGears();
@@ -2419,12 +2315,6 @@ document.querySelectorAll("input[name=wheelMode]").forEach((radio) => radio.addE
 }));
 $("sizeFromModel").addEventListener("click", sizeFromModel);
 $("chassisFromWheels").addEventListener("click", chassisFromWheels);
-$("addPoint").addEventListener("click", () => {
-    const last = state.curve[state.curve.length - 1] || [0, 0];
-    state.curve.push([last[0] + 500, last[1]]);
-    renderCurve();
-});
-$("generate").addEventListener("click", generateCurve);
 for (const id of ["limiter", "idle"]) $(id).addEventListener("input", () => { if (state.build) recomputeBuild(); clearDyno(); drawChart(); updateSpeedInfo(); $("soundRpm").max = Math.round((num("limiter") || 7000) * 1.1); });
 for (const id of ["gears", "finalDrive", "tyre"]) $(id).addEventListener("input", updateSpeedInfo);
 $("name").addEventListener("input", () => { if (!state.idEdited) $("id").value = slug($("name").value); });
@@ -3329,7 +3219,7 @@ function problems() {
     if (!state.root && !state.existingModel) list.push("Import a model");
     else if (wheelMode() === "model" && state.root && !wheelCenters()) list.push("Pick the parts of all four wheels");
     for (const [id, label] of [["mass", "mass"], ["wheelbase", "wheelbase"], ["tyre", "tyre diameter"]]) if (!(num(id) > 0)) list.push("Fill in the " + label);
-    if (state.curve.length < 3) list.push("The engine needs a torque curve");
+    if (!state.build) list.push("Choose an engine block");
     for (const w of modelWarnings()) list.push(w);
     return list;
 }

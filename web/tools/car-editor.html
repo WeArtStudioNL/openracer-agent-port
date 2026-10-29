@@ -283,19 +283,19 @@
         <details class="card">
             <summary>Engine<span class="meta" id="peakInfo"></span></summary>
             <div class="body">
+                <div><label>Engine block</label><select id="bBlock" title="The block gives the cylinders, bore, stroke, cam, inlet and exhaust; the torque curve is worked out from the build and measured with Run dyno"></select></div>
+                <div class="hint" id="bInfo"></div>
                 <div class="seg" id="engineMode" role="group" aria-label="Engine settings">
                     <button type="button" data-mode="simple" class="on">Simple</button><button type="button" data-mode="advanced">Advanced</button>
                 </div>
                 <div class="row" id="engineSimple">
-                    <div><input type="number" id="simpleHp" step="5" min="1" aria-label="Power (hp)"><div class="hint">power (hp)</div></div>
+                    <div><input type="number" id="simpleHp" step="5" min="1" aria-label="Power (hp)" disabled title="The power follows from the engine"><div class="hint">power (hp)</div></div>
                     <div><input type="number" id="simpleRpm" step="100" min="2000" aria-label="Max rpm"><div class="hint">max rpm</div></div>
                 </div>
                 <canvas id="chart" width="800" height="360"></canvas>
-                <div class="legend hint"><span><i style="background:#ff9f43"></i>torque (Nm)</span><span><i style="background:#54a0ff"></i>power (hp)</span><span id="chartHelp" hidden>drag the dots · click to add · double-click a dot to remove</span></div>
+                <div class="legend hint"><span><i style="background:#ff9f43"></i>torque (Nm)</span><span><i style="background:#54a0ff"></i>power (hp)</span></div>
                 <div class="dynorow"><button type="button" class="small" id="runDyno" title="A full-throttle pull in the gear closest to 1:1, measured at the wheels of a car that stands on rollers: the drivetrain (efficiency) and the rolling of the tyres count, air drag and grip do not. Only the chart changes.">▶ Run dyno</button><span class="hint" id="dynoInfo"></span></div>
                 <div id="engineAdvanced" hidden>
-                    <div><label>Engine block</label><select id="bBlock" title="The block gives the cylinders, bore, stroke, cam, inlet and exhaust; the torque curve is worked out from the build and measured with Run dyno"></select></div>
-                    <div class="hint" id="bInfo"></div>
                     <div id="bBuild" hidden>
                         <div class="group">Block and cam</div>
                         <div class="row">
@@ -343,17 +343,6 @@
                         <div><input type="number" id="limiter" step="100" value="6800"><div class="hint">rev limit (rpm)</div></div>
                         <div><input type="number" id="inertia" step="0.05" value="0.3"><div class="hint">inertia (kg m²)</div></div>
                     </div>
-                    <details class="inner" id="bNumbers"><summary>Numbers</summary>
-                        <table id="curve"><thead><tr><th>rpm</th><th>Nm</th><th>hp</th><th></th></tr></thead><tbody></tbody></table>
-                        <div class="buttons"><button class="small ghost" id="addPoint">Add a point</button></div>
-                    </details>
-                    <details class="inner" id="bTypical"><summary>A typical curve from the peak power</summary>
-                        <div class="row">
-                            <div><input type="number" id="genPower" value="250" step="5"><div class="hint">peak power (hp)</div></div>
-                            <div><input type="number" id="genRpm" value="5500" step="100"><div class="hint">at (rpm)</div></div>
-                            <div><button id="generate" style="width:100%">Generate</button></div>
-                        </div>
-                    </details>
                 </div>
             </div>
         </details>
