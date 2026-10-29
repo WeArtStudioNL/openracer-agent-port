@@ -315,14 +315,29 @@ OpenRacer.Car = function( config, domElement ) {
         document.body.appendChild(note);
         setTimeout(function() { note.remove(); }, 1600);
     };
-    // the reset goes to the nearest point of the racing line of the AI (race.line), the nose in the direction of the line. Only a track without a line uses the place that was
-    // saved, else the nearest point of the line from the gate that was passed last to the next gate, else the start
-    var lastCrossedGate = null;
+    // The reset goes back to the racing line of the AI (race.line), the nose in the direction of the line. The car remembers where it was last on the line, within 3 m of it
+    // (the point of the line that it was nearest to); when it is further away than that (off the road, a spin, a cut over the grass) the reset puts it back in the middle of the
+    // line at that place, and not at the point of the line that happens to be nearest to where it is now (that can be another part of the track). Within 3 m of the line the reset
+    // goes to the nearest point. Only a track without a line uses the place that was saved, else the line from the last gate to the next, else the start.
+    var LINE_MARGIN = 3;
+    var lastLineIndex = null;
+    this.trackLinePosition = function() {
+        var line = typeof race !== "undefined" && race && race.line;
+        if(!(line && line.count && line.count() > 1)) return;
+        var v = this.vehicle;
+        var i = line.nearest(v.px, v.pz, lastLineIndex === null ? undefined : lastLineIndex);
+        var pt = line.point(i);
+        if(Math.hypot(v.px - pt.x, v.pz - pt.z) <= LINE_MARGIN) lastLineIndex = i;
+    };
     this.nearestOnRacingLine = function() {
         var v = this.vehicle, line = typeof race !== "undefined" && race && race.line;
         if(line && line.count && line.count() > 1) {
-            var pt = line.point(line.nearest(v.px, v.pz));
-            return { x: pt.x, z: pt.z, psi: line.headingAt(pt.x, pt.z), py: null, gy: pt.y };
+            var near = line.nearest(v.px, v.pz), pt = line.point(near);
+            var index = Math.hypot(v.px - pt.x, v.pz - pt.z) <= LINE_MARGIN || lastLineIndex === null ? near : lastLineIndex;
+            pt = line.point(index);
+            lastLineIndex = index;
+            var ahead = line.point(index + 1);
+            return { x: pt.x, z: pt.z, psi: Math.atan2(ahead.z - pt.z, ahead.x - pt.x), py: null, gy: pt.y };
         }
         return null;
     };
@@ -644,6 +659,7 @@ OpenRacer.Car = function( config, domElement ) {
             var fl = typeof race !== "undefined" && race && race.line;
             if(fl && fl.count && fl.count() > 1) { var lowest = 1e9; for(var fi = 0; fi < fl.count(); fi++) lowest = Math.min(lowest, fl.point(fi).y || 0); fallMinY = Math.min(-40, lowest - 25); }
         }
+        if(!this.reset) this.trackLinePosition();
         if(v.py < fallMinY && !this.reset) { fallFor += delta; if(fallFor > 0.5) { this.reset = true; } } else if(v.py >= fallMinY) fallFor = 0;
         if(this.reset) {
             // one reset per key press: back to the saved place (the start when none was saved), in the state that the car is in
