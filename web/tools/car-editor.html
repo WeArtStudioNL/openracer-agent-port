@@ -138,16 +138,16 @@
                     </div>
                     </details>
                 </div>
-                <div class="group">Rims and tyres from the wheel library</div>
+                <div class="group">Rims from the wheel library (the tyre is made from the Tyres settings)</div>
                 <div class="tipline"><span>Replaces the wheel parts of an axle</span><button type="button" class="info" data-tip="A rim or a tyre of web/wheels/wheels.json takes the place of the wheel parts of its axle (their middle is the hub). A tyre of the library brings its own shell (the rings and nodes of the tread, the inner shell, the carcass): the shell sliders of the Tuning card then do nothing for that axle (the line below gives the shell of the tyre)." aria-label="More information">i</button></div>
                 <div class="row">
                     <div><label>Front rim</label><select id="libRimFront"><option value="">From the model</option></select></div>
-                    <div><label>Front tyre</label><select id="libTyreFront"><option value="">From the model</option></select></div>
+                    <div style="display:none"><label>Front tyre</label><select id="libTyreFront"><option value="">From the model</option></select></div>
                 </div>
                 <div class="buttons"><button type="button" class="small ghost" id="libSame" title="Give the rear axle the rim and the tyre of the front axle">Rear = front</button></div>
                 <div class="row">
                     <div><label>Rear rim</label><select id="libRimRear"><option value="">From the model</option></select></div>
-                    <div><label>Rear tyre</label><select id="libTyreRear"><option value="">From the model</option></select></div>
+                    <div style="display:none"><label>Rear tyre</label><select id="libTyreRear"><option value="">From the model</option></select></div>
                 </div>
                 <div class="hint" id="libInfo"></div>
                 <div class="carOnly">

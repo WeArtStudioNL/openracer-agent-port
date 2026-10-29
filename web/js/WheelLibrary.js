@@ -68,7 +68,9 @@ OpenRacer.WheelLibrary = (function () {
         var L = config && config.wheels && config.wheels.library;
         if(!L) return { rim: "", tyre: "" };
         var a = L[axle] || (L.rim !== undefined || L.tyre !== undefined ? L : null) || {};
-        return { rim: a.rim || "", tyre: a.tyre || "", custom: a.tyre === "custom" ? a.custom || {} : undefined };
+        // (a rim of the library brings a custom tyre, made from the numbers: the tyres of the library are no longer chosen, only kept for the cars that have one)
+        var tyreId = a.tyre || (a.rim ? "custom" : "");
+        return { rim: a.rim || "", tyre: tyreId, custom: tyreId === "custom" ? a.custom || {} : undefined };
     }
 
     // ---- the custom tyre: made from numbers, no file. The tyre is the space between the outer shell (the diameter, the width) and the inner shell (inner_ratio of the diameter): its

@@ -52,14 +52,16 @@ OpenRacer.CarTuning = (function () {
             ["tyre_damage", "Tyre damage", "", 0, 0, 0],
             // the rims and the tyres of the wheel library (WheelLibrary.js; selects: the car is built again). A tyre of the library brings its own shell: the shell sliders go
             ["rim_front", "Rim at the front (the wheel library)", "", 0, 0, 0],
-            ["tyre_front", "Tyre at the front (the wheel library; it brings its own shell)", "", 0, 0, 0],
+            ["tyre_front", "Tyre at the front (a tyre of the wheel library: only for the cars that have one)", "", 0, 0, 0],
             ["rim_rear", "Rim at the rear", "", 0, 0, 0],
             ["tyre_rear", "Tyre at the rear", "", 0, 0, 0],
             // a custom tyre (WheelLibrary.js: made from the numbers; the width, the nodes and the inner shell are the shell sliders below, the rim takes the size of the inner shell)
-            ["tyre_diameter_front", "Custom tyre at the front: diameter", "mm", 300, 1100, 5],
-            ["rubber_front", "Custom tyre at the front: rubber", "", 0, 100, 1],
-            ["tyre_diameter_rear", "Custom tyre at the rear: diameter", "mm", 300, 1100, 5],
-            ["rubber_rear", "Custom tyre at the rear: rubber", "", 0, 100, 1],
+            ["tyre_diameter_front", "Tyre at the front: diameter", "mm", 300, 1100, 5],
+            ["tyre_height_front", "Tyre at the front: height of the sidewall (the rim takes what is left)", "mm", 20, 300, 5],
+            ["rubber_front", "Tyre at the front: rubber", "", 0, 100, 1],
+            ["tyre_diameter_rear", "Tyre at the rear: diameter", "mm", 300, 1100, 5],
+            ["tyre_height_rear", "Tyre at the rear: height of the sidewall", "mm", 20, 300, 5],
+            ["rubber_rear", "Tyre at the rear: rubber", "", 0, 100, 1],
             ["tyre_width", "Tyre: width of the tread, front (0: from the wheel)", "cm", 0, 60, 1],
             ["tyre_width_rear", "Tyre: width of the rear tread (0: as the front)", "cm", 0, 60, 1],
             ["tyre_rings", "Tyre: rings of nodes across the tread", "", 1, 5, 1],
@@ -220,8 +222,12 @@ OpenRacer.CarTuning = (function () {
             case "turbo_spool": case "turbo_threshold": case "turbo_boost": return turbo;
             case "turbo_intercooler": case "turbo_efficiency": return v.turbo_boost > 0;
             case "tc_lockup": return g === "torque-converter";
-            case "tyre_diameter_front": case "rubber_front": return v.tyre_front === "custom";
-            case "tyre_diameter_rear": case "rubber_rear": return v.tyre_rear === "custom";
+            // (the tyre of a rim of the library is a custom one: made from the numbers; the tyres of the library stay for the cars that have one)
+            case "tyre_inner_ratio": return !(customTyre(v, "front") && customTyre(v, "rear"));
+            case "tyre_front": return !!v.tyre_front && v.tyre_front !== "custom";
+            case "tyre_rear": return !!v.tyre_rear && v.tyre_rear !== "custom";
+            case "tyre_diameter_front": case "tyre_height_front": case "rubber_front": return customTyre(v, "front");
+            case "tyre_diameter_rear": case "tyre_height_rear": case "rubber_rear": return customTyre(v, "rear");
             case "shift_style": return g === "torque-converter" || g === "dct" || g === "amt";
             case "sb_max_nodes": case "sb_wheel_strength": return v.sb_enabled !== "off";
             case "body_flake": case "body_pattern": case "body_uv": return v.body_finish === "flake";
@@ -286,6 +292,10 @@ OpenRacer.CarTuning = (function () {
 
     // the values of a car configuration, in the units of the menu
     // what car.json chose from the wheel library for an axle ({ rim, tyre } ids, "" for none; WheelLibrary.js)
+    // a custom tyre on an axle: the one of a rim of the library, or one that was chosen
+    function customTyre(v, axle) { var t = v["tyre_" + axle]; return t === "custom" || (!t && !!v["rim_" + axle]); }
+    // the height of the sidewall (mm) of a custom tyre: what is between the outer shell and the inner shell; the inner shell is a share of the diameter
+    function heightOf(diameterM, ratio) { return Math.max(20, Math.min(300, Math.round(diameterM / 2 * (1 - ratio) * 1000 / 5) * 5)); }
     function libChoice(c, axle) { return OpenRacer.WheelLibrary ? OpenRacer.WheelLibrary.choiceOf(c, axle) : { rim: "", tyre: "" }; }
 
     // where a kind of tyre of the list is on the rubber slider (a custom tyre starts from the kind of the car)
@@ -339,6 +349,8 @@ OpenRacer.CarTuning = (function () {
             exhaust_type: (c.sound && c.sound.engine_sim && c.sound.engine_sim.exhaust_type) || "custom",
             tyre_diameter_front: Math.round((libChoice(c, "front").custom && libChoice(c, "front").custom.diameter > 0 ? libChoice(c, "front").custom.diameter : (ch.tire_diameter || 0.65)) * 1000 / 5) * 5,
             tyre_diameter_rear: Math.round((libChoice(c, "rear").custom && libChoice(c, "rear").custom.diameter > 0 ? libChoice(c, "rear").custom.diameter : (ch.tire_diameter || 0.65)) * 1000 / 5) * 5,
+            tyre_height_front: heightOf(Math.round((libChoice(c, "front").custom && libChoice(c, "front").custom.diameter > 0 ? libChoice(c, "front").custom.diameter : (ch.tire_diameter || 0.65)) * 1000 / 5) * 5 / 1000, libChoice(c, "front").custom && libChoice(c, "front").custom.inner_ratio > 0 ? libChoice(c, "front").custom.inner_ratio : (tyres.shell && tyres.shell.inner_ratio ? tyres.shell.inner_ratio : 0.62)),
+            tyre_height_rear: heightOf(Math.round((libChoice(c, "rear").custom && libChoice(c, "rear").custom.diameter > 0 ? libChoice(c, "rear").custom.diameter : (ch.tire_diameter || 0.65)) * 1000 / 5) * 5 / 1000, libChoice(c, "rear").custom && libChoice(c, "rear").custom.inner_ratio > 0 ? libChoice(c, "rear").custom.inner_ratio : (tyres.shell && tyres.shell.inner_ratio ? tyres.shell.inner_ratio : 0.62)),
             rubber_front: libChoice(c, "front").custom && libChoice(c, "front").custom.rubber >= 0 ? libChoice(c, "front").custom.rubber : rubberOfCompound(tyres.compound),
             rubber_rear: libChoice(c, "rear").custom && libChoice(c, "rear").custom.rubber >= 0 ? libChoice(c, "rear").custom.rubber : rubberOfCompound(tyres.compound),
             tyre_width: tyres.shell && tyres.shell.width ? Math.round(tyres.shell.width * 100) : 0,
@@ -556,6 +568,23 @@ OpenRacer.CarTuning = (function () {
         } catch(e) { /* a configuration without dimensions: no cameras */ }
     }
 
+    // the rims and the tyres of the wheel library for the values of the table: a rim brings a custom tyre, made from the numbers (width, diameter, sidewall height, rubber)
+    function libraryOf(v) {
+        var library = {};
+        ["front", "rear"].forEach(function (axle) {
+            var r = v["rim_" + axle] || "", t = v["tyre_" + axle] || (v["rim_" + axle] ? "custom" : ""), entry = {};
+            if(r) entry.rim = r;
+            if(t) entry.tyre = t;
+            if(t === "custom") {
+                // (the width of the rear is the width of the front when it is not set; 0 for both: a tyre of 245 mm)
+                var widthCm = axle === "rear" && v.tyre_width_rear > 0 ? v.tyre_width_rear : (v.tyre_width > 0 ? v.tyre_width : 24.5);
+                var diameter = v["tyre_diameter_" + axle] > 0 ? v["tyre_diameter_" + axle] : 650, height = v["tyre_height_" + axle];
+                entry.custom = { width: widthCm / 100, diameter: diameter / 1000, inner_ratio: height > 0 ? Math.max(0.3, Math.min(0.9, 1 - 2 * height / diameter)) : (v.tyre_inner_ratio > 0 ? v.tyre_inner_ratio / 100 : 0.62), rings: v.tyre_rings > 0 ? v.tyre_rings : 4, segments: v.tyre_segments > 0 ? v.tyre_segments : 36, carcass: v.tyre_carcass > 0 ? v.tyre_carcass : 0, rubber: v["rubber_" + axle] >= 0 ? v["rubber_" + axle] : 50 };
+            }
+            if(r || t) library[axle] = entry;
+        });
+        return library;
+    }
     function toConfig(c, v) {
         c = clone(c);
         c.chassis.mass = v.mass - (OpenRacer.Motorcycle ? OpenRacer.Motorcycle.riderMass(c) : 0);
@@ -653,18 +682,7 @@ OpenRacer.CarTuning = (function () {
         }
         // the rims and the tyres of the wheel library (none chosen: the wheels of the model)
         if(v.rim_front !== undefined || v.tyre_front !== undefined || v.rim_rear !== undefined || v.tyre_rear !== undefined) {
-            var library = {};
-            ["front", "rear"].forEach(function (axle) {
-                var r = v["rim_" + axle] || "", t = v["tyre_" + axle] || "", entry = {};
-                if(r) entry.rim = r;
-                if(t) entry.tyre = t;
-                if(t === "custom") {
-                    // (the width of the rear is the width of the front when it is not set; 0 for both: a tyre of 245 mm)
-                    var widthCm = axle === "rear" && v.tyre_width_rear > 0 ? v.tyre_width_rear : (v.tyre_width > 0 ? v.tyre_width : 24.5);
-                    entry.custom = { width: widthCm / 100, diameter: v["tyre_diameter_" + axle] / 1000, inner_ratio: v.tyre_inner_ratio / 100, rings: v.tyre_rings, segments: v.tyre_segments, carcass: v.tyre_carcass, rubber: v["rubber_" + axle] };
-                }
-                if(r || t) library[axle] = entry;
-            });
+            var library = libraryOf(v);
             c.wheels = Object.assign({}, c.wheels || { mode: "default" });
             if(Object.keys(library).length) c.wheels.library = library; else delete c.wheels.library;
         }
@@ -735,7 +753,7 @@ OpenRacer.CarTuning = (function () {
     // the settings of the tyre that lie on top of the kind of tyre (the compound sets the grip, the heat, the wear and the rolling resistance): they are folded away in a part of their own
     var TYRE_FINE = ["tyre_stiff_x", "tyre_stiff_y", "grip", "grip_balance", "cornering", "rolling_resistance", "tyre_heating", "tyre_life"];
     return {
-        TYRE_FINE: TYRE_FINE, CARDS: CARDS, visible: visible, visibleFeature: visibleFeature, GROUPS: GROUPS, FEATURES: FEATURES, FEATURE_DEFAULTS: FEATURE_DEFAULTS, V100: V100, gearsOf: gearsOf, normaliseGears: normaliseGears, fromConfig: fromConfig, toRetune: toRetune, toConfig: toConfig, keys: keys };
+        TYRE_FINE: TYRE_FINE, CARDS: CARDS, visible: visible, visibleFeature: visibleFeature, GROUPS: GROUPS, FEATURES: FEATURES, FEATURE_DEFAULTS: FEATURE_DEFAULTS, V100: V100, gearsOf: gearsOf, normaliseGears: normaliseGears, fromConfig: fromConfig, toRetune: toRetune, toConfig: toConfig, libraryOf: libraryOf, keys: keys };
 })();
 
 // The setups of a car: whole configurations of the car (everything car.json has but the model: the chassis, the tyres, the engine, the gearbox, the suspension and the parts,

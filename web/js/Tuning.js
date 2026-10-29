@@ -861,7 +861,7 @@ var Tuning = (function() {
                 if(document.activeElement !== c.number) c.number.value = format(c.def, v);
                 c.line.classList.toggle("changed", changed(c.key));
                 // the rubber of a custom tyre says what kind of tyre it is, from its grip: eco, road, sport, semi-slick, race slick, drag slick
-                if(c.key === "rubber_front" || c.key === "rubber_rear") { var rl = c.line.querySelector(".label"); if(rl) rl.textContent = "Custom tyre at the " + c.key.slice(7) + ": rubber · " + OpenRacer.rubberLabel(v); }
+                if(c.key === "rubber_front" || c.key === "rubber_rear") { var rl = c.line.querySelector(".label"); if(rl) rl.textContent = "Tyre at the " + c.key.slice(7) + ": rubber · " + OpenRacer.rubberLabel(v); }
             } else if(c.gear) {
                 if(document.activeElement !== c.input) c.input.value = Number(values[c.key]).toFixed(2);
                 c.input.style.color = changed(c.key) ? "var(--accent2)" : "";

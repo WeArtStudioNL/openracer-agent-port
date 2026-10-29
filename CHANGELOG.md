@@ -35,6 +35,10 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### Custom tyres are the tyres; the height of the sidewall
+
+- A rim of the wheel library now brings a custom tyre, made from the numbers (width, diameter, height of the sidewall, rubber), for the front and the rear axle apart; the tyres of the library are no longer chosen (a car that has one keeps it). The height of the sidewall is new: the rim takes what is left of the diameter. It works in the tuning menu and in the car editor, where the rim and the tyre of the front and the rear axle follow the sliders at once (the tyre in the view, the shell of the bench car when the sliders rest) and are saved with the car.
+
 ### Tyres no longer balloon at speed
 
 - A tyre that turned fast grew by centimetres (the soft cables to the rim had to carry the whole pull of the turn, `m w^2 r` on a node, and a tyre of a low pressure has soft cables): the patch got long, the pressure centre ran ahead of the hub and the rolling resistance was a third of the load at 190 km/h. A car stopped at about 190 km/h whatever its power. The belt of a real tyre carries that pull; the cable of a node that is off the road is now taut for it, so the tyre keeps its shape. The Hyundai i30 (135 hp) now reaches 220 km/h instead of 175.

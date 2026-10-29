@@ -2313,14 +2313,11 @@ OpenRacer.WheelLibrary.load().then(() => {
     if (state.pendingLibrary) setLibraryChoice(state.pendingLibrary);
     updateLibraryPreview();
 });
-// what is chosen: { front: { rim, tyre }, rear: { rim, tyre } } without the empty ones, or null
+// what is chosen: { front: { rim, tyre, custom }, rear: { ... } } without the empty ones, or null. A rim brings a custom tyre, made from the numbers of the Tyres settings (width, diameter,
+// height of the sidewall, rubber: CarTuning.libraryOf); a tyre of the library only stays where a car has one
 function libraryChoice() {
-    const out = {};
-    for (const axle of ["front", "rear"]) {
-        const entry = {};
-        for (const kind of ["rim", "tyre"]) { const v = $(LIB_SELECTS[axle][kind]).value; if (v) entry[kind] = v; }
-        if (Object.keys(entry).length) out[axle] = entry;
-    }
+    const values = Object.assign({}, tuning, { rim_front: $("libRimFront").value, tyre_front: $("libTyreFront").value, rim_rear: $("libRimRear").value, tyre_rear: $("libTyreRear").value });
+    const out = OpenRacer.CarTuning.libraryOf(values);
     return Object.keys(out).length ? out : null;
 }
 function setLibraryChoice(library) {
@@ -2333,6 +2330,7 @@ function setLibraryChoice(library) {
             select.value = [...select.options].some((o) => o.value === c[kind]) ? c[kind] : "";
         }
     }
+    for (const axle of ["front", "rear"]) { const select = $(LIB_SELECTS[axle].tyre); select.parentNode.style.display = select.value ? "" : "none"; }          // (the tyre of the library is only shown for a car that has one)
     syncTuningVisibility();
     updateLibraryPreview();                 // (a tune loaded into the form: its rims and tyres show at once)
 }
@@ -2781,9 +2779,17 @@ function syncTuningVisibility() {
 ["drive", "diff", "centerDiff", "gearbox"].forEach((id) => $(id).addEventListener("change", () => syncTuningVisibility()));
 
 // a change goes to the car of the test bench at once
+let librarySig = "", libraryBenchTimer = 0;
 function tuningChanged() {
     syncTuningVisibility();
     applyPaint();
+    // (the tyre of a rim of the library follows the width, the diameter, the sidewall and the rubber at once)
+    const sig = JSON.stringify(libraryChoice());
+    if (sig !== librarySig) {
+        librarySig = sig; updateLibraryPreview();
+        // (the shell of the bench is made from the tyre when the car is built: the car of the bench is built again when the sliders rest)
+        clearTimeout(libraryBenchTimer); libraryBenchTimer = setTimeout(() => { if (bench.vehicle) restartBench(); }, 500);
+    }
     if (!bench.vehicle || !bench.config) return;
     try {
         const config = OpenRacer.CarTuning.toConfig(bench.config, tuningValues(bench.config));
@@ -2916,7 +2922,7 @@ const benchPose = { x: 0, y: 0, z: 0 }, benchQuat = { x: 0, y: 0, z: 0, w: 1 }, 
 // ---- the nodes of the tyres (TyreShell.js) over the car of the bench while a tyre setting is being changed: the outer shell (green where a node holds the road, red where it
 // slides, teal in the air), the rim (white), the beams between them coloured by their strain and the belt (teal), as the debug view of the game (DebugView.js, the 0 key).
 // They appear when a tyre setting (the Tyres group of the Tuning card, the pressures too) gets the focus or is moved, and go when another input gets the focus.
-const TYRE_DEBUG_KEYS = new Set(["tyre_width", "tyre_width_rear", "tyre_rings", "tyre_segments", "tyre_inner_ratio", "tyre_carcass", "tyre_stiff_x", "tyre_stiff_y", "pressure_front", "pressure_rear"]);
+const TYRE_DEBUG_KEYS = new Set(["tyre_diameter_front", "tyre_diameter_rear", "tyre_height_front", "tyre_height_rear", "tyre_width", "tyre_width_rear", "tyre_rings", "tyre_segments", "tyre_inner_ratio", "tyre_carcass", "tyre_stiff_x", "tyre_stiff_y", "pressure_front", "pressure_rear"]);
 const tyreDebug = { group: null, points: null, lines: null, on: false };
 function tyreDebugLayer(kind) {
     const geometry = new THREE.BufferGeometry();
@@ -3506,6 +3512,9 @@ $("changes").addEventListener("click", () => {
 });
 $("layerSearch").addEventListener("input", () => renderLayers());
 $("libSame").addEventListener("click", () => {
+    for (const k of ["tyre_diameter", "tyre_height", "rubber"]) if (Number.isFinite(tuning[k + "_front"])) tuning[k + "_rear"] = tuning[k + "_front"];          // (the tyre of the front too)
+    if (Number.isFinite(tuning.tyre_width)) tuning.tyre_width_rear = 0;
+    renderTuningCard();
     $("libRimRear").value = $("libRimFront").value; $("libTyreRear").value = $("libTyreFront").value;
     $("libRimRear").dispatchEvent(new Event("change", { bubbles: true })); $("libTyreRear").dispatchEvent(new Event("change", { bubbles: true }));
 });
