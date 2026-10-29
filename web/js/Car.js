@@ -252,7 +252,7 @@ OpenRacer.Car = function( config, domElement ) {
     // wheel library). The material of such a mesh is made its own the first time (the model shares materials), and its colour as made is kept to go back to.
     this.colors = null;
     this.setColors = function(colors) {
-        tobj.colors = colors && (colors.body || colors.rim || colors.bodyFinish || colors.rimFinish) ? { body: colors.body || null, rim: colors.rim || null, bodyFinish: colors.bodyFinish || "", rimFinish: colors.rimFinish || "", bodyFlake: colors.bodyFlake || 100, rimFlake: colors.rimFlake || 100, bodyPattern: colors.bodyPattern || "noise", rimPattern: colors.rimPattern || "noise" } : null;
+        tobj.colors = colors && (colors.body || colors.rim || colors.bodyFinish || colors.rimFinish) ? { body: colors.body || null, rim: colors.rim || null, bodyFinish: colors.bodyFinish || "", rimFinish: colors.rimFinish || "", bodyFlake: colors.bodyFlake || 100, rimFlake: colors.rimFlake || 100, bodyPattern: colors.bodyPattern || "noise", rimPattern: colors.rimPattern || "noise", bodyUv: colors.bodyUv || "model", rimUv: colors.rimUv || "model" } : null;
         OpenRacer.applyCarColors([tobj.body].concat(tobj.wheels.map(function(w) { return w.object; })).filter(Boolean), colors);
     };
 

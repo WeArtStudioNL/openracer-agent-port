@@ -37,6 +37,7 @@ OpenRacer.applyCarColors = (function() {
     }
     // the patterns of a metal flake paint: a normal map (a tile that repeats) made once per pattern. noise: the tiny mirrors, random tilts per pixel; voronoi: crystals (cells of
     // random size, each a flat mirror with a tilt of its own); hexagons: the cells of a hexagonal lattice, each with its own tilt; marble: veins (a height made of sine waves bent by noise)
+    OpenRacer.carFlakeUvs = { model: "From the model", generated: "Generated (box projection)" };
     OpenRacer.carFlakePatterns = { noise: "Noise (fine sparkle)", voronoi: "Voronoi (crystals)", hexagons: "Hexagons (honeycomb)", marble: "Marble (veins)" };
     var PATTERN_SCALE = { noise: 0.45, voronoi: 0.6, hexagons: 0.6, marble: 0.9 };
     var patternMaps = {};
@@ -106,7 +107,37 @@ OpenRacer.applyCarColors = (function() {
         return patternMaps[name] || (patternMaps[name] = makePattern(name));
     }
     // a material of the model with a colour and a finish (a paint: roughness, metal, a clear coat, a pearl or flakes); the colour of the model when none is given
-    function style(material, colour, finishName, flakeSize, pattern) {
+    // the tiles per metre of the flakes on a generated map (the pattern is laid on the car by its place in space, not by the UV map of the model: 100% is this size)
+    var TILES_PER_METRE = { noise: 16, voronoi: 1.5, hexagons: 1.5, marble: 1 };
+    // the normal map of the flakes laid on the mesh from three directions (box projection, blended where they meet): no UV map needed, so a model without one (or with a bad one)
+    // gets the same flakes; the shader of the material is changed for it
+    function triplanar(material, texture, tiles, strength) {
+        material.onBeforeCompile = function(shader) {
+            shader.uniforms.triMap = { value: texture }; shader.uniforms.triRepeat = { value: tiles }; shader.uniforms.triStrength = { value: strength };
+            shader.vertexShader = shader.vertexShader
+                .replace("void main() {", "varying vec3 vTriPos;\nvarying vec3 vTriNormal;\nvarying mat3 vObjToView;\nvoid main() {")
+                .replace("#include <begin_vertex>", "#include <begin_vertex>\n\tvTriPos = position;\n\tvTriNormal = normal;\n\tvObjToView = normalMatrix;");
+            shader.fragmentShader = shader.fragmentShader
+                .replace("void main() {", "uniform sampler2D triMap;\nuniform float triRepeat;\nuniform float triStrength;\nvarying vec3 vTriPos;\nvarying vec3 vTriNormal;\nvarying mat3 vObjToView;\nvoid main() {")
+                .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" +
+                    "\t{\n" +
+                    "\t\tvec3 n0 = normalize(vTriNormal);\n" +
+                    "\t\tvec3 bl = pow(abs(n0), vec3(4.0)); bl /= (bl.x + bl.y + bl.z);\n" +
+                    "\t\tvec3 p = vTriPos * triRepeat;\n" +
+                    "\t\tvec3 tx = texture2D(triMap, p.zy).xyz * 2.0 - 1.0;\n" +
+                    "\t\tvec3 ty = texture2D(triMap, p.xz).xyz * 2.0 - 1.0;\n" +
+                    "\t\tvec3 tz = texture2D(triMap, p.xy).xyz * 2.0 - 1.0;\n" +
+                    "\t\ttx = vec3(tx.xy + n0.zy, abs(tx.z) * n0.x);\n" +
+                    "\t\tty = vec3(ty.xy + n0.xz, abs(ty.z) * n0.y);\n" +
+                    "\t\ttz = vec3(tz.xy + n0.xy, abs(tz.z) * n0.z);\n" +
+                    "\t\tvec3 nObj = normalize(tx.zyx * bl.x + ty.xzy * bl.y + tz.xyz * bl.z);\n" +
+                    "\t\tvec3 nView = normalize(vObjToView * nObj) * faceDirection;\n" +
+                    "\t\tnormal = normalize(mix(normal, nView, clamp(triStrength, 0.0, 1.0)));\n" +
+                    "\t}");
+        };
+        material.customProgramCacheKey = function() { return "carpaint-triplanar"; };
+    }
+    function style(material, colour, finishName, flakeSize, pattern, uvMode) {
         if(!material.isMeshStandardMaterial) { var plain = material.clone(); if(colour && plain.color) plain.color.set(colour); return plain; }
         var styled = new THREE.MeshPhysicalMaterial();
         THREE.MeshStandardMaterial.prototype.copy.call(styled, material);
@@ -117,9 +148,14 @@ OpenRacer.applyCarColors = (function() {
             if(f.iridescence) { styled.iridescence = f.iridescence; styled.iridescenceIOR = f.iridescenceIOR; styled.iridescenceThicknessRange = f.iridescenceThicknessRange; }
             if(f.flakes) {
                 // the size of the flakes (100%: the normal size): a bigger flake is a smaller repeat of the map; every material has its own copy of the texture (its repeat)
-                var map = flakes(pattern).clone(), size = Math.max(25, Math.min(400, flakeSize || 100)), scale = (pattern === "marble" ? 4 : (pattern === "voronoi" || pattern === "hexagons" ? 6 : 64)) * 100 / size;
-                map.repeat.set(scale, scale); map.needsUpdate = true;
-                styled.normalMap = map; styled.normalScale.set(PATTERN_SCALE[pattern] || 0.45, PATTERN_SCALE[pattern] || 0.45);
+                var size = Math.max(2, Math.min(400, flakeSize || 100));
+                if(uvMode === "generated") {
+                    triplanar(styled, flakes(pattern), (TILES_PER_METRE[pattern] || 16) * 100 / size, Math.min(1, (PATTERN_SCALE[pattern] || 0.45) * 1.3));
+                } else {
+                    var map = flakes(pattern).clone(), scale = (pattern === "marble" ? 4 : (pattern === "voronoi" || pattern === "hexagons" ? 6 : 64)) * 100 / size;
+                    map.repeat.set(scale, scale); map.needsUpdate = true;
+                    styled.normalMap = map; styled.normalScale.set(PATTERN_SCALE[pattern] || 0.45, PATTERN_SCALE[pattern] || 0.45);
+                }
             }
             styled.roughnessMap = null; styled.metalnessMap = null;                 // (the finish decides, not the maps of the model)
             styled.envMapIntensity = Math.max(styled.envMapIntensity || 1, 1.2);
@@ -147,7 +183,7 @@ OpenRacer.applyCarColors = (function() {
                 ud.styled = ud.asMadeList.map(function(m, i) {
                     var kind = ud.kinds[i];
                     if(!kind || !colors || !(colors[kind] || colors[kind + "Finish"])) return m;
-                    return style(m, colors[kind], colors[kind + "Finish"], colors[kind + "Flake"], colors[kind + "Pattern"]);
+                    return style(m, colors[kind], colors[kind + "Finish"], colors[kind + "Flake"], colors[kind + "Pattern"], colors[kind + "Uv"]);
                 });
                 mesh.material = ud.asMadeIsArray ? ud.styled : ud.styled[0];
             });

@@ -17,9 +17,11 @@ OpenRacer.CarTuning = (function () {
             ["body_finish", "Finish of the body", "", 0, 0, 0],
             ["rim_finish", "Finish of the rims", "", 0, 0, 0],
             ["body_pattern", "Flake pattern of the body", "", 0, 0, 0],
-            ["body_flake", "Flake size of the body (metal flake)", "%", 25, 400, 5],
+            ["body_flake", "Flake size of the body (metal flake)", "%", 2, 400, 1],
+            ["body_uv", "Flake map of the body (the UV map)", "", 0, 0, 0],
             ["rim_pattern", "Flake pattern of the rims", "", 0, 0, 0],
-            ["rim_flake", "Flake size of the rims (metal flake)", "%", 25, 400, 5],
+            ["rim_flake", "Flake size of the rims (metal flake)", "%", 2, 400, 1],
+            ["rim_uv", "Flake map of the rims (the UV map)", "", 0, 0, 0],
             ["mass", "Mass", "kg", 300, 6000, 10],
             ["front_weight", "Weight on the front axle", "%", 25, 75, 0.5],
             ["cg_height", "Height of the centre of gravity", "m", 0.15, 1.5, 0.01],
@@ -214,8 +216,8 @@ OpenRacer.CarTuning = (function () {
             case "turbo_intercooler": case "turbo_efficiency": return v.turbo_boost > 0;
             case "tc_lockup": return g === "torque-converter";
             case "sb_max_nodes": case "sb_wheel_strength": return v.sb_enabled !== "off";
-            case "body_flake": case "body_pattern": return v.body_finish === "flake";
-            case "rim_flake": case "rim_pattern": return v.rim_finish === "flake";
+            case "body_flake": case "body_pattern": case "body_uv": return v.body_finish === "flake";
+            case "rim_flake": case "rim_pattern": case "rim_uv": return v.rim_finish === "flake";
             case "es_exhaust_length": case "es_primary_length": return !v.engine_build;      // (the built engine has them)
             // no suspension: the springs, the dampers, the travel, the progression, the rebound and the ride height do nothing (the tyre is the spring; the roll stiffness and the roll centres still work)
             case "frame_torsion": case "inner_lift": return v.unsprung === "none";
@@ -295,6 +297,7 @@ OpenRacer.CarTuning = (function () {
             body_color: (c.colors && c.colors.body) || "", rim_color: (c.colors && c.colors.rim) || "", body_finish: (c.colors && c.colors.bodyFinish) || "", rim_finish: (c.colors && c.colors.rimFinish) || "",
             body_flake: (c.colors && c.colors.bodyFlake) || 100, rim_flake: (c.colors && c.colors.rimFlake) || 100,
             body_pattern: (c.colors && c.colors.bodyPattern) || "noise", rim_pattern: (c.colors && c.colors.rimPattern) || "noise",
+            body_uv: (c.colors && c.colors.bodyUv) || "model", rim_uv: (c.colors && c.colors.rimUv) || "model",
             // the rest of the car editor (the tuning menu changes these too; Tuning.js builds the car again for what the model is built from)
             vehicle_type: c.type === "motorcycle" ? "motorcycle" : "car",
             susp_front: (c.suspension && c.suspension.front && c.suspension.front.type) || "model",
@@ -607,6 +610,8 @@ OpenRacer.CarTuning = (function () {
             if(v.rim_finish === "flake" && v.rim_flake && v.rim_flake !== 100) colors.rimFlake = v.rim_flake;
             if(v.body_finish === "flake" && v.body_pattern && v.body_pattern !== "noise") colors.bodyPattern = v.body_pattern;
             if(v.rim_finish === "flake" && v.rim_pattern && v.rim_pattern !== "noise") colors.rimPattern = v.rim_pattern;
+            if(v.body_finish === "flake" && v.body_uv === "generated") colors.bodyUv = "generated";
+            if(v.rim_finish === "flake" && v.rim_uv === "generated") colors.rimUv = "generated";
             if(Object.keys(colors).length) c.colors = colors; else delete c.colors;
         }
         // the rims and the tyres of the wheel library (none chosen: the wheels of the model)

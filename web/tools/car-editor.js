@@ -2452,13 +2452,13 @@ function tuningFromCar(car) {
 }
 
 // ---- the paint: the colour and the finish of the body (the material carpaint) and of the rims (rimpaint), as in the tuning menu of the game (CarColors.js)
-const PAINT_WORDS = ["body_color", "rim_color", "body_finish", "rim_finish", "body_pattern", "rim_pattern"], PAINT_KEYS = ["body_flake", "rim_flake"];
+const PAINT_WORDS = ["body_color", "rim_color", "body_finish", "rim_finish", "body_pattern", "rim_pattern", "body_uv", "rim_uv"], PAINT_KEYS = ["body_flake", "rim_flake"];
 function applyPaint() {
     if (!state.root || !OpenRacer.applyCarColors) return;
     const t = tuning;
     OpenRacer.applyCarColors([state.root], {
         body: t.body_color || null, rim: t.rim_color || null, bodyFinish: t.body_finish || "", rimFinish: t.rim_finish || "",
-        bodyFlake: t.body_flake || 100, rimFlake: t.rim_flake || 100, bodyPattern: t.body_pattern || "noise", rimPattern: t.rim_pattern || "noise"
+        bodyFlake: t.body_flake || 100, rimFlake: t.rim_flake || 100, bodyPattern: t.body_pattern || "noise", rimPattern: t.rim_pattern || "noise", bodyUv: t.body_uv || "model", rimUv: t.rim_uv || "model"
     });
 }
 function paintSection() {
@@ -2491,9 +2491,15 @@ function paintSection() {
         Object.entries(OpenRacer.carFlakePatterns).forEach(([id, name]) => { const o = document.createElement("option"); o.value = id; o.textContent = name; pattern.appendChild(o); });
         pattern.value = tuning[part + "_pattern"] || "noise";
         const patternRow = row("Flake pattern of the " + label, pattern);
-        const size = tuneSlider(["" + part + "_flake", "Flake size of the " + label + " (metal flake)", "%", 25, 400, 5], changed);
+        const uv = document.createElement("select");
+        Object.entries(OpenRacer.carFlakeUvs).forEach(([id, name]) => { const o = document.createElement("option"); o.value = id; o.textContent = name; uv.appendChild(o); });
+        uv.value = tuning[part + "_uv"] || "model";
+        uv.title = "Generated: the flakes are laid on the car by where they are in space, so a model without a good UV map gets them too";
+        const uvRow = row("Flake map of the " + label + " (the UV map)", uv);
+        uv.addEventListener("change", () => { tuning[part + "_uv"] = uv.value; changed(); });
+        const size = tuneSlider(["" + part + "_flake", "Flake size of the " + label + " (metal flake)", "%", 2, 400, 1], changed);
         details.appendChild(size);
-        const showFlake = () => { const on = finish.value === "flake"; patternRow.style.display = on ? "" : "none"; size.style.display = on ? "" : "none"; };
+        const showFlake = () => { const on = finish.value === "flake"; patternRow.style.display = on ? "" : "none"; uvRow.style.display = on ? "" : "none"; size.style.display = on ? "" : "none"; };
         finish.addEventListener("change", () => { tuning[part + "_finish"] = finish.value; showFlake(); changed(); });
         pattern.addEventListener("change", () => { tuning[part + "_pattern"] = pattern.value; changed(); });
         showFlake();
