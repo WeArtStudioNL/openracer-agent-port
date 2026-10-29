@@ -31,6 +31,11 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### Floating windows: a drag handle
+
+- The free camera panel, the replay bar and info box, the drag strip box, the track editor drag window and the exhaust window of the car editor are now moved by a handle (their title or header), like the tuning menu, so the rest scrolls with a finger on a phone without moving the window.
+- On a phone the steering assist (counter steer) now works with the touch controls too, like with the keyboard.
+
 ### Cameras: closer
 
 - **The mouse look of the free camera has a smoothing, set with 5 and 6** (smoother, sharper; shown next to the speed as "look 20" or "look direct"; kept per car in the game and in the browser for the replay). The turn that the mouse asks for waits and goes into the look at a rate per second: 1 is slow and heavy, 60 and up is direct. The game had no smoothing before (the look followed the mouse at once); it starts at 20, the rate that the replay had. Measured with a mouse turn of 300 counts: at 20 the camera is at 0.57 rad after a quarter of a second, at 1 at 0.28 rad after half a second, direct at once.

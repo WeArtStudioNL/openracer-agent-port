@@ -323,7 +323,7 @@ OpenRacer.DragStrip = (function () {
         hud = document.createElement("div");
         hud.id = "dragHud";
         document.body.appendChild(hud);
-        if (OpenRacer.Movable && !movableDone) { OpenRacer.Movable.make(hud, { key: "dragstrip" }); movableDone = true; }
+        if (OpenRacer.Movable && !movableDone) { OpenRacer.Movable.make(hud, { key: "dragstrip", handle: hud }); movableDone = true; }
     }
 
     function lamp(kind, on) { return "<div class=\"lamp " + kind + (on ? " on" : "") + "\"></div>"; }

@@ -81,7 +81,7 @@ OpenRacer.FreeCam = (function () {
         fixedButton = toggleButton(toggleFixed);
         [aimButton, followButton, fixedButton].forEach(function (b) { var row = document.createElement("div"); row.className = "row"; row.appendChild(b); panel.appendChild(row); });
         document.body.appendChild(panel);
-        OpenRacer.Movable.make(panel, { key: "freecam" });
+        OpenRacer.Movable.make(panel, { key: "freecam", handle: title });
         refreshUi();
     }
 

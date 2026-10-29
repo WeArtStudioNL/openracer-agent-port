@@ -878,7 +878,7 @@ function dragChanged() {
 $("dragLength").addEventListener("change", dragChanged);
 $("dragRemove").addEventListener("click", () => { state.drag = null; updateMarkers(); });
 $("dragClose").addEventListener("click", () => setMode("view"));
-OpenRacer.Movable.make($("dragWindow"), { key: "track-editor-drag" });
+OpenRacer.Movable.make($("dragWindow"), { key: "track-editor-drag", handle: $("dragWindow").firstElementChild });
 // a drag strip that was loaded: the window shows its distance
 function showDrag() {
     if (!state.drag) return;

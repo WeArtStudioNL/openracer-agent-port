@@ -50,10 +50,19 @@ function gamepadUpdate(delta) {
         var target = car.maxTurn * steer;
         var v = car.vehicle;
         var speed = v ? Math.abs(v.u) : 0;
+        // On a touch screen the assist works as the keyboard's does (Car.js): it is not a part of the target (the angle that is steered towards at the slow rate of the speed: a
+        // slide was met too late), but an offset on top of the angle that the finger made, which follows the slide at once (smoothed at 12 per second) and comes off again first
+        // every frame. It is the setting "Steering assist" (the one of the keyboard: there is no keyboard on a phone).
+        var touchDrive = typeof TouchControls !== "undefined" && TouchControls.enabled();
+        var touchAssistWas = 0;
+        if(touchDrive) {
+            touchAssistWas = car.touchAssistOffset || 0;
+            if(car.touchLastWritten !== undefined && car.turnAngle !== car.touchLastWritten) touchAssistWas = 0; else car.turnAngle -= touchAssistWas;      // (another hand wrote the angle: it is not ours to take off)
+        }
         // The steering assist: when the rear steps out, the front tyres want to point where the car goes (the way a car with a
         // lot of caster steers itself into a slide), so the steering gets a counter-steer added before the slide is a spin.
         // (only driving forwards: in reverse the slip angle of the car is near 180 degrees and the counter-steer would flip from side to side)
-        if(Settings.option("padAssist") && v && v.u > 3) {
+        if(!touchDrive && Settings.option("padAssist") && v && v.u > 3) {
             var beta = Math.atan2(v.v, v.u);                 // the slip angle of the car: positive when it moves to the right of where it points
             var dead = 0.035;                                  // two degrees of slip are normal cornering
             var counter = Math.sign(beta) * Math.max(0, Math.abs(beta) - dead) * 1.1;
@@ -68,6 +77,18 @@ function gamepadUpdate(delta) {
         var step = rate * delta;
         if(Math.abs(target - car.turnAngle) <= step) car.turnAngle = target;
         else car.turnAngle += Math.sign(target - car.turnAngle) * step;
+        if(touchDrive) {
+            var touchAssist = 0;
+            if(Settings.option("keyAssist") && v && !v.controller && v.u > 3) {            // (a motorcycle has its rider: the front wheel is not turned into a slide by itself)
+                var slipAngle = Math.atan2(v.v, v.u);                                     // positive when the car moves to the right of where it points
+                var counterSteer = Math.sign(slipAngle) * Math.max(0, Math.abs(slipAngle) - 0.035) * 1.1;
+                touchAssist = Math.max(-0.6 * car.maxTurn, Math.min(0.6 * car.maxTurn, counterSteer));
+            }
+            var offset = touchAssistWas + (touchAssist - touchAssistWas) * Math.min(1, delta * 12);
+            car.turnAngle = Math.max(-car.maxTurn, Math.min(car.maxTurn, car.turnAngle + offset));
+            car.touchAssistOffset = offset;
+            car.touchLastWritten = car.turnAngle;
+        }
         // the pedals only while the pad drives (or just stopped driving), so that a pad that rests does not hold them at zero
         if(active || gamepadOwnsPedals) {
             car.throttle = throttle;

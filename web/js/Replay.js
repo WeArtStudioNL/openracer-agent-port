@@ -663,9 +663,10 @@ OpenRacer.Replay = (function() {
         }
         var info = el(document.body, "div");
         info.id = "replayInfo";
+        left.style.cursor = "grab";
         ui = { bar: bar, info: info, slider: slider, timeLabel: timeLabel, sync: sync };
-        OpenRacer.Movable.make(bar, { key: "replaybar" });
-        OpenRacer.Movable.make(info, { key: "replayinfo" });
+        OpenRacer.Movable.make(bar, { key: "replaybar", handle: left });
+        OpenRacer.Movable.make(info, { key: "replayinfo", handle: info });
         updateCameraUi();
         slider.min = String(api.start_time());
         sync();
