@@ -195,8 +195,8 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
         if(complete || libraryOnly) {
             measured = { centres: {}, diameter: 0 };
             if(libraryOnly) { nodes = { FR: [], FL: [], RL: [], RR: [] }; if(config.wheels && config.wheels.mode === "model") console.warn("CarLoader: not every wheel has parts of the model; the wheels of the library stand at the wheelbase and the tracks of car.json"); }
-            var ch = config.chassis || {}, hubOf = { FR: [-(ch.front_track || 1.5) / 2, 0, (ch.wheelbase || 2.6) / 2], FL: [(ch.front_track || 1.5) / 2, 0, (ch.wheelbase || 2.6) / 2],
-                RL: [(ch.rear_track || 1.5) / 2, 0, -(ch.wheelbase || 2.6) / 2], RR: [-(ch.rear_track || 1.5) / 2, 0, -(ch.wheelbase || 2.6) / 2] };
+            var ch = config.chassis || {}, zFront = (ch.wheelbase || 2.6) / 2 + (ch.front_axle_offset || 0), zRear = -(ch.wheelbase || 2.6) / 2 + (ch.rear_axle_offset || 0);       // (the axles can be a different way from the middle of the model)
+            var hubOf = { FR: [-(ch.front_track || 1.5) / 2, 0, zFront], FL: [(ch.front_track || 1.5) / 2, 0, zFront], RL: [(ch.rear_track || 1.5) / 2, 0, zRear], RR: [-(ch.rear_track || 1.5) / 2, 0, zRear] };
             SLOTS.forEach(function (slot) {
                 var libWheel = WL ? WL.wheelFor(config, slot, root) : null;
                 var ghost = libraryOnly && config.type === "motorcycle" && (slot === "FR" || slot === "RR");      // (a motorcycle: one wheel at each end, the other slot is a dot)

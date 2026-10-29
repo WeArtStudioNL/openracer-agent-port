@@ -39,6 +39,11 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - A rim of the wheel library now brings a custom tyre, made from the numbers (width, diameter, height of the sidewall, rubber), for the front and the rear axle apart; the tyres of the library are no longer chosen (a car that has one keeps it). The height of the sidewall is new: the rim takes what is left of the diameter. It works in the tuning menu and in the car editor, where the rim and the tyre of the front and the rear axle follow the sliders at once (the tyre in the view, the shell of the bench car when the sliders rest) and are saved with the car.
 
+### The car editor: axle offsets and sliders
+
+- *Front axle offset* and *rear axle offset* (Chassis card, m, forward is positive) for a car whose axles are not the same way from the middle of the model: the wheels of the library stand there in the view, on the bench and in the game (`chassis.front_axle_offset`, `rear_axle_offset`). The wheelbase stays the distance between the axles when both are 0.
+- Every number of the form that has a range now has a slider under it (59 of them: the size, the mass, the weight, the wheelbase and the tracks, the brakes, the gears, the cameras, the engine and the sound), which moves the number as typing does and follows it when a car or a tune is loaded.
+
 ### The car editor: the wheelbase and the tracks are live; no tyre diameter
 
 - For a car whose wheels are the library's (or the model's rim and tyre), the wheelbase and the front and rear track of the Chassis card move the wheels in the view and on the bench as you type. The tyre diameter of the Chassis card is gone for such a car: it is the mean of the diameters of the tyre of the front and the tyre of the rear (the Tyres settings), and follows them.

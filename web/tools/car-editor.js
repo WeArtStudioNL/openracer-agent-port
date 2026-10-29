@@ -1818,6 +1818,8 @@ function buildConfig(id) {
         chassis: {
             mass: need("mass", "The mass"),
             wheelbase: need("wheelbase", "The wheelbase"),
+            front_axle_offset: num("frontOffset") || 0,            // (the axles are not the same way from the middle of the model: forward is positive; the wheels of the library stand there)
+            rear_axle_offset: num("rearOffset") || 0,
             front_track: need("frontTrack", "The front track"),
             rear_track: need("rearTrack", "The rear track"),
             weight_distribution: Math.min(0.9, Math.max(0.1, need("front", "The front weight") / 100)),
@@ -2163,7 +2165,7 @@ function fill(car) {
     set("mass", c.mass); set("front", +(c.weight_distribution * 100).toFixed(2)); set("cgHeight", c.cg_height);
     set("travel", Math.round((c.suspension_travel || 0.09) * 100)); $("travelLabel").textContent = $("travel").value + " cm";
     $("unsprung").checked = !!c.unsprung;
-    set("wheelbase", c.wheelbase); set("frontTrack", c.front_track); set("rearTrack", c.rear_track);
+    set("wheelbase", c.wheelbase); set("frontOffset", c.front_axle_offset || 0); set("rearOffset", c.rear_axle_offset || 0); set("frontTrack", c.front_track); set("rearTrack", c.rear_track);
     set("tyre", c.tire_diameter); set("drag", c.drag_coefficient); set("steer", c.max_steer_deg);
     $("vehicleType").value = car.type === "motorcycle" ? "motorcycle" : "car";
     fillBike(car.motorcycle);
@@ -2372,7 +2374,7 @@ function updateLibraryPreview() {
             }
             if (!centre) {
                 const front = slot[0] === "F", left = slot[1] === "L", track = (front ? num("frontTrack") : num("rearTrack")) || 1.5;
-                centre = new THREE.Vector3((bike ? 0 : (left ? 1 : -1) * track / 2), 0, (front ? 1 : -1) * ((num("wheelbase") || 2.6) / 2));
+                centre = new THREE.Vector3((bike ? 0 : (left ? 1 : -1) * track / 2), 0, (front ? 1 : -1) * ((num("wheelbase") || 2.6) / 2) + (front ? num("frontOffset") : num("rearOffset")));
             }
             if (wheel.offset) centre.x += (slot[1] === "L" ? 1 : -1) * wheel.offset;
             wheel.object.position.copy(centre);
@@ -2833,13 +2835,16 @@ function formChanged() {
         const area = config.dimensions.width * config.dimensions.height * 0.85;
         const retune = OpenRacer.CarTuning.toRetune(tuningValues(config), area, 1.29);
         // the wheels of the model give the wheelbase, the tracks and the tyre (startBench); without them the form does
-        if (!bench.model.measured || (noWheelParts() && libraryChoice())) Object.assign(retune, { wheelbase: config.chassis.wheelbase, front_track: config.chassis.front_track, rear_track: config.chassis.rear_track, tire_diameter: config.chassis.tire_diameter });
+        if (!bench.model.measured || (noWheelParts() && libraryChoice())) Object.assign(retune, { wheelbase: config.chassis.wheelbase + config.chassis.front_axle_offset - config.chassis.rear_axle_offset, front_track: config.chassis.front_track, rear_track: config.chassis.rear_track, tire_diameter: config.chassis.tire_diameter });
         bench.vehicle.retune(retune);
     } catch (error) { /* a field that is empty or not valid yet: the next change tries again */ }
 }
 for (const id of ["mass", "front", "cgHeight", "wheelbase", "frontTrack", "rearTrack", "tyre", "drag", "steer"]) $(id).addEventListener("input", formChanged);
 // (the wheels of the library stand where the wheelbase and the tracks say: they follow them at once, in the view and on the bench)
-for (const id of ["wheelbase", "frontTrack", "rearTrack"]) $(id).addEventListener("input", () => { if (noWheelParts() && libraryChoice()) updateLibraryPreview(); });
+for (const id of ["wheelbase", "frontTrack", "rearTrack", "frontOffset", "rearOffset"]) $(id).addEventListener("input", () => { if (noWheelParts() && libraryChoice()) updateLibraryPreview(); });
+// (the body of the bench stands against the middle of the wheels: with the offsets the car of the bench is built again when the numbers rest)
+let offsetTimer = 0;
+for (const id of ["frontOffset", "rearOffset"]) $(id).addEventListener("input", () => { clearTimeout(offsetTimer); offsetTimer = setTimeout(() => { if (bench.vehicle) restartBench(); }, 500); });
 // the fields of the gearbox that is chosen
 function syncGearboxBoxes() { const g = $("gearbox").value; $("cvtBox").style.visibility = g === "cvt" ? "" : "hidden"; $("tcBox").style.display = g === "torque-converter" ? "" : "none"; }
 $("gearbox").addEventListener("change", () => { syncGearboxBoxes(); formChanged(); });
@@ -3568,4 +3573,37 @@ $("libSame").addEventListener("click", () => {
     window.addEventListener("resize", place);
     if (window.ResizeObserver) new ResizeObserver(place).observe($("side"));
     place();
+}
+
+// ---- a slider under every number of the form that has a range: it moves the number (and the car with it, as typing does), and follows it when the number is set (a car loaded, a tune)
+{
+    const RANGES = {
+        offsetX: [-3, 3], offsetY: [-3, 3], offsetZ: [-3, 3], length: [1, 8], width: [0.5, 3.5], height: [0.5, 3.5], mass: [50, 6000], front: [20, 80], cgHeight: [0.1, 1.5],
+        wheelbase: [0.8, 5], frontTrack: [0.5, 2.6], rearTrack: [0.5, 2.6], frontOffset: [-1, 1], rearOffset: [-1, 1], drag: [0.1, 1], steer: [10, 60], brakeFront: [0, 6000], brakeRear: [0, 6000],
+        diffPreload: [0, 1000], finalDrive: [1, 10], reverse: [1, 10], idle: [300, 2500], limiter: [2000, 20000], inertia: [0.01, 1.5], simpleRpm: [2000, 20000],
+        camFolDist: [1, 15], camFolHeight: [0, 6], camFolLook: [-1, 4], camFolLookZ: [-3, 3], camFolSmooth: [0, 10], camFolFovStand: [20, 100], camFolFovFast: [20, 120], camFolSpeed: [50, 400],
+        camCockX: [-1.5, 1.5], camCockY: [0, 2.5], camCockZ: [-3, 3], camCockFov: [20, 100], sbRadius: [0.05, 0.6], sbForceKmh: [1, 400]
+    };
+    const valueDescriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+    document.querySelectorAll("#side input[type=number]").forEach((input) => {
+        if (input.disabled || input.dataset.noSlider !== undefined) return;
+        let range = RANGES[input.id];
+        if (!range && input.min !== "" && input.max !== "") range = [parseFloat(input.min), parseFloat(input.max)];
+        if (!range || !(range[1] > range[0])) return;
+        const slider = document.createElement("input");
+        slider.type = "range"; slider.className = "numSlider";
+        slider.step = input.step && input.step !== "any" ? input.step : "any";
+        slider.setAttribute("aria-label", (input.getAttribute("aria-label") || input.id || "value") + " (slider)");
+        const sync = () => {
+            const v = parseFloat(input.value);
+            slider.min = Number.isFinite(v) ? Math.min(range[0], v) : range[0];
+            slider.max = Number.isFinite(v) ? Math.max(range[1], v) : range[1];
+            slider.value = Number.isFinite(v) ? v : range[0];
+        };
+        slider.addEventListener("input", () => { valueDescriptor.set.call(input, slider.value); input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); });
+        input.addEventListener("input", sync);
+        Object.defineProperty(input, "value", { get() { return valueDescriptor.get.call(this); }, set(v) { valueDescriptor.set.call(this, v); sync(); }, configurable: true });
+        input.insertAdjacentElement("afterend", slider);
+        sync();
+    });
 }
