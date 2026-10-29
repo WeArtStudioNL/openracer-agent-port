@@ -98,6 +98,12 @@ var Tuning = (function() {
         var top = car.gear_ratios[car.gear_ratios.length - 1];
         var kmh = engine.limiterRPM * Math.PI / 30 * car.wheels[0].radius / (top * car.final_drive) * 3.6;
         var imperial = Settings.option("units") === "imperial";
+        if(cardMeta["Engine"]) cardMeta["Engine"].textContent = Math.round(peakHp) + " hp at " + peakHpRpm + " rpm, " + Math.round(peakNm) + " Nm";
+        if(cardMeta["Drivetrain"]) {
+            var topSpeed = 0;
+            try { topSpeed = OpenRacer.topSpeed ? OpenRacer.topSpeed(tunedConfig()) : 0; } catch(e) { topSpeed = 0; }
+            cardMeta["Drivetrain"].textContent = topSpeed > 0 ? "Top speed ~" + (imperial ? Math.round(topSpeed * 2.2369362920544) + " mph" : Math.round(topSpeed * 3.6) + " km/h") : "";
+        }
         info.textContent = Math.round(peakHp) + " hp at " + peakHpRpm + " rpm · " + Math.round(peakNm) + " Nm · " +
             (imperial ? Math.round(kmh / 1.609344) + " mph" : Math.round(kmh) + " km/h") + " at the limiter in top gear · " +
             Math.round(car.mass) + " kg · " + (car.mass / Math.max(1, peakHp)).toFixed(1) + " kg/hp";
@@ -138,6 +144,10 @@ var Tuning = (function() {
             "#tuning .sub { color: var(--muted); font-size: 12px; margin-bottom: 8px; line-height: 1.4; }" +
             "#tuning .info { background: var(--bg2); border-radius: 5px; padding: 6px 8px; margin-bottom: 8px; color: var(--head); font-size: 12px; line-height: 1.4; }" +
             "#tuning details { border-top: 1px solid var(--line); padding: 4px 0; }" +
+            "#tuning details.card { border: 1px solid var(--line); border-radius: 8px; margin: 6px 0; padding: 2px 10px; background: rgba(255, 255, 255, 0.025); }" +
+            "#tuning details.card > summary { font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--head); padding: 8px 0; }" +
+            "#tuning details.card > summary .meta { float: right; color: var(--muted); font-weight: normal; font-size: 12px; }" +
+            "#tuning details.card > details { border-top: 0; }" +
             "#tuning summary { cursor: pointer; padding: 5px 0; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; font-size: 12px; color: var(--muted); }" +
             "#tuning .item { margin: 5px 0 8px; }" +
             "#tuning .line { display: flex; align-items: center; gap: 6px; }" +
@@ -348,6 +358,7 @@ var Tuning = (function() {
         return wrap;
     }
 
+    var cardMeta = {};
     function build() {
         addStyle();
         panel = document.createElement("div");
@@ -460,29 +471,61 @@ var Tuning = (function() {
         panel.appendChild(setupLine);
         setupButtons = { save: saveSetup, drop: dropSetup };
 
-        GROUPS.forEach(function(group, index) {
+        // the cards of the car editor, with the same names and the same order: each holds its groups of settings (a group with the name of its card is "<name> settings"), and
+        // the Assists and extras card the systems and the extras. Cards without a setting that the car can use do not show. (The torque curve is not set here: it follows from
+        // the engine that is built in the car editor.)
+        var HIDDEN = { gen_power: true, gen_peak_rpm: true };
+        var placed = {};
+        function groupDetails(group, card) {
             var details = document.createElement("details");
-            details.open = false;                          // all the groups are folded when the menu opens
+            details.open = false;
             var summary = document.createElement("summary");
-            summary.textContent = group.name;
+            summary.textContent = group.name === card.name ? group.name + " settings" : group.name;
             details.appendChild(summary);
+            var count = 0;
             group.items.forEach(function(def) {
+                if(HIDDEN[def[0]]) return;
+                count++;
                 if(SELECTS[def[0]]) details.appendChild(selectRow(def[0]));
                 else if(COLORS[def[0]]) details.appendChild(colorRow(def[0]));
                 else if(def[0] === "gears") details.appendChild(gearsRow());
                 else details.appendChild(slider(def));
             });
-            panel.appendChild(details);
+            return count ? details : null;
+        }
+        var cardList = OpenRacer.CarTuning.CARDS.slice();
+        var known = {};
+        cardList.forEach(function(card) { (card.groups || []).forEach(function(g) { known[g] = true; }); });
+        var rest = GROUPS.filter(function(g) { return !known[g.name]; }).map(function(g) { return g.name; });
+        if(rest.length) cardList.push({ name: "More settings", groups: rest });
+        cardMeta = {};
+        cardList.forEach(function(card) {
+            var wrap = document.createElement("details");
+            wrap.className = "card";
+            wrap.open = false;
+            var summary = document.createElement("summary");
+            summary.appendChild(document.createTextNode(card.name));
+            var meta = document.createElement("span");
+            meta.className = "meta";
+            summary.appendChild(meta);
+            wrap.appendChild(summary);
+            cardMeta[card.name] = meta;
+            var content = 0;
+            (card.groups || []).forEach(function(name) {
+                var group = GROUPS.filter(function(g) { return g.name === name; })[0];
+                var details = group && groupDetails(group, card);
+                if(details) { wrap.appendChild(details); content++; }
+            });
+            if(card.features) {
+                OpenRacer.CarTuning.FEATURES.forEach(function(feature) { wrap.appendChild(featureRow(feature)); content++; });
+            }
+            if(content) panel.appendChild(wrap);
         });
-        var extras = document.createElement("details");
-        extras.open = false;
-        extras.innerHTML = "<summary>Extras</summary>";
-        OpenRacer.CarTuning.FEATURES.forEach(function(feature) { extras.appendChild(featureRow(feature)); });
-        panel.appendChild(extras);
         // the mirrors (Mirrors.js): the turn and the tilt of every glass, kept as options of the game (they are not part of a tune: where you want to look is yours); filled when the group is opened,
         // since the model of the car may not be there yet when the menu is made
         var mirrorGroup = document.createElement("details");
         mirrorGroup.open = false;
+        mirrorGroup.className = "card";
         mirrorGroup.innerHTML = "<summary>Mirrors</summary>";
         var mirrorBody = document.createElement("div");
         mirrorGroup.appendChild(mirrorBody);

@@ -650,8 +650,22 @@ OpenRacer.CarTuning = (function () {
     }
 
     // (visible and visibleFeature: see above)
+    // The cards of the car editor and of the tuning menu of the game, in their order, with the groups of the table that each has (and "features": the systems and the extras): one
+    // structure for both. A group that has the name of its card is shown as "<name> settings".
+    var CARDS = [
+        { name: "Wheels", groups: ["Tyres"] },
+        { name: "Suspension and driveline", groups: ["Suspension and driveline"] },
+        { name: "Chassis", groups: ["Chassis", "Brakes", "Aerodynamics and steering", "Size and steering wheel"] },
+        { name: "Drivetrain", groups: ["Transmission"] },
+        { name: "Engine", groups: ["Fuel", "Engine"] },
+        { name: "Engine sound", groups: ["Engine sound"] },
+        { name: "Assists and extras", features: true },
+        { name: "Cameras", groups: ["Cameras"] },
+        { name: "Soft body", groups: ["Soft body"] },
+        { name: "Motorcycle", groups: ["Motorcycle"] }
+    ];
     return {
-        visible: visible, visibleFeature: visibleFeature, GROUPS: GROUPS, FEATURES: FEATURES, FEATURE_DEFAULTS: FEATURE_DEFAULTS, V100: V100, fromConfig: fromConfig, toRetune: toRetune, toConfig: toConfig, keys: keys };
+        CARDS: CARDS, visible: visible, visibleFeature: visibleFeature, GROUPS: GROUPS, FEATURES: FEATURES, FEATURE_DEFAULTS: FEATURE_DEFAULTS, V100: V100, fromConfig: fromConfig, toRetune: toRetune, toConfig: toConfig, keys: keys };
 })();
 
 // The setups of a car: whole configurations of the car (everything car.json has but the model: the chassis, the tyres, the engine, the gearbox, the suspension and the parts,
