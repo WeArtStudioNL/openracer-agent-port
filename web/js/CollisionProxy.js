@@ -90,6 +90,37 @@ OpenRacer.CollisionProxy = (function () {
         return out;
     }
 
+    // The shell from the model itself: an object called "beams" (also softbody_beams, shell_beams) that is made of vertices and edges and has no faces (Blender: the glTF export
+    // has to have Data > Mesh > Loose Edges on, "use_mesh_edges"). Its vertices are the nodes of the shell and its edges the beams. Returns { points: [[x, y, z]] in the frame of the
+    // car, edges: [[a, b]] } or null. Vertices that sit on each other (the exporter splits them) are one node.
+    var BEAMS_NAME = /^(softbody|shell)?beams?$/;
+    function findBeams(root) {
+        var found = null;
+        root.traverse(function (o) { if(!found && BEAMS_NAME.test((o.name || "").toLowerCase().replace(/[^a-z]/g, ""))) found = o; });
+        return found;
+    }
+    function beamsFromModel(root, toVehicle) {
+        var holder = findBeams(root);
+        if(!holder) return null;
+        root.updateMatrixWorld(true);
+        var points = [], edges = [], lookup = {}, p = new THREE.Vector3();
+        var node = function (position, i, matrix) {
+            p.fromBufferAttribute(position, i).applyMatrix4(matrix); toVehicle(p);
+            var key = Math.round(p.x * 1e4) + "," + Math.round(p.y * 1e4) + "," + Math.round(p.z * 1e4);
+            if(lookup[key] === undefined) { lookup[key] = points.length; points.push([p.x, p.y, p.z]); }
+            return lookup[key];
+        };
+        holder.traverse(function (o) {
+            if(!o.geometry || !o.geometry.attributes.position) return;
+            var position = o.geometry.attributes.position, index = o.geometry.index, n = index ? index.count : position.count, at = function (k) { return index ? index.getX(k) : k; };
+            var add = function (i, j) { var a = node(position, i, o.matrixWorld), b = node(position, j, o.matrixWorld); if(a !== b) edges.push([a, b]); };
+            if(o.isLine && !o.isLineSegments) { for(var s = 0; s + 1 < n; s++) add(at(s), at(s + 1)); if(o.isLineLoop && n > 2) add(at(n - 1), at(0)); }         // a strip or a loop
+            else if(o.isLineSegments) { for(var t = 0; t + 1 < n; t += 2) add(at(t), at(t + 1)); }
+            else if(o.isMesh) { for(var f = 0; f + 2 < n; f += 3) { add(at(f), at(f + 1)); add(at(f + 1), at(f + 2)); add(at(f + 2), at(f)); } }                    // (a mesh with faces: its edges)
+        });
+        return points.length >= 3 && edges.length ? { points: points, edges: edges, holder: holder } : null;
+    }
+
     // The part of car.json "parts" that a mesh of the model belongs to (by the object that the part names), or null: for SoftBodyMesh.js
     function partGroups(object, model) {
         var map = new Map();
@@ -140,13 +171,31 @@ OpenRacer.CollisionProxy = (function () {
         try { spheres = fromModel(model.tilt, toVehicle, wheels, maxNodes); } catch (e) { console.warn("CollisionProxy: " + e.message); }
         // car.json "softbody": { "layout": [{ x, y, z, r }] }: the nodes as the maker of the car set them in the editor, instead of the ones made from the model
         var layout = object.config && object.config.softbody && object.config.softbody.layout;
+        // the shell of the model: the vertices and the edges of an object "beams" are the nodes and the beams (a layout that was set in the editor goes before it)
+        var modelBeams = null;
+        if(spheres && !(layout && layout.length) && model.tilt) {
+            var found = null;
+            try { found = beamsFromModel(model.tilt, toVehicle); } catch (e) { console.warn("CollisionProxy: the beams of the model: " + e.message); }
+            if(found) {
+                var limit = 200, mean = 0;
+                found.edges.forEach(function (e) { mean += Math.hypot(found.points[e[0]][0] - found.points[e[1]][0], found.points[e[0]][1] - found.points[e[1]][1], found.points[e[0]][2] - found.points[e[1]][2]); });
+                mean /= found.edges.length;
+                var nodeRadius = object.config && object.config.softbody && object.config.softbody.beam_node_radius > 0 ? object.config.softbody.beam_node_radius : Math.max(0.05, Math.min(0.28, 0.35 * mean));
+                if(found.points.length > limit) console.warn("CollisionProxy: the beams of the model have " + found.points.length + " nodes, only the first " + limit + " are used");
+                layout = found.points.slice(0, limit).map(function (q) { return { x: q[0], y: q[1], z: q[2], r: nodeRadius }; });
+                modelBeams = found.edges.filter(function (e) { return e[0] < limit && e[1] < limit; });
+                found.holder.visible = false;
+                console.log("collision proxy: the shell from the beams of the model, " + layout.length + " nodes and " + modelBeams.length + " beams");
+            }
+        }
         if(spheres && layout && layout.length) {
             // The layout is in the frame of the body: its up runs from the centre of gravity, and the body sits at the centre of gravity's height above the road. Drawn at one
             // centre of gravity (softbody.layout_cg, the car editor writes it) and used with another (a tune that lowers the car's centre of gravity), the whole shell would
             // move by the difference against the road and the model (a kart whose centre went down 11 cm stood on its floor nodes with its wheels in the air): the nodes are
             // shifted back by it, and by a change of the tyre radius, which moves the axle against the centre the other way
             var cfgSoft = object.config.softbody;
-            var shift = (isFinite(cfgSoft.layout_cg) ? cfgSoft.layout_cg - v.cgHeight : 0) + (isFinite(cfgSoft.layout_radius) ? radius - cfgSoft.layout_radius : 0);
+            var shift = modelBeams ? 0 : (isFinite(cfgSoft.layout_cg) ? cfgSoft.layout_cg - v.cgHeight : 0) + (isFinite(cfgSoft.layout_radius) ? radius - cfgSoft.layout_radius : 0);
+            // (the shell of the model: the nodes keep their numbers, the beams point at them)
             var own = layout.slice(0, 200).filter(function (n) { return isFinite(n.x) && isFinite(n.y) && isFinite(n.z) && n.r > 0; })
                 .map(function (n) {
                     // a node must not reach below the underside of the car (the ground clearance): a big node low in the car would stand on the road with
@@ -158,6 +207,7 @@ OpenRacer.CollisionProxy = (function () {
                     return { x: n.x, y: y, z: n.z, r: r, part: typeof n.part === "string" ? n.part : null };
                 });
             if(own.length >= 3) spheres = own.concat(spheres.filter(function (sp) { return sp.wheel; }));
+            else modelBeams = null;
         }
         var cfg = (object.config && object.config.softbody) || {};
         if(spheres && cfg.enabled !== false && OpenRacer.SoftBody && cfg.wheel_hubs !== false) {
@@ -189,7 +239,7 @@ OpenRacer.CollisionProxy = (function () {
             // (damage off, main.js: the car is a rigid body, its spheres still touch the road and the walls; nothing dents, nothing comes off)
             var damage = OpenRacer.damageEnabled !== false;
             if(cfg.enabled !== false && OpenRacer.SoftBody && damage) {
-                v.softBody = new OpenRacer.SoftBody(v, spheres, cfg);
+                v.softBody = new OpenRacer.SoftBody(v, spheres, modelBeams ? Object.assign({}, cfg, { explicit_beams: modelBeams }) : cfg);
                 try { object.softBodyMesh = OpenRacer.SoftBodyMesh.attach(model.tilt, v.softBody, toVehicle, partGroups(object, model)); } catch(e) { console.warn("SoftBodyMesh: " + e.message); }
                 console.log("soft body: " + v.softBody.count + " nodes, " + v.softBody.beamCount + " beams");
                 v.hubLimit = cfg.hub_limit !== undefined ? cfg.hub_limit : 0.3;

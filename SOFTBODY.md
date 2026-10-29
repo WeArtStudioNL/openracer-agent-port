@@ -134,6 +134,15 @@ A hinged part (a hood, a door) can hang on **two nodes of the body**, each with 
 * The car is clamped while the cube is at it (`softBody.pinned`): the anchors do not move the rigid body, or a big blow would carry the car away. The dent is what is tested.
 * The wall of the crash test is 10% opaque, so the car is seen through it when the camera is behind it.
 
+### The shell from the model (an object "beams")
+
+A model can bring its own shell: an object called `beams` (also `softbody_beams`, `shell_beams`) made of **vertices and edges and no faces**. Every vertex is a node, every edge is a beam; nothing is made from the nearest neighbours, and nothing is added between the nodes.
+
+* In Blender: make a mesh with vertices and edges only (delete the faces), name the object `beams`, put it where the car is. In the glTF export turn on **Data > Mesh > Loose Edges** (`use_mesh_edges`): without it the exporter leaves the edges out and the object arrives empty. Vertices that sit on each other are one node. A loop or a strip of lines works too.
+* In the game the object is hidden (the car editor shows it as lines over the model). It is not collision geometry; the nodes are spheres, with the radius of a third of the mean length of the edges (5 to 28 cm), or `softbody.beam_node_radius` (m).
+* At most 200 nodes (the first 200 vertices); the strengths are the defaults of the material (`softbody.beam`), and per beam in the view as always. The wheels and their suspension (hub, knuckle, arms) are added as before.
+* A **layout** that was made in the editor (`softbody.layout`, the first move of a node) goes before the beams of the model; "Make the nodes from the model again" gives the beams back. The numbers of the nodes are the numbers of the vertices, so `softbody.nodes` and `softbody.beams` keep pointing at the same places while the object does not change.
+
 ### Nodes and beams of a part
 
 A part can have **nodes of its own**, so that it dents by itself and its hold on the body is made of beams:

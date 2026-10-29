@@ -77,7 +77,21 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
     var beamA = [], beamB = [], beamRest = [], beamK = [], beamYield = [], beamBreak = [], beamAlive = [];
     var beamRig = [];                                  // 1 for a beam of the suspension: the position solver has it, not the explicit loop (see rigSolve)
     var seen = {};
-    for (var a = 0; a < N; a++) {
+    // the beams of the model (an object "beams" with edges, CollisionProxy.js): exactly those, between the nodes with the numbers of its vertices, instead of the nearest neighbours
+    var explicit = config.explicit_beams;
+    if (explicit) {
+        explicit.forEach(function (e) {
+            var lo = Math.min(e[0], e[1]), hi = Math.max(e[0], e[1]);
+            if (lo === hi || hi >= N || isRig[lo] || isRig[hi]) return;
+            var key = lo * 4096 + hi;
+            if (seen[key]) return;
+            var d = Math.hypot(rest[3 * lo] - rest[3 * hi], rest[3 * lo + 1] - rest[3 * hi + 1], rest[3 * lo + 2] - rest[3 * hi + 2]);
+            if (d < 0.01) return;
+            seen[key] = true;
+            beamA.push(lo); beamB.push(hi); beamRest.push(d); beamK.push(P.beamK); beamYield.push(P.beamYield); beamBreak.push(P.beamBreak); beamAlive.push(1); beamRig.push(0);
+        });
+    }
+    for (var a = 0; a < N && !explicit; a++) {
         var near = [];
         for (var b = 0; b < N; b++) {
             if (a === b || partOf[a] !== partOf[b] || isRig[a] || isRig[b]) continue;
