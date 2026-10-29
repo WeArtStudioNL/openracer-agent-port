@@ -1503,7 +1503,7 @@ function drawChart() {
     g.strokeStyle = "#ff5e5e"; g.lineWidth = 2; g.beginPath(); g.moveTo(limitX, 0); g.lineTo(limitX, bottom); g.stroke();
     const peak = state.curve.reduce((best, p) => (power(p[0], p[1]) > best.hp ? { hp: power(p[0], p[1]), rpm: p[0] } : best), { hp: 0, rpm: 0 });
     const torque = Math.max(0, ...state.curve.map((p) => p[1]));
-    $("peakInfo").textContent = Math.round(peak.hp) + " hp at " + peak.rpm + " rpm, " + Math.round(torque) + " Nm";
+    $("peakInfo").textContent = Math.round(peak.hp) + " hp at " + peak.rpm + " rpm, " + Math.round(torque) + " Nm" + (dynoBest && dyno && dyno.upTo >= dyno.points.length - 1 ? " · " + Math.round(dynoBest.hp) + " hp at the wheels" : "");
     chartGeo = { left, bottom, plotW, plotH, maxRpm, maxY, w, h };
     if (curveAdvanced && !state.build) {
         g.fillStyle = "#ff9f43"; g.strokeStyle = "#12161c"; g.lineWidth = 3;
@@ -1655,7 +1655,7 @@ initBuildSliders();
 initBuildUi();
 
 // ---- the dyno: a full-throttle pull, measured at the wheels; only the chart shows it
-let dyno = null, dynoFrame = 0;
+let dyno = null, dynoFrame = 0, dynoBest = null;       // dynoBest: the best point of the last pull that was run to the end
 let dynoSound = false, dynoRamp = 0;       // the engine sound was started by the dyno run (and stops with it)
 // the run is over: the throttle closes and the engine drops back to idle (the engine braking is quick at first, then it settles), then the sound stops
 function dynoSoundOff() {
@@ -1672,7 +1672,7 @@ function dynoSoundOff() {
     };
     dynoRamp = requestAnimationFrame(step);
 }
-function clearDyno() { if (!dyno) return; cancelAnimationFrame(dynoFrame); dynoSoundOff(); dyno = null; $("runDyno").disabled = false; $("dynoInfo").textContent = ""; }
+function clearDyno() { if (!dyno) return; cancelAnimationFrame(dynoFrame); dynoSoundOff(); dyno = null; dynoBest = null; $("runDyno").disabled = false; $("dynoInfo").textContent = ""; }
 function dynoPull() {
     const gears = parseGears(), final = num("finalDrive"), limit = num("limiter"), r = (num("tyre") || 0.65) / 2, mass = num("mass") || 1000;
     if (!gears.length || !(final > 0) || !(limit > 0) || state.curve.length < 2) return null;
@@ -1724,6 +1724,7 @@ $("runDyno").addEventListener("click", () => {
         $("runDyno").disabled = false;
         dynoSoundOff();
         const best = dyno.points.reduce((m, p) => (p.hp > m.hp ? p : m), dyno.points[0]);
+        dynoBest = best; drawChart(); updateSummary();
         const engine = state.curve.reduce((m, p) => Math.max(m, power(p[0], p[1])), 0);
         $("dynoInfo").textContent = "At the wheels (dashed): " + Math.round(best.hp) + " hp at " + Math.round(best.rpm / 10) * 10 + " rpm, " + Math.round(100 * (1 - best.hp / engine)) + "% below the engine · gear " + run.gear + (state.build && run.room !== 1 ? " · in this air; corrected (DIN) " + Math.round(best.hp / run.room) + " hp" : "") + (state.buildResult && state.buildResult.maxBoost > 0 ? " · boost up to " + state.buildResult.maxBoost.toFixed(2) + " bar" : "");
     };
@@ -1851,7 +1852,8 @@ function updateSummary() {
     const parts = [];
     if (num("mass")) parts.push(Math.round(num("mass")) + " kg");
     if (num("front")) parts.push(Math.round(num("front")) + "/" + (100 - Math.round(num("front"))) + " front/rear");
-    if (peak > 0) parts.push(Math.round(peak) + " kW (" + Math.round(peak * 1.36) + " hp)");
+    if (peak > 0) parts.push(Math.round(peak) + " kW (" + Math.round(peak * 1.341) + " hp)");
+    if (dynoBest && dyno) parts.push(Math.round(dynoBest.hp) + " hp at the wheels");
     if (top) parts.push(top[1] + " km/h");
     el.textContent = parts.join(" · ");
 }
