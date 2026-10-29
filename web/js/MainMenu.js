@@ -144,11 +144,19 @@ var MainMenu = (function() {
         return Math.round(peak * scale);
     }
 
+    // the top speed worked out from the configuration (OpenRacer.topSpeed), in the units of the settings
+    function topSpeedText(car) {
+        var v = OpenRacer.topSpeed ? OpenRacer.topSpeed(car) : 0;
+        if(!(v > 0)) return "";
+        var imperial = typeof Settings !== "undefined" && Settings.option("units") === "imperial";
+        return " · " + Math.round(v * (imperial ? 2.2369362920544 : 3.6)) + (imperial ? " mph" : " km/h");
+    }
+
     function carSpecs(car) {
-        if(car.type === "motorcycle") return Math.round(car.chassis.mass + OpenRacer.Motorcycle.riderMass(car)) + " kg · motorcycle · " + (car.drivetrain && car.drivetrain.gear_ratios ? car.drivetrain.gear_ratios.length : "?") + " gears";
+        if(car.type === "motorcycle") return Math.round(car.chassis.mass + OpenRacer.Motorcycle.riderMass(car)) + " kg · motorcycle · " + (car.drivetrain && car.drivetrain.gear_ratios ? car.drivetrain.gear_ratios.length : "?") + " gears" + topSpeedText(car);
         var drive = (car.drivetrain && car.drivetrain.drive || "rwd").toUpperCase();
         var gears = car.drivetrain && car.drivetrain.gear_ratios ? car.drivetrain.gear_ratios.length : "?";
-        return Math.round(car.chassis.mass) + " kg · " + drive + " · " + gears + " gears";
+        return Math.round(car.chassis.mass) + " kg · " + drive + " · " + gears + " gears" + topSpeedText(car);
     }
 
     // The showcase: the 3D model of every car turns slowly on its tile. One hidden WebGL renderer draws the cars one by one into

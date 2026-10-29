@@ -31,3 +31,30 @@ OpenRacer.cameraSettings = function (config) {
     });
     return result;
 };
+
+// The top speed of a car in m/s, worked out from its configuration (no simulation): in every gear the speed at which the thrust at the wheels (the torque of the engine at that
+// speed, through the gears and the final drive and the efficiency of the drive) is as big as the drag of the air and the rolling resistance, up to the rev limit; the highest of them.
+// A car with one gear or a CVT is the same sum with its ratio (the lowest ratio of a CVT). Returns 0 when the numbers are not there. Downforce and wheel slip are not counted.
+OpenRacer.topSpeed = function (config) {
+    var ch = config && config.chassis, dt = (config && config.drivetrain) || {}, eng = (config && config.engine) || {}, dim = (config && config.dimensions) || {};
+    var curve = eng.torque_curve, gears = dt.gear_ratios;
+    if(!ch || !curve || curve.length < 2 || !gears || !gears.length || !(dt.final_drive > 0) || !(eng.limiter_rpm > 0) || !(ch.tire_diameter > 0)) return 0;
+    var r = ch.tire_diameter / 2, scale = eng.power_scale !== undefined ? eng.power_scale : 1, efficiency = dt.efficiency || 0.92;
+    var cdrag = 0.5 * (ch.drag_coefficient || 0.3) * (dim.width || 1.8) * (dim.height || 1.4) * 0.85 * 1.29;
+    var roll = ((config.tyres && config.tyres.rolling_resistance) || 0.015) * (ch.mass || 1000) * 9.81;
+    var torque = function (rpm) {
+        for(var i = 1; i < curve.length; i++) {
+            if(rpm <= curve[i][0]) { var a = curve[i - 1], b = curve[i]; return a[1] + (b[1] - a[1]) * (rpm - a[0]) / Math.max(1e-9, b[0] - a[0]); }
+        }
+        return 0;
+    };
+    var best = 0, ratios = dt.gearbox === "cvt" ? [Math.min.apply(null, gears)] : gears;
+    ratios.forEach(function (ratio) {
+        var total = ratio * dt.final_drive, vMax = eng.limiter_rpm * Math.PI / 30 * r / total;
+        for(var v = vMax; v > 0.5; v -= 0.1) {
+            var rpm = v / r * total * 30 / Math.PI, thrust = torque(rpm) * scale * efficiency * total / r;
+            if(thrust >= cdrag * v * v + roll) { best = Math.max(best, v); break; }
+        }
+    });
+    return best;
+};

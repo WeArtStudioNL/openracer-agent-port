@@ -1511,7 +1511,14 @@ function updateSpeedInfo() {
     const limiter = num("limiter");
     if (!gears.length || !(final > 0) || !(limiter > 0)) { $("speedInfo").textContent = ""; return; }
     const speed = (ratio) => limiter * Math.PI / 30 * r / (ratio * final) * 3.6;
-    $("speedInfo").textContent = "At the rev limit: " + gears.map((g, i) => (i + 1) + ": " + Math.round(speed(g)) + " km/h").join("   ");
+    // the top speed: the thrust against the drag and the rolling resistance (OpenRacer.topSpeed), with what is in the form
+    const top = OpenRacer.topSpeed({
+        chassis: { mass: num("mass"), tire_diameter: num("tyre"), drag_coefficient: num("drag") },
+        dimensions: { width: num("width"), height: num("height") },
+        drivetrain: { gear_ratios: gears, final_drive: final, gearbox: $("gearbox").value },
+        engine: { limiter_rpm: limiter, torque_curve: state.curve.slice().sort((a, b) => a[0] - b[0]) }
+    });
+    $("speedInfo").textContent = (top > 0 ? "Top speed about " + Math.round(top * 3.6) + " km/h. " : "") + "At the rev limit: " + gears.map((g, i) => (i + 1) + ": " + Math.round(speed(g)) + " km/h").join("   ");
 }
 
 function parseGears() {
