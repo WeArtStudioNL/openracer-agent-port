@@ -10,6 +10,7 @@ OpenRacer.Ghost = function (config, trackId) {
     var self = this;
     var RATE = 30;
     this.enabled = false;          // shows the ghost of the best lap
+    OpenRacer.Ghost.current = this;
     this.saving = true;            // keeps a lap that is the best
     this.best = OpenRacer.Records.ghost(trackId, config.id) || null;
     this.friend = null;            // the ghost of a file that someone sent: { name, car, time, samples }; it is shown instead of the best lap
@@ -102,6 +103,7 @@ OpenRacer.Ghost = function (config, trackId) {
         }
     };
 
+    this.hide = function () { setVisible(false); };       // (a replay does not show the ghost; update() shows it again after the replay)
     function setVisible(v) {
         if (!body) return;
         body.visible = v;

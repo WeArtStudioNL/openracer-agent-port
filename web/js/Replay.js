@@ -1087,6 +1087,7 @@ OpenRacer.Replay = (function() {
 
     api.start = function() {
         if(api.active || (!api.viewer && !api.available())) return false;
+        if(OpenRacer.Ghost && OpenRacer.Ghost.current) OpenRacer.Ghost.current.hide();      // (the replay has no ghost: it would stand still where the game left it)
         if(Settings.option("camera") === 4) Settings.setOption("camera", 2);      // the free camera of the game has no place in a replay, which has its own
         snapshot = cars.map(function(entry, i) { var s = new Float32Array(STRIDE); write(s, 0, entry); return s; });
         cars.forEach(function(entry) {
