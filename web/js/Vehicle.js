@@ -848,6 +848,9 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var limit = this.engine.limiterRPM;
                 var upRPM = limit * (0.45 + 0.42 * thr);
                 var downRPM = limit * (0.23 + 0.17 * thr);
+                // with the throttle off the car rolls and the engine brakes: it keeps the higher gear as long as the clutch can stay closed, and goes down as the road speed asks
+                // for the lowest speed of the clutch (a limit of 10000 rpm made the shift speed of the throttle so high that it shifted down early and kicked)
+                if(thr < 0.1) downRPM = Math.min(downRPM, Math.max(this.clutchStartRPM * 1.5, this.engine.idleRPM * 1.6));
                 var nextRatio = g < gears - 1 ? this.gear_ratios[g + 1] / this.gear_ratios[g] : 1;
                 var prevRatio = g > 0 ? this.gear_ratios[g - 1] / this.gear_ratios[g] : 1;
                 // The engine near the rev limiter with the throttle open while the car moves and the wheels spin faster than the road asks (a lot of power in a low
@@ -2129,10 +2132,15 @@ OpenRacer.Vehicle = function (parameters, input) {
         // ---- engine and clutch
         var gs = self.getGearRatio();
         var shares = self.torqueShares(); // the share of the torque of every wheel with open differentials
+        // the engine speed that the wheels ask for in this gear (a gear that was just shifted into: the speed to match)
+        var driveSpeed = 0;
+        if(gs !== 0) for(var kd = 0; kd < 4; kd++) driveSpeed += shares[kd] * wheels[kd].omega;
+        var driveRPM = Math.max(0, gs * driveSpeed) * 30 / Math.PI;
         var throttle = inp.throttle * self.tcFactor * (1 - 0.85 * escCut) * (self.controller && self.controller.throttleScale ? self.controller.throttleScale(self, dt) : 1);
         // the gearbox takes the power off while it shifts
         if(self.shiftTimer > 0) {
-            if(self.gearbox === "dct") throttle = self.shiftUp ? throttle * 0.35 : Math.max(throttle, 0.45);     // (a dual clutch: a short cut on the way up, a blip on the way down)
+            // (a dual clutch: a short cut on the way up, a blip on the way down: only until the engine has the speed of the new gear, a blip with a light engine went far past it and kicked the car)
+            if(self.gearbox === "dct") throttle = self.shiftUp ? throttle * 0.35 : (engine.getRPM() < driveRPM * 0.97 ? Math.max(throttle, 0.45) : throttle);
             else throttle *= self.gearbox === "torque-converter" ? 0.6 : 0.15;                                   // (a converter keeps the drive through a shift: less is taken off)
         }
         self.throttleUsed = throttle;                      // (for the debugging)
@@ -2147,7 +2155,10 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(inp.clutchPedalPresent) {
             engagement = pedalBite(inp.clutch);
         } else {
-            engagement = smoothstep(self.clutchStartRPM, self.clutchFullRPM, rpm);
+            // the clutch closes with the engine speed (so that the engine does not stall), but a car that rolls in gear keeps it closed: the engine speed the wheels ask for
+            // counts as well. Without that a lifted throttle let the engine fall below the closing speed, the clutch opened, and the engine dropped to idle while the car
+            // still ran at speed; now it follows the wheels down (the engine brakes) until the car is too slow for the gear
+            engagement = smoothstep(self.clutchStartRPM, self.clutchFullRPM, Math.max(rpm, driveRPM));
             if(self.shiftTimer > 0) {
                 var ts = self.shiftTimer;
                 if(self.gearbox === "dct") engagement = Math.min(engagement, 0.4 + 0.6 * (1 - ts / Math.max(0.01, self.shiftDuration)));      // (the hand-over: never open)

@@ -10,6 +10,11 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - *Save and drive* is now **Save and test**: after the car is saved a window asks for the track and the conditions (weather, time of day, ground; they are the options of the game), with *Start*, or *Use last settings* (it says which: the track, the weather and the time) to go at once.
 
+### Automatic gearbox: lifting the throttle
+
+- **The engine speed no longer drops to idle when you lift off.** The automatic clutch closed with the engine speed only, so a lifted throttle let the engine fall below the closing speed (2000 rpm in the V12 rebuild), the clutch opened, and the engine dropped to idle while the car still ran at speed. It now also counts the engine speed that the wheels ask for: the clutch stays closed while the car rolls in gear, the engine follows the wheels down (it brakes) and only lets go when the car is too slow for the gear.
+- **Downshifting on a lifted throttle is calmer.** With the throttle off the gearbox keeps the higher gear until the road speed asks for the clutch (the shift speed of a 10500 rpm limit was far too high) and goes down then. The blip of a dual clutch on a downshift stops when the engine has the speed of the new gear: with a light engine (inertia 0.02) it went to 5600 rpm and kicked the car. Measured with the tune on a lift from 103 km/h: the engine speed falls 4069, 3050, 2352, 1876 (45 km/h), 1603 (first gear), 971 and then idle, without a jump.
+
 ### Repair
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
