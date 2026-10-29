@@ -198,7 +198,7 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
             var ch = config.chassis || {}, hubOf = { FR: [-(ch.front_track || 1.5) / 2, 0, (ch.wheelbase || 2.6) / 2], FL: [(ch.front_track || 1.5) / 2, 0, (ch.wheelbase || 2.6) / 2],
                 RL: [(ch.rear_track || 1.5) / 2, 0, -(ch.wheelbase || 2.6) / 2], RR: [-(ch.rear_track || 1.5) / 2, 0, -(ch.wheelbase || 2.6) / 2] };
             SLOTS.forEach(function (slot) {
-                var libWheel = WL ? WL.wheelFor(config, slot) : null;
+                var libWheel = WL ? WL.wheelFor(config, slot, root) : null;
                 var ghost = libraryOnly && config.type === "motorcycle" && (slot === "FR" || slot === "RR");      // (a motorcycle: one wheel at each end, the other slot is a dot)
                 var parts = nodes[slot].map(function (name) { return root.getObjectByName(name); }).filter(Boolean);
                 // a part that is inside another part goes with it

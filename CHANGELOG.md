@@ -39,6 +39,10 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - A rim of the wheel library now brings a custom tyre, made from the numbers (width, diameter, height of the sidewall, rubber), for the front and the rear axle apart; the tyres of the library are no longer chosen (a car that has one keeps it). The height of the sidewall is new: the rim takes what is left of the diameter. It works in the tuning menu and in the car editor, where the rim and the tyre of the front and the rear axle follow the sliders at once (the tyre in the view, the shell of the bench car when the sliders rest) and are saved with the car.
 
+### The rim and the tyre of the model
+
+- A model with objects called **rim** and **tyre** (or tire; a number after the name is allowed) can have them as its wheels: the car editor has a checkbox *Use the rim and the tyre of the model* (only when the model has them; the rims of the library are then not chosen). The two objects are the wheel of every corner and are fitted to the tyre settings: the rim to the inner shell, the tyre stretched between the inner and the outer shell with its section kept (the height of the sidewall, the width and the diameter of the Tyres settings), turned for the side of the car. They are not seen themselves and not part of the shell. The tyre of the library is gone from the editor: a tyre is always made from the numbers (a car that had one is made again with a custom tyre when it is saved).
+
 ### The beams of the model are the shell
 
 - An object "beams" in the model is now always the shell of the car, also when car.json still has a layout from a scan of the editor (the layout went before it, and the beams were then not used and drawn as grey lines in the game). The object is never seen in the game. For a model with beams the card Soft body no longer shows the scan, the fill, the most nodes and the editing of nodes: they make nodes that are not used then. The test of the editor also works with a rim of the library on both axles when the wheel mode is the demo wheel, and it finds the parts of the car (they were not found at times: 404).

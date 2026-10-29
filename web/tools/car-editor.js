@@ -2326,7 +2326,7 @@ OpenRacer.WheelLibrary.load().then(() => {
 // what is chosen: { front: { rim, tyre, custom }, rear: { ... } } without the empty ones, or null. A rim brings a custom tyre, made from the numbers of the Tyres settings (width, diameter,
 // height of the sidewall, rubber: CarTuning.libraryOf); a tyre of the library only stays where a car has one
 function libraryChoice() {
-    const values = Object.assign({}, tuning, { rim_front: $("libRimFront").value, tyre_front: $("libTyreFront").value, rim_rear: $("libRimRear").value, tyre_rear: $("libTyreRear").value });
+    const values = Object.assign({}, tuning, { rim_front: $("libRimFront").value, tyre_front: "", rim_rear: $("libRimRear").value, tyre_rear: "", model_tyres: $("libUseModel").checked ? "on" : "off" });
     const out = OpenRacer.CarTuning.libraryOf(values);
     return Object.keys(out).length ? out : null;
 }
@@ -2340,7 +2340,7 @@ function setLibraryChoice(library) {
             select.value = [...select.options].some((o) => o.value === c[kind]) ? c[kind] : "";
         }
     }
-    for (const axle of ["front", "rear"]) { const select = $(LIB_SELECTS[axle].tyre); select.parentNode.style.display = select.value ? "" : "none"; }          // (the tyre of the library is only shown for a car that has one)
+    $("libUseModel").checked = ["front", "rear"].some((axle) => OpenRacer.WheelLibrary.choiceOf(cfg, axle).model);
     syncTuningVisibility();
     updateLibraryPreview();                 // (a tune loaded into the form: its rims and tyres show at once)
 }
@@ -2361,7 +2361,7 @@ function updateLibraryPreview() {
         const bike = cfg.type === "motorcycle";
         for (const slot of SLOTS) {
             if (bike && (slot === "FR" || slot === "RR")) continue;
-            const wheel = OpenRacer.WheelLibrary.wheelFor(cfg, slot);
+            const wheel = OpenRacer.WheelLibrary.wheelFor(cfg, slot, state.root);
             if (!wheel) continue;
             let centre = null;
             if (wheelMode() === "model") {
@@ -2376,6 +2376,7 @@ function updateLibraryPreview() {
             wheel.object.position.copy(centre);
             libPreview.add(wheel.object);
         }
+        if ($("libUseModel").checked) OpenRacer.WheelLibrary.modelObjects(state.root).forEach((o) => { if (!libHidden.includes(o)) libHidden.push(o); });          // (the rim and the tyre of the model are drawn at the wheels: the objects themselves are not)
         for (const axle of ["front", "rear"]) {
             const shell = OpenRacer.WheelLibrary.shellOf(cfg, axle);
             if (shell) lines.push(axle + ": tyre " + (shell.diameter * 1000).toFixed(0) + " mm across, " + (shell.width * 1000).toFixed(0) + " mm wide, shell " + (shell.rings || 3) + " rings × " + (shell.segments || 36) + " nodes, inner shell " + Math.round((shell.inner_ratio || 0.62) * 100) + " %, carcass " + (shell.carcass || 0) + " mm");
@@ -2387,6 +2388,7 @@ function updateLibraryPreview() {
     });
 }
 Object.values(LIB_SELECTS).forEach((axle) => Object.values(axle).forEach((id) => $(id).addEventListener("change", () => { state.pendingLibrary = null; updateHelpers(); syncTuningVisibility(); if (bench.vehicle) restartBench(); })));
+$("libUseModel").addEventListener("change", () => { state.pendingLibrary = null; librarySig = ""; updateHelpers(); syncTuningVisibility(); tuningChanged(); setDirty(true); if (bench.vehicle) restartBench(); });
 for (const slot of SLOTS) $("w" + slot).addEventListener("change", updateHelpers);
 document.querySelectorAll("input[name=wheelMode]").forEach((radio) => radio.addEventListener("change", () => {
     $("wheelSelects").style.display = wheelRadio() === "model" ? "" : "none";
@@ -2781,10 +2783,14 @@ $("setupDelete").addEventListener("click", () => {
 // the settings that cannot do anything with the others as they are (the gearbox, the differential, the drive, the turbo) are hidden, as in the tuning menu of the game (CarTuning.visible)
 function syncTuningVisibility() {
     const v = Object.assign({}, tuning, { drive: $("drive").value, diff: $("diff").value, center_diff: $("centerDiff").value, gearbox: $("gearbox").value },
-        { rim_front: $("libRimFront").value, tyre_front: $("libTyreFront").value, rim_rear: $("libRimRear").value, tyre_rear: $("libTyreRear").value });
+        { rim_front: $("libRimFront").value, tyre_front: "", rim_rear: $("libRimRear").value, tyre_rear: "", model_tyres: $("libUseModel").checked ? "on" : "off" });
     document.querySelectorAll("#tuningBox [data-tune-key], #tuningCard [data-tune-key], [data-tune-key]").forEach((cell) => { cell.style.display = OpenRacer.CarTuning.visible(cell.dataset.tuneKey, v) ? "" : "none"; });
     document.querySelectorAll("[data-tune-key]").forEach((cell) => { const row = cell.parentNode; if (row && row.classList.contains("row")) row.style.display = [...row.children].some((c) => c.style.display !== "none") ? "" : "none"; });
     document.querySelectorAll("[data-tune-feature]").forEach((wrap) => { wrap.style.display = OpenRacer.CarTuning.visibleFeature(wrap.dataset.tuneFeature, v) ? "" : "none"; });
+    // (the rim and the tyre of the model: no rim of the library to choose)
+    const fromModel = $("libUseModel").checked;
+    for (const id of ["libRimFront", "libRimRear"]) $(id).parentNode.style.display = fromModel ? "none" : "";
+    $("libSame").style.display = fromModel ? "none" : "";
 }
 ["drive", "diff", "centerDiff", "gearbox"].forEach((id) => $(id).addEventListener("change", () => syncTuningVisibility()));
 
@@ -3383,6 +3389,11 @@ function refreshReady() {
     el.title = list.join("\n") || "Nothing is missing";
     el.style.color = list.length ? "var(--warn)" : "var(--muted)";
     // a model with an object "beams" has its shell: the scan, the fill and the editing of nodes make nodes that are not used then
+    // the rim and the tyre of the model: only when it has objects called so
+    const hasRimTyre = state.nodes.some((n) => /^(rim|tyre|tire)$/i.test(n.name.replace(/[^a-z]/gi, "")));
+    $("libUseModel").disabled = !hasRimTyre && !$("libUseModel").checked;
+    $("libUseModelHint").style.display = hasRimTyre ? "none" : "";
+    $("libUseModelWrap").style.opacity = $("libUseModel").disabled ? 0.5 : "";
     const modelBeams = state.nodes.some((n) => /^(softbody|shell)?beams?$/i.test(n.name.replace(/[^a-z]/gi, "")));
     $("sbLine").textContent = modelBeams ? "Shell from the beams of the model" : "Dents, breaks, loose parts";
     for (const id of ["sbMaxNodes", "sbScan", "sbInside", "sbScanInside", "sbEdit"]) { const el = $(id); const holder = el.closest(".row > div") || el.closest("label") || el; holder.style.display = modelBeams ? "none" : ""; }

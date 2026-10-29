@@ -69,8 +69,8 @@ OpenRacer.WheelLibrary = (function () {
         if(!L) return { rim: "", tyre: "" };
         var a = L[axle] || (L.rim !== undefined || L.tyre !== undefined ? L : null) || {};
         // (a rim of the library brings a custom tyre, made from the numbers: the tyres of the library are no longer chosen, only kept for the cars that have one)
-        var tyreId = a.tyre || (a.rim ? "custom" : "");
-        return { rim: a.rim || "", tyre: tyreId, custom: tyreId === "custom" ? a.custom || {} : undefined };
+        var tyreId = a.tyre || (a.rim || a.model ? "custom" : "");
+        return { rim: a.rim || "", tyre: tyreId, custom: tyreId === "custom" ? a.custom || {} : undefined, model: !!a.model };
     }
 
     // ---- the custom tyre: made from numbers, no file. The tyre is the space between the outer shell (the diameter, the width) and the inner shell (inner_ratio of the diameter): its
@@ -182,11 +182,11 @@ OpenRacer.WheelLibrary = (function () {
     }
 
     // the wheel of a slot: the rim and the tyre of its axle, copied from the files, turned for the side; null when the axle has nothing of the library
-    function wheelFor(config, slot) {
+    function wheelFor(config, slot, root) {
         var axle = AXLE_OF[slot], c = choiceOf(config, axle);
         if(!(c.rim || c.tyre)) return null;
         var r = rim(c.rim), rf = entryFile(r);
-        if(c.tyre === CUSTOM_ID) return customWheel(c, slot, r, rf);
+        if(c.tyre === CUSTOM_ID) return customWheel(c, slot, r, rf, c.model ? root : null);
         var t = tyre(c.tyre), tf = entryFile(t);
         if(!rf && !tf) return null;
         var object = new THREE.Object3D();
@@ -205,16 +205,98 @@ OpenRacer.WheelLibrary = (function () {
         return { object: object, diameter: diameter, width: width, shell: shell, offset: r && r.offset > 0 ? r.offset : 0, rim: r, tyre: t };
     }
 
+    // ---- the rim and the tyre of the model itself: objects called "rim" and "tyre" (or "tire"; a number after the name is allowed) in the model. They are the wheel of every corner: baked
+    // to the frame of a wheel (the axle along X, the middle at the origin, the outside to +X as on the left of the car), the rim scaled to the inner shell and the tyre fitted between
+    // the inner shell and the outer shell, with its section kept (the radius from the bead to the tread is stretched to the height of the sidewall, the width to the width of the tyre)
+    var NAMES_RIM = /^rim$/, NAMES_TYRE = /^(tyre|tire)$/;
+    var bakeCache = typeof WeakMap !== "undefined" ? new WeakMap() : null;
+    function findNamed(root, re) {
+        var found = null;
+        root.traverse(function (o) { if(!found && re.test((o.name || "").toLowerCase().replace(/[^a-z]/g, ""))) found = o; });
+        return found;
+    }
+    function bake(obj) {
+        obj.updateWorldMatrix(true, true);
+        var parts = [], box = new THREE.Box3();
+        obj.traverse(function (m) {
+            if(!m.isMesh || !m.geometry || !m.geometry.attributes.position) return;
+            var g = m.geometry.clone();
+            g.applyMatrix4(m.matrixWorld);
+            g.computeBoundingBox();
+            box.union(g.boundingBox);
+            parts.push({ geometry: g, material: m.material });
+        });
+        if(!parts.length) return null;
+        var size = box.getSize(new THREE.Vector3()), centre = box.getCenter(new THREE.Vector3());
+        // the axle is the thinnest side of the box
+        var axis = size.x <= size.y && size.x <= size.z ? "x" : (size.y <= size.z ? "y" : "z");
+        var flip = axis === "x" ? centre.x < -0.01 : centre.x < -0.01;
+        var R = 0, Rin = Infinity, xMin = Infinity, xMax = -Infinity;
+        parts.forEach(function (part) {
+            var g = part.geometry;
+            g.translate(-centre.x, -centre.y, -centre.z);
+            if(axis === "z") g.rotateY(Math.PI / 2); else if(axis === "y") g.rotateZ(Math.PI / 2);
+            if(flip) g.rotateY(Math.PI);
+            var pos = g.attributes.position;
+            for(var i = 0; i < pos.count; i++) {
+                var rr = Math.sqrt(pos.getY(i) * pos.getY(i) + pos.getZ(i) * pos.getZ(i));
+                if(rr > R) R = rr; if(rr < Rin) Rin = rr;
+                if(pos.getX(i) < xMin) xMin = pos.getX(i); if(pos.getX(i) > xMax) xMax = pos.getX(i);
+            }
+        });
+        return { parts: parts, R: R, Rin: Rin, width: xMax - xMin, centreX: (xMin + xMax) / 2 };
+    }
+    // the rim and the tyre of a model: { rim, tyre } baked (kept for the model), or null when it has none of them
+    function modelWheelParts(root) {
+        if(!root) return null;
+        var cached = bakeCache && bakeCache.get(root);
+        if(cached) { cached.objects.forEach(function (o) { o.visible = false; }); return cached.rim || cached.tyre ? cached : null; }
+        var rimObj = findNamed(root, NAMES_RIM), tyreObj = findNamed(root, NAMES_TYRE);
+        if(!rimObj && !tyreObj) return null;
+        var out = { rim: rimObj ? bake(rimObj) : null, tyre: tyreObj ? bake(tyreObj) : null, objects: [rimObj, tyreObj].filter(Boolean) };
+        if(bakeCache) bakeCache.set(root, out);
+        if(!out.rim && !out.tyre) return null;
+        out.objects.forEach(function (o) { o.visible = false; o.traverse(function (m) { if(m.isMesh) { m.userData = m.userData || {}; m.userData.noCollision = true; } }); });          // (a drawing to take from: not seen, not a part of the shell)
+        return out;
+    }
+    function modelObjects(root) { var p = modelWheelParts(root); return p ? p.objects : []; }
+    function modelRim(baked, spec) {
+        var group = new THREE.Group(), s = baked.R > 0 ? spec.diameter / 2 * spec.inner_ratio / baked.R : 1;
+        baked.parts.forEach(function (part) { var mesh = new THREE.Mesh(part.geometry.clone(), part.material); mesh.scale.set(s, s, s); group.add(mesh); });
+        group.name = "rim_model";
+        return group;
+    }
+    function modelTyre(baked, spec) {
+        var group = new THREE.Group(), R = spec.diameter / 2, Ri = R * spec.inner_ratio;
+        var span = baked.R - baked.Rin > 1e-4 ? baked.R - baked.Rin : 1, sx = baked.width > 1e-4 ? spec.width / baked.width : 1;
+        baked.parts.forEach(function (part) {
+            var g = part.geometry.clone(), pos = g.attributes.position;
+            for(var i = 0; i < pos.count; i++) {
+                var y = pos.getY(i), z = pos.getZ(i), rr = Math.sqrt(y * y + z * z);
+                if(rr > 1e-6) { var rn = Ri + (rr - baked.Rin) / span * (R - Ri), f = rn / rr; pos.setY(i, y * f); pos.setZ(i, z * f); }
+                pos.setX(i, pos.getX(i) * sx);
+            }
+            pos.needsUpdate = true; g.computeBoundingSphere(); g.computeBoundingBox();
+            group.add(new THREE.Mesh(g, part.material));
+        });
+        group.name = "tyre_model";
+        return group;
+    }
+
     // the wheel of a slot with a custom tyre: the tyre between the shells, and the rim (of the library or a plain one) scaled to the inner shell
-    function customWheel(c, slot, r, rf) {
+    function customWheel(c, slot, r, rf, root) {
         var spec = customSpec(c.custom);
+        var modelParts = root ? modelWheelParts(root) : null;
         var object = new THREE.Object3D();
         object.name = "wheel_" + slot + "_library";
         var inner = new THREE.Object3D();
-        inner.name = (c.rim || "plain rim") + " + custom tyre";
+        inner.name = (modelParts && modelParts.rim ? "rim of the model" : (c.rim || "plain rim")) + " + " + (modelParts && modelParts.tyre ? "tyre of the model" : "custom tyre");
         if(!LEFT[slot]) inner.rotation.y = Math.PI;
         var rimObject;
-        if(rf) {
+        if(modelParts && modelParts.rim) {
+            // the rim of the model, scaled to the inner shell (the same on every side of the car)
+            rimObject = modelRim(modelParts.rim, spec);
+        } else if(rf) {
             rimObject = rf.scene.clone(true); rimObject.name = "rim_" + slot; if(r.flip) rimObject.rotation.y = Math.PI;
             // the rim takes the size of the inner shell: its diameter, and a width in step with the tyre (a rim of the library keeps its look, only scaled)
             var wanted = spec.diameter * spec.inner_ratio, widthWanted = spec.width * 0.8;
@@ -223,7 +305,7 @@ OpenRacer.WheelLibrary = (function () {
             var holder = new THREE.Object3D(); holder.add(rimObject); rimObject = holder;
         } else rimObject = plainRim(spec);
         inner.add(rimObject);
-        inner.add(customMesh(spec));
+        inner.add(modelParts && modelParts.tyre ? modelTyre(modelParts.tyre, spec) : customMesh(spec));
         object.add(inner);
         object.traverse(function (child) { if(child.isMesh) { child.castShadow = true; child.receiveShadow = false; } });
         var shell = { width: spec.width, rings: spec.rings, segments: spec.segments, inner_ratio: spec.inner_ratio, carcass: spec.carcass, diameter: spec.diameter };
@@ -231,7 +313,7 @@ OpenRacer.WheelLibrary = (function () {
     }
 
     lib.load = load; lib.rims = rims; lib.tyres = tyres; lib.rim = rim; lib.tyre = tyre; lib.choiceOf = choiceOf; lib.uses = uses; lib.usesAxle = usesAxle;
-    lib.preload = preload; lib.wheelFor = wheelFor; lib.shellOf = shellOf; lib.filesFor = filesFor;
+    lib.preload = preload; lib.wheelFor = wheelFor; lib.modelParts = modelWheelParts; lib.modelObjects = modelObjects; lib.shellOf = shellOf; lib.filesFor = filesFor;
     lib.ready = function () { return loaded; }; lib.problems = problems;
     return lib;
 })();
