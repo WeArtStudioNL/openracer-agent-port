@@ -110,6 +110,37 @@
             </div>
         </details>
 
+        <details class="card" id="bodyCard">
+            <summary>Body (shapes)<span class="meta" id="bodyInfo">None</span></summary>
+            <div class="body">
+                <p class="sub">No model file: build the car from simple shapes. The wheels are shapes named <code>wheel_FL</code>, <code>wheel_RL</code> (mirrored: <code>wheel_FR</code>, <code>wheel_RR</code>), a steering wheel is <code>steeringwheel</code>, the parts of the suspension have the names of <a href="#" style="color:inherit">SuspensionRig.js</a> (<code>susp_upright_FL</code>, <code>steer_tierod_FL</code>, ...). Positions are in metres: x to the left, y up, z forward, the origin at the height of the wheel axles, between the axles. Click a shape in the view or in the list; W moves it, E turns it.</p>
+                <div class="buttons"><button class="accent small" id="bodyStart">Make a body from shapes</button></div>
+                <div id="bodyEdit" style="display:none">
+                    <div class="buttons">
+                        <button class="small" data-body-add="box">+ Box</button><button class="small" data-body-add="cylinder">+ Cylinder</button><button class="small" data-body-add="sphere">+ Sphere</button><button class="small" data-body-add="cone">+ Cone</button><button class="small" data-body-add="wedge">+ Wedge</button>
+                    </div>
+                    <select id="bodyList" size="8" style="width:100%;height:150px"></select>
+                    <div class="buttons"><button class="small ghost" id="bodyMove">Move (W)</button><button class="small ghost" id="bodyTurn">Turn (E)</button><button class="small ghost" id="bodyDuplicate">Duplicate</button><button class="small ghost" id="bodyDelete">Delete</button></div>
+                    <div id="bodyForm" style="display:none">
+                        <div class="row"><div><label>Name</label><input type="text" id="bodyName"></div><div><label>Type</label><select id="bodyType"><option>box</option><option>cylinder</option><option>sphere</option><option>cone</option><option>wedge</option></select></div></div>
+                        <div class="row"><div><label>Parent (it moves with the parent)</label><select id="bodyParent"></select></div><div class="fixed" style="align-self:flex-end"><label><input type="checkbox" id="bodyMirror"> Mirror to the other side</label></div></div>
+                        <label>Position x / y / z (m)</label>
+                        <div class="row"><input type="number" id="bodyPX" step="0.01"><input type="number" id="bodyPY" step="0.01"><input type="number" id="bodyPZ" step="0.01"></div>
+                        <label>Turn x / y / z (°)</label>
+                        <div class="row"><input type="number" id="bodyRX" step="5"><input type="number" id="bodyRY" step="5"><input type="number" id="bodyRZ" step="5"></div>
+                        <label>Size: width / height / length (m); a cylinder or a cone: diameter / height along its axis / diameter</label>
+                        <div class="row"><input type="number" id="bodySX" step="0.01" min="0.001"><input type="number" id="bodySY" step="0.01" min="0.001"><input type="number" id="bodySZ" step="0.01" min="0.001"></div>
+                        <div class="row">
+                            <div><label>Colour</label><input type="color" id="bodyColor"></div>
+                            <div><label>Metal (0-1)</label><input type="number" id="bodyMetal" step="0.1" min="0" max="1"></div>
+                            <div><label>Rough (0-1)</label><input type="number" id="bodyRough" step="0.1" min="0" max="1"></div>
+                            <div><label>Opacity (0-1)</label><input type="number" id="bodyOpacity" step="0.1" min="0.05" max="1"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </details>
+
         <details class="card">
             <summary>Wheels and steering<span class="meta" id="wheelInfo"></span></summary>
             <div class="body">
@@ -633,6 +664,7 @@
 <script src="../js/Motorcycle.js"></script>
 <script src="../js/CarTuning.js"></script>
 <script src="../js/WheelLibrary.js"></script>
+<script src="../js/Shapes.js"></script>
 <script src="../js/Smoke.js"></script>
 <script src="../js/Flames.js"></script>
 <script src="../js/Driver.js"></script>

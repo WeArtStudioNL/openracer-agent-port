@@ -22,6 +22,7 @@
  * Description: Loads the 3D model of a car from its configuration (cars/<id>/car.json, "model" and "wheels").
  *
  *   model.type "legacy": the two JSON models of the original demo (a body and a wheel that is used four times).
+ *   model.type "shapes": no file: a list of simple shapes in car.json (Shapes.js), built as the parts of a model, in the frame of the car.
  *   model.type "gltf":   a glTF or glb file, for example from Blender. The model has to face +z ("forward") and have
  *                        y up; rotation_y, scale and offset in the configuration put it right. The origin of the
  *                        model after that is the height of the wheel axles, in the middle between the axles.
@@ -477,6 +478,8 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
     var start = function () {
         if(loadedRoot) {
             try { build(loadedRoot.clone(true)); } catch(e) { console.error(e); onError("Could not use the model (" + e + ")"); }
+        } else if(model.type === "shapes") {
+            try { build(OpenRacer.Shapes.build(model.shapes)); } catch(e) { console.error(e); onError("Could not build the shapes of the car (" + e + ")"); }
         } else if(model.type === "gltf") gltf();
         else legacy();
     };

@@ -16,6 +16,7 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { initSoftBody } from "./softbody-editor.js";
 import { initDriver } from "./driver-editor.js";
 import { initSuspension } from "./suspension-editor.js";
+import { initBody } from "./body-editor.js";
 
 const $ = (id) => document.getElementById(id);
 const SLOTS = ["FR", "FL", "RL", "RR"];
@@ -26,6 +27,7 @@ const FILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/;
 
 let softBodyEditor = null; // the Soft body card (softbody-editor.js), made at the end
 let driverEditor = null;   // the Driver card (driver-editor.js), made at the end
+let bodyEditor = null;                       // the Body (shapes) card (body-editor.js): a car made of simple shapes, no model file
 let suspensionEditor = null;                 // the Suspension and driveline card (suspension-editor.js)
 const state = {
     files: new Map(),       // name -> File, the files that were picked
@@ -493,7 +495,10 @@ function loadFromUrl(url, label, car) {
     }, undefined, (error) => status("Could not load the model of this car: " + (error.message || error), "error"));
 }
 
-function setModel(root, isNew, replace) {
+// shapes: null for a loaded model; for the body of shapes (body-editor.js) "first" (a new body), "load" (a car that has one) or "again" (the shapes were changed: the wheels that
+// were picked stay picked and the view stays where it is)
+function setModel(root, isNew, replace, shapes) {
+    const picks = shapes === "again" ? SLOTS.map((slot) => [...$("w" + slot).selectedOptions].map((o) => o.value)) : null;
     if (state.root) pivot.remove(state.root);
     state.root = root;
     pivot.add(root);
@@ -537,7 +542,25 @@ function setModel(root, isNew, replace) {
             select.appendChild(option);
         });
     }
-    if (replace) {
+    if (shapes === "again") {
+        SLOTS.forEach((slot, i) => { [...$("w" + slot).options].forEach((o) => { o.selected = picks[i].includes(o.value); }); });
+        applyTransform();
+    } else if (shapes === "first") {
+        // (the shapes are in the frame of the car: no offset, no turn; the wheels are the shapes with a wheel name)
+        $("rotation").value = 0; $("scale").value = 1; $("offsetX").value = $("offsetY").value = $("offsetZ").value = 0;
+        applyTransform();
+        document.querySelector("input[name=wheelMode][value=model]").checked = true;
+        $("wheelSelects").style.display = "";
+        guessWheels();
+        if (wheelCenters()) chassisFromWheels();
+        sizeFromModel();
+        defaultCameras();
+        frameModel();
+    } else if (shapes === "load") {
+        applyTransform();
+        updateHelpers();
+        frameModel();
+    } else if (replace) {
         replaceModel();
     } else if (isNew) {
         $("rotation").value = 0;
@@ -1002,6 +1025,7 @@ function gizmoMoved() {
 }
 
 function selectLayer(id) {
+    if (id && bodyEditor) bodyEditor.hideGizmo();
     if (driverEditor) driverEditor.deselect();
     layers.selected = layers.selected === id ? null : id;
     const sel = layers.selected;
@@ -1626,7 +1650,9 @@ async function save() {
 
         // the model
         const uploads = [];
-        if (state.mainFile && state.files.size) {
+        if (bodyEditor && bodyEditor.active()) {
+            config.model = { type: "shapes", shapes: bodyEditor.shapes() };       // (no file: the shapes are in car.json)
+        } else if (state.mainFile && state.files.size) {
             for (const [fileName, file] of state.files) {
                 if (!FILE_PATTERN.test(fileName)) throw new Error("The file name “" + fileName + "” has characters that are not allowed. Use letters, digits, - _ . and spaces.");
                 uploads.push([fileName, file]);
@@ -1644,15 +1670,17 @@ async function save() {
         } else {
             throw new Error("Load a model first.");
         }
-        if (config.model.type === "gltf") {
+        if (config.model.type === "gltf" || config.model.type === "shapes") {
             const overrides = {};
             for (const [materialName, override] of Object.entries(state.overrides)) {
                 if (Object.keys(override).length) overrides[materialName] = override;
             }
             if (Object.keys(overrides).length) config.materials = overrides;
-            config.model.rotation_y = num("rotation") || 0;
-            config.model.scale = num("scale") > 0 ? num("scale") : 1;
-            config.model.offset = [num("offsetX") || 0, num("offsetY") || 0, num("offsetZ") || 0];
+            if (config.model.type === "gltf") {
+                config.model.rotation_y = num("rotation") || 0;
+                config.model.scale = num("scale") > 0 ? num("scale") : 1;
+                config.model.offset = [num("offsetX") || 0, num("offsetY") || 0, num("offsetZ") || 0];
+            }
         }
 
         // the driver model: a new file is saved as driver.glb in the folder of the car; the one that the car has goes along when it is saved under another id
@@ -1894,6 +1922,19 @@ function loadExisting() {
             updateHelpers();
         }, 100);
         $("modelInfo").textContent = "Loading " + m.file + "…";
+    } else if (car.model.type === "shapes") {
+        const wheels = shown.wheels || car.wheels || { mode: "model" };
+        setLibraryChoice(wheels.library || null);
+        document.querySelector("input[name=wheelMode][value=" + wheels.mode + "]").checked = true;
+        $("wheelSelects").style.display = wheels.mode === "model" ? "" : "none";
+        $("rotation").value = 0; $("scale").value = 1; $("offsetX").value = $("offsetY").value = $("offsetZ").value = 0;
+        bodyEditor.load(car.model.shapes);
+        for (const slot of SLOTS) {
+            const names = (wheels.nodes && wheels.nodes[slot]) || [];
+            [...$("w" + slot).options].forEach((option) => { option.selected = names.includes(option.value); });
+        }
+        updateHelpers();
+        $("modelInfo").textContent = "A body of shapes (see the Body card).";
     } else {
         // the model of the original demo has its own wheels
         document.querySelector("input[name=wheelMode][value=default]").checked = true;
@@ -1905,7 +1946,14 @@ function loadExisting() {
     status("Loaded " + (car.name || car.id) + (activeTune && shown !== car ? " with the tune " + activeTune : "") + ".");
 }
 
+// the body of shapes (body-editor.js) is the model: a group of named meshes, like a loaded glTF
+function setShapesBody(group, how) {
+    if (how === true || how === "first") { state.files = new Map(); state.mainFile = null; state.existingModel = null; state.replacedModel = null; }
+    setModel(group, how === true || how === "first", false, how === true ? "first" : how === false ? "again" : how);
+}
+
 function newCar(type) {
+    if (bodyEditor) bodyEditor.clear();
     $("vehicleType").value = type === "motorcycle" ? "motorcycle" : "car";
     fillBike(null);
     if (softBodyEditor) softBodyEditor.fill({});
@@ -2401,7 +2449,7 @@ function tuningValues(config) {
 // "Drop car" lets it fall from a height, The model is built the way the game
 // builds it (CarLoader.js: the wheels taken out, the suspension rig found), from the model and the settings as they are now.
 window.THREE = Object.assign({}, THREE, { GLTFLoader });
-const PHYSICS_SCRIPTS = ["Engine.js", "Wheel.js", "TyreShell.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "PartsLibrary.js", "Chain.js", "CarLoader.js", "Ground.js", "CollisionProxy.js", "SoftBody.js", "SoftBodyMesh.js", "Parts.js"];
+const PHYSICS_SCRIPTS = ["Engine.js", "Wheel.js", "TyreShell.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "PartsLibrary.js", "Chain.js", "Shapes.js", "CarLoader.js", "Ground.js", "CollisionProxy.js", "SoftBody.js", "SoftBodyMesh.js", "Parts.js"];
 let physicsLoading = null;
 function loadPhysics() {
     if (!physicsLoading) {
@@ -2908,4 +2956,9 @@ softBodyEditor = initSoftBody({
     canSave: () => !!state.existingId && !!state.root,
     save: () => save(),
     frameModel
+});
+
+bodyEditor = initBody({
+    $, THREE, TransformControls, scene, pivot, camera, renderer, controls, status,
+    apply: (group, how) => setShapesBody(group, how)
 });
