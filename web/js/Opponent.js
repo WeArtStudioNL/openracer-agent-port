@@ -469,13 +469,14 @@ OpenRacer.Opponent = function (config, line, options) {
             wheel.object.children[0].children[0].rotation.x = wheel.spin;
             if (this.head && i === 1) OpenRacer.updateFork(this.head, wheel, this.body, v.steerApplied);
         }
-        if (this.rig) this.rig.update(v);
+        if (this.rig) this.rig.update(v, w);
         if(this.softBodyMesh) this.softBodyMesh.update();
         if(this.parts) this.parts.update(delta);
         if (this.steeringWheel) {
             var sw = this.steeringWheel;
-            sw.object.quaternion.setFromAxisAngle(sw.axis, -v.steerApplied * (sw.degrees * Math.PI / 180) / this.maxTurn);
-            sw.angle = -v.steerApplied * (sw.degrees * Math.PI / 180) / this.maxTurn;
+            var swAngle = this.rig && this.rig.columnAngle !== undefined ? this.rig.columnAngle : -v.steerApplied * (sw.degrees * Math.PI / 180) / this.maxTurn;
+            sw.object.quaternion.setFromAxisAngle(sw.axis, swAngle);
+            sw.angle = swAngle;
         }
         // the driver: the hands on the steering wheel, the feet on the pedals (in a replay the pedals and the gear are those of the recording)
         if (this.driver) {

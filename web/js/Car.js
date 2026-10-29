@@ -403,15 +403,16 @@ OpenRacer.Car = function( config, domElement ) {
                 if(this.chain && i === 2) OpenRacer.Chain.update(this.chain, wheel.spin);
             }
         }
-        if(this.rig) this.rig.update(this.vehicle);
+        if(this.rig) this.rig.update(this.vehicle, this.wheels);
         if(this.softBodyMesh) this.softBodyMesh.update();
         if(this.parts) this.parts.update(delta);
         // the steering wheel of the model turns with the steering
         if(this.steeringWheel) {
             var sw = this.steeringWheel;
             var ratio = (sw.degrees * Math.PI / 180) / this.maxTurn;
-            sw.object.quaternion.setFromAxisAngle(sw.axis, -v.steerApplied * ratio);
-            sw.angle = -v.steerApplied * ratio;
+            var swAngle = this.rig && this.rig.columnAngle !== undefined ? this.rig.columnAngle : -v.steerApplied * ratio;       // (a model with a fixed tie rod: the column turns as the rods need)
+            sw.object.quaternion.setFromAxisAngle(sw.axis, swAngle);
+            sw.angle = swAngle;
         }
         // the driver: the hands on the steering wheel, the feet on the pedals (the head is not drawn in the cockpit view, it is in front of the camera)
         if(this.driver) {

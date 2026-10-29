@@ -314,6 +314,8 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
                 rig = OpenRacer.SuspensionRig.find(built ? [root, built.group] : root, space, tilt, config);
                 space.remove(tilt);
                 if(built) { space.remove(built.group); tilt.add(built.group); }      // (what the rig did not take, the engine, the gearbox, a differential, stays on the body)
+                if(rig && steering) rig.column = { centre: steering.object.position.clone(), axis: steering.axis };       // (a fixed tie rod has its arm on the steering column)
+                if(rig && measured) rig.hubs = measured.centres;                                                          // (the middle of each wheel: the upright turns it about its pin)
                 if(rig) console.log("CarLoader: suspension rig with " + rig.count + " parts" + (built && built.names.length ? " (" + built.names.length + " from the parts library)" : ""));
             } else if(built) tilt.add(built.group);
             // glTF models are made of physically based materials: they are lit by and reflect the surroundings of the
@@ -378,8 +380,18 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
         // the vertices of the part in the space of the body, for its middle and its shape
         var points = [];
         var v = new THREE.Vector3();
+        // (with a steering column on it: the shape of the steering wheel itself, not of the column and what hangs on it: they turn with it but do not give it its middle and its axis. The wheel is
+        // the biggest mesh under the node, with the other meshes that a glTF makes of the same mesh, one for each material: "Torus.001", "Torus.001_1")
+        var baseOf = function (mesh) { return (mesh.name || "").replace(/_\d+$/, ""); }, biggest = null;
+        node.traverse(function (child) {
+            if(child.isMesh && child.geometry.attributes.position && (!biggest || child.geometry.attributes.position.count > biggest.geometry.attributes.position.count)) biggest = child;
+        });
+        var hasColumn = false;
+        node.traverse(function (child) { if(child !== node && /column|shaft/i.test(child.name || "")) hasColumn = true; });
+        var ownBase = biggest && hasColumn ? baseOf(biggest) : null;      // (only a wheel with a column on it: any other wheel is all of its meshes)
         node.traverse(function (child) {
             if(!child.isMesh || !child.geometry.attributes.position) return;
+            if(ownBase && baseOf(child) !== ownBase) return;
             var position = child.geometry.attributes.position;
             var step = Math.max(1, Math.floor(position.count / 4000));
             for(var i = 0; i < position.count; i += step) {

@@ -17,7 +17,11 @@
  *     susp_strut_FL                        gets shorter and longer with the travel
  *     steer_rack                           the rack: it slides across the car with the steering (steering.rack_travel of car.json, m
  *                                          per radian of the front wheels, 0.1 by default; negative slides it the other way)
- *     steer_tierod_FL                      a tie rod: the origin at the end on the rack, the other end on the upright; it follows both
+ *     steer_tierod_FL                      a tie rod: the origin at the end on the rack, the other end on the upright; it follows both.
+ *                                          A model without a rack has a fixed tie rod from an arm on the steering column (the origin of the rod is the pin on that
+ *                                          arm) to an arm on the upright: the column turns about the axis of the steering wheel to the angle at which the rods keep
+ *                                          their length (rig.columnAngle; the steering wheel follows it), and the wheel turns about the pin of the upright (the
+ *                                          origin of the upright, a king pin beside the wheel), not about its own middle (the hub moves along: rig.hubs, set by CarLoader.js)
  *     susp_axle_rear (or _front)           a live axle: the origin at its middle; it goes up and down with its two wheels and rolls
  *     propshaft (or susp_propshaft,        the drive shaft of a car with drive to all wheels, from the differential at the front to the one
  *     cardan, susp_driveshaft_center)      at the rear: it stays where it is and turns about its own length with the wheels (the speed of
@@ -82,6 +86,21 @@ OpenRacer.SuspensionRig = (function () {
         return centre.clone().addScaledVector(dir, half);
     }
 
+    // the tip of a rod-like mesh that is farthest from the origin: the middle of its end cap (the box of a slanted rod reaches past its real end)
+    function tipOf(node, origin) {
+        var points = [], v = new THREE.Vector3(), far = 0;
+        node.updateMatrixWorld(true);
+        node.traverse(function (c) {
+            if(!c.isMesh || !c.geometry.attributes.position) return;
+            var pos = c.geometry.attributes.position;
+            for(var i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(c.matrixWorld); var d = v.distanceTo(origin); points.push(v.x, v.y, v.z, d); if(d > far) far = d; }
+        });
+        if(!points.length) return null;
+        var sum = new THREE.Vector3(), n = 0;
+        for(var k = 0; k < points.length; k += 4) if(points[k + 3] > far - 0.012) { sum.add(v.set(points[k], points[k + 1], points[k + 2])); n++; }
+        return n ? sum.multiplyScalar(1 / n) : null;
+    }
+
     // The parts inside a spring or a damper (children of it): a piston (piston, rod, shaft) slides along the part with the travel, a coil (coil, spring) gets shorter and longer
     // about its own origin, and the cylinder itself keeps its length. Without them the whole part is scaled. axis: the direction of the part, from the top mount to the far end
     function innerParts(node, axis, restLength) {
@@ -120,6 +139,7 @@ OpenRacer.SuspensionRig = (function () {
         // (a part inside a part (the coil and the piston of a coilover) goes with its parent: it is not a part of its own)
         parts = parts.filter(function (p) { for(var a = p.node.parent; a; a = a.parent) for(var k = 0; k < parts.length; k++) if(parts[k].node === a) return false; return true; });
         if(!parts.length) return null;
+        var hasRack = parts.some(function (p) { return p.what.kind === "rack"; });
         space.updateMatrixWorld(true);
         var rig = { parts: [], rackTravel: (config.steering && config.steering.rack_travel !== undefined) ? config.steering.rack_travel : 0.1, rack: null, uprights: {} };
         var origin = new THREE.Vector3();
@@ -137,7 +157,7 @@ OpenRacer.SuspensionRig = (function () {
                 entry.ahead = entry.far.z >= origin.z ? 1 : -1; // the free end ahead of (+z) or behind the hinge
             } else if(entry.kind === "spring" || entry.kind === "tierod" || entry.kind === "panhard" || entry.kind === "shaft" || entry.kind === "propaxle") {
                 // the holder's Y axis runs along the part, from its origin to its far end, so that scale.y makes it longer or shorter
-                entry.far = exactFar || farEnd(p.node, origin);
+                entry.far = exactFar || (entry.kind === "tierod" && !hasRack ? tipOf(p.node, origin) : null) || farEnd(p.node, origin);
                 entry.restDir = entry.far.clone().sub(origin);
                 entry.restLength = Math.max(0.01, entry.restDir.length());
                 entry.restDir.normalize();
@@ -202,7 +222,7 @@ OpenRacer.SuspensionRig = (function () {
             else if(bestTrailing) p.onTrailing = bestTrailing;
             else if(axle) p.onAxle = axle;
         });
-        rig.update = function (vehicle) { update(rig, vehicle); };
+        rig.update = function (vehicle, wheels) { update(rig, vehicle, wheels); };
         rig.count = rig.parts.length;
         return rig;
     }
@@ -223,9 +243,72 @@ OpenRacer.SuspensionRig = (function () {
         var l = travelOf(vehicle, axle.rear ? 2 : 1), r = travelOf(vehicle, axle.rear ? 3 : 0), track = (axle.rear ? vehicle.rear_track : vehicle.front_track) || 1.5;
         return (l + r) / 2 + (l - r) / track * x;
     }
-    function update(rig, vehicle) {
+    // the steer of a front wheel (with its toe and the Ackermann), as the wheel is drawn
+    function steerOf(vehicle, wheel) {
+        var w = vehicle.wheels[wheel];
+        return w && w.steerNow !== undefined ? w.steerNow : (vehicle.steerApplied || 0);
+    }
+
+    // the tie rods of a model without a rack: the angle of the steering column at which the rods (fixed in length) fit the wheels best, and the column angle it gives
+    // (the pins of the rods on the column arm go round the axis of the steering wheel). rods: the entries of the rods; the far end of each is turned with its upright first.
+    var cp = new THREE.Vector3(), cn = new THREE.Vector3(), cq = new THREE.Quaternion();
+    function fitColumn(rig, vehicle) {
+        var key = steerOf(vehicle, 0) + "," + steerOf(vehicle, 1);
+        if(rig.columnKey === key) return rig.columnAngle;
+        rig.columnKey = key;
+        var rods = rig.rods, best = 0, bestError = Infinity, errors = [], step = 0.004, min = -2.0, max = 2.0;
+        for(var i = 0; i < rods.length; i++) farPoint(rig, rods[i], vehicle, rods[i].farNow);
+        for(var a = min; a <= max; a += step) {
+            cq.setFromAxisAngle(rig.column.axis, a);
+            var error = 0;
+            for(var r = 0; r < rods.length; r++) {
+                cp.copy(rods[r].origin).sub(rig.column.centre).applyQuaternion(cq).add(rig.column.centre);
+                var d = cp.distanceTo(rods[r].farNow) - rods[r].restLength;
+                error += d * d;
+            }
+            errors.push(error);
+            if(error < bestError) { bestError = error; best = errors.length - 1; }
+        }
+        // (between the steps: the top of the parabola through the best step and its neighbours)
+        var angle = min + best * step;
+        if(best > 0 && best < errors.length - 1) {
+            var e0 = errors[best - 1], e1 = errors[best], e2 = errors[best + 1], den = e0 - 2 * e1 + e2;
+            if(den > 0) angle += step * 0.5 * (e0 - e2) / den;
+        }
+        rig.columnAngle = angle;
+        rig.columnError = Math.sqrt(bestError / rods.length);
+        return angle;
+    }
+    // where the far end of a tie rod is: on the arm of the upright, which turns about the pin of the upright with the steering and goes up with the wheel
+    function farPoint(rig, p, vehicle, out) {
+        var upright = rig.uprights[p.wheel];
+        out.copy(p.far);
+        if(upright) {
+            out.sub(upright.origin).applyAxisAngle(UP, -steerOf(vehicle, p.wheel)).add(upright.origin);
+        }
+        out.y += travelOf(vehicle, p.wheel);
+        return out;
+    }
+
+    function update(rig, vehicle, wheels) {
         var steer = vehicle.steerApplied || 0;
         var rackShift = rig.rackTravel * steer; // along +x (to the left) for a steer to the right, with a positive travel
+        // (a fixed tie rod, from the steering column: found once)
+        if(rig.rods === undefined) {
+            rig.rods = rig.rack || !rig.column ? [] : rig.parts.filter(function (p) { return p.kind === "tierod" && p.wheel < 2 && rig.uprights[p.wheel]; });
+            rig.rods.forEach(function (p) { p.farNow = new THREE.Vector3(); });
+        }
+        var columnAngle = rig.rods.length ? fitColumn(rig, vehicle) : undefined;
+        // (the wheel turns about the pin of its upright, not about its own middle: the hub moves along an arc; the part of the model that is the upright does the same)
+        if(wheels && rig.hubs) {
+            for(var hi = 0; hi < 2; hi++) {
+                var hub = rig.hubs[hi === 0 ? "FR" : "FL"], up = rig.uprights[hi], object = wheels[hi] && wheels[hi].object;
+                if(!hub || !up || !object) continue;
+                tmp.set(hub.x - up.origin.x, 0, hub.z - up.origin.z);
+                tmp2.copy(tmp).applyAxisAngle(UP, -steerOf(vehicle, hi)).sub(tmp);
+                object.position.add(tmp2.applyQuaternion(object.quaternion));
+            }
+        }
         for(var i = 0; i < rig.parts.length; i++) {
             var p = rig.parts[i], h = p.holder;
             if(p.kind === "arm") {
@@ -239,7 +322,7 @@ OpenRacer.SuspensionRig = (function () {
                 h.quaternion.setFromAxisAngle(p.axis, turn / 4);
             } else if(p.kind === "upright") {
                 h.position.set(p.origin.x, p.origin.y + travelOf(vehicle, p.wheel), p.origin.z);
-                if(p.wheel < 2) { q.setFromAxisAngle(UP, -steer); h.quaternion.copy(q).multiply(p.restQuaternion); }
+                if(p.wheel < 2) { q.setFromAxisAngle(UP, -steerOf(vehicle, p.wheel)); h.quaternion.copy(q).multiply(p.restQuaternion); }
             } else if(p.kind === "spring") {
                 // the far end goes with the wheel (its travel), the top mount stays on the body; seated on an arm, it goes round the hinge of the arm with it
                 if(p.onArm) {
@@ -279,11 +362,15 @@ OpenRacer.SuspensionRig = (function () {
                 tmp.copy(p.far);
                 if(upright) {
                     tmp.sub(upright.origin);
-                    if(p.wheel < 2) tmp.applyAxisAngle(UP, -steer);
+                    if(p.wheel < 2) tmp.applyAxisAngle(UP, -steerOf(vehicle, p.wheel));
                     tmp.add(upright.origin);
                 }
                 tmp.y += travelOf(vehicle, p.wheel);
-                h.position.set(p.origin.x + (p.wheel < 2 ? rackShift : 0), p.origin.y, p.origin.z);
+                if(columnAngle !== undefined && p.farNow) {
+                    // (the pin on the arm of the steering column goes round the axis of the steering wheel)
+                    cq.setFromAxisAngle(rig.column.axis, columnAngle);
+                    h.position.copy(p.origin).sub(rig.column.centre).applyQuaternion(cq).add(rig.column.centre);
+                } else h.position.set(p.origin.x + (p.wheel < 2 ? rackShift : 0), p.origin.y, p.origin.z);
                 tmp.sub(h.position);
                 h.quaternion.setFromUnitVectors(Y, tmp2.copy(tmp).normalize());
                 h.scale.y = Math.max(0.2, tmp.length() / p.restLength);

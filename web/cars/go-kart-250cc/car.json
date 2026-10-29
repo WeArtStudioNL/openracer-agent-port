@@ -1,0 +1,867 @@
+{
+ "name": "Go-kart 250cc",
+ "description": "Four-stroke 250cc gearbox kart with an open exhaust: a knuckle with a king pin, a fixed tie rod to the steering column and a chain drive.",
+ "model": {
+  "type": "gltf",
+  "file": "cars/go-kart-250cc/go-kart-250cc.glb",
+  "rotation_y": 0,
+  "scale": 1,
+  "offset": [
+   0,
+   0,
+   0
+  ]
+ },
+ "wheels": {
+  "mode": "model",
+  "nodes": {
+   "FR": [
+    "wheel_FR"
+   ],
+   "FL": [
+    "wheel_FL"
+   ],
+   "RL": [
+    "wheel_RL"
+   ],
+   "RR": [
+    "wheel_RR"
+   ]
+  }
+ },
+ "dimensions": {
+  "length": 1.7,
+  "width": 1.13,
+  "height": 0.64
+ },
+ "chassis": {
+  "mass": 112,
+  "wheelbase": 1.124,
+  "front_track": 0.868,
+  "rear_track": 0.924,
+  "weight_distribution": 0.42,
+  "cg_height": 0.16,
+  "suspension_travel": 0.14,
+  "tire_diameter": 0.289,
+  "drag_coefficient": 0.31,
+  "max_steer_deg": 34,
+  "roll_front": 0.55,
+  "spring_front": 50000,
+  "spring_rear": 50000,
+  "damping_front": 1,
+  "damping_rear": 1,
+  "downforce_front": 0,
+  "downforce_rear": 0,
+  "ackermann": 0.8,
+  "ride_front": 0.02,
+  "ride_rear": 0.02,
+  "roll_center_front": 0.06,
+  "roll_center_rear": 0.12,
+  "toe_front": 0,
+  "toe_rear": 0,
+  "camber_front": 0,
+  "camber_rear": 0,
+  "roll_camber": 0.6,
+  "suspension_length": 0.28,
+  "spring_progression": 0,
+  "damping_rebound": 1.7,
+  "unsprung": true,
+  "inner_lift": 0.015,
+  "frame_torsion": 80
+ },
+ "drivetrain": {
+  "drive": "rwd",
+  "diff": "welded",
+  "diff_preload": 0,
+  "diff_power": 0,
+  "diff_coast": 0,
+  "center_diff": "lsd",
+  "center_split": 0.4,
+  "gear_ratios": [
+   2.4,
+   1.85,
+   1.5,
+   1.25,
+   1.08,
+   0.95
+  ],
+  "reverse_ratio": 3.583,
+  "final_drive": 4.5,
+  "efficiency": 0.93,
+  "shift_time": 0.12,
+  "clutch": 3,
+  "diff_lock": 60,
+  "clutch_start_rpm": 3500,
+  "clutch_full_rpm": 5000
+ },
+ "engine": {
+  "idle_rpm": 1800,
+  "limiter_rpm": 12500,
+  "inertia": 0.03,
+  "torque_curve": [
+   [
+    0,
+    0
+   ],
+   [
+    1000,
+    9
+   ],
+   [
+    2000,
+    13
+   ],
+   [
+    3000,
+    16
+   ],
+   [
+    4000,
+    18.5
+   ],
+   [
+    5000,
+    20.5
+   ],
+   [
+    6000,
+    22.5
+   ],
+   [
+    7000,
+    24.5
+   ],
+   [
+    8000,
+    26
+   ],
+   [
+    9000,
+    27
+   ],
+   [
+    10000,
+    26.5
+   ],
+   [
+    11000,
+    24.5
+   ],
+   [
+    12000,
+    21.5
+   ],
+   [
+    12500,
+    19.5
+   ],
+   [
+    13500,
+    10
+   ]
+  ],
+  "power_scale": 1,
+  "braking_scale": 1,
+  "limiter_hz": 14,
+  "two_step_rpm": 7000,
+  "launch_rpm": 6500
+ },
+ "brakes": {
+  "front": 19,
+  "rear": 81
+ },
+ "cameras": {
+  "follow": {
+   "distance": 2.4,
+   "height": 0.96,
+   "look_height": 0.38,
+   "look_z": 0,
+   "smoothing": 3.5,
+   "fov_standing": 45,
+   "fov_fast": 75,
+   "fov_full_speed": 70,
+   "dolly": 1
+  },
+  "cockpit": {
+   "position": [
+    0,
+    0.58,
+    -0.07
+   ],
+   "fov": 75
+  }
+ },
+ "steering_wheel": {
+  "degrees": 180
+ },
+ "sound": {
+  "engine_sim": {
+   "layout": "single",
+   "impulse_response": "minimal_muffling_01",
+   "convolution": 1,
+   "bore": 77,
+   "stroke": 53.6,
+   "rod": 100,
+   "compression_ratio": 13.5,
+   "burn_duration": 40,
+   "burn_randomness": 0.2,
+   "intake_duration": 250,
+   "intake_lift": 9,
+   "intake_lobe_centre": 106,
+   "exhaust_duration": 244,
+   "exhaust_lift": 8.5,
+   "exhaust_lobe_centre": 108,
+   "intake_flow": 150,
+   "exhaust_flow": 130,
+   "idle_pressure": 0.35,
+   "exhaust_systems": 1,
+   "primary_length": 0.35,
+   "primary_flow": 130,
+   "exhaust_length": 0.5,
+   "outlet_flow": 260,
+   "collector_area": 22,
+   "hf_gain": 0.03,
+   "noise": 1,
+   "jitter": 0.5,
+   "volume": 1,
+   "audio_volume": 1,
+   "simulation_frequency": 10000,
+   "timing": [
+    [
+     0,
+     12
+    ],
+    [
+     2000,
+     18
+    ],
+    [
+     4000,
+     26
+    ],
+    [
+     6000,
+     32
+    ],
+    [
+     8000,
+     36
+    ],
+    [
+     10000,
+     38
+    ],
+    [
+     13500,
+     38
+    ]
+   ]
+  }
+ },
+ "tyres": {
+  "compound": "semislick",
+  "damage": false,
+  "shell": {
+   "width": 0.2,
+   "rings": 3,
+   "segments": 12,
+   "inner_ratio": 0.62,
+   "carcass": 0
+  },
+  "stiff_x": 20,
+  "stiff_y": 18,
+  "grip": 1.2,
+  "grip_balance": 1,
+  "cornering": 1,
+  "rolling_resistance": 0.015,
+  "heating": 1,
+  "life": 1,
+  "pressure_front": 0.8,
+  "pressure_rear": 0.8
+ },
+ "fuel": {
+  "tank": 9,
+  "use": 1
+ },
+ "assists": {
+  "tc_allowance": 0.9,
+  "esc_gain": 0.5
+ },
+ "extras": {
+  "tc_on": true,
+  "abs_on": true,
+  "esc_on": true,
+  "launch_control_on": false,
+  "two_step_on": false,
+  "pops_on": true,
+  "pops_amount": 60,
+  "pops_overrun": 2,
+  "pops_rpm": 3000,
+  "pops_loud": 100,
+  "pops_flames": 100,
+  "antilag_on": false,
+  "antilag_mode": "lift",
+  "antilag_boost": 60,
+  "antilag_rpm": 3000,
+  "antilag_time": 5,
+  "antilag_bangs": 100,
+  "antilag_fuel": 60,
+  "boost_gauge_on": false,
+  "boost_full": 1,
+  "boost_scale": 2
+ },
+ "exhaust": [
+  {
+   "position": [
+    -0.29,
+    0.2,
+    -0.36
+   ],
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "diameter": 0.04,
+   "smoke": 1,
+   "flame_length_cm": 14,
+   "flame_width_cm": 6,
+   "brightness": 1.5
+  }
+ ],
+ "suspension": {
+  "front": {
+   "type": "none"
+  },
+  "rear": {
+   "type": "none"
+  }
+ },
+ "driveline": {
+  "engine": "front"
+ },
+ "driver": {
+  "enabled": true,
+  "file": "cars/openracer-kart/driver.glb",
+  "position": [
+   0,
+   -0.039,
+   -0.019
+  ],
+  "rotation": [
+   147.108,
+   0,
+   -180
+  ],
+  "scale": 1,
+  "bones": {
+   "armL": [
+    "DEF-upper_armL",
+    "DEF-forearmL",
+    "DEF-handL"
+   ],
+   "armR": [
+    "DEF-upper_armR",
+    "DEF-forearmR",
+    "DEF-handR"
+   ],
+   "legL": [
+    "DEF-thighL",
+    "DEF-shinL",
+    "DEF-footL"
+   ],
+   "legR": [
+    "DEF-thighR",
+    "DEF-shinR",
+    "DEF-footR"
+   ],
+   "hips": "DEF-spine",
+   "chest": "DEF-spine003",
+   "head": "DEF-spine006"
+  },
+  "hands": {
+   "left": [
+    0.179,
+    0.385,
+    0.193
+   ],
+   "right": [
+    -0.195,
+    0.355,
+    0.177
+   ],
+   "rotation": {
+    "left": [
+     29.353,
+     13.351,
+     -38.014
+    ],
+    "right": [
+     33.634,
+     -8.13,
+     36.929
+    ]
+   },
+   "grip": {
+    "left": 1,
+    "right": 1
+   },
+   "offset": {
+    "left": [
+     0,
+     0,
+     0
+    ],
+    "right": [
+     0,
+     0,
+     0
+    ]
+   }
+  },
+  "grip_curl": "x",
+  "keys": {
+   "left": [
+    {
+     "t": 0,
+     "pos": [
+      0.179,
+      0.385,
+      0.193
+     ],
+     "rot": [
+      29.4,
+      13.4,
+      -38
+     ],
+     "grip": 1,
+     "wheel": true
+    },
+    {
+     "t": 100,
+     "pos": [
+      0.157,
+      0.413,
+      0.174
+     ],
+     "rot": [
+      66.6,
+      38,
+      -72.1
+     ],
+     "grip": 1,
+     "wheel": true
+    },
+    {
+     "t": 130,
+     "pos": [
+      0.179,
+      0.385,
+      0.193
+     ],
+     "rot": [
+      56.9,
+      47.3,
+      -33.7
+     ],
+     "grip": 1,
+     "wheel": true
+    },
+    {
+     "t": 150,
+     "pos": [
+      0.179,
+      0.385,
+      0.193
+     ],
+     "rot": [
+      59.1,
+      30.5,
+      -36.2
+     ],
+     "grip": 1,
+     "wheel": true
+    },
+    {
+     "t": 170,
+     "pos": [
+      0.179,
+      0.385,
+      0.193
+     ],
+     "rot": [
+      63.1,
+      19.3,
+      -37.4
+     ],
+     "grip": 1,
+     "wheel": true
+    },
+    {
+     "t": 190,
+     "pos": [
+      0.069,
+      0.448,
+      0.262
+     ],
+     "rot": [
+      48.2,
+      43.7,
+      -9.8
+     ],
+     "grip": 1,
+     "wheel": true
+    },
+    {
+     "t": 210,
+     "pos": [
+      -0.066,
+      0.301,
+      0.035
+     ],
+     "rot": [
+      45.6,
+      -11.9,
+      -171.6
+     ],
+     "grip": 1,
+     "wheel": false
+    },
+    {
+     "t": 240,
+     "pos": [
+      0.184,
+      0.272,
+      0.036
+     ],
+     "rot": [
+      37.6,
+      -35,
+      -109.5
+     ],
+     "grip": 0.38,
+     "wheel": false
+    },
+    {
+     "t": 290,
+     "pos": [
+      0.244,
+      0.347,
+      0.2
+     ],
+     "rot": [
+      1.5,
+      13.2,
+      -50
+     ],
+     "grip": 0.2,
+     "wheel": false
+    },
+    {
+     "t": 340,
+     "pos": [
+      0.137,
+      0.52,
+      0.201
+     ],
+     "rot": [
+      -17.5,
+      -3.3,
+      36.1
+     ],
+     "grip": 0.27,
+     "wheel": false
+    },
+    {
+     "t": 390,
+     "pos": [
+      0.013,
+      0.473,
+      0.283
+     ],
+     "rot": [
+      5.2,
+      15.9,
+      27.1
+     ],
+     "grip": 1,
+     "wheel": false
+    },
+    {
+     "t": 430,
+     "pos": [
+      -0.091,
+      0.459,
+      0.263
+     ],
+     "rot": [
+      10.7,
+      8.9,
+      45.6
+     ],
+     "grip": 1,
+     "wheel": false
+    }
+   ],
+   "right": [
+    {
+     "t": 0,
+     "pos": [
+      -0.195,
+      0.355,
+      0.177
+     ],
+     "rot": [
+      33.6,
+      -8.1,
+      36.9
+     ],
+     "grip": 1,
+     "wheel": true
+    },
+    {
+     "t": 100,
+     "pos": [
+      -0.173,
+      0.381,
+      0.223
+     ],
+     "rot": [
+      93.9,
+      7.3,
+      54.7
+     ],
+     "grip": 1,
+     "wheel": true
+    },
+    {
+     "t": 130,
+     "pos": [
+      -0.195,
+      0.355,
+      0.177
+     ],
+     "rot": [
+      74.7,
+      2.7,
+      67.7
+     ],
+     "grip": 1,
+     "wheel": true
+    },
+    {
+     "t": 150,
+     "pos": [
+      -0.049,
+      0.336,
+      0.011
+     ],
+     "rot": [
+      118,
+      77,
+      137.3
+     ],
+     "grip": 0.4,
+     "wheel": false
+    },
+    {
+     "t": 170,
+     "pos": [
+      -0.192,
+      0.352,
+      -0.035
+     ],
+     "rot": [
+      -46,
+      71,
+      -45.8
+     ],
+     "grip": 0.21,
+     "wheel": false
+    },
+    {
+     "t": 190,
+     "pos": [
+      -0.19,
+      0.517,
+      0.136
+     ],
+     "rot": [
+      -14.2,
+      -2.5,
+      13.1
+     ],
+     "grip": 0.22,
+     "wheel": false
+    },
+    {
+     "t": 210,
+     "pos": [
+      -0.047,
+      0.295,
+      0.079
+     ],
+     "rot": [
+      115.6,
+      -13.3,
+      136.2
+     ],
+     "grip": 1,
+     "wheel": true
+    },
+    {
+     "t": 240,
+     "pos": [
+      -0.077,
+      0.244,
+      0.05
+     ],
+     "rot": [
+      49,
+      -17.4,
+      100.6
+     ],
+     "grip": 1,
+     "wheel": true
+    },
+    {
+     "t": 290,
+     "pos": [
+      -0.077,
+      0.244,
+      0.05
+     ],
+     "rot": [
+      49,
+      -17.4,
+      100.6
+     ],
+     "grip": 1,
+     "wheel": true
+    },
+    {
+     "t": 340,
+     "pos": [
+      -0.077,
+      0.244,
+      0.05
+     ],
+     "rot": [
+      49,
+      -17.4,
+      100.6
+     ],
+     "grip": 1,
+     "wheel": true
+    },
+    {
+     "t": 390,
+     "pos": [
+      -0.077,
+      0.244,
+      0.05
+     ],
+     "rot": [
+      49,
+      -17.4,
+      100.6
+     ],
+     "grip": 1,
+     "wheel": true
+    },
+    {
+     "t": 430,
+     "pos": [
+      -0.077,
+      0.244,
+      0.05
+     ],
+     "rot": [
+      49,
+      -17.4,
+      100.6
+     ],
+     "grip": 1,
+     "wheel": true
+    }
+   ]
+  },
+  "feet": {
+   "left": [
+    0.174,
+    0.035,
+    0.637
+   ],
+   "right": [
+    -0.157,
+    0.063,
+    0.648
+   ],
+   "travel": 0.06,
+   "direction": [
+    0,
+    -0.5,
+    0.85
+   ],
+   "offset": {
+    "left": [
+     0,
+     0,
+     0
+    ],
+    "right": [
+     0,
+     0,
+     0
+    ]
+   }
+  },
+  "elbow_out": 0.5,
+  "knee_out": 0.15,
+  "wheel": {
+   "position": [
+    0.003,
+    0.348,
+    0.2
+   ],
+   "rotation": [
+    -131.12,
+    0.262,
+    7.19
+   ],
+   "radius": 0.167
+  },
+  "pivot": "hips",
+  "chest": {
+   "rotation": [
+    37.961,
+    -3.411,
+    2.823
+   ]
+  },
+  "head": {
+   "rotation": [
+    3.585,
+    0,
+    0
+   ]
+  },
+  "poles": {
+   "legR": [
+    -0.245,
+    0.412,
+    0.871
+   ],
+   "legL": [
+    0.278,
+    0.412,
+    0.871
+   ],
+   "armR": [
+    -0.785,
+    0.127,
+    -0.206
+   ]
+  }
+ }
+}
