@@ -1049,7 +1049,9 @@ OpenRacer.Replay = (function() {
             var closeAfter = video.closeAfter; video.closeAfter = false; video.until = undefined;
             if(closeAfter) { document.body.classList.remove("replayClean"); if(ui && ui.bar) ui.bar.style.display = ""; var done = video.onDone; video.onDone = null; setTimeout(function() { api.stop(); if(done) done(true); }, 50); }
             if(!blob.size) return;
-            var stem = "openracer-" + String(currentTrack.id).replace(/[^A-Za-z0-9_-]/g, "") + "-" + new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13);
+            var named = video.name ? String(video.name).replace(/[\\/:*?"<>|\u0000-\u001f]/g, "").replace(/\s+/g, " ").trim().slice(0, 80) : "";
+            video.name = null;
+            var stem = named || "openracer-" + String(currentTrack.id).replace(/[^A-Za-z0-9_-]/g, "") + "-" + new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13);
             function save(file, extension) {
                 var url = URL.createObjectURL(file);
                 var link = document.createElement("a");
@@ -1181,6 +1183,7 @@ OpenRacer.Replay = (function() {
     };
     api.clearCameraOverride = function() { cine.override = null; };      // (the video editor is left: the look ahead of the slider again)
     api.aspect = function() { return aspect; };
+    api.frameRect = frameRect;                // the rectangle of the picture in the window (a take shows it while it runs, Take.js)
     api.aspects = function() { return Object.keys(ASPECTS); };
     api.aspectInfo = function() { return ASPECTS[aspect]; };                // { ratio, width, height }: the size that the editor and a video are made in
     api.setAspect = setAspect;
@@ -1235,10 +1238,11 @@ OpenRacer.Replay = (function() {
 
     // To a time of the recording (seconds), for the tests
     // A take (Take.js): the replay is opened, the part from one time to another is played at normal speed and filmed (as the Video button), and the replay closes again
-    api.filmRange = function(fromTime, toTime, onDone) {
+    api.filmRange = function(fromTime, toTime, onDone, name) {
         if(api.active) return false;
         if(!api.start()) { if(onDone) onDone(false); return false; }
         video.onDone = onDone || null;
+        video.name = name || null;
         if(ui && ui.bar) ui.bar.style.display = "none";
         document.body.classList.add("replayClean");
         video.from = Math.max(api.start_time(), fromTime); video.until = Math.min(api.end_time(), toTime); video.closeAfter = true;
@@ -1706,11 +1710,11 @@ OpenRacer.Replay = (function() {
 
     // Saves the recording in the list of Replays; gives a promise of { bytes }
     var savedTotal = -1;
-    api.saveToLibrary = function(from, to) {
+    api.saveToLibrary = function(from, to, name) {
         if(!cars.length || total < 2) return Promise.reject(new Error("Nothing is recorded yet."));
         var size = total, seconds = ((to === undefined ? total : to) - (from === undefined ? first() : from)) / RATE;
         return gzip(pack(from, to)).then(function(bytes) {
-            return libraryAdd(bytes, { created: new Date().toISOString(), track: { id: currentTrack.id, name: String(currentTrack.name || currentTrack.id) }, cars: cars.map(function(entry) { return String(entry.object.name || entry.object.config.name || entry.object.config.id); }), seconds: seconds, bytes: bytes.length });
+            return libraryAdd(bytes, { created: new Date().toISOString(), name: name ? String(name).slice(0, 80) : undefined, track: { id: currentTrack.id, name: String(currentTrack.name || currentTrack.id) }, cars: cars.map(function(entry) { return String(entry.object.name || entry.object.config.name || entry.object.config.id); }), seconds: seconds, bytes: bytes.length });
         }).then(function() { savedTotal = size; return { bytes: 0 }; });
     };
     // Before the game goes back to the main menu: when there is a recording that was not saved yet, asks whether it should be (then calls leave); otherwise calls leave at once

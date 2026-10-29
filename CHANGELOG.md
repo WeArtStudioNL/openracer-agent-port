@@ -31,6 +31,11 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### Recording a take
+
+- A take (the record button, the 5 key) first asks for the picture (16:9, 9:16 or 1:1), then starts. While it runs the picture is a frame in the window with a dark passepartout round it and a blinking red dot with the time at the top right of the frame.
+- When you stop, one window asks for a name and whether it is a replay or a video (mp4). The name is filled in already (track and time); the replay goes into the list with it and the video file is saved with it.
+
 ### Touch controls and the HUD editor
 
 - The dotted circle with the two arrows is gone from the steering side of the touch controls: the stick that appears under the thumb is enough.
