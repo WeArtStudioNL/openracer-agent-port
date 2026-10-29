@@ -87,10 +87,10 @@ export function initDriver(api) {
             <div class="row drv-wrap" id="drvModes"><button class="small accent" data-m="move">Move (W)</button><button class="small ghost" data-m="rotate">Rotate (E)</button><button class="small ghost" data-m="scale" id="drvScaleMode">Scale (R)</button></div>
             <div id="drvGripRow" style="display:none">
                 <div class="hint">Grip of this hand <span id="drvGripOut">0%</span> (the fingers, open to closed)</div><input type="range" id="drvGrip" min="0" max="100" step="1" value="0" style="width:100%">
-                <div class="row"><select id="drvCurl"><option value="x">Fingers close: +x of the bones</option><option value="-x">Fingers close: -x of the bones (the other way)</option></select></div>
-                <div class="hint">Turn the hand with Rotate (E): it turns about the middle of the wheel as it goes round it.</div>
+                <div class="hint">Direction the fingers close</div><div class="row"><select id="drvCurl" aria-label="Direction the fingers close"><option value="x">+x of the bones</option><option value="-x">-x of the bones (reversed)</option></select></div>
+                <div class="hint">Rotate (E) turns the hand about the wheel.</div>
             </div>
-            <div class="hint">Click a node in the view to take it: the coloured balls are the hands and the feet, the small cubes the elbows and the knees. Click the figure to take the model, click the grey ring to take the ring of the hands: match it to the steering wheel of the model with the gizmo (move, rotate, scale: its size is where the hands hold).</div>
+            <div class="hint">Click a ball, cube or the ring in the view to take it.</div>
             <div class="row"><button class="small ghost" id="drvResetPoles">Reset the elbows and knees</button></div>
             <div class="row">
                 <div><input type="number" id="drvScale" step="0.01" min="0.1" max="3" value="1"><div class="hint">scale</div></div>
@@ -102,7 +102,7 @@ export function initDriver(api) {
             <div class="hint">Steering <span id="drvSteerOut">0°</span></div><input type="range" id="drvSteer" min="-450" max="450" step="1" value="0" style="width:100%">
             <div id="drvKeysStrip" style="position:relative;height:34px;margin:2px 7px 6px"></div>
             <div class="group">Keyframes of the hands</div>
-            <div class="hint">Set the movement of the hands, the chest and the head yourself. Make keys from the automatic movement, turn the steering slider to a place (from -450° to 450°: the left and the right side are set separately), take a hand and move it, turn it, or set its grip, or turn the chest or the head: a key is made at that turn. The hands go through the keys, and the way back is the same movement the other way. Click a mark under the slider to go to a key (blue: left hand, red: right hand, yellow: chest, purple: head).</div>
+            <div class="hint">Set the hands, chest and head by keys.</div>
             <div class="row drv-wrap"><button class="small accent" id="drvKeysBake">Make keys from the automatic movement</button><button class="small ghost" id="drvKeysOff">Back to automatic</button></div>
             <div class="row drv-wrap"><button class="small" id="drvKeyAdd">Add a key here</button><button class="small ghost" id="drvKeyDel">Delete the key here</button><button class="small" id="drvKeyMirror" title="Replace the keys on the side of the negative degrees by the mirror image of the keys on the positive side: the hands changed over and mirrored">Mirror the + keys to the − side</button><label class="check"><input type="checkbox" id="drvKeyWheel"> rides the wheel</label></div>
             <div class="hint" id="drvKeyInfo">No keys: the hands move by themselves.</div>

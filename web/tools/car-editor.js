@@ -1514,6 +1514,18 @@ function updateSpeedInfo() {
     $("speedInfo").title = "At the rev limit: " + gears.map((g, i) => "gear " + (i + 1) + ": " + Math.round(speed(g)) + " km/h").join(", ");
 }
 
+function updateSummary() {
+    const el = $("summary"); if (!el) return;
+    const peak = state.curve.reduce((m, p) => Math.max(m, p[1] * p[0] * Math.PI / 30), 0) / 1000;      // (kW: torque x rpm)
+    const top = /~(\d+)/.exec($("speedInfo").textContent);
+    const parts = [];
+    if (num("mass")) parts.push(Math.round(num("mass")) + " kg");
+    if (num("front")) parts.push(Math.round(num("front")) + "/" + (100 - Math.round(num("front"))) + " front/rear");
+    if (peak > 0) parts.push(Math.round(peak) + " kW (" + Math.round(peak * 1.36) + " hp)");
+    if (top) parts.push(top[1] + " km/h");
+    el.textContent = parts.join(" · ");
+}
+setInterval(updateSummary, 800);
 function parseGears() {
     return $("gears").value.split(/[,;\s]+/).map(parseFloat).filter((v) => v > 0);
 }
@@ -1794,9 +1806,9 @@ function updateSteeringInfo() {
 // ---- the differentials
 
 const DIFF_INFO = {
-    open: "Open: the same torque to both wheels, so the wheel with the least grip decides how much there is. Spins the inner wheel in a corner under power; the easiest to drive straight, the worst for traction.",
-    lsd: "Limited slip: locks the wheels together more the harder it is driven (preload, and a share of the torque under power and off the throttle). Gives traction out of corners; a high lock makes the car push or slide with the power.",
-    welded: "Welded: both wheels always turn at the same speed. Best traction in a straight line and for drifting; it scrubs and pushes in slow corners, and a car is touchy on the throttle at the limit."
+    open: "Open: the wheel with least grip decides. Easy, but the worst traction.",
+    lsd: "Limited slip: locks more the harder it is driven. Traction out of corners.",
+    welded: "Welded: both wheels turn the same. Best for drifting; scrubs in slow corners."
 };
 
 function updateDiffFields() {
@@ -1804,7 +1816,7 @@ function updateDiffFields() {
     $("lsdBox").style.display = diff === "lsd" ? "" : "none";
     $("centerBox").style.display = drive === "awd" ? "" : "none";
     $("splitBox").style.display = drive === "awd" ? "" : "none";
-    $("diffInfo").textContent = DIFF_INFO[diff] + (drive === "awd" ? " Centre differential: " + ({ open: "open gives the axles the share above all the time", lsd: "a limited slip one moves torque to the axle that turns slower", locked: "a locked one turns both axles at the same speed" })[$("centerDiff").value] + "." : "");
+    $("diffInfo").textContent = DIFF_INFO[diff] + (drive === "awd" ? " Centre: " + ({ open: "open, the fixed share", lsd: "limited slip", locked: "locked" })[$("centerDiff").value] + "." : "");
 }
 ["drive", "diff", "centerDiff"].forEach((id) => $(id).addEventListener("change", updateDiffFields));
 updateDiffFields();
@@ -2096,7 +2108,7 @@ $("newBike").addEventListener("click", () => {
 $("save").addEventListener("click", () => {
     const name = $("setupSelect").value, id = $("id").value.trim();
     if (!name) { save(); return; }
-    try { saveTune(id, name); $("setupSelect").value = name; updateTuneButtons(); status("Tune " + name + " saved (car.json is not written; choose Default and Save the car for that)."); }
+    try { saveTune(id, name); $("setupSelect").value = name; updateTuneButtons(); setDirty(false); status("Tune " + name + " saved (car.json is not written)."); }
     catch (error) { status("Could not save the tune: " + error.message); }
 });
 $("delete").addEventListener("click", deleteCar);
@@ -2304,6 +2316,7 @@ function updateTuneButtons() {
     $("save").textContent = name ? "Save tune" : "Save the car";
     $("save").title = name ? "Overwrite the tune " + name + " with the car as the form has it (car.json is not written)" : "Save the car (car.json)";
     $("setupDelete").style.display = name ? "" : "none";
+    $("saveTo").textContent = name ? "Save writes to the tune " + name : "Save writes car.json";
 }
 // the car as the form has it, kept as a tune under a name (buildConfig: the chassis, the tyres, the engine, the gearbox, the suspension and the parts, the driver, the soft body,
 // the cameras, the sound, the exhaust, the rims and the tyres), with the colours of the materials and a picture of the view; the model stays the car's own
@@ -2341,8 +2354,8 @@ $("setupSelect").addEventListener("change", () => {
         if (config.materials) { state.overrides = JSON.parse(JSON.stringify(config.materials)); Object.keys(state.overrides).forEach((n) => applyOverrides(n)); }
         formChanged(); tuningChanged();
         $("setupSelect").value = name;      // (fill lists the tunes again)
-        updateTuneButtons();
-        status(name ? "Tune " + name + " loaded into the form (Save tune keeps changes in it; Save the car writes car.json)." : "Default, the car as made, is back in the form.");
+        updateTuneButtons(); setDirty(false);
+        status(name ? "Tune " + name + " is in the form." : "Default, the car as made, is in the form.");
     } catch (error) { status("Could not load the tune: " + error.message); }
 });
 $("setupSave").addEventListener("click", () => {
@@ -2959,6 +2972,7 @@ softBodyEditor = initSoftBody({
 let dirty = false;
 function setDirty(on) {
     dirty = on;
+    if (!on) setTimeout(() => { if (!dirty) takeBaseline(); }, 400);
     for (const id of ["save", "saveDrive"]) $(id).classList.toggle("dirty", on);
     $("changes").hidden = !on || !state.existingCar;
     refreshReady();
@@ -3100,8 +3114,10 @@ function flat(object, path, out) {
     } else out[path] = object;
     return out;
 }
+let baseline = null;       // the form as it was when it was loaded or saved (a tune that is chosen counts as the start)
+function takeBaseline() { try { baseline = JSON.parse(JSON.stringify(buildConfig(state.existingId || ($("id").value.trim() || slug($("name").value))))); } catch (e) { baseline = null; } }
 function differences() {
-    const before = state.existingCar;
+    const before = baseline || state.existingCar;
     if (!before) return null;
     const now = buildConfig(state.existingId || ($("id").value.trim() || slug($("name").value)));
     const skip = /^(model|softbody|driver|materials|id|wheels\.nodes|sound|cameras|exhaust|suspension|driveline)/;

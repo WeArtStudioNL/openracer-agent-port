@@ -6,6 +6,11 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motorcycles with a rider and a ragdoll crash, a driver in the car, replays as files with a video editor, a new menu, the drag strip, and much more. Per subject:
 
+### Car editor, after the audit
+- The tune bar: the tune file actions (delete, export, import) are folded under *Tune file*, a line says what Save writes to (car.json or the tune), and a line shows mass, front weight, peak power and top speed. Saving or choosing a tune clears the unsaved mark.
+- *Changes* compares with the form as it was loaded, saved or chosen as a tune (1 difference after one edit instead of 39 with a tune active).
+- The move-the-model fields and the finger direction have their own labels; the texts of the differential and the driver card are shorter; on a touch screen the buttons and fields are at least 34 px high.
+
 ### Motorcycles
 
 **After the first drive**
