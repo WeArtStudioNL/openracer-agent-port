@@ -31,6 +31,13 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### Touch controls and the HUD editor
+
+- The dotted circle with the two arrows is gone from the steering side of the touch controls: the stick that appears under the thumb is enough.
+- A new tab Mobile in the settings (on a touch screen): "Finger travel for full lock", a slider from 0.01 to 1 (1 is the old stick): how far the finger goes for the full steering. The ring that appears under the finger is as wide as that.
+- A new button with the tuning menu next to the camera button. The buttons have icons (Lucide, a free icon library) in place of symbols and emoji, and look like the buttons of the menus.
+- Edit HUD (Settings, Display and sound, and the Mobile tab), on every device: a container at the top of the screen. Tap an element on the screen (or its name), drag it, and set its size and opacity with the sliders. The elements are the gauge, the boost gauge, the lap times, the tyres and the fuel and, on a touch screen, the pedals and the buttons. Save keeps the layout in the browser, Cancel (or Escape) goes back, Reset element and Reset all put things back where they were. The game is held while you edit.
+
 ### Camber in roll
 
 - The wheels leaned further over than the body in a corner (the "camber lost in roll" was added to the lean of the body instead of taken from it), so a car that rolled had wheels that looked very crooked. Now the wheels lean back against the roll: with 60% (the default) the wheels of a body that rolls 10° stand 4° from the road. This also changes the camber thrust a little, in the right direction.

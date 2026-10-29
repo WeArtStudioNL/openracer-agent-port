@@ -105,7 +105,7 @@ var Settings = (function() {
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
     var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, autoReverse: true, autoReversePedals: true, autoReverseSpeed: 3, dragReady: 2, dragGreen: 1.5, abs: true, sound: true, wheelRange: 1, wheelMatch: false, wheelDegrees: 900, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, hud: true, units: "metric", debug: false, esc: true, camera: 2, volume: 0.8,
-        padSlow: 1.5, padAssist: true, keySteer: 1, keySlow: 1, keyAssist: true,
+        touchSteer: 1, padSlow: 1.5, padAssist: true, keySteer: 1, keySlow: 1, keyAssist: true,
         // a motorcycle: the steering ("counter": countersteering to start a lean and the lean; "lean": the lean only) and the follow camera ("lean": it rolls with the bike; "classic": as a car)
         bikeSteering: "lean", bikeCamera: "lean", wheelieControl: true, bikeFastLean: 30,
         // the easing of the keys: the time that a key takes to bring the pedal or the wheels to the full value (s), and the curve of it (1 straight, below 1 quick at first, above 1 slow at first)
@@ -290,6 +290,7 @@ var Settings = (function() {
             if(replayOn()) { OpenRacer.Replay.stop(); event.preventDefault(); return; }
             // Escape cancels a wheel calibration first; while the racing line is recorded for the track editor it ends that (main.js)
             if(WheelControls.isCalibrating()) return;
+            if(typeof OpenRacer !== "undefined" && OpenRacer.HudLayout && OpenRacer.HudLayout.editing()) { OpenRacer.HudLayout.cancel(); return; }       // (Escape in the HUD editor is Cancel)
             if(typeof race !== "undefined" && race.recording && !menu) { race.recording.stop(); return; }
             toggleMenu();
             return;
@@ -1016,8 +1017,20 @@ var Settings = (function() {
         page.appendChild(calibrate);
         page = tabPage("Display and sound");
         page.appendChild(optionRow("HUD", options.hud ? "On" : "Off", function() { setOption("hud", !options.hud); }));
+        page.appendChild(optionRow("HUD layout", "Edit HUD…", function() { OpenRacer.HudLayout.edit(); }));
         page.appendChild(optionRow("Units", options.units === "imperial" ? "Imperial (mph)" : "Metric (km/h)",
             function() { setOption("units", options.units === "imperial" ? "metric" : "imperial"); }));
+        if(typeof TouchControls !== "undefined" && TouchControls.enabled()) {
+            page = tabPage("Mobile");
+            var mobileNote = document.createElement("div");
+            mobileNote.className = "sub";
+            mobileNote.textContent = "The steering is a stick under your thumb on the left half of the screen. A smaller number takes less movement of the finger for the full steering.";
+            page.appendChild(mobileNote);
+            page.appendChild(sliderRow("Finger travel for full lock", "touchSteer", 0.01, 1, 0.01, function(v) {
+                return v.toFixed(2) + "× (about " + Math.round(TouchControls.travel(v)) + " px)";
+            }));
+            page.appendChild(optionRow("HUD and buttons", "Edit HUD…", function() { OpenRacer.HudLayout.edit(); }));
+        }
         page = tabPage("Graphics");
         if(typeof OpenRacer !== "undefined" && OpenRacer.Graphics) {
             var G = OpenRacer.Graphics;
@@ -1224,6 +1237,8 @@ var Settings = (function() {
         trigger: function(id) { if(!paused && !replayOn() && handlers[id]) handlers[id](); },      // an action once, as a key press does (the buttons of the HUD)
         isPaused: function() { return paused; },
         toggleMenu: toggleMenu,
+        closeMenu: closeMenu,
+        holdPause: function(flag) { paused = !!flag; keysDown = {}; },        // the game stands still without the menu (the HUD editor)
         bindings: function(id) { return bindings[id]; }
     };
 })();

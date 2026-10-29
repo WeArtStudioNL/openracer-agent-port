@@ -95,6 +95,8 @@ var scripts = [
     "js/EngineSound.js",
     "js/WheelControls.js",
     "js/ForceFeedback.js",
+    "js/Icons.js",
+    "js/HudLayout.js",
     "js/Settings.js",
     "js/FreeCam.js",
     "js/Hud.js",
