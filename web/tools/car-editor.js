@@ -40,6 +40,8 @@ const state = {
     nodes: [],              // the named nodes of the model
     pendingLibrary: null,   // the rims and the tyres of the wheel library of a car that is loaded before the catalogue is (WheelLibrary.js)
     root: null,
+    build: null,            // the engine as it is built (EngineBuild.js), or null: the curve is the car's own
+    buildResult: null,
     curve: [[0, 0], [300, 80], [1000, 180], [2000, 230], [3000, 250], [4000, 255], [5000, 250], [6000, 225], [7000, 170]],
     idEdited: false,
     cars: []
@@ -1483,6 +1485,13 @@ function drawChart() {
             shown.forEach((p, i) => { const x = X(p.rpm), y = Y(value(p)); if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); });
             g.stroke();
         }
+        if (state.buildResult && state.buildResult.maxBoost > 0) {            // the boost of the pull (green; the scale is on the right)
+            const maxB = Math.max(0.5, Math.ceil(state.buildResult.maxBoost * 5) / 5);
+            g.strokeStyle = "#6fdc8c"; g.beginPath();
+            shown.forEach((p, i) => { const x = X(p.rpm), y = bottom - p.boost / maxB * plotH * 0.6; if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); });
+            g.stroke();
+            g.setLineDash([]); g.fillStyle = "#6fdc8c"; g.textAlign = "right"; g.fillText(maxB.toFixed(1) + " bar", w - 4, bottom - plotH * 0.6 - 4); g.textAlign = "left";
+        }
         g.setLineDash([]);
         const tip = shown[shown.length - 1];
         if (tip && dyno.upTo < dyno.points.length - 1) { g.strokeStyle = "#ffffff"; g.lineWidth = 2; g.beginPath(); g.moveTo(X(tip.rpm), 0); g.lineTo(X(tip.rpm), bottom); g.stroke(); }
@@ -1493,13 +1502,109 @@ function drawChart() {
     const torque = Math.max(0, ...state.curve.map((p) => p[1]));
     $("peakInfo").textContent = Math.round(peak.hp) + " hp at " + peak.rpm + " rpm, " + Math.round(torque) + " Nm";
     chartGeo = { left, bottom, plotW, plotH, maxRpm, maxY, w, h };
-    if (curveAdvanced) {
+    if (curveAdvanced && !state.build) {
         g.fillStyle = "#ff9f43"; g.strokeStyle = "#12161c"; g.lineWidth = 3;
         state.curve.forEach((p) => { g.beginPath(); g.arc(X(p[0]), Y(p[1]), p === dragPoint ? 11 : 8, 0, Math.PI * 2); g.fill(); g.stroke(); });
     }
     if (document.activeElement !== $("simpleHp")) $("simpleHp").value = Math.round(peak.hp) || "";
     if (document.activeElement !== $("simpleRpm")) $("simpleRpm").value = num("limiter") || "";
 }
+
+
+// ---- the engine build: the torque curve comes from the block, the cam, the inlet and the exhaust, the fuel and the turbo or supercharger (EngineBuild.js)
+const EB = OpenRacer.EngineBuild;
+function fillSelect(select, entries, labelOf) { select.innerHTML = Object.keys(entries).map((k) => "<option value='" + k + "'>" + labelOf(entries[k]) + "</option>").join(""); }
+function initBuildUi() {
+    $("bBlock").innerHTML = "<option value=''>Own curve (no build)</option>" + Object.keys(OpenRacer.engineSimPresets).map((n) => "<option>" + n + "</option>").join("");
+    fillSelect($("bFuel"), EB.FUELS, (f) => f.label);
+    fillSelect($("bIntercooler"), EB.INTERCOOLERS, (i) => i.label);
+    fillSelect($("bSize"), EB.TURBO_SIZES, (t) => t.label);
+    fillBuildVariants();
+}
+function fillBuildVariants() {
+    const turbo = $("bInduction").value === "turbo";
+    fillSelect($("bVariant"), turbo ? EB.TURBO_VARIANTS : EB.SUPERCHARGERS, (v) => v.label);
+}
+const BUILD_FIELDS = { bBore: "bore", bStroke: "stroke", bCompression: "compression", bCam: "cam_duration", bIntakeFlow: "intake_flow", bExhaustFlow: "exhaust_flow", bPrimary: "primary_length", bExhaustLen: "exhaust_length" };
+function showBuild(build) {
+    for (const [id, key] of Object.entries(BUILD_FIELDS)) $(id).value = build[key];
+    $("bValves").value = String(build.valves || 4); $("bFuel").value = build.fuel || "pump95"; $("bLambda").value = build.lambda || 0.9;
+    const ind = build.induction || { type: "none" };
+    $("bInduction").value = ind.type; fillBuildVariants();
+    if (ind.variant) $("bVariant").value = ind.variant;
+    $("bSize").value = ind.size || "medium"; $("bBoost").value = ind.boost || 0.6; $("bIntercooler").value = ind.intercooler || "air";
+    $("bTemp").value = build.ambient ? build.ambient.celsius : 20; $("bAltitude").value = build.ambient ? build.ambient.altitude : 0;
+}
+function readBuild() {
+    const b = { block: $("bBlock").value, layout: state.build ? state.build.layout : "inline-4", rod: state.build ? state.build.rod : 140 };
+    for (const [id, key] of Object.entries(BUILD_FIELDS)) b[key] = parseFloat($(id).value) || 0;
+    b.valves = parseInt($("bValves").value, 10); b.fuel = $("bFuel").value; b.lambda = parseFloat($("bLambda").value) || 0.9;
+    const type = $("bInduction").value;
+    b.induction = { type, variant: $("bVariant").value, size: $("bSize").value, boost: parseFloat($("bBoost").value) || 0, intercooler: $("bIntercooler").value };
+    b.ambient = { celsius: parseFloat($("bTemp").value) || 0, altitude: parseFloat($("bAltitude").value) || 0 };
+    return b;
+}
+// what is shown for the build that is (or is not) there
+function applyBuildUi() {
+    const has = !!state.build;
+    $("bBuild").hidden = !has;
+    $("bNumbers").hidden = has; $("bTypical").hidden = has;
+    const type = $("bInduction").value;
+    $("bVariantBox").style.display = type === "none" ? "none" : "";
+    $("bBoostRow").style.display = type === "none" ? "none" : "";
+    $("bSizeBox").style.display = type === "turbo" ? "" : "none";
+    for (const id of ["simpleHp", "simpleRpm"]) { $(id).disabled = has; $(id).title = has ? "The engine is built in Advanced: the power follows from it" : ""; }
+    $("chartHelp").hidden = !curveAdvanced || has;
+    $("chart").style.cursor = curveAdvanced && !has ? "crosshair" : "default";
+    const res = state.buildResult;
+    $("bInfo").textContent = has && res
+        ? res.displacement.toFixed(1) + " L, " + res.cylinders + " cylinders · " + Math.round(res.peakPower) + " hp at " + res.peakPowerRpm + " rpm · piston speed at the limit " + res.pistonSpeedAtLimit.toFixed(0) + " m/s" +
+          (res.pistonSpeedAtLimit > 25 ? " (too fast for the engine to last)" : "") + (res.knock > 0.03 ? " · knock: " + Math.round(res.knock * 100) + "% of the torque is lost, use better fuel or less boost" : "")
+        : "The torque curve is the car's own. Choose a block to build the engine: the curve then follows from it.";
+}
+function recomputeBuild() {
+    if (!state.build) { state.buildResult = null; applyBuildUi(); return; }
+    state.build = readBuild();
+    const res = EB.compute(state.build, num("limiter") || 7000, num("idle") || 850);
+    state.buildResult = res;
+    state.curve = res.curve.map((p) => p.slice());
+    const tn = tuning;
+    const spec = EB.turboSpec(state.build), ind = state.build.induction;
+    tn.turbo_share = spec ? Math.round(res.boostShare * 100 / 5) * 5 : 0;
+    tn.turbo_boost = 0;
+    if (spec) {
+        tn.turbo_spool = spec.spool; tn.turbo_threshold = spec.threshold; tn.turbo_intercooler = Math.round(EB.INTERCOOLERS[ind.intercooler].value * 100); tn.turbo_efficiency = 72; tn.boost_full = ind.boost;
+    }
+    renderTuningCard(); tuningChanged();
+    renderCurve(); updateSpeedInfo(); applyBuildUi();
+}
+function buildEdited() { recomputeBuild(); $("bBuild").dispatchEvent(new Event("change", { bubbles: true })); }
+// the engine sound follows the engine that is built (the same bore, stroke, compression, cam, flows and lengths)
+function syncSoundFromBuild(build, wholePreset) {
+    const p = Object.assign({}, readEngineSim());
+    if (wholePreset && OpenRacer.engineSimPresets[build.block]) Object.assign(p, OpenRacer.engineSimPresets[build.block]);
+    Object.assign(p, { bore: build.bore, stroke: build.stroke, compression_ratio: build.compression, intake_duration: build.cam_duration, exhaust_duration: Math.max(180, build.cam_duration - 4),
+        intake_flow: build.intake_flow, exhaust_flow: build.exhaust_flow, primary_length: build.primary_length, exhaust_length: build.exhaust_length });
+    fillEngineSim(p);
+    engineSimChanged();
+}
+$("bBlock").addEventListener("change", () => {
+    const name = $("bBlock").value;
+    if (!name) { state.build = null; state.buildResult = null; applyBuildUi(); renderCurve(); return; }
+    const build = EB.fromPreset(name, OpenRacer.engineSimPresets[name]);
+    state.build = build; showBuild(build);
+    const lim = EB.compute(build, 9000, num("idle") || 850).suggestedLimiter;
+    $("limiter").value = lim; $("limiter").dispatchEvent(new Event("input", { bubbles: true }));
+    syncSoundFromBuild(build, true);
+    recomputeBuild();
+});
+document.querySelectorAll(".b").forEach((el) => el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => {
+    if (!state.build) return;
+    if (el.id === "bInduction") fillBuildVariants();
+    syncSoundFromBuild(readBuild(), false);
+    recomputeBuild();
+}));
+initBuildUi();
 
 // ---- the dyno: a full-throttle pull on a dry road, measured at the wheels; only the chart shows it
 let dyno = null, dynoFrame = 0;
@@ -1509,9 +1614,12 @@ function dynoPull() {
     if (!gears.length || !(final > 0) || !(limit > 0) || state.curve.length < 2) return null;
     const ratio = gears.reduce((best, g) => (Math.abs(g - 1) < Math.abs(best - 1) ? g : best), gears[0]);
     const G = ratio * final, eff = num("efficiency") || 0.92, curve = state.curve.slice().sort((a, b) => a[0] - b[0]);
+    // with a build the dyno room counts: the curve is for the standard air, the dyno has its own (an uncorrected result)
+    const room = state.build && state.build.ambient ? 1 / EB.correction(state.build.ambient.altitude, state.build.ambient.celsius) : 1;
+    const boostAt = (rpm) => { const b = state.buildResult && state.buildResult.boost; if (!b) return 0; for (let i = 1; i < b.length; i++) if (rpm <= b[i][0]) return b[i - 1][1] + (b[i][1] - b[i - 1][1]) * (rpm - b[i - 1][0]) / (b[i][0] - b[i - 1][0]); return 0; };
     const torqueAt = (rpm) => {
         if (rpm > curve[curve.length - 1][0]) return 0;
-        for (let i = 1; i < curve.length; i++) if (rpm <= curve[i][0]) { const a = curve[i - 1], b = curve[i], f = b[0] > a[0] ? (rpm - a[0]) / (b[0] - a[0]) : 0; return a[1] + (b[1] - a[1]) * f; }
+        for (let i = 1; i < curve.length; i++) if (rpm <= curve[i][0]) { const a = curve[i - 1], b = curve[i], f = b[0] > a[0] ? (rpm - a[0]) / (b[0] - a[0]) : 0; return (a[1] + (b[1] - a[1]) * f) * room; }
         return 0;
     };
     const area = (num("width") || 1.8) * (num("height") || 1.3) * 0.85, cd = num("drag") || 0.35;
@@ -1524,12 +1632,12 @@ function dynoPull() {
     for (let t = 0; t < 120 && rpm < limit; t += 0.01) {
         const drive_f = Math.min(torqueAt(rpm) * G * eff / r, traction);
         const net = drive_f - 0.012 * mass * 9.81 - 0.5 * 1.29 * cd * area * v * v;
-        if (rpm - lastRpm >= 50) { points.push({ rpm, nm: Math.max(0, (drive_f - 0.012 * mass * 9.81 - 0.5 * 1.29 * cd * area * v * v) * r / G), hp: Math.max(0, (drive_f - 0.012 * mass * 9.81 - 0.5 * 1.29 * cd * area * v * v) * v / 745.7) }); lastRpm = rpm; }
+        if (rpm - lastRpm >= 50) { points.push({ rpm, boost: boostAt(rpm), nm: Math.max(0, (drive_f - 0.012 * mass * 9.81 - 0.5 * 1.29 * cd * area * v * v) * r / G), hp: Math.max(0, (drive_f - 0.012 * mass * 9.81 - 0.5 * 1.29 * cd * area * v * v) * v / 745.7) }); lastRpm = rpm; }
         if (net <= 0 && rpm > curve[1][0]) break;
         v += net / meff * 0.01;
         rpm = v * 30 / Math.PI * G / r;
     }
-    return points.length > 3 ? { points, gear: gears.indexOf(ratio) + 1 } : null;
+    return points.length > 3 ? { points, gear: gears.indexOf(ratio) + 1, room } : null;
 }
 $("runDyno").addEventListener("click", () => {
     clearDyno();
@@ -1547,7 +1655,7 @@ $("runDyno").addEventListener("click", () => {
         $("runDyno").disabled = false;
         const best = dyno.points.reduce((m, p) => (p.hp > m.hp ? p : m), dyno.points[0]);
         const engine = state.curve.reduce((m, p) => Math.max(m, power(p[0], p[1])), 0);
-        $("dynoInfo").textContent = "At the wheels (dashed): " + Math.round(best.hp) + " hp at " + Math.round(best.rpm / 10) * 10 + " rpm, " + Math.round(100 * (1 - best.hp / engine)) + "% below the engine · gear " + run.gear;
+        $("dynoInfo").textContent = "At the wheels (dashed): " + Math.round(best.hp) + " hp at " + Math.round(best.rpm / 10) * 10 + " rpm, " + Math.round(100 * (1 - best.hp / engine)) + "% below the engine · gear " + run.gear + (state.build && run.room !== 1 ? " · in this air; corrected (DIN) " + Math.round(best.hp / run.room) + " hp" : "") + (state.buildResult && state.buildResult.maxBoost > 0 ? " · boost up to " + state.buildResult.maxBoost.toFixed(2) + " bar" : "");
     };
     dynoFrame = requestAnimationFrame(step);
 });
@@ -1560,7 +1668,7 @@ function setEngineMode(advanced) {
     try { localStorage.setItem("editor-engine-advanced", advanced ? "1" : "0"); } catch (e) { /* no storage */ }
     $("engineAdvanced").hidden = !advanced; $("engineSimple").hidden = advanced; $("chartHelp").hidden = !advanced;
     $("engineMode").querySelectorAll("button").forEach((b) => b.classList.toggle("on", (b.dataset.mode === "advanced") === advanced));
-    $("chart").style.cursor = advanced ? "crosshair" : "default";
+    applyBuildUi();
     drawChart();
 }
 $("engineMode").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setEngineMode(b.dataset.mode === "advanced"); });
@@ -1603,7 +1711,7 @@ function chartValue(pt) {
     return [Math.max(0, Math.round((pt.x - left) / plotW * maxRpm / 50) * 50), Math.max(0, Math.round((bottom - pt.y) / plotH * maxY * 2) / 2)];
 }
 $("chart").addEventListener("pointerdown", (e) => {
-    if (!curveAdvanced || !chartGeo) return;
+    if (!curveAdvanced || !chartGeo || state.build) return;
     const pt = chartPoint(e);
     let hit = chartNear(pt);
     if (!hit) { hit = chartValue(pt); state.curve.push(hit); state.curve.sort((a, b) => a[0] - b[0]); }
@@ -1612,7 +1720,7 @@ $("chart").addEventListener("pointerdown", (e) => {
     drawChart();
 });
 $("chart").addEventListener("pointermove", (e) => {
-    if (!curveAdvanced || !chartGeo) return;
+    if (!curveAdvanced || !chartGeo || state.build) return;
     const pt = chartPoint(e);
     if (!dragPoint) { $("chart").style.cursor = chartNear(pt) ? "grab" : "crosshair"; return; }
     const v = chartValue(pt);
@@ -1624,7 +1732,7 @@ $("chart").addEventListener("pointermove", (e) => {
 });
 $("chart").addEventListener("pointerup", () => { if (!dragPoint) return; dragPoint = null; engineEdited(); });
 $("chart").addEventListener("dblclick", (e) => {
-    if (!curveAdvanced) return;
+    if (!curveAdvanced || state.build) return;
     const hit = chartNear(chartPoint(e));
     if (!hit || state.curve.length <= 3 || hit === state.curve[0]) return;
     state.curve.splice(state.curve.indexOf(hit), 1);
@@ -1748,6 +1856,7 @@ function buildConfig(id) {
         sound: { engine_sim: readEngineSim() }
     };
     if (!engineSimValid(config.sound.engine_sim)) throw new Error("Every field of the engine sound needs a value.");
+    if (state.build) config.engine.build = JSON.parse(JSON.stringify(readBuild()));
     const camNumbers = [config.cameras.follow.distance,
         config.cameras.follow.height, config.cameras.follow.look_height, config.cameras.follow.look_z, config.cameras.follow.smoothing, config.cameras.follow.fov_standing,
         config.cameras.follow.fov_fast, config.cameras.follow.fov_full_speed, config.cameras.follow.dolly, config.cameras.cockpit.fov, ...config.cameras.cockpit.position];
@@ -2026,6 +2135,11 @@ function fill(car) {
     const e = car.engine;
     set("idle", e.idle_rpm); set("limiter", e.limiter_rpm); set("inertia", e.inertia);
     state.curve = e.torque_curve.map((p) => [p[0], p[1]]);
+    state.build = e.build && e.build.bore ? JSON.parse(JSON.stringify(e.build)) : null;
+    $("bBlock").value = state.build ? (state.build.block || "") : "";
+    if (state.build) { showBuild(state.build); state.buildResult = EB.compute(state.build, e.limiter_rpm, e.idle_rpm); }
+    else state.buildResult = null;
+    applyBuildUi();
     set("brakeFront", car.brakes.front); set("brakeRear", car.brakes.rear);
     fillCameras(OpenRacer.cameraSettings(car));
     loadExhaust(car.exhaust);
@@ -2238,7 +2352,7 @@ $("addPoint").addEventListener("click", () => {
     renderCurve();
 });
 $("generate").addEventListener("click", generateCurve);
-for (const id of ["limiter", "idle"]) $(id).addEventListener("input", () => { clearDyno(); drawChart(); updateSpeedInfo(); $("soundRpm").max = Math.round((num("limiter") || 7000) * 1.1); });
+for (const id of ["limiter", "idle"]) $(id).addEventListener("input", () => { if (state.build) recomputeBuild(); clearDyno(); drawChart(); updateSpeedInfo(); $("soundRpm").max = Math.round((num("limiter") || 7000) * 1.1); });
 for (const id of ["gears", "finalDrive", "tyre"]) $(id).addEventListener("input", updateSpeedInfo);
 $("name").addEventListener("input", () => { if (!state.idEdited) $("id").value = slug($("name").value); });
 $("id").addEventListener("input", () => { state.idEdited = true; });
