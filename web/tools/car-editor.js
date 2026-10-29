@@ -1257,7 +1257,10 @@ function renderThumbnail() {
 // the tabs on the edges of the view fold the bars away and back; their caret points the way the bar will go
 function paintTabs() { $("toggleSide").textContent = $("side").classList.contains("collapsed") ? "›" : "‹"; $("toggleLayers").textContent = $("layers").classList.contains("hidden") ? "‹" : "›"; }
 $("toggleSide").addEventListener("click", () => { $("side").classList.toggle("collapsed"); paintTabs(); });
-$("toggleTests").addEventListener("click", () => { const box = $("testBar"); box.style.display = box.style.display === "none" ? "" : "none"; });
+// the test bar is off until it is asked for (the choice is remembered)
+function showTests(on) { $("testBar").style.display = on ? "" : "none"; try { localStorage.setItem("editor-tests", on ? "1" : "0"); } catch (e) { /* no storage */ } }
+{ let on = false; try { on = localStorage.getItem("editor-tests") === "1"; } catch (e) { /* no storage */ } $("testBar").style.display = on ? "" : "none"; }
+$("toggleTests").addEventListener("click", () => showTests($("testBar").style.display === "none"));
 $("toggleLayers").addEventListener("click", () => { $($("layers").classList.contains("hidden") ? "layersShow" : "layersHide").click(); });
 $("layersHide").addEventListener("click", () => { $("layers").classList.add("hidden"); $("layersOpen").style.display = ""; paintTabs(); });
 $("layersShow").addEventListener("click", () => { $("layers").classList.remove("hidden"); $("layersOpen").style.display = "none"; paintTabs(); });
