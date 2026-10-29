@@ -28,11 +28,14 @@ OpenRacer.FreeCam = (function () {
     var yaw = 0, pitch = 0, roll = 0, rollT = 0, fov = 60;
     var pointerLocked = false, mouseHint = null;
     var LOOK_SENSITIVITY = 0.0022, ROLL_RATE = 0.9;
+    // the smoothing of the mouse look: the turn that the mouse asks for waits and goes into the look at a rate (per second): low is slow and smooth, 60 and more is direct (5 and 6)
+    var LOOK_MIN = 1, LOOK_MAX = 60, LOOK_RATE_CHANGE = 1.2;
+    var lookRate = 20, lookX = 0, lookY = 0;
     var euler = new THREE.Euler(0, 0, 0, "YXZ");
     var placeBehind = false;
     var panel = null, followButton = null, aimButton = null, fixedButton = null, speedLabel = null;
     var carId = null, saveAt = 0;
-    var KEYS = { forward: "KeyW", back: "KeyS", left: "KeyA", right: "KeyD", up: ["KeyZ"], down: ["KeyX"], slower: "Digit3", faster: "Digit4",
+    var KEYS = { forward: "KeyW", back: "KeyS", left: "KeyA", right: "KeyD", up: ["KeyZ"], down: ["KeyX"], slower: "Digit3", faster: "Digit4", lookSlower: "Digit5", lookFaster: "Digit6",
         rollLeft: "KeyQ", rollRight: "KeyE", fovNarrow: "BracketLeft", fovWide: "BracketRight", fixedToggle: "KeyI" };
     // the keys this camera takes (Settings.js leaves them to it while it is on: they do not drive the car, mute the sound or save the reset place)
     var TAKEN = {};
@@ -61,7 +64,7 @@ OpenRacer.FreeCam = (function () {
         panel.appendChild(title);
         var keys = document.createElement("div");
         keys.className = "keys";
-        keys.innerHTML = "<b>W A S D</b> move · <b>Z X</b> up, down<br><b>mouse</b> look (click the scene) · <b>Q E</b> roll<br><b>[ ]</b> field of view · <b>3 4</b> slower, faster";
+        keys.innerHTML = "<b>W A S D</b> move · <b>Z X</b> up, down<br><b>mouse</b> look (click the scene) · <b>Q E</b> roll<br><b>[ ]</b> field of view · <b>3 4</b> slower, faster · <b>5 6</b> mouse look smoother, sharper";
         panel.appendChild(keys);
         speedLabel = title.querySelector("#freeCamSpeed");
         // the two toggles: on pointerup (the panel is dragged by its pointerdown, Movable.js, which took the click away from the buttons)
@@ -90,7 +93,7 @@ OpenRacer.FreeCam = (function () {
         followButton.classList.toggle("on", follow);
         fixedButton.textContent = fixed ? "Fixed to the car (I)" : "Fix to the car (I)";
         fixedButton.classList.toggle("on", fixed);
-        speedLabel.textContent = "speed " + speed.toFixed(speed < 0.1 ? 2 : 1) + "×";
+        speedLabel.textContent = "speed " + speed.toFixed(speed < 0.1 ? 2 : 1) + "× · look " + (lookRate >= LOOK_MAX ? "direct" : Math.round(lookRate));
     }
 
     function toggleFollow() { follow = !follow; if (follow && fixed) setFixed(false); refreshUi(); save(); }
@@ -118,7 +121,7 @@ OpenRacer.FreeCam = (function () {
     function storageKey() { return "openracer.freecam." + (carId || "car"); }
     function save() {
         if (!carId) return;
-        try { window.localStorage.setItem(storageKey(), JSON.stringify({ x: pos.x, y: pos.y, z: pos.z, yaw: yaw, pitch: pitch, roll: roll, fov: fov, speed: speed, follow: follow, aim: aim, fixed: fixed,
+        try { window.localStorage.setItem(storageKey(), JSON.stringify({ x: pos.x, y: pos.y, z: pos.z, yaw: yaw, pitch: pitch, roll: roll, fov: fov, speed: speed, look: lookRate, follow: follow, aim: aim, fixed: fixed,
             carX: lastCar.x, carY: lastCar.y, carZ: lastCar.z })); } catch (e) { /* no storage */ }
     }
     function restore(carPosition) {
@@ -130,6 +133,7 @@ OpenRacer.FreeCam = (function () {
             if (s.follow && isFinite(s.carX)) pos.add(carPosition).sub(new THREE.Vector3(s.carX, s.carY, s.carZ));
             yaw = isFinite(s.yaw) ? s.yaw : 0; pitch = isFinite(s.pitch) ? s.pitch : 0; fov = isFinite(s.fov) ? s.fov : 60; roll = rollT = isFinite(s.roll) ? s.roll : 0;
             speed = isFinite(s.speed) ? Math.max(0.01, Math.min(3, s.speed)) : 1;
+            lookRate = isFinite(s.look) ? Math.max(LOOK_MIN, Math.min(LOOK_MAX, s.look)) : 20;
             follow = !!s.follow; aim = s.aim !== false; fixed = !!s.fixed;
             return true;
         } catch (e) { return false; }
@@ -219,6 +223,17 @@ OpenRacer.FreeCam = (function () {
         var mx = key("right") - key("left"), mz = key("forward") - key("back"), my = key("up") - key("down");
         var ds = key("faster") - key("slower");
         if (ds) { speed = Math.max(0.01, Math.min(3, speed * Math.exp(ds * SPEED_RATE * delta))); refreshUi(); }
+        var dl = key("lookFaster") - key("lookSlower");
+        if (dl) { lookRate = Math.max(LOOK_MIN, Math.min(LOOK_MAX, lookRate * Math.exp(dl * LOOK_RATE_CHANGE * delta))); refreshUi(); }
+        // the turn of the mouse goes into the look, a share of what waits every frame (all of it when the look is direct); nothing waits while the camera looks at the car
+        if (aim) lookX = lookY = 0;
+        if (lookX || lookY) {
+            var share = lookRate >= LOOK_MAX ? 1 : 1 - Math.exp(-lookRate * delta), ax = lookX * share, ay = lookY * share;
+            lookX -= ax; lookY -= ay;
+            if (Math.abs(lookX) < 1e-5) lookX = 0;
+            if (Math.abs(lookY) < 1e-5) lookY = 0;
+            yaw -= ax; pitch = Math.max(-1.5, Math.min(1.5, pitch - ay));
+        }
         // Q and E roll the picture (it eases to where it is going)
         rollT = Math.max(-Math.PI, Math.min(Math.PI, rollT + (key("rollLeft") - key("rollRight")) * ROLL_RATE * delta));
         roll += (rollT - roll) * (1 - Math.exp(-8 * delta));
@@ -285,8 +300,8 @@ OpenRacer.FreeCam = (function () {
     });
     document.addEventListener("mousemove", function (event) {
         if (!active || aim || !pointerLocked) return;
-        yaw -= event.movementX * LOOK_SENSITIVITY;
-        pitch = Math.max(-1.5, Math.min(1.5, pitch - event.movementY * LOOK_SENSITIVITY));
+        lookX += event.movementX * LOOK_SENSITIVITY;
+        lookY += event.movementY * LOOK_SENSITIVITY;
     });
 
     return { enter: enter, leave: leave, update: update, toggleFollow: toggleFollow, toggleAim: toggleAim, toggleFixed: toggleFixed, takes: TAKEN,

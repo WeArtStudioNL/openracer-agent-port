@@ -33,6 +33,8 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 ### Cameras: closer
 
+- **The mouse look of the free camera has a smoothing, set with 5 and 6** (smoother, sharper; shown next to the speed as "look 20" or "look direct"; kept per car in the game and in the browser for the replay). The turn that the mouse asks for waits and goes into the look at a rate per second: 1 is slow and heavy, 60 and up is direct. The game had no smoothing before (the look followed the mouse at once); it starts at 20, the rate that the replay had. Measured with a mouse turn of 300 counts: at 20 the camera is at 0.57 rad after a quarter of a second, at 1 at 0.28 rad after half a second, direct at once.
+
 - **The speed of the free camera can go down to 0.01** (it was 0.1; keys 3 and 4, and the slider of the replay, which runs along a scale that multiplies at every step so that the slow speeds are within reach: 0.01 to 3 times).
 
 - **The free camera flies the way it looks.** W and S now move along the look of the camera (up and down with the pitch, so W goes where the mouse points), A and D go sideways level. Up and down are on **Z and X** (they are the gear shift keys of the car, which the free camera takes while it is on, as it does with the other keys of the camera); the replay camera also keeps Space, Shift, Control and Alt. Measured in the game: Z took the camera 7 m up, X 7 m down, and W went along the look (4 m forward, 9 m down toward the car) while the gear did not change.

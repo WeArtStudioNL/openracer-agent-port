@@ -602,7 +602,7 @@ OpenRacer.Replay = (function() {
         var cameraRow = el(bar, "div", "row cameras");
         el(cameraRow, "span", "label", "Camera");
         cameraButtons = [["Follow", "The camera that follows the car"], ["Cockpit", "In the car"], ["Free", "A camera that you move yourself"], ["Cinematic", "The cameras of the track: the one nearest to the car, which turns to follow it"]].map(function(c, i) {
-            var b = button(cameraRow, c[0], c[1] + (i !== 2 ? "" : " (WASD or arrows, Z and X up and down, mouse look, [ and ] zoom)"), function() {
+            var b = button(cameraRow, c[0], c[1] + (i !== 2 ? "" : " (WASD or arrows, Z and X up and down, mouse look, [ and ] zoom, 5 and 6 the smoothing of the look)"), function() {
                 if(i === 2) { leaveCine(); enterFree(); }
                 else if(i === 3) { leaveFree(); enterCine(); }
                 else { leaveFree(); leaveCine(); Settings.setOption("camera", i + 2); }
@@ -645,6 +645,8 @@ OpenRacer.Replay = (function() {
             try { localStorage.setItem("openracer.replay.freeSpeed", String(free.speed)); } catch(e) { /* no storage */ }
         });
         speedSlider.addEventListener("keydown", function(e) { if(/^Arrow/.test(e.code)) e.stopPropagation(); });
+        free.lookLabel = el(freeRow, "span", "label", "Look " + (free.lookRate >= 60 ? "direct" : Math.round(free.lookRate)));
+        free.lookLabel.title = "The smoothing of the mouse look: 5 smoother, 6 sharper";
         var aimButton = button(freeRow, "Aim at the car (F)", "The camera keeps looking at the car", function() { toggleAim(); });
         var parentButton = button(freeRow, "Fixed to the car (L)", "The camera goes with the car, from where it is now (its place and its turn)", function() { toggleParent(); });
         var skyButton = button(freeRow, "Fixed, sky up (K)", "The camera goes with the car but does not turn with it: it keeps the sky up", function() { toggleSky(); });
@@ -728,7 +730,7 @@ OpenRacer.Replay = (function() {
     var free = {
         active: false, speed: 1,
         pos: V3(0, 0, 0), vel: V3(0, 0, 0),            // in the frame of the camera: the world, or the car while the camera is fixed to it
-        yaw: 0, pitch: 0, yawT: 0, pitchT: 0,          // the way it looks, and where the mouse wants it to look
+        yaw: 0, pitch: 0, yawT: 0, pitchT: 0, lookRate: 20,          // the way it looks, and where the mouse wants it to look
         fov: 60, fovT: 60,
         roll: 0, rollT: 0,                             // Q and E: the tilt of the picture (radians), and where it is going
         quat: new THREE.Quaternion(),                  // how it looks in the world, last frame
@@ -738,6 +740,7 @@ OpenRacer.Replay = (function() {
         target: 0                                      // the car (Tab chooses)
     };
     try { var storedSpeed = parseFloat(localStorage.getItem("openracer.replay.freeSpeed")); if(storedSpeed >= 0.01 && storedSpeed <= 3) free.speed = storedSpeed; } catch(e) { /* no storage */ }
+    try { var storedLook = parseFloat(localStorage.getItem("openracer.replay.freeLook")); if(storedLook >= 1 && storedLook <= 60) free.lookRate = storedLook; } catch(e) { /* no storage */ }
     var keys = {};
     var BASE_SPEED = 12, VERTICAL_SPEED = 8, FOV_RATE = 40, LOOK_SENSITIVITY = 0.0022, STICK_LOOK = 2.4, ROLL_RATE = 1.0;
     var tmpQ = new THREE.Quaternion(), tmpQ2 = new THREE.Quaternion(), tmpV = V3(0, 0, 0), tmpV2 = V3(0, 0, 0), tmpV3 = V3(0, 0, 0), tmpE = new THREE.Euler(0, 0, 0, "YXZ"), tmpM = new THREE.Matrix4();
@@ -931,8 +934,16 @@ OpenRacer.Replay = (function() {
         free.pos.addScaledVector(free.vel, delta);
 
         // the look: the mouse decides where it wants to look, the camera follows smoothly
-        free.yaw += (free.yawT - free.yaw) * (1 - Math.exp(-20 * delta));
-        free.pitch += (free.pitchT - free.pitch) * (1 - Math.exp(-20 * delta));
+        // 5 and 6: the smoothing of the look (the rate at which it goes to where the mouse wants it: low is slow and smooth, 60 and up is direct)
+        var lookChange = (keys.Digit6 ? 1 : 0) - (keys.Digit5 ? 1 : 0);
+        if(lookChange) {
+            free.lookRate = Math.max(1, Math.min(60, free.lookRate * Math.exp(lookChange * 1.2 * delta)));
+            if(free.lookLabel) free.lookLabel.textContent = "Look " + (free.lookRate >= 60 ? "direct" : Math.round(free.lookRate));
+            try { localStorage.setItem("openracer.replay.freeLook", String(free.lookRate)); } catch(e) { /* no storage */ }
+        }
+        var lookShare = free.lookRate >= 60 ? 1 : 1 - Math.exp(-free.lookRate * delta);
+        free.yaw += (free.yawT - free.yaw) * lookShare;
+        free.pitch += (free.pitchT - free.pitch) * lookShare;
         free.rollT = Math.max(-Math.PI, Math.min(Math.PI, free.rollT + tilt * ROLL_RATE * Math.max(0.5, scale) * delta));
         free.roll += (free.rollT - free.roll) * (1 - Math.exp(-8 * delta));
 
