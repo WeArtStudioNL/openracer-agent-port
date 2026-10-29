@@ -35,11 +35,16 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### The size of a tyre works like a tyre (library and custom tyres)
+
+- A tyre that says its size (width and diameter) now has: a load that it is rated for that goes with its area (width × diameter, against 245 mm × 645 mm), so a wider or bigger tyre grips more at the same load and loses less of it as the load grows (a rear tyre of 205 mm grips 1.35 at 4500 N, one of 300 mm 1.45, one of 350 mm 1.49); a rolling resistance with the width, a stiffness against the slip angle with the width (a wide tyre turns in sharper), the mass of the wheel (the inertia goes with the width and with the fourth power of the diameter: a wide tall tyre costs acceleration), the heat that the rubber takes and the life of the tread with the area. The wheel of a model has none of this.
+- Fixed, an automatic that stayed in a gear on the rev limiter: the shift point was a quarter above the engine speed of the peak torque, which for an engine that peaks at 6500 of 7700 is 8100, above the limiter, so it never came. It is now at most 94 % of the limiter (96.5 % for the drag pattern). With a converter that is not locked, at full throttle, the engine speed counts for the shift (the converter runs it 15 % over the road).
+
 ### Custom tyres, with the rubber on a slider
 
 - A new choice Custom (made from the shell settings) for the tyre at the front and at the rear, each on its own. The tyre is made from numbers: its width and the nodes of the shell are the shell sliders of the Tyres group, the diameter is a slider of the axle, and the inner shell (a share of the tyre) is where the rim goes. The tyre is drawn as the space between the outer and the inner shell, with grooves on a tyre for the road and none on a slick. The rim of the axle (any rim of the library, or a plain one) is scaled to the inner shell.
 - The two axles can have another diameter: every wheel has its own size in the physics (the height of the mount, the contact, the slip and the road speed of the gearbox follow it).
-- The rubber is a slider from 0 to 100 for the axle: the grip, the temperature window, the heat, the wear and the rolling resistance are worked out between the kinds of tyre of the list, and the label says which it is (Eco, Road, Sport, Semi-slick, Race slick, Drag slick). A wider custom tyre grips a little more (by the fifth power of the width).
+- The rubber is a slider from 0 to 100 for the axle: the grip, the temperature window, the heat, the wear and the rolling resistance are worked out between the kinds of tyre of the list, and the label says which it is (Eco, Road, Sport, Semi-slick, Race slick, Drag slick). 
 - The rubber changes the grip at once, without building the car again; the width and the diameter build it again.
 - Fixed: an automatic with a converter that spins its tyres in a launch shifts up again when the driven wheels slip past their peak (the last change had taken that away).
 
