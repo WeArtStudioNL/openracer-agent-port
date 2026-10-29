@@ -1313,9 +1313,12 @@ function engineSimValid(p) {
     return Object.entries(p).every(([key, v]) => key === "timing" ? v.length > 0 : (typeof v === "string" ? v.length > 0 : Number.isFinite(v)));
 }
 
+// what the form gives, as the synth gets it (an exhaust type decides the impulse response and the amount of it)
+function playParams() { return OpenRacer.engineSimParams({ sound: { engine_sim: readEngineSim() } }); }
 async function engineSimChanged() {
-    const p = readEngineSim();
-    if (!preview.synth || !engineSimValid(p)) return;
+    const raw = readEngineSim();
+    if (!preview.synth || !engineSimValid(raw)) return;
+    const p = playParams();
     preview.synth.setParams(p);
     if (preview.synth.impulseResponseName !== p.impulse_response) {
         try {
@@ -1332,8 +1335,8 @@ async function playSound() {
     if (!window.AudioWorkletNode) { status("This browser cannot play the engine sound (AudioWorklet).", "error"); return; }
     if (!preview.ctx) preview.ctx = new AudioContext();
     if (preview.ctx.state === "suspended") await preview.ctx.resume();
-    const p = readEngineSim();
-    if (!engineSimValid(p)) { status("Every field of the engine sound needs a value.", "error"); return; }
+    if (!engineSimValid(readEngineSim())) { status("Every field of the engine sound needs a value.", "error"); return; }
+    const p = playParams();
     if (!preview.synth) {
         try {
             if (!preview.loaded) { await OpenRacer.EngineSimSynth.load(preview.ctx, "../js/EngineSimWorklet.js"); preview.loaded = true; }
@@ -1485,11 +1488,19 @@ function drawChart() {
 // ---- the engine build: the torque curve comes from the block, the cam, the inlet and the exhaust, the fuel and the turbo or supercharger (EngineBuild.js)
 const EB = OpenRacer.EngineBuild;
 function fillSelect(select, entries, labelOf) { select.innerHTML = Object.keys(entries).map((k) => "<option value='" + k + "'>" + labelOf(entries[k]) + "</option>").join(""); }
-// the exhaust of the Engine card is the impulse response of the engine sound (kept in the hidden field of the sound card)
-function syncExhaustSelect() { const ir = $("esIr").value; if ($("bExhaustSound").value !== ir) $("bExhaustSound").value = ir; }
+// the exhaust of the Engine card is the exhaust type of the engine sound (kept in the hidden field of the sound card)
+function syncExhaustSelect() { const t = $("esExhaust").value; if ($("bExhaustSound").value !== t) $("bExhaustSound").value = t; }
+// the exhaust that goes with a block, until it is chosen otherwise
+function defaultExhaust(block) {
+    if (/kart|Single 0.4|Twin/.test(block)) return "straight";
+    if (/supersport|superbike|triple|thumper/.test(block)) return "performance";
+    if (/flatplane|V10|V12|Flat-6/.test(block)) return "sport";
+    return "standard";
+}
 function initBuildUi() {
-    $("bExhaustSound").innerHTML = OpenRacer.engineSimImpulseResponses.map((ir) => "<option value='" + ir.id + "'>" + ir.label + "</option>").join("");
-    $("bExhaustSound").addEventListener("change", () => { $("esIr").value = $("bExhaustSound").value; $("esIr").dispatchEvent(new Event("change", { bubbles: true })); });
+    const exhaustOptions = "<option value='custom'>Custom (as it was set before)</option>" + Object.entries(OpenRacer.engineSimExhausts).map(([id, e]) => "<option value='" + id + "'>" + e.label + " · " + e.hint + "</option>").join("");
+    $("bExhaustSound").innerHTML = exhaustOptions; $("esExhaust").innerHTML = exhaustOptions;
+    $("bExhaustSound").addEventListener("change", () => { $("esExhaust").value = $("bExhaustSound").value; $("esExhaust").dispatchEvent(new Event("change", { bubbles: true })); });
     $("bBlock").innerHTML = "<option value=''>Choose an engine block…</option>" + Object.keys(OpenRacer.engineSimPresets).map((n) => "<option>" + n + "</option>").join("");
     fillSelect($("bFuel"), EB.FUELS, (f) => f.label);
     fillSelect($("bIntercooler"), EB.INTERCOOLERS, (i) => i.label);
@@ -1560,7 +1571,7 @@ function buildEdited() { recomputeBuild(); $("bBuild").dispatchEvent(new Event("
 // the engine sound follows the engine that is built (the same bore, stroke, compression, cam, flows and lengths)
 function syncSoundFromBuild(build, wholePreset) {
     const p = Object.assign({}, readEngineSim());
-    if (wholePreset && OpenRacer.engineSimPresets[build.block]) Object.assign(p, OpenRacer.engineSimPresets[build.block]);
+    if (wholePreset && OpenRacer.engineSimPresets[build.block]) { Object.assign(p, OpenRacer.engineSimPresets[build.block]); p.exhaust_type = defaultExhaust(build.block); }
     Object.assign(p, { bore: build.bore, stroke: build.stroke, compression_ratio: build.compression, intake_duration: build.cam_duration, exhaust_duration: Math.max(180, build.cam_duration - 4),
         intake_flow: build.intake_flow, exhaust_flow: build.exhaust_flow, primary_length: build.primary_length, exhaust_length: build.exhaust_length });
     fillEngineSim(p);

@@ -48,8 +48,28 @@ OpenRacer.engineSimImpulseResponses = [
     { id: "minimal_muffling_02", label: "Open exhaust 2", file: "minimal_muffling_02.wav" },
     { id: "minimal_muffling_03", label: "Open exhaust 3", file: "minimal_muffling_03.wav" },
     { id: "mild_exhaust", label: "Mild exhaust", file: "mild_exhaust.wav" },
-    { id: "sharp_01", label: "Sharp (race)", file: "sharp_01.wav" }
+    { id: "sharp_01", label: "Sharp (race)", file: "sharp_01.wav" },
+    // our own: pipes and mufflers as delay lines (see engineSimExhausts)
+    { id: "exhaust_standard", label: "Standard muffler", file: "exhaust_standard.wav" },
+    { id: "exhaust_sport", label: "Sport resonator", file: "exhaust_sport.wav" },
+    { id: "exhaust_performance", label: "Performance cat-back", file: "exhaust_performance.wav" },
+    { id: "exhaust_straight", label: "Straight cut", file: "exhaust_straight.wav" },
+    { id: "exhaust_open", label: "Open headers", file: "exhaust_open.wav" }
 ];
+
+// The exhausts to choose from ("exhaust_type" of engine_sim). The impulse response alone hardly changes an engine sound (the engine gives a narrow band, around
+// the firing frequency, and a convolution cannot add what is not there), so a type is a whole chain: the impulse response and how much of it, a drive (the pulses
+// of an exhaust without a muffler are sharp: the harmonics that give it the rasp), a bass, a mid and a treble, a lowpass (the muffler), the volume, and what the
+// exhaust does to the engine: the flow at the outlet and the length of the pipe (EngineSimWorklet.js). "custom" is the old way: the impulse response and the
+// amount of the fields.
+OpenRacer.engineSimExhausts = {
+    standard: { label: "Standard", hint: "stock muffler: dark, quiet, boomy", ir: "exhaust_standard", wet: 1.0, drive: 0, lowpass: 2500, bass: 3, mid: 0, midHz: 600, treble: 0, volume: 0.9, outlet: 0.7, length: 1.15 },
+    sport: { label: "Sport", hint: "resonator: fuller, more mid range", ir: "exhaust_sport", wet: 0.9, drive: 2.5, lowpass: 6000, bass: 0, mid: 6, midHz: 700, treble: 2, volume: 1.0, outlet: 1.0, length: 1.0 },
+    performance: { label: "Performance", hint: "free-flowing cat-back: louder, edgier", ir: "exhaust_performance", wet: 0.8, drive: 4, lowpass: 10000, bass: -2, mid: 8, midHz: 1100, treble: 4, volume: 1.05, outlet: 1.6, length: 0.9 },
+    straight: { label: "Straight cut", hint: "no muffler: raw and raspy", ir: "exhaust_straight", wet: 0.7, drive: 5, lowpass: 20000, bass: -3, mid: 6, midHz: 1400, treble: 4, volume: 1.15, outlet: 2.5, length: 0.6 },
+    open: { label: "Open headers", hint: "race: loud and cracking", ir: "exhaust_open", wet: 0.5, drive: 8, lowpass: 20000, bass: -6, mid: 6, midHz: 2000, treble: 6, volume: 1.2, outlet: 4, length: 0.35 },
+    quiet: { label: "Quiet", hint: "touring: muffled and soft", ir: "mild_exhaust", wet: 1.0, drive: 0, lowpass: 1600, bass: 4, mid: -2, midHz: 600, treble: -3, volume: 0.8, outlet: 0.4, length: 1.4 }
+};
 
 OpenRacer.engineSimPresets = {
     "Single 0.25 L (kart)": { layout: "single", bore: 70, stroke: 65, rod: 105, compression_ratio: 9.0, intake_duration: 232, exhaust_duration: 226,
@@ -112,6 +132,7 @@ OpenRacer.engineSimPresets = {
 };
 
 OpenRacer.engineSimDefaults = Object.assign({
+    exhaust_type: "custom",
     lobe_gamma: 1.0, exhaust_runner_volume: 100, primary_area: 10, collector_area: 20, audio_volume: 1,
     idle_pressure: 0.35, throttle_gamma: 2.0, burn_duration: 45, burn_efficiency: 0.85, burn_randomness: 0.2, afterfire_temperature: 650,
     timing: [[0, 12], [1000, 12], [2000, 20], [3000, 26], [4000, 30], [5000, 34], [6000, 38], [9000, 38]],
@@ -126,6 +147,8 @@ OpenRacer.engineSimParams = function (config) {
     if (!OpenRacer.engineSimLayouts[params.layout]) params.layout = OpenRacer.engineSimDefaults.layout;
     if (!Array.isArray(params.timing) || !params.timing.length) params.timing = OpenRacer.engineSimDefaults.timing;
     params.timing = params.timing.map(function (p) { return [p[0], p[1]]; });
+    var exhaust = OpenRacer.engineSimExhausts[params.exhaust_type];
+    if (exhaust) { params.impulse_response = exhaust.ir; params.convolution = exhaust.wet; }       // (the type decides; a car without one keeps its own impulse response)
     return params;
 };
 
@@ -147,12 +170,22 @@ OpenRacer.engineSimWorkletOptions = function (params) {
         });
     }
     var options = Object.assign({}, params);
+    var exhaust = OpenRacer.engineSimExhausts[params.exhaust_type];
+    if (exhaust) { options.outlet_flow = params.outlet_flow * exhaust.outlet; options.exhaust_length = params.exhaust_length * exhaust.length; }       // (what the exhaust does to the engine itself)
     options.cylinders = cylinders;
     options.exhaust_systems = systems;
     return options;
 };
 
 var ENGINE_SIM_LEVEL = 0.5; // the loudness at a volume of 1
+
+// the rms of tanh(k x) for a signal x with an rms of ENGINE_SIM_SIGNAL (a normal distribution), to put the level back after the drive of an exhaust
+var ENGINE_SIM_SIGNAL = 0.14;       // (measured: the signal at that point of the graph)
+function shaperRms(k) {
+    var sum = 0, weight = 0;
+    for (var g = -4; g <= 4.0001; g += 0.2) { var w = Math.exp(-g * g / 2), t = Math.tanh(k * ENGINE_SIM_SIGNAL * g); sum += w * t * t; weight += w; }
+    return Math.sqrt(sum / weight);
+}
 
 OpenRacer.EngineSimSynth = function (context, params, impulseResponse) {
     var self = this;
@@ -181,6 +214,18 @@ OpenRacer.EngineSimSynth = function (context, params, impulseResponse) {
     var bus = context.createGain();
     this.dry.connect(bus);
     this.wet.connect(bus);
+    // the exhaust: the drive (sharp pulses give harmonics), the tone and the muffler (see engineSimExhausts); all of it is set in apply()
+    this.drivePre = context.createGain();
+    this.shaper = context.createWaveShaper();
+    var curve = new Float32Array(2048);
+    for (var c = 0; c < curve.length; c++) curve[c] = Math.tanh((c / (curve.length - 1)) * 8 - 4);      // tanh(4 z) for z from -1 to 1
+    this.shaper.curve = curve;
+    this.drivePost = context.createGain();
+    this.bass = context.createBiquadFilter(); this.bass.type = "lowshelf"; this.bass.frequency.value = 150;
+    this.mid = context.createBiquadFilter(); this.mid.type = "peaking"; this.mid.Q.value = 0.9;
+    this.treble = context.createBiquadFilter(); this.treble.type = "highshelf"; this.treble.frequency.value = 3000;
+    this.muffler = context.createBiquadFilter(); this.muffler.type = "lowpass"; this.muffler.Q.value = 0.6;
+    this.dryTone = context.createGain();
     // a lowpass for a sound that is heard inside the car, and a limiter against peaks
     this.filter = context.createBiquadFilter();
     this.filter.type = "lowpass";
@@ -191,7 +236,14 @@ OpenRacer.EngineSimSynth = function (context, params, impulseResponse) {
     limiter.knee.value = 8;
     limiter.ratio.value = 6;
     this.master = context.createGain();
-    bus.connect(this.filter);
+    bus.connect(this.drivePre);
+    this.drivePre.connect(this.shaper);
+    this.shaper.connect(this.drivePost);
+    this.drivePost.connect(this.bass);
+    this.bass.connect(this.mid);
+    this.mid.connect(this.treble);
+    this.treble.connect(this.muffler);
+    this.muffler.connect(this.filter);
     this.filter.connect(limiter);
     limiter.connect(this.master);
     this.output = this.master;
@@ -205,8 +257,18 @@ OpenRacer.EngineSimSynth = function (context, params, impulseResponse) {
         var wet = self.convolver.buffer ? Math.max(0, Math.min(1, p.convolution)) : 0;
         self.wet.gain.setTargetAtTime(wet, now, 0.05);
         self.dry.gain.setTargetAtTime(1 - wet, now, 0.05);
+        var ex = OpenRacer.engineSimExhausts[p.exhaust_type];
+        // the drive: the signal is about 0.14 (rms) here; y = tanh(k x) with k = 1 + 4 x drive, and the level put back behind it (the shaper has tanh(4 z) over -1..1)
+        var k = 1 + 4 * (ex ? ex.drive : 0);
+        self.drivePre.gain.setTargetAtTime(k / 4, now, 0.05);
+        self.drivePost.gain.setTargetAtTime(ENGINE_SIM_SIGNAL / shaperRms(k), now, 0.05);
+        self.bass.gain.setTargetAtTime(ex ? ex.bass : 0, now, 0.05);
+        self.mid.frequency.setTargetAtTime(ex ? ex.midHz : 1000, now, 0.05);
+        self.mid.gain.setTargetAtTime(ex ? ex.mid : 0, now, 0.05);
+        self.treble.gain.setTargetAtTime(ex ? ex.treble : 0, now, 0.05);
+        self.muffler.frequency.setTargetAtTime(ex ? ex.lowpass : 20000, now, 0.05);
         self.filter.frequency.setTargetAtTime(self.inside ? 2200 : 20000, now, 0.08);
-        self.master.gain.setTargetAtTime(self.silent ? 0 : ENGINE_SIM_LEVEL * p.volume * (self.inside ? 1.2 : 1), now, 0.05);
+        self.master.gain.setTargetAtTime(self.silent ? 0 : ENGINE_SIM_LEVEL * p.volume * (ex ? ex.volume : 1) * (self.inside ? 1.2 : 1), now, 0.05);
     }
     this.apply = apply;
     apply();
