@@ -5,6 +5,8 @@
  *              scalable: drag it by any part of it that is not a control (a button, a field, a slider), and drag the bottom right corner to scale it.
  *              Where it is and how large it is, is kept in this browser per panel (a key), and a panel that would be out of the window is brought back.
  *              OpenRacer.Movable.make(element, { key: "tuning" }); OpenRacer.Movable.reset(element) puts it back as the page made it.
+ *              With { handle: element } (or a function that gives it) the panel is only dragged by that part (a header), and nothing else of it takes the drag: a panel that
+ *              scrolls can then be scrolled with the finger without moving it (the handle stops the browser from scrolling: touch-action none; the corner still scales).
  */
 
 OpenRacer.Movable = (function () {
@@ -67,6 +69,8 @@ OpenRacer.Movable = (function () {
             width: el.style.width, height: el.style.height, maxHeight: el.style.maxHeight, maxWidth: el.style.maxWidth };
         el.__original = original;
         var gesture = null;
+        var handleAtStart = options && (typeof options.handle === "function" ? options.handle() : options.handle);
+        if(handleAtStart) handleAtStart.style.touchAction = "none";
         var inCorner = function (e) { var r = el.getBoundingClientRect(); return r.right - e.clientX < CORNER && r.bottom - e.clientY < CORNER; };
 
         el.addEventListener("pointermove", function (e) {
@@ -77,6 +81,8 @@ OpenRacer.Movable = (function () {
             if (e.button !== 0) return;
             var corner = inCorner(e);
             if (!corner && control(e.target, el)) return;
+            var handle = options && (typeof options.handle === "function" ? options.handle() : options.handle);
+            if (!corner && handle && !handle.contains(e.target)) return;         // (only the handle drags: the rest of the panel scrolls)
             free(el);
             var rect = el.getBoundingClientRect();
             gesture = { corner: corner, x: e.clientX, y: e.clientY, left: rect.left, top: rect.top, width: rect.width, height: rect.height, id: e.pointerId };

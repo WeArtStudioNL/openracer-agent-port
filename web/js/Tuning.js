@@ -140,9 +140,12 @@ var Tuning = (function() {
     function addStyle() {
         var style = document.createElement("style");
         style.textContent =
-            "#tuning { position: fixed; right: 10px; top: 10px; bottom: 10px; width: 390px; z-index: 1500; overflow-y: auto; padding: 12px 14px 20px; " +
+            "#tuning { position: fixed; right: 10px; top: 10px; bottom: 10px; width: 390px; z-index: 1500; overflow-y: auto; padding: 0 14px 20px; " +
             "background: rgba(24, 29, 35, 0.9); color: var(--head); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 13px; border-radius: 8px; display: none; }" +
-            "#tuning h1 { font-size: 18px; margin: 0 0 2px; }" +
+            "#tuning h1 { font-size: 18px; margin: 0; }" +
+            "#tuning .tuneHeader { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; margin: 0 -14px 6px; padding: 10px 14px 8px; " +
+            "background: rgba(24, 29, 35, 0.98); border-bottom: 1px solid var(--line); border-radius: 8px 8px 0 0; cursor: grab; touch-action: none; user-select: none; }" +
+            "#tuning .tuneHeader button { font-size: 20px; line-height: 1; padding: 2px 10px; }" +
             "#tuning .sub { color: var(--muted); font-size: 12px; margin-bottom: 8px; line-height: 1.4; }" +
             "#tuning .info { background: var(--bg2); border-radius: 5px; padding: 6px 8px; margin-bottom: 8px; color: var(--head); font-size: 12px; line-height: 1.4; }" +
             "#tuning details { border-top: 1px solid var(--line); padding: 4px 0; }" +
@@ -370,7 +373,7 @@ var Tuning = (function() {
         return wrap;
     }
 
-    var cardMeta = {}, engineUi = null, buildResult = null;
+    var cardMeta = {}, engineUi = null, buildResult = null, header = null;
 
     // the engine that is built (EngineBuild.js) for the piece of the Engine card (EngineBuildUI.js): what it works on is in the values of the menu
     function workOutBuild() {
@@ -405,8 +408,17 @@ var Tuning = (function() {
         addStyle();
         panel = document.createElement("div");
         panel.id = "tuning";
-        panel.innerHTML = "<h1>Tuning</h1><div class=\"sub\">Change the car while you drive. The tuning of this car is kept in the browser. " +
-            "The key to show or hide this menu can be changed in the settings menu.</div>";
+        // the header (the title and a cross to close) is the handle: only it drags the panel, so the rest scrolls with the finger without moving the menu
+        header = document.createElement("div");
+        header.className = "tuneHeader";
+        header.innerHTML = "<h1>Tuning</h1>";
+        var cross = document.createElement("button");
+        cross.type = "button"; cross.textContent = "\u00d7"; cross.title = "Close the tuning menu"; cross.setAttribute("aria-label", "Close the tuning menu");
+        cross.onclick = function() { setVisible(false); };
+        header.appendChild(cross);
+        panel.appendChild(header);
+        panel.insertAdjacentHTML("beforeend", "<div class=\"sub\">Change the car while you drive. The tuning of this car is kept in the browser. " +
+            "The key to show or hide this menu can be changed in the settings menu.</div>");
         info = document.createElement("div");
         info.className = "info";
         panel.appendChild(info);
@@ -498,9 +510,6 @@ var Tuning = (function() {
             });
         };
         importTune.onclick = function() { importInput.click(); };
-        var close = document.createElement("button");
-        close.textContent = "Close";
-        close.onclick = function() { setVisible(false); };
         setupLine.appendChild(setupLabel);
         setupLine.appendChild(setupSelect);
         setupLine.appendChild(saveSetup);
@@ -509,7 +518,6 @@ var Tuning = (function() {
         setupLine.appendChild(exportTune);
         setupLine.appendChild(importTune);
         setupLine.appendChild(importInput);
-        setupLine.appendChild(close);
         panel.appendChild(setupLine);
         setupButtons = { save: saveSetup, drop: dropSetup };
 
@@ -623,7 +631,7 @@ var Tuning = (function() {
         mirrorGroup.addEventListener("toggle", function() { if(mirrorGroup.open) fillMirrors(); });
         panel.appendChild(mirrorGroup);
         document.body.appendChild(panel);
-        OpenRacer.Movable.make(panel, { key: "tuning" });
+        OpenRacer.Movable.make(panel, { key: "tuning", handle: header });
     }
 
     // the list of the setups, with the one in use chosen (and "(changed)" when the tuning has moved away from it)

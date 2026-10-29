@@ -45,6 +45,10 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **The dial of the rev counter ends at the rev limit.** The dial went to the next full thousand (7000 for a limit of 6300), so the red zone, which ends at the limit, stopped short of the end of the ring. Now the ring runs to the limit, the numbers stand at the thousands below it, and the red zone is at the end.
 
+### The tuning menu: a header
+
+- **The tuning menu has a header with the title and a cross to close it.** The header stays at the top while the menu scrolls, and it is the only part that drags the menu (`handle` option of `Movable.js`; the header does not scroll the page on a touch screen: `touch-action: none`). The rest of the menu is scrolled with the finger without moving it, which it did on a phone before (any part that was not a control dragged the panel). The old *Close* button of the setup line is gone.
+
 ### Finishes of the paint and the rims
 
 - **Flakes much smaller, and a generated UV map.** The *Flake size* goes down to 2% (it was 25%), so the voronoi, hexagon and marble patterns can be as fine as the noise. *Flake map of the body / rims (the UV map)*: **From the model** (as before) or **Generated (box projection)**: the flakes are laid on the car from three directions by where they are in space (a triplanar normal map in the shader of the paint, blended where the directions meet), so a model with no UV map, or a bad one, gets the same flakes. On the generated map 100% is 16 noise flakes, or 1.5 crystals, a metre. Both in the tuning menu of the game and in the car editor.
