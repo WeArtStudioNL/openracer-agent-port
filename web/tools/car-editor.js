@@ -2852,7 +2852,7 @@ function loadPhysics() {
             script.onload = resolve;
             script.onerror = () => reject(new Error("Could not load " + file));
             document.head.appendChild(script);
-        })), Promise.resolve());
+        })), Promise.resolve()).then(() => { if (OpenRacer.PartsLibrary) OpenRacer.PartsLibrary.base = "../"; });          // (the parts of the car are in web/parts, one folder up from the editor)
     }
     return physicsLoading;
 }
@@ -2862,7 +2862,7 @@ const roadGrip = () => ({ static: 1.2 * bench.grip, kinetic: 1.06 * bench.grip }
 
 async function startBench() {
     if (!state.root) throw new Error("Load a model first.");
-    if (wheelMode() !== "model" && !libraryOnly()) throw new Error("The test needs the wheels of the model, or a rim of the wheel library on both axles: select the parts of every wheel.");
+    if (wheelMode() !== "model" && !($("libRimFront").value && $("libRimRear").value)) throw new Error("The test needs the wheels of the model, or a rim of the wheel library on both axles: select the parts of every wheel.");
     await loadPhysics();
     const config = buildConfig("test");
     config.id = "test";
@@ -3382,7 +3382,10 @@ function refreshReady() {
     el.textContent = list.length ? "⚠ " + list.length + " to fix" : "✓ Ready";
     el.title = list.join("\n") || "Nothing is missing";
     el.style.color = list.length ? "var(--warn)" : "var(--muted)";
-    $("sbLine").textContent = state.nodes.some((n) => /^(softbody|shell)?beams?$/i.test(n.name.replace(/[^a-z]/gi, ""))) ? "Shell from the beams of the model" : "Dents, breaks, loose parts";
+    // a model with an object "beams" has its shell: the scan, the fill and the editing of nodes make nodes that are not used then
+    const modelBeams = state.nodes.some((n) => /^(softbody|shell)?beams?$/i.test(n.name.replace(/[^a-z]/gi, "")));
+    $("sbLine").textContent = modelBeams ? "Shell from the beams of the model" : "Dents, breaks, loose parts";
+    for (const id of ["sbMaxNodes", "sbScan", "sbInside", "sbScanInside", "sbEdit"]) { const el = $(id); const holder = el.closest(".row > div") || el.closest("label") || el; holder.style.display = modelBeams ? "none" : ""; }
 }
 $("ready").addEventListener("click", () => { const list = problems(); status(list.length ? list.join(" · ") : "Nothing is missing.", list.length ? "error" : "ok"); });
 setInterval(refreshReady, 1000);

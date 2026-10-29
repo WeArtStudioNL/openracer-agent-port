@@ -39,6 +39,10 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - A rim of the wheel library now brings a custom tyre, made from the numbers (width, diameter, height of the sidewall, rubber), for the front and the rear axle apart; the tyres of the library are no longer chosen (a car that has one keeps it). The height of the sidewall is new: the rim takes what is left of the diameter. It works in the tuning menu and in the car editor, where the rim and the tyre of the front and the rear axle follow the sliders at once (the tyre in the view, the shell of the bench car when the sliders rest) and are saved with the car.
 
+### The beams of the model are the shell
+
+- An object "beams" in the model is now always the shell of the car, also when car.json still has a layout from a scan of the editor (the layout went before it, and the beams were then not used and drawn as grey lines in the game). The object is never seen in the game. For a model with beams the card Soft body no longer shows the scan, the fill, the most nodes and the editing of nodes: they make nodes that are not used then. The test of the editor also works with a rim of the library on both axles when the wheel mode is the demo wheel, and it finds the parts of the car (they were not found at times: 404).
+
 ### The car editor: a model without wheels
 
 - A model without wheels (no parts chosen for the wheels) with a rim of the wheel library on both axles works now: the wheels are the library's, put where the Chassis card says (the wheelbase and the tracks), as with the demo wheel. The test and the shell of the car (Show the shell) work with it; before, the test stopped with "The test needs the wheels of the model", and so the shell could not be shown.

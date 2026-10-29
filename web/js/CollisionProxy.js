@@ -173,7 +173,11 @@ OpenRacer.CollisionProxy = (function () {
         var layout = object.config && object.config.softbody && object.config.softbody.layout;
         // the shell of the model: the vertices and the edges of an object "beams" are the nodes and the beams (a layout that was set in the editor goes before it)
         var modelBeams = null;
-        if(spheres && !(layout && layout.length) && model.tilt) {
+        // (the object is a drawing of the shell, not a part of the car: it is never seen, also when a layout of the editor is used in its place)
+        var beamsHolder = model.tilt ? findBeams(model.tilt) : null;
+        if(beamsHolder) beamsHolder.visible = false;
+        // (the beams of the model go before a layout that was made with the scan of the editor: a model that has them has no use for a scan; the layout was kept in car.json from before)
+        if(spheres && model.tilt) {
             var found = null;
             try { found = beamsFromModel(model.tilt, toVehicle); } catch (e) { console.warn("CollisionProxy: the beams of the model: " + e.message); }
             if(found) {
