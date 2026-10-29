@@ -1406,6 +1406,7 @@ function power(rpm, nm) {
 }
 
 function renderCurve() {
+    clearDyno();
     state.curve.sort((a, b) => a[0] - b[0]);
     const body = $("curve").querySelector("tbody");
     body.innerHTML = "";
@@ -1473,6 +1474,19 @@ function drawChart() {
     };
     line("#ff9f43", (p) => p[1]);
     line("#54a0ff", (p) => power(p[0], p[1]));
+    if (dyno) {
+        // the pull at the wheels: dashed, as far as the run has come
+        const shown = dyno.points.slice(0, dyno.upTo + 1);
+        g.setLineDash([10, 7]); g.lineWidth = 3;
+        for (const [color, value] of [["#ffd29a", (p) => p.nm], ["#a9cdff", (p) => p.hp]]) {
+            g.strokeStyle = color; g.beginPath();
+            shown.forEach((p, i) => { const x = X(p.rpm), y = Y(value(p)); if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); });
+            g.stroke();
+        }
+        g.setLineDash([]);
+        const tip = shown[shown.length - 1];
+        if (tip && dyno.upTo < dyno.points.length - 1) { g.strokeStyle = "#ffffff"; g.lineWidth = 2; g.beginPath(); g.moveTo(X(tip.rpm), 0); g.lineTo(X(tip.rpm), bottom); g.stroke(); }
+    }
     const limitX = X(num("limiter") || 0);
     g.strokeStyle = "#ff5e5e"; g.lineWidth = 2; g.beginPath(); g.moveTo(limitX, 0); g.lineTo(limitX, bottom); g.stroke();
     const peak = state.curve.reduce((best, p) => (power(p[0], p[1]) > best.hp ? { hp: power(p[0], p[1]), rpm: p[0] } : best), { hp: 0, rpm: 0 });
@@ -1486,6 +1500,57 @@ function drawChart() {
     if (document.activeElement !== $("simpleHp")) $("simpleHp").value = Math.round(peak.hp) || "";
     if (document.activeElement !== $("simpleRpm")) $("simpleRpm").value = num("limiter") || "";
 }
+
+// ---- the dyno: a full-throttle pull on a dry road, measured at the wheels; only the chart shows it
+let dyno = null, dynoFrame = 0;
+function clearDyno() { if (!dyno) return; cancelAnimationFrame(dynoFrame); dyno = null; $("dynoInfo").textContent = ""; }
+function dynoPull() {
+    const gears = parseGears(), final = num("finalDrive"), limit = num("limiter"), r = (num("tyre") || 0.65) / 2, mass = num("mass") || 1000;
+    if (!gears.length || !(final > 0) || !(limit > 0) || state.curve.length < 2) return null;
+    const ratio = gears.reduce((best, g) => (Math.abs(g - 1) < Math.abs(best - 1) ? g : best), gears[0]);
+    const G = ratio * final, eff = num("efficiency") || 0.92, curve = state.curve.slice().sort((a, b) => a[0] - b[0]);
+    const torqueAt = (rpm) => {
+        if (rpm > curve[curve.length - 1][0]) return 0;
+        for (let i = 1; i < curve.length; i++) if (rpm <= curve[i][0]) { const a = curve[i - 1], b = curve[i], f = b[0] > a[0] ? (rpm - a[0]) / (b[0] - a[0]) : 0; return a[1] + (b[1] - a[1]) * f; }
+        return 0;
+    };
+    const area = (num("width") || 1.8) * (num("height") || 1.3) * 0.85, cd = num("drag") || 0.35;
+    const front = (num("front") || 50) / 100, drive = $("drive").value;
+    const share = drive === "awd" ? 1 : drive === "fwd" ? front : 1 - front + 0.08;          // (the weight on the driven wheels, with the weight that moves back under power)
+    const traction = 1.0 * mass * 9.81 * Math.min(1, share);                                  // (dry asphalt)
+    const meff = mass + (num("inertia") || 0.3) * G * G / (r * r);
+    let rpm = Math.max(num("idle") * 1.4 || 1200, limit * 0.25), v = rpm * Math.PI / 30 * r / G, lastRpm = -1e9;
+    const points = [];
+    for (let t = 0; t < 120 && rpm < limit; t += 0.01) {
+        const drive_f = Math.min(torqueAt(rpm) * G * eff / r, traction);
+        const net = drive_f - 0.012 * mass * 9.81 - 0.5 * 1.29 * cd * area * v * v;
+        if (rpm - lastRpm >= 50) { points.push({ rpm, nm: Math.max(0, (drive_f - 0.012 * mass * 9.81 - 0.5 * 1.29 * cd * area * v * v) * r / G), hp: Math.max(0, (drive_f - 0.012 * mass * 9.81 - 0.5 * 1.29 * cd * area * v * v) * v / 745.7) }); lastRpm = rpm; }
+        if (net <= 0 && rpm > curve[1][0]) break;
+        v += net / meff * 0.01;
+        rpm = v * 30 / Math.PI * G / r;
+    }
+    return points.length > 3 ? { points, gear: gears.indexOf(ratio) + 1 } : null;
+}
+$("runDyno").addEventListener("click", () => {
+    clearDyno();
+    const run = dynoPull();
+    if (!run) { $("dynoInfo").textContent = "Needs gears, a final drive, a rev limit and a curve."; return; }
+    dyno = { points: run.points, upTo: 0 };
+    const start = performance.now(), duration = 4500;
+    $("runDyno").disabled = true;
+    const step = (now) => {
+        if (!dyno) { $("runDyno").disabled = false; return; }
+        const f = Math.min(1, (now - start) / duration);
+        dyno.upTo = Math.floor(f * (dyno.points.length - 1));
+        drawChart();
+        if (f < 1) { dynoFrame = requestAnimationFrame(step); return; }
+        $("runDyno").disabled = false;
+        const best = dyno.points.reduce((m, p) => (p.hp > m.hp ? p : m), dyno.points[0]);
+        const engine = state.curve.reduce((m, p) => Math.max(m, power(p[0], p[1])), 0);
+        $("dynoInfo").textContent = "At the wheels (dashed): " + Math.round(best.hp) + " hp at " + Math.round(best.rpm / 10) * 10 + " rpm, " + Math.round(100 * (1 - best.hp / engine)) + "% below the engine · gear " + run.gear;
+    };
+    dynoFrame = requestAnimationFrame(step);
+});
 
 // ---- the engine card: Simple (power and max rpm) or Advanced (draw the curve in the chart)
 let curveAdvanced = false, chartGeo = null, dragPoint = null;
@@ -1553,6 +1618,7 @@ $("chart").addEventListener("pointermove", (e) => {
     const v = chartValue(pt);
     if (dragPoint !== state.curve[0]) dragPoint[0] = v[0];
     dragPoint[1] = v[1];
+    clearDyno();
     state.curve.sort((a, b) => a[0] - b[0]);
     drawChart();
 });
@@ -2172,7 +2238,7 @@ $("addPoint").addEventListener("click", () => {
     renderCurve();
 });
 $("generate").addEventListener("click", generateCurve);
-for (const id of ["limiter", "idle"]) $(id).addEventListener("input", () => { drawChart(); updateSpeedInfo(); $("soundRpm").max = Math.round((num("limiter") || 7000) * 1.1); });
+for (const id of ["limiter", "idle"]) $(id).addEventListener("input", () => { clearDyno(); drawChart(); updateSpeedInfo(); $("soundRpm").max = Math.round((num("limiter") || 7000) * 1.1); });
 for (const id of ["gears", "finalDrive", "tyre"]) $(id).addEventListener("input", updateSpeedInfo);
 $("name").addEventListener("input", () => { if (!state.idEdited) $("id").value = slug($("name").value); });
 $("id").addEventListener("input", () => { state.idEdited = true; });

@@ -7,6 +7,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motorcycles with a rider and a ragdoll crash, a driver in the car, replays as files with a video editor, a new menu, the drag strip, and much more. Per subject:
 
 ### Car editor, after the audit
+- *Run dyno* under the chart of the engine: a full-throttle pull on a dry road in the gear closest to 1:1, measured at the wheels (drivetrain efficiency, rolling and air resistance, the grip of the tyres, the inertia of the engine). The result is drawn as dashed lines in the chart, with a line of text; nothing else changes.
 - The torque curve is in the Engine card now, no window: *Simple* (the default) has power (hp) and max rpm, which scale the curve and keep its shape; *Advanced* has the chart to draw in (drag a dot, click to add one, double-click to remove it), idle, rev limit, inertia, the numbers and a typical curve from the peak power. The choice is remembered.
 - The tune bar: the tune file actions (delete, export, import) are folded under *Tune file*, a line says what Save writes to (car.json or the tune), and a line shows mass, front weight, peak power and top speed. Saving or choosing a tune clears the unsaved mark.
 - *Changes* compares with the form as it was loaded, saved or chosen as a tune (1 difference after one edit instead of 39 with a tune active).
