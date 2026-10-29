@@ -66,14 +66,15 @@
         <details class="card" open>
             <summary>Car<span class="meta" id="editing"></span></summary>
             <div class="body">
-                <div class="row">
-                    <select id="existing"></select>
-                    <button id="newCar" class="fixed ghost">New car</button>
-                    <button id="newBike" class="fixed ghost">New motorcycle</button>
+                <select id="existing" title="The car that is open"></select>
+                <div class="buttons">
+                    <button id="newCar" class="small" title="Start with an empty car">+ Car</button>
+                    <button id="newBike" class="small" title="Start with an empty motorcycle">+ Motorcycle</button>
+                    <button id="copyCar" class="small ghost" title="Save this car again under a new name">Make a copy</button>
                 </div>
                 <div class="row">
                     <div><label>Type</label><select id="vehicleType"><option value="car">Car</option><option value="motorcycle">Motorcycle</option></select></div>
-                    <div><span class="hint" style="display:block; margin-top:26px">A motorcycle shows only what a motorcycle has: one wheel at each end, no differential, no steering wheel; the Motorcycle card has the rider and the lean.</span></div>
+                    <div><div class="tipline"><span>A motorcycle: one wheel per end</span><button type="button" class="info" data-tip="A motorcycle shows only what a motorcycle has: one wheel at each end, no differential, no steering wheel; the Motorcycle card has the rider and the lean." aria-label="More information">i</button></div></div>
                 </div>
                 <div class="row">
                     <div><label>Name</label><input type="text" id="name" placeholder="My car"></div>
@@ -86,8 +87,9 @@
         <details class="card" open>
             <summary>Model<span class="meta" id="modelInfo">No model loaded.</span></summary>
             <div class="body">
-                <p class="sub">A <b>.glb</b>, or a <b>.gltf</b> with its <b>.bin</b> and textures (select them all). The car has to face the blue arrow, y is up. Blender exports a car that looks towards -Y correctly.</p>
-                <input type="file" id="files" multiple accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2">
+                <div class="tipline"><span>Pick a .glb, or a .gltf with its files</span><button type="button" class="info" data-tip="A .glb, or a .gltf with its .bin and textures (select them all). The car has to face the blue arrow, y is up. Blender exports a car that looks towards -Y correctly." aria-label="More information">i</button></div>
+                <div class="buttons"><button type="button" class="accent" id="importBtn">Import model…</button></div>
+                <input hidden type="file" id="files" multiple accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2">
                 <div class="hint warn" id="modelNote"></div>
                 <div id="modelControls">
                     <div class="row">
@@ -111,12 +113,15 @@
         </details>
 
         <details class="card">
-            <summary>Wheels and steering<span class="meta" id="wheelInfo"></span></summary>
+            <summary>Wheels<span class="meta" id="wheelInfo"></span></summary>
             <div class="body">
-                <label class="check"><input type="radio" name="wheelMode" value="model" checked> The wheels are parts of the model</label>
-                <label class="check"><input type="radio" name="wheelMode" value="default"> No separate wheels: use the wheel of the demo car</label>
+                <label class="check"><input type="radio" name="wheelMode" value="model" checked> Wheels from the model</label>
+                <label class="check"><input type="radio" name="wheelMode" value="default"> Wheel of the demo car</label>
                 <div id="wheelSelects">
-                    <p class="sub">Select the parts of each wheel (tyre, rim, disc…); Ctrl or Cmd selects more.</p>
+                    <div class="buttons"><button id="guessWheels" class="small accent" title="Looks for the wheel parts by their names and places">Find the wheels</button></div>
+                    <div id="wheelChips" class="chips"></div>
+                    <details class="inner"><summary>Choose the parts by hand</summary>
+                    <div class="hint">Ctrl or Cmd adds more parts to a wheel</div>
                     <div class="row">
                         <div class="carOnly"><label><span style="color:#ff6b6b">■</span> Front right</label><select multiple id="wFR"></select></div>
                         <div><label id="lblFL"><span style="color:#5ec8ff">■</span> Front left</label><select multiple id="wFL"></select></div>
@@ -125,10 +130,10 @@
                         <div class="carOnly"><label><span style="color:#ffd04d">■</span> Rear right</label><select multiple id="wRR"></select></div>
                         <div><label id="lblRL"><span style="color:#8ee26b">■</span> Rear left</label><select multiple id="wRL"></select></div>
                     </div>
-                    <div class="buttons"><button id="guessWheels" class="small">Find the wheels by their names and places</button></div>
+                    </details>
                 </div>
                 <div class="group">Rims and tyres from the wheel library</div>
-                <p class="sub">A rim or a tyre of <code>web/wheels/wheels.json</code> takes the place of the wheel parts of its axle (their middle is the hub). A tyre of the library brings its own shell (the rings and nodes of the tread, the inner shell, the carcass): the shell sliders of the Tuning card then do nothing for that axle (the line below gives the shell of the tyre).</p>
+                <div class="tipline"><span>Replaces the wheel parts of an axle</span><button type="button" class="info" data-tip="A rim or a tyre of web/wheels/wheels.json takes the place of the wheel parts of its axle (their middle is the hub). A tyre of the library brings its own shell (the rings and nodes of the tread, the inner shell, the carcass): the shell sliders of the Tuning card then do nothing for that axle (the line below gives the shell of the tyre)." aria-label="More information">i</button></div>
                 <div class="row">
                     <div><label>Front rim</label><select id="libRimFront"><option value="">From the model</option></select></div>
                     <div><label>Front tyre</label><select id="libTyreFront"><option value="">From the model</option></select></div>
@@ -153,7 +158,7 @@
         <details class="card carOnly">
             <summary>Suspension and driveline<span class="meta" id="suspInfo"></span></summary>
             <div class="body">
-                <p class="sub">The suspension built from loose parts (web/parts/&lt;type&gt;/&lt;part&gt;.glb, see the README): pick a type for each axle, where the engine is, and drag the mounts in the view. The drive (front, rear, all) is in the Tuning card. "From the model" keeps the parts of your own model (named susp_…).</p>
+                <div class="tipline"><span>Pick a type per axle, drag the mounts</span><button type="button" class="info" data-tip="The suspension built from loose parts (web/parts/&lt;type&gt;/&lt;part&gt;.glb, see the README): pick a type for each axle, where the engine is, and drag the mounts in the view. The drive (front, rear, all) is in the Tuning card. &quot;From the model&quot; keeps the parts of your own model (named susp_…)." aria-label="More information">i</button></div>
                 <div class="row">
                     <div><label>Front suspension</label><select id="suspFront"><option value="model">From the model</option><option value="none">None</option><option value="double-wishbone">Double wishbone</option><option value="macpherson">MacPherson strut</option><option value="live-trailing">Live axle, trailing arms</option><option value="live-leaf">Live axle, leaf springs</option></select></div>
                     <div><label>Rear suspension</label><select id="suspRear"><option value="model">From the model</option><option value="none">None</option><option value="double-wishbone">Double wishbone</option><option value="macpherson">MacPherson strut</option><option value="live-trailing">Live axle, trailing arms</option><option value="live-leaf">Live axle, leaf springs</option></select></div>
@@ -165,12 +170,12 @@
                 <div class="buttons"><button id="suspEdit" class="small" title="Click the origin points in the view, through everything, to move (W) or turn (E) them; Escape leaves the mode">Edit origins</button></div>
                 <div id="suspMounts"></div>
                 <div class="hint" id="suspMissing"></div>
-                <p class="sub">A mount: W moves, E turns (as the exhaust points). The parts of a stretched kind (arms, springs, shafts) are aimed from their mount at their other end and stretched to it; a turn of such a mount rolls the part about its length.</p>
+                <div class="tipline"><span>Select a mount: W moves, E turns</span><button type="button" class="info" data-tip="A mount: W moves, E turns (as the exhaust points). The parts of a stretched kind (arms, springs, shafts) are aimed from their mount at their other end and stretched to it; a turn of such a mount rolls the part about its length." aria-label="More information">i</button></div>
             </div>
         </details>
 
         <details class="card">
-            <summary>Size, chassis and brakes</summary>
+            <summary>Chassis</summary>
             <div class="body">
                 <div class="row">
                     <div><input type="number" id="length" step="0.01" value="4.5"><div class="hint">length (m)</div></div>
@@ -212,7 +217,7 @@
         <details class="card bikeOnly" id="bikeCard" open>
             <summary>Motorcycle</summary>
             <div class="body">
-                <p class="sub">The rider and the lean (<code>motorcycle</code> in car.json, Motorcycle.js). The rider is a mass on the bike that leans into the corners; the lean is capped, and at speed the keys ask for less of it.</p>
+                <div class="tipline"><span>The rider and the lean</span><button type="button" class="info" data-tip="The rider and the lean (motorcycle in car.json, Motorcycle.js). The rider is a mass on the bike that leans into the corners; the lean is capped, and at speed the keys ask for less of it." aria-label="More information">i</button></div>
                 <div class="row">
                     <div><input type="number" id="bikeMaxLean" step="1" min="20" max="70" value="52"><div class="hint">max lean (°)</div></div>
                     <div><input type="number" id="bikeFastLean" step="1" min="10" max="60" value="30"><div class="hint">lean at top speed (°)</div></div>
@@ -233,7 +238,7 @@
         <details class="card">
             <summary>Tuning<span class="meta" id="tuningInfo"></span></summary>
             <div class="body">
-                <p class="sub">Everything else the tuning menu of the game has: the suspension, the tyres, the fuel, the engine, the gearbox, the aerodynamics and the assists. The same table (<code>CarTuning.js</code>), so what you set here is what the game drives; it works at once on the car of the test bench.</p>
+                <div class="tipline"><span>The settings of the tuning menu</span><button type="button" class="info" data-tip="Everything else the tuning menu of the game has: the suspension, the tyres, the fuel, the engine, the gearbox, the aerodynamics and the assists. The same table (CarTuning.js), so what you set here is what the game drives; it works at once on the car of the test bench." aria-label="More information">i</button></div>
                 <div id="tuningFields"></div>
             </div>
         </details>
@@ -291,7 +296,7 @@
         <details class="card">
             <summary>Engine sound</summary>
             <div class="body">
-                <p class="sub">The gas in every cylinder is simulated and the pressure in the exhaust is played through the recorded impulse response of an exhaust (after engine-sim). Press <b>Play</b> in the view to listen while you change the settings.</p>
+                <div class="tipline"><span>Press Play in the view to listen</span><button type="button" class="info" data-tip="The gas in every cylinder is simulated and the pressure in the exhaust is played through the recorded impulse response of an exhaust (after engine-sim). Press Play in the view to listen while you change the settings." aria-label="More information">i</button></div>
                 <div class="row">
                     <div><label>Preset</label><select id="esPreset"></select></div>
                     <div><label>Layout</label><select id="esLayout" class="es" data-key="layout"></select></div>
@@ -321,7 +326,7 @@
         <details class="card">
             <summary>Soft body<span class="meta" id="sbInfo"></span></summary>
             <div class="body">
-                <p class="sub">The shell of the car: nodes and beams made from the model that dent, with a yield force and a break force, and parts that swing on a hinge or come loose. Show the shell, click a node or a beam in the view and set what it can take.</p>
+                <div class="tipline"><span>Dents, breaks, loose parts</span><button type="button" class="info" data-tip="The shell of the car: nodes and beams made from the model that dent, with a yield force and a break force, and parts that swing on a hinge or come loose. Show the shell, click a node or a beam in the view and set what it can take." aria-label="More information">i</button></div>
                 <label class="check"><input type="checkbox" id="sbEnabled" checked> The car dents</label>
                 <div class="row">
                     <button class="small accent" id="sbShow">Show the shell</button>
@@ -353,7 +358,7 @@
                         <div><input type="number" id="sbRadius" value="0.2" step="0.05" min="0.05" max="0.6"><div class="hint">radius of a new node (m)</div></div>
                         <div class="fixed"><button class="small ghost" id="sbResetNodes">Make the nodes from the model again</button></div>
                     </div>
-                    <p class="hint">A click on the model puts a node on its surface; it is held by beams to its nearest neighbours. A click on a node selects it (Shift adds), the middle mouse button and a drag draws a lasso round many. The nodes are also what the car hits the road and the walls with.</p>
+                    <div class="tipline"><span>Click: add a node · Middle drag: lasso</span><button type="button" class="info" data-tip="A click on the model puts a node on its surface; it is held by beams to its nearest neighbours. A click on a node selects it (Shift adds), the middle mouse button and a drag draws a lasso round many. The nodes are also what the car hits the road and the walls with." aria-label="More information">i</button></div>
                 </div>
                 <div class="group">Crash test</div>
                 <div class="hint" id="sbResult"></div>
@@ -372,6 +377,7 @@
 
     </div>
     <footer class="bar">
+        <button type="button" id="ready" class="ghost" title="What is missing before you can save"></button>
         <div id="status"></div>
         <button class="danger" id="delete" style="display:none">Delete</button>
         <button id="saveDrive" title="Save the car and drive it">Save and drive</button>
@@ -469,7 +475,7 @@
 <dialog id="dlgCameras">
     <div class="head"><h3>Cameras</h3><button class="close" data-close>×</button></div>
     <div class="content">
-        <p class="sub">Heights are above the road; the cockpit is from the origin of the model (x to the left, y up, z forward). Fields of view are the vertical angle in degrees.</p>
+        <div class="tipline"><span>Heights above the road; cockpit from the origin</span><button type="button" class="info" data-tip="Heights are above the road; the cockpit is from the origin of the model (x to the left, y up, z forward). Fields of view are the vertical angle in degrees." aria-label="More information">i</button></div>
         <div class="group">1 Follow</div>
         <div class="row">
             <div><input type="number" class="cam" id="camFolDist" step="0.1"><div class="hint">distance (m)</div></div>
@@ -487,7 +493,7 @@
             <div><input type="number" class="cam" id="camFolDolly" min="0" max="1" step="0.1"><div class="hint">comes closer (0 to 1)</div></div>
             <div></div>
         </div>
-        <p class="sub">The faster the car, the wider the FOV. With “comes closer” at 1 the camera moves in with it, so the car keeps its size and only the sense of speed changes (a dolly zoom).</p>
+        <div class="tipline"><span>Faster: wider view and the camera moves in</span><button type="button" class="info" data-tip="The faster the car, the wider the FOV. With “comes closer” at 1 the camera moves in with it, so the car keeps its size and only the sense of speed changes (a dolly zoom)." aria-label="More information">i</button></div>
         <div class="group">2 Cockpit</div>
         <div class="row">
             <div><input type="number" class="cam" id="camCockX" step="0.01"><div class="hint">x (m, left)</div></div>
@@ -505,7 +511,7 @@
 <dialog id="dlgSoftBody">
     <div class="head"><h3>Soft body: material and strengths</h3><button class="close" data-close>×</button></div>
     <div class="content">
-        <p class="sub">What the shell is made of. An empty field is the default (shown grey). A hit pushes a node: it springs back up to the <b>yield</b> force, bends for good above it (the energy is gone) and tears off at the <b>break</b> force. A node is held to the car by its <b>anchor</b>, and to its neighbours by <b>beams</b>. Single nodes and beams are set in the view.</p>
+        <div class="tipline"><span>Empty field: the default</span><button type="button" class="info" data-tip="What the shell is made of. An empty field is the default (shown grey). A hit pushes a node: it springs back up to the yield force, bends for good above it (the energy is gone) and tears off at the break force. A node is held to the car by its anchor, and to its neighbours by beams. Single nodes and beams are set in the view." aria-label="More information">i</button></div>
         <div class="row">
             <div><label>Material preset</label><select id="sbPreset"></select></div>
             <div><label>Shell mass (kg)</label><input type="number" class="sb" data-key="shell_mass" step="10" placeholder="20% of the car"></div>
@@ -539,14 +545,14 @@
             <div></div><div></div>
         </div>
         <div class="buttons"><button class="small ghost" id="sbDefaults">Back to the defaults</button></div>
-        <p class="hint">The nodes are numbered from the model. Strengths set on single nodes and beams belong to those numbers: when you change the model, check them.</p>
+        <div class="tipline"><span>Strengths follow the node numbers</span><button type="button" class="info" data-tip="The nodes are numbered from the model. Strengths set on single nodes and beams belong to those numbers: when you change the model, check them." aria-label="More information">i</button></div>
     </div>
 </dialog>
 
 <dialog id="dlgParts">
     <div class="head"><h3>Parts that swing or come loose</h3><button class="close" data-close>×</button></div>
     <div class="content">
-        <p class="sub">Keep this panel open: select nodes in the view (or click on the model) and use the <b>Set</b> buttons next to the fields.</p>
+        <div class="tipline"><span>Select nodes in the view, then Set</span><button type="button" class="info" data-tip="Keep this panel open: select nodes in the view (or click on the model) and use the Set buttons next to the fields." aria-label="More information">i</button></div>
         <details><summary class="hint" style="cursor:pointer">What the fields mean</summary><p class="sub">A part is an object of the model (a door, the hood, a mirror, a wing). <b>Hinge</b>: it turns about an axis, between two angles, with a spring that brings it back to its rest angle and a damper. With a <b>latch force</b> it sits shut until the load on it passes that force, with a <b>break force</b> it tears off then. <b>Loose</b>: it sits on the car until the load passes the break force, and then it is a free object that falls and slides. The load is the mass times the acceleration of its place, or the force of the shell on the nodes it hangs on, whichever is more. The origin and the axis are in the frame of the car: x to the left, y up, z forward, from the centre of gravity; with the shell shown, the arrows in the view are the hinges.</p></details>
         <div id="sbParts"></div>
         <div class="buttons"><button class="small accent" id="sbAddPart">Add a part</button></div>
@@ -557,7 +563,7 @@
 <dialog id="dlgMaterials">
     <div class="head"><h3>Materials</h3><button class="close" data-close>×</button></div>
     <div class="content">
-        <p class="sub">The materials of the model are physically based and used as they are. A model does not always arrive the way it looked in Blender (the glass of many models becomes opaque white metal): set such a material right with a preset or by hand. The changes are saved with the car.</p>
+        <div class="tipline"><span>Fix materials that arrived wrong</span><button type="button" class="info" data-tip="The materials of the model are physically based and used as they are. A model does not always arrive the way it looked in Blender (the glass of many models becomes opaque white metal): set such a material right with a preset or by hand. The changes are saved with the car." aria-label="More information">i</button></div>
         <div id="materials"></div>
     </div>
 </dialog>
@@ -566,7 +572,7 @@
     <div class="head"><h3>Engine sound settings</h3><button class="close" data-close>×</button></div>
     <div class="content">
         <div id="esAdvanced">
-            <p class="sub">The gas in every cylinder is simulated: compression, the burn, the valves, the exhaust runners and the collector. The simulation rate sets how much of the computer it costs; lower it if the sound stutters.</p>
+            <div class="tipline"><span>Lower the rate if the sound stutters</span><button type="button" class="info" data-tip="The gas in every cylinder is simulated: compression, the burn, the valves, the exhaust runners and the collector. The simulation rate sets how much of the computer it costs; lower it if the sound stutters." aria-label="More information">i</button></div>
             <div class="group">Cylinder</div>
             <div class="row">
                 <div><input type="number" class="es" data-key="bore" step="0.5" min="30"><div class="hint">bore (mm)</div></div>

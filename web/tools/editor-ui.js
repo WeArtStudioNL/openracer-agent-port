@@ -27,6 +27,23 @@
     // cards: all folded when the editor opens (the ones the page marks open too)
     document.querySelectorAll("details.card").forEach(function (card) { card.open = false; });
 
+    // (i) buttons: the longer explanation of a short line, in a small popover (a click or the keyboard; it goes away with a click elsewhere or Escape)
+    var pop = null, popFor = null;
+    function hideTip() { if(pop) pop.style.display = "none"; popFor = null; }
+    document.addEventListener("click", function (event) {
+        var button = event.target.closest && event.target.closest("button.info");
+        if(!button) { hideTip(); return; }
+        if(!pop) { pop = document.createElement("div"); pop.id = "tipPop"; pop.setAttribute("role", "tooltip"); document.body.appendChild(pop); }
+        if(popFor === button) { hideTip(); return; }
+        popFor = button;
+        pop.textContent = button.dataset.tip || "";
+        pop.style.display = "block";
+        var r = button.getBoundingClientRect();
+        pop.style.left = Math.max(8, Math.min(window.innerWidth - pop.offsetWidth - 8, r.left - 8)) + "px";
+        pop.style.top = (r.bottom + 6 + pop.offsetHeight > window.innerHeight ? Math.max(8, r.top - pop.offsetHeight - 6) : r.bottom + 6) + "px";
+    });
+    document.addEventListener("keydown", function (event) { if(event.key === "Escape") hideTip(); });
+
     // the toast
     var timer = 0;
     window.editorToast = function (text, kind) {

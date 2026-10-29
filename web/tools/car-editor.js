@@ -480,6 +480,7 @@ function loadFromFiles(list) {
     status("Loading " + main + "…");
     new GLTFLoader(manager).load(urls.get(main), (gltf) => {
         setModel(gltf.scene, !replacing, replacing);
+        setDirty(true);
         $("modelInfo").textContent = main + " (" + (state.files.get(main).size / 1048576).toFixed(1) + " MB), " + state.nodes.length + " named parts";
         if (!replacing) quickSetup(main);
     }, undefined, (error) => status("Could not read the model: " + (error.message || error), "error"));
@@ -714,7 +715,18 @@ function updateHelpers() {
         if (box) helpers.add(new THREE.Box3Helper(box, SLOT_COLORS[slot]));
     }
     const centres = wheelCenters();
-    $("wheelInfo").textContent = centres ? "" : (wheelMode() === "model" ? "Every wheel needs at least one part." : "");
+    $("wheelInfo").textContent = wheelMode() === "model" ? (centres ? "4 of 4 found" : "") : "demo wheel";
+    // a chip for each wheel: the parts that it has, or that it has none
+    const chips = $("wheelChips");
+    chips.innerHTML = "";
+    for (const slot of isBike() ? ["FL", "RL"] : SLOTS) {
+        const names = [...$("w" + slot).selectedOptions].map((o) => o.value.trim());
+        const chip = document.createElement("span");
+        chip.className = names.length ? "" : "missing";
+        chip.style.borderColor = names.length ? "#" + SLOT_COLORS[slot].toString(16).padStart(6, "0") : "";
+        chip.textContent = ({ FR: "Front right", FL: "Front left", RR: "Rear right", RL: "Rear left" })[slot] + ": " + (names.length ? (names.length > 1 ? names[0] + " +" + (names.length - 1) : names[0]) : "none");
+        chips.appendChild(chip);
+    }
     if (suspensionEditor) suspensionEditor.refresh(false);          // the mounts and the parts of the parts library follow the wheels
     const radius = (num("tyre") || 0.65) / 2;
     grid.position.y = wheelMode() === "model" && centres ? Math.min(...SLOTS.map((s) => centres[s].c.y - centres[s].size.y / 2)) : -radius;
@@ -730,7 +742,7 @@ function quickSetup(file) {
     const ok = SLOTS.every((s) => $("w" + s).selectedOptions.length);
     if (ok) { chassisFromWheels(); fit(); sizeFromModel(); }
     if (!state.existingId && !$("name").value.trim()) { $("name").value = file.replace(/\.(glb|gltf)$/i, "").replace(/[_-]+/g, " ").trim(); if (!state.idEdited) $("id").value = slug($("name").value); }
-    status(ok ? "Ready: Save and drive." : "Pick the four wheels (Wheels and steering), then Save and drive.", ok ? "ok" : "error");
+    status(ok ? "Ready: Save and drive." : "Pick the four wheels (Wheels card), then Save and drive.", ok ? "ok" : "error");
 }
 
 function guessWheels() {
@@ -1704,6 +1716,7 @@ async function save() {
         status(saved.where === "server" ? "Saved as cars/" + id + ". It is in the main menu of the game now."
             : "Saved in your garage, in this browser (the server does not save). It is in the main menu of the game now.", "ok");
         done = true;
+        setDirty(false);
     } catch (error) {
         status(error.message, "error");
     }
@@ -1908,7 +1921,8 @@ function loadExisting() {
         $("modelInfo").textContent = "This car uses the model of the original demo. It cannot be changed here, but everything else can.";
     }
     $("editing").textContent = "Editing " + (car.name || car.id) + " (cars/" + car.id + "). Saving overwrites it; change the id to save a copy.";
-    $("modelNote").textContent = "To update the model of this car pick a new .glb here: the rest of the car is kept (the transform, the wheels and the material changes where the new model still fits them).";
+    $("modelNote").textContent = "A new model keeps the wheels, materials and settings where they still fit.";
+    setDirty(false);
     status("Loaded " + (car.name || car.id) + (activeTune && shown !== car ? " with the tune " + activeTune : "") + ".");
 }
 
@@ -1942,11 +1956,13 @@ function newCar(type) {
     $("delete").style.display = "none";
     $("editing").textContent = "Choose a car to change it, or make a new one below. Saving a car that was chosen here overwrites it.";
     helpers.clear();
+    setDirty(false);
     status("");
 }
 
 // ---- events
 
+$("importBtn").addEventListener("click", () => $("files").click());
 $("files").addEventListener("change", (e) => loadFromFiles(e.target.files));
 for (const id of ["rotation", "scale", "offsetX", "offsetY", "offsetZ"]) $(id).addEventListener("input", applyTransform);
 document.querySelectorAll("[data-turn]").forEach((button) => button.addEventListener("click", () => {
@@ -2916,3 +2932,55 @@ softBodyEditor = initSoftBody({
     save: () => save(),
     frameModel
 });
+
+// ---- quality of life: what is not saved, what is missing, Ctrl+S, the cards that stay as they were, a copy of a car
+let dirty = false;
+function setDirty(on) {
+    dirty = on;
+    for (const id of ["save", "saveDrive"]) $(id).classList.toggle("dirty", on);
+    refreshReady();
+}
+$("side").addEventListener("input", (e) => { if (!e.target.closest("#setupRow, #existing, #copyCar")) setDirty(true); }, true);
+window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+window.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") { e.preventDefault(); $("save").click(); }
+});
+
+function problems() {
+    const list = [];
+    if (!$("name").value.trim()) list.push("Give the car a name");
+    else if (!ID_PATTERN.test($("id").value.trim() || slug($("name").value))) list.push("The id may only have a-z, 0-9, - and _");
+    if (!state.root && !state.existingModel) list.push("Import a model");
+    else if (wheelMode() === "model" && state.root && !wheelCenters()) list.push("Pick the parts of all four wheels");
+    for (const [id, label] of [["mass", "mass"], ["wheelbase", "wheelbase"], ["tyre", "tyre diameter"]]) if (!(num(id) > 0)) list.push("Fill in the " + label);
+    if (state.curve.length < 3) list.push("The engine needs a torque curve");
+    return list;
+}
+function refreshReady() {
+    const list = problems(), el = $("ready");
+    el.textContent = list.length ? "⚠ " + list.length + " to fix" : "✓ Ready";
+    el.title = list.join("\n") || "Nothing is missing";
+    el.style.color = list.length ? "var(--warn)" : "var(--muted)";
+}
+$("ready").addEventListener("click", () => { const list = problems(); status(list.length ? list.join(" · ") : "Nothing is missing.", list.length ? "error" : "ok"); });
+setInterval(refreshReady, 1000);
+
+// the cards that were open are open again next time (the first time: the car and the model)
+{
+    const cards = [...document.querySelectorAll("#side details.card")];
+    const nameOf = (c) => c.querySelector("summary").firstChild.textContent.trim();
+    let kept = null;
+    try { kept = JSON.parse(localStorage.getItem("editor-cards") || "null"); } catch (e) { /* no storage */ }
+    cards.forEach((c) => { c.open = kept ? kept.includes(nameOf(c)) : ["Car", "Model"].includes(nameOf(c)); });
+    cards.forEach((c) => c.addEventListener("toggle", () => { try { localStorage.setItem("editor-cards", JSON.stringify(cards.filter((x) => x.open).map(nameOf))); } catch (e) { /* no storage */ } }));
+}
+
+$("copyCar").addEventListener("click", () => {
+    if (!state.existingId) { status("Save the car first, then make a copy.", "error"); return; }
+    $("name").value = ($("name").value.trim() || state.existingId) + " copy";
+    $("id").value = slug($("name").value);
+    state.idEdited = true;
+    setDirty(true);
+    status("Saving now makes a new car: " + $("id").value + ". Change the name first if you like.", "ok");
+});
+refreshReady();
