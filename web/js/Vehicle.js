@@ -2106,7 +2106,10 @@ OpenRacer.Vehicle = function (parameters, input) {
         // (not in a burnout of a motorcycle: the rear wheel is meant to spin there, and the throttle it cut let the clutch slip and the wheel stop after a moment)
         if((self.tcEnabled && self.tcFitted && !(self.controller && self.controller.burnout > 0.5)) || self.launching > 0) {
             var rate = slipError > 0 ? -(4 + 8 * slipError) * Math.min(1, slipError * 4) : Math.min(1, -slipError * 6) + 1.5 * Math.max(0, Math.min(1, (-slipError - 0.5) / 0.4));
-            self.tcFactor = Math.max(0.2, Math.min(1, self.tcFactor + dt * rate));
+            // the power can go down to a fifth of the pedal; a wheel that spins far past what is allowed (worn or hot tyres, loose ground, more power than the tyres hold) takes it
+            // all the way off: a fifth of a big engine is still too much for them
+            var floor = slipError > 0.3 ? 0.2 * (1 - Math.min(1, (slipError - 0.3) / 1.2)) : 0.2;
+            self.tcFactor = Math.max(floor, Math.min(1, self.tcFactor + dt * rate));
             if(slipError > 0.05) for(var ti = 0; ti < 4; ti++) if(wheels[ti].driven) wheels[ti].tc = true;
             if(self.tcFactor > 0.98) for(var tk = 0; tk < 4; tk++) wheels[tk].tc = false;
         } else {

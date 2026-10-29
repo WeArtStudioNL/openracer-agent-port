@@ -6,6 +6,10 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motorcycles with a rider and a ragdoll crash, a driver in the car, replays as files with a video editor, a new menu, the drag strip, and much more. Per subject:
 
+### Traction control
+
+- **Traction control holds worn tyres too.** It could only take the power down to a fifth of the pedal; with a big engine on worn or hot tyres, or on loose ground, that was still too much and the driven wheels kept spinning (3 times the torque, worn tyres on sand: the driven wheel turned 50 times the allowance). A wheel that spins far past the allowance now takes the power all the way off (the floor falls from a fifth to nothing between 1.3 and 2.5 times the allowance). The same test now holds it at about twice the allowance; at normal power nothing changes.
+
 ### Reset
 
 - **The reset key puts the car back on the racing line of the AI, nose forward.** The car remembers where it was last within 3 m of the line. Within 3 m the reset goes to the nearest point of the line; further away (off the road, a spin, a cut over the grass) it goes to the middle of the line at the last place within 3 m, and not to the point of the line that happens to be nearest to where the car is now (that can be another part of the track). Before, a place saved with the save key came first. Only a track without a racing line (no best lap, no recorded line, no design) still uses the saved place, then the line from the last gate to the next, then the start.
