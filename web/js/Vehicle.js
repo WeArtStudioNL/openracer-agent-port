@@ -615,6 +615,14 @@ OpenRacer.Vehicle = function (parameters, input) {
         this.repairTyres();
     };
 
+    // New tyres (at 60 degrees, as a pit stop gives them) and a full tank, at once: the other half of a repair, next to the shell, the parts, the wheels and the punctures
+    this.fuelAndTyres = function () {
+        this.freshTyres(60);
+        this.fuel = this.tank;
+        this.engine.noFuel = false;
+        this.mass = this.baseMass + (this.wearEnabled ? this.fuel * 0.75 : 0); this.layout();
+    };
+
     // Repairs the car and puts it back on its wheels where it is: the same place and heading, the roof up, 30 cm above the road, not moving (for a car that lies on its roof or its side)
     this.repairUpright = function () {
         var heading = this.psi;
@@ -622,6 +630,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(fx * fx + fz * fz > 0.09) heading = Math.atan2(fz, fx);          // (a car that stands on its nose or tail has no heading from its front: it keeps the last one)
         var x = this.px, z = this.pz;
         this.reset(x, z, heading);                                           // (reset puts it on its wheels on the road there: standOnWheels, a ray under every wheel; it fell 30 cm before)
+        this.fuelAndTyres();                                                 // (a repair is a service: new tyres, a full tank)
     };
 
     // The car put on its wheels where it is, with the heading it has: a ray down under every wheel finds the road there, the body is laid on the plane through the four
