@@ -2568,6 +2568,8 @@ function tuneSlider(item, onChange) {
         const v = Number.isFinite(tuning[key]) ? tuning[key] : min;
         if (document.activeElement !== number) number.value = Number(v).toFixed(digits);
         range.value = Math.min(max, Math.max(min, v));
+        // the rubber of a custom tyre says what kind of tyre it is (eco, road, sport, semi-slick, race slick, drag slick), as in the tuning menu of the game
+        if ((key === "rubber_front" || key === "rubber_rear") && OpenRacer.rubberLabel) text.textContent = label + " · " + OpenRacer.rubberLabel(v);
         const changed = Number.isFinite(tuningBase[key]) && Math.abs(tuningBase[key] - v) > 1e-9;
         line.classList.toggle("changed", changed);
         reset.style.visibility = changed ? "" : "hidden";

@@ -39,6 +39,10 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - A rim of the wheel library now brings a custom tyre, made from the numbers (width, diameter, height of the sidewall, rubber), for the front and the rear axle apart; the tyres of the library are no longer chosen (a car that has one keeps it). The height of the sidewall is new: the rim takes what is left of the diameter. It works in the tuning menu and in the car editor, where the rim and the tyre of the front and the rear axle follow the sliders at once (the tyre in the view, the shell of the bench car when the sliders rest) and are saved with the car.
 
+### The car editor: the rubber says what kind of tyre it is
+
+- The rubber slider of the tyre of an axle in the car editor has the label of the tuning menu of the game, which changes as the slider moves (eco, road, sport, semi-slick, race slick, drag slick).
+
 ### The car editor: changing a tyre setting does not start the physics
 
 - A tyre setting that is being changed shows the nodes of the tyres drawn from the settings (the outer shell, the inner shell and the beams, for the wheels of the library) and no longer builds the car of the bench: the car fell on the floor at every change. The bench starts only at a test button (Tests, Drop car, Drive, the crash test, Show the shell); for a car with the wheels of its model, which has no settings to draw from, the nodes still come from the bench.
