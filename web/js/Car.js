@@ -315,15 +315,19 @@ OpenRacer.Car = function( config, domElement ) {
         document.body.appendChild(note);
         setTimeout(function() { note.remove(); }, 1600);
     };
-    // without a saved place the reset goes to the track near the car: the nearest point of the racing line of the AI (race.line), in its direction, or else the nearest point of
-    // the line from the gate that was passed last to the next gate; the start when there is neither
+    // the reset goes to the nearest point of the racing line of the AI (race.line), the nose in the direction of the line. Only a track without a line uses the place that was
+    // saved, else the nearest point of the line from the gate that was passed last to the next gate, else the start
     var lastCrossedGate = null;
-    this.nearestOnTrack = function() {
+    this.nearestOnRacingLine = function() {
         var v = this.vehicle, line = typeof race !== "undefined" && race && race.line;
         if(line && line.count && line.count() > 1) {
             var pt = line.point(line.nearest(v.px, v.pz));
-            return { x: pt.x, z: pt.z, psi: line.headingAt(v.px, v.pz), py: null, gy: pt.y };
+            return { x: pt.x, z: pt.z, psi: line.headingAt(pt.x, pt.z), py: null, gy: pt.y };
         }
+        return null;
+    };
+    this.nearestOnTrack = function() {
+        var v = this.vehicle;
         if(trackGates.length > 1 && lastCrossedGate !== null) {
             var g = trackGates[lastCrossedGate], n = trackGates[(lastCrossedGate + 1) % trackGates.length];
             var dx = n.x - g.x, dz = n.z - g.z, len2 = dx * dx + dz * dz;
@@ -345,7 +349,7 @@ OpenRacer.Car = function( config, domElement ) {
     };
     var fallMinY = null, fallFor = 0;
     this.returnToSaved = function() {
-        var v = this.vehicle, p = savedReset || this.nearestOnTrack() || { x: startX, z: startZ, psi: startHeading, py: null };
+        var v = this.vehicle, p = this.nearestOnRacingLine() || savedReset || this.nearestOnTrack() || { x: startX, z: startZ, psi: startHeading, py: null };
         var samePlace = p.car === config.id;       // (a place saved before this was kept has no car: it is put on the road)
         v.relocate(p.x, p.z, p.psi, samePlace ? p.py : null, p.gy);
         tyreSmoke.clear();
