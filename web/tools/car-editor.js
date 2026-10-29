@@ -1611,7 +1611,9 @@ initBuildUi();
 
 // ---- the dyno: a full-throttle pull on a dry road, measured at the wheels; only the chart shows it
 let dyno = null, dynoFrame = 0;
-function clearDyno() { if (!dyno) return; cancelAnimationFrame(dynoFrame); dyno = null; $("dynoInfo").textContent = ""; }
+let dynoSound = false;       // the engine sound was started by the dyno run (and stops with it)
+function dynoSoundOff() { if (!dynoSound) return; dynoSound = false; $("soundThrottle").value = 0; soundSliders(); setTimeout(() => { if (!dynoSound && preview.playing) stopPreview(); }, 900); }
+function clearDyno() { if (!dyno) return; cancelAnimationFrame(dynoFrame); dynoSoundOff(); dyno = null; $("dynoInfo").textContent = ""; }
 function dynoPull() {
     const gears = parseGears(), final = num("finalDrive"), limit = num("limiter"), r = (num("tyre") || 0.65) / 2, mass = num("mass") || 1000;
     if (!gears.length || !(final > 0) || !(limit > 0) || state.curve.length < 2) return null;
@@ -1647,20 +1649,27 @@ $("runDyno").addEventListener("click", () => {
     const run = dynoPull();
     if (!run) { $("dynoInfo").textContent = "Needs gears, a final drive, a rev limit and a curve."; return; }
     dyno = { points: run.points, upTo: 0 };
-    const start = performance.now(), duration = 4500;
     $("runDyno").disabled = true;
+    // the engine sound runs with the pull at full throttle (it is started here when it was not playing)
+    const starting = preview.playing ? Promise.resolve() : playSound();
+    dynoSound = !preview.playing;
+    starting.then(() => {
+    const start = performance.now(), duration = 4500;
     const step = (now) => {
         if (!dyno) { $("runDyno").disabled = false; return; }
         const f = Math.min(1, (now - start) / duration);
         dyno.upTo = Math.floor(f * (dyno.points.length - 1));
+        if (preview.playing) { $("soundRpm").value = dyno.points[dyno.upTo].rpm; $("soundThrottle").value = 100; soundSliders(); }
         drawChart();
         if (f < 1) { dynoFrame = requestAnimationFrame(step); return; }
         $("runDyno").disabled = false;
+        dynoSoundOff();
         const best = dyno.points.reduce((m, p) => (p.hp > m.hp ? p : m), dyno.points[0]);
         const engine = state.curve.reduce((m, p) => Math.max(m, power(p[0], p[1])), 0);
         $("dynoInfo").textContent = "At the wheels (dashed): " + Math.round(best.hp) + " hp at " + Math.round(best.rpm / 10) * 10 + " rpm, " + Math.round(100 * (1 - best.hp / engine)) + "% below the engine · gear " + run.gear + (state.build && run.room !== 1 ? " · in this air; corrected (DIN) " + Math.round(best.hp / run.room) + " hp" : "") + (state.buildResult && state.buildResult.maxBoost > 0 ? " · boost up to " + state.buildResult.maxBoost.toFixed(2) + " bar" : "");
     };
     dynoFrame = requestAnimationFrame(step);
+    });
 });
 
 // ---- the engine card: Simple (power and max rpm) or Advanced (draw the curve in the chart)
