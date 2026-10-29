@@ -31,6 +31,10 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### Cameras: closer
+
+- **The near clipping of the cameras is lower** so that you can look closer: the free camera of the game, of the replay, of the camera track, of a take and of the video editor 3 cm (was 30 cm), the cockpit camera 3 cm (was 10 cm), the chase camera 20 cm (was 1 m).
+
 ### The rev counter
 
 - **The dial of the rev counter ends at the rev limit.** The dial went to the next full thousand (7000 for a limit of 6300), so the red zone, which ends at the limit, stopped short of the end of the ring. Now the ring runs to the limit, the numbers stand at the thousands below it, and the red zone is at the end.

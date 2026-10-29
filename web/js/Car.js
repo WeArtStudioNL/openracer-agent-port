@@ -594,7 +594,7 @@ OpenRacer.Car = function( config, domElement ) {
             camera.position.copy(cockpitOffset);
             qLook.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.cameraAngle);
             camera.quaternion.copy(qBody).multiply(qLook).multiply(qFlip);
-            setLens(cs.cockpit.fov, 0.1);
+            setLens(cs.cockpit.fov, 0.03);
             return;
         }
 
@@ -618,7 +618,7 @@ OpenRacer.Car = function( config, domElement ) {
             keepCameraInView(subject, delta);
             camera.lookAt(cx + lookDir.x * lookZ, avgGround + f.look_height, cz + lookDir.z * lookZ);
             if(this.vehicle.controller) this.vehicle.controller.cameraRoll(camera, this.vehicle, delta);      // (a motorcycle: the picture leans with the bike)
-            setLens(cameraFov, 1);
+            setLens(cameraFov, 0.2);
             return;
         }
     };

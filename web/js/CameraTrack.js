@@ -77,7 +77,7 @@ OpenRacer.CameraTrack = (function () {
         }
         camera.position.copy(tmpPos);
         camera.quaternion.copy(tmpQuat);
-        if (Math.abs(camera.fov - fov) > 0.01 || camera.near !== 0.3) { camera.fov = fov; camera.near = 0.3; camera.updateProjectionMatrix(); }
+        if (Math.abs(camera.fov - fov) > 0.01 || camera.near !== 0.03) { camera.fov = fov; camera.near = 0.03; camera.updateProjectionMatrix(); }
         return true;
     }
 

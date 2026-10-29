@@ -980,7 +980,7 @@ OpenRacer.VideoEditor = (function () {
                 if (hit < len) camera.position.set(chaseTo.x + dx / len * Math.max(0.8, hit - 0.4), chaseTo.y + dy / len * Math.max(0.8, hit - 0.4), chaseTo.z + dz / len * Math.max(0.8, hit - 0.4));
             }
             camera.lookAt(chaseTo);
-            if (camera.fov !== 50) { camera.fov = 50; camera.near = 0.3; camera.updateProjectionMatrix(); }
+            if (camera.fov !== 50) { camera.fov = 50; camera.near = 0.03; camera.updateProjectionMatrix(); }
         }
         renderer.render(scene, camera);
         srcCtx.drawImage(renderer.domElement, 0, 0, ui.srcCanvas.width, ui.srcCanvas.height);

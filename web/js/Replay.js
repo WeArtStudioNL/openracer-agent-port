@@ -828,9 +828,9 @@ OpenRacer.Replay = (function() {
         var wanted = Math.max(14, Math.min(60, 2 * Math.atan(9 / Math.max(5, distance(c))) * 180 / Math.PI)) * cine.scale;
         wanted = Math.max(3, Math.min(110, wanted));
         cine.fov = cut ? wanted : cine.fov + (wanted - cine.fov) * (1 - Math.exp(-4 * delta));
-        if(Math.abs(camera.fov - cine.fov) > 0.01 || camera.near !== 0.3) {
+        if(Math.abs(camera.fov - cine.fov) > 0.01 || camera.near !== 0.03) {
             camera.fov = cine.fov;
-            camera.near = 0.3;
+            camera.near = 0.03;
             camera.updateProjectionMatrix();
         }
     }
@@ -951,9 +951,9 @@ OpenRacer.Replay = (function() {
         }
         camera.position.copy(world);
         camera.quaternion.copy(free.quat);
-        if(Math.abs(camera.fov - free.fov) > 0.01 || camera.near !== 0.3) {
+        if(Math.abs(camera.fov - free.fov) > 0.01 || camera.near !== 0.03) {
             camera.fov = free.fov;
-            camera.near = 0.3;
+            camera.near = 0.03;
             camera.updateProjectionMatrix();
         }
     }

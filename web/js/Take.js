@@ -35,7 +35,7 @@ OpenRacer.Take = (function () {
         qa.set(a.qx, a.qy, a.qz, a.qw); qb.set(b.qx, b.qy, b.qz, b.qw);
         camera.quaternion.copy(qa.slerp(qb, f));
         var fov = a.fov + (b.fov - a.fov) * f;
-        if (Math.abs(camera.fov - fov) > 0.01 || camera.near !== 0.3) { camera.fov = fov; camera.near = 0.3; camera.updateProjectionMatrix(); }
+        if (Math.abs(camera.fov - fov) > 0.01 || camera.near !== 0.03) { camera.fov = fov; camera.near = 0.03; camera.updateProjectionMatrix(); }
         return true;
     }
 

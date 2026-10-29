@@ -257,9 +257,9 @@ OpenRacer.FreeCam = (function () {
         euler.set(pitch, yaw, roll, "YXZ");
         camera.quaternion.setFromEuler(euler);
         if (fixed) camera.quaternion.premultiply(body.quaternion);
-        if (Math.abs(camera.fov - fov) > 0.01 || camera.near !== 0.3) {
+        if (Math.abs(camera.fov - fov) > 0.01 || camera.near !== 0.03) {
             camera.fov = fov;
-            camera.near = 0.3;
+            camera.near = 0.03;
             camera.updateProjectionMatrix();
         }
         // remembered now and then (and when the camera is left)
