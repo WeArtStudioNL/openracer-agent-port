@@ -557,35 +557,33 @@ var MainMenu = (function() {
                     pbox.appendChild(prow);
                 });
             };
-            var loadGrid = function(kind) {
-                dialog("pickDialog", kind === "cars" ? "Load a car" : "Load a track", kind === "cars" ? "Click the car to open it in the car editor." : "Click the track to open it in the track editor.", function(pbox, pclose) {
+            // Load: the cars and the tracks together as thumbnails; a click opens it in its editor
+            var loadAll = function() {
+                dialog("pickDialog", "Load", "Click a car or a track to open it in its editor.", function(pbox, pclose) {
                     if(pbox.parentNode) pbox.parentNode.className += " wide";          // (the dialog is not in the page yet while this runs)
-                    if(kind === "cars") {
-                        var tilesBox = document.createElement("div");
-                        tilesBox.className = "tiles";
-                        cars.forEach(function(c) { tilesBox.appendChild(carTile(c, function() { window.location.href = "tools/car-editor.html?car=" + encodeURIComponent(c.id); })); });
-                        pbox.appendChild(tilesBox);
-                    } else {
-                        var list = document.createElement("div");
-                        list.className = "list";
-                        tracks.forEach(function(track) {
-                            var d = document.createElement("div");
-                            d.className = "card";
-                            trackCardStart(d, track);
-                            d.onclick = function() { window.location.href = "tools/track-editor.html?track=" + encodeURIComponent(track.id); };
-                            list.appendChild(d);
-                        });
-                        pbox.appendChild(list);
-                    }
+                    pbox.insertAdjacentHTML("beforeend", "<h3 style=\"margin: 12px 0 6px; font-size: 12px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase;\">Cars</h3>");
+                    var tilesBox = document.createElement("div");
+                    tilesBox.className = "tiles";
+                    cars.forEach(function(c) { tilesBox.appendChild(carTile(c, function() { window.location.href = "tools/car-editor.html?car=" + encodeURIComponent(c.id); })); });
+                    pbox.appendChild(tilesBox);
+                    pbox.insertAdjacentHTML("beforeend", "<h3 style=\"margin: 16px 0 6px; font-size: 12px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase;\">Tracks</h3>");
+                    var list = document.createElement("div");
+                    list.className = "list";
+                    tracks.forEach(function(track) {
+                        var d = document.createElement("div");
+                        d.className = "card";
+                        trackCardStart(d, track);
+                        d.onclick = function() { window.location.href = "tools/track-editor.html?track=" + encodeURIComponent(track.id); };
+                        list.appendChild(d);
+                    });
+                    pbox.appendChild(list);
                     var row = document.createElement("div");
                     row.style.cssText = "display: flex; gap: 10px; margin-top: 12px;";
                     row.appendChild(button("Cancel", "ghost", pclose));
                     pbox.appendChild(row);
                 });
             };
-            titleRow.appendChild(button("Load", "ghost", function() {
-                pick("Load", "Open a car or a track in its editor.", function() { loadGrid("cars"); }, function() { loadGrid("tracks"); });
-            }));
+            titleRow.appendChild(button("Load", "ghost", loadAll));
             titleRow.appendChild(button("New", "ghost", function() {
                 pick("New", "Make a new car or track from a model.", function() { window.location.href = "tools/car-editor.html?new=car"; }, function() { window.location.href = "tools/track-editor.html?new=1"; });
             }));
