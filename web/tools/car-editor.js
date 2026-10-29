@@ -2566,7 +2566,7 @@ function saveTune(id, name) {
         const kept = (driverEditor && driverEditor.existingFile()) || (state.existingCar && state.existingCar.driver && state.existingCar.driver.file) || "";
         if (kept) config.driver.file = kept; else delete config.driver;
     }
-    OpenRacer.Setups.save(id, name, config);            // (the main menu draws the picture of the tune itself)
+    if (OpenRacer.Setups.save(id, name, config) === false) throw new Error("the storage of this browser is full (clear site data of this page, or export the tune as a file)");            // (the main menu draws the picture of the tune itself)
     renderSetups();
 }
 $("setupSelect").addEventListener("change", () => {

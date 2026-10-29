@@ -662,7 +662,17 @@ OpenRacer.CarTuning = (function () {
 OpenRacer.Setups = (function () {
     var PREFIX = "openracer.setups.", CURRENT = "openracer.tuning.";
     function read(id) { try { var d = JSON.parse(window.localStorage.getItem(PREFIX + id)); if(d && d.setups) return d; } catch(e) {} return { setups: {}, active: null }; }
-    function write(id, d) { try { if(Object.keys(d.setups).length) window.localStorage.setItem(PREFIX + id, JSON.stringify(d)); else window.localStorage.removeItem(PREFIX + id); } catch(e) {} }
+    // The pictures of the cars and tracks that the menu keeps (openracer.preview.*, openracer.trackpreview.*) are made again when they are missing: they go first
+    // when the storage of the browser is full, so that a tune can still be kept. Gives false when it could not be written.
+    function dropPictures() {
+        try { Object.keys(window.localStorage).filter(function (k) { return /^openracer\.(track)?preview\./.test(k); }).forEach(function (k) { window.localStorage.removeItem(k); }); } catch(e) {}
+    }
+    function write(id, d) {
+        var attempt = function () { if(Object.keys(d.setups).length) window.localStorage.setItem(PREFIX + id, JSON.stringify(d)); else window.localStorage.removeItem(PREFIX + id); };
+        try { attempt(); return true; } catch(e) {}
+        dropPictures();
+        try { attempt(); return true; } catch(e) { return false; }
+    }
     function clone(x) { return JSON.parse(JSON.stringify(x)); }
     return {
         names: function (id) { return Object.keys(read(id).setups).sort(function (a, b) { return a.localeCompare(b); }); },
@@ -676,7 +686,7 @@ OpenRacer.Setups = (function () {
         },
         active: function (id) { return read(id).active || null; },
         // (the picture of a setup on its tile in the main menu is drawn by the menu from the configuration: MainMenu.js, requestTune)
-        save: function (id, name, config) { var d = read(id); d.setups[name] = clone(config); d.active = name; delete d.thumbs; write(id, d); },
+        save: function (id, name, config) { var d = read(id); d.setups[name] = clone(config); d.active = name; delete d.thumbs; return write(id, d); },
         remove: function (id, name) { var d = read(id); delete d.setups[name]; if(d.active === name) d.active = null; write(id, d); },
         setActive: function (id, name) { var d = read(id); d.active = name && d.setups[name] ? name : null; write(id, d); },
         // a tune as a file, to share: { "openracer-tune": 1, car, name, saved, config }; the name of the file is <car>-<name>.openracer-tune.json
