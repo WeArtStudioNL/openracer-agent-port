@@ -252,7 +252,7 @@ OpenRacer.Car = function( config, domElement ) {
     // wheel library). The material of such a mesh is made its own the first time (the model shares materials), and its colour as made is kept to go back to.
     this.colors = null;
     this.setColors = function(colors) {
-        tobj.colors = colors && (colors.body || colors.rim || colors.bodyFinish || colors.rimFinish) ? { body: colors.body || null, rim: colors.rim || null, bodyFinish: colors.bodyFinish || "", rimFinish: colors.rimFinish || "", bodyFlake: colors.bodyFlake || 100, rimFlake: colors.rimFlake || 100 } : null;
+        tobj.colors = colors && (colors.body || colors.rim || colors.bodyFinish || colors.rimFinish) ? { body: colors.body || null, rim: colors.rim || null, bodyFinish: colors.bodyFinish || "", rimFinish: colors.rimFinish || "", bodyFlake: colors.bodyFlake || 100, rimFlake: colors.rimFlake || 100, bodyPattern: colors.bodyPattern || "noise", rimPattern: colors.rimPattern || "noise" } : null;
         OpenRacer.applyCarColors([tobj.body].concat(tobj.wheels.map(function(w) { return w.object; })).filter(Boolean), colors);
     };
 
@@ -1202,25 +1202,78 @@ OpenRacer.applyCarColors = (function() {
         }
         return null;
     }
-    // the little mirrors of a metal flake paint: a normal map of random tilts, made once
-    var flakeMap = null;
-    function flakes() {
-        if(flakeMap) return flakeMap;
-        var size = 256, canvas = document.createElement("canvas");
-        canvas.width = canvas.height = size;
-        var g = canvas.getContext("2d"), image = g.createImageData(size, size);
-        for(var i = 0; i < size * size; i++) {
-            var a = Math.random() * 2 * Math.PI, tilt = Math.pow(Math.random(), 0.6);        // (most of the flakes tilt, a few lie flat)
-            image.data[i * 4] = 128 + Math.cos(a) * 127 * tilt; image.data[i * 4 + 1] = 128 + Math.sin(a) * 127 * tilt; image.data[i * 4 + 2] = 255; image.data[i * 4 + 3] = 255;
+    // the patterns of a metal flake paint: a normal map (a tile that repeats) made once per pattern. noise: the tiny mirrors, random tilts per pixel; voronoi: crystals (cells of
+    // random size, each a flat mirror with a tilt of its own); hexagons: the cells of a hexagonal lattice, each with its own tilt; marble: veins (a height made of sine waves bent by noise)
+    OpenRacer.carFlakePatterns = { noise: "Noise (fine sparkle)", voronoi: "Voronoi (crystals)", hexagons: "Hexagons (honeycomb)", marble: "Marble (veins)" };
+    var PATTERN_SCALE = { noise: 0.45, voronoi: 0.6, hexagons: 0.6, marble: 0.9 };
+    var patternMaps = {};
+    function tiltPixel(data, i, a, tilt) {
+        data[i * 4] = 128 + Math.cos(a) * 127 * tilt; data[i * 4 + 1] = 128 + Math.sin(a) * 127 * tilt; data[i * 4 + 2] = 255; data[i * 4 + 3] = 255;
+    }
+    function cellsOf(size, points, edge) {
+        // every pixel takes the tilt of the nearest point (on a torus: the tile repeats); a ridge of the width "edge" along the border of two cells
+        var data = new Uint8ClampedArray(size * size * 4), tilts = points.map(function() { return [Math.random() * 2 * Math.PI, 0.35 + 0.65 * Math.random()]; });
+        for(var y = 0; y < size; y++) for(var x = 0; x < size; x++) {
+            var best = 1e9, second = 1e9, which = 0;
+            for(var k = 0; k < points.length; k++) {
+                var dx = Math.abs(x - points[k][0]), dy = Math.abs(y - points[k][1]);
+                if(dx > size / 2) dx = size - dx; if(dy > size / 2) dy = size - dy;
+                var d = dx * dx + dy * dy;
+                if(d < best) { second = best; best = d; which = k; } else if(d < second) second = d;
+            }
+            var gap = Math.sqrt(second) - Math.sqrt(best), i = y * size + x;
+            if(gap < edge) tiltPixel(data, i, tilts[which][0] + Math.PI, 0.8 * (1 - gap / edge) + 0.2);      // the ridge leans away from the cell
+            else tiltPixel(data, i, tilts[which][0], tilts[which][1]);
         }
-        g.putImageData(image, 0, 0);
-        flakeMap = new THREE.CanvasTexture(canvas);
-        flakeMap.wrapS = flakeMap.wrapT = THREE.RepeatWrapping;
-        flakeMap.repeat.set(64, 64);
-        return flakeMap;
+        return data;
+    }
+    function periodicNoise(size, cells) {
+        var lattice = [], i, j;
+        for(i = 0; i < cells; i++) { lattice.push([]); for(j = 0; j < cells; j++) lattice[i].push(Math.random()); }
+        return function(x, y) {                                         // x, y in 0..1 (a tile): value noise, smooth, repeating
+            var fx = x * cells, fy = y * cells, ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy;
+            tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);
+            var a = lattice[ix % cells][iy % cells], b = lattice[(ix + 1) % cells][iy % cells], c = lattice[ix % cells][(iy + 1) % cells], d = lattice[(ix + 1) % cells][(iy + 1) % cells];
+            return a + (b - a) * tx + (c - a) * ty + (a - b - c + d) * tx * ty;
+        };
+    }
+    function makePattern(name) {
+        var size = 256, data = new Uint8ClampedArray(size * size * 4), i;
+        if(name === "voronoi") {
+            var pts = []; for(i = 0; i < 44; i++) pts.push([Math.random() * size, Math.random() * size]);
+            data = cellsOf(size, pts, 3);
+        } else if(name === "hexagons") {
+            var cols = 8, rows = 10, hp = [];                           // a hexagonal lattice: every other row a half step over (an even number of rows: it repeats)
+            for(var r = 0; r < rows; r++) for(var c = 0; c < cols; c++) hp.push([(c + (r % 2) * 0.5) * size / cols + size / cols / 4, (r + 0.5) * size / rows]);
+            data = cellsOf(size, hp, 2.5);
+        } else if(name === "marble") {
+            var n1 = periodicNoise(size, 6), n2 = periodicNoise(size, 12), n3 = periodicNoise(size, 24), height = new Float32Array(size * size);
+            for(var y = 0; y < size; y++) for(var x = 0; x < size; x++) {
+                var u = x / size, v = y / size, turb = n1(u, v) * 1 + n2(u, v) * 0.5 + n3(u, v) * 0.25;
+                height[y * size + x] = Math.sin((u * 3 + v * 2) * 2 * Math.PI + turb * 9);               // (3 and 2 whole waves over the tile: it repeats)
+            }
+            for(var yy = 0; yy < size; yy++) for(var xx = 0; xx < size; xx++) {
+                var gx = height[yy * size + (xx + 1) % size] - height[yy * size + (xx + size - 1) % size], gy = height[((yy + 1) % size) * size + xx] - height[((yy + size - 1) % size) * size + xx];
+                var len = Math.hypot(gx * 3, gy * 3, 1), p = (yy * size + xx) * 4;
+                data[p] = 128 - gx * 3 / len * 127; data[p + 1] = 128 - gy * 3 / len * 127; data[p + 2] = 128 + 127 / len; data[p + 3] = 255;
+            }
+        } else {
+            for(i = 0; i < size * size; i++) tiltPixel(data, i, Math.random() * 2 * Math.PI, Math.pow(Math.random(), 0.6));       // (most of the flakes tilt, a few lie flat)
+        }
+        var canvas = document.createElement("canvas");
+        canvas.width = canvas.height = size;
+        var g = canvas.getContext("2d");
+        g.putImageData(new ImageData(data, size, size), 0, 0);
+        var texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+        return texture;
+    }
+    function flakes(name) {
+        if(!OpenRacer.carFlakePatterns[name]) name = "noise";
+        return patternMaps[name] || (patternMaps[name] = makePattern(name));
     }
     // a material of the model with a colour and a finish (a paint: roughness, metal, a clear coat, a pearl or flakes); the colour of the model when none is given
-    function style(material, colour, finishName, flakeSize) {
+    function style(material, colour, finishName, flakeSize, pattern) {
         if(!material.isMeshStandardMaterial) { var plain = material.clone(); if(colour && plain.color) plain.color.set(colour); return plain; }
         var styled = new THREE.MeshPhysicalMaterial();
         THREE.MeshStandardMaterial.prototype.copy.call(styled, material);
@@ -1231,9 +1284,9 @@ OpenRacer.applyCarColors = (function() {
             if(f.iridescence) { styled.iridescence = f.iridescence; styled.iridescenceIOR = f.iridescenceIOR; styled.iridescenceThicknessRange = f.iridescenceThicknessRange; }
             if(f.flakes) {
                 // the size of the flakes (100%: the normal size): a bigger flake is a smaller repeat of the map; every material has its own copy of the texture (its repeat)
-                var map = flakes().clone(), size = Math.max(25, Math.min(400, flakeSize || 100));
-                map.repeat.set(64 * 100 / size, 64 * 100 / size); map.needsUpdate = true;
-                styled.normalMap = map; styled.normalScale.set(0.45, 0.45);
+                var map = flakes(pattern).clone(), size = Math.max(25, Math.min(400, flakeSize || 100)), scale = (pattern === "marble" ? 4 : (pattern === "voronoi" || pattern === "hexagons" ? 6 : 64)) * 100 / size;
+                map.repeat.set(scale, scale); map.needsUpdate = true;
+                styled.normalMap = map; styled.normalScale.set(PATTERN_SCALE[pattern] || 0.45, PATTERN_SCALE[pattern] || 0.45);
             }
             styled.roughnessMap = null; styled.metalnessMap = null;                 // (the finish decides, not the maps of the model)
             styled.envMapIntensity = Math.max(styled.envMapIntensity || 1, 1.2);
@@ -1253,7 +1306,7 @@ OpenRacer.applyCarColors = (function() {
                 if(!ud.asMade) { ud.asMadeIsArray = Array.isArray(mesh.material); ud.asMade = [].concat(mesh.material); }
                 if(ud.styled) { ud.styled.forEach(function(m) { if(m.normalMap && m.normalMap !== (ud.asMade[0] && ud.asMade[0].normalMap)) m.normalMap.dispose(); m.dispose(); }); ud.styled = null; }
                 if(!colour && !finish) { mesh.material = ud.asMadeIsArray ? ud.asMade.slice() : ud.asMade[0]; return; }
-                ud.styled = ud.asMade.map(function(m) { return style(m, colour, finish, colors ? colors[kind + "Flake"] : 100); });
+                ud.styled = ud.asMade.map(function(m) { return style(m, colour, finish, colors ? colors[kind + "Flake"] : 100, colors ? colors[kind + "Pattern"] : "noise"); });
                 mesh.material = ud.asMadeIsArray ? ud.styled : ud.styled[0];
             });
         });

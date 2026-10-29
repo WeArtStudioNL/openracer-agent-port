@@ -44,7 +44,7 @@ var Tuning = (function() {
     function apply() {
         var v = values;
         if(v.width > 0 && v.height > 0) car.frontal_area = v.width * v.height * 0.85;
-        if(car.setColors) car.setColors({ body: v.body_color || null, rim: v.rim_color || null, bodyFinish: v.body_finish || "", rimFinish: v.rim_finish || "", bodyFlake: v.body_flake || 100, rimFlake: v.rim_flake || 100 });
+        if(car.setColors) car.setColors({ body: v.body_color || null, rim: v.rim_color || null, bodyFinish: v.body_finish || "", rimFinish: v.rim_finish || "", bodyFlake: v.body_flake || 100, rimFlake: v.rim_flake || 100, bodyPattern: v.body_pattern || "noise", rimPattern: v.rim_pattern || "noise" });
         car.vehicle.retune(OpenRacer.CarTuning.toRetune(v, car.frontal_area, air_density));
         // the rest of the car editor, live: the cameras, the steering wheel, the rider of a motorcycle, the torque curve, the sound; and the model built again for
         // what it is built from (the suspension and the driveline of the parts library, the soft body, the size), half a second after the last change
@@ -294,6 +294,8 @@ var Tuning = (function() {
         rim_rear: ["Rim at the rear", function() { return libraryList("rims"); }],
         tyre_rear: ["Tyre at the rear", function() { return libraryList("tyres"); }],
         body_finish: ["Finish of the body", function() { var F = OpenRacer.carFinishes || {}; return Object.keys(F).map(function(id) { return [id, F[id].label]; }); }],
+        body_pattern: ["Flake pattern of the body", function() { var P = OpenRacer.carFlakePatterns || {}; return Object.keys(P).map(function(id) { return [id, P[id]]; }); }],
+        rim_pattern: ["Flake pattern of the rims", function() { var P = OpenRacer.carFlakePatterns || {}; return Object.keys(P).map(function(id) { return [id, P[id]]; }); }],
         rim_finish: ["Finish of the rims", function() { var F = OpenRacer.carFinishes || {}; return Object.keys(F).map(function(id) { return [id, F[id].label]; }); }],
         sim_layout: ["Engine layout (the sound)", function() { var L = OpenRacer.engineSimLayouts || {}; return Object.keys(L).map(function(id) { return [id, L[id].label || id]; }); }],
         sim_ir: ["Exhaust of the sound", function() { return (OpenRacer.engineSimImpulseResponses || []).map(function(ir) { return [ir.id, ir.label || ir.id]; }); }]
