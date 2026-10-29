@@ -131,7 +131,7 @@ var MainMenu = (function() {
             "#garageDialog .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }" +
             "#garageDialog .status { color: var(--accent2); font-size: 14px; min-height: 18px; margin-top: 10px; }" +
             "#garageDialog .status.error { color: var(--bad); }" +
-            "#garageDialog .close { float: right; }" +
+            "#garageDialog .close { float: right; }" + "#garageDialog details.more { margin-top: 16px; } #garageDialog details.more summary { cursor: pointer; color: var(--muted); font-size: 14px; }" +
             ".or-dialog label.tick { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }";
         document.head.appendChild(style);
     }
@@ -592,7 +592,6 @@ var MainMenu = (function() {
             var importTitle = button("Import", "ghost", function() { if(importInput) importInput.click(); });
             titleRow.appendChild(importTitle);
             box.appendChild(titleRow);
-            box.insertAdjacentHTML("beforeend", "<p class=\"note\">Your own cars and tracks, kept in this browser. Export one as a zip to share it, or import a zip you were given.</p>");
             status = document.createElement("div");
             status.className = "status";
             var importInput = null;
@@ -600,11 +599,11 @@ var MainMenu = (function() {
             Promise.all([Garage.list("cars"), Garage.list("tracks"), Garage.usage()]).then(function(result) {
                 [["cars", "Cars", result[0]], ["tracks", "Tracks", result[1]]].forEach(function(section) {
                     var kind = section[0], records = section[2];
-                    box.insertAdjacentHTML("beforeend", "<h3>" + section[1] + " in the garage</h3>");
                     if(!records.length) {
-                        box.insertAdjacentHTML("beforeend", "<div class=\"note\">None yet.</div>");
+                        if(kind === "tracks" && !result[0].length) box.insertAdjacentHTML("beforeend", "<div class=\"note\">No cars or tracks in your garage yet. Use New or Import above.</div>");
                         return;
                     }
+                    box.insertAdjacentHTML("beforeend", "<h3>" + section[1] + "</h3>");
                     records.forEach(function(record) {
                         var row = document.createElement("div");
                         row.className = "row";
@@ -624,7 +623,7 @@ var MainMenu = (function() {
                         name.innerHTML = "<b></b> <span class=\"meta\"></span>";
                         name.querySelector("b").textContent = record.json.name || record.id;
                         name.querySelector(".meta").textContent = record.id + " · " + (files.length ? files.length + " file" + (files.length === 1 ? "" : "s") + ", " + formatSize(Garage.sizeOf(record)) :
-                            "settings only, the files of the server are used");
+                            "settings only");
                         row.appendChild(name);
                         var exportButton = document.createElement("button");
                         exportButton.textContent = "Export zip";
@@ -655,9 +654,6 @@ var MainMenu = (function() {
                     });
                 });
 
-                box.insertAdjacentHTML("beforeend", "<h3>Import</h3>");
-                var actions = document.createElement("div");
-                actions.className = "actions";
                 importInput = document.createElement("input");
                 importInput.type = "file";
                 importInput.accept = ".zip,application/zip";
@@ -676,12 +672,10 @@ var MainMenu = (function() {
                         say("Imported " + done.join(", ") + ".");
                     }).catch(function(error) { say("Could not import: " + error.message, true); });
                 };
-                var importButton = document.createElement("button");
-                importButton.textContent = "Import a zip…";
-                importButton.onclick = function() { importInput.click(); };
-                actions.appendChild(importButton);
-                actions.appendChild(importInput);
-                box.appendChild(actions);
+                box.appendChild(importInput);
+                var more = document.createElement("details");
+                more.className = "more";
+                more.innerHTML = "<summary>More ways to add a car or track</summary>";
                 // a link to a zip: import it, or make the link of the game that imports it for someone else
                 var linkRow = document.createElement("div");
                 linkRow.className = "actions";
@@ -705,22 +699,21 @@ var MainMenu = (function() {
                     (navigator.clipboard ? navigator.clipboard.writeText(game) : Promise.reject()).then(function() { say("Link copied."); }, function() { linkInput.value = game; linkInput.select(); say("Copy the link from the field."); });
                 };
                 linkRow.appendChild(linkInput); linkRow.appendChild(linkImport); linkRow.appendChild(linkCopy);
-                box.appendChild(linkRow);
-                box.insertAdjacentHTML("beforeend", "<div class=\"note\" style=\"margin-top: 8px;\">A zip of a car or track.</div>");
-
+                more.appendChild(linkRow);
+                
                 // the folder on the PC
-                box.insertAdjacentHTML("beforeend", "<h3>Folder on your PC</h3>");
+                more.insertAdjacentHTML("beforeend", "<h3>A folder on your PC</h3>");
                 var folderActions = document.createElement("div");
                 folderActions.className = "actions";
                 if(!Garage.folderSupported()) {
-                    box.insertAdjacentHTML("beforeend", "<div class=\"note\">This browser cannot read a folder on your PC (Chrome and Edge can). Import a zip instead.</div>");
+                    more.insertAdjacentHTML("beforeend", "<div class=\"note\">This browser cannot read a folder on your PC (Chrome and Edge can). Import a zip instead.</div>");
                 } else {
                     var info = Garage.folderInfo();
                     var folderNote = document.createElement("div");
                     folderNote.className = "note";
                     if(info.name) {
                         folderNote.textContent = "Linked: " + info.name + (info.permission === "granted" ? "" : " (allow the browser to read it)") +
-                            ". Its cars/<id>/car.json and tracks/<id>/track.json are in the menu (or the folder itself when it holds cars directly).";
+                            ".";
                         if(info.permission !== "granted") {
                             var allow = document.createElement("button");
                             allow.textContent = "Allow reading " + info.name;
@@ -736,7 +729,7 @@ var MainMenu = (function() {
                         unlink.onclick = function() { Garage.unlinkFolder().then(build); };
                         folderActions.appendChild(unlink);
                     } else {
-                        folderNote.textContent = "Cars and tracks from a folder on your PC are read from there each time. Nothing is copied.";
+                        folderNote.textContent = "Read from the folder each time; nothing is copied.";
                         var link = document.createElement("button");
                         link.textContent = "Link a folder…";
                         link.onclick = function() {
@@ -746,9 +739,11 @@ var MainMenu = (function() {
                         };
                         folderActions.appendChild(link);
                     }
-                    box.appendChild(folderNote);
+                    more.appendChild(folderNote);
                 }
-                box.appendChild(folderActions);
+                more.appendChild(folderActions);
+
+                box.appendChild(more);
 
                 var usage = result[2];
                 var foot = document.createElement("div");
