@@ -2478,7 +2478,14 @@ function applyPaint() {
     const t = tuning;
     // (the car of the bench is a copy of the model with its own materials: it gets the paint too, or the colour went back to the one of the model at Drop car and Drive)
     const roots = [state.root];
-    try { if (bench.body) roots.push(bench.body, ...(bench.model ? bench.model.wheels : [])); } catch (e) { /* the bench is not made yet */ }
+    try {
+        if (bench.body) {
+            const benchRoots = [bench.body, ...(bench.model ? bench.model.wheels : [])];
+            // (the copy of a mesh has the notes of the paint of the model in its userData as plain data, not the materials: they are dropped, the copy has its own materials as made)
+            benchRoots.forEach((root) => root.traverse((o) => { const ud = o.userData; if (ud && ud.asMade !== undefined && !(ud.asMadeList && ud.asMadeList[0] && ud.asMadeList[0].isMaterial)) { delete ud.asMade; delete ud.asMadeList; delete ud.asMadeIsArray; delete ud.kinds; delete ud.styled; } }));
+            roots.push(...benchRoots);
+        }
+    } catch (e) { /* the bench is not made yet */ }
     OpenRacer.applyCarColors(roots, {
         body: t.body_color || null, rim: t.rim_color || null, bodyFinish: t.body_finish || "", rimFinish: t.rim_finish || "",
         bodyFlake: t.body_flake || 100, rimFlake: t.rim_flake || 100, bodyPattern: t.body_pattern || "noise", rimPattern: t.rim_pattern || "noise", bodyUv: t.body_uv || "model", rimUv: t.rim_uv || "model"
@@ -2901,7 +2908,14 @@ function benchWheelSizes(measured) {
     if (sizes && Math.abs(sizes[0] - sizes[2]) < 0.004 && Math.abs(sizes[1] - sizes[3]) < 0.004 && Math.abs(sizes[0] - sizes[1]) < 0.004) return null;
     return sizes;
 }
-async function startBench() {
+// (a second start while the first still loads its model would leave the copy of the first on the floor for good, with the colour it had then: one start at a time, the second asks wait for the first)
+let benchStarting = null;
+function startBench() {
+    if (benchStarting) return benchStarting;
+    benchStarting = startBenchNow().finally(() => { benchStarting = null; });
+    return benchStarting;
+}
+async function startBenchNow() {
     if (!state.root) throw new Error("Load a model first.");
     if (wheelMode() !== "model" && !($("libRimFront").value && $("libRimRear").value)) throw new Error("The test needs the wheels of the model, or a rim of the wheel library on both axles: select the parts of every wheel.");
     await loadPhysics();
