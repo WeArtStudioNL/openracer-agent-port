@@ -304,3 +304,7 @@ button.dirty::after { content: " ●"; color: #ffd04d; }
 #engineSimple[hidden], #engineAdvanced[hidden], #chartHelp[hidden] { display: none !important; }
 .dynorow { display: flex; align-items: center; gap: 10px; margin: 6px 0 8px; } .dynorow .hint { flex: 1; min-width: 0; }
 .bslider { width: 100%; margin: 2px 0 0; }
+
+/* the chart and Run dyno of the Engine card stay next to the sidebar while the card is open (so the settings can be changed while the chart is in view) */
+#enginePanel.pinned { position: fixed; top: 12px; width: 440px; max-width: calc(100vw - 460px); z-index: 6; box-sizing: border-box; background: #171b22ee; border: 1px solid #2f3845; border-radius: 12px; box-shadow: 0 6px 24px #0008; backdrop-filter: blur(8px); padding: 10px 12px; }
+#enginePanel.pinned canvas#chart { border: 0; }

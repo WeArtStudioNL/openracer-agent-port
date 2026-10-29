@@ -3371,3 +3371,17 @@ $("libSame").addEventListener("click", () => {
     $("libRimRear").value = $("libRimFront").value; $("libTyreRear").value = $("libTyreFront").value;
     $("libRimRear").dispatchEvent(new Event("change", { bubbles: true })); $("libTyreRear").dispatchEvent(new Event("change", { bubbles: true }));
 });
+
+// ---- the chart and Run dyno of the Engine card are pinned next to the sidebar while the card is open (not on a narrow window)
+{
+    const panel = $("enginePanel"), card = panel.closest("details");
+    const place = () => {
+        const pinned = card.open && window.innerWidth >= 1000;
+        panel.classList.toggle("pinned", pinned);
+        if (pinned) panel.style.left = ($("side").getBoundingClientRect().right + 12) + "px"; else panel.style.left = "";
+    };
+    card.addEventListener("toggle", place);
+    window.addEventListener("resize", place);
+    if (window.ResizeObserver) new ResizeObserver(place).observe($("side"));
+    place();
+}
