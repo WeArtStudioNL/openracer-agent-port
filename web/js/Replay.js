@@ -16,7 +16,7 @@
  *              track (the standard ones, or the ones of a zip of the garage). Nothing goes to a server.
  *
  *              Cameras: Follow and Cockpit are those of the game; Free is a camera that is moved by hand: WASD or the arrows move it,
- *              Shift and Control up and down, the mouse (click the scene) or the right stick looks around like a first person view, [ and ]
+ *              Z and X (also Shift and Control) up and down, the mouse (click the scene) or the right stick looks around like a first person view, [ and ]
  *              change the field of view. F aims the camera at the car (and the mouse look rests), L fixes the camera to the car, so that it
  *              goes with it, Tab chooses another car. All movements, the look and the zoom are smoothed and damped; a slider (0.1 to 3)
  *              sets how fast they are.
@@ -602,7 +602,7 @@ OpenRacer.Replay = (function() {
         var cameraRow = el(bar, "div", "row cameras");
         el(cameraRow, "span", "label", "Camera");
         cameraButtons = [["Follow", "The camera that follows the car"], ["Cockpit", "In the car"], ["Free", "A camera that you move yourself"], ["Cinematic", "The cameras of the track: the one nearest to the car, which turns to follow it"]].map(function(c, i) {
-            var b = button(cameraRow, c[0], c[1] + (i !== 2 ? "" : " (WASD or arrows, Shift and Control up and down, mouse look, [ and ] zoom)"), function() {
+            var b = button(cameraRow, c[0], c[1] + (i !== 2 ? "" : " (WASD or arrows, Z and X up and down, mouse look, [ and ] zoom)"), function() {
                 if(i === 2) { leaveCine(); enterFree(); }
                 else if(i === 3) { leaveFree(); enterCine(); }
                 else { leaveFree(); leaveCine(); Settings.setOption("camera", i + 2); }
@@ -895,7 +895,7 @@ OpenRacer.Replay = (function() {
         // what is asked for, with the keys and the controller
         var mx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
         var mz = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
-        var my = (keys.Space || keys.ShiftLeft || keys.ShiftRight ? 1 : 0) - (keys.AltLeft || keys.AltRight || keys.ControlLeft || keys.ControlRight ? 1 : 0);
+        var my = (keys.KeyZ || keys.Space || keys.ShiftLeft || keys.ShiftRight ? 1 : 0) - (keys.KeyX || keys.AltLeft || keys.AltRight || keys.ControlLeft || keys.ControlRight ? 1 : 0);
         var zoom = (keys.BracketRight ? 1 : 0) - (keys.BracketLeft ? 1 : 0);
         var tilt = (keys.KeyQ ? 1 : 0) - (keys.KeyE ? 1 : 0);                        // Q and E tilt the picture (anticlockwise with Q), smoothly
         var pad = typeof Settings !== "undefined" && Settings.controllerPad ? Settings.controllerPad() : null;
@@ -913,14 +913,16 @@ OpenRacer.Replay = (function() {
         }
         free.pitchT = Math.max(-1.5, Math.min(1.5, free.pitchT));
 
-        // the direction: along where the camera looks, level; the steps are in the world, and are put in the frame of the camera
+        // the direction: W goes along where the camera looks (also up and down with the look), the sides are level; the steps are in the world, and are put in the frame of the camera
         tmpV.set(0, 0, -1).applyQuaternion(free.quat);
+        var lookY = tmpV.y;
         tmpV.y = 0;
-        if(tmpV.lengthSq() < 1e-6) tmpV.set(0, 0, -1); else tmpV.normalize();
+        var level = tmpV.length();
+        if(level < 1e-6) tmpV.set(0, 0, -1); else tmpV.divideScalar(level);
         tmpV2.set(-tmpV.z, 0, tmpV.x);                       // to the right
-        var wantX = (tmpV.x * mz + tmpV2.x * mx) * BASE_SPEED * scale;
-        var wantZ = (tmpV.z * mz + tmpV2.z * mx) * BASE_SPEED * scale;
-        var want = V3(wantX, my * VERTICAL_SPEED * scale, wantZ);
+        var wantX = (tmpV.x * level * mz + tmpV2.x * mx) * BASE_SPEED * scale;
+        var wantZ = (tmpV.z * level * mz + tmpV2.z * mx) * BASE_SPEED * scale;
+        var want = V3(wantX, (lookY * mz) * BASE_SPEED * scale + my * VERTICAL_SPEED * scale, wantZ);
         if(parented && !free.sky) want.applyQuaternion(tmpQ2.copy(body.quaternion).invert());
         // smoothed: the speed follows what is asked for, it does not jump to it
         free.vel.lerp(want, 1 - Math.exp(-5 * delta));

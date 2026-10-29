@@ -904,7 +904,7 @@ var Settings = (function() {
         page.appendChild(sliderRow("Drag strip: \"Get ready\" before the lights", "dragReady", 0.5, 6, 0.5, function(v) { return v.toFixed(1) + " s"; }));
         page.appendChild(sliderRow("Drag strip: lights stay after the green", "dragGreen", 0.5, 5, 0.5, function(v) { return v.toFixed(1) + " s"; }));
         page.appendChild(optionRow("ESC (stability control)", options.esc ? "On" : "Off", function() { setOption("esc", !options.esc); }));
-        var cameraNames = ["Follow (smooth, FOV with speed)", "Cockpit", "Free camera (W A S D move, Ctrl Alt up and down, the mouse looks, Q E roll, 3 4 speed, [ ] field of view; the arrows still drive; P looks at the car, O moves with it, I fixes it to the car)"];
+        var cameraNames = ["Follow (smooth, FOV with speed)", "Cockpit", "Free camera (W A S D move the way it looks, Z X up and down, the mouse looks, Q E roll, 3 4 speed, [ ] field of view; the arrows still drive; P looks at the car, O moves with it, I fixes it to the car)"];
         page.appendChild(optionRow("Camera", cameraNames[options.camera - 2] || cameraNames[0], function() { setOption("camera", nextCamera(options.camera)); }));
         // a motorcycle: how it is steered, and the camera that follows it (to try what feels right)
         if(typeof car !== "undefined" && car && car.vehicle && car.vehicle.controller) {

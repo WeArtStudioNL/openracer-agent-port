@@ -2,7 +2,7 @@
  * FreeCam.js
  *
  * Description: The fourth camera of the game (the camera switcher: follow, cockpit, free). The camera is not tied to the car: it is moved with the
- *              keys and the mouse, as the free camera of the replay: W A S D move it (level, the way it looks), Control and Alt take it up and down, the
+ *              keys and the mouse, as the free camera of the replay: W A S D move it (W goes the way it looks, also up and down with the look), Z and X take it up and down, the
  *              mouse looks around (click the scene: the pointer is locked, Escape lets it go), Q and E roll the picture, 3 and 4 make it slower and faster
  *              (a tenth to three times), [ and ] narrow and widen the field of view. These keys do not drive the car while this camera is on; the arrows
  *              still do (and Space is the handbrake). Two toggles, on the panel at the top right and on keys (actions of the settings menu): P, "freeCamAim", the camera looks at the
@@ -32,7 +32,7 @@ OpenRacer.FreeCam = (function () {
     var placeBehind = false;
     var panel = null, followButton = null, aimButton = null, fixedButton = null, speedLabel = null;
     var carId = null, saveAt = 0;
-    var KEYS = { forward: "KeyW", back: "KeyS", left: "KeyA", right: "KeyD", up: ["ControlLeft", "ControlRight"], down: ["AltLeft", "AltRight"], slower: "Digit3", faster: "Digit4",
+    var KEYS = { forward: "KeyW", back: "KeyS", left: "KeyA", right: "KeyD", up: ["KeyZ"], down: ["KeyX"], slower: "Digit3", faster: "Digit4",
         rollLeft: "KeyQ", rollRight: "KeyE", fovNarrow: "BracketLeft", fovWide: "BracketRight", fixedToggle: "KeyI" };
     // the keys this camera takes (Settings.js leaves them to it while it is on: they do not drive the car, mute the sound or save the reset place)
     var TAKEN = {};
@@ -61,7 +61,7 @@ OpenRacer.FreeCam = (function () {
         panel.appendChild(title);
         var keys = document.createElement("div");
         keys.className = "keys";
-        keys.innerHTML = "<b>W A S D</b> move · <b>Ctrl Alt</b> up, down<br><b>mouse</b> look (click the scene) · <b>Q E</b> roll<br><b>[ ]</b> field of view · <b>3 4</b> slower, faster";
+        keys.innerHTML = "<b>W A S D</b> move · <b>Z X</b> up, down<br><b>mouse</b> look (click the scene) · <b>Q E</b> roll<br><b>[ ]</b> field of view · <b>3 4</b> slower, faster";
         panel.appendChild(keys);
         speedLabel = title.querySelector("#freeCamSpeed");
         // the two toggles: on pointerup (the panel is dragged by its pointerdown, Movable.js, which took the click away from the buttons)
@@ -223,9 +223,9 @@ OpenRacer.FreeCam = (function () {
         rollT = Math.max(-Math.PI, Math.min(Math.PI, rollT + (key("rollLeft") - key("rollRight")) * ROLL_RATE * delta));
         roll += (rollT - roll) * (1 - Math.exp(-8 * delta));
         fov = Math.max(8, Math.min(110, fov + (key("fovWide") - key("fovNarrow")) * FOV_RATE * delta));
-        // forward is level, the way the camera looks; the speed follows what is asked for, it does not jump to it
-        var fx = -Math.sin(yaw), fz = -Math.cos(yaw);
-        want.set(fx * mz + -fz * mx, my * VERTICAL_SPEED / BASE_SPEED, fz * mz + fx * mx).multiplyScalar(BASE_SPEED * speed);
+        // forward is the way the camera looks (up and down with the look, W flies where the mouse points), the sides are level; the speed follows what is asked for, it does not jump to it
+        var fx = -Math.sin(yaw), fz = -Math.cos(yaw), cp = Math.cos(pitch), fy = Math.sin(pitch);
+        want.set(fx * cp * mz + -fz * mx, fy * mz + my * VERTICAL_SPEED / BASE_SPEED, fz * cp * mz + fx * mx).multiplyScalar(BASE_SPEED * speed);
         vel.lerp(want, 1 - Math.exp(-6 * delta));
         pos.addScaledVector(vel, delta);
         if (follow && !fixed) pos.add(carPosition).sub(lastCar);

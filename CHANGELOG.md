@@ -33,6 +33,8 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 ### Cameras: closer
 
+- **The free camera flies the way it looks.** W and S now move along the look of the camera (up and down with the pitch, so W goes where the mouse points), A and D go sideways level. Up and down are on **Z and X** (they are the gear shift keys of the car, which the free camera takes while it is on, as it does with the other keys of the camera); the replay camera also keeps Space, Shift, Control and Alt. Measured in the game: Z took the camera 7 m up, X 7 m down, and W went along the look (4 m forward, 9 m down toward the car) while the gear did not change.
+
 - **The near clipping of the cameras is lower** so that you can look closer: the free camera of the game, of the replay, of the camera track, of a take and of the video editor 3 cm (was 30 cm), the cockpit camera 3 cm (was 10 cm), the chase camera 20 cm (was 1 m).
 
 ### The rev counter
