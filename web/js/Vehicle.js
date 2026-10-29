@@ -848,11 +848,18 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var limit = this.engine.limiterRPM;
                 var upRPM = limit * (0.45 + 0.42 * thr);
                 var downRPM = limit * (0.23 + 0.17 * thr);
-                // with the throttle off the car rolls and the engine brakes: it keeps the higher gear as long as the clutch can stay closed, and goes down as the road speed asks
-                // for the lowest speed of the clutch (a limit of 10000 rpm made the shift speed of the throttle so high that it shifted down early and kicked)
-                if(thr < 0.1) downRPM = Math.min(downRPM, Math.max(this.clutchStartRPM * 1.5, this.engine.idleRPM * 1.6));
                 var nextRatio = g < gears - 1 ? this.gear_ratios[g + 1] / this.gear_ratios[g] : 1;
                 var prevRatio = g > 0 ? this.gear_ratios[g - 1] / this.gear_ratios[g] : 1;
+                // The downshift is at the engine speed where the engine is still in its torque band: a part of the speed of the peak torque (60% with the throttle off, 90% with it
+                // wide open: the more the throttle asks for, the earlier it kicks down), not at a part of the limit (that was far too low for a car that revs to 10000).
+                // It must not land past the speed where it would shift up again (with a margin), or the gearbox would hunt.
+                var peakRpm = this.peakTorqueRPM();
+                // (and the shift up is not lower than a quarter above the peak torque, also with the throttle off: otherwise a lifted throttle shifted up at once and the shift down
+                // had to wait for a speed far below the torque band)
+                if(peakRpm > 0) {
+                    upRPM = Math.max(upRPM, peakRpm * 1.25);
+                    downRPM = Math.min(peakRpm * (0.6 + 0.3 * thr), upRPM / Math.max(1, prevRatio) * 0.9);
+                }
                 // The engine near the rev limiter with the throttle open while the car moves and the wheels spin faster than the road asks (a lot of power in a low
                 // gear: the speed of the road does not reach the shift speed): after a moment it shifts up, as an automatic does at the redline. The time is
                 // kept leaky, because the engine speed jumps about with the spinning wheels and the limiter.
@@ -893,6 +900,19 @@ OpenRacer.Vehicle = function (parameters, input) {
             if(!inp.clutchPedalPresent) engine.start();
             else if((inp.neutral || inp.clutch > 0.8) && inp.throttle > 0.05) engine.start();
         }
+    };
+
+    // the engine speed of the peak torque (of the curve as it is now), for the gearbox
+    var peakCurve = null, peakLength = 0, peakValue = 0;
+    this.peakTorqueRPM = function () {
+        var curve = this.engine.torque_curve;
+        if(!curve || !curve.length) return 0;
+        if(curve !== peakCurve || curve.length !== peakLength) {
+            peakCurve = curve; peakLength = curve.length; peakValue = 0;
+            var best = -1;
+            for(var i = 0; i < curve.length; i++) if(curve[i].nm > best && curve[i].rpm > this.engine.idleRPM) { best = curve[i].nm; peakValue = curve[i].rpm; }
+        }
+        return peakValue;
     };
 
     this.startEngine = function () {
