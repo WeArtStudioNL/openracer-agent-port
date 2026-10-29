@@ -311,3 +311,5 @@ button.dirty::after { content: " ●"; color: #ffd04d; }
 .panelClose { display: none; position: absolute; top: 6px; right: 8px; width: 26px; height: 26px; padding: 0; line-height: 1; font-size: 20px; border-radius: 8px; z-index: 2; background: #232a34; border: 1px solid #323b48; color: var(--text, #e6e9ee); cursor: pointer; }
 #enginePanel.pinned .panelClose { display: block; }
 #enginePanel.pinned .panelClose:hover { background: #2f3845; }
+.chips.pick button { padding: 4px 10px; border-radius: 999px; font-size: 12.5px; }
+.chips.pick button.on { background: var(--accent, #ff6a2b); border-color: var(--accent, #ff6a2b); color: #fff; }

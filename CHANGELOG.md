@@ -6,6 +6,10 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motorcycles with a rider and a ragdoll crash, a driver in the car, replays as files with a video editor, a new menu, the drag strip, and much more. Per subject:
 
+### Car editor: Save and test
+
+- *Save and drive* is now **Save and test**: after the car is saved a window asks for the track and the conditions (weather, time of day, ground; they are the options of the game), with *Start*, or *Use last settings* (it says which: the track, the weather and the time) to go at once.
+
 ### Traction control
 
 - **Traction control holds worn tyres too.** It could only take the power down to a fifth of the pedal; with a big engine on worn or hot tyres, or on loose ground, that was still too much and the driven wheels kept spinning (3 times the torque, worn tyres on sand: the driven wheel turned 50 times the allowance). A wheel that spins far past the allowance now takes the power all the way off (the floor falls from a fifth to nothing between 1.3 and 2.5 times the allowance). The same test now holds it at about twice the allowance; at normal power nothing changes.

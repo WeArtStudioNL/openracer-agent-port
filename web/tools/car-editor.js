@@ -1987,11 +1987,58 @@ async function save() {
 }
 
 // the car is saved and driven at once, on the track that was chosen last
-async function saveAndDrive() {
-    if (!(await save())) return;
+// Save and test: the car is saved, then a window asks for a track and the conditions (the weather, the time of day and the ground are the options of the game: what is chosen
+// here is what the game starts with), or starts at once with the last settings
+const TEST_WEATHER = [["clear", "Clear"], ["cloudy", "Cloudy"], ["fog", "Fog"], ["rain", "Rain"], ["snow", "Snow"]];
+const TEST_TIME = [[5.25, "Dawn"], [8, "Morning"], [12, "Noon"], [15, "Afternoon"], [17.5, "Evening"], [19, "Sunset"], [20.25, "Dusk"], [23.5, "Night"]];
+const TEST_GROUND = [["auto", "Follows the weather"], ["dry", "Dry"], ["wet", "Wet"], ["snow", "Snow"]];
+function gameSettings() { try { return JSON.parse(localStorage.getItem("openracer.settings")) || {}; } catch (e) { return {}; } }
+function lastTestChoice() {
+    const options = gameSettings().options || {};
     let track = "circuit";
     try { track = (JSON.parse(localStorage.getItem("openracer.lastChoice")) || {}).track || track; } catch (e) { /* no storage */ }
-    window.location.href = "../index.html?car=" + encodeURIComponent(state.existingId) + "&track=" + encodeURIComponent(track);
+    return { track, weather: options.gfxWeather || "clear", time: options.gfxTime !== undefined ? options.gfxTime : 12, ground: options.gfxGround || "auto" };
+}
+function startTest(choice) {
+    // the conditions go where the game keeps its options (the rest of the settings stays as it is), the track where the main menu keeps its choice
+    try {
+        const settings = gameSettings();
+        settings.options = Object.assign({}, settings.options, { gfxWeather: choice.weather, gfxTime: choice.time, gfxGround: choice.ground });
+        localStorage.setItem("openracer.settings", JSON.stringify(settings));
+        const last = JSON.parse(localStorage.getItem("openracer.lastChoice")) || {};
+        last.track = choice.track; last.car = state.existingId;
+        localStorage.setItem("openracer.lastChoice", JSON.stringify(last));
+    } catch (e) { /* no storage */ }
+    window.location.href = "../index.html?car=" + encodeURIComponent(state.existingId) + "&track=" + encodeURIComponent(choice.track);
+}
+let testTracks = null;
+async function openTestDialog() {
+    if (!testTracks) { try { testTracks = await Catalog.load("tracks", "../"); } catch (e) { testTracks = []; } }
+    const last = lastTestChoice(), picked = Object.assign({}, last);
+    const trackName = (id) => { const t = testTracks.find((x) => x.id === id); return t ? (t.name || t.id) : id; };
+    const nameOf = (list, v) => { const e = list.find((x) => x[0] === v); return e ? e[1] : v; };
+    const select = $("testTrack");
+    select.innerHTML = testTracks.map((t) => "<option value='" + t.id + "'>" + (t.name || t.id) + "</option>").join("");
+    if (!testTracks.some((t) => t.id === picked.track) && testTracks.length) picked.track = testTracks[0].id;
+    select.value = picked.track;
+    select.onchange = () => { picked.track = select.value; };
+    const chips = (id, list, key) => {
+        const box = $(id); box.innerHTML = "";
+        list.forEach(([value, label]) => {
+            const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.className = "small" + (picked[key] === value ? " on" : "");
+            b.onclick = () => { picked[key] = value; [...box.children].forEach((c) => c.classList.toggle("on", c === b)); };
+            box.appendChild(b);
+        });
+    };
+    chips("testWeather", TEST_WEATHER, "weather"); chips("testTime", TEST_TIME, "time"); chips("testGround", TEST_GROUND, "ground");
+    $("testLast").textContent = "Use last settings: " + trackName(last.track) + ", " + nameOf(TEST_WEATHER, last.weather).toLowerCase() + ", " + nameOf(TEST_TIME, last.time).toLowerCase();
+    $("testLast").onclick = () => startTest(last);
+    $("testStart").onclick = () => startTest(picked);
+    $("dlgTest").showModal();
+}
+async function saveAndDrive() {
+    if (!(await save())) return;
+    openTestDialog();
 }
 $("saveDrive").addEventListener("click", saveAndDrive);
 // a .glb that is dropped on the page becomes the model

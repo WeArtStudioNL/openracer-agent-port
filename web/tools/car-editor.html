@@ -445,7 +445,7 @@
         <button type="button" id="ready" class="ghost" title="What is missing before you can save"></button>
         <div id="status"></div>
         <button class="danger" id="delete" style="display:none">Delete</button>
-        <button id="saveDrive" title="Save the car and drive it">Save and drive</button>
+        <button id="saveDrive" title="Save the car and test it: choose a track and the conditions, or use the last settings">Save and test</button>
     </footer>
 </div>
 
@@ -615,6 +615,20 @@
     <div class="content">
         <div class="tipline"><span>Fix materials that arrived wrong</span><button type="button" class="info" data-tip="The materials of the model are physically based and used as they are. A model does not always arrive the way it looked in Blender (the glass of many models becomes opaque white metal): set such a material right with a preset or by hand. The changes are saved with the car." aria-label="More information">i</button></div>
         <div id="materials"></div>
+    </div>
+</dialog>
+
+<dialog id="dlgTest">
+    <div class="head"><h3>Test the car</h3><button class="close" data-close>×</button></div>
+    <div class="content">
+        <div><label>Track</label><select id="testTrack"></select></div>
+        <div class="group">Weather</div><div class="chips pick" id="testWeather"></div>
+        <div class="group">Time of day</div><div class="chips pick" id="testTime"></div>
+        <div class="group">Ground</div><div class="chips pick" id="testGround"></div>
+        <div class="buttons" style="margin-top:14px">
+            <button class="primary" id="testStart">Start</button>
+            <button class="ghost" id="testLast" title="Start at once with the track and the conditions of the last time"></button>
+        </div>
     </div>
 </dialog>
 
