@@ -13,7 +13,8 @@
  *              - The times and the speeds are only shown at the end, on the time slip, for the standard distances within the length (60 ft, 330 ft,
  *                1/8 mile, 1000 ft, 1/4 mile, ...) and the finish.
  *              At the finish a time slip slides in from the top at the right of the screen, with the times on it; the cross or Escape closes it.
- *              The lines on the road are drawn: a white start line and a chequered finish line.
+ *              The lines on the road are drawn: a white start line and a chequered finish line. The lights are on a tree: a pole beside the strip, ten metres past the start line, with
+ *              glowing lamps (pre-stage, stage, three ambers, green and red); the HUD only has the text (the distance to the line and what to do).
  */
 
 OpenRacer.DragStrip = (function () {
@@ -36,6 +37,73 @@ OpenRacer.DragStrip = (function () {
         var named = MARKS.filter(function (m) { return Math.abs(m[1] - strip.length) < 0.5; })[0];
         results.push({ label: named ? named[0] : "Finish (" + Math.round(strip.length) + " m)", metres: strip.length, time: null, speed: null, finish: true });
         state = "idle"; lines = null;
+    }
+
+    // The tree: a pole beside the strip, a little behind the start line's far side, with a dark head that faces the cars at the line. Its lights are materials that glow: an emissive
+    // colour that goes up with the light, and a soft additive halo (a sprite) round the lit lamp.
+    var treeLamps = null, treeKey = "";
+    var LAMP_COLOURS = { white: 0xffffff, amber: 0xffb81c, green: 0x2ee26a, red: 0xff3b30 };
+    function haloTexture() {
+        var c = document.createElement("canvas"); c.width = c.height = 64;
+        var g = c.getContext("2d"), grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+        grad.addColorStop(0, "rgba(255,255,255,1)"); grad.addColorStop(0.25, "rgba(255,255,255,0.55)"); grad.addColorStop(1, "rgba(255,255,255,0)");
+        g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+        var t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+    }
+    function buildTree(group, v) {
+        // beside the strip on the left of the driver, ten metres past the start line
+        var along = 10, side = strip.width / 2 + 1.6, sx = strip.dz, sz = -strip.dx;
+        var x = strip.x + strip.dx * along + sx * side, z = strip.z + strip.dz * along + sz * side;
+        var hit = v.ground.query(x, z, v.py + 5, 40), y = hit ? hit.y : v.py - v.cgHeight;
+        var tree = new THREE.Group();
+        tree.position.set(x, y, z);
+        tree.rotation.y = Math.atan2(-strip.dx, -strip.dz);                      // the face looks back along the strip, to the cars at the line
+        var steel = new THREE.MeshStandardMaterial({ color: 0x59606a, metalness: 0.7, roughness: 0.45 });
+        var plastic = new THREE.MeshStandardMaterial({ color: 0x0c0e11, metalness: 0.1, roughness: 0.6 });
+        var pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 3.4, 12), steel);
+        pole.position.y = 1.7; tree.add(pole);
+        var base = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.12, 16), steel);
+        base.position.y = 0.06; tree.add(base);
+        var head = new THREE.Mesh(new THREE.BoxGeometry(1.0, 2.0, 0.26), plastic);
+        head.position.set(0, 3.55, 0); tree.add(head);
+        var hood = new THREE.Mesh(new THREE.BoxGeometry(1.06, 0.06, 0.4), plastic);
+        hood.position.set(0, 4.58, 0.07); tree.add(hood);
+        var halo = haloTexture();
+        treeLamps = [];
+        // two columns (the two lanes of a real tree), each: the pre-stage and the stage lamp, three ambers, the green and the red
+        [-0.25, 0.25].forEach(function (cx) {
+            [["white", 4.38], ["white", 4.2], ["amber", 3.95], ["amber", 3.7], ["amber", 3.45], ["green", 3.15], ["red", 2.9]].forEach(function (row, n) {
+                var kind = row[0], colour = LAMP_COLOURS[kind];
+                var material = new THREE.MeshStandardMaterial({ color: 0x15181d, emissive: colour, emissiveIntensity: 0, metalness: 0, roughness: 0.25 });
+                var lamp = new THREE.Mesh(new THREE.SphereGeometry(kind === "white" ? 0.065 : 0.1, 20, 14), material);
+                lamp.position.set(cx, row[1], 0.15);
+                tree.add(lamp);
+                var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: halo, color: colour, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+                sprite.scale.setScalar(kind === "white" ? 0.5 : 0.75);
+                sprite.position.set(cx, row[1], 0.22);
+                sprite.userData.noGBuffer = true;
+                tree.add(sprite);
+                treeLamps.push({ kind: kind, index: n, material: material, sprite: sprite, colour: colour });
+            });
+        });
+        tree.traverse(function (o) { if (o.isMesh) o.castShadow = true; });
+        group.add(tree);
+    }
+    // which lamps are lit: { white, amber (0..3), green, red } or null for all dark
+    function setLamps(on) {
+        if (!treeLamps) return;
+        var key = on ? [on.white ? 1 : 0, on.amber, on.green ? 1 : 0, on.red ? 1 : 0].join("") : "";
+        if (key === treeKey) return;
+        treeKey = key;
+        var amberSeen = 0;
+        treeLamps.forEach(function (l, n) {
+            // (the rows: 0, 1 white; 2, 3, 4 amber; 5 green; 6 red; the same in the second column)
+            var row = n % 7, lit = false;
+            if (on) lit = row < 2 ? on.white : row < 5 ? (row - 1) <= on.amber : row === 5 ? on.green : on.red;
+            l.material.emissiveIntensity = lit ? 2.4 : 0;
+            l.material.color.setHex(lit ? l.colour : 0x15181d);
+            l.sprite.material.opacity = lit ? 0.6 : 0;
+        });
     }
 
     // the white start line and the chequered finish line on the road
@@ -65,6 +133,7 @@ OpenRacer.DragStrip = (function () {
             return true;
         };
         if (!make(0, false) || !make(strip.length, true)) return;
+        buildTree(group, v);
         scene.add(group);
         lines = group;
     }
@@ -304,18 +373,11 @@ OpenRacer.DragStrip = (function () {
         if (hud) return;
         var style = document.createElement("style");
         style.textContent =
-            "#dragHud { position: fixed; left: 50%; top: 70px; transform: translateX(-50%); z-index: 960; display: none; font-family: Arial, sans-serif; color: #fff; text-align: center; " +
-            "background: rgba(14, 18, 24, 0.78); border-radius: 12px; padding: 10px 16px 12px; min-width: 240px; text-shadow: 0 1px 3px rgba(0,0,0,0.8); user-select: none; }" +
-            "#dragHud .distance { font-size: 26px; font-weight: bold; font-variant-numeric: tabular-nums; }" +
-            "#dragHud .note { font-size: 13px; color: #9fb0c4; margin-top: 2px; }" +
-            "#dragHud .note.bad { color: #ff6b62; font-weight: bold; font-size: 16px; }" +
-            "#dragHud .tree { display: inline-flex; flex-direction: column; align-items: center; gap: 6px; background: #0b0d10; padding: 8px 14px; border-radius: 10px; margin: 8px 0 4px; }" +
-            "#dragHud .row { display: flex; gap: 10px; }" +
-            "#dragHud .lamp { width: 22px; height: 22px; border-radius: 50%; background: #222831; border: 2px solid #2d343f; }" +
-            "#dragHud .lamp.on.white { background: #f2f2f2; box-shadow: 0 0 10px #fff; }" +
-            "#dragHud .lamp.on.amber { background: #ffb81c; box-shadow: 0 0 12px #ffb81c; }" +
-            "#dragHud .lamp.on.green { background: #2ee26a; box-shadow: 0 0 14px #2ee26a; }" +
-            "#dragHud .lamp.on.red { background: #ff3b30; box-shadow: 0 0 14px #ff3b30; }" +
+            "#dragHud { position: fixed; left: 50%; top: 30%; transform: translateX(-50%); z-index: 960; display: none; font-family: Arial, sans-serif; color: #fff; text-align: center; pointer-events: none; " +
+            "min-width: 240px; text-shadow: 0 2px 6px rgba(0,0,0,0.85), 0 0 2px rgba(0,0,0,0.9); user-select: none; }" +
+            "#dragHud .distance { font-size: 40px; font-weight: bold; font-variant-numeric: tabular-nums; }" +
+            "#dragHud .note { font-size: 18px; color: #dbe5f0; margin-top: 4px; }" +
+            "#dragHud .note.bad { color: #ff6b62; font-weight: bold; font-size: 22px; }" +
             "#dragHud table { margin: 8px auto 0; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }" +
             "#dragHud td, #dragHud th { padding: 2px 10px; text-align: right; } #dragHud td:first-child, #dragHud th:first-child { text-align: left; }" +
             "#dragHud th { color: #9fb0c4; font-weight: normal; font-size: 12px; } #dragHud tr.done td { color: #fff; } #dragHud tr td { color: #66727f; } #dragHud tr.finish.done td { color: #7ee7a0; font-weight: bold; }";
@@ -323,7 +385,6 @@ OpenRacer.DragStrip = (function () {
         hud = document.createElement("div");
         hud.id = "dragHud";
         document.body.appendChild(hud);
-        if (OpenRacer.Movable && !movableDone) { OpenRacer.Movable.make(hud, { key: "dragstrip", handle: hud }); movableDone = true; }
     }
 
     // the time of the quarter mile at the top, in the middle, for a moment: it fades in, stays, and fades out (a finish nearer than a quarter mile has its own time)
@@ -353,7 +414,6 @@ OpenRacer.DragStrip = (function () {
         flashTimers.push(setTimeout(function () { flash.classList.add("out"); flash.classList.remove("show"); }, 4500));
     }
 
-    function lamp(kind, on) { return "<div class=\"lamp " + kind + (on ? " on" : "") + "\"></div>"; }
     function distanceText(s, metric) {
         var d = -s;
         if (metric) return (Math.abs(d) < 2 ? d.toFixed(2) : d.toFixed(1)) + " m";
@@ -372,15 +432,12 @@ OpenRacer.DragStrip = (function () {
         if (state === "void") html += "<div class=\"note bad\">Drive back behind the line, then come up slowly</div>";
         if (state === "approach") html += "<div class=\"note\">" + (s > STAGE_MIN && s <= STAGE_MAX ? "Stand still at the line" : "Front wheels to the line, slowly") + "</div>";
         if (state === "ready") html += "<div class=\"distance\">Get ready…</div><div class=\"note\">Hold the car still at the line</div>";
+        // the lights are on the tree beside the strip (a pole in the scene), not in the HUD
         var showTree = state === "tree" || state === "false" || (state === "go" && clock - tGreen < greenShown());
         if (showTree) {
-            var t = clock - tTree;
             var green = state === "go";
-            var amber = state === "tree" ? Math.min(3, Math.floor(t / AMBER)) : (green ? 3 : 0);
-            html += "<div class=\"tree\"><div class=\"row\">" + lamp("white", true) + lamp("white", true) + "</div>" +
-                "<div class=\"row\">" + lamp("amber", amber >= 1) + "</div><div class=\"row\">" + lamp("amber", amber >= 2) + "</div><div class=\"row\">" + lamp("amber", amber >= 3) + "</div>" +
-                "<div class=\"row\">" + lamp("green", green) + "</div><div class=\"row\">" + lamp("red", state === "false") + "</div></div>";
-        }
+            setLamps({ white: true, amber: state === "tree" ? Math.min(3, Math.floor((clock - tTree) / AMBER)) : (green ? 3 : 0), green: green, red: state === "false" });
+        } else setLamps(null);
         if (state === "false") html += "<div class=\"note bad\">FALSE START</div><div class=\"note\">Drive back behind the line and come up slowly</div>";
         if (html !== lastHtml) { lastHtml = html; hud.innerHTML = html; }
         hud.style.display = show && html ? "block" : "none";
