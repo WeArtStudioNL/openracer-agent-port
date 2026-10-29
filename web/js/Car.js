@@ -197,6 +197,11 @@ OpenRacer.Car = function( config, domElement ) {
         // a tyre of the wheel library brings its own shell (WheelLibrary.js): the wheel of the physics takes it over the car's tyres.shell (Vehicle.tyreShellOf)
         var specs = model.tyreSpecs || {};
         for(var si = 0; si < tobj.vehicle.wheels.length; si++) { var vw = tobj.vehicle.wheels[si]; vw.tyreSpec = specs[vw.name] || (vw.name === "FR" && specs.FL) || (vw.name === "RR" && specs.RL) || null; }
+        // the rubber of a custom tyre (the rubber slider, Wheel.js rubberCompound): the grip, the window and the wear of that axle follow it, and its width
+        if(OpenRacer.WheelLibrary) {
+            var rubberOf = function(axle) { var ch = OpenRacer.WheelLibrary.choiceOf(config, axle); return ch.tyre === "custom" ? (ch.custom && ch.custom.rubber >= 0 ? ch.custom.rubber : 50) : -1; };
+            tobj.vehicle.setRubber(rubberOf("front"), rubberOf("rear"));
+        }
         tobj.body.add(model.tilt);
         scene.add(tobj.body);
         // the glass of the mirrors that can be aimed (Mirrors.js; the Car page of the settings menu)
@@ -276,7 +281,10 @@ OpenRacer.Car = function( config, domElement ) {
         var differs = Math.abs(wheelbase - this.wheelbase) > 0.02 || Math.abs(frontTrack - this.front_track) > 0.02 || Math.abs(rearTrack - this.rear_track) > 0.02 || Math.abs(diameter - this.tire_diameter) > 0.02;
         if(differs) console.log("Car: the wheels of the model differ from car.json (wheelbase " + wheelbase.toFixed(3) + ", tracks " + frontTrack.toFixed(3) + "/" + rearTrack.toFixed(3) + ", tyre " + diameter.toFixed(3) + "): the model wins");
         this.wheelbase = wheelbase; this.front_track = frontTrack; this.rear_track = rearTrack; this.tire_diameter = diameter;
-        this.vehicle.retune({ wheelbase: wheelbase, front_track: frontTrack, rear_track: rearTrack, tire_diameter: diameter });
+        // (the axles can have tyres of another size, a custom one or one of the library: every wheel gets its own, from the model; not for a motorcycle)
+        var sizes = !bike && measured.sizes && measured.sizes.length === 4 ? measured.sizes.slice() : null;
+        if(sizes && Math.abs(sizes[0] - sizes[2]) < 0.004 && Math.abs(sizes[1] - sizes[3]) < 0.004 && Math.abs(sizes[0] - sizes[1]) < 0.004) sizes = null;
+        this.vehicle.retune({ wheelbase: wheelbase, front_track: frontTrack, rear_track: rearTrack, tire_diameter: diameter, wheel_diameters: sizes });
         modelMid = new THREE.Vector3((c.FR.x + c.FL.x + c.RL.x + c.RR.x) / 4, (c.FR.y + c.FL.y + c.RL.y + c.RR.y) / 4, (c.FR.z + c.FL.z + c.RL.z + c.RR.z) / 4);
     };
 

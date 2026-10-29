@@ -40,7 +40,15 @@ var Tuning = (function() {
 
     var rebuildSig = null, rebuildTimer = null, lastCurve = null;      // what the model of the car is built from, as it was last applied; the torque curve as last applied
     // (the centre of gravity and the tyre are in it: the shell of the car sits on the centre of gravity, CollisionProxy.js)
-    function builtFrom(c) { return JSON.stringify([c.suspension, c.driveline, c.softbody, c.dimensions, c.steering_wheel && c.steering_wheel.degrees, c.wheels && c.wheels.library, c.chassis && c.chassis.cg_height, c.chassis && c.chassis.tire_diameter]); }
+    // (the rubber of a custom tyre works on the grip, not on the model: it does not build the car again)
+    function libraryWithoutRubber(c) {
+        var L = c.wheels && c.wheels.library;
+        if(!L) return L;
+        var out = {};
+        Object.keys(L).forEach(function(axle) { out[axle] = Object.assign({}, L[axle]); if(out[axle].custom) { out[axle].custom = Object.assign({}, out[axle].custom); delete out[axle].custom.rubber; } });
+        return out;
+    }
+    function builtFrom(c) { return JSON.stringify([c.suspension, c.driveline, c.softbody, c.dimensions, c.steering_wheel && c.steering_wheel.degrees, libraryWithoutRubber(c), c.chassis && c.chassis.cg_height, c.chassis && c.chassis.tire_diameter]); }
     function apply() {
         var v = values;
         if(v.width > 0 && v.height > 0) car.frontal_area = v.width * v.height * 0.85;
@@ -449,7 +457,13 @@ var Tuning = (function() {
     }
     function partsTypes() { var T = OpenRacer.PartsLibrary && OpenRacer.PartsLibrary.TYPES || {}; return Object.keys(T).map(function(id) { return [id, T[id].label || id]; }); }
     // the rims or the tyres of the wheel library (WheelLibrary.js; wheels/wheels.json), with "the wheel of the model" first
-    function libraryList(kind) { var L = OpenRacer.WheelLibrary, list = L ? L[kind]() : []; return [["", kind === "rims" ? "From the model" : "From the model (tyres.shell of the car)"]].concat(list.map(function(e) { return [e.id, e.name || e.id]; })); }
+    function libraryList(kind) {
+        var L = OpenRacer.WheelLibrary, list = L ? L[kind]() : [];
+        var out = [["", kind === "rims" ? "From the model" : "From the model (tyres.shell of the car)"]].concat(list.map(function(e) { return [e.id, e.name || e.id]; }));
+        // (a custom tyre: made from the numbers of the shell, the rim fits its inner shell)
+        if(kind === "tyres") out.push(["custom", "Custom (made from the shell settings)"]);
+        return out;
+    }
 
     function selectRow(key) {
         var item = document.createElement("div");
@@ -846,6 +860,8 @@ var Tuning = (function() {
                 c.range.value = v;
                 if(document.activeElement !== c.number) c.number.value = format(c.def, v);
                 c.line.classList.toggle("changed", changed(c.key));
+                // the rubber of a custom tyre says what kind of tyre it is, from its grip: eco, road, sport, semi-slick, race slick, drag slick
+                if(c.key === "rubber_front" || c.key === "rubber_rear") { var rl = c.line.querySelector(".label"); if(rl) rl.textContent = "Custom tyre at the " + c.key.slice(7) + ": rubber · " + OpenRacer.rubberLabel(v); }
             } else if(c.gear) {
                 if(document.activeElement !== c.input) c.input.value = Number(values[c.key]).toFixed(2);
                 c.input.style.color = changed(c.key) ? "var(--accent2)" : "";

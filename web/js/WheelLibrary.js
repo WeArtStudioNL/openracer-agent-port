@@ -68,7 +68,50 @@ OpenRacer.WheelLibrary = (function () {
         var L = config && config.wheels && config.wheels.library;
         if(!L) return { rim: "", tyre: "" };
         var a = L[axle] || (L.rim !== undefined || L.tyre !== undefined ? L : null) || {};
-        return { rim: a.rim || "", tyre: a.tyre || "" };
+        return { rim: a.rim || "", tyre: a.tyre || "", custom: a.tyre === "custom" ? a.custom || {} : undefined };
+    }
+
+    // ---- the custom tyre: made from numbers, no file. The tyre is the space between the outer shell (the diameter, the width) and the inner shell (inner_ratio of the diameter): its
+    // section is drawn between the two, with the grooves of a road tyre and none on a slick; the rim of the axle is scaled to the inner shell, whichever rim it is.
+    var CUSTOM_ID = "custom";
+    function customSpec(c) {
+        var k = c || {};
+        var width = k.width > 0 ? k.width : 0.245, diameter = k.diameter > 0 ? k.diameter : 0.65;
+        var ratio = k.inner_ratio > 0 ? Math.max(0.3, Math.min(0.9, k.inner_ratio)) : 0.7;
+        return { width: width, diameter: diameter, inner_ratio: ratio, rings: k.rings > 0 ? k.rings : 4, segments: k.segments > 0 ? k.segments : 36, carcass: k.carcass > 0 ? k.carcass : 0,
+            rubber: k.rubber >= 0 ? Math.min(100, k.rubber) : 50 };
+    }
+    var customCache = {};
+    function customMesh(spec) {
+        var key = [spec.width, spec.diameter, spec.inner_ratio, spec.rubber < 75 ? 1 : 0].join("|");
+        if(customCache[key]) return customCache[key].clone(true);
+        var R = spec.diameter / 2, Ri = R * spec.inner_ratio, W = spec.width, H = R - Ri, pts = [];
+        function p(r, a) { pts.push(new THREE.Vector2(r, a)); }
+        // (the profile as radius and position along the axle, from the bead on one side over the tread to the bead on the other)
+        p(Ri, -0.43 * W); p(Ri + 0.14 * H, -0.5 * W); p(Ri + 0.5 * H, -0.505 * W); p(Ri + 0.82 * H, -0.47 * W); p(R - 0.025 * H, -0.4 * W); p(R, -0.31 * W);
+        if(spec.rubber < 75) {
+            // the grooves of a tyre for the road: three, 4 mm deep
+            [-0.16, 0, 0.16].forEach(function(at) { p(R, (at - 0.03) * W); p(R - 0.004, (at - 0.022) * W); p(R - 0.004, (at + 0.022) * W); p(R, (at + 0.03) * W); });
+        }
+        p(R, 0.31 * W); p(R - 0.025 * H, 0.4 * W); p(Ri + 0.82 * H, 0.47 * W); p(Ri + 0.5 * H, 0.505 * W); p(Ri + 0.14 * H, 0.5 * W); p(Ri, 0.43 * W);
+        var geometry = new THREE.LatheGeometry(pts, 72);
+        geometry.rotateZ(-Math.PI / 2);                               // (the lathe turns about Y: the wheel turns about X)
+        geometry.computeVertexNormals();
+        var mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0x151516, roughness: spec.rubber > 75 ? 0.62 : 0.88, metalness: 0, side: THREE.DoubleSide }));
+        mesh.name = "tyre_custom";
+        customCache[key] = mesh;
+        return mesh.clone(true);
+    }
+    // a rim of a plain look for a custom tyre without a rim of the library: a disc with a lip, in the size of the inner shell
+    function plainRim(spec) {
+        var Ri = spec.diameter / 2 * spec.inner_ratio, W = spec.width * 0.8, group = new THREE.Group();
+        var barrel = new THREE.Mesh(new THREE.CylinderGeometry(Ri * 0.98, Ri * 0.98, W, 40, 1, true), new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.9, roughness: 0.35, side: THREE.DoubleSide }));
+        barrel.rotation.z = Math.PI / 2;
+        var face = new THREE.Mesh(new THREE.CylinderGeometry(Ri * 0.94, Ri * 0.94, 0.02, 40), new THREE.MeshStandardMaterial({ color: 0x777d86, metalness: 0.9, roughness: 0.4 }));
+        face.rotation.z = Math.PI / 2; face.position.x = W / 2 - 0.02;
+        group.add(barrel); group.add(face);
+        group.name = "rim_custom";
+        return group;
     }
     function uses(config) { return ["front", "rear"].some(function (axle) { var c = choiceOf(config, axle); return !!(c.rim || c.tyre); }); }
     function usesAxle(config, axle) { var c = choiceOf(config, axle); return !!(c.rim || c.tyre); }
@@ -77,9 +120,9 @@ OpenRacer.WheelLibrary = (function () {
     function filesFor(config) {
         var list = [];
         ["front", "rear"].forEach(function (axle) {
-            var c = choiceOf(config, axle), r = rim(c.rim), t = tyre(c.tyre);
+            var c = choiceOf(config, axle), r = rim(c.rim), t = c.tyre === CUSTOM_ID ? null : tyre(c.tyre);
             if(c.rim && !r) console.warn("WheelLibrary: no rim '" + c.rim + "' in wheels.json");
-            if(c.tyre && !t) console.warn("WheelLibrary: no tyre '" + c.tyre + "' in wheels.json");
+            if(c.tyre && c.tyre !== CUSTOM_ID && !t) console.warn("WheelLibrary: no tyre '" + c.tyre + "' in wheels.json");
             [r, t].forEach(function (e) { if(e && list.indexOf(e.file) < 0) list.push(e.file); });
         });
         return list;
@@ -115,7 +158,7 @@ OpenRacer.WheelLibrary = (function () {
         var out = [];
         ["front", "rear"].forEach(function (axle) {
             var c = choiceOf(config, axle);
-            [["rim", rim(c.rim), c.rim], ["tyre", tyre(c.tyre), c.tyre]].forEach(function (k) {
+            [["rim", rim(c.rim), c.rim], ["tyre", tyre(c.tyre), c.tyre === CUSTOM_ID ? "" : c.tyre]].forEach(function (k) {
                 if(!k[2]) return;
                 if(!k[1]) { out.push("no " + k[0] + " '" + k[2] + "' in wheels.json"); return; }
                 var e = cache[url(k[1].file)];
@@ -128,7 +171,7 @@ OpenRacer.WheelLibrary = (function () {
     // the shell of the tyre of an axle: what the catalogue says, the width and the inner shell from the files when they are loaded
     function shellOf(config, axle) {
         var c = choiceOf(config, axle), t = tyre(c.tyre);
-        if(!t) return null;
+        if(!t) return null;          // (a custom tyre has no shell of the library: its numbers are the shell sliders of the menu)
         var s = t.shell || {}, tf = entryFile(t), rf = entryFile(rim(c.rim));
         var diameter = t.diameter > 0 ? t.diameter : (tf ? tf.size.diameter : 0);
         var width = t.width > 0 ? t.width : (tf ? tf.size.width : 0);
@@ -140,7 +183,9 @@ OpenRacer.WheelLibrary = (function () {
     function wheelFor(config, slot) {
         var axle = AXLE_OF[slot], c = choiceOf(config, axle);
         if(!(c.rim || c.tyre)) return null;
-        var r = rim(c.rim), t = tyre(c.tyre), rf = entryFile(r), tf = entryFile(t);
+        var r = rim(c.rim), rf = entryFile(r);
+        if(c.tyre === CUSTOM_ID) return customWheel(c, slot, r, rf);
+        var t = tyre(c.tyre), tf = entryFile(t);
         if(!rf && !tf) return null;
         var object = new THREE.Object3D();
         object.name = "wheel_" + slot + "_library";
@@ -156,6 +201,31 @@ OpenRacer.WheelLibrary = (function () {
         var diameter = shell && shell.diameter > 0 ? shell.diameter : (rf ? rf.size.diameter : 0);
         var width = shell && shell.width > 0 ? shell.width : (rf ? rf.size.width : 0);
         return { object: object, diameter: diameter, width: width, shell: shell, offset: r && r.offset > 0 ? r.offset : 0, rim: r, tyre: t };
+    }
+
+    // the wheel of a slot with a custom tyre: the tyre between the shells, and the rim (of the library or a plain one) scaled to the inner shell
+    function customWheel(c, slot, r, rf) {
+        var spec = customSpec(c.custom);
+        var object = new THREE.Object3D();
+        object.name = "wheel_" + slot + "_library";
+        var inner = new THREE.Object3D();
+        inner.name = (c.rim || "plain rim") + " + custom tyre";
+        if(!LEFT[slot]) inner.rotation.y = Math.PI;
+        var rimObject;
+        if(rf) {
+            rimObject = rf.scene.clone(true); rimObject.name = "rim_" + slot; if(r.flip) rimObject.rotation.y = Math.PI;
+            // the rim takes the size of the inner shell: its diameter, and a width in step with the tyre (a rim of the library keeps its look, only scaled)
+            var wanted = spec.diameter * spec.inner_ratio, widthWanted = spec.width * 0.8;
+            var sd = rf.size.diameter > 0 ? wanted / rf.size.diameter : 1, sw = rf.size.width > 0 ? Math.max(0.55, Math.min(1.6, widthWanted / rf.size.width)) : 1;
+            rimObject.scale.set(sw, sd, sd);
+            var holder = new THREE.Object3D(); holder.add(rimObject); rimObject = holder;
+        } else rimObject = plainRim(spec);
+        inner.add(rimObject);
+        inner.add(customMesh(spec));
+        object.add(inner);
+        object.traverse(function (child) { if(child.isMesh) { child.castShadow = true; child.receiveShadow = false; } });
+        var shell = { width: spec.width, rings: spec.rings, segments: spec.segments, inner_ratio: spec.inner_ratio, carcass: spec.carcass, diameter: spec.diameter };
+        return { object: object, diameter: spec.diameter, width: spec.width, shell: shell, offset: r && r.offset > 0 ? r.offset : 0, rim: r, tyre: { id: CUSTOM_ID, custom: spec }, rubber: spec.rubber };
     }
 
     lib.load = load; lib.rims = rims; lib.tyres = tyres; lib.rim = rim; lib.tyre = tyre; lib.choiceOf = choiceOf; lib.uses = uses; lib.usesAxle = usesAxle;

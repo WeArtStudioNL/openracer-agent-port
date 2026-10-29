@@ -35,6 +35,14 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### Custom tyres, with the rubber on a slider
+
+- A new choice Custom (made from the shell settings) for the tyre at the front and at the rear, each on its own. The tyre is made from numbers: its width and the nodes of the shell are the shell sliders of the Tyres group, the diameter is a slider of the axle, and the inner shell (a share of the tyre) is where the rim goes. The tyre is drawn as the space between the outer and the inner shell, with grooves on a tyre for the road and none on a slick. The rim of the axle (any rim of the library, or a plain one) is scaled to the inner shell.
+- The two axles can have another diameter: every wheel has its own size in the physics (the height of the mount, the contact, the slip and the road speed of the gearbox follow it).
+- The rubber is a slider from 0 to 100 for the axle: the grip, the temperature window, the heat, the wear and the rolling resistance are worked out between the kinds of tyre of the list, and the label says which it is (Eco, Road, Sport, Semi-slick, Race slick, Drag slick). A wider custom tyre grips a little more (by the fifth power of the width).
+- The rubber changes the grip at once, without building the car again; the width and the diameter build it again.
+- Fixed: an automatic with a converter that spins its tyres in a launch shifts up again when the driven wheels slip past their peak (the last change had taken that away).
+
 ### More transmissions
 
 - A new choice Transmission in the Drivetrain card of the tuning menu sets a whole gearbox: the gearbox, its gears, the reverse, the shift time and (an automatic) the converter. 5 and 6-speed manuals, a 6-speed sequential (no clutch pedal, 0.06 s shifts), a 7-speed dual clutch, a 6-speed automated manual, a 3-speed (TH400), a 4, 6 and 8-speed automatic, and for the drag strip: a 2-speed (Powerglide) and a 3-speed drag automatic, and a 3-speed that you shift yourself. The number of gears can be changed with the − and + beside Gear ratios.

@@ -86,7 +86,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             w.pressureCorner = Math.max(0.7, Math.min(1.25, 1 + 0.15 * (p - 2.2)));   // the stiffness of the sidewall against the slip angle
             w.pressureRoll = Math.sqrt(2.2 / p);                            // rolling resistance and heat
             w.tyreRate = this.tyreRate * Math.pow(p / 2.2, 0.8);            // the stiffness of the tyre as a spring
-            w.anglePeak = this.baseAnglePeak / (this.corneringScale * ((tc && tc.lateral) || 1) * w.stiffnessBias * w.pressureCorner);
+            w.anglePeak = this.baseAnglePeak / (this.corneringScale * (((w.comp || tc) && (w.comp || tc).lateral) || 1) * w.stiffnessBias * w.pressureCorner);
             w.condition = (w.condition || 1); // taken up with the wear in wearStep
         }
     };
@@ -330,12 +330,25 @@ OpenRacer.Vehicle = function (parameters, input) {
     // the kind of tyre (Wheel.js, TyreCompounds): the best temperature, the width of the window, how far out the grip is at its least
     var tc = OpenRacer.TyreCompounds[1];
     this.compound = 1;
+    this.rubber = { front: null, rear: null };      // the rubber (0 to 100) of the custom tyre of an axle (Wheel.js, rubberCompound); null: the kind of tyre of the car
+    this.setRubber = function (front, rear) {
+        this.rubber.front = front >= 0 ? Math.min(100, front) : null;
+        this.rubber.rear = rear >= 0 ? Math.min(100, rear) : null;
+        this.setCompound(this.compound);
+    };
     this.setCompound = function (c) {
         var list = OpenRacer.TyreCompounds, at = typeof c === "string" ? list.findIndex(function (k) { return k.id === c; }) : (c >= 0 && c < list.length ? Math.floor(c) : -1);
         if(at < 0) at = 1;
         this.compound = at;
         tc = list[at];
-        for(var i = 0; i < 4; i++) { var w = this.wheels[i]; w.compoundGrip = tc.grip; w.compoundLoose = tc.looseGrip || 1; w.compoundLooseSlide = tc.looseSlide || 0; w.condition = conditionOf(w) * (w.pressureGrip || 1); }
+        for(var i = 0; i < 4; i++) {
+            var w = this.wheels[i], axle = i < 2 ? "front" : "rear", rubber = this.rubber[axle];
+            // (the rubber of a custom tyre: its own kind for the axle; and a wider tyre grips a little more, a narrower one a little less)
+            w.comp = rubber === null ? null : OpenRacer.rubberCompound(rubber);
+            var kind = w.comp || tc, widthGrip = 1;
+            if(w.comp) { var sw = this.tyreShellOf(w).width; if(sw > 0) widthGrip = Math.max(0.9, Math.min(1.12, Math.pow(sw / 0.245, 0.2))); }
+            w.compoundGrip = kind.grip * widthGrip; w.compoundLoose = kind.looseGrip || 1; w.compoundLooseSlide = kind.looseSlide || 0; w.condition = conditionOf(w) * (w.pressureGrip || 1);
+        }
         if(this.applyPressure) this.applyPressure();          // (the stiffness against the slip angle depends on the kind of tyre)
     };
     this.tyreKind = function () { return tc; };
@@ -344,27 +357,29 @@ OpenRacer.Vehicle = function (parameters, input) {
     var SURFACE_SHARE = 0.3, SURFACE_CAPACITY = 350, SURFACE_TAU = 6;    // the share of the burnt power that heats the rubber, the heat that the hot layer takes (J/K), how slowly it gives it away (s)
 
     function conditionOf(w) {
-        var off = Math.max(0, Math.abs(w.temp - tc.optimum) - tc.window) / tc.cold;
-        var byTemp = 1 - tc.coldLoss * Math.min(1, off);
+        var tk = w.comp || tc;
+        var off = Math.max(0, Math.abs(w.temp - tk.optimum) - tk.window) / tk.cold;
+        var byTemp = 1 - tk.coldLoss * Math.min(1, off);
         var byWear = 1 - 0.2 * Math.pow(Math.min(1, w.wear), 1.5) - (w.wear >= 1 ? 0.15 : 0);
         return byTemp * byWear;
     }
 
     // called every step for a wheel: slidePower is the power the slip burns (W), fz the load (N), v the speed over the road (m/s)
     this.wearStep = function (w, dt, slidePower, fz, v, contact) {
-        if(!this.wearEnabled) { w.temp = tc.optimum; w.wear = Math.min(w.wear, 1); w.condition = w.pressureGrip || 1; return; }
+        var tk = w.comp || tc;
+        if(!this.wearEnabled) { w.temp = tk.optimum; w.wear = Math.min(w.wear, 1); w.condition = w.pressureGrip || 1; return; }
         // the power of the slip (tens of kW in a bend at the limit) and the flexing under the load heat the tyre; the air cools
         // it (W/K, more the faster); the tread has a heat capacity of about 20 kJ/K, so it takes a minute or two to come up
-        var heatIn = (slidePower + (contact ? fz * Math.abs(v) * 0.025 : 0)) * this.tyreHeating * tc.heating * (w.pressureRoll || 1);
+        var heatIn = (slidePower + (contact ? fz * Math.abs(v) * 0.025 : 0)) * this.tyreHeating * tk.heating * (w.pressureRoll || 1);
         // (the numbers are those of a car tyre, a radius of 0.315 m: a smaller tyre has less rubber to heat and less surface to cool by about the cube of its radius, which is
         // also how its load goes, so a kart tyre comes up to temperature on a lap like a car tyre does, instead of staying cold)
         var size = Math.max(0.04, Math.min(2, Math.pow((w.radius || 0.315) / 0.315, 3)));
         var cooling = (40 + 3 * Math.abs(v)) * size * (w.temp - this.ambient);
         w.temp += (heatIn - cooling) / (20000 * size) * dt;
-        var overheated = Math.min(2, Math.max(0, (w.temp - (tc.optimum + tc.window)) / 30));
+        var overheated = Math.min(2, Math.max(0, (w.temp - (tk.optimum + tk.window)) / 30));
         // a powerful car spins its wheels a lot: the slip when driving off counts less than a slide through a bend
         var counted = Math.abs(v) < 8 ? slidePower * 0.35 : slidePower;
-        w.wear += counted * (1 + 2 * overheated) * dt / (6e6 * this.tyreLife * tc.life) * this.wearScale;
+        w.wear += counted * (1 + 2 * overheated) * dt / (6e6 * this.tyreLife * tk.life) * this.wearScale;
         w.condition = conditionOf(w) * (w.pressureGrip || 1);
     };
 
@@ -397,12 +412,18 @@ OpenRacer.Vehicle = function (parameters, input) {
         var l = this.wheels[front ? 1 : 2], r = this.wheels[front ? 0 : 3], track = (front ? this.front_track : this.rear_track) || 1.5;
         return -Math.atan2((r.susLength || 0) - (l.susLength || 0), track);
     };
+    // the radius of the tyres: the mean of the four (the body model stands at that height), and of the driven ones (the road speed in the engine speed that the gearbox looks at)
+    this.meanRadius = function () { return (this.wheels[0].radius + this.wheels[1].radius + this.wheels[2].radius + this.wheels[3].radius) / 4; };
+    this.drivenRadius = function () {
+        var sum = 0, n = 0;
+        for(var i = 0; i < 4; i++) if(this.wheels[i].driven) { sum += this.wheels[i].radius; n++; }
+        return n ? sum / n : this.wheels[0].radius;
+    };
     this.layout = function () {
         this.af = this.wheelbase * (1 - this.weight_distribution); // front axle to the centre of gravity
         this.ar = this.wheelbase * this.weight_distribution;       // rear axle to the centre of gravity
-        var radius = this.wheels[0].radius;
         for(var i = 0; i < 4; i++) {
-            var w = this.wheels[i];
+            var w = this.wheels[i], radius = w.radius;                // (an axle can have bigger tyres than the other: the mount of a wheel is a radius of its own above the road)
             var track = w.front ? this.front_track : this.rear_track;
             w.a = w.front ? this.af : -this.ar;                    // forward of the centre of gravity
             w.b = (w.right ? 1 : -1) * track / 2;                  // to the right of it
@@ -485,6 +506,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         var i, w;
         if(t.mass !== undefined) { this.baseMass = t.mass; this.mass = t.mass + (this.wearEnabled ? this.fuel * 0.75 : 0); }
         if(t.compound !== undefined) this.setCompound(t.compound);
+        if(t.rubber_front !== undefined || t.rubber_rear !== undefined) this.setRubber(t.rubber_front !== undefined ? t.rubber_front : (this.rubber.front === null ? -1 : this.rubber.front), t.rubber_rear !== undefined ? t.rubber_rear : (this.rubber.rear === null ? -1 : this.rubber.rear));
         if(t.tyre_heating !== undefined) this.tyreHeating = t.tyre_heating;
         if(t.tyre_life !== undefined) this.tyreLife = t.tyre_life;
         if(t.fuel_use !== undefined) this.fuelUse = t.fuel_use;
@@ -501,6 +523,10 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.rear_track !== undefined) this.rear_track = t.rear_track;
         if(t.tire_diameter !== undefined) {
             for(var ti = 0; ti < 4; ti++) { this.wheels[ti].diameter = t.tire_diameter; this.wheels[ti].radius = this.wheels[ti].diameterOver2 = t.tire_diameter / 2; }
+        }
+        if(t.wheel_diameters && t.wheel_diameters.length === 4) {
+            // (the tyres of the axles differ: a wheel of its own size, from the model, for a custom tyre or a tyre of the library of another size)
+            for(var wd = 0; wd < 4; wd++) { var wdv = t.wheel_diameters[wd]; if(wdv > 0.1) { this.wheels[wd].diameter = wdv; this.wheels[wd].radius = this.wheels[wd].diameterOver2 = wdv / 2; } }
         }
         if(t.drive !== undefined) { this.driveType = t.drive === "fwd" || t.drive === "awd" ? t.drive : "rwd"; this.frontDriven = this.driveType === "fwd"; }
         if(t.diff !== undefined) this.diffType = t.diff === "open" || t.diff === "welded" ? t.diff : "lsd";
@@ -796,7 +822,7 @@ OpenRacer.Vehicle = function (parameters, input) {
 
     // the place and the orientation of the middle of the body model: the middle between the axles, at the height of the axles at rest
     this.getBodyPose = function (position, quaternion) {
-        var offset = rotate(this.qx, this.qy, this.qz, this.qw, 0, this.wheels[0].radius - this.cgHeight, (this.af - this.ar) / 2, { x: 0, y: 0, z: 0 });
+        var offset = rotate(this.qx, this.qy, this.qz, this.qw, 0, this.meanRadius() - this.cgHeight, (this.af - this.ar) / 2, { x: 0, y: 0, z: 0 });
         position.x = this.px + offset.x; position.y = this.py + offset.y; position.z = this.pz + offset.z;
         quaternion.x = this.qx; quaternion.y = this.qy; quaternion.z = this.qz; quaternion.w = this.qw;
     };
@@ -837,7 +863,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var idle = engine.idleRPM || 900, top = this.cvtRPM > 0 ? this.cvtRPM : engine.limiterRPM * 0.85;
                 var cthr = Math.max(0, Math.min(1, inp.throttle || 0)), cbrk = Math.max(0, Math.min(1, inp.brakePedal || 0));
                 var wantRPM = cthr > 0.05 ? idle + (top - idle) * Math.pow(cthr, 0.6) : idle + (top - idle) * (0.18 + 0.3 * cbrk);
-                var roadOmega = Math.max(0.5, Math.abs(this.u)) / this.wheels[0].radius;              // rad/s of the wheels from the speed of the road (not from spinning wheels)
+                var roadOmega = Math.max(0.5, Math.abs(this.u)) / this.drivenRadius();              // rad/s of the wheels from the speed of the road (not from spinning wheels)
                 var wantRatio = (wantRPM * Math.PI / 30) / (roadOmega * this.final_drive);
                 wantRatio = Math.max(ch, Math.min(cl, wantRatio));
                 var pace = Math.exp(this.cvtRate * delta);
@@ -851,7 +877,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             var g = inp.current_gear;
             var thr = inp.throttle;
             // the engine speed the road speed asks for in this gear: spinning wheels must not cause a shift
-            var rpm = Math.max(0, this.u) / this.wheels[0].radius * ratio * 30 / Math.PI;
+            var rpm = Math.max(0, this.u) / this.drivenRadius() * ratio * 30 / Math.PI;
             if(this.timeSinceShift > 0.6) {
                 var limit = this.engine.limiterRPM;
                 var upRPM = limit * (0.45 + 0.42 * thr);
@@ -882,7 +908,10 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var engineRpm = this.engine.getRPM();
                 // (or the engine sits on the limiter with the throttle open, whatever the wheels do: a powerful car with its wheels spinning by 20% never got the 1.2 times and
                 // stayed in the gear on the limiter, in a drag race for seconds)
-                var slipping = this.gearbox === "torque-converter" && this.tcLock < 0.9;           // (the engine of a converter runs faster than the road by itself: that is not a spin of the tyres)
+                // (the engine of a converter runs faster than the road by itself: that is a spin of the tyres only when the driven wheels slip past their peak)
+                var wheelSpin = 0;
+                for(var ws = 0; ws < 4; ws++) if(this.wheels[ws].driven && this.wheels[ws].slipRatio > wheelSpin) wheelSpin = this.wheels[ws].slipRatio;
+                var slipping = this.gearbox === "torque-converter" && this.tcLock < 0.9 && wheelSpin < 0.2;
                 var spinning = ((engineRpm >= limit * 0.8 && engineRpm > rpm * 1.1 + 100 && !slipping) || engineRpm >= limit * 0.97) && thr > 0.5 && this.u > 1 && this.engine.holdRPM <= 0;
                 this.limiterTime = spinning ? (this.limiterTime || 0) + delta : Math.max(0, (this.limiterTime || 0) - delta * 0.3);
                 this.noDownshift = Math.max(0, (this.noDownshift || 0) - delta);
@@ -1723,7 +1752,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var shellOf = self.tyreShellOf(w);
                 { body.isShell = true; body.round = !!self.soloWheels; body.tyreMass = Math.max(1.5, 0.3 * self.unsprungMass); body.pressure = Math.max(0.15, (w.front ? self.pressureFront : self.pressureRear) - (w.pressureLoss || 0)); body.innerRatio = shellOf.inner_ratio; body.carcass = shellOf.carcass; }
                 body.rings = shellOf.rings; body.segments = shellOf.segments; body.width = shellOf.width;
-                body.stiffX = self.tyreStiffX; body.stiffY = self.tyreStiffY * self.corneringScale * ((tc && tc.lateral) || 1) * (w.stiffnessBias || 1) * (w.pressureCorner || 1);
+                body.stiffX = self.tyreStiffX; body.stiffY = self.tyreStiffY * self.corneringScale * (((w.comp || tc) && (w.comp || tc).lateral) || 1) * (w.stiffnessBias || 1) * (w.pressureCorner || 1);
                 body.verticalStiffness = w.tyreRate || self.tyreRate; body.verticalDamping = self.tyreDamping; body.staticLoad = w.staticLoad || (self.mass * G / 4);
                 // the axes of the wheel: up (the suspension), forward in its plane (turned by the steering), and to the left
                 var ca = Math.cos(wheelAngle[i]), sa = Math.sin(wheelAngle[i]);
@@ -2047,8 +2076,8 @@ OpenRacer.Vehicle = function (parameters, input) {
                     var density = 0.3 + 0.7 * spinShare;
                     // from about 180 degrees the rubber turns to gum (a light haze, and the marbles of Marbles.js); from about 220 the smoke is a plume
                     // (the particles of Smoke.js), full at 260 and more
-                    var smoking = 0.12 * smoothstep(180 + tc.smoke, 220 + tc.smoke, wheel.surfT) + 0.88 * smoothstep(220 + tc.smoke, 260 + tc.smoke, wheel.surfT);
-                    wheel.heat = smoothstep(200 + tc.smoke, 330 + tc.smoke, wheel.surfT) * (0.4 + 0.6 * spinShare);
+                    var smoking = 0.12 * smoothstep(180 + (wheel.comp || tc).smoke, 220 + (wheel.comp || tc).smoke, wheel.surfT) + 0.88 * smoothstep(220 + (wheel.comp || tc).smoke, 260 + (wheel.comp || tc).smoke, wheel.surfT);
+                    wheel.heat = smoothstep(200 + (wheel.comp || tc).smoke, 330 + (wheel.comp || tc).smoke, wheel.surfT) * (0.4 + 0.6 * spinShare);
                     wheel.smoke = fz > 200 ? smoking * (0.4 + 0.6 * Math.min(1, burnt / 40000)) * density : 0;
                 } else {
                     wheel.smoke = fz > 200 ? Math.min(1, 0.15 * sliding + wheel.heat * Math.min(1, sliding * 2 + 0.2)) : 0;
@@ -2082,7 +2111,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 wheel.fxLast = fxW;                                       // (the forward force of the road on the wheel, for the geometry of the fork and the swingarm)
 
                 // rolling resistance (more on soft ground), not a torque on the wheel
-                var rr = wheel.rollingResistance * tc.rolling * (wheel.pressureRoll || 1) * (surface.drag ? surface.drag * (surface.loose && tc.looseRolling ? tc.looseRolling : 1) : (surface.static < 0.8 ? 4 * (surface.loose && tc.looseRolling ? tc.looseRolling : 1) : 1)) * fz * Math.tanh(vl / 0.3);
+                var rr = wheel.rollingResistance * (wheel.comp || tc).rolling * (wheel.pressureRoll || 1) * (surface.drag ? surface.drag * (surface.loose && (wheel.comp || tc).looseRolling ? (wheel.comp || tc).looseRolling : 1) : (surface.static < 0.8 ? 4 * (surface.loose && (wheel.comp || tc).looseRolling ? (wheel.comp || tc).looseRolling : 1) : 1)) * fz * Math.tanh(vl / 0.3);
                 fxW -= rr;
 
                 // the forces on the car: the force along the wheel at the point of contact, the force across the wheel at the roll

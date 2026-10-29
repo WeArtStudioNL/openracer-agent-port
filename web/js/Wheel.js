@@ -45,6 +45,29 @@ OpenRacer.TyreCompounds = [
     { id: "drag", name: "Drag slick (straight line)", grip: 1.7, lateral: 0.5, optimum: 85, window: 20, cold: 28, coldLoss: 0.45, heating: 1.4, life: 0.18, rolling: 1.4, smoke: -24 }
 ];
 
+// The rubber of a custom tyre: a slider from 0 to 100 between the kinds of tyre above (eco at the soft end of nothing, drag slick at the top): every number of the kind is worked out between
+// the two kinds on either side of the slider, and the label says which kind it is nearest to. Gives a kind like those of the list (id "custom").
+OpenRacer.RUBBER_STOPS = [["eco", 0, "Eco"], ["road", 22, "Road"], ["sport", 42, "Sport"], ["semislick", 62, "Semi-slick"], ["slick", 82, "Race slick"], ["drag", 100, "Drag slick"]];
+OpenRacer.rubberLabel = function (rubber) {
+    var best = OpenRacer.RUBBER_STOPS[0], at = Math.max(0, Math.min(100, rubber));
+    OpenRacer.RUBBER_STOPS.forEach(function (s) { if(Math.abs(s[1] - at) < Math.abs(best[1] - at)) best = s; });
+    return best[2];
+};
+OpenRacer.rubberCompound = function (rubber) {
+    var stops = OpenRacer.RUBBER_STOPS, at = Math.max(0, Math.min(100, rubber)), i = 0;
+    while(i < stops.length - 2 && at > stops[i + 1][1]) i++;
+    function kind(id) { return OpenRacer.TyreCompounds.filter(function (k) { return k.id === id; })[0]; }
+    var a = kind(stops[i][0]), b = kind(stops[i + 1][0]), f = (at - stops[i][1]) / (stops[i + 1][1] - stops[i][1]);
+    var out = { id: "custom", name: OpenRacer.rubberLabel(at) };
+    ["grip", "optimum", "window", "cold", "coldLoss", "heating", "life", "rolling", "smoke", "lateral"].forEach(function (k) {
+        var x = a[k] === undefined ? 1 : a[k], y = b[k] === undefined ? 1 : b[k];
+        // (the life goes by a power: a soft tyre wears away several times as fast as a hard one)
+        out[k] = k === "life" ? x * Math.pow(y / x, f) : x + (y - x) * f;
+    });
+    if(out.lateral === 1) delete out.lateral;
+    return out;
+};
+
 OpenRacer.Wheel = function (parameters) {
     this.name = parameters.name;
     this.diameter = parameters.diameter;
