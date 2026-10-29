@@ -36,6 +36,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 - A take (the record button, the 5 key) first asks for the picture (16:9, 9:16 or 1:1) and what to make: a video (mp4) or a replay, and whether the HUD goes away while it runs. Then a count of five seconds, with the frame of the picture and the dark passepartout already in the window, and a blinking red dot with the time at the top right of the frame when it runs.
 - A video is filmed live while you drive and the file is there when you stop: the take is no longer played a second time. The window when you stop asks for a name (filled in with the track and the time) and has two sliders to cut seconds off the start and the end. For a replay that is exact; for a video with a cut the part that is kept is filmed again from the recording (once more at normal speed).
 - A record / stop button: on the free camera panel and, on a touch screen, in the buttons at the top (red while it records). The 5 key counts down and stops, and cancels a count.
+- When the mouse look is on, the record window lets go of the mouse so it can be used; the mouse look comes back when the count starts (or when the window is cancelled).
 - In the free camera the keys for the smoothness of the mouse look are now 7 and 8 (the 5 key is the record key).
 
 ### Free camera panel

@@ -297,8 +297,11 @@ OpenRacer.Take = (function () {
         if (!taking) {
             if (typeof Settings !== "undefined" && Settings.isPaused && Settings.isPaused()) return;
             asking = true; changed();
+            var fc = OpenRacer.FreeCam;
+            if (fc) fc.releaseMouse();           // (the mouse look would keep the pointer: the window cannot be used)
             askStart(r).then(function (choice) {
                 asking = false;
+                if (fc) fc.restoreMouse();       // (back at once: the count is to get ready)
                 if (!choice) { changed(); return; }
                 begin(r, choice);
             });

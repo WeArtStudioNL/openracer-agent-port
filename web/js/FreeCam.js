@@ -368,6 +368,21 @@ OpenRacer.FreeCam = (function () {
         lookY += event.movementY * LOOK_SENSITIVITY;
     });
 
-    return { enter: enter, leave: leave, update: update, toggleFollow: toggleFollow, toggleAim: toggleAim, toggleFixed: toggleFixed, takes: TAKEN,
+    // the mouse look lets go while a window is used (the record dialog) and comes back after: gives true when it was on
+    var mouseWas = false;
+    function releaseMouse() {
+        mouseWas = pointerLocked;
+        if (pointerLocked && document.exitPointerLock) document.exitPointerLock();
+        return mouseWas;
+    }
+    function restoreMouse() {
+        var want = mouseWas;
+        mouseWas = false;
+        if (want && active && !aim && typeof renderer !== "undefined" && renderer.domElement.requestPointerLock) {
+            try { var p = renderer.domElement.requestPointerLock(); if (p && p.catch) p.catch(function () { /* the next click on the scene does it */ }); } catch (e) { /* the next click on the scene does it */ }
+        }
+    }
+
+    return { releaseMouse: releaseMouse, restoreMouse: restoreMouse, enter: enter, leave: leave, update: update, toggleFollow: toggleFollow, toggleAim: toggleAim, toggleFixed: toggleFixed, takes: TAKEN,
         get active() { return active; }, get follows() { return follow; }, get aims() { return aim; }, get fixedToCar() { return fixed; } };
 })();
