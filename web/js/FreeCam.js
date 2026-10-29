@@ -12,6 +12,8 @@
  *              go through a wall: as the chase camera, rays from the car to it bring it in front of what is in the way.
  *              The camera is remembered per car (localStorage, openracer.freecam.<car>): its place, where it looks, the field of view, the speed and the two
  *              toggles; the next time the free camera is chosen for that car, also after a restart, it is back where it was.
+ *              The panel (its title moves it) has buttons for the toggles and a slider for every setting: the speed, the smoothing of the movement, of the mouse look and of the tilt,
+ *              the field of view, the tilt and the speed of the tilt, and a record button (Take.js). They are remembered with the camera.
  *              The replay has its own free camera (Replay.js); this one is for the game.
  */
 
@@ -27,15 +29,18 @@ OpenRacer.FreeCam = (function () {
     var pos = new THREE.Vector3(), lastCar = new THREE.Vector3(), vel = new THREE.Vector3(), want = new THREE.Vector3();
     var yaw = 0, pitch = 0, roll = 0, rollT = 0, fov = 60;
     var pointerLocked = false, mouseHint = null;
-    var LOOK_SENSITIVITY = 0.0022, ROLL_RATE = 0.9;
-    // the smoothing of the mouse look: the turn that the mouse asks for waits and goes into the look at a rate (per second): low is slow and smooth, 60 and more is direct (5 and 6)
+    var LOOK_SENSITIVITY = 0.0022;
+    // the easing of the camera, all settable on the panel: how fast the movement follows the keys (per second; MOVE_MAX is direct), how fast the tilt turns (rad/s) and how fast the picture follows it
+    var MOVE_MIN = 0.5, MOVE_MAX = 30, ROLL_MIN = 0.1, ROLL_MAX = 3, TILT_MIN = 1, TILT_MAX = 40;
+    var moveSmooth = 6, rollRate = 0.9, rollSmooth = 8;
+    // the smoothing of the mouse look: the turn that the mouse asks for waits and goes into the look at a rate (per second): low is slow and smooth, 60 and more is direct (7 and 8)
     var LOOK_MIN = 1, LOOK_MAX = 60, LOOK_RATE_CHANGE = 1.2;
     var lookRate = 20, lookX = 0, lookY = 0;
     var euler = new THREE.Euler(0, 0, 0, "YXZ");
     var placeBehind = false;
     var panel = null, followButton = null, aimButton = null, fixedButton = null, speedLabel = null;
     var carId = null, saveAt = 0;
-    var KEYS = { forward: "KeyW", back: "KeyS", left: "KeyA", right: "KeyD", up: ["KeyZ"], down: ["KeyX"], slower: "Digit3", faster: "Digit4", lookSlower: "Digit5", lookFaster: "Digit6",
+    var KEYS = { forward: "KeyW", back: "KeyS", left: "KeyA", right: "KeyD", up: ["KeyZ"], down: ["KeyX"], slower: "Digit3", faster: "Digit4", lookSlower: "Digit7", lookFaster: "Digit8",
         rollLeft: "KeyQ", rollRight: "KeyE", fovNarrow: "BracketLeft", fovWide: "BracketRight", fixedToggle: "KeyI" };
     // the keys this camera takes (Settings.js leaves them to it while it is on: they do not drive the car, mute the sound or save the reset place)
     var TAKEN = {};
@@ -43,18 +48,24 @@ OpenRacer.FreeCam = (function () {
 
     function key(name) { var codes = [].concat(KEYS[name]); for (var i = 0; i < codes.length; i++) if (Settings.keyDown(codes[i])) return 1; return 0; }
 
+    var sliders = [], recordButton = null, dragging = null;
     function buildPanel() {
         var style = document.createElement("style");
         style.textContent =
-            "#freeCam { position: fixed; right: 16px; top: 14px; z-index: 900; display: none; font-family: Arial, sans-serif; color: #fff; user-select: none; -webkit-user-select: none;" +
-            " background: rgba(14, 18, 24, 0.72); border-radius: 10px; padding: 8px 10px 10px; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); touch-action: none; width: 230px; }" +
-            "#freeCam .title { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: #9fb0c4; margin-bottom: 6px; display: flex; justify-content: space-between; gap: 12px; }" +
-            "#freeCam .keys { font-size: 11px; color: #9fb0c4; line-height: 1.5; margin-bottom: 6px; }" +
+            "#freeCam { position: fixed; right: 16px; top: 14px; z-index: 900; display: none; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: #dfe6ef; user-select: none; -webkit-user-select: none;" +
+            " background: rgba(22, 27, 34, 0.92); border: 1px solid #323c4a; border-radius: 10px; padding: 8px 12px 12px; touch-action: pan-y; width: 260px; max-height: calc(100vh - 28px); overflow-y: auto; box-sizing: border-box; }" +
+            "#freeCam .title { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: #9fb0c4; margin: 0 0 8px; padding: 2px 0; display: flex; justify-content: space-between; gap: 12px; cursor: grab; touch-action: none; }" +
+            "#freeCam .keys { font-size: 11px; color: #9fb0c4; line-height: 1.5; margin: 0 0 8px; } #freeCam .keys summary { cursor: pointer; margin-bottom: 4px; }" +
             "#freeCam .keys b { color: #e6edf5; font-weight: 600; }" +
-            "#freeCam .row { display: flex; align-items: center; gap: 5px; margin-top: 5px; }" +
-            "#freeCam button { height: 30px; padding: 0 8px; border-radius: 6px; border: 1px solid #3a4655; background: #232b36; color: #fff; font-size: 13px; cursor: pointer; touch-action: none; width: 100%; }" +
-            "#freeCam button:active { background: #3d6fb5; border-color: #6aa0e8; }" +
-            "#freeCam button.on { background: #2a7a46; border-color: #4fc07a; }";
+            "#freeCam .row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }" +
+            "#freeCam h3 { margin: 12px 0 2px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #7f90a5; font-weight: 600; }" +
+            "#freeCam button { height: 32px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line, #272e37); background: var(--panel, #181d23); color: #fff; font: 600 13px system-ui, sans-serif; cursor: pointer; width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }" +
+            "#freeCam button:hover { border-color: var(--muted, #8d97a3); }" +
+            "#freeCam button.on { border-color: var(--accent, #ff5a1f); background: rgba(255, 90, 31, 0.16); }" +
+            "#freeCam button.rec { background: #d9372f; border-color: #ff6b62; }" +
+            "#freeCam button.small { width: auto; height: 24px; padding: 0 8px; font-size: 11px; }" +
+            "#freeCam .slide { margin-top: 8px; } #freeCam .slide .top { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #9fb0c4; }" +
+            "#freeCam .slide .top b { color: #fff; font-weight: normal; font-variant-numeric: tabular-nums; } #freeCam .slide input { width: 100%; margin: 4px 0 0; }";
         document.head.appendChild(style);
         panel = document.createElement("div");
         panel.id = "freeCam";
@@ -62,38 +73,85 @@ OpenRacer.FreeCam = (function () {
         title.className = "title";
         title.innerHTML = "<span>Free camera</span><span id=\"freeCamSpeed\"></span>";
         panel.appendChild(title);
-        var keys = document.createElement("div");
-        keys.className = "keys";
-        keys.innerHTML = "<b>W A S D</b> move · <b>Z X</b> up, down<br><b>mouse</b> look (click the scene) · <b>Q E</b> roll<br><b>[ ]</b> field of view · <b>3 4</b> slower, faster · <b>5 6</b> mouse look smoother, sharper";
-        panel.appendChild(keys);
         speedLabel = title.querySelector("#freeCamSpeed");
-        // the two toggles: on pointerup (the panel is dragged by its pointerdown, Movable.js, which took the click away from the buttons)
-        function toggleButton(onToggle) {
-            var button = document.createElement("button");
-            var downAt = null;
-            button.addEventListener("pointerdown", function (e) { downAt = { x: e.clientX, y: e.clientY }; e.stopPropagation(); e.preventDefault(); });
-            button.addEventListener("pointerup", function (e) { if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) < 8) onToggle(); downAt = null; e.stopPropagation(); e.preventDefault(); });
-            button.addEventListener("click", function (e) { e.preventDefault(); });
-            return button;
+        var keys = document.createElement("details");
+        keys.className = "keys";
+        keys.innerHTML = "<summary>Keys</summary><b>W A S D</b> move · <b>Z X</b> up, down<br><b>mouse</b> look (click the scene) · <b>Q E</b> tilt<br><b>[ ]</b> field of view · <b>3 4</b> slower, faster · <b>7 8</b> mouse look smoother, sharper";
+        panel.appendChild(keys);
+        function button(onClick, icon) {
+            var b = document.createElement("button");
+            b.type = "button";
+            b.addEventListener("click", function (e) { e.preventDefault(); onClick(); });
+            return b;
         }
-        aimButton = toggleButton(toggleAim);
-        followButton = toggleButton(toggleFollow);
-        fixedButton = toggleButton(toggleFixed);
-        [aimButton, followButton, fixedButton].forEach(function (b) { var row = document.createElement("div"); row.className = "row"; row.appendChild(b); panel.appendChild(row); });
+        function line(b) { var row = document.createElement("div"); row.className = "row"; row.appendChild(b); panel.appendChild(row); return row; }
+        aimButton = button(toggleAim); followButton = button(toggleFollow); fixedButton = button(toggleFixed);
+        [aimButton, followButton, fixedButton].forEach(line);
+        // a slider: a value that maps to the position of the slider (a log scale for what spans a lot) and back
+        function slider(label, spec) {
+            var wrap = document.createElement("div"); wrap.className = "slide";
+            var top = document.createElement("div"); top.className = "top";
+            var l = document.createElement("span"); l.textContent = label;
+            var value = document.createElement("b");
+            top.appendChild(l); top.appendChild(value);
+            if (spec.reset) { var r = button(function () { spec.reset(); sync(); save(); }); r.className = "small"; r.textContent = "Level"; top.insertBefore(r, value); }
+            var input = document.createElement("input"); input.type = "range"; input.min = 0; input.max = 1000; input.step = 1;
+            input.setAttribute("aria-label", label);
+            wrap.appendChild(top); wrap.appendChild(input); panel.appendChild(wrap);
+            var item = { input: input, value: value, spec: spec };
+            function sync() { if (dragging === input) return; input.value = Math.round(spec.toPos(spec.get()) * 1000); value.textContent = spec.text(spec.get()); }
+            item.sync = sync;
+            input.addEventListener("pointerdown", function () { dragging = input; });
+            window.addEventListener("pointerup", function () { if (dragging === input) { dragging = null; sync(); } });
+            input.addEventListener("input", function () { spec.set(spec.fromPos(input.value / 1000)); value.textContent = spec.text(spec.get()); refreshLabels(); });
+            input.addEventListener("change", save);
+            sliders.push(item);
+            return item;
+        }
+        function linear(min, max) { return { toPos: function (v) { return (v - min) / (max - min); }, fromPos: function (p) { return min + p * (max - min); } }; }
+        function logarithmic(min, max) { return { toPos: function (v) { return Math.log(v / min) / Math.log(max / min); }, fromPos: function (p) { return min * Math.pow(max / min, p); } }; }
+        function merge(a, b) { for (var k in b) a[k] = b[k]; return a; }
+        var h = document.createElement("h3"); h.textContent = "Movement"; panel.appendChild(h);
+        slider("Speed", merge(logarithmic(0.01, 3), { get: function () { return speed; }, set: function (v) { speed = Math.max(0.01, Math.min(3, v)); }, text: function (v) { return v.toFixed(v < 0.1 ? 2 : 1) + "×"; } }));
+        slider("Movement smoothing", merge(logarithmic(MOVE_MIN, MOVE_MAX), { get: function () { return moveSmooth; }, set: function (v) { moveSmooth = Math.max(MOVE_MIN, Math.min(MOVE_MAX, v)); },
+            text: function (v) { return v >= MOVE_MAX * 0.97 ? "direct" : v.toFixed(1) + "/s"; } }));
+        h = document.createElement("h3"); h.textContent = "Look"; panel.appendChild(h);
+        slider("Mouse look smoothing", merge(logarithmic(LOOK_MIN, LOOK_MAX), { get: function () { return lookRate; }, set: function (v) { lookRate = Math.max(LOOK_MIN, Math.min(LOOK_MAX, v)); },
+            text: function (v) { return v >= LOOK_MAX * 0.97 ? "direct" : Math.round(v) + "/s"; } }));
+        slider("Field of view", merge(linear(8, 110), { get: function () { return fov; }, set: function (v) { fov = Math.max(8, Math.min(110, v)); }, text: function (v) { return Math.round(v) + "°"; } }));
+        h = document.createElement("h3"); h.textContent = "Tilt"; panel.appendChild(h);
+        slider("Tilt", merge(linear(-180, 180), { get: function () { return rollT * 180 / Math.PI; }, set: function (v) { rollT = v * Math.PI / 180; }, text: function (v) { return Math.round(v) + "°"; },
+            reset: function () { rollT = 0; } }));
+        slider("Tilt speed", merge(logarithmic(ROLL_MIN, ROLL_MAX), { get: function () { return rollRate; }, set: function (v) { rollRate = Math.max(ROLL_MIN, Math.min(ROLL_MAX, v)); }, text: function (v) { return Math.round(v * 57.3) + "°/s"; } }));
+        slider("Tilt smoothing", merge(logarithmic(TILT_MIN, TILT_MAX), { get: function () { return rollSmooth; }, set: function (v) { rollSmooth = Math.max(TILT_MIN, Math.min(TILT_MAX, v)); },
+            text: function (v) { return v >= TILT_MAX * 0.97 ? "direct" : v.toFixed(1) + "/s"; } }));
+        h = document.createElement("h3"); h.textContent = "Record"; panel.appendChild(h);
+        recordButton = button(function () { if (OpenRacer.Take) OpenRacer.Take.toggle(); });
+        line(recordButton);
+        if (OpenRacer.Take) OpenRacer.Take.onChange(refreshUi);
         document.body.appendChild(panel);
         OpenRacer.Movable.make(panel, { key: "freecam", handle: title });
         refreshUi();
     }
 
+    function refreshLabels() {
+        if (!panel) return;
+        speedLabel.textContent = "";
+    }
+
     function refreshUi() {
         if (!panel) return;
-        aimButton.textContent = aim ? "Looking at the car (P)" : "Look at the car (P)";
+        var icon = function (name) { return OpenRacer.icon(name, 15); };
+        aimButton.innerHTML = icon("camera") + "<span>" + (aim ? "Looking at the car (P)" : "Look at the car (P)") + "</span>";
         aimButton.classList.toggle("on", aim);
-        followButton.textContent = follow ? "Moving with the car (O)" : "Move with the car (O)";
+        followButton.innerHTML = icon("move") + "<span>" + (follow ? "Moving with the car (O)" : "Move with the car (O)") + "</span>";
         followButton.classList.toggle("on", follow);
-        fixedButton.textContent = fixed ? "Fixed to the car (I)" : "Fix to the car (I)";
+        fixedButton.innerHTML = icon("check") + "<span>" + (fixed ? "Fixed to the car (I)" : "Fix to the car (I)") + "</span>";
         fixedButton.classList.toggle("on", fixed);
-        speedLabel.textContent = "speed " + speed.toFixed(speed < 0.1 ? 2 : 1) + "× · look " + (lookRate >= LOOK_MAX ? "direct" : Math.round(lookRate));
+        sliders.forEach(function (item) { item.sync(); });
+        var st = OpenRacer.Take ? OpenRacer.Take.state() : "idle", on = st === "taking" || st === "counting";
+        recordButton.innerHTML = icon(on ? "square" : "video") + "<span>" + (st === "counting" ? "Cancel (5 key)" : on ? "Stop recording (5 key)" : "Record (5 key)") + "</span>";
+        recordButton.classList.toggle("rec", on);
     }
 
     function toggleFollow() { follow = !follow; if (follow && fixed) setFixed(false); refreshUi(); save(); }
@@ -121,7 +179,7 @@ OpenRacer.FreeCam = (function () {
     function storageKey() { return "openracer.freecam." + (carId || "car"); }
     function save() {
         if (!carId) return;
-        try { window.localStorage.setItem(storageKey(), JSON.stringify({ x: pos.x, y: pos.y, z: pos.z, yaw: yaw, pitch: pitch, roll: roll, fov: fov, speed: speed, look: lookRate, follow: follow, aim: aim, fixed: fixed,
+        try { window.localStorage.setItem(storageKey(), JSON.stringify({ x: pos.x, y: pos.y, z: pos.z, yaw: yaw, pitch: pitch, roll: roll, fov: fov, speed: speed, look: lookRate, move: moveSmooth, rollRate: rollRate, rollSmooth: rollSmooth, follow: follow, aim: aim, fixed: fixed,
             carX: lastCar.x, carY: lastCar.y, carZ: lastCar.z })); } catch (e) { /* no storage */ }
     }
     function restore(carPosition) {
@@ -134,6 +192,9 @@ OpenRacer.FreeCam = (function () {
             yaw = isFinite(s.yaw) ? s.yaw : 0; pitch = isFinite(s.pitch) ? s.pitch : 0; fov = isFinite(s.fov) ? s.fov : 60; roll = rollT = isFinite(s.roll) ? s.roll : 0;
             speed = isFinite(s.speed) ? Math.max(0.01, Math.min(3, s.speed)) : 1;
             lookRate = isFinite(s.look) ? Math.max(LOOK_MIN, Math.min(LOOK_MAX, s.look)) : 20;
+            moveSmooth = isFinite(s.move) ? Math.max(MOVE_MIN, Math.min(MOVE_MAX, s.move)) : 6;
+            rollRate = isFinite(s.rollRate) ? Math.max(ROLL_MIN, Math.min(ROLL_MAX, s.rollRate)) : 0.9;
+            rollSmooth = isFinite(s.rollSmooth) ? Math.max(TILT_MIN, Math.min(TILT_MAX, s.rollSmooth)) : 8;
             follow = !!s.follow; aim = s.aim !== false; fixed = !!s.fixed;
             return true;
         } catch (e) { return false; }
@@ -200,7 +261,7 @@ OpenRacer.FreeCam = (function () {
         if (camClear < 0.999) world.copy(camTarget).addScaledVector(camDir, length * camClear);
     }
 
-    var fixedKeyWas = false;
+    var fixedKeyWas = false, syncAt = 0;
     // once per frame while the camera is the free one
     function update(delta, carPosition, camera, carYaw, car) {
         delta = Math.min(delta, 0.1);
@@ -222,9 +283,9 @@ OpenRacer.FreeCam = (function () {
         panel.style.display = Settings.option("hud") ? "block" : "none";      // the panel goes with the HUD
         var mx = key("right") - key("left"), mz = key("forward") - key("back"), my = key("up") - key("down");
         var ds = key("faster") - key("slower");
-        if (ds) { speed = Math.max(0.01, Math.min(3, speed * Math.exp(ds * SPEED_RATE * delta))); refreshUi(); }
+        if (ds) { speed = Math.max(0.01, Math.min(3, speed * Math.exp(ds * SPEED_RATE * delta))); }
         var dl = key("lookFaster") - key("lookSlower");
-        if (dl) { lookRate = Math.max(LOOK_MIN, Math.min(LOOK_MAX, lookRate * Math.exp(dl * LOOK_RATE_CHANGE * delta))); refreshUi(); }
+        if (dl) { lookRate = Math.max(LOOK_MIN, Math.min(LOOK_MAX, lookRate * Math.exp(dl * LOOK_RATE_CHANGE * delta))); }
         // the turn of the mouse goes into the look, a share of what waits every frame (all of it when the look is direct); nothing waits while the camera looks at the car
         if (aim) lookX = lookY = 0;
         if (lookX || lookY) {
@@ -235,13 +296,13 @@ OpenRacer.FreeCam = (function () {
             yaw -= ax; pitch = Math.max(-1.5, Math.min(1.5, pitch - ay));
         }
         // Q and E roll the picture (it eases to where it is going)
-        rollT = Math.max(-Math.PI, Math.min(Math.PI, rollT + (key("rollLeft") - key("rollRight")) * ROLL_RATE * delta));
-        roll += (rollT - roll) * (1 - Math.exp(-8 * delta));
+        rollT = Math.max(-Math.PI, Math.min(Math.PI, rollT + (key("rollLeft") - key("rollRight")) * rollRate * delta));
+        roll = rollSmooth >= TILT_MAX ? rollT : roll + (rollT - roll) * (1 - Math.exp(-rollSmooth * delta));
         fov = Math.max(8, Math.min(110, fov + (key("fovWide") - key("fovNarrow")) * FOV_RATE * delta));
         // forward is the way the camera looks (up and down with the look, W flies where the mouse points), the sides are level; the speed follows what is asked for, it does not jump to it
         var fx = -Math.sin(yaw), fz = -Math.cos(yaw), cp = Math.cos(pitch), fy = Math.sin(pitch);
         want.set(fx * cp * mz + -fz * mx, fy * mz + my * VERTICAL_SPEED / BASE_SPEED, fz * cp * mz + fx * mx).multiplyScalar(BASE_SPEED * speed);
-        vel.lerp(want, 1 - Math.exp(-6 * delta));
+        if (moveSmooth >= MOVE_MAX) vel.copy(want); else vel.lerp(want, 1 - Math.exp(-moveSmooth * delta));
         pos.addScaledVector(vel, delta);
         if (follow && !fixed) pos.add(carPosition).sub(lastCar);
         lastCar.copy(carPosition);
@@ -277,6 +338,9 @@ OpenRacer.FreeCam = (function () {
             camera.near = 0.03;
             camera.updateProjectionMatrix();
         }
+        // the sliders follow what the keys change
+        syncAt += delta;
+        if (syncAt > 0.15) { syncAt = 0; sliders.forEach(function (item) { item.sync(); }); }
         // remembered now and then (and when the camera is left)
         saveAt += delta;
         if (saveAt > 2) { saveAt = 0; save(); }

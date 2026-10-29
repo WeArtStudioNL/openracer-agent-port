@@ -53,6 +53,14 @@ OpenRacer.Take = (function () {
             "#takeFrame .rec i { width: 11px; height: 11px; border-radius: 50%; background: #ff3b30; animation: takeBlink 1s steps(1) infinite; }" +
             "#takeDialog input.name { width: 100%; box-sizing: border-box; font: inherit; font-size: 15px; padding: 9px 12px; margin: 0 0 16px; border-radius: 8px; border: 1px solid var(--line, #272e37); background: var(--bg2, #14181d); color: var(--head, #f4f6f8); }" +
             "#takeDialog input.name:focus { outline: 2px solid var(--accent, #e8622a); outline-offset: 1px; border-color: transparent; }" +
+            "#takeCount { position: fixed; z-index: 925; display: none; align-items: center; justify-content: center; pointer-events: none; color: #fff; font: 700 140px system-ui, -apple-system, sans-serif; text-shadow: 0 4px 24px rgba(0, 0, 0, 0.7); }" +
+            "body.takeClean #hud, body.takeClean #hudLaps, body.takeClean #hudCar, body.takeClean #hudBoost, body.takeClean #hudHint, body.takeClean #debugOut, body.takeClean #raceOverlay { display: none !important; }" +
+            "#takeDialog .group { margin: 0 0 14px; } #takeDialog .group > label { display: block; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted, #8d97a3); margin: 0 0 6px; }" +
+            "#takeDialog .row button.choice { display: inline-flex; align-items: center; gap: 6px; }" +
+            "#takeDialog .seg { display: flex; gap: 8px; flex-wrap: wrap; } #takeDialog .seg button.choice { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }" +
+            "#takeDialog .seg button.choice.on { border-color: var(--accent, #e8622a); background: rgba(232, 98, 42, 0.18); }" +
+            "#takeDialog .slide { display: grid; grid-template-columns: 1fr 64px; align-items: center; gap: 10px; margin: 0 0 6px; } #takeDialog .slide input { width: 100%; } #takeDialog .slide b { text-align: right; font-weight: normal; color: var(--head, #f4f6f8); font-variant-numeric: tabular-nums; }" +
+            "#takeDialog .check { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text, #d7dde3); cursor: pointer; }" +
             "@keyframes takeBlink { 50% { opacity: 0.25; } }" +
             "#takeDialog { position: fixed; inset: 0; z-index: 9000; background: rgba(0, 0, 0, 0.7); display: flex; align-items: center; justify-content: center; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }" +
             "#takeDialog .box { width: 420px; max-width: calc(100% - 32px); background: var(--panel, #181d23); color: var(--text, #d7dde3); border: 1px solid var(--line, #272e37); border-radius: 12px; padding: 20px 24px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); position: relative; }" +
@@ -109,8 +117,9 @@ OpenRacer.Take = (function () {
         setTimeout(function () { if (!taking) hideBadge(); }, 2500);
     }
 
-    // the window: replay, video, or nothing
-    function ask(seconds, defaultName) {
+    // ---- the windows
+
+    function dialog(title, text, build) {
         return new Promise(function (resolve) {
             style();
             var back = document.createElement("div");
@@ -118,106 +127,218 @@ OpenRacer.Take = (function () {
             var box = document.createElement("div");
             box.className = "box";
             var close = document.createElement("button");
-            close.className = "close"; close.textContent = "×"; close.title = "Throw the take away";
-            var h = document.createElement("h2"); h.textContent = "Save the take";
+            close.className = "close"; close.innerHTML = OpenRacer.icon("x", 18); close.title = "Cancel";
+            var h = document.createElement("h2"); h.textContent = title;
+            var p = document.createElement("div"); p.className = "text"; p.textContent = text;
+            box.appendChild(close); box.appendChild(h); box.appendChild(p);
+            var finish = function (value) { if (back.parentNode) back.parentNode.removeChild(back); document.removeEventListener("keydown", onKey, true); resolve(value); };
+            var onKey = function (event) { if (event.code === "Escape") { event.stopPropagation(); event.preventDefault(); finish(null); } };
+            close.onclick = function () { finish(null); };
+            build(box, finish);
+            back.appendChild(box);
+            back.onclick = function (event) { if (event.target === back) finish(null); };
+            document.addEventListener("keydown", onKey, true);
+            document.body.appendChild(back);
+        });
+    }
+    function btn(parent, label, icon, cls, onClick) {
+        var b = document.createElement("button");
+        b.type = "button"; b.className = "choice" + (cls ? " " + cls : "");
+        b.innerHTML = (icon ? OpenRacer.icon(icon, 16) : "") + "<span>" + label + "</span>";
+        b.onclick = onClick;
+        parent.appendChild(b);
+        return b;
+    }
+    function group(box, label) {
+        var g = document.createElement("div"); g.className = "group";
+        var l = document.createElement("label"); l.textContent = label;
+        g.appendChild(l); box.appendChild(g);
+        return g;
+    }
+    function remembered(key, fallback) { try { var v = window.localStorage.getItem("openracer.take." + key); return v === null ? fallback : v; } catch (e) { return fallback; } }
+    function remember(key, value) { try { window.localStorage.setItem("openracer.take." + key, String(value)); } catch (e) { /* no storage */ } }
+
+    // before it starts: the picture, replay or video, and whether the HUD goes away while it runs
+    function askStart(r) {
+        return dialog("Record", "The 5 key, or the record button, starts it after a count of five seconds, and stops it.", function (box, finish) {
+            var aspect = r.aspect(), format = remembered("format", "video") === "replay" ? "replay" : "video", hide = remembered("hide", "1") === "1";
+            var g1 = group(box, "Picture"), seg1 = document.createElement("div"); seg1.className = "seg"; g1.appendChild(seg1);
+            var aspectButtons = [["16:9", "16:9 landscape"], ["9:16", "9:16 upright"], ["1:1", "1:1 square"]].map(function (a) {
+                var b = btn(seg1, a[1], "", "", function () { aspect = a[0]; sync(); });
+                b.dataset.v = a[0];
+                return b;
+            });
+            var g2 = group(box, "Make"), seg2 = document.createElement("div"); seg2.className = "seg"; g2.appendChild(seg2);
+            var formatButtons = [["video", "Video (mp4)", "video"], ["replay", "Replay", "rotate-ccw"]].map(function (f) {
+                var b = btn(seg2, f[1], f[2], "", function () { format = f[0]; sync(); });
+                b.dataset.v = f[0];
+                return b;
+            });
+            var hint = document.createElement("div"); hint.className = "text"; hint.style.margin = "8px 0 0"; g2.appendChild(hint);
+            var label = document.createElement("label"); label.className = "check"; label.style.marginBottom = "16px";
+            var check = document.createElement("input"); check.type = "checkbox"; check.checked = hide;
+            check.onchange = function () { hide = check.checked; };
+            label.appendChild(check); label.appendChild(document.createTextNode("Hide the HUD while it runs"));
+            box.appendChild(label);
+            function sync() {
+                aspectButtons.forEach(function (b) { b.classList.toggle("on", b.dataset.v === aspect); });
+                formatButtons.forEach(function (b) { b.classList.toggle("on", b.dataset.v === format); });
+                hint.textContent = format === "video" ? "The video is filmed while you drive, the file is made when you stop." : "The take is kept in the replay library of the main menu, where it can be watched, edited and downloaded.";
+            }
+            sync();
+            var row = document.createElement("div"); row.className = "row";
+            btn(row, "Cancel", "", "", function () { finish(null); });
+            btn(row, "Start", "video", "primary", function () { remember("format", format); remember("hide", hide ? "1" : "0"); finish({ aspect: aspect, format: format, hide: hide }); });
+            box.appendChild(row);
+        });
+    }
+
+    // after it: a name, what to cut from the start and from the end, and save
+    function askSave(seconds, defaultName, format) {
+        return dialog("Save the take", seconds.toFixed(1) + " s, as a " + (format === "video" ? "video (mp4)" : "replay") + ".", function (box, finish) {
             var nameField = document.createElement("input"); nameField.className = "name"; nameField.type = "text"; nameField.maxLength = 80; nameField.value = defaultName; nameField.setAttribute("aria-label", "Name");
-            var p = document.createElement("div"); p.className = "text"; p.textContent = seconds.toFixed(1) + " s. Give it a name and save it as a replay (in the library of the main menu) or as a video (the take is played and filmed with the camera as it was, then the game goes on).";
+            var gn = group(box, "Name"); gn.appendChild(nameField);
+            var limit = Math.max(0, Math.floor((seconds - 0.5) * 2) / 2), cut = { start: 0, end: 0 };
+            var gc = group(box, "Cut off");
+            function slide(label, key) {
+                var row = document.createElement("div"); row.className = "slide";
+                var input = document.createElement("input"); input.type = "range"; input.min = 0; input.max = limit; input.step = 0.1; input.value = 0;
+                input.setAttribute("aria-label", label);
+                var value = document.createElement("b");
+                var show = function () { value.textContent = cut[key].toFixed(1) + " s"; };
+                input.oninput = function () {
+                    cut[key] = parseFloat(input.value);
+                    var other = key === "start" ? "end" : "start";
+                    if (cut.start + cut.end > seconds - 0.5) { cut[key] = Math.max(0, seconds - 0.5 - cut[other]); input.value = cut[key]; }
+                    show(); result.textContent = "Saved: " + (seconds - cut.start - cut.end).toFixed(1) + " s";
+                };
+                show();
+                var wrap = document.createElement("div");
+                var l = document.createElement("div"); l.className = "text"; l.style.margin = "0 0 2px"; l.textContent = label;
+                wrap.appendChild(l); wrap.appendChild(input);
+                row.appendChild(wrap); row.appendChild(value);
+                gc.appendChild(row);
+            }
+            var result = document.createElement("div");
+            slide("From the start", "start"); slide("From the end", "end");
+            result.className = "text"; result.style.margin = "4px 0 0"; result.textContent = "Saved: " + seconds.toFixed(1) + " s";
+            gc.appendChild(result);
+            if (format === "video") {
+                var note = document.createElement("div"); note.className = "text"; note.style.margin = "6px 0 0";
+                note.textContent = "With a cut the part that is kept is filmed again from the recording of the game (it plays once more).";
+                gc.appendChild(note);
+            }
             var row = document.createElement("div"); row.className = "row";
-            var done = function (what) { if (back.parentNode) back.parentNode.removeChild(back); document.removeEventListener("keydown", onKey, true); resolve(what ? { what: what, name: nameField.value.trim() || defaultName } : null); };
-            var onKey = function (event) { if (event.code === "Escape") { event.stopPropagation(); event.preventDefault(); done(null); } };
-            [["Cancel", null, ""], ["Replay", "replay", ""], ["Video", "video", "primary"]].forEach(function (b) {
-                var button = document.createElement("button");
-                button.className = "choice " + b[2]; button.textContent = b[0];
-                button.onclick = function () { done(b[1]); };
-                row.appendChild(button);
-            });
-            close.onclick = function () { done(null); };
-            box.appendChild(close); box.appendChild(h); box.appendChild(p); box.appendChild(nameField); box.appendChild(row);
-            back.appendChild(box);
-            back.onclick = function (event) { if (event.target === back) done(null); };
-            document.addEventListener("keydown", onKey, true);
-            document.body.appendChild(back);
+            btn(row, "Discard", "x", "", function () { finish(null); });
+            btn(row, "Save", "check", "primary", function () { finish({ name: nameField.value.trim() || defaultName, cutStart: cut.start, cutEnd: cut.end }); });
+            box.appendChild(row);
             nameField.focus(); nameField.select();
+            nameField.onkeydown = function (e) { if (e.key === "Enter") { e.preventDefault(); finish({ name: nameField.value.trim() || defaultName, cutStart: cut.start, cutEnd: cut.end }); } };
         });
     }
 
-    // the picture of the video: landscape, upright or square (the one of the replay is marked)
-    function askAspect(r) {
-        return new Promise(function (resolve) {
-            style();
-            var back = document.createElement("div");
-            back.id = "takeDialog";
-            var box = document.createElement("div"); box.className = "box";
-            var close = document.createElement("button"); close.className = "close"; close.textContent = "×"; close.title = "Do not record";
-            var h = document.createElement("h2"); h.textContent = "Record: which picture?";
-            var p = document.createElement("div"); p.className = "text"; p.textContent = "The frame shows what a video of the take will have; a replay keeps all of it. The take is filmed with the camera as it was during the take.";
-            var row = document.createElement("div"); row.className = "row";
-            var done = function (what) { if (back.parentNode) back.parentNode.removeChild(back); document.removeEventListener("keydown", onKey, true); resolve(what); };
-            var onKey = function (event) { if (event.code === "Escape") { event.stopPropagation(); event.preventDefault(); done(null); } };
-            var current = r.aspect();
-            [["Cancel", null], ["16:9 landscape", "16:9"], ["9:16 upright", "9:16"], ["1:1 square", "1:1"]].forEach(function (b) {
-                var button = document.createElement("button");
-                button.className = "choice" + (b[1] && b[1] === current ? " primary" : ""); button.textContent = b[0];
-                button.onclick = function () { done(b[1]); };
-                row.appendChild(button);
-            });
-            close.onclick = function () { done(null); };
-            box.appendChild(close); box.appendChild(h); box.appendChild(p); box.appendChild(row);
-            back.appendChild(box);
-            back.onclick = function (event) { if (event.target === back) done(null); };
-            document.addEventListener("keydown", onKey, true);
-            document.body.appendChild(back);
-        });
+    // ---- the take
+
+    var asking = false, counting = null, countEl = null, kind = "video", live = null, listeners = [];
+    function changed() { listeners.forEach(function (fn) { try { fn(state()); } catch (e) { console.error(e); } }); }
+    function state() { return counting ? "counting" : taking ? "taking" : asking ? "asking" : "idle"; }
+
+    function showCount(n) {
+        style();
+        if (!countEl) { countEl = document.createElement("div"); countEl.id = "takeCount"; document.body.appendChild(countEl); }
+        var r = replay();
+        if (r && r.frameRect) { var f = r.frameRect(); countEl.style.left = f.x + "px"; countEl.style.top = f.y + "px"; countEl.style.width = f.w + "px"; countEl.style.height = f.h + "px"; }
+        countEl.textContent = n;
+        countEl.style.display = "flex";
+    }
+    function endCount() { if (counting) { clearInterval(counting); counting = null; } if (countEl) countEl.style.display = "none"; }
+
+    function begin(r, choice) {
+        r.setAspect(choice.aspect);
+        kind = choice.format;
+        // the frame with the passepartout is there from the count on; the HUD goes away with it
+        from = r.sampleNow();
+        showBadge();
+        if (choice.hide) document.body.classList.add("takeClean");
+        var n = 5;
+        showCount(n);
+        changed();
+        counting = setInterval(function () {
+            n--;
+            if (n > 0) { showCount(n); return; }
+            endCount();
+            if (kind === "video") {
+                live = r.liveCapture();
+                if (!live) { say("No video here"); stopTake(false); return; }
+            }
+            taking = true; from = r.sampleNow();
+            camSamples = [];
+            if (!camLoop) camLoop = requestAnimationFrame(recordCamera);
+            tickFrom = from;
+            changed();
+        }, 1000);
+    }
+    var tickFrom = 0;
+
+    function stopTake(save) {
+        taking = false;
+        endCount();
+        document.body.classList.remove("takeClean");
+        if (camLoop) { cancelAnimationFrame(camLoop); camLoop = null; }
+        hideBadge();
+        if (!save && live) { live.cancel(); live = null; }
+        changed();
     }
 
-    var asking = false;
     function toggle() {
         var r = replay();
         if (!r || r.active || r.viewer || asking) return;
+        if (counting) { stopTake(false); say("Recording cancelled"); return; }
         if (!taking) {
             if (typeof Settings !== "undefined" && Settings.isPaused && Settings.isPaused()) return;
-            // the picture first: the take is only started with one
-            asking = true;
-            askAspect(r).then(function (aspect) {
+            asking = true; changed();
+            askStart(r).then(function (choice) {
                 asking = false;
-                if (!aspect || taking) return;
-                r.setAspect(aspect);
-                taking = true; from = r.sampleNow();
-                camSamples = [];
-                if (!camLoop) camLoop = requestAnimationFrame(recordCamera);
-                showBadge();
+                if (!choice) { changed(); return; }
+                begin(r, choice);
             });
             return;
         }
-        taking = false;
         var to = r.sampleNow();
-        if (camLoop) { cancelAnimationFrame(camLoop); camLoop = null; }
-        hideBadge();
+        var capture = live; live = null;
         var seconds = (to - from) / r.rate;
-        if (seconds < 0.5) { say("The take is too short"); return; }
-        if (typeof Settings !== "undefined" && Settings.isPaused && Settings.isPaused()) return;
+        stopTake(true);
+        if (seconds < 0.5) { if (capture) capture.cancel(); say("The take is too short"); return; }
         var track = (typeof race !== "undefined" && race && race.track && (race.track.name || race.track.id)) || (typeof currentTrack !== "undefined" && currentTrack && (currentTrack.name || currentTrack.id)) || "";
         var d = new Date(), pad = function (n) { return (n < 10 ? "0" : "") + n; };
         var defaultName = ((track ? track + " " : "") + "take " + d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + "." + pad(d.getMinutes())).slice(0, 80);
-        ask(seconds, defaultName).then(function (answer) {
-            if (!answer) return;
-            var what = answer.what, name = answer.name;
-            if (what === "replay") {
-                r.saveToLibrary(from, to, name).then(function () { say("Replay saved (" + seconds.toFixed(1) + " s): in the library of the main menu"); })
-                    .catch(function (error) { say("Not saved: " + (error && error.message ? error.message : error)); });
-            } else if (what === "video") {
-                // the camera of the take: the game's car places its camera through this while the replay films
-                var theCar = typeof car !== "undefined" ? car : null, samples = camSamples.slice();
-                var cameraWas = typeof Settings !== "undefined" ? Settings.option("camera") : null;       // (the replay puts the free camera of the game away: it comes back after)
-                if (theCar && samples.length) theCar.cameraOverride = function () { return placeCamera(r.time(), r.rate); };
-                var ok = r.filmRange(from / r.rate, to / r.rate, function () {
-                    if (theCar && theCar.cameraOverride) theCar.cameraOverride = null;
-                    if (cameraWas === 4 && typeof Settings !== "undefined") setTimeout(function () { Settings.setOption("camera", 4); }, 100);
-                }, name);
-                if (!ok) { if (theCar) theCar.cameraOverride = null; say("No video here"); }
-            }
+        var finished = capture ? capture.stop() : Promise.resolve(null);
+        asking = true; changed();
+        finished.then(function (clip) {
+            return askSave(seconds, defaultName, kind).then(function (answer) {
+                asking = false; changed();
+                if (!answer) return;
+                var name = answer.name, a = from + Math.round(answer.cutStart * r.rate), b = to - Math.round(answer.cutEnd * r.rate);
+                var trimmed = answer.cutStart > 0 || answer.cutEnd > 0;
+                if (kind === "replay") {
+                    r.saveToLibrary(a, b, name).then(function () { say("Replay saved (" + ((b - a) / r.rate).toFixed(1) + " s): in the library of the main menu"); })
+                        .catch(function (error) { say("Not saved: " + (error && error.message ? error.message : error)); });
+                } else if (clip && !trimmed) {
+                    r.saveVideo(clip.blob, clip.type, name).then(function (ext) { say("Video saved (" + seconds.toFixed(1) + " s, " + ext + ")"); });
+                } else {
+                    // a cut: the part that is kept is filmed from the recording of the game, with the camera of the take
+                    var theCar = typeof car !== "undefined" ? car : null, samples = camSamples.slice();
+                    var cameraWas = typeof Settings !== "undefined" ? Settings.option("camera") : null;       // (the replay puts the free camera of the game away: it comes back after)
+                    if (theCar && samples.length) theCar.cameraOverride = function () { return placeCamera(r.time(), r.rate); };
+                    var ok = r.filmRange(a / r.rate, b / r.rate, function () {
+                        if (theCar && theCar.cameraOverride) theCar.cameraOverride = null;
+                        if (cameraWas === 4 && typeof Settings !== "undefined") setTimeout(function () { Settings.setOption("camera", 4); }, 100);
+                    }, name);
+                    if (!ok) { if (theCar) theCar.cameraOverride = null; say("No video here"); }
+                }
+            });
         });
     }
 
-    return { toggle: toggle, get taking() { return taking; } };
+    return { toggle: toggle, state: state, onChange: function (fn) { listeners.push(fn); }, get taking() { return taking; } };
 })();

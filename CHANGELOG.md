@@ -33,8 +33,14 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 ### Recording a take
 
-- A take (the record button, the 5 key) first asks for the picture (16:9, 9:16 or 1:1), then starts. While it runs the picture is a frame in the window with a dark passepartout round it and a blinking red dot with the time at the top right of the frame.
-- When you stop, one window asks for a name and whether it is a replay or a video (mp4). The name is filled in already (track and time); the replay goes into the list with it and the video file is saved with it.
+- A take (the record button, the 5 key) first asks for the picture (16:9, 9:16 or 1:1) and what to make: a video (mp4) or a replay, and whether the HUD goes away while it runs. Then a count of five seconds, with the frame of the picture and the dark passepartout already in the window, and a blinking red dot with the time at the top right of the frame when it runs.
+- A video is filmed live while you drive and the file is there when you stop: the take is no longer played a second time. The window when you stop asks for a name (filled in with the track and the time) and has two sliders to cut seconds off the start and the end. For a replay that is exact; for a video with a cut the part that is kept is filmed again from the recording (once more at normal speed).
+- A record / stop button: on the free camera panel and, on a touch screen, in the buttons at the top (red while it records). The 5 key counts down and stops, and cancels a count.
+- In the free camera the keys for the smoothness of the mouse look are now 7 and 8 (the 5 key is the record key).
+
+### Free camera panel
+
+- Every setting has a slider and every toggle a button: speed, the smoothing of the movement (new: how fast the camera follows the keys, up to direct), the smoothing of the mouse look, the field of view, the tilt itself (with a Level button), the speed of the tilt (new) and the smoothing of the tilt (new). They are remembered per car. The title moves the panel; the keys are folded away under Keys.
 
 ### Touch controls and the HUD editor
 

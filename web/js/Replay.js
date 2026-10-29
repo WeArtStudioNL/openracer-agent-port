@@ -1077,6 +1077,60 @@ OpenRacer.Replay = (function() {
         videoButton.textContent = sound ? "■ Stop (recording)" : "■ Stop (recording, no sound: press a key first)";
         video.recorder.start(250);
     }
+    // A live capture (a take as a video, Take.js): the picture of the game in the aspect of the take, with the sound, from now until stop(); no replay is played for it.
+    // Gives { stop() -> a promise of { blob, type } } or null when the browser cannot
+    api.liveCapture = function() {
+        var canvas = typeof renderer !== "undefined" && renderer.domElement;
+        if(!canvas || typeof MediaRecorder === "undefined") return null;
+        var types = ["video/mp4;codecs=avc1.640028,mp4a.40.2", "video/mp4;codecs=avc1.42E01E,mp4a.40.2", "video/mp4;codecs=avc1.640028", "video/mp4;codecs=avc1.42E01E", "video/mp4;codecs=avc1", "video/mp4",
+            "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+        var type = types.filter(function(t) { return MediaRecorder.isTypeSupported(t); })[0];
+        if(!type) return null;
+        var crop = document.createElement("canvas"), cropCtx = crop.getContext("2d"), cropOn = true;
+        var A = ASPECTS[aspect], cw = canvas.width, ch = canvas.height, sw = cw, sh = cw / A.ratio;
+        if(sh > ch) { sh = ch; sw = ch * A.ratio; }
+        var scale = Math.min(1, 1920 / Math.max(sw, sh));
+        crop.width = Math.max(2, 2 * Math.round(sw * scale / 2)); crop.height = Math.max(2, 2 * Math.round(sh * scale / 2));
+        (function copy() {
+            if(!cropOn) return;
+            // (the canvas can change its size: the middle of what it is now)
+            var w = canvas.width, h = canvas.height, tw = w, th = w / A.ratio;
+            if(th > h) { th = h; tw = h * A.ratio; }
+            try { cropCtx.drawImage(canvas, (w - tw) / 2, (h - th) / 2, tw, th, 0, 0, crop.width, crop.height); } catch(e) { /* the canvas is not ready */ }
+            requestAnimationFrame(copy);
+        })();
+        var stream = crop.captureStream(60);
+        var sound = typeof EngineSound !== "undefined" && EngineSound.recordingStream ? EngineSound.recordingStream() : null;
+        if(sound) sound.getAudioTracks().forEach(function(track) { stream.addTrack(track); });
+        var chunks = [], recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8000000 });
+        recorder.ondataavailable = function(e) { if(e.data && e.data.size) chunks.push(e.data); };
+        recorder.start(1000);
+        return {
+            type: type,
+            stop: function() {
+                return new Promise(function(resolve) {
+                    recorder.onstop = function() { cropOn = false; resolve({ blob: new Blob(chunks, { type: type.split(";")[0] }), type: type }); };
+                    if(recorder.state !== "inactive") recorder.stop(); else recorder.onstop();
+                });
+            },
+            cancel: function() { cropOn = false; try { recorder.onstop = null; if(recorder.state !== "inactive") recorder.stop(); } catch(e) { /* stopped */ } }
+        };
+    };
+    // keeps a video as a file with a name: a mp4 as it is; a webm goes through the local server (ffmpeg) when there is one. Gives a promise of the extension
+    api.saveVideo = function(blob, type, name) {
+        var stem = String(name || "").replace(/[\\/:*?"<>|\u0000-\u001f]/g, "").replace(/\s+/g, " ").trim().slice(0, 80) ||
+            "openracer-" + String(currentTrack.id).replace(/[^A-Za-z0-9_-]/g, "") + "-" + new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13);
+        function save(file, extension) {
+            var url = URL.createObjectURL(file), link = document.createElement("a");
+            link.href = url; link.download = stem + extension;
+            document.body.appendChild(link); link.click(); link.remove();
+            setTimeout(function() { URL.revokeObjectURL(url); }, 30000);
+            return extension;
+        }
+        if(/mp4/.test(type)) return Promise.resolve(save(blob, ".mp4"));
+        return fetch("/api/convert/mp4", { method: "POST", body: blob }).then(function(r) { if(!r.ok) throw new Error("no"); return r.blob(); })
+            .then(function(mp4) { return save(mp4, ".mp4"); }).catch(function() { return save(blob, ".webm"); });
+    };
     function stopVideo() {
         if(video.recorder && video.recorder.state !== "inactive") video.recorder.stop();
     }

@@ -67,6 +67,7 @@ var TouchControls = (function() {
             "#touch .brk { width: 86px; height: 128px; } #touch .brk .fill { background: rgba(230,60,50,0.60); }" +
             "#touch .grid { display: grid; grid-template-columns: 54px 54px; gap: 8px; }" +
             "#touch .btn { border-radius: 8px; width: 54px; height: 54px; font-size: 13px; display: flex; align-items: center; justify-content: center; }" +
+            "#touch .btn.rec { background: #d9372f; border-color: #ff6b62; }" +
             "#touch .btn.down { background: var(--accent, #ff5a1f); border-color: var(--accent, #ff5a1f); }" +
             "#touch .top { position: absolute; right: calc(12px + env(safe-area-inset-right)); top: calc(12px + env(safe-area-inset-top)); display: flex; gap: 8px; }" +
             "#touch .top .btn { width: 44px; height: 44px; }" +
@@ -199,6 +200,11 @@ var TouchControls = (function() {
         actionButton(top, "icon:rotate-ccw", "resetCar");
         actionButton(top, "icon:wrench", "repairCar");
         actionButton(top, "icon:camera", "cameraSwitch");
+        var rec = actionButton(top, "icon:video", "take");
+        if(typeof OpenRacer !== "undefined" && OpenRacer.Take) OpenRacer.Take.onChange(function(st) {
+            rec.classList.toggle("rec", st === "taking" || st === "counting");
+            rec.innerHTML = OpenRacer.icon(st === "taking" || st === "counting" ? "square" : "video", 24);
+        });
         actionButton(top, "icon:sliders", "tuningMenu");
         var menu = el(top, "div", "btn");
         menu.innerHTML = OpenRacer.icon("menu", 24);
