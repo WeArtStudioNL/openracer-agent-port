@@ -1626,14 +1626,15 @@ initBuildUi();
 // ---- the dyno: a full-throttle pull, measured at the wheels; only the chart shows it
 let dyno = null, dynoFrame = 0, dynoBest = null;       // dynoBest: the best point of the last pull that was run to the end
 let dynoSound = false, dynoRamp = 0;       // the engine sound was started by the dyno run (and stops with it)
-// the run is over: the throttle closes and the engine drops back to idle (the engine braking is quick at first, then it settles), then the sound stops
+// the run is over: the throttle closes and the engine runs down to idle slowly (the weight of the rollers keeps it turning), then the sound stops
 function dynoSoundOff() {
     if (!dynoSound || !preview.playing) { dynoSound = false; return; }
     cancelAnimationFrame(dynoRamp);
-    const from = parseFloat($("soundRpm").value), idle = num("idle") || 850, start = performance.now(), duration = 2200;
+    const from = parseFloat($("soundRpm").value), idle = num("idle") || 850, start = performance.now();
+    const duration = Math.max(3000, Math.min(9000, 3000 + (from - idle) * 0.9));      // (the engine and the rollers run down slowly: about 8 s from 6000 rpm)
     $("soundThrottle").value = 0;
     const step = (now) => {
-        const f = Math.min(1, (now - start) / duration), e = 1 - Math.pow(1 - f, 2.2);
+        const f = Math.max(0, Math.min(1, (now - start) / duration)), e = 1 - Math.pow(1 - f, 1.5);
         $("soundRpm").value = from + (idle - from) * e;
         soundSliders();
         if (f < 1 && dynoSound && preview.playing) { dynoRamp = requestAnimationFrame(step); return; }
