@@ -564,7 +564,9 @@ OpenRacer.CarTuning = (function () {
         c.engine.inertia = v.engine_inertia;
         if(v.turbo_share > 0 || v.turbo_boost > 0) {
             c.engine.turbo = { share: v.turbo_share / 100, spool: v.turbo_spool, threshold_rpm: v.turbo_threshold };
-            if(v.turbo_boost > 0) { c.engine.turbo.boost_bar = v.turbo_boost; c.engine.turbo.intercooler = v.turbo_intercooler / 100; c.engine.turbo.efficiency = v.turbo_efficiency / 100; }
+            // (the intercooler and the compressor are kept with every turbo: the engine build sets them, and a setup that did not keep them was "changed" the moment it was saved)
+            c.engine.turbo.intercooler = v.turbo_intercooler / 100; c.engine.turbo.efficiency = v.turbo_efficiency / 100;
+            if(v.turbo_boost > 0) c.engine.turbo.boost_bar = v.turbo_boost;
         } else delete c.engine.turbo;
         c.drivetrain.shift_time = v.shift_time;
         c.drivetrain.clutch_start_rpm = v.clutch_start_rpm; c.drivetrain.clutch_full_rpm = Math.max(v.clutch_full_rpm, v.clutch_start_rpm + 50);

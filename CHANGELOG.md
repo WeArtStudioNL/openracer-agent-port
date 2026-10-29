@@ -35,6 +35,11 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 
 - **Repair is a service.** It repaired the body, the parts, the wheels and the punctures, but the tyres stayed worn and the tank as it was. Now it also gives new tyres (60 degrees, as a pit stop does) and a full tank.
 
+### Saved setups are not orange or "(changed)" any more
+
+- The orange values of the tuning menu now mean "different from the setup that is chosen" (when there is none: from the car as it was made), so after Save nothing is orange until you change something. The reset arrow of a value still goes back to the car as it was made.
+- A setup was "(changed)" the moment it was saved: the intercooler and the compressor of the turbo were only kept with a boost pressure, and the two hidden values of the torque curve (peak power and where) did not agree with a curve of the engine build. Both are fixed.
+
 ### No Power % any more; the turbo in the chart
 
 - The Power % of the tuning menu and of the car editor is gone: no setting makes an engine stronger than its build is. A tune file or a setup that has a power scale of its own gets the scale of the car again.

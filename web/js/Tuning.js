@@ -187,8 +187,19 @@ var Tuning = (function() {
         return Number(v).toFixed(digits);
     }
 
+    // What a value is compared with to be orange: the setup that is chosen as it was saved (so after Save the values are not orange any more; they are when they moved away from it),
+    // else the car as it was made. The reset arrow of a value still goes back to the car as it was made.
+    var referenceValues = null;
+    function reference() {
+        if(referenceValues) return referenceValues;
+        referenceValues = base;
+        var active = OpenRacer.Setups && config ? OpenRacer.Setups.active(config.id) : null;
+        var cfg = active ? OpenRacer.Setups.configOf(config.id, active, config) : null;
+        if(cfg) { try { referenceValues = Object.assign({}, base, fromConfig(Object.assign({}, original, cfg))); } catch(e) { referenceValues = base; } }
+        return referenceValues;
+    }
     function changed(key) {
-        return JSON.stringify(values[key]) !== JSON.stringify(base[key]);
+        return JSON.stringify(values[key]) !== JSON.stringify(reference()[key]);
     }
 
     function message(text) {
@@ -665,6 +676,7 @@ var Tuning = (function() {
 
     // the list of the setups, with the one in use chosen (and "(changed)" when the tuning has moved away from it)
     function refreshSetups() {
+        referenceValues = null;
         if(!setupSelect || !OpenRacer.Setups) return;
         var names = OpenRacer.Setups.names(config.id), active = OpenRacer.Setups.active(config.id);
         setupSelect.innerHTML = "";
@@ -675,7 +687,7 @@ var Tuning = (function() {
             var o = document.createElement("option");
             o.value = name;
             var same = true;
-            if(name === active) { var cfg = OpenRacer.Setups.configOf(config.id, name, config), saved = cfg ? fromConfig(Object.assign({}, original, cfg)) : null; if(saved) Object.keys(saved).forEach(function(key) { if(key in base && JSON.stringify(saved[key]) !== JSON.stringify(values[key])) same = false; }); }
+            if(name === active) { var cfg = OpenRacer.Setups.configOf(config.id, name, config), saved = cfg ? fromConfig(Object.assign({}, original, cfg)) : null; if(saved) Object.keys(saved).forEach(function(key) { if(key in base && key !== "gen_power" && key !== "gen_peak_rpm" && JSON.stringify(saved[key]) !== JSON.stringify(values[key])) same = false; }); }       // (those two follow from the torque curve: they are not part of what is saved)
             o.textContent = name + (name === active && !same ? " (changed)" : "");
             setupSelect.appendChild(o);
         });
