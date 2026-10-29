@@ -2491,7 +2491,7 @@ const benchPose = { x: 0, y: 0, z: 0 }, benchQuat = { x: 0, y: 0, z: 0, w: 1 }, 
 // ---- the nodes of the tyres (TyreShell.js) over the car of the bench while a tyre setting is being changed: the outer shell (green where a node holds the road, red where it
 // slides, teal in the air), the rim (white), the beams between them coloured by their strain and the belt (teal), as the debug view of the game (DebugView.js, the 0 key).
 // They appear when a tyre setting (the Tyres group of the Tuning card, the pressures too) gets the focus or is moved, and go when another input gets the focus.
-const TYRE_DEBUG_KEYS = new Set(["tyre_width", "tyre_rings", "tyre_segments", "tyre_inner_ratio", "tyre_carcass", "tyre_stiff_x", "tyre_stiff_y", "pressure_front", "pressure_rear"]);
+const TYRE_DEBUG_KEYS = new Set(["tyre_width", "tyre_width_rear", "tyre_rings", "tyre_segments", "tyre_inner_ratio", "tyre_carcass", "tyre_stiff_x", "tyre_stiff_y", "pressure_front", "pressure_rear"]);
 const tyreDebug = { group: null, points: null, lines: null, on: false };
 function tyreDebugLayer(kind) {
     const geometry = new THREE.BufferGeometry();

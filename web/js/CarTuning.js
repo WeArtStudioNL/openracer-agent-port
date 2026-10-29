@@ -47,7 +47,8 @@ OpenRacer.CarTuning = (function () {
             ["tyre_front", "Tyre at the front (the wheel library; it brings its own shell)", "", 0, 0, 0],
             ["rim_rear", "Rim at the rear", "", 0, 0, 0],
             ["tyre_rear", "Tyre at the rear", "", 0, 0, 0],
-            ["tyre_width", "Tyre: width of the tread (0: from the wheel)", "cm", 0, 60, 1],
+            ["tyre_width", "Tyre: width of the tread, front (0: from the wheel)", "cm", 0, 60, 1],
+            ["tyre_width_rear", "Tyre: width of the rear tread (0: as the front)", "cm", 0, 60, 1],
             ["tyre_rings", "Tyre: rings of nodes across the tread", "", 1, 5, 1],
             ["tyre_segments", "Tyre: nodes round the wheel (the sides of the tyre: 4 is a square, 6 a hexagon; fewer is cheaper, the road is still felt between the nodes)", "", 4, 72, 1],
             ["tyre_inner_ratio", "Tyre: radius of the inner shell (the rim), as a share of the tyre", "%", 30, 90, 1],
@@ -310,6 +311,7 @@ OpenRacer.CarTuning = (function () {
             sim_layout: (c.sound && c.sound.engine_sim && c.sound.engine_sim.layout) || "",
             sim_ir: (c.sound && c.sound.engine_sim && c.sound.engine_sim.ir) || "",
             tyre_width: tyres.shell && tyres.shell.width ? Math.round(tyres.shell.width * 100) : 0,
+            tyre_width_rear: tyres.shell && tyres.shell.width_rear ? Math.round(tyres.shell.width_rear * 100) : 0,
             tyre_rings: tyres.shell && tyres.shell.rings ? tyres.shell.rings : 3,
             tyre_segments: tyres.shell && tyres.shell.segments ? tyres.shell.segments : 36,
             tyre_inner_ratio: tyres.shell && tyres.shell.inner_ratio ? Math.round(tyres.shell.inner_ratio * 100) : 62,
@@ -412,7 +414,7 @@ OpenRacer.CarTuning = (function () {
             damping_rear: v.damping_rear / 100,
             compound: v.compound,
             tyre_damage: v.tyre_damage === "on",
-            tyre_width: v.tyre_width, tyre_rings: v.tyre_rings, tyre_segments: v.tyre_segments, tyre_inner_ratio: v.tyre_inner_ratio / 100, tyre_carcass: v.tyre_carcass,
+            tyre_width: v.tyre_width, tyre_width_rear: v.tyre_width_rear, tyre_rings: v.tyre_rings, tyre_segments: v.tyre_segments, tyre_inner_ratio: v.tyre_inner_ratio / 100, tyre_carcass: v.tyre_carcass,
             tyre_stiff_x: v.tyre_stiff_x,
             tyre_stiff_y: v.tyre_stiff_y,
             grip: v.grip / 100,
@@ -541,6 +543,7 @@ OpenRacer.CarTuning = (function () {
         c.chassis.roll_camber = v.roll_camber / 100;
         c.tyres = { compound: v.compound || "road", damage: v.tyre_damage === "on", shell: { width: v.tyre_width / 100, rings: v.tyre_rings, segments: v.tyre_segments, inner_ratio: v.tyre_inner_ratio / 100, carcass: v.tyre_carcass }, stiff_x: v.tyre_stiff_x, stiff_y: v.tyre_stiff_y, grip: v.grip / 100, grip_balance: v.grip_balance / 100, cornering: v.cornering / 100, rolling_resistance: v.rolling_resistance, heating: v.tyre_heating / 100, life: v.tyre_life / 100,
             pressure_front: v.pressure_front, pressure_rear: v.pressure_rear };
+        if(!(v.tyre_width_rear > 0)) delete c.tyres.shell.width_rear; else c.tyres.shell.width_rear = v.tyre_width_rear / 100;
         c.fuel = { tank: v.tank, use: v.fuel_use / 100 };
         c.engine = c.engine || {};
         c.engine.power_scale = v.power / 100;
