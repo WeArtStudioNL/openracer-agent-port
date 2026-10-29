@@ -1656,8 +1656,22 @@ initBuildUi();
 
 // ---- the dyno: a full-throttle pull on a dry road, measured at the wheels; only the chart shows it
 let dyno = null, dynoFrame = 0;
-let dynoSound = false;       // the engine sound was started by the dyno run (and stops with it)
-function dynoSoundOff() { if (!dynoSound) return; dynoSound = false; $("soundThrottle").value = 0; soundSliders(); setTimeout(() => { if (!dynoSound && preview.playing) stopPreview(); }, 900); }
+let dynoSound = false, dynoRamp = 0;       // the engine sound was started by the dyno run (and stops with it)
+// the run is over: the throttle closes and the engine drops back to idle (the engine braking is quick at first, then it settles), then the sound stops
+function dynoSoundOff() {
+    if (!dynoSound || !preview.playing) { dynoSound = false; return; }
+    cancelAnimationFrame(dynoRamp);
+    const from = parseFloat($("soundRpm").value), idle = num("idle") || 850, start = performance.now(), duration = 2200;
+    $("soundThrottle").value = 0;
+    const step = (now) => {
+        const f = Math.min(1, (now - start) / duration), e = 1 - Math.pow(1 - f, 2.2);
+        $("soundRpm").value = from + (idle - from) * e;
+        soundSliders();
+        if (f < 1 && dynoSound && preview.playing) { dynoRamp = requestAnimationFrame(step); return; }
+        if (dynoSound) setTimeout(() => { if (dynoSound && preview.playing) stopPreview(); dynoSound = false; }, 500);
+    };
+    dynoRamp = requestAnimationFrame(step);
+}
 function clearDyno() { if (!dyno) return; cancelAnimationFrame(dynoFrame); dynoSoundOff(); dyno = null; $("dynoInfo").textContent = ""; }
 function dynoPull() {
     const gears = parseGears(), final = num("finalDrive"), limit = num("limiter"), r = (num("tyre") || 0.65) / 2, mass = num("mass") || 1000;
@@ -1696,8 +1710,10 @@ $("runDyno").addEventListener("click", () => {
     dyno = { points: run.points, upTo: 0 };
     $("runDyno").disabled = true;
     // the engine sound runs with the pull at full throttle (it is started here when it was not playing)
+    cancelAnimationFrame(dynoRamp);
+    const owned = dynoSound || !preview.playing;       // (the sound is the dyno's: it started it, or it is still dropping to idle from the last run)
     const starting = preview.playing ? Promise.resolve() : playSound();
-    dynoSound = !preview.playing;
+    dynoSound = owned;
     starting.then(() => {
     const start = performance.now(), duration = 4500;
     const step = (now) => {
