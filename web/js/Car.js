@@ -1176,8 +1176,8 @@ OpenRacer.Car = function( config, domElement ) {
 
 };
 // The colours of a car on its model (Car.setColors, and the pictures of the tunes in the main menu): roots are the body and the wheels, colors { body, rim } (a CSS colour each, or null
-// for the colour of the model). The body is every mesh called body (its own name, a parent's up to the root, or its material's; not the soft body), the rims every mesh called rim
-// (a wheel part of the model, a rim of the wheel library). The material of such a mesh is made its own the first time (the model shares materials), and its colour as made is kept.
+// for the colour of the model). The paint of the body is every material called carpaint, the paint of the rims every material called rimpaint (the name of the material in the model: a mesh can have
+// more materials, only these change). The material is made its own the first time (the model shares materials), and the material as made is kept to go back to.
 OpenRacer.carFinishes = {
     "": { label: "As the model" },
     gloss: { label: "Gloss", roughness: 0.22, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.03 },
@@ -1191,15 +1191,13 @@ OpenRacer.carFinishes = {
     brushed: { label: "Brushed metal", roughness: 0.42, metalness: 1, clearcoat: 0 }
 };
 OpenRacer.applyCarColors = (function() {
-    var BODY_NAME = /body/i, RIM_NAME = /(^|[^a-z])rims?([^a-z]|$)/i;
-    function kindOf(mesh, stopAt) {
-        var names = [], o = mesh;
-        while(o && o !== stopAt) { if(o.name) names.push(o.name); o = o.parent; }
-        [].concat(mesh.material || []).forEach(function(m) { if(m && m.name) names.push(m.name); });
-        for(var i = 0; i < names.length; i++) {
-            if(RIM_NAME.test(names[i])) return "rim";
-            if(BODY_NAME.test(names[i]) && !/soft/i.test(names[i])) return "body";
-        }
+    // only the materials with these names take a colour and a finish: "carpaint" for the paint of the body, "rimpaint" for the paint of the rims (the name of the
+    // material in the model, whatever the mesh is called: Carpaint, carpaint.001, rim_paint)
+    var BODY_MATERIAL = /car[ _-]?paint/i, RIM_MATERIAL = /rim[ _-]?paint/i;
+    function kindOfMaterial(material) {
+        var name = material && material.name ? material.name : "";
+        if(RIM_MATERIAL.test(name)) return "rim";
+        if(BODY_MATERIAL.test(name)) return "body";
         return null;
     }
     // the patterns of a metal flake paint: a normal map (a tile that repeats) made once per pattern. noise: the tiny mirrors, random tilts per pixel; voronoi: crystals (cells of
@@ -1299,14 +1297,23 @@ OpenRacer.applyCarColors = (function() {
             if(!root) return;
             root.traverse(function(mesh) {
                 if(!mesh.isMesh || !mesh.material) return;
-                var kind = mesh.userData.colorKind !== undefined ? mesh.userData.colorKind : (mesh.userData.colorKind = kindOf(mesh, root.parent));
-                if(!kind) return;
-                var colour = colors ? colors[kind] : null, finish = colors ? colors[kind + "Finish"] : null, ud = mesh.userData;
-                if(!colour && !finish && !ud.asMade) return;
-                if(!ud.asMade) { ud.asMadeIsArray = Array.isArray(mesh.material); ud.asMade = [].concat(mesh.material); }
-                if(ud.styled) { ud.styled.forEach(function(m) { if(m.normalMap && m.normalMap !== (ud.asMade[0] && ud.asMade[0].normalMap)) m.normalMap.dispose(); m.dispose(); }); ud.styled = null; }
-                if(!colour && !finish) { mesh.material = ud.asMadeIsArray ? ud.asMade.slice() : ud.asMade[0]; return; }
-                ud.styled = ud.asMade.map(function(m) { return style(m, colour, finish, colors ? colors[kind + "Flake"] : 100, colors ? colors[kind + "Pattern"] : "noise"); });
+                var ud = mesh.userData;
+                if(!ud.asMade) {
+                    var list = [].concat(mesh.material), kinds = list.map(kindOfMaterial);
+                    if(!kinds.some(function(k) { return k; })) { ud.asMade = false; return; }          // (no paint on this mesh: it is not looked at again)
+                    ud.asMadeIsArray = Array.isArray(mesh.material); ud.asMadeList = list; ud.kinds = kinds;
+                }
+                if(ud.asMade === false) return;
+                var wanted = ud.kinds.some(function(kind) { return kind && colors && (colors[kind] || colors[kind + "Finish"]); });
+                if(!wanted && !ud.asMade) return;
+                if(!ud.asMade) ud.asMade = true;
+                if(ud.styled) { ud.styled.forEach(function(m, i) { if(m !== ud.asMadeList[i]) { if(m.normalMap) m.normalMap.dispose(); m.dispose(); } }); ud.styled = null; }
+                if(!wanted) { mesh.material = ud.asMadeIsArray ? ud.asMadeList.slice() : ud.asMadeList[0]; return; }
+                ud.styled = ud.asMadeList.map(function(m, i) {
+                    var kind = ud.kinds[i];
+                    if(!kind || !colors || !(colors[kind] || colors[kind + "Finish"])) return m;
+                    return style(m, colors[kind], colors[kind + "Finish"], colors[kind + "Flake"], colors[kind + "Pattern"]);
+                });
                 mesh.material = ud.asMadeIsArray ? ud.styled : ud.styled[0];
             });
         });

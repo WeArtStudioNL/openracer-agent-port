@@ -12,8 +12,8 @@ OpenRacer.CarTuning = (function () {
         { name: "Chassis", items: [
             // the colours of the car: the meshes of the model called body and the rims (the wheels of the model called rim, the rims of the wheel library); a colour picker
             // in the tuning menu (Tuning.js), "" is the car as made (the colours of the model)
-            ["body_color", "Colour of the body (the meshes called body)", "", 0, 0, 0],
-            ["rim_color", "Colour of the rims", "", 0, 0, 0],
+            ["body_color", "Colour of the body (the material carpaint)", "", 0, 0, 0],
+            ["rim_color", "Colour of the rims (the material rimpaint)", "", 0, 0, 0],
             ["body_finish", "Finish of the body", "", 0, 0, 0],
             ["rim_finish", "Finish of the rims", "", 0, 0, 0],
             ["body_pattern", "Flake pattern of the body", "", 0, 0, 0],

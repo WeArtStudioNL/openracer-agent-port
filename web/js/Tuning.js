@@ -301,7 +301,7 @@ var Tuning = (function() {
         sim_ir: ["Exhaust of the sound", function() { return (OpenRacer.engineSimImpulseResponses || []).map(function(ir) { return [ir.id, ir.label || ir.id]; }); }]
     };
     // the colour pickers (CarTuning.js: body_color, rim_color): a picker and a button back to the car as made
-    var COLORS = { body_color: "Colour of the body (the meshes called body)", rim_color: "Colour of the rims" };
+    var COLORS = { body_color: "Colour of the body (the material carpaint)", rim_color: "Colour of the rims (the material rimpaint)" };
     function colorRow(key) {
         var item = document.createElement("div");
         item.className = "item";
