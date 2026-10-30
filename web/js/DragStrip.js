@@ -69,7 +69,7 @@ OpenRacer.DragStrip = (function () {
         var hood = new THREE.Mesh(new THREE.BoxGeometry(1.06, 0.06, 0.4), plastic);
         hood.position.set(0, 4.58, 0.07); tree.add(hood);
         var halo = haloTexture();
-        treeLamps = [];
+        treeLamps = []; treeKey = "";              // (a new tree is dark: its lamps are lit again at the next change)
         // two columns (the two lanes of a real tree), each: the pre-stage and the stage lamp, three ambers, the green and the red
         [-0.25, 0.25].forEach(function (cx) {
             [["white", 4.38], ["white", 4.2], ["amber", 3.95], ["amber", 3.7], ["amber", 3.45], ["green", 3.15], ["red", 2.9]].forEach(function (row, n) {
@@ -88,14 +88,39 @@ OpenRacer.DragStrip = (function () {
         });
         tree.traverse(function (o) { if (o.isMesh) o.castShadow = true; });
         group.add(tree);
+        attachRecord();
     }
-    // which lamps are lit: { white, amber (0..3), green, red } or null for all dark
+    // The lamps in a replay (Replay.js): the game does not run in a replay, so the tree kept the lamps it had when the replay began. Every change of the lamps is a row of
+    // the recording (the time; 1 or -1 for lit or all dark; white, amber, green, red), and the replay lights them again, also after a jump (the last row before that time).
+    // (Replay.js is loaded after this file: the recording is attached when the tree is made)
+    var lampRecord = { replayLookback: 0 }, lampsOn = null, recordAttached = false;
+    function attachRecord() {
+        if (recordAttached || !OpenRacer.Replay || !OpenRacer.Replay.attach) return;
+        OpenRacer.Replay.attach("dragTree", lampRecord);
+        recordAttached = true;
+    }
+    function lampsOfRow(row) { return row[1] < 0 ? null : { white: row[2] > 0.5, amber: row[3], green: row[4] > 0.5, red: row[5] > 0.5 }; }
+    lampRecord.replayAdd = function (row) { drawLamps(lampsOfRow(row)); };
+    lampRecord.replayStep = function () {};
+    lampRecord.replayClear = function () { drawLamps(null); };
+    lampRecord.replayRebuild = function (rows, end) { drawLamps(end > 0 ? lampsOfRow(rows[end - 1]) : null); };
+    lampRecord.replaySnapshot = function () { return { on: lampsOn }; };
+    lampRecord.replayRestore = function (snap) { drawLamps(snap.on); };
+
+    // which lamps are lit: { white, amber (0..3), green, red } or null for all dark; a change is recorded for the replay
     function setLamps(on) {
         if (!treeLamps) return;
+        if (!drawLamps(on)) return;
+        attachRecord();
+        if (lampRecord.recorder) lampRecord.recorder(Float32Array.of(0, on ? 1 : -1, on && on.white ? 1 : 0, on ? on.amber : 0, on && on.green ? 1 : 0, on && on.red ? 1 : 0));
+    }
+    // the lamps lit as they are asked (true when that changed them)
+    function drawLamps(on) {
+        if (!treeLamps) return false;
         var key = on ? [on.white ? 1 : 0, on.amber, on.green ? 1 : 0, on.red ? 1 : 0].join("") : "";
-        if (key === treeKey) return;
+        if (key === treeKey) return false;
         treeKey = key;
-        var amberSeen = 0;
+        lampsOn = on ? { white: !!on.white, amber: on.amber, green: !!on.green, red: !!on.red } : null;
         treeLamps.forEach(function (l, n) {
             // (the rows: 0, 1 white; 2, 3, 4 amber; 5 green; 6 red; the same in the second column)
             var row = n % 7, lit = false;
@@ -104,6 +129,7 @@ OpenRacer.DragStrip = (function () {
             l.material.color.setHex(lit ? l.colour : 0x15181d);
             l.sprite.material.opacity = lit ? 0.6 : 0;
         });
+        return true;
     }
 
     // the white start line and the chequered finish line on the road
