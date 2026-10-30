@@ -47,6 +47,7 @@
         requestAnimationFrame(update);
         var player = typeof car !== "undefined" ? car : null, v = player && player.vehicle;
         if (!v || !v.ground) return;
+        grabFrame(v);
         var ground = v.ground, i, k;
         // the triangles near the car (3D physics only; the road of the 2D physics has no triangles of this kind)
         if (ground.use3D && ground.nearby) {
@@ -180,7 +181,7 @@
             if (!group) { group = new THREE.Group(); group.name = "debug view"; lines = layer("lines"); points = layer("points"); }
             if (typeof scene !== "undefined" && scene) scene.add(group);
             requestAnimationFrame(update);
-        } else { if (group && group.parent) group.parent.remove(group); if (modelsHidden) { modelsHidden = false; showModels(true); } }
+        } else { if (group && group.parent) group.parent.remove(group); if (modelsHidden) { modelsHidden = false; showModels(true); } setGrabMode(false); }
     }
     function toggle() { setOn(!on); }
 
@@ -192,6 +193,117 @@
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target && e.target.isContentEditable)) return;
         if (zero) toggle(); else if (on) toggleModels();
     });
+    window.addEventListener("keydown", function (e) {
+        if (e.code !== "KeyN" || !on || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+        var tag = e.target && e.target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target && e.target.isContentEditable)) return;
+        setGrabMode(!grabMode);
+    });
+
+    // ---- the node grabber (as BeamNG has it): with the view on, N switches it on; press on a node of the shell with the left mouse button and drag it, held by an elastic
+    // whose strength is set in the panel at the top right (SoftBody.grab: a spring from the node to the pointer, at the depth the node had when it was taken). Let go and
+    // it is free again. The elastic is drawn red from the node to the pointer.
+    var grabMode = false, grabbed = null, grabPanel = null, grabLine = null, grabStrength = 5000;
+    try { var keptStrength = parseFloat(localStorage.getItem("openracer.grabStrength")); if (keptStrength >= 100 && keptStrength <= 200000) grabStrength = keptStrength; } catch (e) { /* no storage */ }
+    var grabPointer = new THREE.Vector2(), grabRay = new THREE.Raycaster(), grabTarget = new THREE.Vector3(), grabNode = new THREE.Vector3(), grabLocal = new THREE.Vector3(), grabQ = new THREE.Quaternion();
+    function strengthText(n) { return n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + " kN/m" : Math.round(n) + " N/m"; }
+    function makeGrabPanel() {
+        grabPanel = document.createElement("div");
+        grabPanel.style.cssText = "position: fixed; right: 16px; top: 14px; z-index: 950; width: 230px; padding: 10px 14px 12px; background: rgba(14, 18, 24, 0.86); border: 1px solid #323c4a; border-radius: 10px; " +
+            "color: #dfe6ef; font: 12.5px Arial, sans-serif; display: none;";
+        grabPanel.innerHTML = "<div style=\"font-weight: bold; margin-bottom: 6px;\">Node grabber <span style=\"color: #9fb0c4; font-weight: normal;\">(N)</span></div>" +
+            "<div style=\"color: #9fb0c4; margin-bottom: 8px;\">Press on a node and drag it. Let go to drop it.</div>" +
+            "<div style=\"display: flex; justify-content: space-between;\"><span>Elastic</span><b class=\"grabValue\"></b></div>" +
+            "<input type=\"range\" min=\"2\" max=\"5.3\" step=\"0.01\" style=\"width: 100%;\">";
+        var slider = grabPanel.querySelector("input"), value = grabPanel.querySelector(".grabValue");
+        slider.value = Math.log10(grabStrength);
+        value.textContent = strengthText(grabStrength);
+        slider.oninput = function () {
+            grabStrength = Math.round(Math.pow(10, parseFloat(slider.value)));
+            value.textContent = strengthText(grabStrength);
+            try { localStorage.setItem("openracer.grabStrength", String(grabStrength)); } catch (e) { /* no storage */ }
+            var v = typeof car !== "undefined" && car ? car.vehicle : null;
+            if (grabbed && v && v.softBody) v.softBody.moveGrab(targetOf(v), grabStrength);
+        };
+        if (OpenRacer.Movable) OpenRacer.Movable.make(grabPanel, { key: "node-grabber", handle: grabPanel.firstElementChild });
+        document.body.appendChild(grabPanel);
+    }
+    function setGrabMode(value) {
+        grabMode = value;
+        if (value && !grabPanel) makeGrabPanel();
+        if (grabPanel) grabPanel.style.display = value ? "block" : "none";
+        if (!value) dropNode();
+    }
+    function pointerAt(e) {
+        var rect = renderer.domElement.getBoundingClientRect();
+        grabPointer.set((e.clientX - rect.left) / rect.width * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+    }
+    // the node nearest to the pointer on the screen (within 30 px): its number and its distance from the camera
+    function nodeUnder(e, v, sb) {
+        var rect = renderer.domElement.getBoundingClientRect(), best = null, bestD = 30;
+        grabQ.set(v.qx, v.qy, v.qz, v.qw);
+        for (var k = 0; k < sb.count; k++) {
+            if (!sb.alive(k)) continue;
+            sb.position(k, nodePos);
+            grabNode.set(nodePos.x, nodePos.y, nodePos.z).applyQuaternion(grabQ); grabNode.x += v.px; grabNode.y += v.py; grabNode.z += v.pz;
+            var depth = grabNode.distanceTo(camera.position);
+            grabLocal.copy(grabNode).project(camera);
+            if (grabLocal.z > 1) continue;
+            var sx = rect.left + (grabLocal.x + 1) / 2 * rect.width, sy = rect.top + (1 - grabLocal.y) / 2 * rect.height;
+            var d = Math.hypot(sx - e.clientX, sy - e.clientY);
+            if (d < bestD) { bestD = d; best = { node: k, depth: depth }; }
+        }
+        return best;
+    }
+    // the point under the pointer at the depth of the node, in the frame of the car
+    function targetOf(v) {
+        grabRay.setFromCamera(grabPointer, camera);
+        grabTarget.copy(grabRay.ray.origin).addScaledVector(grabRay.ray.direction, grabbed.depth);
+        grabQ.set(v.qx, v.qy, v.qz, v.qw).invert();
+        grabLocal.copy(grabTarget).sub(v2.set(v.px, v.py, v.pz)).applyQuaternion(grabQ);
+        return [grabLocal.x, grabLocal.y, grabLocal.z];
+    }
+    function dropNode() {
+        var v = typeof car !== "undefined" && car ? car.vehicle : null;
+        if (grabbed && v && v.softBody) v.softBody.release();
+        grabbed = null;
+        if (grabLine && grabLine.parent) grabLine.parent.remove(grabLine);
+    }
+    // every frame: the elastic goes where the pointer is (the car moves under it), and its line is drawn
+    function grabFrame(v) {
+        if (!grabbed || !v.softBody || !v.softBody.pull) { if (grabbed) dropNode(); return; }
+        var sb = v.softBody;
+        sb.moveGrab(targetOf(v), grabStrength);
+        sb.position(grabbed.node, nodePos);
+        grabQ.set(v.qx, v.qy, v.qz, v.qw);
+        grabNode.set(nodePos.x, nodePos.y, nodePos.z).applyQuaternion(grabQ); grabNode.x += v.px; grabNode.y += v.py; grabNode.z += v.pz;
+        if (!grabLine) {
+            grabLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xff4040, depthTest: false, transparent: true }));
+            grabLine.frustumCulled = false; grabLine.renderOrder = 1002; grabLine.userData.noGBuffer = true;
+        }
+        if (!grabLine.parent && typeof scene !== "undefined" && scene) scene.add(grabLine);
+        var pos = grabLine.geometry.attributes.position;
+        pos.setXYZ(0, grabNode.x, grabNode.y, grabNode.z); pos.setXYZ(1, grabTarget.x, grabTarget.y, grabTarget.z); pos.needsUpdate = true;
+    }
+    window.addEventListener("pointerdown", function (e) {
+        if (!grabMode || !on || e.button !== 0 || typeof renderer === "undefined" || e.target !== renderer.domElement || (OpenRacer.Replay && OpenRacer.Replay.active)) return;
+        var v = typeof car !== "undefined" && car ? car.vehicle : null, sb = v && v.softBody;
+        if (!sb || typeof camera === "undefined") return;
+        var hit = nodeUnder(e, v, sb);
+        if (!hit) return;
+        e.preventDefault();
+        pointerAt(e);
+        grabbed = hit;
+        sb.grab(hit.node, targetOf(v), grabStrength);
+        try { renderer.domElement.setPointerCapture(e.pointerId); } catch (err) { /* a synthetic event */ }
+    });
+    window.addEventListener("pointermove", function (e) {
+        if (!grabbed) return;
+        pointerAt(e);
+        var v = typeof car !== "undefined" && car ? car.vehicle : null;
+        if (v) grabFrame(v);                   // (the elastic follows the pointer at once, not only at the next picture)
+    });
+    window.addEventListener("pointerup", function (e) { if (grabbed && e.button === 0) dropNode(); });
     // A hit on the car with the middle mouse button while the view is on, as Apply force of the car editor does it: a cube of a tonne and a metre at 50 km/h against the
     // surface of the car where it is clicked (SoftBody.pushPlate, in the frame of the car). The car is not clamped here: it feels the hit too. A red arrow shows it for a moment.
     var HIT_KMH = 50, HIT_MASS = 1000, HIT_SIDE = 1, HIT_TIME = 0.03;
@@ -228,5 +340,5 @@
     });
     window.addEventListener("auxclick", function (e) { if (on && e.button === 1 && typeof renderer !== "undefined" && e.target === renderer.domElement) e.preventDefault(); });
 
-    OpenRacer.DebugView = { toggle: toggle, isOn: function () { return on; }, modelsHidden: function () { return on && modelsHidden; }, hitCar: hitCar };
+    OpenRacer.DebugView = { toggle: toggle, isOn: function () { return on; }, modelsHidden: function () { return on && modelsHidden; }, hitCar: hitCar, setGrabMode: setGrabMode, grabbing: function () { return grabbed; } };
 })();

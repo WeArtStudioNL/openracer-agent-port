@@ -1228,7 +1228,11 @@ var Settings = (function() {
     handlers.toggleTwoStep = function() { setOption("twoStep", !options.twoStep); };
     handlers.toggleLaunch = function() { setOption("launchControl", !options.launchControl); };
     handlers.toggleABS = function() { setOption("abs", !options.abs); };
-    handlers.toggleESC = function() { setOption("esc", !options.esc); };
+    handlers.toggleESC = function() {
+        // (with the debug view on, N is the node grabber, DebugView.js: the key of the ESC, N by default, then does not switch it)
+        if(OpenRacer.DebugView && OpenRacer.DebugView.isOn() && (bindings.toggleESC || []).some(function(k) { return k.code === "KeyN"; })) return;
+        setOption("esc", !options.esc);
+    };
     handlers.cameraSwitch = function() { setOption("camera", nextCamera(options.camera)); };
     handlers.parkingBrake = function() { if(options.camera === 4) return; if(window.car && window.car.toggleParkingBrake) window.car.toggleParkingBrake(); };     // (the free camera has P for its aim)
     handlers.freeCamAim = function() { if(options.camera === 4 && typeof OpenRacer !== "undefined" && OpenRacer.FreeCam) OpenRacer.FreeCam.toggleAim(); };

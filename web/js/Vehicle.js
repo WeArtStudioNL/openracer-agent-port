@@ -1546,7 +1546,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         setTurn();
         self.carContacts = 0; self.carHit = 0;
         buildCarPairs();
-        if(sb.quiet && !sb.plate && !wallCandidates.length && !carPairCount && Rm[4] > 0.2) return;      // nothing to hit and nothing moving
+        if(sb.quiet && !sb.plate && !sb.pull && !wallCandidates.length && !carPairCount && Rm[4] > 0.2) return;      // nothing to hit and nothing moving (and nothing held by the node grabber)
         if(carPairCount) sb.quiet = false;
         buildNodeTriangles();
         sb.step(dt, nodeContacts);

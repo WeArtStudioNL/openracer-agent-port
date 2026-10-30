@@ -384,6 +384,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
             // the forces of the hits (the callback fills this.force), then the anchors and the beams
             if (contacts) contacts(h);
             if (this.plate) { pushPlate(this.plate, h); if (this.plate.done) { this.lastPlate = this.plate; this.plate = null; this.pinned = false; } }
+            if (this.pull) pullNode(this.pull);
             for (var k = 0; k < N; k++) {
                 if (!anchorAlive[k] || isRig[k]) continue;
                 var ix = 3 * k;
@@ -451,7 +452,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
             }
             if (rigNodes.length) { if (rigSolve(h, dt)) moved = true; if (rigMaxMove > maxMove) maxMove = rigMaxMove; if (rigMaxSpeed2 > maxMove2) maxMove2 = rigMaxSpeed2; }
         }
-        this.quiet = !moved && maxMove < 1e-4 && maxMove2 < 1e-6 && !this.plate;
+        this.quiet = !moved && maxMove < 1e-4 && maxMove2 < 1e-6 && !this.plate && !this.pull;
         // the displacement for the model, when something moved
         var any = moved;
         if (!any) for (var m = 0; m < 3 * N; m++) { if (Math.abs(u[m]) > 1e-4) { any = true; break; } }
@@ -483,6 +484,21 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         this.quiet = false;
     };
     this.lastPlate = null;                             // the cube that has just been and gone: its peak force and speed
+
+    // A node held by an elastic (the node grabber of the debug view, DebugView.js): a spring of 'stiffness' N/m from the node to a point in the frame of the car, with
+    // the damping that keeps it from ringing, worked out in every small step of the shell (a stiff elastic stays steady). The node takes the car with it through its
+    // anchor and its beams, and bends and tears them as a hit does.
+    this.pull = null;
+    this.grab = function (k, target, stiffness) { if (k < 0 || k >= N || gone[k]) return false; this.pull = { node: k, target: target.slice(), k: Math.max(1, stiffness) }; this.quiet = false; return true; };
+    this.moveGrab = function (target, stiffness) { if (!this.pull) return; this.pull.target[0] = target[0]; this.pull.target[1] = target[1]; this.pull.target[2] = target[2]; if (stiffness) this.pull.k = Math.max(1, stiffness); this.quiet = false; };
+    this.release = function () { this.pull = null; };
+    function pullNode(pl) {
+        var k = pl.node, ix = 3 * k;
+        if (gone[k]) { self.pull = null; return; }
+        var dx = pl.target[0] - (rest[ix] + u[ix] + q[ix]), dy = pl.target[1] - (rest[ix + 1] + u[ix + 1] + q[ix + 1]), dz = pl.target[2] - (rest[ix + 2] + u[ix + 2] + q[ix + 2]);
+        var c = 2 * 0.7 * Math.sqrt(pl.k * mass[k]);
+        f[ix] += pl.k * dx - c * w[ix]; f[ix + 1] += pl.k * dy - c * w[ix + 1]; f[ix + 2] += pl.k * dz - c * w[ix + 2];
+    }
     this.releasePlate = function () { this.plate = null; this.lastPlate = null; this.pinned = false; };
 
     function pushPlate(pl, h) {
