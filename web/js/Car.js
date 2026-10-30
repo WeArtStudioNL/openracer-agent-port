@@ -377,7 +377,7 @@ OpenRacer.Car = function( config, domElement ) {
         }
         return lockDegrees;
     };
-    var fallMinY = null, fallFor = 0;
+    var fallMinY = null, fallFor = 0, autopilotStill = 0;
     this.returnToSaved = function() {
         var v = this.vehicle, p = this.nearestOnRacingLine() || savedReset || this.nearestOnTrack() || { x: startX, z: startZ, psi: startHeading, py: null };
         var samePlace = p.car === config.id;       // (a place saved before this was kept has no car: it is put on the road)
@@ -826,6 +826,12 @@ OpenRacer.Car = function( config, domElement ) {
         if(this.autopilot) {
             var pilot = this.autopilot, others = this.autopilotOthers ? this.autopilotOthers() : [];
             if(pilot.drive) pilot.drive(delta, others);
+            // (a car of the autopilot that went off and stands against something was left there for good: after six seconds without headway it is put back
+            // on the racing line, as the reset key does)
+            if(pilot.drive) {
+                if(Math.abs(v.u) < 1 && pilot.throttle > 0.3) autopilotStill += delta; else autopilotStill = 0;
+                if(autopilotStill > 6) { autopilotStill = 0; this.returnToSaved(); pilot.lineIndex = null; }      // (null: the line is searched whole)
+            }
             this.throttle = pilot.throttle; this.brakePedal = pilot.brakePedal;
             this.turnAngle = Math.max(-this.maxTurn, Math.min(this.maxTurn, pilot.turnAngle));
             this.handbrake = false; this.reverse = false; this.neutral = false; this.parkingLock = false; this.selector = "D";
