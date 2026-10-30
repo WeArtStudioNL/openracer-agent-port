@@ -45,6 +45,10 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - The tuning menu has the cards of the car editor, with the same names and in the same order: Wheels, Suspension and driveline, Chassis, Drivetrain, Engine, Engine sound, Assists and extras, Cameras, Soft body (and Motorcycle, and the Mirrors of the game). Every card holds its groups (Chassis: Chassis settings, Brakes, Aerodynamics and steering, Size and steering wheel; Engine: Fuel, Engine settings), the card Engine shows the power and the card Drivetrain the top speed. The structure is one list for both (`OpenRacer.CarTuning.CARDS`). The torque-curve rows (peak power and its rpm) are gone from the menu: the curve follows from the engine that is built in the editor.
 
+### The grid and the pit boxes on the road
+
+- A grid box is a line across the front with a short leg back from each end (80 cm); the sides ran the whole five metres. The pit box of the player is yellow and stronger (it stands out), the pit boxes of the other cars are light blue.
+
 ### Track editor: the panels move, the handles keep their size
 
 - **Rain and snow on a track drawn with the editor**: the road, the shoulders and the kerbs got no wet and no snow (the ground and the prefabs did). Their triangles were made the wrong way round, so their normals pointed down (the material is drawn on both sides, so it did not show), and the weather only goes on what faces up. The editor makes them the right way round now, and the weather takes the side that is seen, so a track that was saved before works too, without saving it again.
