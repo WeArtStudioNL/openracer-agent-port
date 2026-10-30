@@ -1788,6 +1788,7 @@ async function loadExisting() {
         updateMarkers();
         updateLineNote();
         status("", "");
+        markSaved();
     } catch (error) {
         status("Could not load the track: " + error.message, "error");
     }
@@ -1832,6 +1833,7 @@ function newTrack() {
     updateLineNote();
     startDesign(null);
     status("A new track: draw it with nodes in the view, or import a model.", "ok");
+    markSaved();
 }
 
 // ---- the thumbnail: the track as the game shows it, from the camera as it stands, without the markers, the nodes, the gizmos and the line (everything in the scene that is
@@ -2011,6 +2013,7 @@ async function save() {
         updateLineNote();
         status(saved.where === "server" ? "Saved as tracks/" + id + ". It is in the main menu of the game now."
             : "Saved in your garage, in this browser (the server does not save). It is in the main menu of the game now.", "ok");
+        markSaved();
     } catch (error) {
         status(error.message, "error");
     }
@@ -2053,6 +2056,8 @@ $("recordLine").onclick = async () => {
         try { const cars = await Catalog.load("cars", "../"); car = cars.length ? cars[0].id : null; } catch (e) { /* nothing to drive */ }
     }
     if (!car) { status("No car to drive with.", "error"); return; }
+    if (unsaved() && !(await OpenRacerDialog.ask({ title: "Leave without saving?", text: "The line is recorded on the saved track; the changes since the last save are lost.", ok: "Record the line", danger: true }))) return;
+    savedPrint = null;           // (the question was asked: the page may go)
     window.location.href = "../index.html?car=" + encodeURIComponent(car) + "&track=" + encodeURIComponent(state.existingId) + "&recordline=1&ai=0&ghost=0&records=0";
 };
 
@@ -2098,11 +2103,38 @@ async function openFromAddress() {
     if (line) history.replaceState(null, "", window.location.pathname + "?track=" + encodeURIComponent(id));
 }
 
+// ---- unsaved changes: what would be saved (the fields, the markers, the design, the objects) is compared with what it was when the track was
+// loaded, made new or saved. Leaving the page, Record AI racing line, choosing another track and New track ask first when it differs (all of it was lost
+// without a word)
+
+function fingerprint() {
+    try {
+        const fields = [...document.querySelectorAll("input, select, textarea")].filter((e) => e.id && e.id !== "existing" && e.type !== "file")
+            .map((e) => e.id + "=" + (e.type === "checkbox" ? e.checked : e.value));
+        return JSON.stringify([fields, state.start, state.grid, state.pit, state.pitLine, state.pitBoxes, state.gates, state.cameras, state.drag, state.roles, state.env, state.skyName,
+            design.active && design.active() ? design.toJSON() : null, objectState.list.map((o) => [o.model, o.x, o.y, o.z, o.heading, o.scale])]);
+    } catch (error) { return ""; }
+}
+let savedPrint = null;
+function markSaved() { savedPrint = fingerprint(); }
+function unsaved() { return savedPrint !== null && fingerprint() !== savedPrint; }
+async function discardOk() {
+    if (!unsaved()) return true;
+    return OpenRacerDialog.ask({ title: "Discard the changes?", text: "The track has changes that are not saved.", ok: "Discard", danger: true });
+}
+window.addEventListener("beforeunload", (e) => { if (unsaved()) { e.preventDefault(); e.returnValue = ""; } });
+
 // ---- the form
 
 $("files").addEventListener("change", (e) => { if (e.target.files.length) loadFromFiles([...e.target.files]); });
-$("existing").addEventListener("change", () => $("existing").value ? loadExisting() : newTrack());
-$("newTrack").onclick = newTrack;
+let shownTrack = "";
+$("existing").addEventListener("focus", () => { shownTrack = $("existing").value; });
+$("existing").addEventListener("change", async () => {
+    if (!(await discardOk())) { $("existing").value = shownTrack; return; }
+    shownTrack = $("existing").value;
+    await ($("existing").value ? loadExisting() : newTrack());
+});
+$("newTrack").onclick = async () => { if (await discardOk()) newTrack(); };
 $("save").onclick = save;
 $("delete").onclick = deleteTrack;
 $("id").addEventListener("input", () => { state.idEdited = true; });
