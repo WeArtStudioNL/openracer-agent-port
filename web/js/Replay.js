@@ -103,6 +103,9 @@ OpenRacer.Replay = (function() {
             w.center.x = array[o]; w.center.y = array[o + 1]; w.center.z = array[o + 2];
             w.spin = array[o + 3];
             w.visualLength = array[o + 4];
+            // the steer of the wheel itself (its toe and the Ackermann; Car.js and the suspension rig turn the wheel by it): the physics does not run in a replay, so it stayed at
+            // the angle the wheels had when the replay began. It is not recorded: the front wheels take the steering of the sample, the rear wheels none
+            w.steerNow = k < 2 ? v.steerApplied : 0;
             w.squeal = v.wheelLost && v.wheelLost[k] ? 0 : v.squeal;
         }
     }
