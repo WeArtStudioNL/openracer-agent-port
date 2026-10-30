@@ -45,6 +45,12 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - The tuning menu has the cards of the car editor, with the same names and in the same order: Wheels, Suspension and driveline, Chassis, Drivetrain, Engine, Engine sound, Assists and extras, Cameras, Soft body (and Motorcycle, and the Mirrors of the game). Every card holds its groups (Chassis: Chassis settings, Brakes, Aerodynamics and steering, Size and steering wheel; Engine: Fuel, Engine settings), the card Engine shows the power and the card Drivetrain the top speed. The structure is one list for both (`OpenRacer.CarTuning.CARDS`). The torque-curve rows (peak power and its rpm) are gone from the menu: the curve follows from the engine that is built in the editor.
 
+### Car editor: limits for every axis of a pin
+
+- **Every free axis of a pin point has its own Min and Max sliders** (X, Y and Z in their colours), and the fans in the view follow them. car.json: `limits: { x: [min, max], y: [...], z: [...] }` per pin; a pin of before keeps its `min` and `max` for every axis (and `min`/`max` stay those of the first free axis).
+- **A pin with two or three free axes has limits now.** It was a ball joint without any: it turned every way. It is a joint that holds the place and the axes that are not free, and lets each free one turn between its own limits. The engine makes its own frame from the axis it is given (its Y and Z are not those of the car), so the axes of the pin are put on the axes of that frame. Measured with the left door of the hatchback on a pin free about X, Y and Z (limits X ±10, Y -60 to 0, Z ±5 degrees) and pushed every way: it stayed within 10.5, -60.1 to 0 and 5.2 degrees, also with the pin turned 30 degrees.
+- **The pin points hold a part on a car without a shell too** (Dents off, the hatchback with Race): they were left out without the shell, and the part turned about an axis of its own (up, 90 degrees each way).
+
 ### Car editor: choose a part in the Layers panel
 
 - **A click on a row under Parts in the Layers panel chooses that object as a part**: the window of the part opens and the row is lit, a parent or a child on its own (a click in the view takes the outermost object, the door and not the glass in it); a second click closes it. Objects moved by the wheels, the steering or the suspension rig are not taken.

@@ -181,7 +181,7 @@ export function initSoftBody(api) {
             });
             // the pin points of the part window have more than the fields here (axes, angles, more than two): they are kept
             const prev = part.mounts || [];
-            mounts.forEach((m, i) => { const old = prev[i]; if (old && old.axes && JSON.stringify(old.point || null) === JSON.stringify(m.point || null) && old.node === m.node) { m.axes = old.axes; m.min = old.min; m.max = old.max; if (old.rot) m.rot = old.rot; if (old.activate_force) m.activate_force = old.activate_force; } });
+            mounts.forEach((m, i) => { const old = prev[i]; if (old && old.axes && JSON.stringify(old.point || null) === JSON.stringify(m.point || null) && old.node === m.node) { m.axes = old.axes; m.min = old.min; m.max = old.max; if (old.limits) m.limits = old.limits; if (old.rot) m.rot = old.rot; if (old.activate_force) m.activate_force = old.activate_force; } });
             if (prev.length > 2) prev.slice(2).forEach((m) => mounts.push(m));
             if (mounts.length) part.mounts = mounts; else delete part.mounts;
             delete part.break_force;
@@ -1416,16 +1416,36 @@ export function initSoftBody(api) {
             const axes = pin.axes || { x: true, y: false, z: false };
             const d = add('<div class="pw-pin' + (i === sb.pinSel ? " sel" : "") + '"><div class="pw-pinhead"><b>Pin ' + (i + 1) + '</b> <span class="hint">' + pin.point.map((x) => x.toFixed(2)).join(", ") + '</span>' +
                 ' <span class="pw-axes">' + AXES.map((a) => '<button class="small ' + (axes[a] ? "accent" : "ghost") + '" data-axis="' + a + '">' + a.toUpperCase() + "</button>").join("") + '</span> <button class="small ghost" data-a="del" title="Remove this pin point">✕</button></div>' +
-                '<div class="row"><div><label>Min <b data-v="min"></b>°</label><input type="range" data-a="min" min="-180" max="0" step="1"></div><div><label>Max <b data-v="max"></b>°</label><input type="range" data-a="max" min="0" max="180" step="1"></div></div>' +
+                '<div data-a="limits"></div>' +
                 '<div class="row"><div><label>Rotation of the pin (°) <button class="small ghost set" data-a="rot0">Reset</button></label><div class="row"><input type="number" data-a="rx" step="5"><input type="number" data-a="ry" step="5"><input type="number" data-a="rz" step="5"></div></div></div>' +
                 '<div class="row"><div><label title="1 kN is about 102 kg of force">Opens at (kN)</label><input type="number" data-a="activate" min="0" step="1" placeholder="the part stays shut"></div>' +
                 '<div><label title="1 kN is about 102 kg of force">Breaks off at (kN)</label><input type="number" data-a="force" min="0" step="10" placeholder="0: never"></div></div>' +
                 '<div class="hint pw-warn"></div></div>');
             const pinEl = d.querySelector(".pw-pin");
             const q = (a) => d.querySelector('[data-a="' + a + '"]');
-            const min = pin.min !== undefined ? pin.min : -90, max = pin.max !== undefined ? pin.max : 90;
-            q("min").value = min; q("max").value = max;
-            d.querySelector('[data-v="min"]').textContent = min; d.querySelector('[data-v="max"]').textContent = max;
+            // the limits: every free axis has its own (the axis turns between its min and max from the rest place); a pin of before had one pair for all
+            const freeAxes = AXES.filter((a) => axes[a]), limitBox = q("limits");
+            if (!freeAxes.length) limitBox.innerHTML = '<p class="hint">No free axis: the pin holds the part fast.</p>';
+            freeAxes.forEach((a) => {
+                const lim = limitsOf(pin, a), colour = "#" + AXIS_COLOURS[a].toString(16).padStart(6, "0");
+                const row = document.createElement("div");
+                row.className = "row";
+                row.innerHTML = '<div><label><b style="color: ' + colour + '">' + a.toUpperCase() + '</b> min <b data-v="min"></b>°</label><input type="range" data-l="min" min="-180" max="0" step="1"></div>' +
+                    '<div><label><b style="color: ' + colour + '">' + a.toUpperCase() + '</b> max <b data-v="max"></b>°</label><input type="range" data-l="max" min="0" max="180" step="1"></div>';
+                const inputs = { min: row.querySelector('[data-l="min"]'), max: row.querySelector('[data-l="max"]') };
+                ["min", "max"].forEach((k, j) => {
+                    inputs[k].value = lim[j]; row.querySelector('[data-v="' + k + '"]').textContent = lim[j];
+                    inputs[k].addEventListener("input", () => {
+                        const now = [parseFloat(inputs.min.value), parseFloat(inputs.max.value)];
+                        pin.limits = Object.assign({}, pin.limits || {}); pin.limits[a] = now;
+                        if (a === freeAxes[0]) { pin.min = now[0]; pin.max = now[1]; }         // (the pair of before: the first free axis)
+                        row.querySelector('[data-v="' + k + '"]').textContent = now[j];
+                        sb.pinSel = i; drawPartGizmos();
+                    });
+                    inputs[k].addEventListener("change", () => { checkForces(); partChanged(); });
+                });
+                limitBox.appendChild(row);
+            });
             q("force").value = pin.break_force ? pin.break_force / 1000 : "";
             q("activate").value = pin.activate_force ? pin.activate_force / 1000 : "";
             const warn = d.querySelector(".pw-warn");
@@ -1433,7 +1453,8 @@ export function initSoftBody(api) {
                 const msgs = [];
                 if (pin.activate_force && pin.break_force && pin.break_force <= pin.activate_force) msgs.push("Breaks off should be higher than opens at, or the part never swings: it falls off at once.");
                 // where the part lies now against the zero of the pin: it has to be inside min..max, or it is pushed there at the start
-                const lie = -twistOf(pin) * 180 / Math.PI, lo = pin.min !== undefined ? pin.min : -90, hi = pin.max !== undefined ? pin.max : 90;
+                const lieLimits = freeAxes.length === 1 ? limitsOf(pin, freeAxes[0]) : [-180, 180];
+                const lie = -twistOf(pin) * 180 / Math.PI, lo = lieLimits[0], hi = lieLimits[1];
                 if (pin.rot && (lie < lo - 0.5 || lie > hi + 0.5)) msgs.push("The part lies at " + lie.toFixed(0) + "° from the zero of the pin (the yellow line), outside min and max: it is pushed into the range at the start.");
                 warn.textContent = msgs.join(" ");
             };
@@ -1457,10 +1478,6 @@ export function initSoftBody(api) {
                 partChanged();
             }));
             // the sliders show on the gizmo while they move
-            ["min", "max"].forEach((k) => {
-                q(k).addEventListener("input", () => { pin[k] = parseFloat(q(k).value); d.querySelector('[data-v="' + k + '"]').textContent = pin[k]; sb.pinSel = i; drawPartGizmos(); });
-                q(k).addEventListener("change", () => partChanged());
-            });
             q("force").addEventListener("change", () => { const v = parseFloat(q("force").value); if (v > 0) pin.break_force = v * 1000; else delete pin.break_force; checkForces(); partChanged(); });
             q("del").addEventListener("click", () => { part.mounts.splice(i, 1); sb.pinSel = part.mounts.length ? Math.min(sb.pinSel, part.mounts.length - 1) : -1; partChanged(); });
         });
@@ -1521,6 +1538,11 @@ export function initSoftBody(api) {
         drawPartGizmos();
     });
     // the twist of a pin about its one axis (rad): turning the pin about its axis moves the zero of the angles
+    // the limits of a pin about one of its axes, in degrees: its own, or the min and max of the pin (as a pin of before has them)
+    function limitsOf(pin, a) {
+        if (pin.limits && Array.isArray(pin.limits[a])) return pin.limits[a].slice();
+        return [pin.min !== undefined ? pin.min : -90, pin.max !== undefined ? pin.max : 90];
+    }
     function twistOf(pin) {
         const axes = pin.axes || { x: true, y: false, z: false }, on = AXES.filter((k) => axes[k]);
         if (on.length !== 1 || !pin.rot) return 0;
@@ -1551,7 +1573,6 @@ export function initSoftBody(api) {
             if (i !== sb.pinSel || sb.partMode === "nodes") return;                  // no gizmo of the pin while nodes are added: it is in the way
             // the gizmo: every axis that is free, and the angles that it may turn through (from the rest place, towards min and max)
             const axes = pin.axes || { x: true, y: false, z: false };
-            const min = (pin.min !== undefined ? pin.min : -90) * Math.PI / 180, max = (pin.max !== undefined ? pin.max : 90) * Math.PI / 180;
             // the middle of the part, in the frame of the car
             let partCentre = null;
             const po = partObj();
@@ -1594,6 +1615,7 @@ export function initSoftBody(api) {
                 const centre = new THREE.Vector3();
                 const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([centre.clone().addScaledVector(axis, -0.35), centre.clone().addScaledVector(axis, 0.35)]), new THREE.LineBasicMaterial({ color: AXIS_COLOURS[a], depthTest: false }));
                 line.renderOrder = 15; holder.add(line);
+                const lim = limitsOf(pin, a), min = lim[0] * Math.PI / 180, max = lim[1] * Math.PI / 180;      // (every axis its own limits)
                 const radius = 0.3, steps = Math.max(2, Math.ceil((max - min) / (Math.PI / 36)));
                 const arc = [];
                 for (let k = 0; k <= steps; k++) { const t = min + (max - min) * k / steps; arc.push(centre.clone().addScaledVector(u, Math.cos(t) * radius).addScaledVector(v, Math.sin(t) * radius)); }
