@@ -976,6 +976,7 @@ OpenRacer.Car = function( config, domElement ) {
     // A track with gates (lines across the road, see the track editor): a gate is passed when the car crosses its line in the direction of
     // the gate. It is then handled like a piece of road that is a checkpoint.
     var lastGateX = null, lastGateZ = null;
+    var lastCrossedGate = null;          // the gate that was crossed last (the reset goes back on the line from it to the next); it was not declared: a reset before the first gate threw
     // The racing line as a second way to count (a track with gates and a closed line): the lap is cut in SECTORS pieces of the line, and a piece counts as driven when
     // the car was within 40 m of it. A lap with all pieces driven counts, also when a gate was missed: the pit lane runs beside the road, out of the width of the gates,
     // and a lap through the pits was no lap. Beside the finish gate (up to 40 m out of its width, where the line is at the finish) the line is the finish as well.
