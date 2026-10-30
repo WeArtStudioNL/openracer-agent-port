@@ -2203,6 +2203,7 @@ function fill(car) {
     set("reverse", d.reverse_ratio); set("efficiency", d.efficiency);
     const e = car.engine;
     set("idle", e.idle_rpm); set("limiter", e.limiter_rpm); set("inertia", e.inertia);
+    $("soundRpm").max = Math.round((e.limiter_rpm || 7000) * 1.1);          // (the slider of the sound goes as high as the engine: it stopped at 7000 for a bike of 15500)
     state.curve = e.torque_curve.map((p) => [p[0], p[1]]);
     state.build = e.build && e.build.bore ? JSON.parse(JSON.stringify(e.build)) : null;
     $("bBlock").value = state.build ? (state.build.block || "") : "";
