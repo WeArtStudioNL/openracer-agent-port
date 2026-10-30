@@ -11,6 +11,9 @@
  *
  *   An item of the garage replaces the one of the folder with the same id, and both replace the one of the server. The
  *   configurations of the garage and the folder carry their files as blob URLs (Garage.resolve, Garage.manager).
+ *
+ *   The tunes that come with a car (car.json "tunes": the tune files next to it) are read before the list is given, and handed
+ *   to OpenRacer.Setups.ship, so that every menu has them as soon as it has the car.
  */
 
 var Catalog = (function() {
@@ -54,6 +57,24 @@ var Catalog = (function() {
         return Garage.folderList(kind);
     }
 
+    // the tune files of a car (car.json "tunes", names of files next to car.json); a file that is missing or is not a tune is left out
+    function tunes(config, base) {
+        var Setups = typeof OpenRacer !== "undefined" && OpenRacer.Setups, Garage = typeof OpenRacer !== "undefined" && OpenRacer.Garage;
+        if(!Setups) return Promise.resolve();
+        if(!Array.isArray(config.tunes)) { Setups.ship(config.id, []); return Promise.resolve(); }      // (a car that had tunes before and has none now)
+        return Promise.all(config.tunes.map(function(file) {
+            if(typeof file !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/.test(file)) return null;
+            var url = base + "cars/" + config.id + "/" + file;
+            if(Garage && Garage.resolve) url = Garage.resolve(config, url);
+            return fetch(url, { cache: "no-store" }).then(function(response) { return response.ok ? response.text() : null; }).then(function(text) {
+                var tune = text === null ? null : Setups.parseFile(text);
+                if(!tune || tune instanceof Error) { console.warn("Catalog: the tune " + file + " of " + config.id + " is left out" + (tune ? " (" + tune.message + ")" : "")); return null; }
+                tune.file = file;
+                return tune;
+            }).catch(function() { return null; });
+        })).then(function(list) { Setups.ship(config.id, list.filter(Boolean)); });
+    }
+
     // Promise of the list of configurations of "cars" or "tracks", each with its id. It fails only when nothing at all can be read.
     function load(kind, base) {
         base = base || "";
@@ -72,7 +93,8 @@ var Catalog = (function() {
             });
             var merged = order.map(function(id) { return byId[id]; });
             if(!merged.length && serverError) throw serverError;
-            return merged;
+            if(kind !== "cars") return merged;
+            return Promise.all(merged.map(function(config) { return tunes(config, base); })).then(function() { return merged; });
         });
     }
 

@@ -45,6 +45,10 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - The tuning menu has the cards of the car editor, with the same names and in the same order: Wheels, Suspension and driveline, Chassis, Drivetrain, Engine, Engine sound, Assists and extras, Cameras, Soft body (and Motorcycle, and the Mirrors of the game). Every card holds its groups (Chassis: Chassis settings, Brakes, Aerodynamics and steering, Size and steering wheel; Engine: Fuel, Engine settings), the card Engine shows the power and the card Drivetrain the top speed. The structure is one list for both (`OpenRacer.CarTuning.CARDS`). The torque-curve rows (peak power and its rpm) are gone from the menu: the curve follows from the engine that is built in the editor.
 
+### Tunes that come with a car
+
+- **A car can bring its own tunes**: tune files next to its car.json, listed in it (`"tunes": ["race.openracer-tune.json"]`), for everyone who plays the car, on the site too. They are in the main menu, the tuning menu and the car editor, marked *with the car*. *Save* keeps your own copy in the browser (it goes before the tune of the car), and *Delete* (*Undo changes* in the tuning menu) takes away only that copy. In the car editor, *Tune file → Ship with the car* writes the chosen tune next to car.json and adds it to the list; *Take off the car* removes it. The skidpad keeps its measurement for a tune of the car like for any other setup.
+
 ### Governor
 
 - **A governor in the extras** (*Assists and extras*, `governor_on` and `governor_rpm` under `extras` in car.json): a soft rev limit. Around its engine speed the throttle closes gently, over 250 rpm, so the engine holds that speed against the load instead of cutting the fuel and bouncing on the rev limiter. Made for a CVT at full throttle at its top speed (the go-kart: the belt at its top ratio, the engine went on to the limiter). Off by default; its engine speed starts at 85% of the rev limit.

@@ -640,6 +640,17 @@ var Tuning = (function() {
         dropSetup.onclick = function() {
             var name = setupSelect.value;
             if(!name) return;
+            // (a setup that comes with the car, changed here: the changes go, and the setup as it comes with the car is on the car)
+            if(OpenRacer.Setups.shippedState(config.id, name) === "copy") {
+                OpenRacerDialog.ask({ title: "Undo the changes to “" + name + "”?", text: "The setup goes back to how it comes with the car.", ok: "Undo changes", danger: true }).then(function(yes) {
+                    if(!yes) return;
+                    OpenRacer.Setups.remove(config.id, name);
+                    refresh();
+                    setupSelect.value = name;
+                    setupSelect.onchange();
+                });
+                return;
+            }
             OpenRacerDialog.ask({ title: "Delete the setup “" + name + "”?", text: "The tuning on the car stays as it is.", ok: "Delete", danger: true }).then(function(yes) {
                 if(!yes) return;
                 OpenRacer.Setups.remove(config.id, name);
@@ -820,11 +831,19 @@ var Tuning = (function() {
             o.value = name;
             var same = true;
             if(name === active) { var cfg = OpenRacer.Setups.configOf(config.id, name, config), saved = cfg ? fromConfig(Object.assign({}, original, cfg)) : null; if(saved) Object.keys(saved).forEach(function(key) { if(key in base && key !== "gen_power" && key !== "gen_peak_rpm" && JSON.stringify(saved[key]) !== JSON.stringify(values[key])) same = false; }); }       // (those two follow from the torque curve: they are not part of what is saved)
-            o.textContent = name + (name === active && !same ? " (changed)" : "");
+            var ship = OpenRacer.Setups.shippedState(config.id, name);
+            o.textContent = name + (ship ? " · with the car" : "") + (name === active && !same ? " (changed)" : "");
             setupSelect.appendChild(o);
         });
         setupSelect.value = active && names.indexOf(active) >= 0 ? active : "";
-        if(setupButtons) { var none = !setupSelect.value; setupButtons.save.disabled = none; setupButtons.drop.disabled = none; setupButtons.save.style.opacity = setupButtons.drop.style.opacity = none ? 0.45 : 1; }
+        if(setupButtons) {
+            // (a tune that comes with the car and has no copy in this browser cannot be deleted; of one with a copy, Delete takes the copy away)
+            var none = !setupSelect.value, ship = none ? null : OpenRacer.Setups.shippedState(config.id, setupSelect.value);
+            setupButtons.save.disabled = none; setupButtons.drop.disabled = none || ship === "car";
+            setupButtons.save.style.opacity = none ? 0.45 : 1; setupButtons.drop.style.opacity = setupButtons.drop.disabled ? 0.45 : 1;
+            setupButtons.drop.textContent = ship === "copy" ? "Undo changes" : "Delete";
+            setupButtons.drop.title = ship === "car" ? "This setup comes with the car" : ship === "copy" ? "The setup as it comes with the car, without the changes saved here" : "";
+        }
     }
 
     // The shell of a tyre of the wheel library is the tyre's own (WheelLibrary.js): with a library tyre on both axles the shell sliders show the tyre's values and are

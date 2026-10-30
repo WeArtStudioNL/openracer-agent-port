@@ -523,6 +523,7 @@ cd openracer-agent-port
                 <li><b>Export…</b> saves it as a file to share, and <b>Import…</b> makes a setup of a file of someone else.</li>
             </ul>
             <p>A car with setups gets a <b>Tune</b> step in the main menu, and an opponent can race with a setup too. The car editor has the same list at the top: its Save writes to the setup that is chosen, and Default writes <code>car.json</code>.</p>
+            <p><b>Setups that come with a car.</b> A car can bring its own setups, for everyone who plays it: tune files next to its <code>car.json</code>, listed in it as <code>"tunes": ["race.openracer-tune.json"]</code>. In the lists they say <i>with the car</i>. <b>Save</b> keeps your own copy in the browser, and <b>Undo changes</b> goes back to the setup as it comes with the car; it cannot be deleted. In the car editor, <i>Tune file → Ship with the car</i> writes the chosen tune next to <code>car.json</code> and adds it to the list, and <i>Take off the car</i> removes it again. A tune file exported with <i>Export…</i> works too: put it in the folder of the car and add its name to <code>"tunes"</code>.</p>
         </section>
 
         <section id="skidpad">
@@ -669,7 +670,7 @@ cd openracer-agent-port
                 <li><b>A new main menu</b> in steps: the way to play, the car and its setup, the track, the weather, the race and the opponents.</li>
                 <li><b>Drag strip</b> with a tree of lights, a time slip and a Top 50. See <a href="#dragstrip">Drag strip</a>.</li>
                 <li><b>Replays</b> in a library, takes, and a video editor. See <a href="#replay">Replay</a>.</li>
-                <li><b>Engine builder and dyno</b> in the car editor and the tuning menu, and <b>setups</b> saved under a name.</li>
+                <li><b>Engine builder and dyno</b> in the car editor and the tuning menu, and <b>setups</b> saved under a name; a car can bring its own setups (<a href="#setups">Setups</a>).</li>
                 <li><b>New gearboxes:</b> IMT, AMT, dual clutch, torque converter and CVT, with ready-made transmissions.</li>
                 <li><b>The tyre</b> is a shell of nodes, and the 2D physics is gone.</li>
                 <li><b>New cars and tracks:</b> the Hyundai i30, two karts, the OpenRacer Muscle, the stadium truck, two motorcycles; the Desert, Kartbaan Oldenzaal and TT Assen. The Mustangs are gone.</li>

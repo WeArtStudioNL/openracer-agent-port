@@ -769,45 +769,70 @@ OpenRacer.CarTuning = (function () {
 // The tuning menu of the game saves the car as it is tuned (its configuration with the tuning in it) and the car editor saves the car as the form has it; loading one in the
 // tuning menu takes the values of the table from it, loading one in the editor fills the form with all of it. The main menu offers the setups on the card of a car that has
 // two or more; the one that is chosen is the car of the next game: main.js lays its configuration over car.json (the model and the id stay those of the car).
+// A car can also come with tunes: tune files next to its car.json, listed in it ("tunes": ["race.openracer-tune.json"]), which Catalog.load reads and gives to ship().
+// They are in every list like the tunes of the browser; a tune of the browser with the same name goes before it (Save keeps a copy in the browser), Delete only takes
+// away the copy of the browser, and the car editor puts a tune with the car or takes it off again (shipFile).
 OpenRacer.Setups = (function () {
     var PREFIX = "openracer.setups.", CURRENT = "openracer.tuning.";
+    var shipped = {};       // the tunes that come with a car: { <car id>: { <name>: { config, file } } }
     function read(id) { try { var d = JSON.parse(window.localStorage.getItem(PREFIX + id)); if(d && d.setups) return d; } catch(e) {} return { setups: {}, active: null }; }
+    function find(id, name) { return read(id).setups[name] || (shipped[id] && shipped[id][name] && shipped[id][name].config) || null; }
     // The pictures of the cars and tracks that the menu keeps (openracer.preview.*, openracer.trackpreview.*) are made again when they are missing: they go first
     // when the storage of the browser is full, so that a tune can still be kept. Gives false when it could not be written.
     function dropPictures() {
         try { Object.keys(window.localStorage).filter(function (k) { return /^openracer\.(track)?preview\./.test(k); }).forEach(function (k) { window.localStorage.removeItem(k); }); } catch(e) {}
     }
     function write(id, d) {
-        var attempt = function () { if(Object.keys(d.setups).length) window.localStorage.setItem(PREFIX + id, JSON.stringify(d)); else window.localStorage.removeItem(PREFIX + id); };
+        var attempt = function () { if(Object.keys(d.setups).length || d.active) window.localStorage.setItem(PREFIX + id, JSON.stringify(d)); else window.localStorage.removeItem(PREFIX + id); };
         try { attempt(); return true; } catch(e) {}
         dropPictures();
         try { attempt(); return true; } catch(e) { return false; }
     }
     function clone(x) { return JSON.parse(JSON.stringify(x)); }
+    function safe(t) { return String(t).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "tune"; }
     return {
-        names: function (id) { return Object.keys(read(id).setups).sort(function (a, b) { return a.localeCompare(b); }); },
-        get: function (id, name) { var v = read(id).setups[name]; return v ? clone(v) : null; },
+        names: function (id) {
+            var own = Object.keys(read(id).setups), extra = Object.keys(shipped[id] || {}).filter(function (n) { return own.indexOf(n) < 0; });
+            return own.concat(extra).sort(function (a, b) { return a.localeCompare(b); });
+        },
+        get: function (id, name) { var v = find(id, name); return v ? clone(v) : null; },
+        // the tunes that come with a car (a list of { name, config, file }, from the tune files next to its car.json): they replace the ones it had
+        ship: function (id, list) {
+            shipped[id] = {};
+            (list || []).forEach(function (t) { if(t && t.name && t.config) shipped[id][t.name] = { config: clone(t.config), file: t.file || null }; });
+        },
+        // the name of the tune file next to car.json of a tune that comes with the car, or null
+        shippedFile: function (id, name) { return shipped[id] && shipped[id][name] ? shipped[id][name].file : null; },
+        // "car": the tune comes with the car (and the browser has no copy of it), "copy": the browser has its own copy of a tune of the car, null: a tune of the browser only
+        shippedState: function (id, name) {
+            if(!shipped[id] || !shipped[id][name]) return null;
+            return read(id).setups[name] ? "copy" : "car";
+        },
         // the configuration of a setup (a setup from before this form held the values of the table only: those are laid on the base configuration)
         configOf: function (id, name, base) {
-            var v = read(id).setups[name];
+            var v = find(id, name);
             if(!v) return null;
             // (no setting makes the engine stronger than the car is: the power scale of a setup is the one of the car)
             if(v.chassis) { var out = clone(v); if(out.engine) { if(base && base.engine && base.engine.power_scale !== undefined) out.engine.power_scale = base.engine.power_scale; else delete out.engine.power_scale; } return out; }
             return base && OpenRacer.CarTuning ? OpenRacer.CarTuning.toConfig(base, v) : null;
         },
-        active: function (id) { return read(id).active || null; },
+        active: function (id) { var a = read(id).active; return a && find(id, a) ? a : null; },
         // (the picture of a setup on its tile in the main menu is drawn by the menu from the configuration: MainMenu.js, requestTune)
         save: function (id, name, config) { var d = read(id); d.setups[name] = clone(config); d.active = name; delete d.thumbs; return write(id, d); },
-        remove: function (id, name) { var d = read(id); delete d.setups[name]; if(d.active === name) d.active = null; write(id, d); },
-        setActive: function (id, name) { var d = read(id); d.active = name && d.setups[name] ? name : null; write(id, d); },
-        // a tune as a file, to share: { "openracer-tune": 1, car, name, saved, config }; the name of the file is <car>-<name>.openracer-tune.json
-        exportFile: function (id, name, config) {
+        remove: function (id, name) { var d = read(id); delete d.setups[name]; if(d.active === name && !find(id, name)) d.active = null; write(id, d); },        // (a copy of a tune of the car: the tune of the car is left)
+        setActive: function (id, name) { var d = read(id); d.active = name && find(id, name) ? name : null; write(id, d); },
+        // a tune as a file: { "openracer-tune": 1, car, name, saved, config }, as text; the name of the file is <name>.openracer-tune.json next to car.json (shipFile),
+        // <car>-<name>.openracer-tune.json to share (exportFile)
+        shipFile: function (id, name, config) {
             var data = { "openracer-tune": 1, car: id, name: name, saved: new Date().toISOString(), config: clone(config) };
-            delete data.config.model; delete data.config.id;
-            var blob = new Blob([JSON.stringify(data, null, 1)], { type: "application/json" });
-            var safe = function (t) { return String(t).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "tune"; };
+            delete data.config.model; delete data.config.id; delete data.config.tunes;
+            return { name: safe(name) + ".openracer-tune.json", text: JSON.stringify(data, null, 1) + "\n" };
+        },
+        exportFile: function (id, name, config) {
+            var file = this.shipFile(id, name, config);
+            var blob = new Blob([file.text], { type: "application/json" });
             var url = URL.createObjectURL(blob), link = document.createElement("a");
-            link.href = url; link.download = safe(id) + "-" + safe(name) + ".openracer-tune.json";
+            link.href = url; link.download = safe(id) + "-" + file.name;
             document.body.appendChild(link); link.click(); link.remove();
             setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
         },
@@ -817,13 +842,13 @@ OpenRacer.Setups = (function () {
             try { data = JSON.parse(text); } catch (e) { return new Error("This is not a tune file (no JSON)."); }
             if(!data || data["openracer-tune"] !== 1 || !data.config || typeof data.config !== "object") return new Error("This is not an OpenRacer tune file.");
             if(!data.config.chassis && !data.config.drivetrain && !data.config.tyres) return new Error("The tune file has no car in it.");
-            var config = clone(data.config); delete config.model; delete config.id; if(config.engine) delete config.engine.power_scale;
+            var config = clone(data.config); delete config.model; delete config.id; delete config.tunes; if(config.engine) delete config.engine.power_scale;
             return { name: String(data.name || "Imported tune").slice(0, 40), car: data.car ? String(data.car) : "", config: config };
         },
         // the setup for the next game (null: the car as it was made); the tuning that was kept for the car is forgotten, the setup is the car from here
         use: function (id, name) {
             var d = read(id);
-            d.active = name && d.setups[name] ? name : null; write(id, d);
+            d.active = name && find(id, name) ? name : null; write(id, d);
             try { window.localStorage.removeItem(CURRENT + id); } catch(e) {}
         }
     };

@@ -1977,6 +1977,7 @@ async function save() {
         if (old && id === state.existingId) {
             for (const section of ["chassis", "drivetrain", "engine"]) config[section] = Object.assign({}, old[section], config[section]);
             for (const section of ["tyres", "assists", "extras"]) if (old[section] && !config[section]) config[section] = old[section];
+            if (Array.isArray(old.tunes) && old.tunes.length) config.tunes = old.tunes.slice();       // (the tunes that come with the car: the form does not have them; under another id they stay behind)
         }
 
         // the model that is replaced is removed from the folder of the car when it has another name
@@ -2717,7 +2718,8 @@ function renderSetups() {
     const id = $("id").value.trim(), select = $("setupSelect");
     const names = id && OpenRacer.Setups ? OpenRacer.Setups.names(id) : [];
     select.innerHTML = "";
-    [["", "Default (the car as made)"]].concat(names.map((n) => [n, n])).forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; select.appendChild(o); });
+    const label = (n) => { const ship = OpenRacer.Setups.shippedState(id, n); return n + (ship === "car" ? " · with the car" : ship === "copy" ? " · with the car, changed here" : ""); };
+    [["", "Default (the car as made)"]].concat(names.map((n) => [n, label(n)])).forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; select.appendChild(o); });
     const active = id && OpenRacer.Setups ? OpenRacer.Setups.active(id) : null;
     select.value = active && names.includes(active) ? active : "";
     select.disabled = !id;
@@ -2728,8 +2730,13 @@ function updateTuneButtons() {
     const name = $("setupSelect").value;
     $("save").textContent = name ? "Save tune" : "Save the car";
     $("save").title = name ? "Overwrite the tune " + name + " with the car as the form has it (car.json is not written)" : "Save the car (car.json)";
-    $("setupDelete").style.display = name ? "" : "none";
-    $("saveTo").textContent = name ? "Save writes to the tune " + name : "Save writes car.json";
+    // a tune that comes with the car (car.json "tunes") has no copy in this browser to delete: Take off the car takes it away
+    const ship = name ? OpenRacer.Setups.shippedState($("id").value.trim(), name) : null;
+    $("setupDelete").style.display = name && ship !== "car" ? "" : "none";
+    $("setupDelete").textContent = ship === "copy" ? "Delete the changes here" : "Delete tune";
+    $("tuneShip").style.display = name ? "" : "none";
+    $("tuneShip").textContent = ship === "car" ? "Take off the car" : ship === "copy" ? "Ship the changes with the car" : "Ship with the car";
+    $("saveTo").textContent = name ? "Save writes to the tune " + name + (ship === "car" ? " (a copy in this browser)" : "") : "Save writes car.json";
 }
 // the car as the form has it, kept as a tune under a name (buildConfig: the chassis, the tyres, the engine, the gearbox, the suspension and the parts, the driver, the soft body,
 // the cameras, the sound, the exhaust, the rims and the tyres), with the colours of the materials and a picture of the view; the model stays the car's own
@@ -2812,10 +2819,42 @@ $("tuneImportFile").addEventListener("change", async () => {
 $("setupDelete").addEventListener("click", () => {
     const id = $("id").value.trim(), name = $("setupSelect").value;
     if (!id || !name) return;
-    if (!window.confirm("Delete the tune " + name + "?")) return;
+    const copy = OpenRacer.Setups.shippedState(id, name) === "copy";
+    if (!window.confirm(copy ? "Delete the changes to the tune " + name + "? The tune as it comes with the car stays." : "Delete the tune " + name + "?")) return;
     OpenRacer.Setups.remove(id, name);
     renderSetups();
-    status("Tune " + name + " deleted.");
+    if (copy) { $("setupSelect").value = name; $("setupSelect").dispatchEvent(new Event("change")); }
+    status(copy ? "Tune " + name + " is as it comes with the car again." : "Tune " + name + " deleted.");
+});
+// a tune that comes with the car: its file next to car.json and its name in car.json "tunes" (Catalog.js reads them), so that everyone who has the car has the tune;
+// only car.json as it was saved is written, with the list (what the form has changed is not). Take off the car removes the file and the name again
+$("tuneShip").addEventListener("click", async () => {
+    const id = state.existingId, name = $("setupSelect").value;
+    if (!id || !state.existingCar || $("id").value.trim() !== id) { status("Save the car first.", "error"); return; }
+    if (!name) { status("Choose a tune first.", "error"); return; }
+    const ship = OpenRacer.Setups.shippedState(id, name), kept = OpenRacer.Setups.shippedFile(id, name);
+    const car = JSON.parse(JSON.stringify(state.existingCar));
+    const list = Array.isArray(car.tunes) ? car.tunes.filter((f) => f !== kept) : [];
+    try {
+        if (ship === "car") {
+            if (!window.confirm("Take the tune " + name + " off the car? Its file is removed from the folder of the car.")) return;
+            if (list.length) car.tunes = list; else delete car.tunes;
+            await OpenRacer.Garage.store("cars", id, car, {}, { base: "../", remove: kept ? [kept] : [] });
+        } else {
+            const file = OpenRacer.Setups.shipFile(id, name, OpenRacer.Setups.get(id, name));
+            let fileName = kept || file.name;
+            for (let n = 2; !kept && list.includes(fileName); n++) fileName = file.name.replace(/\.openracer-tune\.json$/, "-" + n + ".openracer-tune.json");
+            car.tunes = list.concat([fileName]);
+            await OpenRacer.Garage.store("cars", id, car, { [fileName]: new Blob([file.text], { type: "application/json" }) }, { base: "../" });
+        }
+    } catch (error) { status("Could not change the tunes of the car: " + error.message, "error"); return; }
+    if (car.tunes) state.existingCar.tunes = car.tunes; else delete state.existingCar.tunes;
+    await refreshList(id);
+    if (ship !== "car") OpenRacer.Setups.remove(id, name);          // (the copy of this browser is the file now)
+    renderSetups();
+    $("setupSelect").value = OpenRacer.Setups.names(id).includes(name) ? name : "";
+    updateTuneButtons();
+    status(ship === "car" ? "Tune " + name + " is off the car." : "Tune " + name + " comes with the car now: " + car.tunes[car.tunes.length - 1] + " next to car.json.", "ok");
 });
 
 // the settings that cannot do anything with the others as they are (the gearbox, the differential, the drive, the turbo) are hidden, as in the tuning menu of the game (CarTuning.visible)
