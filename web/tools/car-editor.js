@@ -717,6 +717,21 @@ function wheelCenters() {
 function wheelRadio() {
     return document.querySelector("input[name=wheelMode]:checked").value;
 }
+// the one shift of both axles (the middle between them from the middle of the model, + forward)
+function axleShift() { return num("frontOffset") || 0; }
+// the middle of a wheel where the Chassis card puts it (Dynamic wheels; CarLoader.js puts them there too): the tracks across, the wheelbase and the shift of the axles along
+function formHub(slot) {
+    const front = slot[0] === "F", left = slot[1] === "L", track = (front ? num("frontTrack") : num("rearTrack")) || 1.5;
+    return new THREE.Vector3(isBike() ? 0 : (left ? 1 : -1) * track / 2, 0, (front ? 1 : -1) * (num("wheelbase") || 2.6) / 2 + axleShift());
+}
+// the middles and the sizes of the wheels as the car has them: the wheel parts of the model, or with Dynamic wheels the places of the form and the size of the tyres
+// (the suspension of the parts library is placed from them: its ends at the wheels follow the wheelbase and the tracks)
+function wheelPlaces() {
+    if (wheelMode() === "model") return wheelCenters();
+    const sizes = libraryWheelSizes(), out = {};
+    SLOTS.forEach((slot, i) => { const d = (sizes && sizes[i]) || num("tyre") || 0.65; out[slot] = { c: formHub(slot), size: new THREE.Vector3(0.25, d, d) }; });
+    return out;
+}
 // what is measured on the wheel parts of the model (Find the wheels, Fit, the chassis from the wheels) works on the parts with either choice: with Dynamic wheels
 // (wheels.mode "default": the rims and tyres of the library, or the demo wheel, where the Chassis card puts them) the parts are the ones the game takes off the model
 function withModelWheels(fn) {
@@ -860,6 +875,8 @@ function chassisFromWheels() {
     $("frontTrack").value = Math.max(isBike() ? 0.04 : 0, Math.abs(c.FL.c.x - c.FR.c.x)).toFixed(3);
     $("rearTrack").value = Math.max(isBike() ? 0.04 : 0, Math.abs(c.RL.c.x - c.RR.c.x)).toFixed(3);
     $("tyre").value = meanTyre(c).toFixed(3);
+    // (and the place of the axles: the middle between them, so that Dynamic wheels stand where the wheels of the model are)
+    $("frontOffset").value = $("rearOffset").value = (((c.FR.c.z + c.FL.c.z) / 2 + (c.RR.c.z + c.RL.c.z) / 2) / 2).toFixed(3);
     updateHelpers();
 }
 
@@ -1833,8 +1850,9 @@ function buildConfig(id) {
         chassis: {
             mass: need("mass", "The mass"),
             wheelbase: need("wheelbase", "The wheelbase"),
-            front_axle_offset: num("frontOffset") || 0,            // (the axles are not the same way from the middle of the model: forward is positive; the wheels of the library stand there)
-            rear_axle_offset: num("rearOffset") || 0,
+            // (the axles are not the same way from the middle of the model: forward is positive, both by the same, so the wheelbase stays the distance between them; Dynamic wheels stand there)
+            front_axle_offset: axleShift(),
+            rear_axle_offset: axleShift(),
             front_track: need("frontTrack", "The front track"),
             rear_track: need("rearTrack", "The rear track"),
             weight_distribution: Math.min(0.9, Math.max(0.1, need("front", "The front weight") / 100)),
@@ -2201,7 +2219,9 @@ function fill(car) {
     set("mass", c.mass); set("front", +(c.weight_distribution * 100).toFixed(2)); set("cgHeight", c.cg_height);
     set("travel", Math.round((c.suspension_travel || 0.09) * 100)); $("travelLabel").textContent = $("travel").value + " cm";
     $("unsprung").checked = !!c.unsprung;
-    set("wheelbase", c.wheelbase); set("frontOffset", c.front_axle_offset || 0); set("rearOffset", c.rear_axle_offset || 0); set("frontTrack", c.front_track); set("rearTrack", c.rear_track);
+    // (a car of before had an offset for each axle, which changed the distance between them as the wheelbase does: the wheelbase is that distance now, and one shift moves both)
+    const fo = c.front_axle_offset || 0, ro = c.rear_axle_offset || 0, round = (v) => Math.round(v * 1000) / 1000;
+    set("wheelbase", round(c.wheelbase + fo - ro)); set("frontOffset", round((fo + ro) / 2)); set("rearOffset", round((fo + ro) / 2)); set("frontTrack", c.front_track); set("rearTrack", c.rear_track);
     set("tyre", c.tire_diameter); set("drag", c.drag_coefficient); set("steer", c.max_steer_deg);
     $("vehicleType").value = car.type === "motorcycle" ? "motorcycle" : "car";
     fillBike(car.motorcycle);
@@ -2415,7 +2435,7 @@ function updateLibraryPreview() {
             } else wheelParts(slot).forEach((p) => { p.visible = false; libHidden.push(p); });         // (the demo wheel: the wheel parts of the model are taken off in the game, CarLoader.js)
             if (!centre) {
                 const front = slot[0] === "F", left = slot[1] === "L", track = (front ? num("frontTrack") : num("rearTrack")) || 1.5;
-                centre = new THREE.Vector3((bike ? 0 : (left ? 1 : -1) * track / 2), 0, (front ? 1 : -1) * ((num("wheelbase") || 2.6) / 2) + (front ? num("frontOffset") : num("rearOffset")));
+                centre = formHub(slot);
             }
             if (wheel.offset) centre.x += (slot[1] === "L" ? 1 : -1) * wheel.offset;
             wheel.object.position.copy(centre);
@@ -2939,11 +2959,18 @@ function formChanged() {
         bench.vehicle.retune(retune);
     } catch (error) { /* a field that is empty or not valid yet: the next change tries again */ }
 }
-for (const id of ["mass", "front", "cgHeight", "wheelbase", "frontTrack", "rearTrack", "frontOffset", "rearOffset", "tyre", "drag", "steer", "length", "width", "height"]) $(id).addEventListener("input", formChanged);
+for (const id of ["mass", "front", "cgHeight", "wheelbase", "frontTrack", "rearTrack", "frontOffset", "tyre", "drag", "steer", "length", "width", "height"]) $(id).addEventListener("input", formChanged);
 // (Dynamic wheels, and the wheels of the library on a model without wheel parts, stand where the wheelbase, the tracks and the offsets say: they follow them at once, in the view
 // and on the bench; it was only for a model without wheel parts, so with Dynamic wheels on a model that has them nothing moved)
 function wheelsFromForm() { return wheelMode() !== "model"; }
-for (const id of ["wheelbase", "frontTrack", "rearTrack", "frontOffset", "rearOffset"]) $(id).addEventListener("input", () => { if (wheelsFromForm()) updateHelpers(); });
+for (const id of ["wheelbase", "frontTrack", "rearTrack", "frontOffset"]) $(id).addEventListener("input", () => { if (wheelsFromForm()) { updateHelpers(); rebuildBenchSoon(); } });
+// the parts of the parts library on the bench were built where the wheels were: a car that is tested is built again, half a second after the last change, where it stands
+let rebuildTimer = 0;
+function rebuildBenchSoon() {
+    clearTimeout(rebuildTimer);
+    if (!bench.vehicle || !(suspensionEditor && suspensionEditor.read().suspension)) return;
+    rebuildTimer = setTimeout(() => { if (bench.vehicle) restartBench(); }, 500);
+}
 
 // the fields of the gearbox that is chosen
 function syncGearboxBoxes() { const g = $("gearbox").value; $("cvtBox").style.visibility = g === "cvt" ? "" : "hidden"; $("tcBox").style.display = g === "torque-converter" ? "" : "none"; }
@@ -3502,7 +3529,7 @@ driverEditor = initDriver({
 });
 
 suspensionEditor = initSuspension({
-    $, THREE, scene, gizmo, rotGizmo, gizmoTargets, layers, selectLayer, wheelCenters,
+    $, THREE, scene, gizmo, rotGizmo, gizmoTargets, layers, selectLayer, wheelCenters: wheelPlaces,
     driveValue: () => $("drive").value,
     loadLibrary: () => loadPhysics(),
     renderLayers: () => renderLayers(),
