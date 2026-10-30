@@ -85,6 +85,12 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 - **The handles and the markers keep one size on the screen** when you zoom in or out: the nodes of the road, the points of a row of prefabs, the nodes of the racing line, the dots of the pit line and the pit area, the balls of the range of a camera, the arrows and the numbers of the grid, the pit boxes, the gates and the drag strip. They were made in metres (from the size of the track), so close by they filled the view and far away they were dots; a click takes them at the size that is drawn.
 - The **Layers** panel and the drawer of the track (*Track*, *Prefabs*) are moved by their heads, as the other windows of the editors (they lay over each other at the bottom right); where they are is kept in the browser.
 
+### Takes (the 5 key)
+
+- **The game stands still while a window of the take is open** (the choice before it and the save after it); it went on behind them.
+- **The red dot and the time come when the take starts**, after the count of five: they ran during the count already, from its start.
+- **The save window is not closed by a press beside it**: a drag of its title let go outside it closed it and threw the take away. Only Discard, Save, the cross and Escape close it; the first window closes on a press beside it only when the press began there.
+
 ### Replay: photos and the free camera
 
 - **The lamps of the drag strip in a replay**: the tree lights as it did (white, the three ambers, green, red), also after a jump in the replay; it kept the lamps it had when the replay began. A saved replay has them too.

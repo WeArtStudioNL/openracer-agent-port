@@ -103,8 +103,15 @@ OpenRacer.Take = (function () {
         }
         placeFrame();
         frame.style.display = "block";
+        // (the red dot and the time only once the take runs: during the count they ran already, from the start of the count)
+        frame.firstChild.style.display = "none";
+    }
+    function startRec() {
+        if (!frame) return;
+        frame.firstChild.style.display = "";
         var tick = function () { var r = replay(); recText.textContent = "REC " + format(r ? (r.sampleNow() - from) / r.rate : 0); };
         tick();
+        if (timer) clearInterval(timer);
         timer = setInterval(tick, 250);
     }
     function hideBadge() { if (badge) badge.style.display = "none"; if (frame) frame.style.display = "none"; if (timer) { clearInterval(timer); timer = null; } }
@@ -119,9 +126,14 @@ OpenRacer.Take = (function () {
 
     // ---- the windows
 
-    function dialog(title, text, build) {
+    // A window of the take. The game stands still while it is open (it went on behind it: the count of the take started in a game that had moved on). A press on the
+    // dark round it closes it only when the press began there too (a drag of the title let go outside the window closed it, and threw the take away); with keep,
+    // only its own buttons close it (the window that saves the take)
+    function dialog(title, text, build, keep) {
         return new Promise(function (resolve) {
             style();
+            var held = typeof Settings !== "undefined" && Settings.holdPause && !(Settings.isPaused && Settings.isPaused());
+            if (held) Settings.holdPause(true);
             var back = document.createElement("div");
             back.id = "takeDialog";
             var box = document.createElement("div");
@@ -131,12 +143,14 @@ OpenRacer.Take = (function () {
             var h = document.createElement("h2"); h.textContent = title;
             var p = document.createElement("div"); p.className = "text"; p.textContent = text;
             box.appendChild(close); box.appendChild(h); box.appendChild(p);
-            var finish = function (value) { if (back.parentNode) back.parentNode.removeChild(back); document.removeEventListener("keydown", onKey, true); resolve(value); };
+            var finish = function (value) { if (back.parentNode) back.parentNode.removeChild(back); document.removeEventListener("keydown", onKey, true); if (held) Settings.holdPause(false); resolve(value); };
             var onKey = function (event) { if (event.code === "Escape") { event.stopPropagation(); event.preventDefault(); finish(null); } };
             close.onclick = function () { finish(null); };
             build(box, finish);
             back.appendChild(box);
-            back.onclick = function (event) { if (event.target === back) finish(null); };
+            var downOnBack = false;
+            back.onpointerdown = function (event) { downOnBack = event.target === back; };
+            back.onclick = function (event) { if (!keep && downOnBack && event.target === back) finish(null); downOnBack = false; };
             document.addEventListener("keydown", onKey, true);
             document.body.appendChild(back);
         });
@@ -234,7 +248,7 @@ OpenRacer.Take = (function () {
             box.appendChild(row);
             nameField.focus(); nameField.select();
             nameField.onkeydown = function (e) { if (e.key === "Enter") { e.preventDefault(); finish({ name: nameField.value.trim() || defaultName, cutStart: cut.start, cutEnd: cut.end }); } };
-        });
+        }, true);              // (only Discard, Save, the cross and Escape close it: the take is not thrown away by a press beside it)
     }
 
     // ---- the take
@@ -272,6 +286,7 @@ OpenRacer.Take = (function () {
                 if (!live) { say("No video here"); stopTake(false); return; }
             }
             taking = true; from = r.sampleNow();
+            startRec();
             camSamples = [];
             if (!camLoop) camLoop = requestAnimationFrame(recordCamera);
             tickFrom = from;
