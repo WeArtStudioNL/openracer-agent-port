@@ -45,6 +45,10 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - The tuning menu has the cards of the car editor, with the same names and in the same order: Wheels, Suspension and driveline, Chassis, Drivetrain, Engine, Engine sound, Assists and extras, Cameras, Soft body (and Motorcycle, and the Mirrors of the game). Every card holds its groups (Chassis: Chassis settings, Brakes, Aerodynamics and steering, Size and steering wheel; Engine: Fuel, Engine settings), the card Engine shows the power and the card Drivetrain the top speed. The structure is one list for both (`OpenRacer.CarTuning.CARDS`). The torque-curve rows (peak power and its rpm) are gone from the menu: the curve follows from the engine that is built in the editor.
 
+### Governor
+
+- **A governor in the extras** (*Assists and extras*, `governor_on` and `governor_rpm` under `extras` in car.json): a soft rev limit. Around its engine speed the throttle closes gently, over 250 rpm, so the engine holds that speed against the load instead of cutting the fuel and bouncing on the rev limiter. Made for a CVT at full throttle at its top speed (the go-kart: the belt at its top ratio, the engine went on to the limiter). Off by default; its engine speed starts at 85% of the rev limit.
+
 ### Automatic gearbox: the limiter
 
 - **An automatic gearbox shifts up when the engine sits on the rev limiter with the throttle open.** It only did so when the wheels spun by more than 20% and 300 rpm, so a powerful car whose wheels spun by about 20% (the V12 rebuild with a final drive of 6.5 on slicks) stayed in the gear on the limiter for seconds: 5 s in 2nd gear at 100 km/h in a test, now 2 s. The shift comes after the engine has been at 97% of the limiter for a third of a second.

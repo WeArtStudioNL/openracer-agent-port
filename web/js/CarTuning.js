@@ -261,6 +261,9 @@ OpenRacer.CarTuning = (function () {
         { key: "two_step", label: "Two-step (the key, or the clutch pedal at a standstill)", items: [
             ["two_step_rpm", "Engine speed", "rpm", 1000, 20000, 100]
         ] },
+        { key: "governor", label: "Governor (a soft rev limit: the throttle closes gently, the engine holds the speed)", items: [
+            ["governor_rpm", "Engine speed", "rpm", 1000, 20000, 100]
+        ] },
         { key: "pops", label: "Pops and bangs (unburnt fuel burns in the exhaust)", items: [
             ["pops_amount", "How often (on the rev limiter and the two-step)", "%", 0, 100, 5],
             ["pops_overrun", "After lifting off the throttle: for", "s", 0, 4, 0.1],
@@ -282,7 +285,7 @@ OpenRacer.CarTuning = (function () {
         ] }
     ];
     var FEATURE_DEFAULTS = {
-        tc_on: true, abs_on: true, esc_on: true, launch_control_on: true, two_step_on: true,
+        tc_on: true, abs_on: true, esc_on: true, launch_control_on: true, two_step_on: true, governor_on: false, governor_rpm: 0,
         pops_on: false, pops_amount: 60, pops_overrun: 2, pops_rpm: 3000, pops_loud: 100, pops_flames: 100,
         antilag_on: false, antilag_mode: "lift", antilag_boost: 60, antilag_rpm: 3000, antilag_time: 5, antilag_bangs: 100, antilag_fuel: 60,
         boost_gauge_on: false, boost_full: 1, boost_scale: 2
@@ -439,6 +442,7 @@ OpenRacer.CarTuning = (function () {
         // the extras: what car.json has, or the default (the full boost of a turbo car follows its share of boost)
         var ex = c.extras || {};
         Object.keys(FEATURE_DEFAULTS).forEach(function (key) { v[key] = ex[key] !== undefined ? ex[key] : FEATURE_DEFAULTS[key]; });
+        if(!v.governor_rpm) v.governor_rpm = Math.round((en.limiter_rpm || 6600) * 0.85 / 100) * 100;
         if(ex.boost_full === undefined && en.turbo && en.turbo.share) v.boost_full = Math.round(en.turbo.share * 20) / 10;
         camerasOf(c, v);
         return v;

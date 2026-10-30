@@ -57,6 +57,7 @@ OpenRacer.Engine = function( parameters ) {
     this.limiterHz = parameters.limiter_hz || 12;
     this.twoStepRPM = parameters.two_step_rpm || Math.round(this.limiterRPM * 0.7 / 100) * 100;     // the lower limit of the two-step key
     this.launchRPM = parameters.launch_rpm || Math.round(this.limiterRPM * 0.6 / 100) * 100;        // the engine speed that the launch control holds
+    var GOVERNOR_BAND = 250;   // the governor (an extra, getNetTorque below) closes the throttle over this many rpm around its engine speed
     this.holdRPM = 0;
     this.cutting = false;
     this.cutTime = 0;
@@ -200,6 +201,11 @@ OpenRacer.Engine = function( parameters ) {
         // the pedal opens the throttle plate faster than the torque grows: half a pedal is already 70% of the air
         var pedal = 1 - Math.pow(1 - Math.max(0, Math.min(1, throttle)), 1.8);
         var thr = Math.max(pedal, idleThrottle);
+
+        // governor (an extra): around its engine speed the throttle closes gently, over GOVERNOR_BAND rpm, so the engine holds that speed against
+        // the load (a CVT at its top ratio at full throttle) instead of bouncing against the rev limiter
+        var x = this.extras;
+        if(x.governor_on && x.governor_rpm > 0) thr = Math.min(thr, Math.max(0, Math.min(1, (x.governor_rpm + GOVERNOR_BAND / 2 - rpm) / GOVERNOR_BAND)));
 
         // rev limiter: cut the fuel
         var limit = this.holdRPM > 0 ? Math.min(this.holdRPM, this.limiterRPM) : this.limiterRPM;
