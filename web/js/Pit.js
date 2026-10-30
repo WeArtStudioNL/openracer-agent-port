@@ -18,9 +18,9 @@ OpenRacer.PitStop = function (vehicle) {
     var LIFT = 1.2;            // seconds to lift the car and to drop it
     var TYRES_MIN = 2.5, TYRES_PER_WEAR = 5;  // seconds for the tyres: the more worn, the longer
     var TYRES_WHEN = 0.15;     // the tyres are changed when the most worn one is past this
-    // the damage (with Damage on): the dents of the shell (2 s and 4 s more for every centimetre that its nodes are out of place on average, at most 14 s), and 3 s for every
-    // part that came off and 4 s for every wheel that is bent or torn off; the repair goes side by side with the fuel and the tyres, at most 30 s
-    var REPAIR_BASE = 2, REPAIR_PER_CM = 4, REPAIR_DENTS_MAX = 14, REPAIR_PART = 3, REPAIR_WHEEL = 4, REPAIR_MAX = 30;
+    // the damage (with Damage on): the dents of the shell (1 s and 1.5 s more for every centimetre that its nodes are out of place on average, at most 7 s), and 1 s for every
+    // part that came off and 1.5 s for every wheel that is bent or torn off; the repair goes side by side with the fuel and the tyres, at most 10 s
+    var REPAIR_BASE = 1, REPAIR_PER_CM = 1.5, REPAIR_DENTS_MAX = 7, REPAIR_PART = 1, REPAIR_WHEEL = 1.5, REPAIR_MAX = 10;
     var wheelsFrom = null;     // the bends of the wheels when the repair began (they go straight with it)
     this.active = false;       // a stop is going on
     this.done = false;         // the stop is complete (until the car pulls away)
