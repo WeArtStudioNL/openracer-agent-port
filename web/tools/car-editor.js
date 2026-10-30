@@ -2556,6 +2556,8 @@ function applyPaint() {
         body: t.body_color || null, rim: t.rim_color || null, bodyFinish: t.body_finish || "", rimFinish: t.rim_finish || "",
         bodyFlake: t.body_flake || 100, rimFlake: t.rim_flake || 100, bodyPattern: t.body_pattern || "noise", rimPattern: t.rim_pattern || "noise", bodyUv: t.body_uv || "model", rimUv: t.rim_uv || "model"
     });
+    // the paint replaces the materials of the car of the bench, which bend with the shell: the new ones are made to bend too (a tune with a finish had a body that did not dent)
+    if (bench.obj && bench.obj.softBodyMesh && bench.obj.softBodyMesh.refresh) bench.obj.softBodyMesh.refresh();
 }
 function paintSection() {
     const details = document.createElement("details");

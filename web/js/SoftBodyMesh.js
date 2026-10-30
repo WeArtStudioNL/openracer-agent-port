@@ -26,6 +26,8 @@ OpenRacer.SoftBodyMesh = (function () {
         var materials = [];
         var p = new THREE.Vector3();
         var seen = -1;
+        var ours = new WeakSet();                                   // the materials that are the bending copies
+        var wrapped = [];                                           // the meshes that bend, with what their shader needs (for refresh)
 
         restore(root);                                              // a model that was made with other nodes before (the car editor) starts again
         var done = new Set();
@@ -68,10 +70,17 @@ OpenRacer.SoftBodyMesh = (function () {
             // a vector of the frame of the car in the space of this mesh
             var toLocal = new THREE.Matrix3().setFromMatrix4(mesh.matrixWorld).invert();
             mesh.userData.sbOriginal = mesh.material;
-            var list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            wrapped.push({ mesh: mesh, toLocal: toLocal, deform: deform });
+            mesh.material = wrapMaterial(mesh.material, mesh, toLocal, deform);
+        });
+        function wrapMaterial(current, mesh, toLocal, deform) {
+            var list = Array.isArray(current) ? current : [current];
             var copies = list.map(function (material) {
                 var copy = material.clone();
-                copy.onBeforeCompile = function (shader) {
+                ours.add(copy);
+                var before = material.onBeforeCompile, ownKey = material.customProgramCacheKey;         // (a paint with flakes has a shader of its own: kept, the bend is added to it)
+                copy.onBeforeCompile = function (shader, renderer) {
+                    if (before && before !== THREE.Material.prototype.onBeforeCompile) before.call(material, shader, renderer);
                     shader.uniforms.uNodeD = mesh.userData.sbUniform || uniform;          // the live bend of the shell, or the bend that a part took with it
                     shader.uniforms.uToLocal = { value: toLocal };
                     shader.uniforms.uDeform = deform;
@@ -79,12 +88,12 @@ OpenRacer.SoftBodyMesh = (function () {
                         .replace("#include <common>", "#include <common>\nattribute vec4 aNodes;\nattribute vec4 aWeights;\nuniform vec3 uNodeD[" + MAX_NODES + "];\nuniform mat3 uToLocal;\nuniform float uDeform;")
                         .replace("#include <begin_vertex>", "#include <begin_vertex>\nvec3 sbD = uNodeD[int(aNodes.x + 0.5)] * aWeights.x + uNodeD[int(aNodes.y + 0.5)] * aWeights.y + uNodeD[int(aNodes.z + 0.5)] * aWeights.z + uNodeD[int(aNodes.w + 0.5)] * aWeights.w;\ntransformed += uDeform * (uToLocal * sbD);");
                 };
-                copy.customProgramCacheKey = function () { return "softbody" + MAX_NODES; };
+                copy.customProgramCacheKey = function () { return (ownKey && ownKey !== THREE.Material.prototype.customProgramCacheKey ? ownKey.call(material) : "") + "softbody" + MAX_NODES; };
                 materials.push(copy);
                 return copy;
             });
-            mesh.material = Array.isArray(mesh.material) ? copies : copies[0];
-        });
+            return Array.isArray(current) ? copies : copies[0];
+        }
         if (!materials.length) return null;
 
         return {
@@ -108,6 +117,16 @@ OpenRacer.SoftBodyMesh = (function () {
                     delete m.userData.sbUniform;
                     (Array.isArray(m.material) ? m.material : [m.material]).forEach(function (mt) { mt.needsUpdate = true; });
                 });
+            },
+            // the materials of the model were replaced after the shell was put on it (the paint of the car editor, CarColors.js): the new ones bend too
+            refresh: function () {
+                wrapped.forEach(function (w) {
+                    var current = w.mesh.material, list = Array.isArray(current) ? current : [current];
+                    if (list.every(function (m) { return ours.has(m); })) return;
+                    w.mesh.userData.sbOriginal = current;
+                    w.mesh.material = wrapMaterial(current, w.mesh, w.toLocal, w.deform);
+                });
+                seen = -1;
             },
             // once per frame: the displacements to the graphics card, when something moved
             update: function () {
