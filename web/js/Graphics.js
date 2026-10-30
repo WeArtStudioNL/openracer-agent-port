@@ -12,7 +12,8 @@
  *              SSGI: for every pixel it looks at a few dozen other pixels around it (a ring that grows with the distance of the surface) and
  *              takes the light that they give off towards it: the colour of such a pixel, weighted by how much that pixel faces this one and
  *              this one faces it, and by the distance. That light is found at half the resolution, smoothed with a blur that follows the
- *              edges (depth and normal), and added to the picture times the colour of the surface: a red car lights the road next to it red,
+ *              edges (depth and normal), and added to the picture times the colour of the surface (guessed from the picture: its colour with most of
+ *              its brightness divided out, so the bounce also shows in the shade): a red car lights the road next to it red,
  *              a sunlit wall lights the shade at its foot. It is one bounce of what the screen shows, not the real thing: what is not on the
  *              screen gives no light.
  */
@@ -35,6 +36,8 @@ OpenRacer.Graphics = (function () {
     function opt(name) { return Settings.option(name); }
     function touch() { try { return window.matchMedia("(pointer: coarse)").matches; } catch (e) { return false; } }
 
+    function seeThrough(material) { var m = Array.isArray(material) ? material[0] : material; return !!(m && m.transparent && !m.depthWrite); }
+
     // ---- the picture of the normals and the depth: the scene with a normal material (as the GTAOPass makes it for itself)
     class GBufferPass extends THREE.Pass {
         constructor(scene, camera, width, height, scale) {
@@ -50,6 +53,11 @@ OpenRacer.Graphics = (function () {
             this.normalTexture = this.target.texture;
             this.material = new THREE.MeshNormalMaterial();
             this.material.blending = THREE.NoBlending;
+            // a surface that is drawn on both sides gets the normal of the face that is seen (from the derivatives of the place: flat shading, which three.js does not turn
+            // with the side): the stored normals of such a model can point the other way (the spokes of the rims of the wheel library, the road of a track of the track editor
+            // of before) without it showing in the picture, but here the occlusion read them as a surface that faces into the wheel, and the rims went black
+            this.doubleMaterial = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide, flatShading: true });
+            this.doubleMaterial.blending = THREE.NoBlending;
             this.hidden = [];
             this.swapped = [];
             this.clearColor = new THREE.Color();
@@ -74,13 +82,15 @@ OpenRacer.Graphics = (function () {
             return normal;
         }
         setSize(width, height) { this.target.setSize(Math.max(1, Math.floor(width * this.scale)), Math.max(1, Math.floor(height * this.scale))); }
-        dispose() { this.target.dispose(); this.material.dispose(); }
+        dispose() { this.target.dispose(); this.material.dispose(); this.doubleMaterial.dispose(); }
         render(renderer) {
             // only meshes count: points, lines and sprites (smoke, skid marks) are not part of the surfaces
             var hidden = this.hidden;
             hidden.length = 0;
             this.scene.traverse(function (o) {
-                if ((o.isPoints || o.isLine || o.isSprite || (o.isMesh && o.userData.noGBuffer)) && o.visible) { hidden.push(o); o.visible = false; }
+                // (and a see-through surface that does not write the depth, a pit box or a line on the road: it is not in the way of the light, and the pit box has no normals,
+                // so it was a black square of occlusion)
+                if ((o.isPoints || o.isLine || o.isSprite || (o.isMesh && (o.userData.noGBuffer || seeThrough(o.material)))) && o.visible) { hidden.push(o); o.visible = false; }
             });
             var oldTarget = renderer.getRenderTarget(), oldAuto = renderer.autoClear, oldAlpha = renderer.getClearAlpha();
             renderer.getClearColor(this.clearColor);
@@ -96,11 +106,12 @@ OpenRacer.Graphics = (function () {
             // bends it the same way, or the normals and the depth, and the effects that read them (the occlusion), stay where the car was whole
             var swapped = this.swapped;
             swapped.length = 0;
-            var plain = this.material, self = this;
+            var plain = this.material, double = this.doubleMaterial, self = this;
             this.scene.traverse(function (o) {
                 if (!o.isMesh || !o.visible) return;
                 swapped.push(o, o.material);
-                o.material = self.normalFor(o) || plain;
+                var own = Array.isArray(o.material) ? o.material[0] : o.material;
+                o.material = self.normalFor(o) || (own && own.side === THREE.DoubleSide ? double : plain);
             });
             renderer.render(this.scene, this.camera);
             renderer.shadowMap.autoUpdate = oldShadows;
@@ -165,7 +176,11 @@ OpenRacer.Graphics = (function () {
         "    sum += texture2D(tIndirect, suv).rgb * w; wsum += w;",
         "  }",
         "  vec3 gi = wsum > 1e-4 ? sum / wsum : vec3(0.0);",
-        "  gl_FragColor = vec4(base.rgb + base.rgb * gi, base.a);",
+        // the light that comes in is reflected with the colour of the surface itself, not with its colour as lit: in the shade that is nearly black, and the bounce did not
+        // show where it should (the shade under a car, beside a wall). The colour of the surface is guessed from the picture: its colour with most of its brightness divided out
+        "  float lum = max(max(base.r, base.g), base.b);",
+        "  vec3 albedo = base.rgb / (lum + 0.25);",
+        "  gl_FragColor = vec4(base.rgb + gi * albedo, base.a);",
         "}"
     ].join("\n");
 
@@ -180,7 +195,7 @@ OpenRacer.Graphics = (function () {
             };
             this.gather = new THREE.ShaderMaterial({
                 defines: { SAMPLES: quality > 1 ? 24 : 12 },
-                uniforms: uniforms({ tDiffuse: { value: null }, resolution: { value: new THREE.Vector2(width, height) }, radius: { value: 2.5 }, intensity: { value: quality > 1 ? 1.4 : 1.1 } }),
+                uniforms: uniforms({ tDiffuse: { value: null }, resolution: { value: new THREE.Vector2(width, height) }, radius: { value: 3.5 }, intensity: { value: quality > 1 ? 3.5 : 2.5 } }),
                 vertexShader: VERTEX, fragmentShader: GATHER_FRAGMENT, depthTest: false, depthWrite: false
             });
             this.compose = new THREE.ShaderMaterial({
@@ -326,7 +341,8 @@ OpenRacer.Graphics = (function () {
             gtao.normalRenderTarget.dispose();
             gtao.normalRenderTarget.setSize = function () {};
             gtao.output = THREE.GTAOPass.OUTPUT.Default;
-            gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1, thickness: 1, scale: 1.3, samples: ao > 1 ? 16 : 8, distanceFallOff: 1, screenSpaceRadius: false });
+            // (a radius of a metre and more: the shade under a car and at the foot of a rail or a wall; at 0.6 m and a scale of 1.3 only the small creases showed)
+            gtao.updateGtaoMaterial({ radius: 1.2, distanceExponent: 1.4, thickness: 1.5, scale: 2.0, samples: ao > 1 ? 16 : 8, distanceFallOff: 1, screenSpaceRadius: false });
             gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: ao > 1 ? 8 : 5, rings: 2, samples: ao > 1 ? 16 : 8 });
             gtao.blendIntensity = 1;
             passes.gtao = gtao;

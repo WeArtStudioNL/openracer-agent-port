@@ -49,6 +49,12 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - **On the jacks**: when the stop begins the car goes up slowly by 10 cm where it stands and is held there; the throttle, the brake and the steering do nothing (the car can no longer pull away in the middle of a stop). The count down is in the middle of the screen, with what is done (tyres, fuel). When it is done the car is let go, drops on its wheels, and the driver drives on (GO). The AI cars stop as before.
 
+### Ambient occlusion and global illumination
+
+- **With ambient occlusion on, the rims went black.** The picture of the normals that the occlusion reads (Graphics.js, GBufferPass) took the stored normals of every surface, and those of the spokes of the rims of the wheel library point the other way than their faces (all of them, measured; a material drawn on both sides hides that in the picture): the occlusion saw a surface that faces into the wheel and darkened it nearly to black (0.66 at the middle of a rim, less on the spokes). A surface drawn on both sides now gets the normal of the face that is seen. See-through surfaces that write no depth (a pit box, the lines on the road) are left out of that picture: the pit box has no normals and was a black square of occlusion.
+- **The occlusion is stronger**: a radius of 1.2 m (it was 0.6) and a stronger curve, so the shade under the car, round the wheels and at the foot of a rail shows; the open road stays as it was (measured under the car: 122 without, 55 before, 27 now; the open road 90 in all three).
+- **The global illumination shows**: the light that bounces was added times the colour of the surface as it is lit, which is nearly black in the shade where the bounce should be seen; it is added times the colour of the surface itself now (guessed from the picture), with more strength (2.5 and 3.5, it was 1.1 and 1.4) over a larger radius (3.5 m). It is still one bounce of what the screen shows: it is seen most near coloured walls and objects, little on an open desert.
+
 ### The grid and the pit boxes on the road
 
 - A grid box is a line across the front with a short leg back from each end (80 cm); the sides ran the whole five metres. The pit box of the player is yellow and stronger (it stands out), the pit boxes of the other cars are light blue.
