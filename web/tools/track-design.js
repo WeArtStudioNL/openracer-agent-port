@@ -274,7 +274,7 @@ export function createDesign(api) {
         const segments = closed ? count : count - 1;
         for (let i = 0; i < segments; i++) {
             const a = i * 2, b = ((i + 1) % count) * 2;
-            indices.push(a, b, a + 1, a + 1, b, b + 1);
+            indices.push(a, a + 1, b, a + 1, b + 1, b);            // (counter-clockwise from above: the normals point up, as the weather of the game needs, Atmosphere.js)
         }
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
@@ -343,7 +343,7 @@ export function createDesign(api) {
                 for (let k = 0; k < 2; k++) col.push(red ? 0.85 : 0.95, red ? 0.15 : 0.95, red ? 0.12 : 0.92);
             }
             const segs = data.closed ? count : count - 1;
-            for (let i = 0; i < segs; i++) { const a = i * 2, b = ((i + 1) % count) * 2; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+            for (let i = 0; i < segs; i++) { const a = i * 2, b = ((i + 1) % count) * 2; idx.push(a, a + 1, b, a + 1, b + 1, b); }       // (the normals up, as the road)
             const g = new THREE.BufferGeometry();
             g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
             g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));

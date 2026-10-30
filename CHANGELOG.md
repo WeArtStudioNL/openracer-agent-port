@@ -47,6 +47,7 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 ### Track editor: the panels move, the handles keep their size
 
+- **Rain and snow on a track drawn with the editor**: the road, the shoulders and the kerbs got no wet and no snow (the ground and the prefabs did). Their triangles were made the wrong way round, so their normals pointed down (the material is drawn on both sides, so it did not show), and the weather only goes on what faces up. The editor makes them the right way round now, and the weather takes the side that is seen, so a track that was saved before works too, without saving it again.
 - **The handles and the markers keep one size on the screen** when you zoom in or out: the nodes of the road, the points of a row of prefabs, the nodes of the racing line, the dots of the pit line and the pit area, the balls of the range of a camera, the arrows and the numbers of the grid, the pit boxes, the gates and the drag strip. They were made in metres (from the size of the track), so close by they filled the view and far away they were dots; a click takes them at the size that is drawn.
 - The **Layers** panel and the drawer of the track (*Track*, *Prefabs*) are moved by their heads, as the other windows of the editors (they lay over each other at the bottom right); where they are is kept in the browser.
 

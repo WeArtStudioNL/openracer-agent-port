@@ -236,7 +236,8 @@ OpenRacer.Atmosphere = (function () {
                     "float gHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\n" +
                     "float gNoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(gHash(i), gHash(i + vec2(1.0, 0.0)), f.x), mix(gHash(i + vec2(0.0, 1.0)), gHash(i + vec2(1.0, 1.0)), f.x), f.y); }")
                 .replace("#include <color_fragment>", "#include <color_fragment>\n" +
-                    "float gUp = clamp(normalize(vGroundNormal).y, 0.0, 1.0);\n" +
+                    // (the side that is seen: a surface that is drawn on both sides with its normals down, the road of a track of the track editor of before, is a floor from above)
+                    "float gUp = clamp(normalize(vGroundNormal).y * (gl_FrontFacing ? 1.0 : -1.0), 0.0, 1.0);\n" +
                     "float gFlat = smoothstep(0.45, 0.85, gUp);\n" +
                     "float gLum = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)); float gMx = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b)), gMn = min(diffuseColor.r, min(diffuseColor.g, diffuseColor.b));\n" +
                     "float gAsphalt = (1.0 - smoothstep(0.3, 0.5, gLum)) * (1.0 - smoothstep(0.25, 0.45, (gMx - gMn) / max(gMx, 0.001)));\n" +
