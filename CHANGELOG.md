@@ -49,6 +49,8 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - The Wheels card of the car editor has **Dynamic wheels** (it was *Wheel of the demo car*) and **Wheels from model**. A new car starts with Dynamic wheels (a motorcycle keeps the wheels of its model): the wheel parts of the model are still found, the car is fitted and the wheelbase, the tracks and the tyre are measured on them, and the game takes those parts off the model, so they no longer stand in the body through the wheels that turn. A new model for a car that exists keeps the choice of the car.
 - After *+ Car* the tune of the car that was open no longer stays in the bar (Save saved a tune instead of the new car).
+- With Dynamic wheels the wheelbase, the tracks and the axle offsets of the Chassis card move the wheels at once, in the view and on the bench (they did only for a model without wheel parts); the size of the car changes the bench at once too. The fields take a millimetre (the wheelbase measured on the wheels, 2.838, was refused as not valid).
+- The paint of the rims is on the rims of the wheel library in the view too: it was on the bench only, so after *Drop car* and ↺ the rims went back to their own colour.
 
 ### The tuning menu saves Default
 

@@ -2431,6 +2431,7 @@ function updateLibraryPreview() {
         $("libInfo").style.whiteSpace = "pre-line";
         $("libInfo").textContent = lines.join("\n");
         refreshStaticTyres();
+        applyPaint();
     });
 }
 Object.values(LIB_SELECTS).forEach((axle) => Object.values(axle).forEach((id) => $(id).addEventListener("change", () => { state.pendingLibrary = null; updateHelpers(); syncTuningVisibility(); syncTyreField(); if (bench.vehicle) restartBench(); })));
@@ -2517,7 +2518,7 @@ function applyPaint() {
     if (!state.root || !OpenRacer.applyCarColors) return;
     const t = tuning;
     // (the car of the bench is a copy of the model with its own materials: it gets the paint too, or the colour went back to the one of the model at Drop car and Drive)
-    const roots = [state.root];
+    const roots = [state.root, libPreview];        // (the rims of the library in the view too: they were painted on the bench only, and went back to their own colour at ↺)
     try {
         if (bench.body) {
             const benchRoots = [bench.body, ...(bench.model ? bench.model.wheels : [])];
@@ -2934,13 +2935,15 @@ function formChanged() {
         const area = config.dimensions.width * config.dimensions.height * 0.85;
         const retune = OpenRacer.CarTuning.toRetune(tuningValues(config), area, 1.29);
         // the wheels of the model give the wheelbase, the tracks and the tyre (startBench); without them the form does
-        if (!bench.model.measured || (noWheelParts() && libraryChoice())) Object.assign(retune, { wheelbase: config.chassis.wheelbase + config.chassis.front_axle_offset - config.chassis.rear_axle_offset, front_track: config.chassis.front_track, rear_track: config.chassis.rear_track, tire_diameter: config.chassis.tire_diameter, wheel_diameters: libraryWheelSizes() });
+        if (!bench.model.measured || wheelsFromForm()) Object.assign(retune, { wheelbase: config.chassis.wheelbase + config.chassis.front_axle_offset - config.chassis.rear_axle_offset, front_track: config.chassis.front_track, rear_track: config.chassis.rear_track, tire_diameter: config.chassis.tire_diameter, wheel_diameters: libraryWheelSizes() });
         bench.vehicle.retune(retune);
     } catch (error) { /* a field that is empty or not valid yet: the next change tries again */ }
 }
-for (const id of ["mass", "front", "cgHeight", "wheelbase", "frontTrack", "rearTrack", "tyre", "drag", "steer"]) $(id).addEventListener("input", formChanged);
-// (the wheels of the library stand where the wheelbase and the tracks say: they follow them at once, in the view and on the bench)
-for (const id of ["wheelbase", "frontTrack", "rearTrack", "frontOffset", "rearOffset"]) $(id).addEventListener("input", () => { if (noWheelParts() && libraryChoice()) updateLibraryPreview(); });
+for (const id of ["mass", "front", "cgHeight", "wheelbase", "frontTrack", "rearTrack", "frontOffset", "rearOffset", "tyre", "drag", "steer", "length", "width", "height"]) $(id).addEventListener("input", formChanged);
+// (Dynamic wheels, and the wheels of the library on a model without wheel parts, stand where the wheelbase, the tracks and the offsets say: they follow them at once, in the view
+// and on the bench; it was only for a model without wheel parts, so with Dynamic wheels on a model that has them nothing moved)
+function wheelsFromForm() { return wheelMode() !== "model"; }
+for (const id of ["wheelbase", "frontTrack", "rearTrack", "frontOffset", "rearOffset"]) $(id).addEventListener("input", () => { if (wheelsFromForm()) updateHelpers(); });
 
 // the fields of the gearbox that is chosen
 function syncGearboxBoxes() { const g = $("gearbox").value; $("cvtBox").style.visibility = g === "cvt" ? "" : "hidden"; $("tcBox").style.display = g === "torque-converter" ? "" : "none"; }
