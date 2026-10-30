@@ -157,7 +157,7 @@ function loadScene() {
                                     }
                                     if(myArr.textures[textureName + "-bump"]) {
                                         //console.log("BUMP: " + myArr.textures[textureName + "-bump"].file);
-                                        bumpTexture = textureLoader.load( trackFile(currentTrack.textures + myArr.textures[textureName + "-bump"].file, shrinkForDevice) );
+                                        bumpTexture = textureLoader.load( trackFile(currentTrack.textures + myArr.textures[textureName + "-bump"].file), shrinkForDevice );      // (the bump maps are made smaller on a phone too: the callback was given to trackFile)
                                     }
                                     //console.log("            textureTile: " + textureTile);
                                     if(textureTile) {

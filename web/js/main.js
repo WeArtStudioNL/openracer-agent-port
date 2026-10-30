@@ -35,7 +35,9 @@ function showLoading() {
     };
     var timer = setInterval(function() {
         var ready = typeof car !== "undefined" && car && car.isReady() && race.opponents.every(function(o) { return o.loaded; });
-        if(!ready && Date.now() - started < 90000) return;
+        // (a car that could not be loaded ends the wait at once: its message was under this screen, which waited 90 seconds for nothing)
+        var failed = typeof car !== "undefined" && car && car.loadError;
+        if(!ready && !failed && Date.now() - started < 90000) return;
         clearInterval(timer);
         bar.style.width = "100%";
         box.style.opacity = "0";
@@ -102,7 +104,9 @@ function raceOptionsFromQuery(query) {
         ghost: query.get("ghost") !== "0",
         records: query.get("records") !== "0",
         laps: Math.max(0, Math.min(99, parseInt(query.get("laps") || "0", 10) || 0)), // 0: practice, no end
-        opp: (query.get("opp") || "").split(",").filter(Boolean).slice(0, 7).map(function(item) { var at = item.indexOf("~"); return at < 0 ? { car: decodeURIComponent(item), tune: "" } : { car: decodeURIComponent(item.slice(0, at)), tune: decodeURIComponent(item.slice(at + 1)) }; }),   // the opponents that were chosen in the main menu: [{ car, tune }] (empty: the cars of aicars, or all)
+        // (read from the address as it is: every car and tune in it is encoded, so a comma or a % in the name of a tune is its own; decoded once more by
+        // URLSearchParams, a tune with a comma became two opponents, and one with a % threw and stopped the race)
+        opp: ((/[?&]opp=([^&]*)/.exec(window.location.search) || [])[1] || "").split(",").filter(Boolean).slice(0, 7).map(function(item) { var at = item.indexOf("~"), dec = function(s) { try { return decodeURIComponent(s); } catch(e) { return s; } }; return at < 0 ? { car: dec(item), tune: "" } : { car: dec(item.slice(0, at)), tune: dec(item.slice(at + 1)) }; }),   // the opponents that were chosen in the main menu: [{ car, tune }] (empty: the cars of aicars, or all)
         aiCars: query.get("aicars") ? query.get("aicars").split(",").filter(Boolean) : null,        // the ids of the cars that may race against you (null: all)
         wear: Math.max(0, Math.min(5, parseFloat(query.get("wear") === null ? "1" : query.get("wear")) || 0)), // tyre wear and fuel: 0 off, 1 as it is, 3 fast
         damage: query.get("damage") !== "0",                                   // off: the cars are rigid bodies (no dents, no parts or wheels off, no punctures)
@@ -275,8 +279,10 @@ function beginFlyby() {
     window.addEventListener("pointerdown", skip);
     state.pointerdown = skip;
     var note = document.createElement("div");
-    note.textContent = "Press Enter to skip the fly-by";
-    note.style.cssText = "position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 1001; color: var(--muted); font: 14px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; text-shadow: 0 1px 4px #000; pointer-events: none;";
+    // (a tap skips it too, and on a phone the line of the engine sound is at the bottom left: this goes above it)
+    var touch = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+    note.textContent = touch ? "Tap to skip the fly-by" : "Press Enter or click to skip the fly-by";
+    note.style.cssText = "position: fixed; " + (window.innerWidth < 640 ? "left: 16px; bottom: 40px;" : "left: 50%; bottom: 22px; transform: translateX(-50%);") + "z-index: 1001; color: var(--muted); font: 14px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; text-shadow: 0 1px 4px #000; pointer-events: none;";
     document.body.appendChild(note);
     state.note = note;
     car.cameraOverride = function(delta) {

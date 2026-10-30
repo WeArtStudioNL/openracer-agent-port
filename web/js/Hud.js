@@ -180,10 +180,14 @@ var Hud = (function() {
 
     function setPill(name, state) { pillStates[name] = state; }
 
+    // the size of the gauge: one rule for resize and for the check in update (they had two, so on a phone the canvases were made again every frame)
+    function gaugeSize() {
+        var small = typeof OpenRacer !== "undefined" && OpenRacer.touchDevice && OpenRacer.touchDevice() && Math.min(window.innerWidth, window.innerHeight) < 600;      // a phone: a smaller gauge
+        return Math.round(Math.max(small ? 130 : 210, Math.min(330, Math.min(window.innerWidth, window.innerHeight) * (small ? 0.3 : 0.36))));
+    }
     function resize() {
         ratio = window.devicePixelRatio || 1;
-        var small = typeof OpenRacer !== "undefined" && OpenRacer.touchDevice && OpenRacer.touchDevice() && Math.min(window.innerWidth, window.innerHeight) < 600;      // a phone: a smaller gauge
-        size = Math.round(Math.max(small ? 130 : 210, Math.min(330, Math.min(window.innerWidth, window.innerHeight) * (small ? 0.3 : 0.36))));
+        size = gaugeSize();
         canvas.style.width = size + "px";
         canvas.style.height = size + "px";
         canvas.width = Math.round(size * ratio);
@@ -448,8 +452,7 @@ var Hud = (function() {
         setPill("2S", !v.twoStepFitted ? null : (v.twoStepActive ? "active" : (!v.twoStepEnabled ? "off" : "on")));
         setPill("TB", v.transbrakeHeld ? "active" : null);
         setPill("P", car.parkingLock ? "park" : null);
-        var wanted = Math.round(Math.max(210, Math.min(330, Math.min(window.innerWidth, window.innerHeight) * 0.36)));
-        if(wanted !== size) resize();
+        if(gaugeSize() !== size || (window.devicePixelRatio || 1) !== ratio) resize();
         drawGauge(car);
         drawBoost(car);
         updateLaps(car);

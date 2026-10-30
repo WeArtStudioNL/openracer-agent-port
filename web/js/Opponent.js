@@ -172,7 +172,17 @@ OpenRacer.Opponent = function (config, line, options) {
         }
         self.loaded = true;
         if (self.pending) { self.place(self.pending.x, self.pending.z, self.pending.heading); self.pending = null; }
-    }, function (message) { console.error("Opponent: " + message); });
+    }, function (message) {
+        // (a car whose model does not load leaves the race: it was never placed, stayed "running" in the results for ever, and kept the replay from starting)
+        console.error("Opponent: " + message);
+        self.failed = true;
+        if (typeof race !== "undefined" && race.opponents) {
+            var at = race.opponents.indexOf(self);
+            if (at >= 0) race.opponents.splice(at, 1);
+            if (typeof car !== "undefined" && car) car.raceCount = race.opponents.length + 1;
+            if (typeof banner === "function") banner((self.name || "An AI car") + " could not be loaded and does not race.");
+        }
+    });
 
     this.place = function (x, z, heading) {
         if (!this.loaded) { this.pending = { x: x, z: z, heading: heading }; return; }
