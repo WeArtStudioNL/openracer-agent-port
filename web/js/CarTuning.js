@@ -828,7 +828,22 @@ OpenRacer.Setups = (function () {
             // (no setting makes the engine stronger than the car is: the power scale of a setup is the one of the car)
             // (a setup with the demo wheel has no wheel parts of its own: the parts of the model are those of the car, and they are taken off the model, CarLoader.js)
             if(v.chassis && v.wheels && !v.wheels.nodes && base && base.wheels && base.wheels.nodes) { v = clone(v); v.wheels.nodes = clone(base.wheels.nodes); }
-            if(v.chassis) { var out = clone(v); if(out.engine) { if(base && base.engine && base.engine.power_scale !== undefined) out.engine.power_scale = base.engine.power_scale; else delete out.engine.power_scale; } return out; }
+            if(v.chassis) {
+                var out = clone(v);
+                if(out.engine) { if(base && base.engine && base.engine.power_scale !== undefined) out.engine.power_scale = base.engine.power_scale; else delete out.engine.power_scale; }
+                // (the shell and the loose parts are how the car is built, not how it is set up: they are those of the car, car.json, so that a part or a hinge made in the
+                // car editor after the setup was saved is there with it too; the parts name nodes of the shell, so the two go together. Of the shell the setup keeps what
+                // the tuning menu sets: dents on or off, the most nodes, the strength of the wheels)
+                if(base && base.softbody) {
+                    var own = out.softbody || {};
+                    out.softbody = clone(base.softbody);
+                    if(own.enabled === false) out.softbody.enabled = false; else delete out.softbody.enabled;
+                    if(own.max_nodes !== undefined) out.softbody.max_nodes = own.max_nodes;
+                    if(own.wheel_strength !== undefined) out.softbody.wheel_strength = own.wheel_strength;
+                }
+                if(base) { if(base.parts) out.parts = clone(base.parts); else delete out.parts; }
+                return out;
+            }
             return base && OpenRacer.CarTuning ? OpenRacer.CarTuning.toConfig(base, v) : null;
         },
         active: function (id) { var a = read(id).active; return a && find(id, a) ? a : null; },
