@@ -1439,7 +1439,9 @@ OpenRacer.Replay = (function() {
         });
         var header = {
             format: FORMAT, version: FILE_VERSION, game: (OpenRacer.VERSION || ""), created: new Date().toISOString(),
-            soft: softInfo, softBytes: softBytes, effects: effectInfo, rider: riderInfo,
+            // (per car the size of its records, not the records: they are in the block after the numbers; with them the header of a long replay grew to 85 MB and the
+            // file was read as damaged)
+            soft: softInfo.map(function(info) { return info ? { nodes: info.nodes, parts: info.parts, count: info.count } : null; }), softBytes: softBytes, effects: effectInfo, rider: riderInfo,
             rate: RATE, stride: STRIDE, samples: n,
             track: { id: currentTrack.id, name: currentTrack.name || currentTrack.id },
             cars: cars.map(function(entry) {
@@ -1513,7 +1515,8 @@ OpenRacer.Replay = (function() {
         var skippedRecords = 0;
         if(bytes.length < 16 || MAGIC.some(function(b, i) { return bytes[i] !== b; })) throw bad("This is not an OpenRacer replay.");
         var headerLength = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(4, true);
-        if(headerLength > 1048576 || 8 + headerLength > bytes.length) throw bad("This replay file is damaged.");
+        // (a header of more than a megabyte is read too: a file of before held the records of the shell in it, a long one 85 MB, and was refused)
+        if(8 + headerLength > bytes.length) throw bad("This replay file is damaged (the header is longer than the file).");
         var header;
         try { header = JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + headerLength))); } catch(e) { throw bad("This replay file is damaged."); }
         if(!header || header.format !== FORMAT) throw bad("This is not an OpenRacer replay.");
@@ -1536,6 +1539,7 @@ OpenRacer.Replay = (function() {
             if(!Array.isArray(header.soft) || header.soft.length !== header.cars.length) throw bad("This replay file is damaged.");
             header.soft = header.soft.map(function(info) {
                 if(info === null) return null;
+                if(info && info.kept) delete info.kept;         // (the records themselves, which a file of before had in its header as well: they are read from the block)
                 if(!info || !(info.nodes >= 1 && info.nodes <= MAX_SOFT_NODES && info.nodes === Math.floor(info.nodes)) || !Array.isArray(info.parts) || info.parts.length > MAX_SOFT_PARTS ||
                    !(info.count >= 1 && info.count <= samples * 4 && info.count === Math.floor(info.count))) throw bad("This replay file is damaged.");
                 info.parts = info.parts.map(function(name) { return String(name).slice(0, 80); });

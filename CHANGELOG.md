@@ -93,6 +93,7 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 ### Replay: photos and the free camera
 
+- **Long replays were saved "damaged"**: the save put the records of the shell of every car into the header of the file as well (they are in the block after the numbers), so the header of a long replay grew past the megabyte that the reader allows (7.6 MB for a race of eight cars, 85 MB for 17 minutes of one car). The header has their sizes only now, and a file of before opens again.
 - **A replay is no longer "damaged" by one bad number**: a number that is not a number (NaN, infinity) anywhere in the recording made the whole file unreadable. It is saved as 0 now, a file that has one opens with a 0 there, and a record of the shell or the rider that is out of order is left out; the console says what was mended and, for a file that really is broken, which check failed.
 - **The lamps of the drag strip in a replay**: the tree lights as it did (white, the three ambers, green, red), also after a jump in the replay; it kept the lamps it had when the replay began. A saved replay has them too.
 - The photo key (F2) works in a replay too, and the bar of the replay has a **Photo** button: the picture as it is now as a PNG, without the bar.
