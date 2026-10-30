@@ -19,6 +19,7 @@ var Tuning = (function() {
     var car = null;
     var config = null;       // the configuration of the car as it was made (never changed by the tuning)
     var original = null;     // the car as made (car.json), when the game started on a setup: "the car as made" of the setups
+    var source = null;       // where the car comes from: null for the server, "garage" or "folder" (OpenRacer.Garage.sourceOf): only car.json of the server is written by Save on Default
     var base = {};           // the values of the car as it was made, in the units of the menu
     var values = {};         // the values that are in use
     var controls = [];       // { def, row, number, slider, reset }
@@ -609,11 +610,36 @@ var Tuning = (function() {
         saveSetup.title = "The setup that is chosen is overwritten with the car as it is now";
         saveSetup.onclick = function() {
             var name = setupSelect.value;
-            if(!name) { message("Choose a setup to overwrite, or Save as new…"); return; }
+            if(!name) { saveDefault(); return; }
             var ok = OpenRacer.Setups.save(config.id, name, tunedConfig());           // (the whole car, as it is tuned; the main menu draws its picture)
             refresh();
             message(ok === false ? "Could not save: the storage of this browser is full." : "Setup " + name + " saved.");
         };
+        // Save on Default: car.json is written with the tuning in it (the car as made becomes the car as it is tuned), through the API of the game's own server
+        // (tools/serve.py, from this computer). The site has no such API, and a car of the garage or of a folder is changed in the car editor
+        function saveDefault() {
+            if(source) { message("This car is in your " + source + ": change car.json in the car editor, or keep the tuning with Save as new…"); return; }
+            OpenRacerDialog.ask({ title: "Overwrite car.json?", text: "Default, the car as made, becomes the car as it is tuned now: this writes cars/" + config.id + "/car.json.", ok: "Overwrite", danger: true }).then(function(yes) {
+                if(!yes) return;
+                var made = OpenRacer.CarTuning.toConfig(original, values);
+                var body = JSON.stringify(made, function(key, value) { return key === "id" && this === made ? undefined : value; }, 2) + "\n";
+                return fetch("api/cars/" + encodeURIComponent(config.id) + "/car.json", { method: "PUT", body: body }).then(function(response) {
+                    if(response.ok) {
+                        // the car as made is this car now: nothing of the tuning differs from it, and the tuning kept for the car goes
+                        made.id = config.id;
+                        original = clone(made); config = clone(made); base = fromConfig(config);
+                        store(); refresh();
+                        message("car.json saved: Default is the car as it is tuned now.");
+                        return;
+                    }
+                    return response.json().catch(function() { return {}; }).then(function(data) {
+                        message(response.status === 403 ? "car.json is only written from this computer, by the game's own server (tools/serve.py). Keep the tuning with Save as new…"
+                            : [404, 405, 501].indexOf(response.status) >= 0 ? "This server does not write car.json (the game's own server, tools/serve.py, does). Keep the tuning with Save as new…"
+                            : "car.json was not saved: " + (data && data.error ? data.error : "HTTP " + response.status) + ".");
+                    });
+                }).catch(function() { message("car.json was not saved: there is no server that writes it (tools/serve.py). Keep the tuning with Save as new…"); });
+            });
+        }
         var saveNew = document.createElement("button");
         saveNew.textContent = "Save as new…";
         // (a name in a window of the game: the prompt of the browser stopped the game, and looked out of place in full screen and on a phone; a name that is
@@ -839,8 +865,9 @@ var Tuning = (function() {
         if(setupButtons) {
             // (a tune that comes with the car and has no copy in this browser cannot be deleted; of one with a copy, Delete takes the copy away)
             var none = !setupSelect.value, ship = none ? null : OpenRacer.Setups.shippedState(config.id, setupSelect.value);
-            setupButtons.save.disabled = none; setupButtons.drop.disabled = none || ship === "car";
-            setupButtons.save.style.opacity = none ? 0.45 : 1; setupButtons.drop.style.opacity = setupButtons.drop.disabled ? 0.45 : 1;
+            setupButtons.drop.disabled = none || ship === "car";
+            setupButtons.save.title = none ? "car.json is overwritten with the car as it is now (Default becomes the car as tuned)" : "The setup that is chosen is overwritten with the car as it is now";
+            setupButtons.drop.style.opacity = setupButtons.drop.disabled ? 0.45 : 1;
             setupButtons.drop.textContent = ship === "copy" ? "Undo changes" : "Delete";
             setupButtons.drop.title = ship === "car" ? "This setup comes with the car" : ship === "copy" ? "The setup as it comes with the car, without the changes saved here" : "";
         }
@@ -947,6 +974,7 @@ var Tuning = (function() {
         car = newCar;
         config = clone(newConfig);
         original = clone(baseConfig || newConfig);
+        source = OpenRacer.Garage && OpenRacer.Garage.sourceOf ? OpenRacer.Garage.sourceOf(baseConfig || newConfig) : null;
         base = fromConfig(config);
         values = clone(base);
         load();
