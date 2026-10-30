@@ -45,6 +45,10 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - The tuning menu has the cards of the car editor, with the same names and in the same order: Wheels, Suspension and driveline, Chassis, Drivetrain, Engine, Engine sound, Assists and extras, Cameras, Soft body (and Motorcycle, and the Mirrors of the game). Every card holds its groups (Chassis: Chassis settings, Brakes, Aerodynamics and steering, Size and steering wheel; Engine: Fuel, Engine settings), the card Engine shows the power and the card Drivetrain the top speed. The structure is one list for both (`OpenRacer.CarTuning.CARDS`). The torque-curve rows (peak power and its rpm) are gone from the menu: the curve follows from the engine that is built in the editor.
 
+### Debug view: a hit with the mouse
+
+- With the debug view on (0), the **middle mouse button** on the car hits it where it is clicked, as *Apply force* of the car editor: a cube of a tonne and a metre at 50 km/h against the surface; the shell dents and the car is pushed by it (it is not clamped as on the bench). A red arrow shows the hit for a moment. Nothing happens on a car without a soft body (or with Damage off).
+
 ### Sound
 
 - **Engine volume** in the settings menu (*Display and sound*) is a slider (0 to 150 %), and **Tyre volume** is new: the squeal of the tyres has its own volume (it went with the engine).

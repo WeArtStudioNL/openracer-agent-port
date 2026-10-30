@@ -192,5 +192,41 @@
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target && e.target.isContentEditable)) return;
         if (zero) toggle(); else if (on) toggleModels();
     });
-    OpenRacer.DebugView = { toggle: toggle, isOn: function () { return on; }, modelsHidden: function () { return on && modelsHidden; } };
+    // A hit on the car with the middle mouse button while the view is on, as Apply force of the car editor does it: a cube of a tonne and a metre at 50 km/h against the
+    // surface of the car where it is clicked (SoftBody.pushPlate, in the frame of the car). The car is not clamped here: it feels the hit too. A red arrow shows it for a moment.
+    var HIT_KMH = 50, HIT_MASS = 1000, HIT_SIDE = 1, HIT_TIME = 0.03;
+    var raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2(), hitArrow = null, hitTimer = 0;
+    function hitCar(e) {
+        var c = typeof car !== "undefined" ? car : null, v = c && c.vehicle, sb = v && v.softBody;
+        if (!on || !sb || !c.body || typeof camera === "undefined" || typeof renderer === "undefined" || (OpenRacer.Replay && OpenRacer.Replay.active)) return false;
+        var rect = renderer.domElement.getBoundingClientRect();
+        pointer.set((e.clientX - rect.left) / rect.width * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+        raycaster.setFromCamera(pointer, camera);
+        var hits = raycaster.intersectObject(c.body, true).filter(function (h) { return h.object.isMesh && h.object.visible && h.face; });
+        if (!hits.length) return false;
+        var h = hits[0], normal = h.face.normal.clone().transformDirection(h.object.matrixWorld);
+        if (normal.dot(raycaster.ray.direction) > 0) normal.negate();          // (the side that faces the camera)
+        q.set(v.qx, v.qy, v.qz, v.qw).invert();
+        var local = v1.copy(h.point).sub(v2.set(v.px, v.py, v.pz)).applyQuaternion(q), n = v3.copy(normal).applyQuaternion(q);
+        sb.pushPlate([local.x, local.y, local.z], [n.x, n.y, n.z], HIT_MASS * (HIT_KMH / 3.6) / HIT_TIME, HIT_SIDE, HIT_MASS, HIT_TIME, null);
+        sb.pinned = false;                     // (the reaction of the shell goes to the car: it is pushed and turned by the hit)
+        var plate = sb.plate;
+        setTimeout(function () { if (sb.plate === plate) sb.releasePlate(); }, 1500);
+        if (typeof scene !== "undefined" && scene) {
+            if (hitArrow && hitArrow.parent) hitArrow.parent.remove(hitArrow);
+            hitArrow = new THREE.ArrowHelper(normal.clone().negate(), h.point.clone().addScaledVector(normal, 0.8), 0.8, 0xff5555, 0.3, 0.18);
+            hitArrow.traverse(function (o) { if (o.material) { o.material.depthTest = false; o.renderOrder = 1001; } });
+            scene.add(hitArrow);
+            clearTimeout(hitTimer);
+            hitTimer = setTimeout(function () { if (hitArrow && hitArrow.parent) hitArrow.parent.remove(hitArrow); hitArrow = null; }, 1000);
+        }
+        return true;
+    }
+    window.addEventListener("pointerdown", function (e) {
+        if (e.button !== 1 || !on || typeof renderer === "undefined" || e.target !== renderer.domElement) return;
+        if (hitCar(e)) e.preventDefault();
+    });
+    window.addEventListener("auxclick", function (e) { if (on && e.button === 1 && typeof renderer !== "undefined" && e.target === renderer.domElement) e.preventDefault(); });
+
+    OpenRacer.DebugView = { toggle: toggle, isOn: function () { return on; }, modelsHidden: function () { return on && modelsHidden; }, hitCar: hitCar };
 })();
