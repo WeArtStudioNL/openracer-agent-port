@@ -169,7 +169,7 @@ var Hud = (function() {
         html += "</div><div class=\"fuel\"><div class=\"label\">FUEL " + v.fuel.toFixed(1) + " L</div><div class=\"bar\"><i style=\"width: " + Math.round(v.fuel / v.tank * 100) + "%\"></i></div>" +
             "<div class=\"label\" style=\"margin-top: 4px;\">TYRES " + Math.round((1 - Math.min(1, v.maxWear())) * 100) + "%</div></div></div>";
         var pit = car.pit;
-        if(pit && pit.active) html += "<div class=\"pit\">PIT STOP " + pit.remaining().toFixed(1) + " s" + (pit.plan && pit.plan.tyres > 0 ? " · tyres" : "") + (pit.plan && pit.plan.fuel > 0 ? " · fuel" : "") + "</div>";
+        if(pit && pit.active) html += "<div class=\"pit\">PIT STOP " + pit.remaining().toFixed(1) + " s" + (pit.plan && pit.plan.repair > 0 ? " · repair" : "") + (pit.plan && pit.plan.tyres > 0 ? " · tyres" : "") + (pit.plan && pit.plan.fuel > 0 ? " · fuel" : "") + "</div>";
         else if(pit && pit.done) html += "<div class=\"pit\" style=\"color: #7ee7a0;\">PIT STOP DONE · go</div>";
         else if(v.fuel <= 0) html += "<div class=\"pit\" style=\"color: #ff6b62;\">OUT OF FUEL</div>";
         else if(v.maxWear() > 0.8 || v.fuel < v.tank * 0.12) html += "<div class=\"pit\"" + (flash ? "" : " style=\"opacity: 0.4\"") + ">PIT · " + (v.maxWear() > 0.8 ? "tyres" : "fuel") + "</div>";
@@ -180,7 +180,7 @@ var Hud = (function() {
     function updatePit(car) {
         var pit = car.pit, now = performance.now(), html = "";
         if(pit && pit.active) {
-            var parts = [pit.plan && pit.plan.tyres > 0 ? "TYRES" : "", pit.plan && pit.plan.fuel > 0 ? "FUEL" : ""].filter(Boolean).join(" · ");
+            var parts = [pit.plan && pit.plan.repair > 0 ? "REPAIR" : "", pit.plan && pit.plan.tyres > 0 ? "TYRES" : "", pit.plan && pit.plan.fuel > 0 ? "FUEL" : ""].filter(Boolean).join(" · ");
             html = "<div class=\"what\">PIT STOP" + (parts ? " · " + parts : "") + "</div><div class=\"count\">" + pit.remaining().toFixed(1) + "</div>";
         } else {
             if(pitWasActive && pit && pit.done) pitGoUntil = now + 1500;

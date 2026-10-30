@@ -6,7 +6,7 @@
  *     AI cars in the order of the grid). A car that stands still with all four wheels inside its box (wheels over the box, at least two on the ground) is serviced; a track with fewer boxes than cars lets a car without a box of its own
  *     use any box. OpenRacer.PitStop.BOX_W, BOX_L and boxesOf(track) are for the rest of the game (the markings on the road, the AI).
  *   - PitStop: a car that stands still on the pit lane (the surface "track01") is serviced (without pit boxes): the tank is filled and, when the tyres
- *     are worn enough or one leaks, new tyres go on (the leak is repaired). How long it takes depends on what is needed: the fuel goes in at a rate, the tyres take
+ *     are worn enough or one leaks, new tyres go on (the leak is repaired), and with Damage on the car is repaired: its dents go out over the stop. How long it takes depends on what is needed: the fuel goes in at a rate, the tyres take
  *     longer the more worn they are, and the two happen side by side with a moment to lift and drop the car. A car that pulls
  *     away early keeps what was done so far.
  *   - PitLane: the line through the pit lane for the AI (Opponent.js), found from the triangles of the pit lane surface and the
@@ -18,11 +18,15 @@ OpenRacer.PitStop = function (vehicle) {
     var LIFT = 1.2;            // seconds to lift the car and to drop it
     var TYRES_MIN = 2.5, TYRES_PER_WEAR = 5;  // seconds for the tyres: the more worn, the longer
     var TYRES_WHEN = 0.15;     // the tyres are changed when the most worn one is past this
+    // the damage (with Damage on): the dents of the shell (2 s and 4 s more for every centimetre that its nodes are out of place on average, at most 14 s), and 3 s for every
+    // part that came off and 4 s for every wheel that is bent or torn off; the repair goes side by side with the fuel and the tyres, at most 30 s
+    var REPAIR_BASE = 2, REPAIR_PER_CM = 4, REPAIR_DENTS_MAX = 14, REPAIR_PART = 3, REPAIR_WHEEL = 4, REPAIR_MAX = 30;
+    var wheelsFrom = null;     // the bends of the wheels when the repair began (they go straight with it)
     this.active = false;       // a stop is going on
     this.done = false;         // the stop is complete (until the car pulls away)
     this.elapsed = 0;
     this.plan = null;          // { fuel, tyres, total }: the seconds that each part takes
-    var fuelGiven = 0, tyresDone = false;
+    var fuelGiven = 0, tyresDone = false, repaired = false;
     var fuelWanted = 0;
 
     this.holdCar = false;      // the car of the player: once the stop has begun the car is on the jacks and cannot pull away (Car.js holds it, lift() is how far up)
@@ -58,13 +62,29 @@ OpenRacer.PitStop = function (vehicle) {
         return true;
     };
 
+    function repairFor(v) {
+        if(OpenRacer.damageEnabled === false) return 0;
+        var secs = 0, sb = v.softBody, d = sb && sb.damage ? sb.damage() : null;
+        if(d && (d.mean > 0.002 || d.broken > 0)) secs += REPAIR_BASE + Math.min(REPAIR_DENTS_MAX, d.mean * 100 * REPAIR_PER_CM);
+        var parts = v.parts && v.parts.parts ? v.parts.parts : [];
+        for(var p = 0; p < parts.length; p++) if(parts[p].state !== "held" && parts[p].wheel === undefined) secs += REPAIR_PART;
+        for(var i = 0; i < 4; i++) {
+            var w = v.wheels[i], lost = v.wheelLost && v.wheelLost[i] && !(v.soloWheels && (i === 1 || i === 3));
+            if(lost || (v.wheelDamage && v.wheelDamage[i] > 0.01) || Math.abs(w.toeBend || 0) > 0.002 || Math.abs(w.camberBend || 0) > 0.002) secs += REPAIR_WHEEL;
+        }
+        return Math.min(REPAIR_MAX, secs);
+    }
+
     function planFor(v) {
         var fuel = (v.tank - v.fuel) / FUEL_RATE;
+        if(fuel < 0.05) fuel = 0;            // (a tank that is full but for a rounding: no fuel to give)
+        var repair = repairFor(v);
         var worn = v.maxWear();
         // (a tyre that leaks is changed too, however little it is worn: the stop repaired the wear only, and the leak stayed)
         var leaking = v.punctured && v.punctured();
         var tyres = worn > TYRES_WHEN || leaking ? TYRES_MIN + TYRES_PER_WEAR * Math.min(1, worn) : 0;
-        return { fuel: fuel, tyres: tyres, total: LIFT + Math.max(fuel, tyres) + (tyres > 0 ? LIFT : 0.3) };
+        var work = Math.max(fuel, tyres, repair);
+        return { fuel: fuel, tyres: tyres, repair: repair, work: work, total: LIFT + work + (tyres > 0 || repair > 0 ? LIFT : 0.3) };
     }
 
     // what a stop would take now, in seconds (for the AI and the HUD)
@@ -85,7 +105,12 @@ OpenRacer.PitStop = function (vehicle) {
             this.plan = planFor(vehicle);
             fuelGiven = 0; tyresDone = false;
             fuelWanted = vehicle.tank - vehicle.fuel;
-            if(this.plan.fuel <= 0 && this.plan.tyres <= 0) { this.done = true; this.active = false; return; }
+            if(this.plan.fuel <= 0 && this.plan.tyres <= 0 && this.plan.repair <= 0) { this.done = true; this.active = false; return; }
+            repaired = false;
+            if(this.plan.repair > 0) {
+                if(vehicle.softBody && vehicle.softBody.repairStart) vehicle.softBody.repairStart();
+                wheelsFrom = vehicle.wheels.map(function (w) { return { toe: w.toeBend || 0, camber: w.camberBend || 0, x: w.shiftX || 0, z: w.shiftZ || 0 }; });
+            }
         }
         this.elapsed += dt;
         var t = this.elapsed - LIFT; // the work starts once the car is up
@@ -93,6 +118,14 @@ OpenRacer.PitStop = function (vehicle) {
             var give = Math.min(fuelWanted, t * FUEL_RATE) - fuelGiven;
             if(give > 0) { vehicle.fuel = Math.min(vehicle.tank, vehicle.fuel + give); fuelGiven += give; }
             if(!tyresDone && this.plan.tyres > 0 && t >= this.plan.tyres) { tyresDone = true; vehicle.freshTyres(60); if(vehicle.repairTyres) vehicle.repairTyres(); }
+        }
+        // the repair: from the start of the work to its end every node of the shell goes back to its place a little more, and the bent wheels go straight; then all is whole
+        // (the shell, the beams, the parts back on the car, the wheels, the tyres that leak)
+        if(this.plan.repair > 0 && !repaired) {
+            var share = Math.max(0, Math.min(1, t / Math.max(0.1, this.plan.work)));
+            if(vehicle.softBody && vehicle.softBody.repairTo) vehicle.softBody.repairTo(share);
+            if(wheelsFrom) for(var wi = 0; wi < 4; wi++) { var wf = wheelsFrom[wi], wh = vehicle.wheels[wi]; wh.toeBend = wf.toe * (1 - share); wh.camberBend = wf.camber * (1 - share); wh.shiftX = wf.x * (1 - share); wh.shiftZ = wf.z * (1 - share); }
+            if(share >= 1) { repaired = true; wheelsFrom = null; vehicle.repair(); }
         }
         if(this.elapsed >= this.plan.total) { this.done = true; this.active = false; vehicle.fuel = Math.min(vehicle.tank, vehicle.fuel); }
     };

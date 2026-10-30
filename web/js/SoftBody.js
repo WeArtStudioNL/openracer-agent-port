@@ -208,8 +208,28 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         return { nodes: N, beams: B, maxBend: maxQ, maxDisplacement: maxU, brokenAnchors: brokenAnchors, brokenBeams: brokenBeams, absorbed: this.absorbed };
     };
 
+    // A repair that takes time (the pit stop, Pit.js): repairStart keeps the shape as it is, repairTo(share) puts every node that share of the way back to its place
+    // (0: as it was, 1: where it belongs) and keeps it still; repair() at the end makes it whole (the beams, the anchors, the lengths as made)
+    var repairFrom = null;
+    this.repairStart = function () { repairFrom = { u: u.slice(), q: q.slice() }; };
+    this.repairTo = function (share) {
+        if (!repairFrom) return;
+        var k = 1 - Math.max(0, Math.min(1, share));
+        for (var n = 0; n < 3 * N; n++) { u[n] = repairFrom.u[n] * k; q[n] = repairFrom.q[n] * k; this.displacement[n] = u[n] + q[n]; }
+        w.fill(0); f.fill(0);
+        this.version++;
+    };
+    // how damaged the shell is: the mean distance of the nodes from their place (m) and the beams and anchors that broke
+    this.damage = function () {
+        var sum = 0, count = 0, broken = 0;
+        for (var k = 0; k < N; k++) { if (gone[k]) continue; sum += Math.hypot(u[3 * k] + q[3 * k], u[3 * k + 1] + q[3 * k + 1], u[3 * k + 2] + q[3 * k + 2]); count++; if (!anchorAlive[k]) broken++; }
+        for (var i = 0; i < B; i++) if (!beamAlive[i]) broken++;
+        return { mean: count ? sum / count : 0, broken: broken };
+    };
+
     // The car is whole again
     this.repair = function () {
+        repairFrom = null;
         u.fill(0); w.fill(0); q.fill(0); f.fill(0);
         for (var k = 0; k < N; k++) { anchorAlive[k] = 1; gone[k] = 0; }
         for (var i = 0; i < B; i++) { beamAlive[i] = 1; }
