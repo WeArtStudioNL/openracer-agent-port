@@ -357,7 +357,7 @@ OpenRacer.Car = function( config, domElement ) {
             pt = line.point(index);
             lastLineIndex = index;
             var ahead = line.point(index + 1);
-            return { x: pt.x, z: pt.z, psi: Math.atan2(ahead.z - pt.z, ahead.x - pt.x), py: null, gy: pt.y };
+            return { x: pt.x, z: pt.z, psi: Math.atan2(ahead.z - pt.z, ahead.x - pt.x), py: null, gy: pt.y, index: index };
         }
         return null;
     };
@@ -382,9 +382,53 @@ OpenRacer.Car = function( config, domElement ) {
         }
         return lockDegrees;
     };
+    // A reset does not put the car inside something that stands on the road (a prefab of the track editor, a barrier, a wall, a building): the footprint of the car is
+    // tried against the triangles of the world that are not road (and what stands up from the road), and when the place is taken the next places are tried, along the
+    // racing line forward first and then back, and at each one beside it too, up to 40 m away. Without a free place the reset goes where it would have gone.
+    function placeIsFree(x, z, psi, gy) {
+        var world = typeof groundWorld !== "undefined" ? groundWorld : null;
+        if(!world || !world.nearby || !world.count3D || !world.count3D()) return true;
+        if(gy === undefined || gy === null) { var hit = world.query(x, z, (isFinite(this.vehicle.py) ? this.vehicle.py : 0) + 20, 60); gy = hit ? hit.y : 0; }
+        var dims = config.dimensions || {}, half = (dims.length || 4.3) / 2, side = (dims.width || 1.8) / 2;
+        var fx = Math.cos(psi), fz = Math.sin(psi), near = [], at = { x: 0, y: 0, z: 0 };
+        for(var a = -1; a <= 1; a += 0.5) for(var b = -1; b <= 1; b++) {
+            var px = x + fx * half * a - fz * side * b, pz = z + fz * half * a + fx * side * b;
+            for(var h = 0.35; h <= 1.25; h += 0.45) {                // (from the sills to the roof: a low barrier and a sign board both count)
+                var py = gy + h;
+                world.nearby(px, py, pz, 0.6, near);
+                for(var k = 0; k < near.length; k++) {
+                    var t = near[k];
+                    if(world.closest(t, px, py, pz, at) > 0.36) continue;
+                    if(!world.isDrivable(t) || at.y > gy + 0.25) return false;
+                }
+            }
+        }
+        return true;
+    }
+    this.freePlace = function(p) {
+        if(!p || placeIsFree.call(this, p.x, p.z, p.psi, p.gy)) return p;
+        var line = typeof race !== "undefined" && race && race.line;
+        var sides = [0, 2.5, -2.5, 4.5, -4.5];
+        for(var d = 3; d <= 40; d += 3) for(var dir = 1; dir >= -1; dir -= 2) {
+            var c;
+            if(p.index !== undefined && line && line.count && line.count() > 1) {
+                // (along the racing line: the points of the line are about a metre apart)
+                var i = p.index + dir * d, q = line.point(i), q2 = line.point(i + 1);
+                c = { x: q.x, z: q.z, psi: Math.atan2(q2.z - q.z, q2.x - q.x), gy: q.y };
+            } else c = { x: p.x + Math.cos(p.psi) * d * dir, z: p.z + Math.sin(p.psi) * d * dir, psi: p.psi, gy: null };
+            for(var si = 0; si < sides.length; si++) {
+                var sx = c.x - Math.sin(c.psi) * sides[si], sz = c.z + Math.cos(c.psi) * sides[si];
+                if(placeIsFree.call(this, sx, sz, c.psi, sides[si] ? null : c.gy)) return { x: sx, z: sz, psi: c.psi, py: null, gy: sides[si] ? null : c.gy, index: c.index };
+            }
+        }
+        return p;
+    };
     var fallMinY = null, fallFor = 0, autopilotStill = 0;
     this.returnToSaved = function() {
         var v = this.vehicle, p = this.nearestOnRacingLine() || savedReset || this.nearestOnTrack() || { x: startX, z: startZ, psi: startHeading, py: null };
+        var kept = p;
+        p = this.freePlace(p);
+        if(p !== kept) p.car = null;          // (a place that was moved is put on the road: its saved height is not the one of the new place)
         var samePlace = p.car === config.id;       // (a place saved before this was kept has no car: it is put on the road)
         v.relocate(p.x, p.z, p.psi, samePlace ? p.py : null, p.gy);
         tyreSmoke.clear();

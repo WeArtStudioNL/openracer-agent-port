@@ -47,6 +47,8 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 ### The pit stop of the player
 
+- **A leaking tyre is changed and repaired** in a pit stop, however little it is worn (the stop only changed tyres past 15 % wear, and did not mend a leak).
+- **A reset does not put the car in a prefab** (a barrier, a wall, a building on the road): the footprint of the car is tried first, and when the place is taken the reset goes to the next free place along the racing line (forward first) or beside it, up to 40 m away.
 - **On the jacks**: when the stop begins the car goes up slowly by 10 cm where it stands and is held there; the throttle, the brake and the steering do nothing (the car can no longer pull away in the middle of a stop). The count down is in the middle of the screen, with what is done (tyres, fuel). When it is done the car is let go, drops on its wheels, and the driver drives on (GO). The AI cars stop as before.
 
 ### Ambient occlusion and global illumination

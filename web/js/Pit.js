@@ -6,7 +6,7 @@
  *     AI cars in the order of the grid). A car that stands still with all four wheels inside its box (wheels over the box, at least two on the ground) is serviced; a track with fewer boxes than cars lets a car without a box of its own
  *     use any box. OpenRacer.PitStop.BOX_W, BOX_L and boxesOf(track) are for the rest of the game (the markings on the road, the AI).
  *   - PitStop: a car that stands still on the pit lane (the surface "track01") is serviced (without pit boxes): the tank is filled and, when the tyres
- *     are worn enough, new tyres go on. How long it takes depends on what is needed: the fuel goes in at a rate, the tyres take
+ *     are worn enough or one leaks, new tyres go on (the leak is repaired). How long it takes depends on what is needed: the fuel goes in at a rate, the tyres take
  *     longer the more worn they are, and the two happen side by side with a moment to lift and drop the car. A car that pulls
  *     away early keeps what was done so far.
  *   - PitLane: the line through the pit lane for the AI (Opponent.js), found from the triangles of the pit lane surface and the
@@ -61,7 +61,9 @@ OpenRacer.PitStop = function (vehicle) {
     function planFor(v) {
         var fuel = (v.tank - v.fuel) / FUEL_RATE;
         var worn = v.maxWear();
-        var tyres = worn > TYRES_WHEN ? TYRES_MIN + TYRES_PER_WEAR * Math.min(1, worn) : 0;
+        // (a tyre that leaks is changed too, however little it is worn: the stop repaired the wear only, and the leak stayed)
+        var leaking = v.punctured && v.punctured();
+        var tyres = worn > TYRES_WHEN || leaking ? TYRES_MIN + TYRES_PER_WEAR * Math.min(1, worn) : 0;
         return { fuel: fuel, tyres: tyres, total: LIFT + Math.max(fuel, tyres) + (tyres > 0 ? LIFT : 0.3) };
     }
 
@@ -90,7 +92,7 @@ OpenRacer.PitStop = function (vehicle) {
         if(t > 0) {
             var give = Math.min(fuelWanted, t * FUEL_RATE) - fuelGiven;
             if(give > 0) { vehicle.fuel = Math.min(vehicle.tank, vehicle.fuel + give); fuelGiven += give; }
-            if(!tyresDone && this.plan.tyres > 0 && t >= this.plan.tyres) { tyresDone = true; vehicle.freshTyres(60); }
+            if(!tyresDone && this.plan.tyres > 0 && t >= this.plan.tyres) { tyresDone = true; vehicle.freshTyres(60); if(vehicle.repairTyres) vehicle.repairTyres(); }
         }
         if(this.elapsed >= this.plan.total) { this.done = true; this.active = false; vehicle.fuel = Math.min(vehicle.tank, vehicle.fuel); }
     };
