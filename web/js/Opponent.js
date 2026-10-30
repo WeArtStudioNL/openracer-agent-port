@@ -553,6 +553,7 @@ OpenRacer.Opponent = function (config, line, options) {
         for (var i = 0; i < 4; i++) {
             var wheel = w[i];
             if (!wheel.object) continue;
+            if (v.wheelLost && v.wheelLost[i] && !(v.soloWheels && (i === 1 || i === 3))) continue;      // (a wheel that came off lies on the road: it does not steer or spin with the car)
             wheel.object.position.set(wheel.center.x, wheel.center.y, wheel.center.z);
             wheel.object.quaternion.copy(this.body.quaternion);
             wheel.turn(wheel.steerNow !== undefined ? wheel.steerNow : (i < 2 ? v.steerApplied : 0));

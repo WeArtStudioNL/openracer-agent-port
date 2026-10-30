@@ -513,6 +513,8 @@ OpenRacer.Car = function( config, domElement ) {
         for(var i = 0; i < 4; i++) {
             var wheel = w[i];
             wheel.position.set(wheel.center.x, wheel.center.y, wheel.center.z);
+            // (a wheel that came off in a crash lies where its body in Parts.js puts it: it no longer steers or spins with the car)
+            if(wheel.object && v.wheelLost && v.wheelLost[i] && !(v.soloWheels && (i === 1 || i === 3))) continue;
             if(wheel.object) {
                 wheel.object.position.copy(wheel.position);
                 // (a motorcycle: the physics has its pair of wheels 4 cm apart, the model has one wheel in the middle: it is drawn in the middle)

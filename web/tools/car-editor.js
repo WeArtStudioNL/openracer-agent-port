@@ -3229,6 +3229,7 @@ function benchFrame(now) {
     }
     bench.model.wheels.forEach((object, i) => {
         const w = v.wheels[i];
+        if (v.wheelLost && v.wheelLost[i] && !(v.soloWheels && (i === 1 || i === 3))) return;       // (a wheel that came off lies where the parts put it: it does not steer or spin)
         object.position.set(w.center.x, w.center.y, w.center.z);
         if (v.soloWheels) object.position.add(new THREE.Vector3(w.b, 0, 0).applyQuaternion(body.quaternion));     // (a motorcycle: the wheel of the model is drawn in the middle, not 2 cm aside as the physics has it)
         object.quaternion.copy(body.quaternion);
