@@ -813,6 +813,8 @@ OpenRacer.Setups = (function () {
             var v = find(id, name);
             if(!v) return null;
             // (no setting makes the engine stronger than the car is: the power scale of a setup is the one of the car)
+            // (a setup with the demo wheel has no wheel parts of its own: the parts of the model are those of the car, and they are taken off the model, CarLoader.js)
+            if(v.chassis && v.wheels && !v.wheels.nodes && base && base.wheels && base.wheels.nodes) { v = clone(v); v.wheels.nodes = clone(base.wheels.nodes); }
             if(v.chassis) { var out = clone(v); if(out.engine) { if(base && base.engine && base.engine.power_scale !== undefined) out.engine.power_scale = base.engine.power_scale; else delete out.engine.power_scale; } return out; }
             return base && OpenRacer.CarTuning ? OpenRacer.CarTuning.toConfig(base, v) : null;
         },

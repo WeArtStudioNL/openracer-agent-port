@@ -182,6 +182,11 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
         var complete = (config.wheels && config.wheels.mode === "model") && SLOTS.every(function (slot) {
             return nodes[slot] && nodes[slot].some(function (name) { return root.getObjectByName(name); });
         });
+        // the wheel of the demo car (wheels.mode "default") on a model that has wheel parts: they are not the wheels, the demo wheel or the wheel library is, so they are
+        // taken off the model (they stood in the body, through the wheels that turn; a tune that chose the demo wheel on a car with wheels of the model)
+        if(config.wheels && config.wheels.mode === "default") SLOTS.forEach(function (slot) {
+            (nodes[slot] || []).forEach(function (name) { var part = root.getObjectByName(name); if(part && part.parent) part.parent.remove(part); });
+        });
 
 
         // The steering wheel: a part called "steeringwheel" turns with the steering. It turns around its own middle, about the axis

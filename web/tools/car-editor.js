@@ -1902,6 +1902,11 @@ function buildConfig(id) {
             config.wheels.nodes[slot] = names;
         }
     }
+    // the demo wheel on a model with wheel parts: the parts go with the configuration, so that the game takes them off the model (CarLoader.js)
+    if (wheelMode() !== "model" && SLOTS.every((slot) => $("w" + slot).selectedOptions.length)) {
+        config.wheels.nodes = {};
+        for (const slot of SLOTS) config.wheels.nodes[slot] = [...$("w" + slot).selectedOptions].map((o) => o.value);
+    }
     const library = libraryChoice();
     if (library) config.wheels.library = library;                           // the rims and the tyres of the wheel library (WheelLibrary.js)
     if (exhaust.length) config.exhaust = exhaustConfig();
@@ -2375,7 +2380,10 @@ function updateLibraryPreview() {
     libPreview.clear();
     const library = libraryChoice();
     const lines = [];
-    if (!library) { $("libInfo").textContent = ""; return; }
+    if (!library) {
+        if (wheelMode() !== "model") for (const slot of SLOTS) wheelParts(slot).forEach((p) => { p.visible = false; libHidden.push(p); });        // (the demo wheel: the game takes the wheel parts of the model off, CarLoader.js)
+        $("libInfo").textContent = ""; return;
+    }
     const cfg = { type: $("vehicleType") ? $("vehicleType").value : "car", wheels: { library } };
     OpenRacer.WheelLibrary.preload(cfg, undefined, () => {
         if (JSON.stringify(libraryChoice()) !== JSON.stringify(library)) return;          // (changed again while the files loaded)
@@ -2391,7 +2399,7 @@ function updateLibraryPreview() {
             if (wheelMode() === "model") {
                 const box = wheelBox(slot);
                 if (box) { centre = box.getCenter(new THREE.Vector3()); wheelParts(slot).forEach((p) => { p.visible = false; libHidden.push(p); }); }
-            }
+            } else wheelParts(slot).forEach((p) => { p.visible = false; libHidden.push(p); });         // (the demo wheel: the wheel parts of the model are taken off in the game, CarLoader.js)
             if (!centre) {
                 const front = slot[0] === "F", left = slot[1] === "L", track = (front ? num("frontTrack") : num("rearTrack")) || 1.5;
                 centre = new THREE.Vector3((bike ? 0 : (left ? 1 : -1) * track / 2), 0, (front ? 1 : -1) * ((num("wheelbase") || 2.6) / 2) + (front ? num("frontOffset") : num("rearOffset")));
