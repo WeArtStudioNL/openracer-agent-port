@@ -109,6 +109,28 @@ var MainMenu = (function() {
             "#mainMenu .chip:hover, .or-dialog .chip:hover { border-color: var(--muted); }" +
             "#mainMenu .chip.on, .or-dialog .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }" +
             "#mainMenu .hint { color: var(--muted); font-size: 14px; margin-top: 16px; line-height: 1.6; }" +
+            // the keyboard: what can be chosen shows where the focus is
+            "#mainMenu .mode:focus-visible, #mainMenu .tile:focus-visible, #mainMenu .card:focus-visible, #mainMenu .steps span:focus-visible, #mainMenu .chip:focus-visible, #mainMenu button:focus-visible { outline: 2px solid var(--accent2, #ffb36b); outline-offset: 2px; }" +
+            // the notch and the home bar of a phone (index.html asks for the whole screen: viewport-fit=cover)
+            "#mainMenu .top { padding-top: max(14px, env(safe-area-inset-top)); padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }" +
+            "#mainMenu .bar { padding-bottom: max(14px, env(safe-area-inset-bottom)); padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }" +
+            // a phone: the steps were wider than the screen (only the step you are on is shown), and the text of a car lay over its picture (the picture sits between the name and the numbers)
+            "@media (max-width: 640px) {" +
+            " #mainMenu .top { gap: 10px; padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }" +
+            " #mainMenu .steps span:not(.on) { display: none; }" +
+            " #mainMenu .inner { padding: 20px 16px 32px; }" +
+            " #mainMenu h2 { font-size: 22px; }" +
+            " #mainMenu .bar { gap: 10px; padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }" +
+            " #mainMenu .bar .summary { font-size: 13px; }" +
+            " #mainMenu .tile, #pickDialog .tile { aspect-ratio: 3 / 4; }" +
+            " #mainMenu .tile img, #pickDialog .tile img { top: 24%; height: 50%; }" +
+            " #mainMenu .tile .over, #pickDialog .tile .over { padding: 10px; background: none; }" +
+            " #mainMenu .tile .name, #pickDialog .tile .name { font-size: 15px; line-height: 1.2; }" +
+            " #mainMenu .tile .hp, #pickDialog .tile .hp { font-size: 19px; }" +
+            " #mainMenu .tile .specs, #pickDialog .tile .specs { font-size: 11px; }" +
+            " #mainMenu .setting .label { width: 100%; }" +
+            " #mainMenu .card .thumb, #pickDialog .card .thumb { width: 104px; height: 64px; }" +
+            "}" +
             // the badge of a car or track that is not of the server: the garage of this browser or a folder on the PC (Garage.js)
             ".or-badge, #mainMenu .badge { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; vertical-align: middle; " +
             "margin-left: 8px; padding: 2px 7px; border-radius: 10px; background: var(--line); color: var(--text); }" +
@@ -1110,7 +1132,7 @@ var MainMenu = (function() {
     }
 
     function carStep(inner) {
-        inner.innerHTML = "<h2>Choose your car</h2><div class=\"sub\">Click a car to go on.</div>";
+        inner.innerHTML = "<h2>Choose your car</h2><div class=\"sub\">Tap or click a car to go on.</div>";
         var tilesBox = document.createElement("div");
         tilesBox.className = "tiles";
         showcase.clear();
@@ -1165,7 +1187,7 @@ var MainMenu = (function() {
     }
 
     function trackStep(inner) {
-        inner.innerHTML = "<h2>Choose the track</h2><div class=\"sub\">Double-click a track to go on.</div>";
+        inner.innerHTML = "<h2>Choose the track</h2><div class=\"sub\">Choose a track, then Next (a double-click goes on at once).</div>";
         var list = document.createElement("div");
         list.className = "list";
         tracks.filter(function(t) { return t.id !== "skidpad"; }).forEach(function(track) {   // the skidpad is a way to play
@@ -1364,7 +1386,7 @@ var MainMenu = (function() {
             return;
         }
         var max = raceOptions.ai, list = oppList();
-        inner.innerHTML = "<h2>Choose your opponents</h2><div class=\"sub\">Up to " + max + ". Click + to add a car; the copy button on a car adds the same one again. Without a choice the cars of the garage take the places.</div>";
+        inner.innerHTML = "<h2>Choose your opponents</h2><div class=\"sub\">Up to " + max + ". Tap + to add a car; the copy button on a car adds the same one again. The places you leave empty get cars of the game.</div>";
         var grid = document.createElement("div");
         grid.className = "tiles opps";
         list.forEach(function(o, index) {
@@ -1424,9 +1446,9 @@ var MainMenu = (function() {
         if(car && OpenRacer.Setups && tunesOf().length >= 1 && screen !== "mode" && screen !== "car" && screen !== "tune") parts.push(OpenRacer.Setups.active(car.id) || "Default");
         if(mode === "skidpad" && screen === "surface") parts.push((SKIDPAD_SURFACES.filter(function(s) { return s.id === skidSurface; })[0] || {}).name || "Asphalt");
         else if(car && screen === "car") parts.push(car.name || car.id);
-        if(track && mode !== "skidpad" && (screen === "track" || screen === "weather" || screen === "race")) parts.push(track.name || track.id);
+        if(track && mode !== "skidpad" && (screen === "track" || screen === "weather" || screen === "race" || screen === "opponents")) parts.push(track.name || track.id);
         if(screen === "race") parts.push(raceOptions.laps + " laps, " + raceOptions.ai + " opponents");
-        if(screen === "opponents") parts.push(raceOptions.laps + " laps, " + (oppList().length || raceOptions.ai) + " opponents" + (oppList().length ? "" : " (from the garage)"));
+        if(screen === "opponents") parts.push(raceOptions.laps + " laps, " + (oppList().length || raceOptions.ai) + " opponents" + (oppList().length ? "" : " (chosen by the game)"));
         return parts;
     }
 
@@ -1553,6 +1575,24 @@ var MainMenu = (function() {
         element = document.createElement("div");
         element.id = "mainMenu";
         document.body.appendChild(element);
+        // (every choice of the menu is a card, a tile or a step: they get the focus with Tab and are chosen with Enter or Space, as a button is)
+        var CHOOSABLE = ".mode, .tile, .card, .steps span.done";
+        new MutationObserver(function() {
+            element.querySelectorAll(CHOOSABLE).forEach(function(el) { if(!el.hasAttribute("tabindex")) { el.tabIndex = 0; el.setAttribute("role", "button"); } });
+        }).observe(element, { childList: true, subtree: true });
+        element.addEventListener("keydown", function(event) {
+            var el = event.target;
+            if(!el || !el.matches || !el.matches(CHOOSABLE) || (event.code !== "Enter" && event.code !== "Space")) return;
+            // Enter on what is chosen already goes on (Next); otherwise it chooses it, as a click
+            if(event.code === "Enter" && el.classList.contains("selected") && !el.classList.contains("mode")) return;       // (a way to play goes on when it is chosen)
+            event.preventDefault(); event.stopPropagation();
+            el.click();
+            // (a choice builds the page again: the focus goes to what is chosen now, not back to the top of the page)
+            if(!document.contains(el)) {
+                var chosen = element.querySelector(".mode.selected, .tile.selected, .card.selected") || element.querySelector(CHOOSABLE);
+                if(chosen) { chosen.tabIndex = 0; chosen.focus(); }
+            }
+        });
         window.addEventListener("keydown", function(event) {
             if(document.querySelector("#orDialog, #settingsMenu")) return;      // (a question or the settings: their own keys)
             // a window of the menu (the garage, the replays, more options, a pick): Escape closes it, the one on top

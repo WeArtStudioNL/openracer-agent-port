@@ -118,7 +118,7 @@ function banner(text) {
     if(!stack) {
         stack = document.createElement("div");
         stack.id = "banners";
-        stack.style.cssText = "position: absolute; top: " + (window.innerWidth < 1100 ? 130 : 60) + "px; left: 50%; transform: translateX(-50%); z-index: 1001; display: flex; flex-direction: column; align-items: center; gap: 8px; " +
+        stack.style.cssText = "position: absolute; top: " + (window.innerWidth < 640 ? 250 : window.innerWidth < 1100 ? 130 : 60) + "px; left: 50%; transform: translateX(-50%); z-index: 1001; display: flex; flex-direction: column; align-items: center; gap: 8px; " +
             "width: max-content; max-width: calc(100vw - 32px); pointer-events: none;";
         document.body.appendChild(stack);
     }

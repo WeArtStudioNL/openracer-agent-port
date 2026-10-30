@@ -1,6 +1,6 @@
 {
   "name": "Hyundai i30",
-  "description": "2013 Hyundai i30 (GD), five-door hatchback: 1.6 GDI, 135 hp at 6300 rpm, 164 Nm at 4850 rpm, six-speed manual, front wheel drive. Placeholder model.",
+  "description": "2013 Hyundai i30 (GD), five-door hatchback: 1.6 GDI, 135 hp at 6300 rpm, 164 Nm at 4850 rpm, six-speed manual, front wheel drive.",
   "model": {
     "type": "gltf",
     "file": "cars/hyundai-i30/hyundai-i30.glb",
@@ -2623,13 +2623,13 @@
       "break_force": 3000
     },
     {
-      "object": "right-,ist",
+      "object": "right-mist",
       "mode": "detachable",
       "mass": 2,
       "break_force": 3000
     },
     {
-      "object": "right-headlight",
+      "object": "left-headlight.001",
       "mode": "detachable",
       "mass": 2,
       "break_force": 3000

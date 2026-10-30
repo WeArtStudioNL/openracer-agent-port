@@ -321,7 +321,7 @@ var EngineSound = (function() {
     function status() {
         if(failed) return failed;
         if(muted) return "Engine sound: off";
-        if(!enabledByUser || !ctx || ctx.state !== "running") return "Engine sound: " + (typeof TouchControls !== "undefined" && TouchControls.enabled() ? "tap the screen" : "press any key or click") + " to enable";
+        if(!enabledByUser || !ctx || ctx.state !== "running") return "Engine sound: " + ((typeof TouchControls !== "undefined" && TouchControls.enabled()) || (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) ? "tap the screen" : "press any key or click") + " to enable";
         return "";
     }
 

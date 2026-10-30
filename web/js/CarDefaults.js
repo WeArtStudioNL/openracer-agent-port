@@ -48,7 +48,14 @@ OpenRacer.topSpeed = function (config) {
         }
         return 0;
     };
-    var best = 0, ratios = dt.gearbox === "cvt" ? [Math.min.apply(null, gears)] : gears;
+    // (a CVT takes any ratio between its lowest and its highest, the one where the engine pulls hardest: the lowest alone held the engine at a low speed, and the
+    // menu gave the i30 with its CVT a top speed of 110 km/h)
+    var best = 0, ratios = gears;
+    if(dt.gearbox === "cvt") {
+        var lo = Math.min.apply(null, gears), hi = Math.max.apply(null, gears);
+        ratios = [];
+        for(var k = 0; k <= 40; k++) ratios.push(lo + (hi - lo) * k / 40);
+    }
     ratios.forEach(function (ratio) {
         var total = ratio * dt.final_drive, vMax = eng.limiter_rpm * Math.PI / 30 * r / total;
         for(var v = vMax; v > 0.5; v -= 0.1) {

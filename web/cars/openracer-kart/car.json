@@ -1,5 +1,5 @@
 {
-  "name": "Openracer Kart",
+  "name": "OpenRacer Kart",
   "description": "Racing kart.",
   "model": {
     "type": "gltf",

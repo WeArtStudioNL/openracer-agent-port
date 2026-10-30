@@ -78,6 +78,11 @@ OpenRacer.GateMarkers = (function () {
     var hud = null, arrow = null, label = null, shown = false;
     function makeHud() {
         hud = document.createElement("div");
+        hud.id = "gateHud";
+        // (on a phone the middle of the top is where the lap time is: the distance goes to the right)
+        var narrow = document.createElement("style");
+        narrow.textContent = "@media (max-width: 640px) { #gateHud { left: auto !important; right: 12px; transform: none !important; } }";
+        document.head.appendChild(narrow);
         hud.style.cssText = "position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 900; pointer-events: none; display: none; align-items: center; gap: 10px; " +
             "padding: 6px 16px 6px 10px; border-radius: 22px; background: rgba(24, 29, 35, 0.8); border: 1px solid var(--line); color: var(--head); " +
             "font: 700 18px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-variant-numeric: tabular-nums;";
