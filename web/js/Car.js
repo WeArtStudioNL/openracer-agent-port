@@ -299,6 +299,7 @@ OpenRacer.Car = function( config, domElement ) {
         if(OpenRacer.DragStrip) OpenRacer.DragStrip.reset();
         lastGateX = null; // a jump of the car is no crossing of a gate
         this.lapStarted = false;
+        this.lapInvalid = false;
         this.throttle = 0;
         this.brakePedal = 0;
         this.turnAngle = 0;
@@ -380,7 +381,8 @@ OpenRacer.Car = function( config, domElement ) {
         flames.clear();
         if(OpenRacer.DragStrip) OpenRacer.DragStrip.reset();
         lastGateX = null; // a jump of the car is no crossing of a gate
-        this.lapStarted = false;
+        // (the lap goes on: a reset in a race no longer costs a whole lap, but the lap is no record and no ghost)
+        if(this.lapStarted) this.lapInvalid = true;
         this.throttle = 0;
         this.brakePedal = 0;
         this.turnAngle = 0;
@@ -950,11 +952,12 @@ OpenRacer.Car = function( config, domElement ) {
                 var lapTime = this.clock - this.lapStartTime;
                 this.lapTimes.push(lapTime);
                 this.laps.push(Hud.formatTime(lapTime));
-                this.newRecord = !!(this.ghost && this.ghost.lapDone(lapTime));
+                this.newRecord = !this.lapInvalid && !!(this.ghost && this.ghost.lapDone(lapTime));
                 console.log("lap time: " + this.laps[this.laps.length - 1]);
                 this.lapsCompleted++;
             }
             this.lapStarted = true;
+            this.lapInvalid = false;
             this.lapStartTime = this.clock;
             if(this.ghost) this.ghost.startLap();
         } else {

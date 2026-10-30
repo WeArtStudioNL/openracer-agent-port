@@ -1312,10 +1312,16 @@ var MainMenu = (function() {
         var trackChosen = tracks.filter(function(t) { return t.id === choice.track; })[0];
         var hasLine = trackChosen && ((trackChosen.design && trackChosen.design.nodes) || (trackChosen.racing_line && trackChosen.racing_line.length > 10) ||
             (OpenRacer.Records && OpenRacer.Records.anyGhost(choice.track)));
-        if(!hasLine) {
+        var hasFinish = trackChosen && ((trackChosen.gates && trackChosen.gates.length) || (trackChosen.checkpoints && trackChosen.checkpoints.length));
+        if(trackChosen && !hasFinish) {
+            var noFinish = document.createElement("div");
+            noFinish.className = "hint";
+            noFinish.textContent = "This track has no finish line (no gates), so there is no race on it: it opens as free driving. Pick another track for a race, or add gates in the track editor.";
+            inner.appendChild(noFinish);
+        } else if(!hasLine) {
             var hint = document.createElement("div");
             hint.className = "hint";
-            hint.textContent = "The AI needs a racing line on this track: drive one lap here first, or draw the track in the track editor.";
+            hint.textContent = "This track has no racing line yet, so the race has no AI cars: you race the clock. Drive a lap here first (it becomes the line), or draw the track in the track editor.";
             inner.appendChild(hint);
         }
         var more = document.createElement("div");

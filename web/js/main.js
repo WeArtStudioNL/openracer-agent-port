@@ -24,6 +24,7 @@ EngineSound.setVolume(Settings.option("volume"));
 // A bar while the track, the car and the other cars load (the loader of three.js counts the files); it goes when all of them are in
 function showLoading() {
     var box = document.createElement("div");
+    box.id = "loadingScreen";
     box.style.cssText = "position: fixed; inset: 0; z-index: 2000; background: var(--bg2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #dfe6ef; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; transition: opacity 0.4s;";
     box.innerHTML = "<div style=\"font-size: 28px; letter-spacing: 2px;\">OpenRacer</div><div style=\"width: 260px; height: 6px; background: #263040; border-radius: 3px; overflow: hidden;\"><div style=\"height: 100%; width: 3%; background: var(--accent); transition: width 0.2s;\"></div></div>";
     document.body.appendChild(box);
@@ -110,11 +111,21 @@ function raceOptionsFromQuery(query) {
 }
 
 function banner(text) {
+    // (a message from while the game loads waits for the loading screen to go: it was shown under it, and gone again before the game could be seen)
+    if(!race.ready && document.getElementById("loadingScreen")) { setTimeout(function() { banner(text); }, 300); return; }
+    // (several messages at once are stacked, not drawn over each other)
+    var stack = document.getElementById("banners");
+    if(!stack) {
+        stack = document.createElement("div");
+        stack.id = "banners";
+        stack.style.cssText = "position: absolute; top: " + (window.innerWidth < 1100 ? 130 : 60) + "px; left: 50%; transform: translateX(-50%); z-index: 1001; display: flex; flex-direction: column; align-items: center; gap: 8px; " +
+            "width: max-content; max-width: calc(100vw - 32px); pointer-events: none;";
+        document.body.appendChild(stack);
+    }
     var div = document.createElement("div");
-    div.style.cssText = "position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1001; padding: 10px 20px; " +
-        "background: rgba(20, 24, 31, 0.85); color: #ffffff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; border-radius: 6px;";
+    div.style.cssText = "padding: 10px 20px; background: rgba(20, 24, 31, 0.85); color: #ffffff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; border-radius: 6px; text-align: center;";
     div.textContent = text;
-    document.body.appendChild(div);
+    stack.appendChild(div);
     setTimeout(function() { div.remove(); }, 9000);
 }
 
@@ -165,19 +176,28 @@ function setupRace() {
     race.pitBoxes = OpenRacer.PitStop.boxesOf(track);                 // the pit boxes of the track editor: the player has the first, the AI cars the next ones
     car.pit.boxes = race.pitBoxes; car.pit.boxIndex = race.pitBoxes.length ? 0 : -1;
     race.pitPath = race.line ? OpenRacer.PitPath.build(OpenRacer.PitPath.pointsOf(track), race.line) : null;       // the pit line of the track editor, for the AI
-    if(options.wear > 0 && !race.pitLane && !race.pitBoxes.length) banner(race.line ? "This track has no pit lane: no pit stops here, mind the tyres and the fuel." : "No racing line: the AI cannot find the pit lane.");
+    // (one message for what matters: a track without a finish line has no laps, so no ghost and no pit stops to speak of)
+    if(!trackCheckPoints.length) {
+        if(options.laps > 0) banner("This track has no finish line (no gates): there is no race here, only free driving.");
+        return;
+    }
+    if(options.wear > 0 && race.line && !race.pitLane && !race.pitBoxes.length) banner("This track has no pit lane: no pit stops here, mind the tyres and the fuel.");
     if(options.ghost && !race.ghost.best) banner("No best lap yet with this car on this track: the ghost appears from the next start, after a lap.");
 
+    if(options.ai > 0 && !race.line) {
+        // no line for the AI: the race is run without it (the laps and the countdown stay), and the player is told why
+        banner("No AI cars: this track has no racing line yet. Drive a lap here (it becomes the line), or draw the track in the track editor.");
+        options.ai = 0;
+    }
     if(options.ai > 0) {
-        if(!race.line) {
-            banner("The AI needs a racing line: drive a lap first (it is kept as the line), or draw the track in the track editor.");
-            return;
-        }
         var skill = { easy: 0.7, normal: 0.85, hard: 1.0 }[options.difficulty] || 0.85;
         var colours = [0xd94a3d, 0x3d7bd9, 0xe3b53a, 0x3fae5a, 0xf0f0f0, 0x8a4fd1, 0xf07a2a];
         var start = track.start, grid = Array.isArray(track.grid) ? track.grid : [];      // the grid boxes of the track editor: box 1 is the start, the others are for the opponents
         var startIndex = race.line.nearest(start.x, start.z);
-        race.line.origin = startIndex; // the laps of the line are counted from the start
+        // the laps of the line are counted from the finish line (the first gate), as the player's laps are (Car.js): everyone's first lap starts
+        // when they cross it, so the grid behind the line costs the AI the same distance as the player
+        var finish = Array.isArray(track.gates) && track.gates.length ? track.gates[0] : null;
+        race.line.origin = finish && isFinite(finish.x) && isFinite(finish.z) ? race.line.nearest(finish.x, finish.z) : startIndex;
         var cars = race.allCars.length ? race.allCars : [carConfig];
         if(options.aiCars) { var chosen = cars.filter(function(c) { return options.aiCars.indexOf(c.id) >= 0; }); if(chosen.length) cars = chosen; }
         for(var i = 0; i < options.ai; i++) {
@@ -196,8 +216,8 @@ function setupRace() {
             var box = grid[i + 1];
             if(box && isFinite(box.x) && isFinite(box.z)) opponent.place(box.x, box.z, box.heading || 0);      // its own grid box
             else {
-                // no box for it: on the grid ahead of the player, two by two, along the racing line
-                var index = startIndex + Math.round((7 * (i + 1) + 4) / race.line.step);
+                // no box for it: on the grid behind the player, two by two, along the racing line (ahead of the player it would be over the line, a lap down)
+                var index = startIndex - Math.round((7 * (i + 1) + 4) / race.line.step);
                 var p = race.line.point(index), next = race.line.point(index + 1);
                 var heading = Math.atan2(next.z - p.z, next.x - p.x);
                 var side = (i % 2 === 0 ? 1 : -1) * 2.2;
@@ -359,7 +379,7 @@ function standings() {
     var rows = race.opponents.map(function(o) {
         return { name: o.name, time: o.finished ? o.finishTime : null, progress: o.progress, best: o.lapTimes.length ? Math.min.apply(null, o.lapTimes) : null, player: false };
     });
-    rows.push({ name: "You (" + (carConfig.name || carConfig.id) + ")", time: race.playerFinished ? race.playerTime : null, progress: playerLineLaps + playerLastFraction,
+    rows.push({ name: "You (" + (carConfig.name || carConfig.id) + ")", time: race.playerFinished ? race.playerTime : null, progress: playerLineLaps + playerLastFraction - (playerCrossed ? 0 : 1),
         best: car.lapTimes.length ? Math.min.apply(null, car.lapTimes) : null, player: true });
     rows.sort(function(a, b) {
         if(a.time !== null && b.time !== null) return a.time - b.time;
@@ -546,7 +566,7 @@ function startSkidpad() {
     race.skidpadReset = skidpadReset;
 }
 
-var playerLineIndex = null, playerLineLaps = 0, playerLastFraction = 0, playerMaxFraction = 0;
+var playerLineIndex = null, playerLineLaps = 0, playerLastFraction = 0, playerMaxFraction = 0, playerCrossed = false;
 function updateRace(delta) {
     if(!race.ghost) return;
     if(!race.playerFinished) race.playerTop = Math.max(race.playerTop || 0, Math.abs(car.vehicle.u));          // (the top speed of the player in this race: after the finish the car goes at half of it)
@@ -560,11 +580,12 @@ function updateRace(delta) {
         // the place: how far along the line everyone is, counted the same way for the player as for the AI (laps of the line)
         playerLineIndex = race.line.nearest(car.vehicle.x, car.vehicle.z, playerLineIndex);
         var fraction = race.line.fractionOf(playerLineIndex);
-        if(fraction < 0.2 && playerLastFraction > 0.8 && playerMaxFraction > 0.5) { playerLineLaps++; playerMaxFraction = 0; }
+        if(fraction < 0.2 && playerLastFraction > 0.8 && !playerCrossed) { playerCrossed = true; playerMaxFraction = 0; }      // (the first time over the line: lap 1 starts, as for the AI)
+        else if(fraction < 0.2 && playerLastFraction > 0.8 && playerMaxFraction > 0.5) { playerLineLaps++; playerMaxFraction = 0; }
         else if(fraction > 0.8 && playerLastFraction < 0.2 && playerLineLaps > 0 && playerMaxFraction < 0.2) { playerLineLaps--; playerMaxFraction = 1; }
         if(fraction < 0.8) playerMaxFraction = Math.max(playerMaxFraction, fraction);
         playerLastFraction = fraction;
-        var mine = playerLineLaps + fraction;
+        var mine = playerLineLaps + fraction - (playerCrossed ? 0 : 1);
         var position = 1;
         race.opponents.forEach(function(o) { if(o.loaded && o.progress > mine) position++; });
         car.racePosition = position;

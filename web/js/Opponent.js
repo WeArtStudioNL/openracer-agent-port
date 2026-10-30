@@ -182,6 +182,7 @@ OpenRacer.Opponent = function (config, line, options) {
         this.lineIndex = line ? line.nearest(x, z) : 0;
         lastFraction = line ? line.fractionOf(this.lineIndex) : 0;
         maxFraction = 0;
+        this.lineCrossed = false;       // (the laps count from the first time over the line, as for the player: the grid is behind it)
         this.lapStart = this.clock;
         this.updateVisuals();
     };
@@ -374,7 +375,14 @@ OpenRacer.Opponent = function (config, line, options) {
         else this.lostFor = Math.max(0, (this.lostFor || 0) - 2 * delta);
         this.overFor = upY < 0.25 ? (this.overFor || 0) + delta : 0;
         if (v.py < here.y - 25) this.lostFor = 99;
-        if (!this.crashedAt && !inLane && !boxMode && (hardHit || this.overFor > 1 || wheelOff || this.lostFor > 7)) {
+        // no headway: a car that rocks against a wall (its speed swings to and fro, so it is never slow for long) gets nowhere either; after eight seconds within
+        // four metres it is lost, and put back
+        if (!this.anchor || Math.hypot(v.x - this.anchor.x, v.z - this.anchor.z) > 4) { this.anchor = { x: v.x, z: v.z }; this.stillFor = 0; }
+        else if (!inLane && !boxMode) this.stillFor = (this.stillFor || 0) + delta;
+        if (this.stillFor > 8) this.lostFor = 99;
+        // (not for a driver of a car that is not an AI car, the player's after the finish: only drive() runs for it, its clock stands still, and it was counted as
+        // crashed again every frame, which also took its learnt speeds down every frame)
+        if (!options.vehicle && !this.crashedAt && !inLane && !boxMode && (hardHit || this.overFor > 1 || wheelOff || this.lostFor > 7)) {
             this.crashedAt = this.clock;
             this.crashReason = hardHit ? "hit" : this.overFor > 1 ? "over" : wheelOff ? "wheel" : v.py < here.y - 25 ? "fell" : offLine > 45 ? "off line " + offLine.toFixed(0) + " m" : "stuck";      // (for the debugging)
             this.crashWait = this.lostFor > 7 || v.py < here.y - 25 ? 0 : 3;        // (lost or fallen out: it waited long enough)
@@ -395,6 +403,7 @@ OpenRacer.Opponent = function (config, line, options) {
         if (!road || road.surface !== "road" && road.surface !== "track01" && road.surface !== (at.surface || "road")) { x = at.x + dz * 1.5; z = at.z - dx * 1.5; }
         v.reset(x, z, Math.atan2(dz, dx));
         this.lostFor = 0; this.overFor = 0; this.stuck = 0; smoothSteer = 0; this.reverse = false; speedTrail.length = 0;        // (the stop of the reset is no hit)
+        this.anchor = null; this.stillFor = 0;
         this.throttle = 0; this.brakePedal = 1; this.turnAngle = 0;
         this.recovered = (this.recovered || 0) + 1;
         this.updateVisuals();
@@ -419,7 +428,11 @@ OpenRacer.Opponent = function (config, line, options) {
         if (pellets) pellets.update(this.vehicle, delta);
         // laps: the fraction of the line wraps around, after the car went round (not when it dithers at the line)
         var fraction = line ? line.fractionOf(this.lineIndex) : 0;
-        if (fraction < 0.2 && lastFraction > 0.8 && maxFraction > 0.5) {
+        if (fraction < 0.2 && lastFraction > 0.8 && !this.lineCrossed) {
+            this.lineCrossed = true;            // over the line for the first time: the first lap starts here
+            this.lapStart = this.clock;
+            maxFraction = 0;
+        } else if (fraction < 0.2 && lastFraction > 0.8 && maxFraction > 0.5) {
             this.lapsCompleted++;
             this.lapTimes.push(this.clock - this.lapStart);
             this.lapStart = this.clock;
@@ -435,7 +448,7 @@ OpenRacer.Opponent = function (config, line, options) {
         if (fraction < 0.8) maxFraction = Math.max(maxFraction, fraction);
         lastFraction = fraction;
         if (this.pit.active) this.pittedThisLap = true;
-        this.progress = this.lapsCompleted + fraction;
+        this.progress = this.lapsCompleted + fraction - (this.lineCrossed ? 0 : 1);
         this.updateVisuals(delta);
     };
 

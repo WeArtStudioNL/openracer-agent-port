@@ -103,7 +103,9 @@ OpenRacer.RacingLine.prototype.progress = function (x, z, hint) {
 OpenRacer.RacingLine.prototype.settle = function (ground) {
     if (!ground) return;
     this.points.forEach(function (p) {
-        var road = ground.query(p.x, p.z, 1000, 0);
+        // the surface at the height of the point (a line that was driven or recorded has it): under a bridge that is the road, not the deck above it;
+        // a point with no surface near its height (a line drawn flat, at 0) takes the highest one
+        var road = (isFinite(p.y) ? ground.query(p.x, p.z, p.y, 1.5) : null) || ground.query(p.x, p.z, 1000, 0);
         if (road) { p.y = road.y; p.surface = road.surface; }
     });
 };
@@ -114,7 +116,9 @@ OpenRacer.RacingLine.prototype.settle = function (ground) {
 OpenRacer.RacingLine.prototype.shorten = function (ground, margin, reach) {
     var n = this.points.length;
     if (!ground || n < 8) return;
-    margin = margin === undefined ? 0.8 : margin; reach = reach || 6;
+    // (the line is the middle of the car: half a car and a little more stay between it and the edge. At 0.8 m the outer wheels ran on the edge, onto the
+    // grass and the kerb, and on the circuit an AI car rolled over there at speed)
+    margin = margin === undefined ? 1.5 : margin; reach = reach || 6;
     var base = this.points.map(function (p) { return { x: p.x, z: p.z }; });
     var nx = new Float32Array(n), nz = new Float32Array(n), left = new Float32Array(n), right = new Float32Array(n);
     var self = this;
