@@ -26,6 +26,11 @@
       "file": "rims/beadlock-17.glb"
     },
     {
+      "id": "OR-17",
+      "name": "OpenRacer 17\" (sports)",
+      "file": "rims/17-203-rim.glb"
+    },
+    {
       "id": "moto-17",
       "name": "Motorcycle 17\", five spokes",
       "file": "rims/moto-17.glb"
@@ -44,6 +49,11 @@
         "inner_ratio": 0.643,
         "carcass": 0
       }
+    },
+    {
+      "id": "OR-203-17",
+      "name": "OpenRacer 203/17\" (sports)",
+      "file": "tyres/17-203-tyre.glb"
     },
     {
       "id": "sport-245-40-18",

@@ -81,7 +81,7 @@ OpenRacer.Marbles = function (scene, capacity) {
         vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz;
         if (!flying[i]) air.push(i);
         flying[i] = 1;
-        sizes[i] = 2 * radius * SEEN;
+        sizes[i] = 1.1 * radius * SEEN;
         rotations[i] = rotation;
         shades[i] = shade;
         eventOf[i] = -1;

@@ -1,0 +1,12 @@
+{
+ "objects": [
+  {
+   "id": "openracer-banner-1",
+   "name": "openracer-banner-1",
+   "file": "openracer-banner-1.glb",
+   "thumb": "openracer-banner-1.webp",
+   "kind": "static",
+   "mass": 0
+  }
+ ]
+}

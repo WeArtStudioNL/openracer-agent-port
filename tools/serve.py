@@ -60,7 +60,8 @@ def write_indexes():
     for kind, config_name in (("cars", "car.json"), ("tracks", "track.json")):
         base = os.path.join(ROOT, kind)
         if os.path.isdir(base):
-            ids = [config["id"] for config in scan(kind, config_name)]
+            # (a folder that is a link to somewhere else, such as a test track of another checkout, is served but kept out of the list in git)
+            ids = [config["id"] for config in scan(kind, config_name) if not os.path.islink(os.path.join(base, config["id"]))]
             with open(os.path.join(base, "index.json"), "w", encoding="utf-8") as f:
                 json.dump(ids, f, indent=1)
                 f.write("\n")

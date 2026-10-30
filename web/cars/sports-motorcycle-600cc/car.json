@@ -1,0 +1,982 @@
+{
+  "name": "Sports motorcycle 600cc",
+  "description": "A 600 cc supersport motorcycle.",
+  "model": {
+    "type": "gltf",
+    "file": "cars/sports-motorcycle-600cc/sports-motorcycle-600cc.glb",
+    "rotation_y": 0,
+    "scale": 1,
+    "offset": [
+      0,
+      0,
+      0
+    ]
+  },
+  "wheels": {
+    "mode": "model",
+    "nodes": {
+      "FR": [
+        "wheel_FL"
+      ],
+      "FL": [
+        "wheel_FL"
+      ],
+      "RL": [
+        "wheel_RL"
+      ],
+      "RR": [
+        "wheel_RL"
+      ]
+    }
+  },
+  "dimensions": {
+    "length": 1.99,
+    "width": 0.72,
+    "height": 1.09
+  },
+  "chassis": {
+    "mass": 195,
+    "wheelbase": 1.385,
+    "front_track": 0.04,
+    "rear_track": 0.04,
+    "weight_distribution": 0.49,
+    "cg_height": 0.62,
+    "suspension_travel": 0.12,
+    "tire_diameter": 0.607,
+    "drag_coefficient": 0.6,
+    "max_steer_deg": 22,
+    "roll_front": 0.5,
+    "spring_front": 17000,
+    "spring_rear": 24000,
+    "damping_front": 0.45,
+    "damping_rear": 0.5,
+    "downforce_front": 0,
+    "downforce_rear": 0,
+    "ackermann": 0,
+    "ride_front": 0,
+    "ride_rear": 0,
+    "roll_center_front": 0.3,
+    "roll_center_rear": 0.3,
+    "toe_front": 0,
+    "toe_rear": 0,
+    "camber_front": 0,
+    "camber_rear": 0,
+    "roll_camber": 0,
+    "suspension_length": 0.28,
+    "spring_progression": 0,
+    "damping_rebound": 1.7
+  },
+  "drivetrain": {
+    "drive": "rwd",
+    "diff": "welded",
+    "diff_preload": 0,
+    "diff_power": 0,
+    "diff_coast": 0,
+    "center_diff": "lsd",
+    "center_split": 0.4,
+    "gear_ratios": [
+      2.75,
+      2,
+      1.667,
+      1.444,
+      1.304,
+      1.208
+    ],
+    "reverse_ratio": 3,
+    "final_drive": 6.03,
+    "efficiency": 0.93,
+    "shift_time": 0.12,
+    "clutch": 3,
+    "diff_lock": 0,
+    "clutch_start_rpm": 3500,
+    "clutch_full_rpm": 5000
+  },
+  "engine": {
+    "idle_rpm": 1400,
+    "limiter_rpm": 15500,
+    "inertia": 0.06,
+    "torque_curve": [
+      [
+        0,
+        0
+      ],
+      [
+        500,
+        60.2
+      ],
+      [
+        1000,
+        62.2
+      ],
+      [
+        1500,
+        64
+      ],
+      [
+        2000,
+        65.6
+      ],
+      [
+        2500,
+        67.1
+      ],
+      [
+        3000,
+        68.4
+      ],
+      [
+        3500,
+        69.5
+      ],
+      [
+        4000,
+        70.4
+      ],
+      [
+        4500,
+        71.2
+      ],
+      [
+        5000,
+        71.8
+      ],
+      [
+        5500,
+        72.2
+      ],
+      [
+        6000,
+        72.5
+      ],
+      [
+        6500,
+        72.6
+      ],
+      [
+        7000,
+        72.5
+      ],
+      [
+        7500,
+        72.2
+      ],
+      [
+        8000,
+        71.8
+      ],
+      [
+        8500,
+        71.2
+      ],
+      [
+        9000,
+        70.4
+      ],
+      [
+        9500,
+        69.5
+      ],
+      [
+        10000,
+        68.4
+      ],
+      [
+        10500,
+        67.1
+      ],
+      [
+        11000,
+        65.6
+      ],
+      [
+        11500,
+        64
+      ],
+      [
+        12000,
+        62.2
+      ],
+      [
+        12500,
+        60.2
+      ],
+      [
+        13000,
+        58.1
+      ],
+      [
+        13500,
+        55.7
+      ],
+      [
+        14000,
+        53.3
+      ],
+      [
+        14500,
+        50.6
+      ],
+      [
+        15000,
+        47.8
+      ],
+      [
+        15500,
+        44.7
+      ],
+      [
+        16000,
+        41.6
+      ]
+    ],
+    "power_scale": 1,
+    "braking_scale": 0.3,
+    "limiter_hz": 20,
+    "two_step_rpm": 8000,
+    "launch_rpm": 9000
+  },
+  "brakes": {
+    "front": 1275,
+    "rear": 225
+  },
+  "cameras": {
+    "follow": {
+      "distance": 3.62,
+      "height": 1.53,
+      "look_height": 1.24,
+      "look_z": 0.19,
+      "smoothing": 3.5,
+      "fov_standing": 45,
+      "fov_fast": 75,
+      "fov_full_speed": 70,
+      "dolly": 1
+    },
+    "cockpit": {
+      "position": [
+        0,
+        0.87,
+        0.03
+      ],
+      "fov": 80
+    }
+  },
+  "steering_wheel": {
+    "degrees": 450
+  },
+  "sound": {
+    "engine_sim": {
+      "layout": "inline-4",
+      "impulse_response": "sharp_01",
+      "convolution": 1,
+      "bore": 67,
+      "stroke": 42.5,
+      "rod": 100,
+      "compression_ratio": 12.2,
+      "burn_duration": 45,
+      "burn_randomness": 0.2,
+      "intake_duration": 256,
+      "intake_lift": 9,
+      "intake_lobe_centre": 106,
+      "exhaust_duration": 250,
+      "exhaust_lift": 8.2,
+      "exhaust_lobe_centre": 106,
+      "intake_flow": 105,
+      "exhaust_flow": 85,
+      "idle_pressure": 0.35,
+      "exhaust_systems": 1,
+      "primary_length": 0.3,
+      "primary_flow": 90,
+      "exhaust_length": 1,
+      "outlet_flow": 300,
+      "collector_area": 20,
+      "hf_gain": 0.01,
+      "noise": 1,
+      "jitter": 0.5,
+      "volume": 1,
+      "audio_volume": 1,
+      "simulation_frequency": 10000,
+      "timing": [
+        [
+          0,
+          10
+        ],
+        [
+          2000,
+          14
+        ],
+        [
+          6000,
+          28
+        ],
+        [
+          10000,
+          36
+        ],
+        [
+          14000,
+          40
+        ],
+        [
+          17000,
+          40
+        ]
+      ]
+    }
+  },
+  "type": "motorcycle",
+  "motorcycle": {
+    "max_lean_deg": 52,
+    "fast_lean_deg": 30,
+    "rake_deg": 24.5,
+    "rider_mass": 80,
+    "hang_off": 0.3,
+    "max_lateral_g": 0.9,
+    "balance": 1,
+    "fork_dive": 1
+  },
+  "tyres": {
+    "compound": "slick",
+    "damage": false,
+    "shell": {
+      "width": 0.16,
+      "rings": 5,
+      "segments": 72,
+      "inner_ratio": 0.62,
+      "carcass": 0
+    },
+    "stiff_x": 20,
+    "stiff_y": 18,
+    "grip": 1.1,
+    "grip_balance": 1,
+    "cornering": 1,
+    "rolling_resistance": 0.012,
+    "heating": 1,
+    "life": 1,
+    "pressure_front": 2.5,
+    "pressure_rear": 2.5
+  },
+  "fuel": {
+    "tank": 18,
+    "use": 1
+  },
+  "assists": {
+    "tc_allowance": 1,
+    "esc_gain": 0
+  },
+  "driver": {
+    "enabled": true,
+    "file": "cars/sports-motorcycle-600cc/driver.glb",
+    "position": [
+      0,
+      0.603,
+      -0.304
+    ],
+    "rotation": [
+      -136.523,
+      0,
+      180
+    ],
+    "scale": 1,
+    "bones": {
+      "armL": [
+        "DEF-upper_armL",
+        "DEF-forearmL",
+        "DEF-handL"
+      ],
+      "armR": [
+        "DEF-upper_armR",
+        "DEF-forearmR",
+        "DEF-handR"
+      ],
+      "legL": [
+        "DEF-thighL",
+        "DEF-shinL",
+        "DEF-footL"
+      ],
+      "legR": [
+        "DEF-thighR",
+        "DEF-shinR",
+        "DEF-footR"
+      ],
+      "hips": "DEF-spine",
+      "chest": "DEF-spine003",
+      "head": "DEF-spine006"
+    },
+    "hands": {
+      "left": [
+        0.277,
+        0.592,
+        0.281
+      ],
+      "right": [
+        -0.282,
+        0.598,
+        0.301
+      ],
+      "rotation": {
+        "left": [
+          -17.295,
+          15.706,
+          13.63
+        ],
+        "right": [
+          -14.418,
+          -12.545,
+          -5.553
+        ]
+      },
+      "grip": {
+        "left": 0,
+        "right": 0
+      },
+      "offset": {
+        "left": [
+          0.012,
+          0.036,
+          -0.075
+        ],
+        "right": [
+          -0.013,
+          0.049,
+          -0.058
+        ]
+      }
+    },
+    "grip_curl": "x",
+    "feet": {
+      "left": [
+        0.208,
+        0.164,
+        -0.239
+      ],
+      "right": [
+        -0.208,
+        0.162,
+        -0.25
+      ],
+      "travel": 0.06,
+      "direction": [
+        0,
+        -0.5,
+        0.85
+      ],
+      "offset": {
+        "left": [
+          0.01,
+          0.121,
+          0.035
+        ],
+        "right": [
+          -0.017,
+          0.119,
+          0.031
+        ]
+      }
+    },
+    "elbow_out": 0.5,
+    "knee_out": 0.15,
+    "pivot": "hips",
+    "chest": {
+      "rotation": [
+        0.616,
+        0,
+        0
+      ]
+    },
+    "head": {
+      "rotation": [
+        -40.594,
+        0,
+        0
+      ]
+    }
+  },
+  "softbody": {
+    "layout": [
+      {
+        "x": 0.18362212908729575,
+        "y": 0.1322,
+        "z": 0.75,
+        "r": 0.3155
+      },
+      {
+        "x": 0.25,
+        "y": -0.2191,
+        "z": 0.25,
+        "r": 0.275
+      },
+      {
+        "x": 0.25,
+        "y": 0.1876,
+        "z": 0.25,
+        "r": 0.275
+      },
+      {
+        "x": -0.21802080387090006,
+        "y": 0.1354,
+        "z": 0.75,
+        "r": 0.3162
+      },
+      {
+        "x": -0.25,
+        "y": -0.2175,
+        "z": 0.25,
+        "r": 0.275
+      },
+      {
+        "x": -0.25,
+        "y": 0.1898,
+        "z": 0.25,
+        "r": 0.275
+      },
+      {
+        "x": 0.12484015353823448,
+        "y": -0.1760552369272174,
+        "z": -0.17376447772017778,
+        "r": 0.275
+      },
+      {
+        "x": 0.0868968199610311,
+        "y": 0.0413,
+        "z": -0.25,
+        "r": 0.275
+      },
+      {
+        "x": -0.16170715811208328,
+        "y": -0.2202705392412524,
+        "z": -0.16327449744297662,
+        "r": 0.275
+      },
+      {
+        "x": -0.16183022246357753,
+        "y": 0.0425,
+        "z": -0.25,
+        "r": 0.275
+      },
+      {
+        "x": -0.14181645542670135,
+        "y": 0.14892299624350497,
+        "z": -0.49639630846031213,
+        "r": 0.275
+      },
+      {
+        "x": -0.079491267977933,
+        "y": 0.36750199327018285,
+        "z": -0.9146662395260806,
+        "r": 0.275
+      },
+      {
+        "x": 0.11895227610003452,
+        "y": 0.155225352332328,
+        "z": -0.5150089476118266,
+        "r": 0.275
+      },
+      {
+        "x": 0.07020976466561732,
+        "y": 0.3972723366499821,
+        "z": -0.9150337504228068,
+        "r": 0.275
+      },
+      {
+        "x": -0.1514,
+        "y": -0.3898,
+        "z": 0.0604,
+        "r": 0.2
+      },
+      {
+        "x": 0.0853,
+        "y": -0.4087,
+        "z": 0.0529,
+        "r": 0.2
+      },
+      {
+        "x": 0.1625,
+        "y": -0.1117,
+        "z": 0.5245,
+        "r": 0.2
+      },
+      {
+        "x": -0.2002,
+        "y": -0.0824,
+        "z": 0.5631,
+        "r": 0.2
+      },
+      {
+        "x": -0.022002471077712332,
+        "y": 0.1431726930050807,
+        "z": 0.7831959147203005,
+        "r": 0.2
+      },
+      {
+        "x": -0.158,
+        "y": 0.325,
+        "z": 0.5641,
+        "r": 0.2
+      },
+      {
+        "x": 0.11250110297834667,
+        "y": 0.34404791236675947,
+        "z": 0.6517789343861448,
+        "r": 0.2
+      },
+      {
+        "x": 0.15770287858867,
+        "y": 0.4320628387637426,
+        "z": 0.47102497008257044,
+        "r": 0.2
+      },
+      {
+        "x": -0.1925973572122018,
+        "y": 0.42744507471012444,
+        "z": 0.4890501010802778,
+        "r": 0.2
+      },
+      {
+        "x": -0.22434762931991786,
+        "y": 0.20871525750625428,
+        "z": 0.23328977965764475,
+        "r": 0.2
+      },
+      {
+        "x": 0.154,
+        "y": 0.241,
+        "z": 0.0553,
+        "r": 0.2
+      },
+      {
+        "x": 0.039,
+        "y": 0.16586349267967906,
+        "z": 0.15438109655755305,
+        "r": 0.2
+      },
+      {
+        "x": 0.04705594803855735,
+        "y": 0.1926781842851538,
+        "z": -0.25837249767767384,
+        "r": 0.2
+      },
+      {
+        "x": -0.10243113876242045,
+        "y": 0.20993787614980408,
+        "z": -0.3172171281238962,
+        "r": 0.2
+      },
+      {
+        "x": 0.276,
+        "y": 0.0387936647873679,
+        "z": 0.3986418010705186,
+        "r": 0.12,
+        "inner": true
+      },
+      {
+        "x": -0.124,
+        "y": -0.20346225751808286,
+        "z": -0.1300531984035418,
+        "r": 0.12,
+        "inner": true
+      },
+      {
+        "x": -0.124,
+        "y": -0.037241315144262654,
+        "z": 0.09739407389017994,
+        "r": 0.12,
+        "inner": true
+      },
+      {
+        "x": 0.076,
+        "y": 0.035699169261185715,
+        "z": -0.20683507390550773,
+        "r": 0.12,
+        "inner": true
+      },
+      {
+        "x": 0.2329875185377558,
+        "y": 0.27948796137386994,
+        "z": 0.19884212266879858,
+        "r": 0.2
+      },
+      {
+        "x": 0.1105031099913629,
+        "y": 0.34848450091407446,
+        "z": 0.18087423535445957,
+        "r": 0.2
+      },
+      {
+        "x": 0.1214025467712801,
+        "y": 0.33667034636318593,
+        "z": 0.02559992889512206,
+        "r": 0.2
+      },
+      {
+        "x": 0.1670059729247294,
+        "y": 0.21363248206193872,
+        "z": -0.1382937141249466,
+        "r": 0.2
+      },
+      {
+        "x": 0.17371892779607534,
+        "y": 0.06278130735790666,
+        "z": 0.010467297646514289,
+        "r": 0.2
+      },
+      {
+        "x": -0.1883,
+        "y": 0.2368,
+        "z": -0.0073,
+        "r": 0.2
+      },
+      {
+        "x": 0.0599,
+        "y": -0.4478,
+        "z": 0.3649,
+        "r": 0.2
+      },
+      {
+        "x": 0.1004,
+        "y": -0.447,
+        "z": -0.3411,
+        "r": 0.2
+      },
+      {
+        "x": -0.1,
+        "y": -0.433,
+        "z": 0.3327,
+        "r": 0.2
+      },
+      {
+        "x": -0.0681,
+        "y": -0.4586,
+        "z": -0.3053,
+        "r": 0.2
+      },
+      {
+        "x": -0.0569,
+        "y": -0.4497,
+        "z": 0.0423,
+        "r": 0.2
+      },
+      {
+        "x": -0.1884,
+        "y": 0.276,
+        "z": -0.5837,
+        "r": 0.2
+      },
+      {
+        "x": 0.1846,
+        "y": 0.2671,
+        "z": -0.5721,
+        "r": 0.2
+      }
+    ],
+    "nodes": [
+      {
+        "i": 0,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 3,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 16,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 17,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 18,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 19,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 20,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 21,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 22,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 2,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 5,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 6,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 7,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 8,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 9,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 10,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 11,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 12,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 13,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 23,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 24,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 25,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 26,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 27,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 1,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 4,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 14,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 15,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 28,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 29,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 30,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 31,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 32,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 33,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 34,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 35,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 36,
+        "yield_force": 2000,
+        "break_force": 50000
+      },
+      {
+        "i": 37,
+        "yield_force": 2000,
+        "break_force": 50000
+      }
+    ]
+  },
+  "extras": {
+    "pops_on": false,
+    "pops_amount": 60,
+    "pops_overrun": 2,
+    "pops_rpm": 3000,
+    "pops_loud": 100,
+    "pops_flames": 100,
+    "antilag_on": false,
+    "antilag_mode": "lift",
+    "antilag_boost": 60,
+    "antilag_rpm": 3000,
+    "antilag_time": 5,
+    "antilag_bangs": 100,
+    "antilag_fuel": 60,
+    "boost_gauge_on": false,
+    "boost_full": 1,
+    "boost_scale": 2
+  }
+}
