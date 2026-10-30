@@ -175,6 +175,9 @@ OpenRacer.Car = function( config, domElement ) {
     this.vehicle.collision = collisionWorld;
     this.vehicle.ground = groundWorld;
     this.pit = new OpenRacer.PitStop(this.vehicle); // the pit stop on the pit lane (Pit.js), when the race has wear and fuel
+    this.pit.holdCar = true;                        // (the player's car goes on the jacks: see the pit stop in update)
+    var jack = null;                                // where the car stood when it went on the jacks: { x, y, z, q }
+    var onJacks = false;                            // the driver's input was taken for a pit stop (and is given back when it is done)
     var tyreSmoke = new OpenRacer.TyreSmoke(scene);
     var debris = OpenRacer.Debris ? new OpenRacer.Debris(scene) : null;          // the grass, sand and snow that a slipping wheel throws up (Debris.js)
     var flames = new OpenRacer.ExhaustFlames(scene, { length: this.length, width: this.width, exhaust: config.exhaust, exhaustSystems: (config.sound && config.sound.engine_sim && config.sound.engine_sim.exhaust_systems) || 1,
@@ -663,6 +666,10 @@ OpenRacer.Car = function( config, domElement ) {
         if(this.held) { this.brakePedal = 1; this.handbrake = true; this.accelerate = false; this.throttle = Math.min(this.throttle, 0.6); }
         else if(wasHeld) { this.brakePedal = 0; this.handbrake = false; this.brake = false; }   // GO: the brake of the grid is let go
         wasHeld = this.held;
+        // a pit stop: the car is on the jacks, the driver does nothing until it is done
+        // (when it is done the brake is let go at once: the pedal follows the brake key only when the key is let go, and it was never pressed)
+        if(this.pit.active) { this.throttle = 0; this.accelerate = false; this.brakePedal = 1; this.turnLeft = this.turnRight = false; onJacks = true; }
+        else if(onJacks) { onJacks = false; if(!this.brake) this.brakePedal = 0; }
         var v = this.vehicle;
         // the mode of the gearbox follows the gearbox the car has (the tuning menu can change it on the track): a manual or an IMT is shifted by the driver, the others are automatics
         var wantMode = this.modeForGearbox();
@@ -868,6 +875,14 @@ OpenRacer.Car = function( config, domElement ) {
 
         v.update(delta);
         this.pit.update(delta);
+        // On the jacks: the car is lifted slowly by 10 cm where it stopped and held there (no movement, its wheels hang); when the stop is done it is let go and falls
+        // on its wheels, and the driver drives on
+        if(this.pit.active) {
+            if(!jack) jack = { x: v.px, y: v.py, z: v.pz, q: [v.qx, v.qy, v.qz, v.qw] };
+            v.px = jack.x; v.pz = jack.z; v.py = jack.y + 0.1 * this.pit.lift();
+            v.qx = jack.q[0]; v.qy = jack.q[1]; v.qz = jack.q[2]; v.qw = jack.q[3];
+            v.vx = v.vy = v.vz = 0; v.wx = v.wy = v.wz = 0;
+        } else if(jack) jack = null;
         this.engineRPM = this.engine.getRPM();
         // the rev limiter cuts the fuel: the engine sounds like it too
         EngineSound.update(this.engineRPM, this.throttle * this.engine.throttleCut, this.engine.throttleCut > 0.5);

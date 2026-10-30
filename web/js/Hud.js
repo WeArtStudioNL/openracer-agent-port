@@ -82,7 +82,13 @@ var Hud = (function() {
             "#hudCar .bar { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.15); overflow: hidden; margin-top: 3px; }" +
             "#hudCar .bar i { display: block; height: 100%; background: #5fb3ff; }" +
             "#hudCar .label { color: #9fb0c4; letter-spacing: 1px; font-size: 11px; }" +
-            "#hudCar .pit { margin-top: 6px; font-weight: bold; color: #ffd04d; }";
+            "#hudCar .pit { margin-top: 6px; font-weight: bold; color: #ffd04d; }" +
+            // the pit stop of the player in the middle of the screen: what is done and the seconds that are left, then GO when the car is let go
+            "#hudPit { position: fixed; left: 50%; top: 38%; transform: translate(-50%, -50%); z-index: 900; pointer-events: none; font-family: Arial, sans-serif; color: #fff; " +
+            "text-align: center; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85); display: none; }" +
+            "#hudPit .what { font-size: 16px; letter-spacing: 3px; color: #ffd04d; font-weight: bold; }" +
+            "#hudPit .count { font-size: 72px; font-weight: bold; font-variant-numeric: tabular-nums; line-height: 1.05; }" +
+            "#hudPit .count.go { color: #7ee7a0; }";
         document.head.appendChild(style);
     }
 
@@ -134,12 +140,15 @@ var Hud = (function() {
         carPanel = document.createElement("div");
         carPanel.id = "hudCar";
         document.body.appendChild(carPanel);
+        pitPanel = document.createElement("div");
+        pitPanel.id = "hudPit";
+        document.body.appendChild(pitPanel);
         applyOptions();
     }
 
     // the tyres (the temperature as the colour, the wear as the dark part) and the fuel, when the race has them (Vehicle.js, Pit.js)
     var boostCanvas = null, boostContext = null, boostPeak = 0, boostPeakTime = 0;
-    var carPanel = null, carHtml = "";
+    var carPanel = null, carHtml = "", pitPanel = null, pitHtml = "", pitGoUntil = 0, pitWasActive = false;
     function tyreColour(temp) {
         // blue when cold, green in the window, red when hot
         if(temp < 70) { var c = Math.max(0, Math.min(1, (temp - 25) / 45)); return "rgb(" + Math.round(60 + 20 * c) + ", " + Math.round(120 + 70 * c) + ", " + Math.round(220 - 90 * c) + ")"; }
@@ -165,6 +174,22 @@ var Hud = (function() {
         else if(v.fuel <= 0) html += "<div class=\"pit\" style=\"color: #ff6b62;\">OUT OF FUEL</div>";
         else if(v.maxWear() > 0.8 || v.fuel < v.tank * 0.12) html += "<div class=\"pit\"" + (flash ? "" : " style=\"opacity: 0.4\"") + ">PIT · " + (v.maxWear() > 0.8 ? "tyres" : "fuel") + "</div>";
         if(html !== carHtml) { carHtml = html; carPanel.innerHTML = html; }
+        updatePit(car);
+    }
+    // the countdown of the pit stop in the middle of the screen (the player's car is on the jacks, Car.js), and GO for a moment and a half when it is let go
+    function updatePit(car) {
+        var pit = car.pit, now = performance.now(), html = "";
+        if(pit && pit.active) {
+            var parts = [pit.plan && pit.plan.tyres > 0 ? "TYRES" : "", pit.plan && pit.plan.fuel > 0 ? "FUEL" : ""].filter(Boolean).join(" · ");
+            html = "<div class=\"what\">PIT STOP" + (parts ? " · " + parts : "") + "</div><div class=\"count\">" + pit.remaining().toFixed(1) + "</div>";
+        } else {
+            if(pitWasActive && pit && pit.done) pitGoUntil = now + 1500;
+            if(now < pitGoUntil) html = "<div class=\"what\">PIT STOP DONE</div><div class=\"count go\">GO</div>";
+        }
+        pitWasActive = !!(pit && pit.active);
+        var show = html && Settings.option("hud") ? "block" : "none";
+        if(pitPanel.style.display !== show) pitPanel.style.display = show;
+        if(html !== pitHtml) { pitHtml = html; pitPanel.innerHTML = html; }
     }
 
     // the HUD and the debug text follow the options of the settings menu

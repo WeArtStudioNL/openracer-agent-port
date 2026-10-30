@@ -45,6 +45,10 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - The tuning menu has the cards of the car editor, with the same names and in the same order: Wheels, Suspension and driveline, Chassis, Drivetrain, Engine, Engine sound, Assists and extras, Cameras, Soft body (and Motorcycle, and the Mirrors of the game). Every card holds its groups (Chassis: Chassis settings, Brakes, Aerodynamics and steering, Size and steering wheel; Engine: Fuel, Engine settings), the card Engine shows the power and the card Drivetrain the top speed. The structure is one list for both (`OpenRacer.CarTuning.CARDS`). The torque-curve rows (peak power and its rpm) are gone from the menu: the curve follows from the engine that is built in the editor.
 
+### The pit stop of the player
+
+- **On the jacks**: when the stop begins the car goes up slowly by 10 cm where it stands and is held there; the throttle, the brake and the steering do nothing (the car can no longer pull away in the middle of a stop). The count down is in the middle of the screen, with what is done (tyres, fuel). When it is done the car is let go, drops on its wheels, and the driver drives on (GO). The AI cars stop as before.
+
 ### The grid and the pit boxes on the road
 
 - A grid box is a line across the front with a short leg back from each end (80 cm); the sides ran the whole five metres. The pit box of the player is yellow and stronger (it stands out), the pit boxes of the other cars are light blue.

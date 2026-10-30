@@ -25,6 +25,7 @@ OpenRacer.PitStop = function (vehicle) {
     var fuelGiven = 0, tyresDone = false;
     var fuelWanted = 0;
 
+    this.holdCar = false;      // the car of the player: once the stop has begun the car is on the jacks and cannot pull away (Car.js holds it, lift() is how far up)
     this.boxes = [];           // the pit boxes of the track (OpenRacer.PitStop.boxesOf), set by the game
     this.boxIndex = -1;        // the box of this car: its place in the list (the player 0, the AI cars from 1); -1: any box
     this.box = null;           // the box that the car stands in
@@ -69,7 +70,8 @@ OpenRacer.PitStop = function (vehicle) {
 
     this.update = function (dt) {
         if(!vehicle.wearEnabled) { this.active = false; this.done = false; return; }
-        var still = Math.abs(vehicle.u) < 0.4 && this.onPitLane();
+        // (a car on the jacks is in its box until the stop is done: its wheels are off the ground)
+        var still = (this.active && this.holdCar) || (Math.abs(vehicle.u) < 0.4 && this.onPitLane());
         if(!still) {
             if(this.active || this.done) { this.active = false; this.done = false; this.plan = null; }
             return;
@@ -94,6 +96,8 @@ OpenRacer.PitStop = function (vehicle) {
     };
 
     this.remaining = function () { return this.active && this.plan ? Math.max(0, this.plan.total - this.elapsed) : 0; };
+    // how far the car is up on the jacks, 0 to 1: it goes up slowly in the first part of the stop and stays up; when the stop is done it is let go (and falls)
+    this.lift = function () { return this.active && this.plan ? Math.min(1, this.elapsed / LIFT) : 0; };
 };
 
 OpenRacer.PitStop.BOX_W = 4;      // m: the width of a pit box
