@@ -1044,7 +1044,7 @@ export function initSoftBody(api) {
     }
     function ensureGround3D() {
         const v = bench.vehicle;
-        if (v && !v.ground.use3D) { sb.savedGround = sb.savedGround || v.ground; v.ground = crashGround(api.floorY(), 0); }
+        if (v && !v.ground.use3D) { const floorY = benchFloorY(v); sb.savedGround = sb.savedGround || v.ground; v.ground = crashGround(floorY, 0); }
     }
     $("sbPush").addEventListener("click", async () => {
         if (!sb.pushMode && !sb.shown) await show(false);
@@ -1667,6 +1667,15 @@ export function initSoftBody(api) {
     $("sbAngle").addEventListener("input", () => { $("sbAngleLabel").textContent = $("sbAngle").value + "°"; });
     let WALL_Z = 40;                                              // where the wall is: ahead of the car, set by the crash test
     // the floor and the wall as the triangles of a 3D ground (Ground.js), which the physics of the shell needs
+    // the height of the floor that the car of the bench stands on (the flat road of the bench, or the floor of a test): the floor of a test is laid there. The grid of the editor
+    // can have moved since the bench started (a tyre of another size in the form): a floor at the grid lay above the wheels of the car, which fell through it
+    function benchFloorY(v) {
+        const g = sb.savedGround || (v && v.ground);
+        const q = g && g.query && v ? g.query(v.px, v.pz, v.py + 5, 10) : null;
+        if (q && isFinite(q.y)) return q.y;
+        if (g && g.firstHit && v) { const d = g.firstHit(v.px, v.py + 5, v.pz, 0, -1, 0, 50); if (isFinite(d)) return v.py + 5 - d; }
+        return api.floorY();
+    }
     function crashGround(floorY, angleDeg) {
         const g = new OpenRacer.GroundWorld(5);
         g.use3D = true;
@@ -1679,6 +1688,9 @@ export function initSoftBody(api) {
                 const x1 = x0 + TILE, z1 = z0 + TILE;
                 tri([x0, floorY, z0], [x0, floorY, z1], [x1, floorY, z0], "floor", true);
                 tri([x1, floorY, z1], [x1, floorY, z0], [x0, floorY, z1], "floor", true);
+                // (and in the map of the road from above, which a reset and the pieces of a part that broke look in: without it the car was put back at height 0, not on the floor)
+                g.addTriangle(x0, floorY, z0, x0, floorY, z1, x1, floorY, z0, "road", "floor", 0);
+                g.addTriangle(x1, floorY, z1, x1, floorY, z0, x0, floorY, z1, "road", "floor", 0);
             }
         }
         const turn = angleDeg * Math.PI / 180, cos = Math.cos(turn), sin = Math.sin(turn);
@@ -1718,7 +1730,7 @@ export function initSoftBody(api) {
             const s = softBody(), v = bench.vehicle;
             if (!s) throw new Error("The car does not dent: tick “The car dents” first.");
             const speed = parseFloat($("sbSpeed").value) / 3.6, angle = parseFloat($("sbAngle").value);
-            const floorY = api.floorY();
+            const floorY = benchFloorY(v);
             stopCrash();
             crashUi(true);
             if (!sb.camSaved) sb.camSaved = { position: camera.position.clone(), target: controls.target.clone() };      // where the camera was, to put it back
@@ -1812,7 +1824,7 @@ export function initSoftBody(api) {
         const v = bench.vehicle;
         if (!v) return false;
         stopCrash();
-        const floorY = api.floorY();
+        const floorY = benchFloorY(v);
         WALL_Z = distance;
         sb.wall = wallMesh(floorY, 0);
         scene.add(sb.wall);
