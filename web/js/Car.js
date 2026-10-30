@@ -497,6 +497,7 @@ OpenRacer.Car = function( config, domElement ) {
                 if(this.head && i === 0) OpenRacer.updateFork(this.head, wheel, this.body, this.vehicle.steerApplied);
                 if(this.swingarm && i === 2) OpenRacer.updateSwingarm(this.swingarm, wheel, this.body);
                 if(this.chain && i === 2) OpenRacer.Chain.update(this.chain, wheel.spin);
+                OpenRacer.PitStop.showChange(this.pit, i, wheel.object, this.body.quaternion);
             }
         }
         if(this.rig) this.rig.update(this.vehicle, this.wheels);

@@ -26,7 +26,7 @@ OpenRacer.PitStop = function (vehicle) {
     this.done = false;         // the stop is complete (until the car pulls away)
     this.elapsed = 0;
     this.plan = null;          // { fuel, tyres, total }: the seconds that each part takes
-    var fuelGiven = 0, tyresDone = false, repaired = false;
+    var fuelGiven = 0, tyresDone = false, repaired = false, changed = [];
     var fuelWanted = 0;
 
     this.holdCar = false;      // the car of the player: once the stop has begun the car is on the jacks and cannot pull away (Car.js holds it, lift() is how far up)
@@ -83,8 +83,11 @@ OpenRacer.PitStop = function (vehicle) {
         // (a tyre that leaks is changed too, however little it is worn: the stop repaired the wear only, and the leak stayed)
         var leaking = v.punctured && v.punctured();
         var tyres = worn > TYRES_WHEN || leaking ? TYRES_MIN + TYRES_PER_WEAR * Math.min(1, worn) : 0;
+        // the tyres that are changed: the ones that are worn past the mark or leak, one after the other, each in its share of the time of the tyres
+        var change = [];
+        if(tyres > 0) for(var i = 0; i < 4; i++) { var w = v.wheels[i]; if(v.soloWheels && (i === 1 || i === 3)) continue; if(w.wear > TYRES_WHEN || w.leak) change.push(i); }
         var work = Math.max(fuel, tyres, repair);
-        return { fuel: fuel, tyres: tyres, repair: repair, work: work, total: LIFT + work + (tyres > 0 || repair > 0 ? LIFT : 0.3) };
+        return { fuel: fuel, tyres: tyres, change: change, repair: repair, work: work, total: LIFT + work + (tyres > 0 || repair > 0 ? LIFT : 0.3) };
     }
 
     // what a stop would take now, in seconds (for the AI and the HUD)
@@ -103,7 +106,7 @@ OpenRacer.PitStop = function (vehicle) {
             this.active = true;
             this.elapsed = 0;
             this.plan = planFor(vehicle);
-            fuelGiven = 0; tyresDone = false;
+            fuelGiven = 0; tyresDone = false; changed = [];
             fuelWanted = vehicle.tank - vehicle.fuel;
             if(this.plan.fuel <= 0 && this.plan.tyres <= 0 && this.plan.repair <= 0) { this.done = true; this.active = false; return; }
             repaired = false;
@@ -117,7 +120,10 @@ OpenRacer.PitStop = function (vehicle) {
         if(t > 0) {
             var give = Math.min(fuelWanted, t * FUEL_RATE) - fuelGiven;
             if(give > 0) { vehicle.fuel = Math.min(vehicle.tank, vehicle.fuel + give); fuelGiven += give; }
-            if(!tyresDone && this.plan.tyres > 0 && t >= this.plan.tyres) { tyresDone = true; vehicle.freshTyres(60); if(vehicle.repairTyres) vehicle.repairTyres(); }
+            // every tyre that is changed gets its new one halfway through its turn (the old wheel is off by then, the new one goes on)
+            var list = this.plan.change || [], slot = list.length ? this.plan.tyres / list.length : 0;
+            for(var c = 0; c < list.length; c++) if(!changed[c] && t >= slot * (c + 0.5)) { changed[c] = true; vehicle.freshTyre(list[c], 60); }
+            if(!tyresDone && this.plan.tyres > 0 && t >= this.plan.tyres) tyresDone = true;
         }
         // the repair: from the start of the work to its end every node of the shell goes back to its place a little more, and the bent wheels go straight; then all is whole
         // (the shell, the beams, the parts back on the car, the wheels, the tyres that leak)
@@ -131,9 +137,36 @@ OpenRacer.PitStop = function (vehicle) {
     };
 
     this.remaining = function () { return this.active && this.plan ? Math.max(0, this.plan.total - this.elapsed) : 0; };
+    // A wheel that is being changed, for the picture (Car.js, Opponent.js): how far it is pulled out (m) and whether it is off (between the old one and the new one), or null.
+    // Its turn: the first 40 % the old wheel comes off and out by 60 cm, then it is gone, the last 40 % the new one goes on.
+    this.tyreChange = function (index) {
+        if(!this.active || !this.plan || !this.plan.change || !this.plan.change.length) return null;
+        var c = this.plan.change.indexOf(index);
+        if(c < 0) return null;
+        var slot = this.plan.tyres / this.plan.change.length, f = (this.elapsed - LIFT - slot * c) / slot;
+        if(f <= 0 || f >= 1) return null;
+        var ease = function (x) { return x * x * (3 - 2 * x); };
+        if(f < 0.4) return { out: 0.6 * ease(f / 0.4), off: false };
+        if(f < 0.6) return { out: 0.6, off: true };
+        return { out: 0.6 * ease((1 - f) / 0.4), off: false };
+    };
     // how far the car is up on the jacks, 0 to 1: it goes up slowly in the first part of the stop and stays up; when the stop is done it is let go (and falls)
     this.lift = function () { return this.active && this.plan ? Math.min(1, this.elapsed / LIFT) : 0; };
 };
+
+// the wheel of a car in the picture while its tyre is changed in a pit stop: pulled out sideways (to the left for the left wheels: x of the car is to the left), hidden
+// between the old one and the new one; drawn again where the car has it when it is not being changed
+OpenRacer.PitStop.showChange = (function () {
+    var side = new THREE.Vector3();
+    return function (pit, index, object, quaternion) {
+        if(!object) return;
+        var change = pit && pit.tyreChange ? pit.tyreChange(index) : null;
+        if(!change) { if(object.userData.pitHidden) { object.visible = true; object.userData.pitHidden = false; } return; }
+        side.set(index === 1 || index === 2 ? 1 : -1, 0, 0).applyQuaternion(quaternion);
+        object.position.addScaledVector(side, change.out);
+        if(change.off !== !object.visible || object.userData.pitHidden !== change.off) { object.visible = !change.off; object.userData.pitHidden = change.off; }
+    };
+})();
 
 OpenRacer.PitStop.BOX_W = 4;      // m: the width of a pit box
 OpenRacer.PitStop.BOX_L = 8;      // m: its length

@@ -558,6 +558,7 @@ OpenRacer.Opponent = function (config, line, options) {
             wheel.turn(wheel.steerNow !== undefined ? wheel.steerNow : (i < 2 ? v.steerApplied : 0));
             wheel.object.children[0].children[0].rotation.x = wheel.spin;
             if (this.head && i === 1) OpenRacer.updateFork(this.head, wheel, this.body, v.steerApplied);
+            OpenRacer.PitStop.showChange(this.pit, i, wheel.object, this.body.quaternion);
         }
         if (this.rig) this.rig.update(v, w);
         if(this.softBodyMesh) this.softBodyMesh.update();

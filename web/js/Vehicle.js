@@ -430,6 +430,12 @@ OpenRacer.Vehicle = function (parameters, input) {
     };
 
     // new tyres (at the temperature of the blankets) and the fuel that is asked for: a pit stop (Pit.js), or the start of a race
+    // one new tyre (the pit stop changes the ones that are worn or leak, one after the other): no wear, the temperature of the blanket, the leak mended
+    this.freshTyre = function (i, temp) {
+        var w = this.wheels[i]; if(!w) return;
+        w.wear = 0; w.temp = temp === undefined ? 60 : temp; w.condition = conditionOf(w) * (w.pressureGrip || 1);
+        if(w.leak || w.pressureLoss) { w.leak = 0; w.pressureLoss = 0; this.applyPressure(); }
+    };
     this.freshTyres = function (temp) {
         for(var i = 0; i < 4; i++) { var w = this.wheels[i]; w.wear = 0; w.temp = temp === undefined ? 60 : temp; w.condition = conditionOf(w) * (w.pressureGrip || 1); }
     };
