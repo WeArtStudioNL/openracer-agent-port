@@ -23,7 +23,7 @@ const POLE_COLOUR = { pArmL: 0xa8e0ff, pArmR: 0xffb3b3, pLegL: 0xc5f0b0, pLegR: 
 
 export function initDriver(api) {
     const { $, THREE, scene, camera, renderer, controls, status } = api;
-    const drv = { enabled: false, driver: null, file: null, existingFile: null, selected: null, mode: "move", dragging: false, steer: 0, throttle: 0, brake: 0, bones: {} };
+    const drv = { editing: false, enabled: false, driver: null, file: null, existingFile: null, selected: null, mode: "move", dragging: false, steer: 0, throttle: 0, brake: 0, bones: {} };
     const targets = {};
     // an invisible ball round a marker, so that it is easy to click
     function addHitBall(mesh, radius) {
@@ -79,6 +79,8 @@ export function initDriver(api) {
             <label class="check"><input type="checkbox" id="drvEnabled"> The car has a driver</label>
             <div class="row drv-wrap"><button class="small accent" id="drvPick">Load the driver model…</button><input type="file" id="drvFile" accept=".glb,.gltf" style="display:none"></div>
             <div class="hint" id="drvFileInfo">No model loaded.</div>
+            <div class="row drv-wrap"><button class="small" id="drvEdit" title="Shows the nodes of the hands, the feet, the chest, the head and the ring of the wheel in the view, and the controls to place them; Escape or this button again stops">Edit driver</button></div>
+            <div id="drvEditBox" style="display:none">
             <div class="group">Place (the gizmo is in the view)</div>
             <div class="row drv-wrap" id="drvPlace">
                 <button class="small" data-t="model">Driver</button><button class="small" data-t="handL">Left hand</button><button class="small" data-t="handR">Right hand</button>
@@ -92,6 +94,7 @@ export function initDriver(api) {
             </div>
             <div class="hint">Click a ball, cube or the ring in the view to take it.</div>
             <div class="row"><button class="small ghost" id="drvResetPoles">Reset the elbows and knees</button></div>
+            </div>
             <div class="row">
                 <div><input type="number" id="drvScale" step="0.01" min="0.1" max="3" value="1"><div class="hint">scale</div></div>
                 <div><input type="number" id="drvTravel" step="1" min="0" max="20" value="6"><div class="hint">pedal travel (cm)</div></div>
@@ -303,13 +306,37 @@ export function initDriver(api) {
     function prepareWheel() { return !!drv.driver; }
 
     // ---- the model
+    // the nodes and the ring of the wheel are seen (and taken with a click) only while the driver is edited (Edit driver): else a click on the car is for the car,
+    // also where the driver is in front of a part
+    function showMarkers() {
+        const on = drv.editing && drv.enabled && !drv.hidden && !!drv.driver && !drv.benchParent;
+        ring.visible = on;
+        for (const t of Object.values(targets)) t.visible = on;
+    }
+    function setEditing(on) {
+        drv.editing = !!(on && drv.driver && drv.enabled && !drv.benchParent);
+        el("drvEditBox").style.display = drv.editing ? "" : "none";
+        el("drvEdit").textContent = drv.editing ? "Stop editing (Esc)" : "Edit driver";
+        el("drvEdit").className = "small" + (drv.editing ? " accent" : "");
+        el("drvEdit").disabled = !drv.driver || !drv.enabled || !!drv.benchParent;
+        el("drvEdit").title = drv.benchParent ? "The driver sits in the car on the test bench: stop the test (↺ at the tests) to edit it" : "Shows the nodes of the hands, the feet, the chest, the head and the ring of the wheel in the view, and the controls to place them; Escape or this button again stops";
+        if (!drv.editing && drv.selected) { drv.selected = null; attach(); }
+        showMarkers();
+    }
+    el("drvEdit").addEventListener("click", () => setEditing(!drv.editing));
+    window.addEventListener("keydown", (e) => {
+        if (!drv.editing || e.key !== "Escape") return;
+        const t = e.target && e.target.tagName;
+        if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
+        setEditing(false);
+    });
     function setEnabled(on) {
         drv.enabled = on;
         el("drvEnabled").checked = on;
         if (drv.driver) drv.driver.root.visible = on && !drv.hidden;
-        ring.visible = on && !drv.hidden && !!drv.driver; ringHit.visible = true;
-        for (const t of Object.values(targets)) t.visible = on && !drv.hidden && !!drv.driver;
+        ringHit.visible = true;
         if (!on) { drv.selected = null; attach(); if (api.steeringPreview) api.steeringPreview(null, null, null); }
+        setEditing(drv.editing && on);
         info();
     }
     // the figure out of the way for a while (the nodes of the soft body are edited): hidden, with its markers, until it is shown again
@@ -317,8 +344,7 @@ export function initDriver(api) {
         drv.hidden = on;
         if (drv.hidden && drv.selected) { drv.selected = null; attach(); }
         if (drv.driver) drv.driver.root.visible = drv.enabled && !on;
-        ring.visible = drv.enabled && !on && !!drv.driver;
-        for (const t of Object.values(targets)) t.visible = drv.enabled && !on && !!drv.driver;
+        showMarkers();
     }
     function info() {
         el("drvInfo").textContent = !drv.driver ? "none" : (drv.enabled ? "on" : "off");
@@ -421,6 +447,7 @@ export function initDriver(api) {
         if (!down || drv.dragging || Math.abs(e.clientX - down[0]) + Math.abs(e.clientY - down[1]) > 4) { down = null; return; }
         down = null;
         if (gizmo.axis) return;                                           // (the click was on the gizmo)
+        if (!drv.editing) return;                                         // (the driver is taken only while it is edited: Edit driver)
         if (api.pickLocked && api.pickLocked()) return;                   // (Edit origins of the suspension card: only its points are picked)
         const rect = renderer.domElement.getBoundingClientRect();
         ray.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
@@ -524,6 +551,7 @@ export function initDriver(api) {
     // the test of the car (the physics of the game): the figure and the wheel it holds go with the car that is tested, in its frame, and the nodes are hidden; when the test stops they go back
     function attachToBench(parent) {
         drv.benchParent = parent;           // (also before the figure has loaded: a tune loaded into the form makes a new figure, which goes on the bench when it arrives)
+        setEditing(false);                  // (the figure is in the car that is tested: it is not edited there)
         if (!drv.driver) return;
         drv.driver.setParent(parent);
         parent.add(wheelPivot);
@@ -543,7 +571,7 @@ export function initDriver(api) {
     // is the driver (the figure or one of its nodes) under the pointer: then a click is for the driver and not for the car part behind it
     const underRay = new THREE.Raycaster();
     function under(e) {
-        if (!drv.driver || !drv.enabled || drv.hidden) return false;
+        if (!drv.driver || !drv.enabled || drv.hidden || !drv.editing) return false;
         const rect = renderer.domElement.getBoundingClientRect();
         underRay.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
         const objects = Object.values(targets).filter((m) => m.visible).concat([drv.driver.root]);
