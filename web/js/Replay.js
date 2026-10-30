@@ -121,10 +121,12 @@ OpenRacer.Replay = (function() {
     var SOFT_SCALE = 1024, PART_FLOATS = 11, WHEEL_FLOATS = 5 * 4, RIDER_FLOATS = 45;      // RIDER_FLOATS: the particles of a rider that is a ragdoll (Driver.RAGDOLL_FLOATS)
     var MAX_SOFT_NODES = 400, MAX_SOFT_PARTS = 64;
 
+    // (a car without a shell that has parts, Dents off: records of 0 nodes, with its parts and its wheels)
+    var NO_NODES = new Int16Array(0);
     function softOf(entry) {
-        var v = entry.object.vehicle, sb = v && v.softBody;
-        if(!sb) return null;
-        if(!entry.soft) entry.soft = { nodes: sb.bodyCount || sb.count, names: [], records: [], version: -1, disp: null };
+        var v = entry.object.vehicle, sb = v && v.softBody, parts = entry.object.parts && entry.object.parts.replay;
+        if(!sb && !parts) return null;
+        if(!entry.soft) entry.soft = { nodes: sb ? sb.bodyCount || sb.count : 0, names: [], records: [], version: -1, disp: null };
         return entry.soft;
     }
     function sameArray(a, b) {
@@ -145,7 +147,8 @@ OpenRacer.Replay = (function() {
         if(!soft) return;
         var object = entry.object, v = object.vehicle, sb = v.softBody, last = soft.records[soft.records.length - 1];
         var disp = soft.disp;
-        if(sb.version !== soft.version || !disp) {
+        if(!sb || !soft.nodes) disp = soft.disp = NO_NODES;
+        else if(sb.version !== soft.version || !disp) {
             soft.version = sb.version;
             var fresh = new Int16Array(3 * soft.nodes);
             for(var i = 0; i < fresh.length; i++) fresh[i] = Math.max(-32767, Math.min(32767, Math.round(sb.displacement[i] * SOFT_SCALE)));
@@ -365,7 +368,7 @@ OpenRacer.Replay = (function() {
     var mixParts = null, mixDisp = null;
     function showSoft(entry, time) {
         var soft = entry.soft, object = entry.object, v = object.vehicle, sb = v.softBody;
-        if(!soft || soft.broken || !sb || (sb.bodyCount || sb.count) !== soft.nodes) return;
+        if(!soft || soft.broken || (sb ? (sb.bodyCount || sb.count) !== soft.nodes : soft.nodes !== 0)) return;
         var partList = object.parts && object.parts.replay;
         if(partList && partList.names().join("|") !== soft.names.join("|") && soft.names.length) return;      // not the car that it was made with
         var position = Math.max(first(), Math.min(last(), time / DT));
@@ -379,7 +382,7 @@ OpenRacer.Replay = (function() {
         if(!mixDisp || mixDisp.length < n) mixDisp = new Float32Array(n);
         for(var k = 0; k < n; k++) mixDisp[k] = (next ? rec.disp[k] + (next.disp[k] - rec.disp[k]) * f : rec.disp[k]) / SOFT_SCALE;
         var shown = soft.shown;
-        if(!shown || shown.rec !== rec || shown.f !== f) {
+        if(sb && (!shown || shown.rec !== rec || shown.f !== f)) {
             sb.displacement.set(mixDisp.subarray(0, n));
             sb.version++;
             soft.shown = { rec: rec, f: f };
@@ -1184,7 +1187,7 @@ OpenRacer.Replay = (function() {
         snapshot = cars.map(function(entry, i) { var s = new Float32Array(STRIDE); write(s, 0, entry); return s; });
         cars.forEach(function(entry) {
             var v = entry.object.vehicle;
-            if(entry.soft && v.softBody) { entry.live = { wheels: wheelFloats(v, new Float32Array(WHEEL_FLOATS)) }; entry.soft.shown = null; }
+            if(entry.soft) { entry.live = { wheels: wheelFloats(v, new Float32Array(WHEEL_FLOATS)) }; entry.soft.shown = null; }
             if(entry.object.parts && entry.object.parts.replay) entry.object.parts.replay.replayBegin();
         });
         for(var name in effects) {
@@ -1224,8 +1227,8 @@ OpenRacer.Replay = (function() {
         cars.forEach(function(entry) {
             var v = entry.object.vehicle;
             if(entry.object.parts && entry.object.parts.replay) entry.object.parts.replay.replayEnd();
-            if(entry.live && v.softBody) {
-                v.softBody.syncDisplacement();
+            if(entry.live) {
+                if(v.softBody) v.softBody.syncDisplacement();
                 var w = entry.live.wheels;
                 for(var k = 0; k < 4; k++) { if(v.wheelLost) v.wheelLost[k] = w[5 * k] > 0.5 || (v.soloWheels && (k === 1 || k === 3)); v.wheels[k].toeBend = w[5 * k + 1]; v.wheels[k].camberBend = w[5 * k + 2]; v.wheels[k].shiftX = w[5 * k + 3]; v.wheels[k].shiftZ = w[5 * k + 4]; }
                 entry.live = null;
@@ -1543,7 +1546,7 @@ OpenRacer.Replay = (function() {
             header.soft = header.soft.map(function(info) {
                 if(info === null) return null;
                 if(info && info.kept) delete info.kept;         // (the records themselves, which a file of before had in its header as well: they are read from the block)
-                if(!info || !(info.nodes >= 1 && info.nodes <= MAX_SOFT_NODES && info.nodes === Math.floor(info.nodes)) || !Array.isArray(info.parts) || info.parts.length > MAX_SOFT_PARTS ||
+                if(!info || !(info.nodes >= 0 && info.nodes <= MAX_SOFT_NODES && info.nodes === Math.floor(info.nodes)) || !Array.isArray(info.parts) || info.parts.length > MAX_SOFT_PARTS ||
                    !(info.count >= 1 && info.count <= samples * 4 && info.count === Math.floor(info.count))) throw bad("This replay file is damaged.");
                 info.parts = info.parts.map(function(name) { return String(name).slice(0, 80); });
                 softBytes += recordSize(info) * info.count;
@@ -1905,6 +1908,7 @@ OpenRacer.Replay = (function() {
 
     api.debugEffects = function() { return effects; };
     api.debugPack = function() { return pack(); };
+    api.debugParse = function(buffer) { return parse(buffer); };          // (a file read back, for the tests)
     api.debugSoft = function() { return cars.map(function(e) { return e.soft ? e.soft.records.map(function(r) { var m = 0; for(var i = 0; i < r.disp.length; i++) m = Math.max(m, Math.abs(r.disp[i])); return r.index + ':' + (m / SOFT_SCALE).toFixed(3) + ':' + Array.prototype.join.call(r.parts.filter(function(x, i) { return i % PART_FLOATS === 0; }), ''); }) : null; }); };
     api.info = function() { return { seconds: total * DT, cars: cars.length, blocks: chunks.length, megabytes: chunks.length * CHUNK * perSample() * 4 / 1048576 }; };
     api.speeds = SPEEDS;

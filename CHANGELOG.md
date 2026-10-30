@@ -62,6 +62,7 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 ### Fixed
 
+- **The replay shows the parts of a car with Dents off too.** The parts (and the wheels that came off) were recorded only with the shell, so on a car without one (the hatchback with its Race tune) a replay left every loose or broken part as it was at the end. They are now recorded in records without nodes, in saved replays as well. Measured on the hatchback: the rear plate on the car before it was knocked off, off it after, and back where the game had it when the replay was closed; a saved file read back had the 61 records.
 - **After a car was built again in the game (a tune applied in the tuning menu) the parts and the collision spheres were in the wrong place**: the shape was read with the model already in the car, so the place of the car on the track went into it (8 to 13 m beside the car on netherlands1). A loose part came off there. The model is now read in its own space (CollisionProxy.js); measured: 0 m, as on the first load.
 
 ### Setups keep the parts of the car
