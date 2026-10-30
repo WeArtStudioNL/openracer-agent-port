@@ -423,9 +423,38 @@ OpenRacer.Car = function( config, domElement ) {
         }
         return p;
     };
+    // Without a racing line, a saved place or a gate that was crossed, the reset goes to the nearest road (the middle of the nearest triangle of the surfaces "road"
+    // and "track01" of the track), with the heading the car has; the start only when the track has no road of those surfaces
+    var roadPoints = null;
+    this.nearestRoad = function() {
+        var world = typeof groundWorld !== "undefined" ? groundWorld : null, v = this.vehicle;
+        if(!world || !world.centroidsOf) return null;
+        if(!roadPoints) roadPoints = world.centroidsOf("road").concat(world.centroidsOf("track01"));
+        if(!roadPoints.length) return null;
+        // the nearest points first; the first one where the four corners of the car are on the road (with the heading of the car, or turned a quarter or a half),
+        // so that the car does not stand half on the grass at the edge of a big triangle of the road
+        var list = roadPoints.map(function (r) { return { r: r, d: (r.x - v.px) * (r.x - v.px) + (r.z - v.pz) * (r.z - v.pz) }; }).sort(function (a, b) { return a.d - b.d; }).slice(0, 400);
+        var dims = config.dimensions || {}, half = (dims.length || 4.3) / 2, side = (dims.width || 1.8) / 2, psi0 = isFinite(v.psi) ? v.psi : startHeading;
+        var onRoad = function (x, z, psi, y) {
+            var fx = Math.cos(psi), fz = Math.sin(psi);
+            for(var a = -1; a <= 1; a += 2) for(var b = -1; b <= 1; b += 2) {
+                var hit = world.query(x + fx * half * a - fz * side * b, z + fz * half * a + fx * side * b, y + 3, 6);
+                if(!hit || (hit.surface !== "road" && hit.surface !== "track01")) return false;
+            }
+            return true;
+        };
+        for(var i = 0; i < list.length; i++) {
+            var r = list[i].r;
+            for(var turn = 0; turn < 4; turn++) {
+                var psi = psi0 + turn * Math.PI / 2;
+                if(onRoad(r.x, r.z, psi, r.y) && placeIsFree.call(this, r.x, r.z, psi, r.y)) return { x: r.x, z: r.z, psi: psi, py: null, gy: r.y };      // (on the road and free: the free place of the reset keeps it)
+            }
+        }
+        return { x: list[0].r.x, z: list[0].r.z, psi: psi0, py: null, gy: list[0].r.y };
+    };
     var fallMinY = null, fallFor = 0, autopilotStill = 0;
     this.returnToSaved = function() {
-        var v = this.vehicle, p = this.nearestOnRacingLine() || savedReset || this.nearestOnTrack() || { x: startX, z: startZ, psi: startHeading, py: null };
+        var v = this.vehicle, p = this.nearestOnRacingLine() || savedReset || this.nearestOnTrack() || this.nearestRoad() || { x: startX, z: startZ, psi: startHeading, py: null };
         var kept = p;
         p = this.freePlace(p);
         if(p !== kept) p.car = null;          // (a place that was moved is put on the road: its saved height is not the one of the new place)
