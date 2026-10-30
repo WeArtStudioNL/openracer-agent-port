@@ -130,7 +130,8 @@ function loadImage(file) {
 // colourFile the colour map (or null: grey). Gives { file: the .glb as a File, vertices, triangles, grid }
 export async function buildTerrain(heightFile, colourFile, options) {
     const map = await readHeights(heightFile);
-    const size = Math.max(10, options.size || map.width), top = options.top === undefined ? 60 : options.top;
+    // (a field that was cleared gives NaN, not undefined: it took every height with it)
+    const size = Math.max(10, options.size || map.width), top = Number.isFinite(options.top) ? options.top : 60;
     const step = Math.max(1, Math.round(options.step || 4));
     const nx = Math.max(2, Math.floor((map.width - 1) / step) + 1), nz = Math.max(2, Math.floor((map.height - 1) / step) + 1);
     if (nx * nz > 600 * 600) throw new Error("That is too many points (" + nx + " × " + nz + "). Take a bigger step.");

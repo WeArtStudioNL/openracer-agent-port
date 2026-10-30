@@ -18,9 +18,12 @@
         dialog.querySelectorAll("[data-close]").forEach(function (button) {
             button.addEventListener("click", function () { dialog.close(); });
         });
-        // a click on the dark backdrop closes the dialog
+        // a click on the dark backdrop closes the dialog (pressed and let go there: selecting the text of a field and letting go beside the window closed it)
+        var downOnBackdrop = false;
+        dialog.addEventListener("pointerdown", function (event) { downOnBackdrop = event.target === dialog; });
         dialog.addEventListener("click", function (event) {
-            if (event.target === dialog) dialog.close();
+            if (event.target === dialog && downOnBackdrop) dialog.close();
+            downOnBackdrop = false;
         });
     });
 
