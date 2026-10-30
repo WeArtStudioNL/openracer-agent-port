@@ -431,6 +431,9 @@ export function initSoftBody(api) {
         if (sb.crash) crashFrame(dt);
         if (sb.pushMode) pushReading();
         if (sb.group) updateShell();
+        // (Apply force: the shell works, but its nodes and beams are not drawn, so that the car and the arrow are seen)
+        if (sb.points) sb.points.visible = !sb.pushMode;
+        if (sb.lines) sb.lines.visible = !sb.pushMode;
         placePartGroup();
     }
     function updateShell() {

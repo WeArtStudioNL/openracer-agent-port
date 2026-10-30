@@ -45,6 +45,10 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - The tuning menu has the cards of the car editor, with the same names and in the same order: Wheels, Suspension and driveline, Chassis, Drivetrain, Engine, Engine sound, Assists and extras, Cameras, Soft body (and Motorcycle, and the Mirrors of the game). Every card holds its groups (Chassis: Chassis settings, Brakes, Aerodynamics and steering, Size and steering wheel; Engine: Fuel, Engine settings), the card Engine shows the power and the card Drivetrain the top speed. The structure is one list for both (`OpenRacer.CarTuning.CARDS`). The torque-curve rows (peak power and its rpm) are gone from the menu: the curve follows from the engine that is built in the editor.
 
+### Car editor: Apply force without the shell in the way
+
+- **While Apply force is on (Tests, Crash test) the nodes and the beams of the shell are not drawn**: the shell works as before, but the car and the arrow are seen. After Release they are drawn again when the shell was shown.
+
 ### Car editor: limits for every axis of a pin
 
 - **Every free axis of a pin point has its own Min and Max sliders** (X, Y and Z in their colours), and the fans in the view follow them. car.json: `limits: { x: [min, max], y: [...], z: [...] }` per pin; a pin of before keeps its `min` and `max` for every axis (and `min`/`max` stay those of the first free axis).
