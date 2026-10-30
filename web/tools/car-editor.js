@@ -2068,6 +2068,7 @@ async function saveAndDrive() {
     // (a tune that is chosen is what is saved, as the Save button does: car.json, the Default, is not written)
     const tune = $("setupSelect").value;
     if (tune) {
+        if (state.files && state.files.size) { status("A new model or driver is part of the car, not of a tune: choose “Default (the car as made)” and save the car to keep it.", "error"); return; }
         try { saveTune($("id").value.trim(), tune); $("setupSelect").value = tune; updateTuneButtons(); setDirty(false); status("Tune " + tune + " saved (car.json is not written)."); }
         catch (error) { status("Could not save the tune: " + error.message); return; }
         openTestDialog();
@@ -2440,6 +2441,8 @@ $("newBike").addEventListener("click", () => {
 $("save").addEventListener("click", () => {
     const name = $("setupSelect").value, id = $("id").value.trim();
     if (!name) { save(); return; }
+    // (a model or a driver that was picked is part of the car, not of a tune: a tune that was saved then lost it without a word)
+    if (state.files && state.files.size) { status("A new model or driver is part of the car, not of a tune: choose “Default (the car as made)” and save the car to keep it.", "error"); return; }
     try { saveTune(id, name); $("setupSelect").value = name; updateTuneButtons(); setDirty(false); status("Tune " + name + " saved (car.json is not written)."); }
     catch (error) { status("Could not save the tune: " + error.message); }
 });
