@@ -553,10 +553,16 @@ function setModel(root, isNew, replace) {
         $("scale").value = 1;
         $("offsetX").value = $("offsetY").value = $("offsetZ").value = 0;
         applyTransform();
-        guessWheels();
-        if (wheelCenters()) fit();
-        sizeFromModel();
-        if (wheelCenters()) chassisFromWheels();
+        // a new car has Dynamic wheels: the wheel parts of the model are found, the car is fitted and the chassis is measured on them, and the game takes them off the model
+        // (a motorcycle keeps the wheels of its model: the demo wheel would stand at four corners)
+        document.querySelector("input[name=wheelMode][value=" + (isBike() ? "model" : "default") + "]").checked = true;
+        withModelWheels(() => {
+            guessWheels();
+            if (wheelCenters()) fit();
+            sizeFromModel();
+            if (wheelCenters()) chassisFromWheels();
+        });
+        updateHelpers();
         defaultCameras();
         frameModel();
     } else {
@@ -588,21 +594,18 @@ function replaceModel() {
         for (const slot of SLOTS) {
             [...$("w" + slot).options].forEach((o) => { o.selected = wanted[slot].includes(o.value); });
         }
-        document.querySelector("input[name=wheelMode][value=model]").checked = true;
-        $("wheelSelects").style.display = "";
         updateHelpers();
         kept = true;
         notes.push("The wheels were found again by the names of their parts.");
     } else {
-        document.querySelector("input[name=wheelMode][value=model]").checked = true;
-        $("wheelSelects").style.display = "";
-        guessWheels();
-        notes.push(wheelCenters() ? "The wheels were looked for by their names and places: check them." : "The parts of the wheels were not found: select them, or use the wheel of the demo car.");
+        withModelWheels(() => guessWheels());
+        updateHelpers();
+        notes.push(withModelWheels(() => wheelCenters()) ? "The wheels were looked for by their names and places: check them." : "The parts of the wheels were not found: select them, or use Dynamic wheels.");
     }
-    if (legacy && wheelCenters()) fit();
+    if (legacy && withModelWheels(() => wheelCenters())) withModelWheels(() => fit());
 
     // does the new model fit the chassis of the car?
-    const centres = wheelCenters();
+    const centres = withModelWheels(() => wheelCenters());
     if (centres) {
         const wheelbase = ((centres.FR.c.z + centres.FL.c.z) / 2) - ((centres.RR.c.z + centres.RL.c.z) / 2);
         const track = Math.abs(centres.FL.c.x - centres.FR.c.x);
@@ -714,6 +717,13 @@ function wheelCenters() {
 function wheelRadio() {
     return document.querySelector("input[name=wheelMode]:checked").value;
 }
+// what is measured on the wheel parts of the model (Find the wheels, Fit, the chassis from the wheels) works on the parts with either choice: with Dynamic wheels
+// (wheels.mode "default": the rims and tyres of the library, or the demo wheel, where the Chassis card puts them) the parts are the ones the game takes off the model
+function withModelWheels(fn) {
+    const was = wheelRadio();
+    document.querySelector("input[name=wheelMode][value=model]").checked = true;
+    try { return fn(); } finally { document.querySelector("input[name=wheelMode][value=" + was + "]").checked = true; }
+}
 // a model without wheels (its parts of a wheel are not chosen) whose two axles have a rim of the wheel library: the wheels are the library's, put where the form says (the wheelbase and the
 // tracks of the Chassis card), as with the demo wheel; the test and the shell of the car work then too
 function noWheelParts() { return SLOTS.every((slot) => !$("w" + slot).selectedOptions.length); }
@@ -734,7 +744,7 @@ function updateHelpers() {
         if (box) helpers.add(new THREE.Box3Helper(box, SLOT_COLORS[slot]));
     }
     const centres = wheelCenters();
-    $("wheelInfo").textContent = wheelMode() === "model" ? (centres ? "4 of 4 found" : "") : (libraryOnly() ? "rims of the library" : "demo wheel");
+    $("wheelInfo").textContent = wheelMode() === "model" ? (centres ? "4 of 4 found" : "") : (libraryOnly() ? "rims of the library" : "dynamic wheels");
     // a chip for each wheel: the parts that it has, or that it has none
     const chips = $("wheelChips");
     chips.innerHTML = "";
@@ -757,11 +767,13 @@ function updateHelpers() {
 
 // A new model is set up by itself: the wheels are found, the car takes its size from them and the model is put on the floor; what is left is a name and Save and drive
 function quickSetup(file) {
-    guessWheels();
+    withModelWheels(() => guessWheels());
     const ok = SLOTS.every((s) => $("w" + s).selectedOptions.length);
-    if (ok) { chassisFromWheels(); fit(); sizeFromModel(); }
-    if (!state.existingId && !$("name").value.trim()) { $("name").value = file.replace(/\.(glb|gltf)$/i, "").replace(/[_-]+/g, " ").trim(); if (!state.idEdited) $("id").value = slug($("name").value); }
-    status(ok ? "Ready: Save and drive." : "Pick the four wheels (Wheels card), then Save and drive.", ok ? "ok" : "error");
+    if (ok) withModelWheels(() => { chassisFromWheels(); fit(); sizeFromModel(); });
+    updateHelpers();
+    if (!state.existingId && !$("name").value.trim()) { $("name").value = file.replace(/\.(glb|gltf)$/i, "").replace(/[_-]+/g, " ").trim(); if (!state.idEdited) $("id").value = slug($("name").value); renderSetups(); }
+    const dynamic = wheelRadio() !== "model";
+    status(ok ? "Ready: Save and drive." : dynamic ? "No wheel parts found: the dynamic wheels stand at the wheelbase and the tracks of the Chassis card. Check them, then Save and drive." : "Pick the four wheels (Wheels card), then Save and drive.", ok || dynamic ? "ok" : "error");
 }
 
 function guessWheels() {
@@ -805,7 +817,7 @@ function guessWheels() {
     }
     updateHelpers();
     const missing = SLOTS.filter((s) => !picked[s].length);
-    status(missing.length ? "No parts found for: " + missing.join(", ") + ". Select them by hand, or use the wheel of the demo car." : "Found the wheels.", missing.length ? "error" : "ok");
+    status(missing.length ? "No parts found for: " + missing.join(", ") + ". Select them by hand, or use Dynamic wheels." : "Found the wheels.", missing.length ? "error" : "ok");
 }
 
 // puts the origin of the model where the game wants it
@@ -1898,7 +1910,7 @@ function buildConfig(id) {
         config.wheels.nodes = {};
         for (const slot of SLOTS) {
             const names = [...$("w" + slot).selectedOptions].map((o) => o.value);
-            if (!names.length) throw new Error("Select the parts of every wheel, or use the wheel of the demo car.");
+            if (!names.length) throw new Error("Select the parts of every wheel, or use Dynamic wheels.");
             config.wheels.nodes[slot] = names;
         }
     }
@@ -2261,7 +2273,7 @@ function loadExisting() {
         const wheels = shown.wheels || car.wheels || { mode: "default" };
         setLibraryChoice(wheels.library || null);
         document.querySelector("input[name=wheelMode][value=" + wheels.mode + "]").checked = true;
-        $("wheelSelects").style.display = wheels.mode === "model" ? "" : "none";
+        $("wheelSelects").style.display = "";          // (with Dynamic wheels too: the parts are the ones taken off the model)
         loadFromUrl("../" + m.file, m.file, car);
         // the parts are known once the model is loaded
         const wait = setInterval(() => {
@@ -2316,6 +2328,7 @@ function newCar(type) {
     $("delete").style.display = "none";
     $("editing").textContent = "Choose a car to change it, or make a new one below. Saving a car that was chosen here overwrites it.";
     helpers.clear();
+    renderSetups();             // (the tunes of the car that was open went with it: Save writes the new car)
     setDirty(false);
     status("");
 }
@@ -2329,8 +2342,8 @@ document.querySelectorAll("[data-turn]").forEach((button) => button.addEventList
     $("rotation").value = (((num("rotation") || 0) + parseFloat(button.dataset.turn)) % 360);
     applyTransform();
 }));
-$("fit").addEventListener("click", fit);
-$("guessWheels").addEventListener("click", guessWheels);
+$("fit").addEventListener("click", () => { withModelWheels(fit); updateHelpers(); });
+$("guessWheels").addEventListener("click", () => { withModelWheels(guessWheels); updateHelpers(); });
 
 // ---- the wheel library (WheelLibrary.js, web/wheels/wheels.json): a rim and a tyre per axle in place of the wheel parts of the model
 OpenRacer.WheelLibrary.base = "../";
@@ -2424,15 +2437,15 @@ Object.values(LIB_SELECTS).forEach((axle) => Object.values(axle).forEach((id) =>
 $("libUseModel").addEventListener("change", () => { state.pendingLibrary = null; librarySig = ""; updateHelpers(); syncTuningVisibility(); tuningChanged(); setDirty(true); });
 for (const slot of SLOTS) $("w" + slot).addEventListener("change", updateHelpers);
 document.querySelectorAll("input[name=wheelMode]").forEach((radio) => radio.addEventListener("change", () => {
-    $("wheelSelects").style.display = wheelRadio() === "model" ? "" : "none";
+    $("wheelSelects").style.display = "";
     updateHelpers();
 }));
 $("sizeFromModel").addEventListener("click", sizeFromModel);
-$("chassisFromWheels").addEventListener("click", chassisFromWheels);
+$("chassisFromWheels").addEventListener("click", () => { withModelWheels(chassisFromWheels); updateHelpers(); });
 for (const id of ["limiter", "idle"]) $(id).addEventListener("input", () => { if (state.build) recomputeBuild(); clearDyno(); drawChart(); updateSpeedInfo(); $("soundRpm").max = Math.round((num("limiter") || 7000) * 1.1); });
 for (const id of ["gears", "finalDrive", "tyre"]) $(id).addEventListener("input", updateSpeedInfo);
-$("name").addEventListener("input", () => { if (!state.idEdited) $("id").value = slug($("name").value); });
-$("id").addEventListener("input", () => { state.idEdited = true; });
+$("name").addEventListener("input", () => { if (!state.idEdited) { $("id").value = slug($("name").value); renderSetups(); } });
+$("id").addEventListener("input", () => { state.idEdited = true; renderSetups(); });
 $("existing").addEventListener("change", loadExisting);
 $("camDefaults").addEventListener("click", defaultCameras);
 document.querySelectorAll(".cam").forEach((el) => el.addEventListener("input", updateCameraMarkers));

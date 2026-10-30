@@ -45,6 +45,11 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - The tuning menu has the cards of the car editor, with the same names and in the same order: Wheels, Suspension and driveline, Chassis, Drivetrain, Engine, Engine sound, Assists and extras, Cameras, Soft body (and Motorcycle, and the Mirrors of the game). Every card holds its groups (Chassis: Chassis settings, Brakes, Aerodynamics and steering, Size and steering wheel; Engine: Fuel, Engine settings), the card Engine shows the power and the card Drivetrain the top speed. The structure is one list for both (`OpenRacer.CarTuning.CARDS`). The torque-curve rows (peak power and its rpm) are gone from the menu: the curve follows from the engine that is built in the editor.
 
+### Dynamic wheels
+
+- The Wheels card of the car editor has **Dynamic wheels** (it was *Wheel of the demo car*) and **Wheels from model**. A new car starts with Dynamic wheels (a motorcycle keeps the wheels of its model): the wheel parts of the model are still found, the car is fitted and the wheelbase, the tracks and the tyre are measured on them, and the game takes those parts off the model, so they no longer stand in the body through the wheels that turn. A new model for a car that exists keeps the choice of the car.
+- After *+ Car* the tune of the car that was open no longer stays in the bar (Save saved a tune instead of the new car).
+
 ### The tuning menu saves Default
 
 - **Save with *Default* chosen overwrites car.json** with the car as it is tuned, after a question, so the car as made can be changed in the game. It goes through the API of the game's own server (`tools/serve.py`, from this computer); on the site, or for a car of the garage or a folder, the menu says so and points to *Save as new…* or the car editor.
