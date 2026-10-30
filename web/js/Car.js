@@ -141,6 +141,7 @@ OpenRacer.Car = function( config, domElement ) {
         ride_rear: chassis.ride_rear,
         roll_center_front: chassis.roll_center_front,
         roll_center_rear: chassis.roll_center_rear,
+        anti_dive: chassis.anti_dive, anti_squat: chassis.anti_squat, anti_lift_front: chassis.anti_lift_front, anti_lift_rear: chassis.anti_lift_rear,
         camber_front: chassis.camber_front,
         camber_rear: chassis.camber_rear,
         roll_camber: chassis.roll_camber,

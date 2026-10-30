@@ -376,6 +376,7 @@ cd openracer-agent-port
                 <li><b>Aerodynamics.</b> Downforce or lift per axle (<code>downforce_front</code>, <code>downforce_rear</code>, negative for lift). It presses at the axle, so the balance of the car changes with speed.</li>
                 <li><b>Steering.</b> The front wheels steer with <b>Ackermann</b> (default 0.6): the inner wheel turns more than the outer one, so a slow bend does not scrub the inner tyre.</li>
                 <li><b>Roll centres.</b> The force across the tyre acts at the roll centre of the axle (a height above the road). The part of the load transfer below the roll centre goes through the linkage at once and presses the outer tyre down; only the rest rolls the body on its springs.</li>
+                <li><b>Anti-dive, anti-squat and anti-lift.</b> The same for the brake and drive forces: a share (in %) of the force along the tyre is taken by the linkage, so the body pitches less on its springs, and that share of the load transfer goes to the tyres at once. The total load transfer stays the same. <i>Anti-dive</i> is the front under the brakes, <i>anti-squat</i> the rear under power, and <i>anti-lift</i> the rear under the brakes and the front under power (front or four wheel drive). They are in the Chassis group of the tuning menu and in <code>chassis</code> of car.json (<code>anti_dive</code>, <code>anti_squat</code>, <code>anti_lift_front</code>, <code>anti_lift_rear</code>, 0 to 1); 0 when not set. A motorcycle has the geometry of its fork and swingarm instead.</li>
             </ul>
         </section>
 
@@ -506,7 +507,7 @@ cd openracer-agent-port
             <ul>
                 <li><b>Wheels:</b> the rims and tyres per axle, size, rubber, pressure, heating and life.</li>
                 <li><b>Suspension and driveline:</b> the type of suspension per axle and where the engine is.</li>
-                <li><b>Chassis:</b> paint, mass, weight distribution, centre of gravity, springs, dampers, travel, ride height, camber, toe, roll centres; the brakes and their bias; drag, downforce and steering; the size and the steering wheel.</li>
+                <li><b>Chassis:</b> paint, mass, weight distribution, centre of gravity, springs, dampers, travel, ride height, camber, toe, roll centres, anti-dive, anti-squat and anti-lift; the brakes and their bias; drag, downforce and steering; the size and the steering wheel.</li>
                 <li><b>Drivetrain:</b> the transmission, the gearbox, every gear, the final drive, the clutch and the differentials. It shows the top speed.</li>
                 <li><b>Engine:</b> the fuel, and the engine build with its chart and <i>Run dyno</i>. It shows the power.</li>
                 <li><b>Engine sound</b>, <b>Assists and extras</b> (traction control, ABS, ESC, launch control, two-step, pops and bangs, anti-lag, boost gauge), <b>Cameras</b>, <b>Soft body</b>, and for a motorcycle <b>Motorcycle</b>. The game adds <b>Mirrors</b>.</li>

@@ -41,6 +41,10 @@ OpenRacer.CarTuning = (function () {
             ["ride_rear", "Ride height at the rear", "mm", -150, 150, 5],
             ["roll_center_front", "Roll centre at the front", "cm", -20, 60, 1],
             ["roll_center_rear", "Roll centre at the rear", "cm", -20, 60, 1],
+            ["anti_dive", "Anti-dive (the front under the brakes)", "%", 0, 100, 1],
+            ["anti_lift_rear", "Anti-lift at the rear (under the brakes)", "%", 0, 100, 1],
+            ["anti_squat", "Anti-squat (the rear under power)", "%", 0, 150, 1],
+            ["anti_lift_front", "Anti-lift at the front (under power)", "%", 0, 100, 1],
             ["toe_front", "Toe at the front (positive: toe-in)", "°", -4, 4, 0.05],
             ["toe_rear", "Toe at the rear", "°", -4, 4, 0.05],
             ["camber_front", "Camber at the front (negative: top in)", "°", -12, 6, 0.1],
@@ -236,6 +240,10 @@ OpenRacer.CarTuning = (function () {
             case "es_exhaust_length": case "es_primary_length": return !v.engine_build;      // (the built engine has them)
             // no suspension: the springs, the dampers, the travel, the progression, the rebound and the ride height do nothing (the tyre is the spring; the roll stiffness and the roll centres still work)
             case "frame_torsion": case "inner_lift": return v.unsprung === "none";
+            // anti-dive, anti-squat, anti-lift: the linkage of a suspension (none on a kart, the fork and the swingarm of a motorcycle have their own); under power only on a driven axle
+            case "anti_dive": case "anti_lift_rear": return v.unsprung !== "none" && v.vehicle_type !== "motorcycle";
+            case "anti_squat": return v.unsprung !== "none" && v.vehicle_type !== "motorcycle" && v.drive !== "fwd";
+            case "anti_lift_front": return v.unsprung !== "none" && v.vehicle_type !== "motorcycle" && (v.drive === "fwd" || v.drive === "awd");
             case "spring_front": case "spring_rear": case "damping_front": case "damping_rear": case "suspension_travel": case "suspension_length": case "spring_progression": case "damping_rebound": case "ride_front": case "ride_rear": return v.unsprung !== "none";
             case "bike_max_lean": case "bike_fast_lean": case "bike_rake": case "bike_rider_mass": case "bike_hang_off": case "bike_max_lateral_g": case "bike_balance": case "bike_fork_dive": return v.vehicle_type === "motorcycle";
             default: return true;
@@ -421,6 +429,8 @@ OpenRacer.CarTuning = (function () {
             ride_rear: Math.round((ch.ride_rear || 0) * 1000),
             roll_center_front: (ch.roll_center_front !== undefined ? ch.roll_center_front : 0.06) * 100,
             roll_center_rear: (ch.roll_center_rear !== undefined ? ch.roll_center_rear : 0.12) * 100,
+            anti_dive: Math.round((ch.anti_dive || 0) * 100), anti_squat: Math.round((ch.anti_squat || 0) * 100),
+            anti_lift_front: Math.round((ch.anti_lift_front || 0) * 100), anti_lift_rear: Math.round((ch.anti_lift_rear || 0) * 100),
             toe_front: ch.toe_front || 0,
             toe_rear: ch.toe_rear || 0,
             camber_front: ch.camber_front || 0,
@@ -543,6 +553,7 @@ OpenRacer.CarTuning = (function () {
             ride_rear: v.ride_rear / 1000,
             roll_center_front: v.roll_center_front / 100,
             roll_center_rear: v.roll_center_rear / 100,
+            anti_dive: v.anti_dive / 100, anti_squat: v.anti_squat / 100, anti_lift_front: v.anti_lift_front / 100, anti_lift_rear: v.anti_lift_rear / 100,
             camber_front: v.camber_front,
             camber_rear: v.camber_rear,
             roll_camber: v.roll_camber / 100,
@@ -620,6 +631,8 @@ OpenRacer.CarTuning = (function () {
         c.chassis.ride_rear = v.ride_rear / 1000;
         c.chassis.roll_center_front = v.roll_center_front / 100;
         c.chassis.roll_center_rear = v.roll_center_rear / 100;
+        // (anti-dive, anti-squat, anti-lift: written only when they are used, so a car made without them keeps its car.json as it was)
+        ["anti_dive", "anti_squat", "anti_lift_front", "anti_lift_rear"].forEach(function(k) { if(v[k]) c.chassis[k] = v[k] / 100; else delete c.chassis[k]; });
         c.chassis.toe_front = v.toe_front;
         c.chassis.toe_rear = v.toe_rear;
         c.chassis.camber_front = v.camber_front;

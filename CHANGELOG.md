@@ -45,6 +45,10 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - The tuning menu has the cards of the car editor, with the same names and in the same order: Wheels, Suspension and driveline, Chassis, Drivetrain, Engine, Engine sound, Assists and extras, Cameras, Soft body (and Motorcycle, and the Mirrors of the game). Every card holds its groups (Chassis: Chassis settings, Brakes, Aerodynamics and steering, Size and steering wheel; Engine: Fuel, Engine settings), the card Engine shows the power and the card Drivetrain the top speed. The structure is one list for both (`OpenRacer.CarTuning.CARDS`). The torque-curve rows (peak power and its rpm) are gone from the menu: the curve follows from the engine that is built in the editor.
 
+### Anti-dive, anti-squat and anti-lift
+
+- **The suspension of a car has anti-dive, anti-squat and anti-lift** (the Chassis group of the tuning menu and of the car editor, `chassis.anti_dive`, `anti_squat`, `anti_lift_front`, `anti_lift_rear` in car.json, 0 to 1). As the roll centres do for the force across the tyre, a share of the brake and drive forces is taken by the linkage: the body dives and squats less on its springs, and that share of the load transfer goes to the tyres at once, so the total stays the same. Anti-dive is the front under the brakes, anti-squat the rear under power, anti-lift the rear under the brakes and the front under power (shown for a driven front axle). They are 0 when not set, so every car drives as before; the AI cars, the bench of the car editor and the live tuning have them too. A motorcycle keeps the geometry of its fork and swingarm.
+
 ### Dynamic wheels
 
 - The Wheels card of the car editor has **Dynamic wheels** (it was *Wheel of the demo car*) and **Wheels from model**. A new car starts with Dynamic wheels (a motorcycle keeps the wheels of its model): the wheel parts of the model are still found, the car is fitted and the wheelbase, the tracks and the tyre are measured on them, and the game takes those parts off the model, so they no longer stand in the body through the wheels that turn. A new model for a car that exists keeps the choice of the car.

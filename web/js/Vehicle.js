@@ -102,6 +102,19 @@ OpenRacer.Vehicle = function (parameters, input) {
     // body on its springs. A higher roll centre: less roll, quicker response, a little jacking.
     this.rollCentreFront = parameters.roll_center_front !== undefined ? parameters.roll_center_front : 0.06;
     this.rollCentreRear = parameters.roll_center_rear !== undefined ? parameters.roll_center_rear : 0.12;
+    // Anti-dive, anti-squat and anti-lift: the share of the pitch of the brake and drive forces that the linkage takes (chassis.anti_dive, anti_squat, anti_lift_front,
+    // anti_lift_rear; 0 to 1, 0 when not set). As with the roll centres, that share of the force along a wheel is passed to the body higher up, so the body pitches
+    // less on its springs, and its load transfer goes to the tyres at once (geometric): the total load transfer stays Fx h / L. Anti-dive: the front under the brakes;
+    // anti-squat: the rear under power; anti-lift: the front under power (front or four wheel drive) and the rear under the brakes. A motorcycle has the geometry of
+    // its fork and swingarm instead (forkSlope, swingSlope).
+    this.setAnti = function (t) {
+        var share = function (v, old) { return v === undefined || v === null || !isFinite(v) ? old : Math.max(-0.5, Math.min(1.5, +v)); };
+        this.antiDive = share(t.anti_dive, this.antiDive || 0);
+        this.antiSquat = share(t.anti_squat, this.antiSquat || 0);
+        this.antiLiftFront = share(t.anti_lift_front, this.antiLiftFront || 0);
+        this.antiLiftRear = share(t.anti_lift_rear, this.antiLiftRear || 0);
+    };
+    this.setAnti(parameters);
     // Camber: the lean of the wheels (degrees; negative is the top in, as it is set on a car that corners), and how much the
     // wheels lean with the body when it rolls (1: like a live axle keeps them upright... no: 0 keeps them upright, 1 leans them fully)
     this.camberFront = parameters.camber_front || 0;
@@ -110,6 +123,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.liveAxle = { front: !!parameters.live_axle_front, rear: !!parameters.live_axle_rear };   // the wheels of a live axle lean with the axle (the travel of the two wheels), not with the roll of the body
     this.camberGain = 0.5;            // a degree of lean is worth this many degrees of slip angle (camber thrust)
     var axleFy = [0, 0];              // the lateral force of each axle in the last step, for the geometric load transfer
+    var pitchLinks = 0;               // the pitch moment of the brake and drive forces that the linkage took in the last step (anti-dive, anti-squat, anti-lift), N m: + nose up
     this.gear_ratios = parameters.gear_ratios;
     this.final_drive = parameters.final_drive;
     this.getSurface = parameters.getSurface;
@@ -603,6 +617,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.camber_front !== undefined) this.camberFront = t.camber_front;
         if(t.camber_rear !== undefined) this.camberRear = t.camber_rear;
         if(t.roll_camber !== undefined) this.rollCamber = t.roll_camber;
+        this.setAnti(t);
         this.layout();
         for(i = 0; i < 4; i++) {
             w = this.wheels[i];
@@ -1977,7 +1992,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(wasTwoStep && !self.twoStepActive && inp.throttle > 0.3 && !inp.clutchPedalPresent) self.launchRelease = 0.15;
         engine.holdRPM = self.twoStepActive ? engine.twoStepRPM : (self.lcArmed ? engine.launchRPM : 0);
         engine.holding = self.lcArmed || self.transbrakeHeld || self.twoStepActive;
-        var newAxleFy = [0, 0];
+        var newAxleFy = [0, 0], newPitchLinks = 0;
 
         for(var iw = 0; iw < 4; iw++) {
             var wheel = wheels[iw];
@@ -2056,7 +2071,10 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var rollCentre = wheel.front ? self.rollCentreFront : self.rollCentreRear;
                 var trackWidth = wheel.front ? self.front_track : self.rear_track;
                 var geometric = self.soloWheels ? 0 : (wheel.right ? 1 : -1) * axleFy[axle] * rollCentre / trackWidth;        // (one wheel on an axle: nothing to move the load to)
+                // and the pitch that the linkage took (anti-dive, anti-squat, anti-lift): a moment nose up loads the rear and unloads the front, half on each wheel of an axle
+                if(!self.soloWheels && pitchLinks !== 0) geometric += (wheel.front ? -1 : 1) * pitchLinks / Math.max(0.5, self.wheelbase) / 2;
                 var fzGrip = Math.max(0, fz + geometric);
+                wheel.gripLoad = fzGrip;                   // (the load the tyre grips with: the spring's and the geometric, for the telemetry and the tests)
                 // camber: the lean of the wheel to the left (its static camber, and the lean of the body in roll); a wheel that
                 // leans pushes towards the side it leans to, as if it had a slip angle
                 var camber = (wheel.front ? self.camberFront : self.camberRear) * Math.PI / 180;
@@ -2147,13 +2165,20 @@ OpenRacer.Vehicle = function (parameters, input) {
                 // the forces on the car: the force along the wheel at the point of contact, the force across the wheel at the roll
                 // centre above it (the linkage passes it to the body there, so the body rolls less). The load along the normal went
                 // to the wheel, which passes it to the body through the spring (above).
+                // (anti-dive, anti-squat, anti-lift: the share that the linkage takes is passed to the body higher up, towards the height of the centre of gravity, so it pitches
+                // the body less; the same share of the load transfer went to the tyres above, from the last step)
+                var anti = self.soloWheels ? 0 : (wheel.front ? (fxW < 0 ? self.antiDive : self.antiLiftFront) : (fxW < 0 ? self.antiLiftRear : self.antiSquat));
+                var below = -(Cv.x * axisY.x + Cv.y * axisY.y + Cv.z * axisY.z);           // m: how far the contact is below the centre of gravity
+                var raise = anti * below;
+                var apx = Cv.x + axisY.x * raise, apy = Cv.y + axisY.y * raise, apz = Cv.z + axisY.z * raise;
+                if(anti !== 0) newPitchLinks += anti * fxW * below;
                 var fxx = fxW * fpx;
                 var fyy = fxW * fpy;
                 var fzz = fxW * fpz;
                 force.x += fxx + fyW * lx; force.y += fyy + fyW * ly; force.z += fzz + fyW * lz;
-                torque.x += Cv.y * fzz - Cv.z * fyy;
-                torque.y += Cv.z * fxx - Cv.x * fzz;
-                torque.z += Cv.x * fyy - Cv.y * fxx;
+                torque.x += apy * fzz - apz * fyy;
+                torque.y += apz * fxx - apx * fzz;
+                torque.z += apx * fyy - apy * fxx;
                 var rcx = Cv.x + axisY.x * rollCentre, rcy = Cv.y + axisY.y * rollCentre, rcz = Cv.z + axisY.z * rollCentre;
                 torque.x += rcy * fyW * lz - rcz * fyW * ly;
                 torque.y += rcz * fyW * lx - rcx * fyW * lz;
@@ -2204,6 +2229,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         }
 
         axleFy[0] = newAxleFy[0]; axleFy[1] = newAxleFy[1];
+        pitchLinks = newPitchLinks;
 
         // ---- traction control
         // Traction control only looks at the wheels: when a driven wheel turns faster than the road under it (it spins),
