@@ -551,8 +551,10 @@ OpenRacer.collideCars = function (vehicles) {
                     var sideB = -Math.sin(b.psi) * nx + Math.cos(b.psi) * nz;
                     a.wy -= 0.5 * armA * sideA * jImp / a.yawInertia;
                     b.wy += 0.5 * armB * sideB * jImp / b.yawInertia;
-                    a.lastImpact = Math.max(a.lastImpact || 0, -vn * 0.5); a.impactTime = 0;
-                    b.lastImpact = Math.max(b.lastImpact || 0, -vn * 0.5); b.impactTime = 0;
+                    // (as in Vehicle.js: the hit of now, not the hardest since the start, which made every later touch a crash of the motorcycle)
+                    if (-vn * 0.5 > (a.lastImpact || 0) || a.impactTime > 0.5) a.lastImpact = -vn * 0.5;
+                    if (-vn * 0.5 > (b.lastImpact || 0) || b.impactTime > 0.5) b.lastImpact = -vn * 0.5;
+                    a.impactTime = 0; b.impactTime = 0;
                 }
             }
         }

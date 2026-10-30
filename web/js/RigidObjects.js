@@ -271,7 +271,8 @@ OpenRacer.RigidObjects = (function () {
             if (dvx * v.vx + dvz * v.vz > 0) return;
             stats.pushed++;
             v.vx += dvx; v.vz += dvz;
-            v.lastImpact = Math.max(v.lastImpact || 0, dv * 4); v.impactTime = 0;
+            if (dv * 4 > (v.lastImpact || 0) || v.impactTime > 0.5) v.lastImpact = dv * 4;       // (as in Vehicle.js: a later, softer touch is not the hard hit of before)
+            v.impactTime = 0;
         });
         active.forEach(function (e) { e.before = null; });
         for (var j = 0; j < active.length; j++) {

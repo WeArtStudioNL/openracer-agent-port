@@ -244,7 +244,11 @@ OpenRacer.Car = function( config, domElement ) {
         tobj.config = newConfig;
         tobj.bodyLoaded = false; tobj.wheelsLoaded = false;
         while(tobj.body.children.length) tobj.body.remove(tobj.body.children[0]);
-        for(var i = 0; i < tobj.wheels.length; i++) { var o = tobj.wheels[i].object; if(o && o.parent) o.parent.remove(o); tobj.wheels[i].object = null; }
+        for(var i = 0; i < tobj.wheels.length; i++) { var o = tobj.wheels[i].object; if(o && o.parent) o.parent.remove(o); tobj.wheels[i].object = null; tobj.wheels[i].deform = null; }
+        // (what the old car left behind goes too: the parts that had come loose stayed in the scene, frozen, and the rapier world of the parts with them;
+        // a wheel that was lost stayed lost, so the new car drove on three wheels with four drawn)
+        if(tobj.parts) { if(tobj.parts.dispose) tobj.parts.dispose(); if(tobj.parts.world && tobj.parts.world.free) { try { tobj.parts.world.free(); } catch(e) { /* already gone */ } } }
+        if(tobj.vehicle.repairWheels) tobj.vehicle.repairWheels();
         tobj.rig = null; tobj.softBodyMesh = null; tobj.parts = null; tobj.driver = null; tobj.steeringWheel = null; tobj.head = null; tobj.swingarm = null; tobj.chain = null;
         tobj.vehicle.softBody = null; tobj.vehicle.parts = null;
         tobj.vehicle.retune({ live_axle_front: !!(OpenRacer.PartsLibrary && OpenRacer.PartsLibrary.isLive(OpenRacer.PartsLibrary.typeOf(config, "front"))),
@@ -298,6 +302,8 @@ OpenRacer.Car = function( config, domElement ) {
         flames.clear();
         if(OpenRacer.DragStrip) OpenRacer.DragStrip.reset();
         lastGateX = null; // a jump of the car is no crossing of a gate
+        if(this.parts && this.parts.moved) this.parts.moved();
+        this.recoverCrash();            // (the skidpad's reset of a motorcycle that was down left it down: no steering, the rider still a ragdoll)
         this.lapStarted = false;
         this.lapInvalid = false;
         this.throttle = 0;
@@ -381,6 +387,7 @@ OpenRacer.Car = function( config, domElement ) {
         flames.clear();
         if(OpenRacer.DragStrip) OpenRacer.DragStrip.reset();
         lastGateX = null; // a jump of the car is no crossing of a gate
+        if(this.parts && this.parts.moved) this.parts.moved();
         // (the lap goes on: a reset in a race no longer costs a whole lap, but the lap is no record and no ghost)
         if(this.lapStarted) this.lapInvalid = true;
         this.throttle = 0;

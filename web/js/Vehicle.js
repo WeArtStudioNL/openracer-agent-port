@@ -737,6 +737,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     // movement and the springs are reset. py: the height of the body there (null: on the road)
     // (hintY: the height of the road that is meant, where there are roads above one another, a bridge or a tunnel: the road within a metre of it is taken, not the highest one)
     this.relocate = function (x, z, psi, py, hintY) {
+        this.lastImpact = 0; this.impactTime = 10;        // (the hit of before the reset is over: a touch afterwards is not that hit again)
         var angle = Math.PI / 2 - psi;
         this.qx = 0; this.qy = Math.sin(angle / 2); this.qz = 0; this.qw = Math.cos(angle / 2);
         var road = (hintY !== undefined && hintY !== null && isFinite(hintY) ? roadAt(x, z, hintY, 0.9) : null) || roadAt(x, z, 1000, 0);
@@ -768,6 +769,7 @@ OpenRacer.Vehicle = function (parameters, input) {
 
     // Puts the car on the road at a place, standing still with the springs at rest.
     this.reset = function (x, z, psi) {
+        this.lastImpact = 0; this.impactTime = 10;        // (the hit of before the reset is over: a touch afterwards is not that hit again)
         var road = roadAt(x, z, 1000, 0);
         var height = road ? road.y : 0;
         // the heading psi, from +x towards +z, is a turn around the y axis of the body of (pi / 2 - psi)

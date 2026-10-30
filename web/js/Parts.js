@@ -444,6 +444,9 @@ OpenRacer.Parts = (function () {
 
         function update(dt) {
             if (replaying) return;                          // the replay (Replay.js) puts the parts where they were; nothing runs
+            // (a call without time, the drawing after a reset, gives no load: the step from the old speed to the new one over 0.1 ms read as 20 kN
+            // on a two kilo part, and the reset key tore the plates, the lights and the engine off)
+            var still = dt < 1e-3;
             dt = Math.min(Math.max(dt, 1e-4), 1 / 20);
             frame++;
             setPose();
@@ -460,7 +463,7 @@ OpenRacer.Parts = (function () {
                 // the load: inertia of the part (mass times the acceleration of its place) and the shell on its nodes
                 pointVelocity(part.centre, b);
                 var inertia = 0;
-                if (part.hasVel) inertia = part.mass * b.distanceTo(part.lastVel) / dt;
+                if (part.hasVel && !still) inertia = part.mass * b.distanceTo(part.lastVel) / dt;
                 part.lastVel.copy(b); part.hasVel = true;
                 var shell = 0, torn = false;
                 if (sb) {
@@ -664,6 +667,8 @@ OpenRacer.Parts = (function () {
         return {
             replay: replayApi,
             world: world, parts: parts, events: events, update: update, repair: repair,
+            // the car was put somewhere else (a reset, the start): the speed of before is no acceleration of the parts
+            moved: function () { parts.forEach(function (p) { p.hasVel = false; }); },
             // the car is taken out of the scene (the car editor makes a new one for every test): the parts that were thrown out of it go with it
             dispose: function () { parts.forEach(function (p) { if (p.state !== "held" && p.object.parent) p.object.parent.remove(p.object); }); },
             states: function () { return parts.map(function (p) { return p.name + ":" + p.state; }).join(" "); }
