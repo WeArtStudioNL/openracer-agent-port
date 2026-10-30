@@ -207,7 +207,7 @@ function defaultDesign() {
 }
 
 export function createDesign(api) {
-    const { scene, trackGroup, camera, renderer, controls, state, registerMesh, applyColours, renderParts, updateMarkers, status, $, roleMaterials } = api;
+    const { scene, trackGroup, camera, renderer, controls, state, registerMesh, applyColours, renderParts, updateMarkers, status, $, roleMaterials, screenSize } = api;
     const roadGroup = new THREE.Group();     // the road, the shoulders and the ground: made again whenever a node changes
     const prefabGroup = new THREE.Group();   // the prefabs, each a group with userData.prefab
     const nodeGroup = new THREE.Group();     // the markers of the nodes (not a part of the track)
@@ -517,6 +517,7 @@ export function createDesign(api) {
                 new THREE.MeshBasicMaterial({ color: i === design.selectedNode ? 0xffd04d : (i === 0 ? 0x4ed88a : 0x4db8ff) }));
             mesh.position.set(n.x, n.y + 0.3, n.z);
             mesh.userData.nodeIndex = i;
+            if (screenSize) screenSize(mesh, i === design.selectedNode ? 11 : 8, i === design.selectedNode ? 1.3 * scale : 0.9 * scale);          // (one size on the screen, track-editor.js)
             nodeGroup.add(mesh);
         });
         if (design.data.nodes.length >= 2) {
@@ -840,6 +841,7 @@ export function createDesign(api) {
             const m = new THREE.Mesh(new THREE.SphereGeometry(scale, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffd04d }));
             m.position.set(q.x, (q.y || 0) + 0.2, q.z);
             m.userData.rowPoint = i;
+            if (screenSize) screenSize(m, 7, scale);
             rowGroup.add(m);
         });
         const curve = rowCurve(p);

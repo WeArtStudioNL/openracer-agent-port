@@ -45,8 +45,9 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - The tuning menu has the cards of the car editor, with the same names and in the same order: Wheels, Suspension and driveline, Chassis, Drivetrain, Engine, Engine sound, Assists and extras, Cameras, Soft body (and Motorcycle, and the Mirrors of the game). Every card holds its groups (Chassis: Chassis settings, Brakes, Aerodynamics and steering, Size and steering wheel; Engine: Fuel, Engine settings), the card Engine shows the power and the card Drivetrain the top speed. The structure is one list for both (`OpenRacer.CarTuning.CARDS`). The torque-curve rows (peak power and its rpm) are gone from the menu: the curve follows from the engine that is built in the editor.
 
-### Track editor: the panels move
+### Track editor: the panels move, the handles keep their size
 
+- **The handles and the markers keep one size on the screen** when you zoom in or out: the nodes of the road, the points of a row of prefabs, the nodes of the racing line, the dots of the pit line and the pit area, the balls of the range of a camera, the arrows and the numbers of the grid, the pit boxes, the gates and the drag strip. They were made in metres (from the size of the track), so close by they filled the view and far away they were dots; a click takes them at the size that is drawn.
 - The **Layers** panel and the drawer of the track (*Track*, *Prefabs*) are moved by their heads, as the other windows of the editors (they lay over each other at the bottom right); where they are is kept in the browser.
 
 ### Replay: photos and the free camera

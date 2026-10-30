@@ -260,7 +260,7 @@ function drawLine(keepNodes) {
     const step = Math.max(1, Math.floor(points.length / 24));
     for (let i = 0; i + 1 < points.length; i += step) {
         const a = points[i], b = points[i + 1];
-        const arrow = makeArrow(a.x, a.y, a.z, Math.atan2(b.z - a.z, b.x - a.x), lineEdit.editing ? 0x4db8ff : 0xffd04d, 3 * state.markerScale);
+        const arrow = screenSize(makeArrow(a.x, a.y, a.z, Math.atan2(b.z - a.z, b.x - a.x), lineEdit.editing ? 0x4db8ff : 0xffd04d, 3 * state.markerScale), 34, 3 * state.markerScale);
         arrow.traverse((o) => { if (o.material) { o.material.depthTest = false; o.renderOrder = 999; } });
         lineLayer.add(arrow);
     }
@@ -271,6 +271,7 @@ function drawLine(keepNodes) {
             ball.position.set(n.x, n.y + lift + radius * 0.5, n.z);
             ball.renderOrder = 1000;
             ball.userData.lineNode = i;
+            screenSize(ball, 8, radius);
             lineLayer.add(ball);
         });
     }
@@ -379,8 +380,26 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 window.__trackEditorView = { scene, camera, renderer };          // (for the tests of the editor)
+// The handles and the markers of the view (the nodes of the road, the points of a row of prefabs, the nodes of the racing line, the dots of the pit line and the pit area,
+// the balls of the gates and the range of a camera, the arrows and the numbers) keep one size on the screen, however near or far the camera is: they were made in metres
+// (markerScale, from the size of the track), so close by they filled the view and far away they were dots. screenSize(object, pixels, size): how large it is on the screen
+// (a ball: its radius, an arrow: its length, a number: its height), and how large it is in metres at a scale of 1. A click on it is the same size as what is drawn.
+function screenSize(object, pixels, size) { object.userData.screenPx = pixels; object.userData.baseSize = size || 1; return object; }
+const sizeAt = new THREE.Vector3();
+function keepScreenSizes() {
+    const h = view.clientHeight || 1;
+    const perPixel = camera.isOrthographicCamera ? (camera.top - camera.bottom) / camera.zoom / h : 2 * Math.tan(camera.fov * Math.PI / 360) / (camera.zoom || 1) / h;
+    scene.traverseVisible((o) => {
+        const px = o.userData.screenPx;
+        if (!px) return;
+        o.getWorldPosition(sizeAt);
+        const metresPerPixel = camera.isOrthographicCamera ? perPixel : perPixel * camera.position.distanceTo(sizeAt);
+        o.scale.setScalar(px * metresPerPixel / o.userData.baseSize);
+    });
+}
 (function loop() {
     requestAnimationFrame(loop);
+    keepScreenSizes();
     renderer.render(scene, camera);
     positionCamIcons();
 })();
@@ -690,7 +709,7 @@ function numberLabel(n, x, y, z, colour) {
     sprite.position.set(x, y + 1.2 * state.markerScale, z);
     sprite.scale.setScalar(1.6 * state.markerScale);
     sprite.renderOrder = 999;
-    return sprite;
+    return screenSize(sprite, 22, 1);
 }
 function makeArrow(x, y, z, h, colour, length) {
     return new THREE.ArrowHelper(new THREE.Vector3(Math.cos(h), 0, Math.sin(h)), new THREE.Vector3(x, y + 0.6, z), length, colour, length * 0.3, length * 0.2);
@@ -709,7 +728,7 @@ function updateMarkers() {
         const loop = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: colour, depthTest: false }));
         loop.renderOrder = 996;
         markers.add(loop);
-        markers.add(makeArrow(b.x, b.y, b.z, b.heading, colour, (i === 0 ? 6 : 3.5) * k));
+        markers.add(screenSize(makeArrow(b.x, b.y, b.z, b.heading, colour, (i === 0 ? 6 : 3.5) * k), i === 0 ? 60 : 40, (i === 0 ? 6 : 3.5) * k));
         markers.add(numberLabel(i + 1, b.x, b.y + 0.1, b.z, colour));
     });
     // the pit boxes: yellow and see-through, 4 by 8 m, with the arrow of the way that the car faces and its number
@@ -726,7 +745,7 @@ function updateMarkers() {
         const loop = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xffe066, depthTest: false }));
         loop.renderOrder = 996;
         markers.add(loop);
-        markers.add(makeArrow(b.x, b.y, b.z, b.heading, 0xffd04d, 3.5 * k));
+        markers.add(screenSize(makeArrow(b.x, b.y, b.z, b.heading, 0xffd04d, 3.5 * k), 40, 3.5 * k));
         markers.add(numberLabel(i + 1, b.x, b.y + 0.1, b.z, 0xffd04d));
     });
     // the pit line: orange, a smooth curve through the points with an arrow on every one, the first point in green (the start on the racing line) and the last in red
@@ -740,8 +759,8 @@ function updateMarkers() {
             const dot = new THREE.Mesh(new THREE.SphereGeometry(0.4 * k, 10, 8), new THREE.MeshBasicMaterial({ color: i === 0 ? 0x4ed88a : (i === L.length - 1 ? 0xff5a4a : 0xff9a2e), depthTest: false }));
             dot.position.set(q.x, q.y + 0.3, q.z);
             dot.renderOrder = 997;
-            markers.add(dot);
-            if (i < L.length - 1) markers.add(makeArrow(q.x, q.y, q.z, Math.atan2(L[i + 1].z - q.z, L[i + 1].x - q.x), 0xff9a2e, 2.2 * k));
+            markers.add(screenSize(dot, 6, 0.4 * k));
+            if (i < L.length - 1) markers.add(screenSize(makeArrow(q.x, q.y, q.z, Math.atan2(L[i + 1].z - q.z, L[i + 1].x - q.x), 0xff9a2e, 2.2 * k), 28, 2.2 * k));
         });
     }
     if (state.pit && state.pit.points.length) {
@@ -761,7 +780,7 @@ function updateMarkers() {
             const dot = new THREE.Mesh(new THREE.SphereGeometry(0.35 * k, 10, 8), new THREE.MeshBasicMaterial({ color: i === P.length - 1 ? 0xffd04d : 0x9cc8ff, depthTest: false }));
             dot.position.set(q.x, q.y + 0.2, q.z);
             dot.renderOrder = 997;
-            markers.add(dot);
+            markers.add(screenSize(dot, 6, 0.35 * k));
         });
     }
     renderGrid(); renderPit(); renderGateLayers(); syncGateTarget();
@@ -781,7 +800,7 @@ function updateMarkers() {
         strip.position.set(gate.x, gate.y + 0.3, gate.z);
         strip.userData.gateIndex = i;
         markers.add(strip);
-        markers.add(makeArrow(gate.x, gate.y, gate.z, gate.heading, colour, 5 * k));
+        markers.add(screenSize(makeArrow(gate.x, gate.y, gate.z, gate.heading, colour, 5 * k), 50, 5 * k));
     });
     camIcons.innerHTML = "";
     state.cameras.forEach((c, i) => {
@@ -818,7 +837,7 @@ function updateMarkers() {
                 ball.position.set(x, groundY(x, z, gy) + 0.9 * k, z);
                 ball.renderOrder = 1000;
                 ball.userData.rangeNode = name;
-                markers.add(ball);
+                markers.add(screenSize(ball, 9, 0.9 * k));
             };
             node(range.x, range.z, "centre", 0xffffff);
             node(range.x + range.r, range.z, "edge", 0xff8a3d);
@@ -847,7 +866,7 @@ function updateMarkers() {
         };
         line(d.x, d.y, d.z, 0x4ed88a);
         line(fx, fy, fz, 0xff5a4f);
-        markers.add(makeArrow(d.x, d.y, d.z, d.heading, 0x4ed88a, 9 * k));
+        markers.add(screenSize(makeArrow(d.x, d.y, d.z, d.heading, 0x4ed88a, 9 * k), 70, 9 * k));
         markers.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(d.x, d.y + 0.5, d.z), new THREE.Vector3(fx, fy + 0.5, fz)]), new THREE.LineBasicMaterial({ color: 0xffffff })));
         DRAG_MARKS.filter(([, metres]) => metres < d.length - 0.5).forEach(([, metres]) => {
             const x = d.x + dx * metres, z = d.z + dz * metres;
@@ -1448,7 +1467,7 @@ $("pitLineClear").onclick = () => { state.pitLine = []; updateMarkers(); };
 // the design of a track without a model: nodes, heights, widths and prefabs (see track-design.js)
 const design = createDesign({
     scene, trackGroup, camera, renderer, controls, state, registerMesh, applyColours, renderParts, updateMarkers, frameTrack, status, $,
-    setMode, getMode: () => state.mode, roleMaterials
+    setMode, getMode: () => state.mode, roleMaterials, screenSize
 });
 function startDesign(data) {
     clearTrack();
