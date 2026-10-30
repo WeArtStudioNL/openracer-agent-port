@@ -31,6 +31,16 @@ var MainMenu = (function() {
         } catch(e) {}
     }
 
+    // A picture kept in this browser under a key that holds a stamp of the car or the track: the pictures of the same car or track with an older stamp go
+    // (every change of a car left its old picture behind, and the storage filled up until the records, the settings and the tunes could not be kept)
+    function prunePictures(key, prefix) {
+        try { Object.keys(window.localStorage).forEach(function(k) { if(k !== key && k.indexOf(prefix) === 0) window.localStorage.removeItem(k); }); } catch(e) { /* no storage */ }
+    }
+    function keepPicture(key, prefix, data) {
+        prunePictures(key, prefix);
+        try { window.localStorage.setItem(key, data); } catch(e) { /* full: the picture is made again next time */ }
+    }
+
     function addStyle() {
         var style = document.createElement("style");
         style.textContent =
@@ -352,7 +362,8 @@ var MainMenu = (function() {
                     var reader = new FileReader();
                     reader.onload = function() {
                         job.img.src = reader.result;
-                        try { window.localStorage.setItem(job.key || key(job.car), reader.result); } catch(e) { /* full */ }
+                        if(job.key) { try { window.localStorage.setItem(job.key, reader.result); } catch(e) { /* full */ } }      // (a tune: its own pruning, see requestTune)
+                        else keepPicture(key(job.car), "openracer.preview.p2." + job.car.id + ".", reader.result);
                     };
                     reader.readAsDataURL(blob);
                     // (the picture of the car goes to the server as preview.webp; the picture of a tune stays in this browser)
@@ -373,7 +384,7 @@ var MainMenu = (function() {
                 car._modelTag = info ? "." + info.size + "." + info.modified : "";
                 var cached = null;
                 try { cached = window.localStorage.getItem(key(car)); } catch(e) { /* no storage */ }
-                if(cached) { img.src = cached; return; }
+                if(cached) { img.src = cached; prunePictures(key(car), "openracer.preview.p2." + car.id + "."); return; }
                 if(fromGarage) { make(); return; }
                 var url = "cars/" + encodeURIComponent(car.id) + "/preview.webp";
                 // the file of the picture is used when it is not older than the model
@@ -522,7 +533,7 @@ var MainMenu = (function() {
                     var reader = new FileReader();
                     reader.onload = function() {
                         job.img.src = reader.result;
-                        try { window.localStorage.setItem(key(job.track), reader.result); } catch(e) { /* full */ }
+                        keepPicture(key(job.track), "openracer.trackpreview." + job.track.id + ".", reader.result);
                     };
                     reader.readAsDataURL(blob);
                     if(!(OpenRacer.Garage && OpenRacer.Garage.sourceOf(job.track))) fetch("/api/tracks/" + encodeURIComponent(job.track.id) + "/preview.webp", { method: "PUT", body: blob }).catch(function() { /* not this server's to write */ });
@@ -535,7 +546,7 @@ var MainMenu = (function() {
             img.onload = function() { img.style.visibility = ""; };
             var cached = null;
             try { cached = window.localStorage.getItem(key(track)); } catch(e) { /* no storage */ }
-            if(cached) { img.src = cached; return; }
+            if(cached) { img.src = cached; prunePictures(key(track), "openracer.trackpreview." + track.id + "."); return; }
             var path = "tracks/" + encodeURIComponent(track.id) + "/preview.webp";
             var url = OpenRacer.Garage ? OpenRacer.Garage.resolve(track, path) : path;
             if(url === path) url += "?v=" + stamp(track);
