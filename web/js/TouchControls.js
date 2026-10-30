@@ -97,9 +97,13 @@ var TouchControls = (function() {
     }
 
     // a button that holds an action of the settings while it is pressed
+    // (a button that is only an icon says what it does, for a screen reader and as the tooltip)
+    var NAMES = { shiftUp: "Shift up", shiftDown: "Shift down", resetCar: "Back on the track", repairCar: "Repair the car", cameraSwitch: "Switch camera", take: "Take: record, and stop", tuningMenu: "Tuning menu" };
     function actionButton(parent, label, action, cls) {
         var b = el(parent, "div", "btn" + (cls ? " " + cls : ""));
         if(/^icon:/.test(label)) b.innerHTML = OpenRacer.icon(label.slice(5), 24); else b.textContent = label;
+        b.setAttribute("role", "button");
+        if(NAMES[action]) { b.setAttribute("aria-label", NAMES[action]); b.title = NAMES[action]; }
         b.addEventListener("pointerdown", function(e) {
             e.preventDefault();
             try { b.setPointerCapture(e.pointerId); } catch(err) { /* not captured */ }
@@ -208,6 +212,7 @@ var TouchControls = (function() {
         actionButton(top, "icon:sliders", "tuningMenu");
         var menu = el(top, "div", "btn");
         menu.innerHTML = OpenRacer.icon("menu", 24);
+        menu.setAttribute("role", "button"); menu.setAttribute("aria-label", "Menu"); menu.title = "Menu";
         menu.addEventListener("pointerup", function() { Settings.toggleMenu(); });
     }
 
