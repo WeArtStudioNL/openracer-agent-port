@@ -220,7 +220,7 @@ var Settings = (function() {
     // ---- actions
 
     // the actions that still work while a replay is shown (the others would act on the car of the game, which stands still)
-    var REPLAY_ACTIONS = { cameraSwitch: true, cameraReset: true, mute: true, hudToggle: false };
+    var REPLAY_ACTIONS = { cameraSwitch: true, cameraReset: true, mute: true, hudToggle: false, photo: true };        // (a photo is of the picture: it works in a replay too)
     // the cameras that can be chosen: the three of the cars, and the free one of the game (a replay has a free camera of its own)
     function nextCamera(current) { var last = replayOn() ? 3 : 4; return current >= last ? 2 : Math.max(2, current + 1); }
     function replayOn() { return typeof OpenRacer !== "undefined" && OpenRacer.Replay && OpenRacer.Replay.active; }

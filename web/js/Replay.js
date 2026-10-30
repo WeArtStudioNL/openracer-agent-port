@@ -554,6 +554,7 @@ OpenRacer.Replay = (function() {
             setTimeout(function() { save.textContent = "Save replay"; }, 4000);
         });
         if(api.viewer) save.style.display = "none";            // (a replay that is already in the list)
+        button(right, "Photo", "Save the picture as it is now as a PNG, without the bar (the photo key, F2, does the same)", function() { if(typeof takePhoto === "function") takePhoto(); });
         videoButton = button(right, "● Video", "Record the replay from the start to the end as a video (.mp4)", function() { toggleVideo(); });
         if(typeof MediaRecorder === "undefined" || !document.createElement("canvas").captureStream) videoButton.style.display = "none";
         var editor = button(right, "Video editor", "Cut this replay, change the speed, place the camera, and save it as a replay or as a video", function() {

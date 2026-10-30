@@ -45,6 +45,10 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - The tuning menu has the cards of the car editor, with the same names and in the same order: Wheels, Suspension and driveline, Chassis, Drivetrain, Engine, Engine sound, Assists and extras, Cameras, Soft body (and Motorcycle, and the Mirrors of the game). Every card holds its groups (Chassis: Chassis settings, Brakes, Aerodynamics and steering, Size and steering wheel; Engine: Fuel, Engine settings), the card Engine shows the power and the card Drivetrain the top speed. The structure is one list for both (`OpenRacer.CarTuning.CARDS`). The torque-curve rows (peak power and its rpm) are gone from the menu: the curve follows from the engine that is built in the editor.
 
+### Replay: photos
+
+- The photo key (F2) works in a replay too, and the bar of the replay has a **Photo** button: the picture as it is now as a PNG, without the bar.
+
 ### Replay: the wheels steer
 
 - In a replay the front wheels turn with the steering again: they kept the angle they had when the replay began (the wheels turn by their own steer, with the toe and the Ackermann, which only the physics set). The replay gives the front wheels the steering of the recording; a replay file of before works the same.
