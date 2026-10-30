@@ -33,6 +33,8 @@ ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 FILE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$")
 MAX_UPLOAD = 8 * 1024 * 1024 * 1024  # 8 GB: a file is streamed to disk in pieces, so its size costs no memory
+# files that a browser would run as a page or a script when they are served from here (a car or a track is models, pictures, sounds and json)
+BLOCKED_TYPES = (".html", ".htm", ".xhtml", ".shtml", ".js", ".mjs", ".svg", ".xml", ".css", ".php", ".py", ".sh")
 
 
 def scan(kind, config_name):
@@ -97,9 +99,28 @@ class Handler(SimpleHTTPRequestHandler):
         if host not in ("localhost", "127.0.0.1", "[::1]"):
             return False
         origin = self.headers.get("Origin")
-        if origin and (urlparse(origin).hostname or "") not in ("localhost", "127.0.0.1", "::1"):
-            return False
+        if origin:
+            # a page of this server: the same name and the same port (another local server, on another port, is someone else)
+            parsed = urlparse(origin)
+            port = raw[len(host) + 1:] if raw.startswith(host + ":") else ""
+            origin_port = str(parsed.port) if parsed.port else ""
+            if (parsed.hostname or "") not in ("localhost", "127.0.0.1", "::1") or origin_port != port:
+                return False
         return True
+
+    def linked(self, target):
+        """True when the path leaves its folder through a link (a car or track folder that points at another checkout, a file that is a link):
+        the API does not write or delete there"""
+        base = os.path.realpath(ROOT)
+        real = os.path.realpath(target)
+        if real != base and not real.startswith(base + os.sep):
+            return True
+        path = os.path.abspath(target)
+        while path.startswith(base + os.sep):
+            if os.path.islink(path):
+                return True
+            path = os.path.dirname(path)
+        return False
 
     def do_GET(self):
         path = urlparse(self.path).path
@@ -112,7 +133,9 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
-        if urlparse(self.path).path != "/api/convert/mp4" or not self.is_local():
+        # (the header of the game makes the browser ask first for a page of another origin, and this server does not answer that question:
+        # without it a page of another local server could make ffmpeg run here)
+        if urlparse(self.path).path != "/api/convert/mp4" or not self.is_local() or self.headers.get("X-OpenRacer") != "1":
             return self.send_json({"error": "not allowed"}, 403)
         ffmpeg = shutil.which("ffmpeg")
         if not ffmpeg:
@@ -186,8 +209,14 @@ class Handler(SimpleHTTPRequestHandler):
         target = self.object_path(parts) or self.item_path(parts)
         if target is None or (len(parts) < 4 and parts[1] != "objects"):
             return self.send_json({"error": "bad path"}, 400)
+        if target.lower().endswith(BLOCKED_TYPES):
+            return self.send_json({"error": "this kind of file is not part of a car or a track"}, 415)
+        if self.linked(target):
+            return self.send_json({"error": "this folder is a link to another place: it is not written from here"}, 409)
+        if self.headers.get("Content-Length") is None:
+            return self.send_json({"error": "the length of the file is missing"}, 411)
         try:
-            length = int(self.headers.get("Content-Length", "0"))
+            length = int(self.headers.get("Content-Length"))
         except ValueError:
             return self.send_json({"error": "bad length"}, 400)
         if length < 0:
@@ -195,14 +224,26 @@ class Handler(SimpleHTTPRequestHandler):
         if length > MAX_UPLOAD:
             return self.send_json({"error": "file too large"}, 413)
         os.makedirs(os.path.dirname(target), exist_ok=True)
+        # the file is written beside the old one and takes its place when it is complete: an upload that breaks off (a closed tab)
+        # no longer leaves half a model or an empty car.json
+        part = target + ".part"
         written = 0
-        with open(target, "wb") as f:
-            while written < length:
-                chunk = self.rfile.read(min(1024 * 1024, length - written))
-                if not chunk:
-                    break
-                f.write(chunk)
-                written += len(chunk)
+        try:
+            with open(part, "wb") as f:
+                while written < length:
+                    chunk = self.rfile.read(min(1024 * 1024, length - written))
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    written += len(chunk)
+            if written != length:
+                os.remove(part)
+                return self.send_json({"error": "the upload broke off (%d of %d bytes)" % (written, length)}, 400)
+            os.replace(part, target)
+        except OSError as error:
+            if os.path.exists(part):
+                os.remove(part)
+            return self.send_json({"error": "could not write the file: %s" % error}, 500)
         if parts[-1] in ("car.json", "track.json") and len(parts) == 4:
             write_indexes()
         self.send_json({"ok": True, "bytes": written})
@@ -212,6 +253,9 @@ class Handler(SimpleHTTPRequestHandler):
         if parts[:1] != ["api"] or not self.is_local():
             return self.send_json({"error": "not allowed"}, 403)
         library = self.object_path(parts)
+        target = library or self.item_path(parts)
+        if target is not None and self.linked(target):
+            return self.send_json({"error": "this folder is a link to another place: it is not deleted from here"}, 409)
         if library is not None:
             if not os.path.isfile(library):
                 return self.send_json({"error": "no such file"}, 404)

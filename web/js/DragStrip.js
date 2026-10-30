@@ -147,6 +147,10 @@ OpenRacer.DragStrip = (function () {
     }, true);
 
     // ---- the time slip
+    // a name (of a car, of a track: from a car.json or a track.json, which can come from someone else's zip) as text in markup
+    function htmlText(text) {
+        return String(text).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]; });
+    }
     function pad(label, value) {
         var dots = " ";
         for (var n = label.length + String(value).length; n < 26; n++) dots += ".";
@@ -185,10 +189,10 @@ OpenRacer.DragStrip = (function () {
         var two = function (n) { return (n < 10 ? "0" : "") + n; };
         var hours = now.getHours() % 12 || 12;
         var lines = [];
-        lines.push("<div class=\"centre\">WELCOME TO THE\n" + String(data.track || "").toUpperCase().slice(0, 28) + "\nDRAG STRIP\nHAVE A SAFE AND\nFUN DAY OF RACING!</div>", "");
+        lines.push("<div class=\"centre\">WELCOME TO THE\n" + htmlText(String(data.track || "").toUpperCase().slice(0, 28)) + "\nDRAG STRIP\nHAVE A SAFE AND\nFUN DAY OF RACING!</div>", "");
         lines.push(hours + ":" + two(now.getMinutes()) + (now.getHours() < 12 ? " AM" : " PM"), two(now.getMonth() + 1) + "/" + two(now.getDate()) + "/" + now.getFullYear(), "");
         lines.push("<div class=\"centre\">TIME SLIP</div>", "");
-        lines.push(pad("CAR", String(data.car || "").toUpperCase().slice(0, 18)), "");
+        lines.push(htmlText(pad("CAR", String(data.car || "").toUpperCase().slice(0, 18))), "");
         lines.push(pad("R/T", plain(data.reaction)));
         data.marks.forEach(function (r) {
             var name = r.label.toUpperCase().replace(" MILE", "").replace(" FT", "");
@@ -328,7 +332,7 @@ OpenRacer.DragStrip = (function () {
         var chosen = current;
         var m = modal();
         var head = document.createElement("div");
-        head.innerHTML = "<h2>Top 50 · drag strip</h2><div class=\"sub\">" + (track.name || track.id) + " · the best runs in this browser</div>";
+        head.innerHTML = "<h2>Top 50 · drag strip</h2><div class=\"sub\">" + htmlText(track.name || track.id) + " · the best runs in this browser</div>";
         m.box.appendChild(head);
         var tabs = document.createElement("div");
         tabs.className = "tabs";

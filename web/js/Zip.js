@@ -95,9 +95,20 @@ OpenRacer.Zip = (function () {
         });
     }
 
-    function inflate(blob) {
+    var MAX_TOTAL = 2 * 1024 * 1024 * 1024;     // 2 GB inflated in all: more is no car or track, but a zip made to fill the memory
+
+    // (the inflated data is counted on the way: a file that inflates to more than the zip says it is, stops there)
+    function inflate(blob, size, name) {
         if (typeof DecompressionStream === "undefined") return Promise.reject(new Error("This browser cannot inflate a zip; it reads stored (uncompressed) zips only."));
-        return new Response(blob.stream().pipeThrough(new DecompressionStream("deflate-raw"))).blob();
+        var seen = 0, limit = size + 1024;
+        var counter = new TransformStream({ transform: function (chunk, controller) {
+            seen += chunk.byteLength;
+            if (seen > limit) controller.error(new Error("The zip is damaged: " + name + " is larger than the zip says."));
+            else controller.enqueue(chunk);
+        } });
+        return new Response(blob.stream().pipeThrough(new DecompressionStream("deflate-raw")).pipeThrough(counter)).blob().catch(function (error) {
+            throw new Error(seen > limit ? "The zip is damaged: " + name + " is larger than the zip says." : "The zip is damaged (" + name + " cannot be inflated).");
+        });
     }
 
     // Promise of [{ name, blob }] for a zip Blob or File
@@ -121,13 +132,15 @@ OpenRacer.Zip = (function () {
                 for (var n = 0; n < count && p + 46 <= dirBuffer.byteLength; n++) {
                     if (dir.getUint32(p, true) !== 0x02014b50) break;
                     var method = dir.getUint16(p + 10, true);
-                    var compressed = dir.getUint32(p + 20, true);
+                    var compressed = dir.getUint32(p + 20, true), uncompressed = dir.getUint32(p + 24, true);
                     var nameLength = dir.getUint16(p + 28, true), extraLength = dir.getUint16(p + 30, true), commentLength = dir.getUint16(p + 32, true);
                     var localOffset = dir.getUint32(p + 42, true);
                     var name = decoder.decode(new Uint8Array(dirBuffer, p + 46, nameLength));
-                    entries.push({ name: name, method: method, compressed: compressed, localOffset: localOffset });
+                    entries.push({ name: name, method: method, compressed: compressed, uncompressed: uncompressed, localOffset: localOffset });
                     p += 46 + nameLength + extraLength + commentLength;
                 }
+                var total = entries.reduce(function (sum, entry) { return sum + entry.uncompressed; }, 0);
+                if (total > MAX_TOTAL) throw new Error("The zip is too large: " + Math.round(total / 1048576) + " MB unpacked (at most " + Math.round(MAX_TOTAL / 1048576) + " MB).");
                 return Promise.all(entries.map(function (entry) {
                     return file.slice(entry.localOffset, entry.localOffset + 30).arrayBuffer().then(function (localBuffer) {
                         var local = new DataView(localBuffer);
@@ -135,7 +148,7 @@ OpenRacer.Zip = (function () {
                         var dataStart = entry.localOffset + 30 + local.getUint16(26, true) + local.getUint16(28, true);
                         var data = file.slice(dataStart, dataStart + entry.compressed);
                         if (entry.method === 0) return { name: entry.name, blob: data };
-                        if (entry.method === 8) return inflate(data).then(function (blob) { return { name: entry.name, blob: blob }; });
+                        if (entry.method === 8) return inflate(data, entry.uncompressed, entry.name).then(function (blob) { return { name: entry.name, blob: blob }; });
                         throw new Error("The zip uses a compression this reader does not know (" + entry.name + ").");
                     });
                 }));

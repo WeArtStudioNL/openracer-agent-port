@@ -409,7 +409,7 @@ OpenRacer.VideoEditor = (function () {
                 if (/mp4/.test(type)) { download(blob, stem + ".mp4"); say("Saved " + stem + ".mp4"); updateButtons(); return; }
                 // a webm: the local server (tools/serve.py) makes the mp4 of it with ffmpeg; without it the webm is kept
                 say("Making the mp4…");
-                fetch("/api/convert/mp4", { method: "POST", body: blob }).then(function (r) { if (!r.ok) throw new Error("no"); return r.blob(); })
+                fetch("/api/convert/mp4", { method: "POST", body: blob, headers: { "X-OpenRacer": "1" } }).then(function (r) { if (!r.ok) throw new Error("no"); return r.blob(); })
                     .then(function (mp4) { download(mp4, stem + ".mp4"); say("Saved " + stem + ".mp4"); })
                     .catch(function () { download(blob, stem + ".webm"); say("ffmpeg is not here: saved " + stem + ".webm"); })
                     .then(updateButtons);

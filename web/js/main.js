@@ -543,7 +543,7 @@ function startSkidpad() {
         panel.style.cssText = "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1002; min-width: 380px; padding: 22px 28px; " +
             "background: rgba(24, 29, 35, 0.95); color: #ffffff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); text-align: center;";
         var verdict = g > 1.1 ? "a racing car on slicks" : g > 0.95 ? "a sports car" : g > 0.85 ? "a good road car" : g > 0.75 ? "an ordinary road car" : "a van";
-        panel.innerHTML = "<div style=\"font-size: 15px; color: var(--muted); letter-spacing: 2px;\">SKIDPAD · " + escapeHtml(carConfig.name || carConfig.id) + (skidpadSurface ? " · " + skidpadSurface.name.toUpperCase() : "") + "</div>" +
+        panel.innerHTML = "<div style=\"font-size: 15px; color: var(--muted); letter-spacing: 2px;\">SKIDPAD · " + escapeHtml(carConfig.name || carConfig.id) + (skidpadSurface ? " · " + escapeHtml(skidpadSurface.name.toUpperCase()) : "") + "</div>" +
             "<div style=\"font-size: 54px; font-weight: bold; margin: 6px 0 2px;\">" + g.toFixed(2) + " g</div>" +
             "<div style=\"color: var(--head); margin-bottom: 18px;\">held at " + Math.round(sp.bestSpeed * 3.6) + " km/h on the circle of " + R + " m · like " + verdict + "</div>" +
             "<button id=\"skidReset\" style=\"padding: 9px 18px; margin: 0 4px; font: bold 15px Arial; background: var(--accent); color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Reset</button>" +

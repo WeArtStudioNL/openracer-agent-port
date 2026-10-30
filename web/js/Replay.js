@@ -685,7 +685,7 @@ OpenRacer.Replay = (function() {
         if(player) {
             var metric = Settings.option("units") !== "imperial";
             ui.info.innerHTML = "<b>" + Math.round(player.speed * (metric ? 3.6 : 2.2369362920544)) + "</b> " + (metric ? "km/h" : "mph") +
-                " &nbsp; " + player.gear + " &nbsp; " + (player.rpm / 1000).toFixed(1) + " ×1000 rpm &nbsp; gas " + Math.round(player.throttle * 100) + "% &nbsp; brake " + Math.round(player.brake * 100) + "%";
+                " &nbsp; " + String(player.gear).replace(/[&<>"']/g, "") + " &nbsp; " + (player.rpm / 1000).toFixed(1) + " ×1000 rpm &nbsp; gas " + Math.round(player.throttle * 100) + "% &nbsp; brake " + Math.round(player.brake * 100) + "%";
         }
     }
 
@@ -1066,7 +1066,7 @@ OpenRacer.Replay = (function() {
             // a webm: the local server (tools/serve.py) turns it into a mp4 with ffmpeg; without it the webm is kept
             if(videoButton) { videoButton.textContent = "Making the mp4…"; videoButton.disabled = true; }
             function done() { if(videoButton) { videoButton.textContent = "● Video"; videoButton.disabled = false; } }
-            fetch("/api/convert/mp4", { method: "POST", body: blob }).then(function(r) { if(!r.ok) throw new Error("no"); return r.blob(); })
+            fetch("/api/convert/mp4", { method: "POST", body: blob, headers: { "X-OpenRacer": "1" } }).then(function(r) { if(!r.ok) throw new Error("no"); return r.blob(); })
                 .then(function(mp4) { save(mp4, ".mp4"); done(); })
                 .catch(function() { save(blob, ".webm"); done(); });
         };
@@ -1128,7 +1128,7 @@ OpenRacer.Replay = (function() {
             return extension;
         }
         if(/mp4/.test(type)) return Promise.resolve(save(blob, ".mp4"));
-        return fetch("/api/convert/mp4", { method: "POST", body: blob }).then(function(r) { if(!r.ok) throw new Error("no"); return r.blob(); })
+        return fetch("/api/convert/mp4", { method: "POST", body: blob, headers: { "X-OpenRacer": "1" } }).then(function(r) { if(!r.ok) throw new Error("no"); return r.blob(); })
             .then(function(mp4) { return save(mp4, ".mp4"); }).catch(function() { return save(blob, ".webm"); });
     };
     function stopVideo() {
@@ -1448,8 +1448,15 @@ OpenRacer.Replay = (function() {
 
     function gunzip(bytes) {
         if(typeof DecompressionStream === "undefined") return Promise.reject(new Error("This browser cannot open a compressed replay. Use a recent Chrome, Edge, Safari or Firefox."));
-        var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
-        return new Response(stream).arrayBuffer().then(function(buffer) { return new Uint8Array(buffer); }, function() { throw new Error("This replay file is damaged."); });
+        // (counted on the way: a small file that unpacks to gigabytes stops at the largest replay there can be, instead of filling the memory)
+        var seen = 0;
+        var counter = new TransformStream({ transform: function(chunk, controller) {
+            seen += chunk.byteLength;
+            if(seen > MAX_FILE) controller.error(new Error("too large")); else controller.enqueue(chunk);
+        } });
+        var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip")).pipeThrough(counter);
+        return new Response(stream).arrayBuffer().then(function(buffer) { return new Uint8Array(buffer); },
+            function() { throw new Error(seen > MAX_FILE ? "This file is too large to be a replay." : "This replay file is damaged."); });
     }
 
     // Saves the recording as a file for the user to keep or to share; gives a promise of { name, bytes }

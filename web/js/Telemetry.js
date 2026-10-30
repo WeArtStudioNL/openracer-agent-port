@@ -61,14 +61,17 @@ OpenRacer.Telemetry = function(parameters) {
     };
     
     this.outputData = function(object, domElement) {
-        domElement.innerHTML = "";
+        // (as text: some of the values come from car.json, the name of a model that did not load among them)
+        var lines = [];
         for(var obj in object) {
             if(object.hasOwnProperty(obj)) {
                 if(typeof object[obj] != "function" && typeof object[obj] != "object") {
-                    domElement.innerHTML += obj + ": " + object[obj] + "<br />";
+                    lines.push(obj + ": " + object[obj]);
                 }
             }
         }
+        domElement.style.whiteSpace = "pre-line";
+        domElement.textContent = lines.join("\n");
     };
     
     this.setVisible = function(vis) {

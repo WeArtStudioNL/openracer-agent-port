@@ -2040,7 +2040,7 @@ async function openTestDialog() {
     const trackName = (id) => { const t = testTracks.find((x) => x.id === id); return t ? (t.name || t.id) : id; };
     const nameOf = (list, v) => { const e = list.find((x) => x[0] === v); return e ? e[1] : v; };
     const select = $("testTrack");
-    select.innerHTML = testTracks.map((t) => "<option value='" + t.id + "'>" + (t.name || t.id) + "</option>").join("");
+    select.replaceChildren(...testTracks.map((t) => { const option = document.createElement("option"); option.value = t.id; option.textContent = t.name || t.id; return option; }));
     if (!testTracks.some((t) => t.id === picked.track) && testTracks.length) picked.track = testTracks[0].id;
     select.value = picked.track;
     select.onchange = () => { picked.track = select.value; };

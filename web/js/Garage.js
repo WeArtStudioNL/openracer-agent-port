@@ -246,6 +246,18 @@ OpenRacer.Garage = (function () {
 
     // ---- saving: the server when it is there, otherwise the garage
 
+    // A refusal of the server that means "there is no API that writes here" (no server of the game, a read-only web server, another device on the network):
+    // then the garage takes it. Any other answer (a link, a file type, a broken upload, a full disk) is a real error, and is said, not hidden behind the garage.
+    var NO_API = [403, 404, 405, 501];
+    function serverError(response) {
+        return response.json().catch(function () { return {}; }).then(function (data) {
+            var error = new Error(data && data.error ? "The server did not save: " + data.error + "." : "The server did not save (HTTP " + response.status + ").");
+            error.status = response.status;
+            error.fromServer = NO_API.indexOf(response.status) < 0;
+            throw error;
+        });
+    }
+
     // Promise of { where: "server" | "garage" }. files: { name: Blob or string }, options.remove: files to drop,
     // options.base: the folder of the page relative to web ("" in the game, "../" in the editors).
     function store(kind, id, json, files, options) {
@@ -255,7 +267,7 @@ OpenRacer.Garage = (function () {
         var names = Object.keys(files || {});
         function putOne(name, data) {
             return fetch(base + "api/" + kind + "/" + encodeURIComponent(id) + "/" + name.split("/").map(encodeURIComponent).join("/"), { method: "PUT", body: data }).then(function (response) {
-                if (!response.ok) throw new Error("HTTP " + response.status);
+                if (!response.ok) return serverError(response);
             });
         }
         var server = names.reduce(function (chain, name) { return chain.then(function () { return putOne(name, files[name]); }); }, Promise.resolve())
@@ -266,6 +278,7 @@ OpenRacer.Garage = (function () {
                 }));
             }).then(function () { return { where: "server" }; });
         return server.catch(function (error) {
+            if (error.fromServer) throw error;
             console.log("Garage: the server does not save (" + error.message + "), saving to the garage");
             var blobs = {};
             names.forEach(function (name) { blobs[name] = files[name] instanceof Blob ? files[name] : new Blob([files[name]]); });
@@ -277,9 +290,10 @@ OpenRacer.Garage = (function () {
     function discard(kind, id, options) {
         var base = (options && options.base) || "";
         return fetch(base + "api/" + kind + "/" + encodeURIComponent(id), { method: "DELETE" }).then(function (response) {
-            if (!response.ok) throw new Error("HTTP " + response.status);
+            if (!response.ok) return serverError(response);
             return { where: "server" };
-        }).catch(function () {
+        }).catch(function (error) {
+            if (error.fromServer) throw new Error(error.message.replace("did not save", "did not delete it"));
             return remove(kind, id).then(function () { return { where: "garage" }; });
         });
     }
@@ -308,7 +322,14 @@ OpenRacer.Garage = (function () {
             });
             if (!found) throw new Error("The zip has no car.json or track.json.");
             return found.entry.blob.text().then(function (text) {
-                var json = JSON.parse(text);
+                var file = found.kind === "cars" ? "car.json" : "track.json", json;
+                try { json = JSON.parse(text); } catch (error) { throw new Error("The " + file + " in the zip is not valid JSON (" + error.message + ")."); }
+                // what the game needs before it can show or load the item: a zip without it broke the list of cars until it was deleted
+                var isObject = function (v) { return !!v && typeof v === "object" && !Array.isArray(v); };
+                var needed = found.kind === "cars" ? ["model", "chassis", "dimensions", "engine", "drivetrain"] : ["start"];
+                var missing = isObject(json) ? needed.filter(function (key) { return !isObject(json[key]); }) : needed;
+                if (found.kind === "tracks" && isObject(json) && !json.model && !json.geometry) missing.push("model");
+                if (missing.length) throw new Error("The " + file + " in the zip is not complete: it has no " + missing.join(", ") + ". Is it a " + found.kind.slice(0, -1) + " of this game?");
                 var folder = found.prefix.split("/").pop();
                 var id = (json.id || folder || file.name.replace(/\.(car|track)?\.?zip$/i, "")).toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
                 if (!/^[a-z0-9]/.test(id)) id = "item-" + id;
