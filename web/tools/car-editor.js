@@ -56,6 +56,7 @@ view.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x20262f);
 const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 200);
+camera.layers.enable(1);         // (the layer of the smoke and the particles of the game, Smoke.js, Debris.js, Shatter.js: the view draws it with the scene, it has no screen space effects)
 camera.position.set(-5, 3, 6);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0.4, 0);
@@ -2783,6 +2784,7 @@ function updateTuneButtons() {
     $("tuneShip").style.display = name ? "" : "none";
     $("tuneShip").textContent = ship === "car" ? "Take off the car" : ship === "copy" ? "Ship the changes with the car" : "Ship with the car";
     $("saveTo").textContent = name ? "Save writes to the tune " + name + (ship === "car" ? " (a copy in this browser)" : "") : "Save writes car.json";
+    if (softBodyEditor && softBodyEditor.setLocked) softBodyEditor.setLocked(!!name);      // (the shell and the parts are the car's: shown, not changed, in a tune)
 }
 // the car as the form has it, kept as a tune under a name (buildConfig: the chassis, the tyres, the engine, the gearbox, the suspension and the parts, the driver, the soft body,
 // the cameras, the sound, the exhaust, the rims and the tyres), with the colours of the materials and a picture of the view; the model stays the car's own
@@ -3561,8 +3563,11 @@ softBodyEditor = initSoftBody({
     pickLocked: () => !!(suspensionEditor && suspensionEditor.editing),
     canSave: () => !!state.existingId && !!state.root,
     save: () => saveCurrent(),
+    // (the shell and the parts are the car's: from a tune to the Default, where they are changed)
+    toDefault: () => { if (!$("setupSelect").value) return; $("setupSelect").value = ""; $("setupSelect").dispatchEvent(new Event("change")); },
     frameModel
 });
+softBodyEditor.setLocked(!!$("setupSelect").value);
 
 // ---- quality of life: what is not saved, what is missing, Ctrl+S, the cards that stay as they were, a copy of a car
 let dirty = false;

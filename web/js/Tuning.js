@@ -789,6 +789,41 @@ var Tuning = (function() {
             }
             if(content || (card.name === "Engine" && engineUi)) panel.appendChild(wrap);
         });
+        // the soft body: shown as the car has it, not set here. The shell, its dents, the strength of the wheels and the loose parts are the car's (car.json): every setup and
+        // every tune uses those (Setups.configOf); they are changed in the car editor, with Default chosen
+        var shellCard = document.createElement("details");
+        shellCard.open = false;
+        shellCard.className = "card";
+        shellCard.innerHTML = "<summary>Soft body</summary>";
+        var shellBody = document.createElement("div");
+        shellCard.appendChild(shellBody);
+        function fillShell() {
+            shellBody.innerHTML = "";
+            var cfg = car && car.config ? car.config : {}, soft = cfg.softbody || {}, parts = (cfg.parts || []).filter(function(p) { return p && p.mode && p.mode !== "fixed"; });
+            var strength = soft.wheel_strength !== undefined ? soft.wheel_strength : 25;
+            [["The car dents", soft.enabled === false ? "Off" : "On"], ["Nodes of the shell at most", String(soft.max_nodes || 120)],
+             ["A wheel comes off at a hit of", strength > 0 ? strength + " kN s" : "never"], ["Loose, hinged and breakable parts", String(parts.length)]].forEach(function(row) {
+                var item = document.createElement("div");
+                item.className = "item";
+                var line = document.createElement("div");
+                line.className = "line";
+                var label = document.createElement("span");
+                label.className = "label";
+                label.textContent = row[0];
+                var value = document.createElement("b");
+                value.textContent = row[1];
+                line.append(label, value);
+                item.appendChild(line);
+                shellBody.appendChild(item);
+            });
+            var note = document.createElement("div");
+            note.className = "item";
+            note.style.cssText = "color: var(--muted); font-size: 13px; padding: 6px 2px;";
+            note.textContent = "These belong to the car, not to a setup: every setup uses them. Change them in the car editor with Default (the car as made) chosen, and save the car.";
+            shellBody.appendChild(note);
+        }
+        shellCard.addEventListener("toggle", function() { if(shellCard.open) fillShell(); });
+        panel.appendChild(shellCard);
         // the mirrors (Mirrors.js): the turn and the tilt of every glass, kept as options of the game (they are not part of a tune: where you want to look is yours); filled when the group is opened,
         // since the model of the car may not be there yet when the menu is made
         var mirrorGroup = document.createElement("details");

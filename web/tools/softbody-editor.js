@@ -190,7 +190,8 @@ export function initSoftBody(api) {
             delete part.hinge; delete part.mounts;
         }
     }
-    function renderParts() {
+    function renderParts() { renderPartsBody(); lockBox($("dlgParts")); }
+    function renderPartsBody() {
         const box = $("sbParts");
         box.innerHTML = "";
         if (!sb.parts.length) box.innerHTML = '<p class="hint">No parts: the whole model dents with the shell.</p>';
@@ -1360,7 +1361,8 @@ export function initSoftBody(api) {
             if (!list.breakLoose(p)) status(w.name + " is broken already: Repair puts it back.", ""); else status(w.name + " broke.", "ok");
         });
     }
-    function renderPartWin() {
+    function renderPartWin() { renderPartWinBody(); lockBox(sb.win && sb.win.querySelector(".pw-body")); }
+    function renderPartWinBody() {
         const w = sb.partWin;
         if (!w || !sb.win) return;
         const part = w.part;
@@ -1645,7 +1647,7 @@ export function initSoftBody(api) {
         }
         // the pivot that the rotate gizmo holds: at the chosen pin, turned as it is
         const pinNow = part && part.mounts && part.mounts[sb.pinSel];
-        if (pinNow && pinNow.point && sb.partMode !== "nodes") {
+        if (pinNow && pinNow.point && sb.partMode !== "nodes" && !sb.locked) {
             if (!sb.pinPivot) sb.pinPivot = new THREE.Object3D();
             g.add(sb.pinPivot);
             if (!rc.dragging) { sb.pinPivot.position.set(...pinNow.point); sb.pinPivot.quaternion.set(...(pinNow.rot || [0, 0, 0, 1])); }
@@ -1841,5 +1843,34 @@ export function initSoftBody(api) {
         openPartWindow(object);
         return true;
     }
-    return { read, fill, frame, addWall, removeWall, wallHit, steerAhead, onStop, changed, holding, openPart, debug: { sb, tc, rc, camera, controls, showSelection, surfaceAt, looseOf, renderer } };
+    // ---- a tune is chosen (the car editor): the shell, its dents, the strength of the wheels and the parts are the car's (car.json, Default), not the tune's
+    // (Setups.configOf takes them from the car). They are shown as they are and cannot be changed here, with a word on where they are changed; the tests still run.
+    const LOCK_TEXT = "The shell, its dents, the strength of the wheels and the loose parts belong to the car, not to a tune: every tune uses those of the car. Choose Default (the car as made) to change them, and save the car.";
+    function lockBox(box) {
+        if (!box) return;
+        let note = box.querySelector(":scope > .sbLockNote");
+        if (sb.locked && !note) {
+            note = document.createElement("div");
+            note.className = "sbLockNote hint";
+            note.style.cssText = "border: 1px solid #f0b83a; border-radius: 8px; padding: 8px 10px; margin: 0 0 10px; color: #f0d79a;";
+            note.innerHTML = '<span></span> <button type="button" class="small" style="margin-top: 6px;">Go to Default</button>';
+            note.querySelector("span").textContent = LOCK_TEXT;
+            note.querySelector("button").addEventListener("click", () => { if (api.toDefault) api.toDefault(); });
+            box.insertBefore(note, box.firstChild);
+        } else if (!sb.locked && note) note.remove();
+        box.querySelectorAll("input, select, textarea, button").forEach((c) => {
+            if (c.closest(".sbLockNote") || c.id === "sbShow" || c.classList.contains("pw-close") || c.closest(".pw-head")) return;      // (showing the shell and closing a window go on)
+            if (sb.locked) { if (!c.disabled) { c.disabled = true; c.dataset.sbLocked = "1"; } }
+            else if (c.dataset.sbLocked) { c.disabled = false; delete c.dataset.sbLocked; }
+        });
+    }
+    function setLocked(locked) {
+        sb.locked = !!locked;
+        if (sb.locked) { if (sb.edit) $("sbEdit").click(); sb.partMode = null; sb.pick = null; }
+        lockBox($("sbEnabled").closest(".body"));
+        lockBox($("dlgParts"));
+        if (sb.partWin) renderPartWin();
+        drawPartGizmos();
+    }
+    return { read, fill, frame, addWall, removeWall, wallHit, steerAhead, onStop, changed, holding, openPart, setLocked, debug: { sb, tc, rc, camera, controls, showSelection, surfaceAt, looseOf, renderer } };
 }
