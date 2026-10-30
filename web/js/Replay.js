@@ -1379,6 +1379,9 @@ OpenRacer.Replay = (function() {
             data.set(at0.array.subarray(at0.offset, at0.offset + per), pos);
             pos += per;
         }
+        // (a number that is not a number is saved as 0: one of them made the whole file "damaged" when it was opened again)
+        var clean = function(x) { return isFinite(x) ? x : 0; };
+        for(var dk = 0; dk < data.length; dk++) if(!isFinite(data[dk])) data[dk] = 0;
         var inRange = function(index) { return index >= base && index < end; };
         // the soft body: per car the records that are inside the recording (and the part that is saved), as a block of bytes after the numbers
         var softInfo = cars.map(function(entry) {
@@ -1397,9 +1400,9 @@ OpenRacer.Replay = (function() {
                 view.setUint32(at, Math.max(0, rec.index - base), true);
                 for(var i = 0; i < rec.disp.length; i++) view.setInt16(at + 4 + 2 * i, rec.disp[i], true);
                 var o = at + 4 + Math.ceil(rec.disp.length * 2 / 4) * 4;
-                for(var j = 0; j < info.parts.length * PART_FLOATS; j++) view.setFloat32(o + 4 * j, j < rec.parts.length ? rec.parts[j] : 0, true);
+                for(var j = 0; j < info.parts.length * PART_FLOATS; j++) view.setFloat32(o + 4 * j, j < rec.parts.length ? clean(rec.parts[j]) : 0, true);
                 o += info.parts.length * PART_FLOATS * 4;
-                for(var k = 0; k < WHEEL_FLOATS; k++) view.setFloat32(o + 4 * k, rec.wheels[k], true);
+                for(var k = 0; k < WHEEL_FLOATS; k++) view.setFloat32(o + 4 * k, clean(rec.wheels[k]), true);
                 at += sizes[c];
             });
         });
@@ -1413,6 +1416,7 @@ OpenRacer.Replay = (function() {
             var block = new Float32Array(rows.length * floats);
             for(var ri = 0; ri < rows.length; ri++) {
                 block.set(rows[ri].subarray(0, floats), ri * floats);
+                for(var bf = 0; bf < floats; bf++) if(!isFinite(block[ri * floats + bf])) block[ri * floats + bf] = 0;
                 block[ri * floats] = Math.max(0, rows[ri][0] - T0);
                 if(effectName === "marbles" && rows[ri][11] < 1e8) block[ri * floats + 11] = Math.max(0, rows[ri][11] - T0);
             }
@@ -1429,7 +1433,7 @@ OpenRacer.Replay = (function() {
             riderKept[c].forEach(function(rec) {
                 riderView.setUint32(riderAt, Math.max(0, rec.index - base), true);
                 riderView.setFloat32(riderAt + 4, rec.pts ? 1 : 0, true);
-                for(var k = 0; k < RIDER_FLOATS; k++) riderView.setFloat32(riderAt + 8 + 4 * k, rec.pts ? rec.pts[k] : 0, true);
+                for(var k = 0; k < RIDER_FLOATS; k++) riderView.setFloat32(riderAt + 8 + 4 * k, rec.pts ? clean(rec.pts[k]) : 0, true);
                 riderAt += RIDER_SIZE;
             });
         });
@@ -1505,7 +1509,8 @@ OpenRacer.Replay = (function() {
     }
 
     function unpack(bytes) {
-        var bad = function(text) { return new Error(text); };
+        var bad = function(text) { console.warn("Replay: " + text + " (" + new Error().stack.split("\n")[2].trim() + ")"); return new Error(text); };
+        var skippedRecords = 0;
         if(bytes.length < 16 || MAGIC.some(function(b, i) { return bytes[i] !== b; })) throw bad("This is not an OpenRacer replay.");
         var headerLength = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(4, true);
         if(headerLength > 1048576 || 8 + headerLength > bytes.length) throw bad("This replay file is damaged.");
@@ -1558,29 +1563,33 @@ OpenRacer.Replay = (function() {
         }
         if(start % 4 !== 0 || bytes.length - start !== wanted + softBytes + effectBytes + riderTotal * RIDER_SIZE) throw bad("This replay file is damaged.");
         var data = new Float32Array(bytes.buffer.slice(bytes.byteOffset + start, bytes.byteOffset + start + wanted));
-        for(var k = 0; k < data.length; k++) if(!isFinite(data[k])) throw bad("This replay file is damaged.");
+        // A number that is not a number (NaN, infinity: a moment in which the physics went wrong, a car flung far by a hit) made the whole replay "damaged": it is now
+        // a 0 at that one place, and the console says how many there were. The layout of the file (the sizes, the order of the records) is still checked as before.
+        var fixedNumbers = 0, mended = function(x) { if(isFinite(x)) return x; fixedNumbers++; return 0; };
+        for(var k = 0; k < data.length; k++) if(!isFinite(data[k])) data[k] = mended(data[k]);
         var view = new DataView(bytes.buffer, bytes.byteOffset + start + wanted, softBytes), at = 0;
         soft = header.soft.map(function(info) {
             if(!info) return null;
             var size = recordSize(info), records = [], previous = -1, disp = null;
             for(var r = 0; r < info.count; r++, at += size) {
                 var index = view.getUint32(at, true);
-                if(index >= samples || index <= previous) throw bad("This replay file is damaged.");
-                previous = index;
+                if(index >= samples) throw bad("This replay file is damaged (a record of the shell after the end).");
+                var skip = index <= previous;            // (a second record of the same moment, or one out of order: it is left out, not the whole replay)
+                if(skip) skippedRecords++;
+                else previous = index;
                 var fresh = new Int16Array(info.nodes * 3);
                 for(var i = 0; i < fresh.length; i++) fresh[i] = view.getInt16(at + 4 + 2 * i, true);
                 if(!disp || !sameArray(disp, fresh)) disp = fresh;
                 var o = at + 4 + Math.ceil(fresh.length * 2 / 4) * 4;
                 var parts = new Float32Array(info.parts.length * PART_FLOATS);
                 for(var j = 0; j < parts.length; j++) {
-                    parts[j] = view.getFloat32(o + 4 * j, true);
-                    if(!isFinite(parts[j])) throw bad("This replay file is damaged.");
-                    if(j % PART_FLOATS === 0 && parts[j] !== 0 && parts[j] !== 1 && parts[j] !== 2) throw bad("This replay file is damaged.");
+                    parts[j] = mended(view.getFloat32(o + 4 * j, true));
+                    if(j % PART_FLOATS === 0 && parts[j] !== 0 && parts[j] !== 1 && parts[j] !== 2) parts[j] = 0;
                 }
                 o += parts.length * 4;
                 var wheels = new Float32Array(WHEEL_FLOATS);
-                for(var w = 0; w < WHEEL_FLOATS; w++) { wheels[w] = view.getFloat32(o + 4 * w, true); if(!isFinite(wheels[w])) throw bad("This replay file is damaged."); }
-                records.push({ index: index, disp: disp, parts: parts, wheels: wheels });
+                for(var w = 0; w < WHEEL_FLOATS; w++) wheels[w] = mended(view.getFloat32(o + 4 * w, true));
+                if(!skip) records.push({ index: index, disp: disp, parts: parts, wheels: wheels });
             }
             return { nodes: info.nodes, names: info.parts, records: records, version: -1, disp: null };
         });
@@ -1588,7 +1597,7 @@ OpenRacer.Replay = (function() {
         for(var name2 in effectCounts) {
             var length = effectCounts[name2] * EFFECT_FLOATS[name2];
             var block = new Float32Array(bytes.buffer.slice(effectAt, effectAt + length * 4));
-            for(var bi = 0; bi < block.length; bi++) if(!isFinite(block[bi])) throw bad("This replay file is damaged.");
+            for(var bi = 0; bi < block.length; bi++) if(!isFinite(block[bi])) block[bi] = mended(block[bi]);
             effectData[name2] = block;
             effectAt += length * 4;
         }
@@ -1601,12 +1610,13 @@ OpenRacer.Replay = (function() {
                 var records = [], prev = -1;
                 for(var r = 0; r < n; r++, rAt += RIDER_SIZE) {
                     var idx = riderView.getUint32(rAt, true), present = riderView.getFloat32(rAt + 4, true);
-                    if(idx >= samples || idx <= prev) throw bad("This replay file is damaged.");
+                    if(idx >= samples) throw bad("This replay file is damaged (a record of the rider after the end).");
+                    if(idx <= prev) { skippedRecords++; continue; }
                     prev = idx;
                     var pts = null;
                     if(present > 0.5) {
                         pts = new Float32Array(RIDER_FLOATS);
-                        for(var k = 0; k < RIDER_FLOATS; k++) { pts[k] = riderView.getFloat32(rAt + 8 + 4 * k, true); if(!isFinite(pts[k]) || Math.abs(pts[k]) > 1e6) throw bad("This replay file is damaged."); }
+                        for(var k = 0; k < RIDER_FLOATS; k++) { pts[k] = mended(riderView.getFloat32(rAt + 8 + 4 * k, true)); if(Math.abs(pts[k]) > 1e6) pts[k] = 0; }
                     }
                     records.push({ index: idx, pts: pts });
                 }
@@ -1616,6 +1626,7 @@ OpenRacer.Replay = (function() {
         // a camera track (the video editor): a list of keys, each with the numbers that CameraTrack.js needs
         if(OpenRacer.CameraTrack) header.camera = OpenRacer.CameraTrack.clean(header.camera); else delete header.camera;
         header.gears = Array.isArray(header.gears) ? header.gears.map(function(g) { return String(g).slice(0, 8); }) : [""];
+        if(fixedNumbers || skippedRecords) console.warn("Replay: " + fixedNumbers + " numbers that were not numbers are 0, " + skippedRecords + " records out of order are left out");
         return { header: header, data: data, soft: soft, effects: effectData, rider: rider };
     }
 
