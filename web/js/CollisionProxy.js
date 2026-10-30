@@ -133,7 +133,15 @@ OpenRacer.CollisionProxy = (function () {
 
     // For a Car or an Opponent that has loaded its model: sets the collision shape of its vehicle
     // (model: what OpenRacer.loadCarModel gave, modelMid: the middle between the wheels of the model, or null)
+    // (the shape is read in the space of the model: a model that is already in the car (a car built again, the tune of the game) is taken out of it for that moment, or
+    // the place of the car on the track went into the spheres and the parts: after a rebuild 10 m beside the car)
     function apply(object, model, modelMid) {
+        var holder = model.tilt && model.tilt.parent;
+        if(!holder) return applyHere(object, model, modelMid);
+        holder.remove(model.tilt);
+        try { return applyHere(object, model, modelMid); } finally { holder.add(model.tilt); }
+    }
+    function applyHere(object, model, modelMid) {
         var v = object.vehicle;
         var radius = object.wheels[0].radius;
         var zCentre = (v.af - v.ar) / 2;

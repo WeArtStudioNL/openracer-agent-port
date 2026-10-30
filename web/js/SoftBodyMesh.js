@@ -31,6 +31,7 @@ OpenRacer.SoftBodyMesh = (function () {
         var done = new Set();
         root.traverse(function (mesh) {
             if (!mesh.isMesh || !mesh.geometry || !mesh.geometry.attributes.position) return;
+            if (mesh.userData && mesh.userData.brokenPiece) return;          // (the broken form of a part, Parts.js: not seen, it keeps its own material for its pieces)
             var geometry = mesh.geometry;
             if (done.has(geometry)) return;                          // a geometry that two meshes share is done once
             done.add(geometry);

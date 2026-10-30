@@ -87,7 +87,7 @@ export function initSoftBody(api) {
     }
 
     // ---- the parts
-    const MODES = [["hinge", "Hinge"], ["detachable", "Loose"]];
+    const MODES = [["hinge", "Hinge"], ["detachable", "Loose"], ["breakable", "Breakable (shatters)"]];
     function partRow(part, index) {
         const row = document.createElement("div");
         row.className = "material";
@@ -130,7 +130,7 @@ export function initSoftBody(api) {
         q("latch").value = h.latch_force !== undefined ? h.latch_force / 1000 : "";
         q("hinge_break").value = h.break_force !== undefined ? h.break_force / 1000 : "";
         const showMode = () => {
-            const hinge = q("mode").value === "hinge";
+            const hinge = q("mode").value === "hinge";     // (a breakable part has the force of a loose one; what it breaks into is set in the window of the part)
             row.querySelector(".hinge").style.display = hinge ? "" : "none";
             row.querySelector(".loose").style.display = hinge ? "none" : "";
         };
@@ -427,6 +427,7 @@ export function initSoftBody(api) {
         if (!o || !v) return;
         if (o.softBodyMesh) o.softBodyMesh.update();
         if (o.parts) o.parts.update(dt);
+        if (OpenRacer.Shatter) OpenRacer.Shatter.step(dt);                 // the pieces and the particles of a part that broke (Shatter.js)
         if (sb.crash) crashFrame(dt);
         if (sb.pushMode) pushReading();
         if (sb.group) updateShell();
@@ -1299,6 +1300,63 @@ export function initSoftBody(api) {
         renderParts();                                                // the list of the Parts panel
     }
     const AXES = ["x", "y", "z"], AXIS_COLOURS = { x: 0xff5555, y: 0x55dd77, z: 0x5599ff };
+    // A part that shatters (Parts.js, mode "breakable"): ticked, it breaks into pieces and particles at its force instead of falling off whole. The pieces are its faces
+    // (in clusters) or the pieces of the hidden object <name>_broken of the model; the particles have a shape and a material (or a colour of their own)
+    const PARTICLE_MATERIALS = [["glass", "Glass"], ["tinted", "Tinted glass"], ["red", "Red plastic"], ["orange", "Orange plastic"], ["white", "White plastic"], ["black", "Black plastic"], ["chrome", "Chrome"], ["custom", "Colour of its own"]];
+    function shatterSection(part, w, add) {
+        const on = part.mode === "breakable", sh = part.shatter || {};
+        const broken = viewModel() && viewModel().getObjectByName(w.name + "_broken");
+        const d = add('<div class="pw-section"><label style="display: flex; gap: 6px; align-items: center;"><input type="checkbox" data-a="shatters"> <b>Breakable: it shatters</b></label></div>' +
+            (on ? '<div class="row"><div><label>Breaks into</label><select data-a="pieces"><option value="faces">Its faces (rigid pieces)</option><option value="mesh">The mesh ' + w.name + '_broken</option><option value="none">Particles only</option></select></div>' +
+                '<div><label title="The faces are put together into at most this many pieces">Pieces at most</label><input type="number" data-a="max" min="1" max="120" step="1" placeholder="40"></div></div>' +
+                '<p class="hint" data-a="brokenInfo"></p>' +
+                '<div class="row"><div><label>Particles</label><input type="number" data-a="count" min="0" max="600" step="10" placeholder="120"></div>' +
+                '<div><label>Shape</label><select data-a="shape"><option value="shards">Shards</option><option value="splinters">Splinters</option><option value="grains">Grains</option></select></div>' +
+                '<div><label>Size (mm)</label><input type="number" data-a="size" min="1" max="80" step="1" placeholder="12"></div></div>' +
+                '<div class="row"><div><label>Material of the particles</label><select data-a="material">' + PARTICLE_MATERIALS.map((m) => '<option value="' + m[0] + '">' + m[1] + "</option>").join("") + '</select></div>' +
+                '<div><label>Colour</label><input type="color" data-a="colour"></div></div>' +
+                '<div class="row"><button class="small" data-a="showBroken">Show the broken mesh</button><button class="small accent" data-a="breakNow" title="Breaks it on the bench, as a hit would">Break it now</button></div>' : ""));
+        const q = (a) => d.querySelector('[data-a="' + a + '"]');
+        q("shatters").checked = on;
+        q("shatters").addEventListener("change", (e) => {
+            if (e.target.checked) { part.mode = "breakable"; part.shatter = Object.assign({ pieces: broken ? "mesh" : "faces", particles: 120, particle: "shards", material: "glass" }, part.shatter || {}); }
+            else { part.mode = "detachable"; delete part.shatter; }
+            partChanged();
+        });
+        if (!on) return;
+        const put = (key, value) => { part.shatter = Object.assign({}, part.shatter || {}); if (value === undefined || value === "") delete part.shatter[key]; else part.shatter[key] = value; partChanged(); };
+        q("pieces").value = sh.pieces || "faces";
+        q("brokenInfo").textContent = broken ? "The model has " + w.name + "_broken: it is not seen and not in the physics; its pieces (its meshes, or the parts of a mesh that are apart) are the pieces when it breaks." :
+            "The model has no " + w.name + "_broken (a copy of the part cut into pieces, in the model with that name): it breaks into its faces.";
+        q("max").value = sh.max_pieces || "";
+        q("count").value = sh.particles !== undefined ? sh.particles : "";
+        q("shape").value = sh.particle || "shards";
+        q("size").value = sh.size ? Math.round(sh.size * 1000) : "";
+        q("material").value = sh.colour ? "custom" : (sh.material || "glass");
+        q("colour").value = sh.colour || "#dceeff";
+        q("colour").disabled = !sh.colour;
+        q("pieces").addEventListener("change", (e) => put("pieces", e.target.value));
+        q("max").addEventListener("change", (e) => { const v = parseInt(e.target.value, 10); put("max_pieces", v > 0 ? v : undefined); });
+        q("count").addEventListener("change", (e) => { const v = parseInt(e.target.value, 10); put("particles", v >= 0 ? v : undefined); });
+        q("shape").addEventListener("change", (e) => put("particle", e.target.value));
+        q("size").addEventListener("change", (e) => { const v = parseFloat(e.target.value); put("size", v > 0 ? v / 1000 : undefined); });
+        q("material").addEventListener("change", (e) => {
+            part.shatter = Object.assign({}, part.shatter || {});
+            if (e.target.value === "custom") { part.shatter.colour = q("colour").value; delete part.shatter.material; }
+            else { part.shatter.material = e.target.value; delete part.shatter.colour; }
+            partChanged();
+        });
+        q("colour").addEventListener("change", (e) => put("colour", e.target.value));
+        const shown = () => broken && broken.visible;
+        q("showBroken").disabled = !broken;
+        q("showBroken").textContent = shown() ? "Hide the broken mesh" : "Show the broken mesh";
+        q("showBroken").addEventListener("click", () => { if (!broken) return; broken.visible = !broken.visible; q("showBroken").textContent = shown() ? "Hide the broken mesh" : "Show the broken mesh"; });
+        q("breakNow").addEventListener("click", () => {
+            const list = bench.obj && bench.obj.parts, p = list && list.parts.find((x) => x.name === w.name);
+            if (!p) { status("Start the bench first (the test of the car), with the part in it.", "error"); return; }
+            if (!list.breakLoose(p)) status(w.name + " is broken already: Repair puts it back.", ""); else status(w.name + " broke.", "ok");
+        });
+    }
     function renderPartWin() {
         const w = sb.partWin;
         if (!w || !sb.win) return;
@@ -1335,12 +1393,13 @@ export function initSoftBody(api) {
             partChanged();
         });
         // a part that is only breakable: no pins and no nodes of its own, it bends with the body and falls off at a force
-        if (part.mode === "detachable") {
+        if (part.mode === "detachable" || part.mode === "breakable") {
             const bf = add('<div class="row"><div><label title="1 kN is about 102 kg of force">Breaks off at (kN)</label><input type="number" data-a="breakforce" min="0" step="0.5"></div><div><label title="After the load has passed the force it goes on bending with the body for this long, then it comes off">Delay (s)</label><input type="number" data-a="breakdelay" min="0" step="0.05" placeholder="0.15"></div></div><p class="hint">It bends with the body, and when the load on it passes this force it comes off and falls as a free object (it hits the car, the road and the walls).</p>');
             bf.querySelector('[data-a="breakforce"]').value = part.break_force ? part.break_force / 1000 : "";
             bf.querySelector('[data-a="breakdelay"]').value = part.break_delay !== undefined ? part.break_delay : "";
             bf.querySelector('[data-a="breakdelay"]').addEventListener("change", (e) => { const v = parseFloat(e.target.value); if (v >= 0) part.break_delay = v; else delete part.break_delay; partChanged(); });
             bf.querySelector('[data-a="breakforce"]').addEventListener("change", (e) => { const v = parseFloat(e.target.value); if (v > 0) part.break_force = v * 1000; else delete part.break_force; partChanged(); });
+            shatterSection(part, w, add);
             return;
         }
         // pin points

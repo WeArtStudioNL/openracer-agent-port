@@ -203,7 +203,10 @@
     // ---- the node grabber (as BeamNG has it): with the view on, N switches it on; press on a node of the shell with the left mouse button and drag it, held by an elastic
     // whose strength is set in the panel at the top right (SoftBody.grab: a spring from the node to the pointer, at the depth the node had when it was taken). Let go and
     // it is free again. The elastic is drawn red from the node to the pointer.
-    var grabMode = false, grabbed = null, grabPanel = null, grabLine = null, grabStrength = 5000;
+    var grabMode = false, grabbed = null, grabPanel = null, grabLine = null, grabStrength = 5000, hitKmh = 50;
+    try { var keptHit = parseFloat(localStorage.getItem("openracer.hitSpeed")); if (keptHit >= 5 && keptHit <= 200) hitKmh = keptHit; } catch (e) { /* no storage */ }
+    // the hit of the middle mouse button as the panel says it: the speed of the block of a tonne, and what that is as a force over the time of the hit
+    function hitText() { return Math.round(hitKmh) + " km/h (" + Math.round(HIT_MASS * (hitKmh / 3.6) / HIT_TIME / 1000) + " kN)"; }
     try { var keptStrength = parseFloat(localStorage.getItem("openracer.grabStrength")); if (keptStrength >= 100 && keptStrength <= 200000) grabStrength = keptStrength; } catch (e) { /* no storage */ }
     var grabPointer = new THREE.Vector2(), grabRay = new THREE.Raycaster(), grabTarget = new THREE.Vector3(), grabNode = new THREE.Vector3(), grabLocal = new THREE.Vector3(), grabQ = new THREE.Quaternion();
     function strengthText(n) { return n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + " kN/m" : Math.round(n) + " N/m"; }
@@ -214,11 +217,20 @@
         grabPanel.innerHTML = "<div style=\"font-weight: bold; margin-bottom: 6px;\">Node grabber <span style=\"color: #9fb0c4; font-weight: normal;\">(N)</span></div>" +
             "<div style=\"color: #9fb0c4; margin-bottom: 8px;\">Press on a node and drag it. Let go to drop it.</div>" +
             "<div style=\"display: flex; justify-content: space-between;\"><span>Elastic</span><b class=\"grabValue\"></b></div>" +
-            "<input type=\"range\" min=\"2\" max=\"5.3\" step=\"0.01\" style=\"width: 100%;\">" +
+            "<input type=\"range\" class=\"grabSlider\" min=\"2\" max=\"5.3\" step=\"0.01\" style=\"width: 100%;\">" +
+            "<div style=\"display: flex; justify-content: space-between; margin-top: 8px;\" title=\"The hit of the middle mouse button: a block of a tonne and a metre at this speed\"><span>Hit (middle mouse)</span><b class=\"hitValue\"></b></div>" +
+            "<input type=\"range\" class=\"hitSlider\" min=\"5\" max=\"200\" step=\"5\" style=\"width: 100%;\">" +
             "<div style=\"display: flex; gap: 6px; margin-top: 10px;\"><button type=\"button\" data-tool=\"hinge\" title=\"Right click a hinge (a door, the hood) to open it with a small torque, again to close it where it was\">Open hinges</button>" +
             "<button type=\"button\" data-tool=\"break\" title=\"Right click a part to break it loose\">Break parts</button></div>" +
             "<div class=\"grabTool\" style=\"color: #9fb0c4; margin-top: 6px; min-height: 1.2em;\"></div>";
-        var slider = grabPanel.querySelector("input"), value = grabPanel.querySelector(".grabValue");
+        var slider = grabPanel.querySelector(".grabSlider"), value = grabPanel.querySelector(".grabValue");
+        var hitSlider = grabPanel.querySelector(".hitSlider"), hitValue = grabPanel.querySelector(".hitValue");
+        hitSlider.value = hitKmh; hitValue.textContent = hitText();
+        hitSlider.oninput = function () {
+            hitKmh = Math.max(5, Math.min(200, parseFloat(hitSlider.value) || 50));
+            hitValue.textContent = hitText();
+            try { localStorage.setItem("openracer.hitSpeed", String(hitKmh)); } catch (e) { /* no storage */ }
+        };
         slider.value = Math.log10(grabStrength);
         value.textContent = strengthText(grabStrength);
         slider.oninput = function () {
@@ -359,7 +371,8 @@
     window.addEventListener("pointerup", function (e) { if (grabbed && e.button === 0) dropNode(); });
     // A hit on the car with the middle mouse button while the view is on, as Apply force of the car editor does it: a cube of a tonne and a metre at 50 km/h against the
     // surface of the car where it is clicked (SoftBody.pushPlate, in the frame of the car). The car is not clamped here: it feels the hit too. A red arrow shows it for a moment.
-    var HIT_KMH = 50, HIT_MASS = 1000, HIT_SIDE = 1, HIT_TIME = 0.03;
+    // (the speed is set in the panel of the node grabber, 5 to 200 km/h; 50 when it was not)
+    var HIT_MASS = 1000, HIT_SIDE = 1, HIT_TIME = 0.03;
     var raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2(), hitArrow = null, hitTimer = 0;
     function hitCar(e) {
         var c = typeof car !== "undefined" ? car : null, v = c && c.vehicle, sb = v && v.softBody;
@@ -373,7 +386,7 @@
         if (normal.dot(raycaster.ray.direction) > 0) normal.negate();          // (the side that faces the camera)
         q.set(v.qx, v.qy, v.qz, v.qw).invert();
         var local = v1.copy(h.point).sub(v2.set(v.px, v.py, v.pz)).applyQuaternion(q), n = v3.copy(normal).applyQuaternion(q);
-        sb.pushPlate([local.x, local.y, local.z], [n.x, n.y, n.z], HIT_MASS * (HIT_KMH / 3.6) / HIT_TIME, HIT_SIDE, HIT_MASS, HIT_TIME, null);
+        sb.pushPlate([local.x, local.y, local.z], [n.x, n.y, n.z], HIT_MASS * (hitKmh / 3.6) / HIT_TIME, HIT_SIDE, HIT_MASS, HIT_TIME, null);
         sb.pinned = false;                     // (the reaction of the shell goes to the car: it is pushed and turned by the hit)
         var plate = sb.plate;
         setTimeout(function () { if (sb.plate === plate) sb.releasePlate(); }, 1500);

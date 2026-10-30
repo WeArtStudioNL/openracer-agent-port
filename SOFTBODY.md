@@ -481,3 +481,18 @@ shell and gives the same figures as before.
 
 **Not done.** The shell is still explicit (see above). The spring and the damper of the wheel are still those of `Vehicle.js`, not beams. A rig whose k is much
 higher than now would want more passes (six is enough for these constraints; the soft stretch of a pass that has not converged makes the rig a little softer).
+
+## Breakable parts (shatter)
+
+A part of the mode `breakable` (car.json `parts`) sits on the car until the load passes `break_force`, then it breaks: the part is hidden and out of the
+physics, and `Shatter.js` throws its pieces and particles. `shatter`: `{ pieces: "faces" | "mesh" | "none", max_pieces: 40, particles: 120,
+particle: "shards" | "splinters" | "grains", material: "glass" | "tinted" | "red" | "orange" | "white" | "black" | "chrome", colour: "#rrggbb", size: 0.012 }`.
+With `"mesh"` the pieces come from the object `<object>_broken` of the model (each mesh, or each island of a single mesh); every object whose name
+ends in `_broken` is hidden when the model loads and left out of the collision spheres, the shapes of the parts and the shell on the model.
+
+The pieces have a physics of their own (gravity, drag, the ground of the track under them; they lie down flat), so that a replay makes them again
+from the rows of the effect `shatter` (one row per piece: place, turn, size, speed, spin; one row per cloud of particles with its seed).
+
+A part whose object is inside the object of another part is its child: while the parent swings or is loose, the load of the child is its mass times the
+change of the speed of its place on the body of the parent, and it comes off (or breaks) at its force; a parent that breaks lets its children fall.
+

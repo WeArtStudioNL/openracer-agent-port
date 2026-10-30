@@ -559,6 +559,7 @@ OpenRacer.Car = function( config, domElement ) {
         if(!(OpenRacer.Replay && OpenRacer.Replay.active)) {   // a replay does not make new smoke and marks from the state of the physics
             tyreSmoke.update(delta, v, camera);
             if(debris) debris.update(delta, v);
+            if(OpenRacer.Shatter) OpenRacer.Shatter.step(delta);      // the pieces and the particles of the parts that broke, of every car (Shatter.js)
             var marks = OpenRacer.skidMarks && OpenRacer.skidMarks();
             if(marks) marks.update(v); // the rubber a sliding tyre leaves on the road (SkidMarks.js)
             var pellets = OpenRacer.marbles && OpenRacer.marbles();

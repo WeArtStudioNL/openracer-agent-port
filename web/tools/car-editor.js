@@ -504,6 +504,7 @@ function loadFromUrl(url, label, car) {
 function setModel(root, isNew, replace) {
     if (state.root) pivot.remove(state.root);
     state.root = root;
+    if (OpenRacer.Parts && OpenRacer.Parts.hideBroken) OpenRacer.Parts.hideBroken(root);         // (the broken forms of parts, <name>_broken: not seen, not in the physics)
     pivot.add(root);
     state.materials = OpenRacer.prepareMaterials(THREE, root);
     setTimeout(applyPaint, 0);                                   // (the paint of the tuning card, on the new model)
@@ -2992,7 +2993,7 @@ function tuningValues(config) {
 // "Drop car" lets it fall from a height, The model is built the way the game
 // builds it (CarLoader.js: the wheels taken out, the suspension rig found), from the model and the settings as they are now.
 window.THREE = Object.assign({}, THREE, { GLTFLoader });
-const PHYSICS_SCRIPTS = ["Engine.js", "Wheel.js", "TyreShell.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "PartsLibrary.js", "Chain.js", "CarLoader.js", "Ground.js", "CollisionProxy.js", "SoftBody.js", "SoftBodyMesh.js", "Parts.js"];
+const PHYSICS_SCRIPTS = ["Engine.js", "Wheel.js", "TyreShell.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "PartsLibrary.js", "Chain.js", "CarLoader.js", "Ground.js", "CollisionProxy.js", "SoftBody.js", "SoftBodyMesh.js", "Parts.js", "Shatter.js"];
 let physicsLoading = null;
 function loadPhysics() {
     if (!physicsLoading) {
@@ -3546,7 +3547,7 @@ softBodyEditor = initSoftBody({
     partChosen: showChosenPart,
     driverUnder: (e) => !!(driverEditor && driverEditor.under(e)),
     hideDriver: (on) => { if (driverEditor) driverEditor.hide(on); },      // the figure is in the way of the nodes: hidden while they are edited
-    nodeNames: () => state.nodes.map((n) => n.name),
+    nodeNames: () => state.nodes.filter((n) => !/_broken$/i.test(n.name)).map((n) => n.name),          // (the broken forms of parts are not parts of their own)
     floorY: () => grid.position.y,
     root: () => state.root,
     // saves the car that is open, as the Save button does (the part panel saves after every change)

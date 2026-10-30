@@ -12,6 +12,14 @@
  *                             tears off at its force; with one mount left it swings about that point) a revolute joint with an axis, an origin (both in the frame of the car), limits (degrees), a spring (a target angle
  *                             and a stiffness) and a damper. With latch_force it sits shut until the load passes it, then it swings. With
  *                             break_force it tears off at that load and becomes a free part.
+ *                "breakable"  sits on the car until the load passes break_force (N), then it breaks (glass, a lamp): it is gone, and in its place are its
+ *                             pieces and particles (Shatter.js). "shatter": { pieces: "faces" (the faces of the part, in clusters of at most max_pieces), "mesh"
+ *                             (the pieces of the hidden object <object>_broken of the model) or "none"; max_pieces (40); particles (a number, 120); particle:
+ *                             "shards", "splinters" or "grains"; material: glass, tinted, red, orange, white, black, chrome (the colour of the particles; colour,
+ *                             "#rrggbb", goes before it); size (m, 0.012) }.
+ *
+ *              An object of the model whose name ends in "_broken" is the broken form of a part: it is not seen and it is not a part of the physics
+ *              (hideBroken, when the model is loaded).
  *
  *              The load on a part is the largest of: its mass times the acceleration of its place on the car (the inertia), and the force that
  *              the shell puts on the nodes it hangs on (the displacement of the nodes times their stiffness). A part also comes loose when the
@@ -38,6 +46,148 @@ OpenRacer.Parts = (function () {
     }
 
     function groups(membership, filter) { return ((membership << 16) | filter) >>> 0; }
+
+    // ---- the broken forms of parts: an object named <part>_broken (and what is in it) is hidden, and the physics leaves it out (CollisionProxy.js, the shapes of the parts,
+    // the shell on the model); a part that breaks into "mesh" pieces takes them from it
+    var BROKEN = /_broken$/i;
+    function hideBroken(root) {
+        if (!root) return 0;
+        var n = 0;
+        root.traverse(function (o) {
+            if (!o.name || !BROKEN.test(o.name)) return;
+            o.visible = false; n++;
+            o.traverse(function (m) { m.userData = m.userData || {}; m.userData.brokenPiece = true; m.userData.noCollision = true; });
+        });
+        return n;
+    }
+    function isBroken(o) { return !!(o && o.userData && o.userData.brokenPiece); }
+
+    // the colours of the particles of a material (linear)
+    function lin(c) { return [Math.pow(c[0], 2.2), Math.pow(c[1], 2.2), Math.pow(c[2], 2.2)]; }
+    var PARTICLE_COLOURS = {
+        glass: lin([0.86, 0.93, 1.0]).map(function (x) { return x * 1.5; }), tinted: lin([0.28, 0.32, 0.36]), red: lin([0.85, 0.06, 0.04]), orange: lin([1.0, 0.5, 0.08]),
+        white: lin([0.93, 0.93, 0.9]), black: lin([0.05, 0.05, 0.055]), chrome: lin([0.82, 0.83, 0.86]).map(function (x) { return x * 1.3; })
+    };
+    var PARTICLE_SHAPES = { shards: 0, splinters: 1, grains: 2 };
+    function particleColour(sh) {
+        var hex = typeof sh.colour === "string" && /^#?[0-9a-f]{6}$/i.test(sh.colour) ? sh.colour.replace("#", "") : null;
+        if (hex) return lin([parseInt(hex.slice(0, 2), 16) / 255, parseInt(hex.slice(2, 4), 16) / 255, parseInt(hex.slice(4, 6), 16) / 255]);
+        return PARTICLE_COLOURS[sh.material] || PARTICLE_COLOURS.glass;
+    }
+    // a number for a breakable part that follows from the model (its name, its size and its place), the same in a replay that builds the car again
+    function keyOf(text) { var h = 2166136261; for (var i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) % 16777216; }
+
+    // The pieces of a part that breaks: the faces of the meshes of source (the part, or its _broken object), in the frame of source, in at most max clusters (by
+    // material, the nearest faces together); with byMesh every mesh is a piece of its own and a single mesh is cut where it falls apart (its islands). Each piece:
+    // { geometry (around its middle), material, centre, flat (the normal of its flat side), half (its half thickness), radius }
+    function piecesOf(source, max, byMesh, others) {
+        var skip = new Set(others || []);
+        function ofOther(m) { for (var o = m; o && o !== source; o = o.parent) if (skip.has(o)) return true; return false; }
+        source.updateWorldMatrix(true, true);
+        var inv = new THREE.Matrix4().copy(source.matrixWorld).invert(), rel = new THREE.Matrix4(), nm = new THREE.Matrix3();
+        var buckets = new Map();             // material -> [units]; a unit: { tris: [[ax, ay, az, bx, ..., nx.. (9), u.. (6)]], centre }
+        var meshes = [];
+        source.traverse(function (m) { if (m.isMesh && m.geometry && m.geometry.attributes.position && (byMesh || !isBroken(m)) && !ofOther(m)) meshes.push(m); });
+        var a = new THREE.Vector3(), n = new THREE.Vector3();
+        meshes.forEach(function (mesh) {
+            var g = mesh.geometry, P = g.attributes.position, N = g.attributes.normal, U = g.attributes.uv, I = g.index;
+            rel.multiplyMatrices(inv, mesh.matrixWorld); nm.getNormalMatrix(rel);
+            var mats = mesh.userData && mesh.userData.sbOriginal ? mesh.userData.sbOriginal : mesh.material;
+            var count = I ? I.count : P.count, groupsOf = g.groups && g.groups.length ? g.groups : [{ start: 0, count: count, materialIndex: 0 }];
+            groupsOf.forEach(function (gr) {
+                var mat = Array.isArray(mats) ? mats[gr.materialIndex || 0] : mats;
+                if (!mat) return;
+                var tris = [];
+                for (var t = gr.start; t + 2 < Math.min(count, gr.start + gr.count); t += 3) {
+                    var tri = new Float32Array(24), idx = [I ? I.getX(t) : t, I ? I.getX(t + 1) : t + 1, I ? I.getX(t + 2) : t + 2];
+                    for (var k = 0; k < 3; k++) {
+                        a.fromBufferAttribute(P, idx[k]).applyMatrix4(rel); tri[k * 3] = a.x; tri[k * 3 + 1] = a.y; tri[k * 3 + 2] = a.z;
+                        if (N) { n.fromBufferAttribute(N, idx[k]).applyMatrix3(nm).normalize(); tri[9 + k * 3] = n.x; tri[10 + k * 3] = n.y; tri[11 + k * 3] = n.z; }
+                        if (U) { tri[18 + k * 2] = U.getX(idx[k]); tri[19 + k * 2] = U.getY(idx[k]); }
+                    }
+                    tri.vertex = idx;
+                    tris.push(tri);
+                }
+                if (!tris.length) return;
+                var units = [];
+                if (!byMesh) tris.forEach(function (tri) { units.push({ tris: [tri] }); });
+                else if (meshes.length > 1) units.push({ tris: tris });
+                else units = islands(tris);
+                if (!buckets.has(mat)) buckets.set(mat, []);
+                Array.prototype.push.apply(buckets.get(mat), units);
+            });
+        });
+        var total = 0;
+        buckets.forEach(function (units) { units.forEach(function (u) { u.centre = centreOf(u.tris); }); total += units.length; });
+        var out = [];
+        buckets.forEach(function (units, mat) {
+            var budget = Math.max(1, Math.round(max * units.length / Math.max(1, total)));
+            clusters(units, budget).forEach(function (tris) { out.push(pieceOf(tris, mat)); });
+        });
+        return out;
+    }
+    function centreOf(tris) {
+        var c = new THREE.Vector3(), n = 0;
+        tris.forEach(function (t) { for (var k = 0; k < 3; k++) { c.x += t[k * 3]; c.y += t[k * 3 + 1]; c.z += t[k * 3 + 2]; n++; } });
+        return c.divideScalar(Math.max(1, n));
+    }
+    // the parts of a mesh that hang together (by the places of their corners: a model that was cut into cells has them apart)
+    function islands(tris) {
+        var parent = tris.map(function (t, i) { return i; }), owner = {};
+        function find(i) { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; }
+        tris.forEach(function (t, i) {
+            for (var k = 0; k < 3; k++) {
+                var key = Math.round(t[k * 3] * 2000) + "," + Math.round(t[k * 3 + 1] * 2000) + "," + Math.round(t[k * 3 + 2] * 2000);
+                if (owner[key] === undefined) owner[key] = i; else { var r1 = find(i), r2 = find(owner[key]); if (r1 !== r2) parent[r1] = r2; }
+            }
+        });
+        var byRoot = {};
+        tris.forEach(function (t, i) { var r = find(i); (byRoot[r] = byRoot[r] || []).push(t); });
+        return Object.keys(byRoot).map(function (r) { return { tris: byRoot[r] }; });
+    }
+    // the units in at most n groups: n of them spread over the list are the seeds, and every unit goes to the nearest seed
+    function clusters(units, n) {
+        if (units.length <= n) return units.map(function (u) { return u.tris; });
+        var seeds = [], step = units.length / n;
+        for (var i = 0; i < n; i++) seeds.push(units[Math.floor(i * step)].centre);
+        var groupsOut = seeds.map(function () { return []; });
+        units.forEach(function (u) {
+            var best = 0, bd = Infinity;
+            for (var k = 0; k < seeds.length; k++) { var d = u.centre.distanceToSquared(seeds[k]); if (d < bd) { bd = d; best = k; } }
+            Array.prototype.push.apply(groupsOut[best], u.tris);
+        });
+        return groupsOut.filter(function (g) { return g.length; });
+    }
+    function pieceOf(tris, mat) {
+        var centre = centreOf(tris), count = tris.length * 3;
+        var P = new Float32Array(count * 3), N = new Float32Array(count * 3), U = new Float32Array(count * 2);
+        var flat = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), f = new THREE.Vector3();
+        tris.forEach(function (t, i) {
+            for (var k = 0; k < 3; k++) {
+                P[(i * 3 + k) * 3] = t[k * 3] - centre.x; P[(i * 3 + k) * 3 + 1] = t[k * 3 + 1] - centre.y; P[(i * 3 + k) * 3 + 2] = t[k * 3 + 2] - centre.z;
+                N[(i * 3 + k) * 3] = t[9 + k * 3]; N[(i * 3 + k) * 3 + 1] = t[10 + k * 3]; N[(i * 3 + k) * 3 + 2] = t[11 + k * 3];
+                U[(i * 3 + k) * 2] = t[18 + k * 2]; U[(i * 3 + k) * 2 + 1] = t[19 + k * 2];
+            }
+            e1.set(t[3] - t[0], t[4] - t[1], t[5] - t[2]); e2.set(t[6] - t[0], t[7] - t[1], t[8] - t[2]);
+            f.crossVectors(e1, e2);
+            if (flat.dot(f) < 0) f.negate();                      // (both sides of a thin piece point the same way)
+            flat.add(f);
+        });
+        if (flat.lengthSq() < 1e-12) flat.set(0, 1, 0);
+        flat.normalize();
+        var half = 0, radius = 0;
+        for (var j = 0; j < count; j++) {
+            var x = P[j * 3], y = P[j * 3 + 1], z = P[j * 3 + 2];
+            half = Math.max(half, Math.abs(x * flat.x + y * flat.y + z * flat.z)); radius = Math.max(radius, Math.hypot(x, y, z));
+        }
+        var geometry = new THREE.BufferGeometry();
+        geometry.setAttribute("position", new THREE.BufferAttribute(P, 3));
+        geometry.setAttribute("normal", new THREE.BufferAttribute(N, 3));
+        geometry.setAttribute("uv", new THREE.BufferAttribute(U, 2));
+        if (!tris[0] || (tris[0][9] === 0 && tris[0][10] === 0 && tris[0][11] === 0)) geometry.computeVertexNormals();
+        geometry.computeBoundingSphere();
+        return { geometry: geometry, material: mat, centre: centre, flat: flat, half: Math.max(0.002, half), radius: Math.max(0.01, radius) };
+    }
 
     // Loads the engine (once) and makes the parts of a car. ctx: see build(). Gives a promise of the controller, or null
     var enginePromise = null;
@@ -83,7 +233,7 @@ OpenRacer.Parts = (function () {
         var pts = [], lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
         var seen = {};
         object.traverse(function (mesh) {
-            if (!mesh.isMesh || !mesh.geometry || !mesh.geometry.attributes.position) return;
+            if (!mesh.isMesh || !mesh.geometry || !mesh.geometry.attributes.position || isBroken(mesh)) return;
             var pos = mesh.geometry.attributes.position;
             var step = Math.max(1, Math.floor(pos.count / 400));
             for (var i = 0; i < pos.count; i += step) {
@@ -101,7 +251,7 @@ OpenRacer.Parts = (function () {
         var centre = new THREE.Vector3((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2);
         var local = new Float32Array(pts.length);
         for (var i = 0; i < pts.length; i += 3) { local[i] = pts[i] - centre.x; local[i + 1] = pts[i + 1] - centre.y; local[i + 2] = pts[i + 2] - centre.z; }
-        return { object: object, centre: centre, local: local, lo: lo, hi: hi };
+        return { object: object, centre: centre, local: local, lo: lo, hi: hi, count: pts.length / 3 };
     }
 
     // R: the engine. ctx: { vehicle, softBody, softBodyMesh, spheres (of the shell), specs ([the "parts" of car.json]), root (the model),
@@ -191,7 +341,30 @@ OpenRacer.Parts = (function () {
                 group.forEach(function (g) { sb.restPosition(g, c); var d = a.distanceToSquared(c); if (d < best) { best = d; nearest = g; } });
                 m.beam = sb.addBeam(m.node, nearest, { break_force: m.break_force || 1e9, yield_force: (m.break_force || 1e9) * 0.5 });
             });
+            // a part that breaks (glass, a lamp): what it breaks into (Shatter.js)
+            var shatter = null;
+            if (spec.mode === "breakable") {
+                var sh = spec.shatter || {};
+                var how = sh.pieces === "mesh" || sh.pieces === "none" ? sh.pieces : "faces";
+                var brokenObject = how === "mesh" ? ctx.root.getObjectByName(spec.object + "_broken") : null;
+                if (how === "mesh" && !brokenObject) { console.warn("Parts: no object '" + spec.object + "_broken' in the model; '" + spec.object + "' breaks into its faces"); how = "faces"; }
+                var maxPieces = Math.max(1, Math.min(120, Math.round(sh.max_pieces || 40)));
+                shatter = {
+                    how: how, source: brokenObject || object, max: maxPieces,
+                    key: keyOf(spec.object + "|" + shape.count + "|" + Math.round(centre.x * 100) + "," + Math.round(centre.y * 100) + "," + Math.round(centre.z * 100) + "|" + how + "|" + maxPieces),
+                    particles: sh.particles !== undefined ? Math.max(0, sh.particles) : 120, kind: PARTICLE_SHAPES[sh.particle] !== undefined ? PARTICLE_SHAPES[sh.particle] : 0,
+                    colour: particleColour(sh), size: sh.size > 0 ? sh.size : 0.012
+                };
+                if (OpenRacer.Shatter) (function (info, holder) {
+                    OpenRacer.Shatter.register(info.key, {
+                        build: function () { return info.how === "none" ? [] : piecesOf(info.source, info.max, info.how === "mesh", parts.filter(function (x) { return x.object !== holder; }).map(function (x) { return x.object; })); },
+                        top: function () { var t = holder; while (t.parent) t = t.parent; return t.isScene ? t : null; },
+                        ground: function () { return v.ground; }
+                    });
+                })(shatter, object);
+            }
             parts.push({
+                shatter: shatter,
                 name: spec.object, spec: spec, object: object, body: body, collider: collider, centre: centre, mass: mass, nodes: nodes,
                 hinge: hinge && {
                     origin: new THREE.Vector3().fromArray(hinge.origin || [centre.x, centre.y, centre.z]),
@@ -224,6 +397,13 @@ OpenRacer.Parts = (function () {
             parts.push({ name: "wheel " + (w.name || wi), wheel: wi, object: wheelObject, body: wbody, collider: wcollider, centre: new THREE.Vector3(), mass: w.mass || 20, nodes: [], mounts: [], hinge: null,
                 breakForce: 0, state: "held", joint: null, grace: 0, lastVel: new THREE.Vector3(), load: 0, hasVel: false, spec: {} });
         });
+        // parts on parts: a part whose object is in the object of another part (the glass of a door, a holder on a bumper) goes with it; while that one moves its load is
+        // measured against it (a holder breaks off when the bumper lands hard), and when it comes off it starts where it is on it
+        parts.forEach(function (p) { p.children = []; p.parentPart = null; });
+        parts.forEach(function (p) {
+            if (p.wheel !== undefined) return;
+            for (var o = p.object.parent; o && !p.parentPart; o = o.parent) for (var k = 0; k < parts.length; k++) if (parts[k] !== p && parts[k].wheel === undefined && parts[k].object === o) { p.parentPart = parts[k]; parts[k].children.push(p); break; }
+        });
         if (!parts.length) return null;
         function emit(name, part) {
             events.push({ name: name, part: part.name, frame: frame });
@@ -231,7 +411,34 @@ OpenRacer.Parts = (function () {
         }
 
         // the part in the engine at the place it has on the car now (the nodes that it hangs on have moved it)
+        // a part on a part that moves: its place and its speed on the body of that part (from where it was on it when that one came off)
+        var onP = new THREE.Vector3(), onQ = new THREE.Quaternion();
+        function onMovingParent(part) { var pp = part.parentPart; return !!(pp && part.onParent && (pp.state === "hinged" || pp.state === "free")); }
+        function parentPoint(part, outPos, outVel) {
+            var body = part.parentPart.body, t = body.translation(), r = body.rotation(), lv = body.linvel(), av = body.angvel();
+            onQ.set(r.x, r.y, r.z, r.w);
+            outPos.copy(part.onParent).applyQuaternion(onQ).add(onP.set(t.x, t.y, t.z));
+            if (outVel) { onP.subVectors(outPos, onP); outVel.set(lv.x + av.y * onP.z - av.z * onP.y, lv.y + av.z * onP.x - av.x * onP.z, lv.z + av.x * onP.y - av.y * onP.x); }
+            return onQ;
+        }
+        // when a part comes off, the parts on it keep their place on its body
+        function holdChildren(part) {
+            var t = part.body.translation(), r = part.body.rotation();
+            onQ.set(r.x, r.y, r.z, r.w).invert();
+            part.children.forEach(function (ch) {
+                if (ch.state !== "held") return;
+                toWorld(ch.centre, c);
+                ch.onParent = new THREE.Vector3(c.x - t.x, c.y - t.y, c.z - t.z).applyQuaternion(onQ);
+                ch.hasVel = false;
+            });
+        }
         function placeBody(part) {
+            if (onMovingParent(part)) {
+                var rq = parentPoint(part, b, null);
+                part.body.setTranslation({ x: b.x, y: b.y, z: b.z }, true);
+                part.body.setRotation({ x: rq.x, y: rq.y, z: rq.z, w: rq.w }, true);
+                return b;
+            }
             a.set(0, 0, 0);
             if (sb && part.nodes.length) {
                 for (var i = 0; i < part.nodes.length; i++) {
@@ -361,14 +568,59 @@ OpenRacer.Parts = (function () {
             emit("wheel torn", part);
         }
 
+        // a part that comes off: a breakable one breaks, the others fall off
+        function comeOff(part) { if (part.shatter) shatterPart(part); else startMoving(part, "free"); }
+        // A part breaks: it is gone at once (hidden, out of the physics, its own nodes out of the shell), and its pieces fly off with the speed that the car has
+        // at their place and a little more outward and up, turning; the particles with them (Shatter.js)
+        var shatterQ = new THREE.Quaternion(), shatterP = new THREE.Vector3(), shatterS = new THREE.Vector3(), shatterM = new THREE.Matrix4(), carInv = new THREE.Quaternion();
+        function shatterPart(part) {
+            if (part.state === "broken") return;
+            part.children.forEach(function (ch) { if (ch.state === "held") comeOff(ch); });       // (what is on it falls off: there is nothing to hold it)
+            var info = part.shatter, o = part.object;
+            o.updateWorldMatrix(true, true);
+            info.source.updateWorldMatrix(true, true);
+            part.state = "broken"; part.breakTimer = null;
+            if (part.joint) { world.removeImpulseJoint(part.joint, true); part.joint = null; }
+            part.collider.setCollisionGroups(0);
+            o.visible = false;
+            if (part.group && sb) sb.detachGroup(part.group);
+            emit("broken", part);
+            var S = OpenRacer.Shatter;
+            if (!S) return;
+            q.set(v.qx, v.qy, v.qz, v.qw); carInv.copy(q).invert();
+            var shapesList = S.shapes ? S.shapes(info.key) : null;
+            (shapesList || []).forEach(function (look, i) {
+                shatterM.makeTranslation(look.centre.x, look.centre.y, look.centre.z).premultiply(info.source.matrixWorld);
+                shatterM.decompose(shatterP, shatterQ, shatterS);
+                // the speed of the car at the piece, and a little away from the middle of the car and up
+                a.copy(shatterP).sub(carPos).applyQuaternion(carInv);
+                pointVelocity(a, b);
+                c.set(shatterP.x - v.px, 0, shatterP.z - v.pz);
+                if (c.lengthSq() < 1e-6) c.set(1, 0, 0);
+                c.normalize().multiplyScalar(0.6 + Math.random() * 1.6);
+                b.x += c.x + (Math.random() - 0.5) * 0.8; b.y += 0.4 + Math.random() * 1.4; b.z += c.z + (Math.random() - 0.5) * 0.8;
+                c.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(3 + Math.random() * 9);
+                S.piece(info.key, i, shatterP, shatterQ, shatterS.x, b, c);
+            });
+            if (info.particles > 0) {
+                var box = new THREE.Box3().setFromObject(info.source), mid = box.getCenter(new THREE.Vector3()), extent = box.getSize(new THREE.Vector3());
+                a.copy(mid).sub(carPos).applyQuaternion(carInv);
+                pointVelocity(a, b);
+                S.burst(mid.x, mid.y, mid.z, b.x, b.y, b.z, info.particles, info.kind, info.colour, info.size, Math.max(0.05, Math.max(extent.x, extent.y, extent.z) * 0.4), Math.floor(Math.random() * 1e9), info.key);
+            }
+        }
+
         function startMoving(part, how) {
             var wasHeld = part.state === "held";
             if (wasHeld) {
+                var onParent = onMovingParent(part);
                 placeBody(part);
                 part.body.setBodyType(R.RigidBodyType.Dynamic, true);
-                pointVelocity(part.centre, b);
+                var spinNow = { x: v.wx, y: v.wy, z: v.wz };
+                if (onParent) { parentPoint(part, a, b); spinNow = part.parentPart.body.angvel(); } else pointVelocity(part.centre, b);
                 part.body.setLinvel({ x: b.x, y: b.y, z: b.z }, true);
-                part.body.setAngvel({ x: v.wx, y: v.wy, z: v.wz }, true);
+                part.body.setAngvel({ x: spinNow.x, y: spinNow.y, z: spinNow.z }, true);
+                holdChildren(part);
                 leaveModel(part);
                 // the nodes of the part go with it, but not before the hit is over: while it is being hit they go on taking it (and deforming)
                 if (part.group && sb) part.detachTimer = 0.3;
@@ -436,7 +688,7 @@ OpenRacer.Parts = (function () {
             var carSpeed = Math.hypot(v.vx, v.vy, v.vz);
             for (var i = 0; i < parts.length; i++) {
                 var p = parts[i];
-                if (p.state === "held") continue;
+                if (p.state === "held" || p.state === "broken") continue;
                 var spin = p.body.angvel(), s = Math.hypot(spin.x, spin.y, spin.z), maxSpin = p.spec.max_spin !== undefined ? p.spec.max_spin : (p.state === "hinged" ? MAX_SPIN_HINGED : MAX_SPIN_FREE);
                 if (s > maxSpin) p.body.setAngvel({ x: spin.x * maxSpin / s, y: spin.y * maxSpin / s, z: spin.z * maxSpin / s }, true);
                 var lin = p.body.linvel(), l = Math.hypot(lin.x, lin.y, lin.z), maxLin = carSpeed + EXTRA_SPEED + (p.state === "hinged" ? 0 : 20);
@@ -460,15 +712,17 @@ OpenRacer.Parts = (function () {
                     if (part.state !== "held") { moving = true; settle(part, dt); }
                     continue;
                 }
+                if (part.state === "broken") continue;                         // (a part that broke: its pieces are in Shatter.js)
                 if (part.openTimer > 0) { part.openTimer -= dt; if (part.openTimer <= 0) { part.openTimer = 0; if (part.state === "held") startMoving(part, "hinge"); } }
                 if (part.detachTimer > 0) { part.detachTimer -= dt; if (part.detachTimer <= 0 && sb) sb.detachGroup(part.group); }
                 // the load: inertia of the part (mass times the acceleration of its place) and the shell on its nodes
-                pointVelocity(part.centre, b);
+                var onMoving = part.state === "held" && onMovingParent(part);
+                if (onMoving) parentPoint(part, c, b); else pointVelocity(part.centre, b);
                 var inertia = 0;
                 if (part.hasVel && !still) inertia = part.mass * b.distanceTo(part.lastVel) / dt;
                 part.lastVel.copy(b); part.hasVel = true;
                 var shell = 0, torn = false;
-                if (sb) {
+                if (sb && !onMoving) {
                     for (var k = 0; k < part.nodes.length; k++) {
                         var node = part.nodes[k];
                         if (!sb.alive(node) && part.state === "held") torn = true;      // (the nodes of a part that has come loose are gone on purpose)
@@ -479,7 +733,11 @@ OpenRacer.Parts = (function () {
                 part.load = frame > 3 ? Math.max(inertia, shell) : 0;
                 part.inertia = frame > 3 ? inertia : 0;
 
-                if (part.state === "held" && part.mounts.length) {
+                if (onMoving) {
+                    // on a part that moves (a door that swings, a bumper that fell off): it breaks off it at its force (a hinge at the force that tears it off)
+                    var limit = part.breakForce || (part.hinge && part.hinge.breakForce) || 0;
+                    if (limit > 0 && part.load > limit) comeOff(part);
+                } else if (part.state === "held" && part.mounts.length) {
                     // the pins: one that is loaded past its breaking force is gone; one that is loaded past its activation force lets the part open
                     var holding = part.mounts.filter(function (m) { return m.alive; });
                     var broke = false, activated = false;
@@ -492,7 +750,7 @@ OpenRacer.Parts = (function () {
                         if (part.mounts.some(function (m) { return m.alive; })) startMoving(part, "hinge"); else startMoving(part, "free");
                     } else if (activated && part.hinge) openSoon(part);
                 }
-                if (part.state === "held" && sb && part.mounts.length) {
+                if (part.state === "held" && !onMoving && sb && part.mounts.length) {
                     // a link beam of a mount tore (the hold of a part with nodes of its own): that mount is gone, the part opens on the others
                     var lost = false;
                     part.mounts.forEach(function (m) { if (m.alive && m.beam !== undefined && !sb.beamAlive[m.beam]) { m.alive = false; lost = true; emit("mount torn", part); } });
@@ -500,17 +758,17 @@ OpenRacer.Parts = (function () {
                         if (part.mounts.some(function (m) { return m.alive; })) startMoving(part, "hinge"); else startMoving(part, "free");
                     }
                 }
-                if (part.state === "held") {
+                if (part.state === "held" && !onMoving) {
                     if (part.hinge) {
                         if (!part.hinge.latch || part.load > part.hinge.latch || torn) openSoon(part);
                     } else if (part.breakTimer === null || part.breakTimer === undefined) {
                         // a breakable part: when the load passes its force it goes on bending with the body for a moment, and then it comes off
                         if (torn || (part.breakForce > 0 && part.load > part.breakForce)) {
-                            if (part.breakDelay > 0) part.breakTimer = part.breakDelay; else startMoving(part, "free");
+                            if (part.breakDelay > 0 && !part.shatter) part.breakTimer = part.breakDelay; else comeOff(part);
                         }
                     } else {
                         part.breakTimer -= dt;
-                        if (part.breakTimer <= 0) { part.breakTimer = null; startMoving(part, "free"); }
+                        if (part.breakTimer <= 0) { part.breakTimer = null; comeOff(part); }
                     }
                 } else if (part.state === "hinged") {
                     if (part.mounts.length) tearMounts(part);
@@ -539,7 +797,7 @@ OpenRacer.Parts = (function () {
             world.step(); limitSpeeds();
             for (var j = 0; j < parts.length; j++) {
                 var p = parts[j];
-                if (p.state === "held" || p.fetching) continue;           // (a part that the pit stop carries back is put where it is by fetchTo)
+                if (p.state === "held" || p.state === "broken" || p.fetching) continue;           // (a part that the pit stop carries back is put where it is by fetchTo)
                 var t = p.body.translation(), r = p.body.rotation();
                 bodyM.compose(a.set(t.x, t.y, t.z), qInv.set(r.x, r.y, r.z, r.w), unit);
                 p.object.matrix.multiplyMatrices(bodyM, p.visual);
@@ -601,7 +859,7 @@ OpenRacer.Parts = (function () {
             return null;
         }
         function toggleHinge(p) {
-            if (!p || !p.hinge || p.fetching) return null;
+            if (!p || !p.hinge || p.fetching || onMovingParent(p)) return null;
             if (p.state === "hinged") { putBack(p); return "closed"; }
             if (p.state !== "held") return null;
             startMoving(p, "hinge");
@@ -618,7 +876,8 @@ OpenRacer.Parts = (function () {
             return "opened";
         }
         function breakLoose(p) {
-            if (!p || p.fetching || p.state === "free") return false;
+            if (!p || p.fetching || p.state === "free" || p.state === "broken") return false;
+            if (p.shatter) { shatterPart(p); return true; }
             startMoving(p, "free");
             p.mounts.forEach(function (m) { m.alive = false; });
             return true;
@@ -642,6 +901,7 @@ OpenRacer.Parts = (function () {
                 p.object.traverse(function (m) { if (m.userData && m.userData.sbDeform) m.userData.sbDeform.value = 1; });
                 if (ctx.softBodyMesh && ctx.softBodyMesh.unfreeze) ctx.softBodyMesh.unfreeze(p.object);
             }
+            p.object.visible = true; p.onParent = null;
             p.mounts.forEach(function (m) { m.alive = true; });
             p.detachTimer = 0; p.breakTimer = null; p.openTimer = 0;
             p.state = "held"; p.hasVel = false; p.grace = 0; p.pending = false; p.region = null; p.fetching = false;
@@ -688,7 +948,7 @@ OpenRacer.Parts = (function () {
             });
             return list;
         }
-        function fetchFade(p, opacity) { if (p && p.fetching && !p.fetchOn) setOpacity(p, Math.max(0, Math.min(1, opacity))); }
+        function fetchFade(p, opacity) { if (p && p.fetching && !p.fetchOn) setOpacity(p, p.state === "broken" ? 0 : Math.max(0, Math.min(1, opacity))); }
         // where a part (or a wheel) belongs, in the world: its home in the model, or the middle of its wheel on the car
         function homeOf(p) {
             if (p.wheel !== undefined) {
@@ -762,9 +1022,10 @@ OpenRacer.Parts = (function () {
             // out: Float32Array(parts.length * 11)
             replayRecord: function (out) {
                 for (var i = 0; i < parts.length; i++) {
-                    var p = parts[i], o = i * PART_FLOATS, code = p.state === "held" ? 0 : (p.state === "hinged" ? 1 : 2);
+                    // (3: broken, it is not seen; a broken part that the pit stop puts back is on the car)
+                    var p = parts[i], o = i * PART_FLOATS, code = p.state === "held" ? 0 : (p.state === "hinged" ? 1 : (p.state === "broken" ? (p.fetching && p.fetchOn ? 0 : 3) : 2));
                     out[o] = code;
-                    if (!code) { for (var k = 1; k < PART_FLOATS; k++) out[o + k] = 0; continue; }
+                    if (!code || code === 3) { for (var k = 1; k < PART_FLOATS; k++) out[o + k] = 0; continue; }
                     p.object.matrix.decompose(tmpP, tmpQ, tmpS);
                     out[o + 1] = tmpP.x; out[o + 2] = tmpP.y; out[o + 3] = tmpP.z;
                     out[o + 4] = tmpQ.x; out[o + 5] = tmpQ.y; out[o + 6] = tmpQ.z; out[o + 7] = tmpQ.w;
@@ -777,6 +1038,8 @@ OpenRacer.Parts = (function () {
                     var p = parts[i], o = i * PART_FLOATS, code = arr[o];
                     // (a part that a pit stop fades away and puts back: its opacity at this time, from the recording of the stop, Pit.js)
                     var fade = OpenRacer.PitStop && OpenRacer.PitStop.replayedPart ? OpenRacer.PitStop.replayedPart(i) : null;
+                    if (code === 3) { if (p.rAway) backOnModel(p); p.object.visible = false; p.rHidden = true; continue; }
+                    if (p.rHidden) { p.object.visible = true; p.rHidden = false; }
                     if (fade !== null) { fadeable(p); setOpacity(p, fade); } else if (p.fadeMats && !p.fetching) unfade(p);
                     if (!code) { if (p.rAway) backOnModel(p); continue; }
                     if (!p.rAway) awayFromModel(p, frozen ? frozen(i) : null);
@@ -787,13 +1050,16 @@ OpenRacer.Parts = (function () {
             replayBegin: function () {
                 if (replaying) return;
                 replaying = true;
-                parts.forEach(function (p) { p.rAway = p.state !== "held"; });
+                parts.forEach(function (p) { p.rAway = p.state !== "held" && p.state !== "broken"; p.rHidden = p.state === "broken"; });
             },
             // back to the game: every part where the game has it
             replayEnd: function () {
                 replaying = false;
                 parts.forEach(function (p) {
-                    if (p.state === "held") { if (p.rAway) backOnModel(p); return; }
+                    p.rHidden = false;
+                    if (p.state === "broken") { if (p.rAway) backOnModel(p); p.object.visible = false; return; }
+                    if (p.state === "held") { p.object.visible = true; if (p.rAway) backOnModel(p); return; }
+                    p.object.visible = true;
                     if (!p.rAway) awayFromModel(p, null);
                     var t = p.body.translation(), r = p.body.rotation();
                     bodyM.compose(a.set(t.x, t.y, t.z), qInv.set(r.x, r.y, r.z, r.w), unit);
@@ -814,5 +1080,5 @@ OpenRacer.Parts = (function () {
         };
     }
 
-    return { create: create, build: build };
+    return { create: create, build: build, hideBroken: hideBroken, isBroken: isBroken, particleColours: PARTICLE_COLOURS };
 })();

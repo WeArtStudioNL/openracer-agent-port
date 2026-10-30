@@ -163,6 +163,7 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
 
     function build(root) {
         fixTextureChannels(root);
+        if(OpenRacer.Parts && OpenRacer.Parts.hideBroken) OpenRacer.Parts.hideBroken(root);       // (the broken forms of parts, <name>_broken: not seen, not in the physics)
         calipersRoot = root;
         var pivot = new THREE.Group();
         pivot.add(root);

@@ -49,6 +49,21 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - A part that is made a hinge (*Hinge part* in the window of the part, or *Hinge* in the list of parts) turns about the origin of its object in the model, its pivot: the window of the part gets a first pin point there (about X, from -90 to 90 degrees), whose axes and limits are set as before, and the list fills in the origin. The origin field has an *Object* button that puts it there again. A model whose objects all have their origin in the middle of the car (the OpenRacer Muscle has) gets the hinge there: set the origin of the object to its hinge in the model (in Blender: Set Origin), or move the pin point.
 
+### Breakable parts: glass that shatters
+
+- **A part can shatter** (car.json `mode: "breakable"`, in the car editor *Breakable only* and then *Breakable: it shatters*): at its force it is gone, and in its place are its pieces and a cloud of particles (Shatter.js). The pieces are its faces, in at most *Pieces at most* clusters, or the pieces of the hidden object `<name>_broken` of the model (every mesh in it, or the parts of a single mesh that lie apart); they fly off with the speed of the car and a little outward and up, tumble, bounce on the road, lie down flat, lie seven seconds and shrink away. The particles: a number, a shape (shards, splinters, grains), a size and a material (glass, tinted glass, red, orange, white or black plastic, chrome) or a colour of its own. *Show the broken mesh* and *Break it now* are in the window of the part. The debug view's *Break parts* breaks it too.
+- **Objects named `<name>_broken`** are hidden when the model loads and left out of the physics: the collision spheres, the shapes of the parts, the shell on the model and the list of objects in the car editor.
+- **The replay shows it**: the part is gone from the moment it broke (a new state of a part in the recording), and the pieces and the particles are made again as they were (the effect `shatter`, in saved replays too).
+- Measured on the OpenRacer Muscle: a hit with the middle mouse button on a breakable taillight (34 kN on the shell) broke it at once into 24 pieces and 140 particles, which lay on the road after two seconds and were gone after twelve; the replay showed the light before the hit and the pieces after it.
+
+### Parts on parts
+
+- **A part in another part goes with it and can still break.** A part whose object is inside the object of another part in the model (the glass of a door, a holder on a bumper) goes with it when it swings or falls off. While that one moves, the load of the part is measured against it, its mass times the change of the speed of its place on that part, and at its force it comes off there (or shatters) and starts from where it is: a holder breaks off when the bumper lands hard. A part that shatters lets the parts on it fall. Measured with a test object in the left door of the hatchback: open, it went 0.79 m with the door; with the door fallen off the load peaked at 534 N when it landed, and with a force of 320 N the test object came off in that frame, beside the door.
+
+### Fixed
+
+- **After a car was built again in the game (a tune applied in the tuning menu) the parts and the collision spheres were in the wrong place**: the shape was read with the model already in the car, so the place of the car on the track went into it (8 to 13 m beside the car on netherlands1). A loose part came off there. The model is now read in its own space (CollisionProxy.js); measured: 0 m, as on the first load.
+
 ### Setups keep the parts of the car
 
 - **A setup no longer has parts and a shell of its own.** A setup (a tune, also one shipped with the car) held a copy of all of car.json, the loose parts and the shell too, so a part or a hinge made in the car editor after the setup was saved was not there while the setup was on: the Hood of the OpenRacer Muscle with V12 rebuild, the doors and the boot of the hatchback with Race. The parts and the shell are now always those of car.json; of the shell a setup keeps what the tuning menu sets (dents on or off, the most nodes, the strength of the wheels). Checked in the game and the car editor: the Hood with V12 rebuild, the boot and the doors with Race.
@@ -56,6 +71,7 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 ### Debug view: the node grabber
 
 - With the debug view on (0), **N** switches the node grabber on: press on a node of the shell with the left mouse button and drag it, held by an elastic (red), as in BeamNG. Its strength (100 N/m to 200 kN/m) is set in a panel at the top right, which can be moved. A weak elastic tugs at the shell, a strong one bends and tears it, or lifts the whole car. N does not switch the ESC while the debug view is on.
+- **The strength of the hit of the middle mouse button** is a slider in the panel of the node grabber (N): the speed of the block of a tonne, 5 to 200 km/h (it was 50), with the force it makes; it is remembered. Measured on the OpenRacer Muscle: 20 km/h dented the side 12.7 cm and pushed the car to 1.1 m/s, 150 km/h 63.7 cm and 10 m/s.
 - **Open hinges** and **Break parts** in the panel of the node grabber, two buttons that switch on and off (one at a time). With Open hinges a right click on a hinged part (a door, the hood, the boot) opens it with a small torque about its hinge (the way its middle goes up; a door the way it has the most room), and another right click closes it where it was made; with Break parts a right click on a part breaks it loose. A line under the buttons says what was done. Measured on the hood of the OpenRacer Muscle: open to 46 degrees in a second, shut again at 0.
 
 ### Debug view: a hit with the mouse
