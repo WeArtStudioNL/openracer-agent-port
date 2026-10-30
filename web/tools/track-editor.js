@@ -879,6 +879,9 @@ $("dragLength").addEventListener("change", dragChanged);
 $("dragRemove").addEventListener("click", () => { state.drag = null; updateMarkers(); });
 $("dragClose").addEventListener("click", () => setMode("view"));
 OpenRacer.Movable.make($("dragWindow"), { key: "track-editor-drag", handle: $("dragWindow").firstElementChild });
+// the Layers panel and the drawer of the track (Track, Prefabs) are moved by their heads too, as the other windows: they lay over each other at the bottom right
+OpenRacer.Movable.make($("eventLayers"), { key: "track-editor-layers", handle: $("eventLayers").firstElementChild });
+OpenRacer.Movable.make($("drawer"), { key: "track-editor-drawer", handle: $("drawer").querySelector(".head") });
 // a drag strip that was loaded: the window shows its distance
 function showDrag() {
     if (!state.drag) return;
