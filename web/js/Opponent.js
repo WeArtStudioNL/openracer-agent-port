@@ -365,7 +365,8 @@ OpenRacer.Opponent = function (config, line, options) {
         var here = line.point(this.lineIndex);
         var offLine = Math.hypot(here.x - v.x, here.z - v.z);
         var upY = 1 - 2 * (v.qx * v.qx + v.qz * v.qz);
-        var wheelOff = v.wheelLost && (v.wheelLost[0] || v.wheelLost[1] || v.wheelLost[2] || v.wheelLost[3]);
+        // (a motorcycle has no wheels 1 and 3: they are "lost" from the start, and every AI motorcycle was put back as crashed every three seconds)
+        var wheelOff = v.wheelLost && [0, 1, 2, 3].some(function (k) { return v.wheelLost[k] && !(v.soloWheels && (k === 1 || k === 3)); });
         // a hard hit: the speed over the road fell by more than 8 m/s within a fifth of a second (a wall, another car; a landing from a jump is not this: that is vertical)
         var over = Math.hypot(v.vx, v.vz);
         speedTrail.push(over); if (speedTrail.length > 7) speedTrail.shift();
@@ -402,6 +403,12 @@ OpenRacer.Opponent = function (config, line, options) {
         var road = ground && ground.query ? ground.query(x, z, at.y + 5, 10) : null;
         if (!road || road.surface !== "road" && road.surface !== "track01" && road.surface !== (at.surface || "road")) { x = at.x + dz * 1.5; z = at.z - dx * 1.5; }
         v.reset(x, z, Math.atan2(dz, dx));
+        // repaired, as the comment says it is: the shell, the parts, the wheels and the tyres; and a motorcycle that was down is up again with its rider on it
+        // (it stayed "crashed": no throttle and no steering, so it was put back again every few seconds and never got going; a torn-off wheel was a new crash at once)
+        if (v.repair) v.repair();
+        if (v.controller && v.controller.recover) v.controller.recover();
+        if (this.driver && this.driver.recover) this.driver.recover();
+        if (this.parts && this.parts.moved) this.parts.moved();
         this.lostFor = 0; this.overFor = 0; this.stuck = 0; smoothSteer = 0; this.reverse = false; speedTrail.length = 0;        // (the stop of the reset is no hit)
         this.anchor = null; this.stillFor = 0;
         this.throttle = 0; this.brakePedal = 1; this.turnAngle = 0;
