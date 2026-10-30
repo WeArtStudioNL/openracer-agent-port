@@ -479,7 +479,17 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         e1 = [e1[0] / l1, e1[1] / l1, e1[2] / l1];
         var e2 = [n[1] * e1[2] - n[2] * e1[1], n[2] * e1[0] - n[0] * e1[2], n[0] * e1[1] - n[1] * e1[0]];
         var surface = n[0] * point[0] + n[1] * point[1] + n[2] * point[2];
-        this.plate = { n: n, e1: e1, e2: e2, p: point.slice(), force: newtons, pushT: pushTime || 0.03, half: Math.max(0.05, side / 2), mass: Math.max(1, cubeMass || 100), surface: surface, w: surface + 0.4, vw: 0, held: 0, peak: 0, travelled: 0, hit: false, done: false, group: group };
+        // it starts outside every node under its square: a node that stuck out more than 40 cm from the point (an edge, a wheel arch, a slanted face: the square lies
+        // across the normal of the face that was clicked) began deep inside the cube and was pushed out by its spring at once, 1000 times the force of the hit
+        var half = Math.max(0.05, side / 2), start = surface + 0.4;
+        for (var k = 0; k < N; k++) {
+            if (!anchorAlive[k] || (group !== undefined && partOf[k] !== group)) continue;           // (the same nodes as the push takes)
+            var ix = 3 * k, x = rest[ix] + u[ix] + q[ix], y = rest[ix + 1] + u[ix + 1] + q[ix + 1], z = rest[ix + 2] + u[ix + 2] + q[ix + 2];
+            var dx = x - point[0], dy = y - point[1], dz = z - point[2], r = radius[k];
+            if (Math.abs(dx * e1[0] + dy * e1[1] + dz * e1[2]) > half + r || Math.abs(dx * e2[0] + dy * e2[1] + dz * e2[2]) > half + r) continue;
+            start = Math.max(start, n[0] * x + n[1] * y + n[2] * z + r + 0.05);
+        }
+        this.plate = { n: n, e1: e1, e2: e2, p: point.slice(), force: newtons, pushT: pushTime || 0.03, half: half, mass: Math.max(1, cubeMass || 100), surface: surface, w: start, vw: 0, held: 0, peak: 0, travelled: 0, hit: false, done: false, group: group };
         this.pinned = true;
         this.quiet = false;
     };

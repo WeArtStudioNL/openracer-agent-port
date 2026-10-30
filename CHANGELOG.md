@@ -45,6 +45,10 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - The tuning menu has the cards of the car editor, with the same names and in the same order: Wheels, Suspension and driveline, Chassis, Drivetrain, Engine, Engine sound, Assists and extras, Cameras, Soft body (and Motorcycle, and the Mirrors of the game). Every card holds its groups (Chassis: Chassis settings, Brakes, Aerodynamics and steering, Size and steering wheel; Engine: Fuel, Engine settings), the card Engine shows the power and the card Drivetrain the top speed. The structure is one list for both (`OpenRacer.CarTuning.CARDS`). The torque-curve rows (peak power and its rpm) are gone from the menu: the curve follows from the engine that is built in the editor.
 
+### Apply force and the hit of the debug view: a small hit is a small hit
+
+- **A small hit could act as an enormous one.** The cube started 40 cm outside the point that was clicked and pushed every node under its square of a metre; the square lies across the normal of the face that was clicked, so on an edge, a slanted face or near a wheel arch nodes elsewhere under it stuck out further than that and began deep inside the cube: their spring threw them out at once. Measured on the OpenRacer Muscle at 3 km/h from 16 directions: 9 to 27 kN at most places, but 1493 and 5401 kN at two. The cube now starts outside the node that sticks out furthest under it and hits that one first: 12 to 30 kN and 0.5 to 1.6 cm at all 16 at 3 km/h, 286 to 981 kN and 17 to 37 cm at 50 km/h. The middle mouse button of the debug view fires the same cube.
+
 ### Car editor: Apply force without the shell in the way
 
 - **While Apply force is on (Tests, Crash test) the nodes and the beams of the shell are not drawn**: the shell works as before, but the car and the arrow are seen. After Release they are drawn again when the shell was shown.
