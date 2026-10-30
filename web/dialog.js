@@ -6,6 +6,7 @@
  *
  *   OpenRacerDialog.ask({ title, text, details, ok, cancel, danger })  Promise of true (ok) or false (cancel, Esc, a click beside the window)
  *   OpenRacerDialog.tell({ title, text, details, ok })                 Promise, when it is closed
+ *   OpenRacerDialog.prompt({ title, text, input, ok })                 Promise of the text that was typed, or null
  *
  *   details: a list of lines of text, or of [name, before, after] for a list of changes, or a DOM node; it scrolls when it is long.
  */
@@ -29,6 +30,7 @@ var OpenRacerDialog = (function () {
             "#orDialog .details .was { color: var(--bad, #ff6b62); text-decoration: line-through; opacity: .85; }" +
             "#orDialog .details .now { color: var(--ok, #3ddc84); }" +
             "#orDialog .actions { display: flex; justify-content: flex-end; gap: 10px; }" +
+            "#orDialog input.field { font: 15px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: var(--head, #f4f6f8); background: var(--bg2, #14181d); border: 1px solid var(--line, #272e37); border-radius: 8px; padding: 9px 12px; margin: 0 0 14px; }" +
             "#orDialog button { font: 600 15px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: var(--text, #d9dee5); background: var(--bg2, #14181d); border: 1px solid var(--line, #272e37); border-radius: 8px; padding: 9px 18px; cursor: pointer; }" +
             "#orDialog button:hover { border-color: var(--muted, #8d97a3); color: var(--head, #f4f6f8); }" +
             "#orDialog button.primary { background: var(--accent, #ff5a1f); border-color: var(--accent, #ff5a1f); color: #fff; }" +
@@ -85,12 +87,37 @@ var OpenRacerDialog = (function () {
             if (options.text) { var t = document.createElement("div"); t.className = "text"; t.textContent = options.text; box.appendChild(t); }
             var d = detailsNode(options.details);
             if (d) box.appendChild(d);
+            var field = null;
+            if (options.input !== undefined) {
+                field = document.createElement("input");
+                field.className = "field"; field.type = "text"; field.value = options.input || ""; field.maxLength = options.maxLength || 60;
+                field.setAttribute("aria-label", options.title || "Name");
+                box.appendChild(field);
+            }
             var actions = document.createElement("div");
             actions.className = "actions";
-            function finish(answer) { document.removeEventListener("keydown", onKey, true); shade.remove(); resolve(answer); }
+            var before = document.activeElement;
+            function finish(answer) {
+                document.removeEventListener("keydown", onKey, true); shade.remove();
+                if (before && before.focus && document.contains(before)) before.focus();          // (the focus goes back where it was)
+                resolve(field ? (answer ? field.value : null) : answer);
+            }
             function onKey(e) {
                 if (e.code === "Escape") { e.preventDefault(); e.stopPropagation(); finish(false); }
-                else if (e.code === "Enter") { e.preventDefault(); e.stopPropagation(); finish(true); }
+                else if (e.code === "Enter") {
+                    // Enter is the button that has the focus (Tab to Cancel, then Enter, deleted the car all the same); OK when none has it
+                    e.preventDefault(); e.stopPropagation();
+                    var focused = document.activeElement;
+                    if (focused && focused.tagName === "BUTTON" && box.contains(focused)) focused.click(); else ok.click();
+                }
+                else if (e.code === "Tab") {
+                    // the focus stays in the window
+                    var buttons = Array.prototype.slice.call(box.querySelectorAll("button, input"));
+                    if (!buttons.length) return;
+                    var at = buttons.indexOf(document.activeElement);
+                    e.preventDefault();
+                    buttons[(at + (e.shiftKey ? buttons.length - 1 : 1) + buttons.length) % buttons.length].focus();
+                }
             }
             if (withCancel) {
                 var cancel = document.createElement("button");
@@ -101,13 +128,18 @@ var OpenRacerDialog = (function () {
             var ok = document.createElement("button");
             ok.className = options.danger ? "danger" : "primary";
             ok.textContent = options.ok || "OK";
-            ok.onclick = function () { finish(true); };
+            ok.onclick = function () {
+                if (field && !field.value.trim()) { field.focus(); return; }           // (a name is needed)
+                finish(true);
+            };
             actions.appendChild(ok);
             box.appendChild(actions);
             shade.onclick = function (e) { if (e.target === shade) finish(false); };
             document.addEventListener("keydown", onKey, true);
+            shade.setAttribute("role", "dialog"); shade.setAttribute("aria-modal", "true"); shade.setAttribute("aria-label", options.title || "");
             document.body.appendChild(shade);
-            ok.focus();
+            // (a question that deletes something starts on Cancel: a stray Enter or Space does not delete)
+            if (field) { field.focus(); field.select(); } else if (options.danger && cancel) cancel.focus(); else ok.focus();
         });
     }
 
@@ -131,6 +163,8 @@ var OpenRacerDialog = (function () {
     return {
         ask: function (options) { return show(options || {}, true); },
         tell: function (options) { return show(options || {}, false); },
+        // a name: Promise of the text, or null (cancel, Esc). options.input is the text it starts with
+        prompt: function (options) { options = Object.assign({}, options || {}); if (options.input === undefined) options.input = ""; return show(options, true); },
         differences: differences
     };
 })();

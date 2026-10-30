@@ -610,29 +610,42 @@ var Tuning = (function() {
         saveSetup.onclick = function() {
             var name = setupSelect.value;
             if(!name) { message("Choose a setup to overwrite, or Save as new…"); return; }
-            OpenRacer.Setups.save(config.id, name, tunedConfig());           // (the whole car, as it is tuned; the main menu draws its picture)
+            var ok = OpenRacer.Setups.save(config.id, name, tunedConfig());           // (the whole car, as it is tuned; the main menu draws its picture)
             refresh();
-            message("Setup " + name + " saved.");
+            message(ok === false ? "Could not save: the storage of this browser is full." : "Setup " + name + " saved.");
         };
         var saveNew = document.createElement("button");
         saveNew.textContent = "Save as new…";
+        // (a name in a window of the game: the prompt of the browser stopped the game, and looked out of place in full screen and on a phone; a name that is
+        // there already is overwritten only when that is confirmed)
+        function askName(title, value) {
+            return OpenRacerDialog.prompt({ title: title, input: value || "", ok: "Save", maxLength: 40 }).then(function(name) {
+                if(name === null) return null;
+                name = name.trim().slice(0, 40);
+                if(!name) return null;
+                if(OpenRacer.Setups.names(config.id).indexOf(name) < 0) return name;
+                return OpenRacerDialog.ask({ title: "Overwrite the setup “" + name + "”?", text: "There is a setup with this name already.", ok: "Overwrite", danger: true }).then(function(yes) { return yes ? name : null; });
+            });
+        }
         saveNew.onclick = function() {
-            var name = window.prompt("The name of the new setup", "");
-            if(name === null) return;
-            name = name.trim().slice(0, 40);
-            if(!name) return;
-            OpenRacer.Setups.save(config.id, name, tunedConfig());
-            refresh();
-            message("Setup " + name + " saved; the main menu asks which tune to drive.");
+            askName("The name of the new setup").then(function(name) {
+                if(!name) return;
+                var ok = OpenRacer.Setups.save(config.id, name, tunedConfig());
+                refresh();
+                message(ok === false ? "Could not save: the storage of this browser is full." : "Setup " + name + " saved; the main menu asks which tune to drive.");
+            });
         };
         var dropSetup = document.createElement("button");
         dropSetup.textContent = "Delete";
         dropSetup.onclick = function() {
             var name = setupSelect.value;
             if(!name) return;
-            OpenRacer.Setups.remove(config.id, name);
-            refresh();
-            message("Setup " + name + " deleted (the tuning on the car stays as it is).");
+            OpenRacerDialog.ask({ title: "Delete the setup “" + name + "”?", text: "The tuning on the car stays as it is.", ok: "Delete", danger: true }).then(function(yes) {
+                if(!yes) return;
+                OpenRacer.Setups.remove(config.id, name);
+                refresh();
+                message("Setup " + name + " deleted (the tuning on the car stays as it is).");
+            });
         };
         // a tune shared as a file: Export (the setup that is chosen, or the car as it is tuned now) and Import (a file: it is kept as a setup of this car and chosen)
         var exportTune = document.createElement("button");
@@ -656,15 +669,15 @@ var Tuning = (function() {
             file.text().then(function(text) {
                 var tune = OpenRacer.Setups.parseFile(text);
                 if(tune instanceof Error) { message(tune.message); return; }
-                var name = window.prompt("The name of this tune" + (tune.car && tune.car !== config.id ? " (it was made for " + tune.car + ")" : ""), tune.name);
-                if(name === null) return;
-                name = name.trim().slice(0, 40) || tune.name;
-                OpenRacer.Setups.save(config.id, name, Object.assign({}, original, tune.config));
+                askName("The name of this tune" + (tune.car && tune.car !== config.id ? " (it was made for " + tune.car + ")" : ""), tune.name).then(function(name) {
+                if(!name) return;
+                if(OpenRacer.Setups.save(config.id, name, Object.assign({}, original, tune.config)) === false) { message("Could not import: the storage of this browser is full."); return; }
                 setupSelect.value = name;
                 refreshSetups();
                 setupSelect.value = name;
                 setupSelect.onchange();
                 message("Tune " + name + " imported and chosen" + (tune.car && tune.car !== config.id ? " (it was made for " + tune.car + ": mind the wheels and the parts)" : "") + ".");
+                });
             });
         };
         importTune.onclick = function() { importInput.click(); };

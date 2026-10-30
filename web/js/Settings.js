@@ -286,6 +286,13 @@ var Settings = (function() {
             return;
         }
         if(event.code === "Escape") {
+            // a layer on top owns Escape and closes only itself: a question (dialog.js), a window of the main menu, the vehicle picker, the question to save the
+            // replay, a name in the video editor. This handler comes first (the window, capturing), and it opened or closed this menu under them as well:
+            // in a game that resumed the race while a question was still open, and in the video editor it left the editor
+            var own = document.querySelector("#orDialog, .or-dialog, #replaysDialog, #garageDialog, #vehiclePicker, #replayLeave, .veShade");
+            if(own) { if(own.id === "replayLeave") { own.remove(); event.preventDefault(); } return; }
+            // the main menu: Escape is a step back there (MainMenu.js), not the menu of a game that is not running
+            if(!menu && document.getElementById("mainMenu")) return;
             // in a replay Escape goes back to the game
             if(replayOn()) { OpenRacer.Replay.stop(); event.preventDefault(); return; }
             // Escape cancels a wheel calibration first; while the racing line is recorded for the track editor it ends that (main.js)
@@ -316,11 +323,11 @@ var Settings = (function() {
     // ---- options
 
 
-    function setOption(name, value) {
+    function setOption(name, value, quiet) {
         options[name] = value;
         save();
         optionListeners.forEach(function(fn) { fn(name, value); });
-        if(menu) renderMenu();
+        if(menu && !quiet) renderMenu();
     }
 
     // ---- capturing a new input for the menu
@@ -583,6 +590,7 @@ var Settings = (function() {
     function chooseVehicle(currentId) {
         if(typeof Catalog === "undefined") return;
         var back = document.createElement("div");
+        back.id = "vehiclePicker";
         back.style.cssText = "position: fixed; inset: 0; z-index: 100000; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center;";
         var box = document.createElement("div");
         box.style.cssText = "background: var(--bg2, #222); color: var(--head, #fff); border: 1px solid var(--line, #555); border-radius: 10px; padding: 16px; width: min(720px, 92vw); max-height: 82vh; overflow: auto; font: 15px sans-serif;";
@@ -709,11 +717,15 @@ var Settings = (function() {
         input.type = "range";
         input.min = min; input.max = max; input.step = step;
         input.value = options[name];
+        input.dataset.key = name;
         input.style.cssText = "width: 160px; vertical-align: middle;";
         var value = document.createElement("span");
         value.style.cssText = "display: inline-block; min-width: 150px; margin-left: 10px; color: var(--head);";
         value.textContent = text(options[name]);
-        input.oninput = function() { setOption(name, parseFloat(input.value)); value.textContent = text(options[name]); };
+        // (the value goes on while the slider moves; the menu is built again when it is let go, for the rows that depend on it. It was built again at every
+        // step: the slider under the pointer was replaced, and with the keyboard it moved one step and lost the focus)
+        input.oninput = function() { setOption(name, parseFloat(input.value), true); value.textContent = text(options[name]); };
+        input.onchange = function() { renderMenu(); };
         inputs.appendChild(input);
         inputs.appendChild(value);
         row.appendChild(inputs);
@@ -784,6 +796,16 @@ var Settings = (function() {
 
     function renderMenu() {
         if(!menu) return;
+        // what had the focus and how far the menu was scrolled stay as they were (a click on a setting jumped to the top)
+        var focused = document.activeElement && menu.contains(document.activeElement) && document.activeElement.dataset ? document.activeElement.dataset.key : null;
+        var oldPanel = menu.querySelector(".panel"), scrollMenu = menu.scrollTop, scrollPanel = oldPanel ? oldPanel.scrollTop : 0;
+        setTimeout(function() {
+            if(!menu) return;
+            menu.scrollTop = scrollMenu;
+            var newPanel = menu.querySelector(".panel");
+            if(newPanel) newPanel.scrollTop = scrollPanel;
+            if(focused) { var again = menu.querySelector("[data-key=\"" + focused + "\"]"); if(again) again.focus(); }
+        }, 0);
         menu.innerHTML = "";
         var panel = document.createElement("div");
         panel.className = "panel";
@@ -792,12 +814,13 @@ var Settings = (function() {
         var top = document.createElement("div");
         top.className = "top";
         var title = document.createElement("div");
-        title.innerHTML = "<h1>Settings</h1><div class=\"sub\">The game is paused. Esc closes this menu.</div>";
+        var inGame = !!window.car;            // (the menu is also opened from the main menu, where no game runs)
+        title.innerHTML = "<h1>Settings</h1><div class=\"sub\">" + (inGame ? "The game is paused. " : "") + "Esc closes this menu.</div>";
         top.appendChild(title);
         var buttons = document.createElement("div");
         var resume = document.createElement("button");
         resume.className = "big";
-        resume.textContent = "Resume";
+        resume.textContent = inGame ? "Resume" : "Close";
         resume.onclick = closeMenu;
         buttons.appendChild(resume);
         // the ghost as a file: to send your best lap, or to race the lap of someone else (Ghost.js)
@@ -841,13 +864,13 @@ var Settings = (function() {
         replay.title = canReplay ? "Watch what was recorded since the start of the game" : "Nothing is recorded yet";
         if(!canReplay) replay.style.opacity = "0.45";
         replay.onclick = function() { closeMenu(); OpenRacer.Replay.start(); };
-        buttons.appendChild(replay);
+        if(inGame) buttons.appendChild(replay);
         var mainMenu = document.createElement("button");
         mainMenu.className = "big";
         mainMenu.style.cssText = "background: var(--line); margin-left: 8px;";
         mainMenu.textContent = "Main menu";
         mainMenu.onclick = function() { var leave = function() { window.location.href = window.location.pathname; }; if(OpenRacer.Replay && OpenRacer.Replay.confirmLeave) OpenRacer.Replay.confirmLeave(leave); else leave(); };
-        buttons.appendChild(mainMenu);
+        if(inGame) buttons.appendChild(mainMenu);
         // a track with a drag strip: the Top 50 and the tickets, at the top
         if(typeof currentTrack !== "undefined" && currentTrack && currentTrack.dragstrip && OpenRacer.DragStrip) {
             var drag = document.createElement("button");
@@ -1094,7 +1117,7 @@ var Settings = (function() {
         page = tabPage("Tools");
         page.appendChild(optionRow("Debug text", options.debug ? "On" : "Off", function() { setOption("debug", !options.debug); }));
         var tuningRow = optionRow("Tuning menu", "Open", function() { closeMenu(); Tuning.toggle(); });
-        page.appendChild(tuningRow);
+        if(window.car) page.appendChild(tuningRow);            // (the tuning menu is of the car in the game)
         // the runs of the drag strip of this track (DragStrip.js): the Top 50, with the tickets
         if(typeof currentTrack !== "undefined" && currentTrack && currentTrack.dragstrip && OpenRacer.DragStrip) {
             page.appendChild(optionRow("Drag strip of this track", "Top 50 and tickets", function() { OpenRacer.DragStrip.showTop(currentTrack); }));
@@ -1109,13 +1132,16 @@ var Settings = (function() {
                 }).catch(function(error) { hint("Could not save: " + error.message); });
             }));
             page.appendChild(optionRow("Records of this track", "Forget them", function() {
-                OpenRacer.Records.forget(currentTrack.id);
-                if(race.ghost) race.ghost.best = null;
-                hint("The records and the ghost of this track are forgotten.");
+                OpenRacerDialog.ask({ title: "Forget the records of this track?", text: "The lap records and the ghosts of every car on " + (currentTrack.name || currentTrack.id) + " are deleted. This cannot be undone.", ok: "Forget them", danger: true }).then(function(yes) {
+                    if(!yes) return;
+                    OpenRacer.Records.forget(currentTrack.id);
+                    if(race.ghost) race.ghost.best = null;
+                    hint("The records and the ghost of this track are forgotten.");
+                });
             }));
         }
-        page.appendChild(optionRow("Surroundings for Blender", "Save as HDR", function() {
-            if(typeof EnvironmentExport !== "undefined" && window.car) EnvironmentExport.download();
+        if(window.car) page.appendChild(optionRow("Surroundings for Blender", "Save as HDR", function() {
+            if(typeof EnvironmentExport !== "undefined") EnvironmentExport.download();
         }));
         page = tabPage("Display and sound");
         page.appendChild(optionRow("Engine volume", Math.round(options.volume * 100) + "%", function() {
@@ -1155,9 +1181,12 @@ var Settings = (function() {
         var reset = document.createElement("button");
         reset.textContent = "Reset the controls to the defaults";
         reset.onclick = function() {
-            ACTIONS.forEach(function(a) { bindings[a.id] = clone(a.defaults); });
-            save();
-            renderMenu();
+            OpenRacerDialog.ask({ title: "Reset the controls?", text: "Every key, pad button and wheel axis goes back to the default. The bindings you made are lost.", ok: "Reset", danger: true }).then(function(yes) {
+                if(!yes) return;
+                ACTIONS.forEach(function(a) { bindings[a.id] = clone(a.defaults); });
+                save();
+                renderMenu();
+            });
         };
         bottom.appendChild(reset);
         tabPage("Controls").appendChild(bottom);

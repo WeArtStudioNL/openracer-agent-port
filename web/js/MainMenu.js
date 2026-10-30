@@ -1554,7 +1554,12 @@ var MainMenu = (function() {
         element.id = "mainMenu";
         document.body.appendChild(element);
         window.addEventListener("keydown", function(event) {
-            if(document.querySelector(".or-dialog, #replaysDialog, #garageDialog, #settingsMenu")) return;
+            if(document.querySelector("#orDialog, #settingsMenu")) return;      // (a question or the settings: their own keys)
+            // a window of the menu (the garage, the replays, more options, a pick): Escape closes it, the one on top
+            var windows = document.querySelectorAll(".or-dialog, #replaysDialog, #garageDialog");
+            if(windows.length) { if(event.code === "Escape") { windows[windows.length - 1].remove(); event.preventDefault(); } return; }
+            // Enter on a button, a field or a link is that button's (it was also "Next", and the page changed under the click)
+            if(event.code === "Enter" && event.target && /^(BUTTON|INPUT|SELECT|TEXTAREA|A)$/.test(event.target.tagName)) return;
             if(event.code === "Enter") { if(screen === "home") go("mode"); else if(screen !== "mode" && !oppPick) goNext(); }
             else if(event.code === "Escape" && screen !== "home") goBack();
         });
