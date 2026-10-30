@@ -55,6 +55,8 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 ### The pit stop of the player
 
+- **The parts that came off are put back one by one**, as the tyres are: each is carried from where it lies to its place on the car in an arc, turning as it goes, in its share of the work, while the dents go out; it stays at its place until the repair is done, and then the car is whole.
+- **The pit stop is in the replay**: the car on the jacks, the dents that go out, the parts that come back, the wheels that come off and go on (a saved replay has them too).
 - **Tyres are changed one by one, and you see it**: only the tyres that are worn past 15 % or leak are changed (it was all four), one after the other in the time the tyres take (which stays as it was): the old wheel comes off and out by 60 cm, is gone for a moment, and the new one goes on; each tyre gets its new rubber when its turn is halfway. The AI cars show it too.
 - **The pit stop repairs the damage** (with *Damage* on): the dents of the shell (1 s and 1.5 s for every centimetre that its nodes are out of place on average), every part that came off (1 s) and every bent or lost wheel (1.5 s) are part of what the stop takes, side by side with the fuel and the tyres (at most 10 s for the repair). The dents go out bit by bit from the start of the work to its end, the bent wheels go straight with them, and then everything is whole: the shell, the parts back on the car, the wheels. The count down says REPAIR.
 - **A leaking tyre is changed and repaired** in a pit stop, however little it is worn (the stop only changed tyres past 15 % wear, and did not mend a leak).

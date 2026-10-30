@@ -525,7 +525,7 @@ OpenRacer.Parts = (function () {
             world.step(); limitSpeeds();
             for (var j = 0; j < parts.length; j++) {
                 var p = parts[j];
-                if (p.state === "held") continue;
+                if (p.state === "held" || p.fetching) continue;           // (a part that the pit stop carries back is put where it is by fetchTo)
                 var t = p.body.translation(), r = p.body.rotation();
                 bodyM.compose(a.set(t.x, t.y, t.z), qInv.set(r.x, r.y, r.z, r.w), unit);
                 p.object.matrix.multiplyMatrices(bodyM, p.visual);
@@ -575,19 +575,60 @@ OpenRacer.Parts = (function () {
                     if (p.state !== "held") { p.body.setBodyType(R.RigidBodyType.KinematicPositionBased, true); setGroups(p, false); p.object.matrixAutoUpdate = true; p.state = "held"; p.pending = false; p.region = null; }
                     continue;
                 }
-                if (p.joint) { world.removeImpulseJoint(p.joint, true); p.joint = null; }
-                if (p.state !== "held") {
-                    p.body.setBodyType(R.RigidBodyType.KinematicPositionBased, true);
-                    setGroups(p, false);
-                    p.parent.add(p.object);
-                    restoreHome(p.object, p.object.userData.partHome);
-                    p.object.traverse(function (m) { if (m.userData && m.userData.sbDeform) m.userData.sbDeform.value = 1; });
-                    if (ctx.softBodyMesh && ctx.softBodyMesh.unfreeze) ctx.softBodyMesh.unfreeze(p.object);
-                }
-                p.mounts.forEach(function (m) { m.alive = true; });
-                p.detachTimer = 0; p.breakTimer = null; p.openTimer = 0;
-                p.state = "held"; p.hasVel = false; p.grace = 0; p.pending = false; p.region = null;
+                putBack(p);
             }
+        }
+        // one part back on the car, held as it was made
+        function putBack(p) {
+            if (p.joint) { world.removeImpulseJoint(p.joint, true); p.joint = null; }
+            if (p.state !== "held") {
+                p.body.setBodyType(R.RigidBodyType.KinematicPositionBased, true);
+                setGroups(p, false);
+                p.parent.add(p.object);
+                restoreHome(p.object, p.object.userData.partHome);
+                p.object.traverse(function (m) { if (m.userData && m.userData.sbDeform) m.userData.sbDeform.value = 1; });
+                if (ctx.softBodyMesh && ctx.softBodyMesh.unfreeze) ctx.softBodyMesh.unfreeze(p.object);
+            }
+            p.mounts.forEach(function (m) { m.alive = true; });
+            p.detachTimer = 0; p.breakTimer = null; p.openTimer = 0;
+            p.state = "held"; p.hasVel = false; p.grace = 0; p.pending = false; p.region = null; p.fetching = false;
+        }
+
+        // The parts back on the car one by one, as the tyres are (the pit stop, Pit.js): fetchStart takes the parts that came loose (a wheel that came off is the
+        // repair of the wheels) out of the physics, so that they no longer move or hit anything, and gives them as a list; fetchTo(part, share) carries one from where
+        // it lies to its place on the car, in an arc of 60 cm, turning it as it goes, and holds it there; putBack (or repair) makes it a part of the car again
+        var fetchPos = new THREE.Vector3(), fetchQuat = new THREE.Quaternion(), fetchScale = new THREE.Vector3(), homeM = new THREE.Matrix4(), homePos = new THREE.Vector3(), homeQuat = new THREE.Quaternion(), homeScale = new THREE.Vector3(), fetchM = new THREE.Matrix4(), parentInv = new THREE.Matrix4();
+        function fetchStart() {
+            var list = [];
+            parts.forEach(function (p) {
+                if (p.wheel !== undefined || p.state === "held") return;
+                if (p.joint) { world.removeImpulseJoint(p.joint, true); p.joint = null; }
+                p.body.setBodyType(R.RigidBodyType.KinematicPositionBased, true);
+                setGroups(p, false);
+                p.object.updateWorldMatrix(true, false);
+                var from = { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), scale: new THREE.Vector3() };
+                p.object.matrixWorld.decompose(from.pos, from.quat, from.scale);
+                p.fetchFrom = from; p.fetching = true;
+                list.push(p);
+            });
+            return list;
+        }
+        function fetchTo(p, share) {
+            if (!p || !p.fetching) return;
+            share = Math.min(1, share);              // (at 1 it is held at its place by this until the repair is done: held earlier it went with its nodes, which come back with the shell)
+            var h = p.object.userData.partHome;
+            p.parent.updateWorldMatrix(true, false);
+            homeM.compose(h.position, h.quaternion, h.scale).premultiply(p.parent.matrixWorld);
+            homeM.decompose(homePos, homeQuat, homeScale);
+            var e = share * share * (3 - 2 * share);
+            fetchPos.lerpVectors(p.fetchFrom.pos, homePos, e); fetchPos.y += Math.sin(Math.PI * e) * 0.6;
+            fetchQuat.slerpQuaternions(p.fetchFrom.quat, homeQuat, e);
+            fetchScale.lerpVectors(p.fetchFrom.scale, homeScale, e);
+            fetchM.compose(fetchPos, fetchQuat, fetchScale);
+            if (p.object.parent) { p.object.parent.updateWorldMatrix(true, false); fetchM.premultiply(parentInv.copy(p.object.parent.matrixWorld).invert()); }
+            p.object.matrixAutoUpdate = false;
+            p.object.matrix.copy(fetchM);
+            p.object.matrixWorldNeedsUpdate = true;
         }
 
         // ---- the replay (Replay.js): what is recorded of a part is its state (0 held, 1 hinged, 2 free) and, when it is not held, the place of its
@@ -666,7 +707,7 @@ OpenRacer.Parts = (function () {
 
         return {
             replay: replayApi,
-            world: world, parts: parts, events: events, update: update, repair: repair,
+            world: world, parts: parts, events: events, update: update, repair: repair, fetchStart: fetchStart, fetchTo: fetchTo, putBack: putBack,
             // the car was put somewhere else (a reset, the start): the speed of before is no acceleration of the parts
             moved: function () { parts.forEach(function (p) { p.hasVel = false; }); },
             // the car is taken out of the scene (the car editor makes a new one for every test): the parts that were thrown out of it go with it

@@ -26,7 +26,7 @@ OpenRacer.PitStop = function (vehicle) {
     this.done = false;         // the stop is complete (until the car pulls away)
     this.elapsed = 0;
     this.plan = null;          // { fuel, tyres, total }: the seconds that each part takes
-    var fuelGiven = 0, tyresDone = false, repaired = false, changed = [];
+    var fuelGiven = 0, tyresDone = false, repaired = false, changed = [], fetching = [];
     var fuelWanted = 0;
 
     this.holdCar = false;      // the car of the player: once the stop has begun the car is on the jacks and cannot pull away (Car.js holds it, lift() is how far up)
@@ -98,7 +98,13 @@ OpenRacer.PitStop = function (vehicle) {
         // (a car on the jacks is in its box until the stop is done: its wheels are off the ground)
         var still = (this.active && this.holdCar) || (Math.abs(vehicle.u) < 0.4 && this.onPitLane());
         if(!still) {
-            if(this.active || this.done) { this.active = false; this.done = false; this.plan = null; }
+            if(this.active || this.done) {
+                // (a car that pulls away in the middle of a stop, the AI: the parts that were being carried back go on at once)
+                if(fetching.length && vehicle.parts && vehicle.parts.putBack) fetching.forEach(function (p) { vehicle.parts.putBack(p); });
+                fetching = [];
+                if(this.active && this.holdCar) OpenRacer.PitStop.recordTyres(null);
+                this.active = false; this.done = false; this.plan = null;
+            }
             return;
         }
         if(this.done) return;
@@ -107,11 +113,13 @@ OpenRacer.PitStop = function (vehicle) {
             this.elapsed = 0;
             this.plan = planFor(vehicle);
             fuelGiven = 0; tyresDone = false; changed = [];
+            if(this.holdCar) OpenRacer.PitStop.recordTyres(this.plan, LIFT);
             fuelWanted = vehicle.tank - vehicle.fuel;
             if(this.plan.fuel <= 0 && this.plan.tyres <= 0 && this.plan.repair <= 0) { this.done = true; this.active = false; return; }
             repaired = false;
             if(this.plan.repair > 0) {
                 if(vehicle.softBody && vehicle.softBody.repairStart) vehicle.softBody.repairStart();
+                fetching = vehicle.parts && vehicle.parts.fetchStart ? vehicle.parts.fetchStart() : [];
                 wheelsFrom = vehicle.wheels.map(function (w) { return { toe: w.toeBend || 0, camber: w.camberBend || 0, x: w.shiftX || 0, z: w.shiftZ || 0 }; });
             }
         }
@@ -130,29 +138,68 @@ OpenRacer.PitStop = function (vehicle) {
         if(this.plan.repair > 0 && !repaired) {
             var share = Math.max(0, Math.min(1, t / Math.max(0.1, this.plan.work)));
             if(vehicle.softBody && vehicle.softBody.repairTo) vehicle.softBody.repairTo(share);
+            // the parts that came off are carried back one after the other, each in its share of the work (as the tyres are changed)
+            if(fetching.length && vehicle.parts && vehicle.parts.fetchTo) {
+                var turn = Math.max(0.1, this.plan.work) / fetching.length;
+                for(var fp = 0; fp < fetching.length; fp++) vehicle.parts.fetchTo(fetching[fp], Math.max(0, Math.min(1, (t - turn * fp) / turn)));
+            }
             if(wheelsFrom) for(var wi = 0; wi < 4; wi++) { var wf = wheelsFrom[wi], wh = vehicle.wheels[wi]; wh.toeBend = wf.toe * (1 - share); wh.camberBend = wf.camber * (1 - share); wh.shiftX = wf.x * (1 - share); wh.shiftZ = wf.z * (1 - share); }
-            if(share >= 1) { repaired = true; wheelsFrom = null; vehicle.repair(); }
+            if(share >= 1) { repaired = true; wheelsFrom = null; fetching = []; vehicle.repair(); }
         }
-        if(this.elapsed >= this.plan.total) { this.done = true; this.active = false; vehicle.fuel = Math.min(vehicle.tank, vehicle.fuel); }
+        if(this.elapsed >= this.plan.total) { this.done = true; this.active = false; vehicle.fuel = Math.min(vehicle.tank, vehicle.fuel); if(this.holdCar) OpenRacer.PitStop.recordTyres(null); }
     };
 
     this.remaining = function () { return this.active && this.plan ? Math.max(0, this.plan.total - this.elapsed) : 0; };
     // A wheel that is being changed, for the picture (Car.js, Opponent.js): how far it is pulled out (m) and whether it is off (between the old one and the new one), or null.
     // Its turn: the first 40 % the old wheel comes off and out by 60 cm, then it is gone, the last 40 % the new one goes on.
     this.tyreChange = function (index) {
+        if(this.holdCar && OpenRacer.Replay && OpenRacer.Replay.active) return OpenRacer.PitStop.replayedChange(index);      // (a replay: what was recorded)
         if(!this.active || !this.plan || !this.plan.change || !this.plan.change.length) return null;
-        var c = this.plan.change.indexOf(index);
-        if(c < 0) return null;
-        var slot = this.plan.tyres / this.plan.change.length, f = (this.elapsed - LIFT - slot * c) / slot;
-        if(f <= 0 || f >= 1) return null;
-        var ease = function (x) { return x * x * (3 - 2 * x); };
-        if(f < 0.4) return { out: 0.6 * ease(f / 0.4), off: false };
-        if(f < 0.6) return { out: 0.6, off: true };
-        return { out: 0.6 * ease((1 - f) / 0.4), off: false };
+        return OpenRacer.PitStop.changeAt(this.plan.change, this.plan.tyres / this.plan.change.length, this.elapsed - LIFT, index);
     };
     // how far the car is up on the jacks, 0 to 1: it goes up slowly in the first part of the stop and stays up; when the stop is done it is let go (and falls)
     this.lift = function () { return this.active && this.plan ? Math.min(1, this.elapsed / LIFT) : 0; };
 };
+
+// A wheel in its turn of a tyre change, at a time of the work (s from when the car is up): how far it is pulled out and whether it is off, or null. Its turn: the first
+// 40 % the old wheel comes off and out by 60 cm, then it is gone, the last 40 % the new one goes on.
+OpenRacer.PitStop.changeAt = function (list, slot, work, index) {
+    var c = list.indexOf(index);
+    if(c < 0 || !(slot > 0)) return null;
+    var f = (work - slot * c) / slot;
+    if(f <= 0 || f >= 1) return null;
+    var ease = function (x) { return x * x * (3 - 2 * x); };
+    if(f < 0.4) return { out: 0.6 * ease(f / 0.4), off: false };
+    if(f < 0.6) return { out: 0.6, off: true };
+    return { out: 0.6 * ease((1 - f) / 0.4), off: false };
+};
+
+// The tyre change of the player in a replay (Replay.js): a row when a stop begins (the time; how long the car takes to go up, the turn of a tyre, how many tyres and which)
+// and one when it ends (no tyres); the replay gives the wheels their turn from the time of the replay, also after a jump (the row before that time). The shell, the parts,
+// the bends of the wheels and the car on the jacks are in the recording of the car already.
+(function () {
+    var record = { replayLookback: 0 }, attached = false, shown = null;
+    function attach() { if(!attached && OpenRacer.Replay && OpenRacer.Replay.attach) { OpenRacer.Replay.attach("pitTyres", record); attached = true; } }
+    OpenRacer.PitStop.recordTyres = function (plan, lift) {
+        attach();
+        if(!record.recorder) return;
+        var list = plan && plan.change ? plan.change : [];
+        record.recorder(Float32Array.of(0, lift || 0, list.length ? plan.tyres / list.length : 0, list.length, list[0] === undefined ? -1 : list[0], list[1] === undefined ? -1 : list[1], list[2] === undefined ? -1 : list[2], list[3] === undefined ? -1 : list[3]));
+    };
+    function rowState(row) { return row && row[3] > 0 ? { t0: row[0], lift: row[1], slot: row[2], list: [row[4], row[5], row[6], row[7]].slice(0, row[3]) } : null; }
+    record.replayAdd = function (row) { shown = rowState(row); };
+    record.replayStep = function () {};
+    record.replayClear = function () { shown = null; };
+    record.replayRebuild = function (rows, end) { shown = end > 0 ? rowState(rows[end - 1]) : null; };
+    record.replaySnapshot = function () { return null; };
+    record.replayRestore = function () { shown = null; };
+    OpenRacer.PitStop.replayedChange = function (index) {
+        if(!shown || !OpenRacer.Replay || !OpenRacer.Replay.time) return null;
+        return OpenRacer.PitStop.changeAt(shown.list, shown.slot, OpenRacer.Replay.time() - shown.t0 - shown.lift, index);
+    };
+    // (Replay.js is loaded after this file: the recording is attached when the first stop begins, or when the game asks for it)
+    OpenRacer.PitStop.attachReplay = attach;
+})();
 
 // the wheel of a car in the picture while its tyre is changed in a pit stop: pulled out sideways (to the left for the left wheels: x of the car is to the left), hidden
 // between the old one and the new one; drawn again where the car has it when it is not being changed
