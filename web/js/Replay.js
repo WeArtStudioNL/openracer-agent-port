@@ -753,6 +753,24 @@ OpenRacer.Replay = (function() {
 
     function targetObject() { var entry = cars[Math.min(free.target, cars.length - 1)]; return entry ? entry.object.body : null; }
 
+    // The mouse, a finger and the stick look left and right about the vertical of the world and up and down about the level axis of the camera, also when the camera is fixed
+    // to a car: the angles are in the frame of the car then, and a car that rolled or pitched made the look turn about its own up axis (the picture turned about itself). The
+    // look that is wanted is found in the world, moved there, and put back in the frame of the car; the tilt (Q and E) and the turn of the car stay as they are.
+    var lookQ = new THREE.Quaternion(), lookQ2 = new THREE.Quaternion(), lookE = new THREE.Euler(0, 0, 0, "YXZ"), lookV = V3(0, 0, 0);
+    function lookBy(dYaw, dPitch) {
+        var body = free.parent && !free.sky ? targetObject() : null;
+        if(!body) { free.yawT += dYaw; free.pitchT = Math.max(-1.5, Math.min(1.5, free.pitchT + dPitch)); return; }
+        lookQ.setFromEuler(lookE.set(free.pitchT, free.yawT, 0, "YXZ")).premultiply(body.quaternion);
+        lookV.set(0, 0, -1).applyQuaternion(lookQ);
+        var yaw = Math.atan2(-lookV.x, -lookV.z) + dYaw, pitch = Math.max(-1.5, Math.min(1.5, Math.asin(Math.max(-1, Math.min(1, lookV.y))) + dPitch));
+        lookQ.setFromEuler(lookE.set(pitch, yaw, 0, "YXZ")).premultiply(lookQ2.copy(body.quaternion).invert());
+        lookE.setFromQuaternion(lookQ, "YXZ");
+        var turn = lookE.y - free.yawT;
+        turn -= Math.round(turn / (2 * Math.PI)) * 2 * Math.PI;           // (the shortest way: the smoothing of the look does not go the long way round)
+        free.yawT += turn;
+        free.pitchT = Math.max(-1.5, Math.min(1.5, lookE.x));
+    }
+
     // yaw and pitch (in the frame of the camera) from how it looks in the world
     function anglesFromWorld(qWorld) {
         var body = free.parent && !free.sky ? targetObject() : null;
@@ -916,10 +934,7 @@ OpenRacer.Replay = (function() {
             if(pad.buttons[6]) my -= pad.buttons[6].value;
             if(pad.buttons[5] && pad.buttons[5].pressed) zoom += 1;
             if(pad.buttons[4] && pad.buttons[4].pressed) zoom -= 1;
-            if(!free.aim) {
-                free.yawT -= stick(pad.axes[2] || 0) * STICK_LOOK * delta * Math.max(0.5, scale);
-                free.pitchT -= stick(pad.axes[3] || 0) * STICK_LOOK * delta * Math.max(0.5, scale);
-            }
+            if(!free.aim) lookBy(-stick(pad.axes[2] || 0) * STICK_LOOK * delta * Math.max(0.5, scale), -stick(pad.axes[3] || 0) * STICK_LOOK * delta * Math.max(0.5, scale));
         }
         free.pitchT = Math.max(-1.5, Math.min(1.5, free.pitchT));
 
@@ -999,8 +1014,7 @@ OpenRacer.Replay = (function() {
     });
     document.addEventListener("mousemove", function(event) {
         if(!api.active || !free.active || free.aim || !pointerLocked) return;
-        free.yawT -= event.movementX * LOOK_SENSITIVITY;
-        free.pitchT = Math.max(-1.5, Math.min(1.5, free.pitchT - event.movementY * LOOK_SENSITIVITY));
+        lookBy(-event.movementX * LOOK_SENSITIVITY, -event.movementY * LOOK_SENSITIVITY);
     });
     // a finger on the scene looks around too
     var touchLast = null;
@@ -1008,8 +1022,7 @@ OpenRacer.Replay = (function() {
     document.addEventListener("touchmove", function(event) {
         if(!touchLast || !api.active || !free.active || free.aim || event.touches.length !== 1) return;
         var touch = event.touches[0];
-        free.yawT -= (touch.clientX - touchLast.x) * LOOK_SENSITIVITY * 1.6;
-        free.pitchT = Math.max(-1.5, Math.min(1.5, free.pitchT - (touch.clientY - touchLast.y) * LOOK_SENSITIVITY * 1.6));
+        lookBy(-(touch.clientX - touchLast.x) * LOOK_SENSITIVITY * 1.6, -(touch.clientY - touchLast.y) * LOOK_SENSITIVITY * 1.6);
         touchLast = { x: touch.clientX, y: touch.clientY };
     }, { passive: true });
     window.addEventListener("keyup", function(event) { keys[event.code] = false; }, true);
