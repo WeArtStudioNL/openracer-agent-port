@@ -46,13 +46,14 @@ OpenRacer.Shatter = (function () {
         for (var name in attrs) geometry.setAttribute(name, attrs[name]);
         // shape: 0 an angular shard, 1 a thin splinter, 2 a round grain (as Debris.js; the shards glint a little: a lighter edge)
         material = new THREE.ShaderMaterial({
-            uniforms: { light: { value: 1 }, scale: { value: 600 } },
+            uniforms: Object.assign({ light: { value: 1 }, scale: { value: 600 } }, OpenRacer.SmokeDepth || { tDepth: { value: null }, uUseDepth: { value: 0 }, uResolution: { value: new THREE.Vector2(1, 1) }, uNear: { value: 1 }, uFar: { value: 5000 } }),
             vertexShader: "attribute vec3 colour; attribute float size; attribute float alpha; attribute float shape; attribute float tilt; uniform float scale;" +
                 "varying vec3 vColour; varying float vAlpha; varying float vShape; varying float vTilt;" +
                 "void main() { vColour = colour; vAlpha = alpha; vShape = shape; vTilt = tilt; vec4 mv = modelViewMatrix * vec4(position, 1.0);" +
                 "gl_PointSize = max(1.5, size * scale / max(0.5, -mv.z)); gl_Position = projectionMatrix * mv; }",
             fragmentShader: "uniform float light; varying vec3 vColour; varying float vAlpha; varying float vShape; varying float vTilt;" +
-                "void main() { vec2 c = gl_PointCoord - 0.5; float cs = cos(vTilt), sn = sin(vTilt); vec2 r = vec2(c.x * cs + c.y * sn, -c.x * sn + c.y * cs); float a; float edge = 0.0;" +
+                "uniform sampler2D tDepth; uniform float uUseDepth; uniform vec2 uResolution; uniform float uNear; uniform float uFar; float linD(float d) { return uNear * uFar / (uFar - d * (uFar - uNear)); }" +
+                "void main() { if (uUseDepth > 0.5) { float sd = texture2D(tDepth, gl_FragCoord.xy / uResolution).x; if (sd < 0.99999 && linD(sd) < linD(gl_FragCoord.z) - 0.05) discard; } vec2 c = gl_PointCoord - 0.5; float cs = cos(vTilt), sn = sin(vTilt); vec2 r = vec2(c.x * cs + c.y * sn, -c.x * sn + c.y * cs); float a; float edge = 0.0;" +
                 "if (vShape < 0.5) { float d = abs(r.x) + abs(r.y) * 1.4; a = smoothstep(0.5, 0.42, d); edge = smoothstep(0.3, 0.45, d); }" +
                 "else if (vShape < 1.5) { float w = 0.04 + 0.08 * (1.0 - abs(r.x) * 2.0); a = smoothstep(w, w * 0.35, abs(r.y)) * smoothstep(0.5, 0.4, abs(r.x)); }" +
                 "else a = smoothstep(0.5, 0.2, length(c));" +
@@ -64,6 +65,7 @@ OpenRacer.Shatter = (function () {
         points.frustumCulled = false;
         points.renderOrder = 4;
         points.userData.noGBuffer = true;
+        points.layers.set(1);               // (the layer of the smoke: after the screen space effects, which washed them out; Graphics.js SmokePass)
         if (top) top.add(points);
     }
 

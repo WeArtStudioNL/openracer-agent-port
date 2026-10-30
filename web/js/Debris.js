@@ -41,7 +41,8 @@ OpenRacer.Debris = function (scene, capacity) {
     geometry.setAttribute("tilt", tiltAttribute);
     // shape: 0 an angular chunk, 1 a thin blade (turned along the way that it flies on the screen), 2 a round grain or clump
     var material = new THREE.ShaderMaterial({
-        uniforms: { light: { value: 1 }, scale: { value: 600 }, aspect: { value: 1 }, sizeScale: { value: 1 } },
+        // (with the depth of the surfaces: drawn after the screen space effects, with the smoke, and hidden behind what is in front of them; Graphics.js SmokePass)
+        uniforms: Object.assign({ light: { value: 1 }, scale: { value: 600 }, aspect: { value: 1 }, sizeScale: { value: 1 } }, OpenRacer.SmokeDepth || { tDepth: { value: null }, uUseDepth: { value: 0 }, uResolution: { value: new THREE.Vector2(1, 1) }, uNear: { value: 1 }, uFar: { value: 5000 } }),
         vertexShader: "attribute vec3 colour; attribute float size; attribute float alpha; attribute vec3 velocity; attribute float shape; attribute float tilt;" +
             "uniform float scale; uniform float aspect; uniform float sizeScale; varying vec3 vColour; varying float vAlpha; varying float vShape; varying float vAngle;" +
             "void main() { vColour = colour; vAlpha = alpha; vShape = shape;" +
@@ -50,7 +51,8 @@ OpenRacer.Debris = function (scene, capacity) {
             "vec2 d = p1.xy / p1.w - p0.xy / p0.w; d.x *= aspect; vAngle = (length(d) > 1e-5 ? atan(d.y, d.x) : 0.0) + tilt;" +        // (the way that it flies, on the screen, and a little of its own)
             "gl_PointSize = max(shape > 0.5 && shape < 1.5 ? 4.0 : 1.5, size * sizeScale * scale / max(0.5, -mv.z)); gl_Position = p0; }",
         fragmentShader: "uniform float light; varying vec3 vColour; varying float vAlpha; varying float vShape; varying float vAngle;" +
-            "void main() { vec2 c = gl_PointCoord - 0.5; c.y = -c.y; float a;" +
+            "uniform sampler2D tDepth; uniform float uUseDepth; uniform vec2 uResolution; uniform float uNear; uniform float uFar; float linD(float d) { return uNear * uFar / (uFar - d * (uFar - uNear)); }" +
+            "void main() { if (uUseDepth > 0.5) { float sd = texture2D(tDepth, gl_FragCoord.xy / uResolution).x; if (sd < 0.99999 && linD(sd) < linD(gl_FragCoord.z) - 0.05) discard; } vec2 c = gl_PointCoord - 0.5; c.y = -c.y; float a;" +
             "if (vShape < 0.5) a = smoothstep(0.5, 0.36, max(abs(c.x), abs(c.y)));" +
             "else if (vShape < 1.5) { float cs = cos(vAngle), sn = sin(vAngle); vec2 r = vec2(c.x * cs + c.y * sn, -c.x * sn + c.y * cs);" +
             "  float w = 0.035 + 0.07 * (1.0 - abs(r.x) * 2.0); a = smoothstep(w, w * 0.35, abs(r.y)) * smoothstep(0.5, 0.4, abs(r.x)); }" +      // (a blade: thin, wider in the middle, with a point at both ends)
@@ -62,6 +64,9 @@ OpenRacer.Debris = function (scene, capacity) {
     points.name = "debris";
     points.frustumCulled = false;
     points.renderOrder = 4;
+    // the layer of the smoke: drawn with the scene, or after the screen space effects when there are (the occlusion and the bounce washed the small pieces out of the picture)
+    points.layers.set(1);
+    points.userData.noGBuffer = true;
     scene.add(points);
 
     // the colours of the pieces of every surface: a few shades (as sRGB; the picture wants them linear)

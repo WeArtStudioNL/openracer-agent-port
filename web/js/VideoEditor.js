@@ -982,7 +982,11 @@ OpenRacer.VideoEditor = (function () {
             camera.lookAt(chaseTo);
             if (camera.fov !== 50) { camera.fov = 50; camera.near = 0.03; camera.updateProjectionMatrix(); }
         }
+        // (the smoke and the particles are on a layer of their own that the camera leaves out when the screen space effects draw them after the scene: here it is drawn with it)
+        var mask = camera.layers.mask;
+        camera.layers.enable(1);
         renderer.render(scene, camera);
+        camera.layers.mask = mask;
         srcCtx.drawImage(renderer.domElement, 0, 0, ui.srcCanvas.width, ui.srcCanvas.height);
     }
 
