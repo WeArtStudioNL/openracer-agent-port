@@ -533,7 +533,9 @@ var ForceFeedback = (function() {
     }
 
     // ---- every frame
+    var lastUpdate = 0;
     function update(car, delta) {
+        lastUpdate = performance.now();
         if(!option("ffb", true)) {
             if(device && Math.abs(lastSent) > 0.001) send(0);
             return;
@@ -598,8 +600,31 @@ var ForceFeedback = (function() {
         pad.vibrationActuator.playEffect("dual-rumble", { startDelay: 0, duration: 120, strongMagnitude: level, weakMagnitude: level * 0.6 }).catch(function() {});
     }
 
+    // The wheel let go: no force while the game does not run (the menu, a replay, the tab in the background, the window without focus). The force of a
+    // HID PID wheel stays at the last value that was sent, so it pulled to one side for as long as the menu was open; and the zero of the background tab
+    // could fall under the limit of 120 sends a second, and was lost. This zero always goes.
+    function neutral() {
+        output = 0;
+        if(!device || !driver || Math.abs(lastSent) < 0.004) return;
+        lastSendTime = 0;
+        send(0);
+    }
+    // called every frame that the car does not run (main.js): the zero once, unless the test is shaking the wheel
+    function idle() {
+        if(performance.now() < testUntil) return;
+        neutral();
+    }
+
+    // The test shakes the wheel for two seconds, also from the settings menu, where the game (and so update) does not run
+    var testTimer = null;
     function test() {
         testUntil = performance.now() + 2000;
+        if(testTimer) return;
+        testTimer = setInterval(function() {
+            var now = performance.now();
+            if(now >= testUntil) { clearInterval(testTimer); testTimer = null; if(now - lastUpdate > 100) neutral(); return; }
+            if(now - lastUpdate > 100) send(0.6 * Math.sin(now / 1000 * 2 * Math.PI * 1.5));     // (the game runs: update sends it)
+        }, 16);
     }
 
     function status() {
@@ -610,7 +635,8 @@ var ForceFeedback = (function() {
     }
 
     window.addEventListener("beforeunload", function() { if(device) (driver === "pid" ? stopPid() : stopLogitech()); });
-    document.addEventListener("visibilitychange", function() { if(document.hidden && device) send(0); });
+    document.addEventListener("visibilitychange", function() { if(document.hidden) neutral(); });
+    window.addEventListener("blur", neutral);
     reconnect();
 
     return {
@@ -619,6 +645,8 @@ var ForceFeedback = (function() {
         connect: connect,
         forget: forget,
         test: test,
+        neutral: neutral,
+        idle: idle,
         status: status,
         diagnose: diagnose,
         parse: parsePid,               // for tests: the PID reports of a descriptor (collections as WebHID gives them)

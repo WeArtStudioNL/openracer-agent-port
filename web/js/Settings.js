@@ -314,6 +314,8 @@ var Settings = (function() {
 
     window.addEventListener("keyup", function(event) {
         keysDown[event.code] = false;
+        // (macOS sends no keyup for the other keys while Cmd is held: after a shortcut with Cmd a key of the game stayed pressed, full throttle until it was pressed again)
+        if(event.code === "MetaLeft" || event.code === "MetaRight") keysDown = {};
     }, false);
 
     window.addEventListener("blur", function() {

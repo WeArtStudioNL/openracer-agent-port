@@ -179,6 +179,8 @@ var EngineSound = (function() {
         if(!ctx || ctx.state !== "running") return;
         if(output) output.gain.setTargetAtTime(level(), ctx.currentTime, 0.05);
         if(squeal && (paused || muted)) squeal.mute(ctx.currentTime);
+        // (the noise of the gravel and the grass too: it is only set while the car runs, so it went on in the menu and in a replay)
+        if(ground && (paused || muted)) ground.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
     }
 
     function start() {
@@ -202,7 +204,7 @@ var EngineSound = (function() {
             squeal = makeSqueal();
             loadSquealSample();
         }
-        if(ctx.state === "suspended") ctx.resume();
+        if(ctx.state !== "running" && ctx.state !== "closed") ctx.resume();        // (suspended, or "interrupted" on iOS after a call or Siri)
         if(!synth && !loading) {
             loading = true;
             // the combustion model, with the impulse response of its exhaust (without it the sound is dry)
@@ -323,7 +325,8 @@ var EngineSound = (function() {
         return "";
     }
 
-    ["keydown", "mousedown", "touchstart"].forEach(function(name) {
+    // (touchend and pointerup are what a browser counts as the gesture that may start sound; the touch pedals stop the mousedown that would follow a touch)
+    ["keydown", "mousedown", "touchstart", "touchend", "pointerup"].forEach(function(name) {
         window.addEventListener(name, start, false);
     });
 

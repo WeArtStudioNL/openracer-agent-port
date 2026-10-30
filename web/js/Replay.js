@@ -1334,7 +1334,9 @@ OpenRacer.Replay = (function() {
         if(typeof EngineSound !== "undefined" && player) {
             var live = (playing || api.editorPlaying) && !scrubbing && direction > 0;      // (the video editor plays the replay itself: it says when, see VideoEditor.js)
             EngineSound.setPaused(!live);
-            if(live) EngineSound.update(player.rpm, player.throttle, false);
+            // (the third value is the ignition: false stopped every combustion, so the engine of a replay and of its video sounded dead)
+            if(live) EngineSound.update(player.rpm, player.throttle, true);
+            if(EngineSound.setGround) EngineSound.setGround(null, 0);      // (the gravel and the grass of the moment the replay began are not heard over it)
         }
         updateUi();
     };

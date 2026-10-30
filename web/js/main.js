@@ -616,6 +616,7 @@ function onEnterFrame() {
     }
     // the replay (Replay.js): the game stands still and the recording is shown
     if(OpenRacer.Replay && OpenRacer.Replay.active) {
+        if(typeof ForceFeedback !== "undefined") ForceFeedback.idle();       // (the wheel is let go while the replay plays)
         var replayNow = performance.now();
         var replayDelta = Math.min(0.1, (replayNow - lastFrameTime) / 1000);
         lastFrameTime = replayNow;
@@ -625,6 +626,7 @@ function onEnterFrame() {
     EngineSound.setPaused(Settings.isPaused());
     if(car && Settings.isPaused()) {
         EngineSound.update(car.engineRPM, 0);
+        if(typeof ForceFeedback !== "undefined") ForceFeedback.idle();       // (and the wheel while the menu is open)
     }
     if(car && !Settings.isPaused()) {
         var now = performance.now();
