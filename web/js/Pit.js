@@ -51,6 +51,9 @@ OpenRacer.PitStop = function (vehicle) {
             return false;
         }
         for(var i = 0; i < 4; i++) if(!w[i].hasContact || w[i].surface !== "track01") return false;
+        // (a track with a pit area drawn: a stop elsewhere on a road called "track01" is no pit stop)
+        var ground = typeof groundWorld !== "undefined" ? groundWorld : null;
+        if(ground && ground.hasPitAreas && ground.hasPitAreas() && !ground.inPit(vehicle.x, vehicle.z)) return false;
         return true;
     };
 
@@ -157,38 +160,58 @@ OpenRacer.PitLane = {
         var centroids = ground.centroidsOf("track01");
         if(centroids.length < 6) return null;
         var n = line.count();
-        // the centroids by the index of the racing line they are nearest to
-        var byIndex = {};
+        // where a point is: the index of the racing line it is nearest to, and how far to the left of the line it lies
         var hint = null;
-        centroids.forEach(function (c) {
+        function placeOf(c) {
             var i = line.nearest(c.x, c.z, hint);
             hint = i;
-            var p = line.point(i);
-            if(Math.hypot(p.x - c.x, p.z - c.z) > 60) return; // not beside the track
-            if(!byIndex[i]) byIndex[i] = { x: 0, y: 0, z: 0, k: 0 };
-            byIndex[i].x += c.x; byIndex[i].y += c.y; byIndex[i].z += c.z; byIndex[i].k++;
-        });
-        var indices = Object.keys(byIndex).map(Number).sort(function (a, b) { return a - b; });
-        if(indices.length < 3) return null;
-        // the lane is one stretch along the line: it starts after the biggest gap (around the end of the line too)
-        var start = 0, biggest = -1;
-        for(var k = 0; k < indices.length; k++) {
-            var next = indices[(k + 1) % indices.length];
-            var gap = ((next - indices[k]) % n + n) % n;
-            if(gap > biggest) { biggest = gap; start = (k + 1) % indices.length; }
+            var p = line.point(i), q = line.point(i + 1), tx = q.x - p.x, tz = q.z - p.z, tl = Math.hypot(tx, tz) || 1;
+            return { index: i, left: (-(c.x - p.x) * tz + (c.z - p.z) * tx) / tl, dist: Math.hypot(p.x - c.x, p.z - c.z) };
         }
-        var ordered = indices.slice(start).concat(indices.slice(0, start));
-        var points = ordered.map(function (i) { var b = byIndex[i]; return { x: b.x / b.k, y: b.y / b.k, z: b.z / b.k, index: i }; });
+        // the pit-lane road beside the track (a track with a pit area drawn: walk, below; else all of that road along the line)
+        var placed = centroids.map(function (c) { var at = placeOf(c); at.c = c; return at; }).filter(function (at) { return at.dist <= 60; });     // (not beside the track: not the lane)
+        var inArea = placed.filter(function (at) { return at.c.area; });
+        var points, ordered;
+        if(inArea.length) {
+            points = OpenRacer.PitLane.walk(placed, inArea, n, placeOf, ground, line);
+            if(points.length < 3) return null;
+            ordered = points.map(function (p) { return p.index; });
+        } else {
+            // the centroids by the index of the racing line they are nearest to
+            var byIndex = {};
+            placed.forEach(function (at) {
+                var i = at.index, c = at.c;
+                if(!byIndex[i]) byIndex[i] = { x: 0, y: 0, z: 0, k: 0 };
+                byIndex[i].x += c.x; byIndex[i].y += c.y; byIndex[i].z += c.z; byIndex[i].k++;
+            });
+            var indices = Object.keys(byIndex).map(Number).sort(function (a, b) { return a - b; });
+            if(indices.length < 3) return null;
+            // the lane is one stretch along the line: it starts after the biggest gap (around the end of the line too)
+            var start = 0, biggest = -1;
+            for(var k = 0; k < indices.length; k++) {
+                var next = indices[(k + 1) % indices.length];
+                var gap = ((next - indices[k]) % n + n) % n;
+                if(gap > biggest) { biggest = gap; start = (k + 1) % indices.length; }
+            }
+            ordered = indices.slice(start).concat(indices.slice(0, start));
+            points = ordered.map(function (i) { var b = byIndex[i]; return { x: b.x / b.k, y: b.y / b.k, z: b.z / b.k, index: i }; });
+        }
         // smoothed, so the AI does not weave over the triangles
         var smooth = points.map(function (p, i) {
             var a = points[Math.max(0, i - 1)], c = points[Math.min(points.length - 1, i + 1)];
             return { x: (a.x + p.x + c.x) / 3, y: p.y, z: (a.z + p.z + c.z) / 3, index: p.index };
         });
+        var stopAt = Math.floor(smooth.length / 2);
+        if(inArea.length) {
+            var middle = inArea.map(function (at) { return at.index; }).sort(function (a, b) { return ((a - ordered[0]) % n + n) % n - ((b - ordered[0]) % n + n) % n; })[Math.floor(inArea.length / 2)];
+            var apart = function (a, b) { var d = ((a - b) % n + n) % n; return Math.min(d, n - d); };
+            smooth.forEach(function (p, i) { if(apart(p.index, middle) < apart(smooth[stopAt].index, middle)) stopAt = i; });
+        }
         return {
             points: smooth,
             entry: ordered[0],                                    // the index of the racing line where it starts
             exit: ordered[ordered.length - 1],                    // ... and ends
-            stop: Math.floor(smooth.length / 2),                  // the point to stop at (the middle of the lane)
+            stop: stopAt,                                         // the point to stop at (the middle of the pit area, else of the lane)
             length: ordered.length * line.step,
             // the point of the lane for an index of the racing line (the nearest one)
             pointAt: function (index) {
@@ -207,5 +230,107 @@ OpenRacer.PitLane = {
                 return at <= span;
             }
         };
+    },
+
+    // The lane of a track with a pit area drawn (track.json "pit"). Through the area: the middle of it. Out of it, both ways along the racing line: the pit-lane road ("track01")
+    // that goes on from the point before (within 8 m to the side of it, two metres on, no wall in between; the nearest in line first), until it has joined the track (8 m from the line). Only on the
+    // side of the area: the road of Circuit is "track01" on both sides of the straight, and in many kerbs. (An average of all of it per point of the line ran a kilometre,
+    // from the right of the road to the grass on its left; with the side kept, it followed a dead end beside the pit exit into the wall, a strip painted across the road, and
+    // a strip on the other side of the pit wall; an AI that went in got stuck there.)
+    walk: function (placed, inArea, n, placeOf, ground, line) {
+        // a wall between two points (a triangle that stands up out of the road, at the height of a car), looked for every metre: a branch behind a wall is not the
+        // road on (beside the pit lane of Circuit runs a strip of "track01" on the other side of the pit wall, and the lane went along that, into the wall at its end)
+        var probe = [], nearest = {};
+        function blocked(a, b, room) {
+            var r = room || 0.6;
+            if(!ground.nearby || !ground.closest) return false;
+            var steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z)));
+            for(var s = 0; s <= steps; s++) {
+                var x = a.x + (b.x - a.x) * s / steps, z = a.z + (b.z - a.z) * s / steps, y = a.y + (b.y - a.y) * s / steps;
+                var under = ground.query(x, z, y + 2, 4), h = (under ? under.y : y) + 0.9;
+                ground.nearby(x, h, z, r, probe);
+                for(var t = 0; t < probe.length; t++) if(ground.closest(probe[t], x, h, z, nearest) < r * r && nearest.y > h - 0.6) return true;
+            }
+            return false;
+        }
+        var side = inArea.reduce(function (sum, at) { return sum + at.left; }, 0) >= 0 ? 1 : -1;
+        var area = {}, road = {};
+        inArea.forEach(function (at) { (area[at.index] = area[at.index] || []).push(at); });
+        placed.forEach(function (at) { if(!at.c.area && at.left * side > 3) (road[at.index] = road[at.index] || []).push(at); });
+        var wrap = function (i) { return ((i % n) + n) % n; };
+        var mean = function (list) {
+            var x = 0, y = 0, z = 0, left = 0;
+            list.forEach(function (at) { x += at.c.x; y += at.c.y; z += at.c.z; left += at.left; });
+            return { x: x / list.length, y: y / list.length, z: z / list.length, left: left / list.length };
+        };
+        // the stretch of the line beside the area (a gap of a few points within it is still the area)
+        var seed = inArea[Math.floor(inArea.length / 2)].index, from = seed, to = seed, miss, i;
+        for(miss = 0, i = seed - 1; miss <= 3 && seed - i < n / 2; i--) { if(area[wrap(i)]) { from = wrap(i); miss = 0; } else miss++; }
+        for(miss = 0, i = seed + 1; miss <= 3 && i - seed < n / 2; i++) { if(area[wrap(i)]) { to = wrap(i); miss = 0; } else miss++; }
+        // through the area: the free part of it (2 m from a wall or a building in it: the middle of the area of Circuit runs through one), and of two free strips side by
+        // side the one nearest to the track at the start, the fast lane, and then the one that goes on from it
+        // (with the pit-lane road beside the area too: on Circuit the area is narrow there, and the lane is wider than it)
+        var middle = [];
+        for(i = from; ; i = wrap(i + 1)) {
+            var free = (area[i] || []).concat(road[i] || []).filter(function (at) { return !blocked(at.c, at.c, 2); }).sort(function (a, b) { return a.left - b.left; });
+            var strips = free.length ? [[free[0]]] : [];
+            for(var f = 1; f < free.length; f++) { if(free[f].left - free[f - 1].left > 3.5) strips.push([]); strips[strips.length - 1].push(free[f]); }
+            var before = middle[middle.length - 1];
+            strips = strips.filter(function (st) { return st.some(function (at) { return at.c.area; }) && (!before || !blocked(before, mean(st))); });
+            if(strips.length) {
+                // (the first the one nearest to the track, after that the one in line with the point before)
+                var score = function (st) { return before ? Math.abs(mean(st).left - before.left) : Math.abs(mean(st).left); };
+                var strip = strips.reduce(function (a, b) { return score(b) < score(a) ? b : a; });
+                var m = mean(strip); m.index = i;
+                if(!blocked(m, m, 1.2) && (!before || !blocked(before, m))) middle.push(m);        // (the middle of a strip can be on a wall in it)
+            }
+            if(i === to) break;
+        }
+        if(!middle.length) return [];
+        // out of the area: the road that goes on (a branch side by side with another is the one in line with the point before); a branch that ends without joining the
+        // track (a dead end, a strip behind a wall) is left, and the search goes back to the fork for the other branch
+        function out(step, start, left, last) {
+            var seen = {}, longest = [];
+            function search(k, last, left, gone, path) {
+                if(k >= n / 2 || gone > 6) return null;
+                var at = wrap(start + step * k), key = at + "," + Math.round(left / 2);
+                if(seen[key]) return null;
+                seen[key] = true;
+                var near = (road[at] || []).filter(function (r) { return Math.abs(r.left - left) < 8; });
+                // the branches: the points side by side, split where there is more than 2.5 m between them, and not behind a wall
+                near.sort(function (a, b) { return a.left - b.left; });
+                var branches = near.length ? [[near[0]]] : [];
+                for(var q = 1; q < near.length; q++) { if(near[q].left - near[q - 1].left > 2.5) branches.push([]); branches[branches.length - 1].push(near[q]); }
+                var middleOf = function (list) { return list.reduce(function (sum, r) { return sum + r.left; }, 0) / list.length; };
+                branches = branches.filter(function (b) { return !blocked(last, mean(b)); });
+                branches.sort(function (a, b) { return Math.abs(middleOf(a) - left) - Math.abs(middleOf(b) - left); });
+                for(var b = 0; b < branches.length; b++) {
+                    var p = mean(branches[b]); p.index = at;
+                    var l = placeOf(p).left, next = path.concat([p]);
+                    if(next.length > longest.length) longest = next;
+                    if(Math.abs(l) < 8 && !blocked(p, line.point(at))) return next;        // joined the track (no pit wall in between)
+                    var found = search(k + 1, p, l, 0, next);
+                    if(found) return found;
+                }
+                return search(k + 1, last, left, gone + 1, path);
+            }
+            var found = search(1, last, left, 0, []);
+            return { path: found || longest, joined: !!found };
+        }
+        // (from the last point of the area, or one before it when the road on is not to be found from there: the end of the area of Circuit is against a wall)
+        function leave(step) {
+            var tries = Math.min(10, middle.length - 1), best = null;
+            for(var t = 0; t <= tries; t++) {
+                var k = step > 0 ? middle.length - 1 - t : t, from = middle[k], way = out(step, from.index, placeOf(from).left, from);
+                if(!best) best = { k: k, path: way.path };
+                if(way.joined) return { k: k, path: way.path };
+            }
+            return best;
+        }
+        var exit = leave(1);
+        middle = middle.slice(0, exit.k + 1);
+        var entry = leave(-1);
+        middle = middle.slice(entry.k);
+        return entry.path.reverse().concat(middle, exit.path);
     }
 };

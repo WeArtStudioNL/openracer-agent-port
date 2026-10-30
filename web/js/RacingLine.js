@@ -154,7 +154,8 @@ OpenRacer.RacingLine.prototype.shorten = function (ground, margin, reach) {
 // The speed a car can have at every point: limited by the bend there (lateral acceleration aLat, m/s^2, on the road; gripOf(surface) gives the share of that
 // grip on another surface, sand or grass, when it is given), by the crest there (above the speed at which the car leaves the ground over the top of a dune
 // it flies, and lands where the line is not: a little of that is allowed) and by the braking (aBrake, scaled by the grip too) that the slower points ahead ask for
-OpenRacer.RacingLine.prototype.computeSpeeds = function (aLat, aBrake, vMax, gripOf) {
+// factorOf (optional): a factor on the speed of the bend at a point (what a driver learned there); the braking before it follows from that speed
+OpenRacer.RacingLine.prototype.computeSpeeds = function (aLat, aBrake, vMax, gripOf, factorOf) {
     var n = this.points.length, G = 9.81, self = this;
     var speeds = new Float32Array(n);
     var grip = new Float32Array(n);
@@ -174,6 +175,7 @@ OpenRacer.RacingLine.prototype.computeSpeeds = function (aLat, aBrake, vMax, gri
         var h = 3, d2 = (height[(i + h) % n] - 2 * height[i] + height[((i - h) % n + n) % n]) / ((h * this.step) * (h * this.step));
         if (this.closed && d2 < -1e-4) speeds[i] = Math.min(speeds[i], 1.15 * Math.sqrt(G / -d2));
         if (speeds[i] < 6) speeds[i] = 6;                 // (a bend tighter than that does not exist on a track; a kink of the line is not a reason to crawl)
+        if (factorOf) speeds[i] = Math.min(vMax, speeds[i] * factorOf(i));
     }
     // braking: going backwards, a point may not be faster than the next one allows
     var passes = this.closed ? 2 : 1;

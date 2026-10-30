@@ -545,6 +545,9 @@ function startSkidpad() {
     function skidpadDone() {
         sp.running = false;
         var g = sp.best / 9.81;
+        // (on asphalt, for the AI: it drives this car with this setup in the bends with the grip that it held here)
+        // (not after the tuning menu was opened here: the car is then no longer the setup that a race would load)
+        if(!skidpadSurface && !sp.tuned && g > 0.3 && OpenRacer.SkidpadGrip) OpenRacer.SkidpadGrip.set(carConfig, g);
         var panel = document.createElement("div");
         panel.style.cssText = "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1002; min-width: 380px; padding: 22px 28px; " +
             "background: rgba(24, 29, 35, 0.95); color: #ffffff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); text-align: center;";
@@ -558,7 +561,7 @@ function startSkidpad() {
         document.body.appendChild(panel);
         sp.panel = panel;
         document.getElementById("skidReset").onclick = skidpadReset;
-        document.getElementById("skidTune").onclick = function() { Tuning.toggle(); };
+        document.getElementById("skidTune").onclick = function() { sp.tuned = true; Tuning.toggle(); };
         document.getElementById("skidMenu").onclick = leaveToMenu;
     }
 

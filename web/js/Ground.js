@@ -50,6 +50,7 @@ OpenRacer.GroundWorld = function (cellSize) {
         return inside;
     }
     this.inPit = function (x, z) { for(var i = 0; i < pitAreas.length; i++) if(inPolygon(pitAreas[i], x, z)) return true; return false; };
+    this.hasPitAreas = function () { return pitAreas.length > 0; };
     var inPit = this.inPit;
     function pitSurface(x, z, surface) { return pitAreas.length && surface !== "wall" && inPit(x, z) ? PIT : surface; }
 
@@ -110,7 +111,7 @@ OpenRacer.GroundWorld = function (cellSize) {
             for(var x = minX + step / 2; x < maxX; x += step) for(var z = minZ + step / 2; z < maxZ; z += step) {
                 if(!inPolygon(poly, x, z)) continue;
                 var road = this.query(x, z, 1e4, 1e4);
-                if(road) out.push({ x: x, y: road.y, z: z });
+                if(road) out.push({ x: x, y: road.y, z: z, area: true });
             }
         }
         return out;

@@ -399,7 +399,8 @@ OpenRacer.Vehicle = function (parameters, input) {
         var overheated = Math.min(2, Math.max(0, (w.temp - (tk.optimum + tk.window)) / 30));
         // a powerful car spins its wheels a lot: the slip when driving off counts less than a slide through a bend
         var counted = Math.abs(v) < 8 ? slidePower * 0.35 : slidePower;
-        w.wear += counted * (1 + 2 * overheated) * dt / (6e6 * this.tyreLife * tk.life * (w.sizeWear || 1)) * this.wearScale;
+        // (a set of slicks lasts 45 to 75 minutes of racing, 25 to 45 laps: 4.8e7 J of slip for a tyre of life 1. It was 6e6, and a set of slicks was 40 % gone after one lap)
+        w.wear += counted * (1 + 2 * overheated) * dt / (4.8e7 * this.tyreLife * tk.life * (w.sizeWear || 1)) * this.wearScale;
         w.condition = conditionOf(w) * (w.pressureGrip || 1);
     };
 

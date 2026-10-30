@@ -88,24 +88,38 @@ OpenRacer.Opponent = function (config, line, options) {
     var speeds = null, speedsGrip = -1;
     // learning: the line is driven in pieces of five points (10 m); each piece has a factor on the speed the line allows, that grows when the piece was driven cleanly (the car stayed
     // near the line) and shrinks when the car ran wide in it or crashed just after it, up to a ceiling that goes with the skill (hard: 1.6, normal: 1.35, easy: 1.1)
-    var SEG = 5, learn = null, segNow = -1, segOff = 0;
-    var learnCap = 1.1 + 0.5 * Math.max(0, Math.min(1, (self.skill - 0.7) / 0.3));
+    // (the factor is on the speed of the bend, and the braking before it is worked out again from it: a factor on the speed at every point let a straight that was
+    // driven cleanly learn a speed that left no room to brake for the bend at its end, and the AI went into the first bend too fast and off)
+    var SEG = 5, learn = null, segNow = -1, segOff = 0, learnChanged = false, learnBuilt = 0;
+    // the grip of the car as the skidpad measured it (OpenRacer.SkidpadGrip, in g, for this car and setup), else null: a guess from tyres.grip in car.json
+    var measuredGrip = OpenRacer.SkidpadGrip ? OpenRacer.SkidpadGrip.get(config) : null;
+    this.measuredGrip = measuredGrip;
+    // the ceiling of the factor: with the grip measured little is left to learn (easy 1, normal 1.04, hard 1.08); a guess can be far off (a wide tyre grips much more
+    // than tyres.grip says), so it may learn more
+    var skillShare = Math.max(0, Math.min(1, (self.skill - 0.7) / 0.3));
+    var learnCap = measuredGrip ? 1 + 0.08 * skillShare : 1.1 + 0.3 * skillShare;
     this.learnFactor = function () { return learn; };
     var learnSavedLap = 0;
     function learnKey() { return "openracer.ai." + (typeof currentTrack !== "undefined" && currentTrack && currentTrack.id || "track") + "." + (config.id || "car") + "." + self.name + "." + (line && line.points.length ? Math.round(line.points[0].x) + "," + Math.round(line.points[0].z) + "," + line.points.length : ""); }
     function learnEnd(seg, off, crashed) {
         if (!learn) return;
         var k = ((seg % learn.length) + learn.length) % learn.length;
+        var before = learn[k];
         if (crashed) { for (var b = 0; b < 3; b++) { var kb = ((k - b) % learn.length + learn.length) % learn.length; learn[kb] = Math.max(0.6, learn[kb] * 0.82); } }
-        else if (off < 1.8) learn[k] = Math.min(learnCap, learn[k] * 1.07);
+        else if (off < 1.8) learn[k] = Math.min(learnCap, learn[k] * 1.03);
         else if (off > 3.5) learn[k] = Math.max(0.6, learn[k] * 0.93);
+        if (crashed || learn[k] !== before) learnChanged = true;
     }
     var carGrip = Math.max(0.8, Math.min(2, (config && config.tyres && config.tyres.grip) || 1.2));    // (the grip of the tyres of the car: a kart on semislicks holds 1.2 g, a car on road tyres less)
     function buildSpeeds() {
         var roadGrip = typeof getSurface === "function" ? getSurface("road").static : 1;
         var wetness = roadGrip / 1.2;                                // (1 on a dry road)
         speedsGrip = roadGrip;
-        speeds = line ? line.computeSpeeds(9.81 * carGrip * 1.1 * self.skill * wetness, 9.81 * carGrip * 0.95 * self.skill * wetness, 90, function (name) { return typeof getSurface === "function" && name ? getSurface(name).static / roadGrip : 1; }) : null;
+        // (the skidpad's g is what the car holds, the share of it that the driver uses is the skill; the guess from tyres.grip is a factor on 1 g)
+        var lateral = measuredGrip ? measuredGrip : carGrip * 1.1, braking = measuredGrip ? measuredGrip * 0.95 : carGrip * 0.95;
+        var factor = learn ? function (i) { return learn[Math.floor(i / SEG) % learn.length]; } : null;
+        speeds = line ? line.computeSpeeds(9.81 * lateral * self.skill * wetness, 9.81 * braking * self.skill * wetness, 90, function (name) { return typeof getSurface === "function" && name ? getSurface(name).static / roadGrip : 1; }, factor) : null;
+        learnChanged = false; learnBuilt = self.clock || 0;
     }
     buildSpeeds();
 
@@ -202,6 +216,8 @@ OpenRacer.Opponent = function (config, line, options) {
     var speedTrail = [];         // the speed over the road of the last frames, for a hard hit
     var aside = 0;               // how far to the side of the line it drives (m), to pass a car
     var asideTarget = 0;
+    var passing = null, passSide = 0, passFor = 0;   // the car that it is passing, the side it chose (1: left), and how long ago it last saw it ahead (s)
+    var lastBeside = null;
     this.drive = function (delta, others) {
         var v = this.vehicle;
         if (!line || !speeds) { this.throttle = 0; this.brakePedal = 1; return; }
@@ -211,7 +227,7 @@ OpenRacer.Opponent = function (config, line, options) {
         var n = line.count();
 
         // the car ahead: move aside for it, and do not run into it
-        var ahead = null, aheadDist = Infinity;
+        var ahead = null, aheadDist = Infinity, blocker = null;
         for (var k = 0; k < others.length; k++) {
             var o = others[k];
             if (o === v) continue;
@@ -219,14 +235,29 @@ OpenRacer.Opponent = function (config, line, options) {
             var forward = Math.cos(v.psi), side = Math.sin(v.psi);
             var along = dx * forward + dz * side;              // in front of us
             var across = -dx * side + dz * forward;             // to the left
-            if (along > 0 && along < 22 && Math.abs(across) < 3.2 && along < aheadDist) { ahead = { along: along, across: across, u: o.u }; aheadDist = along; }
+            // (the car that it is passing stays the one ahead while it is beside it, in a wider box: moved aside, the car ahead dropped out of the narrow box, the AI went
+            // back to the line, saw it again and moved aside again, and weaved from left to right down the straights)
+            var box = o === passing ? 5.5 : 3.2;
+            if (along > -2 && along < 22 && Math.abs(across) < box && (along > 0 || o === passing) && along < aheadDist) { ahead = { along: along, across: across, u: o.u, vehicle: o }; aheadDist = along; }
+            // the car in its path: in front (or its nose level with our middle) and overlapping sideways; it holds back for that one (the cars side by side into a bend,
+            // squeezed together where the road narrows, all held on and took each other off: now the one that is behind gives way)
+            if (along > -1 && along < 25 && Math.abs(across) < 2.2 && (!blocker || along < blocker.along)) blocker = { along: along, u: o.u };
         }
         asideTarget = 0;
         var holdBack = 1;
         if (ahead) {
-            asideTarget = (ahead.across > 0 ? -1 : 1) * 2.6;
-            var gap = ahead.along - 4.5;
-            if (gap < 2 + speed * 0.15 && ahead.u < speed + 1) holdBack = Math.max(0.2, gap / (2 + speed * 0.15));
+            // the side is chosen once for a car and kept until it is passed (or a second has gone by without it ahead)
+            if (ahead.vehicle !== passing || !passSide) { passing = ahead.vehicle; passSide = ahead.across > 0 ? -1 : 1; }
+            passFor = 0;
+            asideTarget = passSide * 2.6;
+        } else if (passing) {
+            passFor += delta;
+            if (passFor < 1) asideTarget = passSide * 2.6;
+            else { passing = null; passSide = 0; }
+        }
+        if (blocker) {
+            var gap = blocker.along - 4.5;
+            if (gap < 2 + speed * 0.15 && blocker.u < speed + 1) holdBack = Math.max(0.2, gap / (2 + speed * 0.15));
         }
         if (this.finished) asideTarget = -3; // done: to the right, out of the way
 
@@ -287,7 +318,7 @@ OpenRacer.Opponent = function (config, line, options) {
             }
         }
         // the pit lane (a track without boxes): in when the tyres are worn or the fuel will not last, through the lane at a walking pace, a stop in the middle
-        var lane = this.pitLane, inLane = false;
+        var lane = this.pitLane, inLane = false, laneSpeed = 16;
         if (lane && !box && v.wearEnabled) {
             var lapsLeft = this.raceLaps ? this.raceLaps - this.lapsCompleted : 99;
             var fuelNeeded = fuelPerLap !== null ? fuelPerLap * (lapsLeft + 0.4) : v.tank * 0.12;
@@ -296,14 +327,32 @@ OpenRacer.Opponent = function (config, line, options) {
             if (!this.pitting && need && toEntry < 60) this.pitting = true;
             if (this.pitting) {
                 inLane = lane.covers(this.lineIndex) || toEntry < 60;
-                if (!inLane) { this.pitting = false; this.pitStops++; }
+                if (!inLane) { this.pitting = false; this.pitStops++; this.laneStopped = false; }
                 else {
                     asideTarget = 0;
+                    // (the stop of this visit is done once: the pit forgets it as soon as the car moves, and the AI stopped again, and again, at the same place)
+                    if (this.pit.done) this.laneStopped = true;
                     var stopIndex = lane.points[lane.stop].index;
                     var span = ((lane.exit - lane.entry) % n + n) % n, at = ((this.lineIndex - lane.entry) % n + n) % n, stopAt = ((stopIndex - lane.entry) % n + n) % n;
-                    if (at <= span && at >= stopAt - 1 && at <= stopAt + 2 && !this.pit.done) atStop = true;
+                    if (at <= span && at >= stopAt - 1 && at <= stopAt + 2 && !this.pit.done && !this.laneStopped) atStop = true;
+                    // (the brakes come on in time for the stop: it was told to stop only within the last six metres, at the speed of the lane, and drove past)
+                    if (!this.pit.done && !this.laneStopped && at <= stopAt) laneSpeed = Math.min(16, Math.sqrt(2 * 3.5 * Math.max(0, (stopAt - at) * line.step - 1)) + 0.6);
                 }
             }
+        }
+        // (aside only as far as there is road: on the inside or the outside of a bend 2.6 m from the line is often the kerb or the gravel, and in the first bend the
+        // cars that moved aside for the car ahead went off; the point ahead is looked at in steps, and the side shrinks to where the road still is)
+        if (asideTarget !== 0) {
+            var ground = typeof groundWorld !== "undefined" ? groundWorld : v.ground;
+            var lookA = Math.round(Math.max(6, speed * 0.6) / line.step), pa = line.point(this.lineIndex + lookA), pb = line.point(this.lineIndex + lookA + 1);
+            var ux = pb.x - pa.x, uz = pb.z - pa.z, ul = Math.hypot(ux, uz) || 1, roadName = pa.surface || "road";
+            for (var tries = 0; tries < 4 && ground && ground.query; tries++) {
+                var sx = pa.x - (uz / ul) * asideTarget, sz = pa.z + (ux / ul) * asideTarget;
+                var under = ground.query(sx, sz, (pa.y || 0) + 3, 6);
+                if (under && (under.surface === roadName || under.surface === "road")) break;
+                asideTarget *= 0.6;
+            }
+            if (Math.abs(asideTarget) < 0.8) asideTarget = 0;
         }
         aside += (asideTarget - aside) * Math.min(1, delta / 0.7);
 
@@ -330,7 +379,12 @@ OpenRacer.Opponent = function (config, line, options) {
         // understeers on sand) tracks a wider arc than that and drifts off the line without ever asking for more; up to 8 degrees for 5 m beside the line it should be on
         var hereP = line.point(this.lineIndex), hx = hereP.x - (tz / tl) * aside - v.x, hz = hereP.z + (tx / tl) * aside - v.z;
         var beside = -hx * Math.sin(v.psi) + hz * Math.cos(v.psi);                        // the line to the left of the car (m)
-        steer += Math.max(-0.05, Math.min(0.05, beside * 0.012));
+        // (the same angle turns the car much harder at speed: the yaw rate goes with the speed, and the sideways speed it gives with its square; the pull is scaled to
+        // that, and damped by how fast the car already closes in on the line, else it swung across the line and back on every straight)
+        var rate = lastBeside === null ? 0 : (beside - lastBeside) / Math.max(delta, 1e-3);
+        lastBeside = beside;
+        var atSpeed = Math.min(1, (15 * 15) / Math.max(15 * 15, speed * speed));
+        steer += Math.max(-0.05, Math.min(0.05, (beside * 0.012 + rate * 0.01) * atSpeed));
         steer = Math.max(-this.maxTurn, Math.min(this.maxTurn, steer));
         smoothSteer += (steer - smoothSteer) * Math.min(1, delta / 0.08);
         this.turnAngle = smoothSteer;
@@ -343,7 +397,9 @@ OpenRacer.Opponent = function (config, line, options) {
                 var stored = JSON.parse(localStorage.getItem(learnKey()) || "null");
                 if (stored && stored.length === learn.length) for (var ls = 0; ls < learn.length; ls++) learn[ls] = Math.max(0.6, Math.min(learnCap, 1 + (stored[ls] - 1) * 0.9));
             } catch (e) { /* no storage */ }
+            buildSpeeds();
         }
+        if (learnChanged && this.clock - learnBuilt > 1) buildSpeeds();
         if (this.lapsCompleted !== learnSavedLap) {
             learnSavedLap = this.lapsCompleted;
             try { localStorage.setItem(learnKey(), JSON.stringify(Array.prototype.map.call(learn, function (x) { return Math.round(x * 100) / 100; }))); } catch (e) { /* no storage */ }
@@ -352,9 +408,9 @@ OpenRacer.Opponent = function (config, line, options) {
         if (segHere !== segNow) { if (segNow >= 0 && !this.crashedAt && this.clock - (this.lapStart || 0) > 3 && !boxMode && !inLane) learnEnd(segNow, segOff, false); segNow = segHere; segOff = 0; }
         segOff = Math.max(segOff, Math.hypot(line.point(this.lineIndex).x - v.x, line.point(this.lineIndex).z - v.z));
         var allowed = Infinity;
-        for (var j = 0; j <= 4; j++) { var kj = ((this.lineIndex + j) % n + n) % n; allowed = Math.min(allowed, speeds[kj] * learn[Math.floor(kj / SEG) % learn.length]); }
+        for (var j = 0; j <= 4; j++) { var kj = ((this.lineIndex + j) % n + n) % n; allowed = Math.min(allowed, speeds[kj]); }
         allowed = Math.min(allowed * holdBack * this.paceFactor, this.paceCap);
-        if (inLane) allowed = Math.min(allowed, 16);        // the pit lane: slowly
+        if (inLane) allowed = Math.min(allowed, laneSpeed);  // the pit lane: slowly, and to a stop at the box
         if (boxMode) allowed = Math.min(allowed, boxSpeed);      // to the box and back: slowly
         if (atStop) allowed = 0;                            // at the box, until the stop is done
         if (this.finished) allowed = 0; // slows down and stops
@@ -391,6 +447,9 @@ OpenRacer.Opponent = function (config, line, options) {
         if (!this.anchor || Math.hypot(v.x - this.anchor.x, v.z - this.anchor.z) > 4) { this.anchor = { x: v.x, z: v.z }; this.stillFor = 0; }
         else if (!inLane && !boxMode) this.stillFor = (this.stillFor || 0) + delta;
         if (this.stillFor > 8) this.lostFor = 99;
+        // stuck in the pit lane (against its wall, not at the stop): it was never put back, and stood there for the rest of the race
+        if ((inLane || boxMode) && !atStop && speed < 1 && this.throttle > 0.3) this.laneStuck = (this.laneStuck || 0) + delta; else this.laneStuck = 0;
+        if (this.laneStuck > 10) { this.lostFor = 99; inLane = boxMode = false; }
         // (not for a driver of a car that is not an AI car, the player's after the finish: only drive() runs for it, its clock stands still, and it was counted as
         // crashed again every frame, which also took its learnt speeds down every frame)
         if (!options.vehicle && !this.crashedAt && !inLane && !boxMode && (hardHit || this.overFor > 1 || wheelOff || this.lostFor > 7)) {
@@ -418,6 +477,7 @@ OpenRacer.Opponent = function (config, line, options) {
         if (v.repair) v.repair();
         if (v.controller && v.controller.recover) v.controller.recover();
         if (this.driver && this.driver.recover) this.driver.recover();
+        this.pitting = false; this.pitPhase = 0; this.laneStopped = false; this.laneStuck = 0;      // (put back beside the track: out of the pits)
         if (this.parts && this.parts.moved) this.parts.moved();
         this.lostFor = 0; this.overFor = 0; this.stuck = 0; smoothSteer = 0; this.reverse = false; speedTrail.length = 0;        // (the stop of the reset is no hit)
         this.anchor = null; this.stillFor = 0;
@@ -575,5 +635,29 @@ OpenRacer.collideCars = function (vehicles) {
                 }
             }
         }
+    }
+};
+
+// The grip that a car holds, as the skidpad measured it (main.js), kept in this browser per car and setup: the AI drives the bends with it (a share of it, the skill). The key
+// is the car and a hash of its whole configuration, so a changed setup is a car that has not been measured yet.
+OpenRacer.SkidpadGrip = {
+    key: function (config) {
+        // (the keys sorted at every level: the same setup gives the same text however its object was put together)
+        function stable(value) {
+            if (Array.isArray(value)) return "[" + value.map(stable).join(",") + "]";
+            if (value && typeof value === "object") return "{" + Object.keys(value).sort().map(function (k) { return JSON.stringify(k) + ":" + stable(value[k]); }).join(",") + "}";
+            return JSON.stringify(value);
+        }
+        var copy = {};
+        Object.keys(config || {}).forEach(function (k) { if (["name", "description", "preview", "folder", "source", "model"].indexOf(k) < 0) copy[k] = config[k]; });
+        var text = stable(copy), hash = 5381;
+        for (var i = 0; i < text.length; i++) hash = ((hash * 33) ^ text.charCodeAt(i)) >>> 0;
+        return "openracer.grip." + ((config && config.id) || "car") + "." + hash.toString(36);
+    },
+    get: function (config) {
+        try { var kept = JSON.parse(localStorage.getItem(this.key(config)) || "null"); return kept && kept.g > 0.3 && kept.g < 4 ? kept.g : null; } catch (e) { return null; }
+    },
+    set: function (config, g) {
+        try { localStorage.setItem(this.key(config), JSON.stringify({ g: Math.round(g * 1000) / 1000 })); } catch (e) { /* no storage */ }
     }
 };

@@ -302,6 +302,7 @@ OpenRacer.Car = function( config, domElement ) {
         flames.clear();
         if(OpenRacer.DragStrip) OpenRacer.DragStrip.reset();
         lastGateX = null; // a jump of the car is no crossing of a gate
+        clearSectors(); sectorIndex = null;
         if(this.parts && this.parts.moved) this.parts.moved();
         this.recoverCrash();            // (the skidpad's reset of a motorcycle that was down left it down: no steering, the rider still a ragdoll)
         this.lapStarted = false;
@@ -914,6 +915,27 @@ OpenRacer.Car = function( config, domElement ) {
     // A track with gates (lines across the road, see the track editor): a gate is passed when the car crosses its line in the direction of
     // the gate. It is then handled like a piece of road that is a checkpoint.
     var lastGateX = null, lastGateZ = null;
+    // The racing line as a second way to count (a track with gates and a closed line): the lap is cut in SECTORS pieces of the line, and a piece counts as driven when
+    // the car was within 40 m of it. A lap with all pieces driven counts, also when a gate was missed: the pit lane runs beside the road, out of the width of the gates,
+    // and a lap through the pits was no lap. Beside the finish gate (up to 40 m out of its width, where the line is at the finish) the line is the finish as well.
+    var SECTORS = 24, sectorSeen = [], sectorIndex = null;
+    function lapLine() { var line = typeof race !== "undefined" && race && race.line; return line && line.closed && line.count() > SECTORS ? line : null; }
+    function clearSectors() { for(var i = 0; i < SECTORS; i++) sectorSeen[i] = false; }
+    clearSectors();
+    function watchSectors(v) {
+        var line = lapLine();
+        if(!line) return;
+        sectorIndex = line.nearest(v.x, v.z, sectorIndex);
+        var p = line.point(sectorIndex);
+        if(Math.hypot(p.x - v.x, p.z - v.z) < 40) sectorSeen[Math.min(SECTORS - 1, Math.floor(line.fractionOf(sectorIndex) * SECTORS))] = true;
+    }
+    function allSectors() { return !!lapLine() && sectorSeen.every(Boolean); }
+    function nearFinishOfLine() {
+        var line = lapLine();
+        if(!line || sectorIndex === null) return false;
+        var f = line.fractionOf(sectorIndex);
+        return f < 0.04 || f > 0.96;
+    }
     function checkGates(v) {
         var crossed = null;
         if(lastGateX !== null) {
@@ -928,6 +950,7 @@ OpenRacer.Car = function( config, domElement ) {
                     var px = lastGateX + (v.x - lastGateX) * t - gate.x, pz = lastGateZ + (v.z - lastGateZ) * t - gate.z;
                     var b = -px * dz + pz * dx;
                     if(Math.abs(b) <= (gate.width || 30) / 2) crossed = g;
+                    else if(g === 0 && crossed === null && Math.abs(b) <= (gate.width || 30) / 2 + 40 && nearFinishOfLine()) crossed = 0;
                 }
             }
         }
@@ -941,6 +964,7 @@ OpenRacer.Car = function( config, domElement ) {
         if(trackCheckPoints.length === 0) return;
         var name;
         if(trackGates.length) {
+            watchSectors(this.vehicle);
             var crossed = checkGates(this.vehicle);
             if(crossed === null) return;
             lastCrossedGate = crossed;
@@ -960,6 +984,9 @@ OpenRacer.Car = function( config, domElement ) {
                 if(checkpointsPassed) checkpointsPassed = this.checkPointsCompleted[i];
                 this.checkPointsCompleted[i] = false;
             }
+            // (a gate missed, but the whole line driven: a lap through the pit lane)
+            if(this.lapStarted && !checkpointsPassed && trackGates.length && allSectors()) checkpointsPassed = true;
+            clearSectors();
             if(checkpointsPassed) {
                 // we passed all checkpoints
                 var lapTime = this.clock - this.lapStartTime;
