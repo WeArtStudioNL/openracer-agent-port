@@ -449,9 +449,29 @@ OpenRacer.Vehicle = function (parameters, input) {
     var arbFront = 0, arbRear = 0;    // anti-roll bars: the force at a wheel per metre that the wheels are pushed in differently
     var inertiaX = 1, inertiaY = 1, inertiaZ = 1;
     // the lean to the left of the two wheels of a live axle, from the travel of its wheels (the left wheel higher: the axle rolls and its wheels lean to the right)
-    this.axleLean = function (front) {
+    // (visual: from the lengths that are drawn, w.visualLength, which a replay has; the physics does not run there)
+    function lengthOf(w, visual) { return visual && w.visualLength !== undefined ? w.visualLength : (w.susLength || 0); }
+    this.axleLean = function (front, visual) {
         var l = this.wheels[front ? 1 : 2], r = this.wheels[front ? 0 : 3], track = (front ? this.front_track : this.rear_track) || 1.5;
-        return -Math.atan2((r.susLength || 0) - (l.susLength || 0), track);
+        return -Math.atan2(lengthOf(r, visual) - lengthOf(l, visual), track);
+    };
+    // the roll of the body on the springs of an axle (positive: leaning to the right), from how far its two wheels are out of their place at rest: the roll that the
+    // wheels see. (It was the roll of the car in the world: on a bank the wheels leaned with the bank, and on its side, or on its roof, a car leaned them 54 degrees.)
+    // It is held to 15 degrees, more than a spring lets the body roll.
+    this.springRoll = function (front, visual) {
+        var l = this.wheels[front ? 1 : 2], r = this.wheels[front ? 0 : 3], track = (front ? this.front_track : this.rear_track) || 1.5;
+        var restL = l.restLengthWheel !== undefined ? l.restLengthWheel : this.restLength, restR = r.restLengthWheel !== undefined ? r.restLengthWheel : this.restLength;
+        var roll = Math.atan2((lengthOf(l, visual) - restL) - (lengthOf(r, visual) - restR), track);
+        return Math.max(-0.26, Math.min(0.26, roll));
+    };
+    // the lean of a wheel to the left (radians): its static camber, what the roll of the body on its springs takes along (roll_camber), and a bent knuckle; the wheels
+    // of a live axle lean with the axle. A motorcycle: 0 (its wheels lean with it).
+    this.wheelLean = function (i, visual) {
+        var w = this.wheels[i];
+        if(this.soloWheels) return 0;
+        if(this.liveAxle[w.front ? "front" : "rear"]) return this.axleLean(w.front, visual) - (w.camberBend || 0);
+        var camber = (w.front ? this.camberFront : this.camberRear) * Math.PI / 180;
+        return (w.right ? -camber : camber) + this.springRoll(w.front, visual) * this.rollCamber - (w.camberBend || 0);
     };
     // the radius of the tyres: the mean of the four (the body model stands at that height), and of the driven ones (the road speed in the engine speed that the gearbox looks at)
     this.meanRadius = function () { return (this.wheels[0].radius + this.wheels[1].radius + this.wheels[2].radius + this.wheels[3].radius) / 4; };
@@ -1749,9 +1769,6 @@ OpenRacer.Vehicle = function (parameters, input) {
         var down = { x: -axisY.x, y: -axisY.y, z: -axisY.z };
         var ground3D = !!(self.ground && self.ground.use3D);
         var anyContact = false;
-        // the roll of the body (positive: leaning to the right), for the camber of the wheels of the tyre bodies (as below for the ring of nodes)
-        rotateInverse(self.qx, self.qy, self.qz, self.qw, 0, 1, 0, tmpA);
-        var rollRightNow = Math.asin(Math.max(-1, Math.min(1, tmpA.x)));
         for(var i = 0; i < 4; i++) {
             var w = wheels[i];
             rotate(self.qx, self.qy, self.qz, self.qw, w.mount.x + (w.shiftX || 0), w.mount.y, w.mount.z + (w.shiftZ || 0), Rv);
@@ -1823,9 +1840,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 // the camber: the wheel leans to the left by its static camber less what the roll of the body takes (and a bent knuckle); the up of the tyre and its axle turn with it
                 // about its forward axis, so the shoulder on the side it leans to carries more, and the tread that goes round a leaning wheel is pulled sideways by the road: the camber
                 // thrust. (A motorcycle: its wheels lean with it and nothing more.)
-                var camberDeg = w.front ? self.camberFront : self.camberRear;
-                var lean = self.soloWheels ? 0 : (w.right ? -camberDeg : camberDeg) * Math.PI / 180 + rollRightNow * self.rollCamber - (w.camberBend || 0);
-                if(!self.soloWheels && self.liveAxle[w.front ? "front" : "rear"]) lean = self.axleLean(w.front) - (w.camberBend || 0);
+                var lean = self.wheelLean(i);
                 var cl = Math.cos(lean), sl = Math.sin(lean);
                 cylU.x = axisY.x * cl + cylL.x * sl; cylU.y = axisY.y * cl + cylL.y * sl; cylU.z = axisY.z * cl + cylL.z * sl;
                 cylL.x = cylL.x * cl - axisY.x * sl; cylL.y = cylL.y * cl - axisY.y * sl; cylL.z = cylL.z * cl - axisY.z * sl;
@@ -2090,9 +2105,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 wheel.gripLoad = fzGrip;                   // (the load the tyre grips with: the spring's and the geometric, for the telemetry and the tests)
                 // camber: the lean of the wheel to the left (its static camber, and the lean of the body in roll); a wheel that
                 // leans pushes towards the side it leans to, as if it had a slip angle
-                var camber = (wheel.front ? self.camberFront : self.camberRear) * Math.PI / 180;
-                var leanLeft = (wheel.right ? -camber : camber) + rollRight * self.rollCamber - (wheel.camberBend || 0);
-                if(self.liveAxle[wheel.front ? "front" : "rear"]) leanLeft = self.axleLean(wheel.front) - (wheel.camberBend || 0);
+                var leanLeft = self.soloWheels ? rollRight * self.rollCamber - (wheel.camberBend || 0) : self.wheelLean(iw);
                 wheel.lean = self.soloWheels ? 0 : leanLeft;            // (for the wheel of the model: it leans with the camber, Wheel.turn)
                 var surface = self.getSurface(wheel.surface, wheel.localSnow, wheel.localWater);
                 if(wheel.cylActive) {

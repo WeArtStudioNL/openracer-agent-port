@@ -430,6 +430,9 @@ OpenRacer.Replay = (function() {
             read(scratch, 0, entry);
             if(object.parts && object.parts.replay) object.parts.replay.replayBegin();       // (a car that is built while the replay is open: its parts are made after it)
             if(entry.soft) showSoft(entry, time);
+            // the camber of the wheels, from the travel of their springs in the sample (and the bends of the record): not recorded, and the physics does not run in a replay,
+            // so the wheels kept the lean they had when it began
+            if(object.vehicle.wheelLean) for(var kl = 0; kl < 4; kl++) object.vehicle.wheels[kl].lean = object.vehicle.wheelLean(kl, true);
             object.vehicle.updateOutputs();
             // a motorcycle: the rider's posture and the foot at a standstill from the recording (the physics does not run in a replay)
             if(object.vehicle.controller && object.vehicle.controller.replayStep) {

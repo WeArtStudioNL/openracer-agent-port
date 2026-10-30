@@ -53,17 +53,21 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - With the debug view on (0), the **middle mouse button** on the car hits it where it is clicked, as *Apply force* of the car editor: a cube of a tonne and a metre at 50 km/h against the surface; the shell dents and the car is pushed by it (it is not clamped as on the bench). A red arrow shows the hit for a moment. Nothing happens on a car without a soft body (or with Damage off).
 
+### Camber
+
+- **The roll camber comes from the springs.** The wheels leaned with the roll of the car in the world (`roll_camber` times it), so a car on a bank leaned its wheels with the bank, and a car on its side or its roof leaned them about 54 degrees: they stood far out of the car. Now it is the roll of the body on the springs of each axle (from how far its two wheels are out of their place at rest), held to 15 degrees: on its side the wheels stay straight in the car. Measured: on its side 0 degrees (was 54), in a bend at 58 km/h at most 10 degrees.
+- **The camber is in the replay.** It is not recorded, and the physics does not run in a replay, so the wheels kept the lean they had when the replay began. The replay works it out from the travel of the springs in the samples, as the game does (old replays have it too).
+
 ### Sound
 
 - **Engine volume** in the settings menu (*Display and sound*) is a slider (0 to 150 %), and **Tyre volume** is new: the squeal of the tyres has its own volume (it went with the engine).
 
 ### The pit stop of the player
 
-- **The parts that came off are put back one by one**, as the tyres are: each is carried from where it lies to its place on the car in an arc, turning as it goes, in its share of the work, while the dents go out; it stays at its place until the repair is done, and then the car is whole.
+- **The parts that came off are put back one by one.** While the car goes up they fade from the track (and are gone), then each in its turn comes in from 60 cm beside the car and into sight, the way the tyres go on. A wheel that came off is put on in the same way and is a wheel of the car again when it is on (it went back at once). The dents go out meanwhile; a part stays at its place until the repair is done, and then the car is whole. The replay shows it so too (saved replays as well).
 - **The pit stop is in the replay**: the car on the jacks, the dents that go out, the parts that come back, the wheels that come off and go on (a saved replay has them too).
 - **Tyres are changed one by one, and you see it**: only the tyres that are worn past 15 % or leak are changed (it was all four), one after the other in the time the tyres take (which stays as it was): the old wheel comes off and out by 60 cm, is gone for a moment, and the new one goes on; each tyre gets its new rubber when its turn is halfway. The AI cars show it too.
 - **The pit stop repairs the damage** (with *Damage* on): the dents of the shell (1 s and 1.5 s for every centimetre that its nodes are out of place on average), every part that came off (1 s) and every bent or lost wheel (1.5 s) are part of what the stop takes, side by side with the fuel and the tyres (at most 10 s for the repair). The dents go out bit by bit from the start of the work to its end, the bent wheels go straight with them, and then everything is whole: the shell, the parts back on the car, the wheels. The count down says REPAIR.
-- **The parts that came off are put back one by one.** They no longer fly through the air to the car: while the car goes up they fade from the track (and are gone), then each in its turn comes in from 60 cm beside the car and into sight, the way the tyres go on. A wheel that came off is put on in the same way and is a wheel of the car again when it is on (it teleported back). The replay shows it so too (saved replays as well).
 - **A leaking tyre is changed and repaired** in a pit stop, however little it is worn (the stop only changed tyres past 15 % wear, and did not mend a leak).
 - **A wheel that came off no longer steers on the ground**: the picture of the car still turned the steering and the spin of a lost wheel (Car.js, Opponent.js, the bench of the car editor); it lies as its body in the physics puts it.
 - **A reset without a place to go back to goes to the nearest road** (free drive without a racing line, no place saved, no gate crossed yet): the nearest place of the surfaces road or track01 where the four corners of the car are on the road and nothing stands, with the heading the car had (or turned a quarter or a half to fit); it went to the start.
