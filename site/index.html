@@ -29,7 +29,7 @@
         <div>
         <div class="kicker">Open source · GPLv3 · runs in the browser</div>
         <h1>A racing simulator<br>that lives in <span>a tab</span>.</h1>
-        <p class="lead">OpenRacer simulates the whole car: a body on springs, four tyres that heat up and wear out, a clutch, a gearbox and differentials. You can drive it with the keyboard, a gamepad or a racing wheel with force feedback, race against AI cars, and build your own cars and tracks.</p>
+        <p class="lead">OpenRacer simulates the whole car: a body on springs that dents in a crash, four tyres that heat up and wear out, a clutch, a gearbox and differentials. You can drive a car or a motorcycle with the keyboard, a gamepad or a racing wheel with force feedback, race against AI cars, and build your own cars and tracks.</p>
         <div class="row">
             <a class="btn primary" href="game/">Play the game</a>
             <a class="btn" href="docs.html">Read the docs</a>
@@ -38,7 +38,7 @@
         </div>
         </div>
         <figure class="shot">
-            <a href="img/race.webp"><img src="img/race.webp" width="1600" height="900" alt="The OpenRacer Mustang on the circuit at 125 km/h, with the gauge, the tyre temperatures and the fuel on the screen" fetchpriority="high"></a>
+            <a href="img/race.webp"><img src="img/race.webp" width="1600" height="900" alt="The Mustang of an older version on the circuit at 125 km/h, with the gauge, the tyre temperatures and the fuel on the screen" fetchpriority="high"></a>
         </figure>
     </div>
 </section>
@@ -61,11 +61,13 @@
         <h2>About the project</h2>
         <p class="intro">OpenRacer started as an open-source initiative by Chris Barnard to build a high-quality racing simulation that runs in the browser. This site is about a fork of it, in which the driving model, the racing and the tools have been taken a long way further. The game needs no installation: it is a static web app that uses WebGL, so any recent browser will do.</p>
         <div class="grid">
-            <div class="card"><span class="tag">Physics</span><h3>A car, not a sprite</h3><p>A rigid body with a quarter-car suspension at every corner, a combined-slip tyre model with load, pressure, camber, toe, heat and wear, and a driveline with clutch, gearbox and differentials.</p></div>
-            <div class="card"><span class="tag">Racing</span><h3>Races with a result</h3><p>Standing starts with a countdown, laps, AI opponents on a racing line, a ghost of your best lap, lap records, fuel, tyre wear and pit stops.</p></div>
+            <div class="card"><span class="tag">Physics</span><h3>A car, not a sprite</h3><p>A soft body of nodes and beams that dents and loses parts, a quarter-car suspension at every corner, tyres that are shells of nodes with load, pressure, camber, toe, heat and wear, and a driveline with clutch, gearbox and differentials.</p></div>
+            <div class="card"><span class="tag">Racing</span><h3>Races with a result</h3><p>Standing starts with a countdown, laps, AI opponents on a racing line, a ghost of your best lap, lap records, fuel, tyre wear, pit stops and a drag strip.</p></div>
             <div class="card"><span class="tag">Controls</span><h3>Keyboard to racing wheel</h3><p>Every action can have a key, a gamepad button and a wheel input at once. Wheels with force feedback work through WebHID, with the torque worked out from the physics.</p></div>
             <div class="card"><span class="tag">Tools</span><h3>Make your own</h3><p>A car editor with a live test bench, a track editor that can also draw a track from nothing, and a tuning menu that changes everything while you drive.</p></div>
             <div class="card"><span class="tag">Sound</span><h3>Calculated engine sound</h3><p>The sound comes from the gas in the cylinders and the exhaust, a port of parts of engine-sim to an AudioWorklet, not from a loop.</p></div>
+            <div class="card"><span class="tag">Weather</span><h3>Rain, snow and night</h3><p>Clear, cloudy, fog, rain or snow, from dawn to night. A wet or snowy road grips less, for you and for the AI.</p></div>
+            <div class="card"><span class="tag">Replays</span><h3>Replays and video</h3><p>Everything is recorded. Keep replays in a library, watch them with free and cinematic cameras, and cut them into a video in the video editor.</p></div>
             <div class="card"><span class="tag">Garage</span><h3>Yours stays yours</h3><p>Cars and tracks you make or import live in your own browser or in a folder on your PC. Nothing is uploaded to the server.</p></div>
         </div>
     </div>
@@ -76,9 +78,9 @@
         <h2>In the game</h2>
         <p class="intro">All of these are screenshots of the game itself, taken in the browser.</p>
         <div class="gallery">
-            <figure class="shot"><a href="img/drift.webp"><img loading="lazy" src="img/drift.webp" width="1600" height="900" alt="A Mustang sliding sideways across the grass in a cloud of dust"></a><figcaption>Tyres that slide leave marks and make smoke, or dust on the grass.</figcaption></figure>
+            <figure class="shot"><a href="img/drift.webp"><img loading="lazy" src="img/drift.webp" width="1600" height="900" alt="A Mustang of an older version sliding sideways across the grass in a cloud of dust"></a><figcaption>Tyres that slide leave marks and make smoke, or dust on the grass.</figcaption></figure>
             <figure class="shot"><a href="img/tuning.webp"><img loading="lazy" src="img/tuning.webp" width="1600" height="900" alt="The tuning menu open over the race, with sliders for the mass, the springs and the dampers"></a><figcaption>The tuning menu changes the car while you drive.</figcaption></figure>
-            <figure class="shot"><a href="img/car-editor.webp"><img loading="lazy" src="img/car-editor.webp" width="1600" height="900" alt="The car editor with a Mustang model, its cameras and the test bench"></a><figcaption>The car editor, with a test bench to drop, shake and drive the car.</figcaption></figure>
+            <figure class="shot"><a href="img/car-editor.webp"><img loading="lazy" src="img/car-editor.webp" width="1600" height="900" alt="The car editor of an older version with a Mustang model, its cameras and the test bench"></a><figcaption>The car editor, with a test bench to drop, drive and crash the car.</figcaption></figure>
             <figure class="shot"><a href="img/track-editor.webp"><img loading="lazy" src="img/track-editor.webp" width="1600" height="900" alt="The track editor showing a drawn track on a hill, with its nodes and gates"></a><figcaption>The track editor: draw a loop, add gates, prefabs and textures.</figcaption></figure>
         </div>
     </div>
@@ -109,12 +111,16 @@
     <div class="wrap">
         <h2>What the fork adds</h2>
         <div class="grid">
-            <div class="card"><h3>Vehicle physics</h3><p>Quarter-car suspension, Ackermann, aero per axle, roll centres, camber, toe, tyre pressure, a combined-slip tyre, turbo, ESC and traction control. A bench runs the road tests of every car.</p></div>
+            <div class="card"><h3>Vehicle physics</h3><p>A soft body that dents, quarter-car suspension, Ackermann, aero per axle, roll centres, camber, toe, tyre pressure, a tyre made of nodes, six kinds of gearbox, turbo, ESC and traction control. A bench runs the road tests of every car.</p></div>
             <div class="card"><h3>Race format</h3><p>Laps, a 3-2-1 start, results, AI difficulty levels, ghost laps, records, fuel, tyre temperature and wear, pit lane stops.</p></div>
             <div class="card"><h3>Input</h3><p>Steering that slows with speed on keyboard and gamepad, a gamepad steering assist, racing wheels with calibration, an H-pattern shifter and force feedback.</p></div>
-            <div class="card"><h3>Car editor</h3><p>Import a glb, find the wheels, set cameras and materials, tune everything, and test it on a bench with a drop, a shake and a full test.</p></div>
+            <div class="card"><h3>Car editor</h3><p>Import a glb, find the wheels or take them from a library, build the engine and run it on a dyno, paint it, set the soft body and the driver, and test it on a bench with a drop, a drive and a crash test.</p></div>
             <div class="card"><h3>Track editor</h3><p>Import a model or draw a loop of nodes, add tileable textures and prefabs, place gates, set the sky and sun, and record the AI racing line.</p></div>
             <div class="card"><h3>Suspension rig</h3><p>Name the parts of a model (wishbones, springs, tie rods, a live axle) and they move with the real suspension and steering.</p></div>
+            <div class="card"><h3>Soft body and damage</h3><p>A shell of nodes and beams that dents and stays bent, doors and hoods on hinges that come loose, wheels that bend or come off. Cars dent each other.</p></div>
+            <div class="card"><h3>Motorcycles</h3><p>Bikes that are steered by leaning, with a rider who moves on the bike and a ragdoll crash.</p></div>
+            <div class="card"><h3>Replays and video</h3><p>A library of replays, takes recorded while you drive, and a video editor with clips, speed ramps and a camera track.</p></div>
+            <div class="card"><h3>Weather</h3><p>Clear, cloudy, fog, rain or snow at any time of day, with a road that gets wet or white and grips less.</p></div>
             <div class="card"><h3>Skidpad</h3><p>A round pad that drives your car round by itself until it lets go and tells you the g it held.</p></div>
             <div class="card"><h3>Local garage</h3><p>The game ships a standard set. Players keep their own cars and tracks in the browser or in a folder, and pass them on as zip files.</p></div>
         </div>

@@ -1,14 +1,16 @@
 # Soft body, parts and hinges: design
 
-Branch `claude/soft-body`. Status: M1 to M4 built (M4: cars that dent each other, replay of the shell, the parts and the wheels, in the saved file too). Nothing here is released.
+Status: released in 2.2.0. M1 to M4 are built (M4: cars that dent each other, replay of the shell, the parts and the wheels, in the saved file too).
 
-## What the game has now
+## Before 2.2
 
-* The car is **one rigid body** (`Vehicle.js`): position, orientation, linear and angular velocity, mass and the inertia of a box, impulses at the point of a hit. On it hang four quarter-car suspensions, the tyres, the driveline.
-* Since 2.2 (3D physics) the body is a cloud of **collision spheres** made from the model, tested against the triangles of the track.
-* Cars hit each other as two discs each (`collideCars`). Nothing else moves: no props, no loose parts, no hinged doors.
+This is what the game had before the soft body:
 
-So the question "do we use rigid body physics" is yes for the car, but there is no general rigid-body engine for the things around it.
+* The car was **one rigid body** (`Vehicle.js`): position, orientation, linear and angular velocity, mass and the inertia of a box, impulses at the point of a hit. On it hung four quarter-car suspensions, the tyres, the driveline.
+* With the 3D physics the body became a cloud of **collision spheres** made from the model, tested against the triangles of the track.
+* Cars hit each other as two discs each (`collideCars`). Nothing else moved: no props, no loose parts, no hinged doors.
+
+So the question "do we use rigid body physics" was yes for the car, but there was no general rigid-body engine for the things around it. The rigid body stays the frame of the car; the layers below were built on it.
 
 ## The decision: three layers
 

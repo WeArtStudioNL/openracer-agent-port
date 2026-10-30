@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>OpenRacer docs</title>
-    <meta name="description" content="How OpenRacer works: controls, racing, the physics of the car, the tuning menu, the car editor, the track editor and the garage.">
+    <meta name="description" content="How OpenRacer works: controls, racing, replays, the physics of the car and its soft body, motorcycles, the tuning menu, the car editor, the track editor and the garage.">
     <link rel="stylesheet" href="site.css?v=5">
     <script src="theme.js?v=3"></script>
 </head>
@@ -46,22 +46,28 @@
             <h4>Racing</h4>
             <a href="#race">A race</a>
             <a href="#replay">Replay</a>
+            <a href="#video-editor">Takes and the video editor</a>
             <a href="#ai">AI opponents</a>
             <a href="#ghost">Ghost and records</a>
             <a href="#wear">Tyres, fuel, pit stops</a>
+            <a href="#weather">Weather and time of day</a>
+            <a href="#dragstrip">Drag strip</a>
             <h4>How the car works</h4>
             <a href="#model">The driving model</a>
             <a href="#chassis">Chassis</a>
             <a href="#suspension">Suspension</a>
             <a href="#tyres">Tyres</a>
             <a href="#driveline">Driveline</a>
-            <a href="#gearbox">Gearbox modes</a>
+            <a href="#gearbox">Gearboxes</a>
             <a href="#assists">TC, ESC and ABS</a>
             <a href="#physics3d">3D contact and collisions</a>
+            <a href="#softbody">Soft body and damage</a>
+            <a href="#motorcycles">Motorcycles</a>
             <a href="#effects">Skid marks, smoke, collisions</a>
             <a href="#sound">Engine sound</a>
             <h4>Tuning and testing</h4>
             <a href="#tuning">Tuning menu</a>
+            <a href="#setups">Setups</a>
             <a href="#skidpad">Skidpad</a>
             <a href="#bench">Physics bench</a>
             <h4>Making things</h4>
@@ -93,12 +99,12 @@
             <h3 id="play">Playing in the browser</h3>
             <p>Open <a href="game/">openracer.eu/game</a>. There is nothing to install: the game is a set of plain files that your browser runs. Any recent browser with WebGL works. Chrome or Edge is the best choice, because only they have WebHID (force feedback on a racing wheel) and the option to link a folder of cars and tracks.</p>
             <ol>
-                <li>Choose a car and a track in the main menu, and set the <b>Race</b> column: practice or a race of some laps, AI opponents, the ghost, lap records, tyre wear.</li>
-                <li>Press <b>Start</b>. The engine sound starts at your first key press or click, because browsers want that.</li>
+                <li>Press <b>Play</b> in the main menu and go through the steps: Free drive, Race or Skidpad, then the car, the track, the weather and, for a race, the laps and the opponents. See <a href="#menu">Main menu and address</a>.</li>
+                <li>The last step starts the game. The engine sound starts at your first key press or click, because browsers want that.</li>
                 <li>Drive with the arrows or <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>, or use the touch controls on a phone, or plug in a gamepad or a wheel and press a button so the browser sees it. <kbd>Esc</kbd> opens the settings, where you can remap every input and calibrate a wheel. See <a href="#keyboard">Keyboard</a>, <a href="#gamepad">Gamepad</a> and <a href="#wheel">Racing wheel</a>.</li>
-                <li>Press <kbd>U</kbd> to tune the car while you drive, and try the <b>Skidpad</b> button to see how much grip a car has.</li>
+                <li>Press <kbd>U</kbd> to tune the car while you drive, and try <b>Skidpad</b> as the way to play to see how much grip a car has.</li>
             </ol>
-            <p>Your settings, key bindings, lap records and tuning are kept in your own browser, not on a server. The same goes for what you make or import: <b>My garage</b> in the main menu keeps your own cars and tracks in the browser, and exports them as zip files (see <a href="#garage">Your own cars and tracks</a>). Even the car editor and the track editor work on the web version, and save to the garage.</p>
+            <p>Your settings, key bindings, lap records, setups and replays are kept in your own browser, not on a server. The same goes for what you make or import: <b>Garage</b> in the main menu keeps your own cars and tracks in the browser, and exports them as zip files (see <a href="#garage">Your own cars and tracks</a>). Even the car editor and the track editor work on the web version, and save to the garage.</p>
 
             <h3 id="local">Running your own copy</h3>
             <p>OpenRacer is a static web app with a small helper server. You need <code>git</code> and <code>python3</code>, and no build step:</p>
@@ -112,11 +118,11 @@ cd openracer-agent-port
             <table>
                 <tr><th>You want to…</th><th>Web version</th><th>Local version</th></tr>
                 <tr><td>Play, race, tune a car, use a wheel or gamepad</td><td>Enough</td><td>Same</td></tr>
-                <tr><td>Keep your own cars and tracks, pass them on as zip files</td><td>Enough, in My garage</td><td>Same, or as folders</td></tr>
+                <tr><td>Keep your own cars and tracks, pass them on as zip files</td><td>Enough, in the Garage</td><td>Same, or as folders</td></tr>
                 <tr><td>Try the car editor or the track editor</td><td>Works, saves to the garage of your browser</td><td>Saves as real files in <code>web/cars</code> and <code>web/tracks</code></td></tr>
                 <tr><td>Put a car or track in the standard set of a game you host</td><td>No: the server of the web version is read only</td><td>Yes, the files are in the folders you deploy</td></tr>
                 <tr><td>Keep cars and tracks in git, or send a pull request</td><td>No</td><td>Yes</td></tr>
-                <tr><td>Use <i>Save to the car</i> on a standard car, or record an AI racing line into a track's files</td><td>Saved in the garage, as a copy with the same id</td><td>Written to <code>car.json</code> and <code>track.json</code></td></tr>
+                <tr><td>Save a standard car in the car editor, or record an AI racing line into a track's files</td><td>Saved in the garage, as a copy with the same id</td><td>Written to <code>car.json</code> and <code>track.json</code></td></tr>
                 <tr><td>Change the code or the physics</td><td>No</td><td>Yes: edit and refresh</td></tr>
                 <tr><td>Run the physics bench, the texture and track tools, or the Blender script</td><td>No</td><td>Yes: they are in <code>tools/</code> and need Node, Python or Blender</td></tr>
                 <tr><td>Host the game yourself</td><td>Not needed</td><td>Upload the <code>web</code> folder to any static host</td></tr>
@@ -126,40 +132,71 @@ cd openracer-agent-port
 
         <section id="menu">
             <h2>Main menu and address</h2>
-            <p>The game starts with a main menu: a tile with a slowly turning 3D model for every car (with its name, description and power), the tracks, and the <b>Race</b> column. <kbd>Esc</kbd> in the game has a button to come back to the menu.</p>
-            <figure class="shot"><a href="img/menu.webp"><img loading="lazy" src="img/menu.webp" width="1600" height="900" alt="The main menu with a tile for every car, the tracks and the race options"></a><figcaption>The main menu: the cars with their power, the tracks and the Race column.</figcaption></figure>
-            <p>Both lists are made by looking at folders. Every <code>cars/&lt;id&gt;/car.json</code> is a car and every <code>tracks/&lt;id&gt;/track.json</code> is a track, so a new folder shows up at the next refresh. Everything that the menu chooses is in the address, so a link starts a particular game:</p>
-            <pre><code>index.html?car=mustang&amp;track=circuit&amp;laps=5&amp;ai=3&amp;difficulty=normal&amp;ghost=1&amp;records=1&amp;wear=1</code></pre>
+            <p>The game starts with a home screen: <b>Play</b>, and the links <b>Garage</b>, <b>Replays</b> and <b>Settings</b>. <b>Play</b> goes through a few steps, one decision each, with <i>Back</i> and <i>Next</i>:</p>
+            <ol>
+                <li><b>Play.</b> <i>Free drive</i> (no end, no opponents, your best lap is kept), <i>Race</i> (laps from a standing start against AI cars, with a countdown) or <i>Skidpad</i>.</li>
+                <li><b>Car.</b> A tile with a turning 3D model for every car. A car that has <a href="#setups">setups</a> gets a <b>Tune</b> step after it: the car as made, or one of its setups.</li>
+                <li><b>Track.</b> With the lap record of the chosen car. In free drive this step also has <i>Tyre wear and fuel</i>, <i>Damage</i> and <i>More options…</i>.</li>
+                <li><b>Weather.</b> The weather, the time of day and the ground. See <a href="#weather">Weather and time of day</a>.</li>
+                <li><b>Race</b> (a race only). Laps (3, 5, 10 or 25), opponents (1, 2, 3, 5 or 7), difficulty, damage, and <i>More options…</i>: tyre wear and fuel, damage, the ghost, lap records and the cars that may race.</li>
+                <li><b>Opponents</b> (a race only). A grid of the places. <b>+</b> adds a car (and its tune, when it has one), the copy button adds the same car again. The places you leave empty get cars of the game.</li>
+            </ol>
+            <p>The skidpad has only the car and the ground. <kbd>Esc</kbd> in the game has a button to come back to the menu. The editors open from the <a href="#garage">Garage</a>.</p>
+            <figure class="shot"><a href="img/menu.webp"><img loading="lazy" src="img/menu.webp" width="1600" height="900" alt="The main menu of an older version, with a tile for every car, the tracks and the race options"></a><figcaption>The main menu of an older version. The menu is now a set of steps.</figcaption></figure>
+            <p>The lists of cars and tracks are made by looking at folders. Every <code>cars/&lt;id&gt;/car.json</code> is a car and every <code>tracks/&lt;id&gt;/track.json</code> is a track, so a new folder shows up at the next refresh. What the menu chooses is in the address, so a link starts a particular game:</p>
+            <pre><code>index.html?car=hyundai-i30&amp;track=circuit&amp;laps=5&amp;ai=3&amp;difficulty=normal&amp;ghost=1&amp;records=1&amp;wear=1&amp;damage=1</code></pre>
             <table>
                 <tr><th>Parameter</th><th>Meaning</th></tr>
                 <tr><td><code>car</code>, <code>track</code></td><td>the ids of the car and the track</td></tr>
-                <tr><td><code>laps</code></td><td>laps of the race; none is practice without an end</td></tr>
-                <tr><td><code>ai</code>, <code>difficulty</code></td><td>number of AI cars (0–7) and how close to the limit they drive</td></tr>
+                <tr><td><code>laps</code></td><td>laps of the race (0–99); 0 or none is driving without an end</td></tr>
+                <tr><td><code>ai</code>, <code>difficulty</code></td><td>number of AI cars (0–7) and how close to the limit they drive (<code>easy</code>, <code>normal</code>, <code>hard</code>)</td></tr>
+                <tr><td><code>opp</code></td><td>the opponents chosen in the menu: car ids separated by commas, a tune after a <code>~</code></td></tr>
+                <tr><td><code>aicars</code></td><td>the ids of the cars that may race against you, separated by commas (none: all)</td></tr>
                 <tr><td><code>ghost</code>, <code>records</code></td><td>1 or 0: the ghost of your best lap, saving lap records</td></tr>
                 <tr><td><code>wear</code></td><td>0 off, 1 tyre wear and fuel on, 3 fast for a short race</td></tr>
-                <tr><td><code>mode=skidpad</code></td><td>the skidpad test, see <a href="#skidpad">Skidpad</a></td></tr>
+                <tr><td><code>damage</code></td><td>1 or 0: the soft body, see <a href="#softbody">Soft body and damage</a></td></tr>
+                <tr><td><code>mode=skidpad</code>, <code>surface</code></td><td>the skidpad test and its ground (<code>road</code>, <code>wet</code>, <code>grass</code>, <code>gravel</code>, <code>sand</code>, <code>mud</code>), see <a href="#skidpad">Skidpad</a></td></tr>
+                <tr><td><code>bestline=0</code></td><td>the AI does not use the best lap as its line</td></tr>
+                <tr><td><code>cut=0</code></td><td>the AI does not cut the bends within the road</td></tr>
+                <tr><td><code>aitires=shell</code></td><td>the AI cars get the shell tyre of the player, to compare</td></tr>
+                <tr><td><code>replay=1</code>, <code>editor=1</code></td><td>open the replay that the Replays window chose, to watch or in the video editor</td></tr>
+                <tr><td><code>recordline=1</code></td><td>record the AI racing line (the track editor uses it)</td></tr>
+                <tr><td><code>touch</code></td><td>1 or 0: the touch controls on or off</td></tr>
+                <tr><td><code>import</code></td><td>a link to a car or track zip: the menu asks to add it to the garage</td></tr>
             </table>
         </section>
 
         <section id="keyboard">
             <h2>Keyboard</h2>
-            <p>Drive with the arrows or <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>. The steering keys turn the wheels at a rate: fast at a standstill, slower the faster the car goes, and the wheels come back to the middle by themselves when the keys are let go. <i>Esc → Keyboard → Steering speed</i> scales that rate (50–300 %).</p>
+            <p>Drive with the arrows or <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>. The steering keys turn the wheels at a rate: fast at a standstill, slower the faster the car goes, and the wheels come back to the middle by themselves when the keys are let go. <i>Esc → Keyboard</i> sets, for the throttle, the brake and the steering, the time a key takes to the full value and the curve of it, how much slower the steering gets at speed, and the steering assist.</p>
             <table>
                 <tr><th>Key</th><th>Action</th></tr>
                 <tr><td><kbd>Esc</kbd></td><td>settings menu (the game pauses)</td></tr>
                 <tr><td><kbd>Space</kbd></td><td>handbrake</td></tr>
-                <tr><td><kbd>R</kbd></td><td>put the car back at the start</td></tr>
-                <tr><td><kbd>X</kbd> / <kbd>Z</kbd></td><td>shift up / down (and the selector of the automatic)</td></tr>
-                <tr><td><kbd>.</kbd></td><td>reverse, while held, in the automatic</td></tr>
-                <tr><td><kbd>G</kbd></td><td>gearbox mode</td></tr>
+                <tr><td><kbd>P</kbd></td><td>parking brake on and off</td></tr>
+                <tr><td><kbd>R</kbd></td><td>put the car back at the nearest point of the racing line, nose forward; the damage and the tyres stay</td></tr>
+                <tr><td><kbd>4</kbd></td><td>save the place of the car for <kbd>R</kbd> (only on a track without a racing line)</td></tr>
+                <tr><td><kbd>Backspace</kbd></td><td>repair the car where it is, with new tyres and a full tank</td></tr>
+                <tr><td><kbd>X</kbd> / <kbd>Z</kbd></td><td>shift up / down (and the selector of an automatic)</td></tr>
+                <tr><td><kbd>.</kbd></td><td>reverse, while held, in an automatic</td></tr>
+                <tr><td><kbd>,</kbd> / <kbd>.</kbd></td><td>a motorcycle: the rider back / forward, while held</td></tr>
+                <tr><td><kbd>9</kbd></td><td>a motorcycle: the rider goes limp, to try a crash</td></tr>
+                <tr><td><kbd>Q</kbd>, <kbd>F</kbd></td><td>two-step and transbrake, while held</td></tr>
                 <tr><td><kbd>C</kbd>, <kbd>N</kbd>, <kbd>B</kbd></td><td>traction control, ESC, ABS on and off</td></tr>
-                <tr><td><kbd>T</kbd></td><td>next camera</td></tr>
+                <tr><td><kbd>Y</kbd>, <kbd>J</kbd></td><td>two-step on the clutch pedal, launch control on and off</td></tr>
+                <tr><td><kbd>T</kbd></td><td>next camera (follow, cockpit, free)</td></tr>
                 <tr><td><kbd>[</kbd> <kbd>]</kbd> and <kbd>`</kbd></td><td>turn the camera, put it back</td></tr>
+                <tr><td><kbd>O</kbd>, <kbd>P</kbd></td><td>free camera: move with the car, look at the car</td></tr>
+                <tr><td><kbd>5</kbd></td><td>start and stop a <a href="#video-editor">take</a></td></tr>
+                <tr><td><kbd>F2</kbd></td><td>save the picture of the game as a PNG, without the HUD</td></tr>
                 <tr><td><kbd>H</kbd></td><td>HUD on and off</td></tr>
                 <tr><td><kbd>V</kbd>, <kbd>F3</kbd></td><td>telemetry, debug text</td></tr>
+                <tr><td><kbd>E</kbd></td><td>engine sound on and off</td></tr>
                 <tr><td><kbd>U</kbd></td><td>tuning menu</td></tr>
                 <tr><td><kbd>I</kbd></td><td>start the engine after a stall</td></tr>
+                <tr><td><kbd>K</kbd>, <kbd>M</kbd></td><td>calibrate the wheel, wheel on and off</td></tr>
             </table>
+            <p>Some keys do two things. <kbd>.</kbd> is reverse in a car and the rider forward on a motorcycle. <kbd>P</kbd> is the parking brake, and in the free camera it looks at the car (the free camera goes first). While the free camera is on, its own keys (<kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>, <kbd>Space</kbd>, <kbd>Z</kbd>, <kbd>X</kbd>, <kbd>Q</kbd>, <kbd>E</kbd>, <kbd>3</kbd>, <kbd>4</kbd>, <kbd>I</kbd>, <kbd>[</kbd>, <kbd>]</kbd>) move the camera and do not drive the car; the arrows still drive. See <a href="#cameras">Cameras</a>.</p>
             <p>All of these can be remapped, see <a href="#settings">Settings and controls</a>.</p>
         </section>
 
@@ -170,7 +207,7 @@ cd openracer-agent-port
             <ul>
                 <li><b>Steering.</b> Put a finger anywhere on the left half of the screen and a stick appears under it. Move it left or right to steer. The stick follows your finger when it goes far, so your hand never runs out of room. Let go and the wheels come back to the middle.</li>
                 <li><b>Pedals.</b> <b>GAS</b> and <b>BRAKE</b> are on the right, each for a thumb. They build up smoothly, like a pedal and not a switch.</li>
-                <li><b>Buttons.</b> <b>HB</b> is the handbrake, the two arrows shift up and down (in the automatic they move the selector) and <b>REV</b> is reverse while you hold it. At the top are <b>↺</b> (back to the start), the camera, and <b>☰</b>, which opens the settings, where Resume brings you back.</li>
+                <li><b>Buttons.</b> <b>HB</b> is the handbrake, the two arrows shift up and down (in the automatic they move the selector) and <b>REV</b> is reverse while you hold it. At the top are <b>↺</b> (the reset), the camera, and <b>☰</b>, which opens the settings, where Resume brings you back.</li>
             </ul>
             <p>Every finger is its own, so you can steer, brake and hold the handbrake at the same time. The steering and the pedals work like a gamepad: the steering gets slower with speed, and the <a href="#gamepad">steering assist</a> and its slider in the gamepad options apply. To keep the game running smoothly the picture on a touch screen is limited to about two million pixels, and the anti-aliasing is lighter.</p>
         </section>
@@ -206,29 +243,41 @@ cd openracer-agent-port
 
         <section id="settings">
             <h2>Settings and controls</h2>
-            <p><kbd>Esc</kbd> opens the settings menu and pauses the game. It has the options for traction control, ABS, the gearbox, the engine sound, units (km/h or mph), the HUD, tone mapping and debug text, and the list of all actions with their inputs. Every action can have several inputs at once: a key, a button or axis of a controller, and a button of a wheel, shown as chips. <b>✎</b> sets a new input, <b>✕</b> removes it and <b>+</b> adds one. An input belongs to one action: taking it for another action removes it from the first. The bindings are stored in the browser.</p>
+            <p><kbd>Esc</kbd> opens the settings menu and pauses the game. It has a tab for each part:</p>
+            <ul>
+                <li><b>Car:</b> another vehicle (when there is no race), traction control, two-step, launch control, ESC, ABS, the drag strip timing, the camera, the reverse of an automatic, and the mirrors. On a motorcycle also the steering, wheelie control, the follow camera and the lean at top speed.</li>
+                <li><b>Keyboard</b>, <b>Gamepad</b> and <b>Wheel:</b> how each input steers and brakes, the wheel range and dead zone, force feedback and the calibration.</li>
+                <li><b>Display and sound:</b> the HUD and its layout (<i>Edit HUD…</i>), units (km/h or mph), the engine volume and the engine sound.</li>
+                <li><b>Mobile</b> (on a touch screen): the finger travel for full lock and the layout of the buttons.</li>
+                <li><b>Graphics:</b> a preset, the picture, light and shadow, tone mapping and the look, the atmosphere (time of day, sun, moon, weather and ground) and the effects (smoke and debris).</li>
+                <li><b>Tools:</b> debug text, the tuning menu, the drag strip Top 50, the racing line and the records of the track, and the surroundings for Blender.</li>
+                <li><b>Controls:</b> the list of all actions with their inputs.</li>
+            </ul>
+            <p>Every action can have several inputs at once: a key, a button or axis of a controller, and a button of a wheel, shown as chips. <b>✎</b> sets a new input, <b>✕</b> removes it and <b>+</b> adds one. An input belongs to one action: taking it for another action removes it from the first. The bindings are stored in the browser.</p>
         </section>
 
         <section id="hud">
             <h2>The HUD</h2>
-            <p>Bottom right is a round gauge. The ring is the engine speed with a red zone at the rev limit and a shift light that goes orange and flashes at the limiter. In the middle are the speed, the gear and the gearbox mode. The two small arcs are the throttle (green, left) and the brake (red, right). Next to it are the lights of traction control (TC) and ABS: red is off, green is on, yellow is working. A red P shows while the parking lock holds the car.</p>
+            <p>Bottom right is a round gauge. The ring is the engine speed with a red zone at the rev limit and a shift light that goes orange and flashes at the limiter. In the middle are the speed and the gear (P R N D and the gear of an automatic, or the gear of a manual). The two small arcs are the throttle (green, left) and the brake (red, right). In the gauge are badges for the systems the car has: TC, ESC, ABS, launch control (LC) and two-step (2S). Off, on and working each look different, and a click or tap on a badge switches it. A car without a system has no badge for it. P shows while the parking brake or the P of an automatic holds the car, TB while the transbrake holds it. A car with a boost gauge also shows the turbo pressure. <i>Esc → Display and sound → Edit HUD…</i> moves the parts of the HUD.</p>
             <figure class="shot"><a href="img/race.webp"><img loading="lazy" src="img/race.webp" width="1600" height="900" alt="The Mustang on the circuit with the round gauge, the tyre temperatures and the fuel"></a><figcaption>The HUD in a race: the gauge bottom right, the lap time, the tyres and the fuel top left.</figcaption></figure>
             <p>Top left are the lap, the time of the lap that is going and the last laps, the best in green. In a race it shows the lap of the race (LAP 2/5, FINAL LAP) and your place. With wear on, a panel shows the four tyres (colour is temperature, the dark part is wear), the fuel and a PIT hint.</p>
         </section>
 
         <section id="cameras">
             <h2>Cameras</h2>
-            <p><kbd>T</kbd> switches camera. <b>1</b> is a fixed camera behind the car. <b>2</b> follows the direction of the car with a smooth rotation and has a wider field of view the faster you go, while the camera comes closer in the same measure so the car keeps its size and only the sense of speed changes (a dolly zoom). <b>3</b> is the cockpit. The place of every camera is set per car in the car editor; without settings a car gets defaults from its size.</p>
+            <p><kbd>T</kbd> switches camera: <b>Follow</b>, <b>Cockpit</b> and <b>Free</b>. Follow keeps to the direction of the car with a smooth rotation and has a wider field of view the faster you go, while the camera comes closer in the same measure so the car keeps its size and only the sense of speed changes (a dolly zoom). On a motorcycle it can roll with the lean (<i>Esc → Car</i>). <kbd>[</kbd> and <kbd>]</kbd> turn the camera and <kbd>`</kbd> puts it back. The place of every camera is set per car in the car editor; without settings a car gets defaults from its size.</p>
+            <p>The <b>free camera</b> is not tied to the car. <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> move it the way it looks, <kbd>Space</kbd> and <kbd>Z</kbd> take it up, <kbd>Alt</kbd> and <kbd>X</kbd> down. The mouse looks around after a click on the scene (<kbd>Esc</kbd> lets the pointer go). <kbd>Q</kbd> and <kbd>E</kbd> roll the picture, <kbd>3</kbd> and <kbd>4</kbd> make it slower and faster, <kbd>[</kbd> and <kbd>]</kbd> change the field of view. <kbd>P</kbd> makes it look at the car, <kbd>O</kbd> makes it move with the car, and <kbd>I</kbd> fixes it to the car. A panel at the top right has the same toggles, sliders for the speed and the smoothing, and a record button for a take. The camera is remembered per car.</p>
         </section>
 
         <section id="race">
             <h2>A race</h2>
-            <p>The <b>Race</b> column of the main menu sets practice without an end, or a race of 3, 5 or 10 laps, the number of <a href="#ai">AI opponents</a> (none to seven), their difficulty, the ghost, lap records and tyre wear. All of it is remembered.</p>
+            <p>Choose <b>Race</b> in the main menu. The race step sets 3, 5, 10 or 25 laps, the number of <a href="#ai">AI opponents</a> (1, 2, 3, 5 or 7), their difficulty and damage; <i>More options…</i> has tyre wear and fuel, the ghost, lap records and the cars that may race. The last step chooses the opponents themselves. All of it is remembered. <b>Free drive</b> has no laps and no opponents.</p>
             <ul>
                 <li><b>Start.</b> Everyone is held on the grid, with the brakes on and the engine free to rev, through a 3-2-1-GO countdown. The clocks of the race run from GO.</li>
-                <li><b>Laps.</b> A lap is counted by driving through the <i>gates</i> of the track in order. The first gate is the finish line.</li>
-                <li><b>Finish.</b> An AI car that has done its laps slows down and pulls to the right, out of the way. When you cross the line after your last lap the results come up: place, best lap and the time of every car with the gap to the winner (a car still on its way is <i>running</i>), with <i>Race again</i> and <i>Main menu</i>.</li>
-                <li><b>Practice</b> has no countdown and no end.</li>
+                <li><b>Laps.</b> A lap is counted by driving through the <i>gates</i> of the track in order. The first gate is the finish line. Everyone's first lap starts when they first cross it, so a place further back on the grid costs the AI the same distance as the player.</li>
+                <li><b>Reset.</b> <kbd>R</kbd> puts the car back at the nearest point of the racing line. In a race this does not cost a lap, but the lap is not a record and does not make a ghost.</li>
+                <li><b>Finish.</b> An AI car that has done its laps slows down and pulls to the right, out of the way. When you cross the line after your last lap an AI driver takes over your car at half pace, and the results come up: place, best lap and the time of every car with the gap to the winner (a car still on its way is <i>running</i>), with <i>Race again</i> and <i>Main menu</i>.</li>
+                <li><b>No racing line.</b> A track without a racing line has no AI cars: you race the clock. A track without gates has no race at all and opens as free driving. The menu says so.</li>
             </ul>
         </section>
 
@@ -239,33 +288,47 @@ cd openracer-agent-port
                 <li><b>Slider.</b> Drag it to go to any moment since the start of the game.</li>
                 <li><b>Buttons.</b> <b>Rewind</b> plays backwards, <b>Pause</b> stops, <b>Play</b> plays forwards, and −10 s and +10 s jump ten seconds. The first and last buttons go to the start and to the end.</li>
                 <li><b>Speed.</b> 0.1×, 0.25×, 0.5×, 1×, 2×, 3× and 5×, forwards and backwards.</li>
-                <li><b>Keys.</b> <kbd>Space</kbd> pauses and plays, the left and right arrows jump five seconds, <kbd>Home</kbd> and <kbd>End</kbd> go to the start and the end, <kbd>T</kbd> switches the camera, <kbd>H</kbd> hides the bar and shows it again. <kbd>Esc</kbd> or <b>Back to the game</b> returns to the game, which goes on exactly where you left it.</li>
+                <li><b>Keys.</b> <kbd>Enter</kbd> pauses and plays, the left and right arrows jump five seconds, <kbd>Home</kbd> and <kbd>End</kbd> go to the start and the end, <kbd>T</kbd> switches the camera, <kbd>H</kbd> hides the bar and shows it again. <kbd>Esc</kbd> or <b>Back to the game</b> returns to the game, which goes on exactly where you left it.</li>
             </ul>
             <h3 id="replay-cameras">Cameras in the replay</h3>
-            <p>The <b>Camera</b> row of the bar has <b>Fixed</b>, <b>Follow</b> and <b>Cockpit</b>, the cameras of the game, and <b>Free</b>, a camera that you move yourself, and that starts from where the last camera was. In Free everything is smoothed and damped, so the camera glides and does not jump.</p>
+            <p>The <b>Camera</b> row of the bar has <b>Follow</b> and <b>Cockpit</b>, the cameras of the game, <b>Free</b>, a camera that you move yourself, and <b>Cinematic</b>, which uses the cameras placed in the track editor: the one nearest to the car, which turns to follow it. <b>Car</b> (or <kbd>Tab</kbd>) chooses the car the cameras follow. In Free everything is smoothed and damped, so the camera glides and does not jump.</p>
             <table>
                 <tr><th>Input</th><th>What it does</th></tr>
                 <tr><td><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> or the arrows</td><td>move forwards, left, backwards and right, level, along where the camera looks (the arrows do not jump in time in Free; the buttons do)</td></tr>
-                <tr><td><kbd>Shift</kbd> and <kbd>Ctrl</kbd></td><td>up and down</td></tr>
+                <tr><td><kbd>Shift</kbd>, <kbd>Space</kbd> or <kbd>Z</kbd>; <kbd>Ctrl</kbd>, <kbd>Alt</kbd> or <kbd>X</kbd></td><td>up; down</td></tr>
                 <tr><td>mouse</td><td>click the scene and look around like a first person view; <kbd>Esc</kbd> lets go of the mouse</td></tr>
                 <tr><td><kbd>[</kbd> and <kbd>]</kbd></td><td>zoom: the field of view narrower and wider</td></tr>
                 <tr><td><kbd>F</kbd></td><td>aim the camera at the car: it keeps looking at it while it moves, and the mouse look rests</td></tr>
                 <tr><td><kbd>L</kbd></td><td>fix the camera to the car: it stays where it is now, relative to the car, and goes with it; <kbd>L</kbd> again lets it go</td></tr>
                 <tr><td><kbd>Tab</kbd></td><td>the next car, for <kbd>F</kbd> and <kbd>L</kbd></td></tr>
                 <tr><td>controller</td><td>left stick moves, right stick looks, the triggers go up and down, the bumpers zoom</td></tr>
-                <tr><td>the slider</td><td>0.1× to 3×: how fast the camera moves, looks and zooms (kept in the browser)</td></tr>
+                <tr><td>the slider</td><td>0.01× to 3×: how fast the camera moves, looks and zooms (kept in the browser)</td></tr>
             </table>
             <p>On a touch screen a finger on the scene looks around; moving needs the keys or a controller.</p>
-            <h3 id="replay-share">Saving and sharing a replay</h3>
-            <p><b>Save replay</b> in the bar saves the recording as one file (<code>.openracer-replay</code>, compressed). Send it to anyone you like: nothing goes to a server. Someone else opens it with <b>Open a replay</b> in the main menu and gets the same bar, with the slider and the speeds, but they cannot drive in it.</p>
-            <p>The file holds the recording and the ids of the track and the cars, not their models, so the other one needs the same track and cars. The standard ones of the game are enough. For a car or a track of your own, send them as a zip (<i>My garage</i> exports one) to import in <i>My garage</i>. If something is missing, the game says exactly what. A file from another version of the game is refused with a message, and a damaged one never starts a game. A recording of ten minutes with four cars is about eight megabytes.</p>
-            <p>The recording is kept in memory, about 4 KB a second for every car, and the last half hour is kept. It is gone when the page is reloaded or you go back to the main menu. Skid marks and smoke are not recorded: they stay as they were drawn.</p>
+            <h3 id="replay-share">The replay library</h3>
+            <p><b>Save replay</b> in the bar keeps the replay in <b>Replays</b> in the main menu, in your browser. When you go back to the main menu with a recording that is not saved, the game asks whether to keep it. The Replays window lists the saved replays with the track, the cars, the length, the date and the size, and has <b>Watch</b>, <b>Edit</b> (the <a href="#video-editor">video editor</a>), <b>Download</b> and <b>Delete</b>. Nothing goes to a server.</p>
+            <p><b>Download</b> saves a replay as one file (<code>.openracer-replay</code>, compressed), to keep or to send. Someone else adds it with <b>Import replay…</b> in the Replays window and gets the same bar, with the slider and the speeds, but they cannot drive in it. The file holds the recording and the ids of the track and the cars, not their models, so the other one needs the same track and cars. The standard ones of the game are enough. For a car or a track of your own, send them as a zip (the <i>Garage</i> exports one). If something is missing, the game says exactly what. A file from another version of the game is refused with a message, and a damaged one never starts a game.</p>
+            <p>While you drive the recording is kept in memory, about 4 KB a second for every car, and the last half hour is kept. Without Save it is gone when the page is reloaded. Skid marks and smoke are not recorded: they stay as they were drawn.</p>
+            <p><b>● Video</b> in the bar records the replay from the start to the end as a video file (mp4 where the browser can, else webm).</p>
+        </section>
+
+        <section id="video-editor">
+            <h2>Takes and the video editor</h2>
+            <p><b>A take.</b> <kbd>5</kbd> starts one while you drive. It first asks for the picture (16:9, 9:16 or 1:1), and the take runs with that frame on the screen and a red dot with the time. <kbd>5</kbd> again stops it, and a window asks for a name and what it should be: a <i>replay</i> (that part goes into the replay library) or a <i>video</i> (that part is played and filmed, and the game goes on). The recorder runs all the time; a take only marks where it starts and stops.</p>
+            <p><b>The video editor</b> opens from <i>Video editor</i> in the bar of a replay, or <i>Edit</i> in the Replays window. One replay is the source.</p>
+            <ul>
+                <li><b>Left monitor:</b> the source, with In and Out markers (<kbd>I</kbd> and <kbd>O</kbd>). <i>Insert at playhead</i> and <i>Add to end</i> put that part on the timeline.</li>
+                <li><b>Right monitor:</b> the result, played from the timeline (<kbd>Space</kbd> plays).</li>
+                <li><b>Clips:</b> trimmed at their edges, with a speed (0.05 to 8) and a zoom (0.5 to 4), each with keys for a smooth change along the clip.</li>
+                <li><b>Camera track:</b> keys of the free camera, between which the camera moves smoothly, with <i>Parent to car</i> and <i>Point at car</i>. A clip can also have a fixed shot or one of the cameras of the game.</li>
+                <li><b>Save</b> keeps the edit with the replay. <i>Save as replay</i> makes a new replay with the cuts and speeds, and <i>Save as mp4</i> records the result with the engine sound.</li>
+            </ul>
         </section>
 
         <section id="ai">
             <h2>AI opponents</h2>
-            <p>AI cars use the same physics and models as the player (the other cars of the game, in other colours). A driver follows the <b>racing line</b>: it steers at a point ahead on the line (further the faster it goes), keeps to the speed the line allows there, which comes from the curvature of the line with braking for the bends ahead, moves aside for a car in front and backs off when it is right behind one. The assists are on and the gearbox is automatic. The <b>difficulty</b> is how close to the limit of the tyres it drives. The cars bump into each other, and the HUD shows the place from how far along the line everyone is.</p>
-            <p>The racing line comes from <code>racing_line</code> in <code>track.json</code> if the track has one, else from the middle of the road of a drawn track, else from the best lap that was driven on the track. So on a track from Blender it is enough to drive one lap and the AI can race from the next start. The track editor can record the line: <i>Record AI racing line</i> opens the game with the track, you drive a calm lap through all gates, and <kbd>Esc</kbd> saves the last lap as the line and returns to the editor.</p>
+            <p>AI cars use the same physics and models as the player (the other cars of the game, in other colours). A driver follows the <b>racing line</b>: it steers at a point ahead on the line (further the faster it goes), keeps to the speed the line allows there, which comes from the curvature of the line with braking for the bends ahead, moves aside for a car in front and backs off when it is right behind one. The assists are on and the gearbox shifts by itself. The <b>difficulty</b> is how close to the limit of the tyres it drives. To keep the frame rate up an AI car drives on a simple tyre (rays and a slip curve), not the shell of nodes of the player's tyres. The cars bump into each other and dent each other, and the HUD shows the place from how far along the line everyone is. An AI car that crashed or got stuck is put back on the track, repaired, a little further along the line.</p>
+            <p>The racing line is the best lap that was driven on the track in this browser, by anyone, if there is one. Else it is <code>racing_line</code> in <code>track.json</code>, else the middle of the road of a drawn track. So on a track from Blender it is enough to drive one lap and the AI can race from the next start. The track editor can record the line: <i>Record AI racing line</i> opens the game with the track, you drive a calm lap through all gates, and <kbd>Esc</kbd> saves the last lap as the line and returns to the editor.</p>
         </section>
 
         <section id="ghost">
@@ -276,7 +339,29 @@ cd openracer-agent-port
         <section id="wear">
             <h2>Tyres, fuel and pit stops</h2>
             <p>With <i>Tyre wear and fuel</i> on, a tyre has a working window of about 70–100 °C. Cold it grips less, overheated too. It warms from sliding and from flexing under load, and cools with the air that passes. It wears with the sliding, faster when overheated, and a worn tyre grips less. Fuel burns with the power of the engine, so the car gets lighter as it goes, and an empty tank stops the engine. The size of the tank (60 L by default), the use, the heating and the life of the tyres are in <code>car.json</code> and in the <a href="#tuning">tuning menu</a>.</p>
-            <p>A <b>pit stop</b> is made by standing still on the pit lane, a surface of the track. The tank is filled at 6 L/s and, when the tyres are worn past 15 %, new tyres go on, which takes longer the more worn they are (2.5–7.5 s). The two happen side by side, so the stop takes as long as what is needed, with a moment to lift and drop the car. The HUD counts it down. The AI pits too, when its tyres are worn or its fuel will not last the laps that are left, and drives the pit lane at a walking pace. A track without a pit lane has no stops.</p>
+            <p>A <b>pit stop</b> is made by standing still in your pit box, a box of 4 by 8 m placed in the track editor (box 1 is the player's, the next ones are for the AI cars in the order of the grid). A track without boxes uses its pit lane, a surface of the track: stand still on it. The tank is filled at 6 L/s and, when the tyres are worn past 15 %, new tyres go on, which takes longer the more worn they are (2.5–7.5 s). The two happen side by side, so the stop takes as long as what is needed, with a moment to lift and drop the car. The HUD counts it down. The AI pits too, when its tyres are worn or its fuel will not last the laps that are left, and drives the pit lane at a walking pace, along the pit line of the track editor when there is one. A track without pit boxes or a pit lane has no stops.</p>
+        </section>
+
+        <section id="weather">
+            <h2>Weather and time of day</h2>
+            <p>The weather step of the main menu, and <i>Esc → Graphics → Atmosphere</i> while you drive, set three things. The sky is made by the game from them, the same on every track.</p>
+            <ul>
+                <li><b>Weather:</b> clear, cloudy, fog, rain or snow. Rain and snow fall past the camera.</li>
+                <li><b>Time of day:</b> dawn, morning, noon, afternoon, evening, sunset, dusk or night, and an hour slider in the Graphics tab. The sun rises at 5:00, is highest at 12:00 and sets at 19:00. At night the moon gives a faint light, after its phase. There are no headlights yet, so the night is dark.</li>
+                <li><b>Ground:</b> follows the weather, or dry, wet or snow. Rain wets the road within a minute and it dries again in a few minutes after. Snow builds up while it falls and stays. A wet road has less grip, snow a lot less, for you and for the AI, which drives slower.</li>
+            </ul>
+        </section>
+
+        <section id="dragstrip">
+            <h2>Drag strip</h2>
+            <p>A track can have a drag strip, placed in the track editor (<i>Drag strip</i>: the start line, the direction and the distance, from 1/8 mile to 1 mile or your own length). None of the tracks that come with the game has one yet.</p>
+            <ul>
+                <li><b>Staging.</b> Near the start line a text shows how far the front wheels are from it. With the front wheels at the line and the car still, "Get ready" shows (time for the two-step), then the lights on the tree: stage, three ambers and green. The timing starts when the car leaves the line; the reaction time is measured from the green.</li>
+                <li><b>False start.</b> Leaving before the green is a red light: the run is over, and the car has to go back behind the line and come up slowly again.</li>
+                <li><b>Time slip.</b> The times and speeds at 60 ft, 330 ft, 1/8 mile, 1000 ft, 1/4 mile and so on, as far as the strip goes, are shown at the end on a time slip.</li>
+                <li><b>Top 50.</b> The best runs per distance in this browser, with the car, the times, the top speed and the ticket of each run. Open it with <i>Drag top 50</i> on the track in the main menu, or <i>Esc → Tools</i>.</li>
+            </ul>
+            <p>For a launch there are the two-step (<kbd>Q</kbd>), the transbrake (<kbd>F</kbd>) and launch control (<kbd>J</kbd>). <i>Esc → Car</i> sets how long "Get ready" shows and how long the lights stay after the green.</p>
         </section>
 
         <section id="model">
@@ -286,7 +371,7 @@ cd openracer-agent-port
 
         <section id="chassis">
             <h2>Chassis</h2>
-            <p>A rigid body in 3D: position, orientation, velocity, angular velocity, mass and the inertia of a box. It pitches, rolls, can jump and can turn over. Gravity, air drag, downforce or lift and the forces of the four wheels act on it. Walls push on it with impulses.</p>
+            <p>A rigid body in 3D: position, orientation, velocity, angular velocity, mass and the inertia of a box. It pitches, rolls, can jump and can turn over. Gravity, air drag, downforce or lift and the forces of the four wheels act on it. Hits reach it through the <a href="#softbody">soft body</a> on it, the shell that dents.</p>
             <ul>
                 <li><b>Aerodynamics.</b> Downforce or lift per axle (<code>downforce_front</code>, <code>downforce_rear</code>, negative for lift). It presses at the axle, so the balance of the car changes with speed.</li>
                 <li><b>Steering.</b> The front wheels steer with <b>Ackermann</b> (default 0.6): the inner wheel turns more than the outer one, so a slow bend does not scrub the inner tyre.</li>
@@ -296,7 +381,7 @@ cd openracer-agent-port
 
         <section id="suspension">
             <h2>Suspension</h2>
-            <p>A quarter car at every corner. The wheel with its tyre, brake and hub is a mass of its own (unsprung mass, 35 kg by default) that hangs on a spring and a damper, with an anti-roll bar, and stands on the tyre, which is a stiff spring with a little damping. The road is found with rays from the wheel mount, sampled ahead of and behind the middle of the wheel, so the rim touches a kerb where it reaches it first and rolls on gradually.</p>
+            <p>A quarter car at every corner. The wheel with its tyre, brake and hub is a mass of its own (unsprung mass, 35 kg by default) that hangs on a spring and a damper, with an anti-roll bar, and stands on the tyre. The tyre finds the road itself with its nodes (see <a href="#tyres">Tyres</a>), so it touches a kerb where it reaches it first and rolls on gradually.</p>
             <p>The road pushes the tyre in, the tyre pushes the wheel, the wheel pushes the spring, the spring pushes the body. A sharp bump reaches the body through the spring and a <b>digressive damper</b>, whose force grows only slowly past a knee, like the blow-off of a real damper, so a kerb is a thump and not a blow. Past the travel there are damped bump and droop stops.</p>
             <table>
                 <tr><th>Setting</th><th>What it does</th></tr>
@@ -312,15 +397,15 @@ cd openracer-agent-port
 
         <section id="tyres">
             <h2>Tyres</h2>
-            <p>The slip ratio and the slip angle are taken together as <b>one slip vector</b>, each measured against the slip where its force peaks. Pacejka's magic formula gives the size of the force for the length of that vector, and the force points against the slip. So a tyre that brakes hard has less left to corner with, and past the peak both forces fall away together.</p>
+            <p>The tyre of the player's car is a <b>shell of nodes</b> (<code>TyreShell.js</code>). An outer shell of free nodes is the tread and the shoulder; an inner shell follows the rim. Beams join them: cables from the tread to the rim that the air pressure keeps taut, belt springs round and across the tread, and a bump stop deep in. The air pressure pushes the tread out and the rim back. The nodes are tested against every triangle of the track, and a node on the road holds it with a bristle, a spring up to the friction of the surface. So the grip, the combined slip, the patch and the way a tyre lets go come out of the nodes; there is no slip formula. The debug view (<kbd>0</kbd>) draws the nodes and beams, and the tyre of the model is pushed in as far as the nodes are. The AI cars use a simpler tyre, see <a href="#ai">AI opponents</a>.</p>
             <ul>
-                <li><b>Load sensitivity.</b> A tyre grips less per newton the more it is loaded, so a car carrying weight on one axle loses grip there. The rear tyres are a little stiffer against the slip angle, so the car understeers at the limit, which keeps it stable.</li>
-                <li><b>Relaxation length.</b> A tyre does not make force instantly; it builds up over a short distance.</li>
-                <li><b>Pressure</b> (bar, 2.2 by default). Around it the tyre grips best. Lower, it is softer against the slip angle, rolls heavier and runs hotter. Higher, it is stiffer with a smaller patch. Its stiffness as a spring follows.</li>
+                <li><b>Size and rubber.</b> The width, the diameter and the height of the sidewall come from the tyre. A wider or bigger tyre grips more at the same load and turns in sharper. The rubber is a slider from eco and road tyres to race and drag slicks: it sets the grip, the temperature window, the heat, the wear and the rolling resistance.</li>
+                <li><b>Load sensitivity.</b> A tyre grips less per newton the more it is loaded, so a car carrying weight on one axle loses grip there.</li>
+                <li><b>Pressure</b> (bar, 2.2 by default). It sets the patch and how far the tyre goes in. A softer tyre has a longer patch and its sidewall folds more. A hard hit can puncture a tyre, which then loses its pressure.</li>
                 <li><b>Camber.</b> A wheel that leans pushes towards the side it leans to.</li>
                 <li><b>Toe.</b> Toe-in calms the rear; toe-out at the front sharpens turn-in.</li>
                 <li><b>Temperature and wear.</b> See <a href="#wear">Tyres, fuel and pit stops</a>.</li>
-                <li><b>Surfaces.</b> Road, pit lane, grass and ground each have their own grip.</li>
+                <li><b>Surfaces.</b> Road, pit lane, grass, gravel, sand, mud and ground each have their own grip, and rain and snow take some away. Loose ground throws up pieces of grass, sand, gravel or snow.</li>
             </ul>
         </section>
 
@@ -330,23 +415,32 @@ cd openracer-agent-port
             <ul>
                 <li><b>Drive</b> is rear, front or all wheels.</li>
                 <li><b>Differential</b> between the wheels of an axle: <i>open</i> (equal torque, so the wheel with the least grip decides), <i>lsd</i> (a preload plus a share of the driven torque under power and off the throttle) or <i>welded</i> (both wheels always at the same speed). An all wheel drive car also has a centre differential (open, lsd or locked) and a torque split.</li>
-                <li><b>Turbo.</b> The share of the torque that is boost, the spool time that is its lag, and the speed from which it comes.</li>
+                <li><b>Engine build.</b> The torque curve follows from the engine that is built in the car editor or the tuning menu: the block, bore and stroke, compression, cam, valves, fuel, and a turbo or supercharger. <i>Run dyno</i> measures it.</li>
+                <li><b>Turbo.</b> A boost pressure with the spool time that is its lag; the heat of the compressed air and the intercooler count.</li>
                 <li><b>Shift time.</b> A shift takes time in which the clutch is open.</li>
                 <li>Without a clutch pedal the car works the clutch itself, so it does not stall. With a clutch pedal on a calibrated wheel the clutch is yours: release too quickly and it stalls, dump it at high revs and the tyres spin.</li>
             </ul>
         </section>
 
         <section id="gearbox">
-            <h2>Gearbox modes</h2>
-            <p>Choose in <i>Gearbox</i> in the settings, or with <kbd>G</kbd>. Every mode has its own gear display.</p>
+            <h2>Gearboxes</h2>
+            <p>The gearbox of the car decides how it is shifted. There is no gearbox-mode key. It is set in the Drivetrain card of the car editor and of the tuning menu (<code>drivetrain.gearbox</code>):</p>
             <dl>
-                <dt>Automatic (P R N D)</dt>
-                <dd>Gears and clutch are automatic. The shift buttons move the selector up and down (P and R only at a standstill). In P the wheels are locked.</dd>
-                <dt>Sequential (1, 2, … with N and R below 1)</dt>
-                <dd>The shift buttons change the gear, the clutch is automatic.</dd>
-                <dt>Manual</dt>
-                <dd>The H-pattern shifter selects the gear and the clutch pedal is used. The paddles still shift, with the automatic clutch. What was used last decides the clutch.</dd>
+                <dt>Manual (<code>gears</code>)</dt>
+                <dd>The gears are 1, 2, … with N and R below 1. The shift keys and paddles change the gear and an H-pattern shifter selects it. With a clutch pedal on a calibrated wheel the pedal is used once it is pressed or the shifter is moved; after the paddles the clutch is automatic again.</dd>
+                <dt>Manual with an automatic clutch (IMT, <code>imt</code>)</dt>
+                <dd>You shift as with a manual, but the clutch is never a pedal.</dd>
+                <dt>Automated manual (AMT, <code>amt</code>)</dt>
+                <dd>The gears of a manual, shifted by a robot: slowly, with the power off.</dd>
+                <dt>Dual clutch (DCT, <code>dct</code>)</dt>
+                <dd>The next gear waits on the other clutch, so a shift is a quick hand-over in which the drive never stops.</dd>
+                <dt>Automatic with a torque converter (<code>torque-converter</code>)</dt>
+                <dd>A fluid coupling in place of the clutch: it multiplies the torque off the line, locks up at speed, keeps the drive through a shift and lets the car creep at idle.</dd>
+                <dt>CVT (<code>cvt</code>)</dt>
+                <dd>No gears: the ratio moves smoothly to hold the engine at the speed the throttle asks for.</dd>
             </dl>
+            <p>The automatics (AMT, DCT, torque converter, CVT) have the selector P R N D: the shift buttons move it (P and R only at a standstill), <kbd>.</kbd> is reverse while held, and in P the wheels are locked. In D the brake key held at a standstill also reverses (<i>Esc → Car</i>). The automatics with gears have a <b>shift pattern</b>: Normal, Sport (holds the gears longer), Drag (up at the rev limiter, no kick down) or Manual (you shift with the paddles or the keys).</p>
+            <p><b>Transmission</b> in the Drivetrain card of the tuning menu sets a whole gearbox at once, with its gears, reverse, shift time and converter: 5 and 6-speed manuals, a 6-speed sequential, a 7-speed dual clutch, a 6-speed automated manual, 3, 4, 6 and 8-speed automatics, and drag automatics with 2 or 3 speeds. − and + beside the gear ratios change the number of gears.</p>
         </section>
 
         <section id="assists">
@@ -361,15 +455,41 @@ cd openracer-agent-port
         <section id="physics3d">
             <h2>3D contact and collisions</h2>
             <p>Every triangle of a track is kept in a 3D grid. The wheels feel the road with rays along the axis of their suspension, so a car can drive up a wall, upside down, or over a bridge, as in a loop. The body of the car is a cloud of spheres, made from its model when the car is made, that is tested against the triangles: a surface that the car rides on is a damped spring, any other surface is a wall that the car is pushed out of. A wall that is lower than the kerb height above the underside of the car is driven over.</p>
-            <p>This is the default for every track. A track can keep the older physics (one height of the road per place) with <code>"physics": "2d"</code> in its <code>track.json</code>. The car deforming in a crash is the next step and is not made yet: the spheres of the collision shape are the start of a skeleton of nodes and beams for it.</p>
+            <p>Every track uses this physics. The older 2D physics (one height of the road per place) is gone.</p>
+        </section>
+
+        <section id="softbody">
+            <h2>Soft body and damage</h2>
+            <p>Every car is a <b>soft body</b> (<code>SoftBody.js</code>, see <code>SOFTBODY.md</code> in the repository): a shell of nodes and beams in the frame of the car, made from its model. A node is held to the frame by a spring that gives way past a yield force and stays bent, and tears off at its break force; the beams between the nodes work the same way. Hits act on the nodes, and the car feels them through the shell, so the energy of a crash goes into the bending.</p>
+            <ul>
+                <li><b>Dents.</b> The shell dents and keeps the dent, and the model is bent with it. Two cars dent each other.</li>
+                <li><b>Parts.</b> Doors, the hood, the boot lid, bumpers, mirrors and wings can hang on hinges, swing, come loose and fall off. They are set in the Soft body card of the car editor.</li>
+                <li><b>Wheels.</b> A hard hit can bend a wheel, tear it off, or puncture its tyre.</li>
+                <li><b>Repair.</b> <kbd>Backspace</kbd> repairs the body, the parts, the wheels and the punctures, and puts the car on its wheels where it is, with new tyres and a full tank.</li>
+                <li><b>Off.</b> <i>Damage</i> in the main menu (free drive, the race step, the skidpad, <code>&amp;damage=0</code>) makes every car a plain rigid body: nothing dents, comes off or punctures. The car still lands on its roof and bumps into the others, and it costs less.</li>
+            </ul>
+            <p>The damage is in the replay and in a saved replay file too.</p>
+        </section>
+
+        <section id="motorcycles">
+            <h2>Motorcycles</h2>
+            <p>A vehicle with <code>"type": "motorcycle"</code> in its <code>car.json</code> is a motorcycle (<code>Motorcycle.js</code>, see <code>MOTORCYCLE.md</code>). The game has two: the <i>Sports motorcycle 600cc</i> and the <i>Supermoto 700</i>.</p>
+            <ul>
+                <li><b>Steering is leaning.</b> The steering keys, the stick or the wheel ask for a lean, and the rider takes it with a short delay. The front wheel is steered to the bend that lean needs at this speed, with a short countersteer to start it. <i>Esc → Car</i> chooses lean only or countersteer and lean, and the lean that is left at top speed.</li>
+                <li><b>The rider</b> is a model with arms and legs that follow the bars and the pegs. He is part of the mass and moves on the bike: back on a hard brake, flat on the throttle, off the seat in a bend. <kbd>,</kbd> and <kbd>.</kbd> move him back and forward while held.</li>
+                <li><b>Wheelies and stoppies.</b> The front brake is let off as the rear wheel lifts, and wheelie control rolls the throttle off as the front wheel lifts (<i>Esc → Car</i>).</li>
+                <li><b>A crash.</b> The rider is thrown off as a ragdoll. <kbd>9</kbd> makes him go limp, to try it.</li>
+                <li><b>Camera.</b> The follow camera rolls with the lean, or stays level like the one of a car (<i>Esc → Car</i>).</li>
+            </ul>
+            <p>A car can have a driver too: the <i>Driver</i> card of the car editor places a model in the car, with its hands on the steering wheel and its feet on the pedals.</p>
         </section>
 
         <section id="effects">
             <h2>Skid marks, smoke and collisions</h2>
             <p><b>Skid marks.</b> A tyre that slides past the peak of its grip at some speed leaves a strip of rubber along the path of its contact patch, darker the harder it slides (black on the road, lighter on grass and dirt), for the player and the AI alike. One mesh holds about a kilometre of marks in a ring; the oldest are drawn over when it is full.</p>
             <figure class="shot"><a href="img/drift.webp"><img loading="lazy" src="img/drift.webp" width="1600" height="900" alt="A Mustang sliding on the grass in a cloud of dust"></a><figcaption>A slide on the grass: the dust comes from the physics of the tyres.</figcaption></figure>
-            <p><b>Smoke and squeal.</b> A sliding tyre makes smoke, and the longer it slides the hotter it gets and the thicker the smoke. On grass it is dust. The squeal is made by the game and follows the car in pitch and volume; a recording in <code>sounds/tyre-squeal.ogg</code> replaces it. It comes from the physics, so it also shows with locked wheels, wheel spin and drifts.</p>
-            <p><b>Collisions.</b> The car collides with walls, fences, buildings and steep embankments. The steep triangles of the track are kept as outlines in a grid and the car is a rectangle that is pushed out of them. A hit gives an impulse at the point that hit, so it stops the car, bounces it a little and spins it when it hits with a corner. Things lower than 30 cm, like kerbs, are driven over.</p>
+            <p><b>Smoke and squeal.</b> A sliding tyre makes smoke, and the longer it slides the hotter it gets and the thicker the smoke. On grass it is dust. The squeal is made by the game and follows the car in pitch and volume; a recording in <code>sounds/tyre-squeal.ogg</code> (or <code>.mp3</code> or <code>.wav</code>) replaces it. It comes from the physics, so it also shows with locked wheels, wheel spin and drifts.</p>
+            <p><b>Collisions.</b> The car collides with walls, fences, buildings, steep embankments and the other cars. The body is the cloud of spheres and the shell of nodes of <a href="#physics3d">3D contact</a> and <a href="#softbody">Soft body</a>: a hit acts where it hits, so it stops the car, dents it, bounces it a little and spins it when it hits with a corner. Things lower than 30 cm, like kerbs, are driven over. Barrels, boxes and cones in a track can be knocked over.</p>
         </section>
 
         <section id="sound">
@@ -382,58 +502,71 @@ cd openracer-agent-port
             <h2>Tuning menu</h2>
             <p><kbd>U</kbd> shows or hides the tuning menu, with which the car is changed while it drives:</p>
             <figure class="shot"><a href="img/tuning.webp"><img loading="lazy" src="img/tuning.webp" width="1600" height="900" alt="The tuning menu open next to the car"></a><figcaption>The tuning menu opens next to the car, which keeps driving.</figcaption></figure>
+            <p>It has the cards of the car editor, with the same names and in the same order (one list for both, <code>OpenRacer.CarTuning.CARDS</code>), so the two always agree:</p>
             <ul>
-                <li><b>Chassis:</b> mass, weight distribution, height of the centre of gravity, ride height, roll centres.</li>
-                <li><b>Suspension:</b> springs, dampers, roll stiffness, travel, camber, toe.</li>
-                <li><b>Tyres:</b> grip, stiffness, pressure per axle, grip balance, heating and life, rolling resistance.</li>
-                <li><b>Engine:</b> power, idle, rev limit, inertia, engine braking, turbo, tank and fuel use.</li>
-                <li><b>Drivetrain:</b> drive, final drive, shift time, every gear, reverse, clutch, differentials.</li>
-                <li><b>Brakes and aero:</b> total brake force and bias, drag, downforce per axle.</li>
-                <li><b>Steering and assists:</b> lock, Ackermann, traction control, ESC.</li>
-                <li><b>Sound:</b> the main engine sound parameters.</li>
+                <li><b>Wheels:</b> the rims and tyres per axle, size, rubber, pressure, heating and life.</li>
+                <li><b>Suspension and driveline:</b> the type of suspension per axle and where the engine is.</li>
+                <li><b>Chassis:</b> paint, mass, weight distribution, centre of gravity, springs, dampers, travel, ride height, camber, toe, roll centres; the brakes and their bias; drag, downforce and steering; the size and the steering wheel.</li>
+                <li><b>Drivetrain:</b> the transmission, the gearbox, every gear, the final drive, the clutch and the differentials. It shows the top speed.</li>
+                <li><b>Engine:</b> the fuel, and the engine build with its chart and <i>Run dyno</i>. It shows the power.</li>
+                <li><b>Engine sound</b>, <b>Assists and extras</b> (traction control, ABS, ESC, launch control, two-step, pops and bangs, anti-lag, boost gauge), <b>Cameras</b>, <b>Soft body</b>, and for a motorcycle <b>Motorcycle</b>. The game adds <b>Mirrors</b>.</li>
             </ul>
-            <p>The power, the weight and the top speed that follow are shown at the top. The tuning of a car is kept in the browser. <i>Reset to the car</i> goes back to the car as it was made, and <i>Save to the car</i> writes it to <code>car.json</code>, through the helper server or into the <a href="#garage">garage</a>. The same table drives the <i>Tuning</i> card of the car editor, so the two always agree.</p>
+            <p>Only the settings that apply are shown. A value that differs from the chosen setup is orange, and its ↺ goes back to the car as it was made. The tuning of a car is kept in the browser. To keep a tuning under a name, see <a href="#setups">Setups</a>.</p>
+        </section>
+
+        <section id="setups">
+            <h2>Setups</h2>
+            <p>A <b>setup</b> (or tune) is the whole car as it is tuned, kept under a name in this browser. The top of the tuning menu has the list of setups, with <i>Default (the car as made)</i>, which is <code>car.json</code>:</p>
+            <ul>
+                <li><b>Save</b> overwrites the chosen setup with the car as it is now. <b>Save as new…</b> asks for a name.</li>
+                <li><b>Delete</b> removes the chosen setup.</li>
+                <li><b>Export…</b> saves it as a file to share, and <b>Import…</b> makes a setup of a file of someone else.</li>
+            </ul>
+            <p>A car with setups gets a <b>Tune</b> step in the main menu, and an opponent can race with a setup too. The car editor has the same list at the top: its Save writes to the setup that is chosen, and Default writes <code>car.json</code>.</p>
         </section>
 
         <section id="skidpad">
             <h2>Skidpad</h2>
-            <p><b>Skidpad</b> in the main menu takes the chosen car to a round pad with a painted circle of 50 m radius and drives it round by itself. The steering holds the painted line, a steady throttle raises the speed slowly, and the lateral acceleration is read from the tyre forces while the car still follows the circle. When it lets go, by going off the line or sliding, or when it understeers wide and cannot go faster, the result comes up: the g it held and the speed. Then you can press <i>Reset</i> to run again with the tuning as it is now, <i>Tune</i> to open the tuning menu, or <i>Back to the menu</i>. ESC is off for it.</p>
+            <p><b>Skidpad</b>, a way to play in the main menu, asks for the car and the ground (asphalt, wet asphalt, grass, gravel, sand or mud, each with its grip), takes the car to a round pad with a painted circle of 50 m radius and drives it round by itself. The steering holds the painted line, a steady throttle raises the speed slowly, and the lateral acceleration is read from the tyre forces while the car still follows the circle. When it lets go, by going off the line or sliding, or when it understeers wide and cannot go faster, the result comes up: the g it held and the speed. Then you can press <i>Reset</i> to run again with the tuning as it is now, <i>Tune</i> to open the tuning menu, or <i>Back to the menu</i>. ESC is off for it.</p>
             <figure class="shot"><a href="img/skidpad.webp"><img loading="lazy" src="img/skidpad.webp" width="1600" height="900" alt="The result of a skidpad run: 0.66 g held at 61 km/h"></a><figcaption>The result of a run: the g the car held, the speed, and the buttons to try again or tune.</figcaption></figure>
         </section>
 
         <section id="bench">
             <h2>Physics bench</h2>
-            <p><code>node tools/physics-bench.js</code> runs the physics of every car without the browser on a flat road and measures what a road test would: 0–100 km/h and 0–60 mph (traction control off and on), the braking distance from 100 km/h and from 60 mph, the top speed, the most lateral acceleration on a skidpad, the understeer gradient at 60 and 120 km/h and the share of the load transfer taken by the front axle. The Mustang Mach 1 is compared with the real car (about 6.5 s to 60 mph, about 40 m to stop from 60 mph, about 0.8 g, about 190 km/h) and its <code>car.json</code> is set so the bench is within 10 % of that. <code>node tools/physics-bench.js &lt;id&gt;</code> runs one car, <code>--json</code> prints the figures. Run it after a change to the physics or to a car.</p>
+            <p><code>node tools/physics-bench.js</code> runs the physics of every car without the browser on a flat road and measures what a road test would: 0–100 km/h and 0–60 mph (traction control off and on), the braking distance from 100 km/h and from 60 mph, the top speed, the most lateral acceleration on a skidpad, the understeer gradient at 60 and 120 km/h and the share of the load transfer taken by the front axle. The bench runs on a flat road with the triangles the tyre shell needs. It has reference figures of a real car only for the Mustang Mach 1, which is no longer in the game, so for the cars of today it prints the figures without a comparison. <code>node tools/physics-bench.js &lt;id&gt;</code> runs one car, <code>--json</code> prints the figures. Run it after a change to the physics or to a car.</p>
         </section>
 
         <section id="cars">
             <h2>Making a car</h2>
-            <p><code>cars/&lt;id&gt;/car.json</code> describes a car: the model, the size, the chassis (mass, wheelbase, tracks, weight distribution, height of the centre of gravity, tyre diameter, drag, steering lock), the drivetrain (drive, gear ratios, reverse, final drive), the engine (idle, rev limit, inertia, torque curve as <code>[rpm, Nm]</code>), the brakes (Nm per wheel), the cameras, the sound and the tyres. The game comes with <code>mustang</code>, the demo car with its original models, <code>openracer-mustang</code>, a Mustang made with the car editor, and <code>openracer-frame</code>, a bare frame with the suspension rig set up after a 2026 Mustang GT.</p>
+            <p><code>cars/&lt;id&gt;/car.json</code> describes a car: the model, the size, the chassis (mass, wheelbase, tracks, weight distribution, height of the centre of gravity, tyre diameter, drag, steering lock), the drivetrain (drive, gear ratios, reverse, final drive), the engine (idle, rev limit, inertia, torque curve as <code>[rpm, Nm]</code>), the brakes (Nm per wheel), the cameras, the sound, the tyres, the soft body and, when it has one, the driver. The game comes with seven: <code>go-kart-250cc</code> (Go-kart 250cc), <code>hyundai-i30</code> (Hyundai i30), <code>openracer-kart</code> (OpenRacer Kart), <code>openracer-muscle</code> (OpenRacer Muscle), <code>sports-motorcycle-600cc</code> (Sports motorcycle 600cc), <code>stadium-truck</code> (Stadium truck) and <code>supermoto-700</code> (Supermoto 700). The tracks are the Circuit, the Desert (3.8 km with eight jumps), Kartbaan Oldenzaal, TT Assen and the Skidpad.</p>
             <p>The model is a glTF or glb file, for example from Blender. Its materials are used as they are (physically based: base colour, metalness, roughness, normal, occlusion and emissive maps, clearcoat, transmission) and lit by the surroundings of the car, so paint, glass and chrome reflect the track and the sky. A part called <code>steeringwheel</code> turns with the steering (<code>steering_wheel.degrees</code>, 450 by default). Draco and Meshopt compression are not supported.</p>
         </section>
 
         <section id="car-editor">
             <h2>Car editor</h2>
-            <p>At <code>tools/car-editor.html</code>, a button in the main menu. With the helper server it writes the files to disk, without it it saves to the garage.</p>
-            <figure class="shot"><a href="img/car-editor.webp"><img loading="lazy" src="img/car-editor.webp" width="1600" height="900" alt="The car editor with a Mustang, the layers panel and the test bench at the bottom"></a><figcaption>The car editor with the test bench at the bottom of the view.</figcaption></figure>
+            <p>At <code>tools/car-editor.html</code>. Open it from the <a href="#garage">Garage</a> in the main menu: <i>New</i> for a new car, <i>Load</i> to open one. With the helper server it writes the files to disk, without it it saves to the garage. The cards on the left are the cards of the <a href="#tuning">tuning menu</a>, plus the model, the materials and the driver. The list of <a href="#setups">setups</a> is at the top.</p>
+            <figure class="shot"><a href="img/car-editor.webp"><img loading="lazy" src="img/car-editor.webp" width="1600" height="900" alt="The car editor of an older version with a Mustang, the layers panel and the test bench at the bottom"></a><figcaption>The car editor of an older version, with the test bench at the bottom of the view.</figcaption></figure>
             <ol>
                 <li><b>Pick the glb.</b> The arrow is the front of the car. Turn the model if needed and press <i>Fit</i>: the origin has to be at the height of the wheel axles, in the middle between the axles.</li>
-                <li><b>Wheels.</b> The wheels have to be separate parts, because they steer and spin. <i>Find the wheels</i> does this by their names and places. The wheelbase, tracks and tyre size are taken from the model, so the car looks in the game as it looks in the editor.</li>
+                <li><b>Wheels.</b> The wheels have to be separate parts, because they steer and spin. <i>Find the wheels</i> does this by their names and places. Or take a rim from the <b>wheel library</b> per axle, with a tyre made from its numbers (width, diameter, sidewall, rubber), or the objects <code>rim</code> and <code>tyre</code> of the model.</li>
+                <li><b>Suspension and driveline.</b> A suspension per axle from the <b>parts library</b> (double wishbone, MacPherson strut, live axle on trailing arms or on leaf springs), or the parts of your own model, and where the engine is. See <a href="#rig">Moving suspension</a>.</li>
+                <li><b>Paint.</b> The colour, the finish and the flakes of the body and the rims, in the Chassis card.</li>
+                <li><b>Engine.</b> Build the engine: the block, bore and stroke, compression, cam, valves, fuel, a turbo or supercharger. <i>Run dyno</i> measures the torque curve on rollers. The engine sound follows the build.</li>
                 <li><b>Cameras.</b> The <i>Layers</i> panel lists the cameras, the model and the wheels. Drag the gizmo in the view and a thumbnail shows what the camera sees, live.</li>
-                <li><b>Materials.</b> A shader the exporter does not know, such as many glass shaders, arrives as opaque white metal. The <i>Materials</i> part lists the materials and sets them right with a preset (glass, car paint, chrome, rubber, plastic, brushed metal) or by hand, with a live preview. Changes are saved with the car.</li>
-                <li><b>Mass, gears, engine, brakes, sound</b> with a torque chart, a generator for a typical curve from the peak power, and sound presets.</li>
-                <li><b>Updating a model.</b> Choose the car in the list and pick the new glb: the transform, the wheels and the material changes are kept where the new model still fits, and the editor says if the wheelbase, track or tyre differ.</li>
-                <li><b>Save the car.</b> It is written to <code>cars/&lt;id&gt;/</code> and is in the main menu.</li>
+                <li><b>Materials.</b> A shader the exporter does not know, such as many glass shaders, arrives as opaque white metal. The <i>Materials</i> card lists the materials and sets them right with a preset (glass, car paint, chrome, rubber, plastic, brushed metal) or by hand, with a live preview.</li>
+                <li><b>Soft body.</b> <i>Show the shell</i> draws the nodes and beams made from the model; set the material and the strengths, add or move nodes, and set the parts that swing on hinges or come loose.</li>
+                <li><b>Driver.</b> Load a driver model and place it, its hands on the steering wheel and its feet on the pedals.</li>
+                <li><b>Updating a model.</b> Choose the car and pick the new glb: the transform, the wheels and the material changes are kept where the new model still fits, and the editor says if the wheelbase, track or tyre differ.</li>
+                <li><b>Save the car.</b> It is written to <code>cars/&lt;id&gt;/</code> and is in the main menu. <b>Save and test</b> saves it and starts the game with it: choose the track, the weather, the time of day and the ground, or use the last settings.</li>
             </ol>
             <h3 id="bench-editor">Test bench</h3>
-            <p>The bottom bar of the view has a test bench that runs the model with the physics of the game, with the suspension rig:</p>
+            <p>The bottom bar of the view has a test bench that runs the model with the physics of the game, with the suspension rig and the soft body:</p>
             <ul>
-                <li><b>Drop car</b> lets the car fall on its wheels from 0.1 to 5 m, with a <i>Tilt</i> of 0–30° so it lands on one wheel first.</li>
-                <li><b>Shake test</b> presses on the four corners in turn (10–2000 kg, with sliders for the length of a push and the pace).</li>
-                <li><b>Full test</b> runs a drop, the engine to the rev limiter, the shake, forwards and back with smooth braking, and the steering to both locks, with sound, and stops by itself.</li>
-                <li><b>Drive</b> lets you drive the car over the floor with the keyboard, with shifting. <i>Reset car</i> or <kbd>R</kbd> puts it back.</li>
+                <li><b>Drop car</b> lets the car fall on its wheels from a height, with a <i>Tilt</i> so it lands on one wheel first.</li>
+                <li><b>Drive</b> lets you drive the car over the floor with the keyboard. <i>Reset car</i> or <kbd>R</kbd> puts it back.</li>
+                <li><b>Full test</b> runs a drop, the engine to the rev limiter, a metre forwards and back, the steering to both locks, and then full throttle into a wall ahead.</li>
+                <li><b>Crash test</b> drives the car into a wall at a speed and an angle you set, or fires a push at the car where you click (<i>Apply force</i>), to see how it dents.</li>
             </ul>
-            <p>The <i>Tuning</i> card has everything of the tuning menu and works at once on the car of the bench.</p>
         </section>
 
         <section id="rig">
@@ -465,16 +598,18 @@ cd openracer-agent-port
                 <li><code>gates</code>: lines across the road (x, z, heading, width) that the car has to drive through in order for a lap. The first is the finish line.</li>
             </ul>
             <p>Drivable surfaces have their own grip. <b>Scenery</b> is a wall for the car where it is steep, <b>decor</b> (sky, trees) is only to look at. The model is in metres, y up.</p>
-            <p>A track can have an <code>environment</code>: <code>sky_top</code> and <code>sky_horizon</code>, a <code>sky_image</code> (2:1 equirectangular), <code>fog</code> (colour, near, far), a <code>sun</code> (azimuth, elevation, intensity, colour, which also sets the direction of the shadow of the car) and <code>ambient</code> light.</p>
+            <p>A track can have an <code>environment</code>: <code>sky_top</code> and <code>sky_horizon</code>, a <code>sky_image</code> (2:1 equirectangular), <code>fog</code> (colour, near, far), a <code>sun</code> (azimuth, elevation, intensity, colour, which also sets the direction of the shadow of the car) and <code>ambient</code> light. In the game the sky is made from the <a href="#weather">weather and the time of day</a>, the same on every track; the environment of a track mainly sets how bright its materials take the light.</p>
         </section>
 
         <section id="track-editor">
             <h2>Track editor</h2>
-            <p>At <code>tools/track-editor.html</code>, a button in the main menu.</p>
+            <p>At <code>tools/track-editor.html</code>. Open it from the <a href="#garage">Garage</a> in the main menu: <i>New</i> for a new track, <i>Load</i> to open one.</p>
             <figure class="shot"><a href="img/track-editor.webp"><img loading="lazy" src="img/track-editor.webp" width="1600" height="900" alt="The track editor with a drawn track"></a><figcaption>A drawn track in the track editor, with the drawer for the road and the prefabs.</figcaption></figure>
             <ol>
                 <li><b>Model.</b> Pick the glb. The parts are listed with a guess of their surface from their names. Click a part in the view to find it, change the surface per part or for all parts that match the filter. <i>Colours of the surfaces</i> shows what you set.</li>
-                <li><b>Start and gates.</b> <i>Place start</i>: click on the road and drag in the direction the car drives. <i>Add gate</i> works the same. <i>Gate 1 at the start</i> puts the finish line just in front of the start.</li>
+                <li><b>Grid and gates.</b> <i>Grid box</i>: click on the road and drag in the direction the car faces; box 1 is the start of the player, 2 to 8 are for the opponents. <i>Add gate</i> works the same. <i>Gate 1 at the start</i> puts the finish line just in front of the start.</li>
+                <li><b>Pits.</b> <i>Pit box</i> places a box of 4 by 8 m per car, and <i>Pit line</i> the path of the AI to its box.</li>
+                <li><b>Drag strip and cameras.</b> <i>Drag strip</i> places the start line, the direction and the distance of a <a href="#dragstrip">drag strip</a>. <i>Add camera</i> places a camera for the Cinematic view of the replay.</li>
                 <li><b>AI racing line.</b> <i>Record AI racing line</i> opens the game on this track; you drive a lap and <kbd>Esc</kbd> saves it.</li>
                 <li><b>Sky and light.</b> Colours or a picture of the sky, fog, and the direction, height, strength and colour of the sun, with a live preview.</li>
                 <li><b>Save the track.</b> It is written to <code>tracks/&lt;id&gt;/</code> and is in the menu. Choose a track in the list to change it, or to delete it.</li>
@@ -497,9 +632,9 @@ cd openracer-agent-port
 
         <section id="garage">
             <h2>Your own cars and tracks</h2>
-            <p>The game can be hosted as plain files, with the cars and tracks of the server as the set that comes with it. Players add their own on their side, in <b>My garage</b> in the main menu, and <b>nothing is uploaded to the server</b>. Three sources make the lists of the menu: the server, the garage (the browser's IndexedDB), and a folder on the PC. A car or track of the garage replaces the one of the server with the same id, so a tuned copy of a standard car keeps its id and its lap records. Items that are not of the server have a badge in the menu.</p>
+            <p>The game can be hosted as plain files, with the cars and tracks of the server as the set that comes with it. Players add their own on their side, in the <b>Garage</b> of the main menu, and <b>nothing is uploaded to the server</b>. The Garage has <i>Load</i> (open a car or track in its editor), <i>New</i> (a new car or track) and <i>Import</i> (a zip). Three sources make the lists of the menu: the server, the garage (the browser's IndexedDB), and a folder on the PC. A car or track of the garage replaces the one of the server with the same id, so a tuned copy of a standard car keeps its id and its lap records. Items that are not of the server have a badge in the menu.</p>
             <ul>
-                <li><b>Saving.</b> The editors and <i>Save to the car</i> save through the helper server when it has the API, and otherwise to the garage, and say which.</li>
+                <li><b>Saving.</b> The editors save through the helper server when it has the API, and otherwise to the garage, and say which.</li>
                 <li><b>Zip.</b> A car or track is exported as <code>&lt;id&gt;.car.zip</code> or <code>&lt;id&gt;.track.zip</code>, and a zip is imported the same way, so a zipped folder from <code>cars</code> or <code>tracks</code> works too.</li>
                 <li><b>A folder on the PC.</b> In Chrome and Edge a folder can be linked. Its cars and tracks are read every time the menu opens and nothing is copied. The browser asks once per session to allow reading it.</li>
                 <li><b>Space.</b> The dialog shows how much the browser lets the site keep. Safari keeps about a gigabyte and forgets it after seven days without a visit, so export what matters.</li>
@@ -512,7 +647,7 @@ cd openracer-agent-port
             <ul>
                 <li><b>Materials:</b> use the Principled BSDF with the inputs glTF has. Other shaders do not survive the export; set them right in the car editor.</li>
                 <li><b>Colour management:</b> the game shows colours as they come (Standard) unless <i>Tone mapping</i> is set. Use the same in Blender. Look None, gamma 1; the game brightens by 20 % at the end.</li>
-                <li><b>Lighting:</b> save the surroundings in the game (<i>Esc → Surroundings for Blender</i>) and use the HDR as the world, then add the lights of the game.</li>
+                <li><b>Lighting:</b> save the surroundings in the game (<i>Esc → Tools → Surroundings for Blender</i>) and use the HDR as the world, then add the lights of the game.</li>
                 <li><b>Render engine:</b> EEVEE, without screen space reflections, bloom and ambient occlusion, with soft shadows.</li>
                 <li><b>The car:</b> y up, forward along +Z, the wheels as separate named parts.</li>
             </ul>
@@ -526,6 +661,19 @@ cd openracer-agent-port
         </section>
 <section id="changelog">
             <h2>Changelog</h2>
+            <h3 id="v220">2.2.0 <small>(October 2026)</small></h3>
+            <ul>
+                <li><b>Soft body and damage:</b> every car is a shell of nodes and beams that dents, parts come loose on hinges or fall off, wheels bend or come off, and cars dent each other. Damage can be switched off; <kbd>Backspace</kbd> repairs. See <a href="#softbody">Soft body and damage</a>.</li>
+                <li><b>Motorcycles</b> with a rider who leans and moves on the bike, and a ragdoll crash. See <a href="#motorcycles">Motorcycles</a>.</li>
+                <li><b>Weather and time of day:</b> clear, cloudy, fog, rain and snow, from dawn to night, with a wet or snowy road that grips less. See <a href="#weather">Weather and time of day</a>.</li>
+                <li><b>A new main menu</b> in steps: the way to play, the car and its setup, the track, the weather, the race and the opponents.</li>
+                <li><b>Drag strip</b> with a tree of lights, a time slip and a Top 50. See <a href="#dragstrip">Drag strip</a>.</li>
+                <li><b>Replays</b> in a library, takes, and a video editor. See <a href="#replay">Replay</a>.</li>
+                <li><b>Engine builder and dyno</b> in the car editor and the tuning menu, and <b>setups</b> saved under a name.</li>
+                <li><b>New gearboxes:</b> IMT, AMT, dual clutch, torque converter and CVT, with ready-made transmissions.</li>
+                <li><b>The tyre</b> is a shell of nodes, and the 2D physics is gone.</li>
+                <li><b>New cars and tracks:</b> the Hyundai i30, two karts, the OpenRacer Muscle, the stadium truck, two motorcycles; the Desert, Kartbaan Oldenzaal and TT Assen. The Mustangs are gone.</li>
+            </ul>
             <h3 id="v210">2.1.0 <small>(19 October 2026)</small></h3>
             <ul>
                 <li><b>Replay:</b> everything is recorded from the start, and Esc, Replay plays it back with a slider, rewind, pause, play and speeds from 0.1× to 5×. See <a href="#replay">Replay</a>.</li>

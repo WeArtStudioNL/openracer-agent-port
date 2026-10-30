@@ -2,9 +2,33 @@
 
 What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in `web/js/Version.js`.
 
-## 2.2.0 (2026-10-24)
+## 2.2.0 (2026-10-30)
 
-Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motorcycles with a rider and a ragdoll crash, a driver in the car, replays as files with a video editor, a new menu, the drag strip, and much more. Per subject:
+Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every car, motorcycles with a rider and a ragdoll crash, a driver in the car, replays as files with a video editor, a new menu, the drag strip, and much more. Per subject:
+
+### Soft body and damage
+
+- **Every car is a soft body**: a shell of nodes and beams in the frame of the car (`SoftBody.js`, see `SOFTBODY.md`). It dents and keeps the dent, it takes the energy of a crash, the model is bent with it, and two cars dent each other.
+- **Parts** (`parts` in car.json, `Parts.js`, on Rapier): doors, the hood, the boot lid, bumpers, lights and plates hang on hinges or mounts, swing open and come off; a wheel can be bent or torn off. *Damage* in the race settings switches it off (rigid cars); Backspace repairs the car where it stands.
+- The car editor has a soft body window: the shell is scanned from the model, with *Apply force* and a *Crash test* on the bench.
+
+### New cars and tracks
+
+- Cars: **Hyundai i30**, **Stadium truck**, **Go-kart 250cc**, **OpenRacer Kart**, **OpenRacer Muscle**, **Supermoto 700** and **Sports motorcycle 600cc**. Tracks: **Desert**, **Kartbaan Oldenzaal** and **TT Assen**; the **Circuit** has a racing line of its own (a race on it has AI cars now).
+- Removed: the Mustang and the Drift Mustang. A replay with one of them says that the car is missing; a link to one opens the main menu.
+- The models are lighter: their textures are re-encoded (at most 2048 px, JPEG where there is no transparency), and the game is about 220 MB instead of 360 MB.
+
+### Fixed before the release
+
+- **Races**: the AI counted its laps from the grid spot of the player, so it finished 80 to 115 m earlier than the player. Everyone's first lap now starts at the first crossing of the finish line. A reset no longer costs a lap (the lap is no record). The gates of Kartbaan Oldenzaal and TT Assen cover the pit lane, so a pit stop no longer costs a lap. A race on a track without a racing line runs without AI cars and says why, instead of becoming free driving without a word; the messages of the game no longer hide under the loading screen.
+- **AI**: the racing line under a bridge took the height of the deck; the line keeps 1.5 m from the edge of the road (the AI rolled over on the kerbs of the circuit); an AI car that rocks against a wall is put back.
+- **Reset**: the reset key no longer tears the parts off a car, an old hit no longer throws the rider off a motorcycle at the next touch, and the skidpad's Reset picks up a fallen bike.
+- **Escape and Enter**: a question, a window of the menu or the video editor owns Escape (it opened the settings under them, and resumed the race); Enter is the button that has the focus (Cancel then Enter deleted the car); a question that deletes something starts on Cancel. The settings menu from the main menu has no Resume or Replay; its sliders keep the focus. Reset the controls, Forget the records and Delete a setup are asked first; a setup name is asked in the game instead of the prompt of the browser.
+- **Sound and force feedback**: the wheel is let go in the menu, in a replay and in a hidden tab (it kept pulling); the engine of a replay fires (it sounded dead, in videos too); no gravel noise in the menu; the sound starts on a tap and after an iOS interruption; a key no longer sticks after a Cmd shortcut on macOS.
+- **Phones and the keyboard**: the menu fits a phone (the steps, the car tiles, the notch); every choice of the menu works with Tab, Enter and Space; the HUD of the game no longer overlaps on a phone. The top speed of a CVT car in the menu is right (the i30 showed 110 km/h).
+- **Editors**: the track editor asks before unsaved changes are lost (leaving the page, Record AI racing line, another track, New track); the car editor marks changes in its windows, the exhaust window, the ↺ buttons and the arrows of the view as not saved; a tune is not saved while a new model is loaded (it is part of the car); the steering wheel and the suspension travel have the same range in the editor and the tuning menu (the steering wheel is the turn each way); the rpm slider of the sound goes as high as the engine; a cleared height field of the height map no longer breaks the mesh.
+- **Smaller things**: a car whose model fails no longer keeps the loading screen up for 90 seconds, and a failing AI car leaves the race; the HUD of a phone no longer makes its canvases again every frame; tune names with a comma or a % in a race link; the pictures of the menu no longer fill the storage of the browser; the touch buttons say what they do; the HUD editor goes back to the settings; the reverse speed is in mph with imperial units.
+- **Security**: names of tracks and cars from a zip are text, never markup (a track from someone else's zip could run a script, in the car editor with the write API); `serve.py` does not write through links, does not take pages or scripts, writes a file only when it is complete, and checks the port of the page; a broken or oversized zip, car.json or replay is refused with a message.
 
 ### Car editor: Save and test
 
@@ -628,7 +652,7 @@ Since 2.1.0 (267 commits): the track in 3D with a soft body for every car, motor
 - The road is no longer one height per place. Every triangle of the track is in a 3D grid, the wheels feel the road with rays along their own axis, and the body is a cloud of spheres, so a loop, a road on a wall or a bridge works: a car with enough speed goes up the wall of a loop, over the top upside down and lands on the exit.
 - The collision shape of a car is made from its model when the car loads (about 40 to 90 spheres), instead of a box.
 - A wall counts where the car is lower than its top, measured along the car; the seams between triangles do not push the car; only a car that goes into a wall is hit hard.
-- It is the default for every track. A track can keep the old physics with `"physics": "2d"` in `track.json` (or `?physics=2d`).
+- It is the default for every track. (At first a track could keep the old physics with `"physics": "2d"`; later in 2.2 the 2D physics was removed, and every track is 3D.)
 
 **Tyres**
 - The repair key (Backspace) now also puts the car back on its wheels where it is: the same place and heading, the roof up, 30 cm above the road, not moving (a car that lies on its roof or its side). Tested with a kart on its roof: after the key it stands again on its wheels with the normal loads.
