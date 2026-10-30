@@ -85,7 +85,7 @@ OpenRacer.PitStop = function (vehicle) {
         var tyres = worn > TYRES_WHEN || leaking ? TYRES_MIN + TYRES_PER_WEAR * Math.min(1, worn) : 0;
         // the tyres that are changed: the ones that are worn past the mark or leak, one after the other, each in its share of the time of the tyres
         var change = [];
-        if(tyres > 0) for(var i = 0; i < 4; i++) { var w = v.wheels[i]; if(v.soloWheels && (i === 1 || i === 3)) continue; if(w.wear > TYRES_WHEN || w.leak) change.push(i); }
+        if(tyres > 0) for(var i = 0; i < 4; i++) { var w = v.wheels[i]; if(v.soloWheels && (i === 1 || i === 3)) continue; if(v.wheelLost && v.wheelLost[i]) continue; if(w.wear > TYRES_WHEN || w.leak) change.push(i); }       // (a wheel that came off is put on whole: Parts.fetchTo)
         var work = Math.max(fuel, tyres, repair);
         return { fuel: fuel, tyres: tyres, change: change, repair: repair, work: work, total: LIFT + work + (tyres > 0 || repair > 0 ? LIFT : 0.3) };
     }
@@ -120,6 +120,7 @@ OpenRacer.PitStop = function (vehicle) {
             if(this.plan.repair > 0) {
                 if(vehicle.softBody && vehicle.softBody.repairStart) vehicle.softBody.repairStart();
                 fetching = vehicle.parts && vehicle.parts.fetchStart ? vehicle.parts.fetchStart() : [];
+                if(this.holdCar && fetching.length) OpenRacer.PitStop.recordParts(vehicle.parts.parts, fetching, this.plan.work, LIFT);
                 wheelsFrom = vehicle.wheels.map(function (w) { return { toe: w.toeBend || 0, camber: w.camberBend || 0, x: w.shiftX || 0, z: w.shiftZ || 0 }; });
             }
         }
@@ -139,9 +140,13 @@ OpenRacer.PitStop = function (vehicle) {
             var share = Math.max(0, Math.min(1, t / Math.max(0.1, this.plan.work)));
             if(vehicle.softBody && vehicle.softBody.repairTo) vehicle.softBody.repairTo(share);
             // the parts that came off are carried back one after the other, each in its share of the work (as the tyres are changed)
+            // the parts that came off and the wheels that are gone: while the car goes up they fade away where they lie, then each in its turn is put on the car
             if(fetching.length && vehicle.parts && vehicle.parts.fetchTo) {
-                var turn = Math.max(0.1, this.plan.work) / fetching.length;
-                for(var fp = 0; fp < fetching.length; fp++) vehicle.parts.fetchTo(fetching[fp], Math.max(0, Math.min(1, (t - turn * fp) / turn)));
+                if(t < 0) fetching.forEach(function (p) { vehicle.parts.fetchFade(p, -t / LIFT); });
+                else {
+                    var turn = Math.max(0.1, this.plan.work) / fetching.length;
+                    for(var fp = 0; fp < fetching.length; fp++) vehicle.parts.fetchTo(fetching[fp], (t - turn * fp) / turn);
+                }
             }
             if(wheelsFrom) for(var wi = 0; wi < 4; wi++) { var wf = wheelsFrom[wi], wh = vehicle.wheels[wi]; wh.toeBend = wf.toe * (1 - share); wh.camberBend = wf.camber * (1 - share); wh.shiftX = wf.x * (1 - share); wh.shiftZ = wf.z * (1 - share); }
             if(share >= 1) { repaired = true; wheelsFrom = null; fetching = []; vehicle.repair(); }
@@ -199,6 +204,39 @@ OpenRacer.PitStop.changeAt = function (list, slot, work, index) {
     };
     // (Replay.js is loaded after this file: the recording is attached when the first stop begins, or when the game asks for it)
     OpenRacer.PitStop.attachReplay = attach;
+})();
+
+// The parts that are put back in a pit stop, in a replay: they are placed by the recording (Parts.js records where a loose part is), but their fading is not; a row
+// when the stop begins (the time, how long the car goes up, the turn of a part, and which parts, by their number on the car, at most 12) gives it back
+(function () {
+    var record = { replayLookback: 0 }, attached = false, shown = null;
+    OpenRacer.PitStop.recordParts = function (all, list, work, lift) {
+        if(!attached && OpenRacer.Replay && OpenRacer.Replay.attach) { OpenRacer.Replay.attach("pitParts", record); attached = true; }
+        if(!record.recorder) return;
+        var row = new Float32Array(16);
+        row[1] = lift; row[2] = Math.max(0.1, work) / list.length; row[3] = Math.min(12, list.length);
+        for(var i = 0; i < 12; i++) row[4 + i] = i < list.length ? all.indexOf(list[i]) : -1;
+        record.recorder(row);
+    };
+    function rowState(row) { return row && row[3] > 0 ? { t0: row[0], lift: row[1], turn: row[2], list: Array.prototype.slice.call(row, 4, 4 + row[3]) } : null; }
+    record.replayAdd = function (row) { shown = rowState(row); };
+    record.replayStep = function () {};
+    record.replayClear = function () { shown = null; };
+    record.replayRebuild = function (rows, end) { shown = end > 0 ? rowState(rows[end - 1]) : null; };
+    record.replaySnapshot = function () { return null; };
+    record.replayRestore = function () { shown = null; };
+    // the opacity of part number index (of the car) at the time of the replay, or null when the stop does not touch it
+    OpenRacer.PitStop.replayedPart = function (index) {
+        if(!shown || !OpenRacer.Replay || !OpenRacer.Replay.time) return null;
+        var c = shown.list.indexOf(index);
+        if(c < 0) return null;
+        var t = OpenRacer.Replay.time() - shown.t0;
+        if(t < 0) return null;
+        if(t < shown.lift) return 1 - t / shown.lift;
+        var share = (t - shown.lift - shown.turn * c) / shown.turn;
+        if(share >= 1) return null;
+        return share <= 0 ? 0 : Math.min(1, share / 0.6);
+    };
 })();
 
 // the wheel of a car in the picture while its tyre is changed in a pit stop: pulled out sideways (to the left for the left wheels: x of the car is to the left), hidden

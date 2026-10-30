@@ -571,15 +571,24 @@ OpenRacer.Parts = (function () {
             if (v.repairWheels) v.repairWheels();
             for (var i = 0; i < parts.length; i++) {
                 var p = parts[i];
+                unfade(p);
                 if (p.wheel !== undefined) {
+                    p.fetching = false;
                     if (p.state !== "held") { p.body.setBodyType(R.RigidBodyType.KinematicPositionBased, true); setGroups(p, false); p.object.matrixAutoUpdate = true; p.state = "held"; p.pending = false; p.region = null; }
                     continue;
                 }
                 putBack(p);
             }
         }
-        // one part back on the car, held as it was made
+        // one part back on the car, held as it was made (a wheel: a wheel of the car again)
         function putBack(p) {
+            unfade(p);
+            if (p.wheel !== undefined) {
+                if (p.state !== "held") { p.body.setBodyType(R.RigidBodyType.KinematicPositionBased, true); setGroups(p, false); p.object.matrixAutoUpdate = true; p.state = "held"; p.pending = false; p.region = null; }
+                p.fetching = false;
+                if (v.repairWheel) v.repairWheel(p.wheel);
+                return;
+            }
             if (p.joint) { world.removeImpulseJoint(p.joint, true); p.joint = null; }
             if (p.state !== "held") {
                 p.body.setBodyType(R.RigidBodyType.KinematicPositionBased, true);
@@ -594,41 +603,83 @@ OpenRacer.Parts = (function () {
             p.state = "held"; p.hasVel = false; p.grace = 0; p.pending = false; p.region = null; p.fetching = false;
         }
 
-        // The parts back on the car one by one, as the tyres are (the pit stop, Pit.js): fetchStart takes the parts that came loose (a wheel that came off is the
-        // repair of the wheels) out of the physics, so that they no longer move or hit anything, and gives them as a list; fetchTo(part, share) carries one from where
-        // it lies to its place on the car, in an arc of 60 cm, turning it as it goes, and holds it there; putBack (or repair) makes it a part of the car again
-        var fetchPos = new THREE.Vector3(), fetchQuat = new THREE.Quaternion(), fetchScale = new THREE.Vector3(), homeM = new THREE.Matrix4(), homePos = new THREE.Vector3(), homeQuat = new THREE.Quaternion(), homeScale = new THREE.Vector3(), fetchM = new THREE.Matrix4(), parentInv = new THREE.Matrix4();
+        // The parts back on the car one by one, as the tyres are (the pit stop, Pit.js). fetchStart takes the parts that came loose and the wheels that came off out of
+        // the physics (they no longer move or hit anything) and gives them as a list, each with materials of its own so that it can be faded without the car; fetchFade(part,
+        // opacity) fades one where it lies on the track (from 1 to 0, then it is gone); fetchTo(part, share) puts it on the car in its turn: from 60 cm out it goes to its place
+        // and comes into sight (0: gone, 1: on), and holds it there. A wheel is a wheel of the car again when it is on (Vehicle.repairWheel); putBack (or repair) ends it.
+        var fetchPos = new THREE.Vector3(), fetchQuat = new THREE.Quaternion(), fetchScale = new THREE.Vector3(), homeM = new THREE.Matrix4(), homePos = new THREE.Vector3(), homeQuat = new THREE.Quaternion(), homeScale = new THREE.Vector3(), fetchM = new THREE.Matrix4(), parentInv = new THREE.Matrix4(), outward = new THREE.Vector3(), carQ = new THREE.Quaternion();
+        function fadeable(p) {
+            if (p.fadeMats) return;
+            p.fadeMats = [];
+            p.object.traverse(function (m) {
+                if (!m.isMesh || !m.material) return;
+                var own = Array.isArray(m.material) ? m.material.map(function (x) { return x.clone(); }) : m.material.clone();
+                (Array.isArray(own) ? own : [own]).forEach(function (x) { x.userData.fadeOpacity = x.opacity; x.transparent = true; });
+                p.fadeMats.push({ mesh: m, was: m.material, own: own });
+                m.material = own;
+            });
+        }
+        function setOpacity(p, a) {
+            if (!p.fadeMats) return;
+            p.fadeMats.forEach(function (f) { (Array.isArray(f.own) ? f.own : [f.own]).forEach(function (x) { x.opacity = x.userData.fadeOpacity * a; x.depthWrite = a > 0.98; }); });
+            p.object.visible = a > 0.005;
+        }
+        function unfade(p) {
+            if (!p.fadeMats) return;
+            p.fadeMats.forEach(function (f) { f.mesh.material = f.was; (Array.isArray(f.own) ? f.own : [f.own]).forEach(function (x) { x.dispose(); }); });
+            p.fadeMats = null;
+            p.object.visible = true;
+        }
         function fetchStart() {
             var list = [];
             parts.forEach(function (p) {
-                if (p.wheel !== undefined || p.state === "held") return;
+                if (p.state === "held") return;
+                if (p.wheel !== undefined && !(v.wheelLost && v.wheelLost[p.wheel])) return;
                 if (p.joint) { world.removeImpulseJoint(p.joint, true); p.joint = null; }
                 p.body.setBodyType(R.RigidBodyType.KinematicPositionBased, true);
                 setGroups(p, false);
-                p.object.updateWorldMatrix(true, false);
-                var from = { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), scale: new THREE.Vector3() };
-                p.object.matrixWorld.decompose(from.pos, from.quat, from.scale);
-                p.fetchFrom = from; p.fetching = true;
+                fadeable(p);
+                p.fetching = true; p.fetchOn = false;
                 list.push(p);
             });
             return list;
         }
-        function fetchTo(p, share) {
-            if (!p || !p.fetching) return;
-            share = Math.min(1, share);              // (at 1 it is held at its place by this until the repair is done: held earlier it went with its nodes, which come back with the shell)
+        function fetchFade(p, opacity) { if (p && p.fetching && !p.fetchOn) setOpacity(p, Math.max(0, Math.min(1, opacity))); }
+        // where a part (or a wheel) belongs, in the world: its home in the model, or the middle of its wheel on the car
+        function homeOf(p) {
+            if (p.wheel !== undefined) {
+                var w = v.wheels[p.wheel];
+                carQ.set(v.qx, v.qy, v.qz, v.qw);
+                homePos.set(w.mount.x + (w.shiftX || 0), w.mount.y - (w.restLengthWheel || v.restLength || 0.3), w.mount.z + (w.shiftZ || 0)).applyQuaternion(carQ);
+                homePos.x += v.px; homePos.y += v.py; homePos.z += v.pz;
+                homeQuat.copy(carQ); homeScale.set(1, 1, 1);
+                return;
+            }
             var h = p.object.userData.partHome;
             p.parent.updateWorldMatrix(true, false);
             homeM.compose(h.position, h.quaternion, h.scale).premultiply(p.parent.matrixWorld);
             homeM.decompose(homePos, homeQuat, homeScale);
+        }
+        function fetchTo(p, share) {
+            if (!p || !p.fetching) return;
+            share = Math.max(0, Math.min(1, share));
+            if (share <= 0) { setOpacity(p, 0); return; }          // (gone from the track, waiting for its turn)
+            p.fetchOn = true;
+            homeOf(p);
+            // out from the car: away from its middle, level, 60 cm at the start of the turn
+            outward.set(homePos.x - v.px, 0, homePos.z - v.pz);
+            if (outward.lengthSq() < 1e-6) outward.set(1, 0, 0);
+            outward.normalize();
             var e = share * share * (3 - 2 * share);
-            fetchPos.lerpVectors(p.fetchFrom.pos, homePos, e); fetchPos.y += Math.sin(Math.PI * e) * 0.6;
-            fetchQuat.slerpQuaternions(p.fetchFrom.quat, homeQuat, e);
-            fetchScale.lerpVectors(p.fetchFrom.scale, homeScale, e);
-            fetchM.compose(fetchPos, fetchQuat, fetchScale);
+            fetchPos.copy(homePos).addScaledVector(outward, 0.6 * (1 - e));
+            fetchM.compose(fetchPos, homeQuat, homeScale);
             if (p.object.parent) { p.object.parent.updateWorldMatrix(true, false); fetchM.premultiply(parentInv.copy(p.object.parent.matrixWorld).invert()); }
             p.object.matrixAutoUpdate = false;
             p.object.matrix.copy(fetchM);
             p.object.matrixWorldNeedsUpdate = true;
+            setOpacity(p, Math.min(1, share / 0.6));
+            // a wheel that is on is a wheel of the car again: it hangs on its spring and rolls when the car comes down
+            if (share >= 1 && p.wheel !== undefined) putBack(p);
         }
 
         // ---- the replay (Replay.js): what is recorded of a part is its state (0 held, 1 hinged, 2 free) and, when it is not held, the place of its
@@ -680,6 +731,9 @@ OpenRacer.Parts = (function () {
             replayApply: function (arr, frozen) {
                 for (var i = 0; i < parts.length; i++) {
                     var p = parts[i], o = i * PART_FLOATS, code = arr[o];
+                    // (a part that a pit stop fades away and puts back: its opacity at this time, from the recording of the stop, Pit.js)
+                    var fade = OpenRacer.PitStop && OpenRacer.PitStop.replayedPart ? OpenRacer.PitStop.replayedPart(i) : null;
+                    if (fade !== null) { fadeable(p); setOpacity(p, fade); } else if (p.fadeMats && !p.fetching) unfade(p);
                     if (!code) { if (p.rAway) backOnModel(p); continue; }
                     if (!p.rAway) awayFromModel(p, frozen ? frozen(i) : null);
                     p.object.matrix.compose(tmpP.set(arr[o + 1], arr[o + 2], arr[o + 3]), tmpQ.set(arr[o + 4], arr[o + 5], arr[o + 6], arr[o + 7]), tmpS.set(arr[o + 8], arr[o + 9], arr[o + 10]));
@@ -707,7 +761,7 @@ OpenRacer.Parts = (function () {
 
         return {
             replay: replayApi,
-            world: world, parts: parts, events: events, update: update, repair: repair, fetchStart: fetchStart, fetchTo: fetchTo, putBack: putBack,
+            world: world, parts: parts, events: events, update: update, repair: repair, fetchStart: fetchStart, fetchFade: fetchFade, fetchTo: fetchTo, putBack: putBack,
             // the car was put somewhere else (a reset, the start): the speed of before is no acceleration of the parts
             moved: function () { parts.forEach(function (p) { p.hasVel = false; }); },
             // the car is taken out of the scene (the car editor makes a new one for every test): the parts that were thrown out of it go with it

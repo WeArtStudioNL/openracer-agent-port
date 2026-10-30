@@ -1339,6 +1339,13 @@ OpenRacer.Vehicle = function (parameters, input) {
             if(self.onWheelLost) self.onWheelLost(i);
         }
     }
+    // one wheel whole again, on the car (the pit stop puts them back one by one, Parts.js)
+    this.repairWheel = function (i) {
+        if(this.soloWheels && (i === 1 || i === 3)) return;
+        this.wheelDamage[i] = 0; this.wheelLost[i] = false; this.wheels[i].toeBend = 0; this.wheels[i].camberBend = 0; this.wheels[i].damageGrip = 1;
+        this.wheels[i].shiftX = 0; this.wheels[i].shiftZ = 0;
+        if(this.hubSphere[i] >= 0 && this.proxy3 && this.proxy3[this.hubSphere[i]]) this.proxy3[this.hubSphere[i]].disabled = false;
+    };
     // the bend of a wheel (a bent suspension arm and tie rod): toe in or out and a lean, to the side that the hit pushed it
     this.repairWheels = function () {
         for(var i = 0; i < 4; i++) {
