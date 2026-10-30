@@ -142,7 +142,7 @@ OpenRacer.CarTuning = (function () {
             ["length", "Length", "m", 1, 8, 0.01],
             ["width", "Width", "m", 0.5, 3.5, 0.01],
             ["height", "Height", "m", 0.4, 3.5, 0.01],
-            ["steering_degrees", "Steering wheel: lock to lock", "°", 90, 1440, 10]
+            ["steering_degrees", "Steering wheel: turn at full lock (each way; 450 is 900° lock to lock)", "°", 30, 1000, 10]
         ] },
         { name: "Cameras", items: [
             ["cam_follow_distance", "Follow camera: distance", "m", 1, 20, 0.1],
