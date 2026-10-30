@@ -3475,6 +3475,16 @@ function setDirty(on) {
     refreshReady();
 }
 $("side").addEventListener("input", (e) => { if (!e.target.closest("#setupRow, #existing, #copyCar")) setDirty(true); }, true);
+// (what is changed outside the side panel counts too: the windows of the cameras, the soft body, the materials and the sound, the exhaust window in the view,
+// the ↺ and "= front" buttons of the tuning card, and a drag of an arrow in the view. They were not marked, so closing the page lost them without a question)
+for (const id of ["dlgCameras", "dlgSoftBody", "dlgMaterials", "dlgSound"]) { const d = $(id); if (d) { d.addEventListener("input", () => setDirty(true), true); d.addEventListener("change", () => setDirty(true), true); } }
+exhaustWindow.addEventListener("input", () => setDirty(true), true);
+$("side").addEventListener("click", (e) => { if (e.target.closest(".tuneReset") || (e.target.tagName === "BUTTON" && e.target.textContent === "= front")) setDirty(true); }, true);
+let gizmoChanged = false;
+for (const g of [gizmo, rotGizmo]) {
+    g.addEventListener("objectChange", () => { gizmoChanged = true; });
+    g.addEventListener("dragging-changed", (event) => { if (!event.value && gizmoChanged) { gizmoChanged = false; setDirty(true); } });
+}
 window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
 window.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") { e.preventDefault(); $("save").click(); }
