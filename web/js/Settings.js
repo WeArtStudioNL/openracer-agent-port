@@ -104,7 +104,7 @@ var Settings = (function() {
     var actionsById = {};
     ACTIONS.forEach(function(a) { actionsById[a.id] = a; });
 
-    var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, autoReverse: true, autoReversePedals: true, autoReverseSpeed: 3, dragReady: 2, dragGreen: 1.5, abs: true, sound: true, wheelRange: 1, wheelMatch: false, wheelDegrees: 900, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, hud: true, units: "metric", debug: false, esc: true, camera: 2, volume: 0.8,
+    var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, autoReverse: true, autoReversePedals: true, autoReverseSpeed: 3, dragReady: 2, dragGreen: 1.5, abs: true, sound: true, wheelRange: 1, wheelMatch: false, wheelDegrees: 900, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, hud: true, units: "metric", debug: false, esc: true, camera: 2, volume: 0.8, tyreVolume: 0.8,
         touchSteer: 1, padSlow: 1.5, padAssist: true, keySteer: 1, keySlow: 1, keyAssist: true,
         // a motorcycle: the steering ("counter": countersteering to start a lean and the lean; "lean": the lean only) and the follow camera ("lean": it rolls with the bike; "classic": as a car)
         bikeSteering: "lean", bikeCamera: "lean", wheelieControl: true, bikeFastLean: 30,
@@ -1146,11 +1146,10 @@ var Settings = (function() {
             if(typeof EnvironmentExport !== "undefined") EnvironmentExport.download();
         }));
         page = tabPage("Display and sound");
-        page.appendChild(optionRow("Engine volume", Math.round(options.volume * 100) + "%", function() {
-            var steps = [0.2, 0.4, 0.6, 0.8, 1, 1.3];
-            var next = steps.find(function(v) { return v > options.volume + 0.01; });
-            setOption("volume", next === undefined ? steps[0] : next);
-        }));
+        // the volumes as sliders (0 to 150 %): the engine, and the squeal of the tyres on its own (it went with the engine)
+        var percent = function(v) { return Math.round(v * 100) + "%"; };
+        page.appendChild(sliderRow("Engine volume", "volume", 0, 1.5, 0.05, percent));
+        page.appendChild(sliderRow("Tyre volume", "tyreVolume", 0, 1.5, 0.05, percent));
         page.appendChild(optionRow("Engine sound", options.sound ? "On" : "Off", function() { setOption("sound", !options.sound); }));
 
         var groups = [];

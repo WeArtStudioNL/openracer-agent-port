@@ -45,6 +45,10 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - The tuning menu has the cards of the car editor, with the same names and in the same order: Wheels, Suspension and driveline, Chassis, Drivetrain, Engine, Engine sound, Assists and extras, Cameras, Soft body (and Motorcycle, and the Mirrors of the game). Every card holds its groups (Chassis: Chassis settings, Brakes, Aerodynamics and steering, Size and steering wheel; Engine: Fuel, Engine settings), the card Engine shows the power and the card Drivetrain the top speed. The structure is one list for both (`OpenRacer.CarTuning.CARDS`). The torque-curve rows (peak power and its rpm) are gone from the menu: the curve follows from the engine that is built in the editor.
 
+### Sound
+
+- **Engine volume** in the settings menu (*Display and sound*) is a slider (0 to 150 %), and **Tyre volume** is new: the squeal of the tyres has its own volume (it went with the engine).
+
 ### The pit stop of the player
 
 - **Tyres are changed one by one, and you see it**: only the tyres that are worn past 15 % or leak are changed (it was all four), one after the other in the time the tyres take (which stays as it was): the old wheel comes off and out by 60 cm, is gone for a moment, and the new one goes on; each tyre gets its new rubber when its turn is halfway. The AI cars show it too.

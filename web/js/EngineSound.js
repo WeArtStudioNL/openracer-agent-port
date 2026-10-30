@@ -27,7 +27,7 @@ var EngineSound = (function() {
     // without it the sound is made: the tone that a tyre makes when it sticks and slips again (a few raw tones, a bit inharmonic, that wobble),
     // some grit of the rubber and a low rumble. A filtered noise only gives a hiss, like a vacuum cleaner.
     var squeal = null;
-    var squealLevel = 0, squealSpeed = 0;
+    var squealLevel = 0, squealSpeed = 0, tyreVolume = 0.8;
     var analyser = null;         // to measure the level of the sound (the debug display, tests)
     var analyserData = null;
     var squealSample = null;     // the decoded recording, if there is one
@@ -252,7 +252,7 @@ var EngineSound = (function() {
         squealLevel = amount;
         squealSpeed = speed;
         if(!ctx || !squeal || ctx.state !== "running") return;
-        squeal.set(amount, speed, (muted || paused ? 0 : volume) * (inside ? 0.12 : 0.3), ctx.currentTime);
+        squeal.set(amount, speed, (muted || paused ? 0 : tyreVolume) * (inside ? 0.12 : 0.3), ctx.currentTime);       // (its own volume: the settings menu, Tyre volume)
     }
 
     // ---- the road under the tyres, and what lands: noise that is made here (no files). The tyres on loose ground hiss, crunch or squelch with the speed (sand low and soft, gravel
@@ -365,6 +365,7 @@ var EngineSound = (function() {
         setMuted: function(value) { muted = value; applyLevel(); },
         setPaused: function(value) { paused = value; applyLevel(); },
         setVolume: function(value) { volume = value; },
+        setTyreVolume: function(value) { tyreVolume = value; },
         // the sound parameters of a car (its configuration, "sound.engine_sim"); also while the engine runs, for tuning
         setCar: function(config) {
             applyParams(OpenRacer.engineSimParams(config));

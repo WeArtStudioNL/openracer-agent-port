@@ -15,11 +15,13 @@ var carConfig;
 Settings.onOptionChange(function(name, value) {
     if(name === "sound") EngineSound.setMuted(!value);
     else if(name === "volume") EngineSound.setVolume(value);
+    else if(name === "tyreVolume") EngineSound.setTyreVolume(value);
     else if(name.indexOf("mirror") === 0 && typeof car !== "undefined" && car && car.mirrors && OpenRacer.Mirrors) OpenRacer.Mirrors.aim(car.mirrors);
     else if(name.indexOf("gfx") === 0 && OpenRacer.Graphics) OpenRacer.Graphics.changed(name);
 });
 EngineSound.setMuted(!Settings.option("sound"));
 EngineSound.setVolume(Settings.option("volume"));
+EngineSound.setTyreVolume(Settings.option("tyreVolume") === undefined ? 0.8 : Settings.option("tyreVolume"));
 
 // A bar while the track, the car and the other cars load (the loader of three.js counts the files); it goes when all of them are in
 function showLoading() {
