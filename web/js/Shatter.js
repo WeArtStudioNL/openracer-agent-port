@@ -74,6 +74,28 @@ OpenRacer.Shatter = (function () {
         var t = (seed >>> 0) || 1;
         return function () { t += 0x6D2B79F5; var r = Math.imul(t ^ (t >>> 15), 1 | t); r ^= r + Math.imul(r ^ (r >>> 7), 61 | r); return ((r ^ (r >>> 14)) >>> 0) / 4294967296; };
     }
+    // a step of something small through the track: when a face of it is in the way (a wall: not the road under it, which floorAt has), it stops a little before it and its
+    // speed into the face turns back by 'bounce', the rest slowed. Gives true when it hit. (x, y, z) and the speed are changed in place: p a THREE.Vector3 or an array and index
+    var rayDir = { x: 0, y: 0, z: 0 };
+    function wallBounce(p, v, delta, reach, bounce) {
+        var g = lastGround;
+        if (!g || !g.firstHit || !g.use3D) return false;
+        var len = Math.hypot(v.x, v.y, v.z) * delta;
+        if (len < 1e-5) return false;
+        rayDir.x = v.x * delta / len; rayDir.y = v.y * delta / len; rayDir.z = v.z * delta / len;
+        var t = g.firstHit(p.x, p.y, p.z, rayDir.x, rayDir.y, rayDir.z, len + reach);
+        if (!(t <= len + reach)) return false;
+        var n = g.hitNormal;
+        if (!n || Math.abs(n.y) > 0.7) return false;                    // (the road and the floor: the fall to it is worked out by floorAt)
+        var nx = n.x, ny = n.y, nz = n.z, into = v.x * nx + v.y * ny + v.z * nz;
+        if (into > 0) { nx = -nx; ny = -ny; nz = -nz; into = -into; }
+        var go = Math.max(0, t - reach);
+        p.x += rayDir.x * go; p.y += rayDir.y * go; p.z += rayDir.z * go;
+        v.x -= (1 + bounce) * into * nx; v.y -= (1 + bounce) * into * ny; v.z -= (1 + bounce) * into * nz;
+        v.x *= 0.6; v.y *= 0.8; v.z *= 0.6;
+        return true;
+    }
+    var partP = { x: 0, y: 0, z: 0 }, partV = { x: 0, y: 0, z: 0 };
     function floorAt(x, y, z) {
         var g = lastGround;
         var hit = g && g.query ? g.query(x, z, y + 0.3, 0.5) : null;
@@ -138,7 +160,9 @@ OpenRacer.Shatter = (function () {
             if (p.lying && p.age > p.life + SHRINK) { removePiece(i); continue; }
             if (!p.lying) {
                 p.v.multiplyScalar(drag); p.v.y -= GRAVITY * delta;
-                p.p.addScaledVector(p.v, delta);
+                // a wall (or anything of the track) in the way: it bounces off it (a little, and slowed), it does not go through
+                if (!wallBounce(p.p, p.v, delta, Math.max(0.01, p.look.radius * p.s * 0.3), 0.3)) p.p.addScaledVector(p.v, delta);
+                else p.w.multiplyScalar(0.5);
                 var wl = p.w.length();
                 if (wl > 1e-4) { tmpQ.setFromAxisAngle(tmpV.copy(p.w).divideScalar(wl), wl * delta); p.q.premultiply(tmpQ).normalize(); }
                 // the road under it: it touches when its middle is less than about half its size above it
@@ -202,7 +226,10 @@ OpenRacer.Shatter = (function () {
             age[i] += delta;
             if (!lying[i]) {
                 vel[i * 3] *= drag; vel[i * 3 + 2] *= drag; vel[i * 3 + 1] = vel[i * 3 + 1] * drag - GRAVITY * delta;
-                pos[i * 3] += vel[i * 3] * delta; pos[i * 3 + 1] += vel[i * 3 + 1] * delta; pos[i * 3 + 2] += vel[i * 3 + 2] * delta;
+                partP.x = pos[i * 3]; partP.y = pos[i * 3 + 1]; partP.z = pos[i * 3 + 2]; partV.x = vel[i * 3]; partV.y = vel[i * 3 + 1]; partV.z = vel[i * 3 + 2];
+                if (wallBounce(partP, partV, delta, 0.005, 0.25)) {           // (off a wall, as the pieces)
+                    pos[i * 3] = partP.x; pos[i * 3 + 1] = partP.y; pos[i * 3 + 2] = partP.z; vel[i * 3] = partV.x; vel[i * 3 + 1] = partV.y; vel[i * 3 + 2] = partV.z;
+                } else { pos[i * 3] += vel[i * 3] * delta; pos[i * 3 + 1] += vel[i * 3 + 1] * delta; pos[i * 3 + 2] += vel[i * 3 + 2] * delta; }
                 if (pos[i * 3 + 1] < floor[i] + 0.004) { pos[i * 3 + 1] = floor[i] + 0.004; lying[i] = 1; life[i] = age[i] + 6 + (i % 9); }
             }
             alpha[i] = Math.min(1, (life[i] - age[i]) / 1.2);

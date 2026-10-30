@@ -297,7 +297,7 @@ OpenRacer.GroundWorld = function (cellSize) {
         var j0 = Math.floor(Math.min(oy, ey) / CELL3), j1 = Math.floor(Math.max(oy, ey) / CELL3);
         var k0 = Math.floor(Math.min(oz, ez) / CELL3), k1 = Math.floor(Math.max(oz, ez) / CELL3);
         stampValue++;
-        var bestT = Infinity;
+        var bestT = Infinity, bestO = -1;
         for(var i = i0; i <= i1; i++) {
             for(var j = j0; j <= j1; j++) {
                 for(var k = k0; k <= k1; k++) {
@@ -320,13 +320,20 @@ OpenRacer.GroundWorld = function (cellSize) {
                         var v = (dx * qx + dy * qy + dz * qz) * inv;
                         if(v < -1e-6 || u + v > 1 + 1e-6) continue;
                         var hitT = (e2x * qx + e2y * qy + e2z * qz) * inv;
-                        if(hitT >= 0 && hitT < bestT && hitT <= maxT) bestT = hitT;
+                        if(hitT >= 0 && hitT < bestT && hitT <= maxT) { bestT = hitT; bestO = o; }
                     }
                 }
             }
         }
+        // (the normal of the face that was hit, for what bounces off it: the pieces of a part that broke, Shatter.js)
+        if(bestO >= 0) {
+            var a1 = data3[bestO + 3], a2 = data3[bestO + 4], a3 = data3[bestO + 5], b1 = data3[bestO + 6], b2 = data3[bestO + 7], b3 = data3[bestO + 8];
+            var nx = a2 * b3 - a3 * b2, ny = a3 * b1 - a1 * b3, nz = a1 * b2 - a2 * b1, nl = Math.hypot(nx, ny, nz) || 1;
+            this.hitNormal.x = nx / nl; this.hitNormal.y = ny / nl; this.hitNormal.z = nz / nl;
+        }
         return bestT;
     };
+    this.hitNormal = { x: 0, y: 1, z: 0 };
 
     // The triangles (all, drivable or not) whose box touches a sphere, as a list of numbers in out
     this.nearby = function (cx, cy, cz, radius, out) {
