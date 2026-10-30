@@ -106,7 +106,7 @@ export function initSoftBody(api) {
             '<div><label>Hinge point B (node) ' + set("mB", "Set = selected node") + '</label><input type="number" data-f="mB" step="1" min="0"></div><div><label>tears off at (kN)</label><input type="number" data-f="mBf" step="1" min="0" placeholder="0: never"></div></div>' +
             '<div class="row"><div><label>Point A on the surface (x, y, z) ' + set("mAPick", "Pick point") + '</label><input type="text" data-f="mApt" placeholder="instead of a node"></div>' +
             '<div><label>Point B on the surface (x, y, z) ' + set("mBPick", "Pick point") + '</label><input type="text" data-f="mBpt" placeholder="instead of a node"></div></div>' +
-            '<div class="row"><div><label>Origin x, y, z (m) ' + set("originNode", "Node") + set("originPick", "Pick point") + '</label><input type="text" data-f="origin" placeholder="the middle of the part"></div>' +
+            '<div class="row"><div><label>Origin x, y, z (m) ' + set("originObject", "Object") + set("originNode", "Node") + set("originPick", "Pick point") + '</label><input type="text" data-f="origin" placeholder="the middle of the part"></div>' +
             '<div><label>Axis ' + set("axisAB", "A→B") + set("axisX", "X") + set("axisY", "Y") + set("axisZ", "Z") + '</label><input type="text" data-f="axis" placeholder="0, 1, 0"></div></div>' +
             '<div class="row"><div><label>Lowest angle (°)</label><input type="number" data-f="min" step="5" placeholder="-90"></div>' +
             '<div><label>Highest angle (°)</label><input type="number" data-f="max" step="5" placeholder="90"></div>' +
@@ -149,8 +149,14 @@ export function initSoftBody(api) {
     function readRow(row, part) {
         const q = (f) => row.querySelector('[data-f="' + f + '"]');
         const n = (f) => (q(f).value === "" ? undefined : parseFloat(q(f).value));
+        const wasHinge = part.mode === "hinge", wasObject = part.object;
         part.object = q("object").value.trim();
         part.mode = q("mode").value;
+        // a part that becomes a hinge (or a hinge that gets its object) turns about the origin of its object, unless an origin is set: the limits are set after
+        if (part.mode === "hinge" && part.object && (!wasHinge || wasObject !== part.object) && !numbers(q("origin").value)) {
+            const o = objectOrigin(part.object);
+            if (o) q("origin").value = o.join(", ");
+        }
         part.mass = n("mass") || 10;
         const held = q("heldBy").value.split(/[\s,;]+/).filter(Boolean).map((x) => parseInt(x, 10)).filter((x) => x >= 0);
         if (held.length) part.nodes = held; else delete part.nodes;
@@ -212,6 +218,7 @@ export function initSoftBody(api) {
             case "heldBy":
                 if (!sb.sel.nodes.size) { fail("Select the nodes that hold the part in the view."); break; }
                 put("heldBy", [...sb.sel.nodes].join(", ")); break;
+            case "originObject": { const o = objectOrigin(part.object); if (o) { put("origin", o.join(", ")); status("The hinge turns about the origin of " + part.object + ".", "ok"); } else fail("Choose the object of the part first."); break; }
             case "originNode": { const k = one(); if (k !== null) { s.restPosition(k, rest); put("origin", [rest.x, rest.y, rest.z].map((x) => x.toFixed(3)).join(", ")); } break; }
             case "mAPick": case "mBPick": sb.pick = { type: "mount", part, row, field: what.slice(0, 2) + "pt", node: what.slice(0, 2) }; status("Click the model where the pin point is.", "ok"); break;
             case "originPick": sb.pick = { type: "origin", part, row }; status("Click the model where the hinge is.", "ok"); break;
@@ -1156,6 +1163,16 @@ export function initSoftBody(api) {
     renderer.domElement.addEventListener("pointerleave", () => { if (!lasso) outline(selectedObject()); });
     // (the name of the object of the open part, in the model that is in the view now)
     // the object of the open part in the model that is in the view now (the bench makes a new copy of the model for every test)
+    // the origin of an object of the model (its pivot) in the frame of the car, to the millimetre: where a hinge turns when nothing else is set
+    function objectOrigin(name) {
+        const m = name && viewModel();
+        const object = m && m.getObjectByName(name);
+        if (!object) return null;
+        object.updateWorldMatrix(true, false);
+        const world = new THREE.Vector3().setFromMatrixPosition(object.matrixWorld);
+        const local = bench.vehicle ? toVeh(world) : (sb.group ? sb.group.worldToLocal(world) : null);
+        return local ? [local.x, local.y, local.z].map((x) => +x.toFixed(3)) : null;
+    }
     function partObj() { const m = viewModel(); return m && sb.partWin ? m.getObjectByName(sb.partWin.name) : null; }
     function ancestorOf(object, ancestor) { for (let o = object; o; o = o.parent) if (o === ancestor) return true; return false; }
     function within(object, ancestor) { return ancestorOf(object, ancestor); }
@@ -1293,8 +1310,11 @@ export function initSoftBody(api) {
         if (!part) {
             const d = add('<p class="hint">Part not added to loose parts</p><div class="row"><button class="small accent" data-a="hinge" title="A part that swings on pin points (a door, the hood) and can fall off">Hinge part</button><button class="small" data-a="breakable" title="A part that bends with the body and falls off at a force (a mirror, a headlight, a plate)">Breakable only</button></div>');
             d.querySelector('[data-a="hinge"]').addEventListener("click", () => {
-                w.part = { object: w.name, mode: "hinge", mass: 10, hinge: {}, mounts: [] };
+                // the hinge is at the origin of the object (its pivot in the model): a first pin point there, about X; its axes and its limits are set below
+                const origin = objectOrigin(w.name);
+                w.part = { object: w.name, mode: "hinge", mass: 10, hinge: origin ? { origin: origin.slice() } : {}, mounts: origin ? [{ point: origin, axes: { x: true, y: false, z: false }, min: -90, max: 90 }] : [] };
                 sb.parts.push(w.part);
+                sb.pinSel = origin ? 0 : -1;
                 partChanged();
             });
             d.querySelector('[data-a="breakable"]').addEventListener("click", () => {

@@ -309,6 +309,7 @@ OpenRacer.Parts = (function () {
                             if (tau > Math.PI) tau -= 2 * Math.PI; else if (tau < -Math.PI) tau += 2 * Math.PI;
                         }
                         part.joint.setLimits(pin.min + tau, pin.max + tau);
+                        part.jointAxis = ax.clone(); part.jointLimits = [pin.min + tau, pin.max + tau]; part.jointAt = pin.point;
                         if (h.spring > 0) part.joint.configureMotorPosition(h.rest, h.spring, h.damper);
                         else if (h.damper > 0) part.joint.configureMotorVelocity(0, h.damper);
                     }
@@ -325,6 +326,7 @@ OpenRacer.Parts = (function () {
             }
             part.joint = world.createImpulseJoint(R.JointData.revolute(anchor, local, { x: axis.x, y: axis.y, z: axis.z }), chassis, part.body, true);
             part.joint.setLimits(h.min, h.max);
+            part.jointAxis = new THREE.Vector3(axis.x, axis.y, axis.z); part.jointLimits = [h.min, h.max]; part.jointAt = origin;
             if (h.spring > 0) part.joint.configureMotorPosition(h.rest, h.spring, h.damper);
             else if (h.damper > 0) part.joint.configureMotorVelocity(0, h.damper);
             return true;
@@ -519,6 +521,18 @@ OpenRacer.Parts = (function () {
             }
             if (!moving) return;
             refreshTrack();
+            // a hinge opened in the debug view: a small torque about its axis, to the side where it has the most room, enough to lift it a little faster than its weight pulls
+            for (var dk = 0; dk < parts.length; dk++) {
+                var dp = parts[dk];
+                if (!dp.debugOpen) continue;
+                if (dp.state !== "hinged" || !dp.jointAxis) { dp.debugOpen = false; dp.body.resetTorques(true); continue; }     // (it tore off: it falls freely)
+                carQ.set(v.qx, v.qy, v.qz, v.qw);
+                outward.copy(dp.jointAxis).applyQuaternion(carQ);
+                var side = dp.debugSide || 1;
+                var arm = Math.max(0.2, dp.jointAt ? dp.centre.distanceTo(dp.jointAt) : 0.4), torque = side * 1.5 * dp.mass * 9.81 * arm;
+                dp.body.resetTorques(true);
+                dp.body.addTorque({ x: outward.x * torque, y: outward.y * torque, z: outward.z * torque }, true);
+            }
             // two steps of half the time: a part that flies at 30 m/s hits the wall in the middle of a frame, not after it
             world.timestep = dt / 2;
             world.step(); limitSpeeds();
@@ -580,9 +594,39 @@ OpenRacer.Parts = (function () {
                 putBack(p);
             }
         }
+        // ---- the debug view (DebugView.js, the node grabber): the part that an object of the scene is of; a hinge opened by hand (with a small torque) or closed again
+        // where it was made; a part broken loose
+        function partOf(object) {
+            for (var o = object; o; o = o.parent) for (var i = 0; i < parts.length; i++) if (parts[i].object === o && parts[i].wheel === undefined) return parts[i];
+            return null;
+        }
+        function toggleHinge(p) {
+            if (!p || !p.hinge || p.fetching) return null;
+            if (p.state === "hinged") { putBack(p); return "closed"; }
+            if (p.state !== "held") return null;
+            startMoving(p, "hinge");
+            if (p.state !== "hinged") return null;
+            p.debugOpen = true;
+            // the way it opens: the way its middle goes up (a hood, a boot); a hinge about an upright axis (a door): the way its limits leave the most room
+            p.debugSide = 1;
+            if (p.jointAxis && p.jointAt) {
+                var lim = p.jointLimits, arm = a.copy(p.centre).sub(p.jointAt), up = b.copy(p.jointAxis).cross(arm);
+                carQ.set(v.qx, v.qy, v.qz, v.qw); up.applyQuaternion(carQ);
+                if (Math.abs(up.y) > 0.2 * arm.length()) p.debugSide = up.y > 0 ? 1 : -1;
+                else if (lim && lim[1] < -lim[0]) p.debugSide = -1;
+            }
+            return "opened";
+        }
+        function breakLoose(p) {
+            if (!p || p.fetching || p.state === "free") return false;
+            startMoving(p, "free");
+            p.mounts.forEach(function (m) { m.alive = false; });
+            return true;
+        }
         // one part back on the car, held as it was made (a wheel: a wheel of the car again)
         function putBack(p) {
             unfade(p);
+            if (p.debugOpen) { p.debugOpen = false; p.body.resetTorques(true); }
             if (p.wheel !== undefined) {
                 if (p.state !== "held") { p.body.setBodyType(R.RigidBodyType.KinematicPositionBased, true); setGroups(p, false); p.object.matrixAutoUpdate = true; p.state = "held"; p.pending = false; p.region = null; }
                 p.fetching = false;
@@ -761,7 +805,7 @@ OpenRacer.Parts = (function () {
 
         return {
             replay: replayApi,
-            world: world, parts: parts, events: events, update: update, repair: repair, fetchStart: fetchStart, fetchFade: fetchFade, fetchTo: fetchTo, putBack: putBack,
+            world: world, parts: parts, events: events, update: update, repair: repair, fetchStart: fetchStart, fetchFade: fetchFade, fetchTo: fetchTo, putBack: putBack, partOf: partOf, toggleHinge: toggleHinge, breakLoose: breakLoose,
             // the car was put somewhere else (a reset, the start): the speed of before is no acceleration of the parts
             moved: function () { parts.forEach(function (p) { p.hasVel = false; }); },
             // the car is taken out of the scene (the car editor makes a new one for every test): the parts that were thrown out of it go with it

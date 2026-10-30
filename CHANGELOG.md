@@ -45,9 +45,14 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - The tuning menu has the cards of the car editor, with the same names and in the same order: Wheels, Suspension and driveline, Chassis, Drivetrain, Engine, Engine sound, Assists and extras, Cameras, Soft body (and Motorcycle, and the Mirrors of the game). Every card holds its groups (Chassis: Chassis settings, Brakes, Aerodynamics and steering, Size and steering wheel; Engine: Fuel, Engine settings), the card Engine shows the power and the card Drivetrain the top speed. The structure is one list for both (`OpenRacer.CarTuning.CARDS`). The torque-curve rows (peak power and its rpm) are gone from the menu: the curve follows from the engine that is built in the editor.
 
+### Car editor: a hinge turns about the origin of its object
+
+- A part that is made a hinge (*Hinge part* in the window of the part, or *Hinge* in the list of parts) turns about the origin of its object in the model, its pivot: the window of the part gets a first pin point there (about X, from -90 to 90 degrees), whose axes and limits are set as before, and the list fills in the origin. The origin field has an *Object* button that puts it there again. A model whose objects all have their origin in the middle of the car (the OpenRacer Muscle has) gets the hinge there: set the origin of the object to its hinge in the model (in Blender: Set Origin), or move the pin point.
+
 ### Debug view: the node grabber
 
 - With the debug view on (0), **N** switches the node grabber on: press on a node of the shell with the left mouse button and drag it, held by an elastic (red), as in BeamNG. Its strength (100 N/m to 200 kN/m) is set in a panel at the top right, which can be moved. A weak elastic tugs at the shell, a strong one bends and tears it, or lifts the whole car. N does not switch the ESC while the debug view is on.
+- **Open hinges** and **Break parts** in the panel of the node grabber, two buttons that switch on and off (one at a time). With Open hinges a right click on a hinged part (a door, the hood, the boot) opens it with a small torque about its hinge (the way its middle goes up; a door the way it has the most room), and another right click closes it where it was made; with Break parts a right click on a part breaks it loose. A line under the buttons says what was done. Measured on the hood of the OpenRacer Muscle: open to 46 degrees in a second, shut again at 0.
 
 ### Debug view: a hit with the mouse
 

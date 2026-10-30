@@ -214,7 +214,10 @@
         grabPanel.innerHTML = "<div style=\"font-weight: bold; margin-bottom: 6px;\">Node grabber <span style=\"color: #9fb0c4; font-weight: normal;\">(N)</span></div>" +
             "<div style=\"color: #9fb0c4; margin-bottom: 8px;\">Press on a node and drag it. Let go to drop it.</div>" +
             "<div style=\"display: flex; justify-content: space-between;\"><span>Elastic</span><b class=\"grabValue\"></b></div>" +
-            "<input type=\"range\" min=\"2\" max=\"5.3\" step=\"0.01\" style=\"width: 100%;\">";
+            "<input type=\"range\" min=\"2\" max=\"5.3\" step=\"0.01\" style=\"width: 100%;\">" +
+            "<div style=\"display: flex; gap: 6px; margin-top: 10px;\"><button type=\"button\" data-tool=\"hinge\" title=\"Right click a hinge (a door, the hood) to open it with a small torque, again to close it where it was\">Open hinges</button>" +
+            "<button type=\"button\" data-tool=\"break\" title=\"Right click a part to break it loose\">Break parts</button></div>" +
+            "<div class=\"grabTool\" style=\"color: #9fb0c4; margin-top: 6px; min-height: 1.2em;\"></div>";
         var slider = grabPanel.querySelector("input"), value = grabPanel.querySelector(".grabValue");
         slider.value = Math.log10(grabStrength);
         value.textContent = strengthText(grabStrength);
@@ -225,9 +228,59 @@
             var v = typeof car !== "undefined" && car ? car.vehicle : null;
             if (grabbed && v && v.softBody) v.softBody.moveGrab(targetOf(v), grabStrength);
         };
+        grabPanel.querySelectorAll("[data-tool]").forEach(function (b) {
+            b.addEventListener("click", function () { partTool = partTool === b.dataset.tool ? null : b.dataset.tool; showTools(); });
+        });
+        showTools();
         if (OpenRacer.Movable) OpenRacer.Movable.make(grabPanel, { key: "node-grabber", handle: grabPanel.firstElementChild });
         document.body.appendChild(grabPanel);
     }
+    // ---- the tools for the parts in the same panel, switched on and off (one at a time): Open hinges, a right click on a hinge opens it with a small torque (Parts.toggleHinge)
+    // and another one closes it where it was made; Break parts, a right click on a part breaks it loose (Parts.breakLoose)
+    var partTool = null, toolRay = new THREE.Raycaster(), toolPointer = new THREE.Vector2();
+    function toolText(text) { var t = grabPanel && grabPanel.querySelector(".grabTool"); if (t) t.textContent = text; }
+    function showTools() {
+        if (!grabPanel) return;
+        grabPanel.querySelectorAll("[data-tool]").forEach(function (b) {
+            var lit = partTool === b.dataset.tool;
+            b.style.cssText = "flex: 1; padding: 5px 4px; border-radius: 6px; cursor: pointer; font: 12px Arial, sans-serif; color: " + (lit ? "#10151c" : "#dfe6ef") + "; background: " + (lit ? "#f0b83a" : "#232c38") + "; border: 1px solid " + (lit ? "#f0b83a" : "#3a4656") + ";";
+        });
+        toolText(partTool === "hinge" ? "Right click a hinge to open or close it." : partTool === "break" ? "Right click a part to break it loose." : "");
+    }
+    function partUnder(e, c) {
+        var list = c.parts || (c.vehicle && c.vehicle.parts);
+        if (!list || !list.partOf || !c.body) return null;
+        var rect = renderer.domElement.getBoundingClientRect();
+        toolPointer.set((e.clientX - rect.left) / rect.width * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+        toolRay.setFromCamera(toolPointer, camera);
+        // the car, and the parts that are out of it (hinged or loose, they hang in the scene)
+        var targets = [c.body];
+        list.parts.forEach(function (p) { if (p.state !== "held" && p.wheel === undefined && p.object.parent) targets.push(p.object); });
+        var hits = toolRay.intersectObjects(targets, true).filter(function (h) { return h.object.isMesh && h.object.visible; });
+        // (Open hinges: the first part with a hinge along the ray, so that what lies under a hood or behind a door does not take the click)
+        var first = null;
+        for (var i = 0; i < hits.length; i++) {
+            var p = list.partOf(hits[i].object);
+            if (!p) continue;
+            if (partTool !== "hinge" || p.hinge) return { list: list, part: p };
+            if (!first) first = p;
+        }
+        return first ? { list: list, part: first } : null;
+    }
+    window.addEventListener("pointerdown", function (e) {
+        if (!grabMode || !on || !partTool || e.button !== 2 || typeof renderer === "undefined" || typeof camera === "undefined" || e.target !== renderer.domElement || (OpenRacer.Replay && OpenRacer.Replay.active)) return;
+        var c = typeof car !== "undefined" ? car : null;
+        if (!c) return;
+        e.preventDefault();
+        var hit = partUnder(e, c);
+        if (!hit) { toolText("No part there."); return; }
+        var p = hit.part;
+        if (partTool === "hinge") {
+            var done = hit.list.toggleHinge(p);
+            toolText(done ? p.name + ": " + done : p.name + (p.hinge ? " cannot be opened now (" + p.state + ")." : " has no hinge."));
+        } else toolText(hit.list.breakLoose(p) ? p.name + ": broken loose" : p.name + " is loose already.");
+    });
+    window.addEventListener("contextmenu", function (e) { if (grabMode && on && partTool && typeof renderer !== "undefined" && e.target === renderer.domElement) e.preventDefault(); });
     function setGrabMode(value) {
         grabMode = value;
         if (value && !grabPanel) makeGrabPanel();
