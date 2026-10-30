@@ -942,7 +942,7 @@ var Settings = (function() {
         page.appendChild(optionRow("ABS", options.abs ? "On" : "Off", function() { setOption("abs", !options.abs); }));
         page.appendChild(optionRow("Automatic: reverse with the brake key", options.autoReverse ? "On" : "Off", function() { setOption("autoReverse", !options.autoReverse); }));
         page.appendChild(optionRow("Automatic: reverse with the brake pedal (wheel, pad, touch)", options.autoReversePedals ? "On" : "Off", function() { setOption("autoReversePedals", !options.autoReversePedals); }));
-        page.appendChild(sliderRow("Automatic: reverse below a speed of", "autoReverseSpeed", 1, 15, 1, function(v) { return v + " km/h"; }));
+        page.appendChild(sliderRow("Automatic: reverse below a speed of", "autoReverseSpeed", 1, 15, 1, function(v) { return options.units === "imperial" ? (v / 1.609344).toFixed(1) + " mph" : v + " km/h"; }));       // (the value is kept in km/h; it is shown in the units of the game)
         // the mirrors of the car (Mirrors.js): the glass of each can be turned and tilted, to see what is behind or beside the car
         if(window.car && window.car.mirrors && window.car.mirrors.length) {
             var mirrorSides = [];
