@@ -1807,5 +1807,14 @@ export function initSoftBody(api) {
 
     // the car is held still while the shell is shown and nothing is run on it (no crash test, no push, no drive, no shake): the nodes stay under the pointer
     function holding() { return !!(sb.shown && !sb.crash && !sb.pushMode && !bench.driving && !bench.script && !bench.shake); }
-    return { read, fill, frame, addWall, removeWall, wallHit, steerAhead, onStop, changed, holding, debug: { sb, tc, rc, camera, controls, showSelection, surfaceAt, looseOf, renderer } };
+    // a part chosen by its name (a row of the Layers panel): a parent or a child on its own, as a click in the view chooses the outermost one; again closes it
+    function openPart(name) {
+        const root = viewModel(), object = root && root.getObjectByName(name);
+        if (!object) return false;
+        if (sb.partWin && sb.partWin.name === name) { closePartWindow(); return true; }
+        if (/wheel|tyre|tire|steer|^rig-|^susp_|brake_caliper/i.test(name)) { status(name + " is moved by the wheels, the steering or the suspension rig: it cannot be a loose part.", ""); return false; }
+        openPartWindow(object);
+        return true;
+    }
+    return { read, fill, frame, addWall, removeWall, wallHit, steerAhead, onStop, changed, holding, openPart, debug: { sb, tc, rc, camera, controls, showSelection, surfaceAt, looseOf, renderer } };
 }

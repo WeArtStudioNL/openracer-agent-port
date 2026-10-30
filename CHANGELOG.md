@@ -45,6 +45,10 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 - The tuning menu has the cards of the car editor, with the same names and in the same order: Wheels, Suspension and driveline, Chassis, Drivetrain, Engine, Engine sound, Assists and extras, Cameras, Soft body (and Motorcycle, and the Mirrors of the game). Every card holds its groups (Chassis: Chassis settings, Brakes, Aerodynamics and steering, Size and steering wheel; Engine: Fuel, Engine settings), the card Engine shows the power and the card Drivetrain the top speed. The structure is one list for both (`OpenRacer.CarTuning.CARDS`). The torque-curve rows (peak power and its rpm) are gone from the menu: the curve follows from the engine that is built in the editor.
 
+### Car editor: choose a part in the Layers panel
+
+- **A click on a row under Parts in the Layers panel chooses that object as a part**: the window of the part opens and the row is lit, a parent or a child on its own (a click in the view takes the outermost object, the door and not the glass in it); a second click closes it. Objects moved by the wheels, the steering or the suspension rig are not taken.
+
 ### Car editor: a hinge turns about the origin of its object
 
 - A part that is made a hinge (*Hinge part* in the window of the part, or *Hinge* in the list of parts) turns about the origin of its object in the model, its pivot: the window of the part gets a first pin point there (about X, from -90 to 90 degrees), whose axes and limits are set as before, and the list fills in the origin. The origin field has an *Object* button that puts it there again. A model whose objects all have their origin in the middle of the car (the OpenRacer Muscle has) gets the hinge there: set the origin of the object to its hinge in the model (in Blender: Set Origin), or move the pin point.

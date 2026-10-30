@@ -1230,6 +1230,9 @@ function renderLayers() {
             eye.addEventListener("click", (e) => { e.stopPropagation(); node.object.visible = !node.object.visible; syncBenchVisibility(); paint(); });
             paint();
             row.append(arrow, text, eye);
+            // a click on the row chooses that object as a part (the window of the part opens), a parent or a child on its own
+            row.title = "Click: " + node.name + " as a part (hinge, loose, breakable)";
+            row.addEventListener("click", () => { if (softBodyEditor && softBodyEditor.openPart) softBodyEditor.openPart(node.name); });
             list.appendChild(row);
         });
     }
