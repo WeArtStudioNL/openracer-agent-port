@@ -50,6 +50,34 @@ export function initSuspension(api) {
         return { centres, diameter: d };
     }
 
+    // The mounts that were placed by hand are kept where they were put, in the frame of the car: when a wheel moves (the wheelbase, the tracks, the position of the axles
+    // of the Chassis card) they go with it, or the damper and the leaf springs of a live axle stayed behind while the axle moved. Along the car and in height every mount of
+    // the axle goes (the corner as a whole: the arms keep their length); across, only the mounts that sit at the wheel (the ball joints, the foot of a strut, the steering arm).
+    // The differential and the end of the propshaft of an axle go with it too. The defaults follow the wheels by themselves (PartsLibrary.defaultMount).
+    const AT_THE_WHEEL = ["upper_ball", "lower_ball", "strut_bottom", "tierod_outer"];
+    const WITH_AXLE = { front: ["diff_front", "prop_front_end"], rear: ["diff_rear", "prop_rear_end"] };
+    let lastAxles = null;                    // the middle of the left wheel of each axle when the mounts were last placed
+    let moving = false;                      // the wheels were moved in the form (wheelsMoved): only then the mounts go with them, not when a car or its model is loaded
+    function axlesOf(meas) {
+        const c = meas.centres, left = (a, b) => (a.x >= b.x ? a : b);
+        const fl = left(c.FL, c.FR), rl = left(c.RL, c.RR);
+        return { front: { x: Math.abs(fl.x), y: fl.y, z: (c.FL.z + c.FR.z) / 2 }, rear: { x: Math.abs(rl.x), y: rl.y, z: (c.RL.z + c.RR.z) / 2 } };
+    }
+    function followWheels(meas) {
+        const now = axlesOf(meas), was = lastAxles, go = moving;
+        lastAxles = now; moving = false;
+        if (!was || !go) return;
+        ["front", "rear"].forEach((axle) => {
+            const dx = now[axle].x - was[axle].x, dy = now[axle].y - was[axle].y, dz = now[axle].z - was[axle].z;
+            if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6 && Math.abs(dz) < 1e-6) return;
+            const fix = (v) => Math.round(v * 1000) / 1000;
+            const move = (name, mt, across) => { if (!mt || !mt.position) return; mt.position = [fix(mt.position[0] + (across ? dx : 0)), fix(mt.position[1] + dy), fix(mt.position[2] + dz)]; };
+            const live = typeOf(axle) === "live-leaf" || typeOf(axle) === "live-trailing";
+            Object.values(state[axle].mounts).forEach((set) => Object.keys(set || {}).forEach((name) => move(name, set[name], !live && AT_THE_WHEEL.includes(name))));
+            WITH_AXLE[axle].forEach((name) => move(name, state.driveline.mounts[name], false));
+        });
+    }
+
     // ---- what is saved and what is read
     function read() {
         const out = {};
@@ -83,6 +111,7 @@ export function initSuspension(api) {
         state.driveline.mounts = d.mounts ? JSON.parse(JSON.stringify(d.mounts)) : {};
         state.driveline.hidden = Array.isArray(d.hidden) ? d.hidden.slice() : [];
         selects.engine.value = state.driveline.engine;
+        lastAxles = null;                    // (the mounts of this car are where its wheels are now)
         refresh(true);
     }
 
@@ -138,8 +167,9 @@ export function initSuspension(api) {
     }
 
     function refresh(force) {
-        if (!active()) { clearAll(); return; }
         const meas = measured();
+        if (meas) followWheels(meas);        // (also while the parts library is not used: what was set for it stays with the wheels)
+        if (!active()) { clearAll(); return; }
         if (!meas) { clearAll(); rows.innerHTML = "<p class=\"sub\">Select the parts of the four wheels first: the mounts are placed from the wheels.</p>"; return; }
         const cfg = config();
         const sig = JSON.stringify([cfg, Object.values(meas.centres).map((c) => [c.x, c.y, c.z].map((v) => Math.round(v * 1000)))]);
@@ -303,5 +333,7 @@ export function initSuspension(api) {
     selects.engine.addEventListener("change", () => { state.driveline.engine = selects.engine.value; refresh(true); });
     $("drive").addEventListener("change", () => refresh(false));
 
-    return { read, fill, refresh, isMount, attachGizmo, moved, setMode, hide, pickables, get editing() { return editing; }, selected: () => (isMount(layers.selected) ? layers.selected : null) };
+    // the form moved the wheels: the next refresh takes the mounts that were placed by hand along
+    function wheelsMoved() { moving = true; }
+    return { read, fill, refresh, wheelsMoved, isMount, attachGizmo, moved, setMode, hide, pickables, get editing() { return editing; }, selected: () => (isMount(layers.selected) ? layers.selected : null) };
 }

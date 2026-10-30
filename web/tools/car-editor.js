@@ -2963,7 +2963,7 @@ for (const id of ["mass", "front", "cgHeight", "wheelbase", "frontTrack", "rearT
 // (Dynamic wheels, and the wheels of the library on a model without wheel parts, stand where the wheelbase, the tracks and the offsets say: they follow them at once, in the view
 // and on the bench; it was only for a model without wheel parts, so with Dynamic wheels on a model that has them nothing moved)
 function wheelsFromForm() { return wheelMode() !== "model"; }
-for (const id of ["wheelbase", "frontTrack", "rearTrack", "frontOffset"]) $(id).addEventListener("input", () => { if (wheelsFromForm()) { updateHelpers(); rebuildBenchSoon(); } });
+for (const id of ["wheelbase", "frontTrack", "rearTrack", "frontOffset"]) $(id).addEventListener("input", () => { if (wheelsFromForm()) { if (suspensionEditor) suspensionEditor.wheelsMoved(); updateHelpers(); rebuildBenchSoon(); } });
 // the parts of the parts library on the bench were built where the wheels were: a car that is tested is built again, half a second after the last change, where it stands
 let rebuildTimer = 0;
 function rebuildBenchSoon() {
