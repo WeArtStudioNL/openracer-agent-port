@@ -1628,8 +1628,15 @@ OpenRacer.Vehicle = function (parameters, input) {
     function resolveCollisions3D() {
         for(var pass = 0; pass < 3; pass++) {
             if(!scanContacts(false)) return;
-            var best = 0;
-            for(var i = 1; i < contactCount; i++) if(contacts3[i].depth > contacts3[best].depth) best = i;
+            // (without a shell (damage off) the small spheres of the wheel rig are hard spheres too; one that has sunk through the top of the road sees its underside, a "wall" that
+            // faces down, and pushed the whole bike into the road with the suspension crushed after a landing: the underside of a road is no wall)
+            var best = -1;
+            for(var i = 0; i < contactCount; i++) {
+                var k = contacts3[i], sph = self.proxy3[k.sphere];
+                if(!self.softBody && sph && sph.rig && k.nx * carUp.x + k.ny * carUp.y + k.nz * carUp.z < -0.5) continue;
+                if(best < 0 || k.depth > contacts3[best].depth) best = i;
+            }
+            if(best < 0) return;
             var c = contacts3[best];
             self.lastWall = { mesh: self.ground.meshOf(c.tri), surface: self.ground.surfaceOf(c.tri), n: [c.nx, c.ny, c.nz], depth: c.depth, at: [c.qx, c.qy, c.qz], sphere: c.sphere, v: [self.vx, self.vy, self.vz], t: self.impactTime };   // for the debugging
             var rx = c.qx - self.px, ry = c.qy - self.py, rz = c.qz - self.pz;
