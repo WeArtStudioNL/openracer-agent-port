@@ -59,8 +59,8 @@ OpenRacer.Mirrors = (function () {
     // mirrorCentreReal), and a mirror is made every second picture. The glass is left out of the picture of the other mirrors and of the surfaces for the screen space effects.
     var rendering = false;
     var VERTEX = "uniform mat4 textureMatrix; varying vec4 vUvR; void main() { vUvR = textureMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }";
-    var FRAGMENT = "uniform sampler2D tDiffuse; uniform vec3 tint; varying vec4 vUvR; void main() { vec4 c = texture2DProj(tDiffuse, vUvR); gl_FragColor = vec4(c.rgb * tint, 1.0);" +
-        " #include <tonemapping_fragment>\n #include <colorspace_fragment>\n }";
+    var FRAGMENT = "uniform sampler2D tDiffuse; uniform vec3 tint; uniform float show; varying vec4 vUvR; void main() { if (show < 0.5) discard; vec4 c = texture2DProj(tDiffuse, vUvR); gl_FragColor = vec4(c.rgb * tint, 1.0);\n" +
+        "#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}";
     function normalOf(geometry) {
         var pos = geometry.attributes.position, index = geometry.index, n = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
         var count = index ? index.count : pos.count;
@@ -76,7 +76,7 @@ OpenRacer.Mirrors = (function () {
         var mesh = m.mesh, geo = mesh.geometry;
         if (!geo.boundingBox) geo.computeBoundingBox();
         var target = new THREE.WebGLRenderTarget(512, 384, { type: THREE.HalfFloatType });
-        var material = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: target.texture }, textureMatrix: { value: new THREE.Matrix4() }, tint: { value: new THREE.Color(0.9, 0.93, 0.96) } }, vertexShader: VERTEX, fragmentShader: FRAGMENT });
+        var material = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: target.texture }, textureMatrix: { value: new THREE.Matrix4() }, tint: { value: new THREE.Color(0.9, 0.93, 0.96) }, show: { value: 1 } }, vertexShader: VERTEX, fragmentShader: FRAGMENT, side: THREE.DoubleSide });
         m.real = { original: mesh.material, material: material, target: target, normal: normalOf(geo), camera: new THREE.PerspectiveCamera(), skip: 0, noGBuffer: mesh.userData.noGBuffer };
         mesh.material = material;
         mesh.userData.noGBuffer = true;
@@ -94,18 +94,20 @@ OpenRacer.Mirrors = (function () {
     function reflect(m, renderer, scene, camera) {
         var r = m.real;
         if (!r || rendering || camera === r.camera || camera.isCubeCamera) return;
-        if (r.skip-- > 0) return;                                   // (every second picture)
-        r.skip = 1;
         var mesh = m.mesh, geo = mesh.geometry, T = tmp;
         mesh.updateWorldMatrix(true, false);
         T.centre.copy(geo.boundingBox.getCenter(T.corner)).applyMatrix4(mesh.matrixWorld);
         T.normal.copy(r.normal).applyMatrix3(T.nm.getNormalMatrix(mesh.matrixWorld)).normalize();
         T.eye.setFromMatrixPosition(camera.matrixWorld);
+        // (which way the glass faces is not known from the model, a glass can be wound either way: the glass is a mirror on the side that it is seen from)
         T.virt.subVectors(T.centre, T.eye);
         if (T.virt.dot(T.normal) > 0) T.normal.negate();             // (the normal is on the side of the eye)
-        // the mirror image of the eye, and a camera there that looks at the middle of the glass
         T.virt.subVectors(T.eye, T.centre); var dist = T.virt.dot(T.normal);
+        r.material.uniforms.show.value = dist >= 0.02 ? 1 : 0;
         if (dist < 0.02) return;                                      // (the eye is behind the glass)
+        if (r.skip-- > 0) return;                                   // (every second picture)
+        r.skip = 1;
+        // the mirror image of the eye, and a camera there that looks at the middle of the glass
         T.virt.copy(T.eye).addScaledVector(T.normal, -2 * dist);
         var cam = r.camera;
         cam.position.copy(T.virt);
