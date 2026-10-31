@@ -104,7 +104,7 @@ RACER.Scene = function (parameters, domElement) {
         renderer.setPixelRatio( pickPixelRatio() );
         applyToneMapping(Settings.option("gfxTone"));
         renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.shadowMap.type = THREE.PCFShadowMap;       // (PCFSoftShadowMap is gone from three.js: it was PCFShadowMap with a warning)
         // when the browser takes the graphics away (too little memory on the video card), the picture can go wrong without any error: say so
         renderer.domElement.addEventListener("webglcontextlost", function(event) {
             event.preventDefault();

@@ -19,7 +19,7 @@ OpenRacer.carFinishes = {
     satin: { label: "Satin", roughness: 0.5, metalness: 0.12, clearcoat: 0.25, clearcoatRoughness: 0.35 },
     matte: { label: "Matte", roughness: 0.92, metalness: 0, clearcoat: 0 },
     metallic: { label: "Metallic", roughness: 0.33, metalness: 0.75, clearcoat: 1, clearcoatRoughness: 0.05 },
-    pearl: { label: "Pearl (the colour shifts)", roughness: 0.28, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.04, iridescence: 1, iridescenceIOR: 1.8, iridescenceThicknessRange: [250, 650] },
+    pearl: { label: "Pearl (the colour shifts)", roughness: 0.28, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.04, iridescence: 1, iridescenceIOR: 1.8, iridescenceThickness: [250, 650] },
     flake: { label: "Metal flake (sparkle)", roughness: 0.38, metalness: 0.9, clearcoat: 1, clearcoatRoughness: 0.06, flakes: true },
     candy: { label: "Candy (deep and glassy)", roughness: 0.15, metalness: 0.85, clearcoat: 1, clearcoatRoughness: 0.02 },
     chrome: { label: "Chrome", roughness: 0.04, metalness: 1, clearcoat: 0 },
@@ -145,7 +145,7 @@ OpenRacer.applyCarColors = (function() {
         var f = OpenRacer.carFinishes[finishName];
         if(f && finishName) {
             styled.roughness = f.roughness; styled.metalness = f.metalness; styled.clearcoat = f.clearcoat; styled.clearcoatRoughness = f.clearcoatRoughness || 0;
-            if(f.iridescence) { styled.iridescence = f.iridescence; styled.iridescenceIOR = f.iridescenceIOR; styled.iridescenceThicknessRange = f.iridescenceThicknessRange; }
+            if(f.iridescence) { styled.iridescence = f.iridescence; styled.iridescenceIOR = f.iridescenceIOR; styled.iridescenceThicknessMinimum = f.iridescenceThickness[0]; styled.iridescenceThicknessMaximum = f.iridescenceThickness[1]; }
             if(f.flakes) {
                 // the size of the flakes (100%: the normal size): a bigger flake is a smaller repeat of the map; every material has its own copy of the texture (its repeat)
                 var size = Math.max(2, Math.min(400, flakeSize || 100));

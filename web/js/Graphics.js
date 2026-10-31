@@ -329,17 +329,10 @@ OpenRacer.Graphics = (function () {
             composer.addPass(passes.gbuffer);
         }
         if (ao) {
-            var gtao = new THREE.GTAOPass(scene, camera, Math.floor(width * gScale), Math.floor(height * gScale));
+            // it reads the picture of the normals and the depth that GBufferPass made, and does not make its own (the textures stay those of GBufferPass)
+            var gtao = new THREE.GTAOPass(scene, camera, Math.floor(width * gScale), Math.floor(height * gScale),
+                { depthTexture: passes.gbuffer.depthTexture, normalTexture: passes.gbuffer.normalTexture });
             gtao.setSize = function (w, h) { THREE.GTAOPass.prototype.setSize.call(this, Math.floor(w * gScale), Math.floor(h * gScale)); };
-            // it reads the picture of the normals and the depth that GBufferPass made, and does not make its own (GTAOPass does not take an
-            // outside one without a target of its own, so its own is set aside)
-            gtao._renderGBuffer = false;
-            gtao.depthTexture = passes.gbuffer.depthTexture;
-            gtao.normalTexture = passes.gbuffer.normalTexture;
-            [gtao.gtaoMaterial, gtao.pdMaterial].forEach(function (m) { m.uniforms.tNormal.value = gtao.normalTexture; m.uniforms.tDepth.value = gtao.depthTexture; });
-            gtao.depthRenderMaterial.uniforms.tDepth.value = gtao.depthTexture;
-            gtao.normalRenderTarget.dispose();
-            gtao.normalRenderTarget.setSize = function () {};
             gtao.output = THREE.GTAOPass.OUTPUT.Default;
             // (a radius of a metre and more: the shade under a car and at the foot of a rail or a wall; at 0.6 m and a scale of 1.3 only the small creases showed)
             gtao.updateGtaoMaterial({ radius: 1.2, distanceExponent: 1.4, thickness: 1.5, scale: 2.0, samples: ao > 1 ? 16 : 8, distanceFallOff: 1, screenSpaceRadius: false });
