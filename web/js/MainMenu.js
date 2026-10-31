@@ -1198,7 +1198,7 @@ var MainMenu = (function() {
     }
 
     function trackStep(inner) {
-        inner.innerHTML = "<h2>Choose the track</h2><div class=\"sub\">Choose a track, then Next (a double-click goes on at once).</div>";
+        inner.innerHTML = "<h2>Choose the track</h2><div class=\"sub\">Click a track to go on (Back brings you here again with your track chosen).</div>";
         var list = document.createElement("div");
         list.className = "list";
         tracks.filter(function(t) { return t.id !== "skidpad"; }).forEach(function(track) {   // the skidpad is a way to play
@@ -1215,8 +1215,7 @@ var MainMenu = (function() {
                 if(track.dragstrip && OpenRacer.DragStrip) extra.appendChild(button("Drag top 50", "ghost", function(e) { e.stopPropagation(); OpenRacer.DragStrip.showTop(track); }));
                 column.appendChild(extra);
             }
-            d.onclick = function() { choice.track = track.id; remember(); render(); };
-            d.ondblclick = goNext;
+            d.onclick = function() { choice.track = track.id; remember(); goNext(); };      // (one click goes on)
             list.appendChild(d);
         });
         inner.appendChild(list);
