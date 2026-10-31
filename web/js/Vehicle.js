@@ -1359,6 +1359,18 @@ OpenRacer.Vehicle = function (parameters, input) {
             if(self.onWheelLost) self.onWheelLost(i);
         }
     }
+    // a hit on a tyre from outside (the debug view): the same damage as a hit of the wheel on a wall, by the impulse (N s)
+    this.hitWheel = function (i, impulse) {
+        if(!(self.wheelStrength > 0) || self.wheelLost[i]) return false;
+        self.wheelDamage[i] = Math.min(1, self.wheelDamage[i] + impulse / self.wheelStrength);
+        if(self.wheelDamage[i] >= 1) {
+            self.wheelLost[i] = true;
+            self.wheelSpinAtLoss[i] = self.wheels[i].omega;
+            if(self.onWheelLost) self.onWheelLost(i);
+            return true;
+        }
+        return false;
+    };
     // one wheel whole again, on the car (the pit stop puts them back one by one, Parts.js)
     this.repairWheel = function (i) {
         if(this.soloWheels && (i === 1 || i === 3)) return;

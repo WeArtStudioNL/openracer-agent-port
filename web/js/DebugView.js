@@ -376,30 +376,57 @@
     // (the speed is set in the panel of the node grabber, 5 to 200 km/h; 50 when it was not)
     var HIT_MASS = 1000, HIT_SIDE = 1, HIT_TIME = 0.03;
     var raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2(), hitArrow = null, hitTimer = 0;
+    function showHitArrow(h, normal) {
+    if (typeof scene !== "undefined" && scene) {
+        if (hitArrow && hitArrow.parent) hitArrow.parent.remove(hitArrow);
+        hitArrow = new THREE.ArrowHelper(normal.clone().negate(), h.point.clone().addScaledVector(normal, 0.8), 0.8, 0xff5555, 0.3, 0.18);
+        hitArrow.traverse(function (o) { if (o.material) { o.material.depthTest = false; o.renderOrder = 1001; } });
+        scene.add(hitArrow);
+        clearTimeout(hitTimer);
+        hitTimer = setTimeout(function () { if (hitArrow && hitArrow.parent) hitArrow.parent.remove(hitArrow); hitArrow = null; }, 1000);
+    }
+    }
+    var hitInfo = { text: "" };
     function hitCar(e) {
         var c = typeof car !== "undefined" ? car : null, v = c && c.vehicle, sb = v && v.softBody;
-        if (!on || !sb || !c.body || typeof camera === "undefined" || typeof renderer === "undefined" || (OpenRacer.Replay && OpenRacer.Replay.active)) return false;
+        if (!on || !v || !c.body || typeof camera === "undefined" || typeof renderer === "undefined" || (OpenRacer.Replay && OpenRacer.Replay.active)) return false;
         var rect = renderer.domElement.getBoundingClientRect();
         pointer.set((e.clientX - rect.left) / rect.width * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         raycaster.setFromCamera(pointer, camera);
-        var hits = raycaster.intersectObject(c.body, true).filter(function (h) { return h.object.isMesh && h.object.visible && h.face; });
+        // what can be hit: the shell (the body of the car), the tyres, and the parts that are off the car (a hinge that is open, a part that lies about, the children of a hinge)
+        var list = c.parts || v.parts, targets = [c.body];
+        (c.wheels || []).forEach(function (w) { if (w && w.object) targets.push(w.object); });
+        if (list && list.parts) list.parts.forEach(function (p) { if (p.wheel === undefined && p.state !== "held" && p.state !== "broken" && p.object.parent) targets.push(p.object); });
+        var hits = raycaster.intersectObjects(targets, true).filter(function (h) { return h.object.isMesh && h.object.visible && h.face; });
         if (!hits.length) return false;
         var h = hits[0], normal = h.face.normal.clone().transformDirection(h.object.matrixWorld);
         if (normal.dot(raycaster.ray.direction) > 0) normal.negate();          // (the side that faces the camera)
+        var impulse = HIT_MASS * (hitKmh / 3.6), force = impulse / HIT_TIME, into = normal.clone().negate();
+        // a tyre: the damage of a hit of the wheel, and the car takes the impulse where the tyre is
+        var tyre = -1;
+        for (var wi = 0; wi < (c.wheels || []).length && tyre < 0; wi++) { var wo = c.wheels[wi] && c.wheels[wi].object; for (var o = h.object; o && wo; o = o.parent) if (o === wo) { tyre = wi; break; } }
+        var part = list && list.partOf ? list.partOf(h.object) : null, done = "";
+        if (tyre >= 0 && v.hitWheel) {
+            var torn = v.hitWheel(tyre, impulse);
+            v.applyImpulse(h.point.x, h.point.y, h.point.z, into.x * impulse, into.y * impulse, into.z * impulse);
+            done = "tyre " + tyre + (torn ? " torn off" : " (" + Math.round(Math.min(1, v.wheelDamage[tyre]) * 100) + "% damaged)");
+        } else if (part && list.hit && (part.state !== "held" || part.shatter || part.hinge || part.breakForce > 0)) {
+            var what = list.hit(part, { x: h.point.x, y: h.point.y, z: h.point.z }, { x: into.x, y: into.y, z: into.z }, impulse, force);
+            done = part.name + ": " + what;
+            if (part.state === "held" || !sb) { if (!sb) { showHitArrow(h, normal); return true; } }
+            else { showHitArrow(h, normal); return true; }              // (a part that is off the car takes the hit itself)
+        }
+        if (done) toolText(done);
+        if (!sb) { showHitArrow(h, normal); return true; }
+        hitInfo.text = done;
         q.set(v.qx, v.qy, v.qz, v.qw).invert();
         var local = v1.copy(h.point).sub(v2.set(v.px, v.py, v.pz)).applyQuaternion(q), n = v3.copy(normal).applyQuaternion(q);
+        if (tyre >= 0) { showHitArrow(h, normal); return true; }       // (the tyre is not the shell: the car has had its impulse)
         sb.pushPlate([local.x, local.y, local.z], [n.x, n.y, n.z], HIT_MASS * (hitKmh / 3.6) / HIT_TIME, HIT_SIDE, HIT_MASS, HIT_TIME, null);
         sb.pinned = false;                     // (the reaction of the shell goes to the car: it is pushed and turned by the hit)
         var plate = sb.plate;
         setTimeout(function () { if (sb.plate === plate) sb.releasePlate(); }, 1500);
-        if (typeof scene !== "undefined" && scene) {
-            if (hitArrow && hitArrow.parent) hitArrow.parent.remove(hitArrow);
-            hitArrow = new THREE.ArrowHelper(normal.clone().negate(), h.point.clone().addScaledVector(normal, 0.8), 0.8, 0xff5555, 0.3, 0.18);
-            hitArrow.traverse(function (o) { if (o.material) { o.material.depthTest = false; o.renderOrder = 1001; } });
-            scene.add(hitArrow);
-            clearTimeout(hitTimer);
-            hitTimer = setTimeout(function () { if (hitArrow && hitArrow.parent) hitArrow.parent.remove(hitArrow); hitArrow = null; }, 1000);
-        }
+        showHitArrow(h, normal);
         return true;
     }
     window.addEventListener("pointerdown", function (e) {
