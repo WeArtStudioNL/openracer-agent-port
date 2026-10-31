@@ -1,0 +1,354 @@
+{
+  "name": "Desert drag strip",
+  "description": "A nice stretch of road in the desert.",
+  "start": {
+    "x": -118.854,
+    "z": 47.794,
+    "heading": 0.01318
+  },
+  "grid": [
+    {
+      "x": -118.854,
+      "z": 47.794,
+      "heading": 0.01318
+    }
+  ],
+  "pit": {
+    "boxes": [
+      {
+        "x": -120.617,
+        "z": 51.126,
+        "heading": 0.01747
+      }
+    ]
+  },
+  "model": "desert-drag-strip.glb",
+  "design": {
+    "nodes": [
+      {
+        "x": 700.04,
+        "y": 0,
+        "z": 56.23,
+        "width": 12
+      },
+      {
+        "x": 85,
+        "y": 0,
+        "z": 49,
+        "width": 12
+      },
+      {
+        "x": -126.79,
+        "y": 0,
+        "z": 48.28,
+        "width": 12
+      }
+    ],
+    "closed": false,
+    "prefabs": [
+      {
+        "type": "barrier",
+        "row": true,
+        "points": [
+          {
+            "x": -105.78,
+            "y": 0,
+            "z": 48.24
+          },
+          {
+            "x": -96.19,
+            "y": 0,
+            "z": 48.17
+          }
+        ],
+        "spacing": 4,
+        "scale": 1
+      },
+      {
+        "type": "barrier",
+        "row": true,
+        "points": [
+          {
+            "x": -125.76,
+            "y": -0.06,
+            "z": 39.33
+          },
+          {
+            "x": -11.04,
+            "y": -0.07,
+            "z": 39.19
+          },
+          {
+            "x": 253.16,
+            "y": -0.06,
+            "z": 41.88
+          },
+          {
+            "x": 380.69,
+            "y": -0.07,
+            "z": 43.07
+          },
+          {
+            "x": 469.33,
+            "y": -0.07,
+            "z": 44.25
+          },
+          {
+            "x": 698.38,
+            "y": -0.07,
+            "z": 46.94
+          }
+        ],
+        "spacing": 4,
+        "scale": 1
+      },
+      {
+        "type": "barrier",
+        "row": true,
+        "points": [
+          {
+            "x": -125.22,
+            "y": -0.06,
+            "z": 57.2
+          },
+          {
+            "x": -69.06,
+            "y": -0.06,
+            "z": 57.01
+          },
+          {
+            "x": -5.14,
+            "y": -0.06,
+            "z": 57.31
+          },
+          {
+            "x": 193.2,
+            "y": -0.05,
+            "z": 58.38
+          },
+          {
+            "x": 467.96,
+            "y": -0.03,
+            "z": 60.7
+          },
+          {
+            "x": 699.22,
+            "y": -0.03,
+            "z": 63.77
+          }
+        ],
+        "spacing": 4,
+        "scale": 1
+      },
+      {
+        "type": "house",
+        "x": -11.55,
+        "y": -0.15,
+        "z": -20.37,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "house",
+        "x": 117.46,
+        "y": 0.11,
+        "z": 174.28,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "house",
+        "x": 617.02,
+        "y": -1.46,
+        "z": 195.11,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "house",
+        "x": 648.08,
+        "y": -3.43,
+        "z": -14.49,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "house",
+        "x": 286.17,
+        "y": -1.03,
+        "z": 104.18,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "bush",
+        "x": -49.01,
+        "y": -0.71,
+        "z": 13.77,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "bush",
+        "x": 153.65,
+        "y": -0.43,
+        "z": 0.29,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "bush",
+        "x": 798.92,
+        "y": -1.97,
+        "z": 176.57,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "bush",
+        "x": 168.66,
+        "y": 0.75,
+        "z": 107.49,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "bush",
+        "x": 534.41,
+        "y": -0.07,
+        "z": 23.33,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "bush",
+        "x": 579.07,
+        "y": -1.64,
+        "z": 123.46,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "bush",
+        "x": 400.62,
+        "y": -1.43,
+        "z": 172.15,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "tree",
+        "x": 61.67,
+        "y": -0.79,
+        "z": 6.95,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "tree",
+        "x": 286.59,
+        "y": -1.81,
+        "z": 1.42,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "tree",
+        "x": 674.35,
+        "y": 1.58,
+        "z": 123.83,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "tree",
+        "x": 159.49,
+        "y": -0.74,
+        "z": 93.05,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "tree",
+        "x": -2.54,
+        "y": 0.52,
+        "z": 99.85,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "tree",
+        "x": 318.02,
+        "y": -0.97,
+        "z": 193.28,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "tree",
+        "x": 468.37,
+        "y": -0.83,
+        "z": 116.1,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "type": "tree",
+        "x": 219.98,
+        "y": -0.31,
+        "z": 15.11,
+        "rotation": 0,
+        "scale": 1
+      }
+    ],
+    "textures": {
+      "road": "asphalt",
+      "shoulder": "sand",
+      "ground": "sand"
+    }
+  },
+  "environment": {
+    "sky_top": "#4a82c4",
+    "sky_horizon": "#d3e4f4",
+    "fog": {
+      "enabled": false,
+      "color": "#cfdbe8",
+      "near": 300,
+      "far": 2500
+    },
+    "sun": {
+      "azimuth": 40,
+      "elevation": 45,
+      "intensity": 1,
+      "color": "#ffffff"
+    },
+    "ambient": {
+      "color": "#576777",
+      "intensity": 1
+    }
+  },
+  "surfaces": {
+    "meshes": {
+      "road": "road",
+      "shoulder_left": "grass",
+      "shoulder_right": "grass",
+      "kerb_left": "road",
+      "kerb_right": "road",
+      "ground": "ground",
+      "prefab_bush_9": "decor",
+      "prefab_bush_10": "decor",
+      "prefab_bush_11": "decor",
+      "prefab_bush_12": "decor",
+      "prefab_bush_13": "decor",
+      "prefab_bush_14": "decor",
+      "prefab_bush_15": "decor"
+    }
+  },
+  "dragstrip": {
+    "x": -110.287,
+    "z": 47.906,
+    "heading": 0.00988,
+    "width": 12,
+    "length": 402.34
+  }
+}
