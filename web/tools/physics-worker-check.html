@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenRacer physics worker check</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+    body { font: 14px/1.5 Arial, sans-serif; background: #0d0f12; color: #dfe6ef; margin: 0; padding: 20px; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    h2 { font-size: 15px; margin: 22px 0 0; }
+    .sub { color: #9aa8ba; margin-bottom: 14px; max-width: 900px; }
+    button { background: #ff5a1f; color: #fff; border: 0; border-radius: 5px; padding: 8px 16px; cursor: pointer; font-size: 14px; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    table { border-collapse: collapse; margin-top: 10px; width: 100%; max-width: 1100px; }
+    th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #272e37; vertical-align: top; }
+    th { color: #9aa8ba; font-weight: normal; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; }
+    .ok { color: #6fdc8c; } .bad { color: #ff8a80; font-weight: bold; } .note { color: #7e90a6; font-size: 12px; }
+    #cars label { margin-right: 14px; white-space: nowrap; }
+    iframe { position: fixed; right: 10px; bottom: 10px; width: 320px; height: 200px; border: 1px solid #272e37; opacity: 0.85; }
+    input[type=checkbox] { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; flex: none; border: 1.5px solid #8d97a3; border-radius: 4px; background: transparent; vertical-align: middle; cursor: pointer; }
+    input[type=checkbox]:checked { background: #ff5a1f; border-color: #ff5a1f; }
+</style>
+</head>
+<body>
+<h1>Physics worker check</h1>
+<div class="sub">Steps the same cars on the same track in the page and in a Web Worker (js/PhysicsWorker.js) and checks that both give the same numbers, every frame
+    (PHYSICS-WORKER.md). Then it times the physics: in the page, in one worker, and in a worker per car (side by side, on more cores). Open it on a phone to see what a
+    worker gains there.</div>
+<div><label>Track <select id="track"><option value="short-track">short-track</option><option value="desert">desert</option><option value="kartbaan-oldenzaal">kartbaan-oldenzaal</option></select></label>
+    <label style="margin-left: 14px;">Seconds <input id="seconds" type="number" value="10" min="1" max="60" style="width: 60px;"></label></div>
+<div id="cars" style="margin: 10px 0;"></div>
+<button id="run">Run</button> <span id="state" class="note"></span>
+<h2>Same numbers</h2>
+<table id="same"><thead><tr><th>Car</th><th>Page and worker</th><th>Snapshot into a view</th><th>Values a frame</th></tr></thead><tbody></tbody></table>
+<h2>Speed</h2>
+<table id="speed"><thead><tr><th>Where</th><th>Physics of all the cars, ms per frame of 1/60 s</th></tr></thead><tbody></tbody></table>
+<div class="note" style="margin-top: 14px;">The cars drive a fixed script (full throttle, a gentle weave, a stop) with the same seed for their random numbers. A worker per car is the time of the
+    slowest of them, as they step at the same time. The time of the page is that of this browser tab, with the game in the small window paused.</div>
+<iframe id="game" title="game"></iframe>
+<script>
+const $ = (id) => document.getElementById(id);
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const SEED = 7;
+
+async function carList() {
+    try { return (await (await fetch("/api/cars")).json()).map((c) => c.id); } catch (e) { /* no API */ }
+    try { return await (await fetch("../cars/index.json")).json(); } catch (e) { return []; }
+}
+carList().then((ids) => {
+    $("cars").innerHTML = ids.map((id) => '<label><input type="checkbox" value="' + id + '"' + (/muscle|hatchback|600cc|stadium/.test(id) ? " checked" : "") + "> " + id + "</label>").join("");
+});
+
+// opens the game on a track and gives its window when the track and the car are there
+async function load(track) {
+    const frame = $("game");
+    frame.src = "../index.html?track=" + encodeURIComponent(track) + "&car=hatchback&ai=0&ghost=0&records=0";
+    for (let i = 0; i < 120; i++) {
+        await wait(500);
+        try { const w = frame.contentWindow; if (w.car && w.car.isReady && w.car.isReady() && w.groundWorld && w.currentTrack && w.OpenRacer.VehicleState) { await wait(1000); return w; } } catch (e) { /* not yet */ }
+    }
+    throw new Error("The game did not start.");
+}
+
+// the script of the drive: the input at frame f (60 a second)
+function inputAt(f) {
+    const t = f / 60;
+    return { throttle: t < 0.7 * seconds() ? 1 : 0, brakePedal: t >= 0.7 * seconds() ? 0.8 : 0, turnAngle: Math.sin(t * 0.7) * 0.15 };
+}
+const seconds = () => Math.max(1, Math.min(60, +$("seconds").value || 10));
+const START_INPUT = { throttle: 0, brakePedal: 0, clutch: 0, clutchPedalPresent: false, clutchAvailable: true, handbrake: false, turnAngle: 0, maxTurn: 0.6, neutral: false,
+    reverse: false, manualGearbox: false, current_gear: 0, parkingLock: false, twoStep: false, transbrake: false };
+
+function worker() {
+    const w = new Worker("../js/PhysicsWorker.js");
+    const queue = [];
+    w.onmessage = (e) => { const q = queue.shift(); if (q) (e.data.type === "error" ? q.reject(new Error(e.data.message)) : q.resolve(e.data)); };
+    w.onerror = (e) => { const q = queue.shift(); if (q) q.reject(new Error(e.message || "worker error")); };
+    // every message gets one answer, except "ground" and "condition"
+    w.ask = (msg) => new Promise((resolve, reject) => { queue.push({ resolve, reject }); w.postMessage(msg); });
+    w.ready = new Promise((resolve) => queue.push({ resolve, reject: resolve }));
+    return w;
+}
+
+function paramsOf(w, config) {
+    const p = w.OpenRacer.vehicleParams(config, w.getSurface), plain = {};
+    Object.keys(p).forEach((k) => { if (typeof p[k] !== "function") plain[k] = p[k]; });
+    plain.seed = SEED;
+    return plain;
+}
+
+// the first value that is not the same in two snapshots (with the names of the schema)
+function difference(a, b, schema) {
+    const names = schema.split("/")[0].split("|");
+    if (a.num.length !== b.num.length) return "a different number of values (" + a.num.length + " and " + b.num.length + ")";
+    for (let i = 0; i < a.num.length; i++) if (!(a.num[i] === b.num[i] || (a.num[i] !== a.num[i] && b.num[i] !== b.num[i]))) return names[i] + ": " + a.num[i] + " and " + b.num[i];
+    if (a.str.join("|") !== b.str.join("|")) return "the strings: " + a.str.join(",") + " and " + b.str.join(",");
+    if ((a.soft ? a.soft.join() : "") !== (b.soft ? b.soft.join() : "")) return "the soft body";
+    return null;
+}
+
+async function same(w, id, config) {
+    const VS = w.OpenRacer.VehicleState, s = w.currentTrack.start, params = paramsOf(w, config);
+    const input = Object.assign({}, START_INPUT);
+    const v = new w.OpenRacer.Vehicle(Object.assign({}, params, { getSurface: w.getSurface }), input);
+    v.ground = w.groundWorld;
+    v.reset(s.x, s.z, s.heading || 0);
+    const pw = worker(); await pw.ready;
+    pw.postMessage({ type: "ground", data: w.groundWorld.exportData() });
+    await pw.ask({ type: "add", id: "car", params: params, input: START_INPUT, place: [s.x, s.z, s.heading || 0] });
+    const mainCache = {}, workerCache = {}, viewCache = {}, view = {};
+    let schema = null, first = null, viewOk = true, values = 0;
+    for (let f = 0; f < seconds() * 60; f++) {
+        Object.assign(input, inputAt(f));
+        v.update(1 / 60);
+        const a = VS.snapshot(v, mainCache);
+        const b = (await pw.ask({ type: "step", frame: f, d: 1 / 60, inputs: { car: inputAt(f) } })).cars.car;
+        if (a.schema) schema = a.schema;
+        if (!first) { const d = difference(a, b, schema); if (d) first = "frame " + f + ": " + d; }
+        // the worker's snapshot into a view, and the view gives the same values again
+        VS.apply(view, b, viewCache);
+        if (viewOk === true) {
+            const parts = schema.split("/"), names = parts[0].split("|"), pairs = VS.pairsOf(view), byName = {};
+            for (let i = 0; i < pairs.length; i += 2) byName[pairs[i]] = pairs[i + 1];
+            for (let i = 0; i < names.length && viewOk === true; i++) {
+                const x = byName[names[i]], k = parts[1][i];
+                const n = k === "n" ? x : k === "b" ? (x ? 1 : 0) : NaN;
+                if (!(n === b.num[i] || (n !== n && b.num[i] !== b.num[i]))) viewOk = "frame " + f + ", " + names[i];
+            }
+            values = names.length;
+        }
+    }
+    pw.terminate();
+    return { first, viewOk, values };
+}
+
+// the physics of all the cars for a number of frames: in the page, in one worker, in a worker per car
+async function speed(w, configs) {
+    const s = w.currentTrack.start, frames = Math.min(600, seconds() * 60), rows = [];
+    const make = () => configs.map((c, i) => {
+        const input = Object.assign({}, START_INPUT);
+        const v = new w.OpenRacer.Vehicle(Object.assign({}, paramsOf(w, c), { getSurface: w.getSurface }), input);
+        v.ground = w.groundWorld; v.reset(s.x + 6 * i, s.z, s.heading || 0);
+        return { v, input };
+    });
+    const page = make();
+    let t = performance.now();
+    for (let f = 0; f < frames; f++) page.forEach((c) => { Object.assign(c.input, inputAt(f)); c.v.update(1 / 60); });
+    rows.push(["The page (one after the other)", (performance.now() - t) / frames]);
+    const ground = w.groundWorld.exportData();
+    for (const perCar of [false, true]) {
+        if (perCar && configs.length < 2) continue;
+        const workers = perCar ? configs.map(() => worker()) : [worker()];
+        await Promise.all(workers.map((x) => x.ready));
+        for (let i = 0; i < configs.length; i++) {
+            const pw = workers[perCar ? i : 0];
+            if (!pw.hasGround) { pw.postMessage({ type: "ground", data: ground }); pw.hasGround = true; }
+            await pw.ask({ type: "add", id: "car" + i, params: paramsOf(w, configs[i]), input: START_INPUT, place: [s.x + 6 * i, s.z, s.heading || 0] });
+        }
+        t = performance.now();
+        for (let f = 0; f < frames; f++) {
+            const inputs = {}; configs.forEach((c, i) => { inputs["car" + i] = inputAt(f); });
+            await Promise.all(workers.map((pw) => pw.ask({ type: "step", frame: f, d: 1 / 60, inputs })));
+        }
+        rows.push([perCar ? "A worker per car (" + workers.length + ", side by side)" : "One worker", (performance.now() - t) / frames]);
+        workers.forEach((x) => x.terminate());
+    }
+    return rows;
+}
+
+async function run() {
+    const picked = [...document.querySelectorAll("#cars input:checked")].map((i) => i.value);
+    $("run").disabled = true;
+    $("same").tBodies[0].innerHTML = ""; $("speed").tBodies[0].innerHTML = "";
+    let w = null, render = null;
+    try {
+        $("state").textContent = "Loading the track…";
+        w = await load($("track").value);
+        render = w.render; w.render = function () {};          // (the game in the small window stands still)
+        const configs = [];
+        for (const id of picked) {
+            $("state").textContent = "Checking " + id + "…";
+            const row = $("same").tBodies[0].insertRow();
+            try {
+                const config = await (await fetch("../cars/" + id + "/car.json", { cache: "no-store" })).json();
+                configs.push(config);
+                const r = await same(w, id, config);
+                const cell = (ok, text) => '<td class="' + (ok ? "ok" : "bad") + '">' + (ok ? "✓ " : "✗ ") + text + "</td>";
+                row.innerHTML = "<td>" + id + "</td>" + cell(!r.first, r.first || "the same, " + seconds() * 60 + " frames") + cell(r.viewOk === true, r.viewOk === true ? "the same" : r.viewOk) + "<td>" + r.values + "</td>";
+            } catch (e) {
+                row.innerHTML = "<td>" + id + '</td><td colspan="3" class="bad">' + String(e.message).replace(/[<>&]/g, "") + "</td>";
+            }
+        }
+        if (configs.length) {
+            $("state").textContent = "Timing…";
+            (await speed(w, configs)).forEach(([where, ms]) => { const r = $("speed").tBodies[0].insertRow(); r.innerHTML = "<td>" + where + "</td><td>" + ms.toFixed(2) + "</td>"; });
+        }
+        $("state").textContent = "Done (" + (navigator.hardwareConcurrency || "?") + " cores).";
+    } catch (e) {
+        $("state").textContent = String(e.message);
+    } finally {
+        if (w && render) w.render = render;
+        $("run").disabled = false;
+    }
+}
+$("run").onclick = run;
+</script>
+</body>
+</html>

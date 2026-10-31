@@ -25,7 +25,13 @@
  *              ratio and slip angle through a friction circle with a peak and a lower sliding
  *              grip, so a wheel can hook up, spin or lock depending on the load on it.
  *              Vehicle.js drives the wheels; the optional 3D object is only for display.
+ *              No 3D library: it also loads in a Web Worker (PHYSICS-WORKER.md).
  */
+
+// A point or a velocity (x, y, z) with set and copy, in place of a THREE.Vector3 (the physics does not need three.js)
+OpenRacer.Vec3 = function (x, y, z) { this.x = x || 0; this.y = y || 0; this.z = z || 0; };
+OpenRacer.Vec3.prototype.set = function (x, y, z) { this.x = x; this.y = y; this.z = z; return this; };
+OpenRacer.Vec3.prototype.copy = function (v) { this.x = v.x; this.y = v.y; this.z = v.z; return this; };
 
 // The kinds of tyre: the grip (a factor), the working window (the best temperature, its width, and how fast the grip goes when it is outside of it:
 // the smaller "cold", the faster, and "coldLoss", the grip that is lost at most), how fast the tyre heats and wears (factors), the rolling
@@ -107,8 +113,8 @@ OpenRacer.Wheel = function (parameters) {
     this.a = 0; // position relative to the centre of gravity: forward (m)
     this.b = 0; // and to the right (m)
 
-    this.position = new THREE.Vector3(0, 0, 0);
-    this.velocity = new THREE.Vector3(0, 0, 0);
+    this.position = new OpenRacer.Vec3(0, 0, 0);
+    this.velocity = new OpenRacer.Vec3(0, 0, 0);
     this.weight = this.mass * 9.81; // vertical load (N)
     this.omega = 0;                 // angular speed (rad/s), positive when rolling forward
     this.slipRatio = 0;             // longitudinal slip (lagged), negative while braking

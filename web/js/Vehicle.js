@@ -43,9 +43,23 @@
  *              the yaw rate (positive = turning right) of the car.
  */
 
+// Random numbers from a seed (mulberry32): the same seed gives the same numbers, in any thread
+OpenRacer.seededRandom = function (seed) {
+    var a = seed >>> 0;
+    return function () {
+        a = (a + 0x6D2B79F5) >>> 0;
+        var t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+};
+
 OpenRacer.Vehicle = function (parameters, input) {
     var G = 9.81;
     var self = this;
+    // the random numbers of the physics (a puncture, the pops of the exhaust): a seed (parameters.seed) gives the same ones every time, as a physics worker and a replay want
+    this.random = parameters.seed !== undefined ? OpenRacer.seededRandom(parameters.seed) : function () { return Math.random(); };
 
     // A motorcycle ("type": "motorcycle" in car.json, see MOTORCYCLE.md): the same physics, with a pair of wheels at both ends (no track between them), and a rider
     // who keeps the bike up: a torque about the long axis that holds the lean the corner asks for (a_lateral = g tan(lean)) and damps the fall
@@ -156,6 +170,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.groundClearance = 0.13;      // of the underside of the body at rest (m)
 
     this.engine = new OpenRacer.Engine(parameters.engine);
+    this.engine.random = this.random;
     this.driveEfficiency = parameters.efficiency || 0.92;
     this.reverseRatio = parameters.reverse_ratio || parameters.gear_ratios[0];
     // the clutch is made for the engine: it holds a good deal more than the peak torque
@@ -443,7 +458,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         for(var i = 0; i < 4; i++) { var w = this.wheels[i]; w.wear = 0; w.temp = temp === undefined ? 60 : temp; w.condition = conditionOf(w) * (w.pressureGrip || 1); }
     };
     // a puncture: the tyre leaks (bar per second); the pressure falls and the grip, the sidewall and the stiffness of the tyre follow (applyPressure)
-    this.puncture = function (index, rate) { var w = this.wheels[index]; if(w && !w.leak) w.leak = rate || 0.05 + Math.random() * 0.1; };
+    this.puncture = function (index, rate) { var w = this.wheels[index]; if(w && !w.leak) w.leak = rate || 0.05 + this.random() * 0.1; };
     this.repairTyres = function () { for(var i = 0; i < 4; i++) { this.wheels[i].leak = 0; this.wheels[i].pressureLoss = 0; } this.applyPressure(); };
     this.punctured = function () { for(var i = 0; i < 4; i++) if(this.wheels[i].leak) return true; return false; };
     this.maxWear = function () { var m = 0; for(var i = 0; i < 4; i++) m = Math.max(m, this.wheels[i].wear); return m; };
@@ -2071,7 +2086,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 wheel.weight = fz;
                 if(self.tyreDamage && OpenRacer.damageEnabled !== false) {
                     // a hard hit (a kerb, a landing: a load of more than 5 times the static one) can puncture the tyre; a leaking tyre loses its pressure
-                    if(!wheel.leak && fz > 5 * self.mass * gravity / 4 && Math.random() < 0.3) self.puncture(iw);
+                    if(!wheel.leak && fz > 5 * self.mass * G / 4 && self.random() < 0.3) self.puncture(iw);
                     if(wheel.leak) {
                         var nominal = wheel.front ? self.pressureFront : self.pressureRear;
                         wheel.pressureLoss = Math.min(nominal - 0.15, (wheel.pressureLoss || 0) + wheel.leak * dt);

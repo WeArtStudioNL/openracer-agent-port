@@ -450,7 +450,19 @@ OpenRacer.GroundWorld = function (cellSize) {
         out[0] = low; out[1] = high;
         return true;
     };
+
+    // All of this world as plain data (typed arrays, arrays, a Map), to send to a physics worker (PHYSICS-WORKER.md); fromData makes the same world
+    // from it, so every query gives the same answer in both threads
+    this.exportData = function () {
+        return { cellSize: cellSize, tri: tri, surfaces: surfaces, meshes: meshes, meshOf: meshOf, cells: cells, pitAreas: pitAreas, use3D: this.use3D,
+            data3: data3, box3: box3, meta3: meta3, count3: count3, grid3: grid3, capacity3: stamp3.length };
+    };
+    this.importData = function (d) {
+        cellSize = d.cellSize; tri = d.tri; surfaces = d.surfaces; meshes = d.meshes; meshOf = d.meshOf; cells = d.cells; pitAreas = d.pitAreas; this.use3D = d.use3D;
+        data3 = d.data3; box3 = d.box3; meta3 = d.meta3; count3 = d.count3; grid3 = d.grid3; stamp3 = new Int32Array(d.capacity3); stampValue = 0;
+    };
 };
+OpenRacer.GroundWorld.fromData = function (d) { var g = new OpenRacer.GroundWorld(d.cellSize); g.importData(d); return g; };
 
 // A flat road at one height with the interface of the GroundWorld of a track (3D): for the test benches (the car editor, tools/physics-bench.js), where the
 // tyre bodies need triangles. One triangle, as big as the world, at height y; everything is "road".

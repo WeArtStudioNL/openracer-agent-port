@@ -36,6 +36,7 @@ window.THREE = Object.assign({}, THREE_MODULE, {
 });
 
 var scripts = [
+    "js/Surfaces.js",
     "js/Helpers.js",
     "js/Movable.js",
     "js/Version.js",
@@ -90,6 +91,7 @@ var scripts = [
     "js/DragStrip.js",
     "js/Motorcycle.js",
     "js/Vehicle.js",
+    "js/VehicleState.js",
     "js/Telemetry.js",
     "js/EngineSim.js",
     "js/EngineBuild.js",

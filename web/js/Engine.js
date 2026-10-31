@@ -101,6 +101,7 @@ OpenRacer.Engine = function( parameters ) {
     this.fuelFactor = 1;       // the fuel use as a factor (more while the anti-lag works)
     var overrun = 0, previousThrottle = 0, cutWas = false;
     var engine = this;
+    this.random = function () { return Math.random(); };     // (the vehicle gives its own, Vehicle.random)
     function bang(strength, loud, flame) { if(engine.events.length < 40) engine.events.push({ strength: strength, loud: loud, flame: flame }); }
     function stepExtras(throttle, dt, rpm) {
         var x = engine.extras;
@@ -120,10 +121,10 @@ OpenRacer.Engine = function( parameters ) {
             rate = 14 * x.pops_amount / 100 * Math.sqrt(overrun / Math.max(0.1, x.pops_overrun)) * Math.min(1, Math.max(0.3, rpm / engine.limiterRPM));
         }
         if(engine.alsActive) rate = Math.max(rate, 16 * x.antilag_bangs / 100);
-        if(rate > 0 && Math.random() < rate * dt) bang((engine.alsActive ? 0.8 : 0.5) + Math.random() * 0.7, loud, flame);
+        if(rate > 0 && engine.random() < rate * dt) bang((engine.alsActive ? 0.8 : 0.5) + engine.random() * 0.7, loud, flame);
         // at the start of every cut of the rev limiter: the fuel that is not burnt in the cylinder burns in the exhaust
         if(engine.cutting && !cutWas) {
-            if((popsOn && Math.random() < x.pops_amount / 100 * (engine.holding ? 1 : 0.6)) || (engine.alsActive && Math.random() < 0.8 * x.antilag_bangs / 100)) bang(0.7 + Math.random() * 0.6, loud, flame);
+            if((popsOn && engine.random() < x.pops_amount / 100 * (engine.holding ? 1 : 0.6)) || (engine.alsActive && engine.random() < 0.8 * x.antilag_bangs / 100)) bang(0.7 + engine.random() * 0.6, loud, flame);
         }
         cutWas = engine.cutting;
     }

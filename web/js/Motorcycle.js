@@ -76,6 +76,10 @@ OpenRacer.Motorcycle = function (settings) {
     this.wallHit = 0;                                        // the last wall hit that was seen (Vehicle.impactTime), so that one hit crashes once
     var hist = [], now = 0;                                  // the speed of the last tenth of a second: a hit that the smoothed acceleration misses (a wall through the wheels, a kerb)
     this.pushing = false;                                   // the rider walks the bike back (set by Car.js)
+    // the options of the menu that the bike reads (OpenRacer.Motorcycle.OPTIONS): null reads them from Settings; a physics worker, which has no
+    // Settings, is given them here (PHYSICS-WORKER.md)
+    this.options = null;
+    var option = function (name) { return self.options ? self.options[name] : (typeof Settings !== "undefined" ? Settings.option(name) : undefined); };
     this.command = 0;                                      // the lean that is asked (-1..1)
     this.targetLean = 0;                                   // what the rider takes (rad, left is positive)
     this.steer = 0;                                        // the angle of the front wheel that was given to the physics (rad, right is positive)
@@ -161,7 +165,7 @@ OpenRacer.Motorcycle = function (settings) {
         var eps = Math.atan(share * self.posture.lat / v.cgHeight);       // to the left: positive
         // at speed the tyres have to give a slip angle for every bit of lean, and the body crabs: past about 40 m/s the lean that is allowed goes down (to 18 degrees at 60 m/s), so that a key
         // held at 190 km/h is a gentle bend and not a slide
-        var fastLean = typeof Settings !== "undefined" && Settings.option("bikeFastLean") ? Settings.option("bikeFastLean") * DEG : self.fastLean;      // (the menu: Motorcycle: lean at top speed)
+        var fastLean = option("bikeFastLean") ? option("bikeFastLean") * DEG : self.fastLean;      // (the menu: Motorcycle: lean at top speed)
         var speedMax = self.maxLean - (self.maxLean - Math.min(self.maxLean, fastLean)) * smooth(self.fastFrom, self.fastFrom + 22, Math.abs(u));
         // the tyres have so much grip, and what they give along the bike (the engine, the air, the brake: how much the speed goes down) they cannot give sideways: the circle of grip
         var aLong = Math.max(0, -(accel.x * state.fx + accel.z * state.fz)), gripMax = self.gripG * G;
@@ -198,7 +202,7 @@ OpenRacer.Motorcycle = function (settings) {
         var straight = 1 - smooth(2 * DEG, 6 * DEG, Math.abs(target));
         if ((inp.brakePedal || 0) > 0.05) self.sinceBrake = 0; else self.sinceBrake += dt;
         self.counterGain = smooth(self.counterWait, self.counterWait + self.counterRamp, self.sinceBrake);
-        var pulse = typeof Settings !== "undefined" && Settings.option("bikeSteering") === "counter" ? self.counterGain : 0;
+        var pulse = option("bikeSteering") === "counter" ? self.counterGain : 0;
         counter *= straight + (1 - straight) * pulse;
         var geometric = c * lock;                                  // at a walking pace the angle is the command
         var w = 1 - smooth(2, 5, Math.abs(u));
@@ -222,7 +226,7 @@ OpenRacer.Motorcycle = function (settings) {
     // its load; a bike with a lot of torque from low revs loops over backwards at full throttle otherwise
     this.throttleScale = function (v, dt) {
         if (self.crashed || self.limp) { self.wheelieScale = 0; return 0; }
-        var on = typeof Settings === "undefined" || Settings.option("wheelieControl") !== false;
+        var on = option("wheelieControl") !== false;
         var frontLoad = ((v.wheels[0].weight || 0) + (v.wheels[1].weight || 0)) / Math.max(1, v.weight_distribution * v.mass * G);
         var want = on && !v.airborne && Math.abs(v.u) > 0.5 && self.burnout < 0.5 ? Math.max(0.15, Math.min(1, (frontLoad - 0.08) / 0.3)) : 1;      // (not in the air: the gas is what brings the nose up for the landing there)     // (not in a burnout: the front lifts a little there, and the cut let the engine fall to the clutch)
         self.wheelieScale += (want - self.wheelieScale) * Math.min(1, dt / (want < self.wheelieScale ? 0.03 : 0.25));
@@ -508,3 +512,6 @@ OpenRacer.Motorcycle.riderMass = function (config) {
     var m = config.motorcycle && config.motorcycle.rider_mass;
     return m !== undefined ? m : 80;
 };
+
+// The options of the menu that a bike reads (see options in the controller)
+OpenRacer.Motorcycle.OPTIONS = ["bikeFastLean", "bikeSteering", "wheelieControl"];
