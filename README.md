@@ -11,7 +11,7 @@ Released under the GPLv3 License. Some models come from others under their own l
 ## About this fork
 This is a fork of [digi-chris/OpenRacer](https://github.com/digi-chris/OpenRacer) by Chris Barnard, the open-source initiative that began the game: the demo Mustang, its first track and the first version of the driving model. This fork takes it much further: the vehicle physics, the race format, the input (including racing wheels with force feedback), the editors, the engine sound and the local garage were built here.
 
-The fork was developed with AI, in Claude Code, together with **Claude Fable** and **Claude Sonnet 5.5** from Anthropic. The commit log shows how it grew, step by step, and the commits made by the models say so.
+The fork was developed with AI, together with **Claude Code** from Anthropic. The commit log shows how it grew, step by step, and the commits made with Claude Code say so.
 
 What is new in every version is in [CHANGELOG.md](CHANGELOG.md). The version of the game is `OpenRacer.VERSION` in `web/js/Version.js` (shown in the main menu and at the bottom of the settings menu). Raise it when a car or a track made with the game would not work the same on an older version.
 
