@@ -246,6 +246,11 @@
             b.addEventListener("click", function () { partTool = partTool === b.dataset.tool ? null : b.dataset.tool; showTools(); });
         });
         showTools();
+        // after a slider, the box or a button the focus goes back to the game: the keys are the car's again, not the panel's (an arrow key would move the slider)
+        var giveBack = function (e) { var t = e.target; if (t && t.blur && t !== grabPanel) setTimeout(function () { t.blur(); if (document.activeElement && document.activeElement !== document.body && grabPanel.contains(document.activeElement)) document.activeElement.blur(); }, 0); };
+        grabPanel.addEventListener("pointerup", giveBack);
+        grabPanel.addEventListener("change", giveBack);
+        grabPanel.addEventListener("click", giveBack);
         if (OpenRacer.Movable) OpenRacer.Movable.make(grabPanel, { key: "node-grabber", handle: grabPanel.firstElementChild });
         document.body.appendChild(grabPanel);
     }
