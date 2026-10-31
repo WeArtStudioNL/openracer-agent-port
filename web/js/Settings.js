@@ -1249,7 +1249,7 @@ var Settings = (function() {
     handlers.resetCar = function() { if(window.car) window.car.reset = true; };
     handlers.saveResetPosition = function() { if(window.car && window.car.saveResetPosition) window.car.saveResetPosition(); };
     handlers.repairCar = function() { if(window.car && window.car.vehicle) { window.car.vehicle.repairUpright(); if(window.car.recoverCrash) window.car.recoverCrash(); if(window.car.updateVisuals) window.car.updateVisuals(0); } };
-    handlers.cameraReset = function() { if(window.car) window.car.cameraAngle = 0; };
+    handlers.cameraReset = function() { if(window.car) { window.car.cameraAngle = 0; window.car.cameraElev = 0; } };
     handlers.telemetry = function() { if(window.telemetry) window.telemetry.setVisible(!window.telemetry.visible); };
     handlers.shiftUp = function() { if(window.car) window.car.shiftUp(); };
     handlers.shiftDown = function() { if(window.car) window.car.shiftDown(); };

@@ -1609,6 +1609,7 @@ function recomputeBuild() {
     state.build = readBuild();
     const res = EB.compute(state.build, num("limiter") || 7000, num("idle") || 850);
     state.buildResult = res;
+    if (suspensionEditor) suspensionEditor.refresh(false);      // (another block may have a model of its own, parts/driveline/<block>.glb)
     state.curve = res.curve.map((p) => p.slice());
     const tn = tuning;
     const spec = EB.turboSpec(state.build), ind = state.build.induction;
@@ -3540,6 +3541,7 @@ driverEditor = initDriver({
 suspensionEditor = initSuspension({
     $, THREE, scene, gizmo, rotGizmo, gizmoTargets, layers, selectLayer, wheelCenters: wheelPlaces,
     driveValue: () => $("drive").value,
+    engineBlock: () => (state.build ? $("bBlock").value : ""),
     loadLibrary: () => loadPhysics(),
     renderLayers: () => renderLayers(),
     save: () => saveCurrent(),

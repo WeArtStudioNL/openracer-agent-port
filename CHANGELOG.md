@@ -64,9 +64,13 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 - **A pin with two or three free axes has limits now.** It was a ball joint without any: it turned every way. It is a joint that holds the place and the axes that are not free, and lets each free one turn between its own limits. The engine makes its own frame from the axis it is given (its Y and Z are not those of the car), so the axes of the pin are put on the axes of that frame. Measured with the left door of the hatchback on a pin free about X, Y and Z (limits X ±10, Y -60 to 0, Z ±5 degrees) and pushed every way: it stayed within 10.5, -60.1 to 0 and 5.2 degrees, also with the pin turned 30 degrees.
 - **The pin points hold a part on a car without a shell too** (Dents off, the hatchback with Race): they were left out without the shell, and the part turned about an axis of its own (up, 90 degrees each way).
 
+### The follow camera orbits with the right mouse button
+
+- **On a desktop the right mouse button and a drag turn the follow camera about the car** (left and right) and lift or lower it (up and down), at the same distance; `[` and `]` and the reset key (`) work as before and the reset also brings the height back. A drag with the left button does nothing, and the debug tools that use the right button keep it.
+
 ### A model for every engine
 
-- **An engine can have its own model**: `parts/driveline/<block>.glb`, with the block of the engine (*Block* in the engine build of the car editor, e.g. "Inline-3 1.0 L") written with every run of other characters as one hyphen: `Inline-3-1-0-L.glb`. A car with that engine (the Parts library of the suspension and driveline) gets that model; an engine without a file of its own gets `engine.glb`, as it did. A missing model of its own is no error and no warning. The place, the turn and the hiding of the engine (the eye of the card) are the same for both. Measured on the hatchback: the engine node has the 2620 vertices of Inline-3-1-0-L.glb; with another block (V8 5.0 L) it has the 130 of engine.glb.
+- **An engine can have its own model**: `parts/driveline/<block>.glb`, with the block of the engine (*Block* in the engine build of the car editor, e.g. "Inline-3 1.0 L") written with every run of other characters as one hyphen: `Inline-3-1-0-L.glb`. A car with that engine (the Parts library of the suspension and driveline) gets that model; an engine without a file of its own gets `engine.glb`, as it did. A missing model of its own is no error and no warning. The place, the turn and the hiding of the engine (the eye of the card) are the same for both, and the preview of the car editor shows the model at once when the car is opened and when another block is chosen. Measured on the hatchback: the engine node has the 2620 vertices of Inline-3-1-0-L.glb; with another block (V8 5.0 L) it has the 130 of engine.glb.
 
 ### Car editor: the body dents with a paint finish too
 

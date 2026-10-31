@@ -40,7 +40,9 @@ export function initSuspension(api) {
     function config() {
         const susp = {};
         ["front", "rear"].forEach((axle) => { susp[axle] = { type: state[axle].type, mounts: state[axle].mounts[state[axle].type] || {}, hidden: state[axle].hidden }; });
-        return { suspension: susp, driveline: { engine: state.driveline.engine, mounts: state.driveline.mounts, hidden: state.driveline.hidden }, drivetrain: { drive: driveValue() } };
+        // (the block of the engine: an engine with a model of its own, parts/driveline/<block>.glb, is shown with that one, PartsLibrary.engineModel)
+        const block = api.engineBlock ? api.engineBlock() : "";
+        return { suspension: susp, driveline: { engine: state.driveline.engine, mounts: state.driveline.mounts, hidden: state.driveline.hidden }, drivetrain: { drive: driveValue() }, engine: block ? { build: { block } } : undefined };
     }
     function measured() {
         const c = wheelCenters();

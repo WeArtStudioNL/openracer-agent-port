@@ -52,6 +52,27 @@ OpenRacer.Car = function( config, domElement ) {
     this.Cdrag = 0.5 * this.Cd * this.frontal_area * air_density;
     this.reset = false;
     this.cameraAngle = 0;
+    this.cameraElev = 0;                  // the follow camera higher or lower about the car (right mouse button and drag, with cameraAngle: an orbit)
+    var orbit = null;
+    if(typeof window !== "undefined") {
+        // the follow camera on a desktop: the right mouse button and a drag turn it about the car (left and right) and lift or lower it (up and down); [ ] and the reset key still work
+        window.addEventListener("pointerdown", function(e) {
+            if(e.button !== 2 || e.pointerType === "touch" || tobj.cameraMode !== 2 || typeof renderer === "undefined" || e.target !== renderer.domElement) return;
+            if(OpenRacer.Replay && OpenRacer.Replay.active) return;
+            if(OpenRacer.DebugView && OpenRacer.DebugView.isOn() && OpenRacer.DebugView.partToolOn && OpenRacer.DebugView.partToolOn()) return;       // (the right button of the debug tools)
+            orbit = { x: e.clientX, y: e.clientY, id: e.pointerId };
+            try { renderer.domElement.setPointerCapture(e.pointerId); } catch(err) { /* a synthetic event */ }
+            e.preventDefault();
+        });
+        window.addEventListener("pointermove", function(e) {
+            if(!orbit || e.pointerId !== orbit.id) return;
+            tobj.cameraAngle -= (e.clientX - orbit.x) * 0.006;           // (dragging to the right takes the camera round the car to the left, the car turns the way the hand goes)
+            tobj.cameraElev = Math.max(-0.15, Math.min(1.2, tobj.cameraElev + (e.clientY - orbit.y) * 0.005));
+            orbit.x = e.clientX; orbit.y = e.clientY;
+        });
+        window.addEventListener("pointerup", function(e) { if(orbit && e.pointerId === orbit.id) orbit = null; });
+        window.addEventListener("contextmenu", function(e) { if(tobj.cameraMode === 2 && typeof renderer !== "undefined" && e.target === renderer.domElement) e.preventDefault(); });
+    }
     
     this.lapsCompleted = 0;
     this.raceLaps = 0;        // the laps of the race (0: practice, no end), shown by the HUD
@@ -714,6 +735,7 @@ OpenRacer.Car = function( config, domElement ) {
             camera.getWorldDirection(lookDir);
             camera.translateZ(f.distance * scale);
             camera.position.y = avgGround + f.look_height + (f.height - f.look_height) * scale;
+            if(this.cameraElev) camera.position.y += Math.tan(this.cameraElev) * f.distance * scale;          // (the orbit: higher or lower about the car, the same distance)
             keepCameraInView(subject, delta);
             camera.lookAt(cx + lookDir.x * lookZ, avgGround + f.look_height, cz + lookDir.z * lookZ);
             if(this.vehicle.controller) this.vehicle.controller.cameraRoll(camera, this.vehicle, delta);      // (a motorcycle: the picture leans with the bike)
