@@ -2,7 +2,7 @@
 
 What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in `web/js/Version.js`.
 
-## 2.2.0 (2026-10-30)
+## 2.2.0 (2026-10-31)
 
 Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every car, motorcycles with a rider and a ragdoll crash, a driver in the car, replays as files with a video editor, a new menu, the drag strip, and much more. Per subject:
 
