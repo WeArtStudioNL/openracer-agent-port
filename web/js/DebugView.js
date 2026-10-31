@@ -181,6 +181,7 @@
             if (!group) { group = new THREE.Group(); group.name = "debug view"; lines = layer("lines"); points = layer("points"); }
             if (typeof scene !== "undefined" && scene) scene.add(group);
             requestAnimationFrame(update);
+            setGrabMode(true);                              // (the node grabber is there with the view: no key for it)
         } else { if (group && group.parent) group.parent.remove(group); if (modelsHidden) { modelsHidden = false; showModels(true); } setGrabMode(false); }
     }
     function toggle() { setOn(!on); }
@@ -193,14 +194,8 @@
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target && e.target.isContentEditable)) return;
         if (zero) toggle(); else if (on) toggleModels();
     });
-    window.addEventListener("keydown", function (e) {
-        if (e.code !== "KeyN" || !on || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
-        var tag = e.target && e.target.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target && e.target.isContentEditable)) return;
-        setGrabMode(!grabMode);
-    });
 
-    // ---- the node grabber (as BeamNG has it): with the view on, N switches it on; press on a node of the shell with the left mouse button and drag it, held by an elastic
+    // ---- the node grabber (as BeamNG has it): with the view on, it is on; press on a node of the shell with the left mouse button and drag it, held by an elastic
     // whose strength is set in the panel at the top right (SoftBody.grab: a spring from the node to the pointer, at the depth the node had when it was taken). Let go and
     // it is free again. The elastic is drawn red from the node to the pointer.
     // the nodes and the beams of the shell can be left out of the view (the box in the panel of the node grabber), also while they are grabbed
@@ -217,7 +212,7 @@
         grabPanel = document.createElement("div");
         grabPanel.style.cssText = "position: fixed; right: 16px; top: 14px; z-index: 950; width: 230px; padding: 10px 14px 12px; background: rgba(14, 18, 24, 0.86); border: 1px solid #323c4a; border-radius: 10px; " +
             "color: #dfe6ef; font: 12.5px Arial, sans-serif; display: none;";
-        grabPanel.innerHTML = "<div style=\"font-weight: bold; margin-bottom: 6px;\">Node grabber <span style=\"color: #9fb0c4; font-weight: normal;\">(N)</span></div>" +
+        grabPanel.innerHTML = "<div style=\"font-weight: bold; margin-bottom: 6px;\">Node grabber</div>" +
             "<div style=\"color: #9fb0c4; margin-bottom: 8px;\">Press on a node and drag it. Let go to drop it.</div>" +
             "<div style=\"display: flex; justify-content: space-between;\"><span>Elastic</span><b class=\"grabValue\"></b></div>" +
             "<input type=\"range\" class=\"grabSlider\" min=\"2\" max=\"5.3\" step=\"0.01\" style=\"width: 100%;\">" +

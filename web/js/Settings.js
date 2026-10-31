@@ -1229,8 +1229,6 @@ var Settings = (function() {
     handlers.toggleLaunch = function() { setOption("launchControl", !options.launchControl); };
     handlers.toggleABS = function() { setOption("abs", !options.abs); };
     handlers.toggleESC = function() {
-        // (with the debug view on, N is the node grabber, DebugView.js: the key of the ESC, N by default, then does not switch it)
-        if(OpenRacer.DebugView && OpenRacer.DebugView.isOn() && (bindings.toggleESC || []).some(function(k) { return k.code === "KeyN"; })) return;
         setOption("esc", !options.esc);
     };
     handlers.cameraSwitch = function() { setOption("camera", nextCamera(options.camera)); };
