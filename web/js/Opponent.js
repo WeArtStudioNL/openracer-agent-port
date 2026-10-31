@@ -132,7 +132,7 @@ OpenRacer.Opponent = function (config, line, options) {
     this.clock = 0;
     this.lapStart = 0;
     this.held = false;           // on the grid, before the start (the race holds it)
-    this.finished = false;       // the race is done: it slows down and pulls aside
+    this.finished = false;       // the race is done: it drives on, at a calmer pace (main.js sets paceFactor), and no more stops in the pits
     this.raceLaps = 0;           // the laps of the race (0: no end), for the decision to pit
     this.pitLane = null;         // the pit lane of the track (Pit.js), when it has one
     this.pitBox = null;          // the pit box of this car ({ x, z, heading }, from the track editor): it drives to it and stops in it
@@ -260,7 +260,6 @@ OpenRacer.Opponent = function (config, line, options) {
             var gap = blocker.along - 4.5;
             if (gap < 2 + speed * 0.15 && blocker.u < speed + 1) holdBack = Math.max(0.2, gap / (2 + speed * 0.15));
         }
-        if (this.finished) asideTarget = -3; // done: to the right, out of the way
 
         // the pit box: when the tyres are worn or the fuel will not last, and the box is within 70 m ahead along the line, it drives to the box (a staging point on the axis of the box
         // first, then the middle), stops with the wheels inside it until the stop is done, and goes back to the line
@@ -414,12 +413,11 @@ OpenRacer.Opponent = function (config, line, options) {
         if (inLane) allowed = Math.min(allowed, laneSpeed);  // the pit lane: slowly, and to a stop at the box
         if (boxMode) allowed = Math.min(allowed, boxSpeed);      // to the box and back: slowly
         if (atStop) allowed = 0;                            // at the box, until the stop is done
-        if (this.finished) allowed = 0; // slows down and stops
         var error = allowed - speed;
         if (error > 0.5) { this.throttle = Math.min(1, 0.3 + error * 0.25); this.brakePedal = 0; }
         else if (error < -0.5) { this.throttle = 0; this.brakePedal = Math.min(1, -error * 0.18); }
         else { this.throttle = 0.15 + error * 0.2; this.brakePedal = 0; }
-        if (this.finished || atStop) { this.throttle = 0; this.brakePedal = Math.max(this.brakePedal, speed < 1 ? 1 : 0.2); this.stuck = 0; return; }
+        if (atStop) { this.throttle = 0; this.brakePedal = Math.max(this.brakePedal, speed < 1 ? 1 : 0.2); this.stuck = 0; return; }
         if (speed < 2 && v.clutchEngagement < 0.5) this.throttle = Math.max(this.throttle, 0.5);
         // stuck against something: back up a moment
         if (speed < 0.5 && this.throttle > 0.3) { this.stuck = (this.stuck || 0) + delta; } else this.stuck = 0;

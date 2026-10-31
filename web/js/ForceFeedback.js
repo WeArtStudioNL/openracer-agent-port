@@ -542,7 +542,7 @@ var ForceFeedback = (function() {
     function windowActive() { return focused && !document.hidden && (typeof document.hasFocus !== "function" || document.hasFocus()); }
     function update(car, delta) {
         lastUpdate = performance.now();
-        if(!windowActive() && performance.now() >= testUntil) { neutral(); return; }
+        if((!windowActive() || car.autopilot || car.cameraOverride) && performance.now() >= testUntil) { neutral(); return; }      // (not active, or the car drives itself after the finish with the cinematic camera: the wheel is let go)
         if(!option("ffb", true)) {
             if(device && Math.abs(lastSent) > 0.001) send(0);
             return;

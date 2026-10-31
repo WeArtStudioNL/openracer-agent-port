@@ -354,6 +354,7 @@ function updateRaceFlow(delta) {
     race.opponents.forEach(function(o) {
         if(!o.finished && o.lapsCompleted >= race.laps) {
             o.finished = true;
+            o.paceFactor = 0.6;               // (it drives on after the finish, a little slower, as the player's car does)
             o.finishTime = o.clock - (o.goClock || 0);
             if(race.winnerTime === null) race.winnerTime = o.finishTime;
         }

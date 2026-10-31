@@ -20,6 +20,7 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 ### Fixed before the release
 
+- **After the finish of a race** the AI cars drive on at a calmer pace (60% of the line's speed, as the player's car does) instead of stopping at the side; and the force feedback lets go while the car drives itself under the cinematic camera.
 - **Glass of the AI cars**: see-through (opacity) instead of refracting (transmission), against black blocks on the windows of AI cars in a video; it also saves the extra picture of the scene that the transmission of every car costs. The glass of the player's car is as it was.
 - **Pit stop**: the car on the jacks is held by the parking brake, not by the brake pedal, and the automatic reverse is off during a stop (the brake held at a standstill put the car in R).
 - **AI cars put back are a ghost for 10 seconds**: half see-through, and the other cars (and the player) go through them, so two cars that are reset at the same place no longer hit each other and break again. The road and the walls still work.
