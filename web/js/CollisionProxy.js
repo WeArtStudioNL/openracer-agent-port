@@ -208,7 +208,7 @@ OpenRacer.CollisionProxy = (function () {
             var cfgSoft = object.config.softbody;
             var shift = modelBeams ? 0 : (isFinite(cfgSoft.layout_cg) ? cfgSoft.layout_cg - v.cgHeight : 0) + (isFinite(cfgSoft.layout_radius) ? radius - cfgSoft.layout_radius : 0);
             // (the shell of the model: the nodes keep their numbers, the beams point at them)
-            var own = layout.slice(0, 200).filter(function (n) { return isFinite(n.x) && isFinite(n.y) && isFinite(n.z) && n.r > 0; })
+            var own = layout.slice(0, 2000).filter(function (n) { return isFinite(n.x) && isFinite(n.y) && isFinite(n.z) && n.r > 0; })
                 .map(function (n) {
                     // a node must not reach below the underside of the car (the ground clearance): a big node low in the car would stand on the road with
                     // the wheels (the car rode on its nodes, and hovered over bumps with its wheels barely loaded), so its radius is cut to what is above that

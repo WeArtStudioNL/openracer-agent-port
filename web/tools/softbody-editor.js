@@ -773,7 +773,7 @@ export function initSoftBody(api) {
         const hits = caster.intersectObject(bench.model.tilt, true).filter((h) => h.object.isMesh && h.object.visible);
         if (!hits.length) return false;
         freeze(s);
-        if (sb.layout.length >= 200) { status("A car can have 200 nodes at most.", "error"); return true; }
+        if (sb.layout.length >= 2000) { status("A car can have 2000 nodes at most.", "error"); return true; }
         const local = sb.group.worldToLocal(hits[0].point.clone());
         const r = parseFloat($("sbRadius").value) || 0.2;
         sb.layout.push({ x: +local.x.toFixed(4), y: +local.y.toFixed(4), z: +local.z.toFixed(4), r });
@@ -1557,7 +1557,7 @@ export function initSoftBody(api) {
         if (!w || !sb.layout) return;
         const r = 0.1;
         sb.layout.push({ x: +local.x.toFixed(4), y: +local.y.toFixed(4), z: +local.z.toFixed(4), r, part: w.name });
-        if (sb.layout.length > 200) { sb.layout.pop(); status("A car can have 200 nodes at most.", "error"); return; }
+        if (sb.layout.length > 2000) { sb.layout.pop(); status("A car can have 2000 nodes at most.", "error"); return; }
         changed();
         renderPartWin();
         drawPartGizmos();

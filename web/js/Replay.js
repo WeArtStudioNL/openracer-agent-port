@@ -119,7 +119,7 @@ OpenRacer.Replay = (function() {
     // moves, a part opens or flies, a wheel bends): a car that drives without a hit makes none. A record holds the displacements of the nodes of the
     // shell (whole millimetres, 16 bits), for every part its state and where it is, and for every wheel whether it is off and how it is bent.
     var SOFT_SCALE = 1024, PART_FLOATS = 11, WHEEL_FLOATS = 5 * 4, RIDER_FLOATS = 45;      // RIDER_FLOATS: the particles of a rider that is a ragdoll (Driver.RAGDOLL_FLOATS)
-    var MAX_SOFT_NODES = 400, MAX_SOFT_PARTS = 64;
+    var MAX_SOFT_NODES = 2000, MAX_SOFT_PARTS = 64;
 
     // (a car without a shell that has parts, Dents off: records of 0 nodes, with its parts and its wheels)
     var NO_NODES = new Int16Array(0);

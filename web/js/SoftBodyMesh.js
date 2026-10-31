@@ -9,7 +9,19 @@
  */
 
 OpenRacer.SoftBodyMesh = (function () {
-    var MAX_NODES = 200;
+    var MAX_NODES = 2000;
+    // the bend of the nodes goes to the graphics card as a row of pixels (x, y, z of a node in one pixel): a list of uniforms is too short for it (1024 vectors on many cards)
+    function nodeTexture() {
+        var data = new Float32Array(4 * MAX_NODES);
+        var t = new THREE.DataTexture(data, MAX_NODES, 1, THREE.RGBAFormat, THREE.FloatType);
+        t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true;
+        return t;
+    }
+    function fillTexture(t, displacement, n) {
+        var d = t.image.data;
+        for (var k = 0; k < n; k++) { d[4 * k] = displacement[3 * k]; d[4 * k + 1] = displacement[3 * k + 1]; d[4 * k + 2] = displacement[3 * k + 2]; }
+        t.needsUpdate = true;
+    }
 
     // root: the model of the body (THREE.Object3D); toVehicle(p): its points into the frame of the car, in place (as in CollisionProxy.js).
     // Gives { update() } to call every frame, or null when this is not possible
@@ -22,7 +34,7 @@ OpenRacer.SoftBodyMesh = (function () {
         var nodes = new Float32Array(3 * N);
         var tmp = { x: 0, y: 0, z: 0 };
         for (var k = 0; k < N; k++) { softBody.restPosition(k, tmp); nodes[3 * k] = tmp.x; nodes[3 * k + 1] = tmp.y; nodes[3 * k + 2] = tmp.z; }
-        var uniform = { value: new Float32Array(3 * MAX_NODES) };
+        var uniform = { value: nodeTexture() };
         var materials = [];
         var p = new THREE.Vector3();
         var seen = -1;
@@ -85,8 +97,8 @@ OpenRacer.SoftBodyMesh = (function () {
                     shader.uniforms.uToLocal = { value: toLocal };
                     shader.uniforms.uDeform = deform;
                     shader.vertexShader = shader.vertexShader
-                        .replace("#include <common>", "#include <common>\nattribute vec4 aNodes;\nattribute vec4 aWeights;\nuniform vec3 uNodeD[" + MAX_NODES + "];\nuniform mat3 uToLocal;\nuniform float uDeform;")
-                        .replace("#include <begin_vertex>", "#include <begin_vertex>\nvec3 sbD = uNodeD[int(aNodes.x + 0.5)] * aWeights.x + uNodeD[int(aNodes.y + 0.5)] * aWeights.y + uNodeD[int(aNodes.z + 0.5)] * aWeights.z + uNodeD[int(aNodes.w + 0.5)] * aWeights.w;\ntransformed += uDeform * (uToLocal * sbD);");
+                        .replace("#include <common>", "#include <common>\nattribute vec4 aNodes;\nattribute vec4 aWeights;\nuniform sampler2D uNodeD;\nuniform mat3 uToLocal;\nuniform float uDeform;")
+                        .replace("#include <begin_vertex>", "#include <begin_vertex>\nvec3 sbD = texelFetch(uNodeD, ivec2(int(aNodes.x + 0.5), 0), 0).xyz * aWeights.x + texelFetch(uNodeD, ivec2(int(aNodes.y + 0.5), 0), 0).xyz * aWeights.y + texelFetch(uNodeD, ivec2(int(aNodes.z + 0.5), 0), 0).xyz * aWeights.z + texelFetch(uNodeD, ivec2(int(aNodes.w + 0.5), 0), 0).xyz * aWeights.w;\ntransformed += uDeform * (uToLocal * sbD);");
                 };
                 copy.customProgramCacheKey = function () { return (ownKey && ownKey !== THREE.Material.prototype.customProgramCacheKey ? ownKey.call(material) : "") + "softbody" + MAX_NODES; };
                 materials.push(copy);
@@ -102,8 +114,8 @@ OpenRacer.SoftBodyMesh = (function () {
             release: function (object) {
                 // the part comes off the car: it keeps the bend that it has at this moment (a copy of the displacements), and does not follow the shell
                 // any more; before, it went back to its own shape, so a headlight or a grille that came off looked as if it had not been hit
-                var frozen = { value: new Float32Array(3 * MAX_NODES) };
-                frozen.value.set(softBody.displacement.subarray(0, 3 * N));
+                var frozen = { value: nodeTexture() };
+                fillTexture(frozen.value, softBody.displacement, N);
                 object.traverse(function (m) {
                     if (!m.isMesh || !m.userData || !m.userData.sbDeform) return;
                     m.userData.sbUniform = frozen;
@@ -132,7 +144,7 @@ OpenRacer.SoftBodyMesh = (function () {
             update: function () {
                 if (softBody.version === seen) return;
                 seen = softBody.version;
-                uniform.value.set(softBody.displacement.subarray(0, 3 * N));
+                fillTexture(uniform.value, softBody.displacement, N);
                 for (var m = 0; m < materials.length; m++) materials[m].uniformsNeedUpdate = true;
             }
         };
