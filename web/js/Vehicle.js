@@ -1278,7 +1278,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             var sp = spheres[i];
             if(sp.disabled) continue;
             rotate(self.qx, self.qy, self.qz, self.qw, sp.x, sp.y, sp.z, sphereAt);
-            var node = self.softBody ? self.softBody.nodeOfSphere[i] : -1;
+            var node = self.softBody && !self.shellSkip ? self.softBody.nodeOfSphere[i] : -1;      // (a car whose shell is not stepped, Settings > Simulation, is a rigid body: its spheres are the walls' business)
             if(node >= 0) {
                 // a sphere that is a node of the shell: where the node is now (it can be bent); the walls are the business of the shell
                 if(!wantSoft && self.softBody.alive(node)) continue;
