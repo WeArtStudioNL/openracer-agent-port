@@ -78,6 +78,7 @@
             <a href="#tracks">Making a track</a>
             <a href="#track-editor">Track editor</a>
             <a href="#design">Drawing a track</a>
+            <a href="#data">Your data and what can be lost</a>
             <a href="#garage">Your own cars and tracks</a>
             <a href="#models">Making models: requirements</a>
             <a href="#blender">Blender settings</a>
@@ -106,7 +107,7 @@
                 <li>Drive with the arrows or <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>, or use the touch controls on a phone, or plug in a gamepad or a wheel and press a button so the browser sees it. <kbd>Esc</kbd> opens the settings, where you can remap every input and calibrate a wheel. See <a href="#keyboard">Keyboard</a>, <a href="#gamepad">Gamepad</a> and <a href="#wheel">Racing wheel</a>.</li>
                 <li>Press <kbd>U</kbd> to tune the car while you drive, and try <b>Skidpad</b> as the way to play to see how much grip a car has.</li>
             </ol>
-            <p>Your settings, key bindings, lap records, setups and replays are kept in your own browser, not on a server. The same goes for what you make or import: <b>Garage</b> in the main menu keeps your own cars and tracks in the browser, and exports them as zip files (see <a href="#garage">Your own cars and tracks</a>). Even the car editor and the track editor work on the web version, and save to the garage.</p>
+            <p>Your settings, key bindings, lap records, setups and replays are kept in your own browser, not on a server. The same goes for what you make or import: <b>Garage</b> in the main menu keeps your own cars and tracks in the browser, and exports them as zip files (see <a href="#garage">Your own cars and tracks</a>). Even the car editor and the track editor work on the web version, and save to the garage. Because all of that is in your browser, clearing the site data of the browser deletes it: see <a href="#data">Your data and what can be lost</a>, and make a backup now and then.</p>
 
             <h3 id="requirements">Requirements</h3>
             <table>
@@ -275,6 +276,7 @@ start http://localhost:8000</code></pre>
             <ul>
                 <li><b>Car:</b> another vehicle (when there is no race), traction control, two-step, launch control, ESC, ABS, the drag strip timing, the camera, the reverse of an automatic, and the mirrors. On a motorcycle also the steering, wheelie control, the follow camera and the lean at top speed.</li>
                 <li><b>Keyboard</b>, <b>Gamepad</b> and <b>Wheel:</b> how each input steers and brakes, the wheel range and dead zone, force feedback and the calibration.</li>
+                <li><b>Tools:</b> the debug text, the tuning menu, the records and racing line of this track, <i>Surroundings for Blender</i>, and the <b>backup</b>: <i>Back up</i> writes your settings, controls, records and setups to a file, <i>Restore a backup</i> reads one, and <i>Ask the browser to keep my data</i> asks the browser not to clear it. See <a href="#data">Your data</a>.</li>
                 <li><b>Display and sound:</b> the HUD and its layout (<i>Edit HUD…</i>), units (km/h or mph), the engine volume and the engine sound.</li>
                 <li><b>Mobile</b> (on a touch screen): the finger travel for full lock and the layout of the buttons.</li>
                 <li><b>Graphics:</b> a preset, the picture, light and shadow, tone mapping and the look, the atmosphere (time of day, sun, moon, weather and ground) and the effects (smoke and debris).</li>
@@ -334,7 +336,7 @@ start http://localhost:8000</code></pre>
             </table>
             <p>On a touch screen a finger on the scene looks around; moving needs the keys or a controller.</p>
             <h3 id="replay-share">The replay library</h3>
-            <p><b>Save replay</b> in the bar keeps the replay in <b>Replays</b> in the main menu, in your browser. When you go back to the main menu with a recording that is not saved, the game asks whether to keep it. The Replays window lists the saved replays with the track, the cars, the length, the date and the size, and has <b>Watch</b>, <b>Edit</b> (the <a href="#video-editor">video editor</a>), <b>Download</b> and <b>Delete</b>. Nothing goes to a server.</p>
+            <p><b>Save replay</b> in the bar keeps the replay in <b>Replays</b> in the main menu, in your browser (so clearing the site data deletes it: <b>Download</b> a replay you want to keep). When you go back to the main menu with a recording that is not saved, the game asks whether to keep it. The Replays window lists the saved replays with the track, the cars, the length, the date and the size, and has <b>Watch</b>, <b>Edit</b> (the <a href="#video-editor">video editor</a>), <b>Download</b> and <b>Delete</b>. Nothing goes to a server.</p>
             <p><b>Download</b> saves a replay as one file (<code>.openracer-replay</code>, compressed), to keep or to send. Someone else adds it with <b>Import replay…</b> in the Replays window and gets the same bar, with the slider and the speeds, but they cannot drive in it. The file holds the recording and the ids of the track and the cars, not their models, so the other one needs the same track and cars. The standard ones of the game are enough. For a car or a track of your own, send them as a zip (the <i>Garage</i> exports one). If something is missing, the game says exactly what. A file from another version of the game is refused with a message, and a damaged one never starts a game.</p>
             <p>While you drive the recording is kept in memory, about 4 KB a second for every car, and the last half hour is kept. Without Save it is gone when the page is reloaded. Skid marks and smoke are not recorded: they stay as they were drawn.</p>
             <p><b>Photo</b> in the bar (or <kbd>F2</kbd>) saves the picture of the replay as it is now as a PNG, without the bar.</p>
@@ -668,6 +670,29 @@ start http://localhost:8000</code></pre>
             <p>Saving writes the track as a glb (with the textures in it as JPEG) plus the design itself in <code>track.json</code>, so it can be opened and changed again. The game loads it like any glTF track. Walls, houses and trees are scenery (the car hits them); bushes, cones and signs are decor.</p>
         </section>
 
+        <section id="data">
+            <h2>Your data and what can be lost</h2>
+            <p>The game keeps everything of yours <b>in your browser</b>: nothing is sent to a server, and the server has no copy. That is good for privacy, and it means that the browser decides how long it stays.</p>
+            <table>
+                <tr><th>What</th><th>Where</th><th>How to keep a copy</th></tr>
+                <tr><td>Settings, key bindings, wheel calibration, lap records, ghosts, setups (tunes) and the grip the AI measured</td><td>The local storage of the browser</td><td><i>Esc → Tools → Back up my settings, controls, records and setups</i> writes a file; <i>Restore a backup</i> reads it. A tune can also be exported on its own.</td></tr>
+                <tr><td>Your own cars and tracks</td><td>The garage (IndexedDB of the browser)</td><td><i>Export</i> in the Garage makes a zip per car or track. A <i>folder on the PC</i> stays on your disk.</td></tr>
+                <tr><td>Saved replays</td><td>The replay library (IndexedDB of the browser)</td><td><i>Download</i> in the replay bar saves a <code>.openracer-replay</code> file. A video or a photo is a file already.</td></tr>
+                <tr><td>Files in a linked folder</td><td>Your own disk</td><td>Normal backups of your disk. The browser only remembers the link and asks for permission again from time to time.</td></tr>
+            </table>
+            <h3 id="data-risks">What deletes it</h3>
+            <ul>
+                <li><b>Clearing the data of the site</b> (<i>Cookies and site data</i>, <i>All site data</i>, or <i>Clear all data</i> of this site in the browser settings) deletes the local storage and the IndexedDB of the game together, so the records, the garage and the replays all go at once. Clearing only the <i>history</i> or the <i>cached files and images</i> is safe: those are other things.</li>
+                <li><b>A private or incognito window</b> starts empty and forgets everything when it is closed.</li>
+                <li><b>Browser settings or software</b> that clear the site data when the browser closes, and cleaning tools of the system.</li>
+                <li><b>A full disk.</b> When the disk is nearly full the browser may clear the data of sites it has not promised to keep. The game asks the browser to keep its data (<i>Esc → Tools → Ask the browser to keep my data</i>, and once when a game starts); Chrome and Edge decide by themselves, Firefox asks you. The line at the top of the <i>Tools</i> tab says whether the browser has promised, and how much the game uses.</li>
+                <li><b>Safari</b> deletes the data of a site that has not been visited for seven days, unless it is added to the Dock or the home screen as an app.</li>
+                <li><b>Another browser, another computer or another address</b> (<code>localhost</code> and <code>openracer.eu</code> are two) is a new, empty place. A backup file moves your settings and records to it; the garage and the replays move as zip and replay files.</li>
+                <li><b>Too much stored:</b> a browser gives a site a share of the free disk. A garage full of big models or a long list of replays can fill it; the writing then fails and the game says so. Export what you want to keep and delete what you do not.</li>
+            </ul>
+            <p>A good habit: after a session in which you made a car or set up a wheel, press <i>Back up</i> in the <i>Tools</i> tab and export the car from the Garage. The backup file has a date in its name, and <i>Restore</i> puts the items back under the same names, leaving what is not in the file as it is.</p>
+        </section>
+
         <section id="garage">
             <h2>Your own cars and tracks</h2>
             <p>The game can be hosted as plain files, with the cars and tracks of the server as the set that comes with it. Players add their own on their side, in the <b>Garage</b> of the main menu, and <b>nothing is uploaded to the server</b>. The Garage has <i>Load</i> (open a car or track in its editor), <i>New</i> (a new car or track) and <i>Import</i> (a zip). Three sources make the lists of the menu: the server, the garage (the browser's IndexedDB), and a folder on the PC. A car or track of the garage replaces the one of the server with the same id, so a tuned copy of a standard car keeps its id and its lap records. Items that are not of the server have a badge in the menu.</p>
@@ -675,7 +700,7 @@ start http://localhost:8000</code></pre>
                 <li><b>Saving.</b> The editors save through the helper server when it has the API, and otherwise to the garage, and say which.</li>
                 <li><b>Zip.</b> A car or track is exported as <code>&lt;id&gt;.car.zip</code> or <code>&lt;id&gt;.track.zip</code>, and a zip is imported the same way, so a zipped folder from <code>cars</code> or <code>tracks</code> works too.</li>
                 <li><b>A folder on the PC.</b> In Chrome and Edge a folder can be linked. Its cars and tracks are read every time the menu opens and nothing is copied. The browser asks once per session to allow reading it.</li>
-                <li><b>Space.</b> The dialog shows how much the browser lets the site keep. Safari keeps about a gigabyte and forgets it after seven days without a visit, so export what matters.</li>
+                <li><b>Space.</b> The dialog shows how much the browser lets the site keep. Safari keeps about a gigabyte and forgets it after seven days without a visit, so export what matters. Clearing the site data of the browser deletes the garage too (see <a href="#data">Your data and what can be lost</a>): export a car or track as a zip when it is done.</li>
             </ul>
         </section>
 

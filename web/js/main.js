@@ -12,6 +12,9 @@ var car;
 var carConfig;
 
 // the engine sound follows the option of the settings menu
+// ask the browser to keep what the game stores (settings, records, garage, replays): without this it may clear them when the disk is nearly full
+try { if(navigator.storage && navigator.storage.persist && navigator.storage.persisted) navigator.storage.persisted().then(function(kept) { if(!kept) navigator.storage.persist(); }); } catch(e) { /* no storage API */ }
+
 // the simulation options (Settings, tab Simulation): read by Opponent.js and Vehicle.js
 OpenRacer.sim = { aiDamage: Settings.option("simAiDamage") || "near", range: Settings.option("simAiRange") || 60, aiSteps: Settings.option("simAiSteps") || 3, focus: null };
 Settings.onOptionChange(function(name, value) {

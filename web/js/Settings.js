@@ -480,6 +480,76 @@ var Settings = (function() {
     }
 
     var hintText = "";
+    // ---- a backup of what this browser keeps for the game: every key of localStorage that begins with "openracer" (the settings and the controls, the lap records and the ghosts,
+    // the setups and the grip the AI measured). The cars and tracks of the garage and the replays are in IndexedDB and have their own export (the Garage, the Replays).
+    var storageNoteEl = null;
+    function storageNote() {
+        storageNoteEl = document.createElement("div");
+        storageNoteEl.className = "sub";
+        refreshStorageNote();
+        return storageNoteEl;
+    }
+    function refreshStorageNote() {
+        if(!storageNoteEl) return;
+        var text = "Everything the game keeps (settings, controls, records, setups, your garage and replays) is in this browser, not on a server. Clearing the site data of this browser, a private window, or a full disk deletes it. Back up the settings and records here, and export the garage and the replays from their own pages.";
+        storageNoteEl.textContent = text;
+        if(!navigator.storage) return;
+        var kept = navigator.storage.persisted ? navigator.storage.persisted() : Promise.resolve(null);
+        var used = navigator.storage.estimate ? navigator.storage.estimate() : Promise.resolve(null);
+        Promise.all([kept, used]).then(function(r) {
+            var mb = function(n) { return (n / 1048576).toFixed(n > 10485760 ? 0 : 1) + " MB"; };
+            var extra = " " + (r[0] === true ? "The browser keeps this data." : r[0] === false ? "The browser has not promised to keep this data: it can be cleared when the disk is full." : "");
+            if(r[1] && r[1].usage !== undefined) extra += " In use: " + mb(r[1].usage) + (r[1].quota ? " of " + mb(r[1].quota) + " allowed" : "") + ".";
+            storageNoteEl.textContent = text + extra;
+        }).catch(function() { /* no estimate */ });
+    }
+    function backupDownload() {
+        var items = {}, count = 0;
+        try {
+            for(var i = 0; i < localStorage.length; i++) {
+                var key = localStorage.key(i);
+                if(key && key.indexOf("openracer") === 0) { items[key] = localStorage.getItem(key); count++; }
+            }
+        } catch(e) { hint("Could not read the storage of the browser: " + e.message); return; }
+        if(!count) { hint("There is nothing to back up yet."); return; }
+        var date = new Date().toISOString().slice(0, 10);
+        var blob = new Blob([JSON.stringify({ openracerBackup: 1, version: typeof OpenRacer !== "undefined" ? OpenRacer.VERSION : "", made: new Date().toISOString(), items: items })], { type: "application/json" });
+        var link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "openracer-backup-" + date + ".openracer-backup.json";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(function() { URL.revokeObjectURL(link.href); }, 10000);
+        hint("Saved " + count + " items in " + link.download + ".");
+    }
+    function backupRestoreRow() {
+        var input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".json,application/json";
+        input.style.display = "none";
+        var row = optionRow("Restore a backup", "Choose a file\u2026", function() { input.value = ""; input.click(); });
+        row.appendChild(input);
+        input.onchange = function() {
+            var file = input.files && input.files[0];
+            if(!file) return;
+            file.text().then(function(text) {
+                var data;
+                try { data = JSON.parse(text); } catch(e) { data = null; }
+                if(!data || data.openracerBackup !== 1 || !data.items || typeof data.items !== "object") { hint("That is not a backup file of OpenRacer."); return; }
+                var keys = Object.keys(data.items).filter(function(k) { return k.indexOf("openracer") === 0 && typeof data.items[k] === "string"; });
+                if(!keys.length) { hint("The backup is empty."); return; }
+                OpenRacerDialog.ask({ title: "Restore this backup?", text: keys.length + " items from " + (data.made ? data.made.slice(0, 10) : "a backup") + " (version " + (data.version || "?") + ") replace what this browser has under the same names: the settings, the controls, the records and the setups. Other things stay. The game reloads.", ok: "Restore", danger: true }).then(function(yes) {
+                    if(!yes) return;
+                    try { keys.forEach(function(k) { localStorage.setItem(k, data.items[k]); }); }
+                    catch(e) { hint("Could not write everything (" + e.message + "). The storage is full."); return; }
+                    location.reload();
+                });
+            }).catch(function(e) { hint("Could not read the file: " + e.message); });
+        };
+        return row;
+    }
+
     function hint(text) {
         hintText = text;
         if(menu) {
@@ -1131,6 +1201,14 @@ var Settings = (function() {
         page.appendChild(simNote2);
         page = tabPage("Tools");
         page.appendChild(optionRow("Debug text", options.debug ? "On" : "Off", function() { setOption("debug", !options.debug); }));
+        // what the browser keeps (settings, bindings, records, ghosts, setups): a backup file, and the state of the storage of the browser
+        page.appendChild(storageNote());
+        page.appendChild(optionRow("Back up my settings, controls, records and setups", "Download", backupDownload));
+        page.appendChild(backupRestoreRow());
+        page.appendChild(optionRow("Ask the browser to keep my data", "Keep", function() {
+            if(!navigator.storage || !navigator.storage.persist) { hint("This browser cannot be asked."); return; }
+            navigator.storage.persist().then(function(yes) { hint(yes ? "The browser will keep the data of this game unless you delete it yourself." : "The browser did not agree. Back up your data now and then."); refreshStorageNote(); });
+        }));
         var tuningRow = optionRow("Tuning menu", "Open", function() { closeMenu(); Tuning.toggle(); });
         if(window.car) page.appendChild(tuningRow);            // (the tuning menu is of the car in the game)
         // the runs of the drag strip of this track (DragStrip.js): the Top 50, with the tickets
