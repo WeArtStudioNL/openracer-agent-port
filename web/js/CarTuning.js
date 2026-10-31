@@ -832,6 +832,7 @@ OpenRacer.Setups = (function () {
             // (the shell, its dents and the strength of the wheels, and the loose parts are how the car is built, not how it is set up: they are always those of the car,
             // car.json, the Default of the car editor. A setup held a copy of them (with the dents off, the Race tune of the hatchback did not dent), and a part or a hinge
             // made after it was saved was missing while it was on; the parts name nodes of the shell, so the two go together)
+            if(out && base && base.id) out.id = base.id;          // (a setup has no id of its own: the car's, or a replay of it has none and is refused)
             if(out && base) {
                 if(base.softbody) out.softbody = clone(base.softbody); else delete out.softbody;
                 if(base.parts) out.parts = clone(base.parts); else delete out.parts;

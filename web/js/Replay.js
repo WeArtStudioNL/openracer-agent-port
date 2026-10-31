@@ -1530,6 +1530,8 @@ OpenRacer.Replay = (function() {
         if(!header.track || !ID_PATTERN.test(String(header.track.id)) || !Array.isArray(header.cars) || header.cars.length < 1 || header.cars.length > MAX_CARS) throw bad("This replay file is damaged.");
         for(var i = 0; i < header.cars.length; i++) {
             var c = header.cars[i];
+            // (a replay of a car whose setup had no id of its own has none in the file: the id is the name of the car as a slug, hatchback for Hatchback; the file was refused as damaged)
+            if(c && typeof c.id !== "string" && typeof c.name === "string") c.id = c.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
             if(!c || typeof c.id !== "string" || !ID_PATTERN.test(c.id)) throw bad("This replay file is damaged.");
             c.name = String(c.name || c.id).slice(0, 80);
             c.color = typeof c.color === "number" && c.color >= 0 && c.color <= 0xffffff ? c.color : null;
