@@ -462,6 +462,9 @@ export function initSoftBody(api) {
         if (o.parts) o.parts.update(dt);
         if (OpenRacer.Shatter) OpenRacer.Shatter.step(dt);                 // the pieces and the particles of a part that broke (Shatter.js)
         if (sb.crash) crashFrame(dt);
+        // the speed above the Stop crash test button: now, and what the car goes for
+        const speedBox = $("crashSpeed");
+        if (speedBox && sb.crash) speedBox.textContent = Math.round(Math.hypot(v.vx, v.vz) * 3.6) + " km/h" + (sb.crash.hit ? " (hit)" : " of " + Math.round(sb.crash.speed * 3.6));
         if (sb.pushMode) pushReading();
         if (sb.group) updateShell();
         // (Apply force: the shell works, but its nodes and beams are not drawn, so that the car and the arrow are seen)
@@ -1058,6 +1061,17 @@ export function initSoftBody(api) {
         // a part with nodes of its own is hit on those nodes alone (the door dents, not what is behind it); anything else on the nodes of the body
         const loose = looseOf(hit.object);
         const group = loose && sb.layout && sb.layout.some((n) => n.part === loose.name) ? loose.name : null;
+        // a part that hangs on a hinge (that has not been opened) or breaks (glass, a lamp) feels the hit itself: it opens past its latch, tears at its force, shatters (Parts.hit)
+        const list = bench.obj && bench.obj.parts;
+        if (loose && list && list.hit) {
+            const p = list.parts.find((x) => x.name === loose.name);
+            if (p && (p.state !== "held" || p.hinge || p.shatter || p.breakForce > 0)) {
+                const d = hit.normal.clone().negate();
+                // (the world of the parts is the one of the car, not the scene of the editor: the push is at the middle of the part; the direction is that of the car on the bench, which stands as the model)
+                const what = list.hit(p, null, { x: d.x, y: d.y, z: d.z }, cubeMass * speed, cubeMass * speed / 0.03);
+                status(loose.name + ": " + what + " (cube of " + kmh.toFixed(0) + " km/h, " + Math.round(cubeMass * speed / 0.03 / 1000) + " kN).", "ok");
+            }
+        }
         s.pushPlate([local.x, local.y, local.z], [normal.x, normal.y, normal.z], cubeMass * speed / 0.03, side, cubeMass, 0.03, group);      // a push of 0.03 s that brings the cube to its speed
         // the arrow stays on the car while it is pushed
         const arrow = new THREE.ArrowHelper(normal.clone().negate(), local.clone().addScaledVector(normal, 0.8), 0.8, 0xff5555, 0.3, 0.18);

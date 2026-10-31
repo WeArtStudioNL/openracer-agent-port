@@ -496,7 +496,8 @@
             </div>
         </div>
     </div>
-    <div class="float bottom" id="crashBar" style="display:none">
+    <div class="float bottom" id="crashBar" style="display:none; flex-direction: column; align-items: center; gap: 6px;">
+        <div id="crashSpeed" style="font: 600 22px Arial, sans-serif; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,0.7);" title="The speed of the car, and the speed that it is going for">0 km/h</div>
         <button id="crashStop" class="small danger" title="Takes the wall away and puts the car back at its start">Stop crash test</button>
     </div>
     <button class="edgeTab left" id="toggleSide" title="Hide or show the left bar">‹</button>

@@ -1000,15 +1000,18 @@ OpenRacer.Parts = (function () {
             p.mounts.forEach(function (m) { m.alive = false; });
             return true;
         }
-        // A hit on a part from outside (the debug view): at a point, along dir (a unit vector, into the part), with an impulse (N s) and the force that it is over the time of the hit (N).
+        // A hit on a part from outside (the debug view, Apply force of the car editor): at a point (none: its middle), along dir (a unit vector, into the part), with an impulse (N s) and the force that it is over the time of the hit (N).
         // A part that is off the car (hinged or free) gets the impulse on its body; a hinge opens when the force passes its latch, tears at its break force or at the break force of a
         // pin; a part that is on the car (a breakable one, a part on a part) breaks off at its break force. Gives what happened.
         function hit(p, point, dir, impulse, force) {
             if (!p || p.state === "broken" || p.fetching) return "none";
             if (p.state === "held") {
                 if (p.hinge) {
-                    var latch = p.hinge.latch;
-                    if (!(force > latch) && isFinite(latch)) return "held";
+                    // it opens past the activation force of a pin (the pins that have one), or else past its latch; a hinge with neither stays shut
+                    var open = Infinity;
+                    p.mounts.forEach(function (m) { if (m.alive && m.activate > 0) open = Math.min(open, m.activate); });
+                    if (!isFinite(open) && isFinite(p.hinge.latch)) open = p.hinge.latch;
+                    if (!(force > open)) return "held";
                     startMoving(p, "hinge");
                 } else {
                     if (p.breakForce > 0 && force > p.breakForce) { comeOff(p); return p.shatter ? "broke" : "off"; }
@@ -1023,7 +1026,7 @@ OpenRacer.Parts = (function () {
                 if (p.hinge.breakForce > 0 && force > p.hinge.breakForce) { startMoving(p, "free"); result = "tore off"; }
                 else if (torn.length) { emit("mount torn", p); if (p.mounts.some(function (m) { return m.alive; })) joinHinge(p); else { startMoving(p, "free"); result = "tore off"; } }
             }
-            if (p.state === "hinged" || p.state === "free") p.body.applyImpulseAtPoint({ x: dir.x * impulse, y: dir.y * impulse, z: dir.z * impulse }, point, true);
+            if (p.state === "hinged" || p.state === "free") p.body.applyImpulseAtPoint({ x: dir.x * impulse, y: dir.y * impulse, z: dir.z * impulse }, point || p.body.translation(), true);
             return result;
         }
         // one part back on the car, held as it was made (a wheel: a wheel of the car again)
