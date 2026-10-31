@@ -345,9 +345,12 @@ OpenRacer.Vehicle = function (parameters, input) {
     var tc = OpenRacer.TyreCompounds[1];
     this.compound = 1;
     this.rubber = { front: null, rear: null };      // the rubber (0 to 100) of the custom tyre of an axle (Wheel.js, rubberCompound); null: the kind of tyre of the car
-    this.setRubber = function (front, rear) {
+    this.tread = { front: 0, rear: 0 };             // the tread (0 road to 100 knobbly) of the custom tyre of an axle (Wheel.js, TREAD_STOPS)
+    this.setRubber = function (front, rear, treadFront, treadRear) {
         this.rubber.front = front >= 0 ? Math.min(100, front) : null;
         this.rubber.rear = rear >= 0 ? Math.min(100, rear) : null;
+        if(treadFront !== undefined) this.tread.front = treadFront >= 0 ? Math.min(100, treadFront) : 0;
+        if(treadRear !== undefined) this.tread.rear = treadRear >= 0 ? Math.min(100, treadRear) : 0;
         this.setCompound(this.compound);
     };
     // What the size of a tyre does (a tyre that says its size: one of the wheel library or a custom one; the wheel of a model has none of this). The size is the area of the tread,
@@ -378,7 +381,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         for(var i = 0; i < 4; i++) {
             var w = this.wheels[i], axle = i < 2 ? "front" : "rear", rubber = this.rubber[axle];
             // (the rubber of a custom tyre: its own kind for the axle)
-            w.comp = rubber === null ? null : OpenRacer.rubberCompound(rubber);
+            w.comp = rubber === null ? null : OpenRacer.rubberCompound(rubber, this.tread[axle]);
             var kind = w.comp || tc;
             this.sizeOfTyre(w);
             w.compoundGrip = kind.grip; w.compoundLoose = kind.looseGrip || 1; w.compoundLooseSlide = kind.looseSlide || 0; w.condition = conditionOf(w) * (w.pressureGrip || 1);
@@ -567,7 +570,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         var i, w;
         if(t.mass !== undefined) { this.baseMass = t.mass; this.mass = t.mass + (this.wearEnabled ? this.fuel * 0.75 : 0); }
         if(t.compound !== undefined) this.setCompound(t.compound);
-        if(t.rubber_front !== undefined || t.rubber_rear !== undefined) this.setRubber(t.rubber_front !== undefined ? t.rubber_front : (this.rubber.front === null ? -1 : this.rubber.front), t.rubber_rear !== undefined ? t.rubber_rear : (this.rubber.rear === null ? -1 : this.rubber.rear));
+        if(t.rubber_front !== undefined || t.rubber_rear !== undefined || t.tread_front !== undefined || t.tread_rear !== undefined) this.setRubber(t.rubber_front !== undefined ? t.rubber_front : (this.rubber.front === null ? -1 : this.rubber.front), t.rubber_rear !== undefined ? t.rubber_rear : (this.rubber.rear === null ? -1 : this.rubber.rear), t.tread_front, t.tread_rear);
         if(t.tyre_heating !== undefined) this.tyreHeating = t.tyre_heating;
         if(t.tyre_life !== undefined) this.tyreLife = t.tyre_life;
         if(t.fuel_use !== undefined) this.fuelUse = t.fuel_use;

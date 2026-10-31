@@ -2646,6 +2646,8 @@ function tuneSlider(item, onChange) {
         range.value = Math.min(max, Math.max(min, v));
         // the rubber of a custom tyre says what kind of tyre it is (eco, road, sport, semi-slick, race slick, drag slick), as in the tuning menu of the game
         if ((key === "rubber_front" || key === "rubber_rear") && OpenRacer.rubberLabel) text.textContent = label + " · " + OpenRacer.rubberLabel(v);
+        // the tread: what pattern the tyre has (road, slick, all-terrain, knobbly)
+        if ((key === "tread_front" || key === "tread_rear") && OpenRacer.treadLabel) text.textContent = label + " · " + OpenRacer.treadLabel(v, tuning["rubber_" + key.slice(6)]);
         const changed = Number.isFinite(tuningBase[key]) && Math.abs(tuningBase[key] - v) > 1e-9;
         line.classList.toggle("changed", changed);
         reset.style.visibility = changed ? "" : "hidden";
@@ -3762,7 +3764,7 @@ $("changes").addEventListener("click", () => {
 });
 $("layerSearch").addEventListener("input", () => renderLayers());
 $("libSame").addEventListener("click", () => {
-    for (const k of ["tyre_diameter", "tyre_height", "rubber"]) if (Number.isFinite(tuning[k + "_front"])) tuning[k + "_rear"] = tuning[k + "_front"];          // (the tyre of the front too)
+    for (const k of ["tyre_diameter", "tyre_height", "rubber", "tread"]) if (Number.isFinite(tuning[k + "_front"])) tuning[k + "_rear"] = tuning[k + "_front"];          // (the tyre of the front too)
     if (Number.isFinite(tuning.tyre_width)) tuning.tyre_width_rear = 0;
     renderTuningCard();
     $("libRimRear").value = $("libRimFront").value; $("libTyreRear").value = $("libTyreFront").value;

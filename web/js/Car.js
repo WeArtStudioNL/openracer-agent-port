@@ -228,10 +228,11 @@ OpenRacer.Car = function( config, domElement ) {
         // a tyre of the wheel library brings its own shell (WheelLibrary.js): the wheel of the physics takes it over the car's tyres.shell (Vehicle.tyreShellOf)
         var specs = model.tyreSpecs || {};
         for(var si = 0; si < tobj.vehicle.wheels.length; si++) { var vw = tobj.vehicle.wheels[si]; vw.tyreSpec = specs[vw.name] || (vw.name === "FR" && specs.FL) || (vw.name === "RR" && specs.RL) || null; }
-        // the rubber of a custom tyre (the rubber slider, Wheel.js rubberCompound): the grip, the window and the wear of that axle follow it, and its width
+        // the rubber and the tread of a custom tyre (the sliders, Wheel.js rubberCompound): the grip, the window and the wear of that axle follow it, and its width
         if(OpenRacer.WheelLibrary) {
             var rubberOf = function(axle) { var ch = OpenRacer.WheelLibrary.choiceOf(config, axle); return ch.tyre === "custom" ? (ch.custom && ch.custom.rubber >= 0 ? ch.custom.rubber : 50) : -1; };
-            tobj.vehicle.setRubber(rubberOf("front"), rubberOf("rear"));
+            var treadOf = function(axle) { var ch = OpenRacer.WheelLibrary.choiceOf(config, axle); return ch.tyre === "custom" && ch.custom && ch.custom.tread >= 0 ? ch.custom.tread : 0; };
+            tobj.vehicle.setRubber(rubberOf("front"), rubberOf("rear"), treadOf("front"), treadOf("rear"));
         }
         tobj.body.add(model.tilt);
         scene.add(tobj.body);

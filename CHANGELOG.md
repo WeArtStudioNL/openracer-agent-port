@@ -2,6 +2,11 @@
 
 What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in `web/js/Version.js`.
 
+## Unreleased
+
+- **Off-road tyres with dynamic wheels.** A custom tyre now has a second slider next to the rubber: **tread**, from road (0) over all-terrain (50) to knobbly (100). The more tread, the more grip on loose ground (grass, sand, gravel, mud, dirt; up to 1.7 times), the less rolling resistance there, and the more grip in a slide; on tarmac it grips less (down to 0.82) and rolls heavier. A knobbly tyre with road rubber is exactly the *Off-road (knobbly)* kind of tyre. It is in the tuning menu and in the car editor.
+- The look of a custom tyre follows its pattern: slick, road, all-terrain (blocks) or knobbly (big lugs). `wheels.json` has a `treads` list with an entry for every pattern; give one a `"file"` (a .glb) and that model is fitted between the shells in place of the one made from numbers.
+
 ## 2.2.0 (2026-10-31)
 
 Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every car, motorcycles with a rider and a ragdoll crash, a driver in the car, replays as files with a video editor, a new menu, the drag strip, and much more. Per subject:

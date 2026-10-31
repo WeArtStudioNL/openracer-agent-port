@@ -133,5 +133,23 @@
         "carcass": 0
       }
     }
+  ],
+  "treads": [
+    {
+      "id": "slick",
+      "name": "Slick"
+    },
+    {
+      "id": "road",
+      "name": "Road"
+    },
+    {
+      "id": "allterrain",
+      "name": "All-terrain"
+    },
+    {
+      "id": "knobbly",
+      "name": "Knobbly"
+    }
   ]
 }

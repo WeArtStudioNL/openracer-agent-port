@@ -16,6 +16,15 @@
  *              tyre outwards (the track with it). tools/make-wheels.py writes a set
  *              of plain examples.
  *
+ *              The TREADS: the look of a custom tyre for every pattern of tread (Wheel.js, treadPattern: "slick", "road", "allterrain", "knobbly"), from the rubber and the tread sliders:
+ *
+ *                "treads": [ { "id": "knobbly", "name": "Knobbly", "file": "tyres/tread-knobbly.glb" }, ... ]
+ *
+ *              The file is a tyre like those above (the axle along X, the middle at the origin), at any size: it is fitted between the inner and the outer shell of the custom tyre
+ *              (the radius from the bead to the top of the tread stretched to the height of the sidewall, the width to the width of the tyre), so the profile keeps its depth as
+ *              a share of the sidewall. A pattern without a file, or a file that did not load, is made from numbers (customMesh: no grooves on a slick, three on a road tyre,
+ *              blocks on an all-terrain tyre, big lugs on a knobbly one).
+ *
  *              The SHELL of the tyre (TyreShell.js: the rings of nodes across the tread, the nodes round the wheel, the radius of the inner shell as a share of the tyre,
  *              the carcass in mm) is a property of the tyre, set once here, and goes with the tyre to every car that mounts it: "tyres.shell" of car.json is not used for
  *              an axle on a tyre of the library, and the tuning menu hides those sliders. Without "inner_ratio" the rim that is mounted gives it (its radius over the
@@ -40,7 +49,7 @@
 
 OpenRacer.WheelLibrary = (function () {
     var lib = { base: null };
-    var catalog = { rims: [], tyres: [] }, loading = null, loaded = false;
+    var catalog = { rims: [], tyres: [], treads: [] }, loading = null, loaded = false;
     var cache = {};                      // url -> { scene, size: { diameter, width } } or { error }
     var AXLE_OF = { FR: "front", FL: "front", RL: "rear", RR: "rear" }, LEFT = { FL: true, RL: true };
 
@@ -51,7 +60,8 @@ OpenRacer.WheelLibrary = (function () {
         if(base !== undefined && base !== null) lib.base = base;
         if(loading) return loading;
         loading = fetch(url("wheels.json"), { cache: "no-store" }).then(function (r) { if(!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).then(function (json) {
-            catalog = { rims: Array.isArray(json.rims) ? json.rims.filter(function (e) { return e && e.id && e.file; }) : [], tyres: Array.isArray(json.tyres) ? json.tyres.filter(function (e) { return e && e.id && e.file; }) : [] };
+            catalog = { rims: Array.isArray(json.rims) ? json.rims.filter(function (e) { return e && e.id && e.file; }) : [], tyres: Array.isArray(json.tyres) ? json.tyres.filter(function (e) { return e && e.id && e.file; }) : [],
+                treads: Array.isArray(json.treads) ? json.treads.filter(function (e) { return e && e.id; }) : [] };
             loaded = true;
             return catalog;
         }).catch(function (e) { console.warn("WheelLibrary: no wheels/wheels.json (" + (e && e.message || e) + ")"); loaded = true; return catalog; });
@@ -62,6 +72,7 @@ OpenRacer.WheelLibrary = (function () {
     function find(list, id) { for(var i = 0; i < list.length; i++) if(list[i].id === id) return list[i]; return null; }
     function rim(id) { return id ? find(catalog.rims, id) : null; }
     function tyre(id) { return id ? find(catalog.tyres, id) : null; }
+    function treadOf(pattern) { var t = find(catalog.treads, pattern); return t && t.file ? t : null; }
 
     // what car.json chose for an axle ("library": { "front": { "rim", "tyre" }, "rear": { ... } }; or { "rim", "tyre" } for both axles)
     function choiceOf(config, axle) {
@@ -81,17 +92,54 @@ OpenRacer.WheelLibrary = (function () {
         var width = k.width > 0 ? k.width : 0.245, diameter = k.diameter > 0 ? k.diameter : 0.65;
         var ratio = k.inner_ratio > 0 ? Math.max(0.3, Math.min(0.9, k.inner_ratio)) : 0.7;
         return { width: width, diameter: diameter, inner_ratio: ratio, rings: k.rings > 0 ? k.rings : 4, segments: k.segments > 0 ? k.segments : 36, carcass: k.carcass > 0 ? k.carcass : 0,
-            rubber: k.rubber >= 0 ? Math.min(100, k.rubber) : 50 };
+            rubber: k.rubber >= 0 ? Math.min(100, k.rubber) : 50, tread: k.tread >= 0 ? Math.min(100, k.tread) : 0 };
+    }
+    function patternOf(spec) { return OpenRacer.treadPattern ? OpenRacer.treadPattern(spec.tread, spec.rubber) : (spec.rubber < 75 ? "road" : "slick"); }
+    // the geometries of a list in one (position, normal, uv; without an index)
+    function merge(list) {
+        var parts = list.map(function (g) { return g.index ? g.toNonIndexed() : g; }), count = 0;
+        parts.forEach(function (g) { count += g.attributes.position.count; });
+        var out = new THREE.BufferGeometry(), at = 0;
+        var pos = new Float32Array(count * 3), nor = new Float32Array(count * 3), uv = new Float32Array(count * 2);
+        parts.forEach(function (g) {
+            pos.set(g.attributes.position.array, at * 3); nor.set(g.attributes.normal.array, at * 3); uv.set(g.attributes.uv.array, at * 2);
+            at += g.attributes.position.count;
+        });
+        out.setAttribute("position", new THREE.BufferAttribute(pos, 3)); out.setAttribute("normal", new THREE.BufferAttribute(nor, 3)); out.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+        out.computeBoundingSphere(); out.computeBoundingBox();
+        return out;
+    }
+    // the blocks of an off-road tread: rows across the tyre (the middle of the block across the tread as a share of the width, its width as a share, its length round the tyre as
+    // a share of the pitch, and a shift round the tyre as a share of the pitch, which staggers the rows), every block a box that stands on the carcass and reaches the outer shell
+    var TREAD_BLOCKS = {
+        allterrain: { depth: 0.009, pitch: 0.045, rows: [[-0.36, 0.2, 0.62, 0], [-0.12, 0.2, 0.55, 0.5], [0.12, 0.2, 0.55, 0], [0.36, 0.2, 0.62, 0.5]] },
+        knobbly: { depth: 0.016, pitch: 0.075, rows: [[-0.42, 0.18, 0.5, 0], [-0.15, 0.26, 0.45, 0.5], [0.15, 0.26, 0.45, 0], [0.42, 0.18, 0.5, 0.5]] }
+    };
+    function treadBlocks(kind, R, W) {
+        var depth = kind.depth, n = Math.max(12, Math.round(2 * Math.PI * R / kind.pitch)), step = 2 * Math.PI / n, list = [];
+        kind.rows.forEach(function (row) {
+            var len = 2 * Math.PI * R / n * row[2];
+            for(var i = 0; i < n; i++) {
+                // (one more mm into the carcass: no gap where the box meets the round of the lathe)
+                var box = new THREE.BoxGeometry(row[1] * W, depth + 0.001, len);
+                box.translate(row[0] * W, R - (depth + 0.001) / 2, 0);
+                box.rotateX((i + row[3]) * step);
+                list.push(box);
+            }
+        });
+        return list;
     }
     var customCache = {};
     function customMesh(spec) {
-        var key = [spec.width, spec.diameter, spec.inner_ratio, spec.rubber < 75 ? 1 : 0].join("|");
+        var pattern = patternOf(spec), blocks = TREAD_BLOCKS[pattern];
+        var key = [spec.width, spec.diameter, spec.inner_ratio, pattern].join("|");
         if(customCache[key]) return customCache[key].clone(true);
-        var R = spec.diameter / 2, Ri = R * spec.inner_ratio, W = spec.width, H = R - Ri, pts = [];
+        // (an off-road tread: the carcass ends under the blocks, which stand on it up to the outer shell)
+        var R0 = spec.diameter / 2, R = blocks ? R0 - blocks.depth : R0, Ri = R0 * spec.inner_ratio, W = spec.width, H = R - Ri, pts = [];
         function p(r, a) { pts.push(new THREE.Vector2(r, a)); }
         // (the profile as radius and position along the axle, from the bead on one side over the tread to the bead on the other)
         p(Ri, -0.43 * W); p(Ri + 0.14 * H, -0.5 * W); p(Ri + 0.5 * H, -0.505 * W); p(Ri + 0.82 * H, -0.47 * W); p(R - 0.025 * H, -0.4 * W); p(R, -0.31 * W);
-        if(spec.rubber < 75) {
+        if(pattern === "road") {
             // the grooves of a tyre for the road: three, 4 mm deep
             [-0.16, 0, 0.16].forEach(function(at) { p(R, (at - 0.03) * W); p(R - 0.004, (at - 0.022) * W); p(R - 0.004, (at + 0.022) * W); p(R, (at + 0.03) * W); });
         }
@@ -99,7 +147,8 @@ OpenRacer.WheelLibrary = (function () {
         var geometry = new THREE.LatheGeometry(pts, 72);
         geometry.rotateZ(-Math.PI / 2);                               // (the lathe turns about Y: the wheel turns about X)
         geometry.computeVertexNormals();
-        var mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0x151516, roughness: spec.rubber > 75 ? 0.62 : 0.88, metalness: 0, side: THREE.DoubleSide }));
+        if(blocks) geometry = merge([geometry].concat(treadBlocks(blocks, R0, W)));
+        var mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0x151516, roughness: pattern === "slick" ? 0.62 : 0.88, metalness: 0, side: THREE.DoubleSide }));
         mesh.name = "tyre_custom";
         customCache[key] = mesh;
         return mesh.clone(true);
@@ -125,7 +174,9 @@ OpenRacer.WheelLibrary = (function () {
             var c = choiceOf(config, axle), r = rim(c.rim), t = c.tyre === CUSTOM_ID ? null : tyre(c.tyre);
             if(c.rim && !r) console.warn("WheelLibrary: no rim '" + c.rim + "' in wheels.json");
             if(c.tyre && c.tyre !== CUSTOM_ID && !t) console.warn("WheelLibrary: no tyre '" + c.tyre + "' in wheels.json");
-            [r, t].forEach(function (e) { if(e && list.indexOf(e.file) < 0) list.push(e.file); });
+            // (a custom tyre: the model of its pattern of tread, when the catalogue has one)
+            var tr = c.tyre === CUSTOM_ID && !c.model ? treadOf(patternOf(customSpec(c.custom))) : null;
+            [r, t, tr].forEach(function (e) { if(e && list.indexOf(e.file) < 0) list.push(e.file); });
         });
         return list;
     }
@@ -283,6 +334,16 @@ OpenRacer.WheelLibrary = (function () {
         return group;
     }
 
+    // the model of the pattern of tread of a custom tyre (the "treads" of the catalogue), fitted between the shells; null when there is none or it did not load
+    function treadModel(spec) {
+        var tr = treadOf(patternOf(spec)), tf = entryFile(tr);
+        if(!tf) return null;
+        if(!tf.baked) tf.baked = bake(tf.scene);
+        if(!tf.baked) return null;
+        var group = modelTyre(tf.baked, spec);
+        group.name = "tyre_tread_" + tr.id;
+        return group;
+    }
     // the wheel of a slot with a custom tyre: the tyre between the shells, and the rim (of the library or a plain one) scaled to the inner shell
     function customWheel(c, slot, r, rf, root) {
         var spec = customSpec(c.custom);
@@ -305,14 +366,14 @@ OpenRacer.WheelLibrary = (function () {
             var holder = new THREE.Object3D(); holder.add(rimObject); rimObject = holder;
         } else rimObject = plainRim(spec);
         inner.add(rimObject);
-        inner.add(modelParts && modelParts.tyre ? modelTyre(modelParts.tyre, spec) : customMesh(spec));
+        inner.add(modelParts && modelParts.tyre ? modelTyre(modelParts.tyre, spec) : (treadModel(spec) || customMesh(spec)));
         object.add(inner);
         object.traverse(function (child) { if(child.isMesh) { child.castShadow = true; child.receiveShadow = false; } });
         var shell = { width: spec.width, rings: spec.rings, segments: spec.segments, inner_ratio: spec.inner_ratio, carcass: spec.carcass, diameter: spec.diameter };
         return { object: object, diameter: spec.diameter, width: spec.width, shell: shell, offset: r && r.offset > 0 ? r.offset : 0, rim: r, tyre: { id: CUSTOM_ID, custom: spec }, rubber: spec.rubber };
     }
 
-    lib.load = load; lib.rims = rims; lib.tyres = tyres; lib.rim = rim; lib.tyre = tyre; lib.choiceOf = choiceOf; lib.uses = uses; lib.usesAxle = usesAxle;
+    lib.load = load; lib.rims = rims; lib.tyres = tyres; lib.treads = function () { return catalog.treads; }; lib.rim = rim; lib.tyre = tyre; lib.choiceOf = choiceOf; lib.uses = uses; lib.usesAxle = usesAxle;
     lib.preload = preload; lib.wheelFor = wheelFor; lib.modelParts = modelWheelParts; lib.modelObjects = modelObjects; lib.shellOf = shellOf; lib.filesFor = filesFor;
     lib.ready = function () { return loaded; }; lib.problems = problems;
     return lib;

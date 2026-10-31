@@ -53,7 +53,21 @@ OpenRacer.rubberLabel = function (rubber) {
     OpenRacer.RUBBER_STOPS.forEach(function (s) { if(Math.abs(s[1] - at) < Math.abs(best[1] - at)) best = s; });
     return best[2];
 };
-OpenRacer.rubberCompound = function (rubber) {
+// The tread of a custom tyre: a second slider, from 0 to 100, apart from the rubber (how soft it is): from a tyre for the road (0) over an all-terrain tyre (50) to a knobbly one
+// (100). The more profile, the more of the off-road kind above: more grip on the loose ground (grass, sand, gravel, mud, dirt), less rolling resistance there and a slide that keeps
+// its grip, and less grip and more rolling resistance on tarmac. The pattern (treadPattern) is what the tyre looks like: a slick (a soft rubber without profile), a road tyre,
+// an all-terrain or a knobbly one (WheelLibrary.js: a model of the catalogue for every pattern, or one made from numbers).
+OpenRacer.TREAD_STOPS = [["road", 0, "Road"], ["allterrain", 50, "All-terrain"], ["knobbly", 100, "Knobbly"]];
+OpenRacer.treadPattern = function (tread, rubber) {
+    var at = Math.max(0, Math.min(100, tread || 0));
+    if(at >= 75) return "knobbly";
+    if(at >= 25) return "allterrain";
+    return rubber >= 75 ? "slick" : "road";
+};
+OpenRacer.treadLabel = function (tread, rubber) {
+    return { slick: "Slick", road: "Road", allterrain: "All-terrain", knobbly: "Knobbly" }[OpenRacer.treadPattern(tread, rubber)];
+};
+OpenRacer.rubberCompound = function (rubber, tread) {
     var stops = OpenRacer.RUBBER_STOPS, at = Math.max(0, Math.min(100, rubber)), i = 0;
     while(i < stops.length - 2 && at > stops[i + 1][1]) i++;
     function kind(id) { return OpenRacer.TyreCompounds.filter(function (k) { return k.id === id; })[0]; }
@@ -65,6 +79,16 @@ OpenRacer.rubberCompound = function (rubber) {
         out[k] = k === "life" ? x * Math.pow(y / x, f) : x + (y - x) * f;
     });
     if(out.lateral === 1) delete out.lateral;
+    // (the tread: at 100 the numbers of the off-road kind against a road tyre, on top of the rubber)
+    var t = Math.max(0, Math.min(100, tread || 0)) / 100;
+    if(t > 0) {
+        out.grip *= 1 - 0.18 * t;
+        out.rolling *= 1 + 0.25 * t;
+        out.looseGrip = 1 + 0.7 * t;
+        out.looseRolling = 1 - 0.4 * t;
+        out.looseSlide = 0.84 + 0.13 * t;
+        out.name += ", " + OpenRacer.treadLabel(tread, rubber).toLowerCase();
+    }
     return out;
 };
 
