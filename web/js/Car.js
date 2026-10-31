@@ -59,7 +59,7 @@ OpenRacer.Car = function( config, domElement ) {
         // the follow camera on a desktop: the right mouse button and a drag turn it about the car (left and right) and lift or lower it (up and down); [ ] and the reset key still work
         window.addEventListener("pointerdown", function(e) {
             if(e.button !== 2 || e.pointerType === "touch" || tobj.cameraMode !== 2 || typeof renderer === "undefined" || e.target !== renderer.domElement) return;
-            if(OpenRacer.Replay && OpenRacer.Replay.active) return;
+            if(OpenRacer.Replay && OpenRacer.Replay.active && OpenRacer.Replay.free && OpenRacer.Replay.free.active) return;          // (the free camera of a replay has the mouse)
             if(OpenRacer.DebugView && OpenRacer.DebugView.isOn() && OpenRacer.DebugView.partToolOn && OpenRacer.DebugView.partToolOn()) return;       // (the right button of the debug tools)
             orbit = { x: e.clientX, y: e.clientY, id: e.pointerId };
             try { renderer.domElement.setPointerCapture(e.pointerId); } catch(err) { /* a synthetic event */ }
@@ -73,7 +73,7 @@ OpenRacer.Car = function( config, domElement ) {
         });
         window.addEventListener("pointerup", function(e) { if(orbit && e.pointerId === orbit.id) orbit = null; });
         window.addEventListener("wheel", function(e) {
-            if(tobj.cameraMode !== 2 || typeof renderer === "undefined" || e.target !== renderer.domElement || (OpenRacer.Replay && OpenRacer.Replay.active) || e.ctrlKey) return;
+            if(tobj.cameraMode !== 2 || typeof renderer === "undefined" || e.target !== renderer.domElement || e.ctrlKey || (OpenRacer.Replay && OpenRacer.Replay.active && OpenRacer.Replay.free && OpenRacer.Replay.free.active)) return;
             tobj.cameraZoom = Math.max(0.3, Math.min(4, tobj.cameraZoom * Math.exp(Math.max(-300, Math.min(300, e.deltaY)) * 0.0015)));
             e.preventDefault();
         }, { passive: false });
@@ -508,7 +508,15 @@ OpenRacer.Car = function( config, domElement ) {
     var bodyQuaternion = { x: 0, y: 0, z: 0, w: 1 };
     var bodyUp = new THREE.Vector3();
 
+    var camKeysAt = 0;
     this.updateVisuals = function(delta) {
+        // in a replay the game does not run (Car.update is not called): the keys that turn the follow camera are read here, by the clock
+        if(OpenRacer.Replay && OpenRacer.Replay.active) {
+            var nowMs = performance.now(), dtKeys = Math.min(0.1, (nowMs - camKeysAt) / 1000);
+            camKeysAt = nowMs;
+            if(Settings.isDown("cameraLeft")) this.cameraAngle += 2 * dtKeys;
+            if(Settings.isDown("cameraRight")) this.cameraAngle -= 2 * dtKeys;
+        }
         var v = this.vehicle;
         var w = this.wheels;
         this.carAngle = v.psi;
