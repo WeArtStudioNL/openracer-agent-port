@@ -981,7 +981,10 @@ function currentSizes() {
     return { dimensions: { length: num("length") || 4.5, width: num("width") || 1.8, height: num("height") || 1.35 }, chassis: { tire_diameter: num("tyre") || 0.65 } };
 }
 
+// (the tuning menu's "hide the driver" of the cockpit camera: no field in the form, kept as it is)
+let cockpitHideDriver = false;
 function fillCameras(cameras) {
+    cockpitHideDriver = !!cameras.cockpit.hide_driver;
     for (const [id, get] of Object.entries(CAM_FIELDS)) $(id).value = get(cameras);
     updateCameraMarkers();
 }
@@ -995,7 +998,7 @@ function readCameras() {
     return {
         follow: { distance: n("camFolDist"), height: n("camFolHeight"), look_height: n("camFolLook"), look_z: n("camFolLookZ") || 0, smoothing: n("camFolSmooth"),
             fov_standing: n("camFolFovStand"), fov_fast: n("camFolFovFast"), fov_full_speed: n("camFolSpeed") / 3.6, dolly: n("camFolDolly") },
-        cockpit: { position: [n("camCockX"), n("camCockY"), n("camCockZ")], fov: n("camCockFov") }
+        cockpit: { position: [n("camCockX"), n("camCockY"), n("camCockZ")], fov: n("camCockFov"), hide_driver: !!cockpitHideDriver }
     };
 }
 
@@ -2520,7 +2523,7 @@ const EDITOR_HAS = new Set(["mass", "front_weight", "cg_height", "drag_coefficie
     // (the rows of the tuning menu that the form has as its own cards)
     "efficiency", "length", "width", "height", "steering_degrees", "gen_power", "gen_peak_rpm", "sb_max_nodes", "sb_wheel_strength",
     "cam_follow_distance", "cam_follow_height", "cam_follow_look_height", "cam_follow_look_z", "cam_follow_smoothing", "cam_follow_fov_standing", "cam_follow_fov_fast", "cam_follow_fov_full_speed", "cam_follow_dolly",
-    "cam_cockpit_x", "cam_cockpit_y", "cam_cockpit_z", "cam_cockpit_fov",
+    "cam_cockpit_x", "cam_cockpit_y", "cam_cockpit_z", "cam_cockpit_fov", "cam_cockpit_hide_driver",
     "bike_max_lean", "bike_fast_lean", "bike_rake", "bike_rider_mass", "bike_hang_off", "bike_max_lateral_g", "bike_balance", "bike_fork_dive"]);
 const TUNING_KEYS = OpenRacer.CarTuning.keys().filter((k) => !EDITOR_HAS.has(k));
 let tuning = {};

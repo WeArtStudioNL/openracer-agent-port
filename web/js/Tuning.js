@@ -486,6 +486,25 @@ var Tuning = (function() {
         return item;
     }
 
+    // A setting that is on or off (a checkbox in the card of its group)
+    function boolRow(key, label) {
+        var item = document.createElement("div");
+        item.className = "item";
+        var line = document.createElement("label");
+        line.className = "line featureLine";
+        var box = document.createElement("input");
+        box.type = "checkbox";
+        var text = document.createElement("span");
+        text.className = "label";
+        text.textContent = label;
+        line.appendChild(box);
+        line.appendChild(text);
+        item.appendChild(line);
+        box.addEventListener("change", function() { set(key, box.checked); box.blur(); });
+        controls.push({ key: key, bool: box, line: line });
+        return item;
+    }
+
     // An extra with a checkbox: its settings are in a container below it that is open while the box is ticked
     function featureRow(feature) {
         var wrap = document.createElement("div");
@@ -758,6 +777,7 @@ var Tuning = (function() {
                 if(SELECTS[def[0]]) target.appendChild(selectRow(def[0]));
                 else if(COLORS[def[0]]) target.appendChild(colorRow(def[0]));
                 else if(def[0] === "gears") target.appendChild(gearsRow());
+                else if(def[0] === "cam_cockpit_hide_driver") target.appendChild(boolRow(def[0], def[1]));
                 else target.appendChild(slider(def));
             });
             if(fineCount) details.appendChild(fine);
@@ -975,6 +995,9 @@ var Tuning = (function() {
             } else if(c.checkbox) {
                 c.checkbox.checked = !!values[c.key];
                 c.inner.style.display = values[c.key] ? "block" : "none";
+                c.line.classList.toggle("changed", changed(c.key));
+            } else if(c.bool) {
+                c.bool.checked = !!values[c.key];
                 c.line.classList.toggle("changed", changed(c.key));
             }
         });

@@ -581,7 +581,10 @@ OpenRacer.Car = function( config, domElement ) {
         // the driver: the hands on the steering wheel, the feet on the pedals (the head is not drawn in the cockpit view, it is in front of the camera)
         if(this.driver) {
             // (the camera of a replay that is its own, the free and the cinematic one, is outside the car whatever the camera of the game is)
-            this.driver.setCockpit(this.cameraMode === 3 && !(OpenRacer.Replay && OpenRacer.Replay.active && OpenRacer.Replay.ownCamera));
+            var inCockpit = this.cameraMode === 3 && !(OpenRacer.Replay && OpenRacer.Replay.active && OpenRacer.Replay.ownCamera);
+            this.driver.setCockpit(inCockpit);
+            // the driver can be hidden in the cockpit view as a whole (the tuning menu: Cameras, "hide the driver"; the hands and the feet go with him)
+            this.driver.root.visible = !(inCockpit && this.cameraSettings.cockpit.hide_driver);
             var rearWheel = this.vehicle.wheels[2], roadY = rearWheel && rearWheel.hasContact && rearWheel.center ? rearWheel.center.y - rearWheel.radius : undefined;     // (the road under the rear wheel, in the world: for the foot of a rider)
             // (in a replay the gear is the recorded label: "N", "3", "D3", ...)
             var gearNow = this.current_gear, neutralNow = this.neutral, label = OpenRacer.Replay && OpenRacer.Replay.active ? this.replayGear : undefined;

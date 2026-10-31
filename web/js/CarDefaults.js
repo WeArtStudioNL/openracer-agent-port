@@ -10,7 +10,7 @@
  *            dolly (0 to 1): the camera comes closer in the measure that the field of view widens, so that the car keeps its size in
  *            the picture and only the sense of speed changes (1); 0 leaves the camera where it is. The distance and the height are those at a standstill.
  *   cockpit: the camera in the car (camera 2): position [x, y, z] from the origin of the model (x to the left, y up from the
- *            height of the axles, z forward) and the field of view.
+ *            height of the axles, z forward), the field of view, and hide_driver: the driver (the figure of Driver.js) is not drawn in this view.
  *   Every field of view is the vertical angle in degrees.
  */
 
@@ -22,7 +22,7 @@ OpenRacer.cameraSettings = function (config) {
     var defaults = {
         follow: { distance: round(d.length * 1.55, 1), height: round(d.height * 1.6, 2), look_height: round(d.height * 0.6, 2), look_z: 0,
             smoothing: 3.5, fov_standing: 45, fov_fast: 75, fov_full_speed: 70, dolly: 1 },
-        cockpit: { position: [round(d.width * 0.2, 2), round(d.height * 0.8 - r, 2), round(d.length * 0.05, 2)], fov: 75 }
+        cockpit: { position: [round(d.width * 0.2, 2), round(d.height * 0.8 - r, 2), round(d.length * 0.05, 2)], fov: 75, hide_driver: false }
     };
     var result = {};
     Object.keys(defaults).forEach(function (name) {

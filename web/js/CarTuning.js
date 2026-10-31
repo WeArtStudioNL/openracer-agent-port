@@ -163,7 +163,8 @@ OpenRacer.CarTuning = (function () {
             ["cam_cockpit_x", "Cockpit camera: to the left", "m", -1.5, 1.5, 0.01],
             ["cam_cockpit_y", "Cockpit camera: height", "m", -1, 3, 0.01],
             ["cam_cockpit_z", "Cockpit camera: forward", "m", -3, 3, 0.01],
-            ["cam_cockpit_fov", "Cockpit camera: field of view", "°", 30, 130, 1]
+            ["cam_cockpit_fov", "Cockpit camera: field of view", "°", 30, 130, 1],
+            ["cam_cockpit_hide_driver", "Cockpit camera: hide the driver", "", 0, 1, 1]
         ] },
         // (the shell, its dents and the strength of the wheels are not in a setup: they are those of the car, set in the Soft body card of the car editor; Setups.configOf)
         { name: "Motorcycle", items: [
@@ -582,7 +583,7 @@ OpenRacer.CarTuning = (function () {
             var f = cams.follow, k = cams.cockpit;
             v.cam_follow_distance = f.distance; v.cam_follow_height = f.height; v.cam_follow_look_height = f.look_height; v.cam_follow_look_z = f.look_z; v.cam_follow_smoothing = f.smoothing;
             v.cam_follow_fov_standing = f.fov_standing; v.cam_follow_fov_fast = f.fov_fast; v.cam_follow_fov_full_speed = f.fov_full_speed; v.cam_follow_dolly = f.dolly;
-            v.cam_cockpit_x = k.position[0]; v.cam_cockpit_y = k.position[1]; v.cam_cockpit_z = k.position[2]; v.cam_cockpit_fov = k.fov;
+            v.cam_cockpit_x = k.position[0]; v.cam_cockpit_y = k.position[1]; v.cam_cockpit_z = k.position[2]; v.cam_cockpit_fov = k.fov; v.cam_cockpit_hide_driver = !!k.hide_driver;
         } catch(e) { /* a configuration without dimensions: no cameras */ }
     }
 
@@ -722,7 +723,7 @@ OpenRacer.CarTuning = (function () {
             c.cameras = {
                 follow: { distance: v.cam_follow_distance, height: v.cam_follow_height, look_height: v.cam_follow_look_height, look_z: v.cam_follow_look_z, smoothing: v.cam_follow_smoothing,
                     fov_standing: v.cam_follow_fov_standing, fov_fast: v.cam_follow_fov_fast, fov_full_speed: v.cam_follow_fov_full_speed, dolly: v.cam_follow_dolly },
-                cockpit: { position: [v.cam_cockpit_x, v.cam_cockpit_y, v.cam_cockpit_z], fov: v.cam_cockpit_fov }
+                cockpit: { position: [v.cam_cockpit_x, v.cam_cockpit_y, v.cam_cockpit_z], fov: v.cam_cockpit_fov, hide_driver: !!v.cam_cockpit_hide_driver }
             };
         }
         if(v.sb_enabled !== undefined) {
