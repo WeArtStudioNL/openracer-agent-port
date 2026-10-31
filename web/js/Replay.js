@@ -75,7 +75,9 @@ OpenRacer.Replay = (function() {
         array[offset + P.throttle] = object.throttle || 0;
         array[offset + P.brake] = object.brakePedal || 0;
         array[offset + P.gear] = entry.player ? gearIndex(object) : 0;
-        array[offset + P.present] = isReady(object) ? 1 : 0;
+        // (present: 0 for a car that is not there, else 1.01 plus how hard the tyres squeal, 0..1: the sound of a replay is the sound of the drive, not a guess from the slip of the
+        // body; a file from before this has exactly 1, and the sound is then estimated, below)
+        array[offset + P.present] = isReady(object) ? 1.01 + Math.max(0, Math.min(1, v.squeal || 0)) : 0;
         for(var k = 0; k < 4; k++) {
             var w = v.wheels[k], o = offset + FIELDS + k * WHEEL_FIELDS;
             array[o] = w.center.x - v.vx * lag; array[o + 1] = w.center.y - v.vy * lag; array[o + 2] = w.center.z - v.vz * lag;
@@ -97,7 +99,8 @@ OpenRacer.Replay = (function() {
         // the spin is an angle that is interpolated, no speed can be read from it)
         var fwd = rotateZ(v.qx, v.qy, v.qz, v.qw), u = v.vx * fwd.x + v.vz * fwd.z, side = -v.vx * fwd.z + v.vz * fwd.x, speed = Math.hypot(v.vx, v.vz);
         var slipBody = speed > 3 ? Math.abs(Math.atan2(side, Math.max(Math.abs(u), 1))) : 0;
-        v.squeal = smoothstep(0.1, 0.3, slipBody) * smoothstep(3, 8, speed);
+        var recorded = array[offset + P.present];
+        v.squeal = recorded > 1.005 ? Math.min(1, recorded - 1.01) : smoothstep(0.1, 0.3, slipBody) * smoothstep(3, 8, speed);      // (recorded, or for an older file read from the slip)
         for(var k = 0; k < 4; k++) {
             var w = v.wheels[k], o = offset + FIELDS + k * WHEEL_FIELDS;
             w.center.x = array[o]; w.center.y = array[o + 1]; w.center.z = array[o + 2];
