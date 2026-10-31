@@ -72,7 +72,7 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 ### The follow camera orbits with the right mouse button
 
-- **On a desktop the right mouse button and a drag turn the follow camera about the car** (left and right) and lift or lower it (up and down), at the same distance; `[` and `]` and the reset key (`) work as before and the reset also brings the height back. A drag with the left button does nothing, and the debug tools that use the right button keep it.
+- **On a desktop the right mouse button and a drag turn the follow camera about the car** (left and right) and lift or lower it (up and down), at the same distance; `[` and `]` and the reset key (`) work as before and the reset also brings the height back. The wheel of the mouse brings the follow camera nearer or further (0.3 to 4 times its distance; the reset key puts it back). A drag with the left button does nothing, and the debug tools that use the right button keep it.
 
 ### A model for every engine
 

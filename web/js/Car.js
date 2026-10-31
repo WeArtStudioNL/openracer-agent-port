@@ -52,6 +52,7 @@ OpenRacer.Car = function( config, domElement ) {
     this.Cdrag = 0.5 * this.Cd * this.frontal_area * air_density;
     this.reset = false;
     this.cameraAngle = 0;
+    this.cameraZoom = 1;                  // the follow camera nearer or further (the wheel of the mouse), times its distance
     this.cameraElev = 0;                  // the follow camera higher or lower about the car (right mouse button and drag, with cameraAngle: an orbit)
     var orbit = null;
     if(typeof window !== "undefined") {
@@ -71,6 +72,11 @@ OpenRacer.Car = function( config, domElement ) {
             orbit.x = e.clientX; orbit.y = e.clientY;
         });
         window.addEventListener("pointerup", function(e) { if(orbit && e.pointerId === orbit.id) orbit = null; });
+        window.addEventListener("wheel", function(e) {
+            if(tobj.cameraMode !== 2 || typeof renderer === "undefined" || e.target !== renderer.domElement || (OpenRacer.Replay && OpenRacer.Replay.active) || e.ctrlKey) return;
+            tobj.cameraZoom = Math.max(0.3, Math.min(4, tobj.cameraZoom * Math.exp(Math.max(-300, Math.min(300, e.deltaY)) * 0.0015)));
+            e.preventDefault();
+        }, { passive: false });
         window.addEventListener("contextmenu", function(e) { if(tobj.cameraMode === 2 && typeof renderer !== "undefined" && e.target === renderer.domElement) e.preventDefault(); });
     }
     
@@ -733,9 +739,9 @@ OpenRacer.Car = function( config, domElement ) {
             camera.rotation.set(0, followYaw + Math.PI + this.cameraAngle, 0);
             var lookZ = f.look_z || 0;                      // the point that it looks at, ahead of the middle of the car (or behind it: negative)
             camera.getWorldDirection(lookDir);
-            camera.translateZ(f.distance * scale);
+            camera.translateZ(f.distance * scale * this.cameraZoom);
             camera.position.y = avgGround + f.look_height + (f.height - f.look_height) * scale;
-            if(this.cameraElev) camera.position.y += Math.tan(this.cameraElev) * f.distance * scale;          // (the orbit: higher or lower about the car, the same distance)
+            if(this.cameraElev) camera.position.y += Math.tan(this.cameraElev) * f.distance * scale * this.cameraZoom;          // (the orbit: higher or lower about the car, the same distance)
             keepCameraInView(subject, delta);
             camera.lookAt(cx + lookDir.x * lookZ, avgGround + f.look_height, cz + lookDir.z * lookZ);
             if(this.vehicle.controller) this.vehicle.controller.cameraRoll(camera, this.vehicle, delta);      // (a motorcycle: the picture leans with the bike)
