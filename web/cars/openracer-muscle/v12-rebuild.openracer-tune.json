@@ -1,0 +1,2236 @@
+{
+ "openracer-tune": 1,
+ "car": "openracer-muscle",
+ "name": "V12 rebuild",
+ "saved": "2026-10-30T15:59:09.391Z",
+ "config": {
+  "name": "OpenRacer Muscle",
+  "description": "",
+  "wheels": {
+   "mode": "default",
+   "nodes": {
+    "FR": [
+     "wheel_FR"
+    ],
+    "FL": [
+     "wheel_FL"
+    ],
+    "RL": [
+     "wheel_RL"
+    ],
+    "RR": [
+     "wheel_RR"
+    ]
+   },
+   "library": {
+    "front": {
+     "rim": "OR-17",
+     "tyre": "custom",
+     "custom": {
+      "width": 0.3,
+      "diameter": 0.7,
+      "inner_ratio": 0.7571428571428571,
+      "rings": 4,
+      "segments": 12,
+      "carcass": 0,
+      "rubber": 82
+     }
+    },
+    "rear": {
+     "rim": "OR-17",
+     "tyre": "custom",
+     "custom": {
+      "width": 0.3,
+      "diameter": 0.7,
+      "inner_ratio": 0.7571428571428571,
+      "rings": 4,
+      "segments": 12,
+      "carcass": 0,
+      "rubber": 82
+     }
+    }
+   }
+  },
+  "dimensions": {
+   "length": 4.73,
+   "width": 1.81,
+   "height": 1.41
+  },
+  "chassis": {
+   "mass": 1400,
+   "wheelbase": 2.838,
+   "front_axle_offset": 0,
+   "rear_axle_offset": 0,
+   "front_track": 1.43,
+   "rear_track": 1.43,
+   "weight_distribution": 0.525,
+   "cg_height": 0.3,
+   "suspension_travel": 0.09,
+   "unsprung": false,
+   "tire_diameter": 0.7,
+   "drag_coefficient": 0.32,
+   "max_steer_deg": 30,
+   "roll_front": 0.33,
+   "spring_front": 33000,
+   "spring_rear": 34000,
+   "damping_front": 0.35,
+   "damping_rear": 0.35,
+   "downforce_front": 0,
+   "downforce_rear": 0,
+   "ackermann": 0.6,
+   "suspension_length": 0.28,
+   "spring_progression": 0,
+   "damping_rebound": 1.7,
+   "ride_front": -0.1,
+   "ride_rear": -0.1,
+   "roll_center_front": 0.06,
+   "roll_center_rear": 0.12,
+   "toe_front": 0,
+   "toe_rear": 0,
+   "camber_front": 0,
+   "camber_rear": 0,
+   "roll_camber": 0.6
+  },
+  "drivetrain": {
+   "drive": "rwd",
+   "gearbox": "amt",
+   "cvt_rpm": 4000,
+   "tc_stall_rpm": 2150,
+   "tc_ratio": 1.9,
+   "tc_lockup": true,
+   "diff": "lsd",
+   "diff_preload": 150,
+   "diff_power": 0.8,
+   "diff_coast": 0.1,
+   "center_diff": "lsd",
+   "center_split": 0.4,
+   "gear_ratios": [
+    3.5,
+    1.8,
+    1.5,
+    1.2
+   ],
+   "reverse_ratio": 3.35,
+   "final_drive": 3.5,
+   "efficiency": 0.92,
+   "shift_time": 0.12,
+   "clutch_start_rpm": 1650,
+   "clutch_full_rpm": 2650,
+   "clutch": 2.75,
+   "diff_lock": 60
+  },
+  "engine": {
+   "idle_rpm": 900,
+   "limiter_rpm": 10500,
+   "inertia": 0.08,
+   "torque_curve": [
+    [
+     0,
+     0
+    ],
+    [
+     500,
+     161.7
+    ],
+    [
+     1000,
+     511.3
+    ],
+    [
+     1500,
+     619.8
+    ],
+    [
+     2000,
+     717.4
+    ],
+    [
+     2500,
+     801.6
+    ],
+    [
+     3000,
+     872.5
+    ],
+    [
+     3500,
+     930.1
+    ],
+    [
+     4000,
+     974.4
+    ],
+    [
+     4500,
+     1005.6
+    ],
+    [
+     5000,
+     1023.6
+    ],
+    [
+     5500,
+     1028.7
+    ],
+    [
+     6000,
+     1015.9
+    ],
+    [
+     6500,
+     976.2
+    ],
+    [
+     7000,
+     925.4
+    ],
+    [
+     7500,
+     866.8
+    ],
+    [
+     8000,
+     802
+    ],
+    [
+     8500,
+     732
+    ],
+    [
+     9000,
+     657.4
+    ],
+    [
+     9500,
+     578.8
+    ],
+    [
+     10000,
+     496.4
+    ],
+    [
+     10500,
+     410.5
+    ],
+    [
+     11000,
+     321.3
+    ]
+   ],
+   "build": {
+    "block": "V12 6.0 L",
+    "layout": "v12",
+    "rod": 138,
+    "bore": 89,
+    "stroke": 80,
+    "compression": 11.5,
+    "cam_duration": 244,
+    "intake_flow": 250,
+    "exhaust_flow": 200,
+    "primary_length": 0.4,
+    "exhaust_length": 2.6,
+    "valves": 4,
+    "fuel": "e85",
+    "lambda": 0.9,
+    "induction": {
+     "type": "supercharger",
+     "variant": "screw",
+     "size": "medium",
+     "boost": 1.5,
+     "intercooler": "air"
+    },
+    "ambient": {
+     "celsius": 20,
+     "altitude": 0
+    }
+   },
+   "braking_scale": 1,
+   "limiter_hz": 20,
+   "two_step_rpm": 7000,
+   "launch_rpm": 5000
+  },
+  "brakes": {
+   "front": 1000,
+   "rear": 1500
+  },
+  "cameras": {
+   "follow": {
+    "distance": 6.94,
+    "height": 2.93,
+    "look_height": 0.6,
+    "look_z": 0,
+    "smoothing": 3.5,
+    "fov_standing": 45,
+    "fov_fast": 75,
+    "fov_full_speed": 70,
+    "dolly": 1
+   },
+   "cockpit": {
+    "position": [
+     0.4,
+     0.91,
+     -0.16
+    ],
+    "fov": 75
+   }
+  },
+  "steering_wheel": {
+   "degrees": 450
+  },
+  "sound": {
+   "engine_sim": {
+    "layout": "v12",
+    "impulse_response": "exhaust_performance",
+    "exhaust_type": "performance",
+    "convolution": 0.8,
+    "bore": 89,
+    "stroke": 80,
+    "rod": 138,
+    "compression_ratio": 11.5,
+    "burn_duration": 45,
+    "burn_randomness": 0.2,
+    "intake_duration": 244,
+    "intake_lift": 10.5,
+    "intake_lobe_centre": 110,
+    "exhaust_duration": 240,
+    "exhaust_lift": 10,
+    "exhaust_lobe_centre": 108,
+    "intake_flow": 250,
+    "exhaust_flow": 200,
+    "idle_pressure": 0.2,
+    "exhaust_systems": 2,
+    "primary_length": 0.4,
+    "primary_flow": 220,
+    "exhaust_length": 2.6,
+    "outlet_flow": 800,
+    "collector_area": 20,
+    "hf_gain": 0.015,
+    "noise": 0.1,
+    "jitter": 0.35,
+    "volume": 1,
+    "audio_volume": 2.2,
+    "simulation_frequency": 10000,
+    "timing": [
+     [
+      0,
+      12
+     ],
+     [
+      1000,
+      12
+     ],
+     [
+      2000,
+      20
+     ],
+     [
+      3000,
+      26
+     ],
+     [
+      4000,
+      30
+     ],
+     [
+      5000,
+      34
+     ],
+     [
+      6000,
+      38
+     ],
+     [
+      9000,
+      38
+     ]
+    ]
+   }
+  },
+  "tyres": {
+   "compound": "slick",
+   "damage": false,
+   "shell": {
+    "width": 0.3,
+    "rings": 4,
+    "segments": 12,
+    "inner_ratio": 0.67,
+    "carcass": 0
+   },
+   "stiff_x": 20,
+   "stiff_y": 18,
+   "grip": 3,
+   "grip_balance": 1,
+   "cornering": 1,
+   "rolling_resistance": 0.024,
+   "heating": 1,
+   "life": 1,
+   "pressure_front": 2.2,
+   "pressure_rear": 2.2
+  },
+  "fuel": {
+   "tank": 60,
+   "use": 1
+  },
+  "assists": {
+   "tc_allowance": 1,
+   "esc_gain": 1
+  },
+  "extras": {
+   "tc_on": true,
+   "abs_on": true,
+   "esc_on": true,
+   "launch_control_on": true,
+   "two_step_on": true,
+   "governor_on": false,
+   "governor_rpm": 8900,
+   "pops_on": false,
+   "pops_amount": 70,
+   "pops_overrun": 2,
+   "pops_rpm": 3000,
+   "pops_loud": 100,
+   "pops_flames": 100,
+   "antilag_on": false,
+   "antilag_mode": "lift",
+   "antilag_boost": 80,
+   "antilag_rpm": 3000,
+   "antilag_time": 20,
+   "antilag_bangs": 100,
+   "antilag_fuel": 60,
+   "boost_gauge_on": false,
+   "boost_full": 0.6,
+   "boost_scale": 3
+  },
+  "colors": {
+   "body": "#b85328",
+   "rim": "#000000",
+   "bodyFinish": "brushed",
+   "rimFinish": "matte"
+  },
+  "exhaust": [
+   {
+    "position": [
+     0.906,
+     0.079,
+     -0.909
+    ],
+    "rotation": [
+     -3.327,
+     -39.986,
+     178.905
+    ],
+    "diameter": 0.055,
+    "smoke": 1,
+    "flame_length_cm": 6,
+    "flame_width_cm": 7,
+    "brightness": 1.1
+   },
+   {
+    "position": [
+     -0.898,
+     0.083,
+     -0.887
+    ],
+    "rotation": [
+     -2.843,
+     46.832,
+     -2.224
+    ],
+    "diameter": 0.07,
+    "smoke": 1,
+    "flame_length_cm": 6,
+    "flame_width_cm": 11,
+    "brightness": 1.2
+   }
+  ],
+  "suspension": {
+   "front": {
+    "type": "double-wishbone",
+    "mounts": {
+     "spring_top": {
+      "position": [
+       0.442,
+       0.627,
+       1.392
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ]
+     },
+     "tierod_inner": {
+      "position": [
+       0.274,
+       0.094,
+       1.572
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ]
+     }
+    }
+   },
+   "rear": {
+    "type": "live-leaf",
+    "mounts": {
+     "damper_bottom": {
+      "position": [
+       0.392,
+       0.144,
+       -1.453
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ]
+     },
+     "damper_top": {
+      "position": [
+       0.356,
+       0.524,
+       -1.292
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ]
+     },
+     "leaf_front": {
+      "position": [
+       0.404,
+       0.101,
+       -0.846
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ]
+     },
+     "leaf_rear": {
+      "position": [
+       0.4,
+       0.192,
+       -2.046
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ]
+     }
+    }
+   }
+  },
+  "driveline": {
+   "engine": "front",
+   "mounts": {
+    "gearbox": {
+     "position": [
+      0.014,
+      0.255,
+      0.631
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ]
+    }
+   },
+   "hidden": [
+    "engine"
+   ]
+  },
+  "softbody": {
+   "max_nodes": 120,
+   "wheel_strength": 5,
+   "layout": [
+    {
+     "x": -0.1133,
+     "y": -0.042,
+     "z": -1.7126,
+     "r": 0.213
+    },
+    {
+     "x": 0.749,
+     "y": 0.2592,
+     "z": 1.8873,
+     "r": 0.213
+    },
+    {
+     "x": -0.8988,
+     "y": 0.4587,
+     "z": 0.3872,
+     "r": 0.213
+    },
+    {
+     "x": 0.8866,
+     "y": 0.0585,
+     "z": -0.1126,
+     "r": 0.213
+    },
+    {
+     "x": -0.7918,
+     "y": 0.2592,
+     "z": 1.8774,
+     "r": 0.213
+    },
+    {
+     "x": -0.0918,
+     "y": 1.0974,
+     "z": -0.713,
+     "r": 0.213
+    },
+    {
+     "x": 0.789,
+     "y": 0.5577,
+     "z": -2.6128,
+     "r": 0.213
+    },
+    {
+     "x": -0.4918,
+     "y": 0.6577,
+     "z": -2.711,
+     "r": 0.213
+    },
+    {
+     "x": 0.3082,
+     "y": 0.6957,
+     "z": 0.7871,
+     "r": 0.213
+    },
+    {
+     "x": -0.8918,
+     "y": 0.1838,
+     "z": -0.8127,
+     "r": 0.213
+    },
+    {
+     "x": 0.8376,
+     "y": 0.5581,
+     "z": -1.3128,
+     "r": 0.213
+    },
+    {
+     "x": -0.5918,
+     "y": 0.8307,
+     "z": -1.6129,
+     "r": 0.213
+    },
+    {
+     "x": -0.0918,
+     "y": 0.0764,
+     "z": -0.2127,
+     "r": 0.213
+    },
+    {
+     "x": 0.6082,
+     "y": 0.9586,
+     "z": -0.0616,
+     "r": 0.213
+    },
+    {
+     "x": -0.3918,
+     "y": -0.0076,
+     "z": 1.0874,
+     "r": 0.213
+    },
+    {
+     "x": -0.8844,
+     "y": 0.1579,
+     "z": -2.1127,
+     "r": 0.213
+    },
+    {
+     "x": 0.2082,
+     "y": 0.7579,
+     "z": -1.9433,
+     "r": 0.213
+    },
+    {
+     "x": 0.0082,
+     "y": 0.6591,
+     "z": 1.5942,
+     "r": 0.213
+    },
+    {
+     "x": 0.1082,
+     "y": 0.0577,
+     "z": -2.6101,
+     "r": 0.213
+    },
+    {
+     "x": 0.6082,
+     "y": -0.041,
+     "z": 1.1124,
+     "r": 0.213
+    },
+    {
+     "x": -0.1918,
+     "y": 0.8586,
+     "z": 0.1607,
+     "r": 0.213
+    },
+    {
+     "x": 0.1082,
+     "y": 0.3707,
+     "z": -0.9128,
+     "r": 0.213
+    },
+    {
+     "x": -0.7918,
+     "y": 0.6407,
+     "z": 1.1872,
+     "r": 0.213
+    },
+    {
+     "x": -0.6918,
+     "y": 0.8167,
+     "z": -0.4129,
+     "r": 0.213
+    },
+    {
+     "x": 0.3082,
+     "y": 0.0227,
+     "z": 0.3874,
+     "r": 0.213
+    },
+    {
+     "x": 0.6082,
+     "y": 1.0078,
+     "z": -0.813,
+     "r": 0.213
+    },
+    {
+     "x": 0.8942,
+     "y": 0.3588,
+     "z": 0.5873,
+     "r": 0.213
+    },
+    {
+     "x": 0.8082,
+     "y": 0.6233,
+     "z": 1.2872,
+     "r": 0.213
+    },
+    {
+     "x": 0.8868,
+     "y": 0.0583,
+     "z": -0.8126,
+     "r": 0.213
+    },
+    {
+     "x": 0.8082,
+     "y": 0.0729,
+     "z": -2.1127,
+     "r": 0.213
+    },
+    {
+     "x": 0.0082,
+     "y": 0.9581,
+     "z": -1.3428,
+     "r": 0.213
+    },
+    {
+     "x": -0.8886,
+     "y": 0.0585,
+     "z": -0.1126,
+     "r": 0.213
+    },
+    {
+     "x": -0.2918,
+     "y": 0.2917,
+     "z": 0.4873,
+     "r": 0.213
+    },
+    {
+     "x": -0.4918,
+     "y": 0.6813,
+     "z": -1.0129,
+     "r": 0.213
+    },
+    {
+     "x": 0.3887,
+     "y": 0.1581,
+     "z": -1.4127,
+     "r": 0.213
+    },
+    {
+     "x": 0.1082,
+     "y": 0.6737,
+     "z": -2.6129,
+     "r": 0.213
+    },
+    {
+     "x": -0.1918,
+     "y": 0.1592,
+     "z": 1.8509,
+     "r": 0.213
+    },
+    {
+     "x": 0.8556,
+     "y": 0.5584,
+     "z": -0.5128,
+     "r": 0.213
+    },
+    {
+     "x": -0.4918,
+     "y": 0.0852,
+     "z": -2.6127,
+     "r": 0.213
+    },
+    {
+     "x": -0.2918,
+     "y": 0.6921,
+     "z": 0.8871,
+     "r": 0.213
+    },
+    {
+     "x": 0.1082,
+     "y": 0.1508,
+     "z": 1.2873,
+     "r": 0.213
+    },
+    {
+     "x": 0.4082,
+     "y": 0.2365,
+     "z": -0.4127,
+     "r": 0.213
+    },
+    {
+     "x": -0.3918,
+     "y": 0.6932,
+     "z": -2.1129,
+     "r": 0.213
+    },
+    {
+     "x": -0.8918,
+     "y": 0.4123,
+     "z": -1.4128,
+     "r": 0.213
+    },
+    {
+     "x": -0.3918,
+     "y": 0.0715,
+     "z": -1.0127,
+     "r": 0.213
+    },
+    {
+     "x": 0.8082,
+     "y": 0.5772,
+     "z": -1.9128,
+     "r": 0.213
+    },
+    {
+     "x": 0.2082,
+     "y": 0.4596,
+     "z": 0.0872,
+     "r": 0.213
+    },
+    {
+     "x": 0.1082,
+     "y": 1.0873,
+     "z": -0.213,
+     "r": 0.213
+    },
+    {
+     "x": -0.7918,
+     "y": 0.0588,
+     "z": 0.7665,
+     "r": 0.213
+    },
+    {
+     "x": -0.3553,
+     "y": 0.3581,
+     "z": -1.5127,
+     "r": 0.213
+    },
+    {
+     "x": -0.4918,
+     "y": 0.6199,
+     "z": 1.6872,
+     "r": 0.213
+    },
+    {
+     "x": -0.4918,
+     "y": 0.2365,
+     "z": -0.5127,
+     "r": 0.213
+    },
+    {
+     "x": 0.5082,
+     "y": 0.9424,
+     "z": -1.3129,
+     "r": 0.213
+    },
+    {
+     "x": -0.6918,
+     "y": 0.8133,
+     "z": 0.0871,
+     "r": 0.213
+    },
+    {
+     "x": 0.8624,
+     "y": 0.5586,
+     "z": 0.0872,
+     "r": 0.213
+    },
+    {
+     "x": 0.6082,
+     "y": 0.1125,
+     "z": -2.6127,
+     "r": 0.213
+    },
+    {
+     "x": 0.5082,
+     "y": 0.6195,
+     "z": 1.6872,
+     "r": 0.213
+    },
+    {
+     "x": 0.3887,
+     "y": 0.1579,
+     "z": -1.9127,
+     "r": 0.213
+    },
+    {
+     "x": 0.1082,
+     "y": 0.1535,
+     "z": 0.7873,
+     "r": 0.213
+    },
+    {
+     "x": -0.6918,
+     "y": 0.058,
+     "z": -1.7036,
+     "r": 0.213
+    },
+    {
+     "x": -0.7918,
+     "y": 0.5768,
+     "z": -2.3128,
+     "r": 0.213
+    },
+    {
+     "x": 0.3082,
+     "y": 0.1592,
+     "z": 1.8414,
+     "r": 0.213
+    },
+    {
+     "x": -0.3918,
+     "y": 1.0827,
+     "z": -0.213,
+     "r": 0.213
+    },
+    {
+     "x": 0.5082,
+     "y": 0.7023,
+     "z": 0.3871,
+     "r": 0.213
+    },
+    {
+     "x": -0.4918,
+     "y": 0.6987,
+     "z": 0.4871,
+     "r": 0.213
+    },
+    {
+     "x": -0.7918,
+     "y": 0.012,
+     "z": -1.2126,
+     "r": 0.213
+    },
+    {
+     "x": -0.3907,
+     "y": 0.1579,
+     "z": -2.0127,
+     "r": 0.213
+    },
+    {
+     "x": 0.6082,
+     "y": 0.3732,
+     "z": 0.9872,
+     "r": 0.213
+    },
+    {
+     "x": 0.3082,
+     "y": 0.6809,
+     "z": 1.2871,
+     "r": 0.213
+    },
+    {
+     "x": 0.5082,
+     "y": 0.6807,
+     "z": -2.3129,
+     "r": 0.213
+    },
+    {
+     "x": -0.8918,
+     "y": 0.4943,
+     "z": -0.2128,
+     "r": 0.213
+    },
+    {
+     "x": -0.3918,
+     "y": 0.0136,
+     "z": 0.0874,
+     "r": 0.213
+    },
+    {
+     "x": -0.5083,
+     "y": 1.0583,
+     "z": -0.813,
+     "r": 0.213
+    },
+    {
+     "x": -0.1918,
+     "y": 0.3576,
+     "z": -2.7408,
+     "r": 0.213
+    },
+    {
+     "x": 0.4082,
+     "y": 0.0717,
+     "z": -0.9127,
+     "r": 0.213
+    },
+    {
+     "x": -0.2918,
+     "y": 0.455,
+     "z": 0.0872,
+     "r": 0.213
+    },
+    {
+     "x": 0.7082,
+     "y": 0.1132,
+     "z": 0.2873,
+     "r": 0.213
+    },
+    {
+     "x": -0.8389,
+     "y": 0.558,
+     "z": -1.8128,
+     "r": 0.213
+    },
+    {
+     "x": -0.8903,
+     "y": 0.3591,
+     "z": 1.4873,
+     "r": 0.213
+    },
+    {
+     "x": -0.8837,
+     "y": 0.5588,
+     "z": 0.7872,
+     "r": 0.213
+    },
+    {
+     "x": -0.3918,
+     "y": 0.6789,
+     "z": 1.2871,
+     "r": 0.213
+    },
+    {
+     "x": 0.8971,
+     "y": 0.4583,
+     "z": -0.9128,
+     "r": 0.213
+    },
+    {
+     "x": -0.1918,
+     "y": 0.8276,
+     "z": -1.7129,
+     "r": 0.213
+    },
+    {
+     "x": 0.8892,
+     "y": 0.1582,
+     "z": -1.2127,
+     "r": 0.213
+    },
+    {
+     "x": -0.7918,
+     "y": 0.3577,
+     "z": -2.6855,
+     "r": 0.213
+    },
+    {
+     "x": 0.8082,
+     "y": 0.058,
+     "z": -1.7036,
+     "r": 0.213
+    },
+    {
+     "x": 0.0082,
+     "y": 0.7286,
+     "z": 0.4871,
+     "r": 0.213
+    },
+    {
+     "x": 0.6082,
+     "y": 0.2839,
+     "z": 1.4873,
+     "r": 0.213
+    },
+    {
+     "x": 0.2082,
+     "y": 0.8586,
+     "z": 0.1606,
+     "r": 0.213
+    },
+    {
+     "x": -0.8885,
+     "y": 0.0587,
+     "z": 0.2874,
+     "r": 0.213
+    },
+    {
+     "x": -0.1918,
+     "y": 0.3209,
+     "z": 0.9873,
+     "r": 0.213
+    },
+    {
+     "x": 0.2082,
+     "y": 0.7039,
+     "z": -1.1129,
+     "r": 0.213
+    },
+    {
+     "x": -0.3918,
+     "y": 0.9581,
+     "z": -1.2949,
+     "r": 0.213
+    },
+    {
+     "x": -0.5918,
+     "y": 0.0925,
+     "z": 1.5873,
+     "r": 0.213
+    },
+    {
+     "x": -0.8512,
+     "y": 0.5583,
+     "z": -0.9128,
+     "r": 0.213
+    },
+    {
+     "x": -0.5918,
+     "y": 0.3735,
+     "z": 0.9872,
+     "r": 0.213
+    },
+    {
+     "x": 0.4082,
+     "y": 0.7169,
+     "z": -1.6129,
+     "r": 0.213
+    },
+    {
+     "x": 0.5082,
+     "y": 1.0846,
+     "z": -0.413,
+     "r": 0.213
+    },
+    {
+     "x": -0.0918,
+     "y": 0.2365,
+     "z": -0.6127,
+     "r": 0.213
+    },
+    {
+     "x": 0.0082,
+     "y": 0.826,
+     "z": 1.0871,
+     "r": 0.213
+    },
+    {
+     "x": 0.2082,
+     "y": 1.0582,
+     "z": -0.966,
+     "r": 0.213
+    },
+    {
+     "x": 0.3082,
+     "y": 0.3576,
+     "z": -2.737,
+     "r": 0.213
+    },
+    {
+     "x": 0.7082,
+     "y": 0.0588,
+     "z": 0.7651,
+     "r": 0.213
+    },
+    {
+     "x": 0.5082,
+     "y": 0.0136,
+     "z": -0.0126,
+     "r": 0.213
+    },
+    {
+     "x": 0.7196,
+     "y": 0.6588,
+     "z": 0.7871,
+     "r": 0.213
+    },
+    {
+     "x": 0.2082,
+     "y": 0.5592,
+     "z": 1.8795,
+     "r": 0.213
+    },
+    {
+     "x": -0.1918,
+     "y": 0.5927,
+     "z": 1.8872,
+     "r": 0.213
+    },
+    {
+     "x": -0.0918,
+     "y": 0.6828,
+     "z": -2.3129,
+     "r": 0.213
+    },
+    {
+     "x": 0.8601,
+     "y": 0.2578,
+     "z": -2.4127,
+     "r": 0.213
+    },
+    {
+     "x": 0.8965,
+     "y": 0.4591,
+     "z": 1.5872,
+     "r": 0.213
+    },
+    {
+     "x": 0.7082,
+     "y": 0.4503,
+     "z": -1.6128,
+     "r": 0.213
+    },
+    {
+     "x": 0.7082,
+     "y": 0.1132,
+     "z": -0.5127,
+     "r": 0.213
+    },
+    {
+     "x": 0.1082,
+     "y": 0.3118,
+     "z": 0.4873,
+     "r": 0.213
+    },
+    {
+     "x": 0.712,
+     "y": 0.7582,
+     "z": -1.0129,
+     "r": 0.213
+    },
+    {
+     "x": -0.3918,
+     "y": 0.3696,
+     "z": 1.4872,
+     "r": 0.213
+    },
+    {
+     "x": -0.0918,
+     "y": 0.1132,
+     "z": 0.2873,
+     "r": 0.213
+    },
+    {
+     "x": -0.7204,
+     "y": 0.7581,
+     "z": -1.3129,
+     "r": 0.213
+    },
+    {
+     "x": -0.8963,
+     "y": 0.3584,
+     "z": -0.5127,
+     "r": 0.213
+    },
+    {
+     "x": -0.1918,
+     "y": 0.7103,
+     "z": -1.2129,
+     "r": 0.213
+    },
+    {
+     "x": 0.7658,
+     "y": 0.6585,
+     "z": -0.2129,
+     "r": 0.213
+    },
+    {
+     "x": 0.4724,
+     "y": 0.4258,
+     "z": -2.664,
+     "r": 0.1
+    },
+    {
+     "x": -0.4861,
+     "y": 0.4216,
+     "z": -2.6612,
+     "r": 0.1
+    },
+    {
+     "x": -0.1894,
+     "y": 0.4206,
+     "z": -2.6738,
+     "r": 0.1
+    },
+    {
+     "x": 0.1624,
+     "y": 0.4208,
+     "z": -2.674,
+     "r": 0.1
+    },
+    {
+     "x": 0.4778,
+     "y": 0.5719,
+     "z": -2.6691,
+     "r": 0.1
+    },
+    {
+     "x": 0.1699,
+     "y": 0.5622,
+     "z": -2.6733,
+     "r": 0.1
+    },
+    {
+     "x": -0.1956,
+     "y": 0.5672,
+     "z": -2.673,
+     "r": 0.1
+    },
+    {
+     "x": -0.476,
+     "y": 0.5573,
+     "z": -2.6676,
+     "r": 0.1
+    },
+    {
+     "x": 0.4832,
+     "y": 0.6709,
+     "z": -2.7016,
+     "r": 0.1
+    },
+    {
+     "x": 0.174,
+     "y": 0.6712,
+     "z": -2.6951,
+     "r": 0.1
+    },
+    {
+     "x": -0.1737,
+     "y": 0.6611,
+     "z": -2.7153,
+     "r": 0.1
+    },
+    {
+     "x": -0.4869,
+     "y": 0.6708,
+     "z": -2.7028,
+     "r": 0.1
+    },
+    {
+     "x": -0.4896,
+     "y": 0.6783,
+     "z": -2.4072,
+     "r": 0.1
+    },
+    {
+     "x": -0.135,
+     "y": 0.6798,
+     "z": -2.4062,
+     "r": 0.1
+    },
+    {
+     "x": 0.1854,
+     "y": 0.6793,
+     "z": -2.4226,
+     "r": 0.1
+    },
+    {
+     "x": 0.4721,
+     "y": 0.6776,
+     "z": -2.4372,
+     "r": 0.1
+    },
+    {
+     "x": 0.4683,
+     "y": 0.6829,
+     "z": -2.2318,
+     "r": 0.1
+    },
+    {
+     "x": 0.1994,
+     "y": 0.6846,
+     "z": -2.2427,
+     "r": 0.1
+    },
+    {
+     "x": -0.1221,
+     "y": 0.6845,
+     "z": -2.2511,
+     "r": 0.1
+    },
+    {
+     "x": -0.4825,
+     "y": 0.6833,
+     "z": -2.2145,
+     "r": 0.1
+    },
+    {
+     "x": -0.4793,
+     "y": 0.7031,
+     "z": -2.0389,
+     "r": 0.1
+    },
+    {
+     "x": -0.1167,
+     "y": 0.7139,
+     "z": -2.1013,
+     "r": 0.1
+    },
+    {
+     "x": 0.1885,
+     "y": 0.7137,
+     "z": -2.0945,
+     "r": 0.1
+    },
+    {
+     "x": 0.4693,
+     "y": 0.7035,
+     "z": -2.0475,
+     "r": 0.1
+    }
+   ],
+   "nodes": [
+    {
+     "i": 0,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 1,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 2,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 3,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 4,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 5,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 6,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 7,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 8,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 9,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 10,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 11,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 12,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 13,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 14,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 15,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 16,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 17,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 18,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 19,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 20,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 21,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 22,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 23,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 24,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 25,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 26,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 27,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 28,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 29,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 30,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 31,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 32,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 33,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 34,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 35,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 36,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 37,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 38,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 39,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 40,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 41,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 42,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 43,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 44,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 45,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 46,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 47,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 48,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 49,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 50,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 51,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 52,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 53,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 54,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 55,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 56,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 57,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 58,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 59,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 60,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 61,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 62,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 63,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 64,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 65,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 66,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 67,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 68,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 69,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 70,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 71,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 72,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 73,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 74,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 75,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 76,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 77,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 78,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 79,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 80,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 81,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 82,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 83,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 84,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 85,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 86,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 87,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 88,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 89,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 90,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 91,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 92,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 93,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 94,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 95,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 96,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 97,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 98,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 99,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 100,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 101,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 102,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 103,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 104,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 105,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 106,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 107,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 108,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 109,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 110,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 111,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 112,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 113,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 114,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 115,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 116,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 117,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 118,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 119,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 120,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 121,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 122,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 123,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 124,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 125,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 126,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 127,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 128,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 129,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 130,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 131,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 132,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 133,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 134,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 135,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 136,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 137,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 138,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 139,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 140,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 141,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 142,
+     "yield_force": 10000,
+     "break_force": 50000
+    },
+    {
+     "i": 143,
+     "yield_force": 10000,
+     "break_force": 50000
+    }
+   ],
+   "layout_cg": 0.3,
+   "layout_radius": 0.35
+  },
+  "parts": [
+   {
+    "object": "engine",
+    "mode": "hinge",
+    "mass": 100,
+    "hinge": {
+     "origin": [
+      -0.157,
+      -0.114,
+      1.018
+     ]
+    },
+    "mounts": [
+     {
+      "point": [
+       -0.157,
+       -0.114,
+       1.018
+      ],
+      "axes": {
+       "x": true,
+       "y": true,
+       "z": true
+      },
+      "min": -5,
+      "max": 5,
+      "activate_force": 200000,
+      "break_force": 1000000
+     }
+    ]
+   },
+   {
+    "object": "license-front",
+    "mode": "detachable",
+    "mass": 2,
+    "break_force": 3000
+   },
+   {
+    "object": "Radiator",
+    "mode": "detachable",
+    "mass": 10,
+    "break_force": 20000
+   },
+   {
+    "object": "Radiator-fan",
+    "mode": "detachable",
+    "mass": 2,
+    "break_force": 10000
+   },
+   {
+    "object": "Battery",
+    "mode": "detachable",
+    "mass": 15,
+    "break_force": 5000
+   },
+   {
+    "object": "rear-bumper",
+    "mode": "detachable",
+    "mass": 2,
+    "break_force": 5000
+   },
+   {
+    "object": "left-fog-light",
+    "mode": "detachable",
+    "mass": 2,
+    "break_force": 3000
+   },
+   {
+    "object": "right-fog-light",
+    "mode": "detachable",
+    "mass": 2,
+    "break_force": 3000
+   },
+   {
+    "object": "license-back",
+    "mode": "detachable",
+    "mass": 2,
+    "break_force": 3000
+   },
+   {
+    "object": "left-taillight",
+    "mode": "detachable",
+    "mass": 2,
+    "break_force": 10000
+   },
+   {
+    "object": "right-taillight",
+    "mode": "detachable",
+    "mass": 2,
+    "break_force": 10000
+   }
+  ]
+ }
+}

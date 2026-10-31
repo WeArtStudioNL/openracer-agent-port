@@ -3,30 +3,44 @@
   "description": "",
   "model": {
     "type": "gltf",
-    "file": "cars/openracer-muscle/openracer-muscle.glb",
+    "file": "cars/openracer-muscle/OpenRacer muscle.glb",
     "rotation_y": 0,
     "scale": 1,
     "offset": [
       -0.0037,
-      -0.2329,
-      0.0429
+      -0.3,
+      0.07
     ]
   },
   "wheels": {
-    "mode": "model",
-    "nodes": {
-      "FR": [
-        "wheel_FR"
-      ],
-      "FL": [
-        "wheel_FL"
-      ],
-      "RL": [
-        "wheel_RL"
-      ],
-      "RR": [
-        "wheel_RR"
-      ]
+    "mode": "default",
+    "library": {
+      "front": {
+        "rim": "alloy-17",
+        "tyre": "custom",
+        "custom": {
+          "width": 0.3,
+          "diameter": 0.675,
+          "inner_ratio": 0.674074074074074,
+          "rings": 3,
+          "segments": 12,
+          "carcass": 0,
+          "rubber": 31
+        }
+      },
+      "rear": {
+        "rim": "alloy-17",
+        "tyre": "custom",
+        "custom": {
+          "width": 0.3,
+          "diameter": 0.675,
+          "inner_ratio": 0.674074074074074,
+          "rings": 3,
+          "segments": 12,
+          "carcass": 0,
+          "rubber": 82
+        }
+      }
     }
   },
   "dimensions": {
@@ -41,7 +55,7 @@
     "rear_track": 1.43,
     "weight_distribution": 0.525,
     "cg_height": 0.3,
-    "tire_diameter": 0.674,
+    "tire_diameter": 0.675,
     "drag_coefficient": 0.32,
     "max_steer_deg": 30,
     "suspension_travel": 0.09,
@@ -65,39 +79,41 @@
     "suspension_length": 0.28,
     "spring_progression": 0,
     "damping_rebound": 1.7,
-    "unsprung": false
+    "unsprung": false,
+    "front_axle_offset": 0,
+    "rear_axle_offset": 0
   },
   "drivetrain": {
     "drive": "rwd",
-    "diff": "lsd",
+    "diff": "welded",
     "diff_preload": 150,
     "diff_power": 0.3,
     "diff_coast": 0.1,
     "center_diff": "lsd",
     "center_split": 0.4,
     "gear_ratios": [
-      2.6,
-      1.79,
-      1.4,
-      0.76
+      2.84,
+      1.55,
+      1,
+      0.7
     ],
-    "reverse_ratio": 3.35,
-    "final_drive": 3.5,
+    "reverse_ratio": 2.3,
+    "final_drive": 5.4,
     "efficiency": 0.92,
-    "shift_time": 0.32,
+    "shift_time": 0.4,
     "clutch": 2.3,
     "diff_lock": 60,
     "clutch_start_rpm": 1050,
     "clutch_full_rpm": 2000,
-    "gearbox": "amt",
+    "gearbox": "torque-converter",
     "cvt_rpm": 4000,
-    "tc_stall_rpm": 2150,
-    "tc_ratio": 1.9,
+    "tc_stall_rpm": 1700,
+    "tc_ratio": 2,
     "tc_lockup": true
   },
   "engine": {
     "idle_rpm": 900,
-    "limiter_rpm": 10500,
+    "limiter_rpm": 6400,
     "inertia": 0.02,
     "torque_curve": [
       [
@@ -106,123 +122,86 @@
       ],
       [
         500,
-        161.7
+        132.6
       ],
       [
         1000,
-        511.3
+        322.8
       ],
       [
         1500,
-        619.8
+        373.7
       ],
       [
         2000,
-        717.4
+        415.3
       ],
       [
         2500,
-        801.6
+        447.7
       ],
       [
         3000,
-        872.5
+        470.7
       ],
       [
         3500,
-        930.1
+        484.4
       ],
       [
         4000,
-        974.4
+        488.8
       ],
       [
         4500,
-        1005.6
+        481.6
       ],
       [
         5000,
-        1023.6
+        445.6
       ],
       [
         5500,
-        1028.7
+        396.6
       ],
       [
         6000,
-        1015.9
+        339
       ],
       [
         6500,
-        976.2
+        274.6
       ],
       [
         7000,
-        925.4
-      ],
-      [
-        7500,
-        866.8
-      ],
-      [
-        8000,
-        802
-      ],
-      [
-        8500,
-        732
-      ],
-      [
-        9000,
-        657.4
-      ],
-      [
-        9500,
-        578.8
-      ],
-      [
-        10000,
-        496.4
-      ],
-      [
-        10500,
-        410.5
-      ],
-      [
-        11000,
-        321.3
+        204.4
       ]
     ],
     "power_scale": 1,
     "braking_scale": 1,
-    "turbo": {
-      "share": 0.2,
-      "spool": 0.4,
-      "threshold_rpm": 2100
-    },
     "limiter_hz": 8,
     "two_step_rpm": 4500,
     "launch_rpm": 3500,
     "build": {
-      "block": "V12 6.0 L",
-      "layout": "v12",
-      "rod": 138,
-      "bore": 89,
-      "stroke": 80,
-      "compression": 11.5,
-      "cam_duration": 244,
-      "intake_flow": 250,
-      "exhaust_flow": 200,
-      "primary_length": 0.4,
-      "exhaust_length": 2.6,
-      "valves": 4,
-      "fuel": "e85",
+      "block": "V8 5.7 L crossplane",
+      "layout": "v8-crossplane",
+      "rod": 146,
+      "bore": 101.6,
+      "stroke": 88.4,
+      "compression": 9.5,
+      "cam_duration": 232,
+      "intake_flow": 260,
+      "exhaust_flow": 210,
+      "primary_length": 0.5,
+      "exhaust_length": 2.8,
+      "valves": 2,
+      "fuel": "pump95",
       "lambda": 0.9,
       "induction": {
-        "type": "supercharger",
-        "variant": "screw",
+        "type": "none",
+        "variant": "roots",
         "size": "medium",
-        "boost": 1.5,
+        "boost": 0.6,
         "intercooler": "air"
       },
       "ambient": {
@@ -261,29 +240,29 @@
   },
   "sound": {
     "engine_sim": {
-      "layout": "v12",
-      "impulse_response": "sharp_01",
-      "exhaust_type": "performance",
-      "convolution": 0.4,
-      "bore": 89,
-      "stroke": 80,
+      "layout": "v8-crossplane",
+      "impulse_response": "exhaust_standard",
+      "exhaust_type": "standard",
+      "convolution": 1,
+      "bore": 101.6,
+      "stroke": 88.4,
       "rod": 138,
-      "compression_ratio": 11.5,
+      "compression_ratio": 9.5,
       "burn_duration": 45,
       "burn_randomness": 0.2,
-      "intake_duration": 244,
+      "intake_duration": 232,
       "intake_lift": 10.5,
       "intake_lobe_centre": 110,
-      "exhaust_duration": 240,
+      "exhaust_duration": 228,
       "exhaust_lift": 10,
       "exhaust_lobe_centre": 108,
-      "intake_flow": 250,
-      "exhaust_flow": 200,
+      "intake_flow": 260,
+      "exhaust_flow": 210,
       "idle_pressure": 0.2,
       "exhaust_systems": 2,
-      "primary_length": 0.4,
+      "primary_length": 0.5,
       "primary_flow": 220,
-      "exhaust_length": 2.6,
+      "exhaust_length": 2.8,
       "outlet_flow": 800,
       "collector_area": 20,
       "hf_gain": 0.015,
@@ -329,12 +308,12 @@
     }
   },
   "tyres": {
-    "compound": "slick",
+    "compound": "road",
     "damage": false,
     "shell": {
       "width": 0.3,
-      "rings": 4,
-      "segments": 10,
+      "rings": 3,
+      "segments": 12,
       "inner_ratio": 0.67,
       "carcass": 0
     },
@@ -363,6 +342,8 @@
     "esc_on": true,
     "launch_control_on": true,
     "two_step_on": true,
+    "governor_on": false,
+    "governor_rpm": 8900,
     "pops_on": false,
     "pops_amount": 70,
     "pops_overrun": 2,
@@ -1392,653 +1373,653 @@
     "nodes": [
       {
         "i": 0,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 1,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 2,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 3,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 4,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 5,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 6,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 7,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 8,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 9,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 10,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 11,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 12,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 13,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 14,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 15,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 16,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 17,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 18,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 19,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 20,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 21,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 22,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 23,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 24,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 25,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 26,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 27,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 28,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 29,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 30,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 31,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 32,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 33,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 34,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 35,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 36,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 37,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 38,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 39,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 40,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 41,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 42,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 43,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 44,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 45,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 46,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 47,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 48,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 49,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 50,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 51,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 52,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 53,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 54,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 55,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 56,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 57,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 58,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 59,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 60,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 61,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 62,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 63,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 64,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 65,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 66,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 67,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 68,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 69,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 70,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 71,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 72,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 73,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 74,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 75,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 76,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 77,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 78,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 79,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 80,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 81,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 82,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 83,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 84,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 85,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 86,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 87,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 88,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 89,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 90,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 91,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 92,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 93,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 94,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 95,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 96,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 97,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 98,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 99,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 100,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 101,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 102,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 103,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 104,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 105,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 106,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 107,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 108,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 109,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 110,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 111,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 112,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 113,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 114,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 115,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 116,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 117,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 118,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 119,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 120,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 121,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 122,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 123,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 124,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 125,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 126,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 127,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 128,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 129,
-        "yield_force": 10000,
-        "break_force": 50000
+        "yield_force": 5000,
+        "break_force": 20000
       },
       {
         "i": 130,
@@ -2112,7 +2093,7 @@
       }
     ],
     "layout_cg": 0.3,
-    "layout_radius": 0.337
+    "layout_radius": 0.3375
   },
   "parts": [
     {
@@ -2177,15 +2158,27 @@
     },
     {
       "object": "left-fog-light",
-      "mode": "detachable",
+      "mode": "breakable",
       "mass": 2,
-      "break_force": 3000
+      "break_force": 3000,
+      "shatter": {
+        "pieces": "faces",
+        "particles": 120,
+        "particle": "shards",
+        "material": "glass"
+      }
     },
     {
       "object": "right-fog-light",
-      "mode": "detachable",
+      "mode": "breakable",
       "mass": 2,
-      "break_force": 3000
+      "break_force": 3000,
+      "shatter": {
+        "pieces": "faces",
+        "particles": 120,
+        "particle": "shards",
+        "material": "glass"
+      }
     },
     {
       "object": "license-back",
@@ -2195,15 +2188,270 @@
     },
     {
       "object": "left-taillight",
-      "mode": "detachable",
+      "mode": "breakable",
       "mass": 2,
-      "break_force": 10000
+      "break_force": 10000,
+      "shatter": {
+        "pieces": "faces",
+        "particles": 120,
+        "particle": "shards",
+        "material": "glass"
+      }
     },
     {
       "object": "right-taillight",
+      "mode": "breakable",
+      "mass": 2,
+      "break_force": 10000,
+      "shatter": {
+        "pieces": "faces",
+        "particles": 120,
+        "particle": "shards",
+        "material": "glass"
+      }
+    },
+    {
+      "object": "frontbumper",
       "mode": "detachable",
       "mass": 2,
-      "break_force": 10000
+      "break_force": 3000
+    },
+    {
+      "object": "windows",
+      "mode": "breakable",
+      "mass": 2,
+      "break_force": 3000,
+      "shatter": {
+        "pieces": "faces",
+        "particles": 120,
+        "particle": "shards",
+        "material": "glass"
+      }
+    },
+    {
+      "object": "rightdoor",
+      "mode": "hinge",
+      "mass": 10,
+      "hinge": {
+        "origin": [
+          -0.889,
+          0.385,
+          0.454
+        ]
+      },
+      "mounts": [
+        {
+          "point": [
+            -0.889,
+            0.385,
+            0.454
+          ],
+          "axes": {
+            "x": false,
+            "y": true,
+            "z": false
+          },
+          "min": 0,
+          "max": 57,
+          "rot": [
+            0,
+            0.13763,
+            0,
+            0.99048
+          ],
+          "activate_force": 20000,
+          "break_force": 50000
+        }
+      ]
+    },
+    {
+      "object": "leftdoor",
+      "mode": "hinge",
+      "mass": 10,
+      "hinge": {
+        "origin": [
+          0.892,
+          0.394,
+          0.443
+        ]
+      },
+      "mounts": [
+        {
+          "point": [
+            0.892,
+            0.394,
+            0.443
+          ],
+          "axes": {
+            "x": false,
+            "y": true,
+            "z": false
+          },
+          "min": -61,
+          "max": 0,
+          "rot": [
+            0,
+            -0.0966,
+            0,
+            0.99532
+          ],
+          "activate_force": 20000,
+          "break_force": 50000
+        }
+      ]
+    },
+    {
+      "object": "left-exhaust001",
+      "mode": "detachable",
+      "mass": 2,
+      "break_force": 3000
+    },
+    {
+      "object": "right-exhaust001",
+      "mode": "detachable",
+      "mass": 2,
+      "break_force": 3000
+    },
+    {
+      "object": "mirror_left",
+      "mode": "detachable",
+      "mass": 2,
+      "break_force": 3000
+    },
+    {
+      "object": "mirror_right",
+      "mode": "detachable",
+      "mass": 2,
+      "break_force": 3000
+    },
+    {
+      "object": "powerfilter",
+      "mode": "detachable",
+      "mass": 2,
+      "break_force": 3000
+    },
+    {
+      "object": "headerr",
+      "mode": "detachable",
+      "mass": 2,
+      "break_force": 3000
+    },
+    {
+      "object": "headerl",
+      "mode": "detachable",
+      "mass": 2,
+      "break_force": 3000
+    },
+    {
+      "object": "left-exhaust",
+      "mode": "detachable",
+      "mass": 2,
+      "break_force": 3000
+    },
+    {
+      "object": "right-exhaust",
+      "mode": "detachable",
+      "mass": 2,
+      "break_force": 3000
+    },
+    {
+      "object": "left-headlight",
+      "mode": "breakable",
+      "mass": 2,
+      "break_force": 3000,
+      "shatter": {
+        "pieces": "faces",
+        "particles": 120,
+        "particle": "shards",
+        "material": "glass"
+      }
+    },
+    {
+      "object": "right-headlight",
+      "mode": "detachable",
+      "mass": 2,
+      "break_force": 3000
+    },
+    {
+      "object": "grille",
+      "mode": "breakable",
+      "mass": 2,
+      "break_force": 3000,
+      "shatter": {
+        "pieces": "faces",
+        "particles": 120,
+        "particle": "shards",
+        "colour": "#dceeff"
+      }
+    },
+    {
+      "object": "part",
+      "mode": "detachable",
+      "mass": 2,
+      "break_force": 3000
+    },
+    {
+      "object": "grille_emblem",
+      "mode": "detachable",
+      "mass": 2,
+      "break_force": 3000
+    },
+    {
+      "object": "Plane006_1",
+      "mode": "detachable",
+      "mass": 2,
+      "break_force": 3000
+    },
+    {
+      "object": "Plane006",
+      "mode": "breakable",
+      "mass": 2,
+      "break_force": 3000,
+      "shatter": {
+        "pieces": "faces",
+        "particles": 120,
+        "particle": "shards",
+        "material": "glass"
+      }
+    },
+    {
+      "object": "leftdoorhandle",
+      "mode": "detachable",
+      "mass": 2,
+      "break_force": 3000
+    },
+    {
+      "object": "rightdoorhandle",
+      "mode": "detachable",
+      "mass": 2,
+      "break_force": 3000
+    },
+    {
+      "object": "window_door_left",
+      "mode": "breakable",
+      "mass": 2,
+      "break_force": 3000,
+      "shatter": {
+        "pieces": "mesh",
+        "particles": 120,
+        "particle": "shards",
+        "material": "glass"
+      }
+    },
+    {
+      "object": "rightdoor001",
+      "mode": "breakable",
+      "mass": 2,
+      "break_force": 3000,
+      "shatter": {
+        "pieces": "faces",
+        "particles": 120,
+        "particle": "shards",
+        "material": "glass"
+      }
     }
+  ],
+  "tunes": [
+    "v12-rebuild.openracer-tune.json"
   ]
 }
