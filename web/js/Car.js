@@ -970,7 +970,7 @@ OpenRacer.Car = function( config, domElement ) {
         // The same reverse for analog pedals (a wheel, the triggers of a pad, the touch pedals): the brake pedal held at a standstill is the gas of the reverse,
         // the gas pedal is the brake; for the physics the two values are swapped, and put back after it
         var swapPedals = false;
-        if(usingGamepad && !this.vehicle.controller && !this.keyPedals && !this.autoReverse && this.gearboxMode === "automatic" && this.selector === "D" && !this.parkingLock && Settings.option("autoReversePedals") &&
+        if(usingGamepad && !this.vehicle.controller && !this.keyPedals && !this.autoReverse && this.gearboxMode === "automatic" && this.selector === "D" && !this.parkingLock && !this.held && Settings.option("autoReversePedals") &&
            !this.vehicle.launchControlEnabled && !(OpenRacer.DragStrip && OpenRacer.DragStrip.holding)) {
             var padUp = this.throttle > 0.1, padDown = this.brakePedal > 0.1, padAlong = v.u, padLimit = Math.max(0.3, Settings.option("autoReverseSpeed") / 3.6);
             if(!this.autoReversePedals) {
@@ -1168,7 +1168,7 @@ OpenRacer.Car = function( config, domElement ) {
             this.autoReverse = false;
             if(this.pushBack) { this.accelerate = false; this.brake = false; }
         }
-        if(!bike && this.gearboxMode === "automatic" && this.selector === "D" && !this.parkingLock && Settings.option("autoReverse") &&
+        if(!bike && this.gearboxMode === "automatic" && this.selector === "D" && !this.parkingLock && !this.held && Settings.option("autoReverse") &&
            !this.vehicle.launchControlEnabled && !(OpenRacer.DragStrip && OpenRacer.DragStrip.holding)) {
             var along = this.vehicle.u, limit = Math.max(0.3, Settings.option("autoReverseSpeed") / 3.6);
             if(!this.autoReverse) {
