@@ -14,7 +14,7 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 ### New cars and tracks
 
-- Cars: **Hyundai i30**, **Stadium truck**, **Go-kart 250cc**, **OpenRacer Kart**, **OpenRacer Muscle**, **Supermoto 700** and **Sports motorcycle 600cc**. Tracks: **Desert**, **Kartbaan Oldenzaal** and **TT Assen**; the **Circuit** has a racing line of its own (a race on it has AI cars now).
+- Cars: **Hatchback**, **Stadium truck**, **Go-kart 250cc**, **OpenRacer Kart**, **OpenRacer Muscle**, **Supermoto 700** and **Sports motorcycle 600cc**. Tracks: **Desert**, **Desert drag strip**, **Kartbaan Oldenzaal** and **Short track** (the improved track of the first OpenRacer demo). The old Circuit and TT Assen are gone.
 - Removed: the Mustang and the Drift Mustang. A replay with one of them says that the car is missing; a link to one opens the main menu.
 - The models are lighter: their textures are re-encoded (at most 2048 px, JPEG where there is no transparency), and the game is about 220 MB instead of 360 MB.
 
