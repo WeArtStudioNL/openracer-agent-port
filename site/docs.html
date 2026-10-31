@@ -79,6 +79,7 @@
             <a href="#track-editor">Track editor</a>
             <a href="#design">Drawing a track</a>
             <a href="#garage">Your own cars and tracks</a>
+            <a href="#models">Making models: requirements</a>
             <a href="#blender">Blender settings</a>
             <h4>Technical</h4>
             <a href="#tech">Code and licence</a>
@@ -676,6 +677,37 @@ start http://localhost:8000</code></pre>
                 <li><b>A folder on the PC.</b> In Chrome and Edge a folder can be linked. Its cars and tracks are read every time the menu opens and nothing is copied. The browser asks once per session to allow reading it.</li>
                 <li><b>Space.</b> The dialog shows how much the browser lets the site keep. Safari keeps about a gigabyte and forgets it after seven days without a visit, so export what matters.</li>
             </ul>
+        </section>
+
+        <section id="models">
+            <h2>Making models: requirements</h2>
+            <p>You can make a car or a track without writing code, but you need something to make the 3D model in.</p>
+            <h3>Software</h3>
+            <table>
+                <tr><th></th><th>What</th><th>Note</th></tr>
+                <tr><td>3D program (required)</td><td><a href="https://www.blender.org/">Blender</a> is the one the project is made with, and it is free. Any program that exports <b>glTF 2.0</b> works: Maya, 3ds Max, Cinema 4D, Houdini, Modo and others.</td><td>Export a <code>.glb</code>, or a <code>.gltf</code> with its <code>.bin</code> and its textures. Draco and Meshopt compression are not supported: leave them off.</td></tr>
+                <tr><td>Images (optional)</td><td>Any image editor or texture painter (GIMP, Krita, Photoshop, Substance Painter) for the textures; PNG or JPEG.</td><td>Tileable textures for the road, the grass and the ground of a track; a sky as a 2:1 picture of the whole sky.</td></tr>
+                <tr><td>The editors of the game</td><td>The car editor and the track editor, which open from the <a href="#garage">Garage</a> (the driver and the suspension are cards of the car editor). With <code>start-server.sh</code> or <code>tools/serve.py</code> they write real files; on the web version they save to your browser.</td><td>See <a href="#cars">Making a car</a>, <a href="#car-editor">Car editor</a> and <a href="#track-editor">Track editor</a>.</td></tr>
+                <tr><td>Python 3 (optional)</td><td>The scripts in <code>tools/</code> that build models and textures (<code>make-*.py</code>, <code>glbtools.py</code>), and the helper server.</td><td>Not needed to make a car with Blender.</td></tr>
+                <tr><td>Blender script (optional)</td><td><code>tools/blender_match_game.py</code> makes Blender light a car like the game does. See <a href="#blender">Blender settings</a>.</td><td>Tested with Blender 5.1.</td></tr>
+            </table>
+            <h3>A car</h3>
+            <ul>
+                <li><b>Units and axes:</b> metres, y up, the front of the car along +Z (a car that looks towards -Y in Blender's front view exports like that). The origin at the height of the wheel axles and in the middle between the axles; the car editor shows an arrow for the front and has <i>Fit</i>.</li>
+                <li><b>The wheels</b> are separate objects with a name for each (the corners <code>FL</code>, <code>FR</code>, <code>RL</code> and <code>RR</code> in the name help <i>Find the wheels</i>). The game takes the wheelbase, the tracks and the tyre size from them. Or let the game draw its own rims and tyres from the wheel library.</li>
+                <li><b>Materials:</b> the Principled BSDF with the inputs that glTF has; other shaders do not survive the export, and the <i>Materials</i> part of the car editor sets them right (glass, paint, chrome, rubber). The materials called <code>carpaint</code> and <code>rimpaint</code> take the colour and the finish of the tuning menu.</li>
+                <li><b>Parts that move</b> must be separate objects: the doors, the hood, the boot lid, the bumpers and the mirrors can hang on hinges and come off (set in the soft body card), and a part called <code>steeringwheel</code> turns with the steering.</li>
+                <li><b>Optional:</b> a suspension that moves, with parts named <code>susp_...</code> and <code>steer_...</code> with their pivots (see <a href="#rig">Moving suspension and steering</a>), and a driver: a <code>.glb</code> with a simple skeleton in the T pose, with the bones named so that the game finds them (<code>web/examples/driver-t-pose.glb</code> is an example).</li>
+                <li><b>Size:</b> the standard cars are 0.1 to 40 MB, and every texture counts: keep textures to what you can see. If you keep the project on GitHub, a file over 100 MB is refused.</li>
+            </ul>
+            <h3>A track</h3>
+            <ul>
+                <li><b>Units and axes:</b> metres, y up. Make the road, the kerbs, the grass, the ground and the scenery <b>separate objects with names</b>: the track editor guesses the surface of a part from its name (<code>road</code>, <code>track01</code> for the pit lane, <code>grass</code>, <code>ground</code>, <code>scenery</code>, <code>decor</code>) and lets you set it per part.</li>
+                <li><b>Walls and scenery</b> are walls for the car where they are steep, <i>decor</i> is only to look at, so keep what you do not want to hit out of the collision by marking it decor.</li>
+                <li><b>In the editor:</b> the start grid, the gates (the first is the finish line), the pit boxes and the pit line, the cameras and the sky, the sun and the fog. None of those has to be in the model. Without a model you can draw a track from nodes in the track editor.</li>
+                <li><b>Size:</b> a big track is fine, but a model of 100 MB or more is slow to load and cannot be kept on GitHub. Merge small objects that share a material and keep the textures to what you see.</li>
+            </ul>
+            <p>Check a model in the editor first: the car editor shows the front, the wheels and the test bench, and the track editor shows the surfaces in colour.</p>
         </section>
 
         <section id="blender">
