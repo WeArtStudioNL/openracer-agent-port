@@ -712,15 +712,38 @@ start http://localhost:8000</code></pre>
 
         <section id="blender">
             <h2>Blender settings</h2>
-            <p>The game and Blender light a car differently, so a car never looks exactly the same, but it can come close.</p>
+            <p>The game and Blender light a car differently, so a car never looks exactly the same, but it can come close. <code>tools/blender_match_game.py</code> sets Blender up to look like the game. You need Blender (the script was tested with 5.1), the game and a copy of the repository for the script (or just that one file from <a href="https://github.com/WeArtStudioNL/openracer-agent-port/blob/master/tools/blender_match_game.py">GitHub</a>).</p>
+            <h3 id="blender-steps">The steps</h3>
+            <ol>
+                <li><b>In the game:</b> open a car (any race or free drive), press <kbd>Esc</kbd>, go to the <i>Tools</i> tab and press <i>Surroundings for Blender → Save as HDR</i>. Your browser saves <code>openracer-environment.hdr</code>, usually in <i>Downloads</i>. It is the sky and the ground around the car: the game is lit by it and the car reflects it. If you use Tone mapping in the game (<i>Esc → Graphics</i>), note which one (Neutral, AgX, ACES): the script has a switch for it.</li>
+                <li><b>In Blender:</b> open your <code>.blend</code>, or import the model with <i>File → Import → glTF 2.0 (.glb/.gltf)</i>.</li>
+                <li>Open the <b>Scripting</b> workspace (the tab at the top), press <i>Open</i> and choose <code>tools/blender_match_game.py</code>.</li>
+                <li>Near the top of the script, under <i>what you may want to change</i>, set what you need:
+                    <ul>
+                        <li><code>HDRI</code>: the path of the <code>.hdr</code> file. Leave it empty if the file is in your Downloads folder, next to the script or next to the <code>.blend</code>: the script looks there.</li>
+                        <li><code>VIEW</code>: <code>"standard"</code> when the game has Tone mapping off (the default), or <code>"agx"</code> when it uses AgX.</li>
+                        <li><code>SAMPLES</code>, <code>RESOLUTION</code>, <code>ROAD</code> (a dark road under the car, for its shadow) and <code>CAMERA_ANGLE</code> (0 is straight behind the car, like the chase camera) are for the picture.</li>
+                    </ul>
+                </li>
+                <li>Press <i>Run Script</i> (the play button, or <kbd>Alt</kbd> <kbd>P</kbd> with the cursor in the text). Then turn the 3D view to <i>Rendered</i> (the viewport shading), or press <kbd>F12</kbd> to render.</li>
+                <li>Run it again after you change a setting of the script: it does not delete anything of your scene, and it names what it adds <i>OpenRacer ...</i>.</li>
+            </ol>
+            <p>Without the Blender window, from a terminal (give the full path of Blender if it is not in your path, on macOS <code>/Applications/Blender.app/Contents/MacOS/Blender</code>):</p>
+            <pre><code>blender car.blend --python tools/blender_match_game.py</code></pre>
+            <h3 id="blender-does">What the script sets</h3>
+            <ul>
+                <li><b>Render engine:</b> EEVEE, without screen space reflections or ray tracing, bloom and ambient occlusion, with soft shadows and enough samples to look smooth.</li>
+                <li><b>Colour management:</b> <i>Standard</i> (the game shows colours as they come), or AgX; no look; the exposure of the colour correction of the game (a factor of 1.2).</li>
+                <li><b>The world:</b> the saved surroundings, with the ambient light of the game added to the light and not to what the camera sees.</li>
+                <li><b>Lights:</b> the three lights of the game as suns (a main sun, one that casts the shadow, and a high light), a dark road under the car, and a camera with the view of the chase camera (35 degrees) if the scene has none.</li>
+            </ul>
+            <h3 id="blender-export">Making the model for the game</h3>
             <ul>
                 <li><b>Materials:</b> use the Principled BSDF with the inputs glTF has. Other shaders do not survive the export; set them right in the car editor.</li>
-                <li><b>Colour management:</b> the game shows colours as they come (Standard) unless <i>Tone mapping</i> is set. Use the same in Blender. Look None, gamma 1; the game brightens by 20 % at the end.</li>
-                <li><b>Lighting:</b> save the surroundings in the game (<i>Esc → Tools → Surroundings for Blender</i>) and use the HDR as the world, then add the lights of the game.</li>
-                <li><b>Render engine:</b> EEVEE, without screen space reflections, bloom and ambient occlusion, with soft shadows.</li>
-                <li><b>The car:</b> y up, forward along +Z, the wheels as separate named parts.</li>
+                <li><b>The car:</b> y up, forward along +Z, the wheels as separate named parts, the parts that move as separate objects. Apply rotation and scale (<kbd>Ctrl</kbd> <kbd>A</kbd>).</li>
+                <li><b>Export:</b> <i>File → Export → glTF 2.0</i>, format <i>glTF Binary (.glb)</i>, <i>+Y Up</i>, and in the mesh section <b>no compression</b> (Draco is not supported). Then open the file in the <a href="#car-editor">car editor</a>.</li>
             </ul>
-            <p><code>tools/blender_match_game.py</code> does all of this. Open the Scripting workspace, set <code>HDRI</code> to the saved file and run it. It was tested with Blender 5.1.</p>
+            <p>The script only sets up the look in Blender: it does not export or change your model. Use it to compare how a model looks in Blender with how it looks in the game, or for a render of your own.</p>
         </section>
 
         <section id="tech">
