@@ -112,16 +112,30 @@ same numbers before and after these changes (a fixed `Math.random`), and give th
 by frame. The snapshot of the Muscle in the game (its soft body of 166 nodes and four shell tyres) is 13.6 KB, and a view made from it
 gives every value back. The game, a bike and the test bench of the car editor run as before.
 
-Still to measure, in a tab that is in front (the check ran in a hidden one, where the browser slows a page and its workers down):
-the four cars took 105 ms a frame in the page, 189 ms in one worker and 46 ms in a worker per car. One worker slower than the page
-is not what the proof of concept showed (8.8 against 8.4 ms); open tools/physics-worker-check.html in a tab in front, on a desktop
-and on a phone, before step 2.
+Measured in Chrome, in a tab in front, on the Mac with 10 cores (tools/physics-worker-check.html, the four cars, 5 s):
+
+| Where | ms a frame of 1/60 s, the four cars |
+|---|---|
+| The page, one after the other | 92 |
+| One worker | 120 |
+| A worker per car, side by side | 45 |
+
+One worker is slower than the page, but not because of the code: the Muscle alone, 150 steps, takes 9.7 to 10.1 ms at the fastest
+in a worker and 9.8 to 12 ms in the page, while the middle of the worker's times went from 12 to 40 ms between runs. The ground copied
+into the worker is not the cause either (the same copy on the main thread is as fast as the original). It is where the system runs
+the worker: a thread that works for a moment and then waits for the page, frame after frame, is put on a slow core (macOS has
+efficiency cores; phones have them too). So:
+
+* the worker should be busy, not wait for the page: in step 2 it steps on its own clock and the page takes the newest snapshot,
+  rather than a question and an answer every frame;
+* the gain is to be measured in the game itself, on a Mac, a Windows PC, an iPhone and an Android phone, before the player's car
+  moves (step 3).
 
 ### Step 2: the AI cars in a worker
 
 The AI cars have the fewest readers (no HUD, no force feedback, no camera). A worker steps them and their driver (`Opponent.drive`
-reads only positions); the main thread sends the input and the place of the player every frame and draws the AI cars from their
-views. Contacts between the player and an AI car use the other car of one frame before. Gain: the 4.7 ms of five AI cars off the
+reads only positions) on its own clock, so that it stays busy (see the measurements above); the main thread sends the place of the
+player when it has a new one and draws the AI cars from the newest snapshot. Contacts between the player and an AI car use the other car of one frame before. Gain: the 4.7 ms of five AI cars off the
 main thread, and with two workers the AI cars side by side.
 
 ### Step 3: the player's car in a worker
