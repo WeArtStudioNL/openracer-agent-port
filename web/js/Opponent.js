@@ -40,6 +40,7 @@ OpenRacer.vehicleParams = function (config, getSurface) {
     };
 };
 
+var GHOST_TIME = 10;      // seconds that a car that was put back is a ghost for the other cars
 var LOD_DISTANCE = 450;   // metres from the camera, beyond that an AI car is not drawn
 
 OpenRacer.Opponent = function (config, line, options) {
@@ -461,6 +462,42 @@ OpenRacer.Opponent = function (config, line, options) {
         }
     };
 
+    // After a reset an AI car is a ghost for a while (GHOST_TIME seconds): half see-through, and the other cars go through it (their shells and discs do not see it;
+    // the road and the walls still work). Two cars put back at the same place no longer hit each other, and the player cannot run into a car that has just appeared.
+    var ghostSaved = [];
+    function ghostLook(on) {
+        if (!on) {
+            ghostSaved.forEach(function (e) {
+                if (!e.own) { e.mesh.material = e.orig; e.mat.dispose(); }
+                else { e.mat.transparent = e.transparent; e.mat.opacity = e.opacity; e.mat.depthWrite = e.depthWrite; e.mat.needsUpdate = true; }
+            });
+            ghostSaved.length = 0;
+            return;
+        }
+        if (ghostSaved.length) return;
+        [self.body].concat(self.wheels.map(function (w) { return w.object; })).forEach(function (root) {
+            if (!root) return;
+            root.traverse(function (mesh) {
+                if (!mesh.isMesh || !mesh.material) return;
+                var own = !!mesh.userData.sbOriginal;        // (a material of the bent shell is this car's own; the others are shared with the cars of the same model: a copy)
+                var orig = mesh.material;
+                var list = Array.isArray(orig) ? orig : [orig];
+                var used = list.map(function (material) {
+                    var m = own ? material : material.clone();
+                    ghostSaved.push({ mesh: mesh, orig: orig, own: own, mat: m, transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite });
+                    m.transparent = true; m.opacity = 0.4; m.depthWrite = false; m.needsUpdate = true;
+                    return m;
+                });
+                if (!own) mesh.material = Array.isArray(orig) ? used : used[0];
+            });
+        });
+    }
+    this.setGhost = function (seconds) {
+        this.ghostLeft = seconds;
+        this.vehicle.ghost = seconds > 0;
+        ghostLook(seconds > 0);
+    };
+
     // Put back at the side of the track, repaired: the right of the line, a little further along it, where there is road (else on the line), facing along it, standing
     this.putBack = function () {
         var v = this.vehicle;
@@ -483,12 +520,14 @@ OpenRacer.Opponent = function (config, line, options) {
         this.anchor = null; this.stillFor = 0;
         this.throttle = 0; this.brakePedal = 1; this.turnAngle = 0;
         this.recovered = (this.recovered || 0) + 1;
+        this.setGhost(GHOST_TIME);
         this.updateVisuals();
     };
 
     this.update = function (delta, others) {
         if (!this.loaded) return;
         this.clock += delta;
+        if (this.ghostLeft > 0 && (this.ghostLeft -= delta) <= 0) this.setGhost(0);
         if (line && typeof getSurface === "function" && Math.abs(getSurface("road").static - speedsGrip) > 0.03) buildSpeeds();
         if (this.crashedAt) {
             // crashed: it stands (no throttle, the brakes on, no steering) until the wait is over, then it is put back at the side of the track
@@ -602,11 +641,12 @@ OpenRacer.collideCars = function (vehicles) {
         if (!soft.otherCars) continue;
         soft.otherCars.length = 0;
         if (!soft.softBody) continue;
-        for (var s = 0; s < vehicles.length; s++) if (s !== i && Math.abs(soft.py - vehicles[s].py) < 6) soft.otherCars.push(vehicles[s]);
+        for (var s = 0; s < vehicles.length; s++) if (s !== i && !vehicles[s].ghost && !soft.ghost && Math.abs(soft.py - vehicles[s].py) < 6) soft.otherCars.push(vehicles[s]);
     }
     for (var i = 0; i < vehicles.length; i++) {
         for (var j = i + 1; j < vehicles.length; j++) {
             var a = vehicles[i], b = vehicles[j];
+            if (a.ghost || b.ghost) continue;
             if (Math.abs(a.py - b.py) > 2.5) continue;
             var ra = a.halfWidth + 0.15, rb = b.halfWidth + 0.15;
             if (a.softBody && b.softBody && !a.shellSkip && !b.shellSkip && a.ground && a.ground.use3D && b.ground && b.ground.use3D) { ra -= 0.35; rb -= 0.35; }
