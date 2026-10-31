@@ -113,7 +113,7 @@ var Settings = (function() {
         // the graphics (Graphics.js): a preset is a set of these
         gfxPreset: "high", gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000, gfxAniso: 8, gfxSharpen: 1,
         // the look and the atmosphere (Graphics.js, Atmosphere.js): the tone mapping, the exposure, the contrast and the saturation; the hour (-1: as the track) and the weather
-        mirrorLeftReal: false, mirrorRightReal: false, mirrorCentreReal: false, mirrorLeftYaw: 0, mirrorLeftTilt: 0, mirrorRightYaw: 0, mirrorRightTilt: 0, mirrorCentreYaw: 0, mirrorCentreTilt: 0, gfxDebrisRate: 1, gfxDebrisScale: 1, gfxDebrisMax: 6000, gfxTone: "neutral", gfxExposure: 0.9, gfxContrast: 1.05, gfxSaturation: 1, gfxTime: 14, gfxWeather: "clear", gfxSunAzimuth: 40, gfxMoon: 1, gfxGround: "auto" };
+        mirrorLeftReal: false, mirrorRightReal: false, mirrorCentreReal: false, mirrorLeftYaw: 0, mirrorLeftTilt: 0, mirrorRightYaw: 0, mirrorRightTilt: 0, mirrorCentreYaw: 0, mirrorCentreTilt: 0, gfxDebrisRate: 1, gfxDebrisScale: 1, gfxDebrisMax: 6000, gfxTone: "neutral", gfxExposure: 0.9, gfxContrast: 1.05, gfxSaturation: 1, gfxTime: 14, gfxWeather: "clear", gfxSunAzimuth: 40, gfxMoon: 1, gfxGround: "auto", simAiDamage: "near", simAiRange: 60, simAiSteps: 3 };
 
     var bindings = {};      // action id -> list of inputs
     var options = {};
@@ -1117,6 +1117,18 @@ var Settings = (function() {
             page.appendChild(sliderRow("Debris: size (1 is normal)", "gfxDebrisScale", 0, 5, 0.1, function(v) { return v.toFixed(1) + "\u00d7"; }));
             page.appendChild(sliderRow("Debris: most pieces at once (they stay on the ground for a while)", "gfxDebrisMax", 500, 20000, 500, function(v) { return v + " pieces"; }));
         }
+        page = tabPage("Simulation");
+        var simNote = document.createElement("div");
+        simNote.className = "sub";
+        simNote.textContent = "What the computer calculates for the other cars. With many AI cars with damage the physics is the biggest cost: these settings trade a little realism for frames. The player's car is never touched.";
+        page.appendChild(simNote);
+        page.appendChild(pickRow("AI cars: damage (soft body)", options.simAiDamage, [["full", "Always (most realistic)"], ["near", "Only near my car"], ["off", "Off (rigid AI cars)"]], function(v) { setOption("simAiDamage", v); }));
+        page.appendChild(sliderRow("AI cars: damage range around my car (when 'Only near my car')", "simAiRange", 20, 300, 10, function(v) { return v + " m"; }));
+        page.appendChild(pickRow("AI cars: soft body detail (steps per frame)", options.simAiSteps, [[3, "Full"], [2, "Medium"], [1, "Low (fastest)"]], function(v) { setOption("simAiSteps", v); }));
+        var simNote2 = document.createElement("div");
+        simNote2.className = "sub";
+        simNote2.textContent = "'Only near my car': an AI car further away than the range does not dent (it keeps the damage it has), so the cars you see and hit are the ones that are calculated. Low detail makes the shell of an AI car a little softer and less exact; the dents still form.";
+        page.appendChild(simNote2);
         page = tabPage("Tools");
         page.appendChild(optionRow("Debug text", options.debug ? "On" : "Off", function() { setOption("debug", !options.debug); }));
         var tuningRow = optionRow("Tuning menu", "Open", function() { closeMenu(); Tuning.toggle(); });

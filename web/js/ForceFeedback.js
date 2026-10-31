@@ -534,8 +534,15 @@ var ForceFeedback = (function() {
 
     // ---- every frame
     var lastUpdate = 0;
+    // the window has the focus and is shown: else the wheel is let go, and not driven again by the next frame of a game that goes on in the background (the zero of the blur was
+    // followed by a new force at once)
+    var focused = typeof document.hasFocus === "function" ? document.hasFocus() : true;
+    window.addEventListener("focus", function() { focused = true; });
+    window.addEventListener("blur", function() { focused = false; });
+    function windowActive() { return focused && !document.hidden && (typeof document.hasFocus !== "function" || document.hasFocus()); }
     function update(car, delta) {
         lastUpdate = performance.now();
+        if(!windowActive() && performance.now() >= testUntil) { neutral(); return; }
         if(!option("ffb", true)) {
             if(device && Math.abs(lastSent) > 0.001) send(0);
             return;

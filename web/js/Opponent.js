@@ -497,6 +497,13 @@ OpenRacer.Opponent = function (config, line, options) {
         }
         else this.drive(delta, others);
         this.vehicle.updateControls(delta);
+        // the simulation options (Settings, tab Simulation): an AI car far from the player's car, or all of them, do not step their shell (no new dents, a lot less time)
+        var sim = OpenRacer.sim, own = this.vehicle;
+        if(sim && !options.vehicle && own.softBody) {
+            var focus = sim.focus;
+            own.shellSkip = sim.aiDamage === "off" || (sim.aiDamage === "near" && !!focus && Math.hypot(own.px - focus.px, own.pz - focus.pz) > sim.range);
+            own.softBody.minSteps = sim.aiSteps;
+        }
         this.vehicle.update(delta);
         this.pit.update(delta);
         var marks = OpenRacer.skidMarks && OpenRacer.skidMarks();
@@ -602,7 +609,7 @@ OpenRacer.collideCars = function (vehicles) {
             var a = vehicles[i], b = vehicles[j];
             if (Math.abs(a.py - b.py) > 2.5) continue;
             var ra = a.halfWidth + 0.15, rb = b.halfWidth + 0.15;
-            if (a.softBody && b.softBody && a.ground && a.ground.use3D && b.ground && b.ground.use3D) { ra -= 0.35; rb -= 0.35; }
+            if (a.softBody && b.softBody && !a.shellSkip && !b.shellSkip && a.ground && a.ground.use3D && b.ground && b.ground.use3D) { ra -= 0.35; rb -= 0.35; }
             var discsA = [[a.af * 0.8, 0], [-a.ar * 0.8, 0]], discsB = [[b.af * 0.8, 0], [-b.ar * 0.8, 0]];
             for (var p = 0; p < 2; p++) {
                 for (var q = 0; q < 2; q++) {

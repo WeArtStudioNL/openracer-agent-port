@@ -1580,6 +1580,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     // One step of the shell, and the force and the torque of its anchors on the car
     function shellStep(dt, force, torque) {
         var sb = self.softBody;
+        if(self.shellSkip) { self.carContacts = 0; self.carHit = 0; return; }      // (Settings, tab Simulation: an AI car far away does not step its shell)
         ensureProxy();
         refreshCandidates();
         setTurn();
