@@ -527,6 +527,15 @@ OpenRacer.Opponent = function (config, line, options) {
     this.update = function (delta, others) {
         if (!this.loaded) return;
         this.clock += delta;
+        // the glass of an AI car is see-through (opacity), not refracting: the transmission of three.js draws the scene a second time for the glass of every car, and showed
+        // black blocks on the glass of the AI cars (the materials of a car are its own: the player's car keeps its glass)
+        if (!this.glassDone && this.body.children.length && !options.vehicle) {
+            this.glassDone = true;
+            this.body.traverse(function (mesh) {
+                if (!mesh.isMesh || !mesh.material) return;
+                (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(function (m) { if (m.transmission > 0) { m.transmission = 0; m.needsUpdate = true; } });
+            });
+        }
         if (this.ghostLeft > 0 && (this.ghostLeft -= delta) <= 0) this.setGhost(0);
         if (line && typeof getSurface === "function" && Math.abs(getSurface("road").static - speedsGrip) > 0.03) buildSpeeds();
         if (this.crashedAt) {

@@ -20,6 +20,7 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 ### Fixed before the release
 
+- **Glass of the AI cars**: see-through (opacity) instead of refracting (transmission), against black blocks on the windows of AI cars in a video; it also saves the extra picture of the scene that the transmission of every car costs. The glass of the player's car is as it was.
 - **Pit stop**: the car on the jacks is held by the parking brake, not by the brake pedal, and the automatic reverse is off during a stop (the brake held at a standstill put the car in R).
 - **AI cars put back are a ghost for 10 seconds**: half see-through, and the other cars (and the player) go through them, so two cars that are reset at the same place no longer hit each other and break again. The road and the walls still work.
 - **Settings: a Simulation tab** for the cost of the AI cars. With seven AI cars with damage the shells of the AI cars took about 8 ms of every 16 ms frame. The tab has: AI damage *Always / Only near my car (default, within a range of 20-300 m) / Off (rigid AI cars)*, and the soft body detail of the AI cars (the fewest steps of a frame: Full 3, Medium 2, Low 1). A car that is not calculated keeps the dents it has. The player's car is never touched. In a test with 7 AI hatchbacks a frame of the physics went from 12.3 ms to 9.3 ms (near, low detail) or 5.8 ms (off).
