@@ -178,3 +178,10 @@ footer.site .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-conte
 .video video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
 
 .doc h3 small { color: var(--muted); font-weight: 400; font-size: .85em; }
+/* 2.2: loops of the news cards, a smaller gallery for the weather */
+.loops { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+.loopcard { padding: 0 0 14px; overflow: hidden; }
+.loopcard video { display: block; width: 100%; height: auto; background: #000; margin-bottom: 12px; }
+.loopcard .tag, .loopcard h3, .loopcard p { margin-left: 18px; margin-right: 18px; }
+.subhead { margin: 36px 0 0; font-size: 1.1rem; }
+.gallery.weather { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }

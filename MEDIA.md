@@ -1,5 +1,7 @@
 # Screenshots en video's voor de site
 
+**Stand van 31 oktober 2026**: Glenn leverde de beelden in `../` (de map boven dit project). Ze staan nu als WebP (1600 breed) in `site/img/` en als loops in `site/video/`, en de site en de docs gebruiken ze. Gedaan: punt 1 tot 8 en 10 (hero), 12, 14 tot 17 en 19, plus de drie loops van punt 22 (schade, motor, pitstop met reparatie; 1,2 tot 1,5 MB per stuk). Nog open: punt 9 (`poster.webp` en 21: de promovideo is nog die van 2.1.0), 11 (reeks van de crash), 13, 18 (stilstaande pitstop met HUD), 20 (Garage), en de loop "vrije camera in een replay". `touch-portrait.png` is niet gebruikt (de site toont de liggende).
+
 Wat de site (`site/index.html`) en de docs (`site/docs.html`) nodig hebben voor 2.2.0.
 
 **Formaat**

@@ -12,7 +12,7 @@ Openstaande punten voor later. Bijgewerkt op 30 oktober 2026. De nummers met § 
 - **De i30**: de motorbouw geeft 96 Nm en 75 pk, terwijl de beschrijving 164 Nm en 135 pk zegt.
 - **De OpenRacer Muscle**: 913 pk, 391 km/h en 4 versnellingen. Is dat zo bedoeld?
 - **`differential.glb`**: het lege bestand van 132 bytes is vervangen door de vorige versie. Klopt dat? Het lege bestand staat in de backupmap `openracer-softbody-originals-2026-10-30/`.
-- **Screenshots en video's** voor de site en de docs. Glenn levert ze aan; de lijst staat in `MEDIA.md`.
+- **Screenshots en video's** voor de site en de docs: grotendeels binnen en op de site gezet (31 oktober). Nog te leveren: de nieuwe promovideo en poster, de Garage en een stilstaande pitstop. Zie `MEDIA.md`.
 - **Live zetten** pas na akkoord: push, merge naar master, deploy en Discord.
   - De index-bestanden worden live met de hand bijgewerkt.
   - `--delete` verwijdert de Mustang-mappen op de server.

@@ -142,7 +142,7 @@ cd openracer-agent-port
                 <li><b>Opponents</b> (a race only). A grid of the places. <b>+</b> adds a car (and its tune, when it has one), the copy button adds the same car again. The places you leave empty get cars of the game.</li>
             </ol>
             <p>The skidpad has only the car and the ground. <kbd>Esc</kbd> in the game has a button to come back to the menu. The editors open from the <a href="#garage">Garage</a>.</p>
-            <figure class="shot"><a href="img/menu.webp"><img loading="lazy" src="img/menu.webp" width="1600" height="900" alt="The main menu of an older version, with a tile for every car, the tracks and the race options"></a><figcaption>The main menu of an older version. The menu is now a set of steps.</figcaption></figure>
+            <figure class="shot"><a href="img/menu.webp"><img loading="lazy" src="img/menu.webp" width="1600" height="726" alt="The main menu: choose your car, with a tile for every car"></a><figcaption>The main menu is a set of steps: play, car, tune, track, weather, race and opponents.</figcaption></figure>
             <p>The lists of cars and tracks are made by looking at folders. Every <code>cars/&lt;id&gt;/car.json</code> is a car and every <code>tracks/&lt;id&gt;/track.json</code> is a track, so a new folder shows up at the next refresh. What the menu chooses is in the address, so a link starts a particular game:</p>
             <pre><code>index.html?car=hyundai-i30&amp;track=circuit&amp;laps=5&amp;ai=3&amp;difficulty=normal&amp;ghost=1&amp;records=1&amp;wear=1&amp;damage=1</code></pre>
             <table>
@@ -204,7 +204,7 @@ cd openracer-agent-port
         <section id="touch">
             <h2>Touch screen</h2>
             <p>On a phone or tablet the game draws touch controls over the picture. They appear by themselves on a touch screen (and with <code>?touch=1</code> in the address; <code>?touch=0</code> switches them off), so a desktop never sees them. Turn the phone sideways for the most room.</p>
-            <figure class="shot small"><a href="img/touch.webp"><img loading="lazy" src="img/touch.webp" width="844" height="390" alt="The touch controls over the game: a stick on the left, the pedals and buttons on the right"></a><figcaption>The touch controls: the stick under the finger on the left, the pedals and buttons on the right.</figcaption></figure>
+            <figure class="shot small"><a href="img/touch.webp"><img loading="lazy" src="img/touch.webp" width="1100" height="423" alt="The touch controls over the game: a stick on the left, the pedals and buttons on the right"></a><figcaption>The touch controls: the stick under the finger on the left, the pedals and buttons on the right.</figcaption></figure>
             <ul>
                 <li><b>Steering.</b> Put a finger anywhere on the left half of the screen and a stick appears under it. Move it left or right to steer. The stick follows your finger when it goes far, so your hand never runs out of room. Let go and the wheels come back to the middle.</li>
                 <li><b>Pedals.</b> <b>GAS</b> and <b>BRAKE</b> are on the right, each for a thumb. They build up smoothly, like a pedal and not a switch.</li>
@@ -260,7 +260,7 @@ cd openracer-agent-port
         <section id="hud">
             <h2>The HUD</h2>
             <p>Bottom right is a round gauge. The ring is the engine speed with a red zone at the rev limit and a shift light that goes orange and flashes at the limiter. In the middle are the speed and the gear (P R N D and the gear of an automatic, or the gear of a manual). The two small arcs are the throttle (green, left) and the brake (red, right). In the gauge are badges for the systems the car has: TC, ESC, ABS, launch control (LC) and two-step (2S). Off, on and working each look different, and a click or tap on a badge switches it. A car without a system has no badge for it. P shows while the parking brake or the P of an automatic holds the car, TB while the transbrake holds it. A car with a boost gauge also shows the turbo pressure. <i>Esc → Display and sound → Edit HUD…</i> moves the parts of the HUD.</p>
-            <figure class="shot"><a href="img/race.webp"><img loading="lazy" src="img/race.webp" width="1600" height="900" alt="The Mustang on the circuit with the round gauge, the tyre temperatures and the fuel"></a><figcaption>The HUD in a race: the gauge bottom right, the lap time, the tyres and the fuel top left.</figcaption></figure>
+            <figure class="shot"><a href="img/race.webp"><img loading="lazy" src="img/race.webp" width="1600" height="1039" alt="A race from behind the car, with the round gauge, the tyre temperatures and the fuel"></a><figcaption>The HUD in a race: the gauge bottom right, the lap time, the tyres and the fuel top left.</figcaption></figure>
             <p>Top left are the lap, the time of the lap that is going and the last laps, the best in green. In a race it shows the lap of the race (LAP 2/5, FINAL LAP) and your place. With wear on, a panel shows the four tyres (colour is temperature, the dark part is wear), the fuel and a PIT hint.</p>
         </section>
 
@@ -325,6 +325,7 @@ cd openracer-agent-port
                 <li><b>Camera track:</b> keys of the free camera, between which the camera moves smoothly, with <i>Parent to car</i> and <i>Point at car</i>. A clip can also have a fixed shot or one of the cameras of the game.</li>
                 <li><b>Save</b> keeps the edit with the replay. <i>Save as replay</i> makes a new replay with the cuts and speeds, and <i>Save as mp4</i> records the result with the engine sound.</li>
             </ul>
+            <figure class="shot"><a href="img/video-editor.webp"><img loading="lazy" src="img/video-editor.webp" width="1600" height="793" alt="The video editor with a source monitor, a program monitor and a timeline"></a><figcaption>The video editor: the source on the left, the program on the right, the timeline below.</figcaption></figure>
         </section>
 
         <section id="ai">
@@ -352,6 +353,7 @@ cd openracer-agent-port
                 <li><b>Time of day:</b> dawn, morning, noon, afternoon, evening, sunset, dusk or night, and an hour slider in the Graphics tab. The sun rises at 5:00, is highest at 12:00 and sets at 19:00. At night the moon gives a faint light, after its phase. There are no headlights yet, so the night is dark.</li>
                 <li><b>Ground:</b> follows the weather, or dry, wet or snow. Rain wets the road within a minute and it dries again in a few minutes after. Snow builds up while it falls and stays. A wet road has less grip, snow a lot less, for you and for the AI, which drives slower.</li>
             </ul>
+            <div class="gallery weather"><figure class="shot"><a href="img/weather-clear.webp"><img loading="lazy" src="img/weather-clear.webp" width="1600" height="796" alt="The same spot on the track: clear"></a><figcaption>Clear</figcaption></figure><figure class="shot"><a href="img/weather-cloudy.webp"><img loading="lazy" src="img/weather-cloudy.webp" width="1600" height="796" alt="The same spot on the track: cloudy"></a><figcaption>Cloudy</figcaption></figure><figure class="shot"><a href="img/weather-fog.webp"><img loading="lazy" src="img/weather-fog.webp" width="1600" height="796" alt="The same spot on the track: fog"></a><figcaption>Fog</figcaption></figure><figure class="shot"><a href="img/weather-rain.webp"><img loading="lazy" src="img/weather-rain.webp" width="1600" height="796" alt="The same spot on the track: rain"></a><figcaption>Rain</figcaption></figure><figure class="shot"><a href="img/weather-snow.webp"><img loading="lazy" src="img/weather-snow.webp" width="1600" height="796" alt="The same spot on the track: snow"></a><figcaption>Snow</figcaption></figure><figure class="shot"><a href="img/weather-sunset.webp"><img loading="lazy" src="img/weather-sunset.webp" width="1600" height="796" alt="The same spot on the track: sunset"></a><figcaption>Sunset</figcaption></figure><figure class="shot"><a href="img/weather-night.webp"><img loading="lazy" src="img/weather-night.webp" width="1600" height="796" alt="The same spot on the track: night"></a><figcaption>Night</figcaption></figure></div>
         </section>
 
         <section id="dragstrip">
@@ -364,6 +366,8 @@ cd openracer-agent-port
                 <li><b>Top 50.</b> The best runs per distance in this browser, with the car, the times, the top speed and the ticket of each run. Open it with <i>Drag top 50</i> on the track in the main menu, or <i>Esc → Tools</i>.</li>
             </ul>
             <p>For a launch there are the two-step (<kbd>Q</kbd>), the transbrake (<kbd>F</kbd>) and launch control (<kbd>J</kbd>). <i>Esc → Car</i> sets how long "Get ready" shows and how long the lights stay after the green.</p>
+            <figure class="shot"><a href="img/drag-hero.webp"><img loading="lazy" src="img/drag-hero.webp" width="1600" height="796" alt="A car at the start of a drag strip, with the tree of lights beside it"></a><figcaption>The start of the drag strip, with the tree of lights.</figcaption></figure>
+            <figure class="shot"><a href="img/drag-ticket.webp"><img loading="lazy" src="img/drag-ticket.webp" width="1600" height="790" alt="The time slip after a run on the drag strip"></a><figcaption>The time slip of a run.</figcaption></figure>
         </section>
 
         <section id="model">
@@ -486,12 +490,14 @@ cd openracer-agent-port
                 <li><b>Camera.</b> The follow camera rolls with the lean, or stays level like the one of a car (<i>Esc → Car</i>).</li>
             </ul>
             <p>A car can have a driver too: the <i>Driver</i> card of the car editor places a model in the car, with its hands on the steering wheel and its feet on the pedals.</p>
+            <figure class="shot"><a href="img/motorcycle-lean.webp"><img loading="lazy" src="img/motorcycle-lean.webp" width="1600" height="796" alt="A motorcycle leaning far over in a bend"></a><figcaption>A motorcycle leans into a bend; the camera can roll with it.</figcaption></figure>
+            <figure class="shot"><a href="img/driver-in-car.webp"><img loading="lazy" src="img/driver-in-car.webp" width="1600" height="796" alt="A driver with his hands on the steering wheel, seen through the side window"></a><figcaption>The driver of a car: his hands follow the steering wheel.</figcaption></figure>
         </section>
 
         <section id="effects">
             <h2>Skid marks, smoke and collisions</h2>
             <p><b>Skid marks.</b> A tyre that slides past the peak of its grip at some speed leaves a strip of rubber along the path of its contact patch, darker the harder it slides (black on the road, lighter on grass and dirt), for the player and the AI alike. One mesh holds about a kilometre of marks in a ring; the oldest are drawn over when it is full.</p>
-            <figure class="shot"><a href="img/drift.webp"><img loading="lazy" src="img/drift.webp" width="1600" height="900" alt="A Mustang sliding on the grass in a cloud of dust"></a><figcaption>A slide on the grass: the dust comes from the physics of the tyres.</figcaption></figure>
+            <figure class="shot"><a href="img/drift.webp"><img loading="lazy" src="img/drift.webp" width="1600" height="896" alt="A muscle car sliding across a kerb in a cloud of smoke"></a><figcaption>A slide on the grass: the dust comes from the physics of the tyres.</figcaption></figure>
             <p><b>Smoke and squeal.</b> A sliding tyre makes smoke, and the longer it slides the hotter it gets and the thicker the smoke. On grass it is dust. The squeal is made by the game and follows the car in pitch and volume; a recording in <code>sounds/tyre-squeal.ogg</code> (or <code>.mp3</code> or <code>.wav</code>) replaces it. It comes from the physics, so it also shows with locked wheels, wheel spin and drifts.</p>
             <p><b>Collisions.</b> The car collides with walls, fences, buildings, steep embankments and the other cars. The body is the cloud of spheres and the shell of nodes of <a href="#physics3d">3D contact</a> and <a href="#softbody">Soft body</a>: a hit acts where it hits, so it stops the car, dents it, bounces it a little and spins it when it hits with a corner. Things lower than 30 cm, like kerbs, are driven over. Barrels, boxes and cones in a track can be knocked over.</p>
         </section>
@@ -505,7 +511,7 @@ cd openracer-agent-port
         <section id="tuning">
             <h2>Tuning menu</h2>
             <p><kbd>U</kbd> shows or hides the tuning menu, with which the car is changed while it drives:</p>
-            <figure class="shot"><a href="img/tuning.webp"><img loading="lazy" src="img/tuning.webp" width="1600" height="900" alt="The tuning menu open next to the car"></a><figcaption>The tuning menu opens next to the car, which keeps driving.</figcaption></figure>
+            <figure class="shot"><a href="img/tuning.webp"><img loading="lazy" src="img/tuning.webp" width="1600" height="785" alt="The tuning menu open next to the car"></a><figcaption>The tuning menu opens next to the car, which keeps driving.</figcaption></figure>
             <p>It has the cards of the car editor, with the same names and in the same order (one list for both, <code>OpenRacer.CarTuning.CARDS</code>), so the two always agree:</p>
             <ul>
                 <li><b>Wheels:</b> the rims and tyres per axle, size, rubber, pressure, heating and life.</li>
@@ -533,7 +539,7 @@ cd openracer-agent-port
         <section id="skidpad">
             <h2>Skidpad</h2>
             <p><b>Skidpad</b>, a way to play in the main menu, asks for the car and the ground (asphalt, wet asphalt, grass, gravel, sand or mud, each with its grip), takes the car to a round pad with a painted circle of 50 m radius and drives it round by itself. The steering holds the painted line, a steady throttle raises the speed slowly, and the lateral acceleration is read from the tyre forces while the car still follows the circle. When it lets go, by going off the line or sliding, or when it understeers wide and cannot go faster, the result comes up: the g it held and the speed. Then you can press <i>Reset</i> to run again with the tuning as it is now, <i>Tune</i> to open the tuning menu, or <i>Back to the menu</i>. ESC is off for it. The result on asphalt is kept for that car and setup, and the <a href="#ai">AI</a> drives the bends with it (not after the tuning menu was opened during the run: save the setup and run it again).</p>
-            <figure class="shot"><a href="img/skidpad.webp"><img loading="lazy" src="img/skidpad.webp" width="1600" height="900" alt="The result of a skidpad run: 0.66 g held at 61 km/h"></a><figcaption>The result of a run: the g the car held, the speed, and the buttons to try again or tune.</figcaption></figure>
+            <figure class="shot"><a href="img/skidpad.webp"><img loading="lazy" src="img/skidpad.webp" width="1600" height="778" alt="The result of a skidpad run: 0.66 g held at 61 km/h"></a><figcaption>The result of a run: the g the car held, the speed, and the buttons to try again or tune.</figcaption></figure>
         </section>
 
         <section id="bench">
@@ -550,7 +556,7 @@ cd openracer-agent-port
         <section id="car-editor">
             <h2>Car editor</h2>
             <p>At <code>tools/car-editor.html</code>. Open it from the <a href="#garage">Garage</a> in the main menu: <i>New</i> for a new car, <i>Load</i> to open one. With the helper server it writes the files to disk, without it it saves to the garage. The cards on the left are the cards of the <a href="#tuning">tuning menu</a>, plus the model, the materials and the driver. The list of <a href="#setups">setups</a> is at the top.</p>
-            <figure class="shot"><a href="img/car-editor.webp"><img loading="lazy" src="img/car-editor.webp" width="1600" height="900" alt="The car editor of an older version with a Mustang, the layers panel and the test bench at the bottom"></a><figcaption>The car editor of an older version, with the test bench at the bottom of the view.</figcaption></figure>
+            <figure class="shot"><a href="img/car-editor.webp"><img loading="lazy" src="img/car-editor.webp" width="1600" height="781" alt="The car editor with a hatchback, the layers panel and the test bench at the bottom"></a><figcaption>The car editor, with the test bench at the bottom of the view.</figcaption></figure>
             <ol>
                 <li><b>Pick the glb.</b> The arrow is the front of the car. Turn the model if needed and press <i>Fit</i>: the origin has to be at the height of the wheel axles, in the middle between the axles.</li>
                 <li><b>Wheels.</b> The wheels have to be separate parts, because they steer and spin. <i>Find the wheels</i> does this by their names and places. Or take a rim from the <b>wheel library</b> per axle, with a tyre made from its numbers (width, diameter, sidewall, rubber), or the objects <code>rim</code> and <code>tyre</code> of the model.</li>
@@ -609,7 +615,7 @@ cd openracer-agent-port
         <section id="track-editor">
             <h2>Track editor</h2>
             <p>At <code>tools/track-editor.html</code>. Open it from the <a href="#garage">Garage</a> in the main menu: <i>New</i> for a new track, <i>Load</i> to open one.</p>
-            <figure class="shot"><a href="img/track-editor.webp"><img loading="lazy" src="img/track-editor.webp" width="1600" height="900" alt="The track editor with a drawn track"></a><figcaption>A drawn track in the track editor, with the drawer for the road and the prefabs.</figcaption></figure>
+            <figure class="shot"><a href="img/track-editor.webp"><img loading="lazy" src="img/track-editor.webp" width="1600" height="781" alt="The track editor with a drawn track"></a><figcaption>A drawn track in the track editor, with the drawer for the road and the prefabs.</figcaption></figure>
             <ol>
                 <li><b>Model.</b> Pick the glb. The parts are listed with a guess of their surface from their names. Click a part in the view to find it, change the surface per part or for all parts that match the filter. <i>Colours of the surfaces</i> shows what you set.</li>
                 <li><b>Grid and gates.</b> <i>Grid box</i>: click on the road and drag in the direction the car faces; box 1 is the start of the player, 2 to 8 are for the opponents. <i>Add gate</i> works the same. <i>Gate 1 at the start</i> puts the finish line just in front of the start.</li>
