@@ -207,6 +207,13 @@ OpenRacer.PartsLibrary = (function () {
     // ---- the files
     var cache = {};                      // url -> { scene } or { error }
     var lib = { base: "" };
+    // the model of a particular engine: parts/driveline/<block of the engine>.glb, the block with every run of other characters as one "-" ("Inline-3 1.0 L" is
+    // Inline-3-1-0-L.glb). An engine without a model of its own has engine.glb
+    function engineModel(config) {
+        var b = config && config.engine && config.engine.build && config.engine.build.block;
+        var name = typeof b === "string" ? b.trim().replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "") : "";
+        return name && name !== "engine" ? name : null;
+    }
     function url(type, file) { return lib.base + "parts/" + type + "/" + file + ".glb"; }
     function filesFor(config) {
         var list = [], driven = drivenAxles(config), any = false;
@@ -218,6 +225,8 @@ OpenRacer.PartsLibrary = (function () {
             if(axle === "front" && !isLive(t)) list.push({ type: "steering", file: "rack" });
         });
         if(any) DRIVELINE_FILES.forEach(function (f) { list.push({ type: "driveline", file: f }); });
+        var own = engineModel(config);
+        if(any && own) list.push({ type: "driveline", file: own, optional: true });          // (the model of this engine, when there is one)
         return list;
     }
     function preload(config, manager, done) {
@@ -229,7 +238,7 @@ OpenRacer.PartsLibrary = (function () {
             var u = url(f.type, f.file);
             cache[u] = { loading: true };
             loader.load(u, function (loaded) { cache[u] = { scene: loaded.scene }; if(--left === 0) done(); },
-                undefined, function (error) { cache[u] = { error: error || true }; console.warn("PartsLibrary: no " + u); if(--left === 0) done(); });
+                undefined, function (error) { cache[u] = { error: error || true }; if(!f.optional) console.warn("PartsLibrary: no " + u); if(--left === 0) done(); });
         });
     }
     function template(type, file) { var e = cache[url(type, file)]; return e && e.scene ? e.scene : null; }
@@ -239,6 +248,7 @@ OpenRacer.PartsLibrary = (function () {
         var group = type === "driveline" ? "driveline" : out.axle;
         if(out.hidden[group] && out.hidden[group].indexOf(file) >= 0) return null;          // (hidden in the car editor: the car's own model has it)
         var t = template(type, file);
+        if(type === "driveline" && file === "engine" && out.engineModel) t = template(type, out.engineModel) || t;          // (an engine with a model of its own has that one)
         if(!t) { if(out.missing.indexOf(type + "/" + file) < 0) out.missing.push(type + "/" + file); return null; }
         var node = new THREE.Object3D();
         node.name = name;
@@ -333,6 +343,7 @@ OpenRacer.PartsLibrary = (function () {
     function assemble(config, measured) {
         var out = { group: new THREE.Group(), names: [], missing: [], hidden: { front: hiddenOf(config, "front"), rear: hiddenOf(config, "rear"), driveline: hiddenOf(config, "driveline") }, axle: "front" };
         out.group.name = "parts-library";
+        out.engineModel = engineModel(config);
         if(!measured || !measured.centres || !measured.centres.FL) return out;
         var geo = geometry(measured), driven = drivenAxles(config), any = false;
         ["front", "rear"].forEach(function (axle) {
@@ -367,11 +378,12 @@ OpenRacer.PartsLibrary = (function () {
     lib.missingFiles = function (config) {
         return filesFor(config).filter(function (f) {
             var group = f.type === "driveline" ? "driveline" : (f.type === "steering" ? "front" : (typeOf(config, "front") === f.type ? "front" : "rear"));
+            if(f.optional) return false;
             if(hiddenOf(config, group).indexOf(f.file) >= 0) return false;
             var e = cache[url(f.type, f.file)]; return !e || !e.scene;
         }).map(function (f) { return f.type + "/" + f.file + ".glb"; });
     };
     lib.partsOf = partsOf; lib.PART_LABELS = PART_LABELS;
-    lib.url = url;
+    lib.url = url; lib.engineModel = engineModel;
     return lib;
 })();
