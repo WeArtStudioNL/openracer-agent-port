@@ -222,6 +222,7 @@
             "<label style=\"display: flex; gap: 6px; align-items: center; margin-top: 8px; cursor: pointer;\"><input type=\"checkbox\" class=\"showShell\"> Show the nodes and the beams</label>" +
             "<div style=\"display: flex; gap: 6px; margin-top: 10px;\"><button type=\"button\" data-tool=\"hinge\" title=\"Right click a hinge (a door, the hood) to open it with a small torque, again to close it where it was\">Open hinges</button>" +
             "<button type=\"button\" data-tool=\"break\" title=\"Right click a part to break it loose\">Break parts</button></div>" +
+            "<button type=\"button\" class=\"pitNow\" style=\"width: 100%; margin-top: 6px; padding: 5px 4px; border-radius: 6px; cursor: pointer; font: 12px Arial, sans-serif; color: #dfe6ef; background: #232c38; border: 1px solid #3a4656;\" title=\"A pit stop where the car stands now: tyres, fuel and repair, with the car on the jacks\">Pit stop here</button>" +
             "<div class=\"grabTool\" style=\"color: #9fb0c4; margin-top: 6px; min-height: 1.2em;\"></div>";
         var slider = grabPanel.querySelector(".grabSlider"), value = grabPanel.querySelector(".grabValue");
         var hitSlider = grabPanel.querySelector(".hitSlider"), hitValue = grabPanel.querySelector(".hitValue");
@@ -240,6 +241,13 @@
             var v = typeof car !== "undefined" && car ? car.vehicle : null;
             if (grabbed && v && v.softBody) v.softBody.moveGrab(targetOf(v), grabStrength);
         };
+        grabPanel.querySelector(".pitNow").addEventListener("click", function () {
+            var c = typeof car !== "undefined" ? car : null;
+            if (!c || !c.pit || (OpenRacer.Replay && OpenRacer.Replay.active)) return;
+            if (c.pit.active) { toolText("A stop is going on."); return; }
+            c.pit.forceStart();
+            toolText("Pit stop where the car stands.");
+        });
         var shellBox = grabPanel.querySelector(".showShell");
         shellBox.checked = showShell;
         shellBox.addEventListener("change", function () { showShell = shellBox.checked; try { localStorage.setItem("openracer.showShell", showShell ? "1" : "0"); } catch (e) { /* no storage */ } });

@@ -93,10 +93,14 @@ OpenRacer.PitStop = function (vehicle) {
     // what a stop would take now, in seconds (for the AI and the HUD)
     this.estimate = function () { return planFor(vehicle).total; };
 
+    // a stop where the car stands, whatever the place (the Pit stop button of the debug view): it has the plan of a stop in the box and ends as that one does
+    this.forced = false;
+    this.forceStart = function () { this.forced = true; };
     this.update = function (dt) {
-        if(!vehicle.wearEnabled) { this.active = false; this.done = false; return; }
+        if(this.forced && this.done) this.forced = false;
+        if(!vehicle.wearEnabled && !this.forced) { this.active = false; this.done = false; return; }
         // (a car on the jacks is in its box until the stop is done: its wheels are off the ground)
-        var still = (this.active && this.holdCar) || (Math.abs(vehicle.u) < 0.4 && this.onPitLane());
+        var still = (this.active && this.holdCar) || this.forced || (Math.abs(vehicle.u) < 0.4 && this.onPitLane());
         if(!still) {
             if(this.active || this.done) {
                 // (a car that pulls away in the middle of a stop, the AI: the parts that were being carried back go on at once)
