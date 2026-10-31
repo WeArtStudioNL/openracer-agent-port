@@ -68,7 +68,7 @@
         var sb = v.softBody;
         var spheres = v.proxy3 || [];
         var worldOf = function (x, y, z, out) { out.set(x, y, z).applyQuaternion(q); out.x += v.px; out.y += v.py; out.z += v.pz; return out; };
-        for (i = 0; i < spheres.length; i++) {
+        for (i = 0; i < spheres.length && showShell; i++) {
             var sp = spheres[i];
             if (sp.disabled) continue;
             var node = sb ? sb.nodeOfSphere[i] : -1, x = sp.x, y = sp.y, z = sp.z, colour = YELLOW;
@@ -81,7 +81,7 @@
             worldOf(x, y, z, v1);
             push(points, v1.x, v1.y, v1.z, colour === RED ? RED : YELLOW);
         }
-        if (sb && sb.beamA) {
+        if (sb && sb.beamA && showShell) {
             for (k = 0; k < sb.beamA.length; k++) {
                 if (!sb.beamAlive[k]) continue;
                 sb.position(sb.beamA[k], nodePos); worldOf(nodePos.x, nodePos.y, nodePos.z, v1);
@@ -203,6 +203,9 @@
     // ---- the node grabber (as BeamNG has it): with the view on, N switches it on; press on a node of the shell with the left mouse button and drag it, held by an elastic
     // whose strength is set in the panel at the top right (SoftBody.grab: a spring from the node to the pointer, at the depth the node had when it was taken). Let go and
     // it is free again. The elastic is drawn red from the node to the pointer.
+    // the nodes and the beams of the shell can be left out of the view (the box in the panel of the node grabber), also while they are grabbed
+    var showShell = true;
+    try { showShell = localStorage.getItem("openracer.showShell") !== "0"; } catch (e) { /* no storage */ }
     var grabMode = false, grabbed = null, grabPanel = null, grabLine = null, grabStrength = 5000, hitKmh = 50;
     try { var keptHit = parseFloat(localStorage.getItem("openracer.hitSpeed")); if (keptHit >= 5 && keptHit <= 200) hitKmh = keptHit; } catch (e) { /* no storage */ }
     // the hit of the middle mouse button as the panel says it: the speed of the block of a tonne, and what that is as a force over the time of the hit
@@ -220,6 +223,7 @@
             "<input type=\"range\" class=\"grabSlider\" min=\"2\" max=\"5.3\" step=\"0.01\" style=\"width: 100%;\">" +
             "<div style=\"display: flex; justify-content: space-between; margin-top: 8px;\" title=\"The hit of the middle mouse button: a block of a tonne and a metre at this speed\"><span>Hit (middle mouse)</span><b class=\"hitValue\"></b></div>" +
             "<input type=\"range\" class=\"hitSlider\" min=\"5\" max=\"200\" step=\"5\" style=\"width: 100%;\">" +
+            "<label style=\"display: flex; gap: 6px; align-items: center; margin-top: 8px; cursor: pointer;\"><input type=\"checkbox\" class=\"showShell\"> Show the nodes and the beams</label>" +
             "<div style=\"display: flex; gap: 6px; margin-top: 10px;\"><button type=\"button\" data-tool=\"hinge\" title=\"Right click a hinge (a door, the hood) to open it with a small torque, again to close it where it was\">Open hinges</button>" +
             "<button type=\"button\" data-tool=\"break\" title=\"Right click a part to break it loose\">Break parts</button></div>" +
             "<div class=\"grabTool\" style=\"color: #9fb0c4; margin-top: 6px; min-height: 1.2em;\"></div>";
@@ -240,6 +244,9 @@
             var v = typeof car !== "undefined" && car ? car.vehicle : null;
             if (grabbed && v && v.softBody) v.softBody.moveGrab(targetOf(v), grabStrength);
         };
+        var shellBox = grabPanel.querySelector(".showShell");
+        shellBox.checked = showShell;
+        shellBox.addEventListener("change", function () { showShell = shellBox.checked; try { localStorage.setItem("openracer.showShell", showShell ? "1" : "0"); } catch (e) { /* no storage */ } });
         grabPanel.querySelectorAll("[data-tool]").forEach(function (b) {
             b.addEventListener("click", function () { partTool = partTool === b.dataset.tool ? null : b.dataset.tool; showTools(); });
         });
