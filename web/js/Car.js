@@ -781,7 +781,7 @@ OpenRacer.Car = function( config, domElement ) {
         wasHeld = this.held;
         // a pit stop: the car is on the jacks, the driver does nothing until it is done
         // (when it is done the brake is let go at once: the pedal follows the brake key only when the key is let go, and it was never pressed)
-        if(this.pit.active) { this.throttle = 0; this.accelerate = false; this.brakePedal = 1; this.turnLeft = this.turnRight = false; onJacks = true; }
+        if(this.pit.active) { this.throttle = 0; this.accelerate = false; this.brakePedal = 0; this.handbrake = true; this.brake = false; this.turnLeft = this.turnRight = false; onJacks = true; }      // (the parking brake holds it: the brake pedal held at a standstill put an automatic gearbox in reverse)
         else if(onJacks) { onJacks = false; if(!this.brake) this.brakePedal = 0; }
         var v = this.vehicle;
         // the mode of the gearbox follows the gearbox the car has (the tuning menu can change it on the track): a manual or an IMT is shifted by the driver, the others are automatics
@@ -970,7 +970,7 @@ OpenRacer.Car = function( config, domElement ) {
         // The same reverse for analog pedals (a wheel, the triggers of a pad, the touch pedals): the brake pedal held at a standstill is the gas of the reverse,
         // the gas pedal is the brake; for the physics the two values are swapped, and put back after it
         var swapPedals = false;
-        if(usingGamepad && !this.vehicle.controller && !this.keyPedals && !this.autoReverse && this.gearboxMode === "automatic" && this.selector === "D" && !this.parkingLock && !this.held && Settings.option("autoReversePedals") &&
+        if(usingGamepad && !this.vehicle.controller && !this.keyPedals && !this.autoReverse && this.gearboxMode === "automatic" && this.selector === "D" && !this.parkingLock && !this.held && !this.pit.active && Settings.option("autoReversePedals") &&
            !this.vehicle.launchControlEnabled && !(OpenRacer.DragStrip && OpenRacer.DragStrip.holding)) {
             var padUp = this.throttle > 0.1, padDown = this.brakePedal > 0.1, padAlong = v.u, padLimit = Math.max(0.3, Settings.option("autoReverseSpeed") / 3.6);
             if(!this.autoReversePedals) {
@@ -1168,7 +1168,7 @@ OpenRacer.Car = function( config, domElement ) {
             this.autoReverse = false;
             if(this.pushBack) { this.accelerate = false; this.brake = false; }
         }
-        if(!bike && this.gearboxMode === "automatic" && this.selector === "D" && !this.parkingLock && !this.held && Settings.option("autoReverse") &&
+        if(!bike && this.gearboxMode === "automatic" && this.selector === "D" && !this.parkingLock && !this.held && !this.pit.active && Settings.option("autoReverse") &&
            !this.vehicle.launchControlEnabled && !(OpenRacer.DragStrip && OpenRacer.DragStrip.holding)) {
             var along = this.vehicle.u, limit = Math.max(0.3, Settings.option("autoReverseSpeed") / 3.6);
             if(!this.autoReverse) {
