@@ -2482,6 +2482,21 @@ OpenRacer.Vehicle = function (parameters, input) {
         // (a motorcycle that leans in a corner has its bodywork near the road: that is no crash until it is nearly on its side)
         if(ground3D) { if(!(self.controller && self.controller.keepBodyOff(self))) bodyContacts3D(force, torque); if(self.softBody) shellStep(dt, force, torque); } else if(!(self.controller && self.controller.keepBodyOff(self))) bodyCorners(force, torque);
 
+        // ---- the parts that hang on the car and are pushed by the track (a hinged door against a pole, Parts.js): what pushes the part is carried to the car through the hinge, at the place
+        // where it touches
+        if(self.partForces) for(var pf = 0; pf < self.partForces.length; pf++) {
+            var pfo = self.partForces[pf], prx = pfo.px - self.px, pry = pfo.py - self.py, prz = pfo.pz - self.pz;
+            // the contact of the part is a hard one (the car is not one of its bodies in the engine of the parts): the force is held to what stops the car at the point where it touches in
+            // this step, so that the car is stopped and not thrown back
+            var pfl = Math.sqrt(pfo.x * pfo.x + pfo.y * pfo.y + pfo.z * pfo.z) || 1;
+            var pvx = self.vx + self.wy * prz - self.wz * pry, pvy = self.vy + self.wz * prx - self.wx * prz, pvz = self.vz + self.wx * pry - self.wy * prx;
+            var pvn = -(pvx * pfo.x + pvy * pfo.y + pvz * pfo.z) / pfl;
+            if(!(pvn > 0)) continue;
+            var pfs = Math.min(1, m * pvn / Math.max(dt, 1e-4) / pfl), pfx = pfo.x * pfs, pfy = pfo.y * pfs, pfz = pfo.z * pfs;
+            force.x += pfx; force.y += pfy; force.z += pfz;
+            torque.x += pry * pfz - prz * pfy; torque.y += prz * pfx - prx * pfz; torque.z += prx * pfy - pry * pfx;
+        }
+
         // ---- integrate: Newton for the movement, Euler for the rotation (with the gyroscopic term of a body that is not round)
         var accX = force.x / m + forceBody.x / mBody, accY = force.y / m + forceBody.y / mBody, accZ = force.z / m + forceBody.z / mBody;
         self.vx += accX * dt; self.vy += accY * dt; self.vz += accZ * dt;

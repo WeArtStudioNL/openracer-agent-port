@@ -699,6 +699,36 @@ OpenRacer.Parts = (function () {
 
         // A mount tears off when the load on it passes its force: the inertia of the part shared over the mounts that hold, or the force of
         // the shell on its node. With one mount left the part swings about it, with none it is free.
+        // What the track puts on a hinged part (a door against a pole or a wall) goes to the car through the hinge: the force of the contacts of the last step is the force on the car,
+        // at the place of the contact (v.partForces, Vehicle.js), and it counts as load on the hinge (the pins, the break force): the door is pushed on, the car is pushed, and when the
+        // hinge gives way the door is free and has no say any more.
+        var wallF = [];
+        function wallForces(stepDt) {
+            wallF.length = 0;
+            for (var i = 0; i < parts.length; i++) {
+                var p = parts[i];
+                p.wallForce = 0;
+                if (p.state !== "hinged" || !trackCollider || p.fetching) continue;
+                var fx = 0, fy = 0, fz = 0, cx = 0, cy = 0, cz = 0, wsum = 0;
+                world.narrowPhase.contactPair(p.collider.handle, trackCollider.handle, function (manifold, flipped) {
+                    var n = manifold.normal(), sign = flipped ? 1 : -1, count = manifold.numContacts();
+                    for (var k = 0; k < count; k++) {
+                        var imp = manifold.contactImpulse(k) / stepDt;
+                        if (!(imp > 0)) continue;
+                        fx += sign * n.x * imp; fy += sign * n.y * imp; fz += sign * n.z * imp;
+                        var sp = k < manifold.numSolverContacts() ? manifold.solverContactPoint(k) : null;
+                        if (sp) { cx += sp.x * imp; cy += sp.y * imp; cz += sp.z * imp; wsum += imp; }
+                    }
+                });
+                var mag = Math.hypot(fx, fy, fz);
+                // (the weight of the part that rests on the track is the car's own load: only what pushes sideways or up beyond it counts as a hit)
+                if (!(mag > 1)) continue;
+                p.wallForce = mag;
+                if (wsum > 0) wallF.push({ x: fx, y: fy, z: fz, px: cx / wsum, py: cy / wsum, pz: cz / wsum });
+                else wallF.push({ x: fx, y: fy, z: fz, px: p.centre.x, py: p.centre.y, pz: p.centre.z });
+            }
+            v.partForces = wallF;
+        }
         function tearMounts(part) {
             var alive = part.mounts.filter(function (m) { return m.alive; });
             var changed = false;
@@ -709,7 +739,7 @@ OpenRacer.Parts = (function () {
                     sb.position(m.node, a); sb.restPosition(m.node, c);
                     shell = a.distanceTo(c) * sb.params.anchorK;
                 }
-                if (m.breakForce > 0 && Math.max(shell, (part.inertia || 0) / alive.length) > m.breakForce) { m.alive = false; changed = true; emit("mount torn", part); }
+                if (m.breakForce > 0 && Math.max(shell, (part.inertia || 0) / alive.length, (part.wallForce || 0) / alive.length) > m.breakForce) { m.alive = false; changed = true; emit("mount torn", part); }
             });
             if (!changed) return;
             if (!part.mounts.some(function (m) { return m.alive; })) startMoving(part, "free");
@@ -815,12 +845,12 @@ OpenRacer.Parts = (function () {
                     }
                 } else if (part.state === "hinged") {
                     if (part.mounts.length) tearMounts(part);
-                    if (part.state === "hinged" && (torn || (part.hinge.breakForce > 0 && part.load > part.hinge.breakForce))) startMoving(part, "free");
+                    if (part.state === "hinged" && (torn || (part.hinge.breakForce > 0 && Math.max(part.load, part.wallForce || 0) > part.hinge.breakForce))) startMoving(part, "free");
                 }
                 if (part.state !== "held") moving = true;
                 settle(part, dt);
             }
-            if (!moving) return;
+            if (!moving) { wallF.length = 0; return; }                         // (nothing hangs on the car: nothing pushes it)
             refreshTrack();
             // a hinge opened in the debug view: a small torque about its axis, to the side where it has the most room, enough to lift it a little faster than its weight pulls
             for (var dk = 0; dk < parts.length; dk++) {
@@ -838,6 +868,7 @@ OpenRacer.Parts = (function () {
             world.timestep = dt / 2;
             world.step(); limitSpeeds();
             world.step(); limitSpeeds();
+            wallForces(dt / 2);
             for (var j = 0; j < parts.length; j++) {
                 var p = parts[j];
                 if (p.state === "held" || p.state === "broken" || p.fetching) continue;           // (a part that the pit stop carries back is put where it is by fetchTo)
