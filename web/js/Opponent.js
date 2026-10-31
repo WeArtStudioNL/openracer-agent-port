@@ -641,20 +641,73 @@ OpenRacer.Opponent = function (config, line, options) {
 // Two cars with a soft body (SOFTBODY.md, M4) hit each other with their shells: every car puts the others in vehicle.otherCars, and in its step the
 // nodes of the shell push against the collision spheres of the other (Vehicle.js, buildCarPairs). The discs are then only a backstop, a little
 // smaller than the car, for a hit that goes through the shell. A car without a soft body has nothing in otherCars and costs nothing.
+
+var sphereBuffer = new Float64Array(7 * 2);
+var rigidContacts = [];
+// Two rigid cars: every sphere of one against every sphere of the other. The cars are pushed apart along the horizontal line between the spheres and exchange momentum
+// along it (with a turn from the hit off the middle), the push and the impulse shared over the spheres that touch. Returns false when no sphere touches (the discs then
+// have the say, as before: a car without spheres has none).
+function rigidPair(a, b) {
+    var ra = a.boundRadius(), rb = b.boundRadius();
+    var ddx = b.px - a.px, ddy = b.py - a.py, ddz = b.pz - a.pz, reach = ra + rb;
+    if (ddx * ddx + ddy * ddy + ddz * ddz > reach * reach) return true;      // too far apart for any sphere: done
+    var na = a.proxy3.length, nb = b.proxy3.length, count = 0;
+    var A = new Float64Array(7 * na), B = new Float64Array(7 * nb), ca = 0, cb = 0;
+    for (var i = 0; i < na; i++) if (a.sphereWorld(i, A, 7 * ca)) ca++;
+    for (var j = 0; j < nb; j++) if (b.sphereWorld(j, B, 7 * cb)) cb++;
+    rigidContacts.length = 0;
+    for (var p = 0; p < ca; p++) {
+        for (var q = 0; q < cb; q++) {
+            var dx = B[7 * q] - A[7 * p], dy = B[7 * q + 1] - A[7 * p + 1], dz = B[7 * q + 2] - A[7 * p + 2];
+            var rr = A[7 * p + 3] + B[7 * q + 3], d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 >= rr * rr) continue;
+            var h = Math.hypot(dx, dz);
+            if (h < 1e-4) continue;
+            var d = Math.sqrt(d2);
+            rigidContacts.push({ nx: dx / h, nz: dz / h, overlap: (rr - d) * (h / d), x: (A[7 * p] + B[7 * q]) / 2, z: (A[7 * p + 2] + B[7 * q + 2]) / 2 });
+        }
+    }
+    count = rigidContacts.length;
+    if (!count) return true;
+    var share = 1 / Math.min(count, 6), restitution = 0.25, total = a.mass + b.mass;
+    for (var c = 0; c < count; c++) {
+        var k = rigidContacts[c], nx = k.nx, nz = k.nz;
+        var push = k.overlap * share;
+        a.px -= nx * push * (b.mass / total); a.pz -= nz * push * (b.mass / total);
+        b.px += nx * push * (a.mass / total); b.pz += nz * push * (a.mass / total);
+        var vn = (b.vx - a.vx) * nx + (b.vz - a.vz) * nz;
+        if (vn > 0) continue;
+        var jImp = -(1 + restitution) * vn / (1 / a.mass + 1 / b.mass) * share;
+        a.vx -= jImp * nx / a.mass; a.vz -= jImp * nz / a.mass;
+        b.vx += jImp * nx / b.mass; b.vz += jImp * nz / b.mass;
+        // the turn: the impulse at the place of the hit (r x F, the y part), as the discs did with their arm
+        var rax = k.x - a.px, raz = k.z - a.pz, rbx = k.x - b.px, rbz = k.z - b.pz;
+        a.wy -= 0.5 * (raz * (-jImp * nx) - rax * (-jImp * nz)) / a.yawInertia;
+        b.wy -= 0.5 * (rbz * (jImp * nx) - rbx * (jImp * nz)) / b.yawInertia;
+        if (-vn * 0.5 > (a.lastImpact || 0) || a.impactTime > 0.5) a.lastImpact = -vn * 0.5;
+        if (-vn * 0.5 > (b.lastImpact || 0) || b.impactTime > 0.5) b.lastImpact = -vn * 0.5;
+        a.impactTime = 0; b.impactTime = 0;
+    }
+    return true;
+}
 OpenRacer.collideCars = function (vehicles) {
     var restitution = 0.25;
     for (var i = 0; i < vehicles.length; i++) {
         var soft = vehicles[i];
         if (!soft.otherCars) continue;
         soft.otherCars.length = 0;
-        if (!soft.softBody) continue;
-        for (var s = 0; s < vehicles.length; s++) if (s !== i && !vehicles[s].ghost && !soft.ghost && Math.abs(soft.py - vehicles[s].py) < 6) soft.otherCars.push(vehicles[s]);
+        if (!soft.softBody || soft.shellSkip) continue;
+        // (the shells hit each other only when both are stepped; any other pair is a pair of rigid bodies, below)
+        for (var s = 0; s < vehicles.length; s++) if (s !== i && !vehicles[s].ghost && !soft.ghost && vehicles[s].softBody && !vehicles[s].shellSkip && Math.abs(soft.py - vehicles[s].py) < 6) soft.otherCars.push(vehicles[s]);
     }
     for (var i = 0; i < vehicles.length; i++) {
         for (var j = i + 1; j < vehicles.length; j++) {
             var a = vehicles[i], b = vehicles[j];
             if (a.ghost || b.ghost) continue;
             if (Math.abs(a.py - b.py) > 2.5) continue;
+            // a pair where a shell is not stepped (damage off, an AI car far away, Settings > Simulation) is a pair of rigid bodies: they hit each other with the spheres of
+            // the model (the nodes of the shell, where they are), not with the two discs at the axles, which kept the cars too far apart
+            if (!(a.softBody && !a.shellSkip && b.softBody && !b.shellSkip) && a.sphereWorld && b.sphereWorld && rigidPair(a, b)) continue;
             var ra = a.halfWidth + 0.15, rb = b.halfWidth + 0.15;
             if (a.softBody && b.softBody && !a.shellSkip && !b.shellSkip && a.ground && a.ground.use3D && b.ground && b.ground.use3D) { ra -= 0.35; rb -= 0.35; }
             var discsA = [[a.af * 0.8, 0], [-a.ar * 0.8, 0]], discsB = [[b.af * 0.8, 0], [-b.ar * 0.8, 0]];

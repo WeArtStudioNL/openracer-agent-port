@@ -20,6 +20,7 @@ Since 2.1.0 (more than 530 commits): the track in 3D with a soft body for every 
 
 ### Fixed before the release
 
+- **Rigid cars hit each other with the spheres of the model**, not with two discs at the axles: with damage off, and for an AI car whose shell is not stepped (Settings > Simulation), the spheres of the nodes touch the spheres of the other car (the outline of the car). The cars no longer keep a gap between them: side by side they touch at 2.0 m instead of 2.4 m. Two cars with a stepped shell hit with their shells, as before.
 - **After the finish of a race** the AI cars drive on at a calmer pace (60% of the line's speed, as the player's car does) instead of stopping at the side; and the force feedback lets go while the car drives itself under the cinematic camera.
 - **Glass of the AI cars**: see-through (opacity) instead of refracting (transmission), against black blocks on the windows of AI cars in a video; it also saves the extra picture of the scene that the transmission of every car costs. The glass of the player's car is as it was.
 - **Pit stop**: the car on the jacks is held by the parking brake, not by the brake pedal, and the automatic reverse is off during a stop (the brake held at a standstill put the car in R).
