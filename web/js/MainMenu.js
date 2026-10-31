@@ -820,6 +820,8 @@ var MainMenu = (function() {
         return ids.filter(function(id) { return raceOptions.aiCars.indexOf(id) >= 0; });
     }
     function aiCarsParameter() {
+        // (the cars of the opponents are chosen on the Opponents page; a restriction that an older version kept is not used any more, and could not be seen or changed)
+        raceOptions.aiCars = null;
         if(!Array.isArray(raceOptions.aiCars)) return "";
         var allowed = allowedAiCars();
         if(allowed.length === cars.length || !allowed.length) return "";
@@ -1024,7 +1026,7 @@ var MainMenu = (function() {
         document.body.appendChild(shade);
     }
 
-    // the choices of a race that are not in the way: tyre wear and fuel, the ghost, the records and the cars that race
+    // the choices of a race that are not in the way: tyre wear and fuel, the ghost and the records (of free driving; a race has them on its own page)
     function showMore() {
         dialog("moreDialog", "More race options", null, function(box, close) {
             function chips(label, items, current, apply) {
@@ -1048,34 +1050,6 @@ var MainMenu = (function() {
             chips("Damage", [[false, "Off"], [true, "On"]], raceOptions.damage !== false, function(v) { raceOptions.damage = v; });      // off: rigid cars, nothing dents or comes off
             chips("Ghost of your best lap", [[false, "Off"], [true, "On"]], !!raceOptions.ghost, function(v) { raceOptions.ghost = v; });
             chips("Save lap records", [[false, "Off"], [true, "On"]], !!raceOptions.records, function(v) { raceOptions.records = v; });
-            if(cars.length > 1 && mode === "race") {
-                var title = document.createElement("div");
-                title.className = "setting";
-                title.innerHTML = "<span class=\"label\">Cars that may race</span>";
-                var allowed = allowedAiCars();
-                var group = document.createElement("div");
-                group.style.cssText = "flex: 1; min-width: 220px;";
-                cars.forEach(function(car) {
-                    var label = document.createElement("label");
-                    label.className = "tick";
-                    var tick = document.createElement("input");
-                    tick.type = "checkbox";
-                    tick.checked = allowed.indexOf(car.id) >= 0;
-                    tick.onchange = function() {
-                        var current = allowedAiCars();
-                        var at = current.indexOf(car.id);
-                        if(tick.checked && at < 0) current.push(car.id);
-                        else if(!tick.checked && at >= 0) current.splice(at, 1);
-                        raceOptions.aiCars = current.length === cars.length ? null : current;
-                        rememberRace();
-                    };
-                    label.appendChild(tick);
-                    label.appendChild(document.createTextNode(car.name || car.id));
-                    group.appendChild(label);
-                });
-                title.appendChild(group);
-                box.appendChild(title);
-            }
             var foot = document.createElement("div");
             foot.style.cssText = "display: flex; justify-content: flex-end; margin-top: 16px;";
             foot.appendChild(button("Done", "primary", close));
@@ -1341,6 +1315,9 @@ var MainMenu = (function() {
         setting("Opponents", [[1, "1"], [2, "2"], [3, "3"], [5, "5"], [7, "7"]], raceOptions.ai, function(v) { raceOptions.ai = v; });
         setting("Difficulty", [["easy", "Easy"], ["normal", "Normal"], ["hard", "Hard"]], raceOptions.difficulty, function(v) { raceOptions.difficulty = v; });
         setting("Damage", [[true, "On"], [false, "Off"]], raceOptions.damage !== false, function(v) { raceOptions.damage = v; });      // off: rigid cars, nothing dents or comes off
+        setting("Tyre wear and fuel", [[0, "Off"], [1, "On"], [3, "Fast"]], raceOptions.wear === undefined ? 1 : raceOptions.wear, function(v) { raceOptions.wear = v; });
+        setting("Ghost of your best lap", [[true, "On"], [false, "Off"]], !!raceOptions.ghost, function(v) { raceOptions.ghost = v; });
+        setting("Save lap records", [[true, "On"], [false, "Off"]], !!raceOptions.records, function(v) { raceOptions.records = v; });
         var trackChosen = tracks.filter(function(t) { return t.id === choice.track; })[0];
         var hasLine = trackChosen && ((trackChosen.design && trackChosen.design.nodes) || (trackChosen.racing_line && trackChosen.racing_line.length > 10) ||
             (OpenRacer.Records && OpenRacer.Records.anyGhost(choice.track)));
@@ -1356,10 +1333,6 @@ var MainMenu = (function() {
             hint.textContent = "This track has no racing line yet, so the race has no AI cars: you race the clock. Drive a lap here first (it becomes the line), or draw the track in the track editor.";
             inner.appendChild(hint);
         }
-        var more = document.createElement("div");
-        more.style.marginTop = "18px";
-        more.appendChild(button("More options…", "ghost", showMore));
-        inner.appendChild(more);
     }
 
     // ---- the opponents: a grid of the places (as many as Opponents says, 4 in a row); a + adds a car (the way the car is chosen, then the tune when it has one), the copy button adds
