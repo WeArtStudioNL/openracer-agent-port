@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>OpenRacer docs</title>
     <meta name="description" content="How OpenRacer works: controls, racing, replays, the physics of the car and its soft body, motorcycles, the tuning menu, the car editor, the track editor and the garage.">
-    <link rel="stylesheet" href="site.css?v=6">
+    <link rel="stylesheet" href="site.css?v=7">
     <script src="theme.js?v=3"></script>
 </head>
 <body>
@@ -31,6 +31,7 @@
             <a href="#intro">Introduction</a>
             <a href="#getting-started">Getting started</a>
             <a href="#play">Playing in the browser</a>
+            <a href="#requirements">Requirements</a>
             <a href="#local">Running your own copy</a>
             <a href="#which">Web or local?</a>
             <a href="#menu">Main menu and address</a>
@@ -106,12 +107,37 @@
             </ol>
             <p>Your settings, key bindings, lap records, setups and replays are kept in your own browser, not on a server. The same goes for what you make or import: <b>Garage</b> in the main menu keeps your own cars and tracks in the browser, and exports them as zip files (see <a href="#garage">Your own cars and tracks</a>). Even the car editor and the track editor work on the web version, and save to the garage.</p>
 
+            <h3 id="requirements">Requirements</h3>
+            <table>
+                <tr><th></th><th>To play</th><th>To run your own copy</th></tr>
+                <tr><td>Browser</td><td>A recent Chrome, Edge, Firefox or Safari with WebGL 2 and hardware acceleration on. Chrome or Edge for force feedback on a wheel (WebHID) and for linking a folder of cars and tracks.</td><td>The same.</td></tr>
+                <tr><td>Computer</td><td>A computer or tablet with a graphics card of the last years (a laptop with built-in graphics is fine on the <i>Low</i> or <i>Medium</i> preset). The standard cars and tracks are about 300 MB of files, loaded when you choose them. A phone works with the touch controls, on the low settings.</td><td>Any computer that runs Python 3.</td></tr>
+                <tr><td>Software</td><td>Nothing to install.</td><td><code>git</code> and <code>python3</code>. No build step and no packages. Node.js is only for the physics bench, Blender only for its script, and <a href="https://github.com/FiloSottile/mkcert">mkcert</a> only if you want <code>--https</code> without a warning.</td></tr>
+                <tr><td>Controls</td><td>Keyboard, a gamepad, a racing wheel (with force feedback in Chrome or Edge) or a touch screen.</td><td>The same.</td></tr>
+                <tr><td>Speed</td><td>Many AI cars with damage cost the most: <i>Esc → Simulation</i> lets AI cars far from you skip their damage, and <i>Esc → Graphics</i> has presets.</td><td>The same.</td></tr>
+            </table>
+
             <h3 id="local">Running your own copy</h3>
-            <p>OpenRacer is a static web app with a small helper server. You need <code>git</code> and <code>python3</code>, and no build step:</p>
-            <pre><code>git clone https://github.com/WeArtStudioNL/openracer-agent-port.git
+            <p>OpenRacer is a static web app with a small helper server. You need <code>git</code> and <code>python3</code>, and no build step. Pick your system:</p>
+            <h4 id="local-macos">macOS</h4>
+            <pre><code>brew install git python        # if you do not have them (or install the Xcode command line tools)
+git clone https://github.com/WeArtStudioNL/openracer-agent-port.git
 cd openracer-agent-port
-./start-server.sh        # optionally pass a port, default 8000</code></pre>
-            <p>This serves the <code>web</code> folder (<code>tools/serve.py</code>) and opens <code>http://localhost:8000</code>. Nothing is cached, so after a <code>git pull</code> or an edit a refresh is enough and the server never needs a restart. Opening <code>index.html</code> straight from the disk does not work, because the game loads its files.</p>
+./start-server.sh              # optionally pass a port, default 8000</code></pre>
+            <h4 id="local-linux">Linux</h4>
+            <pre><code>sudo apt install git python3   # Debian and Ubuntu; use your own package manager elsewhere
+git clone https://github.com/WeArtStudioNL/openracer-agent-port.git
+cd openracer-agent-port
+./start-server.sh              # opens the browser with xdg-open, port 8000 by default</code></pre>
+            <h4 id="local-windows">Windows</h4>
+            <p>The script is for a bash shell. In PowerShell run the helper server itself, which is the same thing:</p>
+            <pre><code>winget install Git.Git Python.Python.3.12     # if you do not have them
+git clone https://github.com/WeArtStudioNL/openracer-agent-port.git
+cd openracer-agent-port
+py -3 tools\serve.py 8000
+start http://localhost:8000</code></pre>
+            <p>With WSL or Git Bash <code>./start-server.sh</code> works as on Linux.</p>
+            <p>The script and <code>tools/serve.py</code> serve the <code>web</code> folder and, with the script, open <code>http://localhost:8000</code>. <code>--local</code> keeps the game to this computer (otherwise a phone or another computer on your network can open the address that is printed), and <code>--https</code> serves with a certificate made here (the browser warns once). Nothing is cached, so after a <code>git pull</code> or an edit a refresh is enough and the server never needs a restart. Opening <code>index.html</code> straight from the disk does not work, because the game loads its files.</p>
             <p>Any plain web server works too (<code>cd web &amp;&amp; python3 -m http.server 8000</code>). The game then behaves like the version on this site, with the cars and tracks listed in <code>cars/index.json</code> and <code>tracks/index.json</code>.</p>
 
             <h3 id="which">Which one do you need?</h3>

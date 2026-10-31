@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>OpenRacer: a racing simulator in your browser</title>
     <meta name="description" content="OpenRacer is an open-source racing simulator that runs in the browser, with a physics model of the whole car, a car editor, a track editor and racing wheel support.">
-    <link rel="stylesheet" href="site.css?v=6">
+    <link rel="stylesheet" href="site.css?v=7">
     <script src="theme.js?v=3"></script>
 </head>
 <body>
@@ -167,11 +167,27 @@
 <section class="block" id="run">
     <div class="wrap">
         <h2>Run it yourself</h2>
-        <p class="intro">The game here is hosted as plain files. To make cars and tracks with the editors on your own machine, run the small helper server from a checkout of the fork:</p>
-<pre><code>git clone https://github.com/WeArtStudioNL/openracer-agent-port.git
+        <p class="intro">The game here is hosted as plain files. To make cars and tracks with the editors on your own machine, run the small helper server from a checkout of the fork.</p>
+        <div class="grid req">
+            <div class="card"><span class="tag">Requirements</span><h3>To play</h3><p>A recent Chrome, Edge, Firefox or Safari with WebGL 2. Chrome or Edge for force feedback on a wheel. Nothing to install: open <a href="game/">the game</a>.</p></div>
+            <div class="card"><span class="tag">Requirements</span><h3>To run it yourself</h3><p><code>git</code> and <code>python3</code>. No build step and no packages.</p></div>
+        </div>
+        <div class="grid os">
+            <div class="card"><span class="tag">macOS</span><pre><code>brew install git python
+git clone https://github.com/WeArtStudioNL/openracer-agent-port.git
 cd openracer-agent-port
-./start-server.sh        # opens http://localhost:8000</code></pre>
-        <p>More in the <a href="docs.html#local">docs</a>.</p>
+./start-server.sh</code></pre></div>
+            <div class="card"><span class="tag">Linux</span><pre><code>sudo apt install git python3
+git clone https://github.com/WeArtStudioNL/openracer-agent-port.git
+cd openracer-agent-port
+./start-server.sh</code></pre></div>
+            <div class="card"><span class="tag">Windows</span><pre><code>winget install Git.Git Python.Python.3.12
+git clone https://github.com/WeArtStudioNL/openracer-agent-port.git
+cd openracer-agent-port
+py -3 tools\serve.py 8000
+start http://localhost:8000</code></pre></div>
+        </div>
+        <p>It opens <code>http://localhost:8000</code>. More in the <a href="docs.html#requirements">docs</a>.</p>
     </div>
 </section>
 </main>
