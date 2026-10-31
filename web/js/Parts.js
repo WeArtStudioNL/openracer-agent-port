@@ -34,7 +34,8 @@
  */
 
 OpenRacer.Parts = (function () {
-    var GROUND = 1, CHASSIS = 2, PART_FREE = 4, PART_HELD = 8;       // the groups of collisions
+    var MAX_PART_FORCE = 300000;                                   // N: the most that a hinged part puts on the car or on an object in one step
+    var GROUND = 1, CHASSIS = 2, PART_FREE = 4, PART_HELD = 8, OBJ_COPY = 16;       // the groups of collisions (OBJ_COPY: the copies of the rigid objects of the track that the parts meet)
     var GRACE = 0.35;                                               // s after coming loose in which a part does not hit the car (it is inside it)
     var DEG = Math.PI / 180;
 
@@ -483,7 +484,7 @@ OpenRacer.Parts = (function () {
         }
 
         function setGroups(part, free) {
-            part.collider.setCollisionGroups(free ? groups(PART_FREE, GROUND | CHASSIS) : groups(PART_HELD, GROUND));
+            part.collider.setCollisionGroups(free ? groups(PART_FREE, GROUND | CHASSIS | OBJ_COPY) : groups(PART_HELD, GROUND | OBJ_COPY));
         }
 
         // A part that has come loose hits the car only when it is clear of it: a part that is inside the car (or touching it, like a door that
@@ -702,24 +703,66 @@ OpenRacer.Parts = (function () {
         // What the track puts on a hinged part (a door against a pole or a wall) goes to the car through the hinge: the force of the contacts of the last step is the force on the car,
         // at the place of the contact (v.partForces, Vehicle.js), and it counts as load on the hinge (the pins, the break force): the door is pushed on, the car is pushed, and when the
         // hinge gives way the door is free and has no say any more.
+        // The rigid objects of the track (barriers, blocks, RigidObjects.js) are bodies of another engine: the parts meet a copy of each one that is near them, a body that is moved to where
+        // the object is before every step. What the copy puts on a part is a force like that of the track; and the object gets the same push the other way, so that a door that is
+        // pushed on a block pushes it too.
+        var objCopies = new Map();
+        function syncObjects() {
+            var RO = OpenRacer.RigidObjects;
+            if (!RO || !RO.near) return;
+            var wanted = new Set();
+            for (var i = 0; i < parts.length; i++) {
+                var p = parts[i];
+                if (p.wheel !== undefined || p.fetching || (p.state !== "hinged" && p.state !== "free")) continue;
+                var t = p.body.translation();
+                RO.near(t.x, t.y, t.z, 6).forEach(function (e) { wanted.add(e); });
+            }
+            wanted.forEach(function (e) {
+                if (objCopies.has(e)) return;
+                var t = e.body.translation(), r = e.body.rotation();
+                var body = world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setTranslation(t.x, t.y, t.z).setRotation(r));
+                var col = world.createCollider(new R.ColliderDesc(e.collider.shape).setFriction(0.7).setCollisionGroups(groups(OBJ_COPY, PART_HELD | PART_FREE)), body);
+                objCopies.set(e, { body: body, col: col });
+            });
+            objCopies.forEach(function (c, e) {
+                if (!wanted.has(e)) { world.removeRigidBody(c.body); objCopies.delete(e); return; }
+                c.body.setNextKinematicTranslation(e.body.translation());
+                c.body.setNextKinematicRotation(e.body.rotation());
+            });
+        }
         var wallF = [];
         function wallForces(stepDt) {
             wallF.length = 0;
             for (var i = 0; i < parts.length; i++) {
                 var p = parts[i];
                 p.wallForce = 0;
-                if (p.state !== "hinged" || !trackCollider || p.fetching) continue;
+                if (p.state !== "hinged" || (!trackCollider && !objCopies.size) || p.fetching) continue;
                 var fx = 0, fy = 0, fz = 0, cx = 0, cy = 0, cz = 0, wsum = 0;
-                world.narrowPhase.contactPair(p.collider.handle, trackCollider.handle, function (manifold, flipped) {
-                    var n = manifold.normal(), sign = flipped ? 1 : -1, count = manifold.numContacts();
-                    for (var k = 0; k < count; k++) {
-                        var imp = manifold.contactImpulse(k) / stepDt;
-                        if (!(imp > 0)) continue;
-                        fx += sign * n.x * imp; fy += sign * n.y * imp; fz += sign * n.z * imp;
-                        var sp = k < manifold.numSolverContacts() ? manifold.solverContactPoint(k) : null;
-                        if (sp) { cx += sp.x * imp; cy += sp.y * imp; cz += sp.z * imp; wsum += imp; }
+                var gather = function (otherHandle, entry) {
+                    var ox = 0, oy = 0, oz = 0, ocx = 0, ocy = 0, ocz = 0, osum = 0;
+                    world.narrowPhase.contactPair(p.collider.handle, otherHandle, function (manifold, flipped) {
+                        var n = manifold.normal(), sign = flipped ? 1 : -1, count = manifold.numContacts();
+                        for (var k = 0; k < count; k++) {
+                            var imp = manifold.contactImpulse(k) / stepDt;
+                            if (!(imp > 0)) continue;
+                            ox += sign * n.x * imp; oy += sign * n.y * imp; oz += sign * n.z * imp;
+                            var sp = k < manifold.numSolverContacts() ? manifold.solverContactPoint(k) : null;
+                            if (sp) { ocx += sp.x * imp; ocy += sp.y * imp; ocz += sp.z * imp; osum += imp; }
+                        }
+                    });
+                    // (a copy that has just been made inside the part, or a fast hit, gives an impulse far beyond what a door can pass on: it is held to 300 kN)
+                    var om = Math.hypot(ox, oy, oz);
+                    if (om > MAX_PART_FORCE) { var os = MAX_PART_FORCE / om; ox *= os; oy *= os; oz *= os; ocx *= os; ocy *= os; ocz *= os; osum *= os; }
+                    fx += ox; fy += oy; fz += oz; cx += ocx; cy += ocy; cz += ocz; wsum += osum;
+                    // the object is pushed the other way, for the time of the frame
+                    if (entry && (ox || oy || oz) && OpenRacer.RigidObjects && OpenRacer.RigidObjects.pushAt) {
+                        var frameDt = 2 * stepDt, at = osum > 0 ? { x: ocx / osum, y: ocy / osum, z: ocz / osum } : entry.body.translation();
+                        var ik = Math.min(1, 5 * (entry.mass || 50) / Math.max(1e-6, Math.hypot(ox, oy, oz) * frameDt));          // (at most 5 m/s of change of speed in a frame)
+                        OpenRacer.RigidObjects.pushAt(entry, { x: -ox * frameDt * ik, y: -oy * frameDt * ik, z: -oz * frameDt * ik }, at);
                     }
-                });
+                };
+                if (trackCollider) gather(trackCollider.handle, null);
+                objCopies.forEach(function (c, e) { gather(c.col.handle, e); });
                 var mag = Math.hypot(fx, fy, fz);
                 // (the weight of the part that rests on the track is the car's own load: only what pushes sideways or up beyond it counts as a hit)
                 if (!(mag > 1)) continue;
@@ -852,6 +895,7 @@ OpenRacer.Parts = (function () {
             }
             if (!moving) { wallF.length = 0; return; }                         // (nothing hangs on the car: nothing pushes it)
             refreshTrack();
+            syncObjects();
             // a hinge opened in the debug view: a small torque about its axis, to the side where it has the most room, enough to lift it a little faster than its weight pulls
             for (var dk = 0; dk < parts.length; dk++) {
                 var dp = parts[dk];
@@ -1150,6 +1194,8 @@ OpenRacer.Parts = (function () {
             moved: function () { parts.forEach(function (p) { p.hasVel = false; }); },
             // the car is taken out of the scene (the car editor makes a new one for every test): the parts that were thrown out of it go with it
             dispose: function () { parts.forEach(function (p) { if (p.state !== "held" && p.object.parent) p.object.parent.remove(p.object); }); },
+            copies: function () { return objCopies.size; },
+            debugCopies: function () { var out = []; objCopies.forEach(function (c, e) { out.push({ at: c.body.translation(), obj: e.body.translation(), col: c.col, ctype: c.col.shape.type, doorOverlap: parts.filter(function (p) { return p.state === "hinged"; }).map(function (p) { return world.intersectionPair(p.collider, c.col) || world.narrowPhase.contactPair(p.collider.handle, c.col.handle, function () {}); }) }); }); return out; },
             states: function () { return parts.map(function (p) { return p.name + ":" + p.state; }).join(" "); }
         };
     }

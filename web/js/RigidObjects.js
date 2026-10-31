@@ -390,5 +390,20 @@ OpenRacer.RigidObjects = (function () {
         }).catch(function (e) { console.warn("RigidObjects: " + e.message); });
     }
 
-    return { setup: setup, update: update, reset: reset, clear: clear, count: function () { return objects.length; }, awake: function () { return objects.filter(function (e) { return !e.body.isSleeping(); }).length; }, isReady: function () { return ready; }, stats: stats };
+    // for the loose parts of a car (Parts.js): the objects within a distance of a point (their bodies and shapes, to make copies of in the world of the parts), and a push on one
+    function near(x, y, z, distance) {
+        var out = [];
+        if (!ready) return out;
+        for (var i = 0; i < objects.length; i++) {
+            var e = objects[i], t = e.body.translation(), reach = distance + (e.radius || 1);
+            if (Math.abs(t.x - x) < reach && Math.abs(t.z - z) < reach && Math.abs(t.y - y) < reach + 3) out.push(e);
+        }
+        return out;
+    }
+    function pushAt(entry, impulse, point) {
+        if (!entry || !entry.body) return;
+        entry.body.applyImpulseAtPoint(impulse, point, true);
+        entry.quiet = 0;
+    }
+    return { near: near, pushAt: pushAt, setup: setup, update: update, reset: reset, clear: clear, count: function () { return objects.length; }, awake: function () { return objects.filter(function (e) { return !e.body.isSleeping(); }).length; }, isReady: function () { return ready; }, stats: stats };
 })();
