@@ -50,7 +50,7 @@
         grabFrame(v);
         var ground = v.ground, i, k;
         // the triangles near the car (3D physics only; the road of the 2D physics has no triangles of this kind)
-        if (ground.use3D && ground.nearby) {
+        if (ground.use3D && ground.nearby && showShell) {
             ground.nearby(v.px, v.py, v.pz, RADIUS, tri);
             var step = Math.max(1, Math.ceil(tri.length / MAX_TRIANGLES));
             for (i = 0; i < tri.length; i += step) {
@@ -113,7 +113,7 @@
         // the tyre (TyreShell.js): the nodes and the beams of every wheel; green where a node holds, red where it slides
         for (i = 0; i < 4; i++) {
             var tbody = v.wheels[i].tyreBody;
-            if (!tbody || !v.wheels[i].cylActive) continue;
+            if (!tbody || !v.wheels[i].cylActive || !showShell) continue;
             // the shell tyre (TyreShell.js): the outer shell as it is (nodes and the belt), the inner shell (the rim), and the beams between them coloured by their strain: dark where they are
             // slack, towards cyan as they are stretched, towards red as they are pushed in
             {
@@ -198,7 +198,8 @@
     // ---- the node grabber (as BeamNG has it): with the view on, it is on; press on a node of the shell with the left mouse button and drag it, held by an elastic
     // whose strength is set in the panel at the top right (SoftBody.grab: a spring from the node to the pointer, at the depth the node had when it was taken). Let go and
     // it is free again. The elastic is drawn red from the node to the pointer.
-    // the nodes and the beams of the shell can be left out of the view (the box in the panel of the node grabber), also while they are grabbed
+    // the nodes and the beams of the shell, the nodes and the beams of the tyres and the triangles of the track (the lines of the geometry) can be left out of the view (the box in the panel
+    // of the node grabber), also while they are grabbed
     var showShell = true;
     try { showShell = localStorage.getItem("openracer.showShell") !== "0"; } catch (e) { /* no storage */ }
     var grabMode = false, grabbed = null, grabPanel = null, grabLine = null, grabStrength = 5000, hitKmh = 50;

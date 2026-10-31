@@ -36,7 +36,37 @@ export function initSoftBody(api) {
     const sb = { nodeEdits: new Map(), beamEdits: new Map(), parts: [], shown: false, group: null, points: null, lines: null, hinges: [], sel: { nodes: new Set(), beam: null }, layout: null, edit: false, keepSelection: null, crash: null, wall: null, dirty: false, partWin: null, partMode: null, pinSel: -1, win: null, partGroup: null, deferRestart: false };
 
     // ---- the settings
+    // A force (the number field, in kN) as a slider under it too, on a scale that goes up by tenfolds (0.5 kN to 5000 kN; the left end is "not set": the default or never). It says what the
+    // force is as the hit that makes it: a block of a tonne (the hit of the debug view, 30 ms) at that speed, "6.5 km/h / 60 kN".
+    const forceBoxes = [];
+    const KN_MIN = 0.5, KN_DECADES = 4, HIT_KG = 1000, HIT_S = 0.03;
+    const kmhOf = (kn) => kn * 1000 * HIT_S / HIT_KG * 3.6;
+    const forceText = (kn, off) => (kn > 0 ? (kmhOf(kn) < 10 ? kmhOf(kn).toFixed(1) : Math.round(kmhOf(kn))) + " km/h / " + (kn < 10 ? +kn.toFixed(1) : Math.round(kn)) + " kN" : off);
+    function forceSlider(input, off) {
+        if (!input || input.dataset.forceSlider) return;
+        input.dataset.forceSlider = "1";
+        const wrap = document.createElement("div");
+        wrap.style.cssText = "margin-top: 4px;";
+        const slider = document.createElement("input");
+        slider.type = "range"; slider.min = 0; slider.max = 1000; slider.step = 1; slider.style.width = "100%";
+        const text = document.createElement("div");
+        text.className = "hint"; text.style.cssText = "margin-top: 2px;";
+        wrap.append(slider, text);
+        input.after(wrap);
+        const posOf = (kn) => (kn > 0 ? Math.max(1, Math.min(1000, Math.round(1000 * Math.log10(Math.max(KN_MIN, kn) / KN_MIN) / KN_DECADES))) : 0);
+        const knOf = (pos) => (pos > 0 ? KN_MIN * Math.pow(10, KN_DECADES * pos / 1000) : 0);
+        const roundKn = (kn) => (kn >= 100 ? Math.round(kn) : kn >= 10 ? Math.round(kn * 2) / 2 : Math.round(kn * 10) / 10);
+        const refresh = () => { const kn = parseFloat(input.value) || 0; slider.value = posOf(kn); text.textContent = forceText(kn, off); };
+        slider.addEventListener("input", () => { const kn = roundKn(knOf(parseFloat(slider.value))); input.value = kn > 0 ? String(kn) : ""; text.textContent = forceText(kn, off); });
+        slider.addEventListener("change", () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
+        input.addEventListener("input", refresh);
+        input.addEventListener("change", refresh);
+        forceBoxes.push(refresh);
+        refresh();
+    }
+    const refreshForces = () => forceBoxes.forEach((f) => f());
     const fields = [...document.querySelectorAll("input.sb")];
+    fields.filter((i) => /(yield|break)_force$/.test(i.dataset.key)).forEach((i) => forceSlider(i, "the default"));
     function readSettings() {
         const out = {};
         fields.forEach((input) => {
@@ -57,6 +87,7 @@ export function initSoftBody(api) {
             const stored = group ? (config[group] || {})[name] : config[name];
             input.value = stored === undefined ? "" : String(+(stored / (SCALE[key] || 1)).toPrecision(6));
         });
+        refreshForces();
     }
     const presetSelect = $("sbPreset");
     Object.keys(PRESETS).forEach((name) => { const o = document.createElement("option"); o.textContent = name; presetSelect.appendChild(o); });
@@ -79,6 +110,7 @@ export function initSoftBody(api) {
     // the shell is made again from the new settings when the bench runs
     let restartTimer = 0;
     function changed(keep) {
+        refreshForces();                                  // (the sliders of the forces follow the fields: a preset or the defaults set them)
         sb.dirty = true;                                  // the bench has to be made again before the next test
         scheduleSave();
         clearTimeout(restartTimer);
@@ -1401,6 +1433,8 @@ export function initSoftBody(api) {
         if (part.mode === "detachable" || part.mode === "breakable") {
             const bf = add('<div class="row"><div><label title="1 kN is about 102 kg of force">Breaks off at (kN)</label><input type="number" data-a="breakforce" min="0" step="0.5"></div><div><label title="After the load has passed the force it goes on bending with the body for this long, then it comes off">Delay (s)</label><input type="number" data-a="breakdelay" min="0" step="0.05" placeholder="0.15"></div></div><p class="hint">It bends with the body, and when the load on it passes this force it comes off and falls as a free object (it hits the car, the road and the walls).</p>');
             bf.querySelector('[data-a="breakforce"]').value = part.break_force ? part.break_force / 1000 : "";
+            forceSlider(bf.querySelector('[data-a="breakforce"]'), "never");
+            bf.querySelector(".row").style.flexDirection = "column";
             bf.querySelector('[data-a="breakdelay"]').value = part.break_delay !== undefined ? part.break_delay : "";
             bf.querySelector('[data-a="breakdelay"]').addEventListener("change", (e) => { const v = parseFloat(e.target.value); if (v >= 0) part.break_delay = v; else delete part.break_delay; partChanged(); });
             bf.querySelector('[data-a="breakforce"]').addEventListener("change", (e) => { const v = parseFloat(e.target.value); if (v > 0) part.break_force = v * 1000; else delete part.break_force; partChanged(); });
@@ -1453,6 +1487,8 @@ export function initSoftBody(api) {
             });
             q("force").value = pin.break_force ? pin.break_force / 1000 : "";
             q("activate").value = pin.activate_force ? pin.activate_force / 1000 : "";
+            forceSlider(q("activate"), "the part stays shut"); forceSlider(q("force"), "never");
+            q("activate").closest(".row").style.flexDirection = "column";
             const warn = d.querySelector(".pw-warn");
             const checkForces = () => {
                 const msgs = [];
