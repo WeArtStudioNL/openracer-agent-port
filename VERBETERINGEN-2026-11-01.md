@@ -104,7 +104,7 @@
 - **Een replay onthoudt de setup** van elke auto en speelt hem daarmee af. Eerst kwam de auto terug met de setup die nu gekozen is, met andere wielen of zonder deuken.
 - Look-ahead-keys schuiven mee bij het trimmen. De knoppen van de replaybalk houden geen focus meer, zodat Enter weer afspelen en pauzeren is.
 - **Een bewerkte replay toont nu schade**, losgeslagen onderdelen, de berijder als ragdoll, sliprijen, rook en vonken van wat hij afspeelt (`16587dd`). Eerst was een auto na een crash weer heel en stond hij op vier wielen. Getest: een bewerking met een sprong terug en slow motion neemt precies de sliprijen van de afgespeelde stukken mee.
-- **Laten liggen:** Watch van een bewerking gebruikt niet de camera's die je per clip koos. Dat vraagt een uitbreiding van het bestandsformaat.
+- **Watch van een bewerking** gebruikt nu de camera die je per clip koos: volgcamera, cockpit of cinematic met zijn look-ahead (`0272ffe`). Getest: een bewerking met cockpit tot 5 s en daarna de volgcamera wisselt op 5 s.
 
 ### AI (audit van 9 punten; `e0f262b`)
 - **De AI reed van achteren op een langzamere auto.** Hij keek maar 25 m vooruit en remde met een factor op zijn eigen snelheid. Vanaf 15 m/s snelheidsverschil raakte hij de auto voor hem. Nu kijkt hij zo ver vooruit als nodig en rijdt hij niet sneller dan hij nog achter die auto kan stoppen.

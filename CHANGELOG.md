@@ -20,6 +20,7 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
   - Saving a Take as a replay no longer marks the whole race as saved. *Save replay* in the bar saves once and says why it failed.
   - A replay keeps the setup every car raced with, and plays it back with it.
   - Look-ahead keys follow a trim; the bar's buttons let go of the focus after a click (Enter plays and pauses again).
+  - An edit keeps the camera of every clip (follow, cockpit, cinematic with its look ahead): Watch shows it as the Program monitor did.
   - An edit of the video editor keeps the damage, the parts that came off, the rider as a ragdoll, the skid marks, the smoke and the sparks of what it plays (a car was whole again after a crash).
 - **AI.** From an audit of the racing:
   - It stops behind a slower car (it looked 25 m ahead and hit a car 15 m/s slower), and two cars level no longer both brake hard.
