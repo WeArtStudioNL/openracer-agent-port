@@ -155,8 +155,10 @@ OpenRacer.RacingLine.prototype.shorten = function (ground, margin, reach) {
 // grip on another surface, sand or grass, when it is given), by the crest there (above the speed at which the car leaves the ground over the top of a dune
 // it flies, and lands where the line is not: a little of that is allowed) and by the braking (aBrake, scaled by the grip too) that the slower points ahead ask for
 // factorOf (optional): a factor on the speed of the bend at a point (what a driver learned there); the braking before it follows from that speed
-OpenRacer.RacingLine.prototype.computeSpeeds = function (aLat, aBrake, vMax, gripOf, factorOf) {
-    var n = this.points.length, G = 9.81, self = this;
+// aeroK: the downforce of the car per kg, in 1/m (N per (m/s)² over the mass): the grip grows with the square of the speed (a car with wings was too slow in the
+// fast bends, as if it had none); 0 or left out for none
+OpenRacer.RacingLine.prototype.computeSpeeds = function (aLat, aBrake, vMax, gripOf, factorOf, aeroK) {
+    var n = this.points.length, G = 9.81, self = this, aero = Math.max(0, aeroK || 0);
     var speeds = new Float32Array(n);
     var grip = new Float32Array(n);
     for (var gi = 0; gi < n; gi++) grip[gi] = gripOf ? Math.max(0.25, Math.min(1, gripOf(this.points[gi].surface))) : 1;
@@ -170,7 +172,9 @@ OpenRacer.RacingLine.prototype.computeSpeeds = function (aLat, aBrake, vMax, gri
         var cross = abx * bcz - abz * bcx;
         var lab = Math.hypot(abx, abz), lbc = Math.hypot(bcx, bcz), lac = Math.hypot(c.x - a.x, c.z - a.z);
         var curvature = (lab * lbc * lac) > 1e-6 ? Math.abs(2 * cross / (lab * lbc * lac)) : 0;
-        speeds[i] = curvature > 1e-4 ? Math.min(vMax, Math.sqrt(aLat * grip[i] / curvature)) : vMax;
+        // (with downforce: v² · curvature = aLat · grip · (1 + k v² / g), so v² = aLat · grip / (curvature − aLat · grip · k / g); no limit when that is not positive)
+        var room = curvature - aLat * grip[i] * aero / G;
+        speeds[i] = curvature > 1e-4 && room > 1e-6 ? Math.min(vMax, Math.sqrt(aLat * grip[i] / room)) : vMax;
         // the crest: the second derivative of the height along the line over six metres; the car leaves the ground at sqrt(g / curvature), a hop of 15 % over that is allowed
         var h = 3, d2 = (height[(i + h) % n] - 2 * height[i] + height[((i - h) % n + n) % n]) / ((h * this.step) * (h * this.step));
         if (this.closed && d2 < -1e-4) speeds[i] = Math.min(speeds[i], 1.15 * Math.sqrt(G / -d2));
@@ -182,7 +186,7 @@ OpenRacer.RacingLine.prototype.computeSpeeds = function (aLat, aBrake, vMax, gri
     for (var pass = 0; pass < passes; pass++) {
         for (var k = n - 1; k >= 0; k--) {
             var next = this.closed ? (k + 1) % n : Math.min(n - 1, k + 1);
-            var allowed = Math.sqrt(speeds[next] * speeds[next] + 2 * aBrake * grip[k] * this.step);
+            var allowed = Math.sqrt(speeds[next] * speeds[next] + 2 * aBrake * grip[k] * (1 + aero * speeds[next] * speeds[next] / G) * this.step);
             if (speeds[k] > allowed) speeds[k] = allowed;
         }
     }
