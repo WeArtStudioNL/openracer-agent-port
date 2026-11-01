@@ -139,6 +139,7 @@
 - **Ctrl+Z bij het bewerken van knooppunten** zet de knooppunten terug; een losse Delete was na een seconde definitief opgeslagen. *Remove part* en *Back to the defaults* vragen eerst.
 - **Sterktes op losse knooppunten** hoorden bij een nummer dat kon verschuiven: bij een ander *Max nodes* landden ze op andere knooppunten. Nu wordt de layout vastgezet.
 - **Waarschuwing** als het model, de schaal of de draaiing verandert terwijl er al punten op het model staan.
+- **Uit de review** (`4be7dd1`): bij een motor zonder `layout_cg` (de 600cc en de supermoto) schreef de nieuwe code `layout_cg: null` in `car.json`, want `isFinite(null)` is in JavaScript `true`. De game zou de shell dan 25 cm verschuiven. Dat is gerepareerd voordat het ooit is opgeslagen; geen enkele `car.json` heeft het. Verder: de berijder in een bewerking zat in zijn crashhouding vanaf de eerste frame, de undo van knooppunten nam de knooppunten van de vorige auto mee, en Watch van een bewerking liet de cockpitcamera staan voor de volgende race.
 - **Laten liggen:** met het demowiel (Dynamic wheels zonder velg uit de bibliotheek) toont de editor ophangingsdelen die de game niet bouwt. Dat vraagt een wijziging in CarLoader.
 
 ### Menu's en kleine punten
