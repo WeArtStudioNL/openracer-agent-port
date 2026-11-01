@@ -775,7 +775,8 @@ OpenRacer.SkidpadGrip = {
             return JSON.stringify(value);
         }
         var copy = {};
-        Object.keys(config || {}).forEach(function (k) { if (["name", "description", "preview", "folder", "source", "model", "tunes"].indexOf(k) < 0) copy[k] = config[k]; });
+        // (setupName is the key of the records, main.js withTune: not part of the car)
+        Object.keys(config || {}).forEach(function (k) { if (["name", "description", "preview", "folder", "source", "model", "tunes", "setupName"].indexOf(k) < 0) copy[k] = config[k]; });
         var text = stable(copy), hash = 5381;
         for (var i = 0; i < text.length; i++) hash = ((hash * 33) ^ text.charCodeAt(i)) >>> 0;
         return "openracer.grip." + ((config && config.id) || "car") + "." + hash.toString(36);

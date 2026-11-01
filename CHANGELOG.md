@@ -6,6 +6,7 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 ## Unreleased
 
+- **Skidpad after tuning.** A car tuned on the skidpad (the place to tune it) had its grip thrown away; it is now kept for the car as it is tuned, so a race with that tuning saved as a setup gives the AI the grip that was measured. (A measured grip of a setup was also no longer found after the records per setup: fixed.)
 - **Car editor: making your own car.** From an audit of the flow:
   - *New* in the garage opens a new car (it opened the first car of the list, and a model picked then replaced the model of that car).
   - A model picked while a car is open asks: replace the model of that car, or start a new car with it.

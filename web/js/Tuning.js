@@ -1119,6 +1119,9 @@ var Tuning = (function() {
     return {
         attach: attach,
         toggle: function() { if(panel) setVisible(!visible); },
-        isVisible: function() { return visible; }
+        isVisible: function() { return visible; },
+        // the car as it is tuned now, and whether that differs from the setup that is chosen (the skidpad keeps its measurement for the car that was measured)
+        tunedConfig: function() { return config ? tunedConfig() : null; },
+        changed: function() { return !!config && !!panel && unsavedChanges(); }
     };
 })();

@@ -564,8 +564,12 @@ function startSkidpad() {
         sp.running = false;
         var g = sp.best / 9.81;
         // (on asphalt, for the AI: it drives this car with this setup in the bends with the grip that it held here)
-        // (not after the tuning menu was opened here: the car is then no longer the setup that a race would load)
-        if(!skidpadSurface && !sp.tuned && g > 0.3 && OpenRacer.SkidpadGrip) OpenRacer.SkidpadGrip.set(carConfig, g);
+        // (tuned here: the measurement is kept for the car as it is tuned now, which is the setup a race loads once the tuning is saved as one; it was not kept at all,
+        // and a car tuned on the skidpad, the way to tune it, never had its grip measured)
+        if(!skidpadSurface && g > 0.3 && OpenRacer.SkidpadGrip) {
+            var measured = typeof Tuning !== "undefined" && Tuning.changed && Tuning.changed() && Tuning.tunedConfig ? Tuning.tunedConfig() : (sp.tuned ? null : carConfig);
+            if(measured) OpenRacer.SkidpadGrip.set(Object.assign({}, measured, { id: carConfig.id }), g);      // (the tuned config has no id of its own)
+        }
         var panel = document.createElement("div");
         panel.style.cssText = "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1002; min-width: 380px; padding: 22px 28px; " +
             "background: rgba(24, 29, 35, 0.95); color: #ffffff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); text-align: center;";
