@@ -26,6 +26,12 @@
  *              clutch and the wheels (see Vehicle.js) load it from outside.
  */
 
+// The litres of the fuel of an engine build for the work of a litre of pump fuel (EngineBuild.js FUELS)
+OpenRacer.engineFuelVolume = function(build) {
+    var fuels = OpenRacer.EngineBuild && OpenRacer.EngineBuild.FUELS, f = build && fuels ? fuels[build.fuel] : null;
+    return f && f.volume > 0 ? f.volume : 1;
+};
+
 OpenRacer.Engine = function( parameters ) {
     parameters = parameters || {};
 
@@ -83,6 +89,8 @@ OpenRacer.Engine = function( parameters ) {
     // after the throttle opens. (The ramp of 2000 rpm above the threshold took the torque off a second time: a 2.0 litre with a turbo had 114 Nm at
     // 1500 rpm where the engine without it has 152.)
     this.turboBuilt = !!parameters.build;
+    // the litres of the fuel of a build for the work of a litre of pump fuel (E85: 1.35; Vehicle.fuelStep)
+    this.fuelVolume = OpenRacer.engineFuelVolume(parameters.build);
     // the power as a factor for a boost pressure (bar above the atmosphere)
     this.boostFactor = function (bar) {
         if(bar <= 0) return 1;

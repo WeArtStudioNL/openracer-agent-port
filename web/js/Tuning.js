@@ -114,7 +114,8 @@ var Tuning = (function() {
             peakNm = Math.max(peakNm, nm);
         });
         var top = car.gear_ratios[car.gear_ratios.length - 1];
-        var kmh = engine.limiterRPM * Math.PI / 30 * car.wheels[0].radius / (top * car.final_drive) * 3.6;
+        var driven = car.wheels[values.drive === "fwd" ? 0 : 2] || car.wheels[0];      // (the wheel that drives, as it is fitted: it was the front one, whatever drove)
+        var kmh = engine.limiterRPM * Math.PI / 30 * driven.radius / (top * car.final_drive) * 3.6;
         var imperial = Settings.option("units") === "imperial";
         if(cardMeta["Engine"]) cardMeta["Engine"].textContent = Math.round(peakHp) + " hp at " + peakHpRpm + " rpm, " + Math.round(peakNm) + " Nm";
         if(cardMeta["Drivetrain"]) {
@@ -207,6 +208,11 @@ var Tuning = (function() {
     // What a value is compared with to be orange: the setup that is chosen as it was saved (so after Save the values are not orange any more; they are when they moved away from it),
     // else the car as it was made. The reset arrow of a value still goes back to the car as it was made.
     var referenceValues = null;
+    // the tuning on the car differs from the setup that is chosen (as the "(changed)" of the list: gen_power and gen_peak_rpm follow from the curve)
+    function unsavedChanges() {
+        var ref = reference();
+        return Object.keys(base).some(function(key) { return key !== "gen_power" && key !== "gen_peak_rpm" && JSON.stringify(values[key]) !== JSON.stringify(ref[key]); });
+    }
     function reference() {
         if(referenceValues) return referenceValues;
         referenceValues = base;
@@ -572,6 +578,12 @@ var Tuning = (function() {
         closeCard: function() { if(engineCard) engineCard.open = false; },
         build: function() { return values.engine_build || null; },
         setBuild: function(b) {
+            // another block: the car is heavier or lighter by the difference of the two engines (the Mass row shows it)
+            var before = values.engine_build, EBm = OpenRacer.EngineBuild;
+            if(before && b && before.block !== b.block && EBm && EBm.mass) {
+                var change = Math.round(EBm.mass(b) - EBm.mass(before));
+                if(change) { values.mass = Math.max(50, values.mass + change); message("The engine is " + Math.abs(change) + " kg " + (change > 0 ? "heavier" : "lighter") + ": the car weighs " + Math.round(values.mass) + " kg now."); }
+            }
             values.engine_build = JSON.parse(JSON.stringify(b));
             workOutBuild();
             // the turbo of the game follows the build (as in the car editor): the share of the torque that is boost, the lag, the intercooler; a supercharger has no lag
@@ -632,9 +644,8 @@ var Tuning = (function() {
         setupSelect.style.width = "150px";
         setupSelect.onchange = function() {
             // tuning that was not saved is lost by a switch: asked first (it was gone without a word)
-            var was = OpenRacer.Setups.active(config.id) || "", ref = reference();
-            var unsaved = Object.keys(base).some(function(key) { return key !== "gen_power" && key !== "gen_peak_rpm" && JSON.stringify(values[key]) !== JSON.stringify(ref[key]); });      // (as the "(changed)" of the list: those two follow from the curve)
-            if(!unsaved) { switchSetup(); return; }
+            var was = OpenRacer.Setups.active(config.id) || "";
+            if(!unsavedChanges()) { switchSetup(); return; }
             var to = setupSelect.value;
             setupSelect.value = was;
             OpenRacerDialog.ask({ title: "Switch the setup?", text: "The tuning on the car has changes that are not saved. They are lost when you switch to " + (to ? "“" + to + "”" : "the car as made") + ".", ok: "Switch", danger: true }).then(function(yes) {
@@ -740,6 +751,12 @@ var Tuning = (function() {
         exportTune.title = "The setup that is chosen (or the car as it is tuned now) as a file, to share";
         exportTune.onclick = function() {
             var name = setupSelect.value;
+            // (a setup with changes on the car: the car as it is tuned now, under the name with "(changed)"; the saved setup was exported, without the changes)
+            if(name && unsavedChanges()) {
+                OpenRacer.Setups.exportFile(config.id, name + " (changed)", tunedConfig());
+                message("Tune " + name + " with the changes that are not saved yet saved as a file (in your downloads).");
+                return;
+            }
             var cfg = name ? (OpenRacer.Setups.configOf(config.id, name, original) || tunedConfig()) : tunedConfig();
             OpenRacer.Setups.exportFile(config.id, name || ((config.name || config.id) + " as tuned"), name ? Object.assign({}, original, cfg) : cfg);
             message("Tune " + (name || "as tuned now") + " saved as a file (in your downloads).");

@@ -20,10 +20,11 @@ OpenRacer.EngineBuild = (function () {
     var CYLINDERS = { "single": 1, "inline-2": 2, "inline-3": 3, "inline-4": 4, "inline-5": 5, "inline-6": 6, "v6": 6, "v8-crossplane": 8, "v8-flatplane": 8, "v10": 10, "v12": 12, "flat-4": 4, "flat-6": 6 };
     var T0 = 293.15;                                           // the standard air: 20 C, 101.3 kPa
     var FUELS = {
-        pump95: { label: "Pump fuel (95)", knock: 11.0, energy: 1.0 },
-        pump98: { label: "Pump fuel (98)", knock: 12.0, energy: 1.005 },
-        e85: { label: "E85", knock: 15.5, energy: 1.03 },
-        race: { label: "Race fuel (100+)", knock: 13.0, energy: 1.01 }
+        // (volume: the litres for the same work as pump fuel; ethanol has about a third less energy in a litre, so E85 is used up about 35 % faster)
+        pump95: { label: "Pump fuel (95)", knock: 11.0, energy: 1.0, volume: 1 },
+        pump98: { label: "Pump fuel (98)", knock: 12.0, energy: 1.005, volume: 1 },
+        e85: { label: "E85", knock: 15.5, energy: 1.03, volume: 1.35 },
+        race: { label: "Race fuel (100+)", knock: 13.0, energy: 1.01, volume: 1.02 }
     };
     var INTERCOOLERS = { none: { label: "None", value: 0 }, air: { label: "Air to air", value: 0.65 }, water: { label: "Air to water", value: 0.8 } };
     // the size of the turbo: the spool speed (rpm at a 2 L engine) and the air that the compressor can move (kg/s); a variant changes both
@@ -230,6 +231,9 @@ OpenRacer.EngineBuild = (function () {
         };
     }
 
-    return { limits: limits, turboSpec: turboSpec, CYLINDERS: CYLINDERS, FUELS: FUELS, INTERCOOLERS: INTERCOOLERS, TURBO_SIZES: TURBO_SIZES, TURBO_VARIANTS: TURBO_VARIANTS, SUPERCHARGERS: SUPERCHARGERS,
+    // About what an engine weighs (kg), from its size and its cylinders: a kart single about 28, a 1.0 litre three about 60, a 2.0 four about 100, a 5.7 V8 about 240, a
+    // 6.0 V12 about 270. For a swap the difference of the two goes to the mass of the car (Tuning.js), so a V12 in a kart is no longer as light as its single.
+    function mass(b) { return 15 + 32 * displacement(sized(b)) + 5 * cylinders(b); }
+    return { mass: mass, limits: limits, turboSpec: turboSpec, CYLINDERS: CYLINDERS, FUELS: FUELS, INTERCOOLERS: INTERCOOLERS, TURBO_SIZES: TURBO_SIZES, TURBO_VARIANTS: TURBO_VARIANTS, SUPERCHARGERS: SUPERCHARGERS,
         compute: compute, fromPreset: fromPreset, prepare: prepare, at: at, correction: correction, airDensity: airDensity, displacement: displacement, cylinders: cylinders };
 })();

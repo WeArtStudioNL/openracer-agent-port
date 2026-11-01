@@ -39,7 +39,9 @@ OpenRacer.topSpeed = function (config) {
     var ch = config && config.chassis, dt = (config && config.drivetrain) || {}, eng = (config && config.engine) || {}, dim = (config && config.dimensions) || {};
     var curve = eng.torque_curve, gears = dt.gear_ratios;
     if(!ch || !curve || curve.length < 2 || !gears || !gears.length || !(dt.final_drive > 0) || !(eng.limiter_rpm > 0) || !(ch.tire_diameter > 0)) return 0;
-    var r = ch.tire_diameter / 2, scale = eng.power_scale !== undefined ? eng.power_scale : 1, efficiency = dt.efficiency || 0.92;
+    // (the tyre of the driven axle as it is fitted: a custom tyre of the wheel library has its own size; car.json's tire_diameter is the tyre the car was made with)
+    var drivenAxle = dt.drive === "fwd" ? "front" : "rear", fitted = config.wheels && config.wheels.library && config.wheels.library[drivenAxle];
+    var r = (fitted && fitted.custom && fitted.custom.diameter > 0 ? fitted.custom.diameter : ch.tire_diameter) / 2, scale = eng.power_scale !== undefined ? eng.power_scale : 1, efficiency = dt.efficiency || 0.92;
     var cdrag = 0.5 * (ch.drag_coefficient || 0.3) * (dim.width || 1.8) * (dim.height || 1.4) * 0.85 * 1.29;
     var roll = ((config.tyres && config.tyres.rolling_resistance) || 0.015) * (ch.mass || 1000) * 9.81;
     var torque = function (rpm) {

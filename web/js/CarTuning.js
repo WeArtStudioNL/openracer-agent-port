@@ -544,6 +544,7 @@ OpenRacer.CarTuning = (function () {
             clutch_start_rpm: v.clutch_start_rpm, clutch_full_rpm: v.clutch_full_rpm,
             turbo_share: v.turbo_share / 100,
             engine_built: !!v.engine_build,
+            fuel_volume: OpenRacer.engineFuelVolume ? OpenRacer.engineFuelVolume(v.engine_build) : 1,
             turbo_spool: v.turbo_spool,
             turbo_threshold: v.turbo_threshold,
             turbo_boost: v.engine_build ? 0 : v.turbo_boost,          // (a built engine has its boost in the curve: a pressure kept from a tuning of before, on a row that is hidden now, counted it twice)
