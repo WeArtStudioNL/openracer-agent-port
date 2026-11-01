@@ -12,7 +12,8 @@ OpenRacer.Ghost = function (config, trackId) {
     this.enabled = false;          // shows the ghost of the best lap
     OpenRacer.Ghost.current = this;
     this.saving = true;            // keeps a lap that is the best
-    this.best = OpenRacer.Records.ghost(trackId, config.id) || null;
+    var recordKey = OpenRacer.Records.keyOf(config);      // the car, and its setup when it has one (Records.js)
+    this.best = OpenRacer.Records.ghost(trackId, recordKey) || null;
     this.friend = null;            // the ghost of a file that someone sent: { name, car, time, samples }; it is shown instead of the best lap
     this.recording = null;         // the samples of the lap that is going
     var body = null, wheels = null, steering = null;
@@ -119,9 +120,11 @@ OpenRacer.Ghost = function (config, trackId) {
         since = 1;
         if (this.onLap && recording && recording.length >= 10) this.onLap(recording, lapTime);
         if (!this.saving || !recording || recording.length < 10) return false;
-        if (!OpenRacer.Records.lap(trackId, config.id, lapTime)) return false;
+        if (!OpenRacer.Records.lap(trackId, recordKey, lapTime)) return false;
         this.best = { time: lapTime, samples: recording };
-        OpenRacer.Records.keepGhost(trackId, config.id, this.best);
+        // (a ghost that does not fit in the storage of the browser is kept for this game: the record is the time)
+        this.ghostKept = OpenRacer.Records.keepGhost(trackId, recordKey, this.best);
+        if (!this.ghostKept) console.warn("Ghost: the storage of the browser is full; the ghost of this lap is kept until the page is closed");
         return true;
     };
 
@@ -174,5 +177,5 @@ OpenRacer.Ghost = function (config, trackId) {
     this.objects = function () { return body ? [body].concat(wheels) : []; };     // (the reflections leave them out: the camera of the reflections is often inside the ghost)
     this.isVisible = function () { return !!(body && body.visible); };
 
-    this.bestTime = function () { return this.friend ? this.friend.time : (this.best ? this.best.time : OpenRacer.Records.best(trackId, config.id)); };
+    this.bestTime = function () { return this.friend ? this.friend.time : (this.best ? this.best.time : OpenRacer.Records.best(trackId, recordKey)); };
 };

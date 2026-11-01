@@ -1182,7 +1182,7 @@ var MainMenu = (function() {
             if(choice.track === track.id) {
                 var extra = document.createElement("div");
                 extra.className = "extra";
-                var best = choice.car && OpenRacer.Records ? OpenRacer.Records.best(track.id, choice.car) : null;
+                var best = choice.car && OpenRacer.Records ? OpenRacer.Records.best(track.id, OpenRacer.Records.key(choice.car, OpenRacer.Setups ? OpenRacer.Setups.active(choice.car) : null)) : null;      // (of the setup that is chosen)
                 var text = document.createElement("span");
                 text.textContent = best ? "Best lap: " + OpenRacer.Records.format(best) : "No lap record yet";
                 extra.appendChild(text);

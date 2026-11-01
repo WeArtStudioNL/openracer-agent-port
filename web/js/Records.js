@@ -39,12 +39,61 @@ OpenRacer.Records = (function () {
         return true;
     }
 
-    function ghost(trackId, carId) {
-        return read(GHOST + trackId + "." + carId);
+    // The record of a car with a setup of its own is not the record of the car as made (and the AI used the best lap as its line): the key is
+    // the id of the car, with "~" and the name of the setup when there is one
+    function key(carId, setupName) { return setupName ? carId + "~" + setupName : carId; }
+    // the key of a car config (main.js withTune marks a config with its setup)
+    function keyOf(config) { return key(config.id, config.setupName); }
+
+    // A ghost is kept packed: one list of rounded numbers per sample (time, place, rotation, steering, spin, and the four wheels from the
+    // place of the car), about a fifth of the samples as objects with every digit (a lap was about a million characters, and the storage of
+    // the browser was full after a few)
+    var PACKED = 22;
+    function round(v, n) { var f = Math.pow(10, n); return Math.round(v * f) / f; }
+    function pack(recording) {
+        var p = [];
+        recording.samples.forEach(function (s) {
+            p.push(round(s.t, 3), round(s.x, 3), round(s.y, 3), round(s.z, 3), round(s.qx, 4), round(s.qy, 4), round(s.qz, 4), round(s.qw, 4), round(s.s || 0, 3), round(s.r || 0, 2));
+            for (var i = 0; i < 4; i++) { var w = s.w[i] || s.w[0]; p.push(round(w[0] - s.x, 3), round(w[1] - s.y, 3), round(w[2] - s.z, 3)); }
+        });
+        return { v: 2, time: recording.time, p: p };
+    }
+    function unpack(stored) {
+        if (!stored || stored.v !== 2 || !Array.isArray(stored.p)) return stored;          // (a ghost of an older version: samples as objects)
+        var p = stored.p, samples = [];
+        for (var o = 0; o + PACKED <= p.length; o += PACKED) {
+            var x = p[o + 1], y = p[o + 2], z = p[o + 3], w = [];
+            for (var i = 0; i < 4; i++) w.push([x + p[o + 10 + 3 * i], y + p[o + 11 + 3 * i], z + p[o + 12 + 3 * i]]);
+            samples.push({ t: p[o], x: x, y: y, z: z, qx: p[o + 4], qy: p[o + 5], qz: p[o + 6], qw: p[o + 7], s: p[o + 8], r: p[o + 9], w: w });
+        }
+        return { time: stored.time, samples: samples };
     }
 
-    function keepGhost(trackId, carId, recording) {
-        return write(GHOST + trackId + "." + carId, recording);
+    function ghost(trackId, carKey) {
+        return unpack(read(GHOST + trackId + "." + carKey));
+    }
+
+    // keeps the ghost of a best lap. When the storage is full the ghosts of other tracks and cars go, the oldest record first, until it fits
+    // (they were lost without a word before, and then the record and the ghost of a lap did not agree). Gives false when it does not fit.
+    function keepGhost(trackId, carKey, recording) {
+        var name = GHOST + trackId + "." + carKey, value = pack(recording);
+        if (write(name, value)) return true;
+        var others = [];
+        try {
+            for (var i = 0; i < window.localStorage.length; i++) {
+                var k = window.localStorage.key(i);
+                if (!k || k.indexOf(GHOST) !== 0 || k === name) continue;
+                var rest = k.slice(GHOST.length), dot = rest.indexOf(".");
+                var rec = dot > 0 ? ofTrack(rest.slice(0, dot))[rest.slice(dot + 1)] : null;
+                others.push({ key: k, date: rec && rec.date ? rec.date : "" });
+            }
+        } catch (e) { return false; }
+        others.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+        for (var j = 0; j < others.length; j++) {
+            try { window.localStorage.removeItem(others[j].key); } catch (e) { /* gone */ }
+            if (write(name, value)) { console.warn("Records: the storage of the browser was full; the ghosts of " + (j + 1) + " older records were removed"); return true; }
+        }
+        return false;
     }
 
     // the best lap of any car on a track, as the line for the AI when the track has none: the newest best
@@ -91,7 +140,7 @@ OpenRacer.Records = (function () {
         return m + ":" + (s < 10 ? "0" : "") + s.toFixed(3);
     }
 
-    return { ofTrack: ofTrack, best: best, lap: lap, ghost: ghost, keepGhost: keepGhost, anyGhost: anyGhost, dragRuns: dragRuns, dragRun: dragRun, forget: forget, format: format };
+    return { key: key, keyOf: keyOf, ofTrack: ofTrack, best: best, lap: lap, ghost: ghost, keepGhost: keepGhost, anyGhost: anyGhost, dragRuns: dragRuns, dragRun: dragRun, forget: forget, format: format };
 })();
 
 // The jump records of an older version are gone: what it kept in the browser goes too
