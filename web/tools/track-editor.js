@@ -2300,7 +2300,54 @@ $("existing").addEventListener("change", async () => {
     await ($("existing").value ? loadExisting() : newTrack());
 });
 $("newTrack").onclick = async () => { if (await discardOk()) newTrack(); };
+// The track as it is saved, as a zip to share (as Export zip of the car editor): a track of the garage as the garage keeps it, a track of the server from its
+// folder: track.json and every file it names (the model with the .bin and pictures of a .gltf, the objects, the sky picture) and the thumbnail. A track saved
+// through the local server, the normal way, could not be shared from anywhere
+async function exportTrack() {
+    const id = state.existingId, track = state.existingTrack;
+    if (!id || !track) { status("Save the track first: the zip is made of the track as it is saved.", "error"); return; }
+    try {
+        let zip;
+        const source = OpenRacer.Garage.sourceOf(track);
+        if (source === "folder") throw new Error("this track is in a folder of your PC that is linked to the garage: zip that folder itself");
+        if (source === "garage") zip = await OpenRacer.Garage.exportZip("tracks", id);
+        else {
+            const base = "../tracks/" + id + "/", answer = await fetch(base + "track.json", { cache: "no-store" });
+            if (!answer.ok) throw new Error("track.json of " + id + " could not be read (HTTP " + answer.status + "); save the track first");
+            const json = await answer.json();
+            const names = new Set(["preview.webp"]);
+            if (json.model) names.add(json.model);
+            (json.objects || []).forEach((o) => { if (o && o.model) names.add(o.model); });
+            if (json.environment && json.environment.sky_image) names.add(json.environment.sky_image);
+            if (json.geometry) names.add(json.geometry);
+            if (json.scene) names.add(json.scene);
+            const entries = [{ name: id + "/track.json", data: JSON.stringify(json, null, 2) + "\n" }];
+            for (const name of names) {
+                if (typeof name !== "string" || !/^[^/\\]+(\/[^/\\]+)*$/.test(name) || name.split("/").includes("..")) continue;
+                const response = await fetch(base + name.split("/").map(encodeURIComponent).join("/"));
+                if (!response.ok) { if (name !== "preview.webp") throw new Error(name + " could not be read (HTTP " + response.status + ")"); continue; }
+                const bytes = new Uint8Array(await response.arrayBuffer());
+                entries.push({ name: id + "/" + name, data: bytes });
+                if (/\.gltf$/i.test(name)) {
+                    try {
+                        const gltf = JSON.parse(new TextDecoder().decode(bytes)), dir = name.includes("/") ? name.slice(0, name.lastIndexOf("/") + 1) : "";
+                        [].concat(gltf.buffers || [], gltf.images || []).forEach((r) => { if (r && r.uri && !/^data:/.test(r.uri)) names.add(dir + decodeURIComponent(r.uri)); });
+                    } catch (e) { /* not JSON: kept as it is */ }
+                }
+            }
+            zip = { blob: await OpenRacer.Zip.write(entries), name: id + ".track.zip" };
+        }
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(zip.blob); link.download = zip.name;
+        document.body.appendChild(link); link.click(); link.remove();
+        setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+        status("Saved " + zip.name + " (" + (zip.blob.size / 1048576).toFixed(1) + " MB) in your downloads: the Garage of the main menu imports it." +
+            (unsaved() ? " It has the track as it is saved, not the changes since." : ""), "ok");
+    } catch (error) { status("Could not make the zip: " + error.message, "error"); }
+}
+
 $("save").onclick = save;
+$("exportTrack").onclick = exportTrack;
 $("testDrive").onclick = testDrive;
 $("delete").onclick = deleteTrack;
 $("id").addEventListener("input", () => { state.idEdited = true; });
