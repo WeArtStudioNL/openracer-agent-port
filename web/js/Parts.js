@@ -817,7 +817,10 @@ OpenRacer.Parts = (function () {
             // (a call without time, the drawing after a reset, gives no load: the step from the old speed to the new one over 0.1 ms read as 20 kN
             // on a two kilo part, and the reset key tore the plates, the lights and the engine off)
             var still = dt < 1e-3;
-            dt = Math.min(Math.max(dt, 1e-4), 1 / 20);
+            // the load is the change of speed over the whole frame: on a slow computer (a frame of 0.1 s) it was divided by 1/20 s, twice the load,
+            // and the parts came off at half their force. The world of the parts steps in pieces of at most 1/40 s (see the end).
+            var frameDt = Math.min(Math.max(dt, 1e-4), 0.25), slices = Math.ceil(frameDt / (1 / 20));
+            dt = frameDt;
             frame++;
             setPose();
             var moving = false;
@@ -908,11 +911,10 @@ OpenRacer.Parts = (function () {
                 dp.body.resetTorques(true);
                 dp.body.addTorque({ x: outward.x * torque, y: outward.y * torque, z: outward.z * torque }, true);
             }
-            // two steps of half the time: a part that flies at 30 m/s hits the wall in the middle of a frame, not after it
-            world.timestep = dt / 2;
-            world.step(); limitSpeeds();
-            world.step(); limitSpeeds();
-            wallForces(dt / 2);
+            // two steps of half the time (more on a long frame): a part that flies at 30 m/s hits the wall in the middle of a frame, not after it
+            world.timestep = dt / (2 * slices);
+            for (var st = 0; st < 2 * slices; st++) { world.step(); limitSpeeds(); }
+            wallForces(world.timestep);
             for (var j = 0; j < parts.length; j++) {
                 var p = parts[j];
                 if (p.state === "held" || p.state === "broken" || p.fetching) continue;           // (a part that the pit stop carries back is put where it is by fetchTo)

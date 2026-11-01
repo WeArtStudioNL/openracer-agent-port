@@ -7,11 +7,26 @@
  *              car, as in the car editor, where they are placed: x to the left, y up, z forward; a flame goes along the negative z of the point,
  *              turned by the rotation; the older form is a list of [x, y, z]), or a guess: at the back, at the height of the hubs, one on each side for two exhaust
  *              systems and one on the right for one.
- *              Your own pictures: flat PNGs with transparency in web/images/flames/ named flame1.png, flame2.png, flame3.png, ... (numbered
- *              without a gap; it stops at the first missing number; at most 16). Every flame takes one of them at random. A picture points to
+ *              Your own pictures: flat PNGs with transparency in web/images/flames/, listed in its index.json (at most 16; without the list
+ *              it looks for flame1.png, flame2.png, ... up to the first missing number). Every flame takes one of them at random. A picture points to
  *              the right: the nozzle is the left edge in the middle, the tip is the right edge; it is turned to the way the flame flies and drawn
  *              additive (black is nothing). Without pictures the flames are the gradient that is made here.
  */
+
+// The pictures of web/images/flames/, one list for every car with the same image base (it fills as they load)
+OpenRacer.flamePictures = function (base) {
+    var cache = OpenRacer.flamePictures.cache || (OpenRacer.flamePictures.cache = {});
+    if (cache[base]) return cache[base];
+    var list = cache[base] = [];
+    var add = function (url, next) {
+        new THREE.TextureLoader().load(url, function (t) { t.colorSpace = THREE.SRGBColorSpace; list.push(t); if (next) next(); }, undefined, function () { /* no more pictures */ });
+    };
+    var probe = function (n) { if (n <= 16) add(base + "images/flames/flame" + n + ".png", function () { probe(n + 1); }); };
+    fetch(base + "images/flames/index.json").then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function (names) { names.slice(0, 16).forEach(function (name) { if (/^[\w.-]+\.png$/.test(name)) add(base + "images/flames/" + name); }); })
+        .catch(function () { probe(1); });
+    return list;
+};
 
 OpenRacer.ExhaustFlames = function (scene, car) {
     var N = 64;
@@ -28,16 +43,9 @@ OpenRacer.ExhaustFlames = function (scene, car) {
     var texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
 
-    // the pictures of web/images/flames/ (flame1.png, flame2.png, ...), when there are some
-    var custom = [];
-    (function load(n) {
-        if (n > 16) return;
-        new THREE.TextureLoader().load((car.imageBase || "") + "images/flames/flame" + n + ".png", function (t) {
-            t.colorSpace = THREE.SRGBColorSpace;
-            custom.push(t);
-            load(n + 1);
-        }, undefined, function () { /* no more pictures */ });
-    })(1);
+    // the pictures of web/images/flames/ (flame1.png, flame2.png, ...), when there are some: loaded once for all the cars (every AI car loaded them
+    // again), from the list in index.json; without that list it looks for flame1.png, flame2.png, ... up to the first that is missing (a 404)
+    var custom = OpenRacer.flamePictures(car.imageBase || "");
 
     var sprites = [], age = new Float32Array(N).fill(1e9), life = new Float32Array(N).fill(1), size0 = new Float32Array(N), size1 = new Float32Array(N);
     var alpha0 = new Float32Array(N), own = new Float32Array(N), lengthF = new Float32Array(N), widthF = new Float32Array(N), vel = [], next = 0;
