@@ -131,6 +131,18 @@ efficiency cores; phones have them too). So:
 * the gain is to be measured in the game itself, on a Mac, a Windows PC, an iPhone and an Android phone, before the player's car
   moves (step 3).
 
+### What step 2 and step 3 would win (measured before starting step 2)
+
+The Muscle and 5 AI cars on the Short track, in the game, per frame of 1/60 s (the Mac, the in-app browser):
+
+| | Physics (`vehicle.update`) | The rest of its update (driver AI, placing the model, soft body mesh, parts, smoke, marks) |
+|---|---|---|
+| The player's car (shell tyres, soft body of 166 nodes, 38 parts) | 6.5 ms | 0.4 ms |
+| The 5 AI cars together (simple tyres, soft bodies of 57 to 211 nodes) | 1.3 ms | 2.0 ms (driving: 0.03 ms) |
+
+The AI cars drive on the simple tyre, so their physics is cheap and most of their time is the drawing side, which stays on the main
+thread. Step 2 takes about 1.3 ms off the main thread; step 3 takes about 6.5 ms off it. Step 3 is where the gain is.
+
 ### Step 2: the AI cars in a worker
 
 The AI cars have the fewest readers (no HUD, no force feedback, no camera). A worker steps them and their driver (`Opponent.drive`
