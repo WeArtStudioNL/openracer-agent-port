@@ -15,6 +15,7 @@ OpenRacer.Records = (function () {
     function read(key) {
         try { return JSON.parse(window.localStorage.getItem(key)); } catch (e) { return null; }
     }
+    var lastFull = false;
     function write(key, value) {
         try { window.localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; }
     }
@@ -37,8 +38,9 @@ OpenRacer.Records = (function () {
         var oldRoad = old && roadDate && !(old.date > roadDate);
         if (old && old.time <= time && !oldRoad) return false;
         all[carId] = { time: time, date: new Date().toISOString() };
-        write(PREFIX + trackId, all);
-        return true;
+        // (the storage full: no record, and Records.full() says so; it gave true, the HUD said "new record" and nothing was kept)
+        lastFull = !write(PREFIX + trackId, all);
+        return !lastFull;
     }
 
     // The record of a car with a setup of its own is not the record of the car as made (and the AI used the best lap as its line): the key is
@@ -148,7 +150,7 @@ OpenRacer.Records = (function () {
         return m + ":" + (s < 10 ? "0" : "") + s.toFixed(3);
     }
 
-    return { key: key, keyOf: keyOf, ofTrack: ofTrack, best: best, lap: lap, ghost: ghost, keepGhost: keepGhost, anyGhost: anyGhost, dragRuns: dragRuns, dragRun: dragRun, forget: forget, format: format };
+    return { full: function () { return lastFull; }, key: key, keyOf: keyOf, ofTrack: ofTrack, best: best, lap: lap, ghost: ghost, keepGhost: keepGhost, anyGhost: anyGhost, dragRuns: dragRuns, dragRun: dragRun, forget: forget, format: format };
 })();
 
 // The jump records of an older version are gone: what it kept in the browser goes too

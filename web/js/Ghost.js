@@ -126,7 +126,11 @@ OpenRacer.Ghost = function (config, trackId) {
         var key = OpenRacer.Setups && OpenRacer.Setups.active ? OpenRacer.Records.key(config.id, OpenRacer.Setups.active(config.id)) : recordKey;
         if (key !== recordKey) { recordKey = key; this.best = OpenRacer.Records.ghost(trackId, key) || null; }
         var roadDate = typeof currentTrack !== "undefined" && currentTrack && currentTrack.id === trackId ? currentTrack.road_date : null;
-        if (!OpenRacer.Records.lap(trackId, recordKey, lapTime, roadDate)) return false;
+        if (!OpenRacer.Records.lap(trackId, recordKey, lapTime, roadDate)) {
+            // (the record did not fit in the storage of the browser: said so; it said a new record and kept nothing)
+            if (OpenRacer.Records.full && OpenRacer.Records.full() && typeof banner === "function") banner("This lap could not be kept as a record: the storage of this browser is full. Delete replays or garage items in the main menu.");
+            return false;
+        }
         this.best = { time: lapTime, samples: recording };
         // (a ghost that does not fit in the storage of the browser is kept for this game: the record is the time)
         this.ghostKept = OpenRacer.Records.keepGhost(trackId, recordKey, this.best);
@@ -172,19 +176,32 @@ OpenRacer.Ghost = function (config, trackId) {
             try { d = JSON.parse(text); } catch (e) { throw new Error("This is not a ghost file."); }
             if (!d || d.format !== "openracer-ghost" || !Array.isArray(d.samples) || d.samples.length < 10) throw new Error("This is not a ghost file.");
             if (d.track !== trackId) throw new Error("This ghost is for another track (" + String(d.track).slice(0, 40) + ").");
-            var ok = d.samples.every(function (s) { return s && isFinite(s.t) && isFinite(s.x) && isFinite(s.y) && isFinite(s.z) && isFinite(s.qw) && Array.isArray(s.w) && s.w.length >= 4; });
-            if (!ok || !isFinite(d.time)) throw new Error("This ghost file is damaged.");
+            if (!validSamples(d.samples) || !(Number.isFinite(d.time) && d.time > 0)) throw new Error("This ghost file is damaged.");
             self.friend = { name: String(d.name || (d.car && d.car.name) || "Ghost").slice(0, 40), car: d.car, time: d.time, samples: d.samples };
             self.enabled = true;
             try { window.localStorage.setItem(FRIEND, JSON.stringify(self.friend)); } catch (e) { /* too big or no storage: it is kept for this game only */ }
             return self.friend;
         });
     };
+    // every number of every sample, the four wheels as three numbers each, and the times going up (a file with times going back, no qx/qy/qz or wheels of
+    // null was taken, and the ghost was drawn from it; Number.isFinite: isFinite(null) is true)
+    function validSamples(samples) {
+        if (!Array.isArray(samples) || samples.length < 10) return false;
+        var n = function (v) { return typeof v === "number" && Number.isFinite(v); };
+        for (var i = 0; i < samples.length; i++) {
+            var s = samples[i];
+            if (!s || !n(s.t) || !n(s.x) || !n(s.y) || !n(s.z) || !n(s.qx) || !n(s.qy) || !n(s.qz) || !n(s.qw)) return false;
+            if (i > 0 && !(s.t > samples[i - 1].t)) return false;
+            if (!Array.isArray(s.w) || s.w.length < 4) return false;
+            for (var k = 0; k < 4; k++) if (!Array.isArray(s.w[k]) || s.w[k].length < 3 || !n(s.w[k][0]) || !n(s.w[k][1]) || !n(s.w[k][2])) return false;
+        }
+        return true;
+    }
     this.clearFriend = function () {
         this.friend = null;
         try { window.localStorage.removeItem(FRIEND); } catch (e) { /* no storage */ }
     };
-    try { var kept = JSON.parse(window.localStorage.getItem(FRIEND)); if (kept && kept.samples) this.friend = kept; } catch (e) { /* none */ }
+    try { var kept = JSON.parse(window.localStorage.getItem(FRIEND)); if (kept && validSamples(kept.samples) && kept.time > 0) this.friend = kept; } catch (e) { /* none */ }
 
     this.objects = function () { return body ? [body].concat(wheels) : []; };     // (the reflections leave them out: the camera of the reflections is often inside the ghost)
     this.isVisible = function () { return !!(body && body.visible); };
