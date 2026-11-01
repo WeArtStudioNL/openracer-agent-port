@@ -542,7 +542,8 @@ OpenRacer.Replay = (function() {
     function button(parent, label, title, onclick) {
         var b = el(parent, "button", "", label);
         b.title = title;
-        b.onclick = onclick;
+        // (the focus goes off after a click, as in the video editor: Enter clicked the last button again, +10 s or Pause, instead of play and pause)
+        b.onclick = function(event) { onclick(event); if(event && event.detail > 0) b.blur(); };
         return b;
     }
 
@@ -555,20 +556,35 @@ OpenRacer.Replay = (function() {
         el(left, "span", "tag", "REPLAY");
         var timeLabel = el(left, "span", "time", "");
         var right = el(head, "div", "row");
+        // (once: every click added another copy to Replays; the reason of a failure is shown, it was only in the console)
         var save = button(right, "Save replay", "Keep the replay in Replays in the main menu (from there it can be downloaded as a file to share)", function() {
-            save.textContent = "Saving…";
+            if(total === savedTotal) { save.textContent = "Saved in Replays"; return; }
+            save.textContent = "Saving…"; save.disabled = true;
             api.saveToLibrary().then(function() {
                 save.textContent = "Saved in Replays";
-            }).catch(function(error) { save.textContent = "Could not save"; console.error(error); });
-            setTimeout(function() { save.textContent = "Save replay"; }, 4000);
+            }).catch(function(error) {
+                console.error(error);
+                save.disabled = false;
+                save.textContent = "Could not save";
+                save.title = (error && error.message) || "The replay could not be saved";
+                if(typeof OpenRacerDialog !== "undefined") OpenRacerDialog.tell({ title: "The replay could not be saved", text: ((error && error.message) || String(error)) + " Replays in the main menu shows what is kept; delete old ones to make room." });
+            });
         });
         if(api.viewer) save.style.display = "none";            // (a replay that is already in the list)
         button(right, "Photo", "Save the picture as it is now as a PNG, without the bar (the photo key, F2, does the same)", function() { if(typeof takePhoto === "function") takePhoto(); });
         videoButton = button(right, "● Video", "Record the replay from the start to the end as a video (.mp4)", function() { toggleVideo(); });
         if(typeof MediaRecorder === "undefined" || !document.createElement("canvas").captureStream) videoButton.style.display = "none";
         var editor = button(right, "Video editor", "Cut this replay, change the speed, place the camera, and save it as a replay or as a video", function() {
-            editor.textContent = "Opening…";
-            api.openInEditor().catch(function(error) { editor.textContent = "Could not open"; console.error(error); setTimeout(function() { editor.textContent = "Video editor"; }, 4000); });
+            var go = function() {
+                editor.textContent = "Opening…";
+                api.openInEditor().catch(function(error) {
+                    editor.textContent = "Could not open"; console.error(error); setTimeout(function() { editor.textContent = "Video editor"; }, 4000);
+                    if(typeof OpenRacerDialog !== "undefined") OpenRacerDialog.tell({ title: "The video editor could not open", text: (error && error.message) || String(error) });
+                });
+            };
+            // (from a game the editor is a page of its own: the game ends; it went without a word)
+            if(api.viewer || typeof OpenRacerDialog === "undefined") { go(); return; }
+            OpenRacerDialog.ask({ title: "Leave the game for the video editor?", text: "The game ends here. Its replay is kept in Replays in the main menu first, and opens in the editor.", ok: "Open the editor" }).then(function(yes) { if(yes) go(); });
         });
         var exit = button(right, api.viewer ? "Main menu" : "Back to the game", "Escape", function() { api.stop(); });
         exit.className = "exit";
@@ -1306,9 +1322,19 @@ OpenRacer.Replay = (function() {
             cars: cars.map(function(entry) { return String(entry.object.name || entry.object.config.name || entry.object.config.id); }), seconds: baked.seconds, bytes: baked.bytes.length });
     };
     // from the bar of a replay to the video editor: what is shown goes to the new page as it would for a file
+    // A race of the game is kept in Replays first (the page goes away: the race was lost without a question when the editor was closed without saving), and the
+    // editor gets the entry, so its Save goes with that replay instead of adding a second copy
     api.openInEditor = function() {
         if(!cars.length || total < 2) return Promise.reject(new Error("Nothing is recorded yet."));
-        return Promise.resolve(unpack(pack())).then(stash).then(function() {
+        // (an edit that is watched is a recording of its own: its clips do not fit the replay it was made of, so it goes as a new one)
+        var kept = api.viewer ? Promise.resolve(api.isEdit ? null : api.libraryId || null)
+            : total === savedTotal ? Promise.resolve(savedId) : api.saveToLibrary().then(function(r) { return r.id; });
+        return kept.then(function(libraryId) {
+            var parsed = unpack(pack());
+            parsed.libraryId = libraryId || null;
+            if(libraryId && api.viewer) parsed.project = api.project || null;
+            return stash(parsed);
+        }).then(function() {
             window.location.href = window.location.pathname + "?car=" + encodeURIComponent(cars[0].object.config.id) + "&track=" + encodeURIComponent(currentTrack.id) + "&editor=1";
         });
     };
@@ -1816,13 +1842,17 @@ OpenRacer.Replay = (function() {
     };
 
     // Saves the recording in the list of Replays; gives a promise of { bytes }
-    var savedTotal = -1;
+    var savedTotal = -1, savedId = null;
     api.saveToLibrary = function(from, to, name) {
         if(!cars.length || total < 2) return Promise.reject(new Error("Nothing is recorded yet."));
         var size = total, seconds = ((to === undefined ? total : to) - (from === undefined ? first() : from)) / RATE;
         return gzip(pack(from, to)).then(function(bytes) {
             return libraryAdd(bytes, { created: new Date().toISOString(), name: name ? String(name).slice(0, 80) : undefined, track: { id: currentTrack.id, name: String(currentTrack.name || currentTrack.id) }, cars: cars.map(function(entry) { return String(entry.object.name || entry.object.config.name || entry.object.config.id); }), seconds: seconds, bytes: bytes.length });
-        }).then(function() { savedTotal = size; return { bytes: 0 }; });
+        }).then(function(id) {
+            // (only the whole recording is the race saved: a take of 10 s saved this way marked the race as kept, and leaving asked nothing)
+            if(from === undefined && to === undefined) { savedTotal = size; savedId = id; }
+            return { bytes: 0, id: id };
+        });
     };
     // Before the game goes back to the main menu: when there is a recording that was not saved yet, asks whether it should be (then calls leave); otherwise calls leave at once
     api.confirmLeave = function(leave) {

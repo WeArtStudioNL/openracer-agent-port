@@ -591,10 +591,11 @@ OpenRacer.VideoEditor = (function () {
         var down = function (event) {
             if (event.target.closest && (event.target.closest(".clip") || event.target.closest(".ck"))) return;
             event.preventDefault();
+            if (recording) return;          // (the playhead stays where the recording is)
             scrubbing = true; state.finalPlaying = false; moveHead(event);
         };
         ui.inner.addEventListener("pointerdown", down);
-        ui.head.addEventListener("pointerdown", function (event) { event.stopPropagation(); event.preventDefault(); scrubbing = true; state.finalPlaying = false; });
+        ui.head.addEventListener("pointerdown", function (event) { event.stopPropagation(); event.preventDefault(); if (recording) return; scrubbing = true; state.finalPlaying = false; });
         window.addEventListener("pointermove", function (event) { if (scrubbing) moveHead(event); });
         window.addEventListener("pointerup", function () { scrubbing = null; });
         ui.inspector = el(tl, "div", "inspector");
@@ -627,7 +628,8 @@ OpenRacer.VideoEditor = (function () {
         h.addEventListener("pointerdown", function (event) {
             event.stopPropagation(); event.preventDefault();
             var startX = event.clientX, in0 = clip.in, out0 = clip.out, moved = false;
-            var keys0 = clip.keys.map(function (k) { return Object.assign({}, k); }), zoom0 = (clip.zoomKeys || []).map(function (k) { return Object.assign({}, k); });
+            var keys0 = clip.keys.map(function (k) { return Object.assign({}, k); }), zoom0 = (clip.zoomKeys || []).map(function (k) { return Object.assign({}, k); }),
+                lead0 = (clip.leadKeys || []).map(function (k) { return Object.assign({}, k); });          // (the look-ahead too: it changed at the wrong moments after a trim)
             // (the moves come to the window: the timeline is drawn again while it is dragged, and this handle with it)
             var a = Replay.start_time(), b = Replay.end_time();
             var move = function (e) {
@@ -641,15 +643,18 @@ OpenRacer.VideoEditor = (function () {
                     clip.in = newIn;
                     clip.keys = keys0.map(function (k) { return Object.assign({}, k, { at: k.at - shift }); }).filter(function (k) { return k.at >= -1e-6 && k.at <= clip.out - clip.in + 1e-6; });
                     clip.zoomKeys = zoom0.map(function (k) { return Object.assign({}, k, { at: k.at - shift }); }).filter(function (k) { return k.at >= -1e-6 && k.at <= clip.out - clip.in + 1e-6; });
+                    clip.leadKeys = lead0.map(function (k) { return Object.assign({}, k, { at: k.at - shift }); }).filter(function (k) { return k.at >= -1e-6 && k.at <= clip.out - clip.in + 1e-6; });
                 } else {
                     var dOut = dx / state.scale * speedAtOffset(clip, out0 - in0);
                     clip.out = clamp(out0 + dOut, in0 + MIN_CLIP, b);
                     clip.keys = keys0.filter(function (k) { return k.at <= clip.out - clip.in + 1e-6; });
                     clip.zoomKeys = zoom0.filter(function (k) { return k.at <= clip.out - clip.in + 1e-6; });
+                    clip.leadKeys = lead0.filter(function (k) { return k.at <= clip.out - clip.in + 1e-6; });
                 }
                 // one key left of a kind is no ramp: its value is the clip's
                 if (clip.keys.length === 1) { clip.speed = clip.keys[0].speed; clip.keys = []; }
                 if (clip.zoomKeys.length === 1) { clip.zoom = clip.zoomKeys[0].zoom; clip.zoomKeys = []; }
+                if (clip.leadKeys.length === 1) { clip.lead = clip.leadKeys[0].lead; clip.leadKeys = []; }
                 prepare(clip);
                 state.selected = index; state.selectedKey = -1; state.selectedZoomKey = -1; state.selectedLeadKey = -1;
                 say("Clip " + (index + 1) + ": " + fmt(clip.in) + " – " + fmt(clip.out) + " · " + round(clip.duration, 2) + " s");
@@ -1024,6 +1029,12 @@ OpenRacer.VideoEditor = (function () {
         if (state.finalPlaying) {
             state.T += delta;
             if (state.T >= length) { state.T = length; state.finalPlaying = false; if (recording) setTimeout(stopRecording, 300); updateButtons(); }
+        } else if (recording && !recording.stopping) {
+            // something stopped the playhead during the recording (a button, a camera key): the video ends here and is saved as far as it went. The recorder
+            // ran on before, without an end, and nothing was ever saved
+            recording.stopping = true;
+            say("The recording stopped at " + state.T.toFixed(1) + " s: the video is saved up to there.");
+            setTimeout(stopRecording, 100);
         }
         if (state.srcPlaying) {
             state.srcT += delta;
@@ -1057,7 +1068,7 @@ OpenRacer.VideoEditor = (function () {
     // ---- the keys
 
     function onKey(event) {
-        if (!api.active || !ui) return;
+        if (!api.active || !ui || recording) return;          // (while the mp4 is recorded the keys do not move the playhead)
         var target = event.target;
         if (target && (/^(TEXTAREA|SELECT)$/.test(target.tagName) || (target.tagName === "INPUT" && target.type !== "range"))) return;
         if (document.querySelector(".veShade")) return;

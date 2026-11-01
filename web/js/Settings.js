@@ -302,6 +302,8 @@ var Settings = (function() {
             // the main menu: Escape is a step back there (MainMenu.js), not the menu of a game that is not running
             if(!menu && document.getElementById("mainMenu")) return;
             // in a replay Escape goes back to the game
+            // (not in the video editor: Escape left it, without the question about what was not saved; Close there asks)
+            if(OpenRacer.VideoEditor && OpenRacer.VideoEditor.active) return;
             if(replayOn()) { OpenRacer.Replay.stop(); event.preventDefault(); return; }
             // Escape cancels a wheel calibration first; while the racing line is recorded for the track editor it ends that (main.js)
             if(WheelControls.isCalibrating()) return;
