@@ -1092,7 +1092,7 @@ var MainMenu = (function() {
         box.appendChild(links);
         var foot = document.createElement("div");
         foot.className = "foot";
-        foot.innerHTML = "<a href=\"https://openracer.eu\" target=\"_blank\" rel=\"noopener\">openracer.eu</a><a href=\"https://discord.gg/JFgHVFUagF\" target=\"_blank\" rel=\"noopener\">Discord</a><span></span>";
+        foot.innerHTML = "<a href=\"https://openracer.eu\" target=\"_blank\" rel=\"noopener\">openracer.eu</a><a href=\"https://discord.gg/JFgHVFUagF\" target=\"_blank\" rel=\"noopener\">Discord</a><a href=\"https://openracer.eu/changelog.html\" target=\"_blank\" rel=\"noopener\" title=\"What is new in every version\"></a>";
         foot.lastChild.textContent = "v" + OpenRacer.VERSION;
         box.appendChild(foot);
         page.appendChild(box);

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OpenRacer changelog</title>
+    <meta name="description" content="What is new in every version of OpenRacer, the hotfixes included.">
+    <link rel="stylesheet" href="site.css?v=8">
+    <script src="theme.js?v=3"></script>
+</head>
+<body>
+<header class="top">
+    <div class="in">
+        <a class="brand" href="./"><i></i>OpenRacer</a>
+        <nav>
+            <a class="hide-s" href="./">Home</a>
+            <a class="hide-s" href="docs.html">Docs</a>
+            <a class="on" href="changelog.html">Changelog</a>
+            <a class="hide-s" href="https://github.com/WeArtStudioNL/openracer-agent-port">Fork</a>
+            <a class="hide-s" href="https://discord.gg/JFgHVFUagF">Discord</a>
+            <a class="play" href="game/">Play</a>
+            <button class="themebtn" id="theme" type="button">◐ Auto</button>
+        </nav>
+    </div>
+</header>
+
+<main class="wrap">
+    <article class="doc changelog">
+        <h1>Changelog</h1>
+        <p class="intro">What changed in every version of the game. A <span class="badge hotfix">Hotfix</span> only fixes things: its last number goes up (2.3.0 → 2.3.1). The version you play is shown at the bottom of the main menu. Every detail is in <a href="https://github.com/WeArtStudioNL/openracer-agent-port/blob/master/CHANGELOG.md">CHANGELOG.md</a> on GitHub.</p>
+
+        <section id="v230">
+            <h2>2.3.0 <span class="badge">Release</span> <small>1 November 2026</small></h2>
+            <ul>
+                <li><b>Fixed: the screen went black</b> after a crash into an AI car, or when you drove through your own ghost. A shell of a car that blew up, or one bad pixel in the reflections, made the lighting black for the rest of the race.</li>
+                <li><b>Tyres with tread:</b> a custom tyre has a tread slider from road over all-terrain to knobbly. More tread grips more on grass, sand, gravel and mud, and less on tarmac.</li>
+                <li><b>Tyre detail</b> (<i>Esc → Simulation</i>): <i>Medium</i> and <i>Low</i> make the physics of the cars' tyres up to 2.5 times cheaper, for slower computers and phones. <i>Full</i> stays the default.</li>
+                <li><b>Hide the driver</b> in the cockpit camera: a checkbox under <i>Tuning → Camera</i>, kept with the tune.</li>
+                <li><b>Track editor:</b> walls, tyre stacks, cones, trees and the other prefabs can be placed on a track with its own model.</li>
+                <li><b>F9</b> checks what makes the picture dark, for when something goes wrong with the graphics.</li>
+                <li>three.js r187, the graphics library under the game.</li>
+            </ul>
+        </section>
+
+        <section id="v220">
+            <h2>2.2.0 <span class="badge">Release</span> <small>31 October 2026</small></h2>
+            <ul>
+                <li><b>Soft body and damage:</b> every car is a shell of nodes and beams that dents, parts come loose on hinges or fall off, wheels bend or come off, and cars dent each other. Damage can be switched off; <kbd>Backspace</kbd> repairs.</li>
+                <li><b>Motorcycles</b> with a rider who leans and moves on the bike, and a ragdoll crash.</li>
+                <li><b>Weather and time of day:</b> clear, cloudy, fog, rain and snow, from dawn to night, with a wet or snowy road that grips less.</li>
+                <li><b>A new main menu</b> in steps: the way to play, the car and its setup, the track, the weather, the race and the opponents.</li>
+                <li><b>Drag strip</b> with a tree of lights, a time slip and a Top 50.</li>
+                <li><b>Replays</b> in a library, takes, and a video editor.</li>
+                <li><b>Engine builder and dyno</b> in the car editor and the tuning menu, and <b>setups</b> saved under a name.</li>
+                <li><b>New gearboxes:</b> IMT, AMT, dual clutch, torque converter and CVT.</li>
+                <li><b>The tyre</b> is a shell of nodes, and the 2D physics is gone.</li>
+                <li><b>New cars and tracks:</b> the Hatchback, two karts, the OpenRacer Muscle, the stadium truck, two motorcycles; the Desert, the Desert drag strip, Kartbaan Oldenzaal and Short track.</li>
+            </ul>
+        </section>
+
+        <section id="v210">
+            <h2>2.1.0 <span class="badge">Release</span> <small>19 October 2026</small></h2>
+            <ul>
+                <li><b>Replay:</b> everything is recorded from the start; <i>Esc → Replay</i> plays it back with a slider, rewind, pause and speeds from 0.1× to 5×.</li>
+                <li><b>Cameras in the replay:</b> fixed, follow, cockpit and a free camera.</li>
+                <li><b>Save and share</b> a replay as a file; nothing goes to a server.</li>
+                <li><b>Fixed:</b> the end and the sides of a ramp were walls; the sky trembled; an error while a game was loading.</li>
+            </ul>
+        </section>
+
+        <section id="v201">
+            <h2>2.0.1 <span class="badge hotfix">Hotfix</span> <small>19 October 2026</small></h2>
+            <ul>
+                <li><b>Touch controls</b> for phones and tablets, and a phone no longer runs out of memory.</li>
+                <li>A new version reaches the player at once, and the helper server, the names in the menus and the site were made safer.</li>
+            </ul>
+        </section>
+
+        <section id="v200">
+            <h2>2.0.0 <span class="badge">Release</span> <small>19 October 2026</small></h2>
+            <ul>
+                <li>The fork as a new version: the driving model, races with AI, ghost and records, wheels with force feedback, the car and track editors, the tuning menu, the skidpad and the local garage.</li>
+            </ul>
+        </section>
+    </article>
+</main>
+
+<footer class="site">
+    <div class="wrap">
+        <span>OpenRacer is released under the GPLv3 license.</span>
+        <span><a href="https://github.com/digi-chris/OpenRacer">Original</a> · <a href="https://github.com/WeArtStudioNL/openracer-agent-port">Fork</a> · <a href="https://discord.gg/JFgHVFUagF">Discord</a> · <a href="docs.html">Docs</a></span>
+    </div>
+</footer>
+</body>
+</html>

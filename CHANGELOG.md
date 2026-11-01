@@ -2,8 +2,15 @@
 
 What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in `web/js/Version.js`.
 
-## Unreleased
+A version that only fixes things is a hotfix: the last number goes up (2.3.0 → 2.3.1). The players' list of every version, hotfixes included, is the changelog page of the site (`site/changelog.html`, <https://openracer.eu/changelog.html>).
 
+## 2.3.0 (2026-11-01)
+
+The black screen after a crash is gone, tyres with tread for off-road, a setting that makes the physics of the tyres cheaper, the driver can be hidden in the cockpit, prefabs on tracks with their own model, and three.js r187.
+
+- **Tuning: hide the driver** (*Tuning → Camera*): a checkbox that hides the driver in the cockpit camera, saved with the tune, so every car and tune can have it its own way.
+- **three.js r187** (vendored in `web/js/three`): the lighting made from the reflections is kept as a cube map instead of an atlas, and the ambient occlusion takes the depth and the normals of the picture that is already made.
+- **Physics in a Web Worker, as a test** (`?worker=1` in the address): the physics of the player's car in a worker of its own. Not fit to drive yet (the car lags and jitters, no contacts with the AI cars), so it is off unless asked for; see `PHYSICS-WORKER.md`.
 - **Prefabs on a track with its own model.** The track editor's Objects card has a Prefabs row: the walls, tyre stacks, cones, trees, houses and the other prefabs of the track designer can be placed on a track made in Blender (before, they only showed on tracks drawn with nodes). A wall or a cone is hit by the cars; a tree or a bush is only drawn. Placed prefabs are saved and listed under Objects like any other model.
 - **Off-road tyres with dynamic wheels.** A custom tyre now has a second slider next to the rubber: **tread**, from road (0) over all-terrain (50) to knobbly (100). The more tread, the more grip on loose ground (grass, sand, gravel, mud, dirt; up to 1.7 times), the less rolling resistance there, and the more grip in a slide; on tarmac it grips less (down to 0.82) and rolls heavier. A knobbly tyre with road rubber is exactly the *Off-road (knobbly)* kind of tyre. It is in the tuning menu and in the car editor.
 - The look of a custom tyre follows its pattern: slick, road, all-terrain (blocks) or knobbly (big lugs). `wheels.json` has a `treads` list with an entry for every pattern; give one a `"file"` (a .glb) and that model is fitted between the shells in place of the one made from numbers.

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>OpenRacer docs</title>
     <meta name="description" content="How OpenRacer works: controls, racing, replays, the physics of the car and its soft body, motorcycles, the tuning menu, the car editor, the track editor and the garage.">
-    <link rel="stylesheet" href="site.css?v=7">
+    <link rel="stylesheet" href="site.css?v=8">
     <script src="theme.js?v=3"></script>
 </head>
 <body>
@@ -15,6 +15,7 @@
         <nav>
             <a class="hide-s" href="./">Home</a>
             <a class="on" href="docs.html">Docs</a>
+            <a class="hide-s" href="changelog.html">Changelog</a>
             <a class="hide-s" href="https://github.com/WeArtStudioNL/openracer-agent-port">Fork</a>
             <a class="hide-s" href="https://discord.gg/JFgHVFUagF">Discord</a>
             <a class="play" href="game/">Play</a>
@@ -778,36 +779,16 @@ start http://localhost:8000</code></pre>
         </section>
 <section id="changelog">
             <h2>Changelog</h2>
-            <h3 id="v220">2.2.0 <small>(October 2026)</small></h3>
+            <p>Every version, the hotfixes included, is on the <a href="changelog.html">changelog page</a>. The newest:</p>
+            <h3 id="v230">2.3.0 <small>(1 November 2026)</small></h3>
             <ul>
-                <li><b>Soft body and damage:</b> every car is a shell of nodes and beams that dents, parts come loose on hinges or fall off, wheels bend or come off, and cars dent each other. Damage can be switched off; <kbd>Backspace</kbd> repairs. See <a href="#softbody">Soft body and damage</a>.</li>
-                <li><b>Motorcycles</b> with a rider who leans and moves on the bike, and a ragdoll crash. See <a href="#motorcycles">Motorcycles</a>.</li>
-                <li><b>Weather and time of day:</b> clear, cloudy, fog, rain and snow, from dawn to night, with a wet or snowy road that grips less. See <a href="#weather">Weather and time of day</a>.</li>
-                <li><b>A new main menu</b> in steps: the way to play, the car and its setup, the track, the weather, the race and the opponents.</li>
-                <li><b>Drag strip</b> with a tree of lights, a time slip and a Top 50. See <a href="#dragstrip">Drag strip</a>.</li>
-                <li><b>Replays</b> in a library, takes, and a video editor. See <a href="#replay">Replay</a>.</li>
-                <li><b>Engine builder and dyno</b> in the car editor and the tuning menu, and <b>setups</b> saved under a name; a car can bring its own setups (<a href="#setups">Setups</a>).</li>
-                <li><b>New gearboxes:</b> IMT, AMT, dual clutch, torque converter and CVT, with ready-made transmissions.</li>
-                <li><b>The tyre</b> is a shell of nodes, and the 2D physics is gone.</li>
-                <li><b>New cars and tracks:</b> the Hatchback, two karts, the OpenRacer Muscle, the stadium truck, two motorcycles; the Desert, the Desert drag strip, Kartbaan Oldenzaal and Short track. The Mustangs, the Circuit and TT Assen are gone.</li>
+                <li><b>Fixed: the screen went black</b> after a crash into an AI car, or when you drove through your own ghost.</li>
+                <li><b>Tyres with tread:</b> a tread slider for a custom tyre, from road to knobbly, for grip off the road.</li>
+                <li><b>Tyre detail</b> (<i>Esc → Simulation</i>): cheaper physics for the tyres of the cars on slower computers.</li>
+                <li><b>Hide the driver</b> in the cockpit camera (<i>Tuning → Camera</i>).</li>
+                <li><b>Track editor:</b> prefabs on a track with its own model.</li>
+                <li><kbd>F9</kbd> checks what makes the picture dark; three.js r187.</li>
             </ul>
-            <h3 id="v210">2.1.0 <small>(19 October 2026)</small></h3>
-            <ul>
-                <li><b>Replay:</b> everything is recorded from the start, and Esc, Replay plays it back with a slider, rewind, pause, play and speeds from 0.1× to 5×. See <a href="#replay">Replay</a>.</li>
-                <li><b>Cameras in the replay:</b> Fixed, Follow, Cockpit and a Free camera with smoothing, mouse look, zoom, aim at the car and fix to the car.</li>
-                <li><b>Save and share:</b> a replay is saved as a file and opened from the main menu; nothing goes to a server.</li>
-                <li><b>Fixes:</b> the end and the sides of a ramp were walls for a car above them; the sky trembled; an error while a game was loading.</li>
-            </ul>
-            <h3 id="v201">2.0.1 <small>(19 October 2026)</small></h3>
-            <ul>
-                <li><b>Touch controls</b> for phones and tablets, and a phone no longer runs out of memory.</li>
-                <li>A new version reaches the player at once, and the helper server, the names in the menus and the site have been made safer.</li>
-            </ul>
-            <h3 id="v200">2.0.0 <small>(19 October 2026)</small></h3>
-            <ul>
-                <li>The fork as a new version: the driving model, races with AI, ghost and records, wheels with force feedback, the car and track editors, the tuning menu, the skidpad and the local garage.</li>
-            </ul>
-            <p>The full list is in <a href="https://github.com/WeArtStudioNL/openracer-agent-port/blob/master/CHANGELOG.md">CHANGELOG.md</a> on GitHub.</p>
         </section>
     </article>
 </div>
