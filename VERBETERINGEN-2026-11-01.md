@@ -6,8 +6,8 @@
 
 ## Kort
 
-- Ik heb in **29 commits** (sinds 05:51) gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen) en een reeks UX-punten.
-- Na elke grote wijziging heb ik een onafhankelijke review of audit laten doen (vijf reviews, plus audits van de motorbouw, de car-editor, de races en de Garage). Elke bevinding heb ik zelf nagelopen en zo nodig opgelost.
+- Ik heb in **39 commits** (sinds 05:51) gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen), de track-editor, de eerste keer spelen en een reeks UX-punten.
+- Na elke grote wijziging heb ik een onafhankelijke review of audit laten doen (zes reviews, plus audits van de motorbouw, de car-editor, de races, de Garage, de track-editor en de eerste keer spelen). Elke bevinding heb ik zelf nagelopen en zo nodig opgelost.
 - Alles is getest in het spel zelf, vanuit JavaScript aangestuurd. Het browservenster stond verborgen; daar loopt de animatielus niet. Hoe het er in beeld uitziet, heb ik maar op enkele screenshots gezien.
 
 ## Wat er is gedaan
@@ -74,6 +74,26 @@
 - **Een setup van een andere auto** neemt alleen de tuning over. Een motorsetup maakte de hatchback een motor met de wielen van de motor. Getest: de hatchback houdt zijn naam, wielen, spoorbreedte, wielbasis en gewicht.
 - **De ghost van een vriend** geldt per baan en auto (hij verving je eigen beste ronde bij elke auto). Een oude vriend-ghost wordt overgenomen. *Download* van een bewerkte replay geeft de bewerking.
 - Uit de review: bijbestanden in een submap van een gekoppelde map worden gevonden, twee mappen met dezelfde naam botsen niet meer, en een zip zonder naam krijgt een vaste id (dezelfde zip twee keer importeren overschrijft in plaats van te verdubbelen).
+
+### Track-editor (audit van 12 punten en een review; `49bdbe5`, `357b90a`, `7a43b48`, `2b6178d`, `3d5e83b`, `b65f0e9`)
+- **De AI reed een oude ronde.** De beste ronde die op deze computer gereden was, ging vóór de opgeslagen racelijn, ook nadat je de weg of de lijn had veranderd. Daardoor reed de AI de nieuwe muren in. Een baan krijgt nu een datum bij elke wijziging van de lijn of de weg, en alleen rondes van daarna tellen. Een record van de oude weg wordt bij de volgende ronde vervangen.
+- **Record AI racing line** gooide niet-opgeslagen gates weg; daarna telde geen ronde meer. Nu slaat hij eerst op.
+- **Opslaan zegt wat er nog mist:** geen gates, of geen racelijn op een modelbaan. Die melding blijft staan tot je erop klikt. Een foutmelding verdwijnt ook niet meer na 7 s.
+- **Nieuw:** *Test drive* (opslaan en de baan in een nieuw tabblad rijden) en *Export zip* (`track.json`, het model, de objecten, de lucht en de thumbnail). Een baan van de lokale server kon nergens als zip gedeeld worden.
+- Vragen vóór *Clear the grid*, *Clear the pit boxes*, *Clear the pit line* en *Forget the line*. Ook vóór de hoogtekaart en de startdialoog werk vervangen.
+- Een thumbnail van baan A werd de foto van baan B. Schalen of kantelen van objecten telde niet als wijziging. Een negende gridvak verving vak 8. Delete wiste op een getekende baan ook de gekozen node.
+- Een `.gltf` met texturen in een submap had in de game geen texturen: de verwijzingen worden bij het importeren plat gemaakt.
+- Het kaartje *Sky and light* zegt nu dat de game alleen de sterkte van het licht gebruikt (lucht, mist en zon komen uit het weer en de tijd van de speler).
+
+### Eerste keer spelen (audit van 12 punten en een review; `2ddbeb2`, `5f14774`, `b65f0e9`)
+- **Restart** in het pauzemenu. Een spin in ronde 1 betekende alle ronden uitrijden of het hele menu opnieuw.
+- **Bij de eerste race** een paneel met de belangrijkste toetsen (of padknoppen), één keer. De HUD zegt *Esc: pause, restart, settings and controls*, met een pad *Start*.
+- **De race pauzeert** als je tunet (eerst reden de AI door terwijl je las) en als het venster de focus verliest. Esc en U sluiten het tuningmenu. De pauze wordt per reden vastgehouden, zodat het menu, het tuningmenu, de HUD-editor en een Take elkaars pauze niet opheffen.
+- **Een korte melding** als C, B, N, Y, J of E een rijhulp of het geluid aan- of uitzet. F2 en F3 openen niet meer de zoekbalk van de browser.
+- **De vrije camera** komt niet terug bij de volgende start. Hij nam W, A, S, D en Space over, en de auto reed niet.
+- **Gamepad:** knoppen heten A, B, LB, RT enzovoort in plaats van "Button 7". Camera op X en repareren op Back, ook voor spelers met opgeslagen bediening.
+- Een link naar een auto of baan die er niet is, zegt nu waarom je in het menu staat. De replayvraag komt niet meer bij minder dan een minuut. Een laadtekst bij het eerste bezoek.
+- **Telefoon:** een woordje onder elke knop bovenaan (*Reset*, *Repair*, *Record*…), en op een smalle telefoon twee kolommen rechts in plaats van een rij over de rondetijd.
 
 ### Menu's en kleine punten
 - **Tune the car** staat bovenaan het pauzemenu.
