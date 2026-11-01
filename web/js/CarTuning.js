@@ -222,7 +222,10 @@ OpenRacer.CarTuning = (function () {
             case "diff_preload": case "diff_power": case "diff_coast": case "diff_lock": return lsd;
             case "center_diff": return awd;
             case "center_split": return awd && v.center_diff !== "locked";
-            case "turbo_spool": case "turbo_threshold": case "turbo_boost": return turbo;
+            case "turbo_spool": return turbo;
+            // (a built engine has its turbo in its curve: the share, the threshold and a boost pressure on top of it follow the build, Engine.js)
+            case "turbo_share": return !v.engine_build;
+            case "turbo_threshold": case "turbo_boost": return turbo && !v.engine_build;
             case "turbo_intercooler": case "turbo_efficiency": return v.turbo_boost > 0;
             case "tc_lockup": return g === "torque-converter";
             // (the tyre of a rim of the library is a custom one: made from the numbers; the tyres of the library stay for the cars that have one)
@@ -540,6 +543,7 @@ OpenRacer.CarTuning = (function () {
             shift_time: v.shift_time,
             clutch_start_rpm: v.clutch_start_rpm, clutch_full_rpm: v.clutch_full_rpm,
             turbo_share: v.turbo_share / 100,
+            engine_built: !!v.engine_build,
             turbo_spool: v.turbo_spool,
             turbo_threshold: v.turbo_threshold,
             turbo_boost: v.turbo_boost,
@@ -741,6 +745,10 @@ OpenRacer.CarTuning = (function () {
         if(v.exhaust_type) c.sound.engine_sim.exhaust_type = v.exhaust_type;
         if(v.engine_build && OpenRacer.EngineBuild) {
             var b = JSON.parse(JSON.stringify(v.engine_build));
+            // another block than the car has: the whole character of its sound (the rod, the lifts, the lobe centres, the exhaust systems), as the car editor does.
+            // The sound of the car's own block stays as car.json has it. (A swap in the game kept the sound of the old engine, with only its size and cam changed.)
+            var preset = OpenRacer.engineSimPresets[b.block], ownBlock = c.engine.build && c.engine.build.block;
+            if(preset && b.block !== ownBlock) Object.keys(preset).forEach(function(k) { if(k !== "impulse_response" || !v.exhaust_type) c.sound.engine_sim[k] = preset[k]; });
             c.engine.build = b;
             c.engine.torque_curve = OpenRacer.EngineBuild.compute(b, c.engine.limiter_rpm, c.engine.idle_rpm).curve;
             if(OpenRacer.engineSimPresets[b.block]) c.sound.engine_sim.layout = OpenRacer.engineSimPresets[b.block].layout;

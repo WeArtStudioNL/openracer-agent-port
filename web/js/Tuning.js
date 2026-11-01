@@ -52,23 +52,24 @@ var Tuning = (function() {
         });
         return out;
     }
-    function builtFrom(c) { return JSON.stringify([c.suspension, c.driveline, c.softbody, c.dimensions, c.steering_wheel && c.steering_wheel.degrees, libraryWithoutRubber(c), c.chassis && c.chassis.cg_height, c.chassis && c.chassis.tire_diameter]); }
+    function builtFrom(c) { return JSON.stringify([c.suspension, c.driveline, c.softbody, c.dimensions, c.steering_wheel && c.steering_wheel.degrees, libraryWithoutRubber(c), c.chassis && c.chassis.cg_height, c.chassis && c.chassis.tire_diameter, c.engine && c.engine.build && c.engine.build.block]); }      // (the block: the engine model of the parts library, PartsLibrary.js)
     function apply() {
         var v = values;
         if(v.width > 0 && v.height > 0) car.frontal_area = v.width * v.height * 0.85;
         if(car.setColors) car.setColors({ body: v.body_color || null, rim: v.rim_color || null, bodyFinish: v.body_finish || "", rimFinish: v.rim_finish || "", bodyFlake: v.body_flake || 100, rimFlake: v.rim_flake || 100, bodyPattern: v.body_pattern || "noise", rimPattern: v.rim_pattern || "noise", bodyUv: v.body_uv || "model", rimUv: v.rim_uv || "model" });
-        car.vehicle.retune(OpenRacer.CarTuning.toRetune(v, car.frontal_area, air_density));
-        // the rest of the car editor, live: the cameras, the steering wheel, the rider of a motorcycle, the torque curve, the sound; and the model built again for
-        // what it is built from (the suspension and the driveline of the parts library, the soft body, the size), half a second after the last change
+        // the torque curve first: the clutch of retune() is made for the peak torque of the engine (a block that was swapped kept the clutch of the old one)
         var tuned = tunedConfig();
-        if(OpenRacer.cameraSettings) car.cameraSettings = OpenRacer.cameraSettings(tuned);
-        if(car.steeringWheel && v.steering_degrees > 0) car.steeringWheel.degrees = v.steering_degrees;
-        if(car.vehicle.controller && car.vehicle.controller.retune && tuned.motorcycle) car.vehicle.controller.retune(tuned.motorcycle);
         var curve = tuned.engine && tuned.engine.torque_curve;
         if(curve && car.engine && JSON.stringify(curve) !== JSON.stringify(lastCurve)) {
             car.engine.torque_curve = curve.map(function(p) { return { rpm: p[0], nm: p[1] }; });
             lastCurve = curve;
         }
+        car.vehicle.retune(OpenRacer.CarTuning.toRetune(v, car.frontal_area, air_density));
+        // the rest of the car editor, live: the cameras, the steering wheel, the rider of a motorcycle, the sound; and the model built again for
+        // what it is built from (the suspension and the driveline of the parts library, the soft body, the size), half a second after the last change
+        if(OpenRacer.cameraSettings) car.cameraSettings = OpenRacer.cameraSettings(tuned);
+        if(car.steeringWheel && v.steering_degrees > 0) car.steeringWheel.degrees = v.steering_degrees;
+        if(car.vehicle.controller && car.vehicle.controller.retune && tuned.motorcycle) car.vehicle.controller.retune(tuned.motorcycle);
         var sig = builtFrom(tuned);
         if(rebuildSig !== null && sig !== rebuildSig && car.rebuild) {
             clearTimeout(rebuildTimer);
@@ -94,7 +95,9 @@ var Tuning = (function() {
         // the exhaust of the sound, and (for an engine that is built) what the sound has of the build: the layout, the bore and the stroke, the cam, the flows and the lengths
         if(v.exhaust_type) sound.exhaust_type = v.exhaust_type;
         var tunedSound = tuned.sound && tuned.sound.engine_sim;
-        if(tunedSound && v.engine_build) ["layout", "bore", "stroke", "compression_ratio", "intake_duration", "exhaust_duration", "intake_flow", "exhaust_flow", "primary_length", "exhaust_length"].forEach(function(k) { if(tunedSound[k] !== undefined) sound[k] = tunedSound[k]; });
+        // (and the character of another block than the car's own: tunedConfig lays it over the sound, CarTuning.toConfig)
+        var presetKeys = v.engine_build && OpenRacer.engineSimPresets[v.engine_build.block] ? Object.keys(OpenRacer.engineSimPresets[v.engine_build.block]) : [];
+        if(tunedSound && v.engine_build) ["layout", "bore", "stroke", "compression_ratio", "intake_duration", "exhaust_duration", "intake_flow", "exhaust_flow", "primary_length", "exhaust_length"].concat(presetKeys).forEach(function(k) { if(tunedSound[k] !== undefined) sound[k] = tunedSound[k]; });
         EngineSound.setParams(sound);
         updateInfo();
     }
@@ -104,6 +107,7 @@ var Tuning = (function() {
         var engine = car.engine;
         var peakHp = 0, peakHpRpm = 0, peakNm = 0;
         engine.torque_curve.forEach(function(p) {
+            if(p.rpm > engine.limiterRPM) return;          // (the curve of a build goes on past the rev limit: a peak there is never reached)
             var nm = p.nm * engine.torqueScale;
             var hp = nm * p.rpm * Math.PI / 30 / 745.7;
             if(hp > peakHp) { peakHp = hp; peakHpRpm = p.rpm; }
@@ -250,7 +254,7 @@ var Tuning = (function() {
         var reset = document.createElement("button");
         reset.className = "small";
         reset.textContent = "↺";
-        reset.title = "Back to the value of the car";
+        reset.title = "Back to the value of the setup that is chosen (or of the car as made)";
         line.appendChild(reset);
         item.appendChild(line);
         var range = document.createElement("input");
@@ -264,10 +268,14 @@ var Tuning = (function() {
         range.addEventListener("change", function() { range.blur(); });
         number.addEventListener("change", function() {
             var value = parseFloat(number.value);
-            if(Number.isFinite(value)) set(key, Math.min(def[4] * 2, Math.max(def[3] / 2, value)));
+            // (a typed value may go past the slider: to half its lowest and twice its highest, away from zero. With a negative lowest, half of it was nearer
+            // to zero than the slider itself: a camber of -8 became -6, a ride height of -100 mm became -75)
+            var lo = def[3] < 0 ? def[3] * 2 : def[3] / 2, hi = def[4] > 0 ? def[4] * 2 : def[4] / 2;
+            if(Number.isFinite(value)) set(key, Math.min(hi, Math.max(lo, value)));
             number.blur();
         });
-        reset.addEventListener("click", function() { set(key, base[key]); });
+        // (the setup that is chosen now, as the orange of a changed value: it went back to the car as the game started, also after a switch of setup)
+        reset.addEventListener("click", function() { var ref = reference(); set(key, key in ref ? ref[key] : base[key]); });
         controls.push({ key: key, def: def, line: line, number: number, range: range });
         return item;
     }
@@ -576,7 +584,14 @@ var Tuning = (function() {
         exhaust: function() { return values.exhaust_type || "custom"; },
         setExhaust: function(type) { values.exhaust_type = type; apply(); store(); refresh(); },
         speeds: function() { return { idle: values.idle_rpm, limiter: values.limiter_rpm }; },
-        setLimiter: function(rpm) { values.limiter_rpm = rpm; },
+        // (a new block: the speeds that belong to the old engine follow the new rev limit, or a two-step of 9800 sat above the limiter of a V8 at 6400 and did nothing)
+        setLimiter: function(rpm) {
+            var f = values.limiter_rpm > 0 ? rpm / values.limiter_rpm : 1;
+            values.limiter_rpm = rpm;
+            if(Math.abs(f - 1) < 0.01) return;
+            ["two_step_rpm", "launch_rpm", "governor_rpm", "cvt_rpm", "pops_rpm", "antilag_rpm"].forEach(function(k) { if(values[k] > 0) values[k] = Math.round(values[k] * f / 100) * 100; });
+            if(values.tc_stall_rpm > 0) values.tc_stall_rpm = Math.round(values.tc_stall_rpm * f / 50) * 50;
+        },
         curve: function() { var t = tunedConfig(); return t.engine && t.engine.torque_curve; },
         result: function() { return buildResult; },
         driveline: function() {
@@ -616,6 +631,19 @@ var Tuning = (function() {
         setupSelect = document.createElement("select");
         setupSelect.style.width = "150px";
         setupSelect.onchange = function() {
+            // tuning that was not saved is lost by a switch: asked first (it was gone without a word)
+            var was = OpenRacer.Setups.active(config.id) || "", ref = reference();
+            var unsaved = Object.keys(base).some(function(key) { return JSON.stringify(values[key]) !== JSON.stringify(ref[key]); });
+            if(!unsaved) { switchSetup(); return; }
+            var to = setupSelect.value;
+            setupSelect.value = was;
+            OpenRacerDialog.ask({ title: "Switch the setup?", text: "The tuning on the car has changes that are not saved. They are lost when you switch to " + (to ? "“" + to + "”" : "the car as made") + ".", ok: "Switch", danger: true }).then(function(yes) {
+                if(!yes) return;
+                setupSelect.value = to;
+                switchSetup();
+            });
+        };
+        function switchSetup() {
             // the values of the table from the setup (its whole configuration; what the table does not have, the suspension and the parts, waits for the next start)
             var name = setupSelect.value, from = name ? OpenRacer.Setups.configOf(config.id, name, config) : null;
             values = clone(base);
@@ -625,7 +653,7 @@ var Tuning = (function() {
             OpenRacer.Setups.setActive(config.id, name || null);
             apply(); store(); refresh();
             message(name ? "Setup " + name + " (what the menu does not have, the suspension and the parts, comes at the next start)." : "The car as it was made (fully at the next start).");
-        };
+        }
         var saveSetup = document.createElement("button");
         saveSetup.className = "save";
         saveSetup.textContent = "Save";

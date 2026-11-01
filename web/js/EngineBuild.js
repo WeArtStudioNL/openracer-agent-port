@@ -135,8 +135,11 @@ OpenRacer.EngineBuild = (function () {
     }
 
     // the torque curve (rpm, Nm) of a build up to the rev limit, for the standard air, and the boost at every point
+    // a bore or a stroke that is not a size (a field that was emptied) is taken as 86 mm: with 0 the engine had no torque and the speed of its torque peak was
+    // infinite, and the limits of the flows became 0 to 0
+    function sized(b) { return b.bore > 0 && b.stroke > 0 ? b : Object.assign({}, b, { bore: b.bore > 0 ? b.bore : 86, stroke: b.stroke > 0 ? b.stroke : 86 }); }
     function compute(build, limiter, idle) {
-        var b = Object.assign({}, build, { idle: idle });
+        var b = Object.assign({}, sized(build), { idle: idle });
         var p = prepare(b), curve = [[0, 0]], boost = [[0, 0]], top = 0, peak = { power: 0, rpm: 0 }, topNm = 0;
         var end = Math.max(1000, limiter) + 600;
         for (var rpm = 500; rpm <= end; rpm += 500) {
@@ -192,6 +195,7 @@ OpenRacer.EngineBuild = (function () {
     }
     function round(x, step) { return Math.round(x / step) * step; }
     function limits(b, limiter, idle) {
+        b = sized(b);
         var bore = b.bore, stroke = b.stroke, valves = b.valves || 4, vdL = displacement(b), ind = b.induction || { type: "none" };
         var fuel = FUELS[b.fuel] || FUELS.pump95, knockLimit = fuel.knock + Math.max(0, 1 - (b.lambda || 0.9)) * 8, kiMax = knockLimit + 3;
         var intakeMax = 0.036 * bore * bore * (0.85 + 0.075 * valves), intakeMin = 0.012 * bore * bore;

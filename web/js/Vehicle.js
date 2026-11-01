@@ -658,6 +658,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         if(t.turbo_share !== undefined) this.engine.turboShare = Math.max(0, Math.min(0.9, t.turbo_share));
         if(t.turbo_spool !== undefined) this.engine.turboSpool = Math.max(0.05, t.turbo_spool);
         if(t.turbo_threshold !== undefined) this.engine.turboThreshold = t.turbo_threshold;
+        if(t.engine_built !== undefined) this.engine.turboBuilt = !!t.engine_built;
         if(t.turbo_boost !== undefined) this.engine.turboBar = Math.max(0, t.turbo_boost);
         if(t.turbo_intercooler !== undefined) this.engine.turboIntercooler = Math.max(0, Math.min(0.98, t.turbo_intercooler));
         if(t.turbo_efficiency !== undefined) this.engine.turboEfficiency = Math.max(0.3, Math.min(0.9, t.turbo_efficiency));

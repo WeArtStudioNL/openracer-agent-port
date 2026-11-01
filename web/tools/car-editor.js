@@ -1579,7 +1579,8 @@ function showBuild(build) {
 }
 function readBuild() {
     const b = { block: $("bBlock").value, layout: state.build ? state.build.layout : "inline-4", rod: state.build ? state.build.rod : 140 };
-    for (const [id, key] of Object.entries(BUILD_FIELDS)) b[key] = parseFloat($(id).value) || 0;
+    // (a field that is empty or not a number keeps what the build had: it was 0, an engine without torque)
+    for (const [id, key] of Object.entries(BUILD_FIELDS)) { const x = parseFloat($(id).value); b[key] = Number.isFinite(x) ? x : (state.build && state.build[key] !== undefined ? state.build[key] : 0); }
     b.valves = parseInt($("bValves").value, 10); b.fuel = $("bFuel").value; b.lambda = parseFloat($("bLambda").value) || 0.9;
     const type = $("bInduction").value;
     b.induction = { type, variant: $("bVariant").value, size: $("bSize").value, boost: parseFloat($("bBoost").value) || 0, intercooler: $("bIntercooler").value };
@@ -1645,12 +1646,23 @@ $("bBlock").addEventListener("change", () => {
     syncSoundFromBuild(build, true);
     recomputeBuild();
 });
-document.querySelectorAll(".b").forEach((el) => el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => {
+document.querySelectorAll(".b").forEach((el) => el.addEventListener(el.tagName === "SELECT" ? "change" : "input", (ev) => {
     if (!state.build) return;
     if (el.id === "bInduction") fillBuildVariants();
-    if (el.type === "number" && el.min !== "" && el.max !== "") { const v = parseFloat(el.value); if (Number.isFinite(v) && (v < +el.min || v > +el.max)) el.value = Math.min(+el.max, Math.max(+el.min, v)); }     // (a number typed beyond what is possible)
+    const out = el.type === "number" && el.min !== "" && el.max !== "" && (v => Number.isFinite(v) && (v < +el.min || v > +el.max))(parseFloat(el.value));
+    // a number that is being typed is put within its limits when it is done (change, below): 95 into the bore became 40 at the "9", then 405
+    if (out && ev.isTrusted) return;
+    if (out) el.value = Math.min(+el.max, Math.max(+el.min, parseFloat(el.value)));     // (a number typed beyond what is possible)
     syncSoundFromBuild(readBuild(), false);
     recomputeBuild();
+}));
+
+document.querySelectorAll("input.b[type=number]").forEach((el) => el.addEventListener("change", () => {
+    if (!state.build || el.min === "" || el.max === "") return;
+    const v = parseFloat(el.value);
+    if (!Number.isFinite(v) || (v >= +el.min && v <= +el.max)) return;
+    el.value = Math.min(+el.max, Math.max(+el.min, v));
+    el.dispatchEvent(new Event("input", { bubbles: true }));
 }));
 
 // ---- sliders for the build, with limits that follow from the other settings (EngineBuild.limits): a bore that the stroke does not allow, a compression that the fuel cannot take

@@ -79,6 +79,10 @@ OpenRacer.Engine = function( parameters ) {
     this.turboIntercooler = turbo && turbo.intercooler !== undefined ? turbo.intercooler : 0.75;
     this.turboEfficiency = turbo && turbo.efficiency > 0 ? turbo.efficiency : 0.7;
     this.hasTurbo = function () { return this.turboShare > 0 || this.turboBar > 0; };
+    // A built engine (EngineBuild.js) has the boost in its curve, with its fall below the speed where the turbo spools: the turbo here only adds the lag
+    // after the throttle opens. (The ramp of 2000 rpm above the threshold took the torque off a second time: a 2.0 litre with a turbo had 114 Nm at
+    // 1500 rpm where the engine without it has 152.)
+    this.turboBuilt = !!parameters.build;
     // the power as a factor for a boost pressure (bar above the atmosphere)
     this.boostFactor = function (bar) {
         if(bar <= 0) return 1;
@@ -133,7 +137,7 @@ OpenRacer.Engine = function( parameters ) {
         var rpm = this.getRPM();
         stepExtras(throttle, dt, rpm);
         if(!this.hasTurbo()) { this.boost = 0; return; }
-        var wanted = this.running ? Math.max(0, Math.min(1, throttle)) * Math.max(0, Math.min(1, (rpm - this.turboThreshold) / 2000)) : 0;
+        var wanted = this.running ? Math.max(0, Math.min(1, throttle)) * (this.turboBuilt ? 1 : Math.max(0, Math.min(1, (rpm - this.turboThreshold) / 2000))) : 0;
         if(this.alsActive) wanted = Math.max(wanted, this.extras.antilag_boost / 100 * Math.min(1, 0.4 + (rpm - this.extras.antilag_rpm) / 3000));
         var tau = wanted > this.boost ? this.turboSpool : this.turboSpool * 0.35;
         this.boost += (wanted - this.boost) * Math.min(1, dt / tau);
@@ -164,8 +168,10 @@ OpenRacer.Engine = function( parameters ) {
 
     // Torque the engine loses when the throttle is closed (friction plus pumping losses, so engine braking)
     // (scaled to the size of the engine; the numbers are for an engine with a peak torque of about 580 Nm)
-    var motoringScale = Math.max(0.3, Math.min(2.5, this.getPeakTorque() / 580));
+    // (follows the curve: a block that is swapped in the tuning menu gets a new curve, and the engine braking of the old engine stayed for the session)
+    var motoringScale = 1, motoringCurve = null;
     this.getMotoringTorque = function( rpm ) {
+        if(this.torque_curve !== motoringCurve) { motoringCurve = this.torque_curve; motoringScale = Math.max(0.3, Math.min(2.5, this.getPeakTorque() / 580)); }
         return (30 + 0.0355 * rpm) * motoringScale * this.motoringFactor;
     };
 

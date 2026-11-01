@@ -51,6 +51,11 @@ OpenRacer.EngineBuildUI = (function () {
         // ---- the block and the exhaust
         var blockSelect = select("Engine block", element);
         blockSelect.innerHTML = "<option value=''>Choose an engine block…</option>" + Object.keys(OpenRacer.engineSimPresets).map(function(n) { return "<option>" + n + "</option>"; }).join("");
+        // back to the block as it comes (the rev limit and the exhaust stay): before, the only way was to choose another block and this one again
+        var stockButton = el("button", "small", "Stock block", blockSelect.parentNode);
+        stockButton.type = "button"; stockButton.style.marginTop = "4px";
+        stockButton.title = "Every setting of the build back to how this block comes; the rev limit and the exhaust stay";
+        stockButton.addEventListener("click", function() { var b = host.build(), preset = b && OpenRacer.engineSimPresets[b.block]; if(preset) push(EB.fromPreset(b.block, preset)); });
         var info = el("div", "ebuInfo", null, element);
         var exhaustSelect = select("Exhaust", element);
         exhaustSelect.innerHTML = "<option value='custom'>Custom (as it was set before)</option>" + Object.keys(OpenRacer.engineSimExhausts).map(function(id) { var e = OpenRacer.engineSimExhausts[id]; return "<option value='" + id + "'>" + e.label + " · " + e.hint + "</option>"; }).join("");
@@ -100,7 +105,8 @@ OpenRacer.EngineBuildUI = (function () {
         function read() {
             var old = host.build() || {};
             var b = Object.assign({}, old, { block: blockSelect.value || old.block });
-            FIELDS.forEach(function(f) { b[f[1]] = parseFloat(rows[f[0]].number.value) || 0; });
+            // (a field that is empty or not a number keeps what the build had: it was 0, an engine without torque)
+            FIELDS.forEach(function(f) { var x = parseFloat(rows[f[0]].number.value); b[f[1]] = isFinite(x) ? x : (old[f[1]] !== undefined ? old[f[1]] : 0); });
             b.valves = parseInt(valvesSelect.value, 10); b.fuel = fuelSelect.value; b.lambda = parseFloat(rows.lambda.number.value) || 0.9;
             b.induction = { type: inductionSelect.value, variant: variantSelect.value, size: sizeSelect.value, boost: parseFloat(rows.boost.number.value) || 0, intercooler: coolerSelect.value };
             b.ambient = { celsius: parseFloat(rows.temp.number.value) || 0, altitude: parseFloat(rows.altitude.number.value) || 0 };
@@ -259,8 +265,11 @@ OpenRacer.EngineBuildUI = (function () {
             blockSelect.options[0].disabled = !!b;
             var ex = host.exhaust(); if(exhaustSelect.value !== ex) exhaustSelect.value = ex;
             body.style.display = b ? "" : "none";
+            stockButton.style.display = b ? "" : "none";
             if(b) {
-                show(b); limits();
+                show(b);
+                // a value that the limits pull in (a higher rev limit allows a shorter stroke only) goes to the build too: the box showed 70 mm, the engine kept 88
+                if(limits()) setTimeout(function() { if(host.build()) { for(var i = 0; i < 3 && limits(); i++); push(read()); } }, 0);
                 variantBox.style.display = inductionSelect.value === "none" ? "none" : "";
                 boostBox.style.display = inductionSelect.value === "none" ? "none" : "";
                 sizeBox.style.display = inductionSelect.value === "turbo" ? "" : "none";
