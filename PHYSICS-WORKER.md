@@ -12,6 +12,33 @@ cars can be stepped side by side (two workers do two cars at the same time). The
 not as long as all of them together. So the gain is in frames per second and in physics that fits in a frame (no slow motion,
 `simLimit` in main.js), not in less CPU over all.
 
+## Cheaper physics instead (1 November 2026)
+
+After the worker turned out not to be fit for a drive yet, the physics itself was made cheaper:
+
+* **The same numbers, a little faster**: the sines of a place round the tyre once for all its rings, the damping of a class of beams
+  once per substep, the boxes and the normals of the triangles read from the arrays of the ground. 5 to 10 % less time; the Muscle,
+  the Stadium truck and the Sports motorcycle drive a 10 s script with the same position, speed and wheels to 15 digits. (Moving the
+  helpers `rimForce` and `addK` out of the step gave nothing: the compiler did it already.)
+* **Where the time is**: in the tyres of nodes, 80 % of a step of the Muscle; within a substep the contacts between the nodes 29 %,
+  the beams 24 %, the shear 16 %, the nodes on the road 13 %. It is the number of nodes times the substeps (13 or 14 for every step
+  of 3 ms), not a slow part.
+* **Tyre detail** (Settings, tab Simulation; `Vehicle.tyreDetail`): fewer rings across the tread for a car. Per second of driving
+  (fresh vehicles on the Short track, with the tyres of their car.json):
+
+  | Car | Tyre | ms of work | Ride, hop 3 m, hop 10 m, flickers, cornering |
+  |---|---|---|---|
+  | Muscle | 3 x 12 (its own) | 271 | 1.2 cm, 0.09, 2.22, 0, 0.88 |
+  | Muscle | 2 x 12 (Medium) | 181 | 1.2 cm, 0.09, 2.11, 0, 0.88 |
+  | Muscle | 1 x 12 (Low) | 99 | 1.2 cm, 0.10, 2.42, 0, 0.86 |
+  | Stadium truck | 3 x 20 (its own) | 330 | 3.9 cm, 0.11, 2.41, 0, 0.90 |
+  | Stadium truck | 2 x 20 (Medium) | 223 | 4.0 cm, 0.12, 2.51, 0, 0.82 |
+  | Stadium truck | 1 x 12 (Low) | 99 | 4.0 cm, 0.07, 2.50, 0, 0.89 |
+
+  In the game (the Muscle with its soft body, 4 x 12 in its tune): 7.0 ms of physics a frame on Full, 4.2 on Medium, 2.7 on Low.
+  A motorcycle and a kart keep their own tyres: the Sports motorcycle with fewer nodes round its tyre fell over in the test, and the
+  Go-kart (no suspension: the tyre is its spring) spun with 2 rings and cornered much sharper with 1.
+
 ## Where the time goes now
 
 Measured in the game (r187, preset "low", a Mac with 10 cores), per frame of 1/60 s of game time:

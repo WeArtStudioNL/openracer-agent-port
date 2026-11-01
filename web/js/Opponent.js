@@ -80,6 +80,7 @@ OpenRacer.Opponent = function (config, line, options) {
         this.vehicle.escEnabled = true;
     }
     this.wheels = this.vehicle.wheels;
+    if (OpenRacer.sim && !options.vehicle) this.vehicle.tyreDetail = OpenRacer.sim.tyreDetail;      // (an AI car on tyres of nodes, aitires=shell)
     this.body = new THREE.Object3D();
     this.loaded = false;
     this.steeringWheel = null;

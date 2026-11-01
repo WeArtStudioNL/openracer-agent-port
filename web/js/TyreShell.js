@@ -43,7 +43,7 @@ OpenRacer.TyreShell = function (wheel) {
     var near = { x: 0, y: 0, z: 0 }, triNormal = { x: 0, y: 0, z: 0 };
     var hubFx = 0, hubFy = 0, hubFz = 0, hubTorque = 0;
     var CLASS_RADIAL = 0, CLASS_ALONG = 1, CLASS_ACROSS = 2, CLASS_BELT = 3, CLASS_CROSS = 4;
-    var classK = [0, 0, 0, 0, 0], classL0Pre = 0;
+    var classK = [0, 0, 0, 0, 0], classL0Pre = 0, beamDamp = new Float64Array(5), beamDampHalf = new Float64Array(5);
 
     // set by Vehicle.js
     this.forceFilter = 0.0015;         // s: the load that goes to the car is smoothed over this (a long one lagged behind the hop of a heavy wheel on a stiff tyre and fed it)
@@ -137,10 +137,12 @@ OpenRacer.TyreShell = function (wheel) {
     }
 
     // where the nodes of the two shells are on a tyre that is not deformed: from the hub c and the axes L (along the axle, to the left), F (forward in the plane of the wheel), U (up)
+    // (the angle of a place round the wheel is the same for every ring: its sine and cosine are taken once per place)
     function placeShells(cx, cy, cz, L, F, U, ph, omega, vel) {
-        for(var j = 0; j < rings; j++) {
-            for(var k = 0; k < segs; k++) {
-                var i = j * segs + k, a = ph + 2 * Math.PI * k / segs, s = Math.sin(a), c = Math.cos(a);
+        for(var k = 0; k < segs; k++) {
+            var a = ph + 2 * Math.PI * k / segs, s = Math.sin(a), c = Math.cos(a);
+            for(var j = 0; j < rings; j++) {
+                var i = j * segs + k;
                 var ro = nodeRad[j], lo = nodeLat[j];
                 Tx[i] = F.x * c - U.x * s; Ty[i] = F.y * c - U.y * s; Tz[i] = F.z * c - U.z * s;
                 Ox[i] = cx + L.x * lo + F.x * s * ro + U.x * c * ro; Oy[i] = cy + L.y * lo + F.y * s * ro + U.y * c * ro; Oz[i] = cz + L.z * lo + F.z * s * ro + U.z * c * ro;
@@ -166,14 +168,26 @@ OpenRacer.TyreShell = function (wheel) {
 
     // the road at a place: the depth of the node in the nearest triangle that it is in, and the normal (as in TyreBody.js)
     var cDepth = 0, cNx = 0, cNy = 0, cNz = 0, cTri = -1, upRef = { x: 0, y: 1, z: 0 };
+    // (the boxes and the data of the triangles of the ground, when it gives them: Ground.boxes and triangleData; the tests then need no call for each triangle)
+    var gBox = null, gTri = null, gTests = 0;
+    function boxNear(ground, t, cx, cy, cz, r) {
+        if(!gBox) return ground.boxNear(t, cx, cy, cz, r);
+        gTests++;
+        var b = t * 6;
+        return !(gBox[b] > cx + r || gBox[b + 3] < cx - r || gBox[b + 1] > cy + r || gBox[b + 4] < cy - r || gBox[b + 2] > cz + r || gBox[b + 5] < cz - r);
+    }
+    function normalOf(ground, t, out) {
+        if(!gTri) { ground.normalOf(t, out); return; }
+        var o = t * 12; out.x = gTri[o + 9]; out.y = gTri[o + 10]; out.z = gTri[o + 11];
+    }
     function contactAt(x, y, z, hub, ground, list, tol) {
         cDepth = 0; cTri = -1;
         for(var q = 0; q < list.length; q++) {
             var t = list[q];
-            if(!ground.boxNear(t, x, y, z, tol + 0.06)) continue;
+            if(!boxNear(ground, t, x, y, z, tol + 0.06)) continue;
             var d2 = ground.closest(t, x, y, z, near), dist = Math.sqrt(d2), mx, my, mz, dd;
             if(near.region === 0) {
-                ground.normalOf(t, triNormal);
+                normalOf(ground, t, triNormal);
                 // the side of the triangle that pushes: the one the up of the wheel points to (a hub that is driven below the road in a hard landing would have turned the push
                 // the wrong way and let the wheel fall through); for a wall, where the up of the wheel lies along it, the side of the hub
                 var upN = upRef.x * triNormal.x + upRef.y * triNormal.y + upRef.z * triNormal.z, sgn;
@@ -184,7 +198,7 @@ OpenRacer.TyreShell = function (wheel) {
             } else {
                 if(dist > tol || dist < 1e-6) continue;
                 mx = (x - near.x) / dist; my = (y - near.y) / dist; mz = (z - near.z) / dist;
-                ground.normalOf(t, triNormal);
+                normalOf(ground, t, triNormal);
                 if(Math.abs(mx * triNormal.x + my * triNormal.y + mz * triNormal.z) < 0.85) continue;
                 dd = tol - dist;
             }
@@ -194,6 +208,23 @@ OpenRacer.TyreShell = function (wheel) {
     }
 
     function smoothstep(a, b, x) { var t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+    // a force on a node of the rim: it goes to the hub (and its torque about the axle). (These helpers are made once, here, and add up in arrays: made inside the step they
+    // added up in variables of the step that they had to reach, which kept those out of the registers, hundreds of times in every substep.)
+    var hubAcc = new Float64Array(4), hubC = new Float64Array(3), axisL = { x: 0, y: 0, z: 0 };
+    function rimForce(i, fx, fy, fz) {
+        hubAcc[0] += fx; hubAcc[1] += fy; hubAcc[2] += fz;
+        var rx = Ix[i] - hubC[0], ry = Iy[i] - hubC[1], rz = Iz[i] - hubC[2];
+        hubAcc[3] += axisL.x * (ry * fz - rz * fy) + axisL.y * (rz * fx - rx * fz) + axisL.z * (rx * fy - ry * fx);
+    }
+    // a spring of k along the unit direction d on node i, to an anchor: its stiffness k d d^T goes into the implicit step of the node; addKv: an anchor that moves
+    // (vax, vay, vaz: its speed: the rim, or the place of the node on the wheel)
+    function addK(i, k, dx, dy, dz) {
+        Kxx[i] += k * dx * dx; Kxy[i] += k * dx * dy; Kxz[i] += k * dx * dz; Kyy[i] += k * dy * dy; Kyz[i] += k * dy * dz; Kzz[i] += k * dz * dz;
+    }
+    function addKv(i, k, dx, dy, dz, vax, vay, vaz) {
+        Kxx[i] += k * dx * dx; Kxy[i] += k * dx * dy; Kxz[i] += k * dx * dz; Kyy[i] += k * dy * dy; Kyz[i] += k * dy * dz; Kzz[i] += k * dz * dz;
+        var kv = k * (vax * dx + vay * dy + vaz * dz); Bx[i] += kv * dx; By[i] += kv * dy; Bz[i] += kv * dz;
+    }
     var halfPatch = 0.1, contactSamples = 4;
     // The softness of the carcass that gives the tyre the stiffness of the cylinder tyre at its static load: a node that is pushed in by d holds with a force of k d (k = pA / softness) up
     // to pA (the cable is slack from there: the air carries it), and the patch of a tyre that is pushed in by d is as long as 2 sqrt(2 R d), so the load of the whole patch is the sum
@@ -222,6 +253,7 @@ OpenRacer.TyreShell = function (wheel) {
     // One step of the car: hub, vel, the axes, the turn of the wheel, the road (Ground.js) and its triangles near the wheel, friction(load, name): { mu, sliding }.
     this.step = function (dt, hub, vel, L, F, U, omega, ground, list, frictionOf, lateralGrip, carMass) {
         if(!Px || self.builtFor !== key()) build();
+        gBox = ground.boxes ? ground.boxes() : null; gTri = ground.triangleData ? ground.triangleData() : null; gTests = 0;
         var R = radius, mn = Math.max(0.01, (self.tyreMass > 0 ? self.tyreMass : 8) / N);     // the mass of a node (kg)
         // ---- the constants of the beams from the pressure and the stiffness
         var Pa = Math.max(0.15, self.pressure) * 1e5, An = (2 * Math.PI * R / segs) * (width / rings), pA = Pa * An;
@@ -259,20 +291,10 @@ OpenRacer.TyreShell = function (wheel) {
         }
         var tol = self.tolerance;
         upRef.x = U.x; upRef.y = U.y; upRef.z = U.z;
-        var fHubX = 0, fHubY = 0, fHubZ = 0, torque = 0;
-        // a force on a node of the rim: it goes to the hub (and its torque about the axle)
+        hubAcc[0] = hubAcc[1] = hubAcc[2] = hubAcc[3] = 0;                   // the force and the torque of the rim on the hub (rimForce)
+        axisL.x = L.x; axisL.y = L.y; axisL.z = L.z;
         var hcx = hubx, hcy = huby, hcz = hubz;                              // the hub of the substep (the rim is placed along the path of the hub: the arm of a torque is from there)
-        function rimForce(i, fx, fy, fz) {
-            fHubX += fx; fHubY += fy; fHubZ += fz;
-            var rx = Ix[i] - hcx, ry = Iy[i] - hcy, rz = Iz[i] - hcz;
-            torque += L.x * (ry * fz - rz * fy) + L.y * (rz * fx - rx * fz) + L.z * (rx * fy - ry * fx);
-        }
-        // a spring of k along the unit direction d on node i, to an anchor: its stiffness k d d^T goes into the implicit step of the node
-        // (vax, vay, vaz: the speed of the anchor, when it moves: the rim, or the place of the node on the wheel)
-        function addK(i, k, dx, dy, dz, vax, vay, vaz) {
-            Kxx[i] += k * dx * dx; Kxy[i] += k * dx * dy; Kxz[i] += k * dx * dz; Kyy[i] += k * dy * dy; Kyz[i] += k * dy * dz; Kzz[i] += k * dz * dz;
-            if(vax !== undefined) { var kv = k * (vax * dx + vay * dy + vaz * dz); Bx[i] += kv * dx; By[i] += kv * dy; Bz[i] += kv * dz; }
-        }
+        hubC[0] = hcx; hubC[1] = hcy; hubC[2] = hcz;
         var load0 = Math.max(self.staticLoad * 0.3, 1);
         var surf = frictionOf(Math.max(load0, loadPrev), self.surface);
         // ---- the nodes that a triangle can reach in this step: a node with no triangle near it (by the way it goes in the step) is not tested against the road in the substeps, which
@@ -288,12 +310,12 @@ OpenRacer.TyreShell = function (wheel) {
             for(var jc = 0; jc < rings; jc++) for(var kc = k0; kc < k1; kc++) { var ic = jc * segs + kc, dxb = Px[ic] - bx, dyb = Py[ic] - by, dzb = Pz[ic] - bz, db = Math.sqrt(dxb * dxb + dyb * dyb + dzb * dzb); if(db > rad) rad = db; }
             var reachB = rad * 1.05 + tol + 0.06 + 0.03 + 1.4 * dt * Math.sqrt(bv) * 1.2, bList = blockList[bl];
             bList.length = 0;
-            for(var qb = 0; qb < list.length; qb++) if(ground.boxNear(list[qb], bx, by, bz, reachB)) bList.push(list[qb]);
+            for(var qb = 0; qb < list.length; qb++) if(boxNear(ground, list[qb], bx, by, bz, reachB)) bList.push(list[qb]);
         }
         for(var inr = 0; inr < N; inr++) {
             var reachN = tol + 0.06 + 0.03 + 1.4 * dt * Math.sqrt(Vx[inr] * Vx[inr] + Vy[inr] * Vy[inr] + Vz[inr] * Vz[inr]), mine = nodeList[inr], fromBlock = blockList[Math.floor((inr % segs) / blockSize)];
             mine.length = 0;
-            for(var qn = 0; qn < fromBlock.length; qn++) if(ground.boxNear(fromBlock[qn], Px[inr], Py[inr], Pz[inr], reachN)) mine.push(fromBlock[qn]);
+            for(var qn = 0; qn < fromBlock.length; qn++) if(boxNear(ground, fromBlock[qn], Px[inr], Py[inr], Pz[inr], reachN)) mine.push(fromBlock[qn]);
             nearNode[inr] = mine.length ? 1 : 0;
         }
         // ---- the steps
@@ -306,9 +328,10 @@ OpenRacer.TyreShell = function (wheel) {
         var maxDepth = 0, count = 0, sumFn = 0, slideLoad = 0, cxs = 0, cys = 0, czs = 0, nxs = 0, nys = 0, nzs = 0, minF = 1e9, maxF = -1e9, bestFn = 0, bestTri = -1, sag = 0;
         for(var s = 0; s < n; s++) {
             // (the path of the rim is centred on the hub of now, from half a step before to half a step after: the force of the step is then the force at the place where the car has the wheel; a path that ran ahead of the hub gave a force that led the motion, which is a negative damping)
-            var tc = h * (s + 1) - 0.5 * dt, tq0 = torque;
+            var tc = h * (s + 1) - 0.5 * dt, tq0 = hubAcc[3];
             phS += omS * h;
             hcx = hub.x + vel.x * tc; hcy = hub.y + vel.y * tc; hcz = hub.z + vel.z * tc;
+            hubC[0] = hcx; hubC[1] = hcy; hubC[2] = hcz;
             placeShells(hcx, hcy, hcz, L, F, U, phS, omS, vel);
             shellNormals(hubx, huby, hubz);
             for(var i = 0; i < N; i++) { Fx[i] = Fy[i] = Fz[i] = 0; Kxx[i] = Kxy[i] = Kxz[i] = Kyy[i] = Kyz[i] = Kzz[i] = 0; Bx[i] = By[i] = Bz[i] = 0; holdA[i] = 0; }
@@ -318,7 +341,8 @@ OpenRacer.TyreShell = function (wheel) {
                 Fx[ip] += fx; Fy[ip] += fy; Fz[ip] += fz;
                 rimForce(ip, -fx, -fy, -fz);
             }
-            // the beams
+            // the beams (the damping of a class of beam is the same for all of them: its root is taken once)
+            for(var dcl = 0; dcl < 5; dcl++) { beamDamp[dcl] = zeta * 2 * Math.sqrt(classK[dcl] * mn); beamDampHalf[dcl] = zeta * 2 * Math.sqrt(classK[dcl] * mn * 0.5); }
             for(var b = 0; b < beamCount; b++) {
                 var a = bA[b], c = bB[b], ax, ay, az, avx, avy, avz, bx, by, bz, bvx, bvy, bvz, bInner = c >= N;
                 ax = Px[a]; ay = Py[a]; az = Pz[a]; avx = Vx[a]; avy = Vy[a]; avz = Vz[a];
@@ -337,18 +361,18 @@ OpenRacer.TyreShell = function (wheel) {
                     if(!inContact[a] && omS * omS > 1) { var crx = Ox[a] - hcx, cry = Oy[a] - hcy, crz = Oz[a] - hcz, cax = crx * L.x + cry * L.y + crz * L.z; crx -= cax * L.x; cry -= cax * L.y; crz -= cax * L.z; cfPull = mn * omS * omS * Math.sqrt(crx * crx + cry * cry + crz * crz); }
                     var lSlack = L0 - (pA + cfPull) / k, spring = 0;
                     bK[b] = 0;
-                    if(len > lSlack) { spring = k * (len - lSlack); addK(a, k, dx, dy, dz, bvx, bvy, bvz); bK[b] = k; }
-                    else if(len < bLmin[b]) { spring = -kStop * (bLmin[b] - len); addK(a, kStop, dx, dy, dz, bvx, bvy, bvz); bK[b] = kStop; }
+                    if(len > lSlack) { spring = k * (len - lSlack); addKv(a, k, dx, dy, dz, bvx, bvy, bvz); bK[b] = k; }
+                    else if(len < bLmin[b]) { spring = -kStop * (bLmin[b] - len); addKv(a, kStop, dx, dy, dz, bvx, bvy, bvz); bK[b] = kStop; }
                     bDx[b] = dx; bDy[b] = dy; bDz[b] = dz;
-                    force = spring + zeta * 2 * Math.sqrt(k * mn) * vr;              // (the damper works whether the cable is taut or slack: the node has to be held in the patch)
+                    force = spring + beamDamp[bClass[b]] * vr;              // (the damper works whether the cable is taut or slack: the node has to be held in the patch)
                     bStrain[b] = (len - L0) / L0;
                 } else if(kind === 0) {
                     var s0 = len - L0;
-                    if(s0 > 0 || self.beltTwoSided) force = k * s0 + zeta * 2 * Math.sqrt(k * mn) * vr; else force = 0;
+                    if(s0 > 0 || self.beltTwoSided) force = k * s0 + beamDamp[bClass[b]] * vr; else force = 0;
                     if(force < 0 && !self.beltTwoSided) force = 0;
                     bStrain[b] = s0 / L0;
                 } else {
-                    force = k * (len - L0) + zeta * 2 * Math.sqrt(k * mn * 0.5) * vr;
+                    force = k * (len - L0) + beamDampHalf[bClass[b]] * vr;
                     bStrain[b] = (len - L0) / L0;
                 }
                 var gx = force * dx, gy = force * dy, gz = force * dz;
@@ -364,7 +388,7 @@ OpenRacer.TyreShell = function (wheel) {
                 var rvx = Vx[is2] - OVx[is2], rvy = Vy[is2] - OVy[is2], rvz = Vz[is2] - OVz[is2];
                 var vT = rvx * Tx[is2] + rvy * Ty[is2] + rvz * Tz[is2], vL = rvx * L.x + rvy * L.y + rvz * L.z;
                 var fT = -(kShearT * dT + cShearT * vT), fL = -(kShearL * dL + cShearL * vL);
-                addK(is2, kShearT, Tx[is2], Ty[is2], Tz[is2], OVx[is2], OVy[is2], OVz[is2]); addK(is2, kShearL, L.x, L.y, L.z, OVx[is2], OVy[is2], OVz[is2]);
+                addKv(is2, kShearT, Tx[is2], Ty[is2], Tz[is2], OVx[is2], OVy[is2], OVz[is2]); addKv(is2, kShearL, L.x, L.y, L.z, OVx[is2], OVy[is2], OVz[is2]);
                 var sx = fT * Tx[is2] + fL * L.x, sy = fT * Ty[is2] + fL * L.y, sz = fT * Tz[is2] + fL * L.z;
                 Fx[is2] += sx; Fy[is2] += sy; Fz[is2] += sz;
                 rimForce(is2, -sx, -sy, -sz);
@@ -491,9 +515,11 @@ OpenRacer.TyreShell = function (wheel) {
                     rimForce(ns, relT * Tx[ns] + relL * L.x, relT * Ty[ns] + relL * L.y, relT * Tz[ns] + relL * L.z);
                 }
             }
-            if(!self.lockedSpin) omS += h * (torque - tq0) / inertiaW;
+            if(!self.lockedSpin) omS += h * (hubAcc[3] - tq0) / inertiaW;
             omSum += omS;
         }
+        if(gBox && ground.stats) ground.stats.boxes += gTests;      // (the count of the debug text, as boxNear keeps it)
+        var fHubX = hubAcc[0], fHubY = hubAcc[1], fHubZ = hubAcc[2], torque = hubAcc[3];
         self.omegaOut = omS; self.omegaAvg = omSum / n;
         phase += self.omegaAvg * dt;
         frame.hx = hub.x + vel.x * 0.5 * dt; frame.hy = hub.y + vel.y * 0.5 * dt; frame.hz = hub.z + vel.z * 0.5 * dt;

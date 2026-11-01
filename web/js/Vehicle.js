@@ -198,7 +198,13 @@ OpenRacer.Vehicle = function (parameters, input) {
     };
 
     this.tyreDamage = false;          // a hard hit can puncture a tyre: it leaks and loses its pressure (applyPressure, the grip and the stiffness follow)
-    this.tyreShell = { width: 0, rings: 3, segments: 36, inner_ratio: 0.62, carcass: 0, width_rear: 0 };      // the tread of the tyre (TyreShell.js): rings across the tread, nodes round the wheel, the width (m, 0: from the wheel), the inner shell and the carcass
+    this.tyreShell = { width: 0, rings: 3, segments: 36, inner_ratio: 0.62, carcass: 0, width_rear: 0 };
+    // how fine the tyres of nodes of a car are made (Settings, tab Simulation): "full" as the car has them, "medium" at most 2 rings of nodes across the tread, "low" 1 ring of at
+    // most 12 nodes round the tyre (as the hatchback has). The tyres cost most of the time of the physics, and that goes with the number of nodes: the Muscle (3 x 12) needs a
+    // third less work on 2 rings and two thirds less on 1, the Stadium truck (3 x 20) a third less on 2 rings and a half on 2 x 12; the tests of tools/physics-check.html (the
+    // ride height, the landings, the wheels on the road, the cornering) stayed the same or nearly (PHYSICS-WORKER.md). A motorcycle and a kart keep their tyres as they are:
+    // with fewer nodes the bike fell over in the test (its round crown leans on them), and the kart (no suspension: the tyre is its spring) spun
+    this.tyreDetail = "full";      // the tread of the tyre (TyreShell.js): rings across the tread, nodes round the wheel, the width (m, 0: from the wheel), the inner shell and the carcass
     // the shell of one wheel: its own (wheel.tyreSpec, a tyre of the wheel library: WheelLibrary.js, set by Car.js) where it says, the shared one for the rest
     this.tyreShellOf = function (w) {
         var s = this.tyreShell, t = w.tyreSpec;
@@ -1865,7 +1871,10 @@ OpenRacer.Vehicle = function (parameters, input) {
                 var body = w.tyreBody || (w.tyreBody = new OpenRacer.TyreShell(w));
                 var shellOf = self.tyreShellOf(w);
                 { body.isShell = true; body.round = !!self.soloWheels; body.tyreMass = Math.max(1.5, 0.3 * self.unsprungMass); body.pressure = Math.max(0.15, (w.front ? self.pressureFront : self.pressureRear) - (w.pressureLoss || 0)); body.innerRatio = shellOf.inner_ratio; body.carcass = shellOf.carcass; }
-                body.rings = shellOf.rings; body.segments = shellOf.segments; body.width = shellOf.width;
+                var lighter = !self.soloWheels && !self.unsprung && (self.tyreDetail === "medium" || self.tyreDetail === "low");
+                body.rings = lighter ? Math.min(shellOf.rings, self.tyreDetail === "low" ? 1 : 2) : shellOf.rings;
+                body.segments = lighter && self.tyreDetail === "low" ? Math.min(shellOf.segments, 12) : shellOf.segments;
+                body.width = shellOf.width;
                 body.stiffX = self.tyreStiffX; body.stiffY = self.tyreStiffY * self.corneringScale * (((w.comp || tc) && (w.comp || tc).lateral) || 1) * (w.stiffnessBias || 1) * (w.pressureCorner || 1) * (w.sizeCorner || 1);
                 body.verticalStiffness = w.tyreRate || self.tyreRate; body.verticalDamping = self.tyreDamping; body.staticLoad = w.staticLoad || (self.mass * G / 4);
                 // the axes of the wheel: up (the suspension), forward in its plane (turned by the steering), and to the left

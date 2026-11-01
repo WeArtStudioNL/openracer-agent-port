@@ -16,11 +16,16 @@ var carConfig;
 try { if(navigator.storage && navigator.storage.persist && navigator.storage.persisted) navigator.storage.persisted().then(function(kept) { if(!kept) navigator.storage.persist(); }); } catch(e) { /* no storage API */ }
 
 // the simulation options (Settings, tab Simulation): read by Opponent.js and Vehicle.js
-OpenRacer.sim = { aiDamage: Settings.option("simAiDamage") || "near", range: Settings.option("simAiRange") || 60, aiSteps: Settings.option("simAiSteps") || 3, focus: null };
+OpenRacer.sim = { aiDamage: Settings.option("simAiDamage") || "near", range: Settings.option("simAiRange") || 60, aiSteps: Settings.option("simAiSteps") || 3, tyreDetail: Settings.option("simTyreDetail") || "full", focus: null };
 Settings.onOptionChange(function(name, value) {
     if(name === "simAiDamage") OpenRacer.sim.aiDamage = value;
     else if(name === "simAiRange") OpenRacer.sim.range = value;
     else if(name === "simAiSteps") OpenRacer.sim.aiSteps = value;
+    else if(name === "simTyreDetail") {
+        OpenRacer.sim.tyreDetail = value;
+        if(typeof car !== "undefined" && car) car.vehicle.tyreDetail = value;
+        if(typeof race !== "undefined" && race.opponents) race.opponents.forEach(function(o) { o.vehicle.tyreDetail = value; });
+    }
     else if(name === "sound") EngineSound.setMuted(!value);
     else if(name === "volume") EngineSound.setVolume(value);
     else if(name === "tyreVolume") EngineSound.setTyreVolume(value);
@@ -146,6 +151,7 @@ function banner(text) {
 function trackLoaded() {
     car = new OpenRacer.Car(carConfig);
     OpenRacer.sim.focus = car.vehicle;
+    car.vehicle.tyreDetail = OpenRacer.sim.tyreDetail;
     if(OpenRacer.RigidObjects) OpenRacer.RigidObjects.setup(currentTrack, typeof trackRigidPieces !== "undefined" ? trackRigidPieces : []);
     if(OpenRacer.GateMarkers) OpenRacer.GateMarkers.build(currentTrack);
     if(OpenRacer.TrackMarks) OpenRacer.TrackMarks.build(currentTrack);      // the pit area and the grid boxes of the track editor, drawn on the road

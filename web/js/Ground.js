@@ -422,6 +422,10 @@ OpenRacer.GroundWorld = function (cellSize) {
         return out;
     };
     this.normalOf = function (t, out) { var o = t * 12; out.x = data3[o + 9]; out.y = data3[o + 10]; out.z = data3[o + 11]; };
+    // the arrays themselves, for a loop that tests many triangles (TyreShell.js reads the boxes and the normals there instead of calling boxNear and normalOf for each):
+    // per triangle 6 numbers of its box (min x, y, z, max x, y, z) and 12 of its data (the corner, the two edges, the unit normal)
+    this.boxes = function () { return box3; };
+    this.triangleData = function () { return data3; };
 
     // How far a line (through p, in the direction u of unit length) runs inside triangle t, as a range of distances along it: the top of a
     // wall above a point of it is the upper end. Gives [low, high] in out, or false when the line misses the triangle.
