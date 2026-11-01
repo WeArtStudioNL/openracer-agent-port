@@ -1972,7 +1972,9 @@ async function save() {
             !(await OpenRacerDialog.ask({ title: "Replace the track “" + id + "”?", text: "There already is a track with this id.", ok: "Replace" }))) return;
 
         const old = state.existingTrack;
-        const config = old && id === state.existingId ? JSON.parse(JSON.stringify(old)) : {};
+        // (a copy under another id starts from the track too: it lost the racing line, the skidpad and what else only the file has; the model, the sky and the
+        // objects are written below for the new folder; audit 2.2.0 §3.24)
+        const config = old ? JSON.parse(JSON.stringify(old)) : {};
         delete config.id;
         config.name = name;
         config.description = $("description").value.trim();

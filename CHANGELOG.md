@@ -18,6 +18,9 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
   - A new car whose id is that of another car does not take that car's setups (it reset the setup the other car had chosen in the game).
   - Deleting a car that comes with the game, without the local server, says it cannot be done (it said "Deleted from your garage").
   - A name without Latin letters asks for an id; the brakes start at 1 Nm (0 was refused at Save).
+  - Switching the setup in the car editor asks first when the form has changes that are not saved (they were gone without a word; §3.22).
+  - The part window saves only the shell and the parts, in the car as it is saved (it saved the whole form, with whatever was half done elsewhere; §3.28).
+  - The track editor: a copy under another id keeps the racing line, the skidpad and the rest of the file (§3.24).
   - *Make a copy* keeps what only the tuning menu sets (the frame torsion, the tyre rate, the tyres, the assists, the extras); the copy lost them (audit 2.2.0 §3.24).
   - With Dynamic wheels and no rim of the library, grey wheels show where the game puts the demo wheel (nothing showed where the wheels would stand).
   - **Export zip** in the car editor: the car as it is saved (car.json, the model, the driver, the setups, the picture) as a zip to share, also a car saved through the local server, which had no way to be shared.

@@ -2146,6 +2146,25 @@ async function openTestDialog() {
     $("testStart").onclick = () => startTest(picked);
     $("dlgTest").showModal();
 }
+// What the part window saves after a change: only the shell and the parts, in the car as it is saved. It saved the whole form, and with it whatever was
+// half done elsewhere (audit 2.2.0 §3.28). A tune that is chosen is saved as before; a car that is not saved yet (or has a new model) is saved whole.
+async function saveParts() {
+    const old = state.existingCar, id = $("id").value.trim();
+    if ($("setupSelect").value || !old || id !== state.existingId || (state.files && state.files.size) || !softBodyEditor) return saveCurrent();
+    try {
+        const config = JSON.parse(JSON.stringify(old));
+        delete config.id;
+        const soft = softBodyEditor.read();
+        if (soft.softbody) config.softbody = soft.softbody; else delete config.softbody;
+        if (config.softbody && config.softbody.layout && config.chassis) { config.softbody.layout_cg = config.chassis.cg_height; config.softbody.layout_radius = config.chassis.tire_diameter / 2; }
+        if (soft.parts) config.parts = soft.parts; else delete config.parts;
+        await OpenRacer.Garage.store("cars", id, config, {}, { base: "../" });
+        state.existingCar = Object.assign(Object.create(Object.getPrototypeOf(old)), old, { softbody: config.softbody, parts: config.parts });
+        if (OpenRacer.Garage.sourceOf(old)) Object.defineProperty(state.existingCar, "_garage", { value: old._garage, enumerable: false, configurable: true, writable: true });
+        status("The parts and the shell are saved" + (dirty ? " (the other changes in the form are not)." : "."), "ok");
+        return true;
+    } catch (error) { status("Could not save the parts: " + error.message, "error"); return false; }
+}
 // what the panels save after a change: the tune that is chosen, or the car (car.json) when it is the Default
 async function saveCurrent() {
     const tune = $("setupSelect").value;
@@ -2878,9 +2897,16 @@ function saveTune(id, name) {
     if (OpenRacer.Setups.save(id, name, config) === false) throw new Error("the storage of this browser is full (clear site data of this page, or export the tune as a file)");            // (the main menu draws the picture of the tune itself)
     renderSetups();
 }
-$("setupSelect").addEventListener("change", () => {
+$("setupSelect").addEventListener("change", async () => {
     const id = $("id").value.trim(), name = $("setupSelect").value;
     if (!id) return;
+    // (changes that are not saved are lost by a switch: asked first, they were gone without a word; audit 2.2.0 §3.22)
+    if (dirty) {
+        const was = OpenRacer.Setups.active(id) || "";
+        $("setupSelect").value = was;
+        if (!(await OpenRacerDialog.ask({ title: "Switch to " + (name ? "“" + name + "”" : "Default") + "?", text: "The car in the form has changes that are not saved. They are lost when you switch.", ok: "Switch", danger: true }))) return;
+        $("setupSelect").value = name;
+    }
     OpenRacer.Setups.setActive(id, name || null);
     try {
         const base = state.existingCar && state.existingCar.id === id ? state.existingCar : null;
@@ -3642,7 +3668,7 @@ softBodyEditor = initSoftBody({
     hideChrome: (on) => { cameraMarkers.visible = !on; axes.visible = !on; arrow.visible = !on; grid.visible = !on; bigGrid.visible = bigGrid.visible && !on; },
     pickLocked: () => !!(suspensionEditor && suspensionEditor.editing),
     canSave: () => !!state.existingId && !!state.root,
-    save: () => saveCurrent(),
+    save: () => saveParts(),
     // (the shell and the parts are the car's: from a tune to the Default, where they are changed)
     toDefault: () => { if (!$("setupSelect").value) return; $("setupSelect").value = ""; $("setupSelect").dispatchEvent(new Event("change")); },
     frameModel
