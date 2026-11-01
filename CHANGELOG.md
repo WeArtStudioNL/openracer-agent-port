@@ -4,6 +4,12 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 A version that only fixes things is a hotfix: the last number goes up (2.3.0 → 2.3.1). The players' list of every version, hotfixes included, is the changelog page of the site (`site/changelog.html`, <https://openracer.eu/changelog.html>).
 
+## Unreleased
+
+- **Dents as deep as the crash.** A dent stood twice as deep as the energy it took: the anchor of a node pulled on `u − q`, but the node stood at `rest + u + q`, and at the yield the node jumped. Now the anchor is stretched by the elastic part only and the yield moves that part into the bend. A wall pushed 10 cm into the front of the hatchback leaves 7.9 cm (was 10.9 cm), 25 cm leaves 23 cm (was 26 cm), and the mean dent over the car is about half.
+- **The crumple zone runs out.** A node that is bent 0.35 m (`softbody.anchor.max_bend`) is crushed solid: it bends no further and passes the full force to the car. Before, a node could be pushed metres into the car (8 m in a test of 3 MN).
+- **Things break.** A beam snaps when it was stretched for good by 40 % of its length (`softbody.beam.break_strain`): the shell tears, and an arm of the suspension or the mount of a part can break in a heavy crash. Before, nothing broke: past the yield the force was cut back at every step and never reached the break force. Driving, landings from 10 m and cornering are the same as before (hatchback and Muscle, the tests of `tools/physics-check.html`), and nothing breaks there.
+
 ## 2.3.0 (2026-11-01)
 
 The black screen after a crash is gone, tyres with tread for off-road, a setting that makes the physics of the tyres cheaper, the driver can be hidden in the cockpit, prefabs on tracks with their own model, and three.js r187.
