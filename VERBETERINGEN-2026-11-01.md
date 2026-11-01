@@ -71,7 +71,7 @@
 ## Wat ik heb geprobeerd en heb laten liggen
 
 - **AI-inhaalgedrag** (alleen inhalen als hij sneller is): oud en nieuw maten gelijk (3 crashes, 1,6 m naast de lijn). Zonder bewijs heb ik het niet ingebouwd.
-- **Motor die na een val van 10 m 8 m/s omhoog stuitert:** dat was al zo vóór vannacht. Demping van de aanslagen hielp niet; dit vraagt een eigen afstemronde. Bij 3 m is het in orde (0,6 m/s).
+- **Motor die na een harde landing terugstuitert:** dat was al zo vóór vannacht. Zodra de vork doorslaat (vanaf een val van ongeveer 4 m) kaatst de motor terug: 3,8 m/s bij 4 m, 5,3 m/s bij 6 m, 8 m/s bij 10 m. Ik heb twee dingen geprobeerd: meer demping in de aanslag en een aanslag met hysterese. Geen van beide hielp genoeg, dus de veerkracht zit waarschijnlijk in de band. Dit vraagt een eigen afstemronde; ik heb het teruggedraaid.
 - **CPU:** met 7 AI-auto's kost een frame ongeveer 12 ms. De speler kost 3,7 ms terwijl hij stilstaat, vooral door de schaalbanden; daarvoor bestaat de instelling banddetail al. Een snelle grote winst zag ik niet.
 
 ## Wat je zelf moet bekijken of beslissen
