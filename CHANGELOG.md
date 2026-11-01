@@ -20,7 +20,7 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
   - *Your start* in the race options: pole (as it was), random or last. The places of the grid go front to back; the fly-by goes to the last car.
   - An infinite heading of a car no longer freezes the game (angle loops without a loop).
   - It waits behind a car that stands (the player who spun, a crashed car, the queue at a stop) and then goes round it, or is put on further after 15 s without being counted as a crash (it crept, reversed into the car behind and was put back as crashed). It finds the car ahead along the racing line (in a bend it saw a car that stood only 9 m away).
-  - The speeds of the bends and the braking follow the grip the tyres have left.
+  - The speeds of the bends and the braking follow the grip the tyres have left, and count the downforce of the car.
 - **Track editor: making your own track.** From an audit of the flow:
   - The AI drove a lap that was driven before the road or the line was changed (the best lap on this computer came before the saved line), into the new walls. A track keeps when its line or road last changed (`line_date`, `road_date`): only laps driven after it are the line of the AI, and a record of the old road is replaced by the next lap.
   - *Record AI racing line* saves first (it threw away the gates that were not saved, and then no lap counted).

@@ -115,9 +115,10 @@
 - **Nieuw: *Your start*** in de race-opties: pole (zoals het was), willekeurig of als laatste (`68468aa`). De speler stond altijd vooraan en won de race in de eerste bocht.
 - **Gemeten** op de Short Track met 5 AI over 150 s: oud 2 keer teruggezet, nieuw 0. De Muscle is 1 % langzamer (114,7 tegen 113,5 s).
 - **Uit de review** (`1588cd0`): een AI achter een stilstaande auto (de speler die spinde, een gecrashte auto, de rij bij een pitstop) wacht nu. Eerst kroop hij, reed achteruit tegen de auto achter hem en werd als crash teruggezet. Na 6 s rijdt hij eromheen, na 15 s zonder voortgang wordt hij zonder strafpunten verder gezet. De auto ervoor wordt gezocht langs de racelijn: in een bocht zag hij een stilstaande auto pas op 9 m. Getest: hij stopt 5 m erachter en rijdt er daarna omheen.
+- **Downforce** telt nu mee in de bochtsnelheden en het remmen van de AI. Een auto met vleugels was te langzaam in snelle bochten.
 - **Bandenslijtage** telt mee in de bochtsnelheden van de AI (`4ba3789`): hij reed met versleten banden de snelheden van nieuwe.
 - **Gevonden bij het testen:** een auto met een oneindige hoek (na een physics-explosie) liet een `while`-lus eeuwig draaien, en de hele game bevroor. Vijf van die lussen zijn vervangen.
-- **Laten liggen:** een gecrashte AI wordt gratis gerepareerd (zonder reparatie crasht hij meteen opnieuw, zo staat het in de code). Bochtsnelheden houden nog geen rekening met downforce. Elk van die twee vraagt een eigen ronde.
+- **Laten liggen:** een gecrashte AI wordt gratis gerepareerd (zonder reparatie crasht hij meteen opnieuw, zo staat het in de code). Dat vraagt een eigen ronde.
 
 ### Menu's en kleine punten
 - **Tune the car** staat bovenaan het pauzemenu.
