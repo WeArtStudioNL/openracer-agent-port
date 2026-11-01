@@ -77,6 +77,8 @@ OpenRacer.Ghost = function (config, trackId) {
         }
         var shown = this.friend || this.best;
         if (!this.enabled || !shown || !shown.samples) return;
+        // (not before GO: during the fly-by and the countdown the clock of the car runs, and the ghost drove off and jumped back to the line at GO and again at the line)
+        if (typeof race !== "undefined" && race && (race.state === "waiting" || race.state === "flyby" || race.state === "countdown")) { setVisible(false); return; }
         load();
         if (!body) return;
         var t = car.lapStartTime !== undefined ? car.clock - car.lapStartTime : 0;

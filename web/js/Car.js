@@ -1118,13 +1118,16 @@ OpenRacer.Car = function( config, domElement ) {
             // the finish line; a lap of less than twenty seconds is no lap (back and forth over the line)
             if(this.lapStarted && this.clock - this.lapStartTime < 20) return;
             this.checkPointsCompleted[0] = true;
-            var checkpointsPassed = this.lapStarted;
+            var checkpointsPassed = this.lapStarted, missedGate = -1;
             for(var i = 1; i < this.checkPointsCompleted.length; i++) {
+                if(!this.checkPointsCompleted[i] && missedGate < 0) missedGate = i;
                 if(checkpointsPassed) checkpointsPassed = this.checkPointsCompleted[i];
                 this.checkPointsCompleted[i] = false;
             }
             // (a gate missed, but the whole line driven: a lap through the pit lane)
             if(this.lapStarted && !checkpointsPassed && trackGates.length && allSectors()) checkpointsPassed = true;
+            // (said: the timer went back to 0:00 and the lap count stayed, without a word)
+            if(this.lapStarted && !checkpointsPassed && typeof banner === "function") banner("Lap not counted: gate " + missedGate + " was missed");
             clearSectors();
             if(checkpointsPassed) {
                 // we passed all checkpoints
@@ -1132,12 +1135,16 @@ OpenRacer.Car = function( config, domElement ) {
                 this.lapTimes.push(lapTime);
                 this.laps.push(Hud.formatTime(lapTime));
                 this.newRecord = !this.lapInvalid && !!(this.ghost && this.ghost.lapDone(lapTime));
+                // the fuel of a lap without a stop, for the HUD (fuel left in laps)
+                var fuelNow = this.vehicle.fuel;
+                if(this.fuelAtLapStart > fuelNow) this.fuelPerLap = this.fuelAtLapStart - fuelNow;
                 console.log("lap time: " + this.laps[this.laps.length - 1]);
                 this.lapsCompleted++;
             }
             this.lapStarted = true;
             this.lapInvalid = false;
             this.lapStartTime = this.clock;
+            this.fuelAtLapStart = this.vehicle.fuel;
             if(this.ghost) this.ghost.startLap();
         } else {
             for(var k = 1; k < this.checkPointsCompleted.length; k++) {

@@ -160,19 +160,29 @@ var Hud = (function() {
         var v = car.vehicle;
         if(!v.wearEnabled) { if(carPanel.style.display !== "none") carPanel.style.display = "none"; return; }
         if(carPanel.style.display !== "block" && Settings.option("hud")) carPanel.style.display = "block";
+        // (under the lap times as they grow: the panel stood at 150 px, and the lap times of the second lap and the best lap went under it. Not when one of them was
+        // moved in the HUD editor, which places them from where they stand by default)
+        if(!carPanel.__hudLayout && !lapPanel.__hudLayout) { var under = Math.max(150, lapPanel.offsetTop + lapPanel.offsetHeight + 8) + "px"; if(carPanel.style.top !== under) carPanel.style.top = under; }
         var order = [1, 0, 2, 3]; // FL FR / RL RR
         var html = "<div class=\"row\"><div class=\"tyres\">";
         order.forEach(function(i) {
             var w = v.wheels[i];
             html += "<div class=\"tyre\" style=\"background: " + tyreColour(w.temp) + "\"><i style=\"height: " + Math.round(Math.min(1, w.wear) * 100) + "%\"></i><span>" + Math.round(w.temp) + "°</span></div>";
         });
-        html += "</div><div class=\"fuel\"><div class=\"label\">FUEL " + v.fuel.toFixed(1) + " L</div><div class=\"bar\"><i style=\"width: " + Math.round(v.fuel / v.tank * 100) + "%\"></i></div>" +
+        // the fuel in laps, when a lap has been driven (Car.js fuelPerLap): the warning at 12 % of the tank came with less than a lap left on a long track
+        var lapsOfFuel = car.fuelPerLap > 0 ? v.fuel / car.fuelPerLap : null, lapsLeft = car.raceLaps ? car.raceLaps - car.lapsCompleted : Infinity;
+        html += "</div><div class=\"fuel\"><div class=\"label\">FUEL " + v.fuel.toFixed(1) + " L" + (lapsOfFuel !== null ? " · " + lapsOfFuel.toFixed(1) + " laps" : "") + "</div><div class=\"bar\"><i style=\"width: " + Math.round(v.fuel / v.tank * 100) + "%\"></i></div>" +
             "<div class=\"label\" style=\"margin-top: 4px;\">TYRES " + Math.round((1 - Math.min(1, v.maxWear())) * 100) + "%</div></div></div>";
         var pit = car.pit;
         if(pit && pit.active) html += "<div class=\"pit\">PIT STOP " + pit.remaining().toFixed(1) + " s" + (pit.plan && pit.plan.repair > 0 ? " · repair" : "") + (pit.plan && pit.plan.tyres > 0 ? " · tyres" : "") + (pit.plan && pit.plan.fuel > 0 ? " · fuel" : "") + "</div>";
         else if(pit && pit.done) html += "<div class=\"pit\" style=\"color: #7ee7a0;\">PIT STOP DONE · go</div>";
         else if(v.fuel <= 0) html += "<div class=\"pit\" style=\"color: #ff6b62;\">OUT OF FUEL</div>";
-        else if(v.maxWear() > 0.8 || v.fuel < v.tank * 0.12) html += "<div class=\"pit\"" + (flash ? "" : " style=\"opacity: 0.4\"") + ">PIT · " + (v.maxWear() > 0.8 ? "tyres" : "fuel") + "</div>";
+        else {
+            // (both reasons: worn tyres hid the fuel that was running out)
+            var fuelLow = lapsOfFuel !== null ? lapsOfFuel < lapsLeft && lapsOfFuel < 1.5 : v.fuel < v.tank * 0.12;
+            var reasons = (v.maxWear() > 0.8 ? ["tyres"] : []).concat(fuelLow ? ["fuel"] : []);
+            if(reasons.length) html += "<div class=\"pit\"" + (flash ? "" : " style=\"opacity: 0.4\"") + ">PIT · " + reasons.join(" · ") + "</div>";
+        }
         if(html !== carHtml) { carHtml = html; carPanel.innerHTML = html; }
         updatePit(car);
     }
@@ -441,6 +451,11 @@ var Hud = (function() {
         var current = car.lapStartTime !== undefined ? car.clock - car.lapStartTime : 0;
         if(typeof race !== "undefined" && race && (race.state === "waiting" || race.state === "flyby" || race.state === "countdown")) current = 0;      // (the time starts at GO)
         html += "<div class=\"time\">" + formatTime(Math.max(0, current)) + "</div>";
+        // the gaps to the car ahead and the one behind (main.js), once a lap time is known
+        if(car.raceCount > 1 && (car.gapAhead !== null && car.gapAhead !== undefined || car.gapBehind !== null && car.gapBehind !== undefined) && car.lapsCompleted < (car.raceLaps || Infinity)) {
+            var gap = function(s) { return s >= 60 ? formatTime(s) : s.toFixed(1) + " s"; };
+            html += "<div class=\"last\">" + (car.gapAhead != null ? "ahead " + gap(car.gapAhead) : "") + (car.gapAhead != null && car.gapBehind != null ? " &nbsp;·&nbsp; " : "") + (car.gapBehind != null ? "behind " + gap(car.gapBehind) : "") + "</div>";
+        }
         var times = car.lapTimes;
         if(times.length) {
             var best = Math.min.apply(null, times);

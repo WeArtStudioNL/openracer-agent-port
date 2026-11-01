@@ -6,6 +6,14 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 ## Unreleased
 
+- **Fixed: a car could turn into numbers that are not numbers.** A frame without time (two frames in the same millisecond) divided a step of 0 s by itself: the fuel, the wear, the mass and then the whole car became NaN for the rest of the race. Such a frame now does nothing.
+- **Races.** From an audit of a race from the start to after the finish:
+  - The results work with a gamepad and the keyboard: *Race again* has the focus, and the buttons keep it (the panel was written again whenever a car moved up). *Race again* asks about a replay that is not saved, as *Main menu* does. The panel fits a phone, is hidden in the replay, says how many laps a car that still runs is down, and says *Finished* without opponents.
+  - The lap panel shows the gap to the car ahead and to the one behind, the fuel panel the fuel in laps (from the last lap), and the pit warning both reasons (worn tyres hid the fuel that ran out); the tyres and fuel panel stays under the lap times as they grow.
+  - A lap that is not counted because a gate was missed says so.
+  - *Backspace* in a race repairs, but gives no new tyres or fuel, and the lap is no record (it was a free pit stop at any moment).
+  - The ghost waits at the line until GO (it drove off during the fly-by and jumped back twice).
+  - An AI car that rolls back over the line no longer gets a lap of a few seconds; one that waits at a pit stop that never begins gives up after 6 s (it stood there for the rest of the race).
 - **Skidpad after tuning.** A car tuned on the skidpad (the place to tune it) had its grip thrown away; it is now kept for the car as it is tuned, so a race with that tuning saved as a setup gives the AI the grip that was measured. (A measured grip of a setup was also no longer found after the records per setup: fixed.)
 - **Car editor: making your own car.** From an audit of the flow:
   - *New* in the garage opens a new car (it opened the first car of the list, and a model picked then replaced the model of that car).

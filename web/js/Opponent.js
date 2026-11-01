@@ -426,6 +426,10 @@ OpenRacer.Opponent = function (config, line, options) {
         if (error > 0.5) { this.throttle = Math.min(1, 0.3 + error * 0.25); this.brakePedal = 0; }
         else if (error < -0.5) { this.throttle = 0; this.brakePedal = Math.min(1, -error * 0.18); }
         else { this.throttle = 0.15 + error * 0.2; this.brakePedal = 0; }
+        // (a stop that does not begin, the car standing still and no pit stop going: a pit lane of the track editor that misses the boxes, more cars than boxes. It
+        // waited there for the rest of the race, in the way of the others: after six seconds it gives up the stop and drives on)
+        if (atStop && speed < 1 && !this.pit.active) this.stopWait = (this.stopWait || 0) + delta; else if (!atStop) this.stopWait = 0;
+        if (atStop && this.stopWait > 6) { this.stopWait = 0; this.laneStopped = true; this.pitting = false; this.pitPhase = 0; this.pitStops++; boxMode = false; inLane = false; atStop = false; }
         if (atStop) { this.throttle = 0; this.brakePedal = Math.max(this.brakePedal, speed < 1 ? 1 : 0.2); this.stuck = 0; return; }
         if (speed < 2 && v.clutchEngagement < 0.5) this.throttle = Math.max(this.throttle, 0.5);
         // a motorcycle rolls the throttle on, and less of it the more it leans: from 0.1 to full in one frame at 35 m/s and 10 degrees the rear stepped out and the bike spun
@@ -582,6 +586,7 @@ OpenRacer.Opponent = function (config, line, options) {
         } else if (fraction < 0.2 && lastFraction > 0.8 && maxFraction > 0.5) {
             this.lapsCompleted++;
             this.lapTimes.push(this.clock - this.lapStart);
+            this.lapStartBefore = this.lapStart;
             this.lapStart = this.clock;
             maxFraction = 0;
             // the fuel a lap takes, for the decision to pit (a lap with a stop in it does not count)
@@ -590,6 +595,9 @@ OpenRacer.Opponent = function (config, line, options) {
             this.pittedThisLap = false;
         } else if (fraction > 0.8 && lastFraction < 0.2 && this.lapsCompleted > 0 && maxFraction < 0.2) {
             this.lapsCompleted--; // went back over the line
+            // (and that lap is undone: its time stayed, and going forward again gave a lap of a few seconds, the "best lap" of that car)
+            if (this.lapTimes.length) this.lapTimes.pop();
+            if (this.lapStartBefore !== undefined) this.lapStart = this.lapStartBefore;
             maxFraction = 1;
         }
         if (fraction < 0.8) maxFraction = Math.max(maxFraction, fraction);

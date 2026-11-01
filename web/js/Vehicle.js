@@ -746,13 +746,13 @@ OpenRacer.Vehicle = function (parameters, input) {
     };
 
     // Repairs the car and puts it back on its wheels where it is: the same place and heading, the roof up, 30 cm above the road, not moving (for a car that lies on its roof or its side)
-    this.repairUpright = function () {
+    this.repairUpright = function (keepTyresAndFuel) {
         var heading = this.psi;
         var fx = axisZ.x, fz = axisZ.z;
         if(fx * fx + fz * fz > 0.09) heading = Math.atan2(fz, fx);          // (a car that stands on its nose or tail has no heading from its front: it keeps the last one)
         var x = this.px, z = this.pz;
         this.reset(x, z, heading);                                           // (reset puts it on its wheels on the road there: standOnWheels, a ray under every wheel; it fell 30 cm before)
-        this.fuelAndTyres();                                                 // (a repair is a service: new tyres, a full tank)
+        if(!keepTyresAndFuel) this.fuelAndTyres();                           // (a repair is a service: new tyres, a full tank; not in a race, where that is the pit stop)
     };
 
     // The car put on its wheels where it is, with the heading it has: a ray down under every wheel finds the road there, the body is laid on the plane through the four
@@ -2634,6 +2634,9 @@ OpenRacer.Vehicle = function (parameters, input) {
     };
 
     this.update = function (delta) {
+        // (a frame without time does nothing: a step of 0 s divided by it, the fuel and the wear became numbers that are not numbers, then the mass and the whole car,
+        // for the rest of the race. Two frames in the same millisecond (a coarse clock) gave one)
+        if(!(delta > 0)) return;
         this.updateControls(delta);
         this.impactTime += delta;
         this.soundImpact = 0;             // how hard something landed or hit the bump stop in this update (0..1), for the sound (Car.js)

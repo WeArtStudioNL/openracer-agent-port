@@ -419,32 +419,41 @@ function showResults() {
     if(resultsPanel) return;
     resultsPanel = document.createElement("div");
     resultsPanel.id = "raceResults";
-    resultsPanel.style.cssText = "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1002; min-width: 420px; padding: 22px 28px; " +
-        "background: rgba(24, 29, 35, 0.95); color: #ffffff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);";
+    resultsPanel.setAttribute("role", "dialog");
+    // (as wide as the screen allows: on a phone the panel of 420 px and its Main menu button ran off both sides)
+    resultsPanel.style.cssText = "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1002; width: min(476px, calc(100vw - 24px)); box-sizing: border-box; padding: 22px 28px; " +
+        "max-height: calc(100vh - 24px); overflow-y: auto; background: rgba(24, 29, 35, 0.95); color: #ffffff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);";
+    // (the buttons are made once and keep the focus: the whole panel was written again whenever a car moved up a place, and a button that had the focus lost it)
+    resultsPanel.innerHTML = "<div class=\"table\"></div><div style=\"margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end;\">" +
+        "<button id=\"raceAgain\" style=\"padding: 9px 18px; font: bold 15px Arial; background: var(--accent); color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Race again</button>" +
+        "<button id=\"raceMenu\" style=\"padding: 9px 18px; font: bold 15px Arial; background: var(--line); color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Main menu</button></div>";
     document.body.appendChild(resultsPanel);
+    // (a replay that was not saved is asked about, as Main menu does: Race again threw it away)
+    document.getElementById("raceAgain").onclick = function() { var again = function() { window.location.reload(); }; if(OpenRacer.Replay && OpenRacer.Replay.confirmLeave) OpenRacer.Replay.confirmLeave(again); else again(); };
+    document.getElementById("raceMenu").onclick = leaveToMenu;
     renderResults();
+    try { document.getElementById("raceAgain").focus({ preventScroll: true }); } catch(e) { /* no focus */ }
 }
 
 function renderResults() {
     var rows = standings();
     var position = rows.map(function(r) { return r.player; }).indexOf(true) + 1;
-    var html = "<div style=\"font-size: 26px; font-weight: bold; margin-bottom: 4px;\">" + (position === 1 ? "You won!" : "Finished P" + position) + "</div>" +
-        "<div style=\"color: var(--muted); margin-bottom: 14px;\">" + race.laps + " laps · " + (currentTrack.name || currentTrack.id) + "</div>" +
+    var leader = rows[0], leaderLaps = !leader ? 0 : leader.time !== null ? race.laps : Math.floor(leader.progress + 1e-6);      // (a car that is in drives on: its progress grows)
+    var html = "<div style=\"font-size: 26px; font-weight: bold; margin-bottom: 4px;\">" + (rows.length < 2 ? "Finished" : position === 1 ? "You won!" : "Finished P" + position) + "</div>" +
+        "<div style=\"color: var(--muted); margin-bottom: 14px;\">" + race.laps + " laps · " + escapeHtml(currentTrack.name || currentTrack.id) + "</div>" +
         "<table style=\"border-collapse: collapse; width: 100%; font-size: 15px;\">" +
         "<tr style=\"color: var(--muted); text-align: left;\"><th style=\"padding: 4px 10px 4px 0;\">#</th><th>Car</th><th style=\"text-align: right;\">Best lap</th><th style=\"text-align: right;\">Time</th></tr>";
     rows.forEach(function(r, i) {
-        var time = r.time === null ? "running" : (i === 0 ? Hud.formatTime(r.time) : "+" + Hud.formatTime(r.time - rows[0].time));
+        // (a car that is still running: how many laps it is behind the leader, when it is; it only said "running")
+        var down = Math.max(0, leaderLaps - Math.floor((r.progress || 0) + 1e-6));
+        var time = r.time === null ? (down > 0 ? "+" + down + " lap" + (down > 1 ? "s" : "") : "running") : (i === 0 ? Hud.formatTime(r.time) : "+" + Hud.formatTime(r.time - rows[0].time));
         html += "<tr style=\"" + (r.player ? "color: var(--accent2); font-weight: bold;" : "") + "\"><td style=\"padding: 5px 10px 5px 0;\">" + (i + 1) + "</td><td>" + escapeHtml(r.name) + "</td>" +
             "<td style=\"text-align: right; padding-left: 16px;\">" + (r.best === null ? "–" : Hud.formatTime(r.best)) + "</td><td style=\"text-align: right; padding-left: 16px;\">" + time + "</td></tr>";
     });
-    html += "</table><div style=\"margin-top: 18px; text-align: right;\">" +
-        "<button id=\"raceAgain\" style=\"padding: 9px 18px; margin-right: 8px; font: bold 15px Arial; background: var(--accent); color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Race again</button>" +
-        "<button id=\"raceMenu\" style=\"padding: 9px 18px; font: bold 15px Arial; background: var(--line); color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Main menu</button></div>";
+    html += "</table>";
     if(html === resultsHtml) return;
     resultsHtml = html;
-    resultsPanel.innerHTML = html;
-    document.getElementById("raceAgain").onclick = function() { window.location.reload(); };
-    document.getElementById("raceMenu").onclick = leaveToMenu;
+    resultsPanel.querySelector(".table").innerHTML = html;
 }
 
 // To the main menu: a recording that was not saved is asked about first (Replay.js)
@@ -617,9 +626,14 @@ function updateRace(delta) {
         if(fraction < 0.8) playerMaxFraction = Math.max(playerMaxFraction, fraction);
         playerLastFraction = fraction;
         var mine = playerLineLaps + fraction - (playerCrossed ? 0 : 1);
-        var position = 1;
-        race.opponents.forEach(function(o) { if(o.loaded && o.progress > mine) position++; });
+        var position = 1, ahead = Infinity, behind = Infinity;
+        race.opponents.forEach(function(o) { if(!o.loaded) return; if(o.progress > mine) { position++; ahead = Math.min(ahead, o.progress - mine); } else behind = Math.min(behind, mine - o.progress); });
         car.racePosition = position;
+        // the gaps to the car ahead and the one behind, in seconds: the part of a lap between them times a lap (the best of the player, else of the field)
+        var lapRef = car.lapTimes.length ? Math.min.apply(null, car.lapTimes) : null;
+        if(lapRef === null) race.opponents.forEach(function(o) { if(o.lapTimes.length) lapRef = Math.min(lapRef === null ? Infinity : lapRef, Math.min.apply(null, o.lapTimes)); });
+        car.gapAhead = lapRef && isFinite(ahead) ? ahead * lapRef : null;
+        car.gapBehind = lapRef && isFinite(behind) ? behind * lapRef : null;
     }
     if(race.state) updateRaceFlow(delta);
 }

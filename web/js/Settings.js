@@ -1352,7 +1352,8 @@ var Settings = (function() {
     handlers.startEngine = function() { if(window.car) window.car.startEngine(); };
     handlers.resetCar = function() { if(window.car) window.car.reset = true; };
     handlers.saveResetPosition = function() { if(window.car && window.car.saveResetPosition) window.car.saveResetPosition(); };
-    handlers.repairCar = function() { if(window.car && window.car.vehicle) { window.car.vehicle.repairUpright(); if(window.car.recoverCrash) window.car.recoverCrash(); if(window.car.updateVisuals) window.car.updateVisuals(0); } };
+    // (in a race the repair is no pit stop: the tyres and the fuel stay as they are, and the lap does not count as a record; it was a free stop at any moment)
+    handlers.repairCar = function() { if(window.car && window.car.vehicle) { var racing = typeof race !== "undefined" && race && race.state === "racing"; window.car.vehicle.repairUpright(racing); if(racing) window.car.lapInvalid = true; if(window.car.recoverCrash) window.car.recoverCrash(); if(window.car.updateVisuals) window.car.updateVisuals(0); } };
     handlers.cameraReset = function() { if(window.car) { window.car.cameraAngle = 0; window.car.cameraElev = 0; window.car.cameraZoom = 1; } };
     handlers.telemetry = function() { if(window.telemetry) window.telemetry.setVisible(!window.telemetry.visible); };
     handlers.shiftUp = function() { if(window.car) window.car.shiftUp(); };
