@@ -231,11 +231,16 @@ OpenRacer.CollisionProxy = (function () {
             spheres.forEach(function (sp) {
                 var wheel = sp.wheel && object.wheels[sp.wheelIndex];
                 if(!wheel) return;
+                // A motorcycle: no suspension for the wheels 1 and 3, which it does not have, and the pivots of the fork and the swingarm 7 cm beside the middle
+                // instead of the 45 to 50 cm of the arms of a car. Those nodes stood half a metre beside the bike; leaning in a bend they touched the road, the
+                // bike lost 13 m/s in a frame, and an AI motorcycle went down about every ten seconds.
+                if(v.soloWheels && (sp.wheelIndex === 1 || sp.wheelIndex === 3)) return;
+                var wide = v.soloWheels ? 0.15 : 1;
                 var s = sp.x > 0 ? -1 : 1;                    // towards the middle of the car (x is to the left)
                 // the places of the joints are those of a car wheel (0.32 m of radius); a smaller wheel (a kart) has them closer to the hub, or the lower ball joint and the arms
                 // stand in the road
                 var fit = Math.min(1, (wheel.radius || 0.32) / 0.3);
-                var add = function (role, dx, dy, dz, r) { rigSpheres.push({ x: sp.x + s * dx * fit, y: sp.y + dy * fit, z: sp.z + dz * fit, r: r, rig: true, role: role, wheelIndex: sp.wheelIndex, hub: role === "H" }); };
+                var add = function (role, dx, dy, dz, r) { rigSpheres.push({ x: sp.x + s * dx * fit * (dx > 0.3 ? wide : 1), y: sp.y + dy * fit, z: sp.z + dz * fit, r: r, rig: true, role: role, wheelIndex: sp.wheelIndex, hub: role === "H" }); };
                 add("H", 0, 0, 0, sp.r);
                 add("Ub", 0.12, 0.14, 0, 0.02); add("Lb", 0.10, -0.14, 0, 0.02); add("Te", 0.12, -0.04, -0.12, 0.02);
                 add("U1", 0.45, 0.20, 0.15, 0.02); add("U2", 0.45, 0.20, -0.15, 0.02);

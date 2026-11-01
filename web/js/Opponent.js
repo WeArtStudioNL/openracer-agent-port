@@ -56,6 +56,7 @@ OpenRacer.Opponent = function (config, line, options) {
     this.throttle = 0; this.brakePedal = 0; this.clutch = 0; this.clutchPedalPresent = false; this.handbrake = false;
     this.turnAngle = 0; this.neutral = false; this.reverse = false; this.manualGearbox = false; this.current_gear = 0; this.parkingLock = false;
     this.maxTurn = (config.chassis.max_steer_deg || 30) * Math.PI / 180;
+    this.leanFromBend = config.type === "motorcycle";        // (a motorcycle leans as much as the bend that is asked needs, Motorcycle.js steering)
 
     // the AI drives on the simple tyre (Vehicle.simpleTyres: rays and a slip curve): the shell of nodes of the player's tyres costs most of the time of a car, and with it every
     // AI car cost as much as the player, and the frame rate fell with every car on the grid
@@ -119,6 +120,13 @@ OpenRacer.Opponent = function (config, line, options) {
         speedsGrip = roadGrip;
         // (the skidpad's g is what the car holds, the share of it that the driver uses is the skill; the guess from tyres.grip is a factor on 1 g)
         var lateral = measuredGrip ? measuredGrip : carGrip * 1.1, braking = measuredGrip ? measuredGrip * 0.95 : carGrip * 0.95;
+        // A motorcycle holds what its lean and its "max_lateral_g" allow (0.9 g), not the 1.2 g of the guess for a car on the same tyres, and it cannot brake hard
+        // and lean at once: it came into every bend too fast, braked, could not lean enough, ran 10 to 16 m wide into the barriers and went down every ten seconds
+        if (config.type === "motorcycle") {
+            var bike = config.motorcycle || {}, leanLimit = Math.tan(Math.min(55, bike.max_lean_deg || 50) * Math.PI / 180);
+            lateral = Math.min(lateral, bike.max_lateral_g || 0.9, leanLimit) * 0.9;
+            braking = Math.min(braking, 0.8);
+        }
         var factor = learn ? function (i) { return learn[Math.floor(i / SEG) % learn.length]; } : null;
         speeds = line ? line.computeSpeeds(9.81 * lateral * self.skill * wetness, 9.81 * braking * self.skill * wetness, 90, function (name) { return typeof getSurface === "function" && name ? getSurface(name).static / roadGrip : 1; }, factor) : null;
         learnChanged = false; learnBuilt = self.clock || 0;
@@ -420,6 +428,14 @@ OpenRacer.Opponent = function (config, line, options) {
         else { this.throttle = 0.15 + error * 0.2; this.brakePedal = 0; }
         if (atStop) { this.throttle = 0; this.brakePedal = Math.max(this.brakePedal, speed < 1 ? 1 : 0.2); this.stuck = 0; return; }
         if (speed < 2 && v.clutchEngagement < 0.5) this.throttle = Math.max(this.throttle, 0.5);
+        // a motorcycle rolls the throttle on, and less of it the more it leans: from 0.1 to full in one frame at 35 m/s and 10 degrees the rear stepped out and the bike spun
+        if (this.leanFromBend) {
+            var leanNow = Math.abs(v.lean || 0), bikeLean = ((config.motorcycle && config.motorcycle.max_lean_deg) || 50) * Math.PI / 180;
+            var leanCap = 1 - 0.7 * Math.min(1, leanNow / bikeLean);
+            var rolled = (this.rolledThrottle || 0) + 2.5 * delta;
+            this.throttle = Math.min(this.throttle, leanCap, rolled);
+            this.rolledThrottle = this.throttle;
+        }
         // stuck against something: back up a moment
         if (speed < 0.5 && this.throttle > 0.3) { this.stuck = (this.stuck || 0) + delta; } else this.stuck = 0;
         if (this.stuck > 2.5) { this.reverse = true; this.throttle = 0.5; this.brakePedal = 0; this.turnAngle = -smoothSteer; if (this.stuck > 4.5) this.stuck = 0; }

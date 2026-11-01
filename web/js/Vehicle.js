@@ -1556,6 +1556,9 @@ OpenRacer.Vehicle = function (parameters, input) {
             var mine = nodeTriCount ? nodeTris[k] : null;
             if(carPairCount) { carForce.x = 0; carForce.y = 0; carForce.z = 0; carContactsOfNode(k, cx, cy, cz, r, rx, ry, rz, h, carForce); fx = carForce.x; fy = carForce.y; fz = carForce.z; }
             if(!mine || !mine.length) mine = noTriangles;
+            // (the nodes of the fork and the swingarm of a motorcycle sit 16 to 20 cm above the road, fixed to the frame: on a bump or when the fork dives they
+            // touched it, the bike lost 10 to 20 m/s in a frame and went down. The tyre is what touches the road; the other cars still hit them.)
+            if(self.soloWheels && sb.isRig[k]) mine = noTriangles;
             for(var i = 0; i < mine.length; i++) {
                 var t = mine[i];
                 var d2 = ground.closest(t, cx, cy, cz, nearest);

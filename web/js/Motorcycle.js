@@ -172,6 +172,9 @@ OpenRacer.Motorcycle = function (settings) {
         speedMax = Math.min(speedMax, Math.atan(Math.sqrt(Math.max(0, gripMax * gripMax - aLong * aLong)) / G) + self.overLean);     // (a little past the grip: that is the lowside)
         var phiMax = speedMax + epsFull;
         var want = -c * Math.min(phiMax, cap) * fast;
+        // the AI (Opponent.js) asks the angle of the front wheel of a car on the path it wants: the lean is the one that bend needs at this speed. As a share of the
+        // most lean (the keys of a player) a bend it needed 50 degrees for got 14, and an AI bike ran tens of metres wide into the barriers.
+        if (inp.leanFromBend) want = -Math.sign(delta) * Math.min(phiMax, Math.atan(u * u * Math.tan(Math.min(Math.abs(delta), 1.2)) / (v.wheelbase * G))) * fast;
         // at a standstill the rider puts the right foot down and the bike rests against it, a little to the right
         // (the foot comes up once the bike itself moves at 7 km/h, or when the nose is up more than 30 degrees (a wheelie): not on the throttle and not on the speed of the rear
         // wheel, so it stays down in a burnout; up and down in about a second. Whenever it should be down it reaches for the road: a wheelie that is braked to a walking pace
