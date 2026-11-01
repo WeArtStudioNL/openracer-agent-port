@@ -1,7 +1,7 @@
 # OpenRacer: verbeteringen in de nacht van 1 november 2026
 
 - Tijd: 05:51 tot ongeveer 10:35 (de klok van de Mac); 's avonds na 22:00 nog de dragstrip, de skidpad en de ChatGPT-audit.
-- Branch: `claude/soft-body`. Alles staat **lokaal gecommit**. Er is niets gepusht, niets gedeployed en niets op Discord gezet.
+- Branch: `claude/soft-body`. Na jouw akkoord **live gezet als 2.4.0** (1 november, ±22:30): gepusht naar GitHub (`master`, tag `v2.4.0`), gedeployed op openracer.eu, en gepost in #announcements en #changelog.
 - Jouw eigen werk in `web/cars` en `web/tracks` (de dune buggy, het nieuwe Stadium Truck-model, de Desert) heb ik niet aangeraakt.
 
 ## Kort
@@ -204,4 +204,3 @@ De Desert kost in het verborgen browservenster ongeveer 14 ms per frame, tegen 8
 - **Stadium truck: banden blijven koud.** In een test hadden zijn banden een conditie van 0,6 (de andere auto's 0,95), ook zonder slijtage. Dat komt waarschijnlijk uit jouw niet-gecommitte `car.json`. De AI rijdt hem daardoor nu langzamer, passend bij de grip die hij echt heeft.
 - **Motorbanden blijven koud.** In een race van 150 s bleven de banden van zowel jouw motor als die van de AI rond 45–53 °C, met een grip van 0,6 tot 0,75. Dat is de afstelling van de motorbanden (opwarmen tegenover koelen). Ik heb het niet veranderd. De AI houdt er nu wel rekening mee (`33cccdd`), en de supermoto rijdt even snel als vóór vannacht (gemeten: 59 % van een ronde na 99 s, zowel oud als nieuw, 0 crashes).
 - **Kartbaan Oldenzaal** draagt nog de naam van de echte baan.
-- **Live zetten:** pas na jouw akkoord.
