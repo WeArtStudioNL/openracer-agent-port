@@ -132,8 +132,12 @@ OpenRacer.Opponent = function (config, line, options) {
         var wetness = roadGrip / 1.2;                                // (1 on a dry road)
         speedsGrip = roadGrip;
         speedsTyres = tyresNow();
+
         // (the skidpad's g is what the car holds, the share of it that the driver uses is the skill; the guess from tyres.grip is a factor on 1 g)
         var lateral = measuredGrip ? measuredGrip : carGrip * 1.1, braking = measuredGrip ? measuredGrip * 0.95 : carGrip * 0.95;
+        // the grip the tyres have left, before the limits of a motorcycle (its lean holds it under what the tyres give: cold tyres took a quarter off its speeds on
+        // top of the lean, and a lap took 165 s)
+        lateral *= speedsTyres; braking *= speedsTyres;
         // A motorcycle holds what its lean and its "max_lateral_g" allow (0.9 g), not the 1.2 g of the guess for a car on the same tyres, and it cannot brake hard
         // and lean at once: it came into every bend too fast, braked, could not lean enough, ran 10 to 16 m wide into the barriers and went down every ten seconds
         if (config.type === "motorcycle") {
@@ -144,8 +148,8 @@ OpenRacer.Opponent = function (config, line, options) {
         // (below hard a share of what was learned: a normal driver never goes wide at 85 %, so it learned up to the ceiling and was as fast as hard after a few laps)
         var share = 0.4 + 0.6 * skillShare;
         var factor = learn ? function (i) { var f = learn[Math.floor(i / SEG) % learn.length]; return f > 1 ? 1 + (f - 1) * share : f; } : null;      // (slower where it went wide or crashed: all of it)
-        brakeAccel = 9.81 * braking * self.skill * wetness * speedsTyres;
-        speeds = line ? line.computeSpeeds(9.81 * lateral * self.skill * wetness * speedsTyres, 9.81 * braking * self.skill * wetness * speedsTyres, 90, function (name) { return typeof getSurface === "function" && name ? getSurface(name).static / roadGrip : 1; }, factor,
+        brakeAccel = 9.81 * braking * self.skill * wetness;
+        speeds = line ? line.computeSpeeds(9.81 * lateral * self.skill * wetness, 9.81 * braking * self.skill * wetness, 90, function (name) { return typeof getSurface === "function" && name ? getSurface(name).static / roadGrip : 1; }, factor,
             // (a grip measured on the skidpad has the downforce at that speed in it already: not twice)
             !measuredGrip && self.vehicle && self.vehicle.mass > 0 ? ((self.vehicle.downforceFront || 0) + (self.vehicle.downforceRear || 0)) / self.vehicle.mass : 0) : null;      // (the downforce: more grip the faster)
         learnChanged = false; learnBuilt = self.clock || 0;
