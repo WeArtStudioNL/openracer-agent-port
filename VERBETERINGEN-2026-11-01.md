@@ -6,8 +6,8 @@
 
 ## Kort
 
-- Ik heb in **ruim 45 commits** gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen) en een reeks UX-punten.
-- Na elke grote wijziging heb ik een onafhankelijke review laten doen (drie in totaal, plus een audit van de motorbouw en een van de car-editor). Elke bevinding heb ik zelf nagelopen en zo nodig opgelost.
+- Ik heb in **29 commits** (sinds 05:51) gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen) en een reeks UX-punten.
+- Na elke grote wijziging heb ik een onafhankelijke review of audit laten doen (vijf reviews, plus audits van de motorbouw, de car-editor, de races en de Garage). Elke bevinding heb ik zelf nagelopen en zo nodig opgelost.
 - Alles is getest in het spel zelf, vanuit JavaScript aangestuurd. Het browservenster stond verborgen; daar loopt de animatielus niet. Hoe het er in beeld uitziet, heb ik maar op enkele screenshots gezien.
 
 ## Wat er is gedaan
@@ -61,7 +61,7 @@
   - Een AI die wacht op een pitstop die nooit begint, rijdt na 6 s verder.
 - De fly-by is met A over te slaan.
 
-### Garage en delen (audit van 12 punten; `3820dbf`, `f0f0050`)
+### Garage en delen (audit van 12 punten en een review; `3820dbf`, `f0f0050`, `3ad03c4`)
 - **Zips die niet importeerden, doen het nu:**
   - een zip met `car.json` in de hoofdmap (wat Finder of Verkenner maakt van geselecteerde bestanden) liet het importeren crashen;
   - een Windows-zip met backslashes;
@@ -71,8 +71,9 @@
   Alle vier getest in het spel, de `.gltf` los in Node.
 - **Meerdere zips** worden elk apart geïmporteerd, met een overzicht van wat wel en niet lukte. De melding staat bovenaan.
 - **Gekoppelde map** neemt mappen als `Dune Buggy` mee (die werden zonder melding overgeslagen).
-- **Een setup van een andere auto** neemt alleen de tuning over. Een motorsetup maakte de hatchback een motor met de wielen van de motor.
-- **De ghost van een vriend** geldt per baan en auto (hij verving je eigen beste ronde bij elke auto). *Download* van een bewerkte replay geeft de bewerking.
+- **Een setup van een andere auto** neemt alleen de tuning over. Een motorsetup maakte de hatchback een motor met de wielen van de motor. Getest: de hatchback houdt zijn naam, wielen, spoorbreedte, wielbasis en gewicht.
+- **De ghost van een vriend** geldt per baan en auto (hij verving je eigen beste ronde bij elke auto). Een oude vriend-ghost wordt overgenomen. *Download* van een bewerkte replay geeft de bewerking.
+- Uit de review: bijbestanden in een submap van een gekoppelde map worden gevonden, twee mappen met dezelfde naam botsen niet meer, en een zip zonder naam krijgt een vaste id (dezelfde zip twee keer importeren overschrijft in plaats van te verdubbelen).
 
 ### Menu's en kleine punten
 - **Tune the car** staat bovenaan het pauzemenu.
