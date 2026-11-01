@@ -226,7 +226,7 @@ var MainMenu = (function() {
                 // the materials of the old models reflect a cube map: a grey room, taken once
                 initialiseMaterials();
                 scene.background = new THREE.Color(0x9a9ea6);
-                cubeCamera.update(renderer, scene);
+                updateReflections(renderer, scene);
                 scene.background = null;
             }
         }

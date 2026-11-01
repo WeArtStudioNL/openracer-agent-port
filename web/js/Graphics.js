@@ -266,7 +266,9 @@ OpenRacer.Graphics = (function () {
             renderer.autoClear = oldAuto;
             scene.background = oldBackground;
             camera.layers.mask = oldMask;
-            u.uUseDepth.value = 0;
+            // (and let go of the depth: the debris and the glass splinters share these uniforms and are drawn while the
+            // next frame writes that depth, which the browser refused as a loop: "Mismatch between texture format and sampler type")
+            u.uUseDepth.value = 0; u.tDepth.value = null;
             // over the picture
             this.material.uniforms.tBase.value = readBuffer.texture;
             renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);

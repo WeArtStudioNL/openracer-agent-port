@@ -171,6 +171,7 @@ OpenRacer.Ghost = function (config, trackId) {
     };
     try { var kept = JSON.parse(window.localStorage.getItem(FRIEND)); if (kept && kept.samples) this.friend = kept; } catch (e) { /* none */ }
 
+    this.objects = function () { return body ? [body].concat(wheels) : []; };     // (the reflections leave them out: the camera of the reflections is often inside the ghost)
     this.isVisible = function () { return !!(body && body.visible); };
 
     this.bestTime = function () { return this.friend ? this.friend.time : (this.best ? this.best.time : OpenRacer.Records.best(trackId, config.id)); };

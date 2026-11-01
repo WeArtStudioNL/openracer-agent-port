@@ -306,8 +306,9 @@ function render() {
             // the rain, the snow and the thrown pieces are not in the picture of the surroundings: they jump about at every frame and made the paint and the wet road sparkle
             var hidden = [];
             ["rain", "snow", "debris"].forEach(function(name) { var o = scene.getObjectByName(name); if(o && o.visible) { o.visible = false; hidden.push(o); } });
+            if(car.ghost) car.ghost.objects().forEach(function(o) { if(o.visible) { o.visible = false; hidden.push(o); } });
             //renderer.autoClear = true;
-            cubeCamera.update( renderer, scene );
+            updateReflections(renderer, scene);
             //renderer.autoClear = false;
             hidden.forEach(function(o) { o.visible = true; });
 
