@@ -920,7 +920,7 @@ var MainMenu = (function() {
                     watch.onclick = function() {
                         problem.textContent = "";
                         OpenRacer.Replay.library.open(item.id, carList, trackList).then(function(ids) {
-                            window.location.href = window.location.pathname + "?car=" + encodeURIComponent(ids.car) + "&track=" + encodeURIComponent(ids.track) + "&replay=1";
+                            window.location.href = window.location.pathname + "?car=" + encodeURIComponent(ids.car) + "&track=" + encodeURIComponent(ids.track) + "&replay=1&setup=" + encodeURIComponent(ids.setup || "");
                         }).catch(function(error) { problem.textContent = error.message || "This replay could not be opened."; });
                     };
                     var download = document.createElement("button");
@@ -937,7 +937,7 @@ var MainMenu = (function() {
                     edit.onclick = function() {
                         problem.textContent = "";
                         OpenRacer.Replay.library.open(item.id, carList, trackList, { source: true }).then(function(ids) {
-                            window.location.href = window.location.pathname + "?car=" + encodeURIComponent(ids.car) + "&track=" + encodeURIComponent(ids.track) + "&editor=1";
+                            window.location.href = window.location.pathname + "?car=" + encodeURIComponent(ids.car) + "&track=" + encodeURIComponent(ids.track) + "&editor=1&setup=" + encodeURIComponent(ids.setup || "");
                         }).catch(function(error) { problem.textContent = error.message || "This replay could not be opened."; });
                     };
                     row.appendChild(watch);

@@ -1302,7 +1302,7 @@ OpenRacer.Replay = (function() {
             soft: cars.map(function() { return null; }), softBytes: 0, effects: {},
             rate: RATE, stride: STRIDE, samples: n,
             track: { id: currentTrack.id, name: currentTrack.name || currentTrack.id },
-            cars: cars.map(function(entry) { var o = entry.object; return { id: o.config.id, name: String(o.name || o.config.name || o.config.id), color: typeof o.color === "number" ? o.color : null, player: entry.player }; }),
+            cars: cars.map(function(entry) { var o = entry.object; return { id: o.config.id, name: String(o.name || o.config.name || o.config.id), color: typeof o.color === "number" ? o.color : null, player: entry.player, setup: o.config.setupName || undefined }; }),
             gears: gearLabels
         };
         for(var key in (extra || {})) header[key] = extra[key];
@@ -1335,7 +1335,7 @@ OpenRacer.Replay = (function() {
             if(libraryId && api.viewer) parsed.project = api.project || null;
             return stash(parsed);
         }).then(function() {
-            window.location.href = window.location.pathname + "?car=" + encodeURIComponent(cars[0].object.config.id) + "&track=" + encodeURIComponent(currentTrack.id) + "&editor=1";
+            window.location.href = window.location.pathname + "?car=" + encodeURIComponent(cars[0].object.config.id) + "&track=" + encodeURIComponent(currentTrack.id) + "&editor=1&setup=" + encodeURIComponent(cars[0].object.config.setupName || "");
         });
     };
     // the replay that was stashed, as it was loaded (for the editor)
@@ -1481,7 +1481,7 @@ OpenRacer.Replay = (function() {
             track: { id: currentTrack.id, name: currentTrack.name || currentTrack.id },
             cars: cars.map(function(entry) {
                 var o = entry.object;
-                return { id: o.config.id, name: String(o.name || o.config.name || o.config.id), color: typeof o.color === "number" ? o.color : null, player: entry.player };
+                return { id: o.config.id, name: String(o.name || o.config.name || o.config.id), color: typeof o.color === "number" ? o.color : null, player: entry.player, setup: o.config.setupName || undefined };
             }),
             gears: gearLabels
         };
@@ -1564,6 +1564,8 @@ OpenRacer.Replay = (function() {
             if(!c || typeof c.id !== "string" || !ID_PATTERN.test(c.id)) throw bad("This replay file is damaged.");
             c.name = String(c.name || c.id).slice(0, 80);
             c.color = typeof c.color === "number" && c.color >= 0 && c.color <= 0xffffff ? c.color : null;
+            // the setup it raced with (it played back with the setup chosen now, or as the base car: other wheels, another ride height, the dents left out)
+            c.setup = typeof c.setup === "string" && c.setup ? c.setup.slice(0, 80) : null;
         }
         if(!header.cars[0].player) throw bad("This replay file is damaged.");
         var samples = header.samples;
@@ -1692,7 +1694,7 @@ OpenRacer.Replay = (function() {
                 missingCars.forEach(function(c) { if(!seen[c.id]) { seen[c.id] = true; parts.push("the car " + c.name + " (" + c.id + ")"); } });
                 throw new Error("This replay needs " + parts.join(", ") + ", which this game does not have. Ask the sender for them as a zip and import it in My garage.");
             }
-            return stash(parsed).then(function() { return { car: h.cars[0].id, track: h.track.id }; });
+            return stash(parsed).then(function() { return { car: h.cars[0].id, track: h.track.id, setup: h.cars[0].setup || "" }; });
         });
     };
 

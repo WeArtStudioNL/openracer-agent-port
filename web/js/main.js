@@ -76,7 +76,10 @@ function startGame(carId, trackId) {
         carBaseConfig = carFound;
         // the setup that was chosen for this car (the main menu, the tuning menu, the car editor; OpenRacer.Setups): its configuration laid over car.json, the model and the id of the car kept
         if(OpenRacer.Setups) {
-            var setupName = OpenRacer.Setups.active(carId), setup = setupName ? OpenRacer.Setups.configOf(carId, setupName, carFound) : null;
+            // (a replay: the setup the car raced with, from the file; "" is the car as made)
+            var query = new URLSearchParams(window.location.search), viewing = query.get("replay") === "1" || query.get("editor") === "1";
+            var setupName = viewing && query.get("setup") !== null ? query.get("setup") || null : OpenRacer.Setups.active(carId);
+            var setup = setupName ? OpenRacer.Setups.configOf(carId, setupName, carFound) : null;
             if(setup) carConfig = withTune(carFound, setupName);
         }
         race.allCars = result[0].filter(function(item) { return item.id !== carId; }).concat([carFound]);
@@ -266,6 +269,7 @@ function setupReplayViewer() {
             var entry = parsed.header.cars[i];
             var config = race.allCars.filter(function(c) { return c.id === entry.id; })[0];
             if(!config) { back("This replay needs the car " + entry.id + ", which this game does not have."); return; }
+            if(entry.setup) config = withTune(config, entry.setup);          // (the setup it raced with; one that is not here leaves the car as made)
             race.opponents.push(new OpenRacer.Opponent(config, null, { skill: 1, color: entry.color, name: entry.name }));
         }
         race.viewer = parsed;
