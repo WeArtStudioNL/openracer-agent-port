@@ -357,7 +357,7 @@ const verbose = args.includes("--verbose");
 const testsArg = args.includes("--tests") ? args[args.indexOf("--tests") + 1].split(",") : null;      // static is always run; roll,slipx,slipy,camber,combined,relax,mass,cost
 const sets = args.filter((a) => a.startsWith("--set=")).map((a) => a.slice(6).split("="));             // --set=beamDamping=0.3: a parameter of the tyre body
 const taken = [modelArg].concat(testsArg ? [testsArg.join(",")] : []);
-const carId = args.filter((a) => !a.startsWith("--") && taken.indexOf(a) < 0)[0] || "openracer-mustang";
+const carId = args.filter((a) => !a.startsWith("--") && taken.indexOf(a) < 0)[0] || "hatchback";          // (openracer-mustang is no longer a car of the game)
 const config = loadCar(carId);
 const models = ["shell"];
 const results = {};

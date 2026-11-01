@@ -31,8 +31,8 @@ vm.createContext(sandbox);
 for (const file of ["Engine.js", "Wheel.js", "TyreShell.js", "Ground.js", "Vehicle.js", "Motorcycle.js", "Opponent.js"]) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, "js", file), "utf8"), sandbox, { filename: file });
 }
-// the grip of the surfaces (Helpers.js needs the browser: only its table is taken)
-const helpers = fs.readFileSync(path.join(ROOT, "js", "Helpers.js"), "utf8");
+// the grip of the surfaces (Surfaces.js, where the table went from Helpers.js: only its table is taken)
+const helpers = fs.readFileSync(path.join(ROOT, "js", "Surfaces.js"), "utf8");
 const table = helpers.match(/var uCoeff = (\{[\s\S]*?\});/);
 const uCoeff = vm.runInContext("(" + table[1] + ")", sandbox);
 const getSurface = (name) => uCoeff[name] || uCoeff.track01;
