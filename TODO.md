@@ -37,7 +37,7 @@ Openstaande punten voor later. Bijgewerkt op 30 oktober 2026. De nummers met § 
 - ~~Bij "Make a copy" (opslaan onder een ander id) gaan velden verloren (§3.24).~~ Opgelost in beide editors op 1 november 2026.
 - ~~De autosave van het onderdelenvenster schrijft het hele formulier weg (§3.28).~~ Opgelost 1 november 2026.
 - ~~Wisselen van tune in de car-editor gooit wijzigingen weg zonder te vragen (§3.22).~~ Opgelost 1 november 2026.
-- De editor-pagina's laden hun scripts zonder `?v=`.
+- ~~De editor-pagina's laden hun scripts zonder `?v=`.~~ Niet nodig: `web/.htaccess` zet `Cache-Control: no-cache` op html, js, json en css, dus de browser vraagt bij elk bezoek of er iets nieuws is (nagekeken 1 november 2026).
 
 ## Nieuwe functies
 
