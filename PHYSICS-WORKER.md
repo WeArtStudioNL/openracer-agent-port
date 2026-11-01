@@ -185,6 +185,17 @@ main thread, and with two workers the AI cars side by side.
   `collideCars` in the page still pushes it, through the values it writes); the pose between two snapshots is not smoothed (when the
   worker steps every other frame, the car moves every other frame).
 
+**Not fit for a drive yet** (found in the second test on the Mac, 1 November 2026):
+
+* **The cars do not meet as they should.** The car in the worker has no other cars, so it drives through the AI cars; the AI cars
+  in the page do feel it (their shell meets its spheres) and are thrown off: five AI cars held still in front of the Muscle went
+  up to 138 km/h when it drove into them, and in the page it stopped against them. A crash into the AI cars ended with a black
+  screen in the test of the Mac. Contacts between cars need both cars in the same thread: all the cars in the worker (steps 2 and
+  3 together), the AI drivers staying in the page.
+* **The car jitters.** The page shows at frame k+1 the step that was made with the time of frame k; when the frames are not all as
+  long (58 to 67 fps), what the car moves in a frame no longer fits the frame. The picture should be carried forward by the time
+  of the frame it is shown in (with the speed and the turn of the car), or drawn between two snapshots.
+
 What was measured (the Mac, 10 cores):
 
 * **Chrome in the background** (another app in front) puts the page and its workers on the efficiency cores: a loop that takes 75 to
