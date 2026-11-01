@@ -132,8 +132,8 @@ OpenRacer.CarTuning = (function () {
         ] },
         { name: "Aerodynamics and steering", items: [
             ["drag_coefficient", "Drag coefficient", "", 0.05, 2, 0.01],
-            ["downforce_front", "Downforce at the front axle at 100 km/h (negative: lift)", "N", -10000, 20000, 50],
-            ["downforce_rear", "Downforce at the rear axle at 100 km/h", "N", -10000, 20000, 50],
+            ["downforce_front", "Downforce at the front axle at 100 km/h, 62 mph (negative: lift)", "N", -10000, 20000, 50],
+            ["downforce_rear", "Downforce at the rear axle at 100 km/h, 62 mph", "N", -10000, 20000, 50],
             ["max_steer_deg", "Steering lock", "°", 5, 80, 1],
             ["ackermann", "Ackermann (the inner wheel steers more)", "%", -50, 150, 5]
         ] },
@@ -614,7 +614,9 @@ OpenRacer.CarTuning = (function () {
     }
     function toConfig(c, v) {
         c = clone(c);
-        c.chassis.mass = v.mass - (OpenRacer.Motorcycle ? OpenRacer.Motorcycle.riderMass(c) : 0);
+        // (the rider of the menu: with the old one taken off, a heavier rider made the bike as much heavier at the next start, and the setup "(changed)" at once)
+        var rider = c.type === "motorcycle" && v.bike_rider_mass !== undefined ? v.bike_rider_mass : (OpenRacer.Motorcycle ? OpenRacer.Motorcycle.riderMass(c) : 0);
+        c.chassis.mass = v.mass - rider;
         c.chassis.weight_distribution = v.front_weight / 100;
         c.chassis.cg_height = v.cg_height;
         c.chassis.roll_front = v.roll_front / 100;
@@ -906,8 +908,10 @@ OpenRacer.Setups = (function () {
         },
         // the setup for the next game (null: the car as it was made); the tuning that was kept for the car is forgotten, the setup is the car from here
         use: function (id, name) {
-            var d = read(id);
-            d.active = name && find(id, name) ? name : null; write(id, d);
+            var d = read(id), next = name && find(id, name) ? name : null;
+            // (the tuning on the car goes only with another setup: a click on the setup that was chosen already threw the changes away without a word)
+            if ((d.active || null) === next) return;
+            d.active = next; write(id, d);
             try { window.localStorage.removeItem(CURRENT + id); } catch(e) {}
         }
     };

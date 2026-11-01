@@ -58,6 +58,11 @@ OpenRacer.Movable = (function () {
         var left = Math.min(Math.max(rect.left, 60 - rect.width), window.innerWidth - 60);
         var top = Math.min(Math.max(rect.top, 0), window.innerHeight - 40);
         place(el, left, top);
+        // (and no taller or wider than the window: a panel sized on a large screen hung 350 px under a smaller one, and its own scroll could not reach the bottom)
+        if (rect.height > window.innerHeight - 10) el.style.height = Math.max(MIN_H, window.innerHeight - 10) + "px";
+        if (rect.width > window.innerWidth - 10) el.style.width = Math.max(MIN_W, window.innerWidth - 10) + "px";
+        rect = el.getBoundingClientRect();
+        if (rect.bottom > window.innerHeight && rect.height <= window.innerHeight) place(el, left, Math.max(0, window.innerHeight - rect.height - 5));
     }
 
     function make(el, options) {
@@ -132,5 +137,5 @@ OpenRacer.Movable = (function () {
 
     window.addEventListener("resize", function () { all.forEach(keep); });
 
-    return { make: make, reset: reset };
+    return { make: make, reset: reset, keep: keep };          // (keep: for a panel that is shown again, in a window that may be smaller now)
 })();

@@ -138,10 +138,12 @@ var Tuning = (function() {
         return STORAGE_PREFIX + config.id;
     }
 
+    // (the differences from the setup that is chosen, which is the car of the next start: from the setup of this start, a setup switched to in the menu or a
+    // deleted one came back at the next start as another car with these differences on it)
     function store() {
-        var changed = {};
+        var changed = {}, ref = reference();
         Object.keys(values).forEach(function(key) {
-            if(JSON.stringify(values[key]) !== JSON.stringify(base[key])) changed[key] = values[key];
+            if(JSON.stringify(values[key]) !== JSON.stringify(key in ref ? ref[key] : base[key])) changed[key] = values[key];
         });
         try {
             if(Object.keys(changed).length) window.localStorage.setItem(storageKey(), JSON.stringify(changed));
@@ -162,7 +164,7 @@ var Tuning = (function() {
     function addStyle() {
         var style = document.createElement("style");
         style.textContent =
-            "#tuning { position: fixed; right: 10px; top: 10px; bottom: 10px; width: 390px; z-index: 1500; overflow-y: auto; padding: 0 14px 20px; " +
+            "#tuning { position: fixed; right: 10px; top: 10px; bottom: 10px; box-sizing: border-box; width: min(418px, calc(100vw - 20px)); z-index: 1500; overflow-y: auto; padding: 0 14px 20px; " +
             "background: rgba(24, 29, 35, 0.9); color: var(--head); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 13px; border-radius: 8px; display: none; }" +
             "#tuning h1 { font-size: 18px; margin: 0; }" +
             "#tuning .tuneHeader { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; margin: 0 -14px 6px; padding: 10px 14px 8px; " +
@@ -203,6 +205,12 @@ var Tuning = (function() {
         document.head.appendChild(style);
     }
 
+    // a control lets go of the keyboard after a change made with the mouse or a finger (so the car can be driven), not after one with the keys or a controller
+    var byPointer = false;
+    window.addEventListener("pointerdown", function() { byPointer = true; }, true);
+    window.addEventListener("keydown", function() { byPointer = false; }, true);
+    function letGo(el) { if(byPointer && !(OpenRacer.PadNav && OpenRacer.PadNav.recent && OpenRacer.PadNav.recent()) && el && el.blur) el.blur(); }
+
     function format(def, v) {
         var step = def[5];
         var digits = step >= 1 ? 0 : (step >= 0.1 ? 1 : (step >= 0.01 ? 2 : 3));
@@ -222,7 +230,8 @@ var Tuning = (function() {
         referenceValues = base;
         var active = OpenRacer.Setups && config ? OpenRacer.Setups.active(config.id) : null;
         var cfg = active ? OpenRacer.Setups.configOf(config.id, active, config) : null;
-        if(cfg) { try { referenceValues = Object.assign({}, base, fromConfig(Object.assign({}, original, cfg))); } catch(e) { referenceValues = base; } }
+        // (Default is the car as made, not the setup this start was on: every value of that setup was orange, and ↺ went to it)
+        try { referenceValues = Object.assign({}, base, fromConfig(cfg ? Object.assign({}, original, cfg) : original)); } catch(e) { referenceValues = base; }
         return referenceValues;
     }
     function changed(key) {
@@ -274,13 +283,16 @@ var Tuning = (function() {
         range.step = def[5];
         item.appendChild(range);
         range.addEventListener("input", function() { set(key, parseFloat(range.value)); });
-        // a slider that was used lets go of the keyboard again, so that the car can be driven
-        range.addEventListener("change", function() { range.blur(); });
+        // a slider that was used with the mouse or a finger lets go of the keyboard again, so that the car can be driven (with the arrows it keeps it: it let go
+        // after one step, and the next arrow steered the car)
+        range.addEventListener("change", function() { letGo(range); });
         number.addEventListener("change", function() {
             var value = parseFloat(number.value);
             // (a typed value may go past the slider: to half its lowest and twice its highest, away from zero. With a negative lowest, half of it was nearer
             // to zero than the slider itself: a camber of -8 became -6, a ride height of -100 mm became -75)
             var lo = def[3] < 0 ? def[3] * 2 : def[3] / 2, hi = def[4] > 0 ? def[4] * 2 : def[4] / 2;
+            // (a share in % stays a share: a brake bias of 655 % gave the rear brakes a negative torque, a front weight of 150 % the rear wheels a negative mass)
+            if(def[2] === "%" && def[3] >= 0 && def[4] <= 100) { lo = 0; hi = 100; }
             if(Number.isFinite(value)) set(key, Math.min(hi, Math.max(lo, value)));
             number.blur();
         });
@@ -404,7 +416,7 @@ var Tuning = (function() {
         select.addEventListener("change", function() {
             var t = TRANSMISSIONS.filter(function(x) { return x[0] === select.value; })[0];
             select.value = "";
-            select.blur();
+            letGo(select);
             if(!t) return;
             var p = t[2];
             values.gearbox = p.gearbox;
@@ -465,7 +477,7 @@ var Tuning = (function() {
         input.type = "color";
         input.style.cssText = "width: 44px; height: 26px; padding: 0 2px; border: 1px solid var(--line); border-radius: 5px; background: transparent; cursor: pointer;";
         input.addEventListener("input", function() { set(key, input.value); });
-        input.addEventListener("change", function() { input.blur(); });
+        input.addEventListener("change", function() { letGo(input); });
         var reset = document.createElement("button");
         reset.className = "small";
         reset.textContent = "↺";
@@ -497,7 +509,7 @@ var Tuning = (function() {
         var options = typeof SELECTS[key][1] === "function" ? SELECTS[key][1]() : SELECTS[key][1];
         select.innerHTML = options.map(function(o) { return "<option value=\"" + o[0] + "\">" + o[1] + "</option>"; }).join("");
         select.style.width = "130px";
-        select.addEventListener("change", function() { set(key, select.value); select.blur(); });
+        select.addEventListener("change", function() { set(key, select.value); letGo(select); });
         line.appendChild(select);
         item.appendChild(line);
         controls.push({ key: key, select: select, line: line });
@@ -518,7 +530,7 @@ var Tuning = (function() {
         line.appendChild(box);
         line.appendChild(text);
         item.appendChild(line);
-        box.addEventListener("change", function() { set(key, box.checked); box.blur(); });
+        box.addEventListener("change", function() { set(key, box.checked); letGo(box); });
         controls.push({ key: key, bool: box, line: line });
         return item;
     }
@@ -541,7 +553,7 @@ var Tuning = (function() {
         inner.className = "featureBox";
         feature.items.forEach(function(def) { inner.appendChild(SELECTS[def[0]] ? selectRow(def[0]) : slider(def)); });
         wrap.appendChild(inner);
-        box.addEventListener("change", function() { set(feature.key + "_on", box.checked); box.blur(); });
+        box.addEventListener("change", function() { set(feature.key + "_on", box.checked); letGo(box); });
         controls.push({ key: feature.key + "_on", checkbox: box, inner: inner, line: line });
         return wrap;
     }
@@ -681,8 +693,13 @@ var Tuning = (function() {
             values = clone(base); engineMassNow = 0;
             // (a setup laid over the car as made, as main.js lays it at the start: what the setup does not say, the car says)
             var saved = fromConfig(from ? Object.assign({}, original, from) : original);
-            Object.keys(saved).forEach(function(key) { if(key in base) values[key] = saved[key]; });
+            // (and all its gears: one of 8 gears on a car of 4 got made-up ratios for 5 to 8, and the boxes stayed 4)
+            Object.keys(values).forEach(function(key) { if(/^gear\d+$/.test(key)) delete values[key]; });
+            Object.keys(saved).forEach(function(key) { if(key in base || /^gear\d+$/.test(key)) values[key] = saved[key]; });
+            OpenRacer.CarTuning.normaliseGears(values);
             OpenRacer.Setups.setActive(config.id, name || null);
+            referenceValues = null;
+            buildGearGrid();
             apply(); store(); refresh();
             message(name ? "Setup " + name + " (what the menu does not have, the suspension and the parts, comes at the next start)." : "The car as it was made (fully at the next start).");
         }
@@ -763,6 +780,7 @@ var Tuning = (function() {
                 if(!yes) return;
                 OpenRacer.Setups.remove(config.id, name);
                 refresh();
+                store();          // (kept now as differences from the car as made: they were kept from the deleted setup, and the next start was another car)
                 message("Setup " + name + " deleted (the tuning on the car stays as it is).");
             });
         };
@@ -1108,6 +1126,7 @@ var Tuning = (function() {
         var racing = typeof race !== "undefined" && race && race.opponents && race.opponents.length && race.state !== "finished";
         if(Settings.holdPause) Settings.holdPause(show && !!racing, "tuning");
         if(show) {
+            if(OpenRacer.Movable && OpenRacer.Movable.keep) OpenRacer.Movable.keep(panel);       // (moved and sized on a larger screen: into this window)
             refreshSelectLists();
             refresh();
             message("");

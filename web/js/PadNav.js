@@ -32,6 +32,8 @@ OpenRacer.PadNav = (function() {
         if (layers.length) return layers[layers.length - 1];
         var settings = document.getElementById("settingsMenu");
         if (settings) return settings;
+        // the tuning menu while it is open (the D-pad, A and B did nothing in it: in free drive they drove the car)
+        if (typeof Tuning !== "undefined" && Tuning.isVisible && Tuning.isVisible()) return document.getElementById("tuning");
         // the results of a race (Race again, Main menu): under the pause menu and in a replay, where they are hidden, they are not the controller's
         var results = document.getElementById("raceResults");
         if (results && !document.body.classList.contains("replaying") && results.offsetParent) return results;
@@ -115,7 +117,9 @@ OpenRacer.PadNav = (function() {
         return null;
     }
 
+    var lastUsed = 0;           // (when the controller last moved or changed something: the tuning menu then keeps the focus after a change)
     function step(root, dir) {
+        lastUsed = Date.now();
         var d = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir];
         if ((dir === "left" || dir === "right") && adjust(document.activeElement, d[0])) return;
         move(root, d[0], d[1]);
@@ -156,5 +160,5 @@ OpenRacer.PadNav = (function() {
         window.addEventListener(type, function(ev) { if (!ev.isTrusted) return; var el = document.querySelector(".or-padfocus"); if (el) el.classList.remove("or-padfocus"); }, true);
     });
     requestAnimationFrame(poll);
-    return { layer: layer, poll: function(now) { pollOnce(now === undefined ? performance.now() : now); } };
+    return { layer: layer, poll: function(now) { pollOnce(now === undefined ? performance.now() : now); }, recent: function() { return Date.now() - lastUsed < 1500; } };
 })();
