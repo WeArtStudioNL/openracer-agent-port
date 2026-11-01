@@ -12,7 +12,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { installZoomToMouse } from "./zoom-to-mouse.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
-import { createDesign, PREFAB_TYPES, TEXTURE_CHOICES, prefabGlb } from "./track-design.js";
+import { createDesign, PREFAB_TYPES, prefabGlb, prefabReady } from "./track-design.js";
 import { buildTerrain, readHeights } from "./heightmap.js";
 
 const $ = (id) => document.getElementById(id);
@@ -1265,13 +1265,22 @@ async function useLibraryModel(entry) {
 }
 // ---- the prefabs of the track designer, placed as objects: a glb of the prefab (track-design.js) with the texture chosen, put in the track like a model. The kind follows the
 // role of the prefab: scenery stands in the track and is hit (static), decor is only drawn (decor). The same model is used again when it is in the track already.
+// on a designed track the designer has its own prefab tools (the Prefabs tab: single ones and rows along a line), so this row is not shown there
+const prefabThumbs = new Map();
 function renderPrefabs() {
     const holder = $("objectPrefabs");
     if (!holder) return;
     holder.innerHTML = "";
+    holder.style.display = design && design.active() ? "none" : "";
+    if (design && design.active()) return;
     PREFAB_TYPES.forEach((p) => {
         const div = document.createElement("div");
         div.className = "libtile";
+        div.style.background = "#1d2630";
+        // a picture of the prefab (made once, when its textures are there): the tile is not black without one
+        const thumb = prefabThumbs.get(p.type + (p.textures ? ":default" : ""));
+        if (thumb) div.style.backgroundImage = "url(" + thumb + ")";
+        else prefabReady(p.type, p.textures ? p.textures[0] : undefined).then((g) => { const url = thumbOf(g); prefabThumbs.set(p.type + (p.textures ? ":default" : ""), url); div.style.backgroundImage = "url(" + url + ")"; }).catch(() => {});
         div.title = p.label + (p.role === "scenery" ? ": stands in the track and is hit" : ": only drawn") + " — click to place it";
         const label = document.createElement("div");
         label.className = "name";
@@ -1522,11 +1531,13 @@ function startDesign(data) {
     $("colour").checked = false; // a designed track is shown with its textures; the colours of the surfaces can be switched on
     design.enable(data);
     $("modes").classList.add("design");
+    renderPrefabs();
     setMode("node");
 }
 function stopDesign() {
     design.disable();
     $("modes").classList.remove("design");
+    renderPrefabs();
     if (state.mode === "node" || state.mode === "prefab") setMode("view");
 }
 

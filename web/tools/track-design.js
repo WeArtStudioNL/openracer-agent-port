@@ -217,7 +217,8 @@ export { TEXTURE_CHOICES };
 
 // The glb of one prefab (type, and the texture it has a choice of): a binary glb as the exporter writes it. The pictures of its textures are loaded first,
 // the exporter needs them. The parts keep the names of their materials, so the game finds the surfaces (see the prefab's role).
-export async function prefabGlb(type, texture) {
+// the prefab as a group, once its pictures are loaded (for the glb, and for the picture of the editor's list)
+export async function prefabReady(type, texture) {
     const def = PREFABS[type];
     if (!def) throw new Error("there is no prefab “" + type + "”");
     const group = def.make(texture);
@@ -226,6 +227,10 @@ export async function prefabGlb(type, texture) {
     const pictures = new Set();
     group.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { if (m.map && m.map.userData.loaded) pictures.add(m.map); }); });
     await Promise.all([...pictures].map((t) => t.userData.loaded));
+    return group;
+}
+export async function prefabGlb(type, texture) {
+    const group = await prefabReady(type, texture);
     const glb = await new GLTFExporter().parseAsync(group, { binary: true });
     return new Blob([glb], { type: "model/gltf-binary" });
 }
