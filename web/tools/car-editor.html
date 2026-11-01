@@ -78,6 +78,7 @@
                     <button id="newCar" class="small" title="Start with an empty car">+ Car</button>
                     <button id="newBike" class="small" title="Start with an empty motorcycle">+ Motorcycle</button>
                     <button id="copyCar" class="small ghost" title="Save this car again under a new name">Make a copy</button>
+                    <button id="exportCar" class="small ghost" title="The car as it is saved, as a zip to share (car.json, the model, the driver, the setups and the picture); the Garage of the main menu imports it">Export zip</button>
                 </div>
                 <div class="row">
                     <div><label>Type</label><select id="vehicleType"><option value="car">Car</option><option value="motorcycle">Motorcycle</option></select></div>
@@ -702,6 +703,7 @@
 
 <script>var OpenRacer = {};</script>
 <script src="../js/Movable.js"></script>
+<script src="../js/Zip.js"></script>
 <script src="../js/Garage.js"></script>
 <script src="../js/Catalog.js"></script>
 <script src="../js/MaterialOverrides.js"></script>

@@ -3694,6 +3694,41 @@ setInterval(refreshReady, 1000);
     cards.forEach((c) => c.addEventListener("toggle", () => { try { localStorage.setItem("editor-cards", JSON.stringify(cards.filter((x) => x.open).map(nameOf))); } catch (e) { /* no storage */ } }));
 }
 
+// The car as it is saved, as a zip to share: a car of the garage as the garage keeps it, a car of the server (or one that comes with the game) from its folder:
+// car.json and every file it refers to (the model, the driver, the setups) and the picture. A car saved through the local server had no way to be shared.
+$("exportCar").addEventListener("click", async () => {
+    const id = state.existingId;
+    if (!id) { status("Save the car first: the zip is made of the car as it is saved.", "error"); return; }
+    if (dirty) status("The zip has the car as it is saved, not the changes that are not saved yet.");
+    try {
+        let zip;
+        if (OpenRacer.Garage.sourceOf(state.existingCar)) zip = await OpenRacer.Garage.exportZip("cars", id);
+        else {
+            const base = "../cars/" + id + "/", json = await (await fetch(base + "car.json", { cache: "no-store" })).json();
+            const names = new Set(["preview.webp"]);
+            const walk = (v) => {
+                if (typeof v === "string") { if (v.indexOf("cars/" + id + "/") === 0) names.add(v.slice(("cars/" + id + "/").length)); }
+                else if (Array.isArray(v)) v.forEach(walk);
+                else if (v && typeof v === "object") Object.values(v).forEach(walk);
+            };
+            walk(json);
+            (json.tunes || []).forEach((t) => { if (typeof t === "string") names.add(t); });
+            const entries = [{ name: id + "/car.json", data: JSON.stringify(json, null, 2) + "\n" }];
+            for (const name of names) {
+                if (!/^[^/\\]+(\/[^/\\]+)*$/.test(name) || name.split("/").includes("..")) continue;
+                const response = await fetch(base + name.split("/").map(encodeURIComponent).join("/"));
+                if (response.ok) entries.push({ name: id + "/" + name, data: new Uint8Array(await response.arrayBuffer()) });
+                else if (name !== "preview.webp") throw new Error(name + " could not be read (HTTP " + response.status + ")");
+            }
+            zip = { blob: await OpenRacer.Zip.write(entries), name: id + ".car.zip" };
+        }
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(zip.blob); link.download = zip.name;
+        document.body.appendChild(link); link.click(); link.remove();
+        setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+        status("Saved " + zip.name + " (" + (zip.blob.size / 1048576).toFixed(1) + " MB) in your downloads: the Garage of the main menu imports it.", "ok");
+    } catch (error) { status("Could not make the zip: " + error.message, "error"); }
+});
 $("copyCar").addEventListener("click", () => {
     if (!state.existingId) { status("Save the car first, then make a copy.", "error"); return; }
     $("name").value = ($("name").value.trim() || state.existingId) + " copy";
