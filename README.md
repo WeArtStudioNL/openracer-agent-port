@@ -238,6 +238,8 @@ On a phone or tablet (a coarse pointer, or `?touch=1` in the address; `?touch=0`
 ## Gamepad
 A gamepad steers with the left stick and drives with the triggers (the bindings are in the settings menu). The stick is the steering one to one at a standstill; the faster the car goes, the slower the steering follows the stick, as with the keyboard, so a flick at speed is a small movement of the wheels. *Esc → Gamepad* has a slider for how much slower (off: one to one at every speed) and the check box *Steering assist*: when the rear steps out, the front tyres steer into the slide by themselves (the way a car with a lot of caster does), so it does not become a spin.
 
+The menus work with the gamepad too (`PadNav.js`, the standard layout): **Start** pauses and resumes (on a page of the main menu it goes on, as Enter), the **D-pad** or the left stick moves to the next button in that direction, **A** chooses, **B** goes back. On a slider or a list left and right change the value. While driving only Start does something; the other buttons stay the controls of the car.
+
 ## Racing wheel support
 Wheels with pedals and a shifter are supported through the browser's Gamepad API.
 

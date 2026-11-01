@@ -102,6 +102,7 @@ var scripts = [
     "js/Icons.js",
     "js/HudLayout.js",
     "js/Settings.js",
+    "js/PadNav.js",
     "js/FreeCam.js",
     "js/Hud.js",
     "js/CarTuning.js",
