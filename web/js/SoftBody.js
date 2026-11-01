@@ -375,10 +375,22 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
     // One step of dt seconds of the nodes and the beams; 'contacts' (optional) is called with (dt) before the forces are summed, to add the
     // forces of the hits to this.force
     this.minSteps = 3;       // the fewest steps of a frame (the AI cars can use less: Settings, tab Simulation)
+    // The last state that was a number everywhere: a shell that blows up (a crash where two shells are deep in each other for a long time; a number that is not one, or a
+    // node kilometres away) goes back to it, and when that blows up as well it is made whole. A number that is not one in the displacement made the model of the car a
+    // set of points that are nowhere (the car was gone), and the camera of the reflections took them in: everything with a reflection was black for the rest of the race.
+    var goodU = new Float64Array(3 * N), goodQ = new Float64Array(3 * N), blewUp = 0, blowUpSaid = false;
+    function sane() {
+        for (var n = 0; n < 3 * N; n++) {
+            var x = u[n], y = q[n], z = w[n];
+            if (!(x > -50 && x < 50) || !(y > -50 && y < 50) || !(z > -1e4 && z < 1e4)) return false;      // (false for a number that is not one too)
+        }
+        return true;
+    }
     this.step = function (dt, contacts) {
         var hard = P.hardening;
         var reaction = this.reaction;
         reaction.fill(0);
+        goodU.set(u); goodQ.set(q);
         var moved = false, maxMove = 0, maxMove2 = 0;
         var steps = Math.max(this.minSteps, Math.min(8, Math.ceil(dt / hSafe))), h = dt / steps;      // small enough for the stiffest and densest place (see safeStep)
         for (var s = 0; s < steps; s++) {
@@ -453,6 +465,15 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
             }
             if (rigNodes.length) { if (rigSolve(h, dt)) moved = true; if (rigMaxMove > maxMove) maxMove = rigMaxMove; if (rigMaxSpeed2 > maxMove2) maxMove2 = rigMaxSpeed2; }
         }
+        if (!sane() || !(reaction[0] === reaction[0] && reaction[1] === reaction[1] && reaction[2] === reaction[2] && reaction[3] === reaction[3] && reaction[4] === reaction[4] && reaction[5] === reaction[5])) {
+            blewUp++;
+            if (!blowUpSaid) { blowUpSaid = true; console.warn("SoftBody: the shell blew up (" + N + " nodes); it goes back to its last good state" + (blewUp > 1 ? " and is made whole" : "")); }
+            if (blewUp > 1) this.repair();
+            else { u.set(goodU); w.fill(0); q.set(goodQ); f.fill(0); for (var n0 = 0; n0 < 3 * N; n0++) self.displacement[n0] = u[n0] + q[n0]; this.version++; }
+            reaction.fill(0);
+            return false;
+        }
+        blewUp = 0;
         this.quiet = !moved && maxMove < 1e-4 && maxMove2 < 1e-6 && !this.plate && !this.pull;
         // the displacement for the model, when something moved
         var any = moved;
