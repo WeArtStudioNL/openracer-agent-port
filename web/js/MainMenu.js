@@ -1556,6 +1556,17 @@ var MainMenu = (function() {
 
     function show() {
         addStyle();
+        var boot = document.getElementById("bootLoading"); if(boot) boot.remove();
+        // back from a game that could not start (main.js): why
+        var missing = new URLSearchParams(window.location.search).get("missing");
+        if(missing && typeof OpenRacerDialog !== "undefined") {
+            var what = missing.split(":")[0], id = missing.slice(what.length + 1);
+            history.replaceState(null, "", window.location.pathname);
+            setTimeout(function() {
+                OpenRacerDialog.tell(what === "list" ? { title: "The game could not start", text: "The list of cars and tracks could not be loaded (" + id + "). Check the connection and try again." }
+                    : { title: "The " + what + " “" + id + "” is not here", text: "It is not on the site and not in the garage of this browser. A car or a track of someone else can be imported with Garage → Import." });
+            }, 0);
+        }
         var last = remembered();
         choice.car = last.car || null;
         choice.track = last.track || null;

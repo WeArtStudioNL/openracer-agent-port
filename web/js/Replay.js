@@ -1826,7 +1826,9 @@ OpenRacer.Replay = (function() {
     };
     // Before the game goes back to the main menu: when there is a recording that was not saved yet, asks whether it should be (then calls leave); otherwise calls leave at once
     api.confirmLeave = function(leave) {
-        if(api.viewer || api.active || !api.available() || total === savedTotal || document.getElementById("replayLeave")) { if(!document.getElementById("replayLeave")) leave(); return; }
+        // (not for less than a minute: every short try, Restart, Race again and Main menu stopped at this question)
+        var short = (total - first()) / RATE < 60;
+        if(api.viewer || api.active || !api.available() || total === savedTotal || short || document.getElementById("replayLeave")) { if(!document.getElementById("replayLeave")) leave(); return; }
         css();
         var shade = el(document.body, "div");
         shade.id = "replayLeave";
@@ -1842,8 +1844,8 @@ OpenRacer.Replay = (function() {
         row.style.cssText = "display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;";
         var style = function(b, colour) { b.style.cssText = "padding: 9px 16px; font: bold 14px Arial; background: " + colour + "; color: #fff; border: 0; border-radius: 6px; cursor: pointer;"; };
         var cancel = button(row, "Cancel", "Stay in the game", function() { shade.remove(); });
-        var drop = button(row, "Don't save", "Go to the main menu without keeping the replay", function() { shade.remove(); leave(); });
-        var keep = button(row, "Save replay", "Keep the replay in Replays and go to the main menu", function() {
+        var drop = button(row, "Don't save", "Go on without keeping the replay", function() { shade.remove(); leave(); });
+        var keep = button(row, "Save replay", "Keep the replay in Replays, then go on", function() {
             keep.textContent = "Saving…"; keep.disabled = true;
             api.saveToLibrary().then(function() { shade.remove(); leave(); }).catch(function(error) {
                 keep.textContent = "Could not save"; text.textContent = (error && error.message) || "The replay could not be saved."; text.style.color = "#ff8a80"; keep.disabled = false;

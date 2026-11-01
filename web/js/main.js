@@ -38,6 +38,7 @@ EngineSound.setTyreVolume(Settings.option("tyreVolume") === undefined ? 0.8 : Se
 
 // A bar while the track, the car and the other cars load (the loader of three.js counts the files); it goes when all of them are in
 function showLoading() {
+    var boot = document.getElementById("bootLoading"); if(boot) boot.remove();
     var box = document.createElement("div");
     box.id = "loadingScreen";
     box.style.cssText = "position: fixed; inset: 0; z-index: 2000; background: var(--bg2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #dfe6ef; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; transition: opacity 0.4s;";
@@ -65,8 +66,8 @@ function startGame(carId, trackId) {
         var carFound = result[0].filter(function(item) { return item.id === carId; })[0];
         var trackFound = result[1].filter(function(item) { return item.id === trackId; })[0];
         if(!carFound || !trackFound) {
-            // the choice is not available (any more): back to the menu
-            window.location.href = window.location.pathname;
+            // the choice is not available (any more): back to the menu, which says why (a shared link to a car of someone's garage went back without a word)
+            window.location.href = window.location.pathname + "?missing=" + encodeURIComponent(!carFound ? "car:" + carId : "track:" + trackId);
             return;
         }
         carConfig = carFound;
@@ -84,7 +85,7 @@ function startGame(carId, trackId) {
         loadTrack(trackFound, trackLoaded);
     }).catch(function(error) {
         console.error(error);
-        window.location.href = window.location.pathname;
+        window.location.href = window.location.pathname + "?missing=" + encodeURIComponent("list:" + ((error && error.message) || error));
     });
 }
 
@@ -325,6 +326,7 @@ function endFlyby() {
     race.flyby = null;
     race.state = "countdown";
     race.countdown = 4;
+    if(Settings.showKeysOnce) Settings.showKeysOnce();       // (the first game on this computer: the keys that matter)
     var overlay = document.createElement("div");
     overlay.id = "raceOverlay";
     overlay.style.cssText = "position: absolute; top: 9%; left: 50%; transform: translateX(-50%); z-index: 1001; font: bold 120px Arial; -webkit-text-stroke: 3px rgba(0, 0, 0, 0.55); paint-order: stroke fill; " +

@@ -77,7 +77,7 @@ var Settings = (function() {
         { id: "reverseGear", wheelOnly: true, group: "Gearbox", label: "H-shifter: reverse", wheel: { profile: "reverseGear", steps: ["reverse"] }, defaults: [] },
         { id: "resetCar", group: "Other", label: "Reset the car to the nearest point of the racing line, nose forward (a track without a racing line: the saved position, else the line from the last gate to the next, else the start), as it is: the damage and the tyres stay", defaults: [key("KeyR"), padButton(3)] },
         { id: "saveResetPosition", group: "Other", label: "Save the place of the car for the reset (only used on a track without a racing line)", defaults: [key("Digit4")] },
-        { id: "repairCar", group: "Other", label: "Repair the car and put it on its wheels where it is, on the road under every wheel (body, parts, wheels, punctures), with new tyres and a full tank (in a race no new tyres or fuel: that is the pit stop)", defaults: [key("Backspace")] },
+        { id: "repairCar", group: "Other", label: "Repair the car and put it on its wheels where it is, on the road under every wheel (body, parts, wheels, punctures), with new tyres and a full tank (in a race no new tyres or fuel: that is the pit stop)", defaults: [key("Backspace"), padButton(8)] },
         { id: "cameraLeft", group: "Other", label: "Camera left", defaults: [key("BracketLeft")] },
         { id: "cameraRight", group: "Other", label: "Camera right", defaults: [key("BracketRight")] },
         { id: "cameraReset", group: "Other", label: "Camera behind the car", defaults: [key("Backquote")] },
@@ -87,7 +87,7 @@ var Settings = (function() {
         { id: "freeCamAim", group: "Other", label: "Free camera: look at the car or not", defaults: [key("KeyP")] },
         { id: "freeCamFollow", group: "Other", label: "Free camera: move with the car or stay here", defaults: [key("KeyO")] },
         { id: "take", group: "Other", label: "Take: start a recording, and stop it (then: save it as a replay or a video)", defaults: [key("Digit5")] },
-        { id: "cameraSwitch", group: "Other", label: "Switch camera (follow, cockpit, free)", defaults: [key("KeyT")] },
+        { id: "cameraSwitch", group: "Other", label: "Switch camera (follow, cockpit, free)", defaults: [key("KeyT"), padButton(2)] },
         { id: "toggleESC", group: "Other", label: "ESC (stability control) on/off", defaults: [key("KeyN")] },
         { id: "tuningMenu", group: "Other", label: "Tuning menu on/off", defaults: [key("KeyU")] },
         { id: "toggleTC", group: "Other", label: "Traction control on/off", defaults: [key("KeyC")] },
@@ -291,6 +291,8 @@ var Settings = (function() {
             // in a game that resumed the race while a question was still open, and in the video editor it left the editor
             var own = document.querySelector("#orDialog, .or-dialog, #replaysDialog, #garageDialog, #vehiclePicker, #replayLeave, .veShade");
             if(own) { if(own.id === "replayLeave") { own.remove(); event.preventDefault(); } return; }
+            // the tuning menu: Escape closes it (it opened the pause menu on top of it)
+            if(!menu && typeof Tuning !== "undefined" && Tuning.isVisible && Tuning.isVisible()) { Tuning.toggle(); event.preventDefault(); return; }
             // the main menu: Escape is a step back there (MainMenu.js), not the menu of a game that is not running
             if(!menu && document.getElementById("mainMenu")) return;
             // in a replay Escape goes back to the game
@@ -307,7 +309,9 @@ var Settings = (function() {
         if(target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return;
         if(!paused) {
             var freeCamTaken = typeof OpenRacer !== "undefined" && OpenRacer.FreeCam && OpenRacer.FreeCam.active && OpenRacer.FreeCam.takes[event.code];      // (Alt and Control move the free camera: not the menu of the browser)
-            if(event.code === "Space" || event.code.indexOf("Arrow") === 0 || freeCamTaken) event.preventDefault();
+            // (an F key of the game is not the browser's too: F3 opened the find bar, which took the keys, and the car no longer drove)
+            var fKey = /^F\d+$/.test(event.code) && Object.keys(bindings).some(function(id) { return bindings[id].some(function(b) { return b.d === "key" && b.code === event.code; }); });
+            if(event.code === "Space" || event.code.indexOf("Arrow") === 0 || freeCamTaken || fKey) event.preventDefault();
             keysDown[event.code] = true;
         }
     }, true);
@@ -318,9 +322,14 @@ var Settings = (function() {
         if(event.code === "MetaLeft" || event.code === "MetaRight") keysDown = {};
     }, false);
 
-    window.addEventListener("blur", function() {
+    // another window or tab took the focus in a race against others: the pause menu (the race went on, the AI drove away and the car rolled on without a driver)
+    function awayInRace() {
         keysDown = {};
-    }, false);
+        var racing = typeof race !== "undefined" && race && race.opponents && race.opponents.length && (race.state === "countdown" || race.state === "racing");
+        if(racing && !menu && !paused && !replayOn() && window.car) openMenu();
+    }
+    window.addEventListener("blur", awayInRace, false);
+    document.addEventListener("visibilitychange", function() { if(document.hidden) awayInRace(); }, false);
 
     // ---- options
 
@@ -394,8 +403,13 @@ var Settings = (function() {
 
     // ---- the menu
 
+    // the buttons and sticks of a controller with the standard layout by their names (the trigger was "Button 7"); a wheel keeps its numbers
+    var PAD_BUTTONS = ["A", "B", "X", "Y", "LB", "RB", "LT", "RT", "Back", "Start", "Left stick press", "Right stick press", "D-pad up", "D-pad down", "D-pad left", "D-pad right", "Home"];
+    var PAD_AXES = [["Left stick ←", "Left stick →"], ["Left stick ↑", "Left stick ↓"], ["Right stick ←", "Right stick →"], ["Right stick ↑", "Right stick ↓"]];
     function inputLabel(input) {
         if(input.d === "key") return keyLabel(input.code);
+        if(input.d === "pad" && input.t === "b" && PAD_BUTTONS[input.i]) return PAD_BUTTONS[input.i];
+        if(input.d === "pad" && input.t === "a" && PAD_AXES[input.i]) return PAD_AXES[input.i][input.s < 0 ? 0 : 1];
         if(input.t === "b") return "Button " + input.i;
         if(input.t === "v") return "Hat " + input.i + " (" + input.v + ")";
         return "Axis " + input.i + (input.s < 0 ? " −" : " +");
@@ -955,6 +969,14 @@ var Settings = (function() {
         mainMenu.style.cssText = "background: var(--line); margin-left: 8px;";
         mainMenu.textContent = "Main menu";
         mainMenu.onclick = function() { var leave = function() { window.location.href = window.location.pathname; }; if(OpenRacer.Replay && OpenRacer.Replay.confirmLeave) OpenRacer.Replay.confirmLeave(leave); else leave(); };
+        // start the race again from the grid (it was only in the results: a spin on lap 1 meant all the laps, or the main menu and every step again)
+        var restart = document.createElement("button");
+        restart.className = "big";
+        restart.style.cssText = "background: var(--line); margin-left: 8px;";
+        restart.textContent = "Restart";
+        restart.title = "Start again from the grid, with the same car, track and options";
+        restart.onclick = function() { var again = function() { window.location.reload(); }; if(OpenRacer.Replay && OpenRacer.Replay.confirmLeave) OpenRacer.Replay.confirmLeave(again); else again(); };
+        if(inGame && !replayOn()) buttons.appendChild(restart);
         if(inGame) buttons.appendChild(mainMenu);
         // a track with a drag strip: the Top 50 and the tickets, at the top
         if(typeof currentTrack !== "undefined" && currentTrack && currentTrack.dragstrip && OpenRacer.DragStrip) {
@@ -1330,13 +1352,32 @@ var Settings = (function() {
 
     // ---- actions without a car
 
-    handlers.toggleTC = function() { setOption("tc", !options.tc); };
-    handlers.toggleTwoStep = function() { setOption("twoStep", !options.twoStep); };
-    handlers.toggleLaunch = function() { setOption("launchControl", !options.launchControl); };
-    handlers.toggleABS = function() { setOption("abs", !options.abs); };
-    handlers.toggleESC = function() {
-        setOption("esc", !options.esc);
-    };
+    // a short line in the middle of the screen when a key turns a driver aid on or off (a C or a B next to W, A, S, D turned it off without a sign but a badge)
+    var noticeTimer = 0;
+    function notice(text) {
+        var el = document.getElementById("aidNotice");
+        if(!el) {
+            el = document.createElement("div");
+            el.id = "aidNotice";
+            el.style.cssText = "position: absolute; left: 50%; top: 38%; transform: translateX(-50%); z-index: 1001; padding: 8px 18px; border-radius: 6px; background: rgba(20, 24, 31, 0.85); " +
+                "color: #fff; font: bold 16px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; pointer-events: none;";
+            document.body.appendChild(el);
+        }
+        el.textContent = text;
+        el.style.display = "block";
+        clearTimeout(noticeTimer);
+        noticeTimer = setTimeout(function() { el.style.display = "none"; }, 1600);
+    }
+    function aid(option, name, action) {
+        setOption(option, !options[option]);
+        var keys = (bindings[action] || []).filter(function(b) { return b.d === "key"; }).map(function(b) { return keyLabel(b.code); });
+        notice(name + (options[option] ? " on" : " off") + (keys.length ? " (" + keys[0] + ")" : ""));
+    }
+    handlers.toggleTC = function() { aid("tc", "Traction control", "toggleTC"); };
+    handlers.toggleTwoStep = function() { aid("twoStep", "Two-step", "toggleTwoStep"); };
+    handlers.toggleLaunch = function() { aid("launchControl", "Launch control", "toggleLaunch"); };
+    handlers.toggleABS = function() { aid("abs", "ABS", "toggleABS"); };
+    handlers.toggleESC = function() { aid("esc", "Stability control (ESC)", "toggleESC"); };
     handlers.cameraSwitch = function() { setOption("camera", nextCamera(options.camera)); };
     handlers.parkingBrake = function() { if(options.camera === 4) return; if(window.car && window.car.toggleParkingBrake) window.car.toggleParkingBrake(); };     // (the free camera has P for its aim)
     handlers.freeCamAim = function() { if(options.camera === 4 && typeof OpenRacer !== "undefined" && OpenRacer.FreeCam) OpenRacer.FreeCam.toggleAim(); };
@@ -1346,7 +1387,7 @@ var Settings = (function() {
     handlers.hudToggle = function() { setOption("hud", !options.hud); };
     handlers.debugToggle = function() { setOption("debug", !options.debug); };
     handlers.photo = function() { if(typeof takePhoto === "function") takePhoto(); };
-    handlers.mute = function() { setOption("sound", !options.sound); };
+    handlers.mute = function() { aid("sound", "Engine sound", "mute"); };
     handlers.calibrate = function() { WheelControls.startCalibration(window.car); };
     handlers.wheelToggle = function() { WheelControls.toggle(); };
     handlers.startEngine = function() { if(window.car) window.car.startEngine(); };
@@ -1359,8 +1400,36 @@ var Settings = (function() {
     handlers.shiftUp = function() { if(window.car) window.car.shiftUp(); };
     handlers.shiftDown = function() { if(window.car) window.car.shiftDown(); };
 
+    // the first game on this computer: the keys that matter, for a while at the side (they were only on the last tab of the settings, in long rows)
+    function showKeysOnce() {
+        try { if(localStorage.getItem("openracer.keysShown")) return; localStorage.setItem("openracer.keysShown", "1"); } catch(e) { return; }
+        if(typeof TouchControls !== "undefined" && TouchControls.enabled && TouchControls.enabled()) return;      // (the touch buttons are on the screen)
+        var pad = typeof usingGamepad !== "undefined" && usingGamepad;
+        var of = function(id) {
+            var list = (bindings[id] || []).filter(function(b) { return pad ? b.d === "pad" : b.d === "key"; });
+            return list.map(inputLabel).slice(0, 2).join(" / ") || "–";
+        };
+        var rows = [["Throttle, brake", of("throttle") + ", " + of("brake")], ["Steer", of("steerLeft") + ", " + of("steerRight")], ["Handbrake", of("handbrake")],
+            ["Shift up, down", of("shiftUp") + ", " + of("shiftDown")], ["Back on the line", of("resetCar")], ["Repair", of("repairCar")], ["Camera", of("cameraSwitch")],
+            ["Pause, restart, all controls", pad ? "Start" : "Esc"]];
+        var box = document.createElement("div");
+        box.id = "keysOnce";
+        box.style.cssText = "position: absolute; right: 16px; bottom: 120px; z-index: 1001; padding: 12px 16px; border-radius: 8px; background: rgba(20, 24, 31, 0.88); color: #fff; " +
+            "font: 13px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; max-width: calc(100vw - 32px); cursor: pointer;";
+        box.title = "Click to close";
+        var html = "<div style=\"font-weight: bold; margin-bottom: 6px;\">Controls</div><table style=\"border-spacing: 10px 2px; margin: 0 -10px;\">";
+        rows.forEach(function(r) { html += "<tr><td style=\"opacity: 0.75;\"></td><td style=\"font-weight: bold;\"></td></tr>"; });
+        box.innerHTML = html + "</table>";
+        var cells = box.querySelectorAll("td");
+        rows.forEach(function(r, i) { cells[i * 2].textContent = r[0]; cells[i * 2 + 1].textContent = r[1]; });
+        box.onclick = function() { box.remove(); };
+        document.body.appendChild(box);
+        setTimeout(function() { box.remove(); }, 20000);
+    }
+
     load();
     if(options.camera === 1) options.camera = 2;      // the fixed camera is gone
+    if(options.camera === 4) options.camera = 2;      // (the free camera is not kept for the next game: it took W, A, S, D and Space, and the car did not drive)
     addStyle();
 
     return {
@@ -1379,6 +1448,7 @@ var Settings = (function() {
         toggleMenu: toggleMenu,
         closeMenu: closeMenu,
         holdPause: function(flag) { paused = !!flag; keysDown = {}; },        // the game stands still without the menu (the HUD editor)
-        bindings: function(id) { return bindings[id]; }
+        bindings: function(id) { return bindings[id]; },
+        showKeysOnce: showKeysOnce
     };
 })();
