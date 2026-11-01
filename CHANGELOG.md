@@ -17,6 +17,7 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
   - A new car whose id is that of another car does not take that car's setups (it reset the setup the other car had chosen in the game).
   - Deleting a car that comes with the game, without the local server, says it cannot be done (it said "Deleted from your garage").
   - A name without Latin letters asks for an id; the brakes start at 1 Nm (0 was refused at Save).
+  - With Dynamic wheels and no rim of the library, grey wheels show where the game puts the demo wheel (nothing showed where the wheels would stand).
   - **Export zip** in the car editor: the car as it is saved (car.json, the model, the driver, the setups, the picture) as a zip to share, also a car saved through the local server, which had no way to be shared.
   - A smaller window: narrower panels, the layers fold away below 1100 px, and the engine chart is pinned from 1300 px.
 - **Menus.** The step of the main menu is called *Setup*, as in the rest of the game (it said *tune*, with "car.json" in its text). The tuning menu hides a card with nothing for this car in it (a car had the card *Motorcycle*, empty), and its top line gives the top speed the car reaches (it gave the speed at the limiter in top gear: 341 km/h for the hatchback, whose CVT ends in an overdrive).

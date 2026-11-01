@@ -2469,6 +2469,20 @@ function updateLibraryPreview() {
     const lines = [];
     if (!library) {
         if (wheelMode() !== "model") for (const slot of SLOTS) wheelParts(slot).forEach((p) => { p.visible = false; libHidden.push(p); });        // (the demo wheel: the game takes the wheel parts of the model off, CarLoader.js)
+        // (and where the game puts its wheels, plainly: with Dynamic wheels and no rim of the library nothing showed where they stand, and a model that faced the
+        // other way or a wheelbase that was off could not be seen)
+        if (wheelMode() !== "model") {
+            const r = (num("tyre") || 0.65) / 2, bike = $("vehicleType") && $("vehicleType").value === "motorcycle";
+            for (const slot of SLOTS) {
+                if (bike && (slot === "FR" || slot === "RR")) continue;
+                const marker = new THREE.Mesh(new THREE.CylinderGeometry(r, r, Math.max(0.1, r * 0.6), 28), new THREE.MeshStandardMaterial({ color: 0x3a3f47, roughness: 0.9 }));
+                marker.rotation.z = Math.PI / 2;
+                marker.position.copy(formHub(slot));
+                libPreview.add(marker);
+            }
+            $("libInfo").textContent = "The demo wheel goes where the grey wheels are (the wheelbase and the tracks of the Chassis card). Choose a rim of the wheel library to see it there.";
+            return;
+        }
         $("libInfo").textContent = ""; return;
     }
     const cfg = { type: $("vehicleType") ? $("vehicleType").value : "car", wheels: { library } };
