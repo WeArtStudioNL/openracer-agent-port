@@ -9,7 +9,7 @@
 var MainMenu = (function() {
     var STORAGE_KEY = "openracer.lastChoice";
     var RACE_KEY = "openracer.raceOptions";
-    var raceOptions = { ai: 0, difficulty: "normal", ghost: true, records: true, laps: 0, wear: 1, damage: true, opp: [] };
+    var raceOptions = { ai: 0, difficulty: "normal", grid: "front", ghost: true, records: true, laps: 0, wear: 1, damage: true, opp: [] };
     try { raceOptions = Object.assign(raceOptions, JSON.parse(window.localStorage.getItem(RACE_KEY)) || {}); } catch(e) { /* no storage */ }
     function rememberRace() { try { window.localStorage.setItem(RACE_KEY, JSON.stringify(raceOptions)); } catch(e) { /* no storage */ } }
     var element = null;
@@ -838,7 +838,7 @@ var MainMenu = (function() {
         var chosen = mode === "race" ? oppList() : [];
         window.location.href = window.location.pathname + "?car=" + encodeURIComponent(choice.car) + "&track=" + encodeURIComponent(choice.track) +
             "&ai=" + Math.max(chosen.length, raceOptions.ai || 0) +          // (the places left empty get cars of the game, as the page says: they were dropped)
-            (chosen.length ? "&opp=" + chosen.map(function(o) { return encodeURIComponent(o.car) + (o.tune ? "~" + encodeURIComponent(o.tune) : ""); }).join(",") : "") + "&difficulty=" + raceOptions.difficulty + "&ghost=" + (raceOptions.ghost ? 1 : 0) + "&records=" + (raceOptions.records ? 1 : 0) +
+            (chosen.length ? "&opp=" + chosen.map(function(o) { return encodeURIComponent(o.car) + (o.tune ? "~" + encodeURIComponent(o.tune) : ""); }).join(",") : "") + "&difficulty=" + raceOptions.difficulty + "&grid=" + (raceOptions.grid || "front") + "&ghost=" + (raceOptions.ghost ? 1 : 0) + "&records=" + (raceOptions.records ? 1 : 0) +
             "&laps=" + (raceOptions.laps || 0) + "&wear=" + (raceOptions.wear === undefined ? 1 : raceOptions.wear) + "&damage=" + (raceOptions.damage === false ? 0 : 1) + aiCarsParameter();
     }
 
@@ -1319,6 +1319,7 @@ var MainMenu = (function() {
         setting("Laps", [[3, "3"], [5, "5"], [10, "10"], [25, "25"]], raceOptions.laps, function(v) { raceOptions.laps = v; });
         setting("Opponents", [[1, "1"], [2, "2"], [3, "3"], [5, "5"], [7, "7"]], raceOptions.ai, function(v) { raceOptions.ai = v; });
         setting("Difficulty", [["easy", "Easy"], ["normal", "Normal"], ["hard", "Hard"]], raceOptions.difficulty, function(v) { raceOptions.difficulty = v; });
+        setting("Your start", [["front", "Pole"], ["random", "Random"], ["back", "Last"]], raceOptions.grid || "front", function(v) { raceOptions.grid = v; });      // (always on pole: the race was won at the first bend)
         setting("Damage", [[true, "On"], [false, "Off"]], raceOptions.damage !== false, function(v) { raceOptions.damage = v; });      // off: rigid cars, nothing dents or comes off
         setting("Tyre wear and fuel", [[0, "Off"], [1, "On"], [3, "Fast"]], raceOptions.wear === undefined ? 1 : raceOptions.wear, function(v) { raceOptions.wear = v; });
         setting("Ghost of your best lap", [[true, "On"], [false, "Off"]], !!raceOptions.ghost, function(v) { raceOptions.ghost = v; });

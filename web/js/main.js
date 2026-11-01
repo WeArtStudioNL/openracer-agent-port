@@ -122,6 +122,7 @@ function raceOptionsFromQuery(query) {
     return {
         ai: Math.max(0, Math.min(7, parseInt(query.get("ai") || "0", 10) || 0)),
         difficulty: query.get("difficulty") || "normal",
+        grid: query.get("grid") || "front",                                // where the player starts: front (pole), back (last) or random
         ghost: query.get("ghost") !== "0",
         records: query.get("records") !== "0",
         laps: Math.max(0, Math.min(99, parseInt(query.get("laps") || "0", 10) || 0)), // 0: practice, no end
@@ -227,13 +228,35 @@ function setupRace() {
         var finish = Array.isArray(track.gates) && track.gates.length ? track.gates[0] : null;
         race.line.origin = finish && isFinite(finish.x) && isFinite(finish.z) ? race.line.nearest(finish.x, finish.z) : startIndex;
         var cars = race.allCars.length ? race.allCars : [carConfig];
+        // the places of the grid: 0 is the start (box 1), then the grid boxes of the track, else two by two behind it along the racing line (ahead of the start
+        // a car would be over the line, a lap down). On pole the player has the start and the AI the others in order, as it always was; from another place
+        // the places go front to back along the start (the boxes of a track are not always numbered that way), the player takes its own, the AI the others
+        function slotPlace(s) {
+            if(s === 0) return { x: start.x, z: start.z, heading: start.heading || 0 };
+            var box = grid[s];
+            if(box && isFinite(box.x) && isFinite(box.z)) return { x: box.x, z: box.z, heading: box.heading || 0 };      // its own grid box
+            var index = startIndex - Math.round((7 * s + 4) / race.line.step);
+            var p = race.line.point(index), next = race.line.point(index + 1);
+            var heading = Math.atan2(next.z - p.z, next.x - p.x);
+            var side = ((s - 1) % 2 === 0 ? 1 : -1) * 2.2;
+            return { x: p.x - Math.sin(heading) * side, z: p.z + Math.cos(heading) * side, heading: heading };
+        }
+        var slots = [];
+        for(var si = 0; si <= options.ai; si++) slots.push(slotPlace(si));
+        var playerSlot = 0;
+        if(options.grid === "back" || options.grid === "random") {
+            var hx = Math.cos(start.heading || 0), hz = Math.sin(start.heading || 0);
+            var ahead = function(q) { return (q.x - start.x) * hx + (q.z - start.z) * hz; };
+            slots.sort(function(a, b) { return ahead(b) - ahead(a); });
+            playerSlot = options.grid === "back" ? options.ai : Math.floor(Math.random() * (options.ai + 1));
+        }
         if(options.aiCars) { var chosen = cars.filter(function(c) { return options.aiCars.indexOf(c.id) >= 0; }); if(chosen.length) cars = chosen; }
         else {
             // the cars of the player's kind: a car against cars, a kart against karts, a motorcycle against motorcycles (the first cars of the list raced: a muscle car
             // against a kart and a dune buggy, lapped or out of reach); with no other of its kind, the player's own car
             var kind = function(c) { return c.type === "motorcycle" ? "bike" : (c.chassis && c.chassis.mass < 300 ? "kart" : "car"); };
-            var mine = kind(carBaseConfig || carConfig);
-            var alike = cars.filter(function(c) { return kind(c) === mine && c.id !== carConfig.id; });
+            var own = kind(carBaseConfig || carConfig);
+            var alike = cars.filter(function(c) { return kind(c) === own && c.id !== carConfig.id; });
             cars = alike.length ? alike : [carBaseConfig || carConfig];
         }
         for(var i = 0; i < options.ai; i++) {
@@ -249,18 +272,12 @@ function setupRace() {
             opponent.pitBox = race.pitBoxes[i + 1] || null;
             opponent.pitPath = race.pitPath;                      // (its own box: it drives to it; without one it uses the pit lane, if the track has one)
             opponent.raceLaps = options.laps;
-            var box = grid[i + 1];
-            if(box && isFinite(box.x) && isFinite(box.z)) opponent.place(box.x, box.z, box.heading || 0);      // its own grid box
-            else {
-                // no box for it: on the grid behind the player, two by two, along the racing line (ahead of the player it would be over the line, a lap down)
-                var index = startIndex - Math.round((7 * (i + 1) + 4) / race.line.step);
-                var p = race.line.point(index), next = race.line.point(index + 1);
-                var heading = Math.atan2(next.z - p.z, next.x - p.x);
-                var side = (i % 2 === 0 ? 1 : -1) * 2.2;
-                opponent.place(p.x - Math.sin(heading) * side, p.z + Math.cos(heading) * side, heading);
-            }
+            var slot = slots[i < playerSlot ? i : i + 1];
+            opponent.place(slot.x, slot.z, slot.heading);
             race.opponents.push(opponent);
         }
+        // the player in its place on the grid when that is not pole (the AI that is placed first is the fastest: on pole it was always behind the player)
+        if(playerSlot > 0 || slots[0].x !== start.x || slots[0].z !== start.z) car.place(slots[playerSlot].x, slots[playerSlot].z, slots[playerSlot].heading);
         car.raceCount = race.opponents.length + 1;
     }
     if(options.laps > 0) startRace(options.laps);
@@ -304,7 +321,10 @@ function beginFlyby() {
     var front = 0;
     race.opponents.forEach(function(o) { front = Math.max(front, (o.vehicle.px - s.x) * dx + (o.vehicle.pz - s.z) * dz); });
     front += 14;
-    var back = -14;
+    // (to behind the last car, the player too: from the back of the grid the fly-by ended before it)
+    var back = 0;
+    race.opponents.concat([{ vehicle: car.vehicle }]).forEach(function(o) { back = Math.min(back, (o.vehicle.px - s.x) * dx + (o.vehicle.pz - s.z) * dz); });
+    back -= 14;
     var state = race.flyby = { time: 0, skip: false };
     function skip() { state.skip = true; }
     state.keydown = function(e) { if(e.code === "Enter" || e.code === "Space") skip(); };
