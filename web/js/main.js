@@ -564,8 +564,10 @@ function startSkidpad() {
     sp.overlay = overlay;
     // the car's keys and pads do nothing: the skidpad drives
     var targetSpeed = 3, radiusIndex = 0;
-    car.pollInput = function() {
-        var v = this.vehicle;
+    car.inputLocked = true;
+    // (per second, not per frame: on a screen of 144 Hz the speed went up 2.4 times as fast, and the same car gave another g on another computer)
+    car.pollInput = function(delta) {
+        var v = this.vehicle, dt = delta > 0 ? Math.min(0.1, delta) : 1 / 60;
         this.handbrake = false; this.reverse = false; this.neutral = false; this.parkingLock = false;
         this.turnLeft = this.turnRight = false;
         if(!sp.running) { this.accelerate = false; this.brake = true; this.throttle = 0; return; }
@@ -582,9 +584,9 @@ function startSkidpad() {
         // nose that points outside the tangent both ask for more of it
         var wanted = base + 0.08 * (r - R) + 0.6 * headingError;
         wanted = Math.max(-this.turnLimit, Math.min(this.turnLimit, wanted));
-        this.turnAngle += (wanted - this.turnAngle) * 0.3;
+        this.turnAngle += (wanted - this.turnAngle) * (1 - Math.pow(0.7, dt * 60));
         // the speed: up by a quarter of a metre per second every second
-        targetSpeed += 0.25 / 60;
+        targetSpeed += 0.25 * dt;
         // the throttle is set, not tapped: a little more than it takes to hold the speed, in the measure that the car is behind
         var error = targetSpeed - speed;
         this.accelerate = this.brake = false;
@@ -599,11 +601,15 @@ function startSkidpad() {
         if(speed > 2 && (Math.abs(r - R) > 6 || Math.abs(slip) > 0.25)) skidpadDone();
         // a car that understeers wide does not let go: it just cannot go faster; when the speed stays three metres per second
         // behind what is asked for three seconds, that is the limit too
-        sp.stalled = targetSpeed - speed > 3 ? (sp.stalled || 0) + 1 / 60 : 0;
+        sp.stalled = targetSpeed - speed > 3 ? (sp.stalled || 0) + dt : 0;
         if(sp.stalled > 3) skidpadDone();
-        overlay.innerHTML = "<b>Skidpad</b> · circle of " + R + " m<br>" + (ay / 9.81).toFixed(2) + " g at " + Math.round(speed * 3.6) + " km/h · best " + (sp.best / 9.81).toFixed(2) + " g";
+        overlay.innerHTML = "<b>Skidpad</b> · circle of " + circle() + "<br>" + (ay / 9.81).toFixed(2) + " g at " + speedText(speed) + " · best " + (sp.best / 9.81).toFixed(2) + " g";
     };
     car.vehicle.tcEnabled = Settings.option("tc"); car.vehicle.escEnabled = false;
+    // the speed and the circle in the units of the settings (km/h and m, or mph and ft: it was always km/h)
+    function imperial() { return Settings.option("units") === "imperial"; }
+    function speedText(speed) { return imperial() ? Math.round(speed * 2.23694) + " mph" : Math.round(speed * 3.6) + " km/h"; }
+    function circle() { return imperial() ? Math.round(R * 3.28084) + " ft" : R + " m"; }
 
     function skidpadDone() {
         sp.running = false;
@@ -621,7 +627,7 @@ function startSkidpad() {
         var verdict = g > 1.1 ? "a racing car on slicks" : g > 0.95 ? "a sports car" : g > 0.85 ? "a good road car" : g > 0.75 ? "an ordinary road car" : "a van";
         panel.innerHTML = "<div style=\"font-size: 15px; color: var(--muted); letter-spacing: 2px;\">SKIDPAD · " + escapeHtml(carConfig.name || carConfig.id) + (skidpadSurface ? " · " + escapeHtml(skidpadSurface.name.toUpperCase()) : "") + "</div>" +
             "<div style=\"font-size: 54px; font-weight: bold; margin: 6px 0 2px;\">" + g.toFixed(2) + " g</div>" +
-            "<div style=\"color: var(--head); margin-bottom: 18px;\">held at " + Math.round(sp.bestSpeed * 3.6) + " km/h on the circle of " + R + " m · like " + verdict + "</div>" +
+            "<div style=\"color: var(--head); margin-bottom: 18px;\">held at " + speedText(sp.bestSpeed) + " on the circle of " + circle() + " · like " + verdict + "</div>" +
             "<button id=\"skidReset\" style=\"padding: 9px 18px; margin: 0 4px; font: bold 15px Arial; background: var(--accent); color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Reset</button>" +
             "<button id=\"skidTune\" style=\"padding: 9px 18px; margin: 0 4px; font: bold 15px Arial; background: var(--line); color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Tune</button>" +
             "<button id=\"skidMenu\" style=\"padding: 9px 18px; margin: 0 4px; font: bold 15px Arial; background: var(--line); color: #fff; border: 0; border-radius: 6px; cursor: pointer;\">Back to the menu</button>";

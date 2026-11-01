@@ -779,8 +779,9 @@ OpenRacer.Car = function( config, domElement ) {
             placed = true;
             this.place(startX, startZ, startHeading);
         }
-        this.pollInput();
-        gamepadUpdate(delta);
+        this.pollInput(delta);
+        // (a mode that drives the car itself, the skidpad: the stick, the triggers and the touch controls do not take it over; a touch of the stick steered it off the circle)
+        if(!this.inputLocked) gamepadUpdate(delta);
         // on the grid before the start of a race: the brakes are on, the engine can be revved
         if(this.held) { this.brakePedal = 1; this.handbrake = true; this.accelerate = false; this.throttle = Math.min(this.throttle, 0.6); }
         else if(wasHeld) { this.brakePedal = 0; this.handbrake = false; this.brake = false; }   // GO: the brake of the grid is let go
@@ -809,6 +810,8 @@ OpenRacer.Car = function( config, domElement ) {
         if(this.reset) {
             // one reset per key press: back to the saved place (the start when none was saved), in the state that the car is in
             this.reset = false;
+            // (the skidpad: R starts the test again, from its place on the circle; it moved the car and the test went on, and ended with a result)
+            if(this.inputLocked && typeof race !== "undefined" && race && race.skidpadReset) { race.skidpadReset(); return; }
             this.returnToSaved();
             this.recoverCrash();
             return;

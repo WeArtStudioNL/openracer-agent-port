@@ -378,11 +378,14 @@ OpenRacer.DragStrip = (function () {
             var runs = OpenRacer.Records.dragRuns(track.id, chosen).slice(0, 50);
             if (!runs.length) { var empty = document.createElement("div"); empty.className = "empty"; empty.textContent = "No runs over this distance yet. Drive the strip and your runs are kept here (while \"Save lap records\" is on in the main menu)."; body.appendChild(empty); return; }
             var table = document.createElement("table");
-            table.innerHTML = "<tr><th>#</th><th class=\"l\">Car</th><th>1/4 mile</th><th>2/4 mile</th><th>Top speed</th><th></th></tr>";
+            // (the time of the run at this distance, its R/T, and the 1/4 and 1/2 mile only where the strip reaches them: a strip of 1/8 mile or 1000 ft showed "–" in every row)
+            var withQuarter = chosen > 402.336 + 0.5, withHalf = chosen > 804.672 + 0.5;
+            table.innerHTML = "<tr><th>#</th><th class=\"l\">Car</th><th>R/T</th><th>Time</th>" + (withQuarter ? "<th>1/4 mile</th>" : "") + (withHalf ? "<th>1/2 mile</th>" : "") + "<th>Top speed</th><th></th></tr>";
             runs.forEach(function (run, n) {
                 var tr = document.createElement("tr");
-                var t = function (v) { return v === null || v === undefined ? "–" : v.toFixed(3) + " s"; };
-                tr.innerHTML = "<td>" + (n + 1) + "</td><td class=\"l\"></td><td>" + t(run.quarter) + "</td><td>" + t(run.half) + "</td><td>" + Math.round(run.topSpeed * (metric ? 3.6 : 2.2369362920544)) + (metric ? " km/h" : " mph") + "</td><td></td>";
+                var t = function (v) { return v === null || v === undefined || !isFinite(v) ? "–" : v.toFixed(3) + " s"; };
+                tr.innerHTML = "<td>" + (n + 1) + "</td><td class=\"l\"></td><td>" + t(run.reaction) + "</td><td>" + t(run.time) + "</td>" + (withQuarter ? "<td>" + t(run.quarter) + "</td>" : "") + (withHalf ? "<td>" + t(run.half) + "</td>" : "") +
+                    "<td>" + Math.round(run.topSpeed * (metric ? 3.6 : 2.2369362920544)) + (metric ? " km/h" : " mph") + "</td><td></td>";
                 var link = document.createElement("a");
                 link.className = "car"; link.textContent = run.car || run.carId; link.title = "Car and tuning of this run";
                 link.addEventListener("click", function () { showCar(run); });
@@ -459,7 +462,7 @@ OpenRacer.DragStrip = (function () {
         if (state === "approach" || state === "void") {
             html += "<div class=\"distance\">" + (s <= 0 ? "Start line: " + distanceText(s, metric) : "Past the line") + "</div>";
         }
-        if (state === "void") html += "<div class=\"note bad\">Drive back behind the line, then come up slowly</div>";
+        if (state === "void") html += "<div class=\"note bad\">Drive back behind the line (hold the brake to reverse), then come up slowly</div>";
         if (state === "approach") html += "<div class=\"note\">" + (s > STAGE_MIN && s <= STAGE_MAX ? "Stand still at the line" : "Front wheels to the line, slowly") + "</div>";
         if (state === "ready") html += "<div class=\"distance\">Get ready…</div><div class=\"note\">Hold the car still at the line</div>";
         // the lights are on the tree beside the strip (a pole in the scene), not in the HUD
@@ -468,7 +471,7 @@ OpenRacer.DragStrip = (function () {
             var green = state === "go";
             setLamps({ white: true, amber: state === "tree" ? Math.min(3, Math.floor((clock - tTree) / AMBER)) : (green ? 3 : 0), green: green, red: state === "false" });
         } else setLamps(null);
-        if (state === "false") html += "<div class=\"note bad\">FALSE START</div><div class=\"note\">Drive back behind the line and come up slowly</div>";
+        if (state === "false") html += "<div class=\"note bad\">FALSE START</div><div class=\"note\">Drive back behind the line (hold the brake to reverse) and come up slowly</div>";
         if (html !== lastHtml) { lastHtml = html; hud.innerHTML = html; }
         hud.style.display = show && html ? "block" : "none";
     }
@@ -527,6 +530,9 @@ OpenRacer.DragStrip = (function () {
                 if (clock - tTree >= 3 * AMBER + AMBER) { state = "go"; tGreen = tTree + 4 * AMBER; t0 = null; results.forEach(function (r) { r.time = null; r.speed = null; }); prevT = clock; prevS = s; prevV = forwardSpeed; }
                 break;
             case "go":
+                // (no launch after the green: backed off, out of the lane, or still standing after five seconds is no run; a crossing minutes later was timed, with that R/T)
+                if (t0 === null && (s < STAGE_MIN - 0.5 || !inLane)) { state = "approach"; break; }
+                if (t0 === null && clock - tGreen > 5 && s < stagedS + ROLLOUT) { setState("void"); break; }
                 if (t0 === null) {
                     if (s >= stagedS + ROLLOUT) {
                         var f = (stagedS + ROLLOUT - prevS) / Math.max(1e-6, s - prevS);
@@ -538,15 +544,17 @@ OpenRacer.DragStrip = (function () {
                     topSpeed = Math.max(topSpeed, speed);
                     for (var i = 0; i < results.length; i++) {
                         var r = results[i];
-                        if (r.time === null && s >= r.metres) {
-                            var k = (r.metres - prevS) / Math.max(1e-6, s - prevS);
+                        // (from where the car was staged: deep in the 65 cm of the beams it had up to 0.65 m less to go, 0.05 s on the 60 ft)
+                        var at = r.metres + stagedS;
+                        if (r.time === null && s >= at) {
+                            var k = (at - prevS) / Math.max(1e-6, s - prevS);
                             k = Math.max(0, Math.min(1, k));
                             r.time = prevT + (clock - prevT) * k - t0;
                             r.speed = prevV + (forwardSpeed - prevV) * k;
                             if (r.label === "1/4 mile" || (r.finish && strip.length < 402)) flashTime(r);
                         }
                     }
-                    if (s >= strip.length) { state = "finished"; finishRun(car); }
+                    if (s >= strip.length + stagedS) { state = "finished"; finishRun(car); }
                     else if (s < stagedS - 1 || !inLane && Math.abs(side) > strip.width) setState("void");   // back, or off the strip: no run
                 }
                 break;
@@ -557,7 +565,8 @@ OpenRacer.DragStrip = (function () {
         }
         prevT = clock; prevS = s; prevV = forwardSpeed;
         // at the line the brake key holds the car for the start: the automatic gearbox must not turn it into reverse (Car.js)
-        holding = state === "ready" || state === "tree" || state === "go" || state === "false" || (state === "approach" && s > -2 && s < 1);
+        // (not after a false start, a run that was off, or a car a little past the line: there the brake has to reverse it back, and a gamepad has no other way)
+        holding = state === "ready" || state === "tree" || (state === "go" && t0 === null) || (state === "approach" && s > STAGE_MIN - 0.3 && s <= STAGE_MAX);
         render(s, clock);
     }
 
