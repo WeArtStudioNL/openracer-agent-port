@@ -910,7 +910,8 @@ OpenRacer.Setups = (function () {
         use: function (id, name) {
             var d = read(id), next = name && find(id, name) ? name : null;
             // (the tuning on the car goes only with another setup: a click on the setup that was chosen already threw the changes away without a word)
-            if ((d.active || null) === next) return;
+            var current = d.active && find(id, d.active) ? d.active : null;           // (a setup that is gone counts as Default, as active() says)
+            if (current === next) return;
             d.active = next; write(id, d);
             try { window.localStorage.removeItem(CURRENT + id); } catch(e) {}
         }

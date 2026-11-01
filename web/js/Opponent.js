@@ -146,7 +146,8 @@ OpenRacer.Opponent = function (config, line, options) {
         var factor = learn ? function (i) { var f = learn[Math.floor(i / SEG) % learn.length]; return f > 1 ? 1 + (f - 1) * share : f; } : null;      // (slower where it went wide or crashed: all of it)
         brakeAccel = 9.81 * braking * self.skill * wetness * speedsTyres;
         speeds = line ? line.computeSpeeds(9.81 * lateral * self.skill * wetness * speedsTyres, 9.81 * braking * self.skill * wetness * speedsTyres, 90, function (name) { return typeof getSurface === "function" && name ? getSurface(name).static / roadGrip : 1; }, factor,
-            self.vehicle && self.vehicle.mass > 0 ? ((self.vehicle.downforceFront || 0) + (self.vehicle.downforceRear || 0)) / self.vehicle.mass : 0) : null;      // (the downforce: more grip the faster)
+            // (a grip measured on the skidpad has the downforce at that speed in it already: not twice)
+            !measuredGrip && self.vehicle && self.vehicle.mass > 0 ? ((self.vehicle.downforceFront || 0) + (self.vehicle.downforceRear || 0)) / self.vehicle.mass : 0) : null;      // (the downforce: more grip the faster)
         learnChanged = false; learnBuilt = self.clock || 0;
     }
     buildSpeeds();

@@ -221,9 +221,13 @@ var Tuning = (function() {
     // else the car as it was made. The reset arrow of a value still goes back to the car as it was made.
     var referenceValues = null;
     // the tuning on the car differs from the setup that is chosen (as the "(changed)" of the list: gen_power and gen_peak_rpm follow from the curve)
-    function unsavedChanges() {
-        var ref = reference();
-        return Object.keys(base).some(function(key) { return key !== "gen_power" && key !== "gen_peak_rpm" && JSON.stringify(values[key]) !== JSON.stringify(ref[key]); });
+    function unsavedChanges() { return differs(reference()); }
+    // the values differ from those of a setup: the keys of the car and all the gears of each (a setup with another number of gears than the car of the start was
+    // "changed" at once, or an edit of its sixth gear was not seen)
+    function differs(ref) {
+        var gearKey = /^gear\d+$/;
+        if(JSON.stringify(OpenRacer.CarTuning.gearsOf(values)) !== JSON.stringify(OpenRacer.CarTuning.gearsOf(ref))) return true;
+        return Object.keys(base).some(function(key) { return !gearKey.test(key) && key !== "gen_power" && key !== "gen_peak_rpm" && JSON.stringify(values[key]) !== JSON.stringify(ref[key]); });
     }
     function reference() {
         if(referenceValues) return referenceValues;
@@ -231,7 +235,12 @@ var Tuning = (function() {
         var active = OpenRacer.Setups && config ? OpenRacer.Setups.active(config.id) : null;
         var cfg = active ? OpenRacer.Setups.configOf(config.id, active, config) : null;
         // (Default is the car as made, not the setup this start was on: every value of that setup was orange, and ↺ went to it)
-        try { referenceValues = Object.assign({}, base, fromConfig(cfg ? Object.assign({}, original, cfg) : original)); } catch(e) { referenceValues = base; }
+        // (without the gears of the car of the start: the setup brings all of its own)
+        try {
+            var withoutGears = Object.assign({}, base);
+            Object.keys(withoutGears).forEach(function(key) { if(/^gear\d+$/.test(key)) delete withoutGears[key]; });
+            referenceValues = Object.assign(withoutGears, fromConfig(cfg ? Object.assign({}, original, cfg) : original));
+        } catch(e) { referenceValues = base; }
         return referenceValues;
     }
     function changed(key) {
@@ -292,7 +301,7 @@ var Tuning = (function() {
             // to zero than the slider itself: a camber of -8 became -6, a ride height of -100 mm became -75)
             var lo = def[3] < 0 ? def[3] * 2 : def[3] / 2, hi = def[4] > 0 ? def[4] * 2 : def[4] / 2;
             // (a share in % stays a share: a brake bias of 655 % gave the rear brakes a negative torque, a front weight of 150 % the rear wheels a negative mass)
-            if(def[2] === "%" && def[3] >= 0 && def[4] <= 100) { lo = 0; hi = 100; }
+            if(def[2] === "%" && def[3] >= 0 && def[4] <= 100) { lo = Math.max(0, lo); hi = Math.min(100, hi); }       // (the floor as it was: 0 % front weight left an axle without mass)
             if(Number.isFinite(value)) set(key, Math.min(hi, Math.max(lo, value)));
             number.blur();
         });
@@ -1000,7 +1009,7 @@ var Tuning = (function() {
             var o = document.createElement("option");
             o.value = name;
             var same = true;
-            if(name === active) { var cfg = OpenRacer.Setups.configOf(config.id, name, config), saved = cfg ? fromConfig(Object.assign({}, original, cfg)) : null; if(saved) Object.keys(saved).forEach(function(key) { if(key in base && key !== "gen_power" && key !== "gen_peak_rpm" && JSON.stringify(saved[key]) !== JSON.stringify(values[key])) same = false; }); }       // (those two follow from the torque curve: they are not part of what is saved)
+            if(name === active) { var cfg = OpenRacer.Setups.configOf(config.id, name, config), saved = cfg ? fromConfig(Object.assign({}, original, cfg)) : null; if(saved) same = !differs(Object.assign({}, base, saved)); }       // (gen_power and gen_peak_rpm follow from the torque curve: they are not part of what is saved)
             var ship = OpenRacer.Setups.shippedState(config.id, name);
             o.textContent = name + (ship ? " · with the car" : "") + (name === active && !same ? " (changed)" : "");
             setupSelect.appendChild(o);

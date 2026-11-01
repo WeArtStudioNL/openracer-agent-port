@@ -33,7 +33,8 @@ OpenRacer.PadNav = (function() {
         var settings = document.getElementById("settingsMenu");
         if (settings) return settings;
         // the tuning menu while it is open (the D-pad, A and B did nothing in it: in free drive they drove the car)
-        if (typeof Tuning !== "undefined" && Tuning.isVisible && Tuning.isVisible()) return document.getElementById("tuning");
+        // (only while it holds the game still, in a race: in free drive the stick and A also drive the car, and A on a focused Save overwrote the setup)
+        if (typeof Tuning !== "undefined" && Tuning.isVisible && Tuning.isVisible() && Settings.isPaused && Settings.isPaused()) return document.getElementById("tuning");
         // the results of a race (Race again, Main menu): under the pause menu and in a replay, where they are hidden, they are not the controller's
         var results = document.getElementById("raceResults");
         if (results && !document.body.classList.contains("replaying") && results.offsetParent) return results;
@@ -144,8 +145,8 @@ OpenRacer.PadNav = (function() {
         // the fly-by over the grid before a race: A skips it, as Enter does
         if (!root && a && typeof race !== "undefined" && race && race.state === "flyby" && race.flyby) { race.flyby.skip = true; return; }
         if (!root) { held.dir = null; return; }
-        if (b) { key("Escape"); return; }
-        if (a) { choose(root); return; }
+        if (b) { lastUsed = Date.now(); key("Escape"); return; }
+        if (a) { lastUsed = Date.now(); choose(root); return; }
         var dir = direction(p);
         if (!dir) { held.dir = null; return; }
         if (dir !== held.dir) { held.dir = dir; held.next = t + FIRST_REPEAT; step(root, dir); }
