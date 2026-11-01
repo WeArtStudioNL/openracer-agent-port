@@ -53,7 +53,11 @@ const textureCache = new Map(), materialCache = new Map();
 let maxAnisotropy = 1;
 function texture(name) {
     if (!textureCache.has(name)) {
-        const t = new THREE.TextureLoader().load(TEXTURE_PATH + name + ".jpg");
+        // (the picture is loaded before a glb is written from it: prefabGlb waits for this promise)
+        let done, failed;
+        const loaded = new Promise((resolve, reject) => { done = resolve; failed = reject; });
+        const t = new THREE.TextureLoader().load(TEXTURE_PATH + name + ".jpg", () => done(), undefined, () => failed(new Error("the texture " + name + " could not be loaded")));
+        t.userData.loaded = loaded;
         t.wrapS = t.wrapT = THREE.RepeatWrapping;
         t.colorSpace = THREE.SRGBColorSpace;
         t.anisotropy = maxAnisotropy;
@@ -204,6 +208,26 @@ function defaultDesign() {
         nodes.push({ x: Math.round(Math.cos(a) * 120), y: 0, z: Math.round(Math.sin(a) * 70), width: 12 });
     }
     return { nodes, closed: true, prefabs: [], textures: Object.assign({}, DEFAULT_TEXTURES) };
+}
+
+// ---- prefabs as a glb of their own (the objects of a track with its own model: track-editor.js puts them in the track like any model)
+// the prefabs to choose from, with what the editor shows for them
+export const PREFAB_TYPES = Object.keys(PREFABS).map((type) => ({ type, label: PREFABS[type].label, icon: PREFABS[type].icon, role: PREFABS[type].role, textures: TEXTURE_CHOICES[type] || null }));
+export { TEXTURE_CHOICES };
+
+// The glb of one prefab (type, and the texture it has a choice of): a binary glb as the exporter writes it. The pictures of its textures are loaded first,
+// the exporter needs them. The parts keep the names of their materials, so the game finds the surfaces (see the prefab's role).
+export async function prefabGlb(type, texture) {
+    const def = PREFABS[type];
+    if (!def) throw new Error("there is no prefab “" + type + "”");
+    const group = def.make(texture);
+    group.name = "prefab_" + type;
+    group.updateMatrixWorld(true);
+    const pictures = new Set();
+    group.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { if (m.map && m.map.userData.loaded) pictures.add(m.map); }); });
+    await Promise.all([...pictures].map((t) => t.userData.loaded));
+    const glb = await new GLTFExporter().parseAsync(group, { binary: true });
+    return new Blob([glb], { type: "model/gltf-binary" });
 }
 
 export function createDesign(api) {

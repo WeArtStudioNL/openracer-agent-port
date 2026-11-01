@@ -12,7 +12,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { installZoomToMouse } from "./zoom-to-mouse.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
-import { createDesign } from "./track-design.js";
+import { createDesign, PREFAB_TYPES, TEXTURE_CHOICES, prefabGlb } from "./track-design.js";
 import { buildTerrain, readHeights } from "./heightmap.js";
 
 const $ = (id) => document.getElementById(id);
@@ -1103,6 +1103,7 @@ function renderObjects() {
     const holder = $("objectModels");
     holder.innerHTML = "";
     renderLibrary();
+    renderPrefabs();
     for (const [name, model] of (objectState.models.has(objectState.selected) ? [[objectState.selected, objectState.models.get(objectState.selected)]] : [])) {
         const row = document.createElement("div");
         row.className = "gate";
@@ -1262,6 +1263,53 @@ async function useLibraryModel(entry) {
     setMode("object");
     status("Placing “" + entry.name + "”: press on the road and drag to say which way it faces. Escape goes back to Look.", "ok");
 }
+// ---- the prefabs of the track designer, placed as objects: a glb of the prefab (track-design.js) with the texture chosen, put in the track like a model. The kind follows the
+// role of the prefab: scenery stands in the track and is hit (static), decor is only drawn (decor). The same model is used again when it is in the track already.
+function renderPrefabs() {
+    const holder = $("objectPrefabs");
+    if (!holder) return;
+    holder.innerHTML = "";
+    PREFAB_TYPES.forEach((p) => {
+        const div = document.createElement("div");
+        div.className = "libtile";
+        div.title = p.label + (p.role === "scenery" ? ": stands in the track and is hit" : ": only drawn") + " — click to place it";
+        const label = document.createElement("div");
+        label.className = "name";
+        label.textContent = p.icon + " " + p.label;
+        div.appendChild(label);
+        let choice = null;
+        if (p.textures) {
+            choice = document.createElement("select");
+            choice.style.cssText = "position:absolute; left:4px; bottom:20px; right:4px; font-size:11px";
+            choice.title = "The texture of the " + p.label.toLowerCase();
+            p.textures.forEach((t) => { const o = document.createElement("option"); o.value = t; o.textContent = t; choice.appendChild(o); });
+            choice.onclick = (e) => e.stopPropagation();
+            div.appendChild(choice);
+        }
+        div.style.position = "relative";
+        div.onclick = () => usePrefab(p, choice ? choice.value : null);
+        holder.appendChild(div);
+    });
+}
+async function usePrefab(p, texture) {
+    const suffix = texture ? "-" + texture : "";
+    const name = OBJECT_PREFIX + "prefab-" + p.type + suffix + ".glb";
+    if (!objectState.models.has(name)) {
+        let model = null;
+        try {
+            const blob = await prefabGlb(p.type, texture || undefined);
+            model = await makeObjectModel(new File([blob], name, { type: "model/gltf-binary" }), name, p.role === "scenery" ? "static" : "decor", 0);
+        } catch (error) { status("The prefab “" + p.label + "” could not be made: " + error.message, "error"); return; }
+        if (!model) { status("The prefab “" + p.label + "” could not be read.", "error"); return; }
+        model.prefab = { type: p.type, texture: texture || null };
+        objectState.models.set(name, model);
+    }
+    objectState.selected = name;
+    renderObjects();
+    setMode("object");
+    status("Placing “" + p.label + "”: press on the road and drag to say which way it faces. Escape goes back to Look.", "ok");
+}
+
 function renderLibrary() {
     const holder = $("objectLibrary");
     if (!holder) return;

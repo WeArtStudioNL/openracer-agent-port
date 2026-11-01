@@ -4,6 +4,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 ## Unreleased
 
+- **Prefabs on a track with its own model.** The track editor's Objects card has a Prefabs row: the walls, tyre stacks, cones, trees, houses and the other prefabs of the track designer can be placed on a track made in Blender (before, they only showed on tracks drawn with nodes). A wall or a cone is hit by the cars; a tree or a bush is only drawn. Placed prefabs are saved and listed under Objects like any other model.
 - **Off-road tyres with dynamic wheels.** A custom tyre now has a second slider next to the rubber: **tread**, from road (0) over all-terrain (50) to knobbly (100). The more tread, the more grip on loose ground (grass, sand, gravel, mud, dirt; up to 1.7 times), the less rolling resistance there, and the more grip in a slide; on tarmac it grips less (down to 0.82) and rolls heavier. A knobbly tyre with road rubber is exactly the *Off-road (knobbly)* kind of tyre. It is in the tuning menu and in the car editor.
 - The look of a custom tyre follows its pattern: slick, road, all-terrain (blocks) or knobbly (big lugs). `wheels.json` has a `treads` list with an entry for every pattern; give one a `"file"` (a .glb) and that model is fitted between the shells in place of the one made from numbers.
 
