@@ -139,6 +139,7 @@
             <div class="body">
                 <label class="check"><input type="checkbox" id="envOn" checked> Set the sky and the light of this track</label>
                 <p class="sub">A track of the old format has its own sky in its model: leave this off to keep it. Switch off the colours of the surfaces to see the model in this light.</p>
+                <p class="sub"><b>In the game</b> the sky, the fog, the sun and the time of day come from the player's weather and time settings, the same on every track. Of this card the game uses only the <b>strength</b> of the sun and of the ambient light (how bright the materials of this track want the light). The rest is the light in this editor, and for an older version of the game.</p>
                 <div id="envFields">
                     <div class="row">
                         <div><label>Sky overhead</label><input type="color" id="skyTop"></div>
@@ -146,7 +147,7 @@
                     </div>
                     <div><label>Picture of the whole sky instead (equirectangular, 2:1)</label><input type="file" id="skyImage" accept=".jpg,.jpeg,.png,.webp"></div>
                     <div class="buttons"><span class="hint" id="skyImageName"></span><button class="small ghost" id="skyImageClear">No picture</button></div>
-                    <label class="check"><input type="checkbox" id="fogOn"> Fog (seen in the game, not here)</label>
+                    <label class="check"><input type="checkbox" id="fogOn"> Fog (not here, and the game uses the fog of its weather)</label>
                     <div class="row">
                         <div><input type="color" id="fogColor"><div class="hint">colour</div></div>
                         <div><input type="number" id="fogNear" min="0" step="50"><div class="hint">from (m)</div></div>
