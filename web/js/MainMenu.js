@@ -154,6 +154,8 @@ var MainMenu = (function() {
             "#garageDialog .titleRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 4px; padding-right: 90px; } #garageDialog .titleRow h2 { margin: 0 12px 0 0; }" +
             ".or-dialog .row, #replaysDialog .row, #garageDialog .row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; }" +
             "#replaysDialog .row .name, #garageDialog .row .name { flex: 1; min-width: 0; }" +
+            // (a phone: the buttons go under the name; the row of four buttons pushed the name to nothing and the box scrolled sideways)
+            "@media (max-width: 640px) { #replaysDialog .row, #garageDialog .row { flex-wrap: wrap; } #replaysDialog .row .name, #garageDialog .row .name { flex-basis: 100%; } }" +
             "#replaysDialog .row .meta, #garageDialog .row .meta { color: var(--muted); font-size: 13px; }" +
             "#replaysDialog .error { color: var(--bad); font-size: 14px; margin: 8px 0; }" +
             "#replaysDialog button, #garageDialog button, .or-dialog button.or-btn { background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; cursor: pointer; font: inherit; font-size: 14px; }" +
@@ -585,8 +587,15 @@ var MainMenu = (function() {
         overlay.appendChild(box);
         overlay.onclick = function(event) { if(event.target === overlay) close(); };
         function close() { overlay.remove(); load(); }
+        overlay._close = close;        // (Escape and B close it the same way: the menu got no new list, and a car imported or deleted was not seen)
         var status = null;
-        function say(text, error) { if(status) { status.textContent = text || ""; status.className = "status" + (error ? " error" : ""); } }
+        // (in view: below in the list a failed Export or Delete said it above, out of sight; and a full storage is explained)
+        function say(text, error) {
+            if(!status) return;
+            if(text && /quota|QuotaExceeded/i.test(text)) text += " The storage of this browser for the game is full: delete replays or garage items (their sizes are listed), or export some first.";
+            status.textContent = text || ""; status.className = "status" + (error ? " error" : "");
+            if(text) try { status.scrollIntoView({ block: "nearest" }); } catch(e) { /* old browser */ }
+        }
 
         function build() {
             box.innerHTML = "";
@@ -629,6 +638,11 @@ var MainMenu = (function() {
                         list.appendChild(d);
                     });
                     pbox.appendChild(list);
+                    // (Tab, Enter and a gamepad: the tiles of this window are outside the menu, where they get that, and only Cancel could be reached)
+                    pbox.querySelectorAll(".tile, .card").forEach(function(el) {
+                        el.tabIndex = 0; el.setAttribute("role", "button");
+                        el.addEventListener("keydown", function(event) { if(event.code === "Enter" || event.code === "Space") { event.preventDefault(); event.stopPropagation(); el.click(); } });
+                    });
                     var row = document.createElement("div");
                     row.style.cssText = "display: flex; gap: 10px; margin-top: 12px;";
                     row.appendChild(button("Cancel", "ghost", pclose));
@@ -671,7 +685,9 @@ var MainMenu = (function() {
             };
             box.appendChild(importInput);
 
-            Promise.all([Garage.list("cars"), Garage.list("tracks"), Garage.usage()]).then(function(result) {
+            // (with the lists of the game as they are now: a car just imported had no picture, and Load did not have it until the garage was closed)
+            Promise.all([Garage.list("cars"), Garage.list("tracks"), Garage.usage(), Catalog.load("cars").catch(function() { return cars; }), Catalog.load("tracks").catch(function() { return tracks; })]).then(function(result) {
+                cars = result[3]; tracks = result[4];
                 [["cars", "Cars", result[0]], ["tracks", "Tracks", result[1]]].forEach(function(section) {
                     var kind = section[0], records = section[2];
                     if(!records.length) {
@@ -720,7 +736,10 @@ var MainMenu = (function() {
                         deleteButton.className = "danger";
                         deleteButton.textContent = "Delete";
                         deleteButton.onclick = function() {
-                            OpenRacerDialog.ask({ title: "Delete " + (record.json.name || record.id) + "?", text: "It is removed from the garage of this browser.", ok: "Delete", danger: true }).then(function(yes) {
+                            // (settings only: the car of the game stays, without these changes; "removed" made it look as if the delete had failed)
+                            var only = !files.length, label = record.json.name || record.id;
+                            OpenRacerDialog.ask(only ? { title: "Drop your changes to " + label + "?", text: "The game's own " + label + " stays, as it comes with the game.", ok: "Drop changes", danger: true }
+                                : { title: "Delete " + label + "?", text: "It is removed from the garage of this browser.", ok: "Delete", danger: true }).then(function(yes) {
                                 if(yes) Garage.remove(kind, record.id).then(build).catch(function(error) { say("Could not delete: " + error.message, true); });
                             });
                         };
@@ -789,7 +808,14 @@ var MainMenu = (function() {
                         var link = document.createElement("button");
                         link.textContent = "Link a folder…";
                         link.onclick = function() {
-                            Garage.linkFolder().then(function() { say("The folder is linked."); build(); }).catch(function(error) {
+                            Garage.linkFolder().then(function() {
+                                // (what was found in it: a folder of one car, or a car.json that could not be read, gave no sign)
+                                return Promise.all([Garage.folderList("cars").catch(function() { return []; }), Garage.folderList("tracks").catch(function() { return []; })]).then(function(found) {
+                                    say("The folder is linked: " + found[0].length + " car" + (found[0].length === 1 ? "" : "s") + " and " + found[1].length + " track" + (found[1].length === 1 ? "" : "s") + " found." +
+                                        (found[0].length + found[1].length ? "" : " It needs a folder per car (with its car.json) or per track (with its track.json) inside it."), !(found[0].length + found[1].length));
+                                    build();
+                                });
+                            }).catch(function(error) {
                                 if(error && error.name !== "AbortError") say("Could not link the folder: " + error.message, true);
                             });
                         };
@@ -931,7 +957,7 @@ var MainMenu = (function() {
                     var remove = document.createElement("button");
                     remove.className = "danger";
                     remove.textContent = "Delete";
-                    remove.onclick = function() { OpenRacerDialog.ask({ title: "Delete this replay?", ok: "Delete", danger: true }).then(function(yes) { if(yes) OpenRacer.Replay.library.remove(item.id).then(fill); }); };
+                    remove.onclick = function() { OpenRacerDialog.ask({ title: "Delete this replay?", ok: "Delete", danger: true }).then(function(yes) { if(yes) OpenRacer.Replay.library.remove(item.id).then(fill).catch(function(error) { problem.textContent = (error && error.message) || "The replay could not be deleted."; try { problem.scrollIntoView({ block: "nearest" }); } catch(e) { /* old browser */ } }); }); };
                     var edit = document.createElement("button");
                     edit.textContent = "Edit";
                     edit.title = "Open the replay in the video editor: cut it, change the speed, place the camera";
@@ -1598,7 +1624,7 @@ var MainMenu = (function() {
             if(document.querySelector("#orDialog, #settingsMenu")) return;      // (a question or the settings: their own keys)
             // a window of the menu (the garage, the replays, more options, a pick): Escape closes it, the one on top
             var windows = document.querySelectorAll(".or-dialog, #replaysDialog, #garageDialog");
-            if(windows.length) { if(event.code === "Escape") { windows[windows.length - 1].remove(); event.preventDefault(); } return; }
+            if(windows.length) { if(event.code === "Escape") { var top = windows[windows.length - 1]; if(top._close) top._close(); else top.remove(); event.preventDefault(); } return; }
             // Enter on a button, a field or a link is that button's (it was also "Next", and the page changed under the click)
             if(event.code === "Enter" && event.target && /^(BUTTON|INPUT|SELECT|TEXTAREA|A)$/.test(event.target.tagName)) return;
             if(event.code === "Enter") { if(screen === "home") go("mode"); else if(screen !== "mode" && !oppPick) goNext(); }
