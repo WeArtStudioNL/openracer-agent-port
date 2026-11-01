@@ -245,8 +245,10 @@ OpenRacer.RacingLine.save = function (track, samples) {
     var config = JSON.parse(JSON.stringify(track));
     delete config.id;
     config.racing_line = line;
+    config.line_date = new Date().toISOString();         // (the laps driven before do not take the place of this line: Records.anyGhost)
     return OpenRacer.Garage.store("tracks", track.id, config, {}, {}).then(function () {
         track.racing_line = line;
+        track.line_date = config.line_date;
         return line.length;
     });
 };

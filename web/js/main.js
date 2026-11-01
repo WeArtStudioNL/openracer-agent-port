@@ -168,13 +168,14 @@ function setupRace() {
     if(new URLSearchParams(window.location.search).get("mode") === "skidpad") { startSkidpad(); return; }
     // the racing line: a line saved with the track (recorded for it), the middle of a designed track, or the best lap that was driven here
     // the best lap that was driven here (by anyone, on this computer) is the line of the AI: the way the fastest driver takes the bends; without one the line saved with the track
-    var bestLap = new URLSearchParams(window.location.search).get("bestline") === "0" ? null : OpenRacer.Records.anyGhost(track.id);
+    // (only a lap driven since the road or the line was last changed in the track editor, line_date: an older lap took the AI into the new walls)
+    var bestLap = new URLSearchParams(window.location.search).get("bestline") === "0" ? null : OpenRacer.Records.anyGhost(track.id, track.line_date);
     race.lineFromLap = !!(bestLap && bestLap.samples && bestLap.samples.length >= 10 && OpenRacer.RacingLine.fromLap(bestLap.samples));
     race.line = (race.lineFromLap && OpenRacer.RacingLine.fromLap(bestLap.samples)) ||
         (track.racing_line && track.racing_line.length > 10 && new OpenRacer.RacingLine(track.racing_line, true)) ||
         (track.design && OpenRacer.RacingLine.fromDesign(track.design)) || null;
     if(!race.line) {
-        var lap = OpenRacer.Records.anyGhost(track.id);
+        var lap = OpenRacer.Records.anyGhost(track.id, track.line_date);
         if(lap) race.line = OpenRacer.RacingLine.fromLap(lap.samples);
     }
     if(race.line) {

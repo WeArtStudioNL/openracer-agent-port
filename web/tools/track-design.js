@@ -1090,7 +1090,8 @@ export function createDesign(api) {
         if (ctrl && (e.key === "z" || e.key === "Z")) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
         if (ctrl && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); return; }
         if (ctrl && (e.key === "d" || e.key === "D")) { e.preventDefault(); duplicatePrefab(); return; }
-        if (e.key === "Delete" || e.key === "Backspace") { if (design.selectedPrefab !== null) deletePrefab(); else if (design.selectedNode >= 0) deleteNode(); }
+        // (not when a gate, an object or a node of the line took the key first: both went, the gate and the road node that was still chosen)
+        if ((e.key === "Delete" || e.key === "Backspace") && !e.defaultPrevented) { if (design.selectedPrefab !== null) deletePrefab(); else if (design.selectedNode >= 0) deleteNode(); }
         if (e.key === "Escape") {
             if (design.selectedNode >= 0 || design.selectedPrefab !== null) { design.selectedNode = -1; design.selectedPrefab = null; gizmo.detach(); rowGroup.clear(); renderNodes(); fillNodeFields(); fillPrefabFields(); }
             else api.setMode("view");

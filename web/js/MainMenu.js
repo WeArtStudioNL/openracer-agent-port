@@ -1324,7 +1324,7 @@ var MainMenu = (function() {
         setting("Save lap records", [[true, "On"], [false, "Off"]], !!raceOptions.records, function(v) { raceOptions.records = v; });
         var trackChosen = tracks.filter(function(t) { return t.id === choice.track; })[0];
         var hasLine = trackChosen && ((trackChosen.design && trackChosen.design.nodes) || (trackChosen.racing_line && trackChosen.racing_line.length > 10) ||
-            (OpenRacer.Records && OpenRacer.Records.anyGhost(choice.track)));
+            (OpenRacer.Records && OpenRacer.Records.anyGhost(choice.track, trackChosen.line_date)));
         var hasFinish = trackChosen && ((trackChosen.gates && trackChosen.gates.length) || (trackChosen.checkpoints && trackChosen.checkpoints.length));
         if(trackChosen && !hasFinish) {
             var noFinish = document.createElement("div");

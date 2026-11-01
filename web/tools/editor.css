@@ -135,6 +135,8 @@ button:disabled { opacity: 0.45; cursor: default; }
 #toast { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); max-width: 70%; padding: 9px 16px; border-radius: 9px; background: #232b36ee; border: 1px solid #3a4658; box-shadow: 0 4px 16px #0009; display: none; white-space: pre-line; pointer-events: none; font-size: 13px; z-index: 5; }
 #toast.error { background: #5a2823ee; border-color: #8a3a34; pointer-events: auto; cursor: pointer; }      /* (an error stays until it is clicked) */
 #toast.ok { background: #1f4a33ee; border-color: #2e7a52; }
+#toast.warn { background: #4a3c1cee; border-color: #8a6a2a; pointer-events: auto; cursor: pointer; }      /* (a warning stays too: what a saved track still needs) */
+footer.bar #status.warn { color: #ffc96b; }
 
 /* ---- dialogs */
 /* a dialog sits at the left, over the side bar, so that the view stays in sight */

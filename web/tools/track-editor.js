@@ -343,9 +343,11 @@ async function applyLineEdit() {
     const config = JSON.parse(JSON.stringify(track));
     delete config.id;
     config.racing_line = line;
+    config.line_date = new Date().toISOString();       // (a best lap driven before is no longer the line of the AI: Records.anyGhost)
     try {
         await store(track.id, config);
         track.racing_line = line;
+        track.line_date = config.line_date;
         stopLineEdit();
         updateLineNote();
         status("The line is saved (" + line.length + " points): the AI drives it from the next start.", "ok");
@@ -404,18 +406,13 @@ function keepScreenSizes() {
     positionCamIcons();
 })();
 
-let toastTimer = 0;
 function status(text, kind) {
     const el = $("status");
     el.textContent = text;
     el.className = kind || "";
-    // the same message in the view: the one in the side bar is at the bottom of a long page
-    const toast = $("toast");
-    clearTimeout(toastTimer);
-    toast.textContent = text;
-    toast.className = kind || "";
-    toast.style.display = text ? "block" : "none";
-    if (text && kind) toastTimer = setTimeout(() => { toast.style.display = "none"; }, 7000);
+    el.title = text;
+    // the same message in the view, as in the car editor: an error stays until it is clicked away (it went after 7 s, and the line at the bottom cut a long one off)
+    if (window.editorToast) window.editorToast(text, kind);
 }
 
 function slug(text) {
@@ -1517,10 +1514,12 @@ function renderCameras() {
 }
 
 // the grid and the pit area: their buttons
-$("gridClear").onclick = () => { state.grid = []; syncStart(); updateMarkers(); };
-$("pitClear").onclick = () => { state.pitBoxes = []; updateMarkers(); };
+// (the clear buttons ask first: there is no undo for the markers, and one click took all the boxes)
+const clearOk = (what, count) => count > 1 ? OpenRacerDialog.ask({ title: "Clear " + what + "?", text: "All " + count + " of them. This cannot be undone.", ok: "Clear", danger: true }) : Promise.resolve(true);
+$("gridClear").onclick = async () => { if (!(await clearOk("the grid", state.grid.length))) return; state.grid = []; syncStart(); updateMarkers(); };
+$("pitClear").onclick = async () => { if (!(await clearOk("the pit boxes", state.pitBoxes.length))) return; state.pitBoxes = []; updateMarkers(); };
 $("pitLineUndo").onclick = () => { state.pitLine.pop(); updateMarkers(); };
-$("pitLineClear").onclick = () => { state.pitLine = []; updateMarkers(); };
+$("pitLineClear").onclick = async () => { if (!(await clearOk("the pit line", state.pitLine.length))) return; state.pitLine = []; updateMarkers(); };
 // the design of a track without a model: nodes, heights, widths and prefabs (see track-design.js)
 const design = createDesign({
     scene, trackGroup, camera, renderer, controls, state, registerMesh, applyColours, renderParts, updateMarkers, frameTrack, status, $,
@@ -1625,14 +1624,18 @@ function place(d, preview) {
     const point = d.hit.point;
     const h = d.heading === undefined ? (state.start ? state.start.heading : 0) : d.heading;
     if (state.mode === "grid") {
+        // (a box past the last one is not placed: d.full, not d.added, or the drag took the last box away and put this one in its place)
+        if (d.full) return;
         if (preview && d.added) state.grid.pop();
-        if (state.grid.length >= GRID_MAX) { status("The grid has its " + GRID_MAX + " boxes: remove one in the card first.", "error"); d.added = true; return; }
+        if (state.grid.length >= GRID_MAX) { status("The grid has its " + GRID_MAX + " boxes: remove one in the card first.", "error"); d.full = true; return; }
         state.grid.push({ x: point.x, y: point.y, z: point.z, heading: h });
         d.added = true;
         syncStart();
     } else if (state.mode === "pitbox") {
+        // (a box past the last one is not placed: d.full, not d.added, or the drag took the last box away and put this one in its place)
+        if (d.full) return;
         if (preview && d.added) state.pitBoxes.pop();
-        if (state.pitBoxes.length >= GRID_MAX) { status("There are " + GRID_MAX + " pit boxes: remove one in the card first.", "error"); d.added = true; return; }
+        if (state.pitBoxes.length >= GRID_MAX) { status("There are " + GRID_MAX + " pit boxes: remove one in the card first.", "error"); d.full = true; return; }
         state.pitBoxes.push({ x: point.x, y: point.y, z: point.z, heading: h });
         d.added = true;
         renderPit();
@@ -1819,6 +1822,7 @@ async function loadExisting() {
     state.existingTrack = track;
     state.files = new Map();
     state.mainFile = null;
+    state.thumbnail = null;          // (a picture taken of another track was saved as the picture of this one)
     $("name").value = track.name || "";
     $("id").value = id;
     $("id").disabled = false;
@@ -1878,6 +1882,7 @@ async function loadExisting() {
 function newTrack() {
     state.existingId = null;
     state.existingTrack = null;
+    state.thumbnail = null;
     state.files = new Map();
     state.mainFile = null;
     state.start = null;
@@ -2061,6 +2066,17 @@ async function save() {
             if (model.file) uploads.push([model.name, model.file]);
             else if (id !== state.existingId && state.existingTrack) uploads.push([model.name, await fileOf(trackFile(state.existingTrack, model.name))]);
         }
+        // the road changed under the same id (other nodes, another model): the laps driven on the old road are no longer the line of the AI (Records.anyGhost),
+        // and a recorded line of another model is dropped (the AI drove the old road into the new walls). A design keeps its line: it can be edited to fit
+        let lineOfOldRoad = false;
+        if (old && id === state.existingId) {
+            const newModel = !design.active() && state.mainFile && state.files.size;
+            if (newModel) { delete config.racing_line; delete config.skidpad; }
+            if (newModel || JSON.stringify(old.design || null) !== JSON.stringify(config.design || null)) {
+                config.line_date = new Date().toISOString();
+                lineOfOldRoad = !!(config.racing_line && config.racing_line.length);
+            }
+        }
         if (handMade.length || made.length) config.objects = handMade.concat(made); else delete config.objects;
         let oldSky = null;
         if (state.envOn) {
@@ -2099,6 +2115,7 @@ async function save() {
         state.skyName = config.environment && config.environment.sky_image || "";
         state.oldSkyName = state.skyName;
         state.skyFile = null;
+        state.thumbnail = null;          // (it is preview.webp now; a later save of another track did not get it)
         for (const m of objectState.models.values()) m.file = null;       // the models are in the folder of the track now
         await refreshList(id);
         // (the track as the list has it now, with where it is kept: the copy of the form had no garage mark, and a second copy of a garage track looked for its files on the server)
@@ -2106,8 +2123,14 @@ async function save() {
         if (fresh) state.existingTrack = fresh;
         $("delete").style.display = "";
         updateLineNote();
-        status(saved.where === "server" ? "Saved as tracks/" + id + ". It is in the main menu of the game now."
-            : "Saved in your garage, in this browser (the server does not save). It is in the main menu of the game now.", "ok");
+        // what the game still needs to race here (it saved, and said it was ready, with no gates or no line for the AI)
+        const missing = [];
+        if (!(config.gates || []).length && !(config.checkpoints || []).length) missing.push("no gates: no lap counts (Gates, put gate 1 on the start line)");
+        if (!(config.racing_line && config.racing_line.length > 10) && !(config.design && config.design.nodes)) missing.push("no racing line: the AI cannot race here (Record AI racing line)");
+        if (lineOfOldRoad) missing.push("the racing line was made on the road as it was: record it again, or edit it to the new road");
+        status((saved.where === "server" ? "Saved as tracks/" + id + ". It is in the main menu of the game now."
+            : "Saved in your garage, in this browser (the server does not save). It is in the main menu of the game now.") +
+            (missing.length ? "\nStill to do: " + missing.join("; ") + "." : ""), missing.length ? "warn" : "ok");
         markSaved();
     } catch (error) {
         status(error.message, "error");
@@ -2143,7 +2166,6 @@ function updateLineNote() {
 
 $("recordLine").onclick = async () => {
     if (!state.existingId) { status("Save the track first: the line is recorded on the saved track.", "error"); return; }
-    if (!state.gates.length && !(state.existingTrack.checkpoints || []).length) { status("Place a gate at the start first: a lap is counted through the gates.", "error"); return; }
     // the car: the one chosen last in the main menu, or else the first one
     let car = null;
     try { car = (JSON.parse(localStorage.getItem("openracer.lastChoice")) || {}).car; } catch (e) { /* no storage */ }
@@ -2151,7 +2173,14 @@ $("recordLine").onclick = async () => {
         try { const cars = await Catalog.load("cars", "../"); car = cars.length ? cars[0].id : null; } catch (e) { /* nothing to drive */ }
     }
     if (!car) { status("No car to drive with.", "error"); return; }
-    if (unsaved() && !(await OpenRacerDialog.ask({ title: "Leave without saving?", text: "The line is recorded on the saved track; the changes since the last save are lost.", ok: "Record the line", danger: true }))) return;
+    // the line is recorded on the saved track: the changes are saved first (they were thrown away, gates too, and then no lap of the saved track counted)
+    if (unsaved()) {
+        if (!(await OpenRacerDialog.ask({ title: "Save the track first?", text: "The line is recorded on the saved track. Save the changes and drive it?", ok: "Save and record" }))) return;
+        await save();
+        if (unsaved()) return;           // (the save failed: its message is shown)
+    }
+    const saved = state.existingTrack;
+    if (!(saved.gates || []).length && !(saved.checkpoints || []).length) { status("Place a gate at the start first and save: a lap is counted through the gates.", "error"); return; }
     savedPrint = null;           // (the question was asked: the page may go)
     window.location.href = "../index.html?car=" + encodeURIComponent(car) + "&track=" + encodeURIComponent(state.existingId) + "&recordline=1&ai=0&ghost=0&records=0";
 };
@@ -2171,12 +2200,17 @@ $("showLine").onchange = () => { lineEdit.show = $("showLine").checked; drawLine
 $("clearLine").onclick = async () => {
     const track = state.existingTrack;
     if (!track || !track.racing_line) return;
+    // (it is written to the saved track at once: a recorded line was gone for good with one click)
+    if (!(await OpenRacerDialog.ask({ title: "Forget the racing line?", text: "The recorded line is removed from the saved track. The AI then follows " +
+        (track.design && track.design.nodes ? "the middle of the road" : "the best lap driven here, or cannot race") + ".", ok: "Forget", danger: true }))) return;
     const config = JSON.parse(JSON.stringify(track));
     delete config.id;
     delete config.racing_line;
+    config.line_date = new Date().toISOString();
     try {
         await store(track.id, config);
         delete track.racing_line;
+        track.line_date = config.line_date;
         updateLineNote();
         status("The line is forgotten.", "ok");
     } catch (error) {
@@ -2207,7 +2241,8 @@ function fingerprint() {
         const fields = [...document.querySelectorAll("input, select, textarea")].filter((e) => e.id && e.id !== "existing" && e.type !== "file")
             .map((e) => e.id + "=" + (e.type === "checkbox" ? e.checked : e.value));
         return JSON.stringify([fields, state.start, state.grid, state.pit, state.pitLine, state.pitBoxes, state.gates, state.cameras, state.drag, state.roles, state.env, state.skyName,
-            design.active && design.active() ? design.toJSON() : null, objectState.list.map((o) => [o.model, o.x, o.y, o.z, o.heading, o.scale])]);
+            design.active && design.active() ? design.toJSON() : null, objectState.list.map((o) => [o.model, o.x, o.y, o.z, o.heading, o.sx, o.sy, o.sz, o.pitch, o.roll]),
+            [...objectState.models.values()].map((m) => [m.name, m.kind, m.mass, m.pivot]), !!state.thumbnail]);
     } catch (error) { return ""; }
 }
 let savedPrint = null;
@@ -2264,7 +2299,7 @@ function trackPicker() {
             b.innerHTML = "<b></b><div style='font-weight: normal; font-size: 12.5px; opacity: 0.75; margin-top: 2px'></div>";
             b.firstChild.textContent = t.name || t.id;
             b.lastChild.textContent = t.id;
-            b.onclick = () => { $("existing").value = t.id; close(); loadExisting(); };
+            b.onclick = async () => { if (!(await discardOk())) return; $("existing").value = t.id; close(); loadExisting(); };
             list.appendChild(b);
         }
         box.appendChild(list);
@@ -2293,13 +2328,14 @@ function startDialog() {
             return b;
         };
         choice("Open track", state.tracks.length ? state.tracks.length + " tracks to change" : "There are no tracks yet", () => { if (state.tracks.length) { close(); trackPicker(); } });
-        choice("Import height map", "A track from a height map (16 bit grey PNG) and a colour map", () => { close(); heightDialog(); });
-        choice("New track", "Start empty: import a model, or draw the road with nodes", () => { close(); newTrack(); });
+        choice("Import height map", "A track from a height map (16 bit grey PNG) and a colour map", () => { close(); heightDialog(true); });
+        choice("New track", "Start empty: import a model, or draw the road with nodes", async () => { if (await discardOk()) { close(); newTrack(); } });
     });
 }
 
-// The height map and the colour map: the size of the square in metres, the height of white, and how fine the mesh is
-function heightDialog() {
+// The height map and the colour map: the size of the square in metres, the height of white, and how fine the mesh is. From the start dialog Cancel goes back
+// to it; from the side bar it only closes (the start dialog opened the way to New track and Open over the work, without a question)
+function heightDialog(fromStart) {
     dialog("Import height map", (box, close) => {
         const field = (label, node, hint) => {
             const row = document.createElement("div");
@@ -2349,12 +2385,13 @@ function heightDialog() {
         row.style.cssText = "display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px;";
         const cancel = document.createElement("button");
         cancel.textContent = "Cancel";
-        cancel.onclick = () => { close(); startDialog(); };
+        cancel.onclick = () => { close(); if (fromStart === true) startDialog(); };
         const make = document.createElement("button");
         make.className = "primary";
         make.textContent = "Make the track";
         make.onclick = async () => {
             if (!heightFile.files[0]) { info.textContent = "Choose the height map first."; info.style.color = "#ff8a80"; return; }
+            if (!(await discardOk())) return;          // (the work on the open track was replaced without a question)
             make.disabled = true; make.textContent = "Making…";
             try {
                 const result = await buildTerrain(heightFile.files[0], colourFile.files[0] || null, { size: parseFloat(size.value), top: parseFloat(top.value), step: parseInt(step.value, 10), role: role.value, surfaceFile: surfaceFile.files[0] || null });
@@ -2371,7 +2408,7 @@ function heightDialog() {
         box.appendChild(row);
     });
 }
-$("importHeight").onclick = heightDialog;
+$("importHeight").onclick = () => heightDialog(false);
 
 renderLegend();
 renderParts();

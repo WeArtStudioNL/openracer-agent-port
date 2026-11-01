@@ -100,11 +100,13 @@ OpenRacer.Records = (function () {
         return false;
     }
 
-    // the best lap of any car on a track, as the line for the AI when the track has none: the newest best
-    function anyGhost(trackId) {
+    // the best lap of any car on a track, as the line for the AI when the track has none: the newest best. With "after" (line_date of the track: when its
+    // road or its line was changed in the track editor) only a lap driven since then: an older one went over the old road
+    function anyGhost(trackId, after) {
         var all = ofTrack(trackId);
         var bestCar = null, bestTime = Infinity;
         Object.keys(all).forEach(function (car) {
+            if (after && !(all[car].date > after)) return;
             if (all[car].time < bestTime && ghost(trackId, car)) { bestTime = all[car].time; bestCar = car; }
         });
         return bestCar ? ghost(trackId, bestCar) : null;
