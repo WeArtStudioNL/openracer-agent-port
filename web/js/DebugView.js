@@ -437,7 +437,7 @@
         var local = v1.copy(h.point).sub(v2.set(v.px, v.py, v.pz)).applyQuaternion(q), n = v3.copy(normal).applyQuaternion(q);
         if (tyre >= 0) { showHitArrow(h, normal); return true; }       // (the tyre is not the shell: the car has had its impulse)
         sb.pushPlate([local.x, local.y, local.z], [n.x, n.y, n.z], HIT_MASS * (hitKmh / 3.6) / HIT_TIME, HIT_SIDE, HIT_MASS, HIT_TIME, null);
-        sb.pinned = false;                     // (the reaction of the shell goes to the car: it is pushed and turned by the hit)
+        sb.setPinned(false);                   // (the reaction of the shell goes to the car: it is pushed and turned by the hit)
         var plate = sb.plate;
         setTimeout(function () { if (sb.plate === plate) sb.releasePlate(); }, 1500);
         showHitArrow(h, normal);

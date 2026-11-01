@@ -32,15 +32,17 @@ OpenRacer.PhysicsLink = function (car) {
             "puncture", "applyImpulse", "hitWheel", "setRubber", "setCompound", "setAnti", "applyPressure", "standOnWheels", "startEngine", "pushDown"],
         engine: ["start"],
         softBody: ["detachGroup", "repairStart", "repairTo", "repair", "settle", "syncDisplacement", "pushPlate", "grab", "moveGrab", "release", "releasePlate",
-            "addBeam", "setNode"],
+            "addBeam", "setNode", "setPinned"],
         controller: ["recover"]
     };
     var CONFIG = { retune: 1, setRubber: 1, setCompound: 1, setAnti: 1, applyPressure: 1 };
     // the calls that nudge the car (an impulse, the node grabber that moves every frame, the cube of the hit tool, the repair of the pit stop share by share): the
     // snapshots of the steps before them are still used. After the other calls (a reset, a repair) they are not: they would put the car back for a frame.
-    var NUDGE = { applyImpulse: 1, hitWheel: 1, pushDown: 1, puncture: 1, startEngine: 1, start: 1, grab: 1, moveGrab: 1, release: 1, pushPlate: 1, releasePlate: 1, repairTo: 1, repairStart: 1 };
-    // objects in the vehicle that are not values of a snapshot, which the page sets: sent when they are another object
-    var WATCH = ["partForces", "engine.torque_curve", "engine.extras"];
+    var NUDGE = { applyImpulse: 1, hitWheel: 1, pushDown: 1, puncture: 1, startEngine: 1, start: 1, grab: 1, moveGrab: 1, release: 1, pushPlate: 1, releasePlate: 1, repairTo: 1, repairStart: 1, setPinned: 1 };
+    // objects in the vehicle that are not values of a snapshot, which the page sets: sent when they are another object (partForces: every frame that has some, as the
+    // parts fill the same array again, Parts.js)
+    var WATCH = ["engine.torque_curve", "engine.extras"];
+    var partForcesSent = 0;
 
     var worker = null, workerReady = false, live = false, failed = false, busy = false;
     var frame = 0, pendingTime = 0, ops = [], latest = null;
@@ -56,13 +58,24 @@ OpenRacer.PhysicsLink = function (car) {
     var sentAt = 0;                                      // when the step that is out was sent (performance.now)
     var sentTime = 0, liveFor = 0, slowFor = 0;          // the game time of the step that is out, and how long the worker has had the car and been too slow
 
-    // a copy of a value without functions (what postMessage can take)
-    function plain(x) {
+    // a copy of a value with only the data in it (what postMessage can take): plain objects, arrays, numbers, strings, typed arrays. An object of a class (a part of
+    // the 3D scene: its children point back at their parent, and the copy went round for ever) and an object that is already on the way are left out; the first one
+    // that is left out is said once in the console
+    var leftOut = false;
+    function plain(x, path, way) {
         if(typeof x === "function") return undefined;
         if(!x || typeof x !== "object" || ArrayBuffer.isView(x)) return x;
-        if(Array.isArray(x)) return x.map(plain);
-        var out = {};
-        for(var k in x) if(Object.prototype.hasOwnProperty.call(x, k) && typeof x[k] !== "function") out[k] = plain(x[k]);
+        way = way || [];
+        var proto = Object.getPrototypeOf(x);
+        if((proto !== Object.prototype && proto !== Array.prototype && proto !== null) || way.indexOf(x) >= 0) {
+            if(!leftOut) { leftOut = true; console.warn("PhysicsLink: left out of what goes to the worker: " + (path || "a value") + " (" + (x.constructor && x.constructor.name || "a loop") + ")"); }
+            return undefined;
+        }
+        way.push(x);
+        var out;
+        if(Array.isArray(x)) { out = new Array(x.length); for(var i = 0; i < x.length; i++) out[i] = plain(x[i], (path || "") + "[" + i + "]", way); }
+        else { out = {}; for(var k in x) if(Object.prototype.hasOwnProperty.call(x, k) && typeof x[k] !== "function") out[k] = plain(x[k], (path || "") + "." + k, way); }
+        way.pop();
         return out;
     }
 
@@ -78,9 +91,9 @@ OpenRacer.PhysicsLink = function (car) {
                 var result;
                 try { result = fn.apply(this, arguments); } finally { depth--; }
                 if(outer) {
-                    if(target === "vehicle" && CONFIG[name]) configCalls.push([target, name, plain(args)]);
+                    if(target === "vehicle" && CONFIG[name]) configCalls.push([target, name, plain(args, name)]);
                     if(live) {
-                        ops.push({ op: "call", target: target, method: name, args: plain(args) });
+                        ops.push({ op: "call", target: target, method: name, args: plain(args, target + "." + name) });
                         VS.rebase(v, cache);
                         if(!NUDGE[name]) callFrame = frame + 1;
                     }
@@ -101,11 +114,13 @@ OpenRacer.PhysicsLink = function (car) {
 
     // what the page wrote into the vehicle since the last snapshot: to the worker, and kept here until a snapshot knows it
     function flush() {
-        VS.changes(v, cache).forEach(function (c) { ops.push({ op: "set", name: c.name, value: plain(c.value) }); keepFrom[c.name] = frame + 1; });
+        VS.changes(v, cache).forEach(function (c) { ops.push({ op: "set", name: c.name, value: plain(c.value, c.name) }); keepFrom[c.name] = frame + 1; });
         WATCH.forEach(function (name) {
             var x = VS.get(v, name);
-            if(x !== watched[name]) { watched[name] = x; ops.push({ op: "set", name: name, value: plain(x) }); }
+            if(x !== watched[name]) { watched[name] = x; ops.push({ op: "set", name: name, value: plain(x, name) }); }
         });
+        var pf = v.partForces, n = pf ? pf.length : 0;
+        if(n || partForcesSent) { ops.push({ op: "set", name: "partForces", value: n ? plain(pf, "partForces") : null }); partForcesSent = n; }
         VS.rebase(v, cache);
     }
 
@@ -142,17 +157,17 @@ OpenRacer.PhysicsLink = function (car) {
         var sb = v.softBody;
         return {
             calls: configCalls,
-            engine: { torque_curve: plain(v.engine.torque_curve), extras: plain(v.engine.extras) },
+            engine: { torque_curve: plain(v.engine.torque_curve, "engine.torque_curve"), extras: plain(v.engine.extras, "engine.extras") },
             fields: VS.snapshot(v, {}),
-            objects: { collisionSpheres: plain(v.collisionSpheres), rig: plain(v.rig), partForces: null },
-            softBody: sb && sb.made ? { spheres: plain(sb.made.spheres), config: plain(sb.made.config), calls: plain(sb.made.calls), state: sb.exportState() } : null
+            objects: { collisionSpheres: plain(v.collisionSpheres, "collisionSpheres"), rig: plain(v.rig, "rig"), partForces: null },
+            softBody: sb && sb.made ? { spheres: plain(sb.made.spheres, "softBody.spheres"), config: plain(sb.made.config, "softBody.config"), calls: plain(sb.made.calls, "softBody.calls"), state: sb.exportState() } : null
         };
     }
     function takeOver() {
         var s = setupOf();
         if(!live) {
             worker.postMessage({ type: "ground", data: groundWorld.exportData() });
-            worker.postMessage({ type: "add", id: "player", params: plain(v.parameters), input: VS.readInput(car), setup: s });
+            worker.postMessage({ type: "add", id: "player", params: plain(v.parameters, "parameters"), input: VS.readInput(car), setup: s });
         } else worker.postMessage({ type: "setup", id: "player", setup: s });
         sendCondition();
         sentShell = v.softBody; sentSpheres = v.collisionSpheres;

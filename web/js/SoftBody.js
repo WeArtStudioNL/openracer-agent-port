@@ -511,6 +511,8 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         f[ix] += pl.k * dx - c * w[ix]; f[ix + 1] += pl.k * dy - c * w[ix + 1]; f[ix + 2] += pl.k * dz - c * w[ix + 2];
     }
     this.releasePlate = function () { this.plate = null; this.lastPlate = null; this.pinned = false; };
+    // the reaction of the shell goes to the car (false: a hit of the debug view, which pushes and turns the car) or not (true: the test of the car editor on a clamped car)
+    this.setPinned = function (on) { this.pinned = !!on; };
 
     function pushPlate(pl, h) {
         var n = pl.n, total = 0;

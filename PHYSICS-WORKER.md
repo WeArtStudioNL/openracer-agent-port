@@ -173,7 +173,12 @@ main thread, and with two workers the AI cars side by side.
   snapshots away, so nothing came back while a node was dragged and the car stood still on the screen (found in the first test on
   the Mac). The calls that only nudge the car (an impulse, the grabber, the cube of the hit tool, the repair of the pit stop share by
   share) no longer do that; the shell keeps the objects of the cube and the elastic through the snapshots (the debug view knows
-  them by their object).
+  them by their object). The debug view unpins the shell with `setPinned(false)` (it wrote `sb.pinned`, which did not reach the
+  worker: the cube dented the car, but the car did not feel the hit).
+* **Only data goes to the worker**: what is copied for it leaves out objects of a class and loops. A suspension change in the tuning
+  menu put a 3D object in a value the page wrote (a wheel's `deform`, for drawing its tyre), and the copy went round in it for ever
+  (a stack overflow). Tested: all six suspension types front and rear on the Stadium truck. The forces of the loose parts
+  (`partForces`, the same array filled again every frame) are sent every frame that has some.
 * **A label** with `worker=1` or `worker=0` in the address: the frames per second, where the physics runs and what it costs. It is for
   a test on a device.
 * Not in the worker yet: the contacts of the shell with the AI cars (the worker's car has no other cars; the rigid contact of
