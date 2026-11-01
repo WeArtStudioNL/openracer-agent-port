@@ -6,6 +6,11 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 ## Unreleased
 
+- **Skidpad and drag strip.** From an audit:
+  - The skidpad is not taken over by a gamepad or touch (a touch of the stick steered it off the circle and stored a low grip for the AI), counts per second instead of per frame (a 144 Hz screen gave another g), starts again with R, and shows speeds in the units of the settings.
+  - The brake reverses after a false start or past the line; standing after the green voids the run after 5 s; the Top 50 shows R/T and the time of every distance; the marks count from where the car was staged.
+- **Records and ghosts.** A lap that a full storage cannot keep is no record, and the game says why. A ghost file is checked number by number, with its times going up.
+- **Tools.** `tools/physics-bench.js` reads the surfaces from Surfaces.js and `tools/tyre-bench.js` starts with the hatchback: both run again.
 - **Garage and Replays in the main menu.** From an audit:
   - Escape or B closes the garage as Close does: the menu gets the new list (a car just imported was missing, one just deleted was still there).
   - The garage reads the lists again after an import (pictures, Load). The tiles of Load work with the keyboard and a gamepad.

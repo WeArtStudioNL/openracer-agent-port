@@ -1,12 +1,12 @@
 # OpenRacer: verbeteringen in de nacht van 1 november 2026
 
-- Tijd: ongeveer 05:50 tot 07:30 (de klok van de Mac), en daarna door tot je terug was.
+- Tijd: 05:51 tot ongeveer 10:35 (de klok van de Mac); 's avonds na 22:00 nog de dragstrip, de skidpad en de ChatGPT-audit.
 - Branch: `claude/soft-body`. Alles staat **lokaal gecommit**. Er is niets gepusht, niets gedeployed en niets op Discord gezet.
 - Jouw eigen werk in `web/cars` en `web/tracks` (de dune buggy, het nieuwe Stadium Truck-model, de Desert) heb ik niet aangeraakt.
 
 ## Kort
 
-- Ik heb in **75 commits** (sinds 05:51) gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen), de track-editor, de eerste keer spelen, replays en video, het racegedrag van de AI, het tuningmenu, onderdelen en shell in de car-editor, de vensters van het hoofdmenu en een reeks UX-punten.
+- Ik heb in **79 commits** gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen), de track-editor, de eerste keer spelen, replays en video, het racegedrag van de AI, het tuningmenu, onderdelen en shell in de car-editor, de vensters van het hoofdmenu en een reeks UX-punten.
 - Na elke grote wijziging heb ik een onafhankelijke review of audit laten doen (negen reviews, plus audits van de motorbouw, de car-editor (twee keer), de races, de Garage, de track-editor, de eerste keer spelen, replays, de AI, het tuningmenu en de vensters van het hoofdmenu). Elke bevinding heb ik zelf nagelopen en zo nodig opgelost.
 - Alles is getest in het spel zelf, vanuit JavaScript aangestuurd. Het browservenster stond verborgen; daar loopt de animatielus niet. Hoe het er in beeld uitziet, heb ik maar op enkele screenshots gezien.
 
@@ -158,6 +158,25 @@
 - Onderdelen breken op een trage pc niet meer bij de halve kracht.
 - De vlammen laden één keer, zonder 404.
 - `<html lang="en">` op de pagina's.
+
+### Dragstrip en skidpad (audit van 8 punten, 's avonds; `56c9f17`)
+- **De skidpad liet zich overnemen** door een gamepad of touch: een tik op de stick stuurde de auto uit de cirkel. De gemeten grip was dan te laag, en de AI rekende daarmee.
+- **De skidpad telde per frame.** Op 144 Hz liep de snelheid 2,4× zo snel op. Getest: 60 Hz geeft nu 0,902 g en 144 Hz 0,904 g, allebei bij 77 km/h.
+- **R op de skidpad** start de test opnieuw. Eerst eindigde hij met een uitslag die je niet vroeg. De skidpad toont snelheden in de eenheden van de instellingen.
+- **Dragstrip:** na een valse start of een te ver opgestelde auto rijdt de rem weer achteruit. Een gamepad had geen andere weg terug.
+- **Wie na groen blijft staan,** krijgt na 5 s een ongeldige run. Eerst telde een passage minuten later mee, met die reactietijd.
+- **De Top 50** toont nu R/T en de tijd van elke afstand. Een strip van 1/8 mijl toonde overal "–".
+- **De meetpunten tellen vanaf waar de auto opgesteld stond.** Diep opstellen won tot 0,05 s op de 60 ft.
+
+### ChatGPT-audit (op commit `8930320`, van vóór vannacht)
+- **1. Records bij een volle opslag** — klopte nog. Nu geen record, met een melding in beeld (`b3c8542`). Getest met een opslag die vol raakt.
+- **2. Tune wisselen in de car-editor** — vroeg al eerst (een vraag met *Switch* of *Cancel*).
+- **3. Onderdelenvenster slaat de hele auto op** — vannacht opgelost (`2906c7a`).
+- **4. Ghost-import controleert te weinig** — klopte nog. Nu wordt elk getal, elk wiel en de volgorde van de tijden gecontroleerd, ook bij een bewaarde ghost (`b3c8542`). Getest: een goed bestand gaat erin; aflopende tijden, een ontbrekende qx en wielen van null worden geweigerd.
+- **5. Physics-bench en tyre-bench starten niet** — klopte nog. Ze draaien weer: de hatchback haalt 0–100 in 16,2 s, 123 km/h top, 1,00 g op de skidpad.
+- **6. Records zonder setup** — vannacht opgelost (records per setup). Weer en physics-versie zitten er niet in.
+- **7. *Make a copy*** — vannacht opgelost (oude velden blijven).
+- **Niet gedaan:** de drie ideeën (één back-up van alles, een prestatietest per apparaat, de physics-worker). Gamepad in het hoofd- en pauzemenu bestaat vannacht al.
 
 ## Rooktest aan het eind
 
