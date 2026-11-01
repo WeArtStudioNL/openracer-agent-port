@@ -70,7 +70,11 @@ var TouchControls = (function() {
             "#touch .btn.rec { background: #d9372f; border-color: #ff6b62; }" +
             "#touch .btn.down { background: var(--accent, #ff5a1f); border-color: var(--accent, #ff5a1f); }" +
             "#touch .top { position: absolute; right: calc(12px + env(safe-area-inset-right)); top: calc(12px + env(safe-area-inset-top)); display: flex; gap: 8px; }" +
-            "#touch .top .btn { width: 44px; height: 44px; }" +
+            "#touch .top .btn { width: 44px; height: 44px; flex-direction: column; gap: 1px; }" +
+            // (a word under each icon: reset and repair could not be told apart, and the video icon started a recording)
+            "#touch .top .btn .cap { font-size: 9px; font-weight: normal; line-height: 1; letter-spacing: 0; }" +
+            // a narrow phone upright: the row of six went over the lap time and the place at the left; two columns of three at the right, above the HUD
+            "@media (orientation: portrait) and (max-width: 640px) { #touch .top { display: grid; grid-template-columns: repeat(2, 44px); } }" +
             // upright: the pedals take the width, so the buttons go in a row above them and the left side stays free for the steering
             "@media (orientation: portrait) { #touch .pedals { flex-wrap: wrap; justify-content: flex-end; width: 210px; } #touch .grid { order: -1; width: 100%; " +
                 "grid-template-columns: repeat(4, 1fr); justify-items: end; } #touch .btn { width: 46px; height: 46px; font-size: 12px; } " +
@@ -99,9 +103,10 @@ var TouchControls = (function() {
     // a button that holds an action of the settings while it is pressed
     // (a button that is only an icon says what it does, for a screen reader and as the tooltip)
     var NAMES = { shiftUp: "Shift up", shiftDown: "Shift down", resetCar: "Back on the track", repairCar: "Repair the car", cameraSwitch: "Switch camera", take: "Take: record, and stop", tuningMenu: "Tuning menu" };
-    function actionButton(parent, label, action, cls) {
+    function actionButton(parent, label, action, cls, caption) {
         var b = el(parent, "div", "btn" + (cls ? " " + cls : ""));
-        if(/^icon:/.test(label)) b.innerHTML = OpenRacer.icon(label.slice(5), 24); else b.textContent = label;
+        if(/^icon:/.test(label)) b.innerHTML = OpenRacer.icon(label.slice(5), caption ? 20 : 24); else b.textContent = label;
+        if(caption) el(b, "span", "cap", caption);
         b.setAttribute("role", "button");
         if(NAMES[action]) { b.setAttribute("aria-label", NAMES[action]); b.title = NAMES[action]; }
         b.addEventListener("pointerdown", function(e) {
@@ -201,17 +206,20 @@ var TouchControls = (function() {
         gasEl = pedal(right, "gas", "GAS", "gas");
 
         var top = el(root, "div", "top");
-        actionButton(top, "icon:rotate-ccw", "resetCar");
-        actionButton(top, "icon:wrench", "repairCar");
-        actionButton(top, "icon:camera", "cameraSwitch");
-        var rec = actionButton(top, "icon:video", "take");
+        actionButton(top, "icon:rotate-ccw", "resetCar", "", "Reset");
+        actionButton(top, "icon:wrench", "repairCar", "", "Repair");
+        actionButton(top, "icon:camera", "cameraSwitch", "", "Camera");
+        var rec = actionButton(top, "icon:video", "take", "", "Record");
         if(typeof OpenRacer !== "undefined" && OpenRacer.Take) OpenRacer.Take.onChange(function(st) {
-            rec.classList.toggle("rec", st === "taking" || st === "counting");
-            rec.innerHTML = OpenRacer.icon(st === "taking" || st === "counting" ? "square" : "video", 24);
+            var on = st === "taking" || st === "counting";
+            rec.classList.toggle("rec", on);
+            rec.innerHTML = OpenRacer.icon(on ? "square" : "video", 20);
+            el(rec, "span", "cap", on ? "Stop" : "Record");
         });
-        actionButton(top, "icon:sliders", "tuningMenu");
+        actionButton(top, "icon:sliders", "tuningMenu", "", "Tune");
         var menu = el(top, "div", "btn");
-        menu.innerHTML = OpenRacer.icon("menu", 24);
+        menu.innerHTML = OpenRacer.icon("menu", 20);
+        el(menu, "span", "cap", "Menu");
         menu.setAttribute("role", "button"); menu.setAttribute("aria-label", "Menu"); menu.title = "Menu";
         menu.addEventListener("pointerup", function() { Settings.toggleMenu(); });
     }
