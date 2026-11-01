@@ -552,7 +552,7 @@ OpenRacer.VideoEditor = (function () {
         ui.empty = el(ui.finalScreen, "div", "over", "Empty. Set In and Out in the source, then Insert.");
         var fr = el(right, "div", "row");
         ui.play = button(fr, "▶", "Play the result (Enter)", function () { toggleFinal(); });
-        button(fr, "⏮", "To the start (Home)", function () { state.T = 0; state.finalPlaying = false; });
+        button(fr, "⏮", "To the start (Home)", function () { if (recording) return; state.T = 0; state.finalPlaying = false; });
         ui.time = el(fr, "span", "time", "");
         el(fr, "span", "spacer");
         var cr = el(right, "div", "row");
@@ -700,8 +700,8 @@ OpenRacer.VideoEditor = (function () {
             var d = el(ui.laneCam, "div", "ck" + (i === state.selectedCam ? " sel" : "") + (k.parent ? " parent" : ""));
             d.style.left = k.t * state.scale + "px";
             d.title = "Camera key at " + fmt(k.t) + (k.parent ? ", parented" : "") + (k.aim ? ", pointing at the car" : "") + " (click: go there; double click: edit with the free camera)";
-            d.onclick = function (event) { event.stopPropagation(); state.selectedCam = i; state.T = k.t; state.finalPlaying = false; renderTimeline(); updateButtons(); };
-            d.ondblclick = function (event) { event.stopPropagation(); state.selectedCam = i; state.T = k.t; state.finalPlaying = false; editKey(i); };
+            d.onclick = function (event) { event.stopPropagation(); if (recording) return; state.selectedCam = i; state.T = k.t; state.finalPlaying = false; renderTimeline(); updateButtons(); };
+            d.ondblclick = function (event) { event.stopPropagation(); if (recording) return; state.selectedCam = i; state.T = k.t; state.finalPlaying = false; editKey(i); };
         });
         ui.total.textContent = state.clips.length ? " · " + state.clips.length + (state.clips.length === 1 ? " clip, " : " clips, ") + fmt(length) : " · empty";
         placeHead();
@@ -1028,7 +1028,7 @@ OpenRacer.VideoEditor = (function () {
         var length = total(), a = Replay.start_time(), b = Replay.end_time();
         if (state.finalPlaying) {
             state.T += delta;
-            if (state.T >= length) { state.T = length; state.finalPlaying = false; if (recording) setTimeout(stopRecording, 300); updateButtons(); }
+            if (state.T >= length) { state.T = length; state.finalPlaying = false; if (recording) { recording.stopping = true; setTimeout(stopRecording, 300); } updateButtons(); }
         } else if (recording && !recording.stopping) {
             // something stopped the playhead during the recording (a button, a camera key): the video ends here and is saved as far as it went. The recorder
             // ran on before, without an end, and nothing was ever saved

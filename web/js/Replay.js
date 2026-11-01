@@ -576,9 +576,10 @@ OpenRacer.Replay = (function() {
         if(typeof MediaRecorder === "undefined" || !document.createElement("canvas").captureStream) videoButton.style.display = "none";
         var editor = button(right, "Video editor", "Cut this replay, change the speed, place the camera, and save it as a replay or as a video", function() {
             var go = function() {
-                editor.textContent = "Opening…";
+                if(editor.disabled) return;
+                editor.textContent = "Opening…"; editor.disabled = true;          // (once: a second click saved the race again)
                 api.openInEditor().catch(function(error) {
-                    editor.textContent = "Could not open"; console.error(error); setTimeout(function() { editor.textContent = "Video editor"; }, 4000);
+                    editor.disabled = false; editor.textContent = "Could not open"; console.error(error); setTimeout(function() { editor.textContent = "Video editor"; }, 4000);
                     if(typeof OpenRacerDialog !== "undefined") OpenRacerDialog.tell({ title: "The video editor could not open", text: (error && error.message) || String(error) });
                 });
             };
@@ -1718,7 +1719,7 @@ OpenRacer.Replay = (function() {
                 var tx = db.transaction("files", "readwrite");
                 tx.objectStore("files").put(parsed, "pending");
                 tx.oncomplete = function() { db.close(); resolve(); };
-                tx.onerror = function() { reject(tx.error); };
+                tx.onerror = function() { reject(tx.error || new Error("The replay could not be kept (is the storage of the browser full?).")); };
             });
         });
     }
@@ -1730,7 +1731,7 @@ OpenRacer.Replay = (function() {
                 var put = tx.objectStore("library").put(meta);
                 put.onsuccess = function() { id = put.result; tx.objectStore("blobs").put(bytes, id); };
                 tx.oncomplete = function() { db.close(); resolve(id); };
-                tx.onerror = function() { db.close(); reject(tx.error); };
+                tx.onerror = function() { db.close(); reject(tx.error || new Error("The replay could not be kept (is the storage of the browser full?).")); };
                 tx.onabort = function() { db.close(); reject(tx.error || new Error("The replay could not be kept (is the storage of the browser full?).")); };
             });
         });
@@ -1763,7 +1764,7 @@ OpenRacer.Replay = (function() {
                     tx.objectStore("blobs").delete(id);
                     tx.objectStore("blobs").delete(id + ":edit");
                     tx.oncomplete = function() { db.close(); resolve(); };
-                    tx.onerror = function() { db.close(); reject(tx.error); };
+                    tx.onerror = function() { db.close(); reject(tx.error || new Error("The replay could not be kept (is the storage of the browser full?).")); };
                 });
             });
         },
@@ -1835,7 +1836,7 @@ OpenRacer.Replay = (function() {
                             tx.objectStore("blobs").put(editBytes, theId + ":edit");
                         };
                         tx.oncomplete = function() { db.close(); resolve(theId); };
-                        tx.onerror = function() { db.close(); reject(tx.error); };
+                        tx.onerror = function() { db.close(); reject(tx.error || new Error("The replay could not be kept (is the storage of the browser full?).")); };
                         tx.onabort = function() { db.close(); reject(tx.error || new Error("The edit could not be kept (is the storage of the browser full?).")); };
                     });
                 });
@@ -1844,17 +1845,22 @@ OpenRacer.Replay = (function() {
     };
 
     // Saves the recording in the list of Replays; gives a promise of { bytes }
-    var savedTotal = -1, savedId = null;
+    var savedTotal = -1, savedId = null, saving = null;
     api.saveToLibrary = function(from, to, name) {
         if(!cars.length || total < 2) return Promise.reject(new Error("Nothing is recorded yet."));
+        // (the whole race while it is being saved already: the same save, not a second copy; a long race takes a while to pack)
+        var whole = from === undefined && to === undefined;
+        if(whole && saving && saving.total === total) return saving.promise;
         var size = total, seconds = ((to === undefined ? total : to) - (from === undefined ? first() : from)) / RATE;
-        return gzip(pack(from, to)).then(function(bytes) {
+        var promise = gzip(pack(from, to)).then(function(bytes) {
             return libraryAdd(bytes, { created: new Date().toISOString(), name: name ? String(name).slice(0, 80) : undefined, track: { id: currentTrack.id, name: String(currentTrack.name || currentTrack.id) }, cars: cars.map(function(entry) { return String(entry.object.name || entry.object.config.name || entry.object.config.id); }), seconds: seconds, bytes: bytes.length });
         }).then(function(id) {
             // (only the whole recording is the race saved: a take of 10 s saved this way marked the race as kept, and leaving asked nothing)
-            if(from === undefined && to === undefined) { savedTotal = size; savedId = id; }
+            if(whole) { savedTotal = size; savedId = id; saving = null; }
             return { bytes: 0, id: id };
-        });
+        }, function(error) { if(whole) saving = null; throw error; });
+        if(whole) saving = { total: total, promise: promise };
+        return promise;
     };
     // Before the game goes back to the main menu: when there is a recording that was not saved yet, asks whether it should be (then calls leave); otherwise calls leave at once
     api.confirmLeave = function(leave) {
@@ -1894,7 +1900,7 @@ OpenRacer.Replay = (function() {
                 var get = tx.objectStore("files").get("pending");
                 tx.objectStore("files").delete("pending");
                 tx.oncomplete = function() { db.close(); resolve(get.result || null); };
-                tx.onerror = function() { reject(tx.error); };
+                tx.onerror = function() { reject(tx.error || new Error("The replay could not be kept (is the storage of the browser full?).")); };
             });
         });
     };

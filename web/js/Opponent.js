@@ -242,6 +242,9 @@ OpenRacer.Opponent = function (config, line, options) {
 
         // the car ahead: move aside for it, and do not run into it
         var ahead = null, aheadDist = Infinity, blocker = null;
+        // how far left of the racing line a point is, at a point of the line
+        var laneOf = function (i, x, z) { var a = line.point(i), b = line.point(i + 1), l = Math.hypot(b.x - a.x, b.z - a.z) || 1; return ((b.x - a.x) * (z - a.z) - (b.z - a.z) * (x - a.x)) / l; };
+        var myLane = laneOf(this.lineIndex, v.x, v.z);
         for (var k = 0; k < others.length; k++) {
             var o = others[k];
             if (o === v) continue;
@@ -257,7 +260,21 @@ OpenRacer.Opponent = function (config, line, options) {
             // squeezed together where the road narrows, all held on and took each other off: now the one that is behind gives way)
             // (as far ahead as it needs to stop at its speed: 25 m was 0.5 s at 50 m/s, and it ran into a car that was much slower. And only a car whose nose is
             // clearly ahead: two cars level each took the other for the one in front, and both braked hard in the bend)
-            if (along > 1.5 && along < Math.max(25, speed * 1.5) && Math.abs(across) < 2.2 && (!blocker || along < blocker.along)) blocker = { along: along, u: o.u };
+            // (its speed along our heading, not its own: a car that came the other way or slid sideways had a large speed of its own; and only on our level: a bridge,
+            // an underpass. One it waited behind for six seconds is passed: see below)
+            var ignored = o === this.ignoreBlocker && this.clock < this.ignoreUntil;
+            if (ignored || Math.abs((o.py || 0) - (v.py || 0)) > 3) continue;
+            var reachB = Math.max(25, speed * 1.5), closing = Math.max(0, o.vx * forward + o.vz * side);
+            // close by: straight ahead along its heading
+            if (along > 1.5 && along < 10 && Math.abs(across) < 2.2 && (!blocker || along < blocker.along)) blocker = { along: along, u: closing, vehicle: o };
+            // further: along the racing line, in its lane (along its heading a car in the bend ahead was off to the side until 9 m, too late to stop from 17 m/s)
+            else if (along > 0 && dx * dx + dz * dz < (reachB + 5) * (reachB + 5)) {
+                var oi = line.nearest(o.x, o.z, this.lineIndex), dI = ((oi - this.lineIndex) % n + n) % n, onLine = dI * line.step;
+                if (onLine > 1.5 && onLine < reachB && Math.abs(laneOf(oi, o.x, o.z) - myLane) < 2.2 && (!blocker || onLine < blocker.along)) {
+                    var lp = line.point(oi), ln = line.point(oi + 1), ll = Math.hypot(ln.x - lp.x, ln.z - lp.z) || 1;
+                    blocker = { along: onLine, u: Math.max(0, (o.vx * (ln.x - lp.x) + o.vz * (ln.z - lp.z)) / ll), vehicle: o };
+                }
+            }
         }
         asideTarget = 0;
         if (ahead) {
@@ -275,7 +292,8 @@ OpenRacer.Opponent = function (config, line, options) {
         var blockerCap = Infinity;
         if (blocker) {
             var gap = blocker.along - 4.5;
-            blockerCap = Math.max(0, blocker.u) + Math.sqrt(2 * brakeAccel * 0.8 * Math.max(0, gap - 2));
+            // (closer than 2 m behind it: a little slower than it, so it drops back out of the overlap; at its speed it stayed there)
+            blockerCap = gap < 2 ? Math.max(0, blocker.u * 0.85 - (2 - gap)) : blocker.u + Math.sqrt(2 * brakeAccel * 0.8 * (gap - 2));
         }
 
         // the pit box: when the tyres are worn or the fuel will not last, and the box is within 70 m ahead along the line, it drives to the box (a staging point on the axis of the box
@@ -443,6 +461,23 @@ OpenRacer.Opponent = function (config, line, options) {
         // (a box: the way out, phase 2, which counts the stop at its end; going back to phase 0 next to the box it pitted again at once. The lane: on through it)
         if (atStop && this.stopWait > 6) { this.stopWait = 0; atStop = false; if (boxMode) this.pitPhase = 2; else this.laneStopped = true; }
         if (atStop) { this.throttle = 0; this.brakePedal = Math.max(this.brakePedal, speed < 1 ? 1 : 0.2); this.stuck = 0; return; }
+        // waiting behind a car that stands (the player who spun, a car that crashed, the queue at a stop in the pit lane): it stands too, and that is no being stuck
+        // (it crept, reversed into the car behind and was put back as crashed, with the speeds there cut). After six seconds it goes round it
+        // (and when that does not get it 8 m on in 15 s, wedged against the car or no room beside it, it is put back further along: no crash, so no speeds are cut)
+        if (this.blockAnchor && Math.hypot(v.x - this.blockAnchor.x, v.z - this.blockAnchor.z) > 8) this.blockAnchor = null;
+        if (this.blockAnchor && this.clock - this.blockAnchor.t > 15 && !options.vehicle) {
+            this.blockAnchor = null; this.crashedAt = this.clock; this.crashWait = 0; this.crashReason = "blocked"; return;
+        }
+        if (blocker && blockerCap < 0.5 && speed < 1) {
+            if (!this.blockAnchor) this.blockAnchor = { x: v.x, z: v.z, t: this.clock };
+            this.blockWait = (this.blockWait || 0) + delta;
+            if (this.blockWait < 6) {
+                this.throttle = 0; this.brakePedal = 1; this.reverse = false;
+                this.stuck = 0; this.lostFor = 0; this.stillFor = 0; this.anchor = null; this.laneStuck = 0;
+                return;
+            }
+            this.ignoreBlocker = blocker.vehicle; this.ignoreUntil = this.clock + 5; this.blockWait = 0;
+        } else this.blockWait = 0;
         if (speed < 2 && v.clutchEngagement < 0.5) this.throttle = Math.max(this.throttle, 0.5);
         // a motorcycle rolls the throttle on, and less of it the more it leans: from 0.1 to full in one frame at 35 m/s and 10 degrees the rear stepped out and the bike spun
         if (this.leanFromBend) {
