@@ -609,6 +609,7 @@ function placedOnModel() {
     return list;
 }
 for (const id of ["scale", "rotation"]) $(id).addEventListener("change", () => {
+    if (restoring) return;           // (Ctrl+Z sets the field back: no warning for that)
     const placed = placedOnModel();
     if (placed.length) status("The model is scaled or turned; what was placed on it stays where it was: " + placed.join(", ") + ". Check them.", "warn");
 });
@@ -2006,15 +2007,14 @@ function buildConfig(id) {
     if (suspensionEditor) Object.assign(config, suspensionEditor.read());          // the suspension and the driveline from the parts library
     const driverConfig = driverEditor && driverEditor.read();
     if (driverConfig) config.driver = driverConfig;
-    // (the driver switched off, or not loaded yet or not loaded at all: the driver of car.json stays, switched off when it is; its place, hands, keys and bones were
-    // all thrown away, and switching it on again asked for the model)
-    else if (driverEditor && state.existingCar && state.existingCar.driver && state.existingCar.driver.file)
-        config.driver = Object.assign({}, state.existingCar.driver, driverEditor.driver() && !driverEditor.enabled() ? { enabled: false } : {});
+    // (the driver not loaded yet, or not loaded at all: the driver of car.json stays; it was thrown away, with its place, hands, keys and bones)
+    else if (driverEditor && !driverEditor.driver() && state.existingCar && state.existingCar.driver && state.existingCar.driver.file)
+        config.driver = Object.assign({}, state.existingCar.driver);
     if (softBodyEditor) {
         const soft = softBodyEditor.read();
         if (soft.softbody) config.softbody = soft.softbody;
         // (the layout of the shell is in the frame of the body: the centre of gravity and the tyre it was drawn at go with it, so a tune with another centre keeps the shell on the model)
-        if (config.softbody && config.softbody.layout && !isFinite(config.softbody.layout_cg)) { config.softbody.layout_cg = config.chassis.cg_height; config.softbody.layout_radius = config.chassis.tire_diameter / 2; }
+        if (config.softbody && config.softbody.layout && !Number.isFinite(config.softbody.layout_cg)) { config.softbody.layout_cg = config.chassis.cg_height; config.softbody.layout_radius = config.chassis.tire_diameter / 2; }
         if (soft.parts) config.parts = soft.parts;
     }
     return config;
@@ -2182,7 +2182,7 @@ async function saveParts() {
         const soft = softBodyEditor.read();
         if (soft.softbody) config.softbody = soft.softbody; else delete config.softbody;
         // (the layout is drawn on the car of the bench, which is built from the form: its centre of gravity and its tyre are those of the form)
-        if (config.softbody && config.softbody.layout && config.chassis && !isFinite(config.softbody.layout_cg)) { config.softbody.layout_cg = num("cgHeight") > 0 ? num("cgHeight") : config.chassis.cg_height; config.softbody.layout_radius = (num("tyre") > 0 ? num("tyre") : config.chassis.tire_diameter) / 2; }
+        if (config.softbody && config.softbody.layout && config.chassis && !Number.isFinite(config.softbody.layout_cg)) { config.softbody.layout_cg = num("cgHeight") > 0 ? num("cgHeight") : config.chassis.cg_height; config.softbody.layout_radius = (num("tyre") > 0 ? num("tyre") : config.chassis.tire_diameter) / 2; }
         if (soft.parts) config.parts = soft.parts; else delete config.parts;
         await OpenRacer.Garage.store("cars", id, config, {}, { base: "../" });
         // (the list as it is now: picking another car and this one again loaded the parts of before, and the next Save wrote them back)
@@ -2380,7 +2380,7 @@ function loadExisting() {
         const saved = OpenRacer.Setups.configOf(car.id, activeTune, car);
         if (saved) shown = Object.assign({}, car, saved, { id: car.id, model: car.model });
         if (shown.driver && !shown.driver.file && car.driver && car.driver.file) shown.driver = Object.assign({}, shown.driver, { file: car.driver.file });
-        if (shown.softbody && shown.softbody.layout && !isFinite(shown.softbody.layout_cg) && car.chassis) shown.softbody = Object.assign({}, shown.softbody, { layout_cg: car.chassis.cg_height, layout_radius: car.chassis.tire_diameter / 2 });
+        if (shown.softbody && shown.softbody.layout && !Number.isFinite(shown.softbody.layout_cg) && car.chassis) shown.softbody = Object.assign({}, shown.softbody, { layout_cg: car.chassis.cg_height, layout_radius: car.chassis.tire_diameter / 2 });
     }
     fill(shown);
     state.overrides = JSON.parse(JSON.stringify(shown.materials || car.materials || {}));
@@ -2949,7 +2949,7 @@ $("setupSelect").addEventListener("change", async () => {
             if (!saved) return;
             config = Object.assign({}, base || {}, saved, { id, model: base ? base.model : saved.model });
             if (config.driver && !config.driver.file && base && base.driver && base.driver.file) config.driver = Object.assign({}, config.driver, { file: base.driver.file });
-            if (config.softbody && config.softbody.layout && !isFinite(config.softbody.layout_cg) && base && base.chassis) config.softbody = Object.assign({}, config.softbody, { layout_cg: base.chassis.cg_height, layout_radius: base.chassis.tire_diameter / 2 });      // (a layout drawn for the car as made)
+            if (config.softbody && config.softbody.layout && !Number.isFinite(config.softbody.layout_cg) && base && base.chassis) config.softbody = Object.assign({}, config.softbody, { layout_cg: base.chassis.cg_height, layout_radius: base.chassis.tire_diameter / 2 });      // (a layout drawn for the car as made)
         }
         fill(config);
         if (bench.vehicle) restartBench();              // (the car on the bench is built again from the tune, a metre up)                       // the whole form, the cards of the suspension, the driver and the soft body, and the Tuning card (which lists the setups again)
@@ -3669,7 +3669,8 @@ driverEditor = initDriver({
     steeringPreview,
     resolve: (file) => OpenRacer.Garage.resolve(state.existingCar, "../" + file),
     // (a drag of the driver, a hand, a foot, the chest, the head or the wheel is a change of the car: Save did not light up, and leaving lost it without a question)
-    setDragging: (on) => { layers.dragging = on; if (!on) { setDirty(true); remember(); } },
+    // (not a step of Ctrl+Z: the undo of the form does not hold the driver)
+    setDragging: (on, moved) => { layers.dragging = on; if (!on && moved) setDirty(true); },
     deselectLayers: () => { if (layers.selected) selectLayer(layers.selected); },
     pickLocked: () => !!(suspensionEditor && suspensionEditor.editing)        // (Edit origins: nothing else is picked in the view)
 });
@@ -3681,7 +3682,7 @@ suspensionEditor = initSuspension({
     loadLibrary: () => loadPhysics(),
     renderLayers: () => renderLayers(),
     save: () => saveCurrent(),
-    changed: () => { setDirty(true); remember(); },
+    changed: () => setDirty(true),            // (not a step of Ctrl+Z: the undo of the form does not hold the suspension)
     status,
     // Edit origins: everything else that can be picked or marks something in the view is hidden, so that only the points are seen
     hideOthers: (on) => { cameraMarkers.visible = !on; axes.visible = !on; arrow.visible = !on; helpers.visible = !on; exhaust.forEach((e) => { e.target.visible = !on; }); if (driverEditor && driverEditor.deselect) driverEditor.deselect(); }

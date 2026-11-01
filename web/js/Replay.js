@@ -1301,17 +1301,22 @@ OpenRacer.Replay = (function() {
         // the dents, the parts that came off, the wheels and the rider as a ragdoll go with the edit (it played without them: an intact car on four wheels after a
         // crash, the rider still seated): at every sample of the edit the record that holds at its time in the recording, written when it changes
         var position = function(t) { return Math.max(first(), Math.min(last(), t / DT)); };
-        var follow = function(holder, copy) {
-            var out = [], was = -1;
+        // (before is what holds before the first record: the shell as recorded first, as the replay shows it; the rider nothing, he is seated, as the replay hides
+        // the ragdoll there; he was drawn in his crash from the first frame of the edit)
+        var follow = function(holder, copy, before) {
+            var out = [], was = -2;
             if(!holder || !holder.records.length) return out;
             for(var i = 0; i < n; i++) {
-                var at = softAt(holder, position(times[i]));
-                if(at !== was) { out.push(copy(holder.records[at], i)); was = at; }
+                var p = position(times[i]), at = before === null && p < holder.records[0].index ? -1 : softAt(holder, p);
+                if(at === was) continue;
+                if(at >= 0) out.push(copy(holder.records[at], i));
+                else if(was >= 0) out.push(before === null ? copy({ pts: null }, i) : copy(holder.records[0], i));
+                was = at;
             }
             return out;
         };
         var softKept = cars.map(function(entry) { return follow(entry.soft, function(rec, i) { return { index: i, disp: rec.disp, parts: rec.parts, wheels: rec.wheels }; }); });
-        var riderKept = cars.map(function(entry) { return follow(entry.rider, function(rec, i) { return { index: i, pts: rec.pts }; }); });
+        var riderKept = cars.map(function(entry) { return follow(entry.rider, function(rec, i) { return { index: i, pts: rec.pts }; }, null); });
         // the skid marks, the smoke, the sparks: the rows made in the part of the recording that a step of the edit plays forwards (not over a cut or a jump back)
         var effectRows = {};
         var firstAfter = function(rows, t) { var lo = 0, hi = rows.length; while(lo < hi) { var mid = (lo + hi) >> 1; if(rows[mid][0] <= t) lo = mid + 1; else hi = mid; } return lo; };
@@ -1969,6 +1974,11 @@ OpenRacer.Replay = (function() {
         // the camera of the clips of the video editor (runs of samples): follow, cockpit or cinematic where a clip had it, else the camera track
         var camRuns = !api.editor && Array.isArray(parsed.header.cams) ? parsed.header.cams.filter(function(r) { return Array.isArray(r) && isFinite(r[0]) && /^(follow|cockpit|cinematic|track)$/.test(r[1]); }) : [];
         var camShown = null;
+        // (the camera of the settings comes back when the page goes: an edit that ended on the cockpit left the next race in the cockpit)
+        if(camRuns.length && typeof Settings !== "undefined") {
+            var priorCamera = Settings.option("camera");
+            window.addEventListener("pagehide", function() { if(Settings.option("camera") !== priorCamera) Settings.setOption("camera", priorCamera, true); });
+        }
         var clipCam = function(time) {
             if(!camRuns.length || free.active) return "track";
             var at = Math.round(time / DT), lo = 0, hi = camRuns.length - 1;

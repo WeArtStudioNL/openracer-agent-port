@@ -122,8 +122,9 @@ export function initDriver(api) {
     // ---- the gizmo: one at a time, for the model (move or rotate) or for a hand or a foot (move)
     const gizmo = new TransformControls(camera, renderer.domElement);
     gizmo.setSize(0.7);
-    gizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !event.value; drv.dragging = event.value; if (api.setDragging) api.setDragging(event.value); });
-    gizmo.addEventListener("objectChange", () => moved());
+    let dragMoved = false;          // (a click on the gizmo without a move is no change of the car)
+    gizmo.addEventListener("dragging-changed", (event) => { if (event.value) dragMoved = false; controls.enabled = !event.value; drv.dragging = event.value; if (api.setDragging) api.setDragging(event.value, dragMoved); });
+    gizmo.addEventListener("objectChange", () => { dragMoved = true; moved(); });
     scene.add(typeof gizmo.getHelper === "function" ? gizmo.getHelper() : gizmo);
 
     function attach() {
@@ -518,15 +519,16 @@ export function initDriver(api) {
     }
 
     // ---- the car: what goes in car.json, and what is read from it
+    // (switched off it is read too, with enabled false: the place, the hands and the keys of this session stay with it, and the game shows no driver)
     function read() {
-        if (!drv.driver || !drv.enabled) return null;
+        if (!drv.driver) return null;
         const c = drv.driver.config;
         const bones = {};
         for (const [key, , parts] of ROLES) { const list = drv.driver.bones[key]; if (list && list.every(Boolean)) bones[key] = list.map((b) => b.name); }
         if (drv.driver.bones.hips) bones.hips = drv.driver.bones.hips.name;
         if (drv.driver.bones.chest && drv.driver.bones.chest[0]) bones.chest = drv.driver.bones.chest[0].name;
         if (drv.driver.bones.head) bones.head = drv.driver.bones.head.name;
-        return { enabled: true, file: "", position: c.position.slice(), rotation: c.rotation.slice(), scale: c.scale, bones, hands: { left: c.hands.left.slice(), right: c.hands.right.slice(), rotation: { left: c.hands.rotation.left.slice(), right: c.hands.rotation.right.slice() }, grip: { left: c.hands.grip.left, right: c.hands.grip.right }, offset: c.hands.offset ? { left: c.hands.offset.left.slice(), right: c.hands.offset.right.slice() } : undefined }, grip_curl: c.grip_curl, keys: c.keys ? JSON.parse(JSON.stringify(c.keys)) : undefined,
+        return { enabled: !!drv.enabled, file: "", position: c.position.slice(), rotation: c.rotation.slice(), scale: c.scale, bones, hands: { left: c.hands.left.slice(), right: c.hands.right.slice(), rotation: { left: c.hands.rotation.left.slice(), right: c.hands.rotation.right.slice() }, grip: { left: c.hands.grip.left, right: c.hands.grip.right }, offset: c.hands.offset ? { left: c.hands.offset.left.slice(), right: c.hands.offset.right.slice() } : undefined }, grip_curl: c.grip_curl, keys: c.keys ? JSON.parse(JSON.stringify(c.keys)) : undefined,
             feet: { left: c.feet.left.slice(), right: c.feet.right.slice(), travel: c.feet.travel, direction: c.feet.direction.slice(), offset: c.feet.offset ? { left: c.feet.offset.left.slice(), right: c.feet.offset.right.slice() } : undefined }, elbow_out: c.elbow_out, knee_out: c.knee_out,
             wheel: c.wheel ? JSON.parse(JSON.stringify(c.wheel)) : undefined, pivot: c.pivot, chest: { rotation: c.chest.rotation.slice() }, head: { rotation: c.head.rotation.slice() }, poles: c.poles ? JSON.parse(JSON.stringify(c.poles)) : undefined };
     }

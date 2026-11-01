@@ -112,7 +112,7 @@ function withTune(base, setupName) {
     if(!setup) return base;
     var config = Object.assign({}, base, setup, { id: base.id, model: base.model, preview: base.preview, folder: base.folder, source: base.source, setupName: setupName });      // (setupName: the key of its records and ghost, Records.js)
     // (a layout of the shell without the centre of gravity it was drawn at: it was drawn for the car as made, car.json; CollisionProxy shifts it to the centre of the setup)
-    if(config.softbody && config.softbody.layout && !isFinite(config.softbody.layout_cg) && base.chassis) config.softbody = Object.assign({}, config.softbody, { layout_cg: base.chassis.cg_height, layout_radius: base.chassis.tire_diameter / 2 });
+    if(config.softbody && config.softbody.layout && !Number.isFinite(config.softbody.layout_cg) && base.chassis) config.softbody = Object.assign({}, config.softbody, { layout_cg: base.chassis.cg_height, layout_radius: base.chassis.tire_diameter / 2 });
     // (a setup from the car editor has the driver without his file, which is the car's: the file of car.json)
     if(config.driver && !config.driver.file && base.driver && base.driver.file) config.driver = Object.assign({}, config.driver, { file: base.driver.file });
     return config;

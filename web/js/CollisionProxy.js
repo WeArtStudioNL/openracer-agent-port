@@ -206,7 +206,7 @@ OpenRacer.CollisionProxy = (function () {
             // move by the difference against the road and the model (a kart whose centre went down 11 cm stood on its floor nodes with its wheels in the air): the nodes are
             // shifted back by it, and by a change of the tyre radius, which moves the axle against the centre the other way
             var cfgSoft = object.config.softbody;
-            var shift = modelBeams ? 0 : (isFinite(cfgSoft.layout_cg) ? cfgSoft.layout_cg - v.cgHeight : 0) + (isFinite(cfgSoft.layout_radius) ? radius - cfgSoft.layout_radius : 0);
+            var shift = modelBeams ? 0 : (Number.isFinite(cfgSoft.layout_cg) ? cfgSoft.layout_cg - v.cgHeight : 0) + (Number.isFinite(cfgSoft.layout_radius) ? radius - cfgSoft.layout_radius : 0);
             // (the shell of the model: the nodes keep their numbers, the beams point at them)
             var own = layout.slice(0, 2000).filter(function (n) { return isFinite(n.x) && isFinite(n.y) && isFinite(n.z) && n.r > 0; })
                 .map(function (n) {

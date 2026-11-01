@@ -338,8 +338,8 @@ export function initSoftBody(api) {
             soft.layout = sb.layout;
             // the centre of gravity and the tyre the layout was drawn at (the game shifts the shell by the difference): kept with the layout, not the form's of now
             // (the centre set lower after the nodes were drawn put them 10 cm under the body)
-            if (isFinite(sb.layoutCg)) soft.layout_cg = sb.layoutCg;
-            if (isFinite(sb.layoutRadius)) soft.layout_radius = sb.layoutRadius;
+            if (Number.isFinite(sb.layoutCg)) soft.layout_cg = sb.layoutCg;
+            if (Number.isFinite(sb.layoutRadius)) soft.layout_radius = sb.layoutRadius;
         }
         if (nodes.length) soft.nodes = nodes;
         if (beams.length) soft.beams = beams;
@@ -360,8 +360,9 @@ export function initSoftBody(api) {
         sb.parts = JSON.parse(JSON.stringify(car.parts || []));
         sb.sel.nodes.clear(); sb.sel.beam = null;
         sb.layout = Array.isArray(soft.layout) ? soft.layout.map((n) => Object.assign({}, n)) : null;
-        sb.layoutCg = sb.layout && isFinite(soft.layout_cg) ? soft.layout_cg : null;
-        sb.layoutRadius = sb.layout && isFinite(soft.layout_radius) ? soft.layout_radius : null;
+        nodeUndo.length = 0;               // (the undo of the nodes is of this car: Ctrl+Z put the nodes of the car before on this one, and saved them)
+        sb.layoutCg = sb.layout && Number.isFinite(soft.layout_cg) ? soft.layout_cg : null;
+        sb.layoutRadius = sb.layout && Number.isFinite(soft.layout_radius) ? soft.layout_radius : null;
         showSelection();
         renderParts();
     }
@@ -758,7 +759,7 @@ export function initSoftBody(api) {
         if (!(y >= 0) || !(b >= 0)) { status("Give the yield and the break force as numbers.", "error"); return; }
         if (b < y) { status("The break force has to be at least the yield force.", "error"); return; }
         // (the numbers of the nodes are those of this shell: kept as a layout, or another Max nodes or model made new nodes and the strengths landed on others)
-        freeze(s);
+        if (sb.sel.nodes.size || sb.sel.beam !== null) freeze(s);
         if (sb.sel.nodes.size) {
             sb.sel.nodes.forEach((k) => { sb.nodeEdits.set(k, { yield_force: y, break_force: b }); s.nodeYield[k] = y; s.nodeBreak[k] = b; });
         } else if (sb.sel.beam !== null) {
@@ -795,9 +796,9 @@ export function initSoftBody(api) {
         caster.setFromCamera(new THREE.Vector2(mx / rect.width * 2 - 1, -(my / rect.height) * 2 + 1), camera);
         const hits = caster.intersectObject(bench.model.tilt, true).filter((h) => h.object.isMesh && h.object.visible);
         if (!hits.length) return false;
+        if ((sb.layout ? sb.layout.length : nb(s)) >= 2000) { status("A car can have 2000 nodes at most.", "error"); return true; }
         rememberNodes();
         freeze(s);
-        if (sb.layout.length >= 2000) { status("A car can have 2000 nodes at most.", "error"); return true; }
         const local = sb.group.worldToLocal(hits[0].point.clone());
         const r = parseFloat($("sbRadius").value) || 0.2;
         sb.layout.push({ x: +local.x.toFixed(4), y: +local.y.toFixed(4), z: +local.z.toFixed(4), r });
@@ -829,9 +830,9 @@ export function initSoftBody(api) {
     function removeNodes(gone) {
         const s = softBody();
         if (!s || !gone.size) return;
+        if ((sb.layout ? sb.layout.length : nb(s)) - gone.size < 3) { status("A car needs at least 3 nodes.", "error"); return; }
         rememberNodes();
         freeze(s);
-        if (sb.layout.length - gone.size < 3) { status("A car needs at least 3 nodes.", "error"); return; }
         // the numbers of the nodes behind a removed one go down: the strengths that were set follow them
         const map = new Map();
         let next = 0;
