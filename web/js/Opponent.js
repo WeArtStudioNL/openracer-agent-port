@@ -88,7 +88,19 @@ OpenRacer.Opponent = function (config, line, options) {
     var modelMid = null;
     // the speed of the line for this driver: the grip of the road times the skill, less on sand or grass (the surfaces of the track, Helpers.getSurface), and no flying off the crests
     // (the grip of the road as it is now: in the rain or on snow the line is driven slower; the speeds are made again when the grip has changed)
-    var speeds = null, speedsGrip = -1;
+    var speeds = null, speedsGrip = -1, speedsTyres = 1;
+    // the grip the tyres have left from their wear and temperature, the mean of the wheels on the road (worn tyres kept the speeds of new ones: it ran wide and crashed,
+    // and the learning saved that as slower bends for the next race)
+    function tyresNow() {
+        var v = self.vehicle, sum = 0, count = 0;
+        if (!v || !v.wheels) return 1;
+        for (var i = 0; i < v.wheels.length; i++) {
+            if (v.soloWheels && (i === 1 || i === 3)) continue;
+            var w = v.wheels[i];
+            sum += (w.condition || 1) / (w.pressureGrip || 1); count++;
+        }
+        return count ? Math.max(0.5, Math.min(1.1, sum / count)) : 1;
+    }
     // learning: the line is driven in pieces of five points (10 m); each piece has a factor on the speed the line allows, that grows when the piece was driven cleanly (the car stayed
     // near the line) and shrinks when the car ran wide in it or crashed just after it, up to a ceiling that goes with the skill (hard: 1.6, normal: 1.35, easy: 1.1)
     // (the factor is on the speed of the bend, and the braking before it is worked out again from it: a factor on the speed at every point let a straight that was
@@ -119,6 +131,7 @@ OpenRacer.Opponent = function (config, line, options) {
         var roadGrip = typeof getSurface === "function" ? getSurface("road").static : 1;
         var wetness = roadGrip / 1.2;                                // (1 on a dry road)
         speedsGrip = roadGrip;
+        speedsTyres = tyresNow();
         // (the skidpad's g is what the car holds, the share of it that the driver uses is the skill; the guess from tyres.grip is a factor on 1 g)
         var lateral = measuredGrip ? measuredGrip : carGrip * 1.1, braking = measuredGrip ? measuredGrip * 0.95 : carGrip * 0.95;
         // A motorcycle holds what its lean and its "max_lateral_g" allow (0.9 g), not the 1.2 g of the guess for a car on the same tyres, and it cannot brake hard
@@ -131,8 +144,8 @@ OpenRacer.Opponent = function (config, line, options) {
         // (below hard a share of what was learned: a normal driver never goes wide at 85 %, so it learned up to the ceiling and was as fast as hard after a few laps)
         var share = 0.4 + 0.6 * skillShare;
         var factor = learn ? function (i) { var f = learn[Math.floor(i / SEG) % learn.length]; return f > 1 ? 1 + (f - 1) * share : f; } : null;      // (slower where it went wide or crashed: all of it)
-        brakeAccel = 9.81 * braking * self.skill * wetness;
-        speeds = line ? line.computeSpeeds(9.81 * lateral * self.skill * wetness, 9.81 * braking * self.skill * wetness, 90, function (name) { return typeof getSurface === "function" && name ? getSurface(name).static / roadGrip : 1; }, factor) : null;
+        brakeAccel = 9.81 * braking * self.skill * wetness * speedsTyres;
+        speeds = line ? line.computeSpeeds(9.81 * lateral * self.skill * wetness * speedsTyres, 9.81 * braking * self.skill * wetness * speedsTyres, 90, function (name) { return typeof getSurface === "function" && name ? getSurface(name).static / roadGrip : 1; }, factor) : null;
         learnChanged = false; learnBuilt = self.clock || 0;
     }
     buildSpeeds();
@@ -603,7 +616,7 @@ OpenRacer.Opponent = function (config, line, options) {
             });
         }
         if (this.ghostLeft > 0 && (this.ghostLeft -= delta) <= 0) this.setGhost(0);
-        if (line && typeof getSurface === "function" && Math.abs(getSurface("road").static - speedsGrip) > 0.03) buildSpeeds();
+        if (line && typeof getSurface === "function" && (Math.abs(getSurface("road").static - speedsGrip) > 0.03 || Math.abs(tyresNow() - speedsTyres) > 0.03)) buildSpeeds();
         if (this.crashedAt) {
             // crashed: it stands (no throttle, the brakes on, no steering) until the wait is over, then it is put back at the side of the track
             this.throttle = 0; this.brakePedal = 1; this.turnAngle = 0; this.reverse = false;
