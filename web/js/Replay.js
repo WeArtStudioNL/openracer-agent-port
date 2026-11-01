@@ -1298,24 +1298,40 @@ OpenRacer.Replay = (function() {
         if(!cars.length || times.length < 2) return Promise.reject(new Error("There is nothing to save."));
         var per = perSample(), n = times.length, data = new Float32Array(n * per), sample = new Float32Array(STRIDE);
         for(var i = 0; i < n; i++) for(var c = 0; c < cars.length; c++) { interpolate(times[i], c, sample); data.set(sample, i * per + c * STRIDE); }
-        var header = {
-            format: FORMAT, version: FILE_VERSION, game: (OpenRacer.VERSION || ""), created: new Date().toISOString(),
-            soft: cars.map(function() { return null; }), softBytes: 0, effects: {},
-            rate: RATE, stride: STRIDE, samples: n,
-            track: { id: currentTrack.id, name: currentTrack.name || currentTrack.id },
-            cars: cars.map(function(entry) { var o = entry.object; return { id: o.config.id, name: String(o.name || o.config.name || o.config.id), color: typeof o.color === "number" ? o.color : null, player: entry.player, setup: o.config.setupName || undefined }; }),
-            gears: gearLabels
+        // the dents, the parts that came off, the wheels and the rider as a ragdoll go with the edit (it played without them: an intact car on four wheels after a
+        // crash, the rider still seated): at every sample of the edit the record that holds at its time in the recording, written when it changes
+        var position = function(t) { return Math.max(first(), Math.min(last(), t / DT)); };
+        var follow = function(holder, copy) {
+            var out = [], was = -1;
+            if(!holder || !holder.records.length) return out;
+            for(var i = 0; i < n; i++) {
+                var at = softAt(holder, position(times[i]));
+                if(at !== was) { out.push(copy(holder.records[at], i)); was = at; }
+            }
+            return out;
         };
-        for(var key in (extra || {})) header[key] = extra[key];
-        var text = new TextEncoder().encode(JSON.stringify(header));
-        var padded = Math.ceil((text.length + 8) / 4) * 4 - 8;
-        var out = new Uint8Array(8 + padded + data.byteLength);
-        out.set(MAGIC, 0);
-        new DataView(out.buffer).setUint32(4, padded, true);
-        out.fill(0x20, 8, 8 + padded);
-        out.set(text, 8);
-        out.set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength), 8 + padded);
-        return gzip(out).then(function(bytes) { return { bytes: bytes, seconds: n / RATE }; });
+        var softKept = cars.map(function(entry) { return follow(entry.soft, function(rec, i) { return { index: i, disp: rec.disp, parts: rec.parts, wheels: rec.wheels }; }); });
+        var riderKept = cars.map(function(entry) { return follow(entry.rider, function(rec, i) { return { index: i, pts: rec.pts }; }); });
+        // the skid marks, the smoke, the sparks: the rows made in the part of the recording that a step of the edit plays forwards (not over a cut or a jump back)
+        var effectRows = {};
+        var firstAfter = function(rows, t) { var lo = 0, hi = rows.length; while(lo < hi) { var mid = (lo + hi) >> 1; if(rows[mid][0] <= t) lo = mid + 1; else hi = mid; } return lo; };
+        for(var effectName in EFFECT_FLOATS) {
+            var effect = effects[effectName];
+            if(!effect || !effect.rows.length) continue;
+            var floats = EFFECT_FLOATS[effectName], list = [];
+            for(var k = 1; k < n; k++) {
+                var t0 = times[k - 1], t1 = times[k];
+                if(!(t1 > t0 && t1 - t0 < 0.5)) continue;
+                for(var r = firstAfter(effect.rows, t0); r < effect.rows.length && effect.rows[r][0] <= t1; r++) {
+                    var row = effect.rows[r], copy = new Float32Array(row.subarray(0, floats));
+                    copy[0] = (k - 1 + (row[0] - t0) / (t1 - t0)) * DT;
+                    if(effectName === "marbles" && row[11] < 1e8) copy[11] = copy[0] + (row[11] - row[0]);
+                    list.push(copy);
+                }
+            }
+            if(list.length) effectRows[effectName] = list;
+        }
+        return gzip(fileBytes(assemble(n, data, softKept, effectRows, riderKept), extra)).then(function(bytes) { return { bytes: bytes, seconds: n / RATE }; });
     };
     // keeps bytes (of bake) in the list of Replays, with a name
     api.keepBaked = function(name, baked) {
@@ -1419,12 +1435,34 @@ OpenRacer.Replay = (function() {
         var clean = function(x) { return isFinite(x) ? x : 0; };
         for(var dk = 0; dk < data.length; dk++) if(!isFinite(data[dk])) data[dk] = 0;
         var inRange = function(index) { return index >= base && index < end; };
-        // the soft body: per car the records that are inside the recording (and the part that is saved), as a block of bytes after the numbers
-        var softInfo = cars.map(function(entry) {
-            var soft = entry.soft;
-            if(!soft || !soft.records.length) return null;
-            var kept = soft.records.filter(function(rec) { return inRange(rec.index); });
-            if(!kept.length) return null;
+        // the soft body, the effects and the rider: what is inside the recording, counted from its start
+        var softKept = cars.map(function(entry) {
+            return entry.soft ? entry.soft.records.filter(function(rec) { return inRange(rec.index); }).map(function(rec) { return { index: rec.index - base, disp: rec.disp, parts: rec.parts, wheels: rec.wheels }; }) : [];
+        });
+        var T0 = base * DT, T1 = end * DT, effectRows = {};
+        for(var effectName in EFFECT_FLOATS) {
+            var effect = effects[effectName];
+            if(!effect || !effect.rows.length) continue;
+            effectRows[effectName] = effect.rows.filter(function(row) { return row[0] >= T0 - 2 && row[0] <= T1; }).map(function(row) {
+                var copy = new Float32Array(row.subarray(0, EFFECT_FLOATS[effectName]));
+                copy[0] = Math.max(0, row[0] - T0);
+                if(effectName === "marbles" && row[11] < 1e8) copy[11] = Math.max(0, row[11] - T0);
+                return copy;
+            });
+        }
+        var riderKept = cars.map(function(entry) {
+            return entry.rider ? entry.rider.records.filter(function(rec) { return inRange(rec.index); }).map(function(rec) { return { index: rec.index - base, pts: rec.pts }; }) : [];
+        });
+        return fileBytes(assemble(n, data, softKept, effectRows, riderKept));
+    }
+
+    // A replay file: the header, the numbers (n samples), and after them the blocks of the soft body, the effects and the rider. The records and rows have their
+    // indexes and times counted from the first sample already (pack: from the start of the part that is saved; bake: in the edit as it plays)
+    function assemble(n, data, softKept, effectRows, riderKept) {
+        var clean = function(x) { return isFinite(x) ? x : 0; };
+        var softInfo = cars.map(function(entry, c) {
+            var soft = entry.soft, kept = softKept[c] || [];
+            if(!soft || !kept.length) return null;
             return { nodes: soft.nodes, parts: soft.names.slice(0, MAX_SOFT_PARTS), count: kept.length, kept: kept };
         });
         var softBytes = 0, sizes = softInfo.map(function(info) { if(!info) return 0; var size = recordSize(info); softBytes += size * info.count; return size; });
@@ -1433,7 +1471,7 @@ OpenRacer.Replay = (function() {
             var info = softInfo[c];
             if(!info) return;
             info.kept.forEach(function(rec) {
-                view.setUint32(at, Math.max(0, rec.index - base), true);
+                view.setUint32(at, Math.max(0, rec.index), true);
                 for(var i = 0; i < rec.disp.length; i++) view.setInt16(at + 4 + 2 * i, rec.disp[i], true);
                 var o = at + 4 + Math.ceil(rec.disp.length * 2 / 4) * 4;
                 for(var j = 0; j < info.parts.length * PART_FLOATS; j++) view.setFloat32(o + 4 * j, j < rec.parts.length ? clean(rec.parts[j]) : 0, true);
@@ -1442,32 +1480,29 @@ OpenRacer.Replay = (function() {
                 at += sizes[c];
             });
         });
-        // the skid marks, the smoke and the marbles: their rows (what was made, and when), with the times counted from the start of the recording
-        var T0 = base * DT, T1 = end * DT, effectInfo = {}, effectBlocks = [], effectBytes = 0;
+        // the skid marks, the smoke and the marbles: their rows (what was made, and when)
+        var effectInfo = {}, effectBlocks = [], effectBytes = 0;
         for(var effectName in EFFECT_FLOATS) {
-            var effect = effects[effectName];
-            if(!effect || !effect.rows.length) continue;
-            var floats = EFFECT_FLOATS[effectName], rows = effect.rows.filter(function(row) { return row[0] >= T0 - 2 && row[0] <= T1; });
+            var rows = effectRows[effectName];
+            if(!rows || !rows.length) continue;
+            var floats = EFFECT_FLOATS[effectName];
             rows = rows.slice(Math.max(0, rows.length - MAX_EFFECT_ROWS));
             var block = new Float32Array(rows.length * floats);
             for(var ri = 0; ri < rows.length; ri++) {
                 block.set(rows[ri].subarray(0, floats), ri * floats);
                 for(var bf = 0; bf < floats; bf++) if(!isFinite(block[ri * floats + bf])) block[ri * floats + bf] = 0;
-                block[ri * floats] = Math.max(0, rows[ri][0] - T0);
-                if(effectName === "marbles" && rows[ri][11] < 1e8) block[ri * floats + 11] = Math.max(0, rows[ri][11] - T0);
             }
             effectInfo[effectName] = rows.length;
             effectBlocks.push(block);
             effectBytes += block.byteLength;
         }
         // the rider that is a ragdoll: per car its records (the sample, whether he is one, and the places of his particles), after the effects
-        var riderKept = cars.map(function(entry) { return entry.rider ? entry.rider.records.filter(function(rec) { return inRange(rec.index); }) : []; });
         var RIDER_SIZE = 4 + 4 + RIDER_FLOATS * 4, riderInfo = riderKept.map(function(list) { return list.length; });
         var riderBytes = riderInfo.reduce(function(a, b) { return a + b; }, 0) * RIDER_SIZE, riderBlob = new Uint8Array(riderBytes), riderView = new DataView(riderBlob.buffer), riderAt = 0;
         cars.forEach(function(entry, c) {
             if(!riderInfo[c]) return;
             riderKept[c].forEach(function(rec) {
-                riderView.setUint32(riderAt, Math.max(0, rec.index - base), true);
+                riderView.setUint32(riderAt, Math.max(0, rec.index), true);
                 riderView.setFloat32(riderAt + 4, rec.pts ? 1 : 0, true);
                 for(var k = 0; k < RIDER_FLOATS; k++) riderView.setFloat32(riderAt + 8 + 4 * k, rec.pts ? clean(rec.pts[k]) : 0, true);
                 riderAt += RIDER_SIZE;
@@ -1486,18 +1521,24 @@ OpenRacer.Replay = (function() {
             }),
             gears: gearLabels
         };
-        var text = new TextEncoder().encode(JSON.stringify(header));
+        return { header: header, data: data, blocks: [softBlob].concat(effectBlocks.map(function(b) { return new Uint8Array(b.buffer, b.byteOffset, b.byteLength); }), [riderBlob]) };
+    }
+
+    // the bytes of a file of assemble, with extra fields in its header
+    function fileBytes(file, extra) {
+        for(var key in (extra || {})) file.header[key] = extra[key];
+        var text = new TextEncoder().encode(JSON.stringify(file.header));
         var padded = Math.ceil((text.length + 8) / 4) * 4 - 8;      // the numbers start on a multiple of four
-        var out = new Uint8Array(8 + padded + data.byteLength + softBytes + effectBytes + riderBytes);
+        var size = 8 + padded + file.data.byteLength;
+        file.blocks.forEach(function(b) { size += b.byteLength; });
+        var out = new Uint8Array(size);
         out.set(MAGIC, 0);
         new DataView(out.buffer).setUint32(4, padded, true);
         out.fill(0x20, 8, 8 + padded);
         out.set(text, 8);
-        out.set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength), 8 + padded);
-        out.set(softBlob, 8 + padded + data.byteLength);
-        var effectAt = 8 + padded + data.byteLength + softBytes;
-        effectBlocks.forEach(function(block) { out.set(new Uint8Array(block.buffer, block.byteOffset, block.byteLength), effectAt); effectAt += block.byteLength; });
-        out.set(riderBlob, effectAt);
+        out.set(new Uint8Array(file.data.buffer, file.data.byteOffset, file.data.byteLength), 8 + padded);
+        var o = 8 + padded + file.data.byteLength;
+        file.blocks.forEach(function(b) { out.set(b, o); o += b.byteLength; });
         return out;
     }
 

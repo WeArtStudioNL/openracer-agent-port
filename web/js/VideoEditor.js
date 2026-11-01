@@ -15,7 +15,7 @@
  *                 the free camera back there), or one of the cameras of the game (follow, cockpit, cinematic).
  *   Save:         "Save" keeps the work with the replay in Replays (the clips with their keys and the camera track, and the edit as it plays): Watch then plays the edit, Edit goes on
  *                 where it was, and the recording itself stays the source in the left monitor. "Save as replay" makes a new replay in the list of Replays (with the clips cut and the
- *                 speeds applied, and the camera track in it; the smoke, the skid marks and the damage are not in it) and "Save as mp4" records the right monitor from the start to
+ *                 speeds applied, and the camera track in it, with the damage, the rider, the smoke and the skid marks of the parts it plays) and "Save as mp4" records the right monitor from the start to
  *                 the end, with the sound of the engine. Both of those ask for a name.
  */
 
@@ -515,7 +515,7 @@ OpenRacer.VideoEditor = (function () {
             return b;
         });
         ui.saveProject = button(top, "Save", "Keep the clips, their keys and the camera track with this replay in Replays: Watch then plays the edit, Edit goes on from here (the recording stays the source)", saveProject, "primary");
-        ui.save = button(top, "Save as replay", "Cut, speeds and camera track as a new replay in the list of Replays (without smoke, skid marks and damage)", saveReplay);
+        ui.save = button(top, "Save as replay", "Cut, speeds and camera track as a new replay in the list of Replays, with the damage, the smoke and the skid marks", saveReplay);
         ui.video = button(top, "Save as mp4", "The result recorded from the start to the end, as a video file", saveVideo);
         ui.close = button(top, "Close", "Back to the main menu", function () { leave(); });
 
