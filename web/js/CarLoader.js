@@ -198,6 +198,7 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
 
         var takenAt = {}, takenBy = {};   // the parts that the slots have taken (by name): where they were, and the chain that holds them
         var measured = null; // the centres and the size of the wheels of the model, in the space of the body
+        var libraryHubs = null; // (the demo wheel: the hubs where car.json puts them, only for the parts of the suspension; the car keeps its own wheelbase and tracks)
         var WL = OpenRacer.WheelLibrary, tyreSpecs = {};     // the rims and the tyres of the wheel library (WheelLibrary.js), and the shell of a library tyre per slot
         var libraryOnly = !!(WL && WL.uses(config) && !complete);          // (no wheel parts in the model: the wheels of the library stand where car.json puts the wheels)
         if(complete || libraryOnly) {
@@ -264,6 +265,15 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
             finish(wheels);
         } else {
             if(config.wheels && config.wheels.mode === "model") console.warn("CarLoader: not every wheel has parts of the model, using the default wheel");
+            // (the demo wheel and a suspension of the parts library: the hubs where car.json puts the wheels, as for the wheels of the library. Without them the
+            // wishbones, the axle and the driveline that the car editor showed were not built in the game, while their physics was)
+            var types = config.suspension || {}, usesLibrary = ["front", "rear"].some(function (a) { return types[a] && types[a].type && types[a].type !== "model" && types[a].type !== "none"; });
+            if(OpenRacer.PartsLibrary && usesLibrary && config.type !== "motorcycle") {
+                var dch = config.chassis || {}, dzF = (dch.wheelbase || 2.6) / 2 + (dch.front_axle_offset || 0), dzR = -(dch.wheelbase || 2.6) / 2 + (dch.rear_axle_offset || 0);
+                libraryHubs = { diameter: dch.tire_diameter || 0.6, sizes: [], centres: {
+                    FR: new THREE.Vector3(-(dch.front_track || 1.5) / 2, 0, dzF), FL: new THREE.Vector3((dch.front_track || 1.5) / 2, 0, dzF),
+                    RL: new THREE.Vector3((dch.rear_track || 1.5) / 2, 0, dzR), RR: new THREE.Vector3(-(dch.rear_track || 1.5) / 2, 0, dzR) } };
+            }
             defaultWheels(config.wheels && config.wheels.default_model, finish);
         }
 
@@ -313,7 +323,7 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
             // the moving parts of the suspension and the steering, when the model has them (SuspensionRig.js)
             var rig = null;
             // the suspension and the driveline built from loose parts, when the car editor chose a type for an axle (PartsLibrary.js); they are placed in the frame of the car
-            var built = OpenRacer.PartsLibrary && measured ? OpenRacer.PartsLibrary.assemble(config, measured) : null;
+            var built = OpenRacer.PartsLibrary && (measured || libraryHubs) ? OpenRacer.PartsLibrary.assemble(config, measured || libraryHubs) : null;
             if(built && built.missing.length) console.warn("PartsLibrary: missing " + built.missing.join(", "));
             if(OpenRacer.SuspensionRig) {
                 space.add(tilt);
@@ -323,7 +333,7 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
                 space.remove(tilt);
                 if(built) { space.remove(built.group); tilt.add(built.group); }      // (what the rig did not take, the engine, the gearbox, a differential, stays on the body)
                 if(rig && steering) rig.column = { centre: steering.object.position.clone(), axis: steering.axis };       // (a fixed tie rod has its arm on the steering column)
-                if(rig && measured) rig.hubs = measured.centres;                                                          // (the middle of each wheel: the upright turns it about its pin)
+                if(rig && (measured || libraryHubs)) rig.hubs = (measured || libraryHubs).centres;                                                          // (the middle of each wheel: the upright turns it about its pin)
                 if(rig) console.log("CarLoader: suspension rig with " + rig.count + " parts" + (built && built.names.length ? " (" + built.names.length + " from the parts library)" : ""));
             } else if(built) tilt.add(built.group);
             // glTF models are made of physically based materials: they are lit by and reflect the surroundings of the
