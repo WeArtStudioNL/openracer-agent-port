@@ -17,7 +17,13 @@ OpenRacer.PadNav = (function() {
     // the layers that take the controller, the one on top first
     var LAYERS = "#orDialog, .or-dialog, #replaysDialog, #garageDialog, #vehiclePicker, #replayLeave, .veShade";
 
-    function pad() { return typeof Settings !== "undefined" && Settings.controllerPad ? Settings.controllerPad() : null; }
+    // (only a controller with the standard layout: separate pedals, a shifter or a button box beside a wheel have other mappings, and their resting axes moved the
+    // focus and changed a slider every 0.12 s; and nothing while a control is being bound in the settings, where the buttons are what is bound)
+    function pad() {
+        if (typeof Settings === "undefined" || !Settings.controllerPad || (Settings.capturing && Settings.capturing())) return null;
+        var p = Settings.controllerPad();
+        return p && p.mapping === "standard" ? p : null;
+    }
     function pressed(p, i) { var b = p.buttons[i]; return !!b && (b.pressed || b.value > 0.5); }
 
     // the part of the page that the controller works in, or null while the car is driven

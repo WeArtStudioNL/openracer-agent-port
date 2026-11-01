@@ -633,7 +633,7 @@ var Tuning = (function() {
         setupSelect.onchange = function() {
             // tuning that was not saved is lost by a switch: asked first (it was gone without a word)
             var was = OpenRacer.Setups.active(config.id) || "", ref = reference();
-            var unsaved = Object.keys(base).some(function(key) { return JSON.stringify(values[key]) !== JSON.stringify(ref[key]); });
+            var unsaved = Object.keys(base).some(function(key) { return key !== "gen_power" && key !== "gen_peak_rpm" && JSON.stringify(values[key]) !== JSON.stringify(ref[key]); });      // (as the "(changed)" of the list: those two follow from the curve)
             if(!unsaved) { switchSetup(); return; }
             var to = setupSelect.value;
             setupSelect.value = was;

@@ -85,9 +85,13 @@ OpenRacer.Records = (function () {
                 if (!k || k.indexOf(GHOST) !== 0 || k === name) continue;
                 var rest = k.slice(GHOST.length), dot = rest.indexOf(".");
                 var rec = dot > 0 ? ofTrack(rest.slice(0, dot))[rest.slice(dot + 1)] : null;
-                others.push({ key: k, date: rec && rec.date ? rec.date : "" });
+                others.push({ key: k, date: rec && rec.date ? rec.date : "", size: (window.localStorage.getItem(k) || "").length });
             }
         } catch (e) { return false; }
+        // (only when the other ghosts together are at least as big as this one: the rest of the storage is the settings, the setups, the pictures of the cars,
+        // and every ghost was taken away when they filled it, and this one still did not fit)
+        var room = others.reduce(function (sum, o) { return sum + o.size; }, 0);
+        if (room < JSON.stringify(value).length) return false;
         others.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
         for (var j = 0; j < others.length; j++) {
             try { window.localStorage.removeItem(others[j].key); } catch (e) { /* gone */ }

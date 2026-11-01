@@ -339,7 +339,8 @@ var Settings = (function() {
         var pads = getPads();
         var baseline = [];
         for(var p = 0; p < pads.length; p++) {
-            baseline[p] = pads[p] ? { axes: Array.prototype.slice.call(pads[p].axes) } : null;
+            // (a button that is held already, the A that chose the binding with a controller, counts only after it is let go: it was bound at once)
+            baseline[p] = pads[p] ? { axes: Array.prototype.slice.call(pads[p].axes), held: Array.prototype.map.call(pads[p].buttons, function(x) { return x.pressed; }) } : null;
         }
         capture = { done: done, baseline: baseline };
         captureTimer = setInterval(pollCapture, 40);
@@ -367,7 +368,9 @@ var Settings = (function() {
             var pad = pads[p];
             if(!pad || !pad.connected) continue;
             var device = wheel && pad.index === wheel.index ? "wheel" : "pad";
+            var heldBefore = capture.baseline[p] && capture.baseline[p].held;
             for(var b = 0; b < pad.buttons.length; b++) {
+                if(heldBefore && heldBefore[b]) { if(!pad.buttons[b].pressed) heldBefore[b] = false; continue; }
                 if(pad.buttons[b].pressed) {
                     finishCapture({ d: device, t: "b", i: b });
                     return;
@@ -1371,6 +1374,7 @@ var Settings = (function() {
         setVirtual: function(id, held) { virtualDown[id] = !!held; },
         trigger: function(id) { if(!paused && !replayOn() && handlers[id]) handlers[id](); },      // an action once, as a key press does (the buttons of the HUD)
         isPaused: function() { return paused; },
+        capturing: function() { return !!capture; },          // (a control is being bound: PadNav.js keeps off the buttons)
         toggleMenu: toggleMenu,
         closeMenu: closeMenu,
         holdPause: function(flag) { paused = !!flag; keysDown = {}; },        // the game stands still without the menu (the HUD editor)

@@ -120,6 +120,9 @@ OpenRacer.Ghost = function (config, trackId) {
         since = 1;
         if (this.onLap && recording && recording.length >= 10) this.onLap(recording, lapTime);
         if (!this.saving || !recording || recording.length < 10) return false;
+        // (the setup that is chosen now: one switched in the tuning menu during the game is the car of this lap; the lap went to the setup of the start)
+        var key = OpenRacer.Setups && OpenRacer.Setups.active ? OpenRacer.Records.key(config.id, OpenRacer.Setups.active(config.id)) : recordKey;
+        if (key !== recordKey) { recordKey = key; this.best = OpenRacer.Records.ghost(trackId, key) || null; }
         if (!OpenRacer.Records.lap(trackId, recordKey, lapTime)) return false;
         this.best = { time: lapTime, samples: recording };
         // (a ghost that does not fit in the storage of the browser is kept for this game: the record is the time)

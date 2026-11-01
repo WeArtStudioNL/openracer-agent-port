@@ -731,7 +731,7 @@ OpenRacer.Parts = (function () {
             });
         }
         var wallF = [];
-        function wallForces(stepDt) {
+        function wallForces(stepDt, frameTime) {
             wallF.length = 0;
             for (var i = 0; i < parts.length; i++) {
                 var p = parts[i];
@@ -756,7 +756,7 @@ OpenRacer.Parts = (function () {
                     fx += ox; fy += oy; fz += oz; cx += ocx; cy += ocy; cz += ocz; wsum += osum;
                     // the object is pushed the other way, for the time of the frame
                     if (entry && (ox || oy || oz) && OpenRacer.RigidObjects && OpenRacer.RigidObjects.pushAt) {
-                        var frameDt = 2 * stepDt, at = osum > 0 ? { x: ocx / osum, y: ocy / osum, z: ocz / osum } : entry.body.translation();
+                        var frameDt = frameTime || 2 * stepDt, at =      /* (the whole frame: on a long frame there are more steps than two) */ osum > 0 ? { x: ocx / osum, y: ocy / osum, z: ocz / osum } : entry.body.translation();
                         var ik = Math.min(1, 5 * (entry.mass || 50) / Math.max(1e-6, Math.hypot(ox, oy, oz) * frameDt));          // (at most 5 m/s of change of speed in a frame)
                         OpenRacer.RigidObjects.pushAt(entry, { x: -ox * frameDt * ik, y: -oy * frameDt * ik, z: -oz * frameDt * ik }, at);
                     }
@@ -914,7 +914,7 @@ OpenRacer.Parts = (function () {
             // two steps of half the time (more on a long frame): a part that flies at 30 m/s hits the wall in the middle of a frame, not after it
             world.timestep = dt / (2 * slices);
             for (var st = 0; st < 2 * slices; st++) { world.step(); limitSpeeds(); }
-            wallForces(world.timestep);
+            wallForces(world.timestep, dt);
             for (var j = 0; j < parts.length; j++) {
                 var p = parts[j];
                 if (p.state === "held" || p.state === "broken" || p.fetching) continue;           // (a part that the pit stop carries back is put where it is by fetchTo)

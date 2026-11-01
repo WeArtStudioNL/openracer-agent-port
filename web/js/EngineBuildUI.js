@@ -181,7 +181,8 @@ OpenRacer.EngineBuildUI = (function () {
             // The turbo as the game runs it (Engine.js), with the throttle wide open and the boost built up: the part of the torque that comes with boost is there from the "from" speed up
             // over 2000 rpm; a boost pressure counts as the factor of the air that the compressor puts in. Dotted, over the curve of the build, when the turbo settings of the menu say something.
             var turbo = host.turbo ? host.turbo() : null;
-            if(turbo && (turbo.share > 0 || turbo.bar > 0)) {
+            // (not for a built engine: its curve has the boost, and the game only adds the lag, Engine.js turboBuilt)
+            if(turbo && !host.build() && (turbo.share > 0 || turbo.bar > 0)) {
                 var factor = function(rpm) {
                     var b = Math.max(0, Math.min(1, (rpm - turbo.threshold) / 2000));
                     if(turbo.bar > 0) {
