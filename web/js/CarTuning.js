@@ -879,10 +879,21 @@ OpenRacer.Setups = (function () {
         // The tuning of a setup that was made for another car, without what belongs to that car's model: its type and name, the places of its wheels, its size, its
         // shell and parts, its driver, its cameras, its exhausts and its motorcycle geometry. A setup of a motorcycle on the hatchback made it a motorcycle with
         // the wheels of the bike; the chassis, the engine, the drivetrain, the tyres, the brakes, the suspension, the sound and the extras are what is taken.
-        tuningOnly: function (config) {
-            var c = JSON.parse(JSON.stringify(config || {}));
-            ["type", "name", "description", "dimensions", "softbody", "parts", "driver", "cameras", "exhaust", "motorcycle", "steering_wheel", "materials", "model", "preview", "tunes"].forEach(function (k) { delete c[k]; });
-            if (c.wheels) { delete c.wheels.nodes; delete c.wheels.mode; }
+        // base: the car it goes on (its own wheels and geometry are laid back in here: the callers merge shallowly, and a wheels or chassis of the tune replaced the
+        // car's whole one, its wheel mode and its track with it)
+        tuningOnly: function (config, base) {
+            var c = JSON.parse(JSON.stringify(config || {})), own = JSON.parse(JSON.stringify(base || {}));
+            ["type", "name", "description", "dimensions", "softbody", "parts", "driver", "cameras", "exhaust", "motorcycle", "steering_wheel", "materials", "model", "preview", "tunes",
+                "suspension", "driveline"].forEach(function (k) { delete c[k]; if (own[k] !== undefined) c[k] = own[k]; });
+            // the wheels (their mode, their places, the rims and tyres of the library: the size of the other car's tyres) stay the car's
+            if (own.wheels) c.wheels = own.wheels; else delete c.wheels;
+            // the geometry of the chassis stays the car's: the wheelbase, the tracks, the tyre, the axles, the centre of gravity, the mass and its balance, the drag of its body
+            if (c.chassis || own.chassis) {
+                c.chassis = Object.assign({}, c.chassis || {});
+                ["wheelbase", "front_track", "rear_track", "tire_diameter", "front_axle_offset", "rear_axle_offset", "cg_height", "mass", "weight_distribution", "drag_coefficient"].forEach(function (k) {
+                    if (own.chassis && own.chassis[k] !== undefined) c.chassis[k] = own.chassis[k]; else delete c.chassis[k];
+                });
+            }
             return c;
         },
         parseFile: function (text) {

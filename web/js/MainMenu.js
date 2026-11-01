@@ -661,7 +661,7 @@ var MainMenu = (function() {
                 var done = [], failed = [];
                 files.reduce(function(chain, file) {
                     return chain.then(function() {
-                        return Garage.importZip(file).then(function(item) { done.push(item.kind.slice(0, -1) + " " + item.id); }, function(error) { failed.push(file.name + ": " + error.message); });
+                        return Garage.importZip(file).then(function(item) { done.push(item.kind.slice(0, -1) + " " + item.id); }, function(error) { failed.push(file.name + ": " + error.message.replace(/^Not imported: /, "")); });
                     });
                 }, Promise.resolve()).then(function() {
                     if(done.length) build();

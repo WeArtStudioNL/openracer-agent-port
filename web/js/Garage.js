@@ -134,7 +134,10 @@ OpenRacer.Garage = (function () {
         if (/^blob:/.test(url)) {
             for (var own in urls) if (urls[own] === url) return url;
             var path = decodeURIComponent(url.replace(/^blob:[a-z]+:\/\/[^/]+\//i, "").split("?")[0].split("#")[0]);
-            return urls[path] || urls[baseName(path)] || url;
+            if (urls[path]) return urls[path];
+            // (a .gltf in a folder of the item, models/car.gltf: its model.bin is models/model.bin)
+            for (var key in urls) if (key.length > path.length && key.slice(-path.length - 1) === "/" + path) return urls[key];
+            return urls[baseName(path)] || url;
         }
         var clean = decodeURIComponent(url.split("?")[0].split("#")[0]).replace(/^(\.\.\/|\.\/)+/, "");
         var marker = new RegExp("(^|/)(cars|tracks)/" + config.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "/(.+)$");
@@ -227,7 +230,7 @@ OpenRacer.Garage = (function () {
             return folderPermission(false).then(function (state) {
                 if (state !== "granted") return [];
                 return handle.getDirectoryHandle(kind).catch(function () { return handle; }).then(function (dir) {
-                    var items = [];
+                    var items = [], used = {};
                     var iterator = dir.entries();
                     function next() {
                         return iterator.next().then(function (step) {
@@ -238,6 +241,9 @@ OpenRacer.Garage = (function () {
                             var id = folderName.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
                             if (!id || folderName.charAt(0) === ".") return next();
                             if (!/^[a-z0-9]/.test(id)) id = "item-" + id;
+                            // (two folders that make the same id, "Dune Buggy" and "dune-buggy": the second gets a number, they replaced each other)
+                            if (used[id]) { var n = 2; while (used[id + "-" + n]) n++; console.warn("Garage: the folders of the linked folder “" + folderName + "” and another make the same id: this one is " + id + "-" + n); id = id + "-" + n; }
+                            used[id] = true;
                             return sub.getFileHandle(CONFIG_FILE[kind]).then(function (fh) { return fh.getFile(); }).then(function (file) {
                                 return file.text();
                             }).then(function (text) {
@@ -349,7 +355,8 @@ OpenRacer.Garage = (function () {
                 var folder = found.prefix.split("/").pop();
                 var id = (json.id || folder || String((file && file.name) || "").replace(/\.(car|track)?\.?zip$/i, "") || json.name || "").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
                 // (a name of letters that are not Latin gives no id: they all became "item-", and one replaced the other)
-                if (!id) id = "item-" + Date.now().toString(36);
+                // (from the text of the file: the same zip twice is the same item, and asks before it replaces it)
+                if (!id) { var h = 5381; for (var ci = 0; ci < text.length; ci++) h = ((h * 33) ^ text.charCodeAt(ci)) >>> 0; id = "item-" + h.toString(36); }
                 if (!/^[a-z0-9]/.test(id)) id = "item-" + id;
                 delete json.id;
                 var files = {};
@@ -361,8 +368,9 @@ OpenRacer.Garage = (function () {
                 // the car.json of a car names its model as cars/<id>/<file>: it is this car now
                 // (with its folders: a model in cars/x/models/ became cars/<id>/body.glb, and the file is models/body.glb in the zip)
                 if (found.kind === "cars" && json.model && json.model.file) {
-                    var rel = json.model.file.replace(/^cars\/[^/]+\//, ""), base = rel.split("/").pop();
-                    json.model.file = "cars/" + id + "/" + (files[rel] || !files[base] ? rel : base);
+                    var rel = json.model.file.replace(/^cars\/[^/]+\//, "").replace(/^(\.\/)+/, ""), base = rel.split("/").pop();
+                    // (a zip without the model, that uses one of the game: the path stays as it is)
+                    if (files[rel] || files[base]) json.model.file = "cars/" + id + "/" + (files[rel] ? rel : base);
                 }
                 // is there one with this id already (in the garage, of the server, of a folder)? then it is shown what is different, and asked first
                 var kindName = found.kind.slice(0, -1);

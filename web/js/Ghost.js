@@ -136,6 +136,11 @@ OpenRacer.Ghost = function (config, trackId) {
     // ---- a ghost as a file, to send or to race: { format, version, track, car, name, time, samples }
     // (per track and car: it was per track, and the ghost of a friend replaced your own best lap there with every car, in every later game)
     var FRIEND = "openracer.friendghost." + trackId + "." + config.id;
+    // (a friend ghost kept under the key of before, per track: taken over for its car, and the old key goes either way; it stayed for good and took room)
+    try {
+        var older = JSON.parse(window.localStorage.getItem("openracer.friendghost." + trackId));
+        if (older) { window.localStorage.removeItem("openracer.friendghost." + trackId); if (older.samples && older.car && older.car.id === config.id && !window.localStorage.getItem(FRIEND)) window.localStorage.setItem(FRIEND, JSON.stringify(older)); }
+    } catch (e) { /* no storage */ }
     function rounded(samples) {
         var r = function (v, n) { var f = Math.pow(10, n); return Math.round(v * f) / f; };
         return samples.map(function (s) {

@@ -797,7 +797,7 @@ var Tuning = (function() {
                 var other = tune.car && tune.car !== config.id;
                 askName("The name of this tune" + (other ? " (it was made for " + tune.car + ": only its tuning is taken, not that car's wheels, size, shell or type)" : ""), tune.name).then(function(name) {
                 if(!name) return;
-                var taken = other && OpenRacer.Setups.tuningOnly ? OpenRacer.Setups.tuningOnly(tune.config) : tune.config;
+                var taken = other && OpenRacer.Setups.tuningOnly ? OpenRacer.Setups.tuningOnly(tune.config, original) : tune.config;
                 if(OpenRacer.Setups.save(config.id, name, Object.assign({}, original, taken)) === false) { message("Could not import: the storage of this browser is full."); return; }
                 setupSelect.value = name;
                 refreshSetups();
