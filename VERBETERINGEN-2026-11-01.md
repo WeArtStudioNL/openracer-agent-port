@@ -6,8 +6,8 @@
 
 ## Kort
 
-- Ik heb in **39 commits** (sinds 05:51) gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen), de track-editor, de eerste keer spelen en een reeks UX-punten.
-- Na elke grote wijziging heb ik een onafhankelijke review of audit laten doen (zes reviews, plus audits van de motorbouw, de car-editor, de races, de Garage, de track-editor en de eerste keer spelen). Elke bevinding heb ik zelf nagelopen en zo nodig opgelost.
+- Ik heb in **44 commits** (sinds 05:51) gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen), de track-editor, de eerste keer spelen, replays en video, het racegedrag van de AI en een reeks UX-punten.
+- Na elke grote wijziging heb ik een onafhankelijke review of audit laten doen (zeven reviews, plus audits van de motorbouw, de car-editor, de races, de Garage, de track-editor, de eerste keer spelen, replays en de AI). Elke bevinding heb ik zelf nagelopen en zo nodig opgelost.
 - Alles is getest in het spel zelf, vanuit JavaScript aangestuurd. Het browservenster stond verborgen; daar loopt de animatielus niet. Hoe het er in beeld uitziet, heb ik maar op enkele screenshots gezien.
 
 ## Wat er is gedaan
@@ -94,6 +94,27 @@
 - **Gamepad:** knoppen heten A, B, LB, RT enzovoort in plaats van "Button 7". Camera op X en repareren op Back, ook voor spelers met opgeslagen bediening.
 - Een link naar een auto of baan die er niet is, zegt nu waarom je in het menu staat. De replayvraag komt niet meer bij minder dan een minuut. Een laadtekst bij het eerste bezoek.
 - **Telefoon:** een woordje onder elke knop bovenaan (*Reset*, *Repair*, *Record*…), en op een smalle telefoon twee kolommen rechts in plaats van een rij over de rondetijd.
+
+### Replays en video (audit van 10 punten; `ef76326`, `898ebf6`)
+- **De video-editor vanuit een race** gooide de race weg zonder te vragen. Als je de editor dan sloot zonder op te slaan, was de race weg. Nu vraagt hij eerst en bewaart hij de race in Replays.
+- **Save as mp4 was niet te stoppen** zodra je de afspeelkop aanraakte: de opname liep eindeloos door en er kwam nooit een bestand. Nu stopt hij daar en slaat hij de video op tot dat punt.
+- **Esc verliet de video-editor** zonder te vragen. Nu niet meer.
+- **Een Take als replay opslaan** markeerde de hele race als bewaard. De vraag bij verlaten kwam dan niet, en de race ging verloren.
+- *Save replay* in de balk maakte bij elke klik een kopie. Nu één keer, met de reden als het niet lukt.
+- **Een replay onthoudt de setup** van elke auto en speelt hem daarmee af. Eerst kwam de auto terug met de setup die nu gekozen is, met andere wielen of zonder deuken.
+- Look-ahead-keys schuiven mee bij het trimmen. De knoppen van de replaybalk houden geen focus meer, zodat Enter weer afspelen en pauzeren is.
+- **Laten liggen:** een bewerkte replay toont geen schade of rook, en Watch van een bewerking gebruikt niet de camera's die je per clip koos. Beide vragen een uitbreiding van het bestandsformaat.
+
+### AI (audit van 9 punten; `e0f262b`)
+- **De AI reed van achteren op een langzamere auto.** Hij keek maar 25 m vooruit en remde met een factor op zijn eigen snelheid. Vanaf 15 m/s snelheidsverschil raakte hij de auto voor hem. Nu kijkt hij zo ver vooruit als nodig en rijdt hij niet sneller dan hij nog achter die auto kan stoppen.
+- **Twee auto's naast elkaar** zagen elkaar allebei als de auto ervoor en remden allebei hard in de bocht. Nu telt alleen een auto die echt voor ligt.
+- **Remmen:** de AI kijkt 0,35 s vooruit (eerst 8 m) en remt harder bij te veel snelheid. Hij kwam 10 tot 20 % te snel de bochten in.
+- **Normal werd na een paar ronden even snel als Hard**, omdat hij leerde tot het plafond. Nu leert elke moeilijkheid apart, en onder Hard telt maar een deel van het geleerde.
+- **De tegenstanders zijn van jouw soort:** auto's tegen auto's, karts tegen karts, motoren tegen motoren. Eerst raceten de eerste auto's van de lijst, bijvoorbeeld een Muscle tegen een kart.
+- **Lege plekken op de tegenstanderspagina** kregen geen auto, terwijl de pagina zei dat ze gevuld zouden worden. Nu wel.
+- **Gemeten** op de Short Track met 5 AI over 150 s: oud 2 keer teruggezet, nieuw 0. De Muscle is 1 % langzamer (114,7 tegen 113,5 s).
+- **Gevonden bij het testen:** een auto met een oneindige hoek (na een physics-explosie) liet een `while`-lus eeuwig draaien, en de hele game bevroor. Vijf van die lussen zijn vervangen.
+- **Laten liggen:** een gecrashte AI wordt gratis gerepareerd (zonder reparatie crasht hij meteen opnieuw, zo staat het in de code). Bochtsnelheden houden geen rekening met bandenslijtage of downforce. En de speler start altijd vooraan. Elk van die drie vraagt een eigen ronde.
 
 ### Menu's en kleine punten
 - **Tune the car** staat bovenaan het pauzemenu.

@@ -6,6 +6,18 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 ## Unreleased
 
+- **Replays and video.** From an audit:
+  - *Video editor* in a game asks first and keeps the race in Replays (the race was lost when the editor was closed without saving).
+  - *Save as mp4* stops and saves where the playhead was stopped (the recording ran on for ever and no file came). Escape no longer leaves the video editor.
+  - Saving a Take as a replay no longer marks the whole race as saved. *Save replay* in the bar saves once and says why it failed.
+  - A replay keeps the setup every car raced with, and plays it back with it.
+  - Look-ahead keys follow a trim; the bar's buttons let go of the focus after a click (Enter plays and pauses again).
+- **AI.** From an audit of the racing:
+  - It stops behind a slower car (it looked 25 m ahead and hit a car 15 m/s slower), and two cars level no longer both brake hard.
+  - It brakes 0.35 s ahead, and harder when too fast (it came into the bends 10 to 20 % too fast).
+  - It learns per difficulty, and below hard with a share of what it learned (Normal was as fast as Hard after a few laps).
+  - Places left empty on the Opponents page are filled, with cars of the player's kind (cars, karts, motorcycles).
+  - An infinite heading of a car no longer freezes the game (angle loops without a loop).
 - **Track editor: making your own track.** From an audit of the flow:
   - The AI drove a lap that was driven before the road or the line was changed (the best lap on this computer came before the saved line), into the new walls. A track keeps when its line or road last changed (`line_date`, `road_date`): only laps driven after it are the line of the AI, and a record of the old road is replaced by the next lap.
   - *Record AI racing line* saves first (it threw away the gates that were not saved, and then no lap counted).
