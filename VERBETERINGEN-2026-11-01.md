@@ -114,8 +114,10 @@
 - **Lege plekken op de tegenstanderspagina** kregen geen auto, terwijl de pagina zei dat ze gevuld zouden worden. Nu wel.
 - **Nieuw: *Your start*** in de race-opties: pole (zoals het was), willekeurig of als laatste (`68468aa`). De speler stond altijd vooraan en won de race in de eerste bocht.
 - **Gemeten** op de Short Track met 5 AI over 150 s: oud 2 keer teruggezet, nieuw 0. De Muscle is 1 % langzamer (114,7 tegen 113,5 s).
+- **Uit de review** (`1588cd0`): een AI achter een stilstaande auto (de speler die spinde, een gecrashte auto, de rij bij een pitstop) wacht nu. Eerst kroop hij, reed achteruit tegen de auto achter hem en werd als crash teruggezet. Na 6 s rijdt hij eromheen, na 15 s zonder voortgang wordt hij zonder strafpunten verder gezet. De auto ervoor wordt gezocht langs de racelijn: in een bocht zag hij een stilstaande auto pas op 9 m. Getest: hij stopt 5 m erachter en rijdt er daarna omheen.
+- **Bandenslijtage** telt mee in de bochtsnelheden van de AI (`4ba3789`): hij reed met versleten banden de snelheden van nieuwe.
 - **Gevonden bij het testen:** een auto met een oneindige hoek (na een physics-explosie) liet een `while`-lus eeuwig draaien, en de hele game bevroor. Vijf van die lussen zijn vervangen.
-- **Laten liggen:** een gecrashte AI wordt gratis gerepareerd (zonder reparatie crasht hij meteen opnieuw, zo staat het in de code). Bochtsnelheden houden geen rekening met bandenslijtage of downforce. Elk van die twee vraagt een eigen ronde.
+- **Laten liggen:** een gecrashte AI wordt gratis gerepareerd (zonder reparatie crasht hij meteen opnieuw, zo staat het in de code). Bochtsnelheden houden nog geen rekening met downforce. Elk van die twee vraagt een eigen ronde.
 
 ### Menu's en kleine punten
 - **Tune the car** staat bovenaan het pauzemenu.
@@ -134,5 +136,6 @@
 
 - **Testen in het echt:** deuken en breken tegen de AI, de motoren in een race, en de car-editor met een eigen model.
 - **Stadium truck: 20 pk.** Jouw niet-gecommitte `car.json` heeft een V8-bouw met een boring van 40 mm, nokduur 200 en inlaat 49 (20 pk, 37 Nm). Dat lijkt per ongeluk.
+- **Stadium truck: banden blijven koud.** In een test hadden zijn banden een conditie van 0,6 (de andere auto's 0,95), ook zonder slijtage. Dat komt waarschijnlijk uit jouw niet-gecommitte `car.json`. De AI rijdt hem daardoor nu langzamer, passend bij de grip die hij echt heeft.
 - **Kartbaan Oldenzaal** draagt nog de naam van de echte baan.
 - **Live zetten:** pas na jouw akkoord.
