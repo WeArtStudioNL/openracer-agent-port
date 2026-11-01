@@ -238,6 +238,45 @@ function numbersWatch() {
     });
 }
 
+// F9 (or OpenRacer.diagnosePicture() in the console): what makes the picture dark. It draws the frame again with one thing at a time taken away (the reflections, the
+// fog, the shadows, the post-processing, the particles, each light) and says which one brings the picture back, with the values of the lights, the fog, the camera and the
+// exposure. For a black screen that comes after a crash and stays (the Desert, with AI cars), when the watch above finds no object with a place that is not a number.
+OpenRacer.diagnosePicture = function() {
+    var gl = renderer.getContext();
+    function draw() { if(useComposer) composer.render(); else renderer.render(scene, camera); }
+    function bright() {
+        var w = gl.drawingBufferWidth, h = gl.drawingBufferHeight, px = new Uint8Array(4), sum = 0, n = 0;
+        for(var i = 1; i < 8; i++) for(var j = 2; j < 7; j++) { gl.readPixels(Math.floor(w * i / 8), Math.floor(h * j / 8), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); sum += px[0] + px[1] + px[2]; n++; }
+        return Math.round(sum / n / 3);
+    }
+    function measure() { draw(); return bright(); }
+    var finite = function(list) { return list.every(function(x) { return typeof x === "number" && x - x === 0; }); };
+    var vec = function(v) { return v ? [v.x, v.y, v.z].map(function(x) { return x - x === 0 ? +x.toFixed(2) : String(x); }).join(", ") : "-"; };
+    var report = [], base = measure();
+    report.push("the picture now: " + base + " (0 black, 255 white)");
+    var tests = [];
+    tests.push(["without the reflections (scene.environment)", function() { var e = scene.environment; scene.environment = null; return function() { scene.environment = e; }; }]);
+    tests.push(["without the fog", function() { var f = scene.fog; scene.fog = null; return function() { scene.fog = f; }; }]);
+    tests.push(["drawn straight, without the post-processing", function() { var u = useComposer; useComposer = false; return function() { useComposer = u; }; }]);
+    tests.push(["without the particles (smoke, dust, debris)", function() { var hidden = []; scene.traverse(function(o) { if((o.isPoints || o.isSprite || o.isInstancedMesh) && o.visible) { o.visible = false; hidden.push(o); } }); return function() { hidden.forEach(function(o) { o.visible = true; }); }; }]);
+    tests.push(["without the shadows", function() { var on = renderer.shadowMap.enabled; renderer.shadowMap.enabled = false; scene.traverse(function(o) { if(o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(function(m) { m.needsUpdate = true; }); }); return function() { renderer.shadowMap.enabled = on; scene.traverse(function(o) { if(o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(function(m) { m.needsUpdate = true; }); }); }; }]);
+    scene.traverse(function(o) {
+        if(!o.isLight) return;
+        report.push((o.name || o.type) + ": colour " + vec({ x: o.color.r, y: o.color.g, z: o.color.b }) + ", intensity " + o.intensity + ", place " + vec(o.position) + (o.target ? ", target " + vec(new THREE.Vector3().setFromMatrixPosition(o.target.matrixWorld)) : "") + (finite([o.intensity, o.color.r, o.color.g, o.color.b]) ? "" : "  <- not a number"));
+        tests.push(["without the light " + (o.name || o.type), function() { var v = o.visible; o.visible = false; return function() { o.visible = v; }; }]);
+    });
+    tests.forEach(function(t) { var undo = t[1](); var b = measure(); undo(); report.push(t[0] + ": " + b + (b > base + 25 ? "  <- the picture comes back" : "")); });
+    if(scene.fog) report.push("fog: colour " + vec({ x: scene.fog.color.r, y: scene.fog.color.g, z: scene.fog.color.b }) + ", near " + scene.fog.near + ", far " + scene.fog.far);
+    report.push("camera: place " + vec(camera.position) + ", near " + camera.near + ", far " + camera.far + ", fov " + camera.fov + (finite(camera.projectionMatrix.elements) && finite(camera.matrixWorld.elements) ? "" : "  <- a matrix that is not a number"));
+    report.push("exposure " + renderer.toneMappingExposure + ", tone mapping " + renderer.toneMapping + (useComposer && composer ? ", passes " + composer.passes.filter(function(p) { return p.enabled; }).map(function(p) { return p.constructor.name; }).join(" ") : ""));
+    measure();
+    console.warn("OpenRacer picture check (F9):\n" + report.join("\n"));
+    var back = report.filter(function(r) { return /comes back/.test(r); });
+    if(typeof banner === "function") banner(back.length ? "Picture check: " + back.map(function(r) { return r.split(":")[0]; }).join("; ") + " brings it back (the console has the rest)" : "Picture check done: the console has the values (F12)");
+    return report;
+};
+window.addEventListener("keydown", function(e) { if(e.code === "F9" && typeof renderer !== "undefined" && renderer && scene) { e.preventDefault(); OpenRacer.diagnosePicture(); } });
+
 function render() {
     if(Date.now() - countStart > 1000) {
         fps = frameCount;
