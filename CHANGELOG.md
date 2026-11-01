@@ -17,6 +17,7 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
   - It brakes 0.35 s ahead, and harder when too fast (it came into the bends 10 to 20 % too fast).
   - It learns per difficulty, and below hard with a share of what it learned (Normal was as fast as Hard after a few laps).
   - Places left empty on the Opponents page are filled, with cars of the player's kind (cars, karts, motorcycles).
+  - *Your start* in the race options: pole (as it was), random or last. The places of the grid go front to back; the fly-by goes to the last car.
   - An infinite heading of a car no longer freezes the game (angle loops without a loop).
 - **Track editor: making your own track.** From an audit of the flow:
   - The AI drove a lap that was driven before the road or the line was changed (the best lap on this computer came before the saved line), into the new walls. A track keeps when its line or road last changed (`line_date`, `road_date`): only laps driven after it are the line of the AI, and a record of the old road is replaced by the next lap.

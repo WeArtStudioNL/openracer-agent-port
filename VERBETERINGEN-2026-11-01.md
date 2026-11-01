@@ -112,9 +112,10 @@
 - **Normal werd na een paar ronden even snel als Hard**, omdat hij leerde tot het plafond. Nu leert elke moeilijkheid apart, en onder Hard telt maar een deel van het geleerde.
 - **De tegenstanders zijn van jouw soort:** auto's tegen auto's, karts tegen karts, motoren tegen motoren. Eerst raceten de eerste auto's van de lijst, bijvoorbeeld een Muscle tegen een kart.
 - **Lege plekken op de tegenstanderspagina** kregen geen auto, terwijl de pagina zei dat ze gevuld zouden worden. Nu wel.
+- **Nieuw: *Your start*** in de race-opties: pole (zoals het was), willekeurig of als laatste (`68468aa`). De speler stond altijd vooraan en won de race in de eerste bocht.
 - **Gemeten** op de Short Track met 5 AI over 150 s: oud 2 keer teruggezet, nieuw 0. De Muscle is 1 % langzamer (114,7 tegen 113,5 s).
 - **Gevonden bij het testen:** een auto met een oneindige hoek (na een physics-explosie) liet een `while`-lus eeuwig draaien, en de hele game bevroor. Vijf van die lussen zijn vervangen.
-- **Laten liggen:** een gecrashte AI wordt gratis gerepareerd (zonder reparatie crasht hij meteen opnieuw, zo staat het in de code). Bochtsnelheden houden geen rekening met bandenslijtage of downforce. En de speler start altijd vooraan. Elk van die drie vraagt een eigen ronde.
+- **Laten liggen:** een gecrashte AI wordt gratis gerepareerd (zonder reparatie crasht hij meteen opnieuw, zo staat het in de code). Bochtsnelheden houden geen rekening met bandenslijtage of downforce. Elk van die twee vraagt een eigen ronde.
 
 ### Menu's en kleine punten
 - **Tune the car** staat bovenaan het pauzemenu.
