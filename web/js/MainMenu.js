@@ -1147,8 +1147,23 @@ var MainMenu = (function() {
         inner.appendChild(grid);
     }
 
+    // a linked folder of the PC that needs the permission of the browser again (after the browser was closed): its cars and tracks were missing without a word
+    function folderNote(inner, what) {
+        var G = OpenRacer.Garage, info = G && G.folderInfo ? G.folderInfo() : null;
+        if(!info || !info.name || info.permission !== "prompt") return;
+        var note = document.createElement("div");
+        note.className = "sub";
+        note.style.cssText = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;";
+        var text = document.createElement("span");
+        text.textContent = "The " + what + " of your folder “" + info.name + "” are not shown: the browser asks for permission again.";
+        note.appendChild(text);
+        note.appendChild(button("Allow", "ghost", function() { G.folderPermission(true).then(function() { load(); }); }));
+        inner.appendChild(note);
+    }
+
     function carStep(inner) {
         inner.innerHTML = "<h2>Choose your car</h2><div class=\"sub\">Tap or click a car to go on.</div>";
+        folderNote(inner, "cars");
         var tilesBox = document.createElement("div");
         tilesBox.className = "tiles";
         showcase.clear();
@@ -1204,6 +1219,7 @@ var MainMenu = (function() {
 
     function trackStep(inner) {
         inner.innerHTML = "<h2>Choose the track</h2><div class=\"sub\">Click a track to go on (Back brings you here again with your track chosen).</div>";
+        folderNote(inner, "tracks");
         var list = document.createElement("div");
         list.className = "list";
         tracks.filter(function(t) { return t.id !== "skidpad"; }).forEach(function(track) {   // the skidpad is a way to play
