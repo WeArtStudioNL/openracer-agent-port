@@ -599,6 +599,19 @@ function setModel(root, isNew, replace) {
 
 // A new model for a car that exists: the transform, the wheels (by the names of their parts) and the changes to the materials
 // are kept where the new model still fits them; the chassis, the cameras, the engine and the sound are not touched.
+// what was placed by hand on the model (it does not follow a new model, or its scale and turn): the nodes of the shell, the hinges of the parts, the exhaust points, the driver
+function placedOnModel() {
+    const list = [], soft = softBodyEditor ? softBodyEditor.read() : {};
+    if (soft.softbody && soft.softbody.layout) list.push("the nodes of the shell");
+    if (soft.parts && soft.parts.some((p) => p.hinge || p.pins)) list.push("the hinges and pins of the parts");
+    if (exhaust.length) list.push("the exhaust points");
+    if (driverEditor && driverEditor.driver && driverEditor.driver()) list.push("the driver");
+    return list;
+}
+for (const id of ["scale", "rotation"]) $(id).addEventListener("change", () => {
+    const placed = placedOnModel();
+    if (placed.length) status("The model is scaled or turned; what was placed on it stays where it was: " + placed.join(", ") + ". Check them.", "warn");
+});
 function replaceModel() {
     const previous = state.replacedModel;
     const notes = state.replaceNotes || [];
@@ -642,6 +655,9 @@ function replaceModel() {
         if (off.length) notes.push("The new model measures " + off.join(", ") + ". \"Take wheelbase, track and tyre from the wheels\" sets the car to it; the car was left as it is.");
     }
     $("modelNote").textContent = "";
+    // (what was placed on the old model stays where it was, in metres from the car: on another model it may be off)
+    const placed = placedOnModel();
+    if (placed.length) notes.push("Placed on the old model and kept where it was: " + placed.join(", ") + ". Check them on the new model.");
     status("The model is replaced, it is saved with “Save the car”.\n" + notes.join("\n"), "ok");
     frameModel();
     return kept;
@@ -1990,11 +2006,15 @@ function buildConfig(id) {
     if (suspensionEditor) Object.assign(config, suspensionEditor.read());          // the suspension and the driveline from the parts library
     const driverConfig = driverEditor && driverEditor.read();
     if (driverConfig) config.driver = driverConfig;
+    // (the driver switched off, or not loaded yet or not loaded at all: the driver of car.json stays, switched off when it is; its place, hands, keys and bones were
+    // all thrown away, and switching it on again asked for the model)
+    else if (driverEditor && state.existingCar && state.existingCar.driver && state.existingCar.driver.file)
+        config.driver = Object.assign({}, state.existingCar.driver, driverEditor.driver() && !driverEditor.enabled() ? { enabled: false } : {});
     if (softBodyEditor) {
         const soft = softBodyEditor.read();
         if (soft.softbody) config.softbody = soft.softbody;
         // (the layout of the shell is in the frame of the body: the centre of gravity and the tyre it was drawn at go with it, so a tune with another centre keeps the shell on the model)
-        if (config.softbody && config.softbody.layout) { config.softbody.layout_cg = config.chassis.cg_height; config.softbody.layout_radius = config.chassis.tire_diameter / 2; }
+        if (config.softbody && config.softbody.layout && !isFinite(config.softbody.layout_cg)) { config.softbody.layout_cg = config.chassis.cg_height; config.softbody.layout_radius = config.chassis.tire_diameter / 2; }
         if (soft.parts) config.parts = soft.parts;
     }
     return config;
@@ -2150,7 +2170,10 @@ async function openTestDialog() {
 // half done elsewhere (audit 2.2.0 §3.28). A tune that is chosen is saved as before; a car that is not saved yet (or has a new model) is saved whole.
 async function saveParts() {
     const old = state.existingCar, id = $("id").value.trim();
-    if ($("setupSelect").value || !old || id !== state.existingId || (state.files && state.files.size) || !softBodyEditor) return saveCurrent();
+    if ($("setupSelect").value) return saveCurrent();
+    // (only the parts and the shell: with a new model, a copy under another id or a car not saved yet this saved the whole form without a click, and took the old
+    // model out of the folder; now Save does that)
+    if (!old || id !== state.existingId || (state.files && state.files.size) || !softBodyEditor) { setDirty(true); status("The shell and the parts are kept with the car when you press Save (the car has other changes that only Save writes)."); return false; }
     // (a car of a folder of the PC: its car.json is in that folder, not here; written to the server or the garage it shadowed the folder car)
     if (OpenRacer.Garage.sourceOf(old) === "folder") { status("This car is in a linked folder: save it with Save to keep the parts.", "error"); return false; }
     try {
@@ -2159,7 +2182,7 @@ async function saveParts() {
         const soft = softBodyEditor.read();
         if (soft.softbody) config.softbody = soft.softbody; else delete config.softbody;
         // (the layout is drawn on the car of the bench, which is built from the form: its centre of gravity and its tyre are those of the form)
-        if (config.softbody && config.softbody.layout && config.chassis) { config.softbody.layout_cg = num("cgHeight") > 0 ? num("cgHeight") : config.chassis.cg_height; config.softbody.layout_radius = (num("tyre") > 0 ? num("tyre") : config.chassis.tire_diameter) / 2; }
+        if (config.softbody && config.softbody.layout && config.chassis && !isFinite(config.softbody.layout_cg)) { config.softbody.layout_cg = num("cgHeight") > 0 ? num("cgHeight") : config.chassis.cg_height; config.softbody.layout_radius = (num("tyre") > 0 ? num("tyre") : config.chassis.tire_diameter) / 2; }
         if (soft.parts) config.parts = soft.parts; else delete config.parts;
         await OpenRacer.Garage.store("cars", id, config, {}, { base: "../" });
         // (the list as it is now: picking another car and this one again loaded the parts of before, and the next Save wrote them back)
@@ -3645,7 +3668,8 @@ driverEditor = initDriver({
     $, THREE, scene, camera, renderer, controls, status, GLTFLoader,
     steeringPreview,
     resolve: (file) => OpenRacer.Garage.resolve(state.existingCar, "../" + file),
-    setDragging: (on) => { layers.dragging = on; },
+    // (a drag of the driver, a hand, a foot, the chest, the head or the wheel is a change of the car: Save did not light up, and leaving lost it without a question)
+    setDragging: (on) => { layers.dragging = on; if (!on) { setDirty(true); remember(); } },
     deselectLayers: () => { if (layers.selected) selectLayer(layers.selected); },
     pickLocked: () => !!(suspensionEditor && suspensionEditor.editing)        // (Edit origins: nothing else is picked in the view)
 });
@@ -3657,6 +3681,7 @@ suspensionEditor = initSuspension({
     loadLibrary: () => loadPhysics(),
     renderLayers: () => renderLayers(),
     save: () => saveCurrent(),
+    changed: () => { setDirty(true); remember(); },
     status,
     // Edit origins: everything else that can be picked or marks something in the view is hidden, so that only the points are seen
     hideOthers: (on) => { cameraMarkers.visible = !on; axes.visible = !on; arrow.visible = !on; helpers.visible = !on; exhaust.forEach((e) => { e.target.visible = !on; }); if (driverEditor && driverEditor.deselect) driverEditor.deselect(); }
@@ -3703,7 +3728,7 @@ $("side").addEventListener("click", (e) => { if (e.target.closest(".tuneReset") 
 let gizmoChanged = false;
 for (const g of [gizmo, rotGizmo]) {
     g.addEventListener("objectChange", () => { gizmoChanged = true; });
-    g.addEventListener("dragging-changed", (event) => { if (!event.value && gizmoChanged) { gizmoChanged = false; setDirty(true); } });
+    g.addEventListener("dragging-changed", (event) => { if (!event.value && gizmoChanged) { gizmoChanged = false; setDirty(true); remember(); } });      // (a drag is a step of Ctrl+Z of its own: it went back with the change before it)
 }
 window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
 window.addEventListener("keydown", (e) => {

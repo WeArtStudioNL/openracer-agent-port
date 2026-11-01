@@ -163,6 +163,7 @@ export function initSuspension(api) {
     }
     function reset(id) {
         const m = markers[id]; if (!m) return;
+        if (api.changed) api.changed();          // (a change of the car: Save lights up, leaving asks; it did not)
         if (m.group === "driveline") delete state.driveline.mounts[m.name];
         else { const t = state[m.group].type; if (state[m.group].mounts[t]) delete state[m.group].mounts[t][m.name]; }
         refresh(true);
@@ -210,7 +211,7 @@ export function initSuspension(api) {
                 b.className = "small ghost"; b.innerHTML = ICONS.eye + " " + part.label;
                 b.style.cssText = "display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; color: " + (hidden ? "#6b7480" : "#ff7a3d") + ";";
                 b.title = hidden ? "Hidden: the car's own model has this part. Click to place it from the parts library" : "Placed from the parts library. Click to hide it (the car's own model has it)";
-                b.addEventListener("click", () => { const h = state[grp].hidden, i = h.indexOf(part.file); if (i >= 0) h.splice(i, 1); else h.push(part.file); refresh(true); });
+                b.addEventListener("click", () => { const h = state[grp].hidden, i = h.indexOf(part.file); if (i >= 0) h.splice(i, 1); else h.push(part.file); refresh(true); if (api.changed) api.changed(); });
                 eyes.appendChild(b);
             });
             rows.appendChild(eyes);

@@ -101,7 +101,11 @@ export function initSoftBody(api) {
         });
         changed();
     });
-    $("sbDefaults").addEventListener("click", () => { fields.forEach((i) => { i.value = ""; }); presetSelect.selectedIndex = 0; changed(); });
+    // (it is saved a moment later, with no undo: asked first)
+    $("sbDefaults").addEventListener("click", async () => {
+        if (fields.some((i) => i.value !== "") && !(await OpenRacerDialog.ask({ title: "Back to the defaults?", text: "The strengths set for the shell go back to the defaults of the game.", ok: "Defaults", danger: true }))) return;
+        fields.forEach((i) => { i.value = ""; }); presetSelect.selectedIndex = 0; changed();
+    });
     fields.forEach((i) => i.addEventListener("change", changed));
     $("sbEnabled").addEventListener("change", changed);
     $("sbMaxNodes").addEventListener("change", () => { if (!sb.layout) changed(); });
@@ -171,7 +175,10 @@ export function initSoftBody(api) {
         row.addEventListener("click", (e) => { const b = e.target.closest("[data-set]"); if (b) setField(row, part, b.dataset.set); });
         const own = sb.layout ? sb.layout.filter((n) => n.part === part.object).length : 0;
         q("partNodesInfo").textContent = own ? own + " nodes of its own (orange in the view)" : "none: the part is one rigid piece";
-        q("remove").addEventListener("click", () => { sb.parts.splice(sb.parts.indexOf(part), 1); renderParts(); changed(); drawHinges(); });
+        q("remove").addEventListener("click", async () => {
+            if (!(await OpenRacerDialog.ask({ title: "Remove “" + part.object + "” from the loose parts?", text: "Its hinge, pins and strengths go; it is saved at once.", ok: "Remove", danger: true }))) return;
+            sb.parts.splice(sb.parts.indexOf(part), 1); renderParts(); changed(); drawHinges();
+        });
         return row;
     }
     function numbers(text) {
@@ -327,7 +334,13 @@ export function initSoftBody(api) {
         if (max >= 10) soft.max_nodes = Math.min(120, max);
         const wheel = parseFloat($("sbWheelStrength").value);
         if (wheel >= 0) soft.wheel_strength = wheel;
-        if (sb.layout) soft.layout = sb.layout;
+        if (sb.layout) {
+            soft.layout = sb.layout;
+            // the centre of gravity and the tyre the layout was drawn at (the game shifts the shell by the difference): kept with the layout, not the form's of now
+            // (the centre set lower after the nodes were drawn put them 10 cm under the body)
+            if (isFinite(sb.layoutCg)) soft.layout_cg = sb.layoutCg;
+            if (isFinite(sb.layoutRadius)) soft.layout_radius = sb.layoutRadius;
+        }
         if (nodes.length) soft.nodes = nodes;
         if (beams.length) soft.beams = beams;
         if (Object.keys(soft).length) out.softbody = soft;
@@ -347,6 +360,8 @@ export function initSoftBody(api) {
         sb.parts = JSON.parse(JSON.stringify(car.parts || []));
         sb.sel.nodes.clear(); sb.sel.beam = null;
         sb.layout = Array.isArray(soft.layout) ? soft.layout.map((n) => Object.assign({}, n)) : null;
+        sb.layoutCg = sb.layout && isFinite(soft.layout_cg) ? soft.layout_cg : null;
+        sb.layoutRadius = sb.layout && isFinite(soft.layout_radius) ? soft.layout_radius : null;
         showSelection();
         renderParts();
     }
@@ -742,6 +757,8 @@ export function initSoftBody(api) {
         const y = parseFloat($("sbSelYield").value) * 1000, b = parseFloat($("sbSelBreak").value) * 1000;
         if (!(y >= 0) || !(b >= 0)) { status("Give the yield and the break force as numbers.", "error"); return; }
         if (b < y) { status("The break force has to be at least the yield force.", "error"); return; }
+        // (the numbers of the nodes are those of this shell: kept as a layout, or another Max nodes or model made new nodes and the strengths landed on others)
+        freeze(s);
         if (sb.sel.nodes.size) {
             sb.sel.nodes.forEach((k) => { sb.nodeEdits.set(k, { yield_force: y, break_force: b }); s.nodeYield[k] = y; s.nodeBreak[k] = b; });
         } else if (sb.sel.beam !== null) {
@@ -767,6 +784,9 @@ export function initSoftBody(api) {
         if (sb.layout) return;
         const p = new THREE.Vector3();
         sb.layout = [];
+        // (drawn at the car of the bench: its centre of gravity and its tyre, the library's when it has one)
+        sb.layoutCg = bench.vehicle && isFinite(bench.vehicle.cgHeight) ? bench.vehicle.cgHeight : null;
+        sb.layoutRadius = bench.obj && bench.obj.wheels && bench.obj.wheels[0] && isFinite(bench.obj.wheels[0].radius) ? bench.obj.wheels[0].radius : null;
         for (let k = 0; k < nb(s); k++) { s.restPosition(k, p); sb.layout.push({ x: +p.x.toFixed(4), y: +p.y.toFixed(4), z: +p.z.toFixed(4), r: +s.radiusOf(k).toFixed(4) }); }
     }
     function addAt(mx, my, rect) {
@@ -775,6 +795,7 @@ export function initSoftBody(api) {
         caster.setFromCamera(new THREE.Vector2(mx / rect.width * 2 - 1, -(my / rect.height) * 2 + 1), camera);
         const hits = caster.intersectObject(bench.model.tilt, true).filter((h) => h.object.isMesh && h.object.visible);
         if (!hits.length) return false;
+        rememberNodes();
         freeze(s);
         if (sb.layout.length >= 2000) { status("A car can have 2000 nodes at most.", "error"); return true; }
         const local = sb.group.worldToLocal(hits[0].point.clone());
@@ -790,9 +811,25 @@ export function initSoftBody(api) {
     function deleteSelected() {
         if (sb.sel.nodes.size) removeNodes(new Set(sb.sel.nodes));
     }
+    // the nodes as they were before an add or a removal, for Ctrl+Z while the nodes are edited (a stray Delete was saved for good a second later)
+    const nodeUndo = [];
+    function rememberNodes() {
+        nodeUndo.push({ layout: sb.layout ? sb.layout.map((n) => Object.assign({}, n)) : null, cg: sb.layoutCg, radius: sb.layoutRadius,
+            nodes: new Map(sb.nodeEdits), beams: new Map(sb.beamEdits) });
+        if (nodeUndo.length > 30) nodeUndo.shift();
+    }
+    function undoNodes() {
+        const last = nodeUndo.pop();
+        if (!last) { status("Nothing of the nodes to undo."); return; }
+        sb.layout = last.layout; sb.layoutCg = last.cg; sb.layoutRadius = last.radius; sb.nodeEdits = last.nodes; sb.beamEdits = last.beams;
+        sb.sel.nodes.clear(); sb.sel.beam = null;
+        status("The nodes are back as they were.", "ok");
+        changed(true);
+    }
     function removeNodes(gone) {
         const s = softBody();
         if (!s || !gone.size) return;
+        rememberNodes();
         freeze(s);
         if (sb.layout.length - gone.size < 3) { status("A car needs at least 3 nodes.", "error"); return; }
         // the numbers of the nodes behind a removed one go down: the strengths that were set follow them
@@ -813,6 +850,13 @@ export function initSoftBody(api) {
         changed(true);
     }
     $("sbDelete").addEventListener("click", deleteSelected);
+    // Ctrl+Z while the nodes are edited: the nodes, not the form (first, before the undo of the car editor)
+    window.addEventListener("keydown", (e) => {
+        if (!sb.edit || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== "z") return;
+        if (/input|textarea|select/i.test((document.activeElement || {}).tagName || "")) return;
+        e.preventDefault(); e.stopImmediatePropagation();
+        undoNodes();
+    }, true);
     window.addEventListener("keydown", (e) => {
         if (!sb.edit || (e.key !== "Delete" && e.key !== "Backspace")) return;
         if (/input|textarea|select/i.test((document.activeElement || {}).tagName || "")) return;
@@ -832,7 +876,7 @@ export function initSoftBody(api) {
     $("sbResetNodes").addEventListener("click", async () => {
         if (!sb.layout) { status("The nodes are the ones made from the model already.", "ok"); return; }
         if (!(await OpenRacerDialog.ask({ title: "Make the nodes again?", text: "Your nodes are thrown away and made again from the model. The strengths set on single nodes and beams go too.", ok: "Make again", danger: true }))) return;
-        sb.layout = null; sb.nodeEdits.clear(); sb.beamEdits.clear(); sb.sel.nodes.clear(); sb.sel.beam = null;
+        sb.layout = null; sb.layoutCg = sb.layoutRadius = null; sb.nodeEdits.clear(); sb.beamEdits.clear(); sb.sel.nodes.clear(); sb.sel.beam = null;
         changed(true);
     });
 
@@ -1437,7 +1481,8 @@ export function initSoftBody(api) {
         const top = add('<div class="row"><div><label>Mass (kg)</label><input type="number" data-a="mass" min="0.1" step="0.5"></div><div class="fixed"><label>&nbsp;</label><button class="small ghost" data-a="remove">Remove from loose parts</button></div></div>');
         top.querySelector('[data-a="mass"]').value = part.mass !== undefined ? part.mass : 10;
         top.querySelector('[data-a="mass"]').addEventListener("change", (e) => { part.mass = parseFloat(e.target.value) || 10; partChanged(); });
-        top.querySelector('[data-a="remove"]').addEventListener("click", () => {
+        top.querySelector('[data-a="remove"]').addEventListener("click", async () => {
+            if (!(await OpenRacerDialog.ask({ title: "Remove “" + part.object + "” from the loose parts?", text: "Its hinge, pins and strengths go; it is saved at once.", ok: "Remove", danger: true }))) return;
             sb.parts.splice(sb.parts.indexOf(part), 1);
             if (sb.layout) sb.layout.forEach((n) => { if (n.part === w.name) delete n.part; });
             w.part = null; sb.pinSel = -1;
