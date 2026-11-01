@@ -2151,16 +2151,21 @@ async function openTestDialog() {
 async function saveParts() {
     const old = state.existingCar, id = $("id").value.trim();
     if ($("setupSelect").value || !old || id !== state.existingId || (state.files && state.files.size) || !softBodyEditor) return saveCurrent();
+    // (a car of a folder of the PC: its car.json is in that folder, not here; written to the server or the garage it shadowed the folder car)
+    if (OpenRacer.Garage.sourceOf(old) === "folder") { status("This car is in a linked folder: save it with Save to keep the parts.", "error"); return false; }
     try {
         const config = JSON.parse(JSON.stringify(old));
         delete config.id;
         const soft = softBodyEditor.read();
         if (soft.softbody) config.softbody = soft.softbody; else delete config.softbody;
-        if (config.softbody && config.softbody.layout && config.chassis) { config.softbody.layout_cg = config.chassis.cg_height; config.softbody.layout_radius = config.chassis.tire_diameter / 2; }
+        // (the layout is drawn on the car of the bench, which is built from the form: its centre of gravity and its tyre are those of the form)
+        if (config.softbody && config.softbody.layout && config.chassis) { config.softbody.layout_cg = num("cgHeight") > 0 ? num("cgHeight") : config.chassis.cg_height; config.softbody.layout_radius = (num("tyre") > 0 ? num("tyre") : config.chassis.tire_diameter) / 2; }
         if (soft.parts) config.parts = soft.parts; else delete config.parts;
         await OpenRacer.Garage.store("cars", id, config, {}, { base: "../" });
-        state.existingCar = Object.assign(Object.create(Object.getPrototypeOf(old)), old, { softbody: config.softbody, parts: config.parts });
-        if (OpenRacer.Garage.sourceOf(old)) Object.defineProperty(state.existingCar, "_garage", { value: old._garage, enumerable: false, configurable: true, writable: true });
+        // (the list as it is now: picking another car and this one again loaded the parts of before, and the next Save wrote them back)
+        await refreshList(id);
+        const fresh = state.cars.find((c) => c.id === id);
+        state.existingCar = fresh || Object.assign({}, old, { softbody: config.softbody, parts: config.parts });
         status("The parts and the shell are saved" + (dirty ? " (the other changes in the form are not)." : "."), "ok");
         return true;
     } catch (error) { status("Could not save the parts: " + error.message, "error"); return false; }
@@ -2897,11 +2902,13 @@ function saveTune(id, name) {
     if (OpenRacer.Setups.save(id, name, config) === false) throw new Error("the storage of this browser is full (clear site data of this page, or export the tune as a file)");            // (the main menu draws the picture of the tune itself)
     renderSetups();
 }
+let switchChosen = false;          // (a setup that an import or a copy chooses: the user chose it, no question; the new setup was active already, and Cancel kept the old form under it)
 $("setupSelect").addEventListener("change", async () => {
-    const id = $("id").value.trim(), name = $("setupSelect").value;
+    const id = $("id").value.trim(), name = $("setupSelect").value, chosen = switchChosen;
+    switchChosen = false;
     if (!id) return;
     // (changes that are not saved are lost by a switch: asked first, they were gone without a word; audit 2.2.0 §3.22)
-    if (dirty) {
+    if (dirty && !chosen) {
         const was = OpenRacer.Setups.active(id) || "";
         $("setupSelect").value = was;
         if (!(await OpenRacerDialog.ask({ title: "Switch to " + (name ? "“" + name + "”" : "Default") + "?", text: "The car in the form has changes that are not saved. They are lost when you switch.", ok: "Switch", danger: true }))) return;
@@ -2965,7 +2972,7 @@ $("tuneImportFile").addEventListener("change", async () => {
     OpenRacer.Setups.save(id, name, tune.config);
     renderSetups();
     $("setupSelect").value = name;
-    $("setupSelect").dispatchEvent(new Event("change"));
+    switchChosen = true; $("setupSelect").dispatchEvent(new Event("change"));
     status("Tune " + name + " imported and loaded into the form" + (tune.car && tune.car !== id ? " (it was made for " + tune.car + ": mind the wheels and the parts)" : "") + ".", "ok");
 });
 $("setupDelete").addEventListener("click", () => {
@@ -2975,7 +2982,7 @@ $("setupDelete").addEventListener("click", () => {
     if (!window.confirm(copy ? "Delete the changes to the tune " + name + "? The tune as it comes with the car stays." : "Delete the tune " + name + "?")) return;
     OpenRacer.Setups.remove(id, name);
     renderSetups();
-    if (copy) { $("setupSelect").value = name; $("setupSelect").dispatchEvent(new Event("change")); }
+    if (copy) { $("setupSelect").value = name; switchChosen = true; $("setupSelect").dispatchEvent(new Event("change")); }
     status(copy ? "Tune " + name + " is as it comes with the car again." : "Tune " + name + " deleted.");
 });
 // a tune that comes with the car: its file next to car.json and its name in car.json "tunes" (Catalog.js reads them), so that everyone who has the car has the tune;
@@ -3793,6 +3800,7 @@ $("copyCar").addEventListener("click", () => {
     $("name").value = ($("name").value.trim() || state.existingId) + " copy";
     $("id").value = slug($("name").value);
     state.idEdited = true;
+    renderSetups();          // (the tune list goes to Default for the new id: with a tune chosen, Save stored a tune for a car that did not exist, and no copy)
     setDirty(true);
     status("Saving now makes a new car: " + $("id").value + ". Change the name first if you like.", "ok");
 });

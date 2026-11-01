@@ -599,7 +599,7 @@ var Tuning = (function() {
             if(b && EBm && EBm.mass) {
                 if(!(engineMassNow > 0)) engineMassNow = values.engine_build ? EBm.mass(values.engine_build) : stockEngineMass();
                 var heavier = EBm.mass(b), change = Math.round(heavier - engineMassNow);
-                engineMassNow = heavier;
+                engineMassNow += change;          // (what was applied: with the exact value the rounding was lost at every step of a slider, 20 kg for a bore dragged by 10 mm)
                 if(change) {
                     values.mass = Math.max(50, values.mass + change);
                     if(Math.abs(change) >= 5) message("The engine is " + Math.abs(change) + " kg " + (change > 0 ? "heavier" : "lighter") + ": the car weighs " + Math.round(values.mass) + " kg now.");
@@ -755,7 +755,7 @@ var Tuning = (function() {
                     OpenRacer.Setups.remove(config.id, name);
                     refresh();
                     setupSelect.value = name;
-                    setupSelect.onchange();
+                    switchSetup();          // (chosen by the user already: not the question of a switch, which saw the new setup as active and the tuning as unsaved)
                 });
                 return;
             }
@@ -800,7 +800,7 @@ var Tuning = (function() {
                 setupSelect.value = name;
                 refreshSetups();
                 setupSelect.value = name;
-                setupSelect.onchange();
+                switchSetup();          // (chosen by the user already: not the question of a switch, which saw the new setup as active and the tuning as unsaved)
                 message("Tune " + name + " imported and chosen" + (tune.car && tune.car !== config.id ? " (it was made for " + tune.car + ": mind the wheels and the parts)" : "") + ".");
                 });
             });

@@ -1227,7 +1227,7 @@ async function keepInLibrary(model, fileName) {
     let id = base.toLowerCase(), k = 2;
     while (library.items.some((e) => e.id === id)) id = base.toLowerCase() + "-" + (k++);
     let blob = model.file;
-    if (!blob && state.existingTrack) blob = await (await fetch(trackFile(state.existingTrack, model.name))).blob();
+    if (!blob && state.existingTrack) blob = await fileOf(trackFile(state.existingTrack, model.name));
     if (!blob) throw new Error("the file of the model is not here");
     const thumb = await (await fetch(thumbOf(model.scene))).blob();
     const entry = { id, name: base, file: id + ".glb", thumb: id + ".webp", kind: model.kind || "rigid", mass: model.mass || 0 };
@@ -1960,6 +1960,12 @@ async function store(id, config, files, remove) {
     return OpenRacer.Garage.store("tracks", id, config, files || {}, { base: "../", remove: remove || [] });
 }
 
+// a file of a track that is copied into another folder: only when it is there (a 404 page was stored as the model, the sky or an object of the copy)
+async function fileOf(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(decodeURIComponent(url.split("/").pop()) + " could not be read (HTTP " + response.status + ")");
+    return response.blob();
+}
 async function save() {
     try {
         const name = $("name").value.trim();
@@ -1975,6 +1981,9 @@ async function save() {
         // (a copy under another id starts from the track too: it lost the racing line, the skidpad and what else only the file has; the model, the sky and the
         // objects are written below for the new folder; audit 2.2.0 §3.24)
         const config = old ? JSON.parse(JSON.stringify(old)) : {};
+        // (a copy with another model that was imported: the racing line and the skidpad of the old road do not fit it, and the AI followed them. A drawn track
+        // makes the same road from the same design, and keeps them)
+        if (old && id !== state.existingId && !design.active() && state.mainFile && state.files.size) { delete config.racing_line; delete config.skidpad; }
         delete config.id;
         config.name = name;
         config.description = $("description").value.trim();
@@ -2024,7 +2033,7 @@ async function save() {
         } else if (state.legacy) {
             if (id !== state.existingId) throw new Error("A track of the old format can only be saved under its own id. Import a glb to make a new track.");
         } else if (old && old.model && id !== state.existingId) {
-            const blob = await (await fetch(trackFile(old, old.model))).blob();
+            const blob = await fileOf(trackFile(old, old.model));
             if (!/\.glb$/i.test(old.model)) throw new Error("To save this track under another id, import its model files again.");
             uploads.push([old.model, blob]);
             config.model = old.model;
@@ -2050,7 +2059,7 @@ async function save() {
         for (const model of objectState.models.values()) {
             if (!made.some((o) => o.model === model.name)) continue;
             if (model.file) uploads.push([model.name, model.file]);
-            else if (id !== state.existingId && state.existingTrack) uploads.push([model.name, await (await fetch(trackFile(state.existingTrack, model.name))).blob()]);
+            else if (id !== state.existingId && state.existingTrack) uploads.push([model.name, await fileOf(trackFile(state.existingTrack, model.name))]);
         }
         if (handMade.length || made.length) config.objects = handMade.concat(made); else delete config.objects;
         let oldSky = null;
@@ -2061,7 +2070,7 @@ async function save() {
                 uploads.push([state.skyFile.name, state.skyFile]);
                 if (state.oldSkyName && state.oldSkyName !== state.skyFile.name && id === state.existingId) oldSky = state.oldSkyName;
             } else if (state.skyName && id !== state.existingId && state.existingId) {
-                const blob = await (await fetch(trackFile(state.existingTrack, state.skyName))).blob();
+                const blob = await fileOf(trackFile(state.existingTrack, state.skyName));
                 uploads.push([state.skyName, blob]);
             } else if (!state.skyName && state.oldSkyName && id === state.existingId) {
                 oldSky = state.oldSkyName;
@@ -2092,6 +2101,9 @@ async function save() {
         state.skyFile = null;
         for (const m of objectState.models.values()) m.file = null;       // the models are in the folder of the track now
         await refreshList(id);
+        // (the track as the list has it now, with where it is kept: the copy of the form had no garage mark, and a second copy of a garage track looked for its files on the server)
+        const fresh = state.tracks.find((t) => t.id === id);
+        if (fresh) state.existingTrack = fresh;
         $("delete").style.display = "";
         updateLineNote();
         status(saved.where === "server" ? "Saved as tracks/" + id + ". It is in the main menu of the game now."
