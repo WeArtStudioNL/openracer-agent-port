@@ -103,7 +103,8 @@
 - *Save replay* in de balk maakte bij elke klik een kopie. Nu één keer, met de reden als het niet lukt.
 - **Een replay onthoudt de setup** van elke auto en speelt hem daarmee af. Eerst kwam de auto terug met de setup die nu gekozen is, met andere wielen of zonder deuken.
 - Look-ahead-keys schuiven mee bij het trimmen. De knoppen van de replaybalk houden geen focus meer, zodat Enter weer afspelen en pauzeren is.
-- **Laten liggen:** een bewerkte replay toont geen schade of rook, en Watch van een bewerking gebruikt niet de camera's die je per clip koos. Beide vragen een uitbreiding van het bestandsformaat.
+- **Een bewerkte replay toont nu schade**, losgeslagen onderdelen, de berijder als ragdoll, sliprijen, rook en vonken van wat hij afspeelt (`16587dd`). Eerst was een auto na een crash weer heel en stond hij op vier wielen. Getest: een bewerking met een sprong terug en slow motion neemt precies de sliprijen van de afgespeelde stukken mee.
+- **Laten liggen:** Watch van een bewerking gebruikt niet de camera's die je per clip koos. Dat vraagt een uitbreiding van het bestandsformaat.
 
 ### AI (audit van 9 punten; `e0f262b`)
 - **De AI reed van achteren op een langzamere auto.** Hij keek maar 25 m vooruit en remde met een factor op zijn eigen snelheid. Vanaf 15 m/s snelheidsverschil raakte hij de auto voor hem. Nu kijkt hij zo ver vooruit als nodig en rijdt hij niet sneller dan hij nog achter die auto kan stoppen.
@@ -127,6 +128,7 @@
 - **Op een telefoon** viel de linkerkant van het paneel buiten beeld. Een paneel dat op een groot scherm versleept was, hing op een kleiner scherm 350 px onder het venster.
 - **Gamepad en pijltjestoetsen** werken in het paneel. Een schuif liet de focus los na één stap, en een controller deed niets in het paneel.
 - Getypte percentages die een aandeel zijn (remverdeling, gewicht vóór, sperdifferentieel) blijven tussen 0 en 100. Een typfout van 655 % gaf de achterremmen negatief koppel.
+- **Uit de review** (`8ed7bd6`): in free drive bediende de controller tegelijk de auto en het menu. A (handrem) op een gefocuste *Save* overschreef de setup. Nu werkt de controller alleen in het menu als dat de race stilzet. Een setup met minder versnellingen gaf meteen "(changed)", en een wijziging aan versnelling 6 van een 8-traps setup werd niet gezien. Downforce werd dubbel geteld bij een gemeten skidpad-grip.
 - Het gewicht van de berijder op een motor gaf na *Save* een zwaardere motor. Nogmaals op dezelfde setup klikken in het hoofdmenu wiste de tuning. De downforce-labels noemen ook mph.
 
 ### Menu's en kleine punten
