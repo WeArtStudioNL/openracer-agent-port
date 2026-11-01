@@ -2053,11 +2053,12 @@ async function save() {
         }
 
         // what the tuning menu of the game has put in the configuration, and that this form does not have, is kept
+        // (also for a copy under another id, Make a copy: the copy lost the frame torsion, the tyre rate, the tyres, the assists and the extras of the car it was made from)
         const old = state.existingCar;
-        if (old && id === state.existingId) {
-            for (const section of ["chassis", "drivetrain", "engine"]) config[section] = Object.assign({}, old[section], config[section]);
-            for (const section of ["tyres", "assists", "extras"]) if (old[section] && !config[section]) config[section] = old[section];
-            if (Array.isArray(old.tunes) && old.tunes.length) config.tunes = old.tunes.slice();       // (the tunes that come with the car: the form does not have them; under another id they stay behind)
+        if (old) {
+            for (const section of ["chassis", "drivetrain", "engine"]) config[section] = Object.assign({}, JSON.parse(JSON.stringify(old[section] || {})), config[section]);
+            for (const section of ["tyres", "assists", "extras"]) if (old[section] && !config[section]) config[section] = JSON.parse(JSON.stringify(old[section]));
+            if (id === state.existingId && Array.isArray(old.tunes) && old.tunes.length) config.tunes = old.tunes.slice();       // (the tunes that come with the car: the form does not have them; their files are in its folder, so under another id they stay behind)
         }
 
         // the model that is replaced is removed from the folder of the car when it has another name
