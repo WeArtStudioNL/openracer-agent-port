@@ -1564,6 +1564,7 @@ var MainMenu = (function() {
             history.replaceState(null, "", window.location.pathname);
             setTimeout(function() {
                 OpenRacerDialog.tell(what === "list" ? { title: "The game could not start", text: "The list of cars and tracks could not be loaded (" + id + "). Check the connection and try again." }
+                    : what === "error" ? { title: "The game could not start", text: "Something went wrong while it was set up (" + id + "). Try again, or choose another car or track." }
                     : { title: "The " + what + " “" + id + "” is not here", text: "It is not on the site and not in the garage of this browser. A car or a track of someone else can be imported with Garage → Import." });
             }, 0);
         }

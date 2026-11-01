@@ -149,6 +149,12 @@ var Settings = (function() {
                 ACTIONS.forEach(function(a) {
                     if(Array.isArray(stored.bindings[a.id])) bindings[a.id] = stored.bindings[a.id];
                 });
+                // the pad buttons that came later (camera on X, repair on Back): also for a player whose controls were saved before, when that action has no pad
+                // input and nothing else uses the button (they had no button at all, and the panel of the controls showed "–")
+                [["cameraSwitch", 2], ["repairCar", 8]].forEach(function(n) {
+                    var list = bindings[n[0]], taken = Object.keys(bindings).some(function(id) { return bindings[id].some(function(b) { return b.d === "pad" && b.t === "b" && b.i === n[1]; }); });
+                    if(!stored.padAdded && !taken && !list.some(function(b) { return b.d === "pad"; })) list.push(padButton(n[1]));
+                });
             }
             if(stored && stored.options) {
                 // an earlier version had auto and manual, where manual is what is sequential now
@@ -164,7 +170,7 @@ var Settings = (function() {
 
     function save() {
         try {
-            window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ bindings: bindings, options: options }));
+            window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ bindings: bindings, options: options, padAdded: true }));
         } catch(e) {
             console.log("Could not store the settings: " + e);
         }
@@ -307,6 +313,9 @@ var Settings = (function() {
         // a key that is typed in a field of the tuning menu is not a key of the game
         var target = event.target;
         if(target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return;
+        // the key of the tuning menu closes it while it holds the race still (keys of the game are not read while the game stands still)
+        if(paused && !menu && typeof Tuning !== "undefined" && Tuning.isVisible && Tuning.isVisible() &&
+            (bindings.tuningMenu || []).some(function(b) { return b.d === "key" && b.code === event.code; })) { Tuning.toggle(); event.preventDefault(); return; }
         if(!paused) {
             var freeCamTaken = typeof OpenRacer !== "undefined" && OpenRacer.FreeCam && OpenRacer.FreeCam.active && OpenRacer.FreeCam.takes[event.code];      // (Alt and Control move the free camera: not the menu of the browser)
             // (an F key of the game is not the browser's too: F3 opened the find bar, which took the keys, and the car no longer drove)
@@ -408,8 +417,10 @@ var Settings = (function() {
     var PAD_AXES = [["Left stick ←", "Left stick →"], ["Left stick ↑", "Left stick ↓"], ["Right stick ←", "Right stick →"], ["Right stick ↑", "Right stick ↓"]];
     function inputLabel(input) {
         if(input.d === "key") return keyLabel(input.code);
-        if(input.d === "pad" && input.t === "b" && PAD_BUTTONS[input.i]) return PAD_BUTTONS[input.i];
-        if(input.d === "pad" && input.t === "a" && PAD_AXES[input.i]) return PAD_AXES[input.i][input.s < 0 ? 0 : 1];
+        // (only for a controller of the standard layout, or none connected: another one has its own numbering)
+        var connected = input.d === "pad" ? controllerPad() : null, standard = !connected || connected.mapping === "standard";
+        if(standard && input.d === "pad" && input.t === "b" && PAD_BUTTONS[input.i]) return PAD_BUTTONS[input.i];
+        if(standard && input.d === "pad" && input.t === "a" && PAD_AXES[input.i]) return PAD_AXES[input.i][input.s < 0 ? 0 : 1];
         if(input.t === "b") return "Button " + input.i;
         if(input.t === "v") return "Hat " + input.i + " (" + input.v + ")";
         return "Axis " + input.i + (input.s < 0 ? " −" : " +");
@@ -1326,6 +1337,11 @@ var Settings = (function() {
         panel.appendChild(version);
     }
 
+    // what holds the game still besides this menu, each by its own name: the HUD editor, a Take, the tuning menu in a race. (One flag for all of them: the tuning
+    // menu let go of the pause of the menu that the window had opened, and the race went on behind it)
+    var holds = {};
+    function held() { return Object.keys(holds).some(function(k) { return holds[k]; }); }
+
     function openMenu() {
         if(menu) return;
         paused = true;
@@ -1341,7 +1357,7 @@ var Settings = (function() {
         stopCapture();
         document.body.removeChild(menu);
         menu = null;
-        paused = false;
+        paused = held();          // (the HUD editor, a Take or the tuning menu in a race may still hold the game)
         hintText = "";
     }
 
@@ -1442,12 +1458,15 @@ var Settings = (function() {
         setOption: setOption,
         onOptionChange: function(fn) { optionListeners.push(fn); },
         setVirtual: function(id, held) { virtualDown[id] = !!held; },
-        trigger: function(id) { if(!paused && !replayOn() && handlers[id]) handlers[id](); },      // an action once, as a key press does (the buttons of the HUD)
+        trigger: function(id) {
+            var closing = id === "tuningMenu" && typeof Tuning !== "undefined" && Tuning.isVisible && Tuning.isVisible();       // (the Tune button closes the menu that holds the race)
+            if((!paused || closing) && !replayOn() && handlers[id]) handlers[id]();
+        },      // an action once, as a key press does (the buttons of the HUD)
         isPaused: function() { return paused; },
         capturing: function() { return !!capture; },          // (a control is being bound: PadNav.js keeps off the buttons)
         toggleMenu: toggleMenu,
         closeMenu: closeMenu,
-        holdPause: function(flag) { paused = !!flag; keysDown = {}; },        // the game stands still without the menu (the HUD editor)
+        holdPause: function(flag, reason) { holds[reason || "other"] = !!flag; paused = !!menu || held(); keysDown = {}; },        // the game stands still without the menu (the HUD editor, a Take, the tuning menu in a race)
         bindings: function(id) { return bindings[id]; },
         showKeysOnce: showKeysOnce
     };

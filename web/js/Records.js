@@ -29,11 +29,13 @@ OpenRacer.Records = (function () {
         return r ? r.time : null;
     }
 
-    // keeps a lap if it is the best; gives true when it is
-    function lap(trackId, carId, time) {
+    // keeps a lap if it is the best; gives true when it is. With "roadDate" (road_date of the track: when its road was changed in the track editor) a record
+    // from before is replaced by any lap: it was driven on the old road (it stayed, and no slower lap on the new road became the line of the AI: anyGhost)
+    function lap(trackId, carId, time, roadDate) {
         var all = ofTrack(trackId);
         var old = all[carId];
-        if (old && old.time <= time) return false;
+        var oldRoad = old && roadDate && !(old.date > roadDate);
+        if (old && old.time <= time && !oldRoad) return false;
         all[carId] = { time: time, date: new Date().toISOString() };
         write(PREFIX + trackId, all);
         return true;

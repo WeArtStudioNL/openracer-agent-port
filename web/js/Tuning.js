@@ -1103,9 +1103,10 @@ var Tuning = (function() {
     function setVisible(show) {
         visible = show;
         panel.style.display = show ? "block" : "none";
-        // in a race against others the game stands still while the menu is open (the AI drove on while it was read); in free drive the car is tuned as it drives
-        var racing = typeof race !== "undefined" && race && race.opponents && race.opponents.length && (race.state === "countdown" || race.state === "racing");
-        if(racing && Settings.holdPause) Settings.holdPause(show);
+        // in a race against others the game stands still while the menu is open (the AI drove on while it was read), also when it was opened before the start;
+        // in free drive the car is tuned as it drives
+        var racing = typeof race !== "undefined" && race && race.opponents && race.opponents.length && race.state !== "finished";
+        if(Settings.holdPause) Settings.holdPause(show && !!racing, "tuning");
         if(show) {
             refreshSelectLists();
             refresh();

@@ -133,7 +133,7 @@ OpenRacer.Take = (function () {
         return new Promise(function (resolve) {
             style();
             var held = typeof Settings !== "undefined" && Settings.holdPause && !(Settings.isPaused && Settings.isPaused());
-            if (held) Settings.holdPause(true);
+            if (held) Settings.holdPause(true, "take");
             var back = document.createElement("div");
             back.id = "takeDialog";
             var box = document.createElement("div");
@@ -143,7 +143,7 @@ OpenRacer.Take = (function () {
             var h = document.createElement("h2"); h.textContent = title;
             var p = document.createElement("div"); p.className = "text"; p.textContent = text;
             box.appendChild(close); box.appendChild(h); box.appendChild(p);
-            var finish = function (value) { if (back.parentNode) back.parentNode.removeChild(back); document.removeEventListener("keydown", onKey, true); if (held) Settings.holdPause(false); resolve(value); };
+            var finish = function (value) { if (back.parentNode) back.parentNode.removeChild(back); document.removeEventListener("keydown", onKey, true); if (held) Settings.holdPause(false, "take"); resolve(value); };
             var onKey = function (event) { if (event.code === "Escape") { event.stopPropagation(); event.preventDefault(); finish(null); } };
             close.onclick = function () { finish(null); };
             build(box, finish);

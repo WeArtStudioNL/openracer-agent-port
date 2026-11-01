@@ -188,7 +188,7 @@ OpenRacer.HudLayout = (function () {
         css();
         fromMenu = !!document.getElementById("settingsMenu");       // (Save and Cancel go back to the settings menu it was opened from, not into the running game)
         Settings.closeMenu();
-        Settings.holdPause(true);
+        Settings.holdPause(true, "hud");
         if(typeof TouchControls !== "undefined") TouchControls.setEditing(true);
         working = clone(saved);
         selected = null;
@@ -279,7 +279,7 @@ OpenRacer.HudLayout = (function () {
         if(ui) { ui.catcher.remove(); ui.panel.remove(); }
         ui = null; working = null; selected = null;
         if(typeof TouchControls !== "undefined") TouchControls.setEditing(false);
-        Settings.holdPause(false);
+        Settings.holdPause(false, "hud");
         if(fromMenu) { fromMenu = false; Settings.toggleMenu(); }
     }
     function cancel() { if(!ui) return; apply(saved); close(); }

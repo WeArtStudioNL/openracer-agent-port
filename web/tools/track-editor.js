@@ -1864,7 +1864,12 @@ async function loadExisting() {
     $("editing").textContent = "Changing the track “" + id + "”. Saving overwrites it.";
     status("Loading…");
     try {
-        if (track.design && track.design.nodes) { startDesign(JSON.parse(JSON.stringify(track.design))); setMode("view"); }
+        state.loadedDesign = null;
+        if (track.design && track.design.nodes) {
+            startDesign(JSON.parse(JSON.stringify(track.design))); setMode("view");
+            // (the design as the designer made it at load, to compare at the save: it adds the textures and snaps the rows again, and track.design differed with no change)
+            state.loadedDesign = JSON.stringify(design.toJSON());
+        }
         else if (track.model) { stopDesign(); await loadGltfTrack(track); }
         else { stopDesign(); await loadLegacyTrack(track); }
         // the heights of the start and the gates come from the road
@@ -2086,9 +2091,10 @@ async function save() {
         let lineOfOldRoad = false;
         if (old && id === state.existingId) {
             const newModel = !design.active() && state.mainFile && state.files.size;
-            if (newModel) { delete config.racing_line; delete config.skidpad; }
-            if (newModel || JSON.stringify(old.design || null) !== JSON.stringify(config.design || null)) {
-                config.line_date = new Date().toISOString();
+            if (newModel) delete config.racing_line;          // (the skidpad stays: its radius is not the road of the model)
+            if (newModel || (config.design && state.loadedDesign !== JSON.stringify(config.design))) {
+                // (road_date: a record from before is replaced by the next lap, Records.lap; line_date: no older lap is the line of the AI)
+                config.line_date = config.road_date = new Date().toISOString();
                 lineOfOldRoad = !!(config.racing_line && config.racing_line.length);
             }
         }
@@ -2125,6 +2131,7 @@ async function save() {
         const saved = await store(id, config, files, [oldSky, oldModel].filter(Boolean));
         state.existingId = id;
         state.existingTrack = Object.assign({}, config, { id });
+        state.loadedDesign = config.design ? JSON.stringify(config.design) : null;
         state.files = new Map();
         state.mainFile = null;
         state.skyName = config.environment && config.environment.sky_image || "";
@@ -2140,8 +2147,9 @@ async function save() {
         updateLineNote();
         // what the game still needs to race here (it saved, and said it was ready, with no gates or no line for the AI)
         const missing = [];
-        if (!(config.gates || []).length && !(config.checkpoints || []).length) missing.push("no gates: no lap counts (Gates, put gate 1 on the start line)");
-        if (!(config.racing_line && config.racing_line.length > 10) && !(config.design && config.design.nodes)) missing.push("no racing line: the AI cannot race here (Record AI racing line)");
+        const special = config.skidpad || (config.dragstrip && !(config.gates || []).length);       // (a skidpad or a drag strip: no laps, no AI)
+        if (!special && !(config.gates || []).length && !(config.checkpoints || []).length) missing.push("no gates: no lap counts (Gates, put gate 1 on the start line)");
+        if (!special && !(config.racing_line && config.racing_line.length > 10) && !(config.design && config.design.nodes)) missing.push("no racing line: the AI cannot race here (Record AI racing line)");
         if (lineOfOldRoad) missing.push("the racing line was made on the road as it was: record it again, or edit it to the new road");
         status((saved.where === "server" ? "Saved as tracks/" + id + ". It is in the main menu of the game now."
             : "Saved in your garage, in this browser (the server does not save). It is in the main menu of the game now.") +
@@ -2237,15 +2245,13 @@ $("clearLine").onclick = async () => {
     if (!track || !track.racing_line) return;
     // (it is written to the saved track at once: a recorded line was gone for good with one click)
     if (!(await OpenRacerDialog.ask({ title: "Forget the racing line?", text: "The recorded line is removed from the saved track. The AI then follows " +
-        (track.design && track.design.nodes ? "the middle of the road" : "the best lap driven here, or cannot race") + ".", ok: "Forget", danger: true }))) return;
+        (track.design && track.design.nodes ? "the middle of the road" : "the best lap driven here since the line was made, or cannot race until one is driven") + ".", ok: "Forget", danger: true }))) return;
     const config = JSON.parse(JSON.stringify(track));
     delete config.id;
     delete config.racing_line;
-    config.line_date = new Date().toISOString();
     try {
         await store(track.id, config);
         delete track.racing_line;
-        track.line_date = config.line_date;
         updateLineNote();
         status("The line is forgotten.", "ok");
     } catch (error) {

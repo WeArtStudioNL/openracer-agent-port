@@ -62,7 +62,9 @@ function showLoading() {
 }
 
 function startGame(carId, trackId) {
+    var listed = false;          // (an error after the lists had loaded is not "the list could not be loaded")
     Promise.all([Catalog.load("cars"), Catalog.load("tracks")]).then(function(result) {
+        listed = true;
         var carFound = result[0].filter(function(item) { return item.id === carId; })[0];
         var trackFound = result[1].filter(function(item) { return item.id === trackId; })[0];
         if(!carFound || !trackFound) {
@@ -85,7 +87,7 @@ function startGame(carId, trackId) {
         loadTrack(trackFound, trackLoaded);
     }).catch(function(error) {
         console.error(error);
-        window.location.href = window.location.pathname + "?missing=" + encodeURIComponent("list:" + ((error && error.message) || error));
+        window.location.href = window.location.pathname + "?missing=" + encodeURIComponent((listed ? "error:" : "list:") + ((error && error.message) || error));
     });
 }
 
