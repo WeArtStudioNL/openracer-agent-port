@@ -162,7 +162,9 @@ var Hud = (function() {
         if(carPanel.style.display !== "block" && Settings.option("hud")) carPanel.style.display = "block";
         // (under the lap times as they grow: the panel stood at 150 px, and the lap times of the second lap and the best lap went under it. Not when one of them was
         // moved in the HUD editor, which places them from where they stand by default)
-        if(!carPanel.__hudLayout && !lapPanel.__hudLayout) { var under = Math.max(150, lapPanel.offsetTop + lapPanel.offsetHeight + 8) + "px"; if(carPanel.style.top !== under) carPanel.style.top = under; }
+        // (no floor: on a phone the panel stands higher, TouchControls.js; moved in the HUD editor, it is placed from its own default, the style is let go)
+        if(!carPanel.__hudLayout && !lapPanel.__hudLayout && lapPanel.offsetParent) { var under = (lapPanel.offsetTop + lapPanel.offsetHeight + 8) + "px"; if(carPanel.style.top !== under) carPanel.style.top = under; }
+        else if(carPanel.style.top) carPanel.style.top = "";
         var order = [1, 0, 2, 3]; // FL FR / RL RR
         var html = "<div class=\"row\"><div class=\"tyres\">";
         order.forEach(function(i) {

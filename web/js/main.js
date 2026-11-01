@@ -438,14 +438,14 @@ function showResults() {
 function renderResults() {
     var rows = standings();
     var position = rows.map(function(r) { return r.player; }).indexOf(true) + 1;
-    var leader = rows[0], leaderLaps = !leader ? 0 : leader.time !== null ? race.laps : Math.floor(leader.progress + 1e-6);      // (a car that is in drives on: its progress grows)
+    var leader = rows[0], leaderProgress = !leader ? 0 : leader.time !== null ? race.laps : leader.progress;      // (a car that is in drives on: its progress grows)
     var html = "<div style=\"font-size: 26px; font-weight: bold; margin-bottom: 4px;\">" + (rows.length < 2 ? "Finished" : position === 1 ? "You won!" : "Finished P" + position) + "</div>" +
         "<div style=\"color: var(--muted); margin-bottom: 14px;\">" + race.laps + " laps · " + escapeHtml(currentTrack.name || currentTrack.id) + "</div>" +
         "<table style=\"border-collapse: collapse; width: 100%; font-size: 15px;\">" +
         "<tr style=\"color: var(--muted); text-align: left;\"><th style=\"padding: 4px 10px 4px 0;\">#</th><th>Car</th><th style=\"text-align: right;\">Best lap</th><th style=\"text-align: right;\">Time</th></tr>";
     rows.forEach(function(r, i) {
         // (a car that is still running: how many laps it is behind the leader, when it is; it only said "running")
-        var down = Math.max(0, leaderLaps - Math.floor((r.progress || 0) + 1e-6));
+        var down = Math.max(0, Math.floor(leaderProgress - (r.progress || 0) + 1e-6));      // (whole laps behind: a car on its last lap, 0.05 behind, said +1 lap)
         var time = r.time === null ? (down > 0 ? "+" + down + " lap" + (down > 1 ? "s" : "") : "running") : (i === 0 ? Hud.formatTime(r.time) : "+" + Hud.formatTime(r.time - rows[0].time));
         html += "<tr style=\"" + (r.player ? "color: var(--accent2); font-weight: bold;" : "") + "\"><td style=\"padding: 5px 10px 5px 0;\">" + (i + 1) + "</td><td>" + escapeHtml(r.name) + "</td>" +
             "<td style=\"text-align: right; padding-left: 16px;\">" + (r.best === null ? "–" : Hud.formatTime(r.best)) + "</td><td style=\"text-align: right; padding-left: 16px;\">" + time + "</td></tr>";

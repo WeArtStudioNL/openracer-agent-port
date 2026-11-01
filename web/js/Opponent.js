@@ -429,7 +429,8 @@ OpenRacer.Opponent = function (config, line, options) {
         // (a stop that does not begin, the car standing still and no pit stop going: a pit lane of the track editor that misses the boxes, more cars than boxes. It
         // waited there for the rest of the race, in the way of the others: after six seconds it gives up the stop and drives on)
         if (atStop && speed < 1 && !this.pit.active) this.stopWait = (this.stopWait || 0) + delta; else if (!atStop) this.stopWait = 0;
-        if (atStop && this.stopWait > 6) { this.stopWait = 0; this.laneStopped = true; this.pitting = false; this.pitPhase = 0; this.pitStops++; boxMode = false; inLane = false; atStop = false; }
+        // (a box: the way out, phase 2, which counts the stop at its end; going back to phase 0 next to the box it pitted again at once. The lane: on through it)
+        if (atStop && this.stopWait > 6) { this.stopWait = 0; atStop = false; if (boxMode) this.pitPhase = 2; else this.laneStopped = true; }
         if (atStop) { this.throttle = 0; this.brakePedal = Math.max(this.brakePedal, speed < 1 ? 1 : 0.2); this.stuck = 0; return; }
         if (speed < 2 && v.clutchEngagement < 0.5) this.throttle = Math.max(this.throttle, 0.5);
         // a motorcycle rolls the throttle on, and less of it the more it leans: from 0.1 to full in one frame at 35 m/s and 10 degrees the rear stepped out and the bike spun

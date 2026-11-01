@@ -15,7 +15,7 @@ OpenRacer.PadNav = (function() {
     var was = {}, held = { dir: null, since: 0, next: 0 };
     var FOCUSABLE = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1']), [role='button']";
     // the layers that take the controller, the one on top first
-    var LAYERS = "#orDialog, .or-dialog, #replaysDialog, #garageDialog, #vehiclePicker, #replayLeave, .veShade, #raceResults";      // (#raceResults: Race again and Main menu after a race)
+    var LAYERS = "#orDialog, .or-dialog, #replaysDialog, #garageDialog, #vehiclePicker, #replayLeave, .veShade";
 
     // (only a controller with the standard layout: separate pedals, a shifter or a button box beside a wheel have other mappings, and their resting axes moved the
     // focus and changed a slider every 0.12 s; and nothing while a control is being bound in the settings, where the buttons are what is bound)
@@ -32,6 +32,9 @@ OpenRacer.PadNav = (function() {
         if (layers.length) return layers[layers.length - 1];
         var settings = document.getElementById("settingsMenu");
         if (settings) return settings;
+        // the results of a race (Race again, Main menu): under the pause menu and in a replay, where they are hidden, they are not the controller's
+        var results = document.getElementById("raceResults");
+        if (results && !document.body.classList.contains("replaying") && results.offsetParent) return results;
         return document.getElementById("mainMenu");
     }
 

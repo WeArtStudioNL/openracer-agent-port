@@ -1127,7 +1127,7 @@ OpenRacer.Car = function( config, domElement ) {
             // (a gate missed, but the whole line driven: a lap through the pit lane)
             if(this.lapStarted && !checkpointsPassed && trackGates.length && allSectors()) checkpointsPassed = true;
             // (said: the timer went back to 0:00 and the lap count stayed, without a word)
-            if(this.lapStarted && !checkpointsPassed && typeof banner === "function") banner("Lap not counted: gate " + missedGate + " was missed");
+            if(this.lapStarted && !checkpointsPassed && typeof banner === "function") banner("Lap not counted: " + (trackGates.length ? "gate " + missedGate : "a part of the track") + " was missed");
             clearSectors();
             if(checkpointsPassed) {
                 // we passed all checkpoints
