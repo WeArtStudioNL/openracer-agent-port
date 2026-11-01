@@ -36,6 +36,9 @@ OpenRacer.PhysicsLink = function (car) {
         controller: ["recover"]
     };
     var CONFIG = { retune: 1, setRubber: 1, setCompound: 1, setAnti: 1, applyPressure: 1 };
+    // the calls that nudge the car (an impulse, the node grabber that moves every frame, the cube of the hit tool, the repair of the pit stop share by share): the
+    // snapshots of the steps before them are still used. After the other calls (a reset, a repair) they are not: they would put the car back for a frame.
+    var NUDGE = { applyImpulse: 1, hitWheel: 1, pushDown: 1, puncture: 1, startEngine: 1, start: 1, grab: 1, moveGrab: 1, release: 1, pushPlate: 1, releasePlate: 1, repairTo: 1, repairStart: 1 };
     // objects in the vehicle that are not values of a snapshot, which the page sets: sent when they are another object
     var WATCH = ["partForces", "engine.torque_curve", "engine.extras"];
 
@@ -49,7 +52,7 @@ OpenRacer.PhysicsLink = function (car) {
     var watched = {};
     var sentShell = null, sentSpheres = null, gearSent = null, wetSent = null, snowSent = null;
     var tyreStubs = [];
-    this.stats = { steps: 0, lastMs: 0, skipped: 0, cost: 0, gaveBack: null, roundTrip: 0 };
+    this.stats = { steps: 0, answers: 0, lastMs: 0, skipped: 0, cost: 0, gaveBack: null, roundTrip: 0 };
     var sentAt = 0;                                      // when the step that is out was sent (performance.now)
     var sentTime = 0, liveFor = 0, slowFor = 0;          // the game time of the step that is out, and how long the worker has had the car and been too slow
 
@@ -79,7 +82,7 @@ OpenRacer.PhysicsLink = function (car) {
                     if(live) {
                         ops.push({ op: "call", target: target, method: name, args: plain(args) });
                         VS.rebase(v, cache);
-                        callFrame = frame + 1;
+                        if(!NUDGE[name]) callFrame = frame + 1;
                     }
                 }
                 return result;
@@ -114,7 +117,7 @@ OpenRacer.PhysicsLink = function (car) {
             var m = e.data;
             if(m.type === "ready") workerReady = true;
             else if(m.type === "state") {
-                busy = false; self.stats.lastMs = m.ms; self.stats.roundTrip = performance.now() - sentAt;
+                busy = false; self.stats.answers++; self.stats.lastMs = m.ms; self.stats.roundTrip = performance.now() - sentAt;
                 // the work for a second of driving (ms), smoothed
                 if(sentTime > 0) self.stats.cost += 0.2 * (m.ms / sentTime - self.stats.cost);
                 if(m.cars.player) { m.cars.player.frame = m.frame; latest = m.cars.player; }

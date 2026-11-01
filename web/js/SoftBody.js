@@ -559,12 +559,19 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         return { u: u.slice(), w: w.slice(), q: q.slice(), gone: gone.slice(), anchorAlive: anchorAlive.slice(), beamRest: Float64Array.from(beamRest), beamAlive: Uint8Array.from(beamAlive),
             displacement: this.displacement.slice(), version: this.version, absorbed: this.absorbed, quiet: this.quiet, pinned: this.pinned, plate: this.plate, lastPlate: this.lastPlate, pull: this.pull };
     };
+    var held = { plate: null, lastPlate: null, pull: null };
     this.importState = function (s) {
         if (s.u.length !== u.length) return false;           // (not the same shell)
         u.set(s.u); w.set(s.w); q.set(s.q); gone.set(s.gone); anchorAlive.set(s.anchorAlive);
         for (var i = 0; i < s.beamRest.length && i < beamRest.length; i++) { beamRest[i] = s.beamRest[i]; beamAlive[i] = s.beamAlive[i]; }
         this.displacement.set(s.displacement);
-        this.version = s.version; this.absorbed = s.absorbed; this.quiet = s.quiet; this.pinned = s.pinned; this.plate = s.plate; this.lastPlate = s.lastPlate; this.pull = s.pull;
+        this.version = s.version; this.absorbed = s.absorbed; this.quiet = s.quiet; this.pinned = s.pinned;
+        // (the cube of the hit tool and the elastic of the node grabber keep their objects here, also through a snapshot of before them: the debug view knows them by it)
+        ["plate", "lastPlate", "pull"].forEach(function (name) {
+            if (self[name]) held[name] = self[name];
+            self[name] = s[name] ? (held[name] ? Object.assign(held[name], s[name]) : s[name]) : null;
+            if (self[name]) held[name] = self[name];
+        });
         return true;
     };
 

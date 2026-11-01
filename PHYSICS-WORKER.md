@@ -167,6 +167,13 @@ main thread, and with two workers the AI cars side by side.
   * The worker steps when the last step came back; the time of the frames in between is added to the next step (at most 0.1 s).
 * **Falls back to the page** when the worker fails, or when it needs more than 0.9 s of work for a second of driving for two
   seconds.
+* **The delay**: a brake at frame 3 slows the car from frame 3 in the page and from frame 4 with the worker (the Muscle at 93 km/h):
+  one frame, as planned.
+* **Nudges keep the snapshots**: the node grabber of the debug view calls `moveGrab` every frame, and every call threw the older
+  snapshots away, so nothing came back while a node was dragged and the car stood still on the screen (found in the first test on
+  the Mac). The calls that only nudge the car (an impulse, the grabber, the cube of the hit tool, the repair of the pit stop share by
+  share) no longer do that; the shell keeps the objects of the cube and the elastic through the snapshots (the debug view knows
+  them by their object).
 * **A label** with `worker=1` or `worker=0` in the address: the frames per second, where the physics runs and what it costs. It is for
   a test on a device.
 * Not in the worker yet: the contacts of the shell with the AI cars (the worker's car has no other cars; the rigid contact of
