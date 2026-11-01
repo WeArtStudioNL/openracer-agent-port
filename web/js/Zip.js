@@ -135,7 +135,8 @@ OpenRacer.Zip = (function () {
                     var compressed = dir.getUint32(p + 20, true), uncompressed = dir.getUint32(p + 24, true);
                     var nameLength = dir.getUint16(p + 28, true), extraLength = dir.getUint16(p + 30, true), commentLength = dir.getUint16(p + 32, true);
                     var localOffset = dir.getUint32(p + 42, true);
-                    var name = decoder.decode(new Uint8Array(dirBuffer, p + 46, nameLength));
+                    // (a zip of Windows PowerShell writes its folders with backslashes: mycar\\car.json was not found as car.json)
+                    var name = decoder.decode(new Uint8Array(dirBuffer, p + 46, nameLength)).replace(/\\/g, "/");
                     entries.push({ name: name, method: method, compressed: compressed, uncompressed: uncompressed, localOffset: localOffset });
                     p += 46 + nameLength + extraLength + commentLength;
                 }

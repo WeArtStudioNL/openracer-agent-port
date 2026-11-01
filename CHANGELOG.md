@@ -6,6 +6,12 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 ## Unreleased
 
+- **Garage: zips that did not import.** From an audit of how players share their cars and tracks:
+  - A zip with car.json at its root (what Finder or Explorer makes of the selected files) crashed the import; it imports, named after the zip.
+  - A zip of Windows PowerShell (backslashes in the names) was "a zip without car.json"; it imports.
+  - A model in a folder of the car (models/body.glb) was looked for beside car.json; it keeps its folder.
+  - A .gltf with its .bin and pictures as files of their own never loaded from the garage or a linked folder; it loads.
+  - A name without Latin letters gave every such car the id "item-", so one replaced the other.
 - **Fixed: a car could turn into numbers that are not numbers.** A frame without time (two frames in the same millisecond) divided a step of 0 s by itself: the fuel, the wear, the mass and then the whole car became NaN for the rest of the race. Such a frame now does nothing.
 - **Races.** From an audit of a race from the start to after the finish:
   - The results work with a gamepad and the keyboard: *Race again* has the focus, and the buttons keep it (the panel was written again whenever a car moved up). *Race again* asks about a replay that is not saved, as *Main menu* does. The panel fits a phone, is hidden in the replay, says how many laps a car that still runs is down, and says *Finished* without opponents.

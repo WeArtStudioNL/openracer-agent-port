@@ -127,8 +127,15 @@ OpenRacer.Garage = (function () {
     // A URL of the game for a file of this item (cars/<id>/model.glb, ../tracks/<id>/images/road.jpg, or just the name of a
     // file that a glTF refers to) as the blob URL of the garage, or the URL as it is when the item does not have that file
     function resolve(config, url) {
-        if (!config || !config._garage || !url || /^(blob|data):/.test(url)) return url;
+        if (!config || !config._garage || !url || /^data:/.test(url)) return url;
         var urls = config._garage.urls;
+        // a file that a .gltf names next to itself (model.bin, textures/road.png) is asked for from the blob URL of the .gltf: blob:<origin>/model.bin. That is not a
+        // blob of the item: the name after the origin is looked up (a .gltf with files of its own never loaded from the garage or the folder)
+        if (/^blob:/.test(url)) {
+            for (var own in urls) if (urls[own] === url) return url;
+            var path = decodeURIComponent(url.replace(/^blob:[a-z]+:\/\/[^/]+\//i, "").split("?")[0].split("#")[0]);
+            return urls[path] || urls[baseName(path)] || url;
+        }
         var clean = decodeURIComponent(url.split("?")[0].split("#")[0]).replace(/^(\.\.\/|\.\/)+/, "");
         var marker = new RegExp("(^|/)(cars|tracks)/" + config.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "/(.+)$");
         var match = clean.match(marker);
@@ -322,16 +329,20 @@ OpenRacer.Garage = (function () {
             });
             if (!found) throw new Error("The zip has no car.json or track.json.");
             return found.entry.blob.text().then(function (text) {
-                var file = found.kind === "cars" ? "car.json" : "track.json", json;
-                try { json = JSON.parse(text); } catch (error) { throw new Error("The " + file + " in the zip is not valid JSON (" + error.message + ")."); }
+                // (configName: it was called file, and hid the zip file whose name is the id of a zip with car.json at its root, a zip that Finder or Explorer makes
+                // of the selected files: "Cannot read properties of undefined (reading 'replace')")
+                var configName = found.kind === "cars" ? "car.json" : "track.json", json;
+                try { json = JSON.parse(text); } catch (error) { throw new Error("The " + configName + " in the zip is not valid JSON (" + error.message + ")."); }
                 // what the game needs before it can show or load the item: a zip without it broke the list of cars until it was deleted
                 var isObject = function (v) { return !!v && typeof v === "object" && !Array.isArray(v); };
                 var needed = found.kind === "cars" ? ["model", "chassis", "dimensions", "engine", "drivetrain"] : ["start"];
                 var missing = isObject(json) ? needed.filter(function (key) { return !isObject(json[key]); }) : needed;
                 if (found.kind === "tracks" && isObject(json) && !json.model && !json.geometry) missing.push("model");
-                if (missing.length) throw new Error("The " + file + " in the zip is not complete: it has no " + missing.join(", ") + ". Is it a " + found.kind.slice(0, -1) + " of this game?");
+                if (missing.length) throw new Error("The " + configName + " in the zip is not complete: it has no " + missing.join(", ") + ". Is it a " + found.kind.slice(0, -1) + " of this game?");
                 var folder = found.prefix.split("/").pop();
-                var id = (json.id || folder || file.name.replace(/\.(car|track)?\.?zip$/i, "")).toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+                var id = (json.id || folder || String((file && file.name) || "").replace(/\.(car|track)?\.?zip$/i, "") || json.name || "").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+                // (a name of letters that are not Latin gives no id: they all became "item-", and one replaced the other)
+                if (!id) id = "item-" + Date.now().toString(36);
                 if (!/^[a-z0-9]/.test(id)) id = "item-" + id;
                 delete json.id;
                 var files = {};
@@ -341,8 +352,10 @@ OpenRacer.Garage = (function () {
                     if (rel) files[rel] = entry.blob;
                 });
                 // the car.json of a car names its model as cars/<id>/<file>: it is this car now
+                // (with its folders: a model in cars/x/models/ became cars/<id>/body.glb, and the file is models/body.glb in the zip)
                 if (found.kind === "cars" && json.model && json.model.file) {
-                    json.model.file = "cars/" + id + "/" + json.model.file.split("/").pop();
+                    var rel = json.model.file.replace(/^cars\/[^/]+\//, ""), base = rel.split("/").pop();
+                    json.model.file = "cars/" + id + "/" + (files[rel] || !files[base] ? rel : base);
                 }
                 // is there one with this id already (in the garage, of the server, of a folder)? then it is shown what is different, and asked first
                 var kindName = found.kind.slice(0, -1);
