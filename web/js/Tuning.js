@@ -549,6 +549,16 @@ var Tuning = (function() {
     var cardMeta = {}, engineUi = null, buildResult = null, header = null;
 
     // the engine that is built (EngineBuild.js) for the piece of the Engine card (EngineBuildUI.js): what it works on is in the values of the menu
+    // what the engine of the car weighs as it is now (EngineBuild.mass), worked out when the build is first changed; for an engine without a build (a torque curve of its own)
+    // a guess from its peak torque (about 95 Nm a litre) and the cylinders of its sound
+    var engineMassNow = 0;
+    function stockEngineMass() {
+        var c = config || {}, curve = (c.engine && c.engine.torque_curve) || [], peak = 0;
+        curve.forEach(function(p) { peak = Math.max(peak, Array.isArray(p) ? p[1] : p.nm || 0); });
+        var layout = String((OpenRacer.engineSimParams ? OpenRacer.engineSimParams(c) : {}).layout || "inline-4");
+        var cylinders = /single/.test(layout) ? 1 : /twin/.test(layout) ? 2 : parseInt((layout.match(/\d+/) || [4])[0], 10) || 4;
+        return 15 + 32 * Math.max(0.1, peak / 95) + 5 * cylinders;
+    }
     function workOutBuild() {
         var b = values.engine_build;
         buildResult = b && OpenRacer.EngineBuild ? OpenRacer.EngineBuild.compute(b, values.limiter_rpm, values.idle_rpm) : null;
@@ -582,11 +592,18 @@ var Tuning = (function() {
         closeCard: function() { if(engineCard) engineCard.open = false; },
         build: function() { return values.engine_build || null; },
         setBuild: function(b) {
-            // another block: the car is heavier or lighter by the difference of the two engines (the Mass row shows it)
-            var before = values.engine_build, EBm = OpenRacer.EngineBuild;
-            if(before && b && before.block !== b.block && EBm && EBm.mass) {
-                var change = Math.round(EBm.mass(b) - EBm.mass(before));
-                if(change) { values.mass = Math.max(50, values.mass + change); message("The engine is " + Math.abs(change) + " kg " + (change > 0 ? "heavier" : "lighter") + ": the car weighs " + Math.round(values.mass) + " kg now."); }
+            // the engine weighs what its size and its cylinders make it: the car is heavier or lighter by the difference with the engine it had (the Mass row shows it).
+            // Every change counts (a bigger bore too), from the engine the car has now: the first swap from an engine without a build (a kart, a motorcycle) changed
+            // nothing, and a bore that was enlarged and swapped away took its kilos off again at every round
+            var EBm = OpenRacer.EngineBuild;
+            if(b && EBm && EBm.mass) {
+                if(!(engineMassNow > 0)) engineMassNow = values.engine_build ? EBm.mass(values.engine_build) : stockEngineMass();
+                var heavier = EBm.mass(b), change = Math.round(heavier - engineMassNow);
+                engineMassNow = heavier;
+                if(change) {
+                    values.mass = Math.max(50, values.mass + change);
+                    if(Math.abs(change) >= 5) message("The engine is " + Math.abs(change) + " kg " + (change > 0 ? "heavier" : "lighter") + ": the car weighs " + Math.round(values.mass) + " kg now.");
+                }
             }
             values.engine_build = JSON.parse(JSON.stringify(b));
             workOutBuild();
@@ -661,7 +678,7 @@ var Tuning = (function() {
         function switchSetup() {
             // the values of the table from the setup (its whole configuration; what the table does not have, the suspension and the parts, waits for the next start)
             var name = setupSelect.value, from = name ? OpenRacer.Setups.configOf(config.id, name, config) : null;
-            values = clone(base);
+            values = clone(base); engineMassNow = 0;
             // (a setup laid over the car as made, as main.js lays it at the start: what the setup does not say, the car says)
             var saved = fromConfig(from ? Object.assign({}, original, from) : original);
             Object.keys(saved).forEach(function(key) { if(key in base) values[key] = saved[key]; });
@@ -1100,7 +1117,7 @@ var Tuning = (function() {
         original = clone(baseConfig || newConfig);
         source = OpenRacer.Garage && OpenRacer.Garage.sourceOf ? OpenRacer.Garage.sourceOf(baseConfig || newConfig) : null;
         base = fromConfig(config);
-        values = clone(base);
+        values = clone(base); engineMassNow = 0;
         load();
         rebuildSig = builtFrom(OpenRacer.CarTuning.toConfig(config, base));        // (what the car is built with now, the car as loaded: a tuning that was kept with another suspension, other wheels or another soft body builds it again, below in apply)
         lastCurve = config.engine && config.engine.torque_curve ? clone(config.engine.torque_curve) : null;

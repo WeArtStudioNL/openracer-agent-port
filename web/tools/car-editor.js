@@ -490,7 +490,9 @@ async function loadFromFiles(list) {
     }
     // a car is open: its model is replaced, or a new car is started with this model ("New" of the garage opened the first car of the list, and a model that was
     // picked then replaced the model of that car, saved over it)
-    if (state.existingId && !(await OpenRacerDialog.ask({ title: "Replace the model of “" + state.existingId + "”?", text: "Replace keeps the settings of this car and puts the new model in it. New car starts a new car with this model.", ok: "Replace the model", cancel: "New car" }))) {
+    // (two questions: Esc or a click beside a question is "not this", and the second one is Cancel; one question with "New car" as its no wiped the open car on Esc)
+    if (state.existingId && !(await OpenRacerDialog.ask({ title: "Replace the model of “" + state.existingId + "”?", text: "This car keeps its settings and gets the new model.", ok: "Replace the model", cancel: "No" }))) {
+        if (!(await OpenRacerDialog.ask({ title: "Start a new car with this model?", text: "The car that is open now is closed" + (dirty ? ", with its changes that are not saved." : "."), ok: "New car" }))) { status("The model was not loaded."); return; }
         newCar($("vehicleType").value === "motorcycle" ? "motorcycle" : "car"); $("existing").value = ""; applyTypeUI();
     }
     state.files = files;
@@ -2079,6 +2081,10 @@ async function save() {
         state.mainFile = null;
         if (driverEditor) driverEditor.saved(config.driver ? config.driver.file : null);
         await refreshList(id);
+        // (the car as the list has it now, with where it is kept: the copy of the form had no garage mark, and Export zip and Delete took a garage car for one of the game)
+        const fresh = state.cars.find((c) => c.id === id);
+        if (fresh) state.existingCar = fresh;
+        renderSetups();          // (a new car that was saved has its setups now)
         $("delete").style.display = "";
         status(saved.where === "server" ? "Saved as cars/" + id + ". It is in the main menu of the game now."
             : "Saved in your garage, in this browser (the server does not save). It is in the main menu of the game now.", "ok");
@@ -3717,9 +3723,13 @@ $("exportCar").addEventListener("click", async () => {
     if (dirty) status("The zip has the car as it is saved, not the changes that are not saved yet.");
     try {
         let zip;
-        if (OpenRacer.Garage.sourceOf(state.existingCar)) zip = await OpenRacer.Garage.exportZip("cars", id);
+        const source = OpenRacer.Garage.sourceOf(state.existingCar);
+        if (source === "folder") throw new Error("this car is in a folder of your PC that is linked to the garage: zip that folder itself");
+        if (source === "garage") zip = await OpenRacer.Garage.exportZip("cars", id);
         else {
-            const base = "../cars/" + id + "/", json = await (await fetch(base + "car.json", { cache: "no-store" })).json();
+            const base = "../cars/" + id + "/", answer = await fetch(base + "car.json", { cache: "no-store" });
+            if (!answer.ok) throw new Error("car.json of " + id + " could not be read (HTTP " + answer.status + "); save the car first");
+            const json = await answer.json();
             const names = new Set(["preview.webp"]);
             const walk = (v) => {
                 if (typeof v === "string") { if (v.indexOf("cars/" + id + "/") === 0) names.add(v.slice(("cars/" + id + "/").length)); }
@@ -3732,8 +3742,16 @@ $("exportCar").addEventListener("click", async () => {
             for (const name of names) {
                 if (!/^[^/\\]+(\/[^/\\]+)*$/.test(name) || name.split("/").includes("..")) continue;
                 const response = await fetch(base + name.split("/").map(encodeURIComponent).join("/"));
-                if (response.ok) entries.push({ name: id + "/" + name, data: new Uint8Array(await response.arrayBuffer()) });
-                else if (name !== "preview.webp") throw new Error(name + " could not be read (HTTP " + response.status + ")");
+                if (!response.ok) { if (name !== "preview.webp") throw new Error(name + " could not be read (HTTP " + response.status + ")"); continue; }
+                const bytes = new Uint8Array(await response.arrayBuffer());
+                entries.push({ name: id + "/" + name, data: bytes });
+                // (a .gltf has its .bin and its pictures as files of their own, named in it, not in car.json)
+                if (/\.gltf$/i.test(name)) {
+                    try {
+                        const gltf = JSON.parse(new TextDecoder().decode(bytes)), dir = name.includes("/") ? name.slice(0, name.lastIndexOf("/") + 1) : "";
+                        [].concat(gltf.buffers || [], gltf.images || []).forEach((r) => { if (r && r.uri && !/^data:/.test(r.uri)) names.add(dir + decodeURIComponent(r.uri)); });
+                    } catch (e) { /* not JSON: kept as it is */ }
+                }
             }
             zip = { blob: await OpenRacer.Zip.write(entries), name: id + ".car.zip" };
         }

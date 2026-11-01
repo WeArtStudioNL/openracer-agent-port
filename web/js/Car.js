@@ -952,6 +952,7 @@ OpenRacer.Car = function( config, domElement ) {
         this.lastWritten = this.turnAngle;
 
         // The autopilot (after a race, main.js): an AI driver (Opponent.js, driving this vehicle) takes the pedals and the wheel; what was pressed is not used. A manual gearbox is shifted by it.
+        if(!this.autopilot) this.leanFromBend = false;          // (the keys of the player: the lean as a share of the most lean)
         if(this.autopilot) {
             var pilot = this.autopilot, others = this.autopilotOthers ? this.autopilotOthers() : [];
             if(pilot.drive) pilot.drive(delta, others);
@@ -963,6 +964,7 @@ OpenRacer.Car = function( config, domElement ) {
             }
             this.throttle = pilot.throttle; this.brakePedal = pilot.brakePedal;
             this.turnAngle = Math.max(-this.maxTurn, Math.min(this.maxTurn, pilot.turnAngle));
+            this.leanFromBend = !!pilot.leanFromBend;          // (a motorcycle: the lean of the bend the pilot asks, as an AI bike, Motorcycle.js)
             this.handbrake = false; this.reverse = false; this.neutral = false; this.parkingLock = false; this.selector = "D";
             this.accelerate = this.brake = this.turnLeft = this.turnRight = false;
             if(this.gearboxMode === "manual" && v.gearbox === "gears") {
