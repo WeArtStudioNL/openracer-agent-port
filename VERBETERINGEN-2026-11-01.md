@@ -6,7 +6,7 @@
 
 ## Kort
 
-- Ik heb in **26 commits** gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren en een reeks UX-punten.
+- Ik heb in **ruim 35 commits** gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop en een reeks UX-punten.
 - Na elke grote wijziging heb ik een onafhankelijke review laten doen (drie in totaal, plus een audit van de motorbouw en een van de car-editor). Elke bevinding heb ik zelf nagelopen en zo nodig opgelost.
 - Alles is getest in het spel zelf, vanuit JavaScript aangestuurd. Het browservenster stond verborgen; daar loopt de animatielus niet. Hoe het er in beeld uitziet, heb ik maar op enkele screenshots gezien.
 
@@ -49,6 +49,18 @@
   - de AI rekende met de grip van een auto;
   - de helling was een deel van de maximale helling in plaats van de helling die de bocht vraagt.
 
+### Races (audit van 12 punten; `41af273`, `c33e319`)
+- **Gevonden en opgelost: een auto kon "NaN" worden.** Eén frame zonder tijd (twee frames binnen dezelfde milliseconde) deelde een stap van 0 s door zichzelf. Daarna waren brandstof, slijtage, massa en de hele auto geen getal meer, voor de rest van de race. In een test werd de kart van de speler zo onbruikbaar, en het verklaart de "place that is not a number"-meldingen. Mogelijk speelde dit ook mee bij het zwarte scherm van gisteren. Zo'n frame doet nu niets.
+- **De uitslag** werkt met gamepad en toetsenbord ("Race again" heeft de focus). "Race again" vraagt eerst naar een niet-bewaarde replay. De uitslag past op een telefoon, verdwijnt in de replay en toont hoeveel ronden een auto achter ligt.
+- **HUD:** afstand tot de auto voor en achter je, brandstof in ronden, en beide redenen voor een pitstop. Het banden-/brandstofpaneel schuift mee onder de rondetijden.
+- **Regels:**
+  - Een gemiste gate meldt dat de ronde niet telt.
+  - *Backspace* in een race repareert, maar geeft geen gratis banden of brandstof meer, en de ronde telt niet als record.
+  - De ghost wacht tot GO.
+  - Een AI die achteruit over de streep rolt, krijgt geen nep-ronde meer.
+  - Een AI die wacht op een pitstop die nooit begint, rijdt na 6 s verder.
+- De fly-by is met A over te slaan.
+
 ### Menu's en kleine punten
 - **Tune the car** staat bovenaan het pauzemenu.
 - Het hoofdmenu zegt *Setup*, niet *tune*. Lege kaarten in het tuningmenu zijn weg, en de topregel geeft de echte topsnelheid.
@@ -60,7 +72,6 @@
 
 - **AI-inhaalgedrag** (alleen inhalen als hij sneller is): oud en nieuw maten gelijk (3 crashes, 1,6 m naast de lijn). Zonder bewijs heb ik het niet ingebouwd.
 - **Motor die na een val van 10 m 8 m/s omhoog stuitert:** dat was al zo vóór vannacht. Demping van de aanslagen hielp niet; dit vraagt een eigen afstemronde. Bij 3 m is het in orde (0,6 m/s).
-- **Meldingen "place that is not a number"** in het console-buffer: ik kon ze niet reproduceren. Ze komen waarschijnlijk uit testruns die het testgereedschap halverwege een physics-stap afbrak.
 - **CPU:** met 7 AI-auto's kost een frame ongeveer 12 ms. De speler kost 3,7 ms terwijl hij stilstaat, vooral door de schaalbanden; daarvoor bestaat de instelling banddetail al. Een snelle grote winst zag ik niet.
 
 ## Wat je zelf moet bekijken of beslissen
