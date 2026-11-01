@@ -548,6 +548,26 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         if (pl.w < floor) { pl.w = floor; if (pl.vw < 0) pl.vw = 0; }
     }
 
+    // ---- a copy of the shell in another thread (a physics worker, PHYSICS-WORKER.md, PhysicsLink.js): what it was made from (with the beams and the nodes that were set
+    // afterwards, in order), and the state of its nodes and beams, to send across and to take over
+    this.made = { spheres: spheres, config: config, calls: [] };
+    ["addBeam", "setNode"].forEach(function (name) {
+        var fn = self[name];
+        self[name] = function () { self.made.calls.push([name, Array.prototype.slice.call(arguments)]); return fn.apply(self, arguments); };
+    });
+    this.exportState = function () {
+        return { u: u.slice(), w: w.slice(), q: q.slice(), gone: gone.slice(), anchorAlive: anchorAlive.slice(), beamRest: Float64Array.from(beamRest), beamAlive: Uint8Array.from(beamAlive),
+            displacement: this.displacement.slice(), version: this.version, absorbed: this.absorbed, quiet: this.quiet, pinned: this.pinned, plate: this.plate, lastPlate: this.lastPlate, pull: this.pull };
+    };
+    this.importState = function (s) {
+        if (s.u.length !== u.length) return false;           // (not the same shell)
+        u.set(s.u); w.set(s.w); q.set(s.q); gone.set(s.gone); anchorAlive.set(s.anchorAlive);
+        for (var i = 0; i < s.beamRest.length && i < beamRest.length; i++) { beamRest[i] = s.beamRest[i]; beamAlive[i] = s.beamAlive[i]; }
+        this.displacement.set(s.displacement);
+        this.version = s.version; this.absorbed = s.absorbed; this.quiet = s.quiet; this.pinned = s.pinned; this.plate = s.plate; this.lastPlate = s.lastPlate; this.pull = s.pull;
+        return true;
+    };
+
     safeStep();
     this.repair();
 };

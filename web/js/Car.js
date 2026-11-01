@@ -201,6 +201,9 @@ OpenRacer.Car = function( config, domElement ) {
     }, this);
     this.vehicle.collision = collisionWorld;
     this.vehicle.ground = groundWorld;
+    // the physics of the car in a Web Worker (PhysicsLink.js, ?worker=1): from here on what is done to the vehicle is also sent there
+    this.physicsLink = OpenRacer.PhysicsLink && OpenRacer.PhysicsLink.wanted() ? new OpenRacer.PhysicsLink(this) : null;
+    if(OpenRacer.PhysicsLink) OpenRacer.PhysicsLink.badge(this);       // (worker=1 or worker=0 in the address: the frames and the cost of the physics, to compare)
     this.pit = new OpenRacer.PitStop(this.vehicle); // the pit stop on the pit lane (Pit.js), when the race has wear and fuel
     this.pit.holdCar = true;                        // (the player's car goes on the jacks: see the pit stop in update)
     var jack = null;                                // where the car stood when it went on the jacks: { x, y, z, q }
@@ -990,7 +993,7 @@ OpenRacer.Car = function( config, domElement ) {
             swapPedals = true;
         }
 
-        v.update(delta);
+        if(this.physicsLink) this.physicsLink.update(delta); else v.update(delta);
         this.pit.update(delta);
         // On the jacks: the car is lifted slowly by 10 cm where it stopped and held there (no movement, its wheels hang); when the stop is done it is let go and falls
         // on its wheels, and the driver drives on

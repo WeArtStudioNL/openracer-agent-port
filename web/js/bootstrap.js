@@ -92,6 +92,7 @@ var scripts = [
     "js/Motorcycle.js",
     "js/Vehicle.js",
     "js/VehicleState.js",
+    "js/PhysicsLink.js",
     "js/Telemetry.js",
     "js/EngineSim.js",
     "js/EngineBuild.js",

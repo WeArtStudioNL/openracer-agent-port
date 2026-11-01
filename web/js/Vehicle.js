@@ -69,6 +69,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.simpleTyres = !!parameters.simpleTyres;   // (Motorcycle.js; a car has none, and goes through none of its hooks)
     this.lean = 0;                    // how far the bike leans to the left (rad; negative: to the right)
     this.input = input; // throttle, brakePedal, clutch, clutchPedalPresent, handbrake, turnAngle, neutral, reverse, manualGearbox, current_gear
+    this.parameters = parameters;     // (what it was made with: a physics worker makes the same vehicle, PhysicsLink.js)
     this.mass = parameters.mass;
     this.wheelbase = parameters.wheelbase;
     this.front_track = parameters.front_track;

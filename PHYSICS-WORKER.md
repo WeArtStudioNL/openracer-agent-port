@@ -150,7 +150,43 @@ reads only positions) on its own clock, so that it stays busy (see the measureme
 player when it has a new one and draws the AI cars from the newest snapshot. Contacts between the player and an AI car use the other car of one frame before. Gain: the 4.7 ms of five AI cars off the
 main thread, and with two workers the AI cars side by side.
 
-### Step 3: the player's car in a worker
+### Step 3, first version — built, behind `?worker=1`
+
+* **PhysicsLink.js** (new): the player's car is stepped in PhysicsWorker.js; `car.vehicle` stays in the page as a view that every
+  snapshot fills. Nothing that reads the car was changed.
+  * What the page writes into the vehicle (the jacks, a hit of an AI car or a prop, the fuel, the options) is found by comparing the
+    view with what the last snapshot left there (`VehicleState.changes`) and sent with the next step; the page keeps its own value
+    until a snapshot knows it.
+  * The methods the page calls (reset, retune, repair, puncture, impulse, start the engine; the shell's repair, settle and node
+    grabber; `detachGroup` of the parts) run in the page and are sent; older snapshots are then not used.
+  * Until the car has its model the page steps it; then the worker takes over the whole state (the setup calls, every value, the
+    collision spheres, the rig, the shell from what it was made of plus its state). A new shell (the tuning menu builds the car again)
+    is taken over again.
+  * The shell's state comes back every step (`SoftBody.exportState` / `importState`), so the parts (Rapier, still in the page), the
+    pit stop and the replay read a live shell. The shell tyres in the page are stubs that show the worker's deformation.
+  * The worker steps when the last step came back; the time of the frames in between is added to the next step (at most 0.1 s).
+* **Falls back to the page** when the worker fails, or when it needs more than 0.9 s of work for a second of driving for two
+  seconds.
+* **A label** with `worker=1` or `worker=0` in the address: the frames per second, where the physics runs and what it costs. It is for
+  a test on a device.
+* Not in the worker yet: the contacts of the shell with the AI cars (the worker's car has no other cars; the rigid contact of
+  `collideCars` in the page still pushes it, through the values it writes); the pose between two snapshots is not smoothed (when the
+  worker steps every other frame, the car moves every other frame).
+
+What was measured (the Mac, 10 cores):
+
+* **Chrome in the background** (another app in front) puts the page and its workers on the efficiency cores: a loop that takes 75 to
+  90 ms on a fast core took 440 ms in the worker, for 30 s on end; the game ran at 20 fps with or without the worker, and with it the
+  worker could not keep up (1189 ms for a second of driving) and gave the car back. Measurements in a browser that is not in front say
+  little.
+* **The browser in front** (the browser of the Claude app): the same loop takes 74 ms in the page and 90 to 160 ms in a worker. The
+  Muscle with 5 AI cars on the Short track: the worker needs 350 to 430 ms for a second of driving (it keeps up), and the page spends
+  19 ms a frame instead of 35 ms. The frame rate itself could not be measured there (its pane was hidden, at 1 fps).
+* **To do before it can be on by default**: drive with `worker=1` and with `worker=0` on a Mac (Chrome and Safari, in front), a
+  Windows PC, an iPhone and an Android phone, and compare the label; then smooth the pose between snapshots, and move the contacts
+  with the AI cars into the worker.
+
+### Step 3: the player's car in a worker (the plan)
 
 The main thread sends the input of frame N+1 and draws frame N while the worker steps (pipelined). That is one frame more between
 a key and the picture (17 ms at 60 frames); the camera, the sound and the force feedback read the snapshot. The parts of the car

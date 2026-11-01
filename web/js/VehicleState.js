@@ -14,15 +14,16 @@
  *                tyres   per wheel the deformation of a shell tyre (TyreShell.deformation: rings of 72 depths) and its rings;
  *                events  the bangs of the exhaust of this frame (Engine.events);
  *                input   what the physics wrote into its input (INPUT_WRITTEN: the gear of an automatic).
- *              apply(view, snap, cache) writes them into a view: an object (or a vehicle) with the same names; the records and the wheels are
- *              made when the view does not have them yet.
+ *              apply(view, snap, cache, keep) writes them into a view: an object (or a vehicle) with the same names; the records and the wheels are
+ *              made when the view does not have them yet. changes(view, cache) gives what was written into the view since (by the main thread);
+ *              set(root, name, value) and get(root, name) reach a value by its name in the schema.
  *              INPUT lists what the physics reads of its input (the Car, or a plain object), and INPUT_WRITTEN what it writes back into it.
  */
 
 OpenRacer.VehicleState = (function () {
     // what a snapshot leaves out: links to other objects, and what the main thread owns (the input, the ground, the model)
     var SKIP = { input: 1, ground: 1, collision: 1, softBody: 1, parts: 1, engine: 1, controller: 1, wheels: 1, rig: 1, collisionSpheres: 1, otherCars: 1,
-        pushes: 1, proxy3: 1, liveAxle: 1, object: 1, comp: 1, tyreBody: 1, events: 1, torque_curve: 1, extras: 1, onWheelLost: 1 };
+        pushes: 1, proxy3: 1, liveAxle: 1, object: 1, comp: 1, tyreBody: 1, events: 1, torque_curve: 1, extras: 1, onWheelLost: 1, parameters: 1 };
     var TABLE = 5 * 72;         // the deformation of a shell tyre: at most 5 rings of 72 bins (TyreShell.js)
 
     var INPUT = ["throttle", "brakePedal", "clutch", "clutchPedalPresent", "clutchAvailable", "handbrake", "turnAngle", "maxTurn", "turnLimit", "neutral", "reverse",
@@ -89,19 +90,21 @@ OpenRacer.VehicleState = (function () {
         return snap;
     }
 
-    // the schema as setters: per value the object it goes into (made when missing) and its key
+    // a name of the schema ("wheels#2.center.x", "wheelLost#1") as the way to its value: the keys of the objects on the way, the last key, and whether it is an
+    // element of an array
+    function stepOf(name) {
+        var path = name.split("."), key = path.pop(), at = [];
+        for(var p = 0; p < path.length; p++) { var hp = path[p].split("#"); at.push(hp[0]); if(hp.length > 1) at.push(+hp[1]); }
+        var hk = key.split("#"), list = hk.length > 1;
+        if(list) { at.push(hk[0]); key = +hk[1]; }
+        return { at: at, key: key, list: list };
+    }
     function compile(schema) {
         var parts = schema.split("/"), names = parts[0] ? parts[0].split("|") : [], kinds = parts[1], steps = [];
-        for(var i = 0; i < names.length; i++) {
-            var path = names[i].split("."), key = path.pop(), at = [];
-            for(var p = 0; p < path.length; p++) { var hp = path[p].split("#"); at.push(hp[0]); if(hp.length > 1) at.push(+hp[1]); }
-            var hk = key.split("#"), list = hk.length > 1;
-            if(list) { at.push(hk[0]); key = +hk[1]; }
-            steps.push({ at: at, key: key, kind: kinds[i], list: list });
-        }
+        for(var i = 0; i < names.length; i++) { var st = stepOf(names[i]); st.kind = kinds[i]; st.name = names[i]; steps.push(st); }
         return steps;
     }
-    // the object that a value goes into (list: the value is an element of an array)
+    // the object that a value goes into (made when missing; list: the value is an element of an array)
     function target(view, at, list) {
         var o = view;
         for(var i = 0; i < at.length; i++) {
@@ -111,22 +114,43 @@ OpenRacer.VehicleState = (function () {
         }
         return o;
     }
+    function valueAt(view, st) {
+        var o = view;
+        for(var i = 0; i < st.at.length; i++) { o = o[st.at[i]]; if(o === undefined || o === null) return undefined; }
+        return o[st.key];
+    }
+    function same(a, b) { return a === b || (a !== a && b !== b); }
 
-    function apply(view, snap, cache) {
-        if(snap.schema) { cache.steps = compile(snap.schema); cache.applySchema = snap.schema; }
+    // keep(i): the value i of the view is kept as it is (the main thread wrote it after this snapshot was made, PhysicsLink.js). What the view holds afterwards
+    // is remembered (cache.base), so that changes() can tell what was written into it since.
+    function apply(view, snap, cache, keep) {
+        if(snap.schema) cache.steps = compile(snap.schema);
         var steps = cache.steps, s = 0;
         if(!steps) throw new Error("VehicleState.apply: a snapshot without a schema before it");
+        var base = cache.base = new Array(steps.length);
         for(var i = 0; i < steps.length; i++) {
             var st = steps[i], o = target(view, st.at, st.list), x = snap.num[i];
-            o[st.key] = st.kind === "n" ? x : st.kind === "b" ? x === 1 : st.kind === "s" ? snap.str[s++] : st.kind === "z" ? null : undefined;
+            var value = st.kind === "n" ? x : st.kind === "b" ? x === 1 : st.kind === "s" ? snap.str[s++] : st.kind === "z" ? null : undefined;
+            if(!keep || !keep(i)) o[st.key] = value;
+            base[i] = o[st.key];
         }
-        if(snap.soft) { view.softDisplacement = snap.soft; }
-        view.softVersion = snap.softVersion;
-        view.tyreDeformation = snap.tyres;
-        view.engineEvents = snap.events;
-        view.inputWritten = snap.input;
         return view;
     }
+    // what was written into the view since the last apply: [{ i, name, value }]
+    function changes(view, cache) {
+        var out = [], steps = cache.steps, base = cache.base;
+        if(!steps || !base) return out;
+        for(var i = 0; i < steps.length; i++) { var x = valueAt(view, steps[i]); if(!same(x, base[i])) out.push({ i: i, name: steps[i].name, value: x }); }
+        return out;
+    }
+    // after the main thread did something to the view that is also done in the worker (a call): what it holds now is the base
+    function rebase(view, cache) {
+        if(!cache.steps) return;
+        for(var i = 0; i < cache.steps.length; i++) cache.base[i] = valueAt(view, cache.steps[i]);
+    }
+    // a value by its name (a name of the schema), in an object; made on the way when missing
+    function set(root, name, value) { var st = stepOf(name); target(root, st.at, st.list)[st.key] = value; }
+    function get(root, name) { return valueAt(root, stepOf(name)); }
 
     // the input of a vehicle as a plain object (from the Car, which is the input in the game); keys: which (INPUT when left out)
     function readInput(from, out, keys) {
@@ -135,5 +159,5 @@ OpenRacer.VehicleState = (function () {
         return out;
     }
 
-    return { snapshot: snapshot, apply: apply, readInput: readInput, INPUT: INPUT, INPUT_WRITTEN: INPUT_WRITTEN, pairsOf: pairsOf };
+    return { snapshot: snapshot, apply: apply, changes: changes, rebase: rebase, set: set, get: get, readInput: readInput, INPUT: INPUT, INPUT_WRITTEN: INPUT_WRITTEN, pairsOf: pairsOf };
 })();
