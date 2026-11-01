@@ -23,3 +23,18 @@
         show();
     });
 })();
+
+// Phone menu: the button under 560px wide opens and closes the page links.
+document.addEventListener("DOMContentLoaded", function () {
+    var b = document.getElementById("menubtn"), links = document.getElementById("navlinks");
+    if (!b || !links) return;
+    function set(open) {
+        links.classList.toggle("open", open);
+        b.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+    b.addEventListener("click", function (e) { e.stopPropagation(); set(!links.classList.contains("open")); });
+    links.addEventListener("click", function (e) { if (e.target.tagName === "A") set(false); });
+    document.addEventListener("click", function (e) { if (!links.contains(e.target)) set(false); });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape") set(false); });
+    window.addEventListener("resize", function () { if (window.innerWidth > 560) set(false); });
+});

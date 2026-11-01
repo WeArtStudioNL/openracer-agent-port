@@ -79,7 +79,32 @@ kbd { background: var(--panel); border: 1px solid var(--line); border-bottom-wid
 .top nav a.on { color: var(--head); }
 .top nav a.play { background: var(--accent); color: #fff; font-weight: 600; }
 .top nav a.play:hover { filter: brightness(1.1); }
-@media (max-width: 560px) { .top nav a.hide-s { display: none; } .top .in { gap: 8px; } .top nav { flex-wrap: nowrap; } }
+.top nav .links { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.menubtn { display: none; }
+/* phone: the links fold into a menu under the bar, Play and the theme stay */
+@media (max-width: 560px) {
+    .top .in { gap: 8px; }
+    .top nav { flex-wrap: nowrap; }
+    .menubtn {
+        display: flex; align-items: center; justify-content: center; width: 38px; height: 34px; margin-left: 4px;
+        background: transparent; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; color: var(--text);
+    }
+    .menubtn i, .menubtn i::before, .menubtn i::after { display: block; width: 16px; height: 2px; border-radius: 1px; background: currentColor; transition: transform .15s, background .15s; }
+    .menubtn i { position: relative; }
+    .menubtn i::before, .menubtn i::after { content: ""; position: absolute; left: 0; }
+    .menubtn i::before { top: -5px; }
+    .menubtn i::after { top: 5px; }
+    .menubtn[aria-expanded="true"] i { background: transparent; }
+    .menubtn[aria-expanded="true"] i::before { transform: translateY(5px) rotate(45deg); }
+    .menubtn[aria-expanded="true"] i::after { transform: translateY(-5px) rotate(-45deg); }
+    .top nav .links {
+        display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 2px;
+        padding: 8px var(--gutter) 12px; background: var(--bg); border-bottom: 1px solid var(--line); box-shadow: 0 10px 24px rgba(0,0,0,.25);
+    }
+    .top nav .links.open { display: flex; }
+    .top nav .links a { padding: 11px 10px; font-size: 1rem; }
+    .top nav .links a.on { background: var(--panel); }
+}
 
 /* buttons */
 .btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 8px; font-weight: 600; border: 1px solid var(--line); background: var(--panel); color: var(--head); }
