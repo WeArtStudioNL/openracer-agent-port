@@ -6,8 +6,8 @@
 
 ## Kort
 
-- Ik heb in **53 commits** (sinds 05:51) gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen), de track-editor, de eerste keer spelen, replays en video, het racegedrag van de AI, het tuningmenu en een reeks UX-punten.
-- Na elke grote wijziging heb ik een onafhankelijke review of audit laten doen (acht reviews, plus audits van de motorbouw, de car-editor, de races, de Garage, de track-editor, de eerste keer spelen, replays, de AI en het tuningmenu). Elke bevinding heb ik zelf nagelopen en zo nodig opgelost.
+- Ik heb in **60 commits** (sinds 05:51) gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen), de track-editor, de eerste keer spelen, replays en video, het racegedrag van de AI, het tuningmenu, onderdelen en shell in de car-editor, en een reeks UX-punten.
+- Na elke grote wijziging heb ik een onafhankelijke review of audit laten doen (negen reviews, plus audits van de motorbouw, de car-editor (twee keer), de races, de Garage, de track-editor, de eerste keer spelen, replays, de AI en het tuningmenu). Elke bevinding heb ik zelf nagelopen en zo nodig opgelost.
 - Alles is getest in het spel zelf, vanuit JavaScript aangestuurd. Het browservenster stond verborgen; daar loopt de animatielus niet. Hoe het er in beeld uitziet, heb ik maar op enkele screenshots gezien.
 
 ## Wat er is gedaan
@@ -130,6 +130,16 @@
 - Getypte percentages die een aandeel zijn (remverdeling, gewicht vóór, sperdifferentieel) blijven tussen 0 en 100. Een typfout van 655 % gaf de achterremmen negatief koppel.
 - **Uit de review** (`8ed7bd6`): in free drive bediende de controller tegelijk de auto en het menu. A (handrem) op een gefocuste *Save* overschreef de setup. Nu werkt de controller alleen in het menu als dat de race stilzet. Een setup met minder versnellingen gaf meteen "(changed)", en een wijziging aan versnelling 6 van een 8-traps setup werd niet gezien. Downforce werd dubbel geteld bij een gemeten skidpad-grip.
 - Het gewicht van de berijder op een motor gaf na *Save* een zwaardere motor. Nogmaals op dezelfde setup klikken in het hoofdmenu wiste de tuning. De downforce-labels noemen ook mph.
+
+### Eigen auto's: onderdelen, shell en bestuurder (audit van 9 punten; `2906c7a`)
+- **De autosave van het shell-venster sloeg soms de hele auto op**, zonder klik, met half ingevulde velden. Dat gebeurde na *Replace the model* of *Make a copy*, en het oude model verdween dan uit de map. Nu slaat hij alleen de shell en de onderdelen op, en anders vraagt hij om *Save*.
+- **De knooppunten van de shell schoven** zodra je het zwaartepunt of de band veranderde nadat je ze getekend had (10 cm onder de carrosserie). De shell onthoudt nu bij welk zwaartepunt en welke band hij getekend is.
+- **De bestuurder uitzetten** en opslaan wiste zijn hele instelling: positie, handen, toetsen en botten. Nu blijft hij in `car.json`, uitgeschakeld.
+- **Slepen** met de bestuurder, handen, voeten of de ophangingspunten telde niet als wijziging. Weggaan verloor het werk zonder te vragen. Elke sleep is nu ook een eigen stap voor Ctrl+Z.
+- **Ctrl+Z bij het bewerken van knooppunten** zet de knooppunten terug; een losse Delete was na een seconde definitief opgeslagen. *Remove part* en *Back to the defaults* vragen eerst.
+- **Sterktes op losse knooppunten** hoorden bij een nummer dat kon verschuiven: bij een ander *Max nodes* landden ze op andere knooppunten. Nu wordt de layout vastgezet.
+- **Waarschuwing** als het model, de schaal of de draaiing verandert terwijl er al punten op het model staan.
+- **Laten liggen:** met het demowiel (Dynamic wheels zonder velg uit de bibliotheek) toont de editor ophangingsdelen die de game niet bouwt. Dat vraagt een wijziging in CarLoader.
 
 ### Menu's en kleine punten
 - **Tune the car** staat bovenaan het pauzemenu.

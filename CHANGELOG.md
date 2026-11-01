@@ -6,6 +6,12 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 ## Unreleased
 
+- **Car editor: parts, shell and driver.** From an audit of building your own car:
+  - The autosave of the shell window never saves the whole car (after Replace the model or Make a copy it saved the half-filled form without a click, and took the old model out of the folder).
+  - The shell keeps the centre of gravity and the tyre it was drawn at (the nodes moved off the body when the centre was changed afterwards).
+  - A driver switched off stays in car.json, switched off (its place, hands, keys and bones were thrown away).
+  - Dragging the driver, its hands and feet, or the points of the suspension is a change and a step of Ctrl+Z; Ctrl+Z while the nodes are edited brings the nodes back; Remove part and Back to the defaults ask first.
+  - Strengths set on single nodes keep their nodes; a warning when the model, its scale or its turn changes under placed points.
 - **Tuning menu and setups.** From an audit:
   - A setup with more or fewer gears than the car the race started with brings all its own ratios (made-up ratios filled the extra gears, the boxes stayed as they were, and Save kept them).
   - Default compares with the car as made (every value of the starting setup was orange, and ↺ went to it). The tuning on the car is kept against the setup that is chosen, so the next start after a switch or a Delete is the same car.
