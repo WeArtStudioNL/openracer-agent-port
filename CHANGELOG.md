@@ -4,7 +4,7 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 A version that only fixes things is a hotfix: the last number goes up (2.3.0 → 2.3.1). The players' list of every version, hotfixes included, is the changelog page of the site (`site/changelog.html`, <https://openracer.eu/changelog.html>).
 
-## Unreleased
+## 2.4.0 (2026-11-01)
 
 - **Skidpad and drag strip.** From an audit:
   - The skidpad is not taken over by a gamepad or touch (a touch of the stick steered it off the circle and stored a low grip for the AI), counts per second instead of per frame (a 144 Hz screen gave another g), starts again with R, and shows speeds in the units of the settings.
