@@ -837,7 +837,8 @@ var MainMenu = (function() {
         remember();
         var chosen = mode === "race" ? oppList() : [];
         window.location.href = window.location.pathname + "?car=" + encodeURIComponent(choice.car) + "&track=" + encodeURIComponent(choice.track) +
-            "&ai=" + (chosen.length || raceOptions.ai) + (chosen.length ? "&opp=" + chosen.map(function(o) { return encodeURIComponent(o.car) + (o.tune ? "~" + encodeURIComponent(o.tune) : ""); }).join(",") : "") + "&difficulty=" + raceOptions.difficulty + "&ghost=" + (raceOptions.ghost ? 1 : 0) + "&records=" + (raceOptions.records ? 1 : 0) +
+            "&ai=" + Math.max(chosen.length, raceOptions.ai || 0) +          // (the places left empty get cars of the game, as the page says: they were dropped)
+            (chosen.length ? "&opp=" + chosen.map(function(o) { return encodeURIComponent(o.car) + (o.tune ? "~" + encodeURIComponent(o.tune) : ""); }).join(",") : "") + "&difficulty=" + raceOptions.difficulty + "&ghost=" + (raceOptions.ghost ? 1 : 0) + "&records=" + (raceOptions.records ? 1 : 0) +
             "&laps=" + (raceOptions.laps || 0) + "&wear=" + (raceOptions.wear === undefined ? 1 : raceOptions.wear) + "&damage=" + (raceOptions.damage === false ? 0 : 1) + aiCarsParameter();
     }
 
@@ -1373,7 +1374,7 @@ var MainMenu = (function() {
             return;
         }
         var max = raceOptions.ai, list = oppList();
-        inner.innerHTML = "<h2>Choose your opponents</h2><div class=\"sub\">Up to " + max + ". Tap + to add a car; the copy button on a car adds the same one again. The places you leave empty get cars of the game.</div>";
+        inner.innerHTML = "<h2>Choose your opponents</h2><div class=\"sub\">Up to " + max + ". Tap + to add a car; the copy button on a car adds the same one again. The places you leave empty get cars of the game of your kind (cars, karts or motorcycles).</div>";
         var grid = document.createElement("div");
         grid.className = "tiles opps";
         list.forEach(function(o, index) {

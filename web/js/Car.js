@@ -638,8 +638,7 @@ OpenRacer.Car = function( config, domElement ) {
     var cockpitOffset = new THREE.Vector3();
 
     function wrapPi(a) {
-        while(a > Math.PI) a -= 2 * Math.PI;
-        while(a < -Math.PI) a += 2 * Math.PI;
+        a = isFinite(a) ? Math.atan2(Math.sin(a), Math.cos(a)) : 0;        // (no loop: an infinite angle kept it going for ever)
         return a;
     }
 

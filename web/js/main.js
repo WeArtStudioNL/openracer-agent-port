@@ -228,6 +228,14 @@ function setupRace() {
         race.line.origin = finish && isFinite(finish.x) && isFinite(finish.z) ? race.line.nearest(finish.x, finish.z) : startIndex;
         var cars = race.allCars.length ? race.allCars : [carConfig];
         if(options.aiCars) { var chosen = cars.filter(function(c) { return options.aiCars.indexOf(c.id) >= 0; }); if(chosen.length) cars = chosen; }
+        else {
+            // the cars of the player's kind: a car against cars, a kart against karts, a motorcycle against motorcycles (the first cars of the list raced: a muscle car
+            // against a kart and a dune buggy, lapped or out of reach); with no other of its kind, the player's own car
+            var kind = function(c) { return c.type === "motorcycle" ? "bike" : (c.chassis && c.chassis.mass < 300 ? "kart" : "car"); };
+            var mine = kind(carBaseConfig || carConfig);
+            var alike = cars.filter(function(c) { return kind(c) === mine && c.id !== carConfig.id; });
+            cars = alike.length ? alike : [carBaseConfig || carConfig];
+        }
         for(var i = 0; i < options.ai; i++) {
             var config = cars[i % cars.length];
             var chosen = options.opp && options.opp[i] ? race.allCars.filter(function(c) { return c.id === options.opp[i].car; })[0] : null;
@@ -549,8 +557,7 @@ function startSkidpad() {
         var base = Math.atan(v.wheelbase / R);
         var tangentHeading = Math.atan2(v.x, -v.z); // the direction along the circle, anticlockwise (from +x towards +z)
         var headingError = tangentHeading - v.psi;
-        while(headingError > Math.PI) headingError -= 2 * Math.PI;
-        while(headingError < -Math.PI) headingError += 2 * Math.PI;
+        headingError = isFinite(headingError) ? Math.atan2(Math.sin(headingError), Math.cos(headingError)) : 0;      // (no loop: an infinite angle kept it going for ever)
         // a positive steering angle turns the car towards a bigger heading (the way the circle goes); too wide (r above R) and a
         // nose that points outside the tangent both ask for more of it
         var wanted = base + 0.08 * (r - R) + 0.6 * headingError;

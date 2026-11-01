@@ -268,7 +268,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         qa.setFromAxisAngle(axis, angle);
         return out.copy(rel).applyQuaternion(qa).add(centre);
     }
-    function wrap(x) { while (x > Math.PI) x -= 2 * Math.PI; while (x < -Math.PI) x += 2 * Math.PI; return x; }
+    function wrap(x) { return isFinite(x) ? Math.atan2(Math.sin(x), Math.cos(x)) : 0; }      // (no loop: an infinite angle kept it going for ever)
 
     var grip = { left: new V(), right: new V() }, restGrip = { left: new V(), right: new V() }, gripAngle = { left: 0, right: 0 }, gripSide = { left: 1, right: -1 };
     function readGrips() {

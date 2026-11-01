@@ -322,8 +322,7 @@ OpenRacer.FreeCam = (function () {
                 tmpE.setFromQuaternion(tmpQ, "YXZ"); pitch = tmpE.x; yaw = tmpE.y;
             } else {
                 var turn = wantYaw - yaw;
-                while (turn > Math.PI) turn -= 2 * Math.PI;
-                while (turn < -Math.PI) turn += 2 * Math.PI;
+                turn = isFinite(turn) ? Math.atan2(Math.sin(turn), Math.cos(turn)) : 0;      // (no loop: an infinite angle kept it going for ever)
                 yaw += turn * k;
                 pitch += (wantPitch - pitch) * k;
             }
