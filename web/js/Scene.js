@@ -212,6 +212,32 @@ function takePhoto() {
     }, "image/png");
 }
 
+// A watch, twice a second, for a number that is not one in what is drawn. One object with such a matrix, or a shell with such a displacement (it goes to the model in its vertex
+// shader), was enough to make everything with a reflection black for the rest of a race: the camera of the reflections took it in, and the lighting of the scene went with it
+// (seen on the Desert after crashes into AI cars). Such an object is hidden until its numbers are numbers again, a shell is made whole, and the console says which it was.
+var watchCount = 0, watchSaid = typeof WeakSet !== "undefined" ? new WeakSet() : null;
+function numbersWatch() {
+    var said = function(thing, text) { if(watchSaid && !watchSaid.has(thing)) { watchSaid.add(thing); console.error("Scene: " + text); } };
+    var cars = [];
+    if(typeof car !== "undefined" && car) cars.push(car);
+    if(typeof race !== "undefined" && race && race.opponents) cars = cars.concat(race.opponents);
+    cars.forEach(function(c) {
+        var sb = c.vehicle && c.vehicle.softBody, d = sb && sb.displacement;
+        if(!d) return;
+        for(var k = 0; k < d.length; k++) if(!(d[k] - d[k] === 0)) { said(sb, "the shell of " + (c.name || (c.config && c.config.id) || "a car") + " had a displacement that is not a number; it is made whole"); sb.repair(); break; }
+    });
+    scene.traverse(function(o) {
+        var e = o.matrixWorld.elements, bad = false;
+        for(var i = 0; i < 16; i++) if(!(e[i] - e[i] === 0)) { bad = true; break; }
+        if(bad && o.visible) {
+            o.visible = false; o.userData.hiddenByWatch = true;
+            var path = [], p = o;
+            for(var depth = 0; p && depth < 4; depth++, p = p.parent) path.push(p.name || p.type);
+            said(o, "an object has a place that is not a number and is hidden: " + path.join(" < "));
+        } else if(!bad && o.userData.hiddenByWatch) { o.visible = true; delete o.userData.hiddenByWatch; }
+    });
+}
+
 function render() {
     if(Date.now() - countStart > 1000) {
         fps = frameCount;
@@ -222,6 +248,7 @@ function render() {
     frameCount++;
     var timeStart = Date.now();
     onEnterFrame();
+    if(++watchCount >= 30) { watchCount = 0; numbersWatch(); }
     var afterCalc = Date.now();
     if(enableCubeCamera && car && car.isReady()) {   // the reflections wait until the car and its wheels have loaded
         if(cubeCount >= cubeUpdate) {          // (cubeUpdate frames between two updates: 1 is every frame; it was > before, which was every other frame)
