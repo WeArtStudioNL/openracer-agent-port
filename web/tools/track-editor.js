@@ -2164,14 +2164,34 @@ function updateLineNote() {
     drawLine();
 }
 
-$("recordLine").onclick = async () => {
-    if (!state.existingId) { status("Save the track first: the line is recorded on the saved track.", "error"); return; }
-    // the car: the one chosen last in the main menu, or else the first one
+// the car to drive with: the one chosen last in the main menu, or else the first one
+async function lastCar() {
     let car = null;
     try { car = (JSON.parse(localStorage.getItem("openracer.lastChoice")) || {}).car; } catch (e) { /* no storage */ }
     if (!car) {
         try { const cars = await Catalog.load("cars", "../"); car = cars.length ? cars[0].id : null; } catch (e) { /* nothing to drive */ }
     }
+    return car;
+}
+
+// Test drive: the saved track in the game, in a tab of its own, alone on it (it was save, go to the game and find the track in the menu). The tab is opened
+// at the click, before the save, or the browser takes it for a pop-up
+async function testDrive() {
+    const tab = window.open("", "_blank");
+    const fail = (text) => { if (tab) tab.close(); status(text, "error"); };
+    if (unsaved() || !state.existingId) {
+        await save();
+        if (unsaved() || !state.existingId) { if (tab) tab.close(); return; }           // (the save failed or was cancelled: its message is shown)
+    }
+    const car = await lastCar();
+    if (!car) { fail("No car to drive with."); return; }
+    const url = "../index.html?car=" + encodeURIComponent(car) + "&track=" + encodeURIComponent(state.existingId) + "&ai=0";
+    if (tab) tab.location.href = url; else window.location.href = url;
+}
+
+$("recordLine").onclick = async () => {
+    if (!state.existingId) { status("Save the track first: the line is recorded on the saved track.", "error"); return; }
+    const car = await lastCar();
     if (!car) { status("No car to drive with.", "error"); return; }
     // the line is recorded on the saved track: the changes are saved first (they were thrown away, gates too, and then no lap of the saved track counted)
     if (unsaved()) {
@@ -2266,6 +2286,7 @@ $("existing").addEventListener("change", async () => {
 });
 $("newTrack").onclick = async () => { if (await discardOk()) newTrack(); };
 $("save").onclick = save;
+$("testDrive").onclick = testDrive;
 $("delete").onclick = deleteTrack;
 $("id").addEventListener("input", () => { state.idEdited = true; });
 $("name").addEventListener("input", () => { if (!state.idEdited && !state.existingId) $("id").value = slug($("name").value); });
