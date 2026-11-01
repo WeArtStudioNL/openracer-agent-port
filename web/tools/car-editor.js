@@ -455,6 +455,7 @@ resize();
 function status(text, kind) {
     const el = $("status");
     el.textContent = text;
+    el.title = text;           // (the bar is one line: the whole message when the pointer is on it)
     el.className = kind || "";
     if (window.editorToast) window.editorToast(text, kind);
 }
@@ -465,14 +466,34 @@ function num(id) {
 
 // ---- the model
 
-function loadFromFiles(list) {
-    state.files = new Map();
-    for (const file of list) state.files.set(file.name, file);
-    const main = [...state.files.keys()].find((n) => /\.glb$/i.test(n)) || [...state.files.keys()].find((n) => /\.gltf$/i.test(n));
+async function loadFromFiles(list) {
+    const files = new Map();
+    for (const file of list) files.set(file.name, file);
+    let main = [...files.keys()].find((n) => /\.glb$/i.test(n)) || [...files.keys()].find((n) => /\.gltf$/i.test(n));
     if (!main) {
         status("Pick a .glb file, or a .gltf with its .bin and texture files.", "error");
         return;
     }
+    // a file name that the save would refuse is said now, not after the whole car is set up: a .glb is renamed (it has everything inside it), the files of a .gltf
+    // refer to each other by their names and have to be renamed on the disk
+    if (!FILE_PATTERN.test(main)) {
+        if (/\.glb$/i.test(main)) {
+            const safe = (main.replace(/\.glb$/i, "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9._ -]/g, "-").replace(/^[^A-Za-z0-9]+/, "").slice(0, 120) || "model") + ".glb";
+            files.set(safe, new File([files.get(main)], safe, { type: files.get(main).type }));
+            files.delete(main);
+            status("The model is kept as “" + safe + "” (the name “" + main + "” has characters that are not allowed in a file name of the game).");
+            main = safe;
+        } else {
+            status("The file name “" + main + "” has characters that are not allowed. Rename the .gltf and its files on your disk (letters, digits, - _ . and spaces) and pick them again.", "error");
+            return;
+        }
+    }
+    // a car is open: its model is replaced, or a new car is started with this model ("New" of the garage opened the first car of the list, and a model that was
+    // picked then replaced the model of that car, saved over it)
+    if (state.existingId && !(await OpenRacerDialog.ask({ title: "Replace the model of “" + state.existingId + "”?", text: "Replace keeps the settings of this car and puts the new model in it. New car starts a new car with this model.", ok: "Replace the model", cancel: "New car" }))) {
+        newCar($("vehicleType").value === "motorcycle" ? "motorcycle" : "car"); $("existing").value = ""; applyTypeUI();
+    }
+    state.files = files;
     state.mainFile = main;
     // a car that exists keeps its model block until it is saved: its transform and the way it is set up are kept
     const replacing = !!state.existingId;
@@ -1185,7 +1206,8 @@ function renderLayers() {
         del.className = "del";
         del.textContent = "×";
         del.title = "Remove this exhaust point";
-        del.addEventListener("click", (event) => { event.stopPropagation(); removeExhaust(e.id); });
+        // (a change of the car: Save lights up, leaving asks, Ctrl+Z brings it back)
+        del.addEventListener("click", (event) => { event.stopPropagation(); removeExhaust(e.id); setDirty(true); remember(); });
         row.append(dot, text, meta, del);
         row.addEventListener("click", () => selectLayer(e.id));
         list.appendChild(row);
@@ -1194,7 +1216,7 @@ function renderLayers() {
     addRow.className = "layer";
     addRow.innerHTML = "<i style=\"background: transparent; border: 1px solid #ff7a3d\"></i><span>+ Add an exhaust point</span>";
     addRow.title = "A point where the flames of the pops and bangs come out; move it and turn it with the gizmos";
-    addRow.addEventListener("click", () => { const e = newExhaust(); layers.selected = null; selectLayer(e.id); });
+    addRow.addEventListener("click", () => { const e = newExhaust(); layers.selected = null; selectLayer(e.id); setDirty(true); remember(); });
     list.appendChild(addRow);
     // every named object of the model, with an eye to show or hide it (a hidden object hides what is inside it too)
     if (state.nodes.length) {
@@ -1320,6 +1342,8 @@ $("toggleTests").addEventListener("click", () => showTests($("testBar").style.di
 $("toggleLayers").addEventListener("click", () => { $($("layers").classList.contains("hidden") ? "layersShow" : "layersHide").click(); });
 $("layersHide").addEventListener("click", () => { $("layers").classList.add("hidden"); $("layersOpen").style.display = ""; paintTabs(); });
 $("layersShow").addEventListener("click", () => { $("layers").classList.remove("hidden"); $("layersOpen").style.display = "none"; paintTabs(); });
+// (a narrow window starts with the layers folded away, for the view; the tab at the edge opens them)
+if (window.innerWidth < 1100) $("layersHide").click();
 (function () {
     const handle = $("layersHandle"), panel = $("layers");
     let startX = 0, startWidth = 0;
@@ -2146,7 +2170,10 @@ window.addEventListener("drop", (e) => {
 async function deleteCar() {
     if (!state.existingId || !(await OpenRacerDialog.ask({ title: "Delete the car “" + state.existingId + "”?", text: "With all its files.", ok: "Delete", danger: true }))) return;
     try {
+        const fromGarage = !!OpenRacer.Garage.sourceOf(state.existingCar);
         const result = await OpenRacer.Garage.discard("cars", state.existingId, { base: "../" });
+        // (without a server a car that comes with the game is not in the garage: it said "Deleted from your garage", and the car was still in the list)
+        if (result.where === "garage" && !fromGarage) { status("This car comes with the game: only the cars of your garage can be deleted here.", "error"); return; }
         status(result.where === "server" ? "Deleted." : "Deleted from your garage.", "ok");
     } catch (error) {
         status("The car could not be deleted (" + error.message + ").", "error");
@@ -2344,6 +2371,12 @@ function newCar(type) {
     fillBike(null);
     if (softBodyEditor) softBodyEditor.fill({});
     if (driverEditor) driverEditor.fill({});
+    // (the exhaust points, the suspension, the rims of the library and the engine build of the car that was open stayed: a new model was saved with the flames of the
+    // old car in the air and its suspension)
+    loadExhaust([]);
+    if (suspensionEditor) suspensionEditor.fill({});
+    setLibraryChoice(null);
+    state.build = null; applyBuildUi();
     fillEngineSim(OpenRacer.engineSimParams(null));
     tuningFromCar(null);
     stopPreview();
@@ -2525,6 +2558,8 @@ refreshList().then(() => {
     const asked = new URLSearchParams(window.location.search).get("car");                  // (Load in the garage of the main menu: this car)
     if (asked && state.cars.some((c) => c.id === asked)) last = asked;
     const id = state.cars.some((c) => c.id === last) ? last : (state.cars[0] && state.cars[0].id);      // the one of last time, else the first of the list
+    // (New in the garage of the main menu: a new car, not the first car of the list)
+    if (new URLSearchParams(window.location.search).get("new") === "car" && !asked) { newCar("car"); $("existing").value = ""; applyTypeUI(); return; }
     if (id && !$("existing").value) { $("existing").value = id; loadExisting(); }
 });
 
@@ -2782,14 +2817,16 @@ function renderTuningCard() {
 // ---- the setups of the car (OpenRacer.Setups, shared with the tuning menu of the game): named tunings kept in this browser; a setup holds all the values of the table
 // (the form's and the card's), loading one fills the form and the card with them
 function renderSetups() {
-    const id = $("id").value.trim(), select = $("setupSelect");
-    const names = id && OpenRacer.Setups ? OpenRacer.Setups.names(id) : [];
+    // (only the tunes of the car that is open: a new car whose id was that of another car took its tunes, Save became "Save tune" and was refused, and Default
+    // reset the tune that the other car had chosen in the game)
+    const id = $("id").value.trim(), select = $("setupSelect"), own = !!id && id === state.existingId;
+    const names = own && OpenRacer.Setups ? OpenRacer.Setups.names(id) : [];
     select.innerHTML = "";
     const label = (n) => { const ship = OpenRacer.Setups.shippedState(id, n); return n + (ship === "car" ? " · with the car" : ship === "copy" ? " · with the car, changed here" : ""); };
     [["", "Default (the car as made)"]].concat(names.map((n) => [n, label(n)])).forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; select.appendChild(o); });
-    const active = id && OpenRacer.Setups ? OpenRacer.Setups.active(id) : null;
+    const active = own && OpenRacer.Setups ? OpenRacer.Setups.active(id) : null;
     select.value = active && names.includes(active) ? active : "";
-    select.disabled = !id;
+    select.disabled = !own;
     updateTuneButtons();
 }
 // the Save button writes to what the list says: the car (car.json) or the tune that is chosen; a tune can be deleted
@@ -3018,7 +3055,7 @@ function tuningValues(config) {
 // "Drop car" lets it fall from a height, The model is built the way the game
 // builds it (CarLoader.js: the wheels taken out, the suspension rig found), from the model and the settings as they are now.
 window.THREE = Object.assign({}, THREE, { GLTFLoader });
-const PHYSICS_SCRIPTS = ["Engine.js", "Wheel.js", "TyreShell.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "PartsLibrary.js", "Chain.js", "CarLoader.js", "Ground.js", "CollisionProxy.js", "SoftBody.js", "SoftBodyMesh.js", "Parts.js", "Shatter.js"];
+const PHYSICS_SCRIPTS = ["Helpers.js", "Engine.js", "Wheel.js", "TyreShell.js", "Vehicle.js", "Opponent.js", "SuspensionRig.js", "PartsLibrary.js", "Chain.js", "CarLoader.js", "Ground.js", "CollisionProxy.js", "SoftBody.js", "SoftBodyMesh.js", "Parts.js", "Shatter.js"];
 let physicsLoading = null;
 function loadPhysics() {
     if (!physicsLoading) {
@@ -3051,7 +3088,8 @@ function startBench() {
 }
 async function startBenchNow() {
     if (!state.root) throw new Error("Load a model first.");
-    if (wheelMode() !== "model" && !($("libRimFront").value && $("libRimRear").value)) throw new Error("The test needs the wheels of the model, or a rim of the wheel library on both axles: select the parts of every wheel.");
+    // (Dynamic wheels without a rim of the library: the bench drives the demo wheel, as the game does (CarLoader.js). It refused every test of a new car, which has Dynamic
+    // wheels, with "select the parts of every wheel" when they were selected)
     await loadPhysics();
     const config = buildConfig("test");
     config.id = "test";
@@ -3618,6 +3656,8 @@ window.addEventListener("keydown", (e) => {
 function problems() {
     const list = [];
     if (!$("name").value.trim()) list.push("Give the car a name");
+    // (a name without Latin letters gives no id: "may only have a-z" next to an empty Id field did not say that one has to be typed)
+    else if (!($("id").value.trim() || slug($("name").value))) list.push("Type an id for the car (a-z, 0-9, - and _): it is its folder and its name in the files");
     else if (!ID_PATTERN.test($("id").value.trim() || slug($("name").value))) list.push("The id may only have a-z, 0-9, - and _");
     if (!state.root && !state.existingModel) list.push("Import a model");
     else if (wheelMode() === "model" && state.root && !wheelCenters()) list.push("Pick the parts of all four wheels");
@@ -3702,7 +3742,7 @@ function snapshot() {
         const key = e.type === "radio" ? "r:" + e.name + ":" + e.value : e.id;
         fields[key] = e.type === "checkbox" || e.type === "radio" ? e.checked : (e.multiple ? [...e.selectedOptions].map((o) => o.value) : e.value);
     }
-    return { fields, tuning: Object.assign({}, tuning), curve: state.curve.map((p) => p.slice()), overrides: JSON.parse(JSON.stringify(state.overrides || {})) };
+    return { fields, tuning: Object.assign({}, tuning), curve: state.curve.map((p) => p.slice()), overrides: JSON.parse(JSON.stringify(state.overrides || {})), exhaust: exhaustConfig() };
 }
 function restore(shot) {
     restoring = true;
@@ -3722,6 +3762,7 @@ function restore(shot) {
         tuning = Object.assign({}, shot.tuning);
         state.curve = shot.curve.map((p) => p.slice());
         state.overrides = JSON.parse(JSON.stringify(shot.overrides));
+        if (shot.exhaust && JSON.stringify(shot.exhaust) !== JSON.stringify(exhaustConfig())) loadExhaust(shot.exhaust);
         renderTuningCard(); renderCurve(); drawChart(); renderMaterials(); updateHelpers(); formChanged(); tuningChanged();
     } finally { restoring = false; }
     lastShot = snapshot();
@@ -3790,7 +3831,7 @@ $("libSame").addEventListener("click", () => {
 {
     const panel = $("enginePanel"), card = panel.closest("details");
     const place = () => {
-        const pinned = card.open && window.innerWidth >= 1000;
+        const pinned = card.open && window.innerWidth >= 1300;          // (narrower, the pinned chart of 440 px covered the whole view)
         panel.classList.toggle("pinned", pinned);
         if (pinned) panel.style.left = ($("side").getBoundingClientRect().right + 12) + "px"; else panel.style.left = "";
     };
@@ -3805,7 +3846,7 @@ $("libSame").addEventListener("click", () => {
 {
     const RANGES = {
         offsetX: [-3, 3], offsetY: [-3, 3], offsetZ: [-3, 3], length: [1, 8], width: [0.5, 3.5], height: [0.5, 3.5], mass: [50, 6000], front: [20, 80], cgHeight: [0.1, 1.5],
-        wheelbase: [0.8, 5], frontTrack: [0.5, 2.6], rearTrack: [0.5, 2.6], frontOffset: [-1, 1], rearOffset: [-1, 1], drag: [0.1, 1], steer: [10, 60], brakeFront: [0, 6000], brakeRear: [0, 6000],
+        wheelbase: [0.8, 5], frontTrack: [0.5, 2.6], rearTrack: [0.5, 2.6], frontOffset: [-1, 1], rearOffset: [-1, 1], drag: [0.1, 1], steer: [10, 60], brakeFront: [1, 6000], brakeRear: [1, 6000],
         diffPreload: [0, 1000], finalDrive: [1, 10], reverse: [1, 10], idle: [300, 2500], limiter: [2000, 20000], inertia: [0.01, 1.5], simpleRpm: [2000, 20000],
         camFolDist: [1, 15], camFolHeight: [0, 6], camFolLook: [-1, 4], camFolLookZ: [-3, 3], camFolSmooth: [0, 10], camFolFovStand: [20, 100], camFolFovFast: [20, 120], camFolSpeed: [50, 400],
         camCockX: [-1.5, 1.5], camCockY: [0, 2.5], camCockZ: [-3, 3], camCockFov: [20, 100], sbRadius: [0.05, 0.6], sbForceKmh: [1, 400]

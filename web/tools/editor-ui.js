@@ -56,6 +56,9 @@
         toast.textContent = text;
         toast.className = kind || "";
         toast.style.display = text ? "block" : "none";
-        if (text && kind) timer = setTimeout(function () { toast.style.display = "none"; }, 6000);
+        // (an error stays until it is clicked away: a long one was gone before it was read; the others go after 6 s)
+        toast.title = kind === "error" ? "Click to close" : "";
+        toast.onclick = function () { toast.style.display = "none"; };
+        if (text && kind && kind !== "error") timer = setTimeout(function () { toast.style.display = "none"; }, 6000);
     };
 })();

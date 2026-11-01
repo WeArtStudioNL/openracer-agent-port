@@ -82,10 +82,12 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
 
     // Four wheels from the wheel model of the original demo, scaled to the tyre of the car
     function defaultWheels(fileName, done) {
-        loadLegacyModel(fileName || DEFAULT_WHEEL, function (geometry) {
+        // (from the folder of web/ as the page sees it: the car editor in tools/ asked tools/models/ and every test of a car without wheels of its own failed)
+        var base = (OpenRacer.PartsLibrary && OpenRacer.PartsLibrary.base) || "";
+        loadLegacyModel(fileName || base + DEFAULT_WHEEL, function (geometry) {
             var material = [
                 new THREE.MeshPhongMaterial({ color: 0x878787 }), /* brakes */
-                mlib["Chrome"], /* alloys */
+                typeof mlib !== "undefined" && mlib["Chrome"] ? mlib["Chrome"] : new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 1, roughness: 0.25 }), /* alloys (the car editor has no material library) */
                 new THREE.MeshBasicMaterial({ color: 0x000000 }) /* tyre */
             ];
             var mesh = new THREE.Mesh(geometry, material);

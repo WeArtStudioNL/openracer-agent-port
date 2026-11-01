@@ -6,6 +6,18 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 ## Unreleased
 
+- **Car editor: making your own car.** From an audit of the flow:
+  - *New* in the garage opens a new car (it opened the first car of the list, and a model picked then replaced the model of that car).
+  - A model picked while a car is open asks: replace the model of that car, or start a new car with it.
+  - *+ Car* starts clean: the exhaust points, the suspension, the rims of the library and the engine build of the car before are gone.
+  - A .glb with characters that a file of the game may not have is renamed when it is picked (it was refused at Save, after the whole car was set up).
+  - The tests on the bench work for a car without wheels of its own and without rims of the library: it drives the demo wheel, as the game does (every test of a new car was refused, and the demo wheel was looked for in the wrong folder).
+  - Adding or removing an exhaust point is a change (Save lights up, leaving asks) and Ctrl+Z brings it back.
+  - An error stays until it is clicked away, and the status bar shows a long message whole when the pointer is on it.
+  - A new car whose id is that of another car does not take that car's setups (it reset the setup the other car had chosen in the game).
+  - Deleting a car that comes with the game, without the local server, says it cannot be done (it said "Deleted from your garage").
+  - A name without Latin letters asks for an id; the brakes start at 1 Nm (0 was refused at Save).
+  - A smaller window: narrower panels, the layers fold away below 1100 px, and the engine chart is pinned from 1300 px.
 - **Menus.** The step of the main menu is called *Setup*, as in the rest of the game (it said *tune*, with "car.json" in its text). The tuning menu hides a card with nothing for this car in it (a car had the card *Motorcycle*, empty), and its top line gives the top speed the car reaches (it gave the speed at the limiter in top gear: 341 km/h for the hatchback, whose CVT ends in an overdrive).
 - **Engine builder: weight and fuel.** Another block makes the car heavier or lighter by the difference of the two engines (a V8 in the hatchback: +177 kg; the menu says so and the Mass row shows it). E85 is used up about 35 % faster than pump fuel, as it has less energy in a litre.
 - **Tuning menu.** The top speed and the speed at the limiter are worked out with the tyre of the driven axle as it is fitted (they used the tyre of car.json, or the front wheel). *Export…* of a setup with changes on the car exports the car as it is now, as "name (changed)" (it exported the saved setup without the changes).

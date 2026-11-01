@@ -133,7 +133,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 .legend span { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
 #toast { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); max-width: 70%; padding: 9px 16px; border-radius: 9px; background: #232b36ee; border: 1px solid #3a4658; box-shadow: 0 4px 16px #0009; display: none; white-space: pre-line; pointer-events: none; font-size: 13px; z-index: 5; }
-#toast.error { background: #5a2823ee; border-color: #8a3a34; }
+#toast.error { background: #5a2823ee; border-color: #8a3a34; pointer-events: auto; cursor: pointer; }      /* (an error stays until it is clicked) */
 #toast.ok { background: #1f4a33ee; border-color: #2e7a52; }
 
 /* ---- dialogs */
@@ -293,6 +293,8 @@ button.dirty::after { content: " ●"; color: #ffd04d; }
 #side header .tunebar .tunebar-more { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 0; }
 #side header .tunebar .saveto, #side header .tunebar .summary { flex: 1 1 100%; font-size: 12px; opacity: .75; }
 #side header .tunebar .summary:empty { display: none; }
+/* a smaller window: narrower panels, so the view keeps room (at 1024 px it was about 330 px wide) */
+@media (max-width: 1280px) { #side { width: 360px; } #layers { width: 230px; } }
 @media (pointer: coarse) { #side button, #side select, #side input[type=number], #side input[type=text], #side summary { min-height: 34px; } }
 
 /* the two modes of a card (Simple | Advanced) */
