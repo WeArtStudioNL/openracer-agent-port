@@ -149,7 +149,7 @@
 - **Op een telefoon** lopen de rijen van Garage en Replays niet meer buiten beeld.
 - **Meldingen** komen in beeld, ook als je naar beneden gescrold was. Bij een volle opslag staat er wat je kunt doen. Een mislukte delete van een replay wordt getoond.
 - **Een item met alleen instellingen** zegt nu dat *Delete* je wijzigingen weggooit en dat de auto van de game blijft. Een gekoppelde map zegt hoeveel auto's en banen hij vond.
-- **Laten liggen:** na een herstart van de browser vraagt een gekoppelde map opnieuw om toestemming. Tot dan ontbreken de auto's daaruit zonder melding (de knop zit onder Garage → More ways).
+- **Na een herstart van de browser** vraagt een gekoppelde map opnieuw om toestemming. De auto- en baanstap zeggen dat nu, met een knop *Allow*. Eerst ontbraken de auto's uit de map zonder melding.
 
 ### Menu's en kleine punten
 - **Tune the car** staat bovenaan het pauzemenu.
