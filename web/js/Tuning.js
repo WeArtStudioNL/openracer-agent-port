@@ -123,8 +123,12 @@ var Tuning = (function() {
             try { topSpeed = OpenRacer.topSpeed ? OpenRacer.topSpeed(tunedConfig()) : 0; } catch(e) { topSpeed = 0; }
             cardMeta["Drivetrain"].textContent = topSpeed > 0 ? "Top speed ~" + (imperial ? Math.round(topSpeed * 2.2369362920544) + " mph" : Math.round(topSpeed * 3.6) + " km/h") : "";
         }
-        info.textContent = Math.round(peakHp) + " hp at " + peakHpRpm + " rpm · " + Math.round(peakNm) + " Nm · " +
-            (imperial ? Math.round(kmh / 1.609344) + " mph" : Math.round(kmh) + " km/h") + " at the limiter in top gear · " +
+        // (the top speed the car reaches, as the Drivetrain card says it; the speed at the limiter in top gear was 341 km/h for the hatchback, whose CVT ends in an overdrive)
+        var reach = 0;
+        try { reach = OpenRacer.topSpeed ? OpenRacer.topSpeed(tunedConfig()) * 3.6 : 0; } catch(e) { reach = 0; }
+        if(!(reach > 0)) reach = kmh;
+        info.textContent = Math.round(peakHp) + " hp at " + peakHpRpm + " rpm · " + Math.round(peakNm) + " Nm · top speed ~" +
+            (imperial ? Math.round(reach / 1.609344) + " mph" : Math.round(reach) + " km/h") + " · " +
             Math.round(car.mass) + " kg · " + (car.mass / Math.max(1, peakHp)).toFixed(1) + " kg/hp";
     }
 
@@ -1046,6 +1050,18 @@ var Tuning = (function() {
                 c.line.classList.toggle("changed", changed(c.key));
             }
         });
+        // a group whose settings are all hidden goes too, and so does a card with nothing left in it (a car had the card Motorcycle, empty)
+        if(panel) {
+            panel.querySelectorAll("details.card > details").forEach(function(group) {
+                var items = group.querySelectorAll(".item");
+                if(items.length) group.style.display = Array.prototype.some.call(items, function(it) { return it.style.display !== "none"; }) ? "" : "none";
+            });
+            panel.querySelectorAll("details.card").forEach(function(card) {
+                if(card === engineCard) return;
+                var shown = Array.prototype.some.call(card.children, function(el) { return el.tagName !== "SUMMARY" && el.style.display !== "none"; });
+                card.style.display = shown ? "" : "none";
+            });
+        }
         workOutBuild();
         if(engineUi) engineUi.update();
         updateInfo();

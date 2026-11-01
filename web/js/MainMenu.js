@@ -952,7 +952,7 @@ var MainMenu = (function() {
     var MODE_KEY = "openracer.mode";
     var mode = "free";
     try { mode = window.localStorage.getItem(MODE_KEY) || "free"; } catch(e) { /* no storage */ }
-    var STEP_NAMES = { mode: "Play", car: "Car", tune: "Tune", track: "Track", weather: "Weather", race: "Race", opponents: "Opponents", surface: "Ground" };
+    var STEP_NAMES = { mode: "Play", car: "Car", tune: "Setup", track: "Track", weather: "Weather", race: "Race", opponents: "Opponents", surface: "Ground" };
     var oppPick = null;                  // while a car is added on the Opponents page: { stage: "car" } or { stage: "tune", car: id }
     var SURFACE_KEY = "openracer.skidSurface";
     var skidSurface = "road";
@@ -1127,7 +1127,7 @@ var MainMenu = (function() {
 
     // the tunes of the car: the car as made and every setup, each with its picture (the one taken when it was saved, or the picture of the car)
     function tuneStep(inner) {
-        inner.innerHTML = "<h2>Choose your tune</h2><div class=\"sub\">Click a tune to go on. A tune is a setup saved in the tuning menu or the car editor, or one that comes with the car; Default is the car as made (car.json).</div>";
+        inner.innerHTML = "<h2>Choose your setup</h2><div class=\"sub\">Click a setup to go on. A setup is the car as you tuned and saved it (the tuning menu, key U, or the car editor), or one that comes with the car. Default is the car as it comes.</div>";
         var car = cars.filter(function(c) { return c.id === choice.car; })[0];
         if(!car) return;
         tuneTiles(inner, car, OpenRacer.Setups.active(car.id) || "", function(name) { OpenRacer.Setups.use(car.id, name || null); goNext(); });
@@ -1364,7 +1364,7 @@ var MainMenu = (function() {
         }
         if(oppPick && oppPick.stage === "tune") {
             var picked = cars.filter(function(c) { return c.id === oppPick.car; })[0];
-            inner.innerHTML = "<h2>Choose the tune</h2><div class=\"sub\">Click a tune of this car to add it. Default is the car as made.</div>";
+            inner.innerHTML = "<h2>Choose the setup</h2><div class=\"sub\">Click a setup of this car to add it. Default is the car as it comes.</div>";
             if(picked) tuneTiles(inner, picked, null, function(name) { oppAdd(picked.id, name); oppPick = null; render(); });
             return;
         }
