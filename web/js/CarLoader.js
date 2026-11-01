@@ -269,7 +269,8 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
             // wishbones, the axle and the driveline that the car editor showed were not built in the game, while their physics was)
             var types = config.suspension || {}, usesLibrary = ["front", "rear"].some(function (a) { return types[a] && types[a].type && types[a].type !== "model" && types[a].type !== "none"; });
             if(OpenRacer.PartsLibrary && usesLibrary && config.type !== "motorcycle") {
-                var dch = config.chassis || {}, dzF = (dch.wheelbase || 2.6) / 2 + (dch.front_axle_offset || 0), dzR = -(dch.wheelbase || 2.6) / 2 + (dch.rear_axle_offset || 0);
+                // (at the middle between the axles, where the demo wheels are: the axle offsets of car.json do not move them, and the arms stood off the wheels)
+                var dch = config.chassis || {}, dzF = (dch.wheelbase || 2.6) / 2, dzR = -(dch.wheelbase || 2.6) / 2;
                 libraryHubs = { diameter: dch.tire_diameter || 0.6, sizes: [], centres: {
                     FR: new THREE.Vector3(-(dch.front_track || 1.5) / 2, 0, dzF), FL: new THREE.Vector3((dch.front_track || 1.5) / 2, 0, dzF),
                     RL: new THREE.Vector3((dch.rear_track || 1.5) / 2, 0, dzR), RR: new THREE.Vector3(-(dch.rear_track || 1.5) / 2, 0, dzR) } };

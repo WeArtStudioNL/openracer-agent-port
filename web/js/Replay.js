@@ -1977,7 +1977,7 @@ OpenRacer.Replay = (function() {
         // (the camera of the settings comes back when the page goes: an edit that ended on the cockpit left the next race in the cockpit)
         if(camRuns.length && typeof Settings !== "undefined") {
             var priorCamera = Settings.option("camera");
-            window.addEventListener("pagehide", function() { if(Settings.option("camera") !== priorCamera) Settings.setOption("camera", priorCamera, true); });
+            window.addEventListener("pagehide", function() { camShown = null; if(Settings.option("camera") !== priorCamera) Settings.setOption("camera", priorCamera, true); });      // (camShown: back to the page, the camera of the clip is set again)
         }
         var clipCam = function(time) {
             if(!camRuns.length || free.active) return "track";

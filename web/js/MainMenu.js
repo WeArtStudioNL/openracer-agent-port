@@ -586,13 +586,14 @@ var MainMenu = (function() {
         box.className = "box";
         overlay.appendChild(box);
         overlay.onclick = function(event) { if(event.target === overlay) close(); };
+        var buildGen = 0;
         function close() { overlay.remove(); load(); }
         overlay._close = close;        // (Escape and B close it the same way: the menu got no new list, and a car imported or deleted was not seen)
         var status = null;
         // (in view: below in the list a failed Export or Delete said it above, out of sight; and a full storage is explained)
         function say(text, error) {
             if(!status) return;
-            if(text && /quota|QuotaExceeded/i.test(text)) text += " The storage of this browser for the game is full: delete replays or garage items (their sizes are listed), or export some first.";
+            if(text && error && /QuotaExceeded|quota.*exceeded|exceeded.*quota/i.test(text)) text += " The storage of this browser for the game is full: delete replays or garage items (their sizes are listed), or export some first.";
             status.textContent = text || ""; status.className = "status" + (error ? " error" : "");
             if(text) try { status.scrollIntoView({ block: "nearest" }); } catch(e) { /* old browser */ }
         }
@@ -686,7 +687,10 @@ var MainMenu = (function() {
             box.appendChild(importInput);
 
             // (with the lists of the game as they are now: a car just imported had no picture, and Load did not have it until the garage was closed)
+            // (only the newest build draws: two at once, the opening one and an import, both added their lists)
+            var gen = ++buildGen;
             Promise.all([Garage.list("cars"), Garage.list("tracks"), Garage.usage(), Catalog.load("cars").catch(function() { return cars; }), Catalog.load("tracks").catch(function() { return tracks; })]).then(function(result) {
+                if(gen !== buildGen) return;
                 cars = result[3]; tracks = result[4];
                 [["cars", "Cars", result[0]], ["tracks", "Tracks", result[1]]].forEach(function(section) {
                     var kind = section[0], records = section[2];
@@ -738,7 +742,7 @@ var MainMenu = (function() {
                         deleteButton.onclick = function() {
                             // (settings only: the car of the game stays, without these changes; "removed" made it look as if the delete had failed)
                             var only = !files.length, label = record.json.name || record.id;
-                            OpenRacerDialog.ask(only ? { title: "Drop your changes to " + label + "?", text: "The game's own " + label + " stays, as it comes with the game.", ok: "Drop changes", danger: true }
+                            OpenRacerDialog.ask(only ? { title: "Delete " + label + " from the garage?", text: "Only its settings are kept here: if the game has its own " + label + ", that one stays, as it comes with the game.", ok: "Delete", danger: true }
                                 : { title: "Delete " + label + "?", text: "It is removed from the garage of this browser.", ok: "Delete", danger: true }).then(function(yes) {
                                 if(yes) Garage.remove(kind, record.id).then(build).catch(function(error) { say("Could not delete: " + error.message, true); });
                             });
@@ -811,9 +815,9 @@ var MainMenu = (function() {
                             Garage.linkFolder().then(function() {
                                 // (what was found in it: a folder of one car, or a car.json that could not be read, gave no sign)
                                 return Promise.all([Garage.folderList("cars").catch(function() { return []; }), Garage.folderList("tracks").catch(function() { return []; })]).then(function(found) {
+                                    build();          // (first: it makes the status line again, and the message was wiped)
                                     say("The folder is linked: " + found[0].length + " car" + (found[0].length === 1 ? "" : "s") + " and " + found[1].length + " track" + (found[1].length === 1 ? "" : "s") + " found." +
                                         (found[0].length + found[1].length ? "" : " It needs a folder per car (with its car.json) or per track (with its track.json) inside it."), !(found[0].length + found[1].length));
-                                    build();
                                 });
                             }).catch(function(error) {
                                 if(error && error.name !== "AbortError") say("Could not link the folder: " + error.message, true);
