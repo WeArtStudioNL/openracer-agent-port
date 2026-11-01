@@ -232,8 +232,12 @@ OpenRacer.Garage = (function () {
                     function next() {
                         return iterator.next().then(function (step) {
                             if (step.done) return items;
-                            var id = step.value[0], sub = step.value[1];
-                            if (sub.kind !== "directory" || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)) return next();
+                            var folderName = step.value[0], sub = step.value[1];
+                            if (sub.kind !== "directory") return next();
+                            // (a folder as a player names it, "Dune Buggy" or "MyCar", is made an id as an import does: it was left out without a word)
+                            var id = folderName.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+                            if (!id || folderName.charAt(0) === ".") return next();
+                            if (!/^[a-z0-9]/.test(id)) id = "item-" + id;
                             return sub.getFileHandle(CONFIG_FILE[kind]).then(function (fh) { return fh.getFile(); }).then(function (file) {
                                 return file.text();
                             }).then(function (text) {
@@ -242,7 +246,10 @@ OpenRacer.Garage = (function () {
                                     delete files[CONFIG_FILE[kind]];
                                     items.push(configOf({ id: id, json: json, files: files }, "folder"));
                                 });
-                            }).catch(function () { /* not an item */ }).then(next);
+                            }).catch(function (error) {
+                                // (a folder without car.json is no item; one whose car.json does not read is said, it was left out without a word)
+                                if (error && error.name !== "NotFoundError" && error.name !== "TypeMismatchError") console.warn("Garage: the folder “" + folderName + "” of the linked folder was left out: " + error.message);
+                            }).then(next);
                         });
                     }
                     return next();

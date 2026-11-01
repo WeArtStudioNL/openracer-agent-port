@@ -876,6 +876,15 @@ OpenRacer.Setups = (function () {
             setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
         },
         // the text of such a file read: { name, car, config }, or an Error with what is wrong (the car of the file is only a note: a tune is laid over the car it is imported on)
+        // The tuning of a setup that was made for another car, without what belongs to that car's model: its type and name, the places of its wheels, its size, its
+        // shell and parts, its driver, its cameras, its exhausts and its motorcycle geometry. A setup of a motorcycle on the hatchback made it a motorcycle with
+        // the wheels of the bike; the chassis, the engine, the drivetrain, the tyres, the brakes, the suspension, the sound and the extras are what is taken.
+        tuningOnly: function (config) {
+            var c = JSON.parse(JSON.stringify(config || {}));
+            ["type", "name", "description", "dimensions", "softbody", "parts", "driver", "cameras", "exhaust", "motorcycle", "steering_wheel", "materials", "model", "preview", "tunes"].forEach(function (k) { delete c[k]; });
+            if (c.wheels) { delete c.wheels.nodes; delete c.wheels.mode; }
+            return c;
+        },
         parseFile: function (text) {
             var data;
             try { data = JSON.parse(text); } catch (e) { return new Error("This is not a tune file (no JSON)."); }

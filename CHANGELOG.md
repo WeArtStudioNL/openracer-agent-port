@@ -12,6 +12,11 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
   - A model in a folder of the car (models/body.glb) was looked for beside car.json; it keeps its folder.
   - A .gltf with its .bin and pictures as files of their own never loaded from the garage or a linked folder; it loads.
   - A name without Latin letters gave every such car the id "item-", so one replaced the other.
+  - Several zips at once: each is imported on its own, and the garage says which came in and which did not and why (one that failed stopped the others). The message is under the title, where Import is; the same file can be picked again; Import works before the list has loaded.
+  - A linked folder takes folders as players name them ("Dune Buggy", "MyCar"), and says in the console which one it left out and why.
+  - A setup made for another car takes only its tuning: not that car's type, name, wheels, size, shell or parts (a motorcycle setup on the hatchback made it a motorcycle with the bike's wheels).
+  - The ghost of a friend is kept per track and car (it replaced your own best lap on that track with every car). *Save lap* says it went to your downloads.
+  - *Download* of a replay that was edited gives the edit, as *Watch* plays it.
 - **Fixed: a car could turn into numbers that are not numbers.** A frame without time (two frames in the same millisecond) divided a step of 0 s by itself: the fuel, the wear, the mass and then the whole car became NaN for the rest of the race. Such a frame now does nothing.
 - **Races.** From an audit of a race from the start to after the finish:
   - The results work with a gamepad and the keyboard: *Race again* has the focus, and the buttons keep it (the panel was written again whenever a car moved up). *Race again* asks about a replay that is not saved, as *Main menu* does. The panel fits a phone, is hidden in the replay, says how many laps a car that still runs is down, and says *Finished* without opponents.

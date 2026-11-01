@@ -644,7 +644,32 @@ var MainMenu = (function() {
             box.appendChild(titleRow);
             status = document.createElement("div");
             status.className = "status";
-            var importInput = null;
+            // (under the title, where Import is: below the list and the notes it was out of sight while a zip was imported)
+            box.appendChild(status);
+            // (made at once: Import before the list had loaded did nothing)
+            var importInput = document.createElement("input");
+            importInput.type = "file";
+            importInput.accept = ".zip,application/zip";
+            importInput.multiple = true;
+            importInput.style.display = "none";
+            importInput.onchange = function() {
+                var files = Array.prototype.slice.call(importInput.files);
+                importInput.value = "";          // (the same file can be picked again after a failure: picking it again did nothing)
+                if(!files.length) return;
+                say("Importing…");
+                // every zip on its own: one that failed (or was kept as it was) stopped the others, and the ones before it were in but not shown
+                var done = [], failed = [];
+                files.reduce(function(chain, file) {
+                    return chain.then(function() {
+                        return Garage.importZip(file).then(function(item) { done.push(item.kind.slice(0, -1) + " " + item.id); }, function(error) { failed.push(file.name + ": " + error.message); });
+                    });
+                }, Promise.resolve()).then(function() {
+                    if(done.length) build();
+                    var text = (done.length ? "Imported " + done.join(", ") + "." : "") + (failed.length ? (done.length ? " " : "") + "Not imported: " + failed.join("; ") : "");
+                    say(text, failed.length > 0 && !done.length);
+                });
+            };
+            box.appendChild(importInput);
 
             Promise.all([Garage.list("cars"), Garage.list("tracks"), Garage.usage()]).then(function(result) {
                 [["cars", "Cars", result[0]], ["tracks", "Tracks", result[1]]].forEach(function(section) {
@@ -704,25 +729,6 @@ var MainMenu = (function() {
                     });
                 });
 
-                importInput = document.createElement("input");
-                importInput.type = "file";
-                importInput.accept = ".zip,application/zip";
-                importInput.multiple = true;
-                importInput.style.display = "none";
-                importInput.onchange = function() {
-                    var files = Array.prototype.slice.call(importInput.files);
-                    if(!files.length) return;
-                    say("Importing…");
-                    files.reduce(function(chain, file) {
-                        return chain.then(function(done) {
-                            return Garage.importZip(file).then(function(item) { return done.concat([item.kind.slice(0, -1) + " " + item.id]); });
-                        });
-                    }, Promise.resolve([])).then(function(done) {
-                        build();
-                        say("Imported " + done.join(", ") + ".");
-                    }).catch(function(error) { say("Could not import: " + error.message, true); });
-                };
-                box.appendChild(importInput);
                 var more = document.createElement("details");
                 more.className = "more";
                 more.innerHTML = "<summary>More ways to add a car or track</summary>";
@@ -802,11 +808,9 @@ var MainMenu = (function() {
                 foot.textContent = usage && usage.quota ? "This browser lets the site keep up to " + formatSize(usage.quota) + "; it uses " + formatSize(usage.used) + " now." : "";
                 if(/^((?!chrome|android).)*safari/i.test(navigator.userAgent)) foot.textContent += " Safari forgets what a site keeps after seven days without a visit: export what you want to keep.";
                 box.appendChild(foot);
-                box.appendChild(status);
             }).catch(function(error) {
                 status.textContent = "The garage could not be opened: " + error.message;
                 status.className = "status error";
-                box.appendChild(status);
             });
         }
         build();

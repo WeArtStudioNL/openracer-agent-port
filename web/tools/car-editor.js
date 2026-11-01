@@ -2966,10 +2966,11 @@ $("tuneImportFile").addEventListener("change", async () => {
     if (!file || !id) { if (!id) status("Give the car an id first."); return; }
     const tune = OpenRacer.Setups.parseFile(await file.text());
     if (tune instanceof Error) { status(tune.message, "error"); return; }
-    let name = window.prompt("The name of this tune" + (tune.car && tune.car !== id ? " (it was made for " + tune.car + ")" : ""), tune.name);
+    const other = tune.car && tune.car !== id;
+    let name = window.prompt("The name of this tune" + (other ? " (it was made for " + tune.car + ": only its tuning is taken, not that car's wheels, size, shell or type)" : ""), tune.name);
     if (name === null) return;
     name = name.trim().slice(0, 40) || tune.name;
-    OpenRacer.Setups.save(id, name, tune.config);
+    OpenRacer.Setups.save(id, name, other ? OpenRacer.Setups.tuningOnly(tune.config) : tune.config);
     renderSetups();
     $("setupSelect").value = name;
     switchChosen = true; $("setupSelect").dispatchEvent(new Event("change"));

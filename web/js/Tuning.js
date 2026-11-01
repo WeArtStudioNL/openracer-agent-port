@@ -794,14 +794,16 @@ var Tuning = (function() {
             file.text().then(function(text) {
                 var tune = OpenRacer.Setups.parseFile(text);
                 if(tune instanceof Error) { message(tune.message); return; }
-                askName("The name of this tune" + (tune.car && tune.car !== config.id ? " (it was made for " + tune.car + ")" : ""), tune.name).then(function(name) {
+                var other = tune.car && tune.car !== config.id;
+                askName("The name of this tune" + (other ? " (it was made for " + tune.car + ": only its tuning is taken, not that car's wheels, size, shell or type)" : ""), tune.name).then(function(name) {
                 if(!name) return;
-                if(OpenRacer.Setups.save(config.id, name, Object.assign({}, original, tune.config)) === false) { message("Could not import: the storage of this browser is full."); return; }
+                var taken = other && OpenRacer.Setups.tuningOnly ? OpenRacer.Setups.tuningOnly(tune.config) : tune.config;
+                if(OpenRacer.Setups.save(config.id, name, Object.assign({}, original, taken)) === false) { message("Could not import: the storage of this browser is full."); return; }
                 setupSelect.value = name;
                 refreshSetups();
                 setupSelect.value = name;
                 switchSetup();          // (chosen by the user already: not the question of a switch, which saw the new setup as active and the tuning as unsaved)
-                message("Tune " + name + " imported and chosen" + (tune.car && tune.car !== config.id ? " (it was made for " + tune.car + ": mind the wheels and the parts)" : "") + ".");
+                message("Tune " + name + " imported and chosen" + (other ? " (made for " + tune.car + ": its tuning, on this car's model)" : "") + ".");
                 });
             });
         };

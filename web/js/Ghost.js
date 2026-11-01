@@ -134,7 +134,8 @@ OpenRacer.Ghost = function (config, trackId) {
     };
 
     // ---- a ghost as a file, to send or to race: { format, version, track, car, name, time, samples }
-    var FRIEND = "openracer.friendghost." + trackId;
+    // (per track and car: it was per track, and the ghost of a friend replaced your own best lap there with every car, in every later game)
+    var FRIEND = "openracer.friendghost." + trackId + "." + config.id;
     function rounded(samples) {
         var r = function (v, n) { var f = Math.pow(10, n); return Math.round(v * f) / f; };
         return samples.map(function (s) {

@@ -1752,7 +1752,8 @@ OpenRacer.Replay = (function() {
         },
         // a replay of the list as a file to keep or to send
         download: function(id, track) {
-            return api.library.bytes(id).then(function(bytes) {
+            // (the edit when there is one, as Watch plays it: the file was the raw recording, and a friend got the race without the cut)
+            return api.library.get(id).then(function(meta) { return api.library.bytes(meta && meta.edit ? id + ":edit" : id); }).then(function(bytes) {
                 var stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13);
                 var url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
                 var link = document.createElement("a");

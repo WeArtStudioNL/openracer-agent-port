@@ -916,7 +916,7 @@ var Settings = (function() {
                 ghostRow.appendChild(b);
                 return b;
             };
-            small("Save lap", "Save your best lap with this car on this track as a file to send", function() { ghost.download(); }, !ghost.hasBest());
+            small("Save lap", "Save your best lap with this car on this track as a file to send", function() { if(ghost.download() !== false) { label.textContent = "Ghost: saved in your downloads"; } }, !ghost.hasBest());
             var picker = document.createElement("input");
             picker.type = "file"; picker.accept = ".openracer-ghost,application/json"; picker.style.display = "none";
             picker.onchange = function() {
