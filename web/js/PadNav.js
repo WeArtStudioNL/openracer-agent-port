@@ -134,6 +134,8 @@ OpenRacer.PadNav = (function() {
             else key("Escape", document.body);
             return;
         }
+        // the fly-by over the grid before a race: A skips it, as Enter does
+        if (!root && a && typeof race !== "undefined" && race && race.state === "flyby" && race.flyby) { race.flyby.skip = true; return; }
         if (!root) { held.dir = null; return; }
         if (b) { key("Escape"); return; }
         if (a) { choose(root); return; }

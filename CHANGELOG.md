@@ -12,6 +12,7 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
   - The lap panel shows the gap to the car ahead and to the one behind, the fuel panel the fuel in laps (from the last lap), and the pit warning both reasons (worn tyres hid the fuel that ran out); the tyres and fuel panel stays under the lap times as they grow.
   - A lap that is not counted because a gate was missed says so.
   - *Backspace* in a race repairs, but gives no new tyres or fuel, and the lap is no record (it was a free pit stop at any moment).
+  - The fly-by over the grid can be skipped with A on a gamepad.
   - The ghost waits at the line until GO (it drove off during the fly-by and jumped back twice).
   - An AI car that rolls back over the line no longer gets a lap of a few seconds; one that waits at a pit stop that never begins gives up after 6 s (it stood there for the rest of the race).
 - **Skidpad after tuning.** A car tuned on the skidpad (the place to tune it) had its grip thrown away; it is now kept for the car as it is tuned, so a race with that tuning saved as a setup gives the AI the grip that was measured. (A measured grip of a setup was also no longer found after the records per setup: fixed.)
