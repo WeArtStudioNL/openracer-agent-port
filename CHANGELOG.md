@@ -6,6 +6,13 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 ## Unreleased
 
+- **Tuning menu and setups.** From an audit:
+  - A setup with more or fewer gears than the car the race started with brings all its own ratios (made-up ratios filled the extra gears, the boxes stayed as they were, and Save kept them).
+  - Default compares with the car as made (every value of the starting setup was orange, and ↺ went to it). The tuning on the car is kept against the setup that is chosen, so the next start after a switch or a Delete is the same car.
+  - The panel fits a phone, and a panel moved on a large screen comes back into a smaller window.
+  - A controller works in the panel, and a slider keeps the focus for the arrow keys (it let go after one step).
+  - Typed shares in % stay between 0 and 100 (a brake bias of 655 % gave the rear brakes a negative torque).
+  - The rider's weight of a motorcycle no longer makes the bike heavier at the next start. Picking the setup that is chosen again in the main menu keeps the tuning.
 - **Replays and video.** From an audit:
   - *Video editor* in a game asks first and keeps the race in Replays (the race was lost when the editor was closed without saving).
   - *Save as mp4* stops and saves where the playhead was stopped (the recording ran on for ever and no file came). Escape no longer leaves the video editor.

@@ -6,8 +6,8 @@
 
 ## Kort
 
-- Ik heb in **44 commits** (sinds 05:51) gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen), de track-editor, de eerste keer spelen, replays en video, het racegedrag van de AI en een reeks UX-punten.
-- Na elke grote wijziging heb ik een onafhankelijke review of audit laten doen (zeven reviews, plus audits van de motorbouw, de car-editor, de races, de Garage, de track-editor, de eerste keer spelen, replays en de AI). Elke bevinding heb ik zelf nagelopen en zo nodig opgelost.
+- Ik heb in **53 commits** (sinds 05:51) gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen), de track-editor, de eerste keer spelen, replays en video, het racegedrag van de AI, het tuningmenu en een reeks UX-punten.
+- Na elke grote wijziging heb ik een onafhankelijke review of audit laten doen (acht reviews, plus audits van de motorbouw, de car-editor, de races, de Garage, de track-editor, de eerste keer spelen, replays, de AI en het tuningmenu). Elke bevinding heb ik zelf nagelopen en zo nodig opgelost.
 - Alles is getest in het spel zelf, vanuit JavaScript aangestuurd. Het browservenster stond verborgen; daar loopt de animatielus niet. Hoe het er in beeld uitziet, heb ik maar op enkele screenshots gezien.
 
 ## Wat er is gedaan
@@ -119,6 +119,15 @@
 - **Bandenslijtage** telt mee in de bochtsnelheden van de AI (`4ba3789`): hij reed met versleten banden de snelheden van nieuwe.
 - **Gevonden bij het testen:** een auto met een oneindige hoek (na een physics-explosie) liet een `while`-lus eeuwig draaien, en de hele game bevroor. Vijf van die lussen zijn vervangen.
 - **Laten liggen:** een gecrashte AI wordt gratis gerepareerd (zonder reparatie crasht hij meteen opnieuw, zo staat het in de code). Dat vraagt een eigen ronde.
+
+### Tuningmenu en setups (audit van 10 punten; `40b6b2e`)
+- **Een setup met meer versnellingen** dan de auto waarmee je startte, kreeg verzonnen verhoudingen voor de extra versnellingen, en het rooster bleef bij 4 vakjes. Op *Save* gingen die verzonnen waarden de setup in. Getest: een 8-traps setup op de Muscle (4 versnellingen) komt nu heen en terug met zijn eigen 8 verhoudingen.
+- **Default vergeleek met de setup** waarmee de race begon. Alles stond oranje, ↺ ging naar die setup, en terugwisselen vroeg naar "niet-opgeslagen" wijzigingen. Getest: Default toont nu 0 gewijzigde waarden.
+- **De tuning werd bewaard** als verschil met de setup van de start. Na een wissel of na *Delete* was de auto bij de volgende start een andere auto. Nu wordt hij bewaard als verschil met de gekozen setup.
+- **Op een telefoon** viel de linkerkant van het paneel buiten beeld. Een paneel dat op een groot scherm versleept was, hing op een kleiner scherm 350 px onder het venster.
+- **Gamepad en pijltjestoetsen** werken in het paneel. Een schuif liet de focus los na één stap, en een controller deed niets in het paneel.
+- Getypte percentages die een aandeel zijn (remverdeling, gewicht vóór, sperdifferentieel) blijven tussen 0 en 100. Een typfout van 655 % gaf de achterremmen negatief koppel.
+- Het gewicht van de berijder op een motor gaf na *Save* een zwaardere motor. Nogmaals op dezelfde setup klikken in het hoofdmenu wiste de tuning. De downforce-labels noemen ook mph.
 
 ### Menu's en kleine punten
 - **Tune the car** staat bovenaan het pauzemenu.
