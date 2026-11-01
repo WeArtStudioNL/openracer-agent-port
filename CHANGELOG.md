@@ -6,6 +6,11 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 ## Unreleased
 
+- **Garage and Replays in the main menu.** From an audit:
+  - Escape or B closes the garage as Close does: the menu gets the new list (a car just imported was missing, one just deleted was still there).
+  - The garage reads the lists again after an import (pictures, Load). The tiles of Load work with the keyboard and a gamepad.
+  - Rows wrap on a phone; messages come into view; a full storage says what to do; a failed replay delete is shown.
+  - An item with only settings says that Delete drops your changes and the game's own car stays; linking a folder says what was found in it.
 - **Car editor: parts, shell and driver.** From an audit of building your own car:
   - The autosave of the shell window never saves the whole car (after Replace the model or Make a copy it saved the half-filled form without a click, and took the old model out of the folder).
   - The shell keeps the centre of gravity and the tyre it was drawn at (the nodes moved off the body when the centre was changed afterwards).

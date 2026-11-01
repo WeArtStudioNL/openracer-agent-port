@@ -6,8 +6,8 @@
 
 ## Kort
 
-- Ik heb in **64 commits** (sinds 05:51) gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen), de track-editor, de eerste keer spelen, replays en video, het racegedrag van de AI, het tuningmenu, onderdelen en shell in de car-editor, en een reeks UX-punten.
-- Na elke grote wijziging heb ik een onafhankelijke review of audit laten doen (negen reviews, plus audits van de motorbouw, de car-editor (twee keer), de races, de Garage, de track-editor, de eerste keer spelen, replays, de AI en het tuningmenu). Elke bevinding heb ik zelf nagelopen en zo nodig opgelost.
+- Ik heb in **70 commits** (sinds 05:51) gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen), de track-editor, de eerste keer spelen, replays en video, het racegedrag van de AI, het tuningmenu, onderdelen en shell in de car-editor, de vensters van het hoofdmenu en een reeks UX-punten.
+- Na elke grote wijziging heb ik een onafhankelijke review of audit laten doen (negen reviews, plus audits van de motorbouw, de car-editor (twee keer), de races, de Garage, de track-editor, de eerste keer spelen, replays, de AI, het tuningmenu en de vensters van het hoofdmenu). Elke bevinding heb ik zelf nagelopen en zo nodig opgelost.
 - Alles is getest in het spel zelf, vanuit JavaScript aangestuurd. Het browservenster stond verborgen; daar loopt de animatielus niet. Hoe het er in beeld uitziet, heb ik maar op enkele screenshots gezien.
 
 ## Wat er is gedaan
@@ -141,6 +141,15 @@
 - **Waarschuwing** als het model, de schaal of de draaiing verandert terwijl er al punten op het model staan.
 - **Uit de review** (`4be7dd1`): bij een motor zonder `layout_cg` (de 600cc en de supermoto) schreef de nieuwe code `layout_cg: null` in `car.json`, want `isFinite(null)` is in JavaScript `true`. De game zou de shell dan 25 cm verschuiven. Dat is gerepareerd voordat het ooit is opgeslagen; geen enkele `car.json` heeft het. Verder: de berijder in een bewerking zat in zijn crashhouding vanaf de eerste frame, de undo van knooppunten nam de knooppunten van de vorige auto mee, en Watch van een bewerking liet de cockpitcamera staan voor de volgende race.
 - **Met het demowiel** (Dynamic wheels zonder velg uit de bibliotheek) bouwt de game nu ook de draagarmen, de as en de aandrijflijn uit de onderdelenbibliotheek (`a8a078c`). Eerst toonde de editor ze, maar ontbraken ze in de game. Getest: de hatchback met het demowiel en double wishbone bouwt de onderdelen; de wielbasis en spoorbreedte van de auto blijven ongewijzigd.
+
+### Garage en Replays in het hoofdmenu (audit van 10 punten; `8282316`)
+- **Escape of B sloot de Garage** zonder dat het menu de nieuwe lijst kreeg. Een geïmporteerde auto stond er niet, een verwijderde nog wel, en Start stuurde je dan terug met "not here".
+- **De Garage leest de lijsten opnieuw** na een import, zodat een nieuwe auto meteen een plaatje heeft en in *Load* staat.
+- **De tegels in *Load*** werken met Tab, Enter en een gamepad; eerst was alleen *Cancel* bereikbaar.
+- **Op een telefoon** lopen de rijen van Garage en Replays niet meer buiten beeld.
+- **Meldingen** komen in beeld, ook als je naar beneden gescrold was. Bij een volle opslag staat er wat je kunt doen. Een mislukte delete van een replay wordt getoond.
+- **Een item met alleen instellingen** zegt nu dat *Delete* je wijzigingen weggooit en dat de auto van de game blijft. Een gekoppelde map zegt hoeveel auto's en banen hij vond.
+- **Laten liggen:** na een herstart van de browser vraagt een gekoppelde map opnieuw om toestemming. Tot dan ontbreken de auto's daaruit zonder melding (de knop zit onder Garage → More ways).
 
 ### Menu's en kleine punten
 - **Tune the car** staat bovenaan het pauzemenu.
