@@ -317,12 +317,27 @@ OpenRacer.VideoEditor = (function () {
         state.selected = state.clips.length ? 0 : -1; state.T = 0;
         return true;
     }
+    // the camera of every clip as runs of samples: [first sample, "follow" | "cockpit" | "cinematic" | "track", look ahead]; null when all of it is the track
+    // (Watch of an edit showed the camera track, or the camera of the settings, over clips set to Follow, Cockpit or Cinematic: not what the Program monitor showed)
+    function bakedCams(N) {
+        var runs = [], any = false;
+        for (var i = 0; i < N; i++) {
+            var mm = mapFinal(Math.min(total(), i * DT)), clip = mm.clip;
+            var mode = clip && clip.cam && clip.cam !== "free" ? clip.cam : "track", lead = clip && mode === "cinematic" ? round(leadAtOffset(clip, mm.src - clip.in), 1) : 0;
+            var lastRun = runs[runs.length - 1];
+            if (!lastRun || lastRun[1] !== mode || lastRun[2] !== lead) runs.push([i, mode, lead]);
+            if (mode !== "track") any = true;
+        }
+        return any ? runs : null;
+    }
+
     function saveProject() {
         if (!state.clips.length) { say("The timeline is empty: put a part of the source in it first."); return; }
         var N = Math.floor(total() / DT) + 1, times = new Array(N), zooms = new Array(N), anyZoom = false;
         for (var i = 0; i < N; i++) { var mm = mapFinal(Math.min(total(), i * DT)); times[i] = mm.src; zooms[i] = round(mm.clip ? zoomAtOffset(mm.clip, mm.src - mm.clip.in) : 1, 3); if (zooms[i] !== 1) anyZoom = true; }
-        var extra = { camera: OpenRacer.CameraTrack.clean(bakedCamera()) };
+        var extra = { camera: OpenRacer.CameraTrack.clean(bakedCamera()) }, cams = bakedCams(N);
         if (anyZoom) extra.zoom = zooms;
+        if (cams) extra.cams = cams;
         ui.saveProject.disabled = true; ui.saveProject.textContent = "Saving…";
         Replay.bake(times, extra).then(function (baked) {
             return Replay.library.saveProject(Replay.libraryId || null, toProject(), baked.bytes, baked.seconds);
@@ -341,8 +356,9 @@ OpenRacer.VideoEditor = (function () {
             var zooms = new Array(N), anyZoom = false;
             for (var i = 0; i < N; i++) { var mm = mapFinal(Math.min(total(), i * DT)); times[i] = mm.src; zooms[i] = round(mm.clip ? zoomAtOffset(mm.clip, mm.src - mm.clip.in) : 1, 3); if (zooms[i] !== 1) anyZoom = true; }
             ui.save.disabled = true; ui.save.textContent = "Saving…";
-            var extra = { camera: OpenRacer.CameraTrack.clean(bakedCamera()), name: name };
-            if (anyZoom) extra.zoom = zooms;                                  // (the zoom of the clips, one per sample: Replay.js lays it on the camera when the file is played)
+            var extra = { camera: OpenRacer.CameraTrack.clean(bakedCamera()), name: name }, cams = bakedCams(N);
+            if (anyZoom) extra.zoom = zooms;
+            if (cams) extra.cams = cams;                                  // (the zoom of the clips, one per sample: Replay.js lays it on the camera when the file is played)
             Replay.bake(times, extra).then(function (baked) {
                 return Replay.keepBaked(name, baked);
             }).then(function () {

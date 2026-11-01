@@ -1966,10 +1966,21 @@ OpenRacer.Replay = (function() {
         api.viewer = true;
         // a replay that was made in the video editor has a camera track: it is the camera, unless the free camera or a cinematic one is chosen
         api.afterFrame = null;
+        // the camera of the clips of the video editor (runs of samples): follow, cockpit or cinematic where a clip had it, else the camera track
+        var camRuns = !api.editor && Array.isArray(parsed.header.cams) ? parsed.header.cams.filter(function(r) { return Array.isArray(r) && isFinite(r[0]) && /^(follow|cockpit|cinematic|track)$/.test(r[1]); }) : [];
+        var camShown = null;
+        var clipCam = function(time) {
+            if(!camRuns.length || free.active) return "track";
+            var at = Math.round(time / DT), lo = 0, hi = camRuns.length - 1;
+            while(lo < hi) { var mid = (lo + hi + 1) >> 1; if(camRuns[mid][0] <= at) lo = mid; else hi = mid - 1; }
+            var run = camRuns[lo];
+            if(camShown !== run) { camShown = run; api.setGameCamera(run[1], run[2]); }
+            return run[1];
+        };
         if(!api.editor && parsed.header.camera && parsed.header.camera.length && OpenRacer.CameraTrack) {
             var cameraKeys = parsed.header.camera;
-            api.afterFrame = function(time) { if(!free.active && !cine.active) OpenRacer.CameraTrack.apply(cameraKeys, time, camera, api.carBody); };
-        }
+            api.afterFrame = function(time) { if(clipCam(time) === "track" && !free.active && !cine.active) OpenRacer.CameraTrack.apply(cameraKeys, time, camera, api.carBody); };
+        } else if(camRuns.length) api.afterFrame = function(time) { clipCam(time); };
         // the zoom of the clips of the video editor (one per sample): on top of whichever camera shows the frame
         var zoomRows = parsed.header.zoom;
         if(!api.editor && Array.isArray(zoomRows) && zoomRows.length) {
