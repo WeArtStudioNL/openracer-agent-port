@@ -6,7 +6,7 @@
 
 ## Kort
 
-- Ik heb in **60 commits** (sinds 05:51) gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen), de track-editor, de eerste keer spelen, replays en video, het racegedrag van de AI, het tuningmenu, onderdelen en shell in de car-editor, en een reeks UX-punten.
+- Ik heb in **64 commits** (sinds 05:51) gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen), de track-editor, de eerste keer spelen, replays en video, het racegedrag van de AI, het tuningmenu, onderdelen en shell in de car-editor, en een reeks UX-punten.
 - Na elke grote wijziging heb ik een onafhankelijke review of audit laten doen (negen reviews, plus audits van de motorbouw, de car-editor (twee keer), de races, de Garage, de track-editor, de eerste keer spelen, replays, de AI en het tuningmenu). Elke bevinding heb ik zelf nagelopen en zo nodig opgelost.
 - Alles is getest in het spel zelf, vanuit JavaScript aangestuurd. Het browservenster stond verborgen; daar loopt de animatielus niet. Hoe het er in beeld uitziet, heb ik maar op enkele screenshots gezien.
 
@@ -160,5 +160,6 @@
 - **Testen in het echt:** deuken en breken tegen de AI, de motoren in een race, en de car-editor met een eigen model.
 - **Stadium truck: 20 pk.** Jouw niet-gecommitte `car.json` heeft een V8-bouw met een boring van 40 mm, nokduur 200 en inlaat 49 (20 pk, 37 Nm). Dat lijkt per ongeluk.
 - **Stadium truck: banden blijven koud.** In een test hadden zijn banden een conditie van 0,6 (de andere auto's 0,95), ook zonder slijtage. Dat komt waarschijnlijk uit jouw niet-gecommitte `car.json`. De AI rijdt hem daardoor nu langzamer, passend bij de grip die hij echt heeft.
+- **Motorbanden blijven koud.** In een race van 150 s bleven de banden van zowel jouw motor als die van de AI rond 45–53 °C, met een grip van 0,6 tot 0,75. Dat is de afstelling van de motorbanden (opwarmen tegenover koelen). Ik heb het niet veranderd. De AI houdt er nu wel rekening mee (`33cccdd`), en de supermoto rijdt even snel als vóór vannacht (gemeten: 59 % van een ronde na 99 s, zowel oud als nieuw, 0 crashes).
 - **Kartbaan Oldenzaal** draagt nog de naam van de echte baan.
 - **Live zetten:** pas na jouw akkoord.
