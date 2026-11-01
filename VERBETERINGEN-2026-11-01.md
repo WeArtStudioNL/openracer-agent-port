@@ -6,7 +6,7 @@
 
 ## Kort
 
-- Ik heb in **70 commits** (sinds 05:51) gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen), de track-editor, de eerste keer spelen, replays en video, het racegedrag van de AI, het tuningmenu, onderdelen en shell in de car-editor, de vensters van het hoofdmenu en een reeks UX-punten.
+- Ik heb in **75 commits** (sinds 05:51) gewerkt aan de soft body, de motorbouw, eigen auto's bouwen in de car-editor, gamepad-bediening, records per setup, AI-motoren, het raceverloop, de Garage (delen van auto's en banen), de track-editor, de eerste keer spelen, replays en video, het racegedrag van de AI, het tuningmenu, onderdelen en shell in de car-editor, de vensters van het hoofdmenu en een reeks UX-punten.
 - Na elke grote wijziging heb ik een onafhankelijke review of audit laten doen (negen reviews, plus audits van de motorbouw, de car-editor (twee keer), de races, de Garage, de track-editor, de eerste keer spelen, replays, de AI, het tuningmenu en de vensters van het hoofdmenu). Elke bevinding heb ik zelf nagelopen en zo nodig opgelost.
 - Alles is getest in het spel zelf, vanuit JavaScript aangestuurd. Het browservenster stond verborgen; daar loopt de animatielus niet. Hoe het er in beeld uitziet, heb ik maar op enkele screenshots gezien.
 
@@ -158,6 +158,19 @@
 - Onderdelen breken op een trage pc niet meer bij de halve kracht.
 - De vlammen laden één keer, zonder 404.
 - `<html lang="en">` op de pagina's.
+
+## Rooktest aan het eind
+
+Elke auto is kort gereden, op meerdere banen, met AI-tegenstanders. Er waren geen fouten in de console, geen NaN en geen AI die teruggezet moest worden:
+
+- Dune Buggy en Go-kart 250cc op de Short Track;
+- Stadium Truck op de Desert;
+- Supermoto op de Kartbaan;
+- Muscle op Netherlands1 (geen racelijn, dus geen AI, zoals bedoeld);
+- de skidpad-modus en de drag strip;
+- de hatchback, de Muscle, de kart en de 600cc al eerder vannacht, in langere races.
+
+De Desert kost in het verborgen browservenster ongeveer 14 ms per frame, tegen 8 ms voor de Short Track.
 
 ## Wat ik heb geprobeerd en heb laten liggen
 
