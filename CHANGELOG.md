@@ -12,6 +12,7 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
   - A driver switched off stays in car.json, switched off (its place, hands, keys and bones were thrown away).
   - Dragging the driver, its hands and feet, or the points of the suspension is a change and a step of Ctrl+Z; Ctrl+Z while the nodes are edited brings the nodes back; Remove part and Back to the defaults ask first.
   - Strengths set on single nodes keep their nodes; a warning when the model, its scale or its turn changes under placed points.
+  - The suspension and driveline of the parts library are built in the game with the demo wheel too (the editor showed them, the game did not).
 - **Tuning menu and setups.** From an audit:
   - A setup with more or fewer gears than the car the race started with brings all its own ratios (made-up ratios filled the extra gears, the boxes stayed as they were, and Save kept them).
   - Default compares with the car as made (every value of the starting setup was orange, and ↺ went to it). The tuning on the car is kept against the setup that is chosen, so the next start after a switch or a Delete is the same car.

@@ -140,7 +140,7 @@
 - **Sterktes op losse knooppunten** hoorden bij een nummer dat kon verschuiven: bij een ander *Max nodes* landden ze op andere knooppunten. Nu wordt de layout vastgezet.
 - **Waarschuwing** als het model, de schaal of de draaiing verandert terwijl er al punten op het model staan.
 - **Uit de review** (`4be7dd1`): bij een motor zonder `layout_cg` (de 600cc en de supermoto) schreef de nieuwe code `layout_cg: null` in `car.json`, want `isFinite(null)` is in JavaScript `true`. De game zou de shell dan 25 cm verschuiven. Dat is gerepareerd voordat het ooit is opgeslagen; geen enkele `car.json` heeft het. Verder: de berijder in een bewerking zat in zijn crashhouding vanaf de eerste frame, de undo van knooppunten nam de knooppunten van de vorige auto mee, en Watch van een bewerking liet de cockpitcamera staan voor de volgende race.
-- **Laten liggen:** met het demowiel (Dynamic wheels zonder velg uit de bibliotheek) toont de editor ophangingsdelen die de game niet bouwt. Dat vraagt een wijziging in CarLoader.
+- **Met het demowiel** (Dynamic wheels zonder velg uit de bibliotheek) bouwt de game nu ook de draagarmen, de as en de aandrijflijn uit de onderdelenbibliotheek (`a8a078c`). Eerst toonde de editor ze, maar ontbraken ze in de game. Getest: de hatchback met het demowiel en double wishbone bouwt de onderdelen; de wielbasis en spoorbreedte van de auto blijven ongewijzigd.
 
 ### Menu's en kleine punten
 - **Tune the car** staat bovenaan het pauzemenu.
