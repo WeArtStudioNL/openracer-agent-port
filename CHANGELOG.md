@@ -6,6 +6,7 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 ## Unreleased
 
+- **Tune the car** is a button at the top of the pause menu (it was a row under *Tools*, or the U key).
 - **Engine builder: a swap is the new engine at once.** The clutch was made for the peak torque of the old engine (a V8 in the hatchback slipped at the launch until another setting was touched) and the engine braking stayed that of the old engine for the session. The two-step, the launch control, the governor, the CVT, the stall speed, pops and anti-lag follow the new rev limit, the sound takes the whole character of the new block (the rod, the cam lifts, two exhaust systems for a V8), and the engine model changes.
 - **Engine builder: a turbo is not counted twice.** The curve of a built engine has the boost in it already; the turbo of the car took a second ramp of 2000 rpm off it (a V8 with a turbo had 65 % of its curve at 2000 rpm, now 99 % after the lag). The rows of the turbo that follow the build (share, threshold, a boost pressure on top) are hidden; the spool time stays.
 - **Engine builder: safer fields.** An emptied field keeps its value (it was 0: an engine without torque); a value that the limits pull in reaches the engine (the box showed 70 mm, the engine kept 88); a **Stock block** button puts the build back as the block comes. In the car editor a number is put within its limits when it is typed, not at every key (95 into the bore became 40, then 405).

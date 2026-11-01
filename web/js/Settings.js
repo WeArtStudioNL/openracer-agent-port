@@ -937,6 +937,16 @@ var Settings = (function() {
         if(!canReplay) replay.style.opacity = "0.45";
         replay.onclick = function() { closeMenu(); OpenRacer.Replay.start(); };
         if(inGame) buttons.appendChild(replay);
+        // the tuning menu, at the top (it was a row under Tools, and the U key)
+        if(inGame && typeof Tuning !== "undefined") {
+            var tune = document.createElement("button");
+            tune.className = "big";
+            tune.style.cssText = "background: var(--line); margin-left: 8px;";
+            tune.textContent = "Tune the car";
+            tune.title = "The tuning menu: the engine, the gearbox, the suspension, the tyres and the setups (key U)";
+            tune.onclick = function() { closeMenu(); Tuning.toggle(); };
+            buttons.appendChild(tune);
+        }
         var mainMenu = document.createElement("button");
         mainMenu.className = "big";
         mainMenu.style.cssText = "background: var(--line); margin-left: 8px;";
