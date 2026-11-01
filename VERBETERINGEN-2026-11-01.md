@@ -148,7 +148,8 @@
 - **De tegels in *Load*** werken met Tab, Enter en een gamepad; eerst was alleen *Cancel* bereikbaar.
 - **Op een telefoon** lopen de rijen van Garage en Replays niet meer buiten beeld.
 - **Meldingen** komen in beeld, ook als je naar beneden gescrold was. Bij een volle opslag staat er wat je kunt doen. Een mislukte delete van een replay wordt getoond.
-- **Een item met alleen instellingen** zegt nu dat *Delete* je wijzigingen weggooit en dat de auto van de game blijft. Een gekoppelde map zegt hoeveel auto's en banen hij vond.
+- **Een item met alleen instellingen** zegt nu dat de auto van de game blijft (als de game er een heeft). Een gekoppelde map zegt hoeveel auto's en banen hij vond.
+- **Uit de review** (`a0e5e35`): de melding na het koppelen van een map werd meteen gewist, en de lijst kon dubbel verschijnen als je meteen importeerde. Met het demowiel stonden de draagarmen 24 cm naast de wielen bij een auto met een asverschuiving (`front_axle_offset`). Die staan nu op de wielen; de editor tekent ze daar nog met de verschuiving.
 - **Na een herstart van de browser** vraagt een gekoppelde map opnieuw om toestemming. De auto- en baanstap zeggen dat nu, met een knop *Allow*. Eerst ontbraken de auto's uit de map zonder melding.
 
 ### Menu's en kleine punten
