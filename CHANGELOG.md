@@ -6,6 +6,24 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 ## Unreleased
 
+- **Track editor: making your own track.** From an audit of the flow:
+  - The AI drove a lap that was driven before the road or the line was changed (the best lap on this computer came before the saved line), into the new walls. A track keeps when its line or road last changed (`line_date`, `road_date`): only laps driven after it are the line of the AI, and a record of the old road is replaced by the next lap.
+  - *Record AI racing line* saves first (it threw away the gates that were not saved, and then no lap counted).
+  - Saving says what the track still needs: no gates, no racing line on a model track, a line made on the road as it was. Errors and these notes stay until clicked.
+  - New: *Test drive* (save and drive the track in a new tab) and *Export zip* (the saved track with its model, objects, sky picture and thumbnail).
+  - Questions before *Clear the grid*, *Clear the pit boxes*, *Clear the pit line* and *Forget the line*, and before the height map or the start dialog replace the work.
+  - A thumbnail of one track was saved as the picture of the next; scaling or tilting an object was no change; a ninth grid box replaced box 8; Delete on a gate also deleted the chosen road node.
+  - A .gltf with its textures or .bin in a folder is imported with flat names (the game found no textures). The model of a track imported again keeps its skidpad.
+  - The *Sky and light* card says what the game uses of it: only the strength of the light (the sky, fog and sun come from the player's weather and time).
+- **The first games.** From an audit of a new player's first ten minutes:
+  - *Restart* in the pause menu.
+  - At the first race, once, a panel with the keys (or pad buttons) that matter; the HUD says *Esc* (*Start* with a pad): pause, restart, settings and controls.
+  - A race against others pauses while the tuning menu is open and when the window loses focus. Esc and U close the tuning menu. The pause is held by name, so the menu, the tuning menu, the HUD editor and a Take do not let go of each other's pause.
+  - A short notice when a key turns a driver aid or the sound on or off. F-keys of the game no longer open the browser's find bar.
+  - The free camera is not kept for the next game (it took W, A, S, D and Space).
+  - Gamepad: buttons by name (A, B, LB, RT, Left stick ←) for a controller of the standard layout; camera on X and repair on Back, also for saved controls.
+  - A link to a car or track that is not there says why it went back to the menu. No replay question for less than a minute. A loading text on the first visit.
+  - Phone: a word under each top button, and two columns at the right on a narrow phone upright (the row covered the lap time).
 - **Garage: zips that did not import.** From an audit of how players share their cars and tracks:
   - A zip with car.json at its root (what Finder or Explorer makes of the selected files) crashed the import; it imports, named after the zip.
   - A zip of Windows PowerShell (backslashes in the names) was "a zip without car.json"; it imports.
