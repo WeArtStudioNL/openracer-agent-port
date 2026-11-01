@@ -20,11 +20,7 @@ Openstaande punten voor later. Bijgewerkt op 30 oktober 2026. De nummers met § 
 
 ## Rijden en AI
 
-- **Soft body**:
-  - deuken zijn 2× te groot (§3.1);
-  - balken en ankers breken nooit (§3.2).
-
-  Dit vraagt een eigen afstemronde.
+- **Soft body**: de dubbele deuk (§3.1) en het nooit-breken (§3.2) zijn opgelost op 1 november 2026 (commit 6600220, nog niet live). Nog doen: in echte races testen of de deuken en het breken goed voelen, ook tegen de AI. Per auto in te stellen met `softbody.anchor.max_bend` en `softbody.beam.break_strain`.
 - **AI-motoren** vallen nog ongeveer elke 20 s.
 - **AI-auto's** raken elkaar soms in een pack en slaan om.
 - **AI-grip zonder skidpad-meting.** Zonder meting schat de AI de grip uit `tyres.grip` in car.json, en die schatting zit er soms ver naast. De i30 houdt 0,91 g bij `grip: 1`, de Muscle 1,77 g bij `grip: 1.15`. Beter: een automatische meting per auto en setup, op de achtergrond bij het laden.
