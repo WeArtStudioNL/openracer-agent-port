@@ -597,7 +597,21 @@ function setModel(root, roles) {
     renderParts();
 }
 
-function loadFromFiles(list, givenRoles) {
+// A .gltf that names its .bin and textures with a folder ("textures/road.png"): the names without the folder. The files go flat into the folder of the track,
+// and the game asked for tracks/<id>/textures/road.png: no texture, and a .bin in a folder did not load at all (here they were found by their names)
+async function flatGltf(file) {
+    let json;
+    try { json = JSON.parse(await file.text()); } catch (e) { return file; }
+    let changed = false;
+    for (const item of [...(json.images || []), ...(json.buffers || [])]) {
+        if (!item.uri || /^data:/i.test(item.uri)) continue;
+        const flat = item.uri.split("?")[0].split(/[\\/]|%2F|%5C/i).pop();          // (the name keeps its own spelling: %20 stays %20)
+        if (flat !== item.uri) { item.uri = flat; changed = true; }
+    }
+    return changed ? new File([JSON.stringify(json)], file.name, { type: "model/gltf+json" }) : file;
+}
+
+async function loadFromFiles(list, givenRoles) {
     state.files = new Map();
     for (const file of list) state.files.set(file.name, file);
     const main = [...state.files.keys()].find((n) => /\.glb$/i.test(n)) || [...state.files.keys()].find((n) => /\.gltf$/i.test(n));
@@ -605,6 +619,7 @@ function loadFromFiles(list, givenRoles) {
         status("Pick a .glb file, or a .gltf with its .bin and texture files.", "error");
         return;
     }
+    if (/\.gltf$/i.test(main)) state.files.set(main, await flatGltf(state.files.get(main)));
     state.mainFile = main;
     stopDesign();
     const urls = new Map();
