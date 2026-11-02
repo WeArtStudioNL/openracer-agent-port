@@ -799,6 +799,7 @@ export function createDesign(api) {
         patchGroup.updateMatrixWorld(true);
         applyColours();
         renderParts();
+        if (api.renderLayers) api.renderLayers();
     }
     // one patch made again (while its points are dragged)
     function refreshPatch(i) {
@@ -1735,6 +1736,7 @@ export function createDesign(api) {
         commit();
     }
     function fillExtraFields() {
+        if (api.renderLayers) api.renderLayers();
         const p = design.selectedPatch !== null ? design.data.patches[design.selectedPatch] : null;
         const b = design.selectedBranch !== null ? design.data.branches[design.selectedBranch] : null;
         $("dsPatchBox").style.display = p ? "" : "none";
@@ -2075,6 +2077,9 @@ export function createDesign(api) {
 
     return {
         enable, disable, toJSON, exportGlb, undo, redo, roadEdgeAt,
+        // the surfaces as rows of the Layers panel, and a click on one
+        patchRows: () => (design.data && design.data.patches ? design.data.patches : []).map((p, i) => ({ label: surfaceOf(p.surface).label + (p.connect ? ", connected" : ""), meta: p.points.length + " points", selected: design.selectedPatch === i })),
+        choosePatch: (i) => { if (!design.data || !design.data.patches[i]) return; if (design.selectedPatch === i) letGoExtras(); else { api.setMode("patch"); selectPatch(i); } },
         outlineOf: (i) => (design.data && design.data.patches[i] ? patchOutline(design.data.patches[i]).poly : []),          // (for the tests: the outline of an area with the way along the road)
         // a curb of the editor changed: the surfaces that connect to the road follow its edge
         curbsChanged: () => { design.edgeCache = null; if (design.data && (design.data.patches || []).some((q) => q.connect)) buildPatches(); },

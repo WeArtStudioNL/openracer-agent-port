@@ -2117,6 +2117,7 @@ const design = createDesign({
     setMode, getMode: () => state.mode, roleMaterials, screenSize,
     curbs: () => curbState.list.map((c) => ({ points: c.points, width: c.width })),
     blockPick: (event) => !!curbStripHit(event),
+    renderLayers: () => { try { renderSurfaceLayers(); } catch (e) { /* (the designer is made further down: not yet) */ } },
     ownUndo: true, onCommit: () => noteDesignStep(), onSelect: () => clearSelection("design"), onRebuild: () => snapToSurface(), groundY: (x, z) => groundY(x, z)
 });
 window.__trackEditorView.design = design;          // (for the tests: the glb it makes)
@@ -3560,6 +3561,23 @@ function renderBoxLayers() {
     fill("gridLayers", state.grid, (i) => i === 0 ? "Box 1 (start)" : "Box " + (i + 1), (i) => boxSel.kind === "grid" && boxSel.i === i, (i) => selectBox(boxSel.kind === "grid" && boxSel.i === i ? null : "grid", i));
     fill("pitLayers", state.pitBoxes, (i) => i === 0 ? "Pit box 1 (player)" : "Pit box " + (i + 1), (i) => boxSel.kind === "pit" && boxSel.i === i, (i) => selectBox(boxSel.kind === "pit" && boxSel.i === i ? null : "pit", i));
     fill("cameraLayers", state.cameras, (i) => "Camera " + (i + 1), (i) => state.camSel === i, (i) => selectCamera(state.camSel === i ? -1 : i));
+}
+// the surfaces of the road designer, as rows (a click chooses one: the Surfaces tool opens on it; a click on the chosen one lets it go)
+function renderSurfaceLayers() {
+    const holder = $("surfaceLayers");
+    if (!holder) return;
+    holder.innerHTML = "";
+    const rows = design.active() ? design.patchRows() : [];
+    rows.forEach((item, i) => {
+        const row = document.createElement("div");
+        row.className = "layer" + (item.selected ? " selected" : "");
+        row.innerHTML = "<i></i><span></span><span class=\"meta\"></span>";
+        row.children[1].textContent = (i + 1) + ". " + item.label;
+        row.children[2].textContent = item.meta;
+        row.onclick = () => design.choosePatch(i);
+        holder.appendChild(row);
+    });
+    if (!rows.length) { const none = document.createElement("div"); none.style.cssText = "padding: 4px 14px; color: #66727f;"; none.textContent = design.active() ? "none drawn" : "only for a drawn road"; holder.appendChild(none); }
 }
 // the sections of the Layers panel fold with a click on their head
 document.querySelectorAll("#eventLayers .layersHead").forEach((head) => head.addEventListener("click", () => {
