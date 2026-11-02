@@ -467,11 +467,21 @@ export function createDesign(api) {
             const vectors = nodes.map((n) => new THREE.Vector3(n.x, 0, n.z));
             const curve = vectors.length === 2 ? new THREE.LineCurve3(vectors[0], vectors[1]) : new THREE.CatmullRomCurve3(vectors, false, "centripetal", 0.5);
             const length = curve.getLength(), count = Math.max(2, Math.ceil(length / BRANCH_STEP));
-            const w = Math.max(2, b.width || 8) / 2, points = [];
+            // the width: of the branch, or of the node (node.width), and in between from one node to the next, with every node at its share of the length
+            const half = (n) => Math.max(2, n.width || b.width || 8) / 2, cum = [0];
+            for (let i = 1; i < nodes.length; i++) cum.push(cum[i - 1] + Math.hypot(nodes[i].x - nodes[i - 1].x, nodes[i].z - nodes[i - 1].z));
+            const total = cum[cum.length - 1] || 1, points = [];
+            const widthAt = (u) => {
+                const at = u * total;
+                let i = 0;
+                while (i < cum.length - 2 && cum[i + 1] < at) i++;
+                const f = Math.max(0, Math.min(1, (at - cum[i]) / ((cum[i + 1] - cum[i]) || 1))), s = f * f * (3 - 2 * f);
+                return half(nodes[i]) + (half(nodes[i + 1]) - half(nodes[i])) * s;
+            };
             for (let i = 0; i <= count; i++) {
                 const u = i / count, p = curve.getPointAt(u), t = curve.getTangentAt(u).setY(0).normalize();
                 const s = u * u * (3 - 2 * u);
-                points.push({ x: p.x, y: y0 + (y1 - y0) * s, z: p.z, w, tangent: t, along: u * length });
+                points.push({ x: p.x, y: y0 + (y1 - y0) * s, z: p.z, w: widthAt(u), tangent: t, along: u * length });
             }
             lines.push({ points, index: k });
         });
@@ -483,7 +493,8 @@ export function createDesign(api) {
         const list = attach.road < 0 ? (design.mainLine || []) : ((lines[attach.road] || {}).points || []);
         if (list.length < 2) return null;
         let best = 0, bestD = Infinity;
-        list.forEach((q, i) => { const d = (q.x - a.x) * (q.x - a.x) + (q.z - a.z) * (q.z - a.z); if (d < bestD) { bestD = d; best = i; } });
+        if (attach.road >= 0) best = Math.max(0, Math.min(list.length - 1, Math.round(attach.u * (list.length - 1))));       // (a branch that joins itself: its own end is nearer)
+        else list.forEach((q, i) => { const d = (q.x - a.x) * (q.x - a.x) + (q.z - a.z) * (q.z - a.z); if (d < bestD) { bestD = d; best = i; } });
         const q0 = list[Math.max(0, best - 1)], q1 = list[Math.min(list.length - 1, best + 1)];
         const tx = q1.x - q0.x, tz = q1.z - q0.z, len = Math.hypot(tx, tz) || 1;
         const t = { x: tx / len, z: tz / len };
@@ -1532,7 +1543,7 @@ export function createDesign(api) {
             if (d.handle.kind === "branch") {
                 const b = design.data.branches[design.selectedBranch], i = d.handle.i;
                 if (i === 0 || i === b.nodes.length - 1) {
-                    const snap = snapRoad(b.nodes[i].x, b.nodes[i].z, design.selectedBranch);
+                    const snap = snapRoad(b.nodes[i].x, b.nodes[i].z, design.selectedBranch, { index: design.selectedBranch, end: i !== 0 });
                     if (snap) { b.nodes[i].x = round(snap.x); b.nodes[i].z = round(snap.z); if (i === 0) b.start = { road: snap.road, u: snap.u }; else b.end = { road: snap.road, u: snap.u }; }
                 }
                 rebuild(true);
@@ -1638,7 +1649,8 @@ export function createDesign(api) {
         selectPatch(design.data.patches.length - 1, 0);
     }
     // the nearest place on the middle of a road (the track, or a branch but not the one that is drawn) within its width and 2 m: { road, u, x, y, z }
-    function snapRoad(x, z, exclude) {
+    // own: { index, end }: the branch that is drawn or dragged may join itself too, far enough along its own line from the end that is placed
+    function snapRoad(x, z, exclude, own) {
         let best = null, bestD = Infinity;
         const look = (points, road, uOf) => points.forEach((q, i) => {
             const d = Math.hypot(q.x - x, q.z - z);
@@ -1646,6 +1658,15 @@ export function createDesign(api) {
         });
         look(design.mainLine || [], -1, (q) => q.u);
         design.branchLines.forEach((line, k) => { if (k !== exclude && line.points.length > 1) look(line.points, k, (q, i) => i / (line.points.length - 1)); });
+        const mine = own && design.branchLines[own.index];
+        if (mine && mine.points.length > 1) {
+            const pts = mine.points, total = pts[pts.length - 1].along, gap = Math.max(12, pts[own.end ? pts.length - 1 : 0].w * 6);
+            pts.forEach((q, i) => {
+                if (own.end ? q.along > total - gap : q.along < gap) return;
+                const d = Math.hypot(q.x - x, q.z - z);
+                if (d < q.w + 2 && d < bestD) { bestD = d; best = { road: own.index, u: i / (pts.length - 1), x: q.x, y: q.y, z: q.z }; }
+            });
+        }
         return best;
     }
     // Branch: a click on a road starts a branch there (anywhere else: a free end), the next clicks are its nodes, and a click on a road ends it
@@ -1656,7 +1677,7 @@ export function createDesign(api) {
         if (dr && dr.kind === "branch") {
             if (!g) return;
             const b = design.data.branches[dr.index];
-            const snap = snapRoad(g.x, g.z, dr.index), first = b.nodes[0];
+            const snap = snapRoad(g.x, g.z, dr.index, { index: dr.index, end: true }), first = b.nodes[0];
             const away = first && Math.hypot(g.x - first.x, g.z - first.z) > (b.width || 8);
             if (snap && away && b.nodes.length >= 1) {
                 b.nodes.push({ x: round(snap.x), z: round(snap.z) });
@@ -1750,6 +1771,10 @@ export function createDesign(api) {
         $("dsSurfaceEdit").style.display = $("dsPatchSurface").value.startsWith("c:") ? "" : "none";
         $("dsPatchPointDelete").disabled = !p || design.selectedPoint < 0;
         $("dsBranchNodeDelete").disabled = !b || design.selectedPoint < 0;
+        const node = b && design.selectedPoint >= 0 ? b.nodes[design.selectedPoint] : null;
+        $("dsBranchNodeWidthBox").style.display = node ? "" : "none";
+        if (node && document.activeElement !== $("dsBranchNodeWidth")) $("dsBranchNodeWidth").value = node.width || b.width || 8;
+        $("dsBranchNodeWidthReset").disabled = !node || !node.width;
         const dr = design.drawing;
         $("dsPatchInfo").textContent = p ? (dr && dr.kind === "patch" ? "Drawing: " + p.points.length + (p.connect ? " points. Press Enter to end: the area closes along the edge of the road." : " corners. Click the first corner or press Enter to close it.") : "Area " + (design.selectedPatch + 1) + ": " + p.points.length + " corners" + (design.selectedPoint >= 0 ? ", corner " + (design.selectedPoint + 1) + " chosen" : "")) : "";
         $("dsBranchInfo").textContent = b ? (dr && dr.kind === "branch" ? "Drawing: " + b.nodes.length + " nodes. Click on a road to join it, or press Enter to end here." : "Branch " + (design.selectedBranch + 1) + ": " + b.nodes.length + " nodes" + (b.start ? ", starts on " + (b.start.road < 0 ? "the track" : "branch " + (b.start.road + 1)) : "") + (b.end ? ", ends on " + (b.end.road < 0 ? "the track" : "branch " + (b.end.road + 1)) : "")) : "";
@@ -1837,6 +1862,15 @@ export function createDesign(api) {
         const b = design.selectedBranch !== null ? design.data.branches[design.selectedBranch] : null;
         if (b) { b.width = Math.max(2, parseFloat($("dsBranchWidth").value) || 8); rebuild(true); commit(); }
     });
+    const chosenNode = () => { const b = design.selectedBranch !== null ? design.data.branches[design.selectedBranch] : null; return b && design.selectedPoint >= 0 ? b.nodes[design.selectedPoint] : null; };
+    $("dsBranchNodeWidth").addEventListener("change", () => {
+        const n = chosenNode();
+        if (n) { n.width = Math.max(2, parseFloat($("dsBranchNodeWidth").value) || 8); rebuild(true); commit(); fillExtraFields(); }
+    });
+    $("dsBranchNodeWidthReset").onclick = () => {
+        const n = chosenNode();
+        if (n) { delete n.width; rebuild(true); commit(); fillExtraFields(); }
+    };
     $("dsBranchDelete").onclick = () => { if (design.selectedBranch !== null) { design.selectedPoint = -1; deleteExtraPoint(); } };
     $("dsBranchNodeDelete").onclick = () => deleteExtraPoint();
 

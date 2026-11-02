@@ -373,10 +373,11 @@
         <div class="page" data-page="branches" style="display:none">
             <div class="row">
                 <div class="fixed"><label>Width (m)</label><input type="number" id="dsBranchWidth" value="8" min="2" step="1" style="width:90px"></div>
+                <div id="dsBranchNodeWidthBox" class="fixed" style="display:none"><label>Width at the node (m)</label><div style="display:flex; gap:6px"><input type="number" id="dsBranchNodeWidth" min="2" step="1" style="width:90px"><button class="small" id="dsBranchNodeWidthReset" title="The width of the branch again at this node">Like the branch</button></div></div>
                 <div id="dsBranchBox" class="fixed buttons" style="display:none; align-self:flex-end"><button class="small danger" id="dsBranchNodeDelete">Delete node</button><button class="small danger" id="dsBranchDelete">Delete branch</button></div>
                 <div class="fixed hint" id="dsBranchInfo" style="align-self:flex-end"></div>
             </div>
-            <p class="hint">A road of its own that joins the track: a pit lane, a side road, the streets of a town or the exit of a motorway. Click on the track (or on a branch) where it starts, then on the ground for its nodes, and on a road where it joins it again (Enter ends it free). Drag a node to move it; an end that is let go on a road joins it there. Click on a chosen branch to add a node.</p>
+            <p class="hint">A road of its own that joins the track: a pit lane, a side road, the streets of a town or the exit of a motorway. Click on the track (or on a branch) where it starts, then on the ground for its nodes, and on a road where it joins it again (Enter ends it free). Drag a node to move it; an end that is let go on a road joins it there (also on the branch itself, a bit further along). A chosen node can have a width of its own: the road goes over smoothly from one width to the next. Click on a chosen branch to add a node.</p>
         </div>
         <div class="page" data-page="patches" style="display:none">
             <div class="row">
