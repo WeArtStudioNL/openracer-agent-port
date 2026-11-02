@@ -373,6 +373,223 @@ window.addEventListener("keydown", (e) => {
     else if (e.code === "Escape") stopLineEdit();
 });
 
+// ---- the curbs (Curbs.js): drawn with Draw curb, a click on the road for every node (Enter or Escape ends the curb). A click on a node chooses it, the arrows of
+// the gizmo move it (its height is where a ray down meets the surface under it), Shift + click on the road adds a node to the chosen curb (between the two nodes it
+// is nearest to, or at an end), Delete takes the chosen node away: the curb then runs from the node before it to the node after it, and a curb without nodes is gone.
+// track.json "curbs": [{ nodes, width, height, colour, points }]
+const curbLayer = new THREE.Group();           // the strips: in the thumbnail as the track
+scene.add(curbLayer);
+const curbNodeLayer = new THREE.Group();       // the nodes
+scene.add(curbNodeLayer);
+const curbState = { list: [], selected: -1, node: -1, drawing: false, dragging: false };
+const curbMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0 });
+const curbTarget = new THREE.Object3D();
+scene.add(curbTarget);
+const curbGizmo = new TransformControls(camera, renderer.domElement);
+curbGizmo.setSize(0.8);
+curbGizmo.showY = false;                       // over the ground only: the height comes from the surface
+curbGizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !event.value; curbState.dragging = event.value; if (!event.value) drawCurbs(); });
+curbGizmo.addEventListener("objectChange", () => {
+    const c = curbState.list[curbState.selected], n = c && c.nodes[curbState.node];
+    if (!n) return;
+    n[0] = curbTarget.position.x; n[2] = curbTarget.position.z;
+    n[1] = groundY(n[0], n[2], n[1]);
+    curbTarget.position.y = n[1];
+    buildCurb(curbState.selected);
+    drawCurbNodes();
+});
+scene.add(typeof curbGizmo.getHelper === "function" ? curbGizmo.getHelper() : curbGizmo);
+
+function curbSettings() {
+    const d = OpenRacer.CURB_DEFAULTS;
+    return { width: Math.max(0.3, parseFloat($("curbWidth").value) || d.width), height: Math.max(0, Math.min(0.3, parseFloat($("curbHeight").value))) || 0, colour: $("curbColour").value || d.colour };
+}
+// the strip of one curb, made again from its nodes (the ground under it is found again)
+function buildCurb(i) {
+    const c = curbState.list[i];
+    if (!c) return;
+    if (c.mesh) { curbLayer.remove(c.mesh); c.mesh.geometry.dispose(); c.mesh = null; }
+    c.points = c.nodes.length >= 2 ? OpenRacer.curbPoints(THREE, c, groundY) : [];
+    const geometry = OpenRacer.curbGeometry(THREE, c);
+    if (!geometry) return;
+    c.mesh = new THREE.Mesh(geometry, curbMaterial);
+    c.mesh.userData.curbIndex = i;
+    curbLayer.add(c.mesh);
+}
+function drawCurbs() {
+    curbLayer.clear();
+    curbState.list.forEach((c, i) => { c.mesh = null; buildCurb(i); });
+    drawCurbNodes();
+}
+// the nodes: of the chosen curb large (the chosen node orange, the first green), of the other curbs small, so that a click finds them
+function drawCurbNodes() {
+    curbNodeLayer.clear();
+    curbState.list.forEach((c, i) => {
+        if (c.mesh) c.mesh.userData.curbIndex = i;
+        const chosen = i === curbState.selected, radius = (chosen ? 0.6 : 0.4) * state.markerScale;
+        c.nodes.forEach((n, k) => {
+            const colour = chosen && k === curbState.node ? 0xff8a3d : (chosen ? (k === 0 ? 0x4ed88a : 0xffffff) : 0xff6a5a);
+            const ball = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 8), new THREE.MeshBasicMaterial({ color: colour, depthTest: false, transparent: true }));
+            ball.position.set(n[0], n[1] + 0.3 + radius * 0.5, n[2]);
+            ball.renderOrder = 1000;
+            ball.userData.curbNode = [i, k];
+            screenSize(ball, chosen ? 7 : 5, radius);
+            curbNodeLayer.add(ball);
+        });
+    });
+    renderCurbs();
+}
+function selectCurb(i, node) {
+    curbState.selected = i >= 0 && curbState.list[i] ? i : -1;
+    curbState.node = curbState.selected >= 0 && node >= 0 && node < curbState.list[curbState.selected].nodes.length ? node : -1;
+    curbGizmo.detach();
+    if (curbState.node >= 0) {
+        const n = curbState.list[curbState.selected].nodes[curbState.node];
+        curbTarget.position.set(n[0], n[1], n[2]);
+        curbGizmo.attach(curbTarget);
+        selectObject(-1); selectGate(-1);
+    }
+    if (curbState.selected >= 0) {
+        const c = curbState.list[curbState.selected];
+        $("curbWidth").value = c.width; $("curbHeight").value = c.height; $("curbColour").value = c.colour;
+    }
+    drawCurbNodes();
+}
+// a click on the road while drawing: the next node (the first one starts a new curb)
+function addCurbNode(point) {
+    if (!curbState.drawing || !curbState.list[curbState.selected]) {
+        curbState.list.push(Object.assign({ nodes: [], points: [], mesh: null }, curbSettings()));
+        curbState.selected = curbState.list.length - 1;
+        curbState.drawing = true;
+    }
+    const c = curbState.list[curbState.selected];
+    c.nodes.push([point.x, groundY(point.x, point.z, point.y), point.z]);
+    buildCurb(curbState.selected);
+    selectCurb(curbState.selected, -1);
+}
+function endCurbDraw() {
+    if (!curbState.drawing) return;
+    curbState.drawing = false;
+    const c = curbState.list[curbState.selected];
+    if (c && !c.nodes.length) removeCurb(curbState.selected);
+    else drawCurbNodes();
+}
+// Shift + click: a node in the chosen curb, between the two nodes nearest to the click, or before the first or after the last
+function insertCurbNode(point) {
+    const c = curbState.list[curbState.selected];
+    if (!c) return;
+    const node = [point.x, groundY(point.x, point.z, point.y), point.z], nodes = c.nodes;
+    let at = nodes.length;
+    if (nodes.length >= 2) {
+        let best = Infinity, bestT = 0, bestI = 0;
+        for (let i = 0; i + 1 < nodes.length; i++) {
+            const a = nodes[i], b = nodes[i + 1], dx = b[0] - a[0], dz = b[2] - a[2], len2 = dx * dx + dz * dz || 1;
+            const t = ((point.x - a[0]) * dx + (point.z - a[2]) * dz) / len2, tc = Math.max(0, Math.min(1, t));
+            const d = Math.hypot(point.x - (a[0] + dx * tc), point.z - (a[2] + dz * tc));
+            if (d < best) { best = d; bestT = t; bestI = i; }
+        }
+        at = bestI === 0 && bestT < 0 ? 0 : (bestI === nodes.length - 2 && bestT > 1 ? nodes.length : bestI + 1);
+    }
+    nodes.splice(at, 0, node);
+    buildCurb(curbState.selected);
+    selectCurb(curbState.selected, at);
+}
+// Delete: the chosen node goes, the nodes on either side of it are joined; the last node takes the curb with it
+function deleteCurbNode() {
+    const c = curbState.list[curbState.selected];
+    if (!c || curbState.node < 0) return false;
+    c.nodes.splice(curbState.node, 1);
+    if (!c.nodes.length) { removeCurb(curbState.selected); status("The curb had no nodes left and is gone.", "ok"); return true; }
+    buildCurb(curbState.selected);
+    selectCurb(curbState.selected, Math.min(curbState.node, c.nodes.length - 1));
+    return true;
+}
+function removeCurb(i) {
+    const c = curbState.list[i];
+    if (!c) return;
+    if (c.mesh) { curbLayer.remove(c.mesh); c.mesh.geometry.dispose(); }
+    curbState.list.splice(i, 1);
+    if (curbState.drawing && curbState.selected === i) curbState.drawing = false;
+    selectCurb(-1);
+}
+function resetCurbs(curbs) {
+    curbGizmo.detach();
+    curbState.list = (Array.isArray(curbs) ? curbs : []).filter((c) => c && Array.isArray(c.nodes)).map((c) => ({
+        nodes: c.nodes.filter((n) => Array.isArray(n) && Number.isFinite(n[0]) && Number.isFinite(n[2])).map((n) => [n[0], groundY(n[0], n[2], Number.isFinite(n[1]) ? n[1] : undefined), n[2]]),
+        width: c.width > 0 ? c.width : OpenRacer.CURB_DEFAULTS.width, height: c.height >= 0 ? c.height : OpenRacer.CURB_DEFAULTS.height,
+        colour: OpenRacer.CURB_COLOURS[c.colour] ? c.colour : OpenRacer.CURB_DEFAULTS.colour, points: [], mesh: null
+    })).filter((c) => c.nodes.length);
+    curbState.selected = -1; curbState.node = -1; curbState.drawing = false;
+    drawCurbs();
+}
+// as track.json keeps them (a curb of one node is not a curb yet: it is not saved)
+function curbsJSON() {
+    const r = (v) => Math.round(v * 1000) / 1000;
+    return curbState.list.filter((c) => c.nodes.length >= 2).map((c) => ({
+        nodes: c.nodes.map((n) => [r(n[0]), r(n[1]), r(n[2])]), width: c.width, height: c.height, colour: c.colour,
+        points: c.points && c.points.length ? c.points : OpenRacer.curbPoints(THREE, c, groundY)
+    }));
+}
+function renderCurbs() {
+    const note = $("curbNote");
+    if (note) note.textContent = curbState.list.length ? curbState.list.length + (curbState.list.length === 1 ? " curb" : " curbs") : "none";
+    const info = $("curbInfo");
+    if (info) {
+        const c = curbState.list[curbState.selected];
+        info.textContent = curbState.drawing ? "Drawing curb " + (curbState.selected + 1) + ": " + (c ? c.nodes.length : 0) + " nodes. Enter or Escape ends it."
+            : c ? "Curb " + (curbState.selected + 1) + ": " + c.nodes.length + " nodes" + (curbState.node >= 0 ? ", node " + (curbState.node + 1) + " chosen" : "") : "";
+    }
+    if ($("curbDeleteNode")) $("curbDeleteNode").disabled = curbState.node < 0;
+    if ($("curbRemove")) $("curbRemove").disabled = curbState.selected < 0;
+    const list = $("curbLayers");
+    if (!list) return;
+    list.innerHTML = "";
+    curbState.list.forEach((c, i) => {
+        const row = document.createElement("div");
+        row.className = "layer" + (curbState.selected === i ? " selected" : "");
+        row.innerHTML = "<i></i><span></span><span class=\"meta\"></span>";
+        row.children[1].textContent = "Curb " + (i + 1);
+        const length = c.points.length > 1 ? (c.points.length - 1) * OpenRacer.CURB_STEP : 0;
+        row.children[2].textContent = c.nodes.length + " nodes" + (length ? ", " + Math.round(length) + " m" : "");
+        row.title = "Choose it: click a node to move it, Shift + click on the road adds a node, Delete takes the chosen node away";
+        row.onclick = () => { endCurbDraw(); selectCurb(curbState.selected === i ? -1 : i, -1); };
+        list.appendChild(row);
+    });
+    if (!curbState.list.length) { const none = document.createElement("div"); none.style.cssText = "padding: 4px 14px; color: #66727f;"; none.textContent = "none drawn"; list.appendChild(none); }
+}
+// the width, the height and the colour: of the chosen curb, and of the next one that is drawn
+["curbWidth", "curbHeight", "curbColour"].forEach((id) => $(id).addEventListener("change", () => {
+    const c = curbState.list[curbState.selected];
+    if (!c) return;
+    Object.assign(c, curbSettings());
+    buildCurb(curbState.selected);
+    drawCurbNodes();
+}));
+$("curbDraw").onclick = () => { endCurbDraw(); selectCurb(-1); setMode("curb"); };
+$("curbDeleteNode").onclick = () => deleteCurbNode();
+$("curbRemove").onclick = async () => {
+    if (curbState.selected < 0) return;
+    if (!(await OpenRacerDialog.ask({ title: "Remove curb " + (curbState.selected + 1) + "?", text: "With all its nodes.", ok: "Remove", danger: true }))) return;
+    removeCurb(curbState.selected);
+};
+// (in the capture phase: before the designer of the road, which takes Delete for its own nodes)
+window.addEventListener("keydown", (e) => {
+    const t = e.target && e.target.tagName;
+    if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
+    if ((e.code === "Delete" || e.code === "Backspace") && curbState.node >= 0) { if (deleteCurbNode()) { e.preventDefault(); e.stopImmediatePropagation(); } }
+    else if ((e.code === "Enter" || e.code === "Escape") && curbState.drawing) { endCurbDraw(); if (e.code === "Enter") e.preventDefault(); }
+    else if (e.code === "Escape" && curbState.selected >= 0) selectCurb(-1);
+}, true);
+// the click on a node of a curb (any mode but drawing another curb): it is chosen; true when one was hit
+function pickCurbNode(event) {
+    const hit = pointerRay(event).intersectObjects(curbNodeLayer.children, false).find((h) => h.object.userData.curbNode);
+    if (!hit) return false;
+    const [i, k] = hit.object.userData.curbNode;
+    if (curbState.drawing && i !== curbState.selected) endCurbDraw();
+    selectCurb(i, k);
+    return true;
+}
+
 function resize() {
     const w = view.clientWidth, h = view.clientHeight;
     renderer.setSize(w, h, false);
@@ -1556,6 +1773,7 @@ function stopDesign() {
 }
 
 function setMode(mode) {
+    if (mode !== "curb" && typeof endCurbDraw === "function") endCurbDraw();
     state.mode = mode;
     if (typeof renderLibrary === "function") renderLibrary();
     $("dragWindow").style.display = mode === "drag" ? "block" : "none";
@@ -1567,6 +1785,7 @@ function setMode(mode) {
         : mode === "camera" ? "Add camera: click on the road or beside it, the camera is put above that place (set the height in the list). Click a camera in Look to choose it and move it with the gizmo; the button above it changes its range."
         : mode === "object" ? "Place object: click on the road (or the ground) where the object stands, and drag to turn it. Add a model with + in the Objects card first."
         : mode === "drag" ? "Drag strip: click on the road where the start line is and drag in the direction of the strip."
+        : mode === "curb" ? "Draw curb: click on the road for every node, along the edge of the road; Enter or Escape ends the curb. Click a node to move it, Shift + click adds one, Delete takes the chosen one away."
         : "Look: drag to turn, right mouse button to move, scroll to zoom. Click a part to find it in the list.");
 }
 document.querySelectorAll("#modes button").forEach((b) => b.onclick = () => setMode(b.dataset.mode));
@@ -1681,6 +1900,19 @@ renderer.domElement.addEventListener("pointerup", (event) => {
     drag = null;
     controls.enabled = true;
     if (d.range) { renderCameras(); return; }
+    // the curbs: a node is chosen by a click; in Draw curb a click on the road is the next node; Shift + click adds a node to the chosen curb
+    if (!d.moved && !curbGizmo.axis && !curbState.dragging) {
+        if (pickCurbNode(event)) return;
+        if (state.mode === "curb") {
+            const road = roadHit(event);
+            if (road) { if (event.shiftKey && curbState.selected >= 0 && !curbState.drawing) insertCurbNode(road.point); else addCurbNode(road.point); }
+            return;
+        }
+        if (event.shiftKey && curbState.selected >= 0 && !lineEdit.editing) {
+            const road = roadHit(event);
+            if (road) { insertCurbNode(road.point); return; }
+        }
+    }
     if (state.mode !== "camera" && !d.moved && !d.hit && state.cameras.length) {
         const hits = pointerRay(event).intersectObjects(markers.children, false).filter((h) => h.object.userData.camera !== undefined);
         if (hits.length) { selectCamera(hits[0].object.userData.camera, state.camRange && state.camSel === hits[0].object.userData.camera); return; }
@@ -1703,7 +1935,10 @@ renderer.domElement.addEventListener("pointerup", (event) => {
         if (!event.shiftKey) { selectLineNode(-1); return; }
     }
     if (state.mode === "view" && !d.moved && !lineEdit.editing && !(design && design.active()) && !objectGizmo.axis) {
-        // an object that is clicked is chosen (its gizmo shows); a gate too; else the part of the model under the pointer
+        // an object that is clicked is chosen (its gizmo shows); a gate too; a curb; else the part of the model under the pointer
+        const curbHit = pointerRay(event).intersectObjects(curbLayer.children, false)[0];
+        if (curbHit && curbHit.object.userData.curbIndex !== undefined) { selectCurb(curbHit.object.userData.curbIndex, -1); return; }
+        if (curbState.selected >= 0) selectCurb(-1);
         const objectHit = pointerRay(event).intersectObjects(objectLayer.children, true)[0];
         if (objectHit && objectIndexOf(objectHit.object) >= 0) { selectObject(objectIndexOf(objectHit.object)); return; }
         const gateHit = pointerRay(event).intersectObjects(markers.children, false).find((h) => h.object.userData.gateIndex !== undefined);
@@ -1888,6 +2123,7 @@ async function loadExisting() {
         });
         selectCamera(-1);
         await loadObjects(track);
+        resetCurbs(track.curbs);
         state.drag = track.dragstrip ? { x: track.dragstrip.x, y: groundY(track.dragstrip.x, track.dragstrip.z), z: track.dragstrip.z, heading: track.dragstrip.heading || 0, width: track.dragstrip.width || 12, length: track.dragstrip.length || 402.336 } : null;
         showDrag();
         updateMarkers();
@@ -1914,6 +2150,7 @@ function newTrack() {
     $("showGates").checked = true;
     state.cameras = [];
     resetObjects();
+    resetCurbs([]);
     selectCamera(-1);
     state.drag = null;
     state.legacy = false;
@@ -1946,7 +2183,7 @@ function newTrack() {
 // not the track itself, its objects, its sky and its lights is hidden for one frame); 640 by 360, saved with the track as preview.webp (the menu shows it on the track's card)
 function takeThumbnail() {
     if (!state.root && !design.active()) { status("Load or draw a track first.", "error"); return; }
-    const keep = new Set([trackGroup, objectLayer, hemi, sun]);
+    const keep = new Set([trackGroup, objectLayer, curbLayer, hemi, sun]);
     if (sky) keep.add(sky);
     const hidden = [];
     scene.children.forEach((o) => { if (!keep.has(o) && o.visible) { o.visible = false; hidden.push(o); } });
@@ -2029,6 +2266,8 @@ async function save() {
 
         if (state.cameras.length) config.cameras = state.cameras.map((c) => Object.assign({ x: +c.x.toFixed(2), y: +c.y.toFixed(2), z: +c.z.toFixed(2) }, c.range ? { range: { x: +c.range.x.toFixed(2), z: +c.range.z.toFixed(2), r: +c.range.r.toFixed(1) } } : {}));
         else delete config.cameras;
+        const curbs = curbsJSON();
+        if (curbs.length) config.curbs = curbs; else delete config.curbs;
 
         if (state.drag) config.dragstrip = { x: +state.drag.x.toFixed(3), z: +state.drag.z.toFixed(3), heading: +state.drag.heading.toFixed(5), width: state.drag.width, length: +state.drag.length.toFixed(2) };
         else delete config.dragstrip;
@@ -2283,6 +2522,7 @@ function fingerprint() {
             .map((e) => e.id + "=" + (e.type === "checkbox" ? e.checked : e.value));
         return JSON.stringify([fields, state.start, state.grid, state.pit, state.pitLine, state.pitBoxes, state.gates, state.cameras, state.drag, state.roles, state.env, state.skyName,
             design.active && design.active() ? design.toJSON() : null, objectState.list.map((o) => [o.model, o.x, o.y, o.z, o.heading, o.sx, o.sy, o.sz, o.pitch, o.roll]),
+            curbState.list.map((c) => [c.nodes, c.width, c.height, c.colour]),
             [...objectState.models.values()].map((m) => [m.name, m.kind, m.mass, m.pivot]), !!state.thumbnail]);
     } catch (error) { return ""; }
 }

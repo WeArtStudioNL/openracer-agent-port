@@ -115,6 +115,20 @@
         </details>
 
         <details class="card" open>
+            <summary>Curbs<span class="meta" id="curbNote">none</span></summary>
+            <div class="body">
+                <p class="sub">Curbstones along the edge of the road, red and white (or another colour). <b>Draw curb</b>: click on the road for every node, along the edge; the curb is a smooth line through them, and <b>Enter</b> or <b>Escape</b> ends it. Every node lies on the surface under it. Afterwards: <b>click a node</b> and move it with the arrows of the gizmo, <b>Shift + click</b> on the road adds a node to the chosen curb (between the two nearest nodes, or at an end), <b>Delete</b> takes the chosen node away and joins the nodes beside it. A curb without nodes is gone. In the game a curb is road, a few centimetres high.</p>
+                <div class="row">
+                    <div><label>Width (m)</label><input type="number" id="curbWidth" value="1.2" min="0.3" max="4" step="0.1"></div>
+                    <div><label>Height (m)</label><input type="number" id="curbHeight" value="0.05" min="0" max="0.3" step="0.01"></div>
+                    <div><label>Colour</label><select id="curbColour"><option value="red">Red and white</option><option value="blue">Blue and white</option><option value="green">Green and white</option><option value="yellow">Yellow and white</option><option value="black">Black and white</option></select></div>
+                </div>
+                <div class="hint" id="curbInfo"></div>
+                <div class="buttons"><button class="small accent" id="curbDraw">Draw curb</button><button class="small danger" id="curbDeleteNode" disabled>Delete node</button><button class="small danger" id="curbRemove" disabled>Remove curb</button></div>
+            </div>
+        </details>
+
+        <details class="card" open>
             <summary>Cinematic cameras<span class="meta" id="cameraNote">none</span></summary>
             <div class="body">
                 <p class="sub">Cameras for the replay (the camera button Cinematic): use <b>Add camera</b> in the view and click on the track. Click a camera to choose it and move it with the gizmo. The button above a camera changes its range, a circle on the floor: move it with the node in the middle, set the radius with the node on the edge. In the replay the camera whose circle the car is in is used (else the nearest), and it always turns to follow the car. The fields of a camera are x, y, z and the radius of the range.</p>
@@ -190,6 +204,8 @@
         <div id="objectLayers" class="eventList" style="max-height: 180px; overflow-y: auto;"></div>
         <div style="padding: 8px 14px 2px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #7f90a5;">Gates</div>
         <div id="gateLayers" class="eventList" style="max-height: 150px; overflow-y: auto;"></div>
+        <div style="padding: 8px 14px 2px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #7f90a5;">Curbs</div>
+        <div id="curbLayers" class="eventList" style="max-height: 150px; overflow-y: auto;"></div>
     </div>
     <div id="dragWindow" style="display:none; position: absolute; right: 16px; top: 70px; width: 270px; padding: 10px 12px 12px; background: rgba(22, 27, 34, 0.94); border: 1px solid #323c4a; border-radius: 10px; color: #dfe6ef; font-size: 12.5px; z-index: 6;">
         <div style="display: flex; justify-content: space-between; align-items: center; font-weight: bold; margin-bottom: 6px;"><span>Drag strip</span><button class="small ghost" id="dragClose" title="Close">×</button></div>
@@ -219,6 +235,7 @@
         <button data-mode="drag">Drag strip</button>
         <button data-mode="object">Place object</button>
         <button data-mode="camera">Add camera</button>
+        <button data-mode="curb">Draw curb</button>
         <button data-mode="node" class="design-only">Add node</button>
         <button data-mode="prefab" class="design-only">Place prefab</button>
     </div>
@@ -271,6 +288,7 @@
 <script src="../js/Garage.js"></script>
 <script src="../js/Catalog.js"></script>
 <script src="../js/TrackEnvironment.js"></script>
+<script src="../js/Curbs.js"></script>
 <script src="editor-ui.js"></script>
 <script type="module" src="track-editor.js"></script>
 </body>

@@ -462,6 +462,12 @@ function loadGltfTrack(track) {
             else trackObjects["other"].push(mesh);
             scene.add(mesh);
         });
+        // the curbs drawn in the track editor (Curbs.js): road, a few centimetres above what is under them
+        if(OpenRacer.curbMeshes) OpenRacer.curbMeshes(THREE, track.curbs).forEach(function(mesh) {
+            mesh.receiveShadow = true;
+            trackObjects["track"].push(mesh);
+            scene.add(mesh);
+        });
         buildCollisionWorld();
         buildGroundWorld();
         mergeScenery();

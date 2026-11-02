@@ -4,6 +4,10 @@ What is new in every version of OpenRacer. The version is `OpenRacer.VERSION` in
 
 A version that only fixes things is a hotfix: the last number goes up (2.3.0 → 2.3.1). The players' list of every version, hotfixes included, is the changelog page of the site (`site/changelog.html`, <https://openracer.eu/changelog.html>).
 
+## Unreleased
+
+- **Curbs in the track editor.** Draw curb: a click on the road for every node, a smooth red and white strip through them (width, height and colour can be chosen). Every node lies where a ray down meets the surface; a node can be moved with the gizmo, Shift + click adds one, Delete takes one away and joins the nodes beside it, and a curb without nodes is gone. Saved in track.json ("curbs"); in the game a curb is road, a few centimetres high (`web/js/Curbs.js`).
+
 ## 2.4.0 (2026-11-01)
 
 - **Skidpad and drag strip.** From an audit:

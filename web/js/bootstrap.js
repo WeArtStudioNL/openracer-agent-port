@@ -54,6 +54,7 @@ var scripts = [
     "js/Chain.js",
     "js/CarLoader.js",
     "js/MaterialLibrary.js",
+    "js/Curbs.js",
     "js/TrackLoader.js",
     "js/Graphics.js",
     "js/Atmosphere.js",
