@@ -3889,9 +3889,14 @@ function touchSync(modeChanged) {
     if (modeChanged && compactQuery.matches && state.mode !== "view" && !document.documentElement.classList.contains("hints")) editorToast($("hud").textContent, "ok");
     updateActions();
 }
+let lastRoadSelection = "";
 function updateActions() {
     if (!touchReady) return;
     const road = design.active && design.active();
+    // a node, a prefab, a branch or a surface that is chosen opens the drawer that was folded: its settings (offset, attach to road, width) are in it
+    const roadSel = road ? design.selection() : "";
+    if (roadSel && roadSel !== lastRoadSelection && $("drawer").classList.contains("collapsed")) $("drawerToggle").click();
+    lastRoadSelection = roadSel;
     const chosen = anythingChosen() || !!(road && design.selection());
     const gizmo = objectUi.selected >= 0 || gateUi.selected >= 0 || !!boxSel.kind;
     const show = {
