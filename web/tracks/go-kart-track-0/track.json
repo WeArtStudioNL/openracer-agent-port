@@ -1,0 +1,887 @@
+{
+  "name": "Go-kart track 0",
+  "description": "Short tgo",
+  "start": {
+    "x": 15.383,
+    "z": 35.981,
+    "heading": 2.72834
+  },
+  "grid": [
+    {
+      "x": 15.383,
+      "z": 35.981,
+      "heading": 2.72834
+    },
+    {
+      "x": 12.042,
+      "z": 40.204,
+      "heading": 2.67479
+    },
+    {
+      "x": 8.234,
+      "z": 39.098,
+      "heading": 2.70873
+    },
+    {
+      "x": 6.732,
+      "z": 42.753,
+      "heading": 2.69365
+    },
+    {
+      "x": 3.174,
+      "z": 41.728,
+      "heading": 2.68504
+    },
+    {
+      "x": 1.849,
+      "z": 44.979,
+      "heading": 2.69077
+    },
+    {
+      "x": -1.9,
+      "z": 44.152,
+      "heading": 2.6853
+    },
+    {
+      "x": -3.177,
+      "z": 47.255,
+      "heading": 2.71609
+    }
+  ],
+  "pit": {
+    "boxes": [
+      {
+        "x": 13.359,
+        "z": 45.663,
+        "heading": 2.58489
+      },
+      {
+        "x": 7.723,
+        "z": 48.843,
+        "heading": 2.68264
+      },
+      {
+        "x": 1.019,
+        "z": 52.197,
+        "heading": 2.70028
+      },
+      {
+        "x": -6.361,
+        "z": 55.695,
+        "heading": 2.72795
+      },
+      {
+        "x": -14.105,
+        "z": 58.324,
+        "heading": 2.8676
+      },
+      {
+        "x": -22.837,
+        "z": 58.833,
+        "heading": -2.91489
+      },
+      {
+        "x": -29.68,
+        "z": 55.232,
+        "heading": -2.41143
+      },
+      {
+        "x": -35.179,
+        "z": 48.882,
+        "heading": -2.22196
+      }
+    ]
+  },
+  "gates": [
+    {
+      "x": -6.112,
+      "z": 52.612,
+      "heading": 2.6682,
+      "width": 24,
+      "y": -0.79
+    },
+    {
+      "x": -44.654,
+      "z": 15.205,
+      "heading": -1.25881,
+      "width": 24,
+      "y": -0.79
+    },
+    {
+      "x": -49.827,
+      "z": -28.106,
+      "heading": -3.12218,
+      "width": 24,
+      "y": -0.79
+    },
+    {
+      "x": -60.299,
+      "z": -52.906,
+      "heading": -0.10465,
+      "width": 24,
+      "y": -0.79
+    },
+    {
+      "x": -13.159,
+      "z": -52.768,
+      "heading": 0.05206,
+      "width": 24,
+      "y": -0.79
+    },
+    {
+      "x": -7.881,
+      "z": -10.798,
+      "heading": 1.74423,
+      "width": 24,
+      "y": -0.79
+    },
+    {
+      "x": 9.852,
+      "z": 18.388,
+      "heading": -0.46954,
+      "width": 24,
+      "y": -0.79
+    },
+    {
+      "x": 20.908,
+      "z": -21.145,
+      "heading": -1.85592,
+      "width": 24,
+      "y": -0.79
+    },
+    {
+      "x": 46.958,
+      "z": -30.941,
+      "heading": 1.10274,
+      "width": 24,
+      "y": -0.79
+    },
+    {
+      "x": 50.496,
+      "z": 21.131,
+      "heading": 2.47403,
+      "width": 24,
+      "y": -0.79
+    }
+  ],
+  "show_gates": true,
+  "cameras": [
+    {
+      "x": -19.71,
+      "y": 2.86,
+      "z": 47.02
+    },
+    {
+      "x": -49.09,
+      "y": 2.92,
+      "z": 2.21
+    },
+    {
+      "x": -25.75,
+      "y": 2.03,
+      "z": -33.89
+    },
+    {
+      "x": -61.5,
+      "y": 2.68,
+      "z": -22.45
+    },
+    {
+      "x": -86.28,
+      "y": 2.99,
+      "z": -40.43
+    },
+    {
+      "x": 5.94,
+      "y": 3.03,
+      "z": -48.12
+    },
+    {
+      "x": -3.96,
+      "y": 1.01,
+      "z": 13.86
+    },
+    {
+      "x": 39.26,
+      "y": 1.01,
+      "z": 1.38
+    },
+    {
+      "x": 28.52,
+      "y": 2,
+      "z": -45.6
+    },
+    {
+      "x": 67.27,
+      "y": 3.17,
+      "z": 11.18
+    },
+    {
+      "x": 19.12,
+      "y": 3.11,
+      "z": 50.1
+    }
+  ],
+  "model": "Go-kart track.glb",
+  "objects": [
+    {
+      "model": "obj-openracer-banner-1.glb",
+      "x": -6.195,
+      "z": 47.435,
+      "y": 0,
+      "heading": -119.52,
+      "pivot": [
+        18.3525,
+        -1.0759,
+        -37.9429
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": 24.34,
+      "z": 62.653,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": 11.456,
+      "z": 76.08,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": -5.169,
+      "z": 83.186,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": -19.515,
+      "z": 79.636,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": -54.372,
+      "z": 58.811,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": -67.903,
+      "z": 34.076,
+      "y": -0.787,
+      "heading": -123.31,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": -76,
+      "z": 12.736,
+      "y": -0.787,
+      "heading": -140.53,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": -97.119,
+      "z": -9.299,
+      "y": -0.787,
+      "heading": -132.45,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": -105.534,
+      "z": -24.19,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": -90.916,
+      "z": -63.352,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": -59.651,
+      "z": -76.777,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": -45.828,
+      "z": -68.26,
+      "y": -0.787,
+      "heading": 24.61,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": 15.745,
+      "z": -78.701,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": 42.351,
+      "z": -73.861,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": 66.349,
+      "z": -51.49,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": 61.594,
+      "z": -40.157,
+      "y": -0.787,
+      "heading": 97.11,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": 82.092,
+      "z": 6.808,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": 75.085,
+      "z": 23.913,
+      "y": -0.787,
+      "heading": 132.53,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": 56.271,
+      "z": 38.373,
+      "y": -0.787,
+      "heading": 126.55,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": 43.798,
+      "z": 57.258,
+      "y": -0.787,
+      "heading": 123.03,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": 34.304,
+      "z": 61.607,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tree.glb",
+      "x": 24.826,
+      "z": 70.891,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": 12.201,
+      "z": 54.118,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": 0.691,
+      "z": 68.304,
+      "y": -0.787,
+      "heading": 141.67,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": -8.539,
+      "z": 73.512,
+      "y": -0.787,
+      "heading": -176.33,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": -21.31,
+      "z": 68.621,
+      "y": -0.787,
+      "heading": -143.64,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": -34.711,
+      "z": 58.399,
+      "y": -0.787,
+      "heading": -133.55,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": -21.038,
+      "z": 35.707,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": -28.115,
+      "z": 17.519,
+      "y": -0.787,
+      "heading": -58.95,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": -24.265,
+      "z": -6.214,
+      "y": -0.787,
+      "heading": -84.15,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": -21.387,
+      "z": -32.124,
+      "y": -0.787,
+      "heading": -99.4,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": -25.821,
+      "z": -42.822,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": 2.244,
+      "z": -14.936,
+      "y": -0.787,
+      "heading": 92.58,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": 4.06,
+      "z": 8.815,
+      "y": -0.787,
+      "heading": -0.72,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": 15.249,
+      "z": 1.038,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": 11.4,
+      "z": 28.637,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": -2.55,
+      "z": 34.072,
+      "y": -0.787,
+      "heading": -156.08,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": 49.193,
+      "z": 8.06,
+      "y": -0.787,
+      "heading": 156.32,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": 49.422,
+      "z": -7.884,
+      "y": -0.787,
+      "heading": -116.66,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": 40.878,
+      "z": -23.828,
+      "y": -0.787,
+      "heading": -152.28,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-bush.glb",
+      "x": 28.442,
+      "z": -36.358,
+      "y": -0.787,
+      "heading": -117.81,
+      "pivot": [
+        0,
+        -0.12,
+        0
+      ],
+      "kind": "decor",
+      "rigid": false
+    },
+    {
+      "model": "obj-prefab-tyrewall.glb",
+      "x": -39.623,
+      "z": 38.187,
+      "y": -0.787,
+      "heading": -122.41,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tyrewall.glb",
+      "x": -41.376,
+      "z": 35.911,
+      "y": -0.787,
+      "heading": -122.73,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-tyrewall.glb",
+      "x": -43.198,
+      "z": 33.124,
+      "y": -0.787,
+      "heading": -115.87,
+      "pivot": [
+        0,
+        0,
+        0
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-grandstand-concrete.glb",
+      "x": -22.097,
+      "z": -67.759,
+      "y": -0.787,
+      "heading": -5.1,
+      "pivot": [
+        0,
+        0,
+        -2.8
+      ],
+      "kind": "static"
+    },
+    {
+      "model": "obj-prefab-grandstand-concrete.glb",
+      "x": -0.549,
+      "z": -68.49,
+      "y": -0.787,
+      "heading": -1.94,
+      "pivot": [
+        0,
+        0,
+        -2.8
+      ],
+      "kind": "static"
+    }
+  ],
+  "environment": {
+    "sky_top": "#4a82c4",
+    "sky_horizon": "#d3e4f4",
+    "fog": {
+      "enabled": false,
+      "color": "#cfdbe8",
+      "near": 300,
+      "far": 2500
+    },
+    "sun": {
+      "azimuth": 40,
+      "elevation": 45,
+      "intensity": 1,
+      "color": "#ffffff"
+    },
+    "ambient": {
+      "color": "#576777",
+      "intensity": 1
+    }
+  },
+  "surfaces": {
+    "meshes": {
+      "Plane_1": "road",
+      "Plane_2": "sand",
+      "Plane_3": "grass"
+    }
+  },
+  "line_date": "2026-11-02T01:36:43.313Z",
+  "road_date": "2026-11-02T01:36:43.313Z"
+}
