@@ -306,7 +306,7 @@
         <div class="propsHead"><span>Keys</span><button class="small ghost" id="helpClose" title="Close (Escape)">×</button></div>
         <table>
             <tr><td>1 … 9, 0</td><td>Look, Grid box, Pit box, Pit line, Add gate, Drag strip, Place object, Add camera, Draw curb, Measure</td></tr>
-            <tr><td>N, P</td><td>Add node, Place prefab (a road drawn with nodes)</td></tr>
+            <tr><td>N, B, G, P</td><td>Edit road, Branch, Gravel, Prefabs (a road drawn with nodes)</td></tr>
             <tr><td>Click</td><td>Choose what is under the pointer (in Look); the panel at the top right has its numbers</td></tr>
             <tr><td>W, E, R</td><td>Move, turn, scale the chosen object, gate or box</td></tr>
             <tr><td>Delete</td><td>Take the chosen thing away</td></tr>
@@ -334,12 +334,14 @@
         <button data-mode="curb" title="Key 9">Draw curb</button>
         <button data-mode="measure" title="Key 0">Measure</button>
         <button data-mode="node" title="Key N" class="design-only">Edit road</button>
+        <button data-mode="branch" title="Key B" class="design-only">Branch</button>
+        <button data-mode="patch" title="Key G" class="design-only">Gravel</button>
         <button data-mode="prefab" title="Key P" class="design-only">Prefabs</button>
         <button data-mode="view" class="done" title="Escape">✓ Done</button>
     </div>
     <div id="drawer" style="display:none">
         <div class="head">
-            <div class="tabs"><button class="tab active" data-tab="track">Track</button><button class="tab" data-tab="prefabs">Prefabs</button></div>
+            <div class="tabs"><button class="tab active" data-tab="track">Track</button><button class="tab" data-tab="branches">Branches</button><button class="tab" data-tab="patches">Gravel</button><button class="tab" data-tab="prefabs">Prefabs</button></div>
             <span class="hint" id="dsNodeInfo"></span>
             <button class="small ghost" id="dsUndo" title="Undo a change of the road: nodes, heights, widths, prefabs (Ctrl+Z). Gates, grid, pit and objects have no undo">↶</button>
             <button class="small ghost" id="dsRedo" title="Redo a change of the road (Ctrl+Shift+Z)">↷</button>
@@ -360,6 +362,22 @@
                 </div>
             </div>
             <p class="hint">Click on the ground to add a node between the two nodes it is nearest to; drag a node to move it, and its arrow up or down for hills. The road is smooth through the nodes. The textures tile in metres and go into the glb with the track. Ctrl+Z undoes.</p>
+        </div>
+        <div class="page" data-page="branches" style="display:none">
+            <div class="row">
+                <div class="fixed"><label>Width (m)</label><input type="number" id="dsBranchWidth" value="8" min="2" step="1" style="width:90px"></div>
+                <div id="dsBranchBox" class="fixed buttons" style="display:none; align-self:flex-end"><button class="small danger" id="dsBranchNodeDelete">Delete node</button><button class="small danger" id="dsBranchDelete">Delete branch</button></div>
+                <div class="fixed hint" id="dsBranchInfo" style="align-self:flex-end"></div>
+            </div>
+            <p class="hint">A road of its own that joins the track: a pit lane, a side road, the streets of a town or the exit of a motorway. Click on the track (or on a branch) where it starts, then on the ground for its nodes, and on a road where it joins it again (Enter ends it free). Drag a node to move it; an end that is let go on a road joins it there. Click on a chosen branch to add a node.</p>
+        </div>
+        <div class="page" data-page="patches" style="display:none">
+            <div class="row">
+                <div class="fixed"><label>Surface</label><select id="dsPatchSurface" class="fixed" style="width:120px"></select></div>
+                <div id="dsPatchBox" class="fixed buttons" style="display:none; align-self:flex-end"><button class="small danger" id="dsPatchPointDelete">Delete corner</button><button class="small danger" id="dsPatchDelete">Delete area</button></div>
+                <div class="fixed hint" id="dsPatchInfo" style="align-self:flex-end"></div>
+            </div>
+            <p class="hint">An area of gravel (or sand, grass, dirt) on the ground, as the gravel on the outside of a bend: click its corners, and the first corner again (or Enter) to close it. It lies on what is under it. Drag a corner to move it, click on the edge of a chosen area to add a corner.</p>
         </div>
         <div class="page" data-page="prefabs" style="display:none">
             <div id="dsPalette" class="palette"></div>

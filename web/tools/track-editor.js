@@ -1002,7 +1002,7 @@ function clearTrack() {
 }
 
 function registerMesh(mesh, role) {
-    invalidateGround();
+    if (!mesh.userData.overlay) invalidateGround();
     const name = mesh.name || "";
     mesh.userData.original = mesh.material;
     if (!state.parts.has(name)) state.parts.set(name, []);
@@ -1184,7 +1184,8 @@ function groundIndexOf() {
     const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
     trackGroup.updateMatrixWorld(true);
     trackGroup.traverse((m) => {
-        if (!m.isMesh || !m.geometry || !m.geometry.attributes.position || !DRIVABLE[state.roles[m.name || ""]]) return;
+        // (a patch of gravel on the ground is not the ground: the patch itself is made on it, and things stand on what is under it)
+        if (!m.isMesh || !m.geometry || !m.geometry.attributes.position || !DRIVABLE[state.roles[m.name || ""]] || m.userData.overlay) return;
         const pos = m.geometry.attributes.position, index = m.geometry.index, count = index ? index.count : pos.count;
         const at = (k) => index ? index.getX(k) : k;
         for (let t = 0; t + 2 < count; t += 3) {
@@ -2058,7 +2059,7 @@ $("pitLineClear").onclick = async () => { if (!(await clearOk("the pit line", st
 const design = createDesign({
     scene, trackGroup, camera, renderer, controls, state, registerMesh, applyColours, renderParts, updateMarkers, frameTrack, status, $,
     setMode, getMode: () => state.mode, roleMaterials, screenSize,
-    ownUndo: true, onCommit: () => noteDesignStep(), onSelect: () => clearSelection("design"), onRebuild: () => snapToSurface()
+    ownUndo: true, onCommit: () => noteDesignStep(), onSelect: () => clearSelection("design"), onRebuild: () => snapToSurface(), groundY: (x, z) => groundY(x, z)
 });
 function startDesign(data) {
     clearTrack();
@@ -2084,6 +2085,7 @@ function setMode(mode) {
     $("dragWindow").style.display = mode === "drag" ? "block" : "none";
     for (const button of document.querySelectorAll("#modes button")) button.classList.toggle("active", button.dataset.mode === mode);
     $("modes").classList.toggle("tool", mode !== "view");
+    if (design && design.modeChanged) design.modeChanged(mode);
     if (editorReady) updateContext();
     $("hud").textContent = (design && design.hudText(mode)) || (mode === "grid" ? "Grid box: click on the road where box " + Math.min(GRID_MAX, state.grid.length + 1) + " is and drag in the direction that the car faces (box 1 is the start of the player, 2 to 8 the opponents)."
         : mode === "pitline" ? "Pit line: click on the road, in the order that a car drives: the first point on the racing line where the pit lane starts, then through the pit lane through the middle of every box, and the last point back on the racing line. Undo the last point in the Pit boxes card."
@@ -3209,7 +3211,7 @@ window.addEventListener("keydown", (e) => {
     if (e.key === "?" || (e.code === "Slash" && e.shiftKey)) { done(); toggleHelp(); return; }
     if (lineEdit.editing) return;
     if (MODE_KEYS[e.code]) { done(); setMode(MODE_KEYS[e.code]); return; }
-    if (design.active() && (e.code === "KeyN" || e.code === "KeyP")) { done(); setMode(e.code === "KeyN" ? "node" : "prefab"); return; }
+    if (design.active() && (e.code === "KeyN" || e.code === "KeyP" || e.code === "KeyG" || e.code === "KeyB")) { done(); setMode({ KeyN: "node", KeyP: "prefab", KeyG: "patch", KeyB: "branch" }[e.code]); return; }
     if (e.code === "KeyF") { done(); frameChosen(); return; }
     if (e.code === "KeyT") { done(); topView(); return; }
     if (e.code === "End") { if (dropChosen()) done(); return; }
@@ -3723,7 +3725,7 @@ function contextOf() {
     if (state.mode === "object" || objectUi.selected >= 0) return "objects";
     if (state.mode === "camera" || state.camSel >= 0) return "cameras";
     if (state.mode === "drag" || eventLayers.selected === "drag") return "drag";
-    if (state.mode === "node" || state.mode === "prefab" || (design.active() && design.selection())) return "road";
+    if (state.mode === "node" || state.mode === "prefab" || state.mode === "patch" || state.mode === "branch" || (design.active() && design.selection())) return "road";
     if (state.mode === "measure") return "measure";
     return "";
 }

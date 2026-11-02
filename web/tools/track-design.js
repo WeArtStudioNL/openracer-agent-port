@@ -248,7 +248,7 @@ export function createDesign(api) {
     scene.add(pickPlane);
     const raycaster = new THREE.Raycaster();
 
-    const design = { data: null, selectedNode: -1, selectedPrefab: null, prefabType: "wall", rebuildPending: false };
+    const design = { data: null, selectedNode: -1, selectedPrefab: null, selectedPatch: null, selectedBranch: null, selectedPoint: -1, drawing: null, prefabType: "wall", rebuildPending: false };
     const gizmo = new TransformControls(camera, renderer.domElement);
     gizmo.setSize(0.9);
     let dragging = false;
@@ -288,11 +288,11 @@ export function createDesign(api) {
         return data.nodes[n - 1].width;
     }
 
-    function strip(name, left, right, tex, role, along) {
-        // a ribbon between two rows of points, closed or not; the texture is tiled in metres: across by the width of the ribbon
+    function strip(name, left, right, tex, role, along, open) {
+        // a ribbon between two rows of points, closed or not (open: a branch); the texture is tiled in metres: across by the width of the ribbon
         // there, along by the distance along the road (along[i])
         const count = left.length;
-        const closed = design.data.closed;
+        const closed = open ? false : design.data.closed;
         const size = TEXTURES[tex].size;
         const positions = [], uvs = [], indices = [];
         for (let i = 0; i < count; i++) {
@@ -321,6 +321,34 @@ export function createDesign(api) {
         return TEXTURES[chosen] ? chosen : DEFAULT_TEXTURES[what];
     }
 
+    // A row of points beside a line (the edge of the road, the outer edge of a shoulder) folds over itself on the inside of a bend that is
+    // sharper than the distance to the line: the points there go backwards, and the ribbon overlapped itself (dark, turned triangles in a
+    // hairpin). A point that goes backwards against the direction of the line is put on the last point that went forwards: the ribbon
+    // narrows to a fan there instead of folding.
+    function unfold(points, tangents, closed) {
+        const n = points.length;
+        if (n < 3) return points;
+        // (a closed loop starts where the road is straightest: a row of points never folds there)
+        let start = 0;
+        if (closed) {
+            let best = Infinity;
+            for (let i = 0; i < n; i++) {
+                const a = tangents[(i + n - 1) % n], c = tangents[(i + 1) % n], turn = 1 - (a.x * c.x + a.z * c.z);
+                if (turn < best) { best = turn; start = i; }
+            }
+        }
+        let last = points[start];
+        for (let k = 1; k < n; k++) {
+            const i = (start + k) % n;
+            if (!closed && i < start) break;
+            // (forwards along the line here and at the point before: the piece from the point before to this one must not go backwards either)
+            const p = points[i], t = tangents[i], t0 = tangents[(i + n - 1) % n];
+            if ((p.x - last.x) * t.x + (p.z - last.z) * t.z <= 0.01 || (p.x - last.x) * t0.x + (p.z - last.z) * t0.z <= 0.01) points[i] = last.clone();
+            else last = p;
+        }
+        return points;
+    }
+
     let lastTerrain = null;
     function rebuild(withTerrain) {
         if (withTerrain === undefined) withTerrain = !dragging;
@@ -339,6 +367,8 @@ export function createDesign(api) {
         const bounds = new THREE.Box2();
         const centreLine = []; // { x, z, y, reach }: the road and its shoulders, for the terrain
         const along = [];      // the distance along the road at every sample, for the textures
+        const tangents = [];
+        design.mainLine = [];  // the middle of the road, for the branches that join it
         for (let i = 0; i < count; i++) {
             const u = data.closed ? i / samples : i / samples;
             along.push(Math.min(1, u) * length);
@@ -346,6 +376,8 @@ export function createDesign(api) {
             const tangent = curve.getTangentAt(Math.min(1, u)).setY(0).normalize();
             const side = new THREE.Vector3().crossVectors(UP, tangent).normalize();
             const w = widthAt(data, curve, Math.min(1, u)) / 2;
+            tangents.push(tangent);
+            design.mainLine.push({ x: p.x, y: p.y, z: p.z, w, u: Math.min(1, u) });
             left.push(p.clone().addScaledVector(side, w));
             right.push(p.clone().addScaledVector(side, -w));
             shoulderL.push(p.clone().addScaledVector(side, w + 14).add(new THREE.Vector3(0, -0.3, 0)));
@@ -354,6 +386,11 @@ export function createDesign(api) {
             bounds.expandByPoint(new THREE.Vector2(p.x, p.z));
             centreLine.push({ x: p.x, z: p.z, y: p.y, reach: w + 14 });
         }
+        [left, right, shoulderL, shoulderR].forEach((row) => unfold(row, tangents, data.closed));
+        design.mainCurve = curve;
+        // the branches before the terrain: the terrain lies under them as under the road
+        const branchLines = buildBranchLines();
+        branchLines.forEach((b) => b.points.forEach((q) => { centreLine.push({ x: q.x, z: q.z, y: q.y, reach: q.w + 6 }); bounds.expandByPoint(new THREE.Vector2(q.x, q.z)); minY = Math.min(minY, q.y); }));
         const road = strip("road", left, right, textureOf("road"), "road", along);
         const shoulderLeft = strip("shoulder_left", shoulderL, left, textureOf("shoulder"), "grass", along);
         const shoulderRight = strip("shoulder_right", right, shoulderR, textureOf("shoulder"), "grass", along);
@@ -363,12 +400,228 @@ export function createDesign(api) {
         lastTerrain = ground;
         [road, shoulderLeft, shoulderRight, ground].forEach((m) => { roadGroup.add(m); registerMesh(m, m.userData.role); state.roles[m.name] = m.userData.role; });
         roadGroup.updateMatrixWorld(true);
+        buildBranches(branchLines);
+        if (withTerrain) buildPatches();
         renderNodes();
+        renderHandles();
         applyColours();
         renderParts();
         updateMarkers();
         if (withTerrain && api.onRebuild) api.onRebuild();          // (the curbs, gates and objects onto the new road; not at every step of a drag)
         $("modelInfo").textContent = "Designed track: " + data.nodes.length + " nodes, " + Math.round(length) + " m, " + data.prefabs.length + " prefabs";
+    }
+
+    // ---- the branches: roads of their own (a pit lane, a side road, the streets of a town) that start and end on the track or on another
+    // branch. data.branches: [{ nodes: [{ x, z }], width, start, end }]; start and end: { road (-1 the track, else a branch), u (0 to 1 along it) }
+    // or null (a free end). The first and the last node follow the road they join. The height goes evenly from the one end to the other,
+    // a few centimetres under the road they join (where they lie over each other the road of the track shows).
+    const branchGroup = new THREE.Group();   // the branches
+    branchGroup.name = "design-branches";
+    const patchGroup = new THREE.Group();    // the patches of gravel, sand ... on the ground
+    patchGroup.name = "design-patches";
+    const handleGroup = new THREE.Group();   // the points of the chosen patch or branch
+    scene.add(handleGroup);
+    design.branchLines = [];
+    const BRANCH_STEP = 2;
+    // the place on a road at u: the track (road -1) or a branch (its line of this rebuild, or of the one before)
+    function attachPoint(a, lines) {
+        if (!a) return null;
+        if (a.road < 0) {
+            if (!design.mainCurve) return null;
+            const p = design.mainCurve.getPointAt(Math.max(0, Math.min(1, a.u)));
+            return { x: p.x, y: p.y, z: p.z };
+        }
+        const line = (lines[a.road] || design.branchLines[a.road] || {}).points;
+        if (!line || line.length < 2) return null;
+        const f = Math.max(0, Math.min(1, a.u)) * (line.length - 1), i = Math.min(line.length - 2, Math.floor(f)), t = f - i;
+        const q = line[i], r = line[i + 1];
+        return { x: q.x + (r.x - q.x) * t, y: q.y + (r.y - q.y) * t, z: q.z + (r.z - q.z) * t };
+    }
+    // the height of the nearest point of the track (a free end of a branch)
+    function nearestRoadY(x, z) {
+        let best = Infinity, y = 0;
+        (design.mainLine || []).forEach((q) => { const d = (q.x - x) * (q.x - x) + (q.z - z) * (q.z - z); if (d < best) { best = d; y = q.y; } });
+        return y;
+    }
+    function buildBranchLines() {
+        const lines = [];
+        (design.data.branches || []).forEach((b, k) => {
+            const nodes = b.nodes;
+            if (nodes.length < 2) { lines.push({ points: [], index: k }); return; }
+            const a = attachPoint(b.start, lines), e = attachPoint(b.end, lines);
+            if (a) { nodes[0].x = round(a.x); nodes[0].z = round(a.z); }
+            if (e) { nodes[nodes.length - 1].x = round(e.x); nodes[nodes.length - 1].z = round(e.z); }
+            const y0 = a ? a.y - 0.03 : nearestRoadY(nodes[0].x, nodes[0].z), y1 = e ? e.y - 0.03 : (a ? y0 : nearestRoadY(nodes[nodes.length - 1].x, nodes[nodes.length - 1].z));
+            const vectors = nodes.map((n) => new THREE.Vector3(n.x, 0, n.z));
+            const curve = vectors.length === 2 ? new THREE.LineCurve3(vectors[0], vectors[1]) : new THREE.CatmullRomCurve3(vectors, false, "centripetal", 0.5);
+            const length = curve.getLength(), count = Math.max(2, Math.ceil(length / BRANCH_STEP));
+            const w = Math.max(2, b.width || 8) / 2, points = [];
+            for (let i = 0; i <= count; i++) {
+                const u = i / count, p = curve.getPointAt(u), t = curve.getTangentAt(u).setY(0).normalize();
+                const s = u * u * (3 - 2 * u);
+                points.push({ x: p.x, y: y0 + (y1 - y0) * s, z: p.z, w, tangent: t, along: u * length });
+            }
+            lines.push({ points, index: k });
+        });
+        design.branchLines = lines;
+        return lines;
+    }
+    function buildBranches(lines) {
+        branchGroup.children.slice().forEach((m) => { branchGroup.remove(m); m.geometry.dispose(); state.parts.delete(m.name); });
+        lines.forEach((line) => {
+            if (line.points.length < 2) return;
+            const left = [], right = [], tangents = [], along = [];
+            line.points.forEach((q) => {
+                const side = new THREE.Vector3().crossVectors(UP, q.tangent).normalize();
+                const p = new THREE.Vector3(q.x, q.y, q.z);
+                left.push(p.clone().addScaledVector(side, q.w));
+                right.push(p.clone().addScaledVector(side, -q.w));
+                tangents.push(q.tangent); along.push(q.along);
+            });
+            unfold(left, tangents, false); unfold(right, tangents, false);
+            const mesh = strip("branch_" + (line.index + 1), left, right, textureOf("road"), "road", along, true);
+            branchGroup.add(mesh);
+            registerMesh(mesh, "road");
+            state.roles[mesh.name] = "road";
+        });
+        branchGroup.updateMatrixWorld(true);
+    }
+
+    // ---- the patches: a surface of its own (gravel, sand, grass, dirt) drawn as an area on the ground, as the gravel beside a bend.
+    // data.patches: [{ surface, points: [{ x, z }] }]. The area is cut into squares of 1.5 m that lie on the ground under them (so it follows
+    // the terrain and the shoulders), 7 cm above it inside and coming down to it over the last metre at the edge (the game takes the higher
+    // surface where two are more than 5 cm apart).
+    const PATCH_SURFACES = { gravel: { label: "Gravel", texture: "gravel", role: "gravel" }, sand: { label: "Sand", texture: "sand", role: "sand" },
+        grass: { label: "Grass", texture: "grass", role: "grass" }, dirt: { label: "Dirt", texture: "dirt", role: "ground" } };
+    design.patchSurface = "gravel";
+    function clipToSquare(poly, x0, z0, x1, z1) {
+        const edges = [[(p) => p[0] >= x0, (a, b) => [x0, a[1] + (b[1] - a[1]) * (x0 - a[0]) / (b[0] - a[0])]],
+            [(p) => p[0] <= x1, (a, b) => [x1, a[1] + (b[1] - a[1]) * (x1 - a[0]) / (b[0] - a[0])]],
+            [(p) => p[1] >= z0, (a, b) => [a[0] + (b[0] - a[0]) * (z0 - a[1]) / (b[1] - a[1]), z0]],
+            [(p) => p[1] <= z1, (a, b) => [a[0] + (b[0] - a[0]) * (z1 - a[1]) / (b[1] - a[1]), z1]]];
+        let out = poly;
+        for (const [inside, cut] of edges) {
+            const input = out; out = [];
+            for (let i = 0; i < input.length; i++) {
+                const a = input[(i + input.length - 1) % input.length], b = input[i];
+                if (inside(b)) { if (!inside(a)) out.push(cut(a, b)); out.push(b); }
+                else if (inside(a)) out.push(cut(a, b));
+            }
+            if (!out.length) break;
+        }
+        return out;
+    }
+    function edgeDistance(poly, x, z) {
+        let best = Infinity;
+        for (let i = 0; i < poly.length; i++) {
+            const a = poly[i], b = poly[(i + 1) % poly.length], dx = b[0] - a[0], dz = b[1] - a[1], len2 = dx * dx + dz * dz || 1;
+            const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / len2));
+            best = Math.min(best, Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t));
+        }
+        return best;
+    }
+    function patchMesh(p, index) {
+        if (!p.points || p.points.length < 3) return null;
+        const surface = PATCH_SURFACES[p.surface] || PATCH_SURFACES.gravel, tex = TEXTURES[surface.texture];
+        const poly = p.points.map((q) => [q.x, q.z]);
+        const ground = api.groundY || ((x, z) => surfaceHeight(x, z, null));
+        let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+        poly.forEach(([x, z]) => { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); });
+        const cell = 1.5, positions = [], uvs = [], heights = new Map();
+        const height = (x, z) => {
+            const key = x.toFixed(3) + "," + z.toFixed(3);
+            if (!heights.has(key)) heights.set(key, ground(x, z) + 0.01 + 0.06 * Math.min(1, edgeDistance(poly, x, z)));
+            return heights.get(key);
+        };
+        for (let x0 = Math.floor(minX / cell) * cell; x0 < maxX; x0 += cell) {
+            for (let z0 = Math.floor(minZ / cell) * cell; z0 < maxZ; z0 += cell) {
+                const piece = clipToSquare(poly, x0, z0, x0 + cell, z0 + cell);
+                if (piece.length < 3) continue;
+                const triangles = THREE.ShapeUtils.triangulateShape(piece.map(([x, z]) => new THREE.Vector2(x, z)), []);
+                triangles.forEach((tri) => {
+                    // (counter-clockwise seen from above: the normal up)
+                    const [a, b, c] = tri.map((k) => piece[k]);
+                    const order = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) < 0 ? [a, b, c] : [a, c, b];
+                    order.forEach(([x, z]) => { positions.push(x, height(x, z), z); uvs.push(x / tex.size, z / tex.size); });
+                });
+            }
+        }
+        if (!positions.length) return null;
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+        geometry.computeVertexNormals();
+        const mesh = new THREE.Mesh(geometry, textured(surface.texture));
+        mesh.name = "patch_" + (p.surface || "gravel") + "_" + (index + 1);
+        mesh.userData.role = surface.role;
+        mesh.userData.overlay = true;          // (the editor does not stand things on it: track-editor.js, groundY)
+        mesh.userData.patchIndex = index;
+        return mesh;
+    }
+    function buildPatches() {
+        patchGroup.children.slice().forEach((m) => { patchGroup.remove(m); m.geometry.dispose(); state.parts.delete(m.name); });
+        (design.data.patches || []).forEach((p, i) => {
+            const mesh = patchMesh(p, i);
+            if (!mesh) return;
+            patchGroup.add(mesh);
+            registerMesh(mesh, mesh.userData.role);
+            state.roles[mesh.name] = mesh.userData.role;
+        });
+        patchGroup.updateMatrixWorld(true);
+        applyColours();
+        renderParts();
+    }
+    // one patch made again (while its points are dragged)
+    function refreshPatch(i) {
+        const old = patchGroup.children.find((m) => m.userData.patchIndex === i);
+        if (old) { patchGroup.remove(old); old.geometry.dispose(); }
+        const mesh = patchMesh(design.data.patches[i], i);
+        if (!mesh) return;
+        if ($("colour").checked) { mesh.userData.original = mesh.material; mesh.material = roleMaterials[mesh.userData.role] || mesh.material; }
+        else mesh.userData.original = mesh.material;
+        state.roles[mesh.name] = mesh.userData.role;
+        patchGroup.add(mesh);
+        patchGroup.updateMatrixWorld(true);
+    }
+
+    // the points of the chosen patch (yellow) or branch (blue, an end that joins a road green), and the outline of a patch that is drawn
+    function renderHandles() {
+        handleGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+        handleGroup.clear();
+        if (!design.data) return;
+        const scale = Math.max(1, state.markerScale || 1) * 0.7;
+        const ball = (x, y, z, colour, kind, i, chosen) => {
+            const m = new THREE.Mesh(new THREE.SphereGeometry(scale, 12, 8), new THREE.MeshBasicMaterial({ color: chosen ? 0xff8a3d : colour, depthTest: false, transparent: true }));
+            m.position.set(x, y + 0.4, z);
+            m.renderOrder = 1000;
+            m.userData.handle = { kind, i };
+            if (screenSize) screenSize(m, chosen ? 9 : 7, scale);
+            handleGroup.add(m);
+        };
+        const line = (points, colour, closed) => {
+            if (points.length < 2) return;
+            const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points.concat(closed ? [points[0]] : [])), new THREE.LineBasicMaterial({ color: colour, depthTest: false, transparent: true }));
+            l.renderOrder = 999;
+            handleGroup.add(l);
+        };
+        const p = design.selectedPatch !== null ? design.data.patches[design.selectedPatch] : null;
+        if (p) {
+            const ys = p.points.map((q) => surfaceHeight(q.x, q.z, null));
+            p.points.forEach((q, i) => ball(q.x, ys[i], q.z, 0xffd04d, "patch", i, i === design.selectedPoint));
+            line(p.points.map((q, i) => new THREE.Vector3(q.x, ys[i] + 0.3, q.z)), 0xffd04d, !(design.drawing && design.drawing.kind === "patch"));
+        }
+        const b = design.selectedBranch !== null ? design.data.branches[design.selectedBranch] : null;
+        if (b) {
+            const line3 = (design.branchLines[design.selectedBranch] || {}).points || [];
+            const yAt = (k) => line3.length ? line3[k === 0 ? 0 : line3.length - 1].y : nearestRoadY(b.nodes[k].x, b.nodes[k].z);
+            b.nodes.forEach((n, i) => {
+                const end = i === 0 ? b.start : (i === b.nodes.length - 1 ? b.end : null);
+                const y = i === 0 || i === b.nodes.length - 1 ? yAt(i) : surfaceHeight(n.x, n.z, null);
+                ball(n.x, y, n.z, end ? 0x4ed88a : 0x4db8ff, "branch", i, i === design.selectedPoint);
+            });
+            line(line3.map((q) => new THREE.Vector3(q.x, q.y + 0.3, q.z)), 0x4db8ff, false);
+            if (design.drawing && design.drawing.kind === "branch" && b.nodes.length === 1) line([], 0, false);
+        }
     }
 
     // The terrain: a grid of heights. Under the road and its shoulders it lies a little below the lowest road nearby (a road that
@@ -489,6 +742,7 @@ export function createDesign(api) {
         design.data = JSON.parse(s);
         design.selectedNode = -1;
         design.selectedPrefab = null;
+        design.selectedPatch = null; design.selectedBranch = null; design.selectedPoint = -1; design.drawing = null;
         gizmo.detach();
         rebuild(true);
         rebuildPrefabs();
@@ -546,6 +800,7 @@ export function createDesign(api) {
 
     function selectNode(i) {
         if (i >= 0 && api.onSelect) api.onSelect();          // (the editor lets go of what else was chosen)
+        if (i >= 0) letGoExtras();
         design.selectedNode = i;
         design.selectedPrefab = null;
         gizmo.detach();
@@ -613,7 +868,7 @@ export function createDesign(api) {
     // the ground (the road, the terrain or another prefab) under a point: its height and the direction it faces
     function surfaceAt(x, z, exclude) {
         raycaster.set(new THREE.Vector3(x, 1000, z), new THREE.Vector3(0, -1, 0));
-        const targets = roadGroup.children.concat(prefabGroup.children.filter((g) => g !== exclude));
+        const targets = roadGroup.children.concat(branchGroup.children, patchGroup.children, prefabGroup.children.filter((g) => g !== exclude));
         const hits = raycaster.intersectObjects(targets, true);
         if (!hits.length) return { y: 0, normal: UP.clone() };
         const hit = hits[0];
@@ -770,6 +1025,7 @@ export function createDesign(api) {
 
     function selectPrefab(i) {
         if (i !== null && i >= 0 && api.onSelect) api.onSelect();
+        if (i !== null && i >= 0) letGoExtras();
         design.selectedNode = -1;
         design.selectedPrefab = i;
         gizmo.detach();
@@ -878,7 +1134,7 @@ export function createDesign(api) {
     }
     function groundPoint(event, exclude) {
         const ray = pointerRay(event);
-        const targets = roadGroup.children.concat(prefabGroup.children.filter((g) => g !== exclude));
+        const targets = roadGroup.children.concat(branchGroup.children, patchGroup.children, prefabGroup.children.filter((g) => g !== exclude));
         const hits = ray.intersectObjects(targets, true);
         if (hits.length) return hits[0].point;
         const plane = ray.intersectObject(pickPlane);
@@ -909,10 +1165,21 @@ export function createDesign(api) {
     renderer.domElement.addEventListener("pointerdown", (e) => {
         if (!design.data || e.button !== 0 || dragging) return;
         const mode = api.getMode();
-        if (mode !== "node" && mode !== "prefab" && mode !== "view") return;
+        if (mode !== "node" && mode !== "prefab" && mode !== "view" && mode !== "patch" && mode !== "branch") return;
         const hit = under(e);
         drag = { start: [e.clientX, e.clientY], moved: false, stroke: null };
-        if (hit.node !== undefined && mode !== "prefab") {
+        const handle = handleHit(e);
+        if (handle) {
+            drag.kind = "handle"; drag.handle = handle;
+            const q = handle.kind === "patch" ? design.data.patches[design.selectedPatch].points[handle.i] : design.data.branches[design.selectedBranch].nodes[handle.i];
+            drag.y = surfaceHeight(q.x, q.z, null);
+            const pp = planePoint(e, drag.y);
+            drag.offset = pp ? { x: q.x - pp.x, z: q.z - pp.z } : { x: 0, z: 0 };
+            design.selectedPoint = handle.i;
+            renderHandles(); fillExtraFields();
+        } else if (mode === "patch" || mode === "branch") {
+            drag.kind = mode;
+        } else if (hit.node !== undefined && mode !== "prefab") {
             if (design.selectedNode !== hit.node) selectNode(hit.node);
             const n = design.data.nodes[hit.node];
             drag.kind = "node"; drag.index = hit.node; drag.y = n.y;
@@ -953,15 +1220,31 @@ export function createDesign(api) {
             if (design.data && !dragging) {
                 const mode = api.getMode();
                 const hit = (mode === "node" || mode === "prefab" || mode === "view") ? under(e) : {};
-                renderer.domElement.style.cursor = (hit.node !== undefined || hit.rowPoint !== undefined || (hit.prefab !== undefined && hit.prefab >= 0)) ? "grab"
-                    : (mode === "node" || mode === "prefab" ? "crosshair" : "");
+                renderer.domElement.style.cursor = (hit.node !== undefined || hit.rowPoint !== undefined || (hit.prefab !== undefined && hit.prefab >= 0) || handleHit(e)) ? "grab"
+                    : (mode === "node" || mode === "prefab" || mode === "patch" || mode === "branch" ? "crosshair" : "");
             }
             return;
         }
         if (Math.abs(e.clientX - drag.start[0]) + Math.abs(e.clientY - drag.start[1]) > 3) drag.moved = true;
         if (!drag.moved) return;
         renderer.domElement.style.cursor = "grabbing";
-        if (drag.kind === "node") {
+        if (drag.kind === "handle") {
+            const pp = planePoint(e, drag.y);
+            if (!pp) return;
+            const x = round(pp.x + drag.offset.x), z = round(pp.z + drag.offset.z);
+            if (drag.handle.kind === "patch") {
+                const q = design.data.patches[design.selectedPatch].points[drag.handle.i];
+                q.x = x; q.z = z;
+                schedule(() => { refreshPatch(design.selectedPatch); renderHandles(); });
+            } else {
+                const b = design.data.branches[design.selectedBranch], q = b.nodes[drag.handle.i];
+                q.x = x; q.z = z;
+                // (an end that is dragged lets go of its road; it joins a road again where it is let go)
+                if (drag.handle.i === 0) b.start = null;
+                if (drag.handle.i === b.nodes.length - 1) b.end = null;
+                schedule(() => { buildBranches(buildBranchLines()); renderHandles(); });
+            }
+        } else if (drag.kind === "node") {
             const p = planePoint(e, drag.y);
             if (!p) return;
             const n = design.data.nodes[drag.index];
@@ -1006,7 +1289,25 @@ export function createDesign(api) {
         controls.enabled = true;
         renderer.domElement.style.cursor = "";
         strokeLine.visible = false;
-        if (d.kind === "add") {
+        if (d.kind === "handle") {
+            // (a click on the first corner of an area that is drawn closes it)
+            if (!d.moved && design.drawing && design.drawing.kind === "patch" && d.handle.kind === "patch" && d.handle.i === 0 && design.data.patches[design.drawing.index].points.length >= 3) { finishDrawing(); return; }
+            if (!d.moved) return;
+            if (d.handle.kind === "branch") {
+                const b = design.data.branches[design.selectedBranch], i = d.handle.i;
+                if (i === 0 || i === b.nodes.length - 1) {
+                    const snap = snapRoad(b.nodes[i].x, b.nodes[i].z, design.selectedBranch);
+                    if (snap) { b.nodes[i].x = round(snap.x); b.nodes[i].z = round(snap.z); if (i === 0) b.start = { road: snap.road, u: snap.u }; else b.end = { road: snap.road, u: snap.u }; }
+                }
+                rebuild(true);
+            } else buildPatches();
+            renderHandles();
+            commit();
+        } else if (d.kind === "patch") {
+            if (!d.moved) patchClick(e);
+        } else if (d.kind === "branch") {
+            if (!d.moved) branchClick(e);
+        } else if (d.kind === "add") {
             if (!d.moved) { const g = groundPoint(e, null); if (g) addNode(g.x, g.z); }
         } else if (d.kind === "draw") {
             if (!d.moved || strokeLength(d.stroke) < 2) { const g = groundPoint(e, null); if (g) addPrefab(g.x, g.z); }
@@ -1016,6 +1317,214 @@ export function createDesign(api) {
             commit();
         }
     });
+
+    // ---- the clicks of Gravel and Branch, and the points of what is chosen
+    let scheduled = null;
+    function schedule(fn) { if (scheduled) { scheduled = fn; return; } scheduled = fn; requestAnimationFrame(() => { const f = scheduled; scheduled = null; f(); }); }
+    function toScreen(x, y, z) {
+        const rect = renderer.domElement.getBoundingClientRect(), v = new THREE.Vector3(x, y, z).project(camera);
+        return v.z > 1 || v.z < -1 ? null : { x: rect.left + (v.x * 0.5 + 0.5) * rect.width, y: rect.top + (-v.y * 0.5 + 0.5) * rect.height };
+    }
+    function handleHit(e) {
+        const hit = pointerRay(e).intersectObjects(handleGroup.children.filter((o) => o.isMesh), false)[0];
+        return hit ? hit.object.userData.handle : null;
+    }
+    // the piece of a row of points (closed: also from the last to the first) nearest to the pointer, within 12 pixels: its first index
+    function nearPiece(e, points, closed, yOf) {
+        let best = -1, bestD = 12;
+        const last = closed ? points.length : points.length - 1;
+        for (let i = 0; i < last; i++) {
+            const a = points[i], b = points[(i + 1) % points.length];
+            const sa = toScreen(a.x, yOf(a), a.z), sb = toScreen(b.x, yOf(b), b.z);
+            if (!sa || !sb) continue;
+            const dx = sb.x - sa.x, dy = sb.y - sa.y, len2 = dx * dx + dy * dy || 1;
+            const t = Math.max(0, Math.min(1, ((e.clientX - sa.x) * dx + (e.clientY - sa.y) * dy) / len2));
+            const d = Math.hypot(e.clientX - sa.x - dx * t, e.clientY - sa.y - dy * t);
+            if (d < bestD) { bestD = d; best = i; }
+        }
+        return best;
+    }
+    function letGoExtras() {
+        if (design.drawing) finishDrawing();
+        if (design.selectedPatch === null && design.selectedBranch === null) return;
+        design.selectedPatch = null; design.selectedBranch = null; design.selectedPoint = -1;
+        renderHandles(); fillExtraFields();
+    }
+    function selectPatch(i, point) {
+        if (api.onSelect) api.onSelect();
+        design.selectedNode = -1; design.selectedPrefab = null; gizmo.detach(); gizmo.enabled = false; rowGroup.clear(); renderNodes();
+        design.selectedBranch = null; design.selectedPatch = i; design.selectedPoint = point === undefined ? -1 : point;
+        const p = design.data.patches[i];
+        if (p) { design.patchSurface = p.surface || "gravel"; }
+        renderHandles(); fillExtraFields(); fillNodeFields(); fillPrefabFields();
+    }
+    function selectBranch(i, point) {
+        if (api.onSelect) api.onSelect();
+        design.selectedNode = -1; design.selectedPrefab = null; gizmo.detach(); gizmo.enabled = false; rowGroup.clear(); renderNodes();
+        design.selectedPatch = null; design.selectedBranch = i; design.selectedPoint = point === undefined ? -1 : point;
+        const b = design.data.branches[i];
+        if (b) $("dsBranchWidth").value = b.width || 8;
+        renderHandles(); fillExtraFields(); fillNodeFields(); fillPrefabFields();
+    }
+    // Gravel: a click starts an area, the next clicks are its corners, a click on the first corner (or Enter) closes it. A chosen area: a click
+    // on its edge adds a corner there, its corners are dragged.
+    function patchClick(e) {
+        const g = groundPoint(e, null);
+        const yOf = (q) => surfaceHeight(q.x, q.z, null);
+        const dr = design.drawing;
+        if (dr && dr.kind === "patch") {
+            const p = design.data.patches[dr.index], first = p.points[0], s = first && toScreen(first.x, yOf(first), first.z);
+            if (p.points.length >= 3 && s && Math.hypot(e.clientX - s.x, e.clientY - s.y) < 14) { finishDrawing(); return; }
+            if (!g) return;
+            p.points.push({ x: round(g.x), z: round(g.z) });
+            design.selectedPoint = p.points.length - 1;
+            if (p.points.length >= 3) refreshPatch(dr.index);
+            renderHandles(); fillExtraFields();
+            return;
+        }
+        const chosen = design.selectedPatch !== null ? design.data.patches[design.selectedPatch] : null;
+        if (chosen && g) {
+            const piece = nearPiece(e, chosen.points, true, yOf);
+            if (piece >= 0) {
+                chosen.points.splice(piece + 1, 0, { x: round(g.x), z: round(g.z) });
+                buildPatches(); selectPatch(design.selectedPatch, piece + 1); commit();
+                return;
+            }
+        }
+        const hit = pointerRay(e).intersectObjects(patchGroup.children, false)[0];
+        if (hit) { selectPatch(hit.object.userData.patchIndex); return; }
+        if (!g) return;
+        design.data.patches.push({ surface: design.patchSurface, points: [{ x: round(g.x), z: round(g.z) }] });
+        design.drawing = { kind: "patch", index: design.data.patches.length - 1 };
+        selectPatch(design.data.patches.length - 1, 0);
+    }
+    // the nearest place on the middle of a road (the track, or a branch but not the one that is drawn) within its width and 2 m: { road, u, x, y, z }
+    function snapRoad(x, z, exclude) {
+        let best = null, bestD = Infinity;
+        const look = (points, road, uOf) => points.forEach((q, i) => {
+            const d = Math.hypot(q.x - x, q.z - z);
+            if (d < q.w + 2 && d < bestD) { bestD = d; best = { road, u: uOf(q, i), x: q.x, y: q.y, z: q.z }; }
+        });
+        look(design.mainLine || [], -1, (q) => q.u);
+        design.branchLines.forEach((line, k) => { if (k !== exclude && line.points.length > 1) look(line.points, k, (q, i) => i / (line.points.length - 1)); });
+        return best;
+    }
+    // Branch: a click on a road starts a branch there (anywhere else: a free end), the next clicks are its nodes, and a click on a road ends it
+    // there (Enter ends it where it is). A chosen branch: a click near it adds a node there, its nodes are dragged.
+    function branchClick(e) {
+        const g = groundPoint(e, null);
+        const dr = design.drawing;
+        if (dr && dr.kind === "branch") {
+            if (!g) return;
+            const b = design.data.branches[dr.index];
+            const snap = snapRoad(g.x, g.z, dr.index), first = b.nodes[0];
+            const away = first && Math.hypot(g.x - first.x, g.z - first.z) > (b.width || 8);
+            if (snap && away && b.nodes.length >= 1) {
+                b.nodes.push({ x: round(snap.x), z: round(snap.z) });
+                b.end = { road: snap.road, u: snap.u };
+                finishDrawing();
+                return;
+            }
+            b.nodes.push({ x: round(g.x), z: round(g.z) });
+            design.selectedPoint = b.nodes.length - 1;
+            buildBranches(buildBranchLines()); renderHandles(); fillExtraFields();
+            return;
+        }
+        const chosen = design.selectedBranch !== null ? design.data.branches[design.selectedBranch] : null;
+        if (chosen && g) {
+            const piece = nearPiece(e, chosen.nodes, false, (q) => nearestRoadY(q.x, q.z));
+            if (piece >= 0) {
+                chosen.nodes.splice(piece + 1, 0, { x: round(g.x), z: round(g.z) });
+                rebuild(true); selectBranch(design.selectedBranch, piece + 1); commit();
+                return;
+            }
+        }
+        // a click on (or near) a branch chooses it
+        let nearest = null;
+        design.branchLines.forEach((line, k) => { if (nearest === null && line.points.length > 1 && nearPiece(e, line.points, false, (q) => q.y) >= 0) nearest = k; });
+        if (nearest !== null) { selectBranch(nearest); return; }
+        if (!g) return;
+        const snap = snapRoad(g.x, g.z, -2);
+        const start = snap ? { x: round(snap.x), z: round(snap.z) } : { x: round(g.x), z: round(g.z) };
+        design.data.branches.push({ nodes: [start], width: Math.max(2, parseFloat($("dsBranchWidth").value) || 8), start: snap ? { road: snap.road, u: snap.u } : null, end: null });
+        design.drawing = { kind: "branch", index: design.data.branches.length - 1 };
+        selectBranch(design.data.branches.length - 1, 0);
+    }
+    // the end of drawing: an area needs three corners, a branch two nodes, or it goes
+    function finishDrawing() {
+        const dr = design.drawing;
+        if (!dr) return;
+        design.drawing = null;
+        if (dr.kind === "patch") {
+            const p = design.data.patches[dr.index];
+            if (!p || p.points.length < 3) { design.data.patches.splice(dr.index, 1); design.selectedPatch = null; }
+            buildPatches();
+        } else {
+            const b = design.data.branches[dr.index];
+            if (!b || b.nodes.length < 2) { removeBranch(dr.index); design.selectedBranch = null; }
+            rebuild(true);
+        }
+        design.selectedPoint = -1;
+        renderHandles(); fillExtraFields();
+        commit();
+    }
+    // a branch goes: the branches that joined it get a free end there, and the numbers of the ones after it go down
+    function removeBranch(i) {
+        design.data.branches.splice(i, 1);
+        design.data.branches.forEach((b) => ["start", "end"].forEach((k) => {
+            const a = b[k];
+            if (!a || a.road < 0) return;
+            if (a.road === i) b[k] = null; else if (a.road > i) a.road--;
+        }));
+    }
+    // Delete: the chosen point (a patch with no corners, a branch with no nodes goes), or the patch or the branch when no point is chosen
+    function deleteExtraPoint() {
+        if (design.drawing) { finishDrawing(); return; }
+        if (design.selectedPatch !== null) {
+            const p = design.data.patches[design.selectedPatch];
+            if (design.selectedPoint >= 0 && p.points.length > 1) { p.points.splice(design.selectedPoint, 1); design.selectedPoint = -1; }
+            else { design.data.patches.splice(design.selectedPatch, 1); design.selectedPatch = null; }
+            buildPatches();
+        } else if (design.selectedBranch !== null) {
+            const b = design.data.branches[design.selectedBranch], i = design.selectedPoint;
+            if (i >= 0 && b.nodes.length > 1) {
+                b.nodes.splice(i, 1);
+                if (i === 0) b.start = null;
+                if (i === b.nodes.length) b.end = null;
+                design.selectedPoint = -1;
+                if (b.nodes.length < 2) { removeBranch(design.selectedBranch); design.selectedBranch = null; }
+            } else { removeBranch(design.selectedBranch); design.selectedBranch = null; }
+            rebuild(true);
+        }
+        renderHandles(); fillExtraFields();
+        commit();
+    }
+    function fillExtraFields() {
+        const p = design.selectedPatch !== null ? design.data.patches[design.selectedPatch] : null;
+        const b = design.selectedBranch !== null ? design.data.branches[design.selectedBranch] : null;
+        $("dsPatchBox").style.display = p ? "" : "none";
+        $("dsBranchBox").style.display = b ? "" : "none";
+        $("dsPatchSurface").value = p ? (p.surface || "gravel") : design.patchSurface;
+        $("dsPatchPointDelete").disabled = !p || design.selectedPoint < 0;
+        $("dsBranchNodeDelete").disabled = !b || design.selectedPoint < 0;
+        const dr = design.drawing;
+        $("dsPatchInfo").textContent = p ? (dr && dr.kind === "patch" ? "Drawing: " + p.points.length + " corners. Click the first corner or press Enter to close it." : "Area " + (design.selectedPatch + 1) + ": " + p.points.length + " corners" + (design.selectedPoint >= 0 ? ", corner " + (design.selectedPoint + 1) + " chosen" : "")) : "";
+        $("dsBranchInfo").textContent = b ? (dr && dr.kind === "branch" ? "Drawing: " + b.nodes.length + " nodes. Click on a road to join it, or press Enter to end here." : "Branch " + (design.selectedBranch + 1) + ": " + b.nodes.length + " nodes" + (b.start ? ", starts on " + (b.start.road < 0 ? "the track" : "branch " + (b.start.road + 1)) : "") + (b.end ? ", ends on " + (b.end.road < 0 ? "the track" : "branch " + (b.end.road + 1)) : "")) : "";
+    }
+    $("dsPatchSurface").innerHTML = Object.entries(PATCH_SURFACES).map(([k, v]) => '<option value="' + k + '">' + v.label + "</option>").join("");
+    $("dsPatchSurface").addEventListener("change", () => {
+        design.patchSurface = $("dsPatchSurface").value;
+        const p = design.selectedPatch !== null ? design.data.patches[design.selectedPatch] : null;
+        if (p) { p.surface = design.patchSurface; buildPatches(); commit(); }
+    });
+    $("dsPatchDelete").onclick = () => { if (design.selectedPatch !== null) { design.selectedPoint = -1; deleteExtraPoint(); } };
+    $("dsPatchPointDelete").onclick = () => deleteExtraPoint();
+    $("dsBranchWidth").addEventListener("change", () => {
+        const b = design.selectedBranch !== null ? design.data.branches[design.selectedBranch] : null;
+        if (b) { b.width = Math.max(2, parseFloat($("dsBranchWidth").value) || 8); rebuild(true); commit(); }
+    });
+    $("dsBranchDelete").onclick = () => { if (design.selectedBranch !== null) { design.selectedPoint = -1; deleteExtraPoint(); } };
+    $("dsBranchNodeDelete").onclick = () => deleteExtraPoint();
 
     // the line that is being drawn
     const strokeLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffd04d }));
@@ -1072,7 +1581,13 @@ export function createDesign(api) {
         if (!api.ownUndo && ctrl && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); return; }
         if (ctrl && (e.key === "d" || e.key === "D")) { e.preventDefault(); duplicatePrefab(); return; }
         // (not when a gate, an object or a node of the line took the key first: both went, the gate and the road node that was still chosen)
-        if ((e.key === "Delete" || e.key === "Backspace") && !e.defaultPrevented) { if (design.selectedPrefab !== null) deletePrefab(); else if (design.selectedNode >= 0) deleteNode(); }
+        if ((e.key === "Delete" || e.key === "Backspace") && !e.defaultPrevented) {
+            if (design.selectedPatch !== null || design.selectedBranch !== null) deleteExtraPoint();
+            else if (design.selectedPrefab !== null) deletePrefab(); else if (design.selectedNode >= 0) deleteNode();
+        }
+        if (e.key === "Enter" && design.drawing) { e.preventDefault(); finishDrawing(); return; }
+        if (e.key === "Escape" && design.drawing) { finishDrawing(); return; }
+        if (e.key === "Escape" && (design.selectedPatch !== null || design.selectedBranch !== null)) { letGoExtras(); return; }
         if (e.key === "Escape") {
             if (design.selectedNode >= 0 || design.selectedPrefab !== null) { design.selectedNode = -1; design.selectedPrefab = null; gizmo.detach(); rowGroup.clear(); renderNodes(); fillNodeFields(); fillPrefabFields(); }
             else api.setMode("view");
@@ -1103,7 +1618,7 @@ export function createDesign(api) {
     document.querySelectorAll("#drawer .tab").forEach((b) => b.addEventListener("click", () => {
         document.querySelectorAll("#drawer .tab").forEach((t) => t.classList.toggle("active", t === b));
         document.querySelectorAll("#drawer .page").forEach((p) => { p.style.display = p.dataset.page === b.dataset.tab ? "" : "none"; });
-        if (b.dataset.tab === "prefabs") api.setMode("prefab"); else if (b.dataset.tab === "track") api.setMode("node");
+        api.setMode({ prefabs: "prefab", patches: "patch", branches: "branch" }[b.dataset.tab] || "node");
     }));
     $("drawerToggle").onclick = () => { $("drawer").classList.toggle("collapsed"); $("drawerToggle").textContent = $("drawer").classList.contains("collapsed") ? "▴" : "▾"; };
 
@@ -1115,7 +1630,12 @@ export function createDesign(api) {
         design.selectedNode = -1;
         design.selectedPrefab = null;
         fillTextureFields();
+        if (!design.data.patches) design.data.patches = [];
+        if (!design.data.branches) design.data.branches = [];
+        design.selectedPatch = null; design.selectedBranch = null; design.selectedPoint = -1; design.drawing = null;
         if (!trackGroup.children.includes(roadGroup)) trackGroup.add(roadGroup);
+        if (!trackGroup.children.includes(branchGroup)) trackGroup.add(branchGroup);
+        if (!trackGroup.children.includes(patchGroup)) trackGroup.add(patchGroup);
         if (!trackGroup.children.includes(prefabGroup)) trackGroup.add(prefabGroup);
         state.legacy = false;
         $("drawer").style.display = "";
@@ -1141,7 +1661,9 @@ export function createDesign(api) {
         rowGroup.clear();
         roadGroup.clear();
         prefabGroup.clear();
+        branchGroup.clear(); patchGroup.clear(); handleGroup.clear();
         trackGroup.remove(roadGroup);
+        trackGroup.remove(branchGroup); trackGroup.remove(patchGroup);
         trackGroup.remove(prefabGroup);
         $("drawer").style.display = "none";
     }
@@ -1154,7 +1676,7 @@ export function createDesign(api) {
     // materials (not the colours of the surfaces) and without the data of the editor.
     async function exportGlb() {
         const saved = [];
-        [roadGroup, prefabGroup].forEach((g) => g.traverse((m) => {
+        [roadGroup, branchGroup, patchGroup, prefabGroup].forEach((g) => g.traverse((m) => {
             if (!m.isMesh) return;
             saved.push({ mesh: m, material: m.material, userData: m.userData });
             m.material = (m.userData && m.userData.original) || m.material;
@@ -1162,7 +1684,7 @@ export function createDesign(api) {
         }));
         try {
             const exporter = new GLTFExporter();
-            return await exporter.parseAsync([roadGroup, prefabGroup], { binary: true });
+            return await exporter.parseAsync([roadGroup, branchGroup, patchGroup, prefabGroup], { binary: true });
         } finally {
             saved.forEach((s) => { s.mesh.material = s.material; s.mesh.userData = s.userData; });
         }
@@ -1172,10 +1694,23 @@ export function createDesign(api) {
         enable, disable, toJSON, exportGlb, undo, redo,
         active: () => !!design.data,
         // what is chosen ("" nothing, "n3" node 3, "p2" prefab 2), and letting go of it (the editor chooses one thing at a time)
-        selection: () => !design.data ? "" : design.selectedNode >= 0 ? "n" + design.selectedNode : design.selectedPrefab !== null ? "p" + design.selectedPrefab : "",
-        deselect: () => { if (design.data && (design.selectedNode >= 0 || design.selectedPrefab !== null)) { selectNode(-1); rowGroup.clear(); } },
-        roles: () => { const r = {}; roadGroup.children.forEach((m) => { r[m.name] = m.userData.role; }); prefabGroup.children.forEach((g) => { r[g.name] = state.roles[g.name]; }); return r; },
+        selection: () => !design.data ? "" : design.selectedNode >= 0 ? "n" + design.selectedNode : design.selectedPrefab !== null ? "p" + design.selectedPrefab
+            : design.selectedPatch !== null ? "g" + design.selectedPatch + "." + design.selectedPoint : design.selectedBranch !== null ? "b" + design.selectedBranch + "." + design.selectedPoint : "",
+        deselect: () => { if (design.data && (design.selectedNode >= 0 || design.selectedPrefab !== null)) { selectNode(-1); rowGroup.clear(); } if (design.data) letGoExtras(); },
+        // the tool changed: the drawer shows its page, and what was being drawn is ended
+        modeChanged: (mode) => {
+            if (!design.data) return;
+            if (design.drawing && mode !== design.drawing.kind) finishDrawing();
+            const tab = { prefab: "prefabs", patch: "patches", branch: "branches", node: "track" }[mode];
+            if (tab) {
+                document.querySelectorAll("#drawer .tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
+                document.querySelectorAll("#drawer .page").forEach((p) => { p.style.display = p.dataset.page === tab ? "" : "none"; });
+            }
+        },
+        roles: () => { const r = {}; [roadGroup, branchGroup, patchGroup].forEach((g) => g.children.forEach((m) => { r[m.name] = m.userData.role; })); prefabGroup.children.forEach((g) => { r[g.name] = state.roles[g.name]; }); return r; },
         hudText: (mode) => mode === "node" ? "Nodes: click on the ground to add one between the two nearest nodes, drag a node to move it, the arrow for its height. Delete removes it, Ctrl+Z undoes."
+            : mode === "patch" ? "Gravel: click on the ground for the corners of an area (gravel beside a bend), click the first corner or press Enter to close it. A chosen area: drag its corners, click its edge to add a corner, Delete takes the chosen corner away."
+            : mode === "branch" ? "Branch: click on the track (or a branch) where the new road starts, then its nodes, and click on a road where it ends (Enter: a free end). A chosen branch: drag its nodes, click on it to add a node, Delete takes the chosen node away."
             : mode === "prefab" ? "Prefabs: click to put down a " + (PREFABS[design.prefabType] || PREFABS.wall).label.toLowerCase() + ", or drag a line to make a row of them. Drag one to move it (it sits on what is under it), the ring turns it, Delete removes it."
             : (design.data ? "Look: drag to turn, right mouse button to move, scroll to zoom. Nodes and prefabs can be dragged here too." : null)
     };
