@@ -57,7 +57,7 @@ const state = {
 
 const view = $("view");
 const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
-renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));       // (an iPad is 2: a quarter less to draw, and the editor needs no more)
 view.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x20262f);
@@ -2161,6 +2161,7 @@ function setMode(mode) {
         : mode === "refscale" ? "Scale by two points: click a place on the reference image whose distance to another place you know, then that other place (Escape cancels)."
         : mode === "curb" ? "Draw curb: click on the road to start a curb, and on to add nodes at its nearest end; click on the curb to add a node there; drag a node to move it. Enter: the next click starts a new curb."
         : "Look: drag to turn, right mouse button to move, scroll to zoom. Click a part to find it in the list.");
+    if (typeof touchSync === "function") touchSync(true);
 }
 document.querySelectorAll("#modes button[data-mode]").forEach((b) => b.onclick = () => setMode(b.dataset.mode));
 // how a new row of prefabs is made: Draw (a line is dragged) or Points (its points are clicked)
@@ -2322,13 +2323,14 @@ renderer.domElement.addEventListener("pointerup", (event) => {
         const hits = pointerRay(event).intersectObjects(lineLayer.children, true).filter((h) => h.object.userData.lineNode !== undefined);
         if (hits.length) { selectLineNode(hits[0].object.userData.lineNode); return; }
         // a line that is drawn: a click on the road is the next node (Shift: between two others, as when a line is edited)
-        if (lineEdit.drawing && !event.shiftKey) {
+        const shift = event.shiftKey || touchInsert;
+        if (lineEdit.drawing && !shift) {
             const road = roadHit(event);
             if (road) { lineEdit.nodes.push({ x: road.point.x, y: road.point.y, z: road.point.z }); selectLineNode(-1); return; }
         }
-        const road = event.shiftKey ? roadHit(event) : null;
+        const road = shift ? roadHit(event) : null;
         if (road) { addLineNodeAt(road.point.x, road.point.z); return; }
-        if (!event.shiftKey) { selectLineNode(-1); return; }
+        if (!shift) { selectLineNode(-1); return; }
     }
     if (state.mode !== "view") return;
     // the designer of the road took the click (a node or a prefab was chosen by it)
@@ -2971,7 +2973,7 @@ function fingerprint() {
     } catch (error) { return ""; }
 }
 let savedPrint = null;
-function markSaved() { savedPrint = fingerprint(); }
+function markSaved() { savedPrint = fingerprint(); if (draftResolved) clearDraft(); }
 function unsaved() { return savedPrint !== null && fingerprint() !== savedPrint; }
 async function discardOk() {
     if (!unsaved()) return true;
@@ -3441,7 +3443,7 @@ function updateUndoUi() {
     for (const id of ["redoButton", "dsRedo"]) if ($(id)) $(id).disabled = !undoState.future.length;
 }
 // after every click, key and field the editor looks whether the track changed (one step per drag of a gizmo: it is looked at when the button is let go)
-["pointerup", "keyup", "change", "click"].forEach((type) => window.addEventListener(type, () => setTimeout(() => { noteEditorStep(); renderProps(); }, 0), true));
+["pointerup", "keyup", "change", "click"].forEach((type) => window.addEventListener(type, () => setTimeout(() => { noteEditorStep(); renderProps(); if (typeof updateActions === "function") updateActions(); }, 0), true));
 $("undoButton").onclick = undo;
 $("redoButton").onclick = redo;
 $("dsUndo").onclick = undo;
@@ -3849,6 +3851,128 @@ document.querySelector("#modes .done").onclick = () => { if (state.mode === "cur
 $("layersButton").onclick = () => showLayers($("eventLayers").style.display === "none");
 { let shown = false; try { shown = localStorage.getItem(LAYERS_KEY) === "1"; } catch (e) { /* (private window) */ } showLayers(shown); }
 
+// ---- touch screens (an iPad Air, in both directions): the side bar is a drawer that slides over the view, the bars are one row, what is touched is 44 px
+// (editor.css: html.compact, html.touch). One finger uses the tool and two fingers move and zoom the view (the pen always uses the tool); what the keys do
+// (Enter, Delete, Shift, W E R, F, Ctrl+D) is a button in the bar under the menu, and a long press on a button says what it does (its title).
+var touchReady = false, touchInsert = false, draftResolved = false;
+const compactQuery = window.matchMedia("(pointer: coarse), (max-width: 1100px)");
+const coarseQuery = window.matchMedia("(pointer: coarse)");
+const sideBar = $("side");
+let orbitOn = false;
+function pressKey(key, code, extra) { window.dispatchEvent(new KeyboardEvent("keydown", Object.assign({ key, code, bubbles: true, cancelable: true }, extra || {}))); }
+function layoutClasses() {
+    const root = document.documentElement;
+    root.classList.toggle("compact", compactQuery.matches);
+    root.classList.toggle("touch", coarseQuery.matches);
+    if (!compactQuery.matches) sideBar.classList.remove("open");
+    resize(); placePanels(); touchSync();
+}
+// what the tool of the moment lets a finger do, and which buttons of the bar under the menu show
+function touchSync(modeChanged) {
+    if (!touchReady) return;
+    const touch = coarseQuery.matches;
+    $("orbitToggle").style.display = touch && state.mode !== "view" ? "" : "none";
+    $("orbitToggle").classList.toggle("accent", orbitOn);
+    $("orbitToggle").classList.toggle("ghost", !orbitOn);
+    controls.touches.ONE = state.mode === "view" || orbitOn ? THREE.TOUCH.ROTATE : -1;
+    if (state.mode !== "node" && state.mode !== "view") { /* (a finger on the ground does what the tool does) */ }
+    // the explanation of a tool: where the hints are hidden, a short message when it is chosen
+    if (modeChanged && compactQuery.matches && state.mode !== "view" && !document.documentElement.classList.contains("hints")) editorToast($("hud").textContent, "ok");
+    updateActions();
+}
+function updateActions() {
+    if (!touchReady) return;
+    const road = design.active && design.active();
+    const chosen = anythingChosen() || !!(road && design.selection());
+    const gizmo = objectUi.selected >= 0 || gateUi.selected >= 0 || !!boxSel.kind;
+    const show = {
+        finish: !!(road && design.isDrawing()) || (state.mode === "curb" && curbState.selected >= 0), insert: lineEdit.editing,
+        move: gizmo, rotate: gizmo, scale: gizmo, frame: chosen, duplicate: chosen && !lineEdit.editing, delete: chosen
+    };
+    let any = false;
+    document.querySelectorAll("#actions button").forEach((b) => { const on = !!show[b.dataset.act]; b.style.display = on ? "" : "none"; any = any || on; });
+    $("actions").style.display = any && compactQuery.matches ? "" : "none";
+    const insert = document.querySelector('#actions [data-act="insert"]');
+    insert.classList.toggle("accent", touchInsert); insert.classList.toggle("ghost", !touchInsert);
+    if (!lineEdit.editing && touchInsert) touchInsert = false;
+}
+document.querySelectorAll("#actions button").forEach((b) => b.onclick = () => {
+    const act = b.dataset.act;
+    if (act === "insert") touchInsert = !touchInsert;
+    else if (act === "finish") pressKey("Enter", "Enter");
+    else if (act === "delete") pressKey("Delete", "Delete");
+    else if (act === "duplicate") pressKey("d", "KeyD", { ctrlKey: true });
+    else if (act === "frame") pressKey("f", "KeyF");
+    else pressKey({ move: "w", rotate: "e", scale: "r" }[act], { move: "KeyW", rotate: "KeyE", scale: "KeyR" }[act]);
+    setTimeout(() => { noteEditorStep(); renderProps(); updateActions(); }, 0);
+});
+$("sideToggle").onclick = () => sideBar.classList.toggle("open");
+$("hintToggle").onclick = () => document.documentElement.classList.toggle("hints");
+$("orbitToggle").onclick = () => { orbitOn = !orbitOn; touchSync(); };
+$("saveQuick").onclick = () => $("save").click();
+view.addEventListener("pointerdown", () => sideBar.classList.remove("open"), true);
+// the pen draws and places (and drags what it touches): it never turns the view, fingers do
+renderer.domElement.addEventListener("pointerdown", (e) => { if (e.pointerType === "pen") controls.enabled = false; }, true);
+["pointerup", "pointercancel"].forEach((t) => window.addEventListener(t, (e) => { if (e.pointerType === "pen") controls.enabled = true; }, true));
+// a long press (touch) on a button, a label or a field: what its title says, in the message of the view (the title was only there for the mouse)
+{
+    let timer = 0, swallow = false, sx = 0, sy = 0;
+    document.addEventListener("pointerdown", (e) => {
+        swallow = false; clearTimeout(timer);
+        if (e.pointerType !== "touch" || !e.target.closest) return;
+        const el = e.target.closest("[title]");
+        if (!el || !el.title || el === $("toast")) return;
+        sx = e.clientX; sy = e.clientY;
+        timer = setTimeout(() => { swallow = true; editorToast(el.title, "ok"); }, 550);
+    }, true);
+    document.addEventListener("pointermove", (e) => { if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > 10) clearTimeout(timer); }, true);
+    ["pointerup", "pointercancel"].forEach((t) => document.addEventListener(t, () => clearTimeout(timer), true));
+    document.addEventListener("click", (e) => { if (swallow) { swallow = false; e.preventDefault(); e.stopPropagation(); } }, true);
+}
+// buttons with only a sign (✓ ↶ ↷ ▾ ?) say in words what they are
+document.querySelectorAll("button").forEach((b) => { if (!b.getAttribute("aria-label") && b.title && b.textContent.trim().length <= 2) b.setAttribute("aria-label", b.title); });
+
+// ---- the draft: what has not been saved is kept in this browser every few seconds (an iPad drops a tab that is in the background); the next time the track
+// is opened the editor offers it. A save clears it.
+function draftTrackId() { return $("id") ? $("id").value : ""; }
+function readDraft() { try { return JSON.parse(localStorage.getItem("openracer-track-editor-draft")); } catch (e) { return null; } }
+function clearDraft() { try { localStorage.removeItem("openracer-track-editor-draft"); } catch (e) { /* (no storage) */ } }
+function saveDraft() {
+    try {
+        if (!draftResolved || !unsaved() || !draftTrackId()) return;
+        localStorage.setItem("openracer-track-editor-draft", JSON.stringify({ id: draftTrackId(), at: Date.now(), editor: editorSnapshot(), design: design.active() ? design.toJSON() : null }));
+    } catch (e) { /* (no storage, or it is full) */ }
+}
+const pendingDraft = readDraft();
+async function offerDraft() {
+    const draft = pendingDraft;
+    draftResolved = true;
+    if (!draft || !draft.id || draft.id !== draftTrackId() || !draft.editor) return;
+    const same = draft.editor === editorSnapshot() && JSON.stringify(draft.design) === JSON.stringify(design.active() ? design.toJSON() : null);
+    if (same) { clearDraft(); return; }
+    const when = new Date(draft.at).toLocaleString();
+    const ok = await OpenRacerDialog.ask({ title: "Restore the unsaved changes?", text: "The editor kept changes to “" + draft.id + "” from " + when + " that were never saved.", ok: "Restore", danger: false });
+    if (!ok) { clearDraft(); return; }
+    if (draft.design) startDesign(draft.design);
+    restoreEditor(draft.editor);
+    status("The unsaved changes are back. Save the track to keep them.", "ok");
+}
+setInterval(saveDraft, 8000);
+document.addEventListener("visibilitychange", () => { if (document.hidden) saveDraft(); });
+window.addEventListener("pagehide", saveDraft);
+setInterval(() => { if (touchReady) $("saveQuick").textContent = unsaved() ? "Save •" : "Save"; }, 1500);
+
+compactQuery.addEventListener("change", layoutClasses);
+coarseQuery.addEventListener("change", layoutClasses);
+touchReady = true;
+layoutClasses();
+try {
+    if (coarseQuery.matches && !localStorage.getItem("openracer-track-editor-touchtip")) {
+        localStorage.setItem("openracer-track-editor-touchtip", "1");
+        setTimeout(() => editorToast("Touch: one finger uses the tool, two fingers move and zoom the view. ⟳ Turn view turns it with one finger. ☰ Menu has the settings, ⓘ Hints explains the tool.", "ok"), 1500);
+    }
+} catch (e) { /* (no storage) */ }
+
 // ---- the last track that was opened: in the start dialog
 const LAST_TRACK = "openracer-track-editor-last";
 
@@ -3862,4 +3986,4 @@ editorReady = true;
 updateUndoUi();
 renderReady();
 updateContext();
-openFromAddress().then(() => { resetHistory(); if (!new URLSearchParams(window.location.search).get("track")) startDialog(); });
+openFromAddress().then(async () => { resetHistory(); await offerDraft(); if (!new URLSearchParams(window.location.search).get("track")) startDialog(); });

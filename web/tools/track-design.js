@@ -2243,6 +2243,8 @@ export function createDesign(api) {
 
     return {
         enable, disable, toJSON, exportGlb, undo, redo, roadEdgeAt,
+        // a line or an area is being drawn (the touch bar then offers Finish, for the Enter key)
+        isDrawing: () => !!design.drawing || design.draft.length > 0,
         // the surfaces as rows of the Layers panel, and a click on one
         patchRows: () => (design.data && design.data.patches ? design.data.patches : []).map((p, i) => ({ label: surfaceOf(p.surface).label + (p.connect ? ", connected" : ""), meta: p.points.length + " points", selected: design.selectedPatch === i })),
         choosePatch: (i) => { if (!design.data || !design.data.patches[i]) return; if (design.selectedPatch === i) letGoExtras(); else { api.setMode("patch"); selectPatch(i); } },

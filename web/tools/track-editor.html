@@ -19,6 +19,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>OpenRacer track editor</title>
     <link rel="stylesheet" href="editor.css">
     <script src="../dialog.js"></script>
@@ -268,6 +269,21 @@
 </div>
 
 <div id="view">
+    <div id="topLeft" class="float">
+        <button id="sideToggle" class="small" title="The settings of the track: the cards of the side bar" aria-label="Menu">☰ Menu</button>
+        <button id="hintToggle" class="small ghost" title="Show or hide the explanation of the tool that is in use">ⓘ Hints</button>
+        <button id="orbitToggle" class="small ghost" title="With a finger: turn the view instead of using the tool (two fingers always move and zoom it)" style="display:none">⟳ Turn view</button>
+    </div>
+    <div id="actions" class="float" style="display:none">
+        <button class="small ghost" data-act="finish" title="End the line or area that is drawn (Enter)">✓ Finish</button>
+        <button class="small ghost" data-act="insert" title="A tap on the road adds a node between two others (Shift+click)">+ Node</button>
+        <button class="small ghost" data-act="move" title="Move it (W)">Move</button>
+        <button class="small ghost" data-act="rotate" title="Turn it (E)">Turn</button>
+        <button class="small ghost" data-act="scale" title="Scale it (R)">Scale</button>
+        <button class="small ghost" data-act="frame" title="Bring it into view (F)">Frame</button>
+        <button class="small ghost" data-act="duplicate" title="A copy of it (Ctrl+D)">Copy</button>
+        <button class="small danger" data-act="delete" title="Take it away (Delete; undo brings it back)">Delete</button>
+    </div>
     <div id="hud"></div>
     <div id="eventLayers" style="position: absolute; right: 16px; bottom: 76px; width: 240px; max-height: calc(100% - 200px); overflow-y: auto; padding: 8px 0 10px; background: rgba(22, 27, 34, 0.94); border: 1px solid #323c4a; border-radius: 10px; color: #dfe6ef; font-size: 12.5px; z-index: 5;">
         <div style="padding: 2px 14px 6px; font-weight: bold;">Layers</div>
@@ -418,8 +434,9 @@
         </div>
     </div>
     <div class="float top-right">
+        <button class="small accent compactOnly" id="saveQuick" title="Save the track (Ctrl+S)">Save</button>
         <span id="refQuick" style="display:none" title="The reference image: show it, and its opacity"><label><input type="checkbox" id="refShowQuick"> reference</label> <input type="range" id="refOpacityQuick" min="0" max="100" step="1" style="width:90px; vertical-align:middle"></span>
-        <label><input type="checkbox" id="colour" checked> colours of the surfaces</label>
+        <label title="Show the surfaces in their own colours"><input type="checkbox" id="colour" checked> <span class="wide">colours of the surfaces</span><span class="narrow">colours</span></label>
         <button class="small ghost" id="topView" title="T">From above</button>
         <button class="small ghost" id="undoButton" title="Undo (Ctrl+Z)">↶</button>
         <button class="small ghost" id="redoButton" title="Redo (Ctrl+Y)">↷</button>

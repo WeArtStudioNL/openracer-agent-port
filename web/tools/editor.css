@@ -323,3 +323,47 @@ button.dirty::after { content: " ●"; color: #ffd04d; }
 
 /* the slider under a number of the form (car-editor.js) */
 input.numSlider { display: block; margin: 4px 0 0; height: 14px; }
+
+/* ---- touch screens and small windows (an iPad): the side bar slides over the view, the bars are one row, and what is touched is 44 px */
+#topLeft, #actions { left: 12px; z-index: 7; padding: 5px 6px; gap: 5px; max-width: calc(100% - 24px); }
+#topLeft { top: 12px; display: none; }
+#actions { top: 68px; flex-wrap: wrap; }
+.compactOnly, .narrow { display: none; }
+html.compact .narrow { display: inline; } html.compact .wide { display: none; }
+html.compact .compactOnly { display: inline-block; }
+html.compact #topLeft { display: flex; }
+html.compact body { height: 100dvh; }
+html.compact #side { position: absolute; left: 0; top: 0; bottom: 0; width: min(400px, 88vw); z-index: 30; transform: translateX(-102%); transition: transform 0.2s; }
+html.compact #side.open { transform: none; box-shadow: 8px 0 30px #000a; }
+html.compact #view { flex: 1 1 100%; width: 100%; }
+html.compact #hud { display: none; }
+html.compact.hints #hud { display: block; left: 12px; top: 124px; max-width: min(520px, 70%); padding: 8px 10px; border-radius: 10px; background: #171b22ee; text-shadow: none; }
+html.compact #refQuick { display: none !important; }
+html.compact #modes { left: 12px; right: 12px; transform: none; width: auto; max-width: none; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; scrollbar-width: none; overscroll-behavior: contain; }
+html.compact #modes::-webkit-scrollbar { display: none; }
+html.compact #modes > * { flex: none; }
+html.compact #drawer { left: 12px; right: 12px; max-height: 40%; }
+html.compact #drawer .page > p.hint { display: none; }
+html.compact.hints #drawer .page > p.hint { display: block; }
+html.compact #props { right: 12px !important; top: 124px; }
+html.compact #eventLayers { right: 12px !important; width: min(300px, 80vw) !important; }
+html.compact #toast { top: 124px; max-width: 90%; }
+button:focus-visible, select:focus-visible, summary:focus-visible, input:focus-visible { outline: 2px solid #6cb6ff; outline-offset: 2px; }
+html.touch button, html.touch select, html.touch input[type=number], html.touch input[type=text], html.touch summary { min-height: 44px; }
+html.touch button.small, html.touch #drawer .tab { height: auto; min-height: 44px; padding-left: 14px; padding-right: 14px; }
+html.touch input, html.touch select, html.touch textarea { font-size: 16px; }
+html.touch input[type=checkbox] { width: 26px; height: 26px; }
+html.touch label.check, html.touch .float label, html.touch #drawer label { min-height: 44px; }
+html.touch button, html.touch label, html.touch summary, html.touch select { touch-action: manipulation; }
+html.touch #view { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+html.touch button.info { width: 32px; height: 32px; min-height: 0; }
+html.touch input[type=range] { min-height: 32px; }
+html.touch #layerList .layer { padding-top: 11px; padding-bottom: 11px; }
+html.touch #layerList .layer .eye, html.touch #layerList .layer .del { width: 44px; height: 36px; min-height: 0; }
+html.touch .libtile .x { width: 32px; height: 32px; min-height: 0; }
+/* the buttons of the bottom of the side bar wrap under the status (the Save button was cut off in a bar of 360 px) */
+footer.bar { flex-wrap: wrap; }
+footer.bar #status { flex: 1 1 100%; order: -1; }
+footer.bar #status:empty { display: none; }
+footer.bar button { flex: 1 1 auto; }
+html.compact #side:not(.open) { visibility: hidden; transition: transform 0.2s, visibility 0s 0.2s; }
