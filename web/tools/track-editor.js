@@ -77,8 +77,8 @@ const markers = new THREE.Group(); // the start and the gates
 scene.add(markers);
 const objectLayer = new THREE.Group(); // the models of the objects, where they are placed
 scene.add(objectLayer);
-// the wheel zooms towards the point under the mouse (the track, its objects, else the floor) and the view then turns about it (zoom-to-mouse.js)
-installZoomToMouse({ THREE, camera, controls, renderer, targets: () => [trackGroup, objectLayer], floorY: () => 0 });
+// the wheel zooms towards the point under the mouse (the track, its objects, else the floor), and that point is at once what the view turns about (zoom-to-mouse.js)
+installZoomToMouse({ THREE, camera, controls, renderer, targets: () => [trackGroup, objectLayer], floorY: () => 0, orbitAtPoint: true });
 // the objects of the track: models (glb) that were added, and where they stand. A model: { file (a Blob, when it was added now), name (the file in the folder of the track),
 // kind (rigid, static or decor), mass (kg, 0: from its size), scene (the loaded model) }
 const objectState = { models: new Map(), list: [], selected: null };
@@ -541,10 +541,10 @@ function curbNodeHit(event) {
     return hit ? hit.object.userData.curbNode : null;
 }
 // where the pointer is on the surface, near the height y (a plane at that height, then the surface there, twice: it follows a slope)
-function surfacePoint(event, y) {
+function surfacePoint(event, y, rounds) {
     const ray = pointerRay(event).ray;
     let p = null, h = y;
-    for (let k = 0; k < 2; k++) {
+    for (let k = 0; k < (rounds || 2); k++) {
         const q = ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -h), new THREE.Vector3());
         if (!q) break;
         h = groundY(q.x, q.z, h + 20);
@@ -3662,7 +3662,7 @@ renderer.domElement.addEventListener("pointermove", (event) => {
     const now = performance.now();
     if (now - coordsTime < 80 || drag) return;
     coordsTime = now;
-    const p = surfacePoint(event, controls.target.y);
+    const p = surfacePoint(event, groundY(controls.target.x, controls.target.z), 5);
     $("coords").textContent = p ? "x " + p.x.toFixed(1) + "   z " + p.z.toFixed(1) + "   y " + p.y.toFixed(2) : "";
 });
 renderer.domElement.addEventListener("pointerleave", () => { $("coords").textContent = ""; });
