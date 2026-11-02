@@ -36,6 +36,12 @@
 .propsGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; } .propsGrid label { font-size: 11px; color: #9aa8ba; display: flex; flex-direction: column; gap: 2px; margin: 0; } .propsGrid input { width: 100%; }
 /* (the bar of the tools was as wide as half the view, and took four rows) */
 #modes { width: max-content; } #modes button { padding-left: 10px; padding-right: 10px; }
+/* only what the work of the moment needs (track-editor.js: updateContext) */
+.ctxHidden { display: none !important; }
+#modes .done { display: none; }
+#modes { z-index: 7; }          /* (over the buttons above the cameras) */
+#modes.tool button:not(.active):not(.done) { display: none !important; } #modes.tool button.done { display: inline-block; }
+#focusBar { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; padding: 8px 10px; border-radius: 10px; background: #26344b; color: #fff; font-weight: 600; }
 #coords { position: absolute; left: 14px; bottom: 14px; font: 11.5px ui-monospace, Menlo, monospace; color: #c3cdd9; text-shadow: 0 1px 3px #000c; pointer-events: none; z-index: 4; }
 #readyList .ready { padding: 2px 0 2px 20px; position: relative; font-size: 12.5px; } #readyList .ready::before { position: absolute; left: 0; font-weight: bold; }
 #readyList .ready.ok::before { content: "✓"; color: #4ed88a; } #readyList .ready.warn::before { content: "!"; color: #ffc04d; } #readyList .ready.bad::before { content: "✗"; color: #ff6a5a; }
@@ -50,6 +56,8 @@
         <a href="../index.html">← Game</a>
     </header>
     <div id="scroll">
+        <div id="focusBar" style="display:none"><button class="small ghost" id="focusBack" title="Escape">← All settings</button><span id="focusTitle"></span></div>
+        <div id="focusNote" class="hint" style="display:none; margin: 4px 4px 10px;">The tools for this are in the view.</div>
 
         <details class="card" open>
             <summary>Track<span class="meta" id="editing"></span></summary>
@@ -170,14 +178,22 @@
         <details class="card" open>
             <summary>Curbs<span class="meta" id="curbNote">none</span></summary>
             <div class="body">
-                <p class="sub">Curbstones along the edge of the road, red and white (or another colour). <b>Draw curb</b>: click on the road for every node, along the edge; the curb is a smooth line through them, and <b>Enter</b> or <b>Escape</b> ends it. Every node lies on the surface under it. Afterwards: <b>click a node</b> and move it with the arrows of the gizmo, <b>Shift + click</b> on the road adds a node to the chosen curb (between the two nearest nodes, or at an end), <b>Delete</b> takes the chosen node away and joins the nodes beside it. A curb without nodes is gone. In the game a curb is road, a few centimetres high.</p>
+                <p class="sub">Curbstones along the edge of the road. <b>Draw curb</b>: click on the road to start one; every next click adds a node at the end that is nearest, and <b>Enter</b> ends the curb. A chosen curb: <b>drag a node</b> to move it (it sticks to the surface under it), <b>click on the strip</b> to add a node there, <b>Delete</b> takes the chosen node away and joins the nodes beside it; without nodes the curb is gone. Both ends slope up from the ground; the size of an end node makes the curb taper off there. In the game a curb is road, a few centimetres high.</p>
                 <div class="row">
                     <div><label>Width (m)</label><input type="number" id="curbWidth" value="1.2" min="0.3" max="4" step="0.1"></div>
                     <div><label>Height (m)</label><input type="number" id="curbHeight" value="0.05" min="0" max="0.3" step="0.01"></div>
-                    <div><label>Colour</label><select id="curbColour"><option value="red">Red and white</option><option value="blue">Blue and white</option><option value="green">Green and white</option><option value="yellow">Yellow and white</option><option value="black">Black and white</option></select></div>
+                    <div><label>Colour</label><select id="curbColour"><option value="red">Red / white</option><option value="blue">Blue / white</option><option value="green">Green / white</option><option value="yellow">Yellow / white</option><option value="black">Black / white</option></select></div>
                 </div>
                 <div class="hint" id="curbInfo"></div>
-                <div class="buttons"><button class="small accent" id="curbDraw">Draw curb</button><button class="small danger" id="curbDeleteNode" disabled>Delete node</button><button class="small danger" id="curbRemove" disabled>Remove curb</button></div>
+                <div class="buttons"><button class="small accent" id="curbDraw">Draw curb</button></div>
+                <div id="curbEdit" style="display:none">
+                    <div id="curbNodeBox" style="display:none">
+                        <label>Size at this node <span class="hint" id="curbSizeValue"></span></label>
+                        <input type="range" id="curbSize" min="0" max="1.5" step="0.05" value="1">
+                        <div class="buttons"><button class="small danger" id="curbDeleteNode">Delete node</button></div>
+                    </div>
+                    <div class="buttons"><button class="small" id="curbTaper" title="The first and the last node small (25%): the curb tapers off at both ends">Taper the ends</button><button class="small danger" id="curbRemove">Remove curb</button><button class="small ghost" id="curbDone" title="Enter">Done</button></div>
+                </div>
             </div>
         </details>
 
@@ -317,8 +333,9 @@
         <button data-mode="camera" title="Key 8">Add camera</button>
         <button data-mode="curb" title="Key 9">Draw curb</button>
         <button data-mode="measure" title="Key 0">Measure</button>
-        <button data-mode="node" title="Key N" class="design-only">Add node</button>
-        <button data-mode="prefab" title="Key P" class="design-only">Place prefab</button>
+        <button data-mode="node" title="Key N" class="design-only">Edit road</button>
+        <button data-mode="prefab" title="Key P" class="design-only">Prefabs</button>
+        <button data-mode="view" class="done" title="Escape">✓ Done</button>
     </div>
     <div id="drawer" style="display:none">
         <div class="head">
@@ -363,6 +380,7 @@
         <button class="small ghost" id="topView" title="T">From above</button>
         <button class="small ghost" id="undoButton" title="Undo (Ctrl+Z)">↶</button>
         <button class="small ghost" id="redoButton" title="Redo (Ctrl+Y)">↷</button>
+        <button class="small ghost" id="layersButton" title="The list of everything in the track">Layers</button>
         <button class="small ghost" id="helpButton" title="The keys (?)">?</button>
     </div>
 </div>
@@ -373,6 +391,7 @@
 <script src="../js/Garage.js"></script>
 <script src="../js/Catalog.js"></script>
 <script src="../js/TrackEnvironment.js"></script>
+<script src="../js/Ground.js"></script>
 <script src="../js/Curbs.js"></script>
 <script src="editor-ui.js"></script>
 <script type="module" src="track-editor.js"></script>
