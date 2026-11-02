@@ -2061,6 +2061,7 @@ const design = createDesign({
     setMode, getMode: () => state.mode, roleMaterials, screenSize,
     ownUndo: true, onCommit: () => noteDesignStep(), onSelect: () => clearSelection("design"), onRebuild: () => snapToSurface(), groundY: (x, z) => groundY(x, z)
 });
+window.__trackEditorView.design = design;          // (for the tests: the glb it makes)
 function startDesign(data) {
     clearTrack();
     $("colour").checked = false; // a designed track is shown with its textures; the colours of the surfaces can be switched on

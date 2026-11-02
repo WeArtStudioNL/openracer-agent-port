@@ -1792,21 +1792,93 @@ export function createDesign(api) {
         return JSON.parse(JSON.stringify(design.data));
     }
 
+    // The surfaces lie over each other: the ground under the road and the shoulders, the shoulders under a branch and the gravel, a
+    // mouth under the road. The game sees only the highest one, but it tested the triangles under it too (Ground.js: all the triangles of
+    // a cell). For the glb, a triangle that lies wholly under another part (above it by more than HIDDEN_MIN and less than HIDDEN_MAX: not
+    // under a bridge) is left out. (A triangle that is partly under one stays whole: cut into smaller ones it gave the game more triangles to
+    // test in a cell, not fewer.) Gives a Map: mesh -> its geometry without them, for the parts that lost triangles.
+    const HIDDEN_MIN = 0.005, HIDDEN_MAX = 2, HIDDEN_CELL = 4, HIDDEN_STEP = 1;
+    function withoutHidden() {
+        const meshes = [];
+        [roadGroup, branchGroup, patchGroup].forEach((g) => g.children.forEach((m) => { if (m.isMesh && m.geometry.attributes.position) meshes.push(m); }));
+        // every triangle of every part in world coordinates (x0 z0 y0 x1 z1 y1 x2 z2 y2), its part, and a grid on the ground to find them
+        const tris = [], owner = [], cells = new Map(), v = new THREE.Vector3();
+        const parts = meshes.map((m, mi) => {
+            const pos = m.geometry.attributes.position, index = m.geometry.index, world = new Float32Array(pos.count * 3);
+            for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld); world[i * 3] = v.x; world[i * 3 + 1] = v.y; world[i * 3 + 2] = v.z; }
+            const corners = [];
+            for (let k = 0; k < (index ? index.count : pos.count); k++) corners.push(index ? index.getX(k) : k);
+            for (let k = 0; k + 2 < corners.length; k += 3) {
+                const t = owner.length, [a, b, d] = [corners[k] * 3, corners[k + 1] * 3, corners[k + 2] * 3];
+                tris.push(world[a], world[a + 2], world[a + 1], world[b], world[b + 2], world[b + 1], world[d], world[d + 2], world[d + 1]);
+                owner.push(mi);
+                const x0 = Math.floor(Math.min(world[a], world[b], world[d]) / HIDDEN_CELL), x1 = Math.floor(Math.max(world[a], world[b], world[d]) / HIDDEN_CELL);
+                const z0 = Math.floor(Math.min(world[a + 2], world[b + 2], world[d + 2]) / HIDDEN_CELL), z1 = Math.floor(Math.max(world[a + 2], world[b + 2], world[d + 2]) / HIDDEN_CELL);
+                for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) { const key = i + "," + j; if (!cells.has(key)) cells.set(key, []); cells.get(key).push(t); }
+            }
+            return { m, corners, first: owner.length - corners.length / 3 };
+        });
+        // whether another part lies over (x, y, z)
+        const covered = (x, z, y, self) => {
+            const list = cells.get(Math.floor(x / HIDDEN_CELL) + "," + Math.floor(z / HIDDEN_CELL));
+            if (!list) return false;
+            for (let q = 0; q < list.length; q++) {
+                const t = list[q];
+                if (owner[t] === self) continue;
+                const o = t * 9, ax = tris[o], az = tris[o + 1], bx = tris[o + 3], bz = tris[o + 4], cx = tris[o + 6], cz = tris[o + 7];
+                const d = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
+                if (Math.abs(d) < 1e-12) continue;
+                const a = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / d, b = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / d, c = 1 - a - b;
+                if (a < -1e-6 || b < -1e-6 || c < -1e-6) continue;
+                const h = a * tris[o + 2] + b * tris[o + 5] + c * tris[o + 8] - y;
+                if (h > HIDDEN_MIN && h < HIDDEN_MAX) return true;
+            }
+            return false;
+        };
+        // whether all of triangle t is under another part: points about every HIDDEN_STEP metres in it, its corners too
+        const hidden = (t) => {
+            const o = t * 9, edge = Math.max(Math.hypot(tris[o + 3] - tris[o], tris[o + 4] - tris[o + 1]), Math.hypot(tris[o + 6] - tris[o + 3], tris[o + 7] - tris[o + 4]), Math.hypot(tris[o] - tris[o + 6], tris[o + 1] - tris[o + 7]));
+            const n = Math.max(1, Math.ceil(edge / HIDDEN_STEP));
+            for (let i = 0; i <= n; i++) for (let j = 0; j <= n - i; j++) {
+                const a = i / n, b = j / n, c = 1 - a - b;
+                if (!covered(a * tris[o] + b * tris[o + 3] + c * tris[o + 6], a * tris[o + 1] + b * tris[o + 4] + c * tris[o + 7], a * tris[o + 2] + b * tris[o + 5] + c * tris[o + 8], owner[t])) return false;
+            }
+            return true;
+        };
+        const result = new Map();
+        parts.forEach(({ m, corners, first }) => {
+            const index = [];
+            for (let k = 0; k + 2 < corners.length; k += 3) if (!hidden(first + k / 3)) index.push(corners[k], corners[k + 1], corners[k + 2]);
+            if (index.length === corners.length) return;
+            const geometry = new THREE.BufferGeometry();
+            Object.entries(m.geometry.attributes).forEach(([name, attribute]) => geometry.setAttribute(name, attribute.clone()));
+            geometry.setIndex(index);
+            result.set(m, geometry);
+        });
+        return result;
+    }
+
     // the glb of the track: the road and the prefabs, the names of the parts say what they are. The parts are exported with their own
-    // materials (not the colours of the surfaces) and without the data of the editor.
+    // materials (not the colours of the surfaces), without the data of the editor and without the triangles that lie under another part.
     async function exportGlb() {
         const saved = [];
+        const cut = withoutHidden();
         [roadGroup, branchGroup, patchGroup, prefabGroup].forEach((g) => g.traverse((m) => {
             if (!m.isMesh) return;
-            saved.push({ mesh: m, material: m.material, userData: m.userData });
+            saved.push({ mesh: m, material: m.material, userData: m.userData, geometry: m.geometry });
             m.material = (m.userData && m.userData.original) || m.material;
+            if (cut.has(m)) m.geometry = cut.get(m);
             m.userData = {};
         }));
+        // (a part with nothing left is not exported)
+        const empty = saved.filter((s) => s.mesh.geometry.index && s.mesh.geometry.index.count === 0);
+        empty.forEach((s) => { s.parent = s.mesh.parent; s.parent.remove(s.mesh); });
         try {
             const exporter = new GLTFExporter();
             return await exporter.parseAsync([roadGroup, branchGroup, patchGroup, prefabGroup], { binary: true });
         } finally {
-            saved.forEach((s) => { s.mesh.material = s.material; s.mesh.userData = s.userData; });
+            empty.forEach((s) => s.parent.add(s.mesh));
+            saved.forEach((s) => { s.mesh.material = s.material; s.mesh.userData = s.userData; if (s.geometry !== s.mesh.geometry) { s.mesh.geometry.dispose(); s.mesh.geometry = s.geometry; } });
         }
     }
 
