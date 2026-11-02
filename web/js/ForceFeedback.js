@@ -13,7 +13,8 @@
  *              - a gamepad or wheel without any of that: rumble through the Gamepad API, from the bumps and the slip (no torque).
  *
  *              WebHID exists in Chrome and Edge, and a device has to be chosen once by the user (Connect in the settings menu); after that
- *              it is opened again by itself. The settings menu has the strength, the centring spring, the damping, the road detail and the
+ *              it is opened again by itself, also when it is switched off and on during a race (a wheel without a serial number loses that
+ *              permission when it goes, and has to be chosen again). The settings menu has the strength, the centring spring, the damping, the road detail and the
  *              direction. See Settings.js for the options and Car.js for the call every frame.
  */
 
@@ -25,6 +26,9 @@ var ForceFeedback = (function() {
     var deviceName = "";
     var failure = "";           // why the device does not work, if it does not
     var connecting = false;
+    var opening = false;        // a device is being opened
+    var session = 0;            // goes up when the wheel is gone: what was still to be sent to it is dropped
+    var reopenTimer = null;
     var lastSent = 0;           // the last constant force that was sent (-1..1)
     var lastSendTime = 0;
     var lastSpring = -1, lastDamper = -1;
@@ -294,7 +298,9 @@ var ForceFeedback = (function() {
     }
 
     function later(fn) {
-        queue = queue.then(fn).catch(function(error) {
+        var started = session;
+        queue = queue.then(function() { if(started === session) return fn(); }).catch(function(error) {
+            if(started !== session) return;
             failure = "Force feedback: " + (error.message || error);
             log("error: " + (error.message || error));
         });
@@ -462,7 +468,9 @@ var ForceFeedback = (function() {
 
     function useDevice(d) {
         failure = "";
-        return d.open().then(function() {
+        opening = true;
+        return (d.opened ? Promise.resolve() : d.open()).then(function() {
+            opening = false;
             device = d;
             deviceName = describe(d);
             pid = parsePid(d.collections);
@@ -477,9 +485,23 @@ var ForceFeedback = (function() {
             try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ vendorId: d.vendorId, productId: d.productId })); } catch(e) { /* no storage */ }
             lastSpring = lastDamper = -1;
             lastSent = 0;
+            nextBlock = 1;
+            setupLogging = true;
             d.addEventListener("inputreport", function() { /* the game reads the wheel through the Gamepad API */ });
             return driver === "pid" ? startPid() : startLogitech();
+        }, function(error) {
+            opening = false;
+            throw error;
         });
+    }
+
+    // The wheel is gone: nothing more goes to it, and a write that hangs on it does not hold up the wheel that comes back (the effects are lost with it, useDevice makes them again)
+    function lost() {
+        session++;
+        queue = Promise.resolve();
+        device = null; driver = null; pid = null;
+        blocks = { constant: 0, spring: 0, damper: 0 };
+        output = 0;
     }
 
     // Lets the user pick the wheel (a click is needed for this)
@@ -516,21 +538,70 @@ var ForceFeedback = (function() {
         return disconnect().then(function() { deviceName = ""; failure = ""; });
     }
 
-    // Opens the wheel that was chosen before, without asking (the permission is kept by the browser)
-    function reconnect() {
-        if(!navigator.hid) return;
-        var wanted = null;
-        try { wanted = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch(e) { /* nothing kept */ }
-        if(!wanted) return;
+    function keptWheel() {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch(e) { return null; }
+    }
+
+    function isKept(d, wanted) { return d.vendorId === wanted.vendorId && d.productId === wanted.productId; }
+
+    function hasOutput(d) { return flattenReports(d.collections).some(function(r) { return r.kind === "outputReports"; }); }
+
+    // Opens the wheel that was chosen before, without asking (the permission is kept by the browser). A wheel that was just switched on may not take the setup yet: it is tried again.
+    function openKept(tries, anyInterface) {
+        var wanted = keptWheel();
+        if(!wanted || device || opening || connecting) return;
         navigator.hid.getDevices().then(function(devices) {
-            var found = devices.filter(function(d) { return d.vendorId === wanted.vendorId && d.productId === wanted.productId; });
-            var chosen = found.filter(function(d) { return flattenReports(d.collections).some(function(r) { return r.kind === "outputReports"; }); })[0] || found[0];
-            if(chosen && !device) useDevice(chosen);
-        });
-        navigator.hid.addEventListener("disconnect", function(event) {
-            if(event.device === device) { device = null; driver = null; pid = null; }
+            var found = devices.filter(function(d) { return isKept(d, wanted); });
+            var chosen = found.filter(hasOutput)[0] || (anyInterface ? found[0] : null);
+            if(!chosen || device || opening || connecting) return;
+            return useDevice(chosen).catch(function(error) {
+                failure = "Force feedback: " + (error.message || error);
+                log("error: " + (error.message || error));
+            }).then(function() {
+                if(device && device !== chosen) return;    // (the user chose another one meanwhile)
+                if(!failure || (device && !driver)) return;
+                log("the setup failed, try " + (tries + 1));
+                lost();
+                Promise.resolve(chosen.opened ? chosen.close() : null).catch(function() {});
+                if(tries < 5) { clearTimeout(reopenTimer); reopenTimer = setTimeout(function() { openKept(tries + 1, anyInterface); }, 2000); }
+            });
         });
     }
+
+    function watchDevices() {
+        if(!navigator.hid) return;
+        openKept(0, true);
+        navigator.hid.addEventListener("disconnect", function(event) {
+            if(event.device !== device && !(device && !device.opened)) return;
+            log("disconnected");
+            lost();
+            failure = "";
+        });
+        // the wheel is back as a new device. It is opened a moment later: it has several interfaces that come one by one, and it has just started up
+        navigator.hid.addEventListener("connect", function(event) {
+            var wanted = keptWheel();
+            if(!wanted || !isKept(event.device, wanted)) return;
+            log("connected again");
+            clearTimeout(reopenTimer);
+            reopenTimer = setTimeout(function() { openKept(0, false); }, 1500);
+        });
+        // The Gamepad API sees the wheel but WebHID does not give it: the browser kept no permission (it does not for a device without a serial number), and only a click can ask for it again
+        window.addEventListener("gamepadconnected", function(event) {
+            var wanted = keptWheel();
+            if(!wanted || event.gamepad.id.toLowerCase().indexOf(hex4(wanted.vendorId)) < 0 || event.gamepad.id.toLowerCase().indexOf(hex4(wanted.productId)) < 0) return;
+            setTimeout(function() {
+                if(device || opening || connecting) return;
+                navigator.hid.getDevices().then(function(devices) {
+                    if(device || devices.some(function(d) { return isKept(d, wanted); })) return;
+                    failure = "The browser needs permission for the wheel again: choose Connect a wheel… in the settings menu.";
+                    log(failure);
+                    if(typeof WheelControls !== "undefined") WheelControls.showMessage("Force feedback is off: the browser asks for the wheel to be chosen again.\nOpen the settings menu (Esc) and choose Connect a wheel…", 10000);
+                });
+            }, 3000);
+        });
+    }
+
+    function hex4(n) { return ("000" + n.toString(16)).slice(-4); }
 
     // ---- every frame
     var lastUpdate = 0;
@@ -644,7 +715,7 @@ var ForceFeedback = (function() {
     window.addEventListener("beforeunload", function() { if(device) (driver === "pid" ? stopPid() : stopLogitech()); });
     document.addEventListener("visibilitychange", function() { if(document.hidden) neutral(); });
     window.addEventListener("blur", neutral);
-    reconnect();
+    watchDevices();
 
     return {
         update: update,

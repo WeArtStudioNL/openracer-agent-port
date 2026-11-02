@@ -593,6 +593,7 @@ var WheelControls = (function() {
         // a disconnected wheel must not leave the pedals it was holding pressed
         if(ownsThrottle) car.throttle = 0;
         if(ownsBrake) car.brakePedal = 0;
+        if(car.vehicle) car.vehicle.wheelStop = 0;     // (and not the end stop that the force feedback would push against when it is back)
         ownsSteer = ownsThrottle = ownsBrake = false;
         shiftSource = null;
         lastStatus = "";
@@ -755,6 +756,7 @@ var WheelControls = (function() {
         toggle: toggle,
         statusText: statusText,
         findWheel: findWheel,
+        showMessage: showMessage,
         isCalibrating: function() { return !!calibration; }
     };
 })();
