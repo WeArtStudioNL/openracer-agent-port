@@ -528,7 +528,7 @@ export function createDesign(api) {
             if (fore) addRow(end.x + end.tangent.x * fore, end.y, end.z + end.tangent.z * fore, end.tangent, end.along + fore, end.w);
             unfold(left, tangents, false); unfold(right, tangents, false);
             if ((b.start && b.start.road < 0) || (b.end && b.end.road < 0)) rings.push(left.concat(right.slice().reverse()));
-            const tex = textureOf("road"), name = "branch_" + (line.index + 1);
+            const tex = textureOf("road"), name = "branch_" + (line.index + 1), firstMesh = meshes.length;
             meshes.push(strip(name, left, right, tex, "road", along, true));
             // the grass beside the branch, as beside the track: from the edge of the branch down to 0.3 m under it, BRANCH_SHOULDER wide (it is
             // not made along the stretch that runs on over the road, which has no edge of its own there)
@@ -539,6 +539,7 @@ export function createDesign(api) {
             const grass = textureOf("shoulder");
             meshes.push(strip(name + "_shoulder_1", outerL, innerL, grass, "grass", alongOnly, true), strip(name + "_shoulder_2", innerR, outerR, grass, "grass", alongOnly, true));
             design.branchEdges.push({ pts: innerL, closed: false }, { pts: innerR, closed: false });
+            for (let k = firstMesh; k < meshes.length; k++) meshes[k].userData.branchIndex = line.index;          // (a click on any part of the branch chooses it)
         });
         return { meshes, rings };
     }
@@ -1436,9 +1437,10 @@ export function createDesign(api) {
             if (g) drag.stroke.push({ x: g.x, z: g.z });
         } else if (mode === "node") {
             drag.kind = "add";
-        } else if (mode === "view" && !(api.blockPick && api.blockPick(e)) && pointerRay(e).intersectObjects(patchGroup.children, false)[0]) {
-            // (in Look a click on a surface chooses it: the Surfaces tool opens on it; the camera still turns when the pointer is dragged)
-            drag.kind = "pick"; drag.patch = pointerRay(e).intersectObjects(patchGroup.children, false)[0].object.userData.patchIndex;
+        } else if (mode === "view" && !(api.blockPick && api.blockPick(e)) && pointerRay(e).intersectObjects(patchGroup.children.concat(branchGroup.children), false)[0]) {
+            // (in Look a click on a surface or on a branch chooses it: its tool opens on it; the camera still turns when the pointer is dragged)
+            const picked = pointerRay(e).intersectObjects(patchGroup.children.concat(branchGroup.children), false)[0].object.userData;
+            drag.kind = "pick"; drag.patch = picked.patchIndex; drag.branch = picked.branchIndex;
             return;
         } else {
             drag = null;
@@ -1539,6 +1541,7 @@ export function createDesign(api) {
             commit();
         } else if (d.kind === "pick") {
             if (!d.moved && d.patch !== undefined && design.data.patches[d.patch]) { api.setMode("patch"); selectPatch(d.patch); }
+            else if (!d.moved && d.branch !== undefined && design.data.branches[d.branch]) { api.setMode("branch"); selectBranch(d.branch); }
         } else if (d.kind === "patch") {
             if (!d.moved) patchClick(e);
         } else if (d.kind === "branch") {
