@@ -580,6 +580,197 @@ window.addEventListener("keydown", (e) => {
     else if ((e.code === "Enter" || e.code === "Escape") && curbState.drawing) { endCurbDraw(); if (e.code === "Enter") e.preventDefault(); }
     else if (e.code === "Escape" && curbState.selected >= 0) selectCurb(-1);
 }, true);
+// ---- the reference image: a picture (a map, an aerial photo) lying flat in the view to draw a track over. Its opacity, its place (the gizmo or the fields), its turn
+// and its width in metres; Scale by two points: click two places on the picture whose distance you know and type it, the picture is scaled about the first one.
+// Saved with the track (track.json "reference": { image, x, y, z, width, rotation, opacity, show, top }, the picture in its folder as reference.<ext>); the game does not use it.
+const REF_FILE = /^reference\.(png|jpe?g|webp)$/;
+const refState = { file: null, name: "", oldName: "", url: "", x: 0, y: 0, z: 0, width: 500, aspect: 1, rotation: 0, opacity: 0.5, show: true, top: true, mesh: null, moving: false, scale: null };
+const refGroup = new THREE.Group();
+scene.add(refGroup);
+const refMarks = new THREE.Group();            // the two points of Scale by two points, and the line between them
+scene.add(refMarks);
+const refGizmo = new TransformControls(camera, renderer.domElement);
+refGizmo.setSize(0.9);
+refGizmo.showY = false;
+refGizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !event.value; });
+refGizmo.addEventListener("objectChange", () => { refState.x = refGroup.position.x; refState.z = refGroup.position.z; fillRefFields(); });
+scene.add(typeof refGizmo.getHelper === "function" ? refGizmo.getHelper() : refGizmo);
+
+function refPlace() {
+    refGroup.position.set(refState.x, refState.y, refState.z);
+    refGroup.rotation.set(0, -refState.rotation * Math.PI / 180, 0);
+    refGroup.scale.set(refState.width, 1, refState.width / (refState.aspect || 1));
+    refGroup.visible = refState.show && !!refState.mesh;
+    if (refState.mesh) {
+        const m = refState.mesh.material;
+        m.opacity = refState.opacity;
+        m.depthTest = !refState.top;           // on top: over the model and the road (the markers and the nodes stay above it), else in its place in the depth
+        refState.mesh.renderOrder = refState.top ? 900 : 0;
+        m.needsUpdate = true;
+    }
+}
+function fillRefFields() {
+    const has = !!refState.mesh;
+    $("refControls").style.display = has ? "" : "none";
+    $("refQuick").style.display = has ? "" : "none";
+    $("refName").textContent = refState.file ? refState.file.name : (refState.name || "none");
+    if (!has) return;
+    $("refOpacity").value = Math.round(refState.opacity * 100); $("refOpacityQuick").value = $("refOpacity").value;
+    $("refOpacityValue").textContent = $("refOpacity").value + "%";
+    $("refShow").checked = refState.show; $("refShowQuick").checked = refState.show;
+    $("refTop").checked = refState.top;
+    $("refWidth").value = +refState.width.toFixed(2);
+    $("refRotation").value = +refState.rotation.toFixed(1);
+    $("refX").value = +refState.x.toFixed(1); $("refZ").value = +refState.z.toFixed(1); $("refY").value = +refState.y.toFixed(2);
+    $("refMove").classList.toggle("accent", refState.moving);
+    $("refScale").classList.toggle("accent", state.mode === "refscale");
+}
+// the picture from a file or a URL: a flat plane of 1 by 1 (the group gives it its size); first: put it in the middle of what is in view, as wide as the track
+function loadRef(url, first) {
+    return new Promise((resolve, reject) => {
+        new THREE.TextureLoader().load(url, (texture) => {
+            texture.colorSpace = THREE.SRGBColorSpace;
+            texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            if (refState.mesh) { refGroup.remove(refState.mesh); refState.mesh.material.map.dispose(); refState.mesh.material.dispose(); }
+            const geometry = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+            refState.mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+            refGroup.add(refState.mesh);
+            refState.aspect = texture.image && texture.image.height ? texture.image.width / texture.image.height : 1;
+            if (first) {
+                const box = driveBox();
+                const size = box && !box.isEmpty() ? box.getSize(new THREE.Vector3()) : null;
+                refState.width = size ? Math.max(50, Math.round(Math.max(size.x, size.z * refState.aspect) * 1.1)) : 500;
+                refState.x = controls.target.x; refState.z = controls.target.z;
+                refState.y = box && !box.isEmpty() ? +box.min.y.toFixed(2) : 0;
+                refState.rotation = 0; refState.show = true;
+            }
+            refPlace(); fillRefFields();
+            resolve();
+        }, undefined, () => reject(new Error("The picture could not be read.")));
+    });
+}
+function clearRef() {
+    if (refState.mesh) { refGroup.remove(refState.mesh); refState.mesh.material.map.dispose(); refState.mesh.material.dispose(); refState.mesh = null; }
+    if (refState.url) URL.revokeObjectURL(refState.url);
+    refState.file = null; refState.name = ""; refState.url = "";
+    refGizmo.detach(); refState.moving = false;
+    endRefScale();
+    refPlace(); fillRefFields();
+}
+// a track that is opened: its picture and where it lies (or none)
+async function resetRef(track) {
+    clearRef();
+    const r = track && track.reference;
+    refState.oldName = r && REF_FILE.test(r.image || "") ? r.image : "";
+    if (!refState.oldName) return;
+    Object.assign(refState, {
+        name: r.image, x: Number.isFinite(r.x) ? r.x : 0, y: Number.isFinite(r.y) ? r.y : 0, z: Number.isFinite(r.z) ? r.z : 0,
+        width: r.width > 0 ? r.width : 500, rotation: Number.isFinite(r.rotation) ? r.rotation : 0,
+        opacity: r.opacity >= 0 && r.opacity <= 1 ? r.opacity : 0.5, show: r.show !== false, top: r.top !== false
+    });
+    try { await loadRef(trackFile(track, r.image), false); } catch (error) { refState.name = ""; status("The reference image of the track could not be loaded.", "error"); }
+}
+function refJSON() {
+    if (!refState.mesh) return null;
+    const ext = refState.file ? (refState.file.name.split(".").pop() || "png").toLowerCase().replace("jpeg", "jpg") : null;
+    return { image: refState.file ? "reference." + ext : refState.name, x: +refState.x.toFixed(2), y: +refState.y.toFixed(2), z: +refState.z.toFixed(2), width: +refState.width.toFixed(3),
+        rotation: +refState.rotation.toFixed(2), opacity: +refState.opacity.toFixed(2), show: refState.show, top: refState.top };
+}
+
+// Scale by two points: two clicks on the picture, then the distance between them in metres (or feet: "400 ft")
+function startRefScale() {
+    if (!refState.mesh) return;
+    refState.scale = [];
+    refState.show = true; refPlace();
+    setMode("refscale");
+    fillRefFields();
+}
+function endRefScale() {
+    refState.scale = null;
+    refMarks.clear();
+    if (state.mode === "refscale") setMode("view");
+}
+function drawRefMarks() {
+    refMarks.clear();
+    const points = refState.scale || [];
+    points.forEach((p) => {
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), new THREE.MeshBasicMaterial({ color: 0xff3df0, depthTest: false, transparent: true }));
+        ball.position.copy(p);
+        ball.renderOrder = 1001;
+        screenSize(ball, 7, 1);
+        refMarks.add(ball);
+    });
+    if (points.length === 2) {
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: 0xff3df0, depthTest: false, transparent: true }));
+        line.renderOrder = 1001;
+        refMarks.add(line);
+    }
+}
+async function refScaleClick(event) {
+    const hit = refState.mesh && pointerRay(event).intersectObject(refState.mesh, false)[0];
+    if (!hit) { status("Click on the picture.", "error"); return; }
+    refState.scale.push(hit.point.clone());
+    drawRefMarks();
+    if (refState.scale.length < 2) { $("hud").textContent = "Scale by two points: now click the second point (Escape cancels)."; return; }
+    const [a, b] = refState.scale;
+    const now = Math.hypot(b.x - a.x, b.z - a.z);
+    if (now < 1e-6) { status("The two points are the same place: click two points further apart.", "error"); refState.scale = []; drawRefMarks(); return; }
+    const answer = await OpenRacerDialog.prompt({ title: "How far apart are the two points?", text: "The distance in the world, in metres (or in feet: 400 ft). The picture is scaled about the first point. It is " + now.toFixed(1) + " m now.", input: "", ok: "Scale" });
+    const match = answer && String(answer).trim().replace(",", ".").match(/^([0-9]*\.?[0-9]+)\s*(m|meter|meters|metres|ft|feet|foot)?$/i);
+    const metres = match ? parseFloat(match[1]) * (/^f/i.test(match[2] || "") ? 0.3048 : 1) : NaN;
+    if (!(metres > 0)) { if (answer !== null) status("That is not a distance: type a number, like 120 or 400 ft.", "error"); endRefScale(); fillRefFields(); return; }
+    const k = metres / now;
+    refState.width *= k;
+    refState.x = a.x + (refState.x - a.x) * k;
+    refState.z = a.z + (refState.z - a.z) * k;
+    refPlace();
+    endRefScale();
+    fillRefFields();
+    status("The picture is scaled ×" + k.toFixed(3) + ": it is " + refState.width.toFixed(1) + " m wide now.", "ok");
+}
+
+$("refFile").onchange = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!/\.(png|jpe?g|webp)$/i.test(file.name)) { status("A reference image is a png, jpg or webp.", "error"); return; }
+    const url = URL.createObjectURL(file);
+    try {
+        await loadRef(url, !refState.mesh);
+        if (refState.url) URL.revokeObjectURL(refState.url);
+        refState.url = url; refState.file = file;
+        fillRefFields();
+        status("Reference image loaded. Move it with Move, then use Scale by two points.", "ok");
+    } catch (error) { URL.revokeObjectURL(url); status(error.message, "error"); }
+};
+$("refPick").onclick = () => $("refFile").click();
+$("refClear").onclick = () => clearRef();
+const refOpacity = (v) => { refState.opacity = Math.max(0, Math.min(1, v / 100)); refPlace(); fillRefFields(); };
+$("refOpacity").addEventListener("input", (e) => refOpacity(+e.target.value));
+$("refOpacityQuick").addEventListener("input", (e) => refOpacity(+e.target.value));
+$("refShow").onchange = (e) => { refState.show = e.target.checked; refPlace(); fillRefFields(); };
+$("refShowQuick").onchange = (e) => { refState.show = e.target.checked; refPlace(); fillRefFields(); };
+$("refTop").onchange = (e) => { refState.top = e.target.checked; refPlace(); };
+[["refWidth", "width", 1], ["refRotation", "rotation", -1e9], ["refX", "x", -1e9], ["refZ", "z", -1e9], ["refY", "y", -1e9]].forEach(([id, key, min]) => $(id).addEventListener("change", (e) => {
+    const v = parseFloat(e.target.value);
+    if (Number.isFinite(v) && v >= min) refState[key] = v;
+    refPlace(); fillRefFields();
+}));
+$("refMove").onclick = () => {
+    refState.moving = !refState.moving;
+    refGizmo.detach();
+    if (refState.moving && refState.mesh) refGizmo.attach(refGroup);
+    fillRefFields();
+};
+$("refScale").onclick = () => { if (state.mode === "refscale") endRefScale(); else startRefScale(); fillRefFields(); };
+window.addEventListener("keydown", (e) => {
+    const t = e.target && e.target.tagName;
+    if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
+    if (e.code === "Escape" && refState.scale) { endRefScale(); fillRefFields(); }
+    else if (e.code === "Escape" && refState.moving) { refState.moving = false; refGizmo.detach(); fillRefFields(); }
+}, true);
+fillRefFields();
+
 // the click on a node of a curb (any mode but drawing another curb): it is chosen; true when one was hit
 function pickCurbNode(event) {
     const hit = pointerRay(event).intersectObjects(curbNodeLayer.children, false).find((h) => h.object.userData.curbNode);
@@ -1785,6 +1976,7 @@ function setMode(mode) {
         : mode === "camera" ? "Add camera: click on the road or beside it, the camera is put above that place (set the height in the list). Click a camera in Look to choose it and move it with the gizmo; the button above it changes its range."
         : mode === "object" ? "Place object: click on the road (or the ground) where the object stands, and drag to turn it. Add a model with + in the Objects card first."
         : mode === "drag" ? "Drag strip: click on the road where the start line is and drag in the direction of the strip."
+        : mode === "refscale" ? "Scale by two points: click a place on the reference image whose distance to another place you know, then that other place (Escape cancels)."
         : mode === "curb" ? "Draw curb: click on the road for every node, along the edge of the road; Enter or Escape ends the curb. Click a node to move it, Shift + click adds one, Delete takes the chosen one away."
         : "Look: drag to turn, right mouse button to move, scroll to zoom. Click a part to find it in the list.");
 }
@@ -1901,6 +2093,7 @@ renderer.domElement.addEventListener("pointerup", (event) => {
     controls.enabled = true;
     if (d.range) { renderCameras(); return; }
     // the curbs: a node is chosen by a click; in Draw curb a click on the road is the next node; Shift + click adds a node to the chosen curb
+    if (state.mode === "refscale") { if (!d.moved && !refGizmo.axis) refScaleClick(event); return; }
     if (!d.moved && !curbGizmo.axis && !curbState.dragging) {
         if (pickCurbNode(event)) return;
         if (state.mode === "curb") {
@@ -2124,6 +2317,7 @@ async function loadExisting() {
         selectCamera(-1);
         await loadObjects(track);
         resetCurbs(track.curbs);
+        await resetRef(track);
         state.drag = track.dragstrip ? { x: track.dragstrip.x, y: groundY(track.dragstrip.x, track.dragstrip.z), z: track.dragstrip.z, heading: track.dragstrip.heading || 0, width: track.dragstrip.width || 12, length: track.dragstrip.length || 402.336 } : null;
         showDrag();
         updateMarkers();
@@ -2151,6 +2345,7 @@ function newTrack() {
     state.cameras = [];
     resetObjects();
     resetCurbs([]);
+    clearRef(); refState.oldName = "";
     selectCamera(-1);
     state.drag = null;
     state.legacy = false;
@@ -2364,10 +2559,24 @@ async function save() {
             config.surfaces = { meshes };
         }
 
+        // the reference image (only for this editor): the picture that was picked, or the one of the track copied into a new folder
+        let oldRef = null;
+        const ref = refJSON();
+        if (ref) {
+            if (refState.file) {
+                uploads.push([ref.image, refState.file]);
+                if (refState.oldName && refState.oldName !== ref.image && id === state.existingId) oldRef = refState.oldName;
+            } else if (id !== state.existingId && state.existingId) uploads.push([ref.image, await fileOf(trackFile(state.existingTrack, ref.image))]);
+            config.reference = ref;
+        } else {
+            delete config.reference;
+            if (refState.oldName && id === state.existingId) oldRef = refState.oldName;
+        }
+
         status("Saving…");
         const files = {};
         for (const [fileName, file] of uploads) files[fileName] = file;
-        const saved = await store(id, config, files, [oldSky, oldModel].filter(Boolean));
+        const saved = await store(id, config, files, [oldSky, oldModel, oldRef].filter(Boolean));
         state.existingId = id;
         state.existingTrack = Object.assign({}, config, { id });
         state.loadedDesign = config.design ? JSON.stringify(config.design) : null;
@@ -2376,6 +2585,7 @@ async function save() {
         state.skyName = config.environment && config.environment.sky_image || "";
         state.oldSkyName = state.skyName;
         state.skyFile = null;
+        refState.name = ref ? ref.image : ""; refState.oldName = refState.name; refState.file = null;
         state.thumbnail = null;          // (it is preview.webp now; a later save of another track did not get it)
         for (const m of objectState.models.values()) m.file = null;       // the models are in the folder of the track now
         await refreshList(id);
@@ -2522,7 +2732,7 @@ function fingerprint() {
             .map((e) => e.id + "=" + (e.type === "checkbox" ? e.checked : e.value));
         return JSON.stringify([fields, state.start, state.grid, state.pit, state.pitLine, state.pitBoxes, state.gates, state.cameras, state.drag, state.roles, state.env, state.skyName,
             design.active && design.active() ? design.toJSON() : null, objectState.list.map((o) => [o.model, o.x, o.y, o.z, o.heading, o.sx, o.sy, o.sz, o.pitch, o.roll]),
-            curbState.list.map((c) => [c.nodes, c.width, c.height, c.colour]),
+            curbState.list.map((c) => [c.nodes, c.width, c.height, c.colour]), refJSON(), refState.file ? refState.file.name : "",
             [...objectState.models.values()].map((m) => [m.name, m.kind, m.mass, m.pivot]), !!state.thumbnail]);
     } catch (error) { return ""; }
 }

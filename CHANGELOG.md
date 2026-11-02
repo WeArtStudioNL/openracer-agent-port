@@ -6,6 +6,7 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 ## Unreleased
 
+- **Reference image in the track editor.** A map or an aerial photo lies flat in the view to draw a track over: opacity, on top of the track or under it, moved with a gizmo or by numbers, turned, and *Scale by two points*: click two places whose distance you know and type it (metres, or feet). It is saved with the track (`reference.png` and track.json "reference"); the game does not use it.
 - **Curbs in the track editor.** Draw curb: a click on the road for every node, a smooth red and white strip through them (width, height and colour can be chosen). Every node lies where a ray down meets the surface; a node can be moved with the gizmo, Shift + click adds one, Delete takes one away and joins the nodes beside it, and a curb without nodes is gone. Saved in track.json ("curbs"); in the game a curb is road, a few centimetres high (`web/js/Curbs.js`).
 
 ## 2.4.0 (2026-11-01)

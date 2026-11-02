@@ -53,6 +53,34 @@
         </details>
 
         <details class="card" open>
+            <summary>Reference image<span class="meta" id="refName">none</span></summary>
+            <div class="body">
+                <p class="sub">A picture to draw the track over: a map or an aerial photo (png, jpg or webp). It lies flat in the view, is only for this editor and is saved with the track. <b>Scale by two points</b>: click two places on the picture whose distance you know (the length of a straight, a building) and type that distance.</p>
+                <div class="buttons"><button class="small accent" id="refPick">Choose a picture…</button><button class="small ghost" id="refClear">Remove</button></div>
+                <input type="file" id="refFile" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" style="display:none">
+                <div id="refControls" style="display:none">
+                    <div class="row">
+                        <div><label>Opacity <span class="hint" id="refOpacityValue"></span></label><input type="range" id="refOpacity" min="0" max="100" step="1"></div>
+                    </div>
+                    <div class="row">
+                        <label class="check"><input type="checkbox" id="refShow"> Show</label>
+                        <label class="check" title="On top: the picture shows over the model and the road (the markers and the nodes stay above it). Off: it lies at its height, and what is higher hides it."><input type="checkbox" id="refTop"> On top of the track</label>
+                    </div>
+                    <div class="buttons"><button class="small" id="refScale">Scale by two points</button><button class="small" id="refMove" title="A gizmo to move the picture over the ground (Escape ends it)">Move</button></div>
+                    <div class="row">
+                        <div><label>Width (m)</label><input type="number" id="refWidth" min="1" step="1"></div>
+                        <div><label>Turn (°)</label><input type="number" id="refRotation" step="1"></div>
+                    </div>
+                    <div class="row">
+                        <div><label>x (m)</label><input type="number" id="refX" step="1"></div>
+                        <div><label>z (m)</label><input type="number" id="refZ" step="1"></div>
+                        <div><label>Height (m)</label><input type="number" id="refY" step="0.5"></div>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <details class="card" open>
             <summary>Model<span class="meta" id="modelInfo">No model loaded.</span></summary>
             <div class="body">
                 <p class="sub">A <b>.glb</b>, or a <b>.gltf</b> with its <b>.bin</b> and textures (select them all). Make the track in metres, y up. Importing a model in a track that exists replaces its model.</p>
@@ -277,6 +305,7 @@
         </div>
     </div>
     <div class="float top-right">
+        <span id="refQuick" style="display:none" title="The reference image: show it, and its opacity"><label><input type="checkbox" id="refShowQuick"> reference</label> <input type="range" id="refOpacityQuick" min="0" max="100" step="1" style="width:90px; vertical-align:middle"></span>
         <label><input type="checkbox" id="colour" checked> colours of the surfaces</label>
         <button class="small ghost" id="topView">From above</button>
     </div>
