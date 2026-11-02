@@ -6,6 +6,14 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 ## Unreleased
 
+- **Track editor, from its audit (AUDIT-TRACK-EDITOR-2026-11-02.md).**
+  - One thing is chosen at a time (a click lets go of the rest), and Delete and Escape act on that one thing; Escape goes back one step at a time. The racing line is no longer written into the next track that is opened, and Escape asks before it throws a changed line away.
+  - Undo and redo for all of the track (Ctrl+Z, Ctrl+Y, and ↶ ↷ in the view): grid, pit, gates, cameras, drag strip, objects, curbs, surfaces and the road of the designer in one list.
+  - Keys: Ctrl+S saves, 1 to 0 are the tools, F brings the chosen thing into view, T looks from above, End puts it on the surface, Ctrl+D copies it, ? lists the keys.
+  - A panel with the numbers of the chosen thing (place, direction, width, scale, range); boxes of the grid and of the pit can be chosen and moved with a gizmo; the Layers panel lists the grid, the pit boxes and the cameras, and its sections fold.
+  - Fill the grid (boxes 2 to 8, two wide and staggered), Fill the pit boxes, Auto gates (along the racing line, gate 1 at the start), a live Ready to race list, a Measure tool and the place of the pointer.
+  - Unsaved changes: a filter or a field that only shows something no longer counts, a model imported again does. A track that fails to load leaves an empty track instead of a mix of two. The drawn road has no painted kerbs any more (draw curbs), and curbs, gates and objects follow the road when it changes; the game shows curbs on tracks of the old format too.
+  - The start dialog closes (× or Escape), opens the last track again, and the track list has pictures and a search. Long explanations are short lines with an (i). The panels no longer lie over each other, and markers are freed when they are drawn again.
 - **Reference image in the track editor.** A map or an aerial photo lies flat in the view to draw a track over: opacity, on top of the track or under it, moved with a gizmo or by numbers, turned, and *Scale by two points*: click two places whose distance you know and type it (metres, or feet). It is saved with the track (`reference.png` and track.json "reference"); the game does not use it.
 - **Curbs in the track editor.** Draw curb: a click on the road for every node, a smooth red and white strip through them (width, height and colour can be chosen). Every node lies where a ray down meets the surface; a node can be moved with the gizmo, Shift + click adds one, Delete takes one away and joins the nodes beside it, and a curb without nodes is gone. Saved in track.json ("curbs"); in the game a curb is road, a few centimetres high (`web/js/Curbs.js`).
 

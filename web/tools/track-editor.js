@@ -85,6 +85,32 @@ const objectState = { models: new Map(), list: [], selected: null };
 const library = { items: [] };                       // the library of models, the same for every track (objects/objects.json: [{ id, name, file, thumb, kind, mass }])
 const gateUi = { selected: -1, dragging: false, width0: 24 };           // the gate that is chosen (the layers panel, a click in the view): its gizmo moves, turns and widens it
 const raycaster = new THREE.Raycaster();
+const boxSel = { kind: null, i: -1, dragging: false };                  // a box of the grid ("grid") or of the pit ("pit") that is chosen: the gizmo moves and turns it
+const undoState = { past: [], future: [], last: null, busy: false };      // the undo of the whole editor (see "undo and redo" below)
+const measureState = { points: [] };                                    // the points of the measure tool
+const boxTarget = new THREE.Object3D();
+scene.add(boxTarget);
+const boxGizmo = new TransformControls(camera, renderer.domElement);
+boxGizmo.setSize(0.9);
+boxGizmo.showY = false;
+scene.add(typeof boxGizmo.getHelper === "function" ? boxGizmo.getHelper() : boxGizmo);
+// the meshes and materials of markers that are made again at every change are freed (they were never: the memory of the GPU grew during a session). The arrows share
+// their geometry, and a sprite too: only their materials go.
+function disposeTree(group) {
+    group.traverse((o) => {
+        const shared = o.isSprite || (o.parent && o.parent.type === "ArrowHelper");
+        if (o.geometry && !shared) o.geometry.dispose();
+        if (o.material) [].concat(o.material).forEach((m) => { if (m.map && o.isSprite) m.map.dispose(); m.dispose(); });
+    });
+    group.clear();
+}
+// the markers drawn again once per frame while a gizmo is dragged (each step of a drag drew all of them)
+let markersQueued = false;
+function scheduleMarkers() {
+    if (markersQueued) return;
+    markersQueued = true;
+    requestAnimationFrame(() => { markersQueued = false; updateMarkers(); });
+}
 
 // ---- the cinematic cameras: a click chooses one, a gizmo moves it, and the button above it changes its range (a circle on the floor: the middle moves it, the node on the edge sets the radius)
 const camTarget = new THREE.Object3D();
@@ -96,12 +122,13 @@ camGizmo.addEventListener("objectChange", () => {
     const c = state.cameras[state.camSel];
     if (!c) return;
     c.x = camTarget.position.x; c.y = camTarget.position.y; c.z = camTarget.position.z;
-    updateMarkers();
+    scheduleMarkers();
 });
 scene.add(typeof camGizmo.getHelper === "function" ? camGizmo.getHelper() : camGizmo);
 const DEFAULT_RANGE = 30;
 function rangeOf(c) { return c.range || { x: c.x, z: c.z, r: DEFAULT_RANGE }; }
 function selectCamera(i, rangeMode) {
+    if (i >= 0) clearSelection("camera");
     state.camSel = i >= 0 && state.cameras[i] ? i : -1;
     state.camRange = state.camSel >= 0 && !!rangeMode;
     camGizmo.detach();
@@ -141,10 +168,6 @@ function positionCamIcons() {
         button.style.top = (rect.top - box.top + (-iconVector.y * 0.5 + 0.5) * rect.height) + "px";
     });
 }
-window.addEventListener("keydown", (event) => {
-    const t = event.target && event.target.tagName;
-    if (event.code === "Escape" && t !== "INPUT" && t !== "TEXTAREA" && state.camSel >= 0) selectCamera(-1);
-});
 
 // ---- the layers of the events (the drag strip): chosen in the list, it shows a gizmo with arrows for the place and a circle for the direction
 const eventLayers = { selected: null, dragging: false };
@@ -166,10 +189,11 @@ function dragGizmoMoved() {
     if (!state.drag) return;
     state.drag.x = dragTarget.position.x; state.drag.y = dragTarget.position.y; state.drag.z = dragTarget.position.z;
     state.drag.heading = -dragTarget.rotation.y;          // (the heading goes from +x towards +z, a turn about y goes the other way)
-    updateMarkers();
+    scheduleMarkers();
 }
 function selectEvent(id) {
     eventLayers.selected = eventLayers.selected === id ? null : id;
+    if (eventLayers.selected) clearSelection("drag");
     moveGizmo.detach(); turnGizmo.detach();
     if (eventLayers.selected === "drag" && state.drag) {
         syncDragTarget();
@@ -238,7 +262,7 @@ function lineSourcePoints() {
 }
 
 function drawLine(keepNodes) {
-    lineLayer.clear();
+    disposeTree(lineLayer);
     const track = state.existingTrack;
     let points = null;
     if (lineEdit.editing && lineEdit.nodes.length >= 3) {
@@ -279,6 +303,7 @@ function drawLine(keepNodes) {
 }
 
 function selectLineNode(i) {
+    if (i >= 0) clearSelection("line");
     lineEdit.selected = i;
     lineGizmo.detach();
     if (i >= 0 && lineEdit.nodes[i]) {
@@ -293,6 +318,7 @@ function startLineEdit() {
     lineEdit.nodes = lineNodesFrom(points, 8);
     if (lineEdit.nodes.length < 4) { status("The line is too short to edit.", "error"); return; }
     lineEdit.editing = true; lineEdit.show = true;
+    lineEdit.start = JSON.stringify(lineEdit.nodes);
     selectLineNode(-1);
     status("Editing the line: click a node, move it with the arrows. Shift + click on the road adds a node, Delete takes the chosen one away.", "ok");
 }
@@ -300,6 +326,7 @@ function startLineEdit() {
 function startLineDraw() {
     lineEdit.nodes = [];
     lineEdit.editing = true; lineEdit.show = true; lineEdit.drawing = true;
+    lineEdit.start = "[]";
     selectLineNode(-1);
     status("Draw the line: click on the road, node after node, in the direction that the AI drives, all the way round (four at least). The line closes itself. Apply line saves it.", "ok");
 }
@@ -307,6 +334,13 @@ function undoLineNode() {
     if (!lineEdit.nodes.length) return;
     lineEdit.nodes.pop();
     selectLineNode(-1);
+}
+// the line was changed since Edit the line or Draw the line (and not applied)
+function lineChanged() { return lineEdit.editing && JSON.stringify(lineEdit.nodes) !== lineEdit.start; }
+// Cancel and Escape: a line that was changed goes only after a question
+async function cancelLineEdit() {
+    if (lineChanged() && !(await OpenRacerDialog.ask({ title: "Throw away the changes of the line?", text: "The nodes are back as they were; the saved line stays.", ok: "Throw away", danger: true }))) return;
+    stopLineEdit();
 }
 function stopLineEdit() {
     lineEdit.editing = false; lineEdit.drawing = false; lineEdit.nodes = []; lineEdit.selected = -1;
@@ -367,11 +401,6 @@ function renderLineButtons() {
     $("deleteLineNode").disabled = lineEdit.selected < 0;
     $("showLine").parentElement.style.display = lineEdit.editing ? "none" : "";
 }
-window.addEventListener("keydown", (e) => {
-    if (!lineEdit.editing || e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
-    if (e.code === "Delete" || e.code === "Backspace") { deleteLineNode(); e.preventDefault(); }
-    else if (e.code === "Escape") stopLineEdit();
-});
 
 // ---- the curbs (Curbs.js): drawn with Draw curb, a click on the road for every node (Enter or Escape ends the curb). A click on a node chooses it, the arrows of
 // the gizmo move it (its height is where a ray down meets the surface under it), Shift + click on the road adds a node to the chosen curb (between the two nodes it
@@ -402,7 +431,7 @@ scene.add(typeof curbGizmo.getHelper === "function" ? curbGizmo.getHelper() : cu
 
 function curbSettings() {
     const d = OpenRacer.CURB_DEFAULTS;
-    return { width: Math.max(0.3, parseFloat($("curbWidth").value) || d.width), height: Math.max(0, Math.min(0.3, parseFloat($("curbHeight").value))) || 0, colour: $("curbColour").value || d.colour };
+    return { width: Math.max(0.3, Math.min(4, parseFloat($("curbWidth").value) || d.width)), height: Math.max(0, Math.min(0.3, parseFloat($("curbHeight").value))) || 0, colour: $("curbColour").value || d.colour };
 }
 // the strip of one curb, made again from its nodes (the ground under it is found again)
 function buildCurb(i) {
@@ -423,7 +452,7 @@ function drawCurbs() {
 }
 // the nodes: of the chosen curb large (the chosen node orange, the first green), of the other curbs small, so that a click finds them
 function drawCurbNodes() {
-    curbNodeLayer.clear();
+    disposeTree(curbNodeLayer);
     curbState.list.forEach((c, i) => {
         if (c.mesh) c.mesh.userData.curbIndex = i;
         const chosen = i === curbState.selected, radius = (chosen ? 0.6 : 0.4) * state.markerScale;
@@ -440,6 +469,7 @@ function drawCurbNodes() {
     renderCurbs();
 }
 function selectCurb(i, node) {
+    if (i >= 0) clearSelection("curb");
     curbState.selected = i >= 0 && curbState.list[i] ? i : -1;
     curbState.node = curbState.selected >= 0 && node >= 0 && node < curbState.list[curbState.selected].nodes.length ? node : -1;
     curbGizmo.detach();
@@ -447,7 +477,6 @@ function selectCurb(i, node) {
         const n = curbState.list[curbState.selected].nodes[curbState.node];
         curbTarget.position.set(n[0], n[1], n[2]);
         curbGizmo.attach(curbTarget);
-        selectObject(-1); selectGate(-1);
     }
     if (curbState.selected >= 0) {
         const c = curbState.list[curbState.selected];
@@ -572,14 +601,6 @@ $("curbRemove").onclick = async () => {
     if (!(await OpenRacerDialog.ask({ title: "Remove curb " + (curbState.selected + 1) + "?", text: "With all its nodes.", ok: "Remove", danger: true }))) return;
     removeCurb(curbState.selected);
 };
-// (in the capture phase: before the designer of the road, which takes Delete for its own nodes)
-window.addEventListener("keydown", (e) => {
-    const t = e.target && e.target.tagName;
-    if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
-    if ((e.code === "Delete" || e.code === "Backspace") && curbState.node >= 0) { if (deleteCurbNode()) { e.preventDefault(); e.stopImmediatePropagation(); } }
-    else if ((e.code === "Enter" || e.code === "Escape") && curbState.drawing) { endCurbDraw(); if (e.code === "Enter") e.preventDefault(); }
-    else if (e.code === "Escape" && curbState.selected >= 0) selectCurb(-1);
-}, true);
 // ---- the reference image: a picture (a map, an aerial photo) lying flat in the view to draw a track over. Its opacity, its place (the gizmo or the fields), its turn
 // and its width in metres; Scale by two points: click two places on the picture whose distance you know and type it, the picture is scaled about the first one.
 // Saved with the track (track.json "reference": { image, x, y, z, width, rotation, opacity, show, top }, the picture in its folder as reference.<ext>); the game does not use it.
@@ -691,7 +712,7 @@ function endRefScale() {
     if (state.mode === "refscale") setMode("view");
 }
 function drawRefMarks() {
-    refMarks.clear();
+    disposeTree(refMarks);
     const points = refState.scale || [];
     points.forEach((p) => {
         const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), new THREE.MeshBasicMaterial({ color: 0xff3df0, depthTest: false, transparent: true }));
@@ -758,17 +779,12 @@ $("refTop").onchange = (e) => { refState.top = e.target.checked; refPlace(); };
 }));
 $("refMove").onclick = () => {
     refState.moving = !refState.moving;
+    if (refState.moving) clearSelection("ref");
     refGizmo.detach();
     if (refState.moving && refState.mesh) refGizmo.attach(refGroup);
     fillRefFields();
 };
 $("refScale").onclick = () => { if (state.mode === "refscale") endRefScale(); else startRefScale(); fillRefFields(); };
-window.addEventListener("keydown", (e) => {
-    const t = e.target && e.target.tagName;
-    if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
-    if (e.code === "Escape" && refState.scale) { endRefScale(); fillRefFields(); }
-    else if (e.code === "Escape" && refState.moving) { refState.moving = false; refGizmo.detach(); fillRefFields(); }
-}, true);
 fillRefFields();
 
 // the click on a node of a curb (any mode but drawing another curb): it is chosen; true when one was hit
@@ -1131,23 +1147,32 @@ function numberLabel(n, x, y, z, colour) {
     sprite.renderOrder = 999;
     return screenSize(sprite, 22, 1);
 }
+// an invisible quad over a box of the grid or of the pit: what a click in Look finds (a line is hard to hit)
+function boxPick(corners, y, kind, i) {
+    const quad = new THREE.BufferGeometry();
+    quad.setAttribute("position", new THREE.Float32BufferAttribute([].concat(...[0, 1, 2, 0, 2, 3].map((k) => [corners[k][0], y + 0.1, corners[k][1]])), 3));
+    const mesh = new THREE.Mesh(quad, new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide }));
+    mesh.userData.box = { kind, i };
+    return mesh;
+}
 function makeArrow(x, y, z, h, colour, length) {
     return new THREE.ArrowHelper(new THREE.Vector3(Math.cos(h), 0, Math.sin(h)), new THREE.Vector3(x, y + 0.6, z), length, colour, length * 0.3, length * 0.2);
 }
 
 function updateMarkers() {
-    markers.clear();
+    disposeTree(markers);
     showObjects();
     const k = state.markerScale;
     // the grid: a box on the road per place, box 1 (the start) in yellow with its arrow, the others in white, each with its number
     state.grid.forEach((b, i) => {
-        const colour = i === 0 ? 0xffd04d : 0xffffff;
+        const colour = boxSel.kind === "grid" && boxSel.i === i ? 0xff8a3d : (i === 0 ? 0xffd04d : 0xffffff);
         const c = Math.cos(b.heading), sn = Math.sin(b.heading), ax = c * BOX_L / 2, az = sn * BOX_L / 2, bx = -sn * BOX_W / 2, bz = c * BOX_W / 2;
         const corners = [[b.x - ax + bx, b.z - az + bz], [b.x + ax + bx, b.z + az + bz], [b.x + ax - bx, b.z + az - bz], [b.x - ax - bx, b.z - az - bz]];
         const pts = corners.concat([corners[0]]).map((q) => new THREE.Vector3(q[0], groundY(q[0], q[1], b.y) + 0.08, q[1]));
         const loop = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: colour, depthTest: false }));
         loop.renderOrder = 996;
         markers.add(loop);
+        markers.add(boxPick(corners, b.y, "grid", i));
         markers.add(screenSize(makeArrow(b.x, b.y, b.z, b.heading, colour, (i === 0 ? 6 : 3.5) * k), i === 0 ? 60 : 40, (i === 0 ? 6 : 3.5) * k));
         markers.add(numberLabel(i + 1, b.x, b.y + 0.1, b.z, colour));
     });
@@ -1162,9 +1187,10 @@ function updateMarkers() {
         fill.renderOrder = 995;
         markers.add(fill);
         const pts = corners.concat([corners[0]]).map((q) => new THREE.Vector3(q[0], y(q) + 0.02, q[1]));
-        const loop = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xffe066, depthTest: false }));
+        const loop = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: boxSel.kind === "pit" && boxSel.i === i ? 0xff8a3d : 0xffe066, depthTest: false }));
         loop.renderOrder = 996;
         markers.add(loop);
+        markers.add(boxPick(corners, b.y, "pit", i));
         markers.add(screenSize(makeArrow(b.x, b.y, b.z, b.heading, 0xffd04d, 3.5 * k), 40, 3.5 * k));
         markers.add(numberLabel(i + 1, b.x, b.y + 0.1, b.z, 0xffd04d));
     });
@@ -1300,6 +1326,9 @@ function updateMarkers() {
     if (eventLayers.selected === "drag" && !state.drag) selectEvent("drag");
     renderEventLayers();
     renderGates();
+    renderBoxLayers();
+    renderProps();
+    renderReady();
 }
 
 // the distances of the drag strip that are timed in the game (Name, metres)
@@ -1386,6 +1415,17 @@ function applyObjectTransform(g, o) {
 function newObject(model, x, y, z, heading) { return { model, x, y, z, heading, pitch: 0, roll: 0, sx: 1, sy: 1, sz: 1 }; }
 let objectBox = null;
 function showObjects() {
+    const key = objectState.list.map((o) => o.model).join("|") + "#" + [...objectState.models.values()].map((m) => m.name + (m.scene ? m.scene.uuid : "") + (m.pivot ? m.pivot.toArray().join(",") : "")).join("|");
+    if (key === objectLayer.userData.key) {
+        // (the same objects: only where they stand; each step of a gizmo cloned every model of the track again)
+        objectLayer.children.forEach((g) => { const o = objectState.list[g.userData.objectIndex]; if (o) applyObjectTransform(g, o); });
+        if (objectBox) { scene.remove(objectBox); objectBox.dispose(); objectBox = null; }
+        const chosen = objectLayer.children.find((g) => g.userData.objectIndex === objectUi.selected);
+        if (chosen) { objectBox = new THREE.BoxHelper(chosen, 0xffd04d); scene.add(objectBox); }
+        syncObjectTarget();
+        return;
+    }
+    objectLayer.userData.key = key;
     objectLayer.clear();
     objectState.list.forEach((o, i) => {
         const model = objectState.models.get(o.model);
@@ -1428,7 +1468,7 @@ function objectGizmoMoved() {
     showObjects();
 }
 function selectObject(i) {
-    if (i >= 0 && gateUi.selected >= 0) selectGate(-1);
+    if (i >= 0) clearSelection("object");
     objectGizmo.detach();
     objectUi.selected = objectState.list[i] ? i : -1;
     if (objectUi.selected >= 0) { applyObjectTransform(objectTarget, objectState.list[objectUi.selected]); objectGizmo.attach(objectTarget); setObjectGizmoMode(objectGizmo.mode || "translate"); }
@@ -1443,23 +1483,16 @@ function setObjectGizmoMode(mode) {
     gateGizmo.setSpace(mode === "translate" ? "world" : "local");
     // a gate only moves, turns about the vertical and widens (the scale along its width)
     gateGizmo.showX = mode !== "rotate"; gateGizmo.showY = mode !== "scale"; gateGizmo.showZ = mode === "translate";
+    // a box of the grid or of the pit moves over the road and turns about the vertical (it has no scale)
+    {
+        boxGizmo.setMode(mode === "rotate" ? "rotate" : "translate");
+        boxGizmo.setSpace(mode === "rotate" ? "local" : "world");
+        boxGizmo.showX = boxGizmo.showZ = mode !== "rotate"; boxGizmo.showY = mode === "rotate";
+    }
     const names = { translate: "Move (W)", rotate: "Turn (E)", scale: "Scale (R)" };
     const hint = $("objectGizmoMode");
     if (hint) hint.textContent = names[mode];
 }
-window.addEventListener("keydown", (event) => {
-    const t = event.target && event.target.tagName;
-    if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT" || (objectUi.selected < 0 && gateUi.selected < 0)) return;
-    if (event.code === "KeyW") setObjectGizmoMode("translate");
-    else if (event.code === "KeyE") setObjectGizmoMode("rotate");
-    else if (event.code === "KeyR") setObjectGizmoMode("scale");
-    else if (event.code === "Delete" || event.code === "Backspace") {
-        if (gateUi.selected >= 0) { state.gates.splice(gateUi.selected, 1); selectGate(-1); updateMarkers(); }
-        else { objectState.list.splice(objectUi.selected, 1); selectObject(-1); updateMarkers(); }
-    }
-    else return;
-    event.preventDefault();
-});
 // ---- the gates as layers: chosen in the layers panel or by a click on one in the view; the gizmo moves it (W), turns it about the vertical (E) and makes it wider or narrower (R)
 const gateTarget = new THREE.Object3D();
 scene.add(gateTarget);
@@ -1477,7 +1510,7 @@ gateGizmo.addEventListener("objectChange", () => {
     g.x = gateTarget.position.x; g.y = gateTarget.position.y; g.z = gateTarget.position.z;
     g.heading = -2 * Math.atan2(gateTarget.quaternion.y, gateTarget.quaternion.w);           // (the heading goes from +x towards +z, a turn about y goes the other way)
     if (Math.abs(gateTarget.scale.x - 1) > 1e-4) g.width = Math.max(2, Math.min(400, Math.round(gateUi.width0 * gateTarget.scale.x * 10) / 10));
-    updateMarkers();
+    scheduleMarkers();
 });
 scene.add(typeof gateGizmo.getHelper === "function" ? gateGizmo.getHelper() : gateGizmo);
 function syncGateTarget() {
@@ -1491,7 +1524,7 @@ function selectGate(i) {
     gateGizmo.detach();
     gateUi.selected = state.gates[i] ? i : -1;
     if (gateUi.selected >= 0) {
-        if (objectUi.selected >= 0) selectObject(-1);
+        clearSelection("gate");
         syncGateTarget();
         gateGizmo.attach(gateTarget);
         setObjectGizmoMode(objectGizmo.mode || "translate");
@@ -1831,10 +1864,13 @@ function renderGrid() {
         row.className = "gate";
         const text = document.createElement("span");
         text.textContent = (i === 0 ? "Box 1 (the start)" : "Box " + (i + 1)) + ": " + b.x.toFixed(1) + ", " + b.z.toFixed(1) + ", " + (b.heading * 180 / Math.PI).toFixed(0) + "°";
+        text.style.cursor = "pointer"; text.title = "Choose it: move it with the gizmo (W), turn it (E)";
+        text.style.fontWeight = boxSel.kind === "grid" && boxSel.i === i ? "700" : "400";
+        text.onclick = () => selectBox("grid", i);
         const remove = document.createElement("button");
         remove.className = "small danger";
         remove.textContent = "Remove";
-        remove.onclick = () => { state.grid.splice(i, 1); syncStart(); updateMarkers(); };
+        remove.onclick = () => { state.grid.splice(i, 1); syncStart(); selectBox(null, -1); };
         row.appendChild(text);
         row.appendChild(remove);
         list.appendChild(row);
@@ -1853,10 +1889,13 @@ function renderPit() {
         row.className = "gate";
         const text = document.createElement("span");
         text.textContent = (i === 0 ? "Box 1 (the player)" : "Box " + (i + 1)) + ": " + b.x.toFixed(1) + ", " + b.z.toFixed(1) + ", " + (b.heading * 180 / Math.PI).toFixed(0) + "°";
+        text.style.cursor = "pointer"; text.title = "Choose it: move it with the gizmo (W), turn it (E)";
+        text.style.fontWeight = boxSel.kind === "pit" && boxSel.i === i ? "700" : "400";
+        text.onclick = () => selectBox("pit", i);
         const remove = document.createElement("button");
         remove.className = "small danger";
         remove.textContent = "Remove";
-        remove.onclick = () => { state.pitBoxes.splice(i, 1); updateMarkers(); };
+        remove.onclick = () => { state.pitBoxes.splice(i, 1); selectBox(null, -1); };
         row.append(text, remove);
         list.appendChild(row);
     });
@@ -1892,7 +1931,7 @@ function renderGates() {
         const remove = document.createElement("button");
         remove.className = "small danger";
         remove.textContent = "Remove";
-        remove.onclick = () => { state.gates.splice(i, 1); updateMarkers(); };
+        remove.onclick = () => { state.gates.splice(i, 1); selectGate(-1); };
         row.appendChild(text);
         row.appendChild(remove);
         list.appendChild(row);
@@ -1929,7 +1968,7 @@ function renderCameras() {
         const remove = document.createElement("button");
         remove.className = "small danger";
         remove.textContent = "Remove";
-        remove.onclick = () => { state.cameras.splice(i, 1); selectCamera(-1); };
+        remove.onclick = () => { state.cameras.splice(i, 1); selectCamera(-1); updateMarkers(); };
         row.appendChild(remove);
         list.appendChild(row);
     });
@@ -1939,14 +1978,15 @@ function renderCameras() {
 // the grid and the pit area: their buttons
 // (the clear buttons ask first: there is no undo for the markers, and one click took all the boxes)
 const clearOk = (what, count) => count > 1 ? OpenRacerDialog.ask({ title: "Clear " + what + "?", text: "All " + count + " of them. This cannot be undone.", ok: "Clear", danger: true }) : Promise.resolve(true);
-$("gridClear").onclick = async () => { if (!(await clearOk("the grid", state.grid.length))) return; state.grid = []; syncStart(); updateMarkers(); };
-$("pitClear").onclick = async () => { if (!(await clearOk("the pit boxes", state.pitBoxes.length))) return; state.pitBoxes = []; updateMarkers(); };
+$("gridClear").onclick = async () => { if (!(await clearOk("the grid", state.grid.length))) return; state.grid = []; syncStart(); selectBox(null, -1); };
+$("pitClear").onclick = async () => { if (!(await clearOk("the pit boxes", state.pitBoxes.length))) return; state.pitBoxes = []; selectBox(null, -1); };
 $("pitLineUndo").onclick = () => { state.pitLine.pop(); updateMarkers(); };
 $("pitLineClear").onclick = async () => { if (!(await clearOk("the pit line", state.pitLine.length))) return; state.pitLine = []; updateMarkers(); };
 // the design of a track without a model: nodes, heights, widths and prefabs (see track-design.js)
 const design = createDesign({
     scene, trackGroup, camera, renderer, controls, state, registerMesh, applyColours, renderParts, updateMarkers, frameTrack, status, $,
-    setMode, getMode: () => state.mode, roleMaterials, screenSize
+    setMode, getMode: () => state.mode, roleMaterials, screenSize,
+    ownUndo: true, onCommit: () => noteDesignStep(), onSelect: () => clearSelection("design"), onRebuild: () => snapToSurface()
 });
 function startDesign(data) {
     clearTrack();
@@ -1965,6 +2005,8 @@ function stopDesign() {
 
 function setMode(mode) {
     if (mode !== "curb" && typeof endCurbDraw === "function") endCurbDraw();
+    if (state.mode === "measure" && mode !== "measure") clearMeasure();
+    if (mode !== "view" && mode !== state.mode && state.mode !== undefined && typeof gizmoBusy === "function" && mode !== "curb") clearSelection();
     state.mode = mode;
     if (typeof renderLibrary === "function") renderLibrary();
     $("dragWindow").style.display = mode === "drag" ? "block" : "none";
@@ -1976,6 +2018,7 @@ function setMode(mode) {
         : mode === "camera" ? "Add camera: click on the road or beside it, the camera is put above that place (set the height in the list). Click a camera in Look to choose it and move it with the gizmo; the button above it changes its range."
         : mode === "object" ? "Place object: click on the road (or the ground) where the object stands, and drag to turn it. Add a model with + in the Objects card first."
         : mode === "drag" ? "Drag strip: click on the road where the start line is and drag in the direction of the strip."
+        : mode === "measure" ? "Measure: click a point on the track, then the next ones; the length is shown here. Escape ends it."
         : mode === "refscale" ? "Scale by two points: click a place on the reference image whose distance to another place you know, then that other place (Escape cancels)."
         : mode === "curb" ? "Draw curb: click on the road for every node, along the edge of the road; Enter or Escape ends the curb. Click a node to move it, Shift + click adds one, Delete takes the chosen one away."
         : "Look: drag to turn, right mouse button to move, scroll to zoom. Click a part to find it in the list.");
@@ -2011,7 +2054,7 @@ renderer.domElement.addEventListener("pointerdown", (event) => {
             return;
         }
     }
-    if ((state.mode === "grid" || state.mode === "pitbox" || state.mode === "pitline" || state.mode === "gate" || state.mode === "drag" || state.mode === "camera" || state.mode === "object") && !moveGizmo.axis && !turnGizmo.axis && !objectGizmo.axis) {
+    if ((state.mode === "grid" || state.mode === "pitbox" || state.mode === "pitline" || state.mode === "gate" || state.mode === "drag" || state.mode === "camera" || state.mode === "object") && !gizmoBusy()) {
         const hit = roadHit(event);
         if (hit) {
             drag.hit = hit;
@@ -2092,30 +2135,23 @@ renderer.domElement.addEventListener("pointerup", (event) => {
     drag = null;
     controls.enabled = true;
     if (d.range) { renderCameras(); return; }
-    // the curbs: a node is chosen by a click; in Draw curb a click on the road is the next node; Shift + click adds a node to the chosen curb
-    if (state.mode === "refscale") { if (!d.moved && !refGizmo.axis) refScaleClick(event); return; }
-    if (!d.moved && !curbGizmo.axis && !curbState.dragging) {
-        if (pickCurbNode(event)) return;
-        if (state.mode === "curb") {
-            const road = roadHit(event);
-            if (road) { if (event.shiftKey && curbState.selected >= 0 && !curbState.drawing) insertCurbNode(road.point); else addCurbNode(road.point); }
-            return;
-        }
-        if (event.shiftKey && curbState.selected >= 0 && !lineEdit.editing) {
-            const road = roadHit(event);
-            if (road) { insertCurbNode(road.point); return; }
-        }
-    }
-    if (state.mode !== "camera" && !d.moved && !d.hit && state.cameras.length) {
-        const hits = pointerRay(event).intersectObjects(markers.children, false).filter((h) => h.object.userData.camera !== undefined);
-        if (hits.length) { selectCamera(hits[0].object.userData.camera, state.camRange && state.camSel === hits[0].object.userData.camera); return; }
-    }
+    if (state.mode === "refscale") { if (!d.moved && !gizmoBusy()) refScaleClick(event); return; }
+    if (state.mode === "measure") { if (!d.moved && !gizmoBusy()) measureClick(event); return; }
     if (d.hit) {
         if (state.mode === "pitline") { if (!d.moved) { state.pitLine.push({ x: d.hit.point.x, y: d.hit.point.y, z: d.hit.point.z }); updateMarkers(); } }
         else if (!d.added && (state.mode === "grid" || state.mode === "pitbox" || state.mode === "gate" || state.mode === "drag" || state.mode === "camera" || state.mode === "object")) place(d, false);
         return;
     }
-    if (lineEdit.editing && !d.moved && !lineEdit.dragging) {
+    if (d.moved || gizmoBusy()) return;
+    // the curbs: a node is chosen by a click (in Look and in Draw curb); in Draw curb a click on the road is the next node; Shift + click adds a node to the chosen curb
+    const looking = state.mode === "view" || state.mode === "curb";
+    if (looking && !lineEdit.editing && pickCurbNode(event)) return;
+    if (state.mode === "curb") {
+        const road = roadHit(event);
+        if (road) { if (event.shiftKey && curbState.selected >= 0 && !curbState.drawing) insertCurbNode(road.point); else addCurbNode(road.point); }
+        return;
+    }
+    if (lineEdit.editing && !lineEdit.dragging) {
         const hits = pointerRay(event).intersectObjects(lineLayer.children, true).filter((h) => h.object.userData.lineNode !== undefined);
         if (hits.length) { selectLineNode(hits[0].object.userData.lineNode); return; }
         // a line that is drawn: a click on the road is the next node (Shift: between two others, as when a line is edited)
@@ -2127,19 +2163,30 @@ renderer.domElement.addEventListener("pointerup", (event) => {
         if (road) { addLineNodeAt(road.point.x, road.point.z); return; }
         if (!event.shiftKey) { selectLineNode(-1); return; }
     }
-    if (state.mode === "view" && !d.moved && !lineEdit.editing && !(design && design.active()) && !objectGizmo.axis) {
-        // an object that is clicked is chosen (its gizmo shows); a gate too; a curb; else the part of the model under the pointer
-        const curbHit = pointerRay(event).intersectObjects(curbLayer.children, false)[0];
-        if (curbHit && curbHit.object.userData.curbIndex !== undefined) { selectCurb(curbHit.object.userData.curbIndex, -1); return; }
-        if (curbState.selected >= 0) selectCurb(-1);
-        const objectHit = pointerRay(event).intersectObjects(objectLayer.children, true)[0];
-        if (objectHit && objectIndexOf(objectHit.object) >= 0) { selectObject(objectIndexOf(objectHit.object)); return; }
-        const gateHit = pointerRay(event).intersectObjects(markers.children, false).find((h) => h.object.userData.gateIndex !== undefined);
-        if (gateHit) { selectGate(gateHit.object.userData.gateIndex); return; }
-        const hit = pointerRay(event).intersectObjects(trackGroup.children, true)[0];
-        if (hit) selectPart(hit.object.name || "", true);
-    }
+    if (state.mode !== "view") return;
+    // the designer of the road took the click (a node or a prefab was chosen by it)
+    if (design.active() && design.selection() !== designSelAtDown) return;
+    if (event.shiftKey && curbState.selected >= 0) { const road = roadHit(event); if (road) { insertCurbNode(road.point); return; } }
+    // what is clicked is chosen, and nothing else: a camera, a curb, an object, a gate, a box of the grid or of the pit; else (a track with a model) the part under the pointer
+    const ray = pointerRay(event);
+    const camHit = ray.intersectObjects(markers.children, false).find((h) => h.object.userData.camera !== undefined);
+    if (camHit) { selectCamera(camHit.object.userData.camera, state.camRange && state.camSel === camHit.object.userData.camera); return; }
+    const curbHit = ray.intersectObjects(curbLayer.children, false)[0];
+    if (curbHit && curbHit.object.userData.curbIndex !== undefined) { selectCurb(curbHit.object.userData.curbIndex, -1); return; }
+    const objectHit = ray.intersectObjects(objectLayer.children, true)[0];
+    if (objectHit && objectIndexOf(objectHit.object) >= 0) { selectObject(objectIndexOf(objectHit.object)); return; }
+    const markerHit = ray.intersectObjects(markers.children, false).find((h) => h.object.userData.gateIndex !== undefined || h.object.userData.box);
+    if (markerHit && markerHit.object.userData.gateIndex !== undefined) { selectGate(markerHit.object.userData.gateIndex); return; }
+    if (markerHit) { selectBox(markerHit.object.userData.box.kind, markerHit.object.userData.box.i); return; }
+    if (design.active()) { clearSelection(); return; }
+    const hit = ray.intersectObjects(trackGroup.children, true)[0];
+    if (hit) { clearSelection("part"); selectPart(hit.object.name || "", true); }
+    else clearSelection();
 });
+// what the designer had chosen when the button went down (its own handler runs first and chooses a node or a prefab)
+let designSelAtDown = "";
+renderer.domElement.addEventListener("pointerdown", () => { designSelAtDown = design.selection(); }, true);
+
 
 $("topView").onclick = topView;
 $("gateAtStart").onclick = () => {
@@ -2149,7 +2196,7 @@ $("gateAtStart").onclick = () => {
     // the finish line is a few metres in front of the start, so that the first gate is passed at the start of the first lap
     const x = s.x + Math.cos(s.heading) * 6, z = s.z + Math.sin(s.heading) * 6;
     state.gates.unshift({ x, y: groundY(x, z, s.y), z, heading: s.heading, width });
-    updateMarkers();
+    selectGate(-1);
 };
 
 $("filter").addEventListener("input", renderParts);
@@ -2256,11 +2303,14 @@ async function refreshList(select) {
     el.value = select || "";
 }
 
+let loadToken = 0;
 async function loadExisting() {
     const id = $("existing").value;
     if (!id) return;
     const track = state.tracks.find((t) => t.id === id);
     if (!track) return;
+    const token = ++loadToken;          // (a second track chosen while this one loads: this one stops)
+    stopLineEdit(); clearSelection(); clearMeasure(); if (state.mode !== "view") setMode("view");
     state.existingId = id;
     state.existingTrack = track;
     state.files = new Map();
@@ -2300,6 +2350,7 @@ async function loadExisting() {
         }
         else if (track.model) { stopDesign(); await loadGltfTrack(track); }
         else { stopDesign(); await loadLegacyTrack(track); }
+        if (token !== loadToken) return;
         // the heights of the start and the gates come from the road
         state.grid.forEach((b) => { b.y = groundY(b.x, b.z); });
         syncStart();
@@ -2308,7 +2359,7 @@ async function loadExisting() {
         state.pitLine.forEach((q) => { q.y = groundY(q.x, q.z); });
         $("showGates").checked = !!track.show_gates;
         gateGizmo.detach(); gateUi.selected = -1;
-        state.gates = (track.gates || []).map((g) => ({ x: g.x, y: groundY(g.x, g.z), z: g.z, heading: g.heading, width: g.width || 24 }));
+        state.gates = (track.gates || []).map((g) => ({ x: g.x, y: groundY(g.x, g.z, Number.isFinite(g.y) ? g.y : undefined), z: g.z, heading: g.heading, width: g.width || 24 }));
         state.cameras = (track.cameras || []).filter((c) => isFinite(c.x) && isFinite(c.z)).map((c) => {
             const camera = { x: c.x, y: isFinite(c.y) ? c.y : groundY(c.x, c.z) + 3, z: c.z };
             if (c.range && isFinite(c.range.x) && isFinite(c.range.z) && c.range.r > 0) camera.range = { x: c.range.x, z: c.range.z, r: c.range.r };
@@ -2316,20 +2367,29 @@ async function loadExisting() {
         });
         selectCamera(-1);
         await loadObjects(track);
+        if (token !== loadToken) return;
         resetCurbs(track.curbs);
         await resetRef(track);
+        if (token !== loadToken) return;
         state.drag = track.dragstrip ? { x: track.dragstrip.x, y: groundY(track.dragstrip.x, track.dragstrip.z), z: track.dragstrip.z, heading: track.dragstrip.heading || 0, width: track.dragstrip.width || 12, length: track.dragstrip.length || 402.336 } : null;
         showDrag();
         updateMarkers();
         updateLineNote();
         status("", "");
         markSaved();
+        resetHistory();
+        try { localStorage.setItem(LAST_TRACK, id); } catch (e) { /* (private window) */ }
     } catch (error) {
-        status("Could not load the track: " + error.message, "error");
+        if (token !== loadToken) return;
+        // (half of this track and half of the one before stayed in the editor, and a save wrote that over this track: an empty track instead)
+        newTrack();
+        status("Could not load the track “" + id + "”: " + error.message + ". The editor has an empty track now.", "error");
     }
 }
 
 function newTrack() {
+    loadToken++;
+    stopLineEdit(); clearSelection(); clearMeasure();
     state.existingId = null;
     state.existingTrack = null;
     state.thumbnail = null;
@@ -2372,6 +2432,7 @@ function newTrack() {
     startDesign(null);
     status("A new track: draw it with nodes in the view, or import a model.", "ok");
     markSaved();
+    resetHistory();
 }
 
 // ---- the thumbnail: the track as the game shows it, from the camera as it stands, without the markers, the nodes, the gizmos and the line (everything in the scene that is
@@ -2602,7 +2663,8 @@ async function save() {
         if (lineOfOldRoad) missing.push("the racing line was made on the road as it was: record it again, or edit it to the new road");
         status((saved.where === "server" ? "Saved as tracks/" + id + ". It is in the main menu of the game now."
             : "Saved in your garage, in this browser (the server does not save). It is in the main menu of the game now.") +
-            (missing.length ? "\nStill to do: " + missing.join("; ") + "." : ""), missing.length ? "warn" : "ok");
+            (missing.length ? "\nStill to do: " + missing.join("; ") + "." : "") +
+            (curbState.list.some((c) => c.nodes.length === 1) ? "\nA curb with one node is not saved: give it a second node." : ""), missing.length ? "warn" : "ok");
         markSaved();
     } catch (error) {
         status(error.message, "error");
@@ -2686,7 +2748,7 @@ $("undoLineNode").onclick = undoLineNode;
 $("addLineNode").onclick = () => { if (lineEdit.nodes.length) { const n = lineEdit.nodes[Math.max(0, lineEdit.selected)], m = lineEdit.nodes[(Math.max(0, lineEdit.selected) + 1) % lineEdit.nodes.length]; addLineNodeAt((n.x + m.x) / 2, (n.z + m.z) / 2); } };
 $("deleteLineNode").onclick = deleteLineNode;
 $("applyLine").onclick = applyLineEdit;
-$("cancelLine").onclick = stopLineEdit;
+$("cancelLine").onclick = cancelLineEdit;
 $("showLine").onchange = () => { lineEdit.show = $("showLine").checked; drawLine(); };
 
 $("clearLine").onclick = async () => {
@@ -2726,14 +2788,16 @@ async function openFromAddress() {
 // loaded, made new or saved. Leaving the page, Record AI racing line, choosing another track and New track ask first when it differs (all of it was lost
 // without a word)
 
+const SAVED_FIELDS = ["name", "id", "description", "showGates", "envOn", "skyTop", "skyHorizon", "fogOn", "fogColor", "fogNear", "fogFar", "sunAz", "sunEl", "sunInt", "sunColor", "ambColor", "ambInt"];
 function fingerprint() {
     try {
-        const fields = [...document.querySelectorAll("input, select, textarea")].filter((e) => e.id && e.id !== "existing" && e.type !== "file")
-            .map((e) => e.id + "=" + (e.type === "checkbox" ? e.checked : e.value));
+        // (only the fields that are saved: a filter, the colours of the view, the width of the next gate or a field that shows what is chosen said the track had changes)
+        const fields = SAVED_FIELDS.map((id) => { const e = $(id); return e ? id + "=" + (e.type === "checkbox" ? e.checked : e.value) : ""; });
         return JSON.stringify([fields, state.start, state.grid, state.pit, state.pitLine, state.pitBoxes, state.gates, state.cameras, state.drag, state.roles, state.env, state.skyName,
             design.active && design.active() ? design.toJSON() : null, objectState.list.map((o) => [o.model, o.x, o.y, o.z, o.heading, o.sx, o.sy, o.sz, o.pitch, o.roll]),
             curbState.list.map((c) => [c.nodes, c.width, c.height, c.colour]), refJSON(), refState.file ? refState.file.name : "",
-            [...objectState.models.values()].map((m) => [m.name, m.kind, m.mass, m.pivot]), !!state.thumbnail]);
+            [...objectState.models.values()].map((m) => [m.name, m.kind, m.mass, m.pivot]), !!state.thumbnail,
+            state.mainFile, [...state.files.values()].map((f) => [f.name, f.size, f.lastModified]), lineChanged()]);
     } catch (error) { return ""; }
 }
 let savedPrint = null;
@@ -2811,8 +2875,9 @@ $("name").addEventListener("input", () => { if (!state.idEdited && !state.existi
 
 // ---- the first choice, and the height map
 
-function dialog(title, build) {
+function dialog(title, build, onClose) {
     const shade = document.createElement("div");
+    shade.className = "te-modal";
     shade.style.cssText = "position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 50; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; font-family: inherit;";
     const box = document.createElement("div");
     box.style.cssText = "width: 440px; max-width: calc(100% - 32px); max-height: calc(100% - 32px); overflow-y: auto; background: #1d232c; border: 1px solid #323c4a; border-radius: 10px; padding: 18px 20px; color: #dfe6ef;";
@@ -2822,7 +2887,16 @@ function dialog(title, build) {
     box.appendChild(heading);
     shade.appendChild(box);
     document.body.appendChild(shade);
-    const close = () => shade.remove();
+    const close = () => { shade.remove(); document.removeEventListener("keydown", onKey, true); };
+    // (the start dialog could not be closed: × and Escape close it, and say what then happens)
+    const dismiss = () => { close(); if (onClose) onClose(); };
+    const x = document.createElement("button");
+    x.className = "small ghost"; x.textContent = "×"; x.title = "Close (Escape)";
+    x.style.cssText = "float: right; margin: -6px -8px 0 0;";
+    x.onclick = dismiss;
+    heading.prepend(x);
+    const onKey = (e) => { if (e.key === "Escape" && !document.getElementById("orDialog")) { e.preventDefault(); e.stopImmediatePropagation(); dismiss(); } };
+    document.addEventListener("keydown", onKey, true);
     build(box, close);
     return { close, shade };
 }
@@ -2830,23 +2904,31 @@ function dialog(title, build) {
 // Open track: every track is a button, and a click opens it at once (Back goes to the choices of the start)
 function trackPicker() {
     dialog("Open a track", (box, close) => {
+        const search = document.createElement("input");
+        search.type = "search"; search.placeholder = "Search by name or id"; search.style.cssText = "width: 100%; margin-bottom: 10px;";
         const list = document.createElement("div");
         list.style.cssText = "display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; max-height: 60vh; overflow-y: auto; margin-bottom: 12px;";
-        for (const t of state.tracks) {
+        const buttons = state.tracks.map((t) => {
             const b = document.createElement("button");
-            b.style.cssText = "text-align: left; padding: 10px 14px; height: auto; white-space: normal;";
-            b.innerHTML = "<b></b><div style='font-weight: normal; font-size: 12.5px; opacity: 0.75; margin-top: 2px'></div>";
-            b.firstChild.textContent = t.name || t.id;
-            b.lastChild.textContent = t.id;
+            b.style.cssText = "text-align: left; padding: 0 0 8px; height: auto; white-space: normal; overflow: hidden;";
+            b.innerHTML = "<div style='aspect-ratio: 16 / 9; background: #11151b center / cover no-repeat; margin-bottom: 6px;'></div><b style='padding: 0 10px; display: block'></b><div style='font-weight: normal; font-size: 12px; opacity: 0.7; padding: 0 10px'></div>";
+            b.firstChild.style.backgroundImage = "url(\"" + trackFile(t, "preview.webp") + "\")";
+            b.children[1].textContent = t.name || t.id;
+            b.children[2].textContent = t.id;
+            b.dataset.find = ((t.name || "") + " " + t.id).toLowerCase();
             b.onclick = async () => { if (!(await discardOk())) return; $("existing").value = t.id; close(); loadExisting(); };
             list.appendChild(b);
-        }
-        box.appendChild(list);
+            return b;
+        });
+        search.addEventListener("input", () => { const q = search.value.trim().toLowerCase(); buttons.forEach((b) => { b.style.display = !q || b.dataset.find.includes(q) ? "" : "none"; }); });
+        box.append(search, list);
         const back = document.createElement("button");
         back.textContent = "Back";
         back.onclick = () => { close(); startDialog(); };
         box.appendChild(back);
-    });
+        box.style.width = "620px";
+        setTimeout(() => search.focus(), 0);
+    }, () => startDialog());
 }
 
 // At the start: open a track, make a track from a height map, or a new track
@@ -2866,10 +2948,13 @@ function startDialog() {
             box.appendChild(b);
             return b;
         };
+        let last = null;
+        try { last = state.tracks.find((t) => t.id === localStorage.getItem(LAST_TRACK)); } catch (e) { /* (private window) */ }
+        if (last) choice("Open “" + (last.name || last.id) + "” again", "The track you opened last", async () => { if (!(await discardOk())) return; close(); $("existing").value = last.id; loadExisting(); });
         choice("Open track", state.tracks.length ? state.tracks.length + " tracks to change" : "There are no tracks yet", () => { if (state.tracks.length) { close(); trackPicker(); } });
         choice("Import height map", "A track from a height map (16 bit grey PNG) and a colour map", () => { close(); heightDialog(true); });
         choice("New track", "Start empty: import a model, or draw the road with nodes", async () => { if (await discardOk()) { close(); newTrack(); } });
-    });
+    }, () => { if (!state.existingId && !state.root && !design.active()) newTrack(); });
 }
 
 // The height map and the colour map: the size of the square in metres, the height of white, and how fine the mesh is. From the start dialog Cancel goes back
@@ -2945,26 +3030,599 @@ function heightDialog(fromStart) {
         };
         row.append(cancel, make);
         box.appendChild(row);
-    });
+    }, () => { if (fromStart === true) startDialog(); });
 }
 $("importHeight").onclick = () => heightDialog(false);
 
+
+
+// ---- one thing chosen at a time: a click on something lets go of whatever else was chosen (an object, a gate, a curb, a camera, the drag strip, a node of the
+// line, a node or a prefab of the road, a box of the grid or of the pit, the reference image, a part of the model). Two gizmos at once dragged both, and Delete took
+// the wrong one away.
+function gizmoBusy() {
+    return [camGizmo, moveGizmo, turnGizmo, lineGizmo, curbGizmo, objectGizmo, gateGizmo, refGizmo, boxGizmo].some((g) => g.object && (g.dragging || g.axis !== null));
+}
+function clearSelection(keep) {
+    if (keep !== "object" && objectUi.selected >= 0) selectObject(-1);
+    if (keep !== "gate" && gateUi.selected >= 0) selectGate(-1);
+    if (keep !== "curb" && curbState.selected >= 0 && !curbState.drawing) selectCurb(-1);
+    if (keep !== "camera" && state.camSel >= 0) selectCamera(-1);
+    if (keep !== "drag" && eventLayers.selected) { eventLayers.selected = null; moveGizmo.detach(); turnGizmo.detach(); renderEventLayers(); }
+    if (keep !== "line" && lineEdit.editing && lineEdit.selected >= 0) selectLineNode(-1);
+    if (keep !== "design" && design.active()) design.deselect();
+    if (keep !== "ref" && refState.moving) { refState.moving = false; refGizmo.detach(); fillRefFields(); }
+    if (keep !== "box" && boxSel.kind) selectBox(null, -1);
+    if (keep !== "part" && state.selected !== null && state.selected !== undefined) selectPart(null);
+}
+function anythingChosen() {
+    return objectUi.selected >= 0 || gateUi.selected >= 0 || curbState.selected >= 0 || state.camSel >= 0 || !!eventLayers.selected || (lineEdit.editing && lineEdit.selected >= 0)
+        || refState.moving || !!boxSel.kind || (state.selected !== null && state.selected !== undefined);
+}
+
+// ---- the boxes of the grid and of the pit: chosen in the view or in their card, moved with the gizmo (W) and turned (E); the height follows the road
+function boxList(kind) { return kind === "grid" ? state.grid : kind === "pit" ? state.pitBoxes : null; }
+function boxOf() { const list = boxList(boxSel.kind); return list ? list[boxSel.i] : null; }
+boxGizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !event.value; boxSel.dragging = event.value; if (!event.value) updateMarkers(); });
+boxGizmo.addEventListener("objectChange", () => {
+    const b = boxOf();
+    if (!b) return;
+    b.x = boxTarget.position.x; b.z = boxTarget.position.z; b.y = groundY(b.x, b.z, b.y);
+    b.heading = -2 * Math.atan2(boxTarget.quaternion.y, boxTarget.quaternion.w);
+    boxTarget.position.y = b.y;
+    if (boxSel.kind === "grid") syncStart();
+    scheduleMarkers();
+});
+function selectBox(kind, i) {
+    boxGizmo.detach();
+    const list = boxList(kind);
+    boxSel.kind = null; boxSel.i = -1;
+    if (list && list[i]) {
+        clearSelection("box");
+        boxSel.kind = kind; boxSel.i = i;
+        const b = list[i];
+        boxTarget.position.set(b.x, b.y, b.z);
+        boxTarget.rotation.set(0, -b.heading, 0);
+        boxGizmo.attach(boxTarget);
+        setObjectGizmoMode(objectGizmo.mode === "rotate" ? "rotate" : "translate");
+    }
+    updateMarkers();
+}
+
+// ---- the keys, in one place and in this order (before the designer of the road, which has its own Delete and Escape for its nodes and prefabs)
+// Ctrl+S saves, Ctrl+Z and Ctrl+Y undo and redo everything, Ctrl+D copies the chosen object, gate or curb, Delete takes the chosen thing away, Escape goes one step back
+// (the measure, the curb that is drawn, what is chosen, then the tool), Enter ends a curb, 1 to 0 are the tools, N and P the tools of the road, F brings the chosen
+// thing into view, T looks from above, End puts the chosen thing on the surface, W E R move, turn and scale, ? shows the keys.
+const MODE_KEYS = { Digit1: "view", Digit2: "grid", Digit3: "pitbox", Digit4: "pitline", Digit5: "gate", Digit6: "drag", Digit7: "object", Digit8: "camera", Digit9: "curb", Digit0: "measure" };
+function dialogOpen() { return !!document.getElementById("orDialog") || !!document.querySelector("dialog[open]") || !!document.querySelector(".te-modal"); }
+window.addEventListener("keydown", (e) => {
+    if (dialogOpen()) return;
+    const t = e.target && e.target.tagName, typing = t === "INPUT" || t === "TEXTAREA" || t === "SELECT";
+    const ctrl = e.ctrlKey || e.metaKey;
+    const done = () => { e.preventDefault(); e.stopImmediatePropagation(); setTimeout(() => { noteEditorStep(); renderProps(); }, 0); };
+    if (ctrl && e.code === "KeyS") { done(); save(); return; }
+    if (typing) return;
+    if (ctrl && e.code === "KeyZ") { done(); if (e.shiftKey) redo(); else undo(); return; }
+    if (ctrl && e.code === "KeyY") { done(); redo(); return; }
+    if (ctrl && e.code === "KeyD") { if (duplicateChosen()) done(); return; }
+    if (ctrl || e.altKey) return;
+    if (e.code === "Delete" || e.code === "Backspace") { if (deleteChosen()) done(); return; }
+    if (e.code === "Escape") { if (escapeStep()) done(); return; }
+    if (e.code === "Enter" && curbState.drawing) { done(); endCurbDraw(); return; }
+    if (e.key === "?" || (e.code === "Slash" && e.shiftKey)) { done(); toggleHelp(); return; }
+    if (lineEdit.editing) return;
+    if (MODE_KEYS[e.code]) { done(); setMode(MODE_KEYS[e.code]); return; }
+    if (design.active() && (e.code === "KeyN" || e.code === "KeyP")) { done(); setMode(e.code === "KeyN" ? "node" : "prefab"); return; }
+    if (e.code === "KeyF") { done(); frameChosen(); return; }
+    if (e.code === "KeyT") { done(); topView(); return; }
+    if (e.code === "End") { if (dropChosen()) done(); return; }
+    if ((e.code === "KeyW" || e.code === "KeyE" || e.code === "KeyR") && (objectUi.selected >= 0 || gateUi.selected >= 0 || boxSel.kind)) {
+        done(); setObjectGizmoMode({ KeyW: "translate", KeyE: "rotate", KeyR: "scale" }[e.code]);
+    }
+}, true);
+// Escape: one step back at a time; false when there was nothing to do here (the designer then lets go of its node or prefab)
+function escapeStep() {
+    if (helpShown()) { toggleHelp(false); return true; }
+    if (refState.scale) { endRefScale(); fillRefFields(); return true; }
+    if (state.mode === "measure") { clearMeasure(); setMode("view"); return true; }
+    if (curbState.drawing) { endCurbDraw(); return true; }
+    if (lineEdit.editing) { if (lineEdit.selected >= 0) selectLineNode(-1); else cancelLineEdit(); return true; }
+    if (design.active() && design.selection()) return false;
+    if (anythingChosen()) { clearSelection(); return true; }
+    if (state.mode !== "view") { setMode("view"); return true; }
+    return false;
+}
+// Delete: the chosen thing goes (Ctrl+Z brings it back); false when nothing of the editor was chosen (the designer then takes its node or prefab away)
+function deleteChosen() {
+    if (curbState.node >= 0) return deleteCurbNode();
+    if (lineEdit.editing) { if (lineEdit.selected >= 0) deleteLineNode(); return true; }
+    if (objectUi.selected >= 0) { objectState.list.splice(objectUi.selected, 1); selectObject(-1); updateMarkers(); return true; }
+    if (gateUi.selected >= 0) { state.gates.splice(gateUi.selected, 1); selectGate(-1); return true; }
+    if (boxSel.kind) { boxList(boxSel.kind).splice(boxSel.i, 1); if (boxSel.kind === "grid") syncStart(); selectBox(null, -1); return true; }
+    if (state.camSel >= 0) { state.cameras.splice(state.camSel, 1); selectCamera(-1); updateMarkers(); return true; }
+    if (curbState.selected >= 0) { removeCurb(curbState.selected); return true; }
+    if (eventLayers.selected === "drag" && state.drag) { state.drag = null; selectEvent("drag"); showDrag(); updateMarkers(); return true; }
+    return false;
+}
+// Ctrl+D: a copy of the chosen object (3 m aside), gate (20 m further) or curb (2 m aside), chosen
+function duplicateChosen() {
+    if (objectUi.selected >= 0) {
+        const o = objectState.list[objectUi.selected], copy = Object.assign({}, o, { x: o.x + 3 });
+        copy.y = groundY(copy.x, copy.z, o.y);
+        objectState.list.push(copy); renderObjects(); selectObject(objectState.list.length - 1); updateMarkers();
+        return true;
+    }
+    if (gateUi.selected >= 0) {
+        const g = state.gates[gateUi.selected], x = g.x + Math.cos(g.heading) * 20, z = g.z + Math.sin(g.heading) * 20;
+        state.gates.splice(gateUi.selected + 1, 0, Object.assign({}, g, { x, z, y: groundY(x, z, g.y) }));
+        selectGate(gateUi.selected + 1);
+        return true;
+    }
+    if (curbState.selected >= 0 && !curbState.drawing) {
+        const c = curbState.list[curbState.selected];
+        curbState.list.push({ nodes: c.nodes.map((n) => [n[0] + 2, groundY(n[0] + 2, n[2], n[1]), n[2]]), width: c.width, height: c.height, colour: c.colour, points: [], mesh: null });
+        buildCurb(curbState.list.length - 1);
+        selectCurb(curbState.list.length - 1, -1);
+        return true;
+    }
+    return false;
+}
+// End: the chosen object, gate or box on the surface under it
+function dropChosen() {
+    const o = objectState.list[objectUi.selected];
+    if (o) { o.y = groundY(o.x, o.z, o.y + 20); selectObject(objectUi.selected); updateMarkers(); return true; }
+    const g = state.gates[gateUi.selected];
+    if (g) { g.y = groundY(g.x, g.z, g.y + 20); syncGateTarget(); updateMarkers(); return true; }
+    const b = boxOf();
+    if (b) { b.y = groundY(b.x, b.z, b.y + 20); selectBox(boxSel.kind, boxSel.i); return true; }
+    return false;
+}
+// F: the view turns to the chosen thing (from as far as it was, but not further than 120 m); nothing chosen: the whole track
+function chosenPoint() {
+    const v = (x, y, z) => new THREE.Vector3(x, y, z);
+    if (objectUi.selected >= 0) { const o = objectState.list[objectUi.selected]; return v(o.x, o.y, o.z); }
+    if (gateUi.selected >= 0) { const g = state.gates[gateUi.selected]; return v(g.x, g.y, g.z); }
+    if (boxOf()) { const b = boxOf(); return v(b.x, b.y, b.z); }
+    if (state.camSel >= 0) { const c = state.cameras[state.camSel]; return v(c.x, c.y, c.z); }
+    const curb = curbState.list[curbState.selected];
+    if (curb) { const n = curb.nodes[Math.max(0, curbState.node)] || curb.nodes[0]; return v(n[0], n[1], n[2]); }
+    if (lineEdit.editing && lineEdit.nodes[lineEdit.selected]) { const n = lineEdit.nodes[lineEdit.selected]; return v(n.x, n.y, n.z); }
+    if (eventLayers.selected === "drag" && state.drag) return v(state.drag.x, state.drag.y, state.drag.z);
+    if (refState.moving) return v(refState.x, refState.y, refState.z);
+    return null;
+}
+function frameChosen() {
+    const p = chosenPoint();
+    if (!p) { frameTrack(); return; }
+    const offset = camera.position.clone().sub(controls.target);
+    offset.setLength(Math.min(120, Math.max(15, offset.length())));
+    controls.target.copy(p);
+    camera.position.copy(p).add(offset);
+    controls.update();
+}
+
+// ---- undo and redo of the whole editor: a step is what the track was before and after a click, a key or a field (the grid, the pit, the gates, the cameras, the drag
+// strip, the objects, the curbs, the surfaces and the place of the reference image), or one step of the road of the designer (its own undo, in the same list). The
+// racing line has its own Cancel while it is edited.
+function editorSnapshot() {
+    return JSON.stringify({
+        grid: state.grid, pit: state.pit, pitLine: state.pitLine, pitBoxes: state.pitBoxes, gates: state.gates, cameras: state.cameras, drag: state.drag,
+        objects: objectState.list, curbs: curbState.list.map((c) => ({ nodes: c.nodes, width: c.width, height: c.height, colour: c.colour })), roles: state.roles,
+        ref: refState.mesh ? { x: refState.x, y: refState.y, z: refState.z, width: refState.width, rotation: refState.rotation, opacity: refState.opacity, show: refState.show, top: refState.top } : null
+    });
+}
+function noteEditorStep() {
+    if (undoState.busy || curbState.dragging || objectUi.dragging || gateUi.dragging || boxSel.dragging || lineEdit.dragging) return;
+    const now = editorSnapshot();
+    if (undoState.last === null) { undoState.last = now; return; }
+    if (now === undoState.last) return;
+    undoState.past.push({ kind: "editor", before: undoState.last, after: now });
+    if (undoState.past.length > 200) undoState.past.shift();
+    undoState.future = [];
+    undoState.last = now;
+    updateUndoUi();
+}
+// a step of the designer (after its road was made again: what moved with it, the curbs and the gates on the road, belongs to that step)
+function noteDesignStep() {
+    if (undoState.busy) return;
+    undoState.last = editorSnapshot();
+    undoState.past.push({ kind: "design" });
+    if (undoState.past.length > 200) undoState.past.shift();
+    undoState.future = [];
+    updateUndoUi();
+}
+function resetHistory() { undoState.past = []; undoState.future = []; undoState.last = editorSnapshot(); updateUndoUi(); }
+function restoreEditor(json) {
+    const s = JSON.parse(json);
+    undoState.busy = true;
+    try {
+        clearSelection();
+        state.grid = s.grid; syncStart();
+        state.pit = s.pit; state.pitLine = s.pitLine; state.pitBoxes = s.pitBoxes; state.gates = s.gates; state.cameras = s.cameras; state.drag = s.drag;
+        objectState.list = s.objects;
+        if (JSON.stringify(curbState.list.map((c) => ({ nodes: c.nodes, width: c.width, height: c.height, colour: c.colour }))) !== JSON.stringify(s.curbs)) resetCurbs(s.curbs);
+        if (s.ref && refState.mesh) { Object.assign(refState, s.ref); refPlace(); fillRefFields(); }
+        if (JSON.stringify(state.roles) !== JSON.stringify(s.roles)) { state.roles = s.roles; applyColours(); renderParts(); }
+        showDrag(); renderObjects(); updateMarkers();
+    } finally { undoState.busy = false; }
+}
+function undo() {
+    noteEditorStep();          // (a change that was not looked at yet is a step of its own first)
+    const step = undoState.past.pop();
+    if (!step) { status("There is nothing to undo.", ""); return; }
+    undoState.busy = true;
+    try { if (step.kind === "design") design.undo(); } finally { undoState.busy = false; }
+    if (step.kind === "editor") restoreEditor(step.before);
+    undoState.last = editorSnapshot();
+    undoState.future.push(step);
+    updateUndoUi();
+}
+function redo() {
+    if (editorSnapshot() !== undoState.last) { noteEditorStep(); return; }          // (a change since the undo: there is nothing to redo any more)
+    const step = undoState.future.pop();
+    if (!step) { status("There is nothing to redo.", ""); return; }
+    undoState.busy = true;
+    try { if (step.kind === "design") design.redo(); } finally { undoState.busy = false; }
+    if (step.kind === "editor") restoreEditor(step.after);
+    undoState.last = editorSnapshot();
+    undoState.past.push(step);
+    updateUndoUi();
+}
+function updateUndoUi() {
+    for (const id of ["undoButton", "dsUndo"]) if ($(id)) $(id).disabled = !undoState.past.length;
+    for (const id of ["redoButton", "dsRedo"]) if ($(id)) $(id).disabled = !undoState.future.length;
+}
+// after every click, key and field the editor looks whether the track changed (one step per drag of a gizmo: it is looked at when the button is let go)
+["pointerup", "keyup", "change", "click"].forEach((type) => window.addEventListener(type, () => setTimeout(() => { noteEditorStep(); renderProps(); }, 0), true));
+$("undoButton").onclick = undo;
+$("redoButton").onclick = redo;
+$("dsUndo").onclick = undo;
+$("dsRedo").onclick = redo;
+
+// ---- the road of the designer changed: what stands on it goes to its new height (the curbs floated or sank, and the game built them there)
+function snapToSurface() {
+    const clean = undoState.last === null || undoState.last === editorSnapshot();
+    const onRoad = (q) => { q.y = groundY(q.x, q.z, q.y); };
+    state.grid.forEach(onRoad); syncStart();
+    state.pitBoxes.forEach(onRoad); state.pitLine.forEach(onRoad);
+    if (state.pit) state.pit.points.forEach(onRoad);
+    state.gates.forEach(onRoad);
+    objectState.list.forEach(onRoad);
+    if (state.drag) onRoad(state.drag);
+    curbState.list.forEach((c) => c.nodes.forEach((n) => { n[1] = groundY(n[0], n[2], n[1]); }));
+    drawCurbs();
+    syncGateTarget(); syncObjectTarget();
+    updateMarkers();
+    if (clean) undoState.last = editorSnapshot();          // (it belongs to the step of the road, not to a step of its own)
+}
+
+// ---- the panel of what is chosen: its place, its direction and its size as numbers (the width of a gate could only be dragged, an object had no fields)
+let propsKey = "";
+function propsOf() {
+    const deg = (h) => +(h * 180 / Math.PI).toFixed(1), rad = (d) => d * Math.PI / 180, r1 = (v) => +(+v).toFixed(2);
+    const onRoad = (q) => { q.y = groundY(q.x, q.z, q.y); };
+    if (objectUi.selected >= 0) {
+        const o = objectState.list[objectUi.selected];
+        return { key: "o" + objectUi.selected, title: "Object " + (objectUi.selected + 1) + ": " + o.model.replace(OBJECT_PREFIX, "").replace(/\.glb$/, ""), fields: [
+            ["x", r1(o.x), (v) => { o.x = v; onRoad(o); }], ["z", r1(o.z), (v) => { o.z = v; onRoad(o); }], ["Height (y)", r1(o.y), (v) => { o.y = v; }],
+            ["Direction (°)", deg(o.heading), (v) => { o.heading = rad(v); }], ["Scale", r1(o.sx), (v) => { if (v > 0) { const k = v / o.sx; o.sx = v; o.sy *= k; o.sz *= k; } }]
+        ], after: () => { syncObjectTarget(); showObjects(); renderObjects(); } };
+    }
+    if (gateUi.selected >= 0) {
+        const g = state.gates[gateUi.selected];
+        return { key: "g" + gateUi.selected, title: gateUi.selected === 0 ? "Gate 1 (finish)" : "Gate " + (gateUi.selected + 1), fields: [
+            ["x", r1(g.x), (v) => { g.x = v; onRoad(g); }], ["z", r1(g.z), (v) => { g.z = v; onRoad(g); }], ["Direction (°)", deg(g.heading), (v) => { g.heading = rad(v); }],
+            ["Width (m)", g.width, (v) => { if (v >= 2) g.width = Math.min(400, v); }]
+        ], after: () => syncGateTarget() };
+    }
+    const b = boxOf();
+    if (b) {
+        return { key: boxSel.kind + boxSel.i, title: (boxSel.kind === "grid" ? "Grid box " : "Pit box ") + (boxSel.i + 1), fields: [
+            ["x", r1(b.x), (v) => { b.x = v; onRoad(b); }], ["z", r1(b.z), (v) => { b.z = v; onRoad(b); }], ["Direction (°)", deg(b.heading), (v) => { b.heading = rad(v); }]
+        ], after: () => { if (boxSel.kind === "grid") syncStart(); selectBox(boxSel.kind, boxSel.i); } };
+    }
+    if (state.camSel >= 0) {
+        const c = state.cameras[state.camSel];
+        return { key: "c" + state.camSel, title: "Camera " + (state.camSel + 1), fields: [
+            ["x", r1(c.x), (v) => { c.x = v; }], ["z", r1(c.z), (v) => { c.z = v; }], ["Height (y)", r1(c.y), (v) => { c.y = v; }],
+            ["Range (m)", r1(rangeOf(c).r), (v) => { if (v >= 2) c.range = Object.assign({}, rangeOf(c), { r: v }); }]
+        ], after: () => { if (!state.camRange) camTarget.position.set(c.x, c.y, c.z); } };
+    }
+    if (eventLayers.selected === "drag" && state.drag) {
+        const d = state.drag;
+        return { key: "drag", title: "Drag strip", fields: [
+            ["x", r1(d.x), (v) => { d.x = v; onRoad(d); }], ["z", r1(d.z), (v) => { d.z = v; onRoad(d); }], ["Direction (°)", deg(d.heading), (v) => { d.heading = rad(v); }],
+            ["Width (m)", d.width, (v) => { if (v >= 3) d.width = v; }], ["Length (m)", r1(d.length), (v) => { if (v >= 50) d.length = v; }]
+        ], after: () => { syncDragTarget(); showDrag(); } };
+    }
+    const curb = curbState.list[curbState.selected];
+    if (curb) {
+        const n = curb.nodes[curbState.node];
+        const fields = [["Width (m)", curb.width, (v) => { if (v >= 0.3) curb.width = Math.min(4, v); }], ["Height (m)", curb.height, (v) => { if (v >= 0) curb.height = Math.min(0.3, v); }]];
+        if (n) fields.push(["Node x", r1(n[0]), (v) => { n[0] = v; n[1] = groundY(n[0], n[2], n[1]); }], ["Node z", r1(n[2]), (v) => { n[2] = v; n[1] = groundY(n[0], n[2], n[1]); }]);
+        return { key: "k" + curbState.selected + "." + curbState.node + (n ? "@" + n[1].toFixed(2) : ""), title: "Curb " + (curbState.selected + 1) + (n ? ", node " + (curbState.node + 1) + " at " + n[1].toFixed(2) + " m" : " (" + curb.nodes.length + " nodes)"), fields,
+            after: () => { buildCurb(curbState.selected); selectCurb(curbState.selected, curbState.node); } };
+    }
+    return null;
+}
+function renderProps() {
+    const panel = $("props");
+    if (!panel) return;
+    const p = propsOf();
+    panel.style.display = p ? "" : "none";
+    if (!p) { propsKey = ""; return; }
+    const inputs = [...panel.querySelectorAll("input")];
+    if (p.key === propsKey && inputs.length === p.fields.length) {
+        // (the same thing: only the values, and not the one that is being typed in)
+        p.fields.forEach((f, i) => { if (document.activeElement !== inputs[i]) inputs[i].value = f[1]; });
+        return;
+    }
+    propsKey = p.key;
+    panel.innerHTML = "";
+    const head = document.createElement("div");
+    head.className = "propsHead";
+    head.innerHTML = "<span></span><button class='small ghost' title='Bring it into view (F)'>F</button><button class='small danger' title='Take it away (Delete; Ctrl+Z brings it back)'>Delete</button>";
+    head.firstChild.textContent = p.title; head.firstChild.title = p.title;
+    head.children[1].onclick = frameChosen;
+    head.children[2].onclick = () => { deleteChosen(); noteEditorStep(); };
+    panel.appendChild(head);
+    const grid = document.createElement("div");
+    grid.className = "propsGrid";
+    p.fields.forEach(([label, value, set]) => {
+        const l = document.createElement("label");
+        l.textContent = label;
+        const input = document.createElement("input");
+        input.type = "number"; input.step = "any"; input.value = value;
+        input.addEventListener("change", () => {
+            const v = parseFloat(input.value);
+            if (!Number.isFinite(v)) { input.value = value; return; }
+            const now = propsOf();
+            if (!now || now.key !== p.key) return;
+            set(v);
+            now.after && now.after();
+            updateMarkers();
+        });
+        l.appendChild(input);
+        grid.appendChild(l);
+    });
+    panel.appendChild(grid);
+}
+
+// ---- the Layers panel: the boxes of the grid and of the pit, and the cameras, as rows (a click chooses one)
+function renderBoxLayers() {
+    const fill = (id, list, name, chosen, choose) => {
+        const holder = $(id);
+        if (!holder) return;
+        holder.innerHTML = "";
+        list.forEach((item, i) => {
+            const row = document.createElement("div");
+            row.className = "layer" + (chosen(i) ? " selected" : "");
+            row.innerHTML = "<i></i><span></span><span class=\"meta\"></span>";
+            row.children[1].textContent = name(i);
+            row.children[2].textContent = Math.round(item.x) + ", " + Math.round(item.z);
+            row.onclick = () => choose(i);
+            holder.appendChild(row);
+        });
+        if (!list.length) { const none = document.createElement("div"); none.style.cssText = "padding: 4px 14px; color: #66727f;"; none.textContent = "none placed"; holder.appendChild(none); }
+    };
+    fill("gridLayers", state.grid, (i) => i === 0 ? "Box 1 (start)" : "Box " + (i + 1), (i) => boxSel.kind === "grid" && boxSel.i === i, (i) => selectBox(boxSel.kind === "grid" && boxSel.i === i ? null : "grid", i));
+    fill("pitLayers", state.pitBoxes, (i) => i === 0 ? "Pit box 1 (player)" : "Pit box " + (i + 1), (i) => boxSel.kind === "pit" && boxSel.i === i, (i) => selectBox(boxSel.kind === "pit" && boxSel.i === i ? null : "pit", i));
+    fill("cameraLayers", state.cameras, (i) => "Camera " + (i + 1), (i) => state.camSel === i, (i) => selectCamera(state.camSel === i ? -1 : i));
+}
+// the sections of the Layers panel fold with a click on their head
+document.querySelectorAll("#eventLayers .layersHead").forEach((head) => head.addEventListener("click", () => {
+    const list = head.nextElementSibling;
+    if (!list) return;
+    const folded = list.style.display === "none";
+    list.style.display = folded ? "" : "none";
+    head.classList.toggle("folded", !folded);
+}));
+
+// ---- the grid in one go: boxes 2 to 8 behind box 1, two wide and staggered (4 m apart along the road, 8 m from one box to the next on the same side); the second
+// row goes to the side of box 1 where there is road
+function roadAt(x, z, hint) {
+    raycaster.set(new THREE.Vector3(x, hint + 50, z), new THREE.Vector3(0, -1, 0));
+    const hit = raycaster.intersectObjects(trackGroup.children, true).find((h) => DRIVABLE[state.roles[h.object.name || ""]]);
+    return !!hit && (state.roles[hit.object.name] === "road" || state.roles[hit.object.name] === "track01");
+}
+$("gridAuto").onclick = async () => {
+    const b = state.grid[0];
+    if (!b) { status("Place box 1 of the grid first (the start): the other boxes go behind it.", "error"); return; }
+    if (state.grid.length > 1 && !(await OpenRacerDialog.ask({ title: "Make the grid again?", text: "Boxes 2 to " + state.grid.length + " are put in new places behind box 1.", ok: "Make the grid" }))) return;
+    const fx = Math.cos(b.heading), fz = Math.sin(b.heading), sx = -fz, sz = fx, gap = 4.5;
+    const side = roadAt(b.x + sx * gap, b.z + sz * gap, b.y) ? 1 : (roadAt(b.x - sx * gap, b.z - sz * gap, b.y) ? -1 : 1);
+    state.grid = [b];
+    for (let k = 1; k < GRID_MAX; k++) {
+        const back = k * 4, across = (k % 2) * gap * side;
+        const x = b.x - fx * back + sx * across, z = b.z - fz * back + sz * across;
+        state.grid.push({ x, y: groundY(x, z, b.y), z, heading: b.heading });
+    }
+    syncStart(); selectBox(null, -1);
+    status("The grid has " + GRID_MAX + " boxes: two wide, behind box 1. Move one with a click on it and the gizmo.", "ok");
+};
+// the pit boxes in a row: boxes 2 to 8 one after the other in the direction of box 1, 10 m apart
+$("pitAuto").onclick = async () => {
+    const b = state.pitBoxes[0];
+    if (!b) { status("Place pit box 1 first (the player's): the other boxes follow it.", "error"); return; }
+    if (state.pitBoxes.length > 1 && !(await OpenRacerDialog.ask({ title: "Make the pit boxes again?", text: "Boxes 2 to " + state.pitBoxes.length + " are put in a row after box 1.", ok: "Make the boxes" }))) return;
+    const fx = Math.cos(b.heading), fz = Math.sin(b.heading);
+    state.pitBoxes = [b];
+    for (let k = 1; k < GRID_MAX; k++) {
+        const x = b.x + fx * 10 * k, z = b.z + fz * 10 * k;
+        state.pitBoxes.push({ x, y: groundY(x, z, b.y), z, heading: b.heading });
+    }
+    selectBox(null, -1);
+    status("There are " + GRID_MAX + " pit boxes in a row, 10 m apart, in the direction of box 1.", "ok");
+};
+
+// ---- the gates in one go: as many as asked, at the same distance from each other along the racing line (or the middle of a drawn road), gate 1 a few metres in front
+// of the start, all in the direction that the line is driven
+$("gatesAuto").onclick = async () => {
+    const points = lineSourcePoints();
+    if (!points || points.length < 10) { status("Auto gates needs a racing line (record or draw one) or a road drawn with nodes.", "error"); return; }
+    if (!state.start) { status("Place box 1 of the grid first: gate 1 goes in front of the start.", "error"); return; }
+    const count = Math.max(2, Math.min(40, parseInt($("gatesCount").value, 10) || 8));
+    if (state.gates.length && !(await OpenRacerDialog.ask({ title: "Replace the gates?", text: "The " + state.gates.length + " gates that are there go; " + count + " new ones come along the line.", ok: "Replace" }))) return;
+    let p = points.map((q) => ({ x: q.x, z: q.z }));
+    // the line in the direction that the car starts in
+    let near = 0, best = Infinity;
+    p.forEach((q, i) => { const d = Math.hypot(q.x - state.start.x, q.z - state.start.z); if (d < best) { best = d; near = i; } });
+    const a = p[near], b = p[(near + 1) % p.length];
+    if (Math.cos(Math.atan2(b.z - a.z, b.x - a.x) - state.start.heading) < 0) { p = p.reverse(); near = p.length - 1 - near; }
+    p = p.slice(near).concat(p.slice(0, near));          // (from the start round)
+    const along = [0];
+    for (let i = 1; i <= p.length; i++) along.push(along[i - 1] + Math.hypot(p[i % p.length].x - p[i - 1].x, p[i % p.length].z - p[i - 1].z));
+    const total = along[p.length], width = Math.max(2, parseFloat($("gateWidth").value) || 24);
+    const at = (s) => {
+        s = ((s % total) + total) % total;
+        let i = 0;
+        while (i < p.length - 1 && along[i + 1] < s) i++;
+        const q = p[i], r = p[(i + 1) % p.length], t = (s - along[i]) / Math.max(1e-6, along[i + 1] - along[i]);
+        return { x: q.x + (r.x - q.x) * t, z: q.z + (r.z - q.z) * t, heading: Math.atan2(r.z - q.z, r.x - q.x) };
+    };
+    state.gates = [];
+    for (let k = 0; k < count; k++) {
+        const g = at(6 + k * total / count);
+        state.gates.push({ x: g.x, y: groundY(g.x, g.z, state.start.y), z: g.z, heading: g.heading, width });
+    }
+    selectGate(-1);
+    status(count + " gates along the line (" + Math.round(total) + " m), gate 1 just in front of the start. Check that each one is as wide as the road there.", "ok");
+};
+
+// ---- ready to race: what the game needs, checked while you work (it was only said after a save)
+function renderReady() {
+    const list = $("readyList");
+    if (!list) return;
+    const items = [];
+    const add = (ok, text, warn) => items.push([ok ? "ok" : (warn ? "warn" : "bad"), text]);
+    add(!!$("name").value.trim(), $("name").value.trim() ? "Name: " + $("name").value.trim() : "No name yet (Track card)");
+    add(!!(state.root || design.active()), state.root || design.active() ? "A road: " + (design.active() ? "drawn with nodes" : "a model") : "No road: import a model or draw it with nodes");
+    add(!!state.start, state.start ? "Start: box 1 of the grid" : "No start: place box 1 with Grid box (2)");
+    add(state.grid.length >= GRID_MAX, state.grid.length + " of " + GRID_MAX + " grid boxes" + (state.grid.length < GRID_MAX ? " (the opponents need boxes 2 to " + GRID_MAX + ": Fill the grid)" : ""), true);
+    const special = state.existingTrack && (state.existingTrack.skidpad || (state.drag && !state.gates.length));
+    if (!special) {
+        add(state.gates.length >= 2, state.gates.length ? state.gates.length + " gates" : "No gates: no lap is counted (Add gate, or Auto gates)");
+        if (state.gates.length && state.start) {
+            const d = Math.hypot(state.gates[0].x - state.start.x, state.gates[0].z - state.start.z);
+            add(d < 150, d < 150 ? "Gate 1 (the finish line) is " + Math.round(d) + " m in front of the start" : "Gate 1 (the finish line) is " + Math.round(d) + " m from the start: is that right?", true);
+        }
+        const line = lineSourcePoints();
+        add(!!line, line ? "A racing line for the AI" : "No racing line: the AI cannot race (record or draw one)");
+        if (line && state.gates.length >= 2) {
+            // every gate on the line, and the gates in the order that the line passes them
+            const index = state.gates.map((g) => { let n = 0, b = Infinity; line.forEach((q, i) => { const d = Math.hypot(q.x - g.x, q.z - g.z); if (d < b) { b = d; n = i; } }); return [n, b, g.width]; });
+            const off = index.filter(([, d, w]) => d > w / 2 + 2).length;
+            add(!off, off ? off + " gate" + (off > 1 ? "s are" : " is") + " not on the racing line" : "The line goes through every gate", true);
+            let turns = 0;
+            for (let i = 1; i < index.length; i++) if (index[i][0] < index[i - 1][0]) turns++;
+            add(turns <= 1, turns <= 1 ? "The gates are in the order of the line" : "The gates are not in the order that the line passes them", true);
+        }
+    }
+    add(state.pitBoxes.length > 0 && state.pitLine.length >= 2, state.pitBoxes.length ? state.pitBoxes.length + " pit boxes" + (state.pitLine.length >= 2 ? " and a pit line" : ", no pit line") : "No pit (optional)", true);
+    const one = curbState.list.filter((c) => c.nodes.length === 1).length;
+    if (one) add(false, one + " curb" + (one > 1 ? "s have" : " has") + " only one node: it is not saved", true);
+    list.innerHTML = "";
+    items.forEach(([kind, text]) => { const row = document.createElement("div"); row.className = "ready " + kind; row.textContent = text; list.appendChild(row); });
+    const bad = items.filter((i) => i[0] === "bad").length, warn = items.filter((i) => i[0] === "warn").length;
+    $("readyNote").textContent = bad ? bad + " to do" : warn ? "ready, " + warn + " to check" : "ready";
+    $("readyNote").className = "meta " + (bad ? "bad" : warn ? "warn" : "ok");
+}
+$("name").addEventListener("input", renderReady);
+
+// ---- the measure tool (0): clicks on the track (or on the reference image) make a line, and the length of it is shown; Escape ends it
+const measureLayer = new THREE.Group();
+scene.add(measureLayer);
+function measurePoint(event) {
+    const road = roadHit(event);
+    if (road) return road.point.clone();
+    const onRef = refState.mesh && refState.show ? pointerRay(event).intersectObject(refState.mesh, false)[0] : null;
+    if (onRef) return onRef.point.clone();
+    return pointerRay(event).ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -controls.target.y), new THREE.Vector3());
+}
+function measureClick(event) {
+    const p = measurePoint(event);
+    if (!p) return;
+    measureState.points.push(p);
+    drawMeasure();
+}
+function drawMeasure() {
+    disposeTree(measureLayer);
+    const pts = measureState.points;
+    pts.forEach((p) => {
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshBasicMaterial({ color: 0x7dff9a, depthTest: false, transparent: true }));
+        ball.position.copy(p).setY(p.y + 0.3); ball.renderOrder = 1001;
+        measureLayer.add(screenSize(ball, 6, 1));
+    });
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) total += pts[i].distanceTo(pts[i - 1]);
+    if (pts.length >= 2) {
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts.map((p) => p.clone().setY(p.y + 0.3))), new THREE.LineBasicMaterial({ color: 0x7dff9a, depthTest: false, transparent: true }));
+        line.renderOrder = 1001;
+        measureLayer.add(line);
+    }
+    const flat = pts.length >= 2 ? Math.hypot(pts[pts.length - 1].x - pts[pts.length - 2].x, pts[pts.length - 1].z - pts[pts.length - 2].z) : 0;
+    $("hud").textContent = pts.length < 2 ? "Measure: click a point on the track, then the next ones. Escape ends it." :
+        "Measure: " + total.toFixed(1) + " m in all (" + (total / 0.3048).toFixed(0) + " ft); the last piece " + flat.toFixed(1) + " m over the ground. Escape ends it.";
+}
+function clearMeasure() { measureState.points = []; disposeTree(measureLayer); }
+
+// ---- where the pointer is: x, z and the height of the track under it, at the bottom left of the view
+let coordsTime = 0;
+renderer.domElement.addEventListener("pointermove", (event) => {
+    const now = performance.now();
+    if (now - coordsTime < 80 || drag) return;
+    coordsTime = now;
+    const hit = roadHit(event);
+    $("coords").textContent = hit ? "x " + hit.point.x.toFixed(1) + "   z " + hit.point.z.toFixed(1) + "   y " + hit.point.y.toFixed(2) : "";
+});
+renderer.domElement.addEventListener("pointerleave", () => { $("coords").textContent = ""; });
+
+// ---- the keys (?): a list in the view
+function helpShown() { return $("helpPanel").style.display !== "none"; }
+function toggleHelp(show) { $("helpPanel").style.display = (show === undefined ? !helpShown() : show) ? "" : "none"; }
+$("helpButton").onclick = () => toggleHelp();
+$("helpClose").onclick = () => toggleHelp(false);
+
+// ---- the cards: a long explanation becomes a short line with an (i) button that shows the rest (editor-ui.js); the Layers panel moves up above the drawer of the road
+document.querySelectorAll("#scroll .card p.sub").forEach((p) => {
+    const text = p.textContent.replace(/\s+/g, " ").trim();
+    if (text.length < 150) return;
+    const first = (text.match(/^.*?[.:](\s|$)/) || [text])[0].trim().replace(/:$/, ".");
+    const line = document.createElement("div");
+    line.className = "tipline sub";
+    const span = document.createElement("span");
+    span.textContent = first.length > 130 ? first.slice(0, 120).replace(/\s\S*$/, "") + "…" : first;
+    const info = document.createElement("button");
+    info.type = "button"; info.className = "info"; info.textContent = "i"; info.dataset.tip = text; info.setAttribute("aria-label", "More information");
+    line.append(span, info);
+    p.replaceWith(line);
+});
+// the panels of the view do not lie over each other: the drawer of the road stands on the bar of the tools (which can take two or three rows), the Layers panel on the
+// drawer, and the Layers panel stays under the bar at the top
+function placePanels() {
+    const modes = $("modes"), drawer = $("drawer"), layers = $("eventLayers");
+    const barTop = modes.offsetHeight + 14 + 10;
+    drawer.style.bottom = barTop + "px";
+    const open = drawer.style.display !== "none";
+    const bottom = open ? barTop + drawer.offsetHeight + 10 : barTop;
+    layers.style.bottom = bottom + "px";
+    layers.style.maxHeight = Math.max(120, view.clientHeight - bottom - 64) + "px";
+}
+if (window.ResizeObserver) {
+    const panels = new ResizeObserver(placePanels);
+    [$("modes"), $("drawer"), view].forEach((e) => panels.observe(e));
+    new MutationObserver(placePanels).observe($("drawer"), { attributes: true, attributeFilter: ["style", "class"] });
+}
+placePanels();
+
+// ---- the last track that was opened: in the start dialog
+const LAST_TRACK = "openracer-track-editor-last";
+
+// ---- the start
 renderLegend();
 renderParts();
 fillEnv(OpenRacer.environmentDefaults());
 applyEnv();
 updateLineNote();
-openFromAddress().then(() => { if (!new URLSearchParams(window.location.search).get("track")) startDialog(); });
-
-// Escape: always back to Look, with nothing chosen (objects, gates, the drag strip, a camera)
-window.addEventListener("keydown", (event) => {
-    if (event.code !== "Escape") return;
-    const t = event.target && event.target.tagName;
-    if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
-    selectObject(-1);
-    selectGate(-1);
-    if (state.selected !== null && state.selected !== undefined) selectPart(null);          // (the part of the model that is yellow: chosen by a click in Look)
-    if (eventLayers.selected) selectEvent(eventLayers.selected);
-    if (state.camSel >= 0) selectCamera(-1);
-    if (state.mode !== "view" && !lineEdit.editing) setMode("view");
-});
+updateUndoUi();
+renderReady();
+openFromAddress().then(() => { resetHistory(); if (!new URLSearchParams(window.location.search).get("track")) startDialog(); });

@@ -333,7 +333,7 @@ export function createDesign(api) {
         const curve = curveOf(data);
         const length = curve.getLength();
         const samples = Math.max(24, Math.min(2000, Math.round(length / 2)));
-        const left = [], right = [], shoulderL = [], shoulderR = [], kerbLo = [], kerbLi = [], kerbRo = [], kerbRi = [];
+        const left = [], right = [], shoulderL = [], shoulderR = [];
         const count = data.closed ? samples : samples + 1;
         let minY = Infinity;
         const bounds = new THREE.Box2();
@@ -348,10 +348,6 @@ export function createDesign(api) {
             const w = widthAt(data, curve, Math.min(1, u)) / 2;
             left.push(p.clone().addScaledVector(side, w));
             right.push(p.clone().addScaledVector(side, -w));
-            kerbLi.push(p.clone().addScaledVector(side, w - 0.6).add(new THREE.Vector3(0, 0.012, 0)));
-            kerbLo.push(p.clone().addScaledVector(side, w + 0.05).add(new THREE.Vector3(0, 0.012, 0)));
-            kerbRi.push(p.clone().addScaledVector(side, -(w - 0.6)).add(new THREE.Vector3(0, 0.012, 0)));
-            kerbRo.push(p.clone().addScaledVector(side, -(w + 0.05)).add(new THREE.Vector3(0, 0.012, 0)));
             shoulderL.push(p.clone().addScaledVector(side, w + 14).add(new THREE.Vector3(0, -0.3, 0)));
             shoulderR.push(p.clone().addScaledVector(side, -(w + 14)).add(new THREE.Vector3(0, -0.3, 0)));
             minY = Math.min(minY, p.y);
@@ -361,37 +357,17 @@ export function createDesign(api) {
         const road = strip("road", left, right, textureOf("road"), "road", along);
         const shoulderLeft = strip("shoulder_left", shoulderL, left, textureOf("shoulder"), "grass", along);
         const shoulderRight = strip("shoulder_right", right, shoulderR, textureOf("shoulder"), "grass", along);
-        // the kerbs: red and white every 4 metres
-        const kerbs = [];
-        const step = Math.max(1, Math.round(4 / (length / count)));
-        [["kerb_left", kerbLo, kerbLi], ["kerb_right", kerbRi, kerbRo]].forEach(([name, outer, inner]) => {
-            const pos = [], idx = [], col = [];
-            for (let i = 0; i < count; i++) {
-                pos.push(outer[i].x, outer[i].y, outer[i].z, inner[i].x, inner[i].y, inner[i].z);
-                const red = Math.floor(i / step) % 2 === 0;
-                for (let k = 0; k < 2; k++) col.push(red ? 0.85 : 0.95, red ? 0.15 : 0.95, red ? 0.12 : 0.92);
-            }
-            const segs = data.closed ? count : count - 1;
-            for (let i = 0; i < segs; i++) { const a = i * 2, b = ((i + 1) % count) * 2; idx.push(a, a + 1, b, a + 1, b + 1, b); }       // (the normals up, as the road)
-            const g = new THREE.BufferGeometry();
-            g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-            g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
-            g.setIndex(idx);
-            g.computeVertexNormals();
-            const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, side: THREE.DoubleSide }));
-            m.name = name;
-            m.userData.role = "road";
-            kerbs.push(m);
-        });
+        // (the road has no painted kerbs: curbs are drawn where they are wanted, with Draw curb of the editor, Curbs.js)
         // the ground: a landscape that joins the shoulders of the road and rolls gently further away (during a drag the old one stays)
         const ground = (!withTerrain && lastTerrain) ? lastTerrain : terrain(centreLine, bounds, minY);
         lastTerrain = ground;
-        [road, shoulderLeft, shoulderRight, ...kerbs, ground].forEach((m) => { roadGroup.add(m); registerMesh(m, m.userData.role); state.roles[m.name] = m.userData.role; });
+        [road, shoulderLeft, shoulderRight, ground].forEach((m) => { roadGroup.add(m); registerMesh(m, m.userData.role); state.roles[m.name] = m.userData.role; });
         roadGroup.updateMatrixWorld(true);
         renderNodes();
         applyColours();
         renderParts();
         updateMarkers();
+        if (withTerrain && api.onRebuild) api.onRebuild();          // (the curbs, gates and objects onto the new road; not at every step of a drag)
         $("modelInfo").textContent = "Designed track: " + data.nodes.length + " nodes, " + Math.round(length) + " m, " + data.prefabs.length + " prefabs";
     }
 
@@ -507,6 +483,7 @@ export function createDesign(api) {
         if (history.past.length > 100) history.past.shift();
         history.future = [];
         updateUndoButtons();
+        if (api.onCommit && history.past.length > 1) api.onCommit();          // (the undo of the editor: one step of the road in its list)
     }
     function restore(s) {
         design.data = JSON.parse(s);
@@ -538,6 +515,7 @@ export function createDesign(api) {
 
     // ---- the node markers
     function renderNodes() {
+        nodeGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });      // (made again at every change: the old ones were never freed)
         nodeGroup.clear();
         if (!design.data) return;
         const scale = Math.max(1, state.markerScale || 1);
@@ -567,6 +545,7 @@ export function createDesign(api) {
     }
 
     function selectNode(i) {
+        if (i >= 0 && api.onSelect) api.onSelect();          // (the editor lets go of what else was chosen)
         design.selectedNode = i;
         design.selectedPrefab = null;
         gizmo.detach();
@@ -790,6 +769,7 @@ export function createDesign(api) {
     }
 
     function selectPrefab(i) {
+        if (i !== null && i >= 0 && api.onSelect) api.onSelect();
         design.selectedNode = -1;
         design.selectedPrefab = i;
         gizmo.detach();
@@ -1087,8 +1067,9 @@ export function createDesign(api) {
     window.addEventListener("keydown", (e) => {
         if (!design.data || e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.target.tagName === "TEXTAREA") return;
         const ctrl = e.ctrlKey || e.metaKey;
-        if (ctrl && (e.key === "z" || e.key === "Z")) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
-        if (ctrl && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); return; }
+        // (Ctrl+Z and Ctrl+Y: the editor has one undo for all of the track when it says so, api.ownUndo, and calls undo and redo below)
+        if (!api.ownUndo && ctrl && (e.key === "z" || e.key === "Z")) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+        if (!api.ownUndo && ctrl && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); return; }
         if (ctrl && (e.key === "d" || e.key === "D")) { e.preventDefault(); duplicatePrefab(); return; }
         // (not when a gate, an object or a node of the line took the key first: both went, the gate and the road node that was still chosen)
         if ((e.key === "Delete" || e.key === "Backspace") && !e.defaultPrevented) { if (design.selectedPrefab !== null) deletePrefab(); else if (design.selectedNode >= 0) deleteNode(); }
@@ -1188,8 +1169,11 @@ export function createDesign(api) {
     }
 
     return {
-        enable, disable, toJSON, exportGlb,
+        enable, disable, toJSON, exportGlb, undo, redo,
         active: () => !!design.data,
+        // what is chosen ("" nothing, "n3" node 3, "p2" prefab 2), and letting go of it (the editor chooses one thing at a time)
+        selection: () => !design.data ? "" : design.selectedNode >= 0 ? "n" + design.selectedNode : design.selectedPrefab !== null ? "p" + design.selectedPrefab : "",
+        deselect: () => { if (design.data && (design.selectedNode >= 0 || design.selectedPrefab !== null)) { selectNode(-1); rowGroup.clear(); } },
         roles: () => { const r = {}; roadGroup.children.forEach((m) => { r[m.name] = m.userData.role; }); prefabGroup.children.forEach((g) => { r[g.name] = state.roles[g.name]; }); return r; },
         hudText: (mode) => mode === "node" ? "Nodes: click on the ground to add one between the two nearest nodes, drag a node to move it, the arrow for its height. Delete removes it, Ctrl+Z undoes."
             : mode === "prefab" ? "Prefabs: click to put down a " + (PREFABS[design.prefabType] || PREFABS.wall).label.toLowerCase() + ", or drag a line to make a row of them. Drag one to move it (it sits on what is under it), the ring turns it, Delete removes it."

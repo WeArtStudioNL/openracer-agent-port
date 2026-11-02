@@ -230,6 +230,7 @@ function loadScene() {
                 }
             }
             
+            addCurbs(currentTrack);
             buildCollisionWorld();
             buildGroundWorld();
             applyTrackEnvironment(currentTrack);
@@ -377,6 +378,16 @@ function buildGroundWorld() {
     console.log("ground triangles: " + groundWorld.count() + (physics3D ? ", 3D: " + groundWorld.count3D() : ""));
 }
 
+// The curbs drawn in the track editor (Curbs.js), on a track of either format: road, a few centimetres above what is under them.
+function addCurbs(track) {
+    if(!OpenRacer.curbMeshes || !track) return;
+    OpenRacer.curbMeshes(THREE, track.curbs).forEach(function(mesh) {
+        mesh.receiveShadow = true;
+        trackObjects["track"].push(mesh);
+        scene.add(mesh);
+    });
+}
+
 // What a piece of the track is made of: for a glTF track the role that the track editor gave it, for the old format the name of its texture.
 function meshSurface(mesh) {
     if(mesh.userData.surface) return mesh.userData.surface;
@@ -462,12 +473,7 @@ function loadGltfTrack(track) {
             else trackObjects["other"].push(mesh);
             scene.add(mesh);
         });
-        // the curbs drawn in the track editor (Curbs.js): road, a few centimetres above what is under them
-        if(OpenRacer.curbMeshes) OpenRacer.curbMeshes(THREE, track.curbs).forEach(function(mesh) {
-            mesh.receiveShadow = true;
-            trackObjects["track"].push(mesh);
-            scene.add(mesh);
-        });
+        addCurbs(track);
         buildCollisionWorld();
         buildGroundWorld();
         mergeScenery();

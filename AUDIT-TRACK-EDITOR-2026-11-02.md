@@ -8,7 +8,7 @@
 
 **Hoe:** de code is gelezen en de paden zijn nagelopen. De punten met *nagekeken* heb ik zelf in de code bevestigd. De rest is door het lezen van de code gevonden, maar niet in de browser nagespeeld.
 
-Er is nog niets van dit rapport opgelost.
+**Stand (later op 2 november):** de drie rondes zijn gebouwd; zie *Wat er gedaan is* onderaan.
 
 ## Gebouwd vandaag
 
@@ -165,3 +165,46 @@ Er is nog niets van dit rapport opgelost.
    - de klaar-om-te-racen-lijst;
    - het orthografische bovenaanzicht met een meetlint;
    - de banenkiezer met plaatjes.
+
+## Wat er gedaan is (2 november, later)
+
+**Ronde 1, bugs:**
+- 1–10, 14, 16, 17 en 19 zijn opgelost.
+- 11 is opgelost: curbs, gates, grid, pit, objecten en de drag strip gaan mee met de weg, en dat zit in dezelfde undo-stap.
+- 12 is opgelost: de game toont curbs ook op banen van het oude formaat.
+- 13 is opgelost: een mislukte laadactie geeft een lege baan met een melding, en een tweede laadactie stopt de eerste.
+- 15 is opgelost met undo voor de hele editor.
+- Van 20: de curbbreedte wordt nu begrensd, en gates snappen bij het laden met hun opgeslagen hoogte.
+- Niet gedaan: 18 (garage tegelijk met de server). Dat is niet nagespeeld en de kans is klein.
+
+**Ronde 2, UX:**
+- één selectiemodel;
+- sneltoetsen en de lijst met `?`;
+- het eigenschappenpaneel;
+- (i)-knoppen in plaats van lange alinea's;
+- panelen die niet meer overlappen;
+- de modusbalk in twee rijen;
+- Delete bij de baan in de Track-kaart;
+- Layers met grid, pitvakken en camera's, en inklapbare secties.
+
+Niet gedaan:
+- één node-editor voor lijn, curbs en weg (ze gebruiken nu wel dezelfde toetsen);
+- de racelijn via Save in plaats van Apply;
+- oog- en slotknoppen in Layers.
+
+**Ronde 3, functies:**
+- Fill the grid, Fill the pit boxes en Auto gates;
+- de klaar-om-te-racen-lijst;
+- het meetlint (toets 0) en de cursorcoördinaten;
+- de banenkiezer met plaatjes, een zoekveld en "laatste baan";
+- Drop to surface (End) en dupliceren (Ctrl+D).
+
+Niet gedaan:
+- een echt orthografisch bovenaanzicht;
+- concept-autosave;
+- rijrichting omdraaien;
+- meerdere objecten tegelijk kiezen;
+- automatische curbs in bochten;
+- tekenen alleen bij verandering.
+
+**Verder:** de geverfde kerbs van de wegontwerper zijn weg. Bestaande getekende banen houden ze in hun glb tot ze opnieuw worden opgeslagen.
