@@ -2146,6 +2146,8 @@ function setMode(mode) {
     $("dragWindow").style.display = mode === "drag" ? "block" : "none";
     for (const button of document.querySelectorAll("#modes button")) button.classList.toggle("active", button.dataset.mode === mode);
     $("modes").classList.toggle("tool", mode !== "view");
+    $("modes").classList.toggle("prefab", mode === "prefab");
+    if (typeof design !== "undefined" && design && design.prefabStyle) try { syncPrefabStyle(); } catch (err) { /* (not yet made) */ }
     if (design && design.modeChanged) design.modeChanged(mode);
     if (editorReady) updateContext();
     $("hud").textContent = (design && design.hudText(mode)) || (mode === "grid" ? "Grid box: click on the road where box " + Math.min(GRID_MAX, state.grid.length + 1) + " is and drag in the direction that the car faces (box 1 is the start of the player, 2 to 8 the opponents)."
@@ -2160,7 +2162,11 @@ function setMode(mode) {
         : mode === "curb" ? "Draw curb: click on the road to start a curb, and on to add nodes at its nearest end; click on the curb to add a node there; drag a node to move it. Enter: the next click starts a new curb."
         : "Look: drag to turn, right mouse button to move, scroll to zoom. Click a part to find it in the list.");
 }
-document.querySelectorAll("#modes button").forEach((b) => b.onclick = () => setMode(b.dataset.mode));
+document.querySelectorAll("#modes button[data-mode]").forEach((b) => b.onclick = () => setMode(b.dataset.mode));
+// how a new row of prefabs is made: Draw (a line is dragged) or Points (its points are clicked)
+function syncPrefabStyle() { document.querySelectorAll("#modes button.sub").forEach((b) => b.classList.toggle("on", b.dataset.style === design.prefabStyle())); }
+$("prefabAttach").addEventListener("change", () => design.setPrefabAttach($("prefabAttach").checked));
+document.querySelectorAll("#modes button.sub").forEach((b) => b.onclick = () => { design.setPrefabStyle(b.dataset.style); syncPrefabStyle(); $("hud").textContent = design.hudText("prefab"); });
 setMode("view");
 
 function pointerRay(event) {

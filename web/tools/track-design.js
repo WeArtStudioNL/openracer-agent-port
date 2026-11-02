@@ -248,7 +248,7 @@ export function createDesign(api) {
     scene.add(pickPlane);
     const raycaster = new THREE.Raycaster();
 
-    const design = { data: null, selectedNode: -1, selectedPrefab: null, selectedPatch: null, selectedBranch: null, selectedPoint: -1, drawing: null, prefabType: "wall", rebuildPending: false };
+    const design = { data: null, selectedNode: -1, selectedPrefab: null, selectedPatch: null, selectedBranch: null, selectedPoint: -1, drawing: null, prefabType: "wall", prefabStyle: "draw", prefabAttach: false, draft: [], selectedRowPoint: -1, rebuildPending: false };
     const gizmo = new TransformControls(camera, renderer.domElement);
     gizmo.setSize(0.9);
     let dragging = false;
@@ -419,6 +419,7 @@ export function createDesign(api) {
         renderParts();
         updateMarkers();
         if (withTerrain && api.onRebuild) api.onRebuild();          // (the curbs, gates and objects onto the new road; not at every step of a drag)
+        if (design.data.prefabs && design.data.prefabs.some((q) => q.row && q.attach)) rebuildPrefabs();          // (the rows that are attached to the road follow it)
         $("modelInfo").textContent = "Designed track: " + data.nodes.length + " nodes, " + Math.round(length) + " m, " + data.prefabs.length + " prefabs";
     }
 
@@ -1227,9 +1228,27 @@ export function createDesign(api) {
         p.points.forEach((q) => { q.y = round(surfaceHeight(q.x, q.z, exclude)); });
     }
 
+    // Attach to road: the nodes of a row lie on the edge of the road (the track or a branch), each a distance off it (node.offset, else the offset of the row:
+    // row.offset; in metres, away from the road when it is more than 0), and they follow the road when it changes
+    function attachRow(p, exclude) {
+        if (!p.row || !p.attach) return;
+        p.points.forEach((q) => {
+            const e = roadEdgeAt(q.x, q.z);
+            if (!e) return;
+            const off = q.offset !== undefined ? q.offset : (p.offset || 0);
+            q.x = round(e.x + e.nx * off); q.z = round(e.z + e.nz * off);
+        });
+        snapRow(p, exclude || null);
+    }
+    // a node that is put on the road is where it is: its offset is its distance from the edge now
+    function startNodeOffset(q) {
+        const e = roadEdgeAt(q.x, q.z);
+        if (e) q.offset = Math.max(-6, Math.min(6, round((q.x - e.x) * e.nx + (q.z - e.z) * e.nz)));
+    }
     function rebuildPrefabs() {
         prefabGroup.children.slice().forEach((g) => { prefabGroup.remove(g); state.parts.delete(g.name); });
         if (!design.data) return;
+        design.data.prefabs.forEach((p) => attachRow(p, null));
         design.data.prefabs.forEach((p, i) => {
             const g = makePrefab(p, i, null);
             prefabGroup.add(g);
@@ -1249,6 +1268,7 @@ export function createDesign(api) {
         const old = prefabGroup.children[i];
         if (!old) { rebuildPrefabs(); return; }
         prefabGroup.remove(old);
+        attachRow(design.data.prefabs[i], null);
         const g = makePrefab(design.data.prefabs[i], i, null);
         prefabGroup.children.splice(i, 0, g);
         g.parent = prefabGroup;
@@ -1273,6 +1293,7 @@ export function createDesign(api) {
 
     function addRow(points) {
         const p = { type: design.prefabType, row: true, points: points.map((q) => ({ x: round(q.x), y: 0, z: round(q.z) })), spacing: SPACING[design.prefabType] || 4, scale: 1 };
+        if (design.prefabAttach) { p.attach = true; p.points.forEach(startNodeOffset); }
         snapRow(p, null);
         design.data.prefabs.push(p);
         rebuildPrefabs();
@@ -1280,7 +1301,52 @@ export function createDesign(api) {
         commit();
     }
 
+    // a click on the line of the chosen row (within 12 pixels): where, as the piece between two points (at) and the place on the line
+    function rowLineHit(e, p) {
+        const curve = rowCurve(p);
+        if (!curve) return null;
+        let best = null, bestD = 12;
+        for (let i = 0; i <= 160; i++) {
+            const t = i / 160, v = curve.getPoint(t), s = toScreen(v.x, v.y + 0.2, v.z);
+            if (!s) continue;
+            const dist = Math.hypot(e.clientX - s.x, e.clientY - s.y);
+            if (dist < bestD) { bestD = dist; best = { t, x: v.x, z: v.z }; }
+        }
+        if (best) best.at = Math.min(p.points.length - 2, Math.floor(best.t * (p.points.length - 1)));
+        return best;
+    }
+    // a node on the line of the chosen row: the line keeps its shape
+    function insertRowPoint(hit) {
+        const p = design.selectedPrefab !== null ? design.data.prefabs[design.selectedPrefab] : null;
+        if (!p || !p.row) return;
+        const node = { x: round(hit.x), y: 0, z: round(hit.z) };
+        if (p.attach) startNodeOffset(node);
+        p.points.splice(hit.at + 1, 0, node);
+        snapRow(p, prefabGroup.children[design.selectedPrefab]);
+        design.selectedRowPoint = hit.at + 1;
+        rebuildPrefabs(); fillPrefabFields();
+        commit();
+    }
+    // the chosen node of the chosen row goes; a row of two nodes goes with its last one
+    function deleteRowPoint() {
+        const p = design.selectedPrefab !== null ? design.data.prefabs[design.selectedPrefab] : null;
+        if (!p || !p.row || design.selectedRowPoint < 0) return;
+        p.points.splice(design.selectedRowPoint, 1);
+        design.selectedRowPoint = -1;
+        if (p.points.length < 2) { deletePrefab(); return; }
+        rebuildPrefabs(); fillPrefabFields();
+        commit();
+    }
+    // Points: the corners of a new row are clicked one by one (Enter, Done or another tool ends it; one point is one prefab)
+    function addDraftPoint(x, z) {
+        design.draft.push({ x: round(x), z: round(z) });
+        design.drawing = { kind: "rowdraft" };
+        previewStroke(design.draft);
+        status && status("Row: " + design.draft.length + " points. Enter ends it.", "ok");
+    }
+
     function selectPrefab(i) {
+        design.selectedRowPoint = -1;
         if (i !== null && i >= 0 && api.onSelect) api.onSelect();
         if (i !== null && i >= 0) letGoExtras();
         design.selectedNode = -1;
@@ -1309,6 +1375,7 @@ export function createDesign(api) {
         if (design.selectedPrefab === null) return;
         design.data.prefabs.splice(design.selectedPrefab, 1);
         design.selectedPrefab = null;
+        design.selectedRowPoint = -1;
         gizmo.detach();
         rebuildPrefabs();
         fillPrefabFields();
@@ -1336,6 +1403,13 @@ export function createDesign(api) {
         $("dsPrefabName").textContent = def.label + (p.row ? " (row of " + (g && g.children[0] ? g.children[0].userData.copies : 0) + ")" : "");
         $("dsPrefabRotationBox").style.display = p.row ? "none" : "";
         $("dsPrefabSpacingBox").style.display = p.row ? "" : "none";
+        $("dsRowNodeBox").style.display = p.row ? "" : "none";
+        $("dsRowNodeDelete").disabled = design.selectedRowPoint < 0;
+        $("dsRowAttach").checked = !!p.attach;
+        $("dsRowOffsetBox").style.display = p.row && p.attach ? "" : "none";
+        const node = p.row && design.selectedRowPoint >= 0 ? p.points[design.selectedRowPoint] : null;
+        $("dsRowOffsetLabel").textContent = node ? "Offset at the node (m)" : "Offset of the row (m)";
+        if (document.activeElement !== $("dsRowOffset")) $("dsRowOffset").value = node ? (node.offset !== undefined ? node.offset : (p.offset || 0)) : (p.offset || 0);
         $("dsPrefabRotation").value = Math.round((p.rotation || 0) * 180 / Math.PI);
         $("dsPrefabSpacing").value = p.spacing || SPACING[p.type] || 4;
         $("dsPrefabScale").value = p.scale || 1;
@@ -1360,7 +1434,7 @@ export function createDesign(api) {
         if (!p || !p.row) return;
         const scale = Math.max(1, state.markerScale || 1) * 0.6;
         p.points.forEach((q, i) => {
-            const m = new THREE.Mesh(new THREE.SphereGeometry(scale, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffd04d }));
+            const m = new THREE.Mesh(new THREE.SphereGeometry(scale, 12, 8), new THREE.MeshBasicMaterial({ color: i === design.selectedRowPoint ? 0xff8a3d : 0xffd04d }));
             m.position.set(q.x, (q.y || 0) + 0.2, q.z);
             m.userData.rowPoint = i;
             if (screenSize) screenSize(m, 7, scale);
@@ -1426,6 +1500,9 @@ export function createDesign(api) {
         const hit = under(e);
         drag = { start: [e.clientX, e.clientY], moved: false, stroke: null };
         const handle = handleHit(e);
+        // (a click on the line of the chosen row adds a node there)
+        const selRow = design.selectedPrefab !== null ? design.data.prefabs[design.selectedPrefab] : null;
+        const rowHit = selRow && selRow.row && (mode === "prefab" || mode === "view") ? rowLineHit(e, selRow) : null;
         if (handle) {
             drag.kind = "handle"; drag.handle = handle;
             const q = handle.kind === "patch" ? design.data.patches[design.selectedPatch].points[handle.i] : design.data.branches[design.selectedBranch].nodes[handle.i];
@@ -1445,10 +1522,15 @@ export function createDesign(api) {
         } else if (hit.rowPoint !== undefined) {
             const p = design.data.prefabs[design.selectedPrefab];
             const q = p.points[hit.rowPoint];
+            design.selectedRowPoint = hit.rowPoint; renderRowPoints(); fillPrefabFields();
             drag.kind = "rowPoint"; drag.index = hit.rowPoint; drag.y = q.y || 0;
             const pp = planePoint(e, drag.y);
             drag.offset = pp ? { x: q.x - pp.x, z: q.z - pp.z } : { x: 0, z: 0 };
+        } else if (rowHit && hit.prefab === undefined) {
+            drag.kind = "rowInsert"; drag.clickInsert = rowHit;
+            if (mode === "view") return;          // (the camera still turns)
         } else if (hit.prefab !== undefined && hit.prefab >= 0 && mode !== "node") {
+            if (rowHit && design.data.prefabs[hit.prefab] === selRow) drag.clickInsert = rowHit;          // (a click on a prefab of the chosen row, on its line: a node; dragged: the row moves)
             if (design.selectedPrefab !== hit.prefab) selectPrefab(hit.prefab);
             const p = design.data.prefabs[hit.prefab];
             drag.kind = "prefab"; drag.index = hit.prefab;
@@ -1457,6 +1539,8 @@ export function createDesign(api) {
             const ox = p.row ? p.points[0].x : p.x, oz = p.row ? p.points[0].z : p.z;
             drag.offset = pp ? { x: ox - pp.x, z: oz - pp.z } : { x: 0, z: 0 };
             drag.origin = p.row ? p.points.map((q) => ({ x: q.x, z: q.z })) : null;
+        } else if (mode === "prefab" && design.prefabStyle === "points") {
+            drag.kind = "draft";
         } else if (mode === "prefab") {
             drag.kind = "draw"; drag.stroke = [];
             const g = groundPoint(e, null);
@@ -1551,6 +1635,7 @@ export function createDesign(api) {
         controls.enabled = true;
         renderer.domElement.style.cursor = "";
         strokeLine.visible = false;
+        if (d.clickInsert && !d.moved) { insertRowPoint(d.clickInsert); return; }
         if (d.kind === "handle") {
             // (a click on the first corner of an area that is drawn closes it)
             if (!d.moved && design.drawing && design.drawing.kind === "patch" && d.handle.kind === "patch" && d.handle.i === 0 && design.data.patches[design.drawing.index].points.length >= 3) { finishDrawing(); return; }
@@ -1574,6 +1659,11 @@ export function createDesign(api) {
             if (!d.moved) branchClick(e);
         } else if (d.kind === "add") {
             if (!d.moved) { const g = groundPoint(e, null); if (g) addNode(g.x, g.z); }
+        } else if (d.kind === "draft") {
+            if (!d.moved) { const g = groundPoint(e, null); if (g) addDraftPoint(g.x, g.z); }
+            if (design.draft.length) previewStroke(design.draft);
+        } else if (d.kind === "rowInsert") {
+            // (a click on the line was handled above)
         } else if (d.kind === "draw") {
             if (!d.moved || strokeLength(d.stroke) < 2) { const g = groundPoint(e, null); if (g) addPrefab(g.x, g.z); }
             else addRow(simplify(d.stroke, 1.5));
@@ -1730,6 +1820,13 @@ export function createDesign(api) {
         const dr = design.drawing;
         if (!dr) return;
         design.drawing = null;
+        if (dr.kind === "rowdraft") {
+            const points = design.draft;
+            design.draft = [];
+            strokeLine.visible = false;
+            if (points.length >= 2) addRow(points); else if (points.length === 1) addPrefab(points[0].x, points[0].z);
+            return;
+        }
         if (dr.kind === "patch") {
             const p = design.data.patches[dr.index];
             if (!p || p.points.length < (p.connect ? 2 : 3)) { design.data.patches.splice(dr.index, 1); design.selectedPatch = null; }
@@ -1946,7 +2043,7 @@ export function createDesign(api) {
         // (not when a gate, an object or a node of the line took the key first: both went, the gate and the road node that was still chosen)
         if ((e.key === "Delete" || e.key === "Backspace") && !e.defaultPrevented) {
             if (design.selectedPatch !== null || design.selectedBranch !== null) deleteExtraPoint();
-            else if (design.selectedPrefab !== null) deletePrefab(); else if (design.selectedNode >= 0) deleteNode();
+            else if (design.selectedPrefab !== null) { if (design.selectedRowPoint >= 0) deleteRowPoint(); else deletePrefab(); } else if (design.selectedNode >= 0) deleteNode();
         }
         if (e.key === "Enter" && design.drawing) { e.preventDefault(); finishDrawing(); return; }
         if (e.key === "Escape" && design.drawing) { finishDrawing(); return; }
@@ -1972,6 +2069,23 @@ export function createDesign(api) {
     $("dsDeleteNode").onclick = deleteNode;
     $("dsAddNode").onclick = () => api.setMode("node");
     $("dsDeletePrefab").onclick = deletePrefab;
+    $("dsRowNodeDelete").onclick = deleteRowPoint;
+    $("dsRowAttach").addEventListener("change", () => {
+        const p = design.selectedPrefab !== null ? design.data.prefabs[design.selectedPrefab] : null;
+        if (!p || !p.row) return;
+        if ($("dsRowAttach").checked) { p.attach = true; p.points.forEach(startNodeOffset); }
+        else { delete p.attach; delete p.offset; p.points.forEach((q) => { delete q.offset; }); }
+        rebuildPrefabs(); fillPrefabFields(); commit();
+    });
+    // the offset: of the chosen node, or (no node chosen) of the whole row, which takes the offsets of the nodes away
+    $("dsRowOffset").addEventListener("change", () => {
+        const p = design.selectedPrefab !== null ? design.data.prefabs[design.selectedPrefab] : null;
+        if (!p || !p.row || !p.attach) return;
+        const value = Math.max(-6, Math.min(6, parseFloat($("dsRowOffset").value) || 0));
+        if (design.selectedRowPoint >= 0) p.points[design.selectedRowPoint].offset = value;
+        else { p.offset = value; p.points.forEach((q) => { delete q.offset; }); }
+        rebuildPrefabs(); fillPrefabFields(); commit();
+    });
     $("dsDuplicate").onclick = duplicatePrefab;
     $("dsUndo").onclick = undo;
     $("dsRedo").onclick = redo;
@@ -2132,6 +2246,11 @@ export function createDesign(api) {
         // the surfaces as rows of the Layers panel, and a click on one
         patchRows: () => (design.data && design.data.patches ? design.data.patches : []).map((p, i) => ({ label: surfaceOf(p.surface).label + (p.connect ? ", connected" : ""), meta: p.points.length + " points", selected: design.selectedPatch === i })),
         choosePatch: (i) => { if (!design.data || !design.data.patches[i]) return; if (design.selectedPatch === i) letGoExtras(); else { api.setMode("patch"); selectPatch(i); } },
+        // how a new row is made: Draw (a line is dragged) or Points (the corners are clicked)
+        prefabStyle: () => design.prefabStyle,
+        prefabAttach: () => design.prefabAttach,
+        setPrefabAttach: (on) => { design.prefabAttach = !!on; },
+        setPrefabStyle: (style) => { if (design.drawing && design.drawing.kind === "rowdraft") finishDrawing(); design.prefabStyle = style === "points" ? "points" : "draw"; },
         outlineOf: (i) => (design.data && design.data.patches[i] ? patchOutline(design.data.patches[i]).poly : []),          // (for the tests: the outline of an area with the way along the road)
         // a curb of the editor changed: the surfaces that connect to the road follow its edge
         curbsChanged: () => { design.edgeCache = null; if (design.data && (design.data.patches || []).some((q) => q.connect)) buildPatches(); },
@@ -2154,7 +2273,8 @@ export function createDesign(api) {
         hudText: (mode) => mode === "node" ? "Nodes: click on the ground to add one between the two nearest nodes, drag a node to move it, the arrow for its height. Delete removes it, Ctrl+Z undoes."
             : mode === "patch" ? "Surfaces: click on the ground for the corners of an area (gravel beside a bend, a car park, a run-off), click the first corner or press Enter to close it. With Connect to road a line is enough: the area closes along the edge of the road. A chosen area: drag its corners, click its edge to add a corner, Delete takes the chosen corner away."
             : mode === "branch" ? "Branch: click on the track (or a branch) where the new road starts, then its nodes, and click on a road where it ends (Enter: a free end). A chosen branch: drag its nodes, click on it to add a node, Delete takes the chosen node away."
-            : mode === "prefab" ? "Prefabs: click to put down a " + (PREFABS[design.prefabType] || PREFABS.wall).label.toLowerCase() + ", or drag a line to make a row of them. Drag one to move it (it sits on what is under it), the ring turns it, Delete removes it."
+            : mode === "prefab" ? "Prefabs: click to put down a " + (PREFABS[design.prefabType] || PREFABS.wall).label.toLowerCase() + ", or " + (design.prefabStyle === "points" ? "click the points of a row of them (Enter ends it)" : "drag a line to make a row of them")
+                + ". Drag one to move it (it sits on what is under it), the ring turns it. A chosen row: click on its line to add a node, click a node to choose it, Delete removes the node (or the prefab)."
             : (design.data ? "Look: drag to turn, right mouse button to move, scroll to zoom. Nodes and prefabs can be dragged here too." : null)
     };
 }

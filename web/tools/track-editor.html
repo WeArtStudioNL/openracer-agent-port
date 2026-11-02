@@ -40,7 +40,7 @@
 .ctxHidden { display: none !important; }
 #modes .done { display: none; }
 #modes { z-index: 7; }          /* (over the buttons above the cameras) */
-#modes.tool button:not(.active):not(.done) { display: none !important; } #modes.tool button.done { display: inline-block; }
+#modes.tool button:not(.active):not(.done):not(.sub) { display: none !important; } #modes button.sub, #modes label.sub { display: none !important; } #modes.prefab label.sub { display: inline-flex !important; align-items: center; gap: 5px; padding: 0 8px; color: #c6cfdb; font-size: 12.5px; cursor: pointer; } #modes.prefab button.sub { display: inline-block !important; background: transparent; border: 1px solid #323c4a; color: #c6cfdb; } #modes.prefab button.sub.on { background: #26344b; border-color: #4a6a9c; color: #fff; } #modes.tool button.done { display: inline-block; }
 #focusBar { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; padding: 8px 10px; border-radius: 10px; background: #26344b; color: #fff; font-weight: 600; }
 #coords { position: absolute; left: 14px; bottom: 14px; font: 11.5px ui-monospace, Menlo, monospace; color: #c3cdd9; text-shadow: 0 1px 3px #000c; pointer-events: none; z-index: 4; }
 #readyList .ready { padding: 2px 0 2px 20px; position: relative; font-size: 12.5px; } #readyList .ready::before { position: absolute; left: 0; font-weight: bold; }
@@ -344,6 +344,9 @@
         <button data-mode="branch" title="Key B" class="design-only">Branch</button>
         <button data-mode="patch" title="Key G" class="design-only">Surfaces</button>
         <button data-mode="prefab" title="Key P" class="design-only">Prefabs</button>
+        <button class="sub design-only" data-style="draw" title="A row is made by dragging a line on the ground">Draw</button>
+        <button class="sub design-only" data-style="points" title="A row is made by clicking its points (Enter ends it)">Points</button>
+        <label class="sub design-only" title="A new row lies along the edge of the road and follows it; set the offset in the drawer"><input type="checkbox" id="prefabAttach"> Attach to road</label>
         <button data-mode="view" class="done" title="Escape">✓ Done</button>
     </div>
     <div id="drawer" style="display:none">
@@ -406,9 +409,12 @@
                 <div class="fixed" id="dsPrefabSpacingBox"><label>Spacing (m)</label><input type="number" id="dsPrefabSpacing" step="0.5" min="0.3" style="width:90px"></div>
                 <div class="fixed"><label>Scale</label><input type="number" id="dsPrefabScale" step="0.1" min="0.1" style="width:80px"></div>
                 <div class="fixed" id="dsPrefabTextureBox"><label>Texture</label><select id="dsPrefabTexture" class="fixed" style="width:120px"></select></div>
+                <div class="fixed" id="dsRowOffsetBox" style="display:none"><label id="dsRowOffsetLabel">Offset of the row (m)</label><input type="number" id="dsRowOffset" step="0.1" min="-6" max="6" style="width:90px"></div>
+                <div class="fixed" style="align-self:flex-end"><label style="display:flex; align-items:center; gap:6px; height:32px" title="A row lies along the edge of the road and follows it when the road is changed"><input type="checkbox" id="dsRowAttach"> Attach to road</label></div>
+                <div class="fixed buttons" id="dsRowNodeBox" style="align-self:flex-end"><button class="small danger" id="dsRowNodeDelete" title="Delete">Delete node</button></div>
                 <div class="fixed buttons" style="align-self:flex-end"><button class="small ghost" id="dsDuplicate" title="Ctrl+D">Duplicate</button><button class="small danger" id="dsDeletePrefab" title="Delete">Delete</button></div>
             </div>
-            <p class="hint">Pick a prefab: a click on the ground puts one down, a dragged line makes a row of them (walls, tyres, trees…) that follows the line. Drag a prefab to move it; it sits on the ground, the road or what it is put on. The ring turns a single one; the points of a row can be dragged.</p>
+            <p class="hint">Pick a prefab: a click on the ground puts one down, a dragged line (Draw) or a line of clicked points (Points, in the bar below) makes a row of them (walls, tyres, trees…) that follows the line. A chosen row: click on its line to add a node, click a node to choose it and Delete it. Drag a prefab to move it; it sits on the ground, the road or what it is put on. The ring turns a single one; the points of a row can be dragged.</p>
         </div>
     </div>
     <div class="float top-right">
