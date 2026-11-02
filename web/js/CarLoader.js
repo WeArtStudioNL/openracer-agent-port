@@ -439,7 +439,8 @@ OpenRacer.loadCarModel = function (config, onLoad, onError, loadedRoot) {
         object.updateMatrixWorld(true);
         object.attach(node); // keeps the place of the part
         space.remove(object);
-        return { object: object, axis: axis, degrees: settings.degrees > 0 ? settings.degrees : 450 };
+        // stop: "rods" (the default: a fixed tie rod decides where the wheel stops) or "degrees" (the wheel stops at its degrees, whatever the rods are)
+        return { object: object, axis: axis, degrees: settings.degrees > 0 ? settings.degrees : 450, stop: settings.stop === "degrees" ? "degrees" : "rods" };
     }
 
     // The direction in which a cloud of points is the flattest: the axis of the covariance matrix with the smallest value (for a ring and

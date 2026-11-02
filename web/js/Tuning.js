@@ -69,6 +69,7 @@ var Tuning = (function() {
         // what it is built from (the suspension and the driveline of the parts library, the soft body, the size), half a second after the last change
         if(OpenRacer.cameraSettings) car.cameraSettings = OpenRacer.cameraSettings(tuned);
         if(car.steeringWheel && v.steering_degrees > 0) car.steeringWheel.degrees = v.steering_degrees;
+        if(car.steeringWheel && v.steering_stop) car.steeringWheel.stop = v.steering_stop === "degrees" ? "degrees" : "rods";
         if(car.vehicle.controller && car.vehicle.controller.retune && tuned.motorcycle) car.vehicle.controller.retune(tuned.motorcycle);
         var sig = builtFrom(tuned);
         if(rebuildSig !== null && sig !== rebuildSig && car.rebuild) {
@@ -460,6 +461,7 @@ var Tuning = (function() {
         susp_rear: ["Suspension at the rear", function() { return partsTypes(); }],
         engine_place: ["Engine placement", [["front", "Front"], ["mid", "Mid"], ["rear", "Rear"]]],
         tc_lockup: ["Torque converter: lock-up clutch", [["on", "On"], ["off", "Off"]]],
+        steering_stop: ["Steering wheel stops", [["rods", "Where the tie rods stop it (a fixed tie rod)"], ["degrees", "At its degrees and the wheel angle, whatever the rods are"]]],
         sb_enabled: ["The car dents (the shell of nodes)", [["on", "On"], ["off", "Off (a rigid body; the car is built again)"]]],
         rim_front: ["Rim at the front (the wheel library; the car is built again)", function() { return libraryList("rims"); }],
         tyre_front: ["Tyre at the front (it brings its own shell)", function() { return libraryList("tyres"); }],

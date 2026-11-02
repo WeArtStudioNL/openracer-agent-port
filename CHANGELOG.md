@@ -6,6 +6,7 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 ## Unreleased
 
+- **The lock of the steering wheel per car.** `steering_wheel.stop` in car.json: `"degrees"` makes the wheel stop at its own degrees (`steering_wheel.degrees`, 450 each way for 900° lock to lock) and the wheel angle of `chassis.max_steer_deg`, whatever the tie rods of the model are. The default `"rods"` is as before: a model with a fixed tie rod (the go-kart) stops where the rods do. The force feedback, the matched lock of the wheel and the steering wheel of the model follow it.
 - **Force feedback after a wheel that lost its connection.** A wheel that is switched off and on again during a race gets its force feedback back by itself: the game opens the new device and makes the effects again. A wheel without a serial number loses its permission in the browser when it goes; the game says so, and Connect a wheel… in the settings menu brings it back.
 - **The road designer: branches, gravel and sharp bends.**
   - Branch (B): a road of its own that starts and ends on the track or on another branch (a pit lane, a side road, the streets of a town, the exit of a motorway). Its ends follow the road they join, the terrain lies under it, and in the game it is road.

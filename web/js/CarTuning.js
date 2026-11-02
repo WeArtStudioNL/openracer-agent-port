@@ -148,7 +148,8 @@ OpenRacer.CarTuning = (function () {
             ["length", "Length", "m", 1, 8, 0.01],
             ["width", "Width", "m", 0.5, 3.5, 0.01],
             ["height", "Height", "m", 0.4, 3.5, 0.01],
-            ["steering_degrees", "Steering wheel: turn at full lock (each way; 450 is 900° lock to lock)", "°", 30, 1000, 10]
+            ["steering_degrees", "Steering wheel: turn at full lock (each way; 450 is 900° lock to lock)", "°", 30, 1000, 10],
+            ["steering_stop", "Steering wheel stops: where the tie rods stop it, or at its degrees", "", 0, 0, 0]
         ] },
         { name: "Cameras", items: [
             ["cam_follow_distance", "Follow camera: distance", "m", 1, 20, 0.1],
@@ -346,6 +347,7 @@ OpenRacer.CarTuning = (function () {
             tc_lockup: c.drivetrain && c.drivetrain.tc_lockup === false ? "off" : "on",
             length: c.dimensions && c.dimensions.length || 4.5, width: c.dimensions && c.dimensions.width || 1.8, height: c.dimensions && c.dimensions.height || 1.4,
             steering_degrees: (c.steering_wheel && c.steering_wheel.degrees) || 450,
+            steering_stop: c.steering_wheel && c.steering_wheel.stop === "degrees" ? "degrees" : "rods",
             gen_power: (function () { var pk = peakOf(c.engine && c.engine.torque_curve); return pk ? Math.round(pk.hp) : 200; })(),
             gen_peak_rpm: (function () { var pk = peakOf(c.engine && c.engine.torque_curve); return pk ? pk.rpm : 6000; })(),
             sb_enabled: c.softbody && c.softbody.enabled === false ? "off" : "on",
@@ -721,6 +723,7 @@ OpenRacer.CarTuning = (function () {
         if(v.tc_lockup !== undefined) c.drivetrain.tc_lockup = v.tc_lockup !== "off";
         if(v.length > 0 && v.width > 0 && v.height > 0) c.dimensions = Object.assign({}, c.dimensions || {}, { length: v.length, width: v.width, height: v.height });
         if(v.steering_degrees > 0) c.steering_wheel = Object.assign({}, c.steering_wheel || {}, { degrees: v.steering_degrees });
+        if(v.steering_stop) c.steering_wheel = Object.assign({}, c.steering_wheel || {}, { stop: v.steering_stop === "degrees" ? "degrees" : "rods" });
         if(v.gen_power > 0 && v.gen_peak_rpm > 0) {
             // a new curve only when the peak was moved: a curve drawn by hand in the car editor stays as it is
             var pk = peakOf(c.engine.torque_curve);

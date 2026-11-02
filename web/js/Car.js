@@ -404,12 +404,15 @@ OpenRacer.Car = function( config, domElement ) {
     };
     // how far the steering wheel turns from the middle to the lock, in degrees: a model with fixed tie rods stops where the rods do (the angle of the column at the lock of the
     // wheels, SuspensionRig.js), another car where steering_wheel.degrees of car.json says (450 without: a wheel of 900 degrees from lock to lock). Force feedback and the
-    // wheel (the options "match the lock of the car") use it.
+    // wheel (the options "match the lock of the car") use it. With steering_wheel.stop "degrees" the rods are not asked: the degrees are the lock, and they are read
+    // at every call (the tuning menu changes them live).
     var lockDegrees = null;
     this.steeringLockDegrees = function() {
+        var wheel = this.steeringWheel;
+        if(wheel && wheel.stop === "degrees") return wheel.degrees > 0 ? wheel.degrees : 450;
         if(lockDegrees === null) {
             var fromRig = this.rig && this.rig.lockAngle ? this.rig.lockAngle(this.vehicle, this.maxTurn) : null;
-            lockDegrees = fromRig ? fromRig * 180 / Math.PI : (this.steeringWheel && this.steeringWheel.degrees > 0 ? this.steeringWheel.degrees : 450);
+            lockDegrees = fromRig ? fromRig * 180 / Math.PI : (wheel && wheel.degrees > 0 ? wheel.degrees : 450);
         }
         return lockDegrees;
     };
@@ -577,7 +580,7 @@ OpenRacer.Car = function( config, domElement ) {
         if(this.steeringWheel) {
             var sw = this.steeringWheel;
             var ratio = (sw.degrees * Math.PI / 180) / this.maxTurn;
-            var swAngle = this.rig && this.rig.columnAngle !== undefined ? this.rig.columnAngle : -v.steerApplied * ratio;       // (a model with a fixed tie rod: the column turns as the rods need)
+            var swAngle = this.rig && this.rig.columnAngle !== undefined && sw.stop !== "degrees" ? this.rig.columnAngle : -v.steerApplied * ratio;       // (a model with a fixed tie rod: the column turns as the rods need, unless the wheel stops at its degrees)
             sw.object.quaternion.setFromAxisAngle(sw.axis, swAngle);
             sw.angle = swAngle;
         }

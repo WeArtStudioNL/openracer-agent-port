@@ -1953,7 +1953,7 @@ function buildConfig(id) {
         },
         brakes: { front: need("brakeFront", "The front brakes"), rear: need("brakeRear", "The rear brakes") },
         cameras: readCameras(),
-        steering_wheel: { degrees: Math.min(1000, Math.max(30, num("steeringDegrees") || 450)) },
+        steering_wheel: { degrees: Math.min(1000, Math.max(30, num("steeringDegrees") || 450)), stop: $("steeringStop").value === "degrees" ? "degrees" : "rods" },
         sound: { engine_sim: readEngineSim() }
     };
     if (!engineSimValid(config.sound.engine_sim)) throw new Error("Every field of the engine sound needs a value.");
@@ -2331,6 +2331,7 @@ function fill(car) {
     tuningFromCar(car);
     const d = car.drivetrain;
     set("steeringDegrees", (car.steering_wheel && car.steering_wheel.degrees) || 450);
+    set("steeringStop", car.steering_wheel && car.steering_wheel.stop === "degrees" ? "degrees" : "rods");
     set("drive", d.drive); set("diff", d.diff || "lsd"); set("centerDiff", d.center_diff || "lsd");
     set("gearbox", ["cvt", "torque-converter", "dct", "amt", "imt"].includes(d.gearbox) ? d.gearbox : "gears"); $("cvtRpm").value = d.cvt_rpm || "";
     $("tcStall").value = d.tc_stall_rpm || ""; $("tcRatio").value = d.tc_ratio || ""; $("tcLockup").checked = d.tc_lockup !== false;
@@ -2636,7 +2637,7 @@ refreshList().then(() => {
 const EDITOR_HAS = new Set(["mass", "front_weight", "cg_height", "drag_coefficient", "max_steer_deg", "idle_rpm", "limiter_rpm", "engine_inertia",
     "final_drive", "reverse_ratio", "brake_total", "brake_bias", "diff_preload", "diff_power", "diff_coast", "center_split", "suspension_travel",
     // (the rows of the tuning menu that the form has as its own cards)
-    "efficiency", "length", "width", "height", "steering_degrees", "gen_power", "gen_peak_rpm", "sb_max_nodes", "sb_wheel_strength",
+    "efficiency", "length", "width", "height", "steering_degrees", "steering_stop", "gen_power", "gen_peak_rpm", "sb_max_nodes", "sb_wheel_strength",
     "cam_follow_distance", "cam_follow_height", "cam_follow_look_height", "cam_follow_look_z", "cam_follow_smoothing", "cam_follow_fov_standing", "cam_follow_fov_fast", "cam_follow_fov_full_speed", "cam_follow_dolly",
     "cam_cockpit_x", "cam_cockpit_y", "cam_cockpit_z", "cam_cockpit_fov", "cam_cockpit_hide_driver",
     "bike_max_lean", "bike_fast_lean", "bike_rake", "bike_rider_mass", "bike_hang_off", "bike_max_lateral_g", "bike_balance", "bike_fork_dive"]);
