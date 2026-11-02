@@ -114,6 +114,19 @@ function cone(r, h, segments, tex) {
     if (typeof tex === "string") scaleUVs(g, Math.PI * r / sizeOf(tex), Math.hypot(r, h) / sizeOf(tex));
     return new THREE.Mesh(g, material(tex));
 }
+// a roof with four sloping sides over a w by d base (y = 0 at the eaves, h at the ridge): a cone of four sides, turned and then stretched, came out skewed
+function hippedRoof(w, d, h, tex) {
+    const size = sizeOf(tex), a = [-w / 2, 0, d / 2], b = [w / 2, 0, d / 2], c = [w / 2, 0, -d / 2], e = [-w / 2, 0, -d / 2], top = [0, h, 0];
+    const position = [], uv = [];
+    // (a face: the two corners of its eave and the ridge; u along the eave, v up the slope, in metres of the texture)
+    const face = (p, q, span, slope) => { position.push(...p, ...q, ...top); uv.push(0, 0, span / size, 0, span / 2 / size, slope / size); };
+    face(a, b, w, Math.hypot(h, d / 2)); face(c, e, w, Math.hypot(h, d / 2)); face(b, c, d, Math.hypot(h, w / 2)); face(e, a, d, Math.hypot(h, w / 2));
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(position, 3));
+    g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    g.computeVertexNormals();
+    return new THREE.Mesh(g, material(tex));
+}
 
 // ---- the prefabs: a function that makes the object (y = 0 is the ground; t is the chosen texture of the prefabs that have a
 // choice, see TEXTURE_CHOICES), and the surface of its parts in the game
@@ -169,10 +182,8 @@ const PREFABS = {
     house: { label: "House", icon: "⌂", role: "scenery", make: (t) => {
         const g = new THREE.Group();
         g.add(box(8, 3.2, 6, t || "plaster", 0, 1.6, 0));
-        const roof = cone(5.6, 2.4, 4, "roof");
-        roof.position.y = 4.4;
-        roof.rotation.y = Math.PI / 4;
-        roof.scale.set(1, 1, 0.75);
+        const roof = hippedRoof(9, 7, 2.2, "roof");          // (half a metre wider than the house all round)
+        roof.position.y = 3.2;
         g.add(roof);
         g.add(box(1, 2.1, 0.1, "wood", 0, 1.05, 3.05));
         return g;
