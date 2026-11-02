@@ -430,8 +430,34 @@ function buildCurb(i) {
     c.mesh = new THREE.Mesh(geometry, curbMaterial);
     c.mesh.userData.curbIndex = i;
     curbLayer.add(c.mesh);
+    curbsChanged();
+}
+// the surfaces that connect to the road follow the curbs (not while a node is dragged, nor while all the curbs are made again)
+function curbsChanged() {
+    if (curbState.dragging || curbState.bulk) return;
+    try { if (design.active()) design.curbsChanged(); } catch (e) { /* (the designer is made further down: not yet) */ }
 }
 // while a node is dragged: the strip once per frame
+// Connect to road: the nodes of the curb lie on the edge of the road (the track or a branch), each a distance off it (node[4], in metres, away from the road
+// when it is more than 0: the curb is then beside the road, less than 0 on it), and they follow the road when it is changed. Only for a designed track.
+const curbOffset = (n) => (Number.isFinite(n[4]) ? n[4] : 0);
+function setCurbOffset(n, offset) {
+    const size = OpenRacer.curbSize(n), value = +Math.max(-6, Math.min(6, offset)).toFixed(2);
+    n.length = 3;
+    if (Math.abs(value) > 1e-3) n.push(size, value); else if (Math.abs(size - 1) > 1e-3) n.push(size);
+}
+function snapCurbNode(n) {
+    const e = design.active() ? design.roadEdgeAt(n[0], n[2]) : null;
+    if (!e) return false;
+    const off = curbOffset(n);
+    n[0] = e.x + e.nx * off; n[2] = e.z + e.nz * off; n[1] = groundY(n[0], n[2], n[1]);
+    return true;
+}
+// a node that is put down on the road: its offset is where it is now, so that it stays there
+function startCurbOffset(n) {
+    const e = design.active() ? design.roadEdgeAt(n[0], n[2]) : null;
+    if (e) setCurbOffset(n, (n[0] - e.x) * e.nx + (n[2] - e.z) * e.nz);
+}
 let curbQueued = -1;
 function scheduleCurb(i) {
     if (curbQueued >= 0) return;
@@ -445,7 +471,10 @@ function curbLength(c) {
 }
 function drawCurbs() {
     curbLayer.clear();
+    curbState.bulk = true;
     curbState.list.forEach((c, i) => { c.mesh = null; buildCurb(i); });
+    curbState.bulk = false;
+    curbsChanged();
     drawCurbNodes();
 }
 // the nodes: of the chosen curb large (the chosen node orange, the first green), of the other curbs small, so that a click finds them
@@ -472,7 +501,7 @@ function selectCurb(i, node) {
     curbState.node = curbState.selected >= 0 && node >= 0 && node < curbState.list[curbState.selected].nodes.length ? node : -1;
     if (curbState.selected >= 0) {
         const c = curbState.list[curbState.selected];
-        $("curbWidth").value = c.width; $("curbHeight").value = c.height; $("curbColour").value = c.colour;
+        $("curbWidth").value = c.width; $("curbHeight").value = c.height; $("curbColour").value = c.colour; $("curbConnect").checked = !!c.connect;
     }
     drawCurbNodes();
     if (editorReady) updateContext();
@@ -486,8 +515,10 @@ function curbClick(event) {
     const road = roadHit(event);
     if (!road) return;
     const node = [road.point.x, groundY(road.point.x, road.point.z, road.point.y), road.point.z];
+    const connect = c ? !!c.connect : $("curbConnect").checked && design.active();
+    if (connect) startCurbOffset(node);
     if (!c) {
-        curbState.list.push(Object.assign({ nodes: [node], points: [], segments: [], mesh: null }, curbSettings()));
+        curbState.list.push(Object.assign({ nodes: [node], points: [], segments: [], mesh: null }, curbSettings(), connect ? { connect: true } : {}));
         selectCurb(curbState.list.length - 1, 0);
         return;
     }
@@ -526,6 +557,7 @@ function insertCurbNodeAt(point) {
     const at = (c.segments[best] || 0) + 1, size = Number.isFinite(c.points[best][5]) ? c.points[best][5] : 1;
     const node = [point.x, groundY(point.x, point.z, point.y), point.z];
     if (Math.abs(size - 1) > 1e-3) node.push(+size.toFixed(2));
+    if (c.connect) startCurbOffset(node);
     c.nodes.splice(at, 0, node);
     buildCurb(curbState.selected);
     selectCurb(curbState.selected, at);
@@ -573,11 +605,12 @@ function resetCurbs(curbs) {
     curbState.list = (Array.isArray(curbs) ? curbs : []).filter((c) => c && Array.isArray(c.nodes)).map((c) => ({
         nodes: c.nodes.filter((n) => Array.isArray(n) && Number.isFinite(n[0]) && Number.isFinite(n[2])).map((n) => {
             const node = [n[0], groundY(n[0], n[2], Number.isFinite(n[1]) ? n[1] : undefined), n[2]];
-            if (Number.isFinite(n[3]) && Math.abs(n[3] - 1) > 1e-3) node.push(OpenRacer.curbSize(n));
+            if (c.connect && Number.isFinite(n[4]) && Math.abs(n[4]) > 1e-3) node.push(OpenRacer.curbSize(n), n[4]);
+            else if (Number.isFinite(n[3]) && Math.abs(n[3] - 1) > 1e-3) node.push(OpenRacer.curbSize(n));
             return node;
         }),
         width: c.width > 0 ? c.width : OpenRacer.CURB_DEFAULTS.width, height: c.height >= 0 ? c.height : OpenRacer.CURB_DEFAULTS.height,
-        colour: OpenRacer.CURB_COLOURS[c.colour] ? c.colour : OpenRacer.CURB_DEFAULTS.colour, points: [], segments: [], mesh: null
+        colour: OpenRacer.CURB_COLOURS[c.colour] ? c.colour : OpenRacer.CURB_DEFAULTS.colour, points: [], segments: [], mesh: null, ...(c.connect ? { connect: true } : {})
     })).filter((c) => c.nodes.length);
     curbState.selected = -1; curbState.node = -1;
     drawCurbs();
@@ -586,7 +619,8 @@ function resetCurbs(curbs) {
 function curbsJSON() {
     const r = (v) => Math.round(v * 1000) / 1000;
     return curbState.list.filter((c) => c.nodes.length >= 2).map((c) => ({
-        nodes: c.nodes.map((n) => n.length > 3 ? [r(n[0]), r(n[1]), r(n[2]), r(n[3])] : [r(n[0]), r(n[1]), r(n[2])]), width: c.width, height: c.height, colour: c.colour,
+        nodes: c.nodes.map((n) => n.length > 4 ? [r(n[0]), r(n[1]), r(n[2]), r(n[3]), r(n[4])] : n.length > 3 ? [r(n[0]), r(n[1]), r(n[2]), r(n[3])] : [r(n[0]), r(n[1]), r(n[2])]), width: c.width, height: c.height, colour: c.colour,
+        ...(c.connect ? { connect: true } : {}),
         points: c.points && c.points.length ? c.points : OpenRacer.curbPoints(THREE, c, groundY)
     }));
 }
@@ -603,6 +637,8 @@ function renderCurbs() {
         const n = c && c.nodes[curbState.node];
         $("curbNodeBox").style.display = n ? "" : "none";
         if (n && document.activeElement !== $("curbSize")) { $("curbSize").value = OpenRacer.curbSize(n); $("curbSizeValue").textContent = Math.round(OpenRacer.curbSize(n) * 100) + "%"; }
+        $("curbOffsetBox").style.display = n && c.connect ? "" : "none";
+        if (n && c.connect && document.activeElement !== $("curbOffset")) { $("curbOffset").value = curbOffset(n); $("curbOffsetValue").textContent = curbOffset(n).toFixed(2) + " m"; }
     }
     const list = $("curbLayers");
     if (!list) return;
@@ -631,7 +667,9 @@ function renderCurbs() {
 function setCurbSize(c, k, size) {
     const n = c.nodes[k];
     if (!n) return;
-    if (Math.abs(size - 1) < 1e-3) n.length = 3; else n[3] = +Math.max(0, Math.min(1.5, size)).toFixed(2);
+    const value = +Math.max(0, Math.min(1.5, size)).toFixed(2), off = curbOffset(n);
+    n.length = 3;
+    if (off) n.push(value, off); else if (Math.abs(value - 1) > 1e-3) n.push(value);
 }
 $("curbSize").addEventListener("input", () => {
     const c = curbState.list[curbState.selected];
@@ -639,6 +677,24 @@ $("curbSize").addEventListener("input", () => {
     setCurbSize(c, curbState.node, parseFloat($("curbSize").value));
     $("curbSizeValue").textContent = Math.round(parseFloat($("curbSize").value) * 100) + "%";
     scheduleCurb(curbState.selected);
+});
+$("curbConnect").addEventListener("change", () => {
+    const c = curbState.list[curbState.selected];
+    if (!c) return;
+    if ($("curbConnect").checked && !design.active()) { $("curbConnect").checked = false; status("Connect to road is for a track that is drawn with the road designer.", "warn"); return; }
+    if ($("curbConnect").checked) { c.connect = true; c.nodes.forEach((n) => startCurbOffset(n)); }
+    else { delete c.connect; c.nodes.forEach((n) => { const size = OpenRacer.curbSize(n); n.length = 3; if (Math.abs(size - 1) > 1e-3) n.push(size); }); }
+    buildCurb(curbState.selected);
+    drawCurbNodes();
+});
+$("curbOffset").addEventListener("input", () => {
+    const c = curbState.list[curbState.selected], n = c && c.nodes[curbState.node];
+    if (!c || !c.connect || !n) return;
+    setCurbOffset(n, parseFloat($("curbOffset").value));
+    snapCurbNode(n);
+    $("curbOffsetValue").textContent = curbOffset(n).toFixed(2) + " m";
+    buildCurb(curbState.selected);
+    drawCurbNodes();
 });
 $("curbTaper").onclick = () => {
     const c = curbState.list[curbState.selected];
@@ -850,7 +906,7 @@ function resize() {
 }
 window.addEventListener("resize", resize);
 resize();
-window.__trackEditorView = { scene, camera, renderer };          // (for the tests of the editor)
+window.__trackEditorView = { scene, camera, renderer, curbState };          // (for the tests of the editor)
 // The handles and the markers of the view (the nodes of the road, the points of a row of prefabs, the nodes of the racing line, the dots of the pit line and the pit area,
 // the balls of the gates and the range of a camera, the arrows and the numbers) keep one size on the screen, however near or far the camera is: they were made in metres
 // (markerScale, from the size of the track), so close by they filled the view and far away they were dots. screenSize(object, pixels, size): how large it is on the screen
@@ -2059,6 +2115,8 @@ $("pitLineClear").onclick = async () => { if (!(await clearOk("the pit line", st
 const design = createDesign({
     scene, trackGroup, camera, renderer, controls, state, registerMesh, applyColours, renderParts, updateMarkers, frameTrack, status, $,
     setMode, getMode: () => state.mode, roleMaterials, screenSize,
+    curbs: () => curbState.list.map((c) => ({ points: c.points, width: c.width })),
+    blockPick: (event) => !!curbStripHit(event),
     ownUndo: true, onCommit: () => noteDesignStep(), onSelect: () => clearSelection("design"), onRebuild: () => snapToSurface(), groundY: (x, z) => groundY(x, z)
 });
 window.__trackEditorView.design = design;          // (for the tests: the glb it makes)
@@ -2161,10 +2219,11 @@ renderer.domElement.addEventListener("pointermove", (event) => {
         const p = surfacePoint(event, n[1]);
         if (!p) return;
         n[0] = p.x; n[1] = p.y; n[2] = p.z;
+        if (c.connect) snapCurbNode(n);
         curbState.dragging = true;
         // the ball follows at once, the strip once per frame
         const ball = curbNodeLayer.children.find((b) => b.userData.curbNode[0] === drag.curbNode[0] && b.userData.curbNode[1] === drag.curbNode[1]);
-        if (ball) ball.position.set(p.x, p.y + 0.3 + ball.geometry.parameters.radius * 0.5, p.z);
+        if (ball) ball.position.set(n[0], n[1] + 0.3 + ball.geometry.parameters.radius * 0.5, n[2]);
         scheduleCurb(drag.curbNode[0]);
         return;
     }
@@ -3388,7 +3447,7 @@ function snapToSurface() {
     state.gates.forEach(onRoad);
     objectState.list.forEach(onRoad);
     if (state.drag) onRoad(state.drag);
-    curbState.list.forEach((c) => c.nodes.forEach((n) => { n[1] = groundY(n[0], n[2], n[1]); }));
+    curbState.list.forEach((c) => c.nodes.forEach((n) => { if (c.connect) snapCurbNode(n); else n[1] = groundY(n[0], n[2], n[1]); }));
     drawCurbs();
     syncGateTarget(); syncObjectTarget();
     updateMarkers();

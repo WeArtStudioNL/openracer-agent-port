@@ -4,7 +4,8 @@
  * Description: The curbstones that are drawn in the track editor: a strip of red and white (or another colour) on the ground along a
  *              smooth line through its nodes. track.json "curbs": [{ nodes: [[x, y, z, size], ...], width, height, colour, points }]. The
  *              nodes are what the editor changes (size: how large the curb is at that node, 0 to 1.5, left out 1: a node at an end with a
- *              small size makes the curb taper off there); points is the line through them about every half metre with the height of the
+ *              small size makes the curb taper off there; a fifth number, offset, is for a curb with connect: true, whose nodes lie on the edge of the
+ *              road at that distance from it, in the editor only: the game uses the points); points is the line through them about every half metre with the height of the
  *              ground under its left edge, its middle and its right edge and its size there ([x, z, yLeft, yMiddle, yRight, size]), found by
  *              the editor on the track, so that the game builds the same strip without looking for the ground. Both ends slope up from the
  *              ground (a car that drove into the end of a curb hit a step of 5 cm). Used by the track editor and by the game (TrackLoader.js:
