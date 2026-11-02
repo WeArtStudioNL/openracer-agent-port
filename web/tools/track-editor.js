@@ -1336,7 +1336,13 @@ function updateMarkers() {
         curve.renderOrder = 996;
         markers.add(curve);
         L.forEach((q, i) => {
-            const dot = new THREE.Mesh(new THREE.SphereGeometry(0.4 * k, 10, 8), new THREE.MeshBasicMaterial({ color: i === 0 ? 0x4ed88a : (i === L.length - 1 ? 0xff5a4a : 0xff9a2e), depthTest: false }));
+            const chosen = boxSel.kind === "pitline" && boxSel.i === i;
+            const dot = new THREE.Mesh(new THREE.SphereGeometry(0.4 * k, 10, 8), new THREE.MeshBasicMaterial({ color: chosen ? 0xffffff : i === 0 ? 0x4ed88a : (i === L.length - 1 ? 0xff5a4a : 0xff9a2e), depthTest: false }));
+            // (a point of the line is chosen with a finger too: an invisible ball of 44 pixels around it)
+            const pick = new THREE.Mesh(new THREE.SphereGeometry(0.4 * k, 8, 6), new THREE.MeshBasicMaterial({ visible: false }));
+            pick.position.set(q.x, q.y + 0.3, q.z);
+            pick.userData.box = { kind: "pitline", i };
+            markers.add(screenSize(pick, 22, 0.4 * k));
             dot.position.set(q.x, q.y + 0.3, q.z);
             dot.renderOrder = 997;
             markers.add(screenSize(dot, 6, 0.4 * k));
@@ -2122,7 +2128,15 @@ const design = createDesign({
     scene, trackGroup, camera, renderer, controls, state, registerMesh, applyColours, renderParts, updateMarkers, frameTrack, status, $,
     setMode, getMode: () => state.mode, roleMaterials, screenSize,
     curbs: () => curbState.list.map((c) => ({ points: c.points, width: c.width })),
-    blockPick: (event) => !!curbStripHit(event),
+    // (a click in Look that the designer would give to the surface or the branch under it, but that is for something that lies on it and is nearer: a pit box,
+    // a pit line node, a gate, a grid box, a camera, the drag strip or an object)
+    blockPick: (event, distance) => {
+        if (curbStripHit(event)) return true;
+        const ray = pointerRay(event);
+        const near = (h) => h && (distance === undefined || h.distance <= distance + 1.5);
+        if (near(ray.intersectObjects(markers.children, false).find((h) => h.object.userData.gateIndex !== undefined || h.object.userData.box || h.object.userData.camera !== undefined || h.object.userData.dragStrip))) return true;
+        return near(ray.intersectObjects(objectLayer.children, true).find((h) => objectIndexOf(h.object) >= 0));
+    },
     snapStep: () => snapStep,
     renderLayers: () => { try { renderSurfaceLayers(); } catch (e) { /* (the designer is made further down: not yet) */ } },
     ownUndo: true, onCommit: () => noteDesignStep(), onSelect: () => clearSelection("design"), onRebuild: () => snapToSurface(), groundY: (x, z) => groundY(x, z)
@@ -2321,7 +2335,7 @@ renderer.domElement.addEventListener("pointerup", (event) => {
     if (state.mode === "refscale") { if (!d.moved && !gizmoBusy()) refScaleClick(event); return; }
     if (state.mode === "measure") { if (!d.moved && !gizmoBusy()) measureClick(event); return; }
     if (d.hit) {
-        if (state.mode === "pitline") { if (!d.moved) { state.pitLine.push({ x: d.hit.point.x, y: d.hit.point.y, z: d.hit.point.z }); updateMarkers(); } }
+        if (state.mode === "pitline") { const nodeHit = !d.moved && pointerRay(event).intersectObjects(markers.children, false).find((h) => h.object.userData.box && h.object.userData.box.kind === "pitline"); if (nodeHit) { selectBox("pitline", nodeHit.object.userData.box.i); return; } if (!d.moved) { state.pitLine.push({ x: d.hit.point.x, y: d.hit.point.y, z: d.hit.point.z }); updateMarkers(); } }
         else if (!d.added && (state.mode === "grid" || state.mode === "pitbox" || state.mode === "gate" || state.mode === "drag" || state.mode === "camera" || state.mode === "object")) place(d, false);
         return;
     }
@@ -3241,14 +3255,14 @@ function anythingChosen() {
 }
 
 // ---- the boxes of the grid and of the pit: chosen in the view or in their card, moved with the gizmo (W) and turned (E); the height follows the road
-function boxList(kind) { return kind === "grid" ? state.grid : kind === "pit" ? state.pitBoxes : null; }
+function boxList(kind) { return kind === "grid" ? state.grid : kind === "pit" ? state.pitBoxes : kind === "pitline" ? state.pitLine : null; }
 function boxOf() { const list = boxList(boxSel.kind); return list ? list[boxSel.i] : null; }
 boxGizmo.addEventListener("dragging-changed", (event) => { controls.enabled = !event.value; boxSel.dragging = event.value; if (!event.value) updateMarkers(); });
 boxGizmo.addEventListener("objectChange", () => {
     const b = boxOf();
     if (!b) return;
     b.x = boxTarget.position.x; b.z = boxTarget.position.z; b.y = groundY(b.x, b.z, b.y);
-    b.heading = -2 * Math.atan2(boxTarget.quaternion.y, boxTarget.quaternion.w);
+    if (boxSel.kind !== "pitline") b.heading = -2 * Math.atan2(boxTarget.quaternion.y, boxTarget.quaternion.w);
     boxTarget.position.y = b.y;
     if (boxSel.kind === "grid") syncStart();
     scheduleMarkers();
@@ -3262,9 +3276,9 @@ function selectBox(kind, i) {
         boxSel.kind = kind; boxSel.i = i;
         const b = list[i];
         boxTarget.position.set(b.x, b.y, b.z);
-        boxTarget.rotation.set(0, -b.heading, 0);
+        boxTarget.rotation.set(0, -(b.heading || 0), 0);
         boxGizmo.attach(boxTarget);
-        setObjectGizmoMode(objectGizmo.mode === "rotate" ? "rotate" : "translate");
+        setObjectGizmoMode(kind !== "pitline" && objectGizmo.mode === "rotate" ? "rotate" : "translate");
     }
     updateMarkers();
 }
@@ -3496,9 +3510,9 @@ function propsOf() {
     }
     const b = boxOf();
     if (b) {
-        return { key: boxSel.kind + boxSel.i, title: (boxSel.kind === "grid" ? "Grid box " : "Pit box ") + (boxSel.i + 1), fields: [
-            ["x", r1(b.x), (v) => { b.x = v; onRoad(b); }], ["z", r1(b.z), (v) => { b.z = v; onRoad(b); }], ["Direction (°)", deg(b.heading), (v) => { b.heading = rad(v); }]
-        ], after: () => { if (boxSel.kind === "grid") syncStart(); selectBox(boxSel.kind, boxSel.i); } };
+        const node = boxSel.kind === "pitline";
+        return { key: boxSel.kind + boxSel.i, title: node ? "Pit line point " + (boxSel.i + 1) : (boxSel.kind === "grid" ? "Grid box " : "Pit box ") + (boxSel.i + 1), fields: [
+            ["x", r1(b.x), (v) => { b.x = v; onRoad(b); }], ["z", r1(b.z), (v) => { b.z = v; onRoad(b); }]].concat(node ? [] : [["Direction (°)", deg(b.heading), (v) => { b.heading = rad(v); }]]), after: () => { if (boxSel.kind === "grid") syncStart(); selectBox(boxSel.kind, boxSel.i); } };
     }
     if (state.camSel >= 0) {
         const c = state.cameras[state.camSel];
@@ -3819,7 +3833,7 @@ function contextOf() {
     if (state.mode === "refscale" || refState.moving) return "ref";
     if (state.mode === "curb" || curbState.selected >= 0) return "curb";
     if (state.mode === "grid" || state.mode === "gate" || gateUi.selected >= 0 || boxSel.kind === "grid") return "gates";
-    if (state.mode === "pitbox" || state.mode === "pitline" || boxSel.kind === "pit") return "pit";
+    if (state.mode === "pitbox" || state.mode === "pitline" || boxSel.kind === "pit" || boxSel.kind === "pitline") return "pit";
     if (state.mode === "object" || objectUi.selected >= 0) return "objects";
     if (state.mode === "camera" || state.camSel >= 0) return "cameras";
     if (state.mode === "drag" || eventLayers.selected === "drag") return "drag";

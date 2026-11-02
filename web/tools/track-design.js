@@ -1526,6 +1526,8 @@ export function createDesign(api) {
         design.pressTook = !!(handle || hit.node !== undefined || hit.rowPoint !== undefined);
         // (a click on the line of the chosen row adds a node there)
         const selRow = design.selectedPrefab !== null ? design.data.prefabs[design.selectedPrefab] : null;
+        // (what lies on the surface, a pit box or a gate for instance, comes first when it is nearer: the editor says so with blockPick)
+        const surfaceHit = mode === "view" ? ((h) => (h && !(api.blockPick && api.blockPick(e, h.distance)) ? h : null))(pointerRay(e).intersectObjects(patchGroup.children.concat(branchGroup.children), false)[0]) : null;
         const rowHit = selRow && selRow.row && (mode === "prefab" || mode === "view") ? rowLineHit(e, selRow) : null;
         if (handle) {
             drag.kind = "handle"; drag.handle = handle;
@@ -1571,9 +1573,9 @@ export function createDesign(api) {
             if (g) drag.stroke.push({ x: g.x, z: g.z });
         } else if (mode === "node") {
             drag.kind = "add";
-        } else if (mode === "view" && !(api.blockPick && api.blockPick(e)) && pointerRay(e).intersectObjects(patchGroup.children.concat(branchGroup.children), false)[0]) {
+        } else if (mode === "view" && surfaceHit) {
             // (in Look a click on a surface or on a branch chooses it: its tool opens on it; the camera still turns when the pointer is dragged)
-            const picked = pointerRay(e).intersectObjects(patchGroup.children.concat(branchGroup.children), false)[0].object.userData;
+            const picked = surfaceHit.object.userData;
             drag.kind = "pick"; drag.patch = picked.patchIndex; drag.branch = picked.branchIndex;
             return;
         } else {
