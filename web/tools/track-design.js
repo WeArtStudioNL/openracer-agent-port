@@ -519,7 +519,7 @@ export function createDesign(api) {
     // the meshes of the branches (one strip each, its ends running on over the road they join), and the footprints of the branches that join the track:
     // the shoulders of the track are pressed down under them (see the shoulders of the track, above)
     function makeBranchParts(lines) {
-        const meshes = [], rings = [];
+        const meshes = [], rings = [], built = [];
         design.branchEdges = [];
         design.edgeCache = null;
         lines.forEach((line) => {
@@ -538,19 +538,34 @@ export function createDesign(api) {
             pts.forEach((q) => addRow(q.x, q.y, q.z, q.tangent, q.along, q.w));
             if (fore) addRow(end.x + end.tangent.x * fore, end.y, end.z + end.tangent.z * fore, end.tangent, end.along + fore, end.w);
             unfold(left, tangents, false); unfold(right, tangents, false);
-            if ((b.start && b.start.road < 0) || (b.end && b.end.road < 0)) rings.push(left.concat(right.slice().reverse()));
-            const tex = textureOf("road"), name = "branch_" + (line.index + 1), firstMesh = meshes.length;
-            meshes.push(strip(name, left, right, tex, "road", along, true));
-            // the grass beside the branch, as beside the track: from the edge of the branch down to 0.3 m under it, BRANCH_SHOULDER wide (it is
-            // not made along the stretch that runs on over the road, which has no edge of its own there)
+            const footprint = left.concat(right.slice().reverse());
+            if ((b.start && b.start.road < 0) || (b.end && b.end.road < 0)) rings.push(footprint);
+            const tex = textureOf("road"), name = "branch_" + (line.index + 1);
+            const road = strip(name, left, right, tex, "road", along, true);
+            road.userData.branchIndex = line.index;
+            meshes.push(road);
+            built.push({ line, b, pts, name, left, right, along, back, footprint });
+        });
+        // the grass beside the branch, as beside the track: from the edge of the branch down to 0.3 m under it, BRANCH_SHOULDER wide (it is not made along the
+        // stretch that runs on over the road, which has no edge of its own there). Where another branch (or the branch itself) joins it, its edge is lower under
+        // the one that joins, as at the track (rebuild): the road that joins lies a few centimetres under the one it joins, and the grass must not lie over it
+        built.forEach(({ line, pts, name, left, right, along, back }) => {
             const off = back ? 1 : 0, count = pts.length, innerL = left.slice(off, off + count), innerR = right.slice(off, off + count);
             const outer = (sign) => pts.map((q) => new THREE.Vector3(q.x, q.y - 0.3, q.z).addScaledVector(new THREE.Vector3().crossVectors(UP, q.tangent).normalize(), sign * (q.w + BRANCH_SHOULDER)));
             const outerL = outer(1), outerR = outer(-1), tangentsOnly = pts.map((q) => q.tangent), alongOnly = along.slice(off, off + count);
             unfold(outerL, tangentsOnly, false); unfold(outerR, tangentsOnly, false);
-            const grass = textureOf("shoulder");
+            const joined = built.filter((o) => (o.b.start && o.b.start.road === line.index) || (o.b.end && o.b.end.road === line.index)).map((o) => o.footprint);
+            if (joined.length) {
+                const lower = (inner, far) => inner.forEach((q, i) => {
+                    const dx = far[i].x - q.x, dz = far[i].z - q.z, l = Math.hypot(dx, dz) || 1, x = q.x + dx / l * 0.4, z = q.z + dz / l * 0.4;
+                    if (joined.some((r) => insideRing(r, x, z))) q.y -= 0.15;
+                });
+                lower(innerL, outerL); lower(innerR, outerR);
+            }
+            const grass = textureOf("shoulder"), first = meshes.length;
             meshes.push(strip(name + "_shoulder_1", outerL, innerL, grass, "grass", alongOnly, true), strip(name + "_shoulder_2", innerR, outerR, grass, "grass", alongOnly, true));
+            for (let k = first; k < meshes.length; k++) meshes[k].userData.branchIndex = line.index;          // (a click on any part of the branch chooses it)
             design.branchEdges.push({ pts: innerL, closed: false }, { pts: innerR, closed: false });
-            for (let k = firstMesh; k < meshes.length; k++) meshes[k].userData.branchIndex = line.index;          // (a click on any part of the branch chooses it)
         });
         return { meshes, rings };
     }
