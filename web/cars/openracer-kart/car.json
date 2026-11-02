@@ -27,6 +27,36 @@
       "RR": [
         "wheel_RR"
       ]
+    },
+    "library": {
+      "front": {
+        "rim": "steel-16",
+        "tyre": "custom",
+        "custom": {
+          "width": 0.2,
+          "diameter": 0.27,
+          "inner_ratio": 0.6296296296296297,
+          "rings": 3,
+          "segments": 12,
+          "carcass": 0,
+          "rubber": 78,
+          "tread": 0
+        }
+      },
+      "rear": {
+        "rim": "steel-16",
+        "tyre": "custom",
+        "custom": {
+          "width": 0.2,
+          "diameter": 0.27,
+          "inner_ratio": 0.6296296296296297,
+          "rings": 3,
+          "segments": 12,
+          "carcass": 0,
+          "rubber": 78,
+          "tread": 0
+        }
+      }
     }
   },
   "dimensions": {
@@ -35,7 +65,7 @@
     "height": 0.64
   },
   "chassis": {
-    "mass": 100,
+    "mass": 280,
     "wheelbase": 1.092,
     "front_track": 0.905,
     "rear_track": 0.99,
@@ -66,8 +96,8 @@
     "spring_progression": 0,
     "damping_rebound": 1.7,
     "unsprung": true,
-    "frame_torsion": 80,
-    "inner_lift": 0.015
+    "frame_torsion": 920,
+    "inner_lift": 0.022
   },
   "drivetrain": {
     "drive": "rwd",
@@ -176,7 +206,8 @@
         0.58,
         -0.07
       ],
-      "fov": 75
+      "fov": 75,
+      "hide_driver": false
     }
   },
   "steering_wheel": {
@@ -247,7 +278,8 @@
           9000,
           38
         ]
-      ]
+      ],
+      "exhaust_type": "custom"
     }
   },
   "tyres": {
@@ -280,11 +312,13 @@
     "esc_gain": 0.5
   },
   "extras": {
-    "tc_on": true,
+    "tc_on": false,
     "abs_on": true,
-    "esc_on": true,
+    "esc_on": false,
     "launch_control_on": false,
     "two_step_on": false,
+    "governor_on": false,
+    "governor_rpm": 3200,
     "pops_on": false,
     "pops_amount": 60,
     "pops_overrun": 2,
