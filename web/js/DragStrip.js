@@ -10,10 +10,10 @@
  *                time is that moment minus the green light.
  *              - Leaving before the green light is a false start: a red light, the run is over and the car has to go back behind the line (3 m)
  *                and come up slowly to the line again. A car that passes the line without staging has no run until it has gone back too.
- *              - The times and the speeds are only shown at the end, on the time slip, for the standard distances within the length (60 ft, 330 ft,
- *                1/8 mile, 1000 ft, 1/4 mile, ...) and the finish.
+ *              - At every distance within the length (60 ft, 330 ft, 1/8 mile, 1000 ft, 1/4 mile, ...) and at the finish, the time and the speed
+ *                of the run there come as a notification at the top right: they stack, and each stays five seconds.
  *              At the finish a time slip slides in from the top at the right of the screen, with the times on it; the cross or Escape closes it.
- *              The lines on the road are drawn: a white start line and a chequered finish line. The lights are on a tree: a pole in the middle of the strip, twelve metres past the start line, with
+ *              The lines on the road are drawn: a white start line, a white line at every distance, and a chequered finish line. The lights are on a tree: a pole in the middle of the strip, twelve metres past the start line, with
  *              glowing lamps (pre-stage, stage, three ambers, green and red); the HUD only has the text (the distance to the line and what to do).
  */
 
@@ -159,6 +159,8 @@ OpenRacer.DragStrip = (function () {
             return true;
         };
         if (!make(0, false) || !make(strip.length, true)) return;
+        // a white line for every distance of the run (the finish has its chequered line)
+        results.forEach(function (r) { if (!r.finish) make(r.metres, false); });
         buildTree(group, v);
         scene.add(group);
         lines = group;
@@ -192,6 +194,8 @@ OpenRacer.DragStrip = (function () {
             "#dragSlip.open { transform: translateY(0); pointer-events: auto; }" +
             "#dragSlip .close { position: absolute; right: 8px; top: 6px; width: 24px; height: 24px; border: 0; background: transparent; font-size: 20px; line-height: 20px; color: #444; cursor: pointer; }" +
             "#dragSlip .close:hover { color: #000; }" +
+            "#dragSlip .download { position: absolute; right: 36px; top: 6px; width: 24px; height: 24px; padding: 0; border: 0; background: transparent; color: #444; cursor: pointer; line-height: 0; }" +
+            "#dragSlip .download:hover { color: #000; }" +
             "#dragSlip .centre { text-align: center; }" +
             "#dragSlip .tear { position: absolute; left: 0; right: 0; bottom: -1px; height: 12px; background: linear-gradient(-45deg, transparent 8px, #f4f1e8 0), linear-gradient(45deg, transparent 8px, #f4f1e8 0); background-size: 16px 16px; background-position: left bottom; transform: translateY(12px); }";
         document.head.appendChild(style);
@@ -205,6 +209,28 @@ OpenRacer.DragStrip = (function () {
         if (slipOff) { var f = slipOff; slipOff = null; f(); }
     }
     function plain(t) { return t < 1 ? t.toFixed(3).replace(/^0/, "") : t.toFixed(3); }
+    // the slip as a PNG, drawn from its rows (the same text as on the page), at twice the size for a sharp picture
+    function downloadSlip(rows, data) {
+        var scale = 2, width = 330 * scale, inset = 18 * scale, lineH = 14 * 1.45 * scale;
+        var canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = inset + rows.length * lineH + 30 * scale;
+        var g = canvas.getContext("2d");
+        g.fillStyle = "#f4f1e8"; g.fillRect(0, 0, canvas.width, canvas.height);
+        g.fillStyle = "#1b1b1b"; g.font = (14 * scale) + "px 'Courier New', Courier, monospace"; g.textBaseline = "top";
+        rows.forEach(function (r, n) {
+            if (!r.text) return;
+            g.textAlign = r.centre ? "center" : "left";
+            g.fillText(r.text, r.centre ? width / 2 : inset, inset + n * lineH);
+        });
+        var name = "time-slip-" + String(data.track || "run").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + new Date(data.date).toISOString().slice(0, 16).replace(/[:T]/g, "-") + ".png";
+        var a = document.createElement("a");
+        a.href = canvas.toDataURL("image/png");
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
     // a ticket of a run: { track, car, date, reaction, marks: [{ label, time, speed, finish }] }
     function ticket(data) {
         build_slip();
@@ -214,20 +240,31 @@ OpenRacer.DragStrip = (function () {
         var now = new Date(data.date);
         var two = function (n) { return (n < 10 ? "0" : "") + n; };
         var hours = now.getHours() % 12 || 12;
-        var lines = [];
-        lines.push("<div class=\"centre\">WELCOME TO THE\n" + htmlText(String(data.track || "").toUpperCase().slice(0, 28)) + "\nDRAG STRIP\nHAVE A SAFE AND\nFUN DAY OF RACING!</div>", "");
-        lines.push(hours + ":" + two(now.getMinutes()) + (now.getHours() < 12 ? " AM" : " PM"), two(now.getMonth() + 1) + "/" + two(now.getDate()) + "/" + now.getFullYear(), "");
-        lines.push("<div class=\"centre\">TIME SLIP</div>", "");
-        lines.push(htmlText(pad("CAR", String(data.car || "").toUpperCase().slice(0, 18))), "");
-        lines.push(pad("R/T", plain(data.reaction)));
+        // the slip as rows of text ({ text, centre }): the page and the PNG are both drawn from these
+        var rows = [];
+        var row = function (text, centre) { rows.push({ text: String(text), centre: !!centre }); };
+        ["WELCOME TO THE", String(data.track || "").toUpperCase().slice(0, 28), "DRAG STRIP", "HAVE A SAFE AND", "FUN DAY OF RACING!"].forEach(function (t) { row(t, true); });
+        row("");
+        row(hours + ":" + two(now.getMinutes()) + (now.getHours() < 12 ? " AM" : " PM"));
+        row(two(now.getMonth() + 1) + "/" + two(now.getDate()) + "/" + now.getFullYear());
+        row("");
+        row("TIME SLIP", true);
+        row("");
+        row(pad("CAR", String(data.car || "").toUpperCase().slice(0, 18)));
+        row("");
+        row(pad("R/T", plain(data.reaction)));
         data.marks.forEach(function (r) {
             var name = r.label.toUpperCase().replace(" MILE", "").replace(" FT", "");
-            lines.push(pad(name, plain(r.time)));
-            if (r.finish || r.label === "1/8 mile") lines.push(pad(unit, speed(r.speed)));
+            row(pad(name, plain(r.time)));
+            if (r.finish || r.label === "1/8 mile") row(pad(unit, speed(r.speed)));
         });
-        lines.push("", "COMPLETED RUN");
-        slip.innerHTML = "<button class=\"close\" title=\"Close (Escape)\">×</button>" + lines.join("\n").replace(/<\/div>\n/g, "</div>") + "<div class=\"tear\"></div>";
+        row("");
+        row("COMPLETED RUN");
+        var download = "<svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 4v11\"/><path d=\"M7 10l5 5 5-5\"/><path d=\"M5 20h14\"/></svg>";
+        slip.innerHTML = "<button class=\"close\" title=\"Close (Escape)\">×</button><button class=\"download\" title=\"Download as PNG\">" + download + "</button>" +
+            rows.map(function (r) { return "<div" + (r.centre ? " class=\"centre\"" : "") + ">" + (htmlText(r.text) || " ") + "</div>"; }).join("") + "<div class=\"tear\"></div>";
         slip.querySelector(".close").addEventListener("click", closeSlip);
+        slip.querySelector(".download").addEventListener("click", function () { downloadSlip(rows, data); });
         // from above into the picture (a frame later, so that the transition runs)
         slip.classList.remove("open");
         void slip.offsetWidth;
@@ -420,31 +457,36 @@ OpenRacer.DragStrip = (function () {
         document.body.appendChild(hud);
     }
 
-    // the time of the quarter mile at the top, in the middle, for a moment: it fades in, stays, and fades out (a finish nearer than a quarter mile has its own time)
-    var flash = null, flashTimers = [];
-    function flashTime(r) {
-        if (!flash) {
+    // the split of a distance at the top right: one notification per distance, stacked under each other; each slides in, stays five seconds, and fades out
+    var splits = null;
+    function splitNote(r) {
+        if (!splits) {
             var style = document.createElement("style");
             style.textContent =
-                "#dragFlash { position: fixed; left: 50%; top: calc(10px + env(safe-area-inset-top)); transform: translateX(-50%); z-index: 960; pointer-events: none; opacity: 0; transition: opacity 0.5s ease; text-align: center; " +
-                "padding: 8px 22px 10px; border-radius: 12px; background: rgba(14, 18, 23, 0.78); color: #fff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }" +
-                "#dragFlash.show { opacity: 1; } #dragFlash.out { transition-duration: 0.9s; }" +
-                "#dragFlash .what { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: #9fb0c4; }" +
-                "#dragFlash .time { font-size: 40px; font-weight: bold; font-variant-numeric: tabular-nums; line-height: 1.15; }" +
-                "#dragFlash .speed { font-size: 14px; color: #7ee7a0; font-variant-numeric: tabular-nums; }";
+                "#dragSplits { position: fixed; right: calc(14px + env(safe-area-inset-right)); top: calc(10px + env(safe-area-inset-top)); z-index: 960; pointer-events: none; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }" +
+                "#dragSplits .split { min-width: 170px; box-sizing: border-box; padding: 7px 14px 8px; border-radius: 10px; text-align: right; background: rgba(14, 18, 23, 0.78); color: #fff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; " +
+                "opacity: 0; transform: translateX(18px); transition: opacity 0.5s ease, transform 0.5s ease; }" +
+                "#dragSplits .split.show { opacity: 1; transform: none; }" +
+                "#dragSplits .what { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: #9fb0c4; }" +
+                "#dragSplits .time { font-size: 28px; font-weight: bold; font-variant-numeric: tabular-nums; line-height: 1.15; }" +
+                "#dragSplits .speed { font-size: 13px; color: #7ee7a0; font-variant-numeric: tabular-nums; }";
             document.head.appendChild(style);
-            flash = document.createElement("div");
-            flash.id = "dragFlash";
-            document.body.appendChild(flash);
+            splits = document.createElement("div");
+            splits.id = "dragSplits";
+            document.body.appendChild(splits);
         }
-        flashTimers.forEach(clearTimeout); flashTimers = [];
         var metric = Settings.option("units") !== "imperial";
-        flash.innerHTML = "<div class=\"what\">" + r.label + "</div><div class=\"time\">" + r.time.toFixed(3) + " s</div><div class=\"speed\">" +
+        var note = document.createElement("div");
+        note.className = "split";
+        note.innerHTML = "<div class=\"what\">" + htmlText(r.label) + "</div><div class=\"time\">" + r.time.toFixed(3) + " s</div><div class=\"speed\">" +
             Math.round(r.speed * (metric ? 3.6 : 2.2369362920544)) + (metric ? " km/h" : " mph") + "</div>";
-        flash.classList.remove("out");
-        void flash.offsetWidth;                                    // (the fade starts from nothing again, also when the last one was still there)
-        flash.classList.add("show");
-        flashTimers.push(setTimeout(function () { flash.classList.add("out"); flash.classList.remove("show"); }, 4500));
+        splits.appendChild(note);
+        void note.offsetWidth;                                     // (the slide starts from where it is, so that the transition runs)
+        note.classList.add("show");
+        setTimeout(function () {
+            note.classList.remove("show");
+            setTimeout(function () { note.remove(); }, 600);       // (after the fade out)
+        }, 5000);
     }
 
     function distanceText(s, metric) {
@@ -551,7 +593,7 @@ OpenRacer.DragStrip = (function () {
                             k = Math.max(0, Math.min(1, k));
                             r.time = prevT + (clock - prevT) * k - t0;
                             r.speed = prevV + (forwardSpeed - prevV) * k;
-                            if (r.label === "1/4 mile" || (r.finish && strip.length < 402)) flashTime(r);
+                            splitNote(r);
                         }
                     }
                     if (s >= strip.length + stagedS) { state = "finished"; finishRun(car); }

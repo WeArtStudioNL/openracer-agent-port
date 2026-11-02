@@ -1437,6 +1437,7 @@ function updateMarkers() {
             m.rotation.x = -Math.PI / 2;
             m.rotation.z = Math.atan2(-dx, -dz);
             m.position.set(x, y + 0.35, z);
+            m.userData.dragStrip = true;                 // (a click on a line chooses the strip: its width and length are in the card)
             markers.add(m);
         };
         line(d.x, d.y, d.z, 0x4ed88a);
@@ -2332,6 +2333,8 @@ renderer.domElement.addEventListener("pointerup", (event) => {
     const ray = pointerRay(event);
     const camHit = ray.intersectObjects(markers.children, false).find((h) => h.object.userData.camera !== undefined);
     if (camHit) { selectCamera(camHit.object.userData.camera, state.camRange && state.camSel === camHit.object.userData.camera); return; }
+    // the drag strip: a click on one of its lines chooses it (the card shows its width and length)
+    if (state.drag && ray.intersectObjects(markers.children, false).some((h) => h.object.userData.dragStrip)) { if (eventLayers.selected !== "drag") selectEvent("drag"); return; }
     const curbHit = curbStripHit(event);
     if (curbHit) { selectCurb(curbHit.index, -1); return; }
     const objectHit = ray.intersectObjects(objectLayer.children, true)[0];
