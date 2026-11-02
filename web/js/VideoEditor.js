@@ -414,7 +414,7 @@ OpenRacer.VideoEditor = (function () {
             var sound = typeof EngineSound !== "undefined" && EngineSound.recordingStream ? EngineSound.recordingStream() : null;
             if (sound) sound.getAudioTracks().forEach(function (track) { stream.addTrack(track); });
             else say("No sound in this video: the browser has not started it (press a key or click first, then record again).");
-            var recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 12000000 });
+            var recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 20000000 });
             recorder.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
             recorder.onstop = function () {
                 recording = null;
@@ -422,12 +422,12 @@ OpenRacer.VideoEditor = (function () {
                 var blob = new Blob(chunks, { type: type.split(";")[0] });
                 if (!blob.size) { say("The video is empty."); updateButtons(); return; }
                 var stem = safeName(name);
-                if (/mp4/.test(type)) { download(blob, stem + ".mp4"); say("Saved " + stem + ".mp4"); updateButtons(); return; }
-                // a webm: the local server (tools/serve.py) makes the mp4 of it with ffmpeg; without it the webm is kept
+                // the local server (tools/serve.py) makes a small mp4 of it with ffmpeg (the browser's own file is several times bigger); without it the file is kept as it is
+                var kept = /mp4/.test(type) ? ".mp4" : ".webm";
                 say("Making the mp4…");
                 fetch("/api/convert/mp4", { method: "POST", body: blob, headers: { "X-OpenRacer": "1" } }).then(function (r) { if (!r.ok) throw new Error("no"); return r.blob(); })
                     .then(function (mp4) { download(mp4, stem + ".mp4"); say("Saved " + stem + ".mp4"); })
-                    .catch(function () { download(blob, stem + ".webm"); say("ffmpeg is not here: saved " + stem + ".webm"); })
+                    .catch(function () { download(blob, stem + kept); say("ffmpeg is not here: saved " + stem + kept); })
                     .then(updateButtons);
             };
             recording = { recorder: recorder };

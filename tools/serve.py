@@ -147,7 +147,7 @@ class Handler(SimpleHTTPRequestHandler):
         if length <= 0 or length > MAX_UPLOAD:
             return self.send_json({"error": "bad length"}, 400)
         with tempfile.TemporaryDirectory() as folder:
-            source, target = os.path.join(folder, "in.webm"), os.path.join(folder, "out.mp4")
+            source, target = os.path.join(folder, "in.video"), os.path.join(folder, "out.mp4")
             with open(source, "wb") as f:
                 left = length
                 while left > 0:
@@ -156,9 +156,11 @@ class Handler(SimpleHTTPRequestHandler):
                         break
                     f.write(chunk)
                     left -= len(chunk)
-            # H.264 in a mp4 that plays everywhere: even sizes, yuv420p, the index at the front
-            command = [ffmpeg, "-y", "-loglevel", "error", "-i", source, "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libx264", "-preset", "veryfast",
-                       "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-c:a", "aac", "-b:a", "160k", target]
+            # H.264 in a mp4 that plays everywhere, as small as it goes: the long side at most 1280, 30 fps, a fairly high CRF, the index at the front, little sound
+            scale = "scale='if(gt(iw,ih),min(1280,iw),-2)':'if(gt(iw,ih),-2,min(1280,ih))'"
+            command = [ffmpeg, "-y", "-loglevel", "error", "-i", source, "-vf", scale, "-r", "30", "-c:v", "libx264", "-preset", "slow",
+                       "-crf", "26", "-x264-params", "aq-mode=3", "-maxrate", "3500k", "-bufsize", "7000k", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                       "-c:a", "aac", "-b:a", "64k", "-ac", "1", target]
             try:
                 done = subprocess.run(command, capture_output=True, timeout=1800)
             except subprocess.TimeoutExpired:

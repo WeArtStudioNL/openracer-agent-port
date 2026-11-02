@@ -450,7 +450,7 @@ OpenRacer.Replay = (function() {
             showRider(entry, time);
             if(entry.player) object.updateVisuals(delta);
             // the squeal of the tyres of the player (Car.update is not run in a replay, which is where the game feeds it)
-            if(entry.player && typeof EngineSound !== "undefined" && EngineSound.setTyres) EngineSound.setTyres(playing && !scrubbing ? object.vehicle.squeal || 0 : 0, Math.abs(object.vehicle.u || 0));
+            if(entry.player && typeof EngineSound !== "undefined" && EngineSound.setTyres) EngineSound.setTyres((playing || api.editorPlaying) && !scrubbing ? object.vehicle.squeal || 0 : 0, Math.abs(object.vehicle.u || 0));
             else object.updateVisuals(delta);
             if(i === 0) player = { rpm: scratch[P.rpm], throttle: scratch[P.throttle], brake: scratch[P.brake], gear: gearLabels[scratch[P.gear] | 0] || "", speed: Math.hypot(scratch[P.vx], scratch[P.vz]) };
         }
@@ -1080,7 +1080,7 @@ OpenRacer.Replay = (function() {
         var sound = typeof EngineSound !== "undefined" && EngineSound.recordingStream ? EngineSound.recordingStream() : null;
         if(sound) sound.getAudioTracks().forEach(function(track) { stream.addTrack(track); });
         video.chunks = [];
-        video.recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8000000 });
+        video.recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 20000000 });
         video.recorder.ondataavailable = function(e) { if(e.data && e.data.size) video.chunks.push(e.data); };
         video.recorder.onstop = function() {
             var blob = new Blob(video.chunks, { type: type.split(";")[0] });
@@ -1105,13 +1105,13 @@ OpenRacer.Replay = (function() {
                 link.remove();
                 setTimeout(function() { URL.revokeObjectURL(url); }, 30000);
             }
-            if(/mp4/.test(type)) { save(blob, ".mp4"); return; }
-            // a webm: the local server (tools/serve.py) turns it into a mp4 with ffmpeg; without it the webm is kept
+            // the local server (tools/serve.py) makes a small mp4 of it with ffmpeg (the browser's own file is several times bigger); without it the file is kept as it is
+            var kept = /mp4/.test(type) ? ".mp4" : ".webm";
             if(videoButton) { videoButton.textContent = "Making the mp4…"; videoButton.disabled = true; }
             function done() { if(videoButton) { videoButton.textContent = "● Video"; videoButton.disabled = false; } }
             fetch("/api/convert/mp4", { method: "POST", body: blob, headers: { "X-OpenRacer": "1" } }).then(function(r) { if(!r.ok) throw new Error("no"); return r.blob(); })
                 .then(function(mp4) { save(mp4, ".mp4"); done(); })
-                .catch(function() { save(blob, ".webm"); done(); });
+                .catch(function() { save(blob, kept); done(); });
         };
         // from the start (or from where a take begins), at normal speed
         t = video.from !== undefined ? video.from : api.start_time(); video.from = undefined; direction = 1; speed = 1; playing = true;
@@ -1145,7 +1145,7 @@ OpenRacer.Replay = (function() {
         var stream = crop.captureStream(60);
         var sound = typeof EngineSound !== "undefined" && EngineSound.recordingStream ? EngineSound.recordingStream() : null;
         if(sound) sound.getAudioTracks().forEach(function(track) { stream.addTrack(track); });
-        var chunks = [], recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8000000 });
+        var chunks = [], recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 20000000 });
         recorder.ondataavailable = function(e) { if(e.data && e.data.size) chunks.push(e.data); };
         recorder.start(1000);
         return {
@@ -1170,9 +1170,9 @@ OpenRacer.Replay = (function() {
             setTimeout(function() { URL.revokeObjectURL(url); }, 30000);
             return extension;
         }
-        if(/mp4/.test(type)) return Promise.resolve(save(blob, ".mp4"));
+        var kept = /mp4/.test(type) ? ".mp4" : ".webm";
         return fetch("/api/convert/mp4", { method: "POST", body: blob, headers: { "X-OpenRacer": "1" } }).then(function(r) { if(!r.ok) throw new Error("no"); return r.blob(); })
-            .then(function(mp4) { return save(mp4, ".mp4"); }).catch(function() { return save(blob, ".webm"); });
+            .then(function(mp4) { return save(mp4, ".mp4"); }).catch(function() { return save(blob, kept); });
     };
     function stopVideo() {
         if(video.recorder && video.recorder.state !== "inactive") video.recorder.stop();
