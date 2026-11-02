@@ -572,6 +572,7 @@ function curbNodeHit(event) {
     const hit = pointerRay(event).intersectObjects(curbNodeLayer.children, false).find((h) => h.object.userData.curbNode);
     return hit ? hit.object.userData.curbNode : null;
 }
+var snapStep = 0;          // (the grid of the Snap button, in metres; 0 is off)
 // where the pointer is on the surface, near the height y (a plane at that height, then the surface there, twice: it follows a slope)
 function surfacePoint(event, y, rounds) {
     const ray = pointerRay(event).ray;
@@ -579,6 +580,7 @@ function surfacePoint(event, y, rounds) {
     for (let k = 0; k < (rounds || 2); k++) {
         const q = ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -h), new THREE.Vector3());
         if (!q) break;
+        if (snapStep) { q.x = Math.round(q.x / snapStep) * snapStep; q.z = Math.round(q.z / snapStep) * snapStep; }
         h = groundY(q.x, q.z, h + 20);
         p = new THREE.Vector3(q.x, h, q.z);
     }
@@ -928,6 +930,7 @@ function keepScreenSizes() {
     requestAnimationFrame(loop);
     keepScreenSizes();
     renderer.render(scene, camera);
+    if (touchReady) drawLoupe();
     positionCamIcons();
 })();
 
@@ -2118,6 +2121,7 @@ const design = createDesign({
     setMode, getMode: () => state.mode, roleMaterials, screenSize,
     curbs: () => curbState.list.map((c) => ({ points: c.points, width: c.width })),
     blockPick: (event) => !!curbStripHit(event),
+    snapStep: () => snapStep,
     renderLayers: () => { try { renderSurfaceLayers(); } catch (e) { /* (the designer is made further down: not yet) */ } },
     ownUndo: true, onCommit: () => noteDesignStep(), onSelect: () => clearSelection("design"), onRebuild: () => snapToSurface(), groundY: (x, z) => groundY(x, z)
 });
@@ -2180,7 +2184,10 @@ function pointerRay(event) {
 function roadHit(event) {
     const hits = pointerRay(event).intersectObjects(trackGroup.children, true);
     const drivable = hits.filter((h) => DRIVABLE[state.roles[h.object.name || ""]]);
-    return (drivable[0] || hits[0] || null);
+    const hit = drivable[0] || hits[0] || null;
+    // (Snap: an object or a camera goes to the grid; the other things are placed on the road itself)
+    if (hit && snapStep && (state.mode === "object" || state.mode === "camera")) { hit.point.x = Math.round(hit.point.x / snapStep) * snapStep; hit.point.z = Math.round(hit.point.z / snapStep) * snapStep; }
+    return hit;
 }
 
 let drag = null;
@@ -3961,6 +3968,53 @@ setInterval(saveDraft, 8000);
 document.addEventListener("visibilitychange", () => { if (document.hidden) saveDraft(); });
 window.addEventListener("pagehide", saveDraft);
 setInterval(() => { if (touchReady) $("saveQuick").textContent = unsaved() ? "Save •" : "Save"; }, 1500);
+
+// Snap: what is placed or dragged goes to a grid of 1, 2 or 5 metres (the nodes, the points and the prefabs of the road, the nodes of the curbs, the objects, the cameras)
+const SNAP_STEPS = [0, 1, 2, 5];
+try { const saved = parseFloat(localStorage.getItem("openracer-track-editor-snap")); if (SNAP_STEPS.includes(saved)) snapStep = saved; } catch (e) { /* (no storage) */ }
+function showSnap() {
+    $("snapButton").textContent = snapStep ? "⌗ Snap " + snapStep + " m" : "⌗ Snap off";
+    $("snapButton").classList.toggle("accent", !!snapStep); $("snapButton").classList.toggle("ghost", !snapStep);
+}
+$("snapButton").onclick = () => {
+    snapStep = SNAP_STEPS[(SNAP_STEPS.indexOf(snapStep) + 1) % SNAP_STEPS.length];
+    try { localStorage.setItem("openracer-track-editor-snap", String(snapStep)); } catch (e) { /* (no storage) */ }
+    showSnap();
+};
+showSnap();
+
+// The loupe: a finger (or the pen) hides the place that it points at, so while a finger is down with a tool, a round enlargement of that place shows above it
+const loupe = document.createElement("canvas");
+const LOUPE = 132, LOUPE_AREA = 46;
+loupe.id = "loupe";
+loupe.width = loupe.height = Math.round(LOUPE * Math.min(window.devicePixelRatio || 1, 2));
+loupe.style.cssText = "position: absolute; display: none; width: " + LOUPE + "px; height: " + LOUPE + "px; border-radius: 50%; border: 3px solid #ffffffcc; box-shadow: 0 4px 18px #000a; pointer-events: none; z-index: 9; background: #20262f;";
+view.appendChild(loupe);
+var loupeState = { ids: new Set(), x: 0, y: 0 };
+window.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse") return;
+    if (e.target === renderer.domElement) loupeState.ids.add(e.pointerId);
+    loupeState.x = e.clientX; loupeState.y = e.clientY;
+}, true);
+window.addEventListener("pointermove", (e) => { if (loupeState.ids.has(e.pointerId)) { loupeState.x = e.clientX; loupeState.y = e.clientY; } }, true);
+["pointerup", "pointercancel"].forEach((t) => window.addEventListener(t, (e) => { loupeState.ids.delete(e.pointerId); }, true));
+function drawLoupe() {
+    // (not with two fingers, which move the view, and not while a finger only turns it)
+    const on = loupeState.ids.size === 1 && (state.mode !== "view" || !controls.enabled);
+    if (!on) { if (loupe.style.display !== "none") loupe.style.display = "none"; return; }
+    const gl = renderer.domElement, rect = gl.getBoundingClientRect(), k = gl.width / rect.width;
+    const ctx = loupe.getContext("2d");
+    const half = LOUPE_AREA / 2, x = loupeState.x - rect.left, y = loupeState.y - rect.top;
+    ctx.clearRect(0, 0, loupe.width, loupe.height);
+    ctx.drawImage(gl, (x - half) * k, (y - half) * k, LOUPE_AREA * k, LOUPE_AREA * k, 0, 0, loupe.width, loupe.height);
+    const c = loupe.width / 2;
+    ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2; ctx.shadowColor = "#000"; ctx.shadowBlur = 3;
+    ctx.beginPath(); ctx.moveTo(c - 12, c); ctx.lineTo(c + 12, c); ctx.moveTo(c, c - 12); ctx.lineTo(c, c + 12); ctx.stroke();
+    ctx.shadowBlur = 0;
+    const left = Math.max(4, Math.min(rect.width - LOUPE - 4, x - LOUPE / 2));
+    const top = y - LOUPE - 60 >= 4 ? y - LOUPE - 60 : y + 60;
+    loupe.style.left = left + "px"; loupe.style.top = Math.min(top, rect.height - LOUPE - 4) + "px"; loupe.style.display = "block";
+}
 
 compactQuery.addEventListener("change", layoutClasses);
 coarseQuery.addEventListener("change", layoutClasses);

@@ -369,7 +369,7 @@
         <div class="head">
             <div class="tabs"><button class="tab active" data-tab="track">Track</button><button class="tab" data-tab="branches">Branches</button><button class="tab" data-tab="patches">Surfaces</button><button class="tab" data-tab="prefabs">Prefabs</button></div>
             <span class="hint" id="dsNodeInfo"></span>
-            <button class="small ghost" id="dsUndo" title="Undo a change of the road: nodes, heights, widths, prefabs (Ctrl+Z). Gates, grid, pit and objects have no undo">↶</button>
+            <button class="small ghost" id="dsUndo" title="Undo (Ctrl+Z): a change of the road (nodes, heights, widths, prefabs) and of gates, grid, pit, objects and curbs">↶</button>
             <button class="small ghost" id="dsRedo" title="Redo a change of the road (Ctrl+Shift+Z)">↷</button>
             <button class="small ghost" id="drawerToggle" title="Fold">▾</button>
         </div>
@@ -437,6 +437,7 @@
         <button class="small accent compactOnly" id="saveQuick" title="Save the track (Ctrl+S)">Save</button>
         <span id="refQuick" style="display:none" title="The reference image: show it, and its opacity"><label><input type="checkbox" id="refShowQuick"> reference</label> <input type="range" id="refOpacityQuick" min="0" max="100" step="1" style="width:90px; vertical-align:middle"></span>
         <label title="Show the surfaces in their own colours"><input type="checkbox" id="colour" checked> <span class="wide">colours of the surfaces</span><span class="narrow">colours</span></label>
+        <button class="small ghost" id="snapButton" title="Snap: what is placed or dragged goes to a grid of 1, 2 or 5 metres (a tap changes it)">⌗ Snap off</button>
         <button class="small ghost" id="topView" title="T">From above</button>
         <button class="small ghost" id="undoButton" title="Undo (Ctrl+Z)">↶</button>
         <button class="small ghost" id="redoButton" title="Redo (Ctrl+Y)">↷</button>

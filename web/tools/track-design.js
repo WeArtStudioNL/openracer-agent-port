@@ -1463,18 +1463,28 @@ export function createDesign(api) {
         raycaster.setFromCamera(new THREE.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1), camera);
         return raycaster;
     }
+    // the grid of the Snap button (0: off): a point of the pointer goes to the nearest crossing of the grid, so a dragged thing is not held at the place where it was grabbed
+    function snapStep() { return (api.snapStep && api.snapStep()) || 0; }
+    function snapped(p) {
+        const step = snapStep();
+        if (!p || !step) return p;
+        const q = p.clone();
+        q.x = Math.round(q.x / step) * step; q.z = Math.round(q.z / step) * step;
+        return q;
+    }
+    function grabOffset(x, z, pp) { return pp && !snapStep() ? { x: x - pp.x, z: z - pp.z } : { x: 0, z: 0 }; }
     function groundPoint(event, exclude) {
         const ray = pointerRay(event);
         const targets = roadGroup.children.concat(branchGroup.children, patchGroup.children, prefabGroup.children.filter((g) => g !== exclude));
         const hits = ray.intersectObjects(targets, true);
-        if (hits.length) return hits[0].point;
+        if (hits.length) return snapped(hits[0].point);
         const plane = ray.intersectObject(pickPlane);
-        return plane.length ? plane[0].point : null;
+        return plane.length ? snapped(plane[0].point) : null;
     }
     // where the pointer is on a horizontal plane at a height (to drag something without it jumping with the terrain under the pointer)
     function planePoint(event, y) {
         const ray = pointerRay(event).ray;
-        return ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -y), new THREE.Vector3());
+        return snapped(ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -y), new THREE.Vector3()));
     }
     function prefabIndexOf(object) {
         let g = object;
@@ -1508,7 +1518,7 @@ export function createDesign(api) {
             const q = handle.kind === "patch" ? design.data.patches[design.selectedPatch].points[handle.i] : design.data.branches[design.selectedBranch].nodes[handle.i];
             drag.y = surfaceHeight(q.x, q.z, null);
             const pp = planePoint(e, drag.y);
-            drag.offset = pp ? { x: q.x - pp.x, z: q.z - pp.z } : { x: 0, z: 0 };
+            drag.offset = grabOffset(q.x, q.z, pp);
             design.selectedPoint = handle.i;
             renderHandles(); fillExtraFields();
         } else if (mode === "patch" || mode === "branch") {
@@ -1518,14 +1528,14 @@ export function createDesign(api) {
             const n = design.data.nodes[hit.node];
             drag.kind = "node"; drag.index = hit.node; drag.y = n.y;
             const p = planePoint(e, n.y);
-            drag.offset = p ? { x: n.x - p.x, z: n.z - p.z } : { x: 0, z: 0 };
+            drag.offset = grabOffset(n.x, n.z, p);
         } else if (hit.rowPoint !== undefined) {
             const p = design.data.prefabs[design.selectedPrefab];
             const q = p.points[hit.rowPoint];
             design.selectedRowPoint = hit.rowPoint; renderRowPoints(); fillPrefabFields();
             drag.kind = "rowPoint"; drag.index = hit.rowPoint; drag.y = q.y || 0;
             const pp = planePoint(e, drag.y);
-            drag.offset = pp ? { x: q.x - pp.x, z: q.z - pp.z } : { x: 0, z: 0 };
+            drag.offset = grabOffset(q.x, q.z, pp);
         } else if (rowHit && hit.prefab === undefined) {
             drag.kind = "rowInsert"; drag.clickInsert = rowHit;
             if (mode === "view") return;          // (the camera still turns)
@@ -1537,7 +1547,7 @@ export function createDesign(api) {
             drag.y = p.row ? (p.points[0].y || 0) : p.y;
             const pp = planePoint(e, drag.y);
             const ox = p.row ? p.points[0].x : p.x, oz = p.row ? p.points[0].z : p.z;
-            drag.offset = pp ? { x: ox - pp.x, z: oz - pp.z } : { x: 0, z: 0 };
+            drag.offset = grabOffset(ox, oz, pp);
             drag.origin = p.row ? p.points.map((q) => ({ x: q.x, z: q.z })) : null;
         } else if (mode === "prefab" && design.prefabStyle === "points") {
             drag.kind = "draft";
