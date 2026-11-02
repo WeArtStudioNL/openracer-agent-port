@@ -392,15 +392,24 @@ export function createDesign(api) {
         const branchLines = buildBranchLines();
         branchLines.forEach((b) => b.points.forEach((q) => { centreLine.push({ x: q.x, z: q.z, y: q.y, reach: q.w + 6 }); bounds.expandByPoint(new THREE.Vector2(q.x, q.z)); minY = Math.min(minY, q.y); }));
         const road = strip("road", left, right, textureOf("road"), "road", along);
-        const shoulderLeft = strip("shoulder_left", shoulderL, left, textureOf("shoulder"), "grass", along);
-        const shoulderRight = strip("shoulder_right", right, shoulderR, textureOf("shoulder"), "grass", along);
+        // (the grass of the shoulder at the edge of the road lay over the mouth of a branch: there its inner edge is lower)
+        const branchParts = makeBranchParts(branchLines);
+        const innerL = left.map((q) => q.clone()), innerR = right.map((q) => q.clone());
+        // (a point of the edge is tested a little out from the road: the edge itself is on the outline of the mouth)
+        const under = (q, outer) => { const dx = outer.x - q.x, dz = outer.z - q.z, l = Math.hypot(dx, dz) || 1, x = q.x + dx / l * 0.4, z = q.z + dz / l * 0.4; return branchParts.rings.some((r) => insideRing(r, x, z)); };
+        if (branchParts.rings.length) {
+            innerL.forEach((q, i) => { if (under(q, shoulderL[i])) q.y -= 0.15; });
+            innerR.forEach((q, i) => { if (under(q, shoulderR[i])) q.y -= 0.15; });
+        }
+        const shoulderLeft = strip("shoulder_left", shoulderL, innerL, textureOf("shoulder"), "grass", along);
+        const shoulderRight = strip("shoulder_right", innerR, shoulderR, textureOf("shoulder"), "grass", along);
         // (the road has no painted kerbs: curbs are drawn where they are wanted, with Draw curb of the editor, Curbs.js)
         // the ground: a landscape that joins the shoulders of the road and rolls gently further away (during a drag the old one stays)
         const ground = (!withTerrain && lastTerrain) ? lastTerrain : terrain(centreLine, bounds, minY);
         lastTerrain = ground;
         [road, shoulderLeft, shoulderRight, ground].forEach((m) => { roadGroup.add(m); registerMesh(m, m.userData.role); state.roles[m.name] = m.userData.role; });
         roadGroup.updateMatrixWorld(true);
-        buildBranches(branchLines);
+        addBranchParts(branchParts);
         if (withTerrain) buildPatches();
         renderNodes();
         renderHandles();
@@ -466,10 +475,101 @@ export function createDesign(api) {
         design.branchLines = lines;
         return lines;
     }
-    function buildBranches(lines) {
-        branchGroup.children.slice().forEach((m) => { branchGroup.remove(m); m.geometry.dispose(); state.parts.delete(m.name); });
+    // The road that a branch joins at its end: its direction and its half width at the place of the join, and the normal across it towards the branch
+    function hostAt(attach, lines, a, towards) {
+        const list = attach.road < 0 ? (design.mainLine || []) : ((lines[attach.road] || {}).points || []);
+        if (list.length < 2) return null;
+        let best = 0, bestD = Infinity;
+        list.forEach((q, i) => { const d = (q.x - a.x) * (q.x - a.x) + (q.z - a.z) * (q.z - a.z); if (d < bestD) { bestD = d; best = i; } });
+        const q0 = list[Math.max(0, best - 1)], q1 = list[Math.min(list.length - 1, best + 1)];
+        const tx = q1.x - q0.x, tz = q1.z - q0.z, len = Math.hypot(tx, tz) || 1;
+        const t = { x: tx / len, z: tz / len };
+        let n = { x: -t.z, z: t.x };
+        if ((towards.x - a.x) * n.x + (towards.z - a.z) * n.z < 0) n = { x: -n.x, z: -n.z };
+        return { t, n, w: list[best].w, y: list[best].y };
+    }
+    // The mouth of a branch where it joins a road: the branch up to where it is clear of the road, with a rounded corner on both sides where its edge
+    // leaves the edge of the road (a branch that left at an angle left a wedge of grass on one side). Each edge of the branch is followed from the join
+    // until it crosses the edge of the road (X); the rounding goes from R metres along the road edge, past X, to R metres along the edge of the branch (Q).
+    // The strip of the branch starts at row k, after both Q; the mouth fills the rest. rows: the edges of the whole branch (left, right) in its order;
+    // i0: the end of the line (0 or the last), dir: +1 or -1 into the branch.
+    function branchMouth(line, rows, i0, dir, attach, lines, name) {
+        const pts = line.points, A = pts[i0];
+        const far = pts[Math.max(0, Math.min(pts.length - 1, i0 + dir * 4))];
+        const host = hostAt(attach, lines, A, far);
+        if (!host) return null;
+        const R = Math.max(2.5, A.w * 0.8);
+        const across = (q) => (q.x - A.x) * host.n.x + (q.z - A.z) * host.n.z;
+        const alongOf = (q) => (q.x - A.x) * host.t.x + (q.z - A.z) * host.t.z;
+        const ex = A.x + host.n.x * host.w, ez = A.z + host.n.z * host.w;
+        const onEdge = (a) => ({ x: ex + host.t.x * a, z: ez + host.t.z * a });
+        // follow one edge outwards: X where it crosses the road edge, Q R metres further, qi the row after Q
+        const follow = (row) => {
+            let X = null, xi = -1;
+            for (let i = i0; i >= 0 && i < row.length && i + dir >= 0 && i + dir < row.length; i += dir) {
+                const a = row[i], b = row[i + dir], ca = across(a) - host.w, cb = across(b) - host.w;
+                if (ca < 0 && cb >= 0) { const f = ca / (ca - cb); X = { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f }; xi = i + dir; break; }
+                if (i === i0 && ca >= 0) { X = { x: a.x, z: a.z }; xi = i; break; }
+            }
+            if (!X) return null;
+            let left = R, prev = X, i = xi, Q = null;
+            for (; i >= 0 && i < row.length; i += dir) {
+                const d = Math.hypot(row[i].x - prev.x, row[i].z - prev.z);
+                if (d >= left) { const f = left / d; Q = { x: prev.x + (row[i].x - prev.x) * f, z: prev.z + (row[i].z - prev.z) * f }; break; }
+                left -= d; prev = row[i];
+            }
+            if (!Q) return null;
+            return { X, Q, qi: i };
+        };
+        const L = follow(rows.left), Rt = follow(rows.right);
+        if (!L || !Rt) return null;
+        const k = dir > 0 ? Math.max(L.qi, Rt.qi) : Math.min(L.qi, Rt.qi);
+        if (k <= 0 || k >= pts.length - 1) return null;
+        // the rounding of one side: from the road edge R metres outside X (away from the other edge), over X, to Q
+        const round3 = (side, other) => {
+            const a = alongOf(side.X), away = Math.sign(a - alongOf(other.X)) || 1;
+            const F = onEdge(a + away * R), out = [];
+            for (let s = 0; s <= 8; s++) {
+                const u = s / 8, a1 = (1 - u) * (1 - u), b1 = 2 * u * (1 - u), c1 = u * u;
+                out.push({ x: a1 * F.x + b1 * side.X.x + c1 * side.Q.x, z: a1 * F.z + b1 * side.X.z + c1 * side.Q.z });
+            }
+            return out;
+        };
+        const rl = round3(L, Rt), rr = round3(Rt, L);
+        // the edge of the branch from Q to row k
+        const edgeTo = (row, side) => { const out = []; for (let i = side.qi; dir > 0 ? i <= k : i >= k; i += dir) out.push({ x: row[i].x, z: row[i].z }); return out; };
+        const inside = (q) => ({ x: q.x - host.n.x * 1.5, z: q.z - host.n.z * 1.5 });
+        const ring = [inside(rl[0])].concat(rl, edgeTo(rows.left, L), edgeTo(rows.right, Rt).reverse(), rr.slice().reverse(), [inside(rr[0])]);
+        const contour = ring.map((q) => new THREE.Vector2(q.x, q.z));
+        if (THREE.ShapeUtils.isClockWise(contour)) { ring.reverse(); contour.reverse(); }
+        const triangles = THREE.ShapeUtils.triangulateShape(contour, []);
+        if (!triangles.length) return null;
+        // the height: just under the road at its edge, the height of the branch at k
+        const P = pts[k], y0 = host.y - 0.03, span = Math.max(0.5, across(P) - host.w);
+        const height = (q) => { const f = Math.max(0, Math.min(1, (across(q) - host.w) / span)); return y0 + (P.y - y0) * f * f * (3 - 2 * f); };
+        const tex = textureOf("road"), size = TEXTURES[tex].size, positions = [], uvs = [];
+        triangles.forEach((tri) => {
+            const [a, b, c] = tri.map((m) => ring[m]);
+            const order = (b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x) < 0 ? [a, b, c] : [a, c, b];
+            order.forEach((q) => { positions.push(q.x, height(q), q.z); uvs.push(q.x / size, q.z / size); });
+        });
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+        geometry.computeVertexNormals();
+        const mesh = new THREE.Mesh(geometry, textured(tex, undefined, THREE.DoubleSide));
+        mesh.name = name;
+        mesh.userData.role = "road";
+        return { mesh, k, ring, host: attach.road };
+    }
+    // the meshes of the branches and their mouths (made before the shoulders of the track: they go down where a mouth lies), and putting them in the track
+    function makeBranchParts(lines) {
+        const meshes = [], rings = [];
+        const add = (mesh) => meshes.push(mesh);
+        const mouth = (m) => { if (!m) return null; add(m.mesh); if (m.host < 0) rings.push(m.ring); return m; };
         lines.forEach((line) => {
             if (line.points.length < 2) return;
+            const b = design.data.branches[line.index], last = line.points.length - 1;
             const left = [], right = [], tangents = [], along = [];
             line.points.forEach((q) => {
                 const side = new THREE.Vector3().crossVectors(UP, q.tangent).normalize();
@@ -479,18 +579,34 @@ export function createDesign(api) {
                 tangents.push(q.tangent); along.push(q.along);
             });
             unfold(left, tangents, false); unfold(right, tangents, false);
-            const mesh = strip("branch_" + (line.index + 1), left, right, textureOf("road"), "road", along, true);
-            branchGroup.add(mesh);
-            registerMesh(mesh, "road");
-            state.roles[mesh.name] = "road";
+            const rows = { left, right };
+            const start = mouth(b.start ? branchMouth(line, rows, 0, 1, b.start, lines, "branch_" + (line.index + 1) + "_join_1") : null);
+            const end = mouth(b.end ? branchMouth(line, rows, last, -1, b.end, lines, "branch_" + (line.index + 1) + "_join_2") : null);
+            const from = start ? start.k : 0, to = end ? end.k : last;
+            if (to - from < 1) return;
+            add(strip("branch_" + (line.index + 1), left.slice(from, to + 1), right.slice(from, to + 1), textureOf("road"), "road", along.slice(from, to + 1), true));
         });
+        return { meshes, rings };
+    }
+    function addBranchParts(parts) {
+        branchGroup.children.slice().forEach((m) => { branchGroup.remove(m); m.geometry.dispose(); state.parts.delete(m.name); });
+        parts.meshes.forEach((mesh) => { branchGroup.add(mesh); registerMesh(mesh, "road"); state.roles[mesh.name] = "road"; });
         branchGroup.updateMatrixWorld(true);
+    }
+    function buildBranches(lines) { addBranchParts(makeBranchParts(lines)); }
+    function insideRing(ring, x, z) {
+        let inside = false;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            const a = ring[i], b = ring[j];
+            if ((a.z > z) !== (b.z > z) && x < (b.x - a.x) * (z - a.z) / ((b.z - a.z) || 1e-9) + a.x) inside = !inside;
+        }
+        return inside;
     }
 
     // ---- the patches: a surface of its own (gravel, sand, grass, dirt) drawn as an area on the ground, as the gravel beside a bend.
-    // data.patches: [{ surface, points: [{ x, z }] }]. The area is cut into squares of 1.5 m that lie on the ground under them (so it follows
-    // the terrain and the shoulders), 7 cm above it inside and coming down to it over the last metre at the edge (the game takes the higher
-    // surface where two are more than 5 cm apart).
+    // data.patches: [{ surface, points: [{ x, z }] }]. The area is cut into squares of 1 m that lie on the highest ground under and around their
+    // corners (so it follows the terrain and the shoulders), 12 cm above it inside and coming down to 2 cm over the last metre at the edge (the game
+    // takes the higher surface where two are more than 5 cm apart).
     const PATCH_SURFACES = { gravel: { label: "Gravel", texture: "gravel", role: "gravel" }, sand: { label: "Sand", texture: "sand", role: "sand" },
         grass: { label: "Grass", texture: "grass", role: "grass" }, dirt: { label: "Dirt", texture: "dirt", role: "ground" } };
     design.patchSurface = "gravel";
@@ -527,10 +643,14 @@ export function createDesign(api) {
         const ground = api.groundY || ((x, z) => surfaceHeight(x, z, null));
         let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
         poly.forEach(([x, z]) => { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); });
-        const cell = 1.5, positions = [], uvs = [], heights = new Map();
+        // (the ground at a point and around it, the highest: a ridge of the terrain or of a shoulder between two points of the area stuck through it)
+        const cell = 1, positions = [], uvs = [], heights = new Map(), r = 0.5;
         const height = (x, z) => {
             const key = x.toFixed(3) + "," + z.toFixed(3);
-            if (!heights.has(key)) heights.set(key, ground(x, z) + 0.01 + 0.06 * Math.min(1, edgeDistance(poly, x, z)));
+            if (!heights.has(key)) {
+                const y = Math.max(ground(x, z), ground(x + r, z), ground(x - r, z), ground(x, z + r), ground(x, z - r));
+                heights.set(key, y + 0.02 + 0.10 * Math.min(1, edgeDistance(poly, x, z)));
+            }
             return heights.get(key);
         };
         for (let x0 = Math.floor(minX / cell) * cell; x0 < maxX; x0 += cell) {

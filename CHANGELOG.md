@@ -8,7 +8,8 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 - **The road designer: branches, gravel and sharp bends.**
   - Branch (B): a road of its own that starts and ends on the track or on another branch (a pit lane, a side road, the streets of a town, the exit of a motorway). Its ends follow the road they join, the terrain lies under it, and in the game it is road.
-  - Gravel (G): an area of gravel, sand, grass or dirt drawn corner by corner on the ground (the gravel on the outside of a bend), each one on its own; it lies on what is under it, and in the game it is that surface.
+  - Where a branch joins a road it has a mouth with rounded corners, from the edge of that road to where the branch is clear of it (there was a wedge of grass on one side), and the shoulder of the track goes under it.
+  - Gravel (G): an area of gravel, sand, grass or dirt drawn corner by corner on the ground (the gravel on the outside of a bend), each one on its own; it lies on the highest ground under and around it (a ridge of the terrain stuck through it), and in the game it is that surface.
   - Sharp bends: the edge of the road and the shoulder on the inside of a bend that is sharper than their distance folded over themselves (dark, overlapping triangles); they narrow to a fan there now.
 - **Track editor, from its audit (AUDIT-TRACK-EDITOR-2026-11-02.md).**
   - One thing is chosen at a time (a click lets go of the rest), and Delete and Escape act on that one thing; Escape goes back one step at a time. The racing line is no longer written into the next track that is opened, and Escape asks before it throws a changed line away.
