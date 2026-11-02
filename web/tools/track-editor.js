@@ -2343,7 +2343,7 @@ renderer.domElement.addEventListener("pointerup", (event) => {
     }
     if (state.mode !== "view") return;
     // the designer of the road took the click (a node or a prefab was chosen by it)
-    if (design.active() && design.selection() !== designSelAtDown) return;
+    if (design.active() && (design.selection() !== designSelAtDown || design.pressTook())) return;
     // a click on the strip of the chosen curb puts a node there
     if (curbState.selected >= 0) { const strip = curbStripHit(event); if (strip && strip.index === curbState.selected) { insertCurbNodeAt(strip.point); return; } }
     // what is clicked is chosen, and nothing else: a camera, a curb, an object, a gate, a box of the grid or of the pit; else (a track with a model) the part under the pointer

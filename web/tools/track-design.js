@@ -1517,10 +1517,13 @@ export function createDesign(api) {
     renderer.domElement.addEventListener("pointerdown", (e) => {
         if (!design.data || e.button !== 0 || dragging) return;
         const mode = api.getMode();
+        design.pressTook = false;
         if (mode !== "node" && mode !== "prefab" && mode !== "view" && mode !== "patch" && mode !== "branch") return;
         const hit = under(e);
         drag = { start: [e.clientX, e.clientY], moved: false, stroke: null };
         const handle = handleHit(e);
+        // (a press on a handle, a node or a point of a row is the designer's, also when it was the one that was chosen already: the editor does not let go of it)
+        design.pressTook = !!(handle || hit.node !== undefined || hit.rowPoint !== undefined);
         // (a click on the line of the chosen row adds a node there)
         const selRow = design.selectedPrefab !== null ? design.data.prefabs[design.selectedPrefab] : null;
         const rowHit = selRow && selRow.row && (mode === "prefab" || mode === "view") ? rowLineHit(e, selRow) : null;
@@ -2265,6 +2268,7 @@ export function createDesign(api) {
     return {
         enable, disable, toJSON, exportGlb, undo, redo, roadEdgeAt,
         // a line or an area is being drawn (the touch bar then offers Finish, for the Enter key)
+        pressTook: () => !!design.pressTook,
         isDrawing: () => !!design.drawing || design.draft.length > 0,
         // the surfaces as rows of the Layers panel, and a click on one
         patchRows: () => (design.data && design.data.patches ? design.data.patches : []).map((p, i) => ({ label: surfaceOf(p.surface).label + (p.connect ? ", connected" : ""), meta: p.points.length + " points", selected: design.selectedPatch === i })),
@@ -2279,7 +2283,7 @@ export function createDesign(api) {
         curbsChanged: () => { design.edgeCache = null; if (design.data && (design.data.patches || []).some((q) => q.connect)) buildPatches(); },
         active: () => !!design.data,
         // what is chosen ("" nothing, "n3" node 3, "p2" prefab 2), and letting go of it (the editor chooses one thing at a time)
-        selection: () => !design.data ? "" : design.selectedNode >= 0 ? "n" + design.selectedNode : design.selectedPrefab !== null ? "p" + design.selectedPrefab
+        selection: () => !design.data ? "" : design.selectedNode >= 0 ? "n" + design.selectedNode : design.selectedPrefab !== null ? "p" + design.selectedPrefab + (design.selectedRowPoint >= 0 ? "." + design.selectedRowPoint : "")
             : design.selectedPatch !== null ? "g" + design.selectedPatch + "." + design.selectedPoint : design.selectedBranch !== null ? "b" + design.selectedBranch + "." + design.selectedPoint : "",
         deselect: () => { if (design.data && (design.selectedNode >= 0 || design.selectedPrefab !== null)) { selectNode(-1); rowGroup.clear(); } if (design.data) letGoExtras(); },
         // the tool changed: the drawer shows its page, and what was being drawn is ended
