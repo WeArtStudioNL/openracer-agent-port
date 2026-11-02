@@ -13,13 +13,16 @@
  *                isOrtho      () => true while the camera is orthographic (camera.zoom scales the picture)
  *                floorY       () => the height of the floor, for a ray that hits nothing (optional)
  *                orbitAtPoint true: turn about the point that was zoomed in on (optional)
+ *                canTurn      (event) => false when this pointer may not turn the view: a finger while a tool is in use (optional)
+ *              Two fingers (touch) zoom by pinching, towards the middle between them; the controls move the view when the two fingers move together.
  * Author:      Glenn Hofman
  * Date:        2026-10-26
  * License:     MIT
  */
 
 export function installZoomToMouse(api) {
-    const { THREE, camera, controls, renderer, targets, isOrtho, floorY, orbitAtPoint } = api;
+    const { THREE, camera, controls, renderer, targets, isOrtho, floorY, orbitAtPoint, canTurn } = api;
+    const touches = new Map();                        // (the fingers that are down: x, y; with two of them the view is pinched, not turned)
     const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), point = new THREE.Vector3(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     controls.enableZoom = false;                      // (the wheel is ours)
     // ---- turning about the point that was zoomed in on (orbitAtPoint)
@@ -32,12 +35,19 @@ export function installZoomToMouse(api) {
         controls.target.copy(camera.position).addScaledVector(forward, depth);
         lastTarget.copy(controls.target);
     }
+    let pinch = null;
     if (orbitAtPoint) {
         controls.enableRotate = false;                // (the left button is ours)
         let down = null, turning = false;
         const qYaw = new THREE.Quaternion(), qPitch = new THREE.Quaternion(), right = new THREE.Vector3(), after = new THREE.Vector3();
-        renderer.domElement.addEventListener("pointerdown", (e) => { if (e.button === 0) { down = { x: e.clientX, y: e.clientY }; turning = false; } });
+        renderer.domElement.addEventListener("pointerdown", (e) => {
+            if (e.pointerType === "touch") { touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); pinch = null; }
+            if (touches.size > 1) { down = null; turning = false; return; }          // (a second finger: the view is pinched, and the turning stops)
+            if (e.button === 0 && (!canTurn || canTurn(e))) { down = { x: e.clientX, y: e.clientY }; turning = false; }
+        });
         renderer.domElement.addEventListener("pointermove", (e) => {
+            if (touches.has(e.pointerId)) touches.get(e.pointerId).x = e.clientX, touches.get(e.pointerId).y = e.clientY;
+            if (touches.size > 1) { down = null; pinchMove(); return; }
             if (!down || !(e.buttons & 1)) { down = null; return; }
             // (a press that the editor took for itself, a gizmo or a node, has switched the controls off)
             if (!controls.enabled) return;
@@ -62,13 +72,14 @@ export function installZoomToMouse(api) {
             keepTarget();
             controls.update();
         });
-        window.addEventListener("pointerup", () => { down = null; turning = false; });
+        const lift = (e) => { touches.delete(e.pointerId); pinch = null; down = null; turning = false; };
+        window.addEventListener("pointerup", lift);
+        window.addEventListener("pointercancel", lift);
     }
-    renderer.domElement.addEventListener("wheel", (e) => {
-        if (!controls.enabled) return;
-        e.preventDefault();
+    // zoom by the factor f (below 1: nearer) towards the point of the view at (clientX, clientY)
+    function zoomAt(clientX, clientY, f) {
         const rect = renderer.domElement.getBoundingClientRect();
-        ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+        ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
         ray.setFromCamera(ndc, camera);
         // the point under the mouse: the nearest mesh, else the floor, else the distance of the orbit centre along the ray
         const list = (targets ? targets() : []).filter(Boolean);
@@ -84,8 +95,6 @@ export function installZoomToMouse(api) {
             found = !!ray.ray.intersectPlane(plane, point) && point.distanceTo(ray.ray.origin) < along + reach;
         }
         if (!found) point.copy(ray.ray.origin).addScaledVector(ray.ray.direction, along);
-        // a notch of the wheel is about 10 %; a trackpad gives many small steps
-        const f = Math.min(2, Math.max(0.5, Math.exp(Math.max(-120, Math.min(120, e.deltaY)) * 0.0012)));
         if (isOrtho && isOrtho()) {
             // the picture scales about the point under the mouse: the orbit centre moves so that the point keeps its place on the screen, the camera goes with it
             const shift = controls.target.clone().sub(point).multiplyScalar(f).add(point).sub(controls.target);
@@ -100,5 +109,19 @@ export function installZoomToMouse(api) {
             else controls.target.sub(point).multiplyScalar(f).add(point);
         }
         controls.update();
+    }
+    // two fingers: the distance between them zooms towards the middle between them (the controls pan the view when the middle moves)
+    function pinchMove() {
+        if (!controls.enabled) return;
+        const [a, b] = [...touches.values()];
+        const dist = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        if (pinch && dist > 8) zoomAt(mx, my, Math.min(2, Math.max(0.5, pinch.dist / dist)));
+        pinch = { dist };
+    }
+    renderer.domElement.addEventListener("wheel", (e) => {
+        if (!controls.enabled) return;
+        e.preventDefault();
+        // a notch of the wheel is about 10 %; a trackpad gives many small steps
+        zoomAt(e.clientX, e.clientY, Math.min(2, Math.max(0.5, Math.exp(Math.max(-120, Math.min(120, e.deltaY)) * 0.0012))));
     }, { passive: false });
 }

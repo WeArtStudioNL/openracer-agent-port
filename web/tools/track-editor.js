@@ -78,7 +78,9 @@ scene.add(markers);
 const objectLayer = new THREE.Group(); // the models of the objects, where they are placed
 scene.add(objectLayer);
 // the wheel zooms towards the point under the mouse (the track, its objects, else the floor), and that point is at once what the view turns about (zoom-to-mouse.js)
-installZoomToMouse({ THREE, camera, controls, renderer, targets: () => [trackGroup, objectLayer], floorY: () => 0, orbitAtPoint: true });
+installZoomToMouse({ THREE, camera, controls, renderer, targets: () => [trackGroup, objectLayer], floorY: () => 0, orbitAtPoint: true,
+    // a finger turns the view in Look (or with the Turn view button); with a tool it uses the tool. The mouse always turns it
+    canTurn: (e) => e.pointerType === "mouse" || state.mode === "view" || orbitOn });
 // the objects of the track: models (glb) that were added, and where they stand. A model: { file (a Blob, when it was added now), name (the file in the folder of the track),
 // kind (rigid, static or decor), mass (kg, 0: from its size), scene (the loaded model) }
 const objectState = { models: new Map(), list: [], selected: null };
@@ -3859,7 +3861,7 @@ $("layersButton").onclick = () => showLayers($("eventLayers").style.display === 
 { let shown = false; try { shown = localStorage.getItem(LAYERS_KEY) === "1"; } catch (e) { /* (private window) */ } showLayers(shown); }
 
 // ---- touch screens (an iPad Air, in both directions): the side bar is a drawer that slides over the view, the bars are one row, what is touched is 44 px
-// (editor.css: html.compact, html.touch). One finger uses the tool and two fingers move and zoom the view (the pen always uses the tool); what the keys do
+// (editor.css: html.compact, html.touch). One finger uses the tool and two fingers move and zoom the view (the pen works as a mouse); what the keys do
 // (Enter, Delete, Shift, W E R, F, Ctrl+D) is a button in the bar under the menu, and a long press on a button says what it does (its title).
 var touchReady = false, touchInsert = false, draftResolved = false;
 const compactQuery = window.matchMedia("(pointer: coarse), (max-width: 1100px)");
@@ -3918,9 +3920,7 @@ $("hintToggle").onclick = () => document.documentElement.classList.toggle("hints
 $("orbitToggle").onclick = () => { orbitOn = !orbitOn; touchSync(); };
 $("saveQuick").onclick = () => $("save").click();
 view.addEventListener("pointerdown", () => sideBar.classList.remove("open"), true);
-// the pen draws and places (and drags what it touches): it never turns the view, fingers do
-renderer.domElement.addEventListener("pointerdown", (e) => { if (e.pointerType === "pen") controls.enabled = false; }, true);
-["pointerup", "pointercancel"].forEach((t) => window.addEventListener(t, (e) => { if (e.pointerType === "pen") controls.enabled = true; }, true));
+// (the pen is a mouse for the view: in Look a drag with it turns the view, with a tool it uses the tool; only a finger is held back by canTurn above)
 // a long press (touch) on a button, a label or a field: what its title says, in the message of the view (the title was only there for the mouse)
 {
     let timer = 0, swallow = false, sx = 0, sy = 0;
