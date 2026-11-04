@@ -6,6 +6,9 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 ## Unreleased
 
+- **"Engine sound: off" only silences the engine.** The squeal of the tyres and the noise of gravel and grass are the tyres: they keep their own volume (Tyre volume) and go only with the pause. (A test player muted the engine and lost the tyre squeal as well.)
+- **Signs seen from behind.** `track.json` can list `"double_sided": ["<name of a material>"]`: the parts with that material are drawn from both sides. The Short track has it for its atlas (the OpenRacer billboards were gone from behind).
+- **A car that falls out of the world goes back sooner.** The limit is 15 m under the lowest triangle of the track (at least as high as before: -40 m, or 25 m under the racing line), so on a track that lies near 0 m the reset comes after a second or two.
 - **The lock of the steering wheel per car.** `steering_wheel.stop` in car.json: `"degrees"` makes the wheel stop at its own degrees (`steering_wheel.degrees`, 450 each way for 900° lock to lock) and the wheel angle of `chassis.max_steer_deg`, whatever the tie rods of the model are. The default `"rods"` is as before: a model with a fixed tie rod (the go-kart) stops where the rods do. The force feedback, the matched lock of the wheel and the steering wheel of the model follow it.
 - **Force feedback after a wheel that lost its connection.** A wheel that is switched off and on again during a race gets its force feedback back by itself: the game opens the new device and makes the effects again. A wheel without a serial number loses its permission in the browser when it goes; the game says so, and Connect a wheel… in the settings menu brings it back.
 - **The road designer: branches, gravel and sharp bends.**

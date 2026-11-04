@@ -807,6 +807,13 @@ OpenRacer.Car = function( config, domElement ) {
             fallMinY = -40;
             var fl = typeof race !== "undefined" && race && race.line;
             if(fl && fl.count && fl.count() > 1) { var lowest = 1e9; for(var fi = 0; fi < fl.count(); fi++) lowest = Math.min(lowest, fl.point(fi).y || 0); fallMinY = Math.min(-40, lowest - 25); }
+            // (a track without a racing line, and one that lies near 0 m: the lowest triangle of the track and 15 m, so that a car that fell through a hole goes back after a second or two, not after 40 m)
+            var gw = this.vehicle.ground;
+            if(gw && gw.boxes && gw.count3D && gw.count3D() > 0) {
+                var boxes = gw.boxes(), n3 = gw.count3D(), low = 1e9;
+                for(var bi = 0; bi < n3; bi++) low = Math.min(low, boxes[bi * 6 + 1]);
+                if(isFinite(low) && low < 1e8) fallMinY = Math.max(fallMinY, low - 15);
+            }
         }
         if(!this.reset) this.trackLinePosition();
         if(v.py < fallMinY && !this.reset) { fallFor += delta; if(fallFor > 0.5) { this.reset = true; } } else if(v.py >= fallMinY) fallFor = 0;

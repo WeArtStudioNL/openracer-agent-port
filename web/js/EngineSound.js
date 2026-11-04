@@ -11,7 +11,8 @@ var EngineSound = (function() {
     var ctx = null;
     var bus = null, recordDestination = null;     // everything that is heard goes through the bus; the video of a replay takes its sound from it
     var synth = null;
-    var output = null;           // the volume of the whole sound
+    var output = null;           // the volume of the engine (off with "Engine sound": off)
+    var tyreBus = null;          // the squeal of the tyres: volume and pause, not the engine switch
     var loading = false;
     var failed = null;           // why the sound does not work, if it does not
     var simParams = OpenRacer.engineSimParams(null);
@@ -58,7 +59,7 @@ var EngineSound = (function() {
     function makeSqueal() {
         var out = ctx.createGain();
         out.gain.value = 0;
-        out.connect(output);
+        out.connect(tyreBus);
 
         // the tone: raw oscillators that wobble a little, the way the stick and slip of the rubber does
         var tone = ctx.createGain();
@@ -131,7 +132,7 @@ var EngineSound = (function() {
         var sampleSource = null;
         var sampleGain = ctx.createGain();
         sampleGain.gain.value = 0;
-        sampleGain.connect(output);
+        sampleGain.connect(tyreBus);
 
         return {
             gain: out,
@@ -178,9 +179,11 @@ var EngineSound = (function() {
     function applyLevel() {
         if(!ctx || ctx.state !== "running") return;
         if(output) output.gain.setTargetAtTime(level(), ctx.currentTime, 0.05);
-        if(squeal && (paused || muted)) squeal.mute(ctx.currentTime);
+        if(tyreBus) tyreBus.gain.setTargetAtTime(paused ? 0 : volume, ctx.currentTime, 0.05);
+        // ("Engine sound" off silences the engine only: the squeal of the tyres and the noise of the gravel are the tyres, they have their own volume, Tyre volume)
+        if(squeal && paused) squeal.mute(ctx.currentTime);
         // (the noise of the gravel and the grass too: it is only set while the car runs, so it went on in the menu and in a replay)
-        if(ground && (paused || muted)) ground.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
+        if(ground && paused) ground.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
     }
 
     function start() {
@@ -201,6 +204,9 @@ var EngineSound = (function() {
             analyser = ctx.createAnalyser();
             analyser.fftSize = 1024;
             output.connect(analyser);
+            tyreBus = ctx.createGain();
+            tyreBus.gain.value = paused ? 0 : volume;
+            tyreBus.connect(bus);
             squeal = makeSqueal();
             loadSquealSample();
         }
@@ -233,7 +239,7 @@ var EngineSound = (function() {
         rpm = newRpm;
         throttle = newThrottle;
         if(synth && synth.setIgnition && ctx && ctx.state === "running") synth.setIgnition(ignition !== false);
-        if(squeal && ctx.state === "running" && (paused || muted)) squeal.mute(ctx.currentTime);
+        if(squeal && ctx.state === "running" && paused) squeal.mute(ctx.currentTime);
         if(!ctx || !synth || ctx.state !== "running") return;
         output.gain.setTargetAtTime(level(), ctx.currentTime, 0.05);
         synth.setRpm(rpm);
@@ -252,7 +258,7 @@ var EngineSound = (function() {
         squealLevel = amount;
         squealSpeed = speed;
         if(!ctx || !squeal || ctx.state !== "running") return;
-        squeal.set(amount, speed, (muted || paused ? 0 : tyreVolume) * (inside ? 0.12 : 0.3), ctx.currentTime);       // (its own volume: the settings menu, Tyre volume)
+        squeal.set(amount, speed, (paused ? 0 : tyreVolume) * (inside ? 0.12 : 0.3), ctx.currentTime);       // (its own volume: the settings menu, Tyre volume)
     }
 
     // ---- the road under the tyres, and what lands: noise that is made here (no files). The tyres on loose ground hiss, crunch or squelch with the speed (sand low and soft, gravel
@@ -280,7 +286,7 @@ var EngineSound = (function() {
             ground = { filter: filter, gain: gain };
         }
         var now = ctx.currentTime;
-        var loud = spec ? Math.min(1, Math.max(0, speed - 2) / 25) * spec[1] * (muted || paused ? 0 : volume) * (inside ? 0.35 : 0.5) * 0.25 : 0;
+        var loud = spec ? Math.min(1, Math.max(0, speed - 2) / 25) * spec[1] * (paused ? 0 : volume) * (inside ? 0.35 : 0.5) * 0.25 : 0;
         if(spec) { ground.filter.type = spec[3]; ground.filter.frequency.setTargetAtTime(spec[0] * (0.7 + 0.5 * Math.min(1, speed / 30)), now, 0.2); ground.filter.Q.value = spec[3] === "bandpass" ? 0.8 : 0.5; }
         ground.gain.gain.setTargetAtTime(loud, now, 0.15);
     }

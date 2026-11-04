@@ -516,6 +516,7 @@
     }
   ],
   "model": "short-track.glb",
+  "double_sided": ["atlas_mat"],
   "surfaces": {
     "meshes": {
       "ground0_color": "sand",

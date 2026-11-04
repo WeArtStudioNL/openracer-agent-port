@@ -421,7 +421,13 @@ function loadGltfTrack(track) {
         var surfaces = track.surfaces || {};
         var pieces = [];
         trackRigidPieces = [];
-        gltf.scene.traverse(function(object) { if(object.isMesh) pieces.push(object); });
+        // "double_sided": the names of materials that are seen from both sides (a sign or a billboard of one flat panel: from behind it was gone, the back of a triangle is not drawn)
+        var doubleSided = Array.isArray(track.double_sided) ? track.double_sided : [];
+        gltf.scene.traverse(function(object) {
+            if(!object.isMesh) return;
+            pieces.push(object);
+            if(doubleSided.length) [].concat(object.material).forEach(function(material) { if(material && doubleSided.indexOf(material.name) >= 0) { material.side = THREE.DoubleSide; material.needsUpdate = true; } });
+        });
         var maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
         pieces.forEach(function(piece) {
             var role = trackRole(piece, surfaces);
