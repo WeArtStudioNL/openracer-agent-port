@@ -66,7 +66,8 @@ OpenRacer.Vehicle = function (parameters, input) {
     this.controller = parameters.motorcycle ? new OpenRacer.Motorcycle(parameters.motorcycle) : null;
     // the simple tyre (the AI cars, Opponent.js): rays along the suspension find the road and a slip curve gives the grip (Wheel.tyreForce), instead of the shell of nodes of
     // TyreShell.js, which costs most of the time of a car; the car is otherwise the same (the suspension, the engine, the body, the soft body)
-    this.simpleTyres = !!parameters.simpleTyres;   // (Motorcycle.js; a car has none, and goes through none of its hooks)
+    this.bikeV2 = !!(parameters.motorcycle && parameters.motorcycle.model === "v2");   // the separate motorcycle model (MOTORCYCLE.md): the tyre gives the camber thrust, the bars have a torque and an angle of their own
+    this.simpleTyres = !!parameters.simpleTyres || this.bikeV2;   // (Motorcycle.js; a car has none, and goes through none of its hooks)
     this.lean = 0;                    // how far the bike leans to the left (rad; negative: to the right)
     this.input = input; // throttle, brakePedal, clutch, clutchPedalPresent, handbrake, turnAngle, neutral, reverse, manualGearbox, current_gear
     this.parameters = parameters;     // (what it was made with: a physics worker makes the same vehicle, PhysicsLink.js)
@@ -2147,7 +2148,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                 // the geometric load transfer: the lateral force of the axle, passed to the body at the roll centre, presses the outer
                 // wheel down and lifts the inner one at once (it does not wait for the springs)
                 var axle = wheel.front ? 0 : 1;
-                var rollCentre = wheel.front ? self.rollCentreFront : self.rollCentreRear;
+                var rollCentre = self.bikeV2 ? 0 : wheel.front ? self.rollCentreFront : self.rollCentreRear;      // (a bike: the side force of a tyre acts at its contact patch)
                 var trackWidth = wheel.front ? self.front_track : self.rear_track;
                 var geometric = self.soloWheels ? 0 : (wheel.right ? 1 : -1) * axleFy[axle] * rollCentre / trackWidth;        // (one wheel on an axle: nothing to move the load to)
                 // and the pitch that the linkage took (anti-dive, anti-squat, anti-lift): a moment nose up loads the rear and unloads the front, half on each wheel of an axle
@@ -2169,6 +2170,14 @@ OpenRacer.Vehicle = function (parameters, input) {
                     wheel.slip = wheel.s > 1.15;
                 } else if(self.simpleTyres) {
                     // the simple tyre: the slip curve, with the camber as a little slip angle (Wheel.tyreForce)
+                    if(self.bikeV2) {
+                        // the tyre of a motorcycle (Motorcycle.js, model v2): the camber is the lean of the bike, a degree of it is worth camber_slip of slip (about a tenth of the cornering
+                        // stiffness); fySlip is what the slip angle alone gives, for the self-aligning torque of the trail on the bars
+                        var camberSlip = self.controller.camberSlip * (self.lean || 0) * wheel.anglePeak / 0.15;
+                        wheel.tyreForce(wheel.slipRatio, wheel.slipTan, fzGrip, surface);
+                        wheel.fySlip = wheel.fy;
+                        wheel.tyreForce(wheel.slipRatio, wheel.slipTan - camberSlip, fzGrip, surface);
+                    } else
                     wheel.tyreForce(wheel.slipRatio, wheel.slipTan - self.camberGain * leanLeft * wheel.anglePeak / 0.15, fzGrip, surface);
                     wheel.tyreSlope = 0;
                 } else { wheel.tyreSlope = 0; wheel.fx = 0; wheel.fy = 0; wheel.s = 0; wheel.slip = false; }      // (no tyre body on the road: a wheel that is lost)

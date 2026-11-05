@@ -54,6 +54,15 @@ OpenRacer.Motorcycle = function (settings) {
         self.gripG = s.grip_g !== undefined ? s.grip_g : 1.05;                        // the lateral g that the tyres give when nothing else is asked of them
         self.frontComply = s.front_comply !== undefined ? s.front_comply : 3;            // how much the front wheel castors into its own slip on the brake (3: it keeps a quarter of the slip angle)
         self.airPitch = s.air_pitch !== undefined ? Math.max(0, s.air_pitch) : 1;      // in the air the wheels turn the bike: gas brings the nose up, the brake brings it down (a factor on the reaction of the wheels; 0: off)
+        // the separate model (model "v2"): the bars are a degree of freedom with a torque from the rider; the tyre gives the camber thrust, the lean is the lean of the body
+        self.v2 = s.model === "v2";
+        self.steerInertia = s.steer_inertia || 0.35;          // kg m2: the front end about the steering axis
+        self.trail = s.trail !== undefined ? s.trail : 0.03;   // m: the contact patch is this far behind the steering axis; the side force of the slip angle turns the wheel into its slip
+        self.steerDamp = s.steer_damp !== undefined ? s.steer_damp : 15;   // Nm s/rad: the damping of the bars (a steering damper and the hands)
+        self.riderKa = s.rider_ka !== undefined ? s.rider_ka : 0.5; self.riderKad = s.rider_kad !== undefined ? s.rider_kad : 0.2;   // the bars (rad) that a radian of lean error, and a radian a second of roll, ask at 10 m/s
+        self.armOmega = s.arm_omega !== undefined ? s.arm_omega : 25;   // rad/s: how stiff the hands hold the bars (the spring is steer_inertia * omega^2)
+        self.riderTorqueMax = s.rider_torque_max !== undefined ? s.rider_torque_max : 120;   // Nm on the bars
+        self.camberSlip = s.camber_slip !== undefined ? s.camber_slip : 0.087;   // slip (tan) that a radian of lean is worth, to the tyre
         self.footLean = (s.foot_lean_deg !== undefined ? s.foot_lean_deg : 7) * DEG;   // how far the bike rests to the right on the foot
     }
     readSettings();
@@ -63,6 +72,7 @@ OpenRacer.Motorcycle = function (settings) {
     this.riderKey = 0;                                      // -1: the rider is put back, 1: forward (keys, set by Car.js)
     this.sinceBrake = 99; this.counterGain = 1;
     this.complied = 0;
+    this.steerDof = 0; this.steerRate = 0; this.steerInt = 0;      // model v2: the angle of the bars (right is positive), their rate, the integral of the rider
     this.footDownL = 0; this.footStill = false; this.footWait = 0;       // the left foot (footDown is the right one), whether the bike is at a standstill, and the time since the feet should come up
     this.footDown = 0;                                       // 0 to 1: the right foot of the rider on the road (a standstill)
     this.noFoot = false;                                     // the car editor: the bike stands upright on its bench, the foot never goes down
@@ -226,8 +236,38 @@ OpenRacer.Motorcycle = function (settings) {
         var upright = 1 - smooth(8 * DEG, 20 * DEG, Math.abs(state.lean)), onBrake = Math.max(smooth(0.05, 0.3, inp.brakePedal || 0), sliding);
         var comply = Math.max(-0.12, Math.min(0.12, -self.frontComply * slipFront)) * smooth(3, 8, Math.abs(u)) * upright * onBrake;
         self.complied += (comply - self.complied) * Math.min(1, dt / 0.04);
+        if (self.v2) return self.steeringV2(v, state, geometric, w, u, dt, steady);
         var wanted = w * geometric + (1 - w) * (steady + counter + self.complied);
         self.steer += (wanted - self.steer) * Math.min(1, dt / 0.05);
+        return self.steer;
+    };
+
+    // ---- model v2: the bars as a degree of freedom. The rider's only input is a torque on them (a PID on the lean error: to lean to the left the bars go to the right first, countersteering
+    // is not coded, it is what the tyres do); the side force of the front tyre's slip angle acts behind the steering axis (trail) and turns the wheel into its slip; a damper. At a walking
+    // pace (w) the angle is the command, as before. Right is positive; the lean is to the left.
+    this.steeringV2 = function (v, state, geometric, w, u, dt, steady) {
+        var front = v.wheels[0], uu = Math.max(Math.abs(u), 5);
+        // the rider steers into the fall and, to start a lean, the other way first: the angle he asks for is the one the bend needs now (steady) plus a gain on the lean error. The error
+        // is positive when the bike has to lean further to the left, and the bars go to the right then (countersteering): it is the sign of the loop, not a rule of its own. The gain
+        // goes down with the speed (the bars have more say on the lean the faster the bike goes).
+        var e = self.targetLean - state.lean;
+        var ask = steady + (10 / uu) * (self.riderKa * e - self.riderKad * state.rate);
+        var lock = v.input.turnLimit || v.input.maxTurn || 0.38;
+        ask = Math.max(-lock, Math.min(lock, ask));
+        // the hands: a spring and a damper on the bars, so that what the front tyre does with the trail pushes back (a wobble is damped, a bump is felt)
+        var arm = self.steerInertia * self.armOmega * self.armOmega;
+        var T = Math.max(-self.riderTorqueMax, Math.min(self.riderTorqueMax, (v.mass / 87) * arm * (ask - self.steerDof))) * (1 - w);
+        var align = front && front.hasContact ? self.trail * (front.fySlip || 0) : 0;
+        if (w > 0.5) { self.steerDof = geometric; self.steerRate = 0; }
+        else {
+            // semi-implicit: the damper is solved with the step
+            var acc = (T + align) / self.steerInertia;
+            self.steerRate = (self.steerRate + acc * dt) / (1 + self.steerDamp / self.steerInertia * dt);
+            self.steerDof += self.steerRate * dt;
+            if (Math.abs(self.steerDof) > lock) { self.steerDof = Math.sign(self.steerDof) * lock; self.steerRate = 0; }
+        }
+        self.steerTorque = T; self.steerAlign = align; self.steerAsk = ask;
+        self.steer = w * geometric + (1 - w) * self.steerDof;
         return self.steer;
     };
 
@@ -395,6 +435,7 @@ OpenRacer.Motorcycle = function (settings) {
         kp *= brace; kd *= brace;
         var T = kp * (self.targetLean - state.lean) - kd * state.rate;                           // about the axis that leans it to the left
         T = alive * Math.max(-6 * gh * brace, Math.min(6 * gh * brace, T));
+        if (self.v2) T *= 1 - smooth(3, 7, Math.abs(u));          // (model v2: from 7 m/s the rider keeps the bike up with the bars only; the torque about the long axis is for a walking pace)
         torque.x -= state.ax * T; torque.y -= state.ay * T; torque.z -= state.az * T;
         // the yaw that the steering did not ask for is damped
         var fast = smooth(1.5, 4.5, Math.abs(u));
@@ -404,7 +445,7 @@ OpenRacer.Motorcycle = function (settings) {
         self.dbg = { T: T, yawDamp: 0, yawLift: 0, lift: lift };
         // The rider keeps the bike turning at the rate that its lean gives (a balanced bend: r = g tan(lean) / u): a torque about the vertical against the yaw that the tyres make on their own
         // (a front that is loaded on the brake and a light rear would swing the tail out, as a car oversteers). With the front wheel in the air it is all there is.
-        if (Math.abs(u) > 2) {
+        if (Math.abs(u) > 2 && !self.v2) {
             var epsNow = Math.atan((self.riderMass / v.mass) * self.posture.lat / v.cgHeight);       // (the rider that hangs off: the lean of the whole)
             var rLean = -G * Math.tan(Math.max(-1.2, Math.min(1.2, state.lean + epsNow))) / Math.max(Math.abs(u), 4);
             var yawErr = c.r - rLean;
@@ -428,7 +469,7 @@ OpenRacer.Motorcycle = function (settings) {
         // it rights the bike (a torque about the centre of gravity), as the real thing does.
         // (the whole of it is shared between the front and the rear as the weight of the bike is at rest, not as the loads are now: the weight that the brake or the gas moves to one end
         // would otherwise turn the camber thrust into a yaw, a bike that tightens its line hard when the throttle is shut at speed, and the rider lost it)
-        var camber = self.camberThrust * Math.tan(Math.max(-1.05, Math.min(1.05, state.lean))) * alive, loadAll = 0;
+        var camber = self.v2 ? 0 : self.camberThrust * Math.tan(Math.max(-1.05, Math.min(1.05, state.lean))) * alive, loadAll = 0;
         for (var i = 0; i < 4; i++) if (v.wheels[i].hasContact) loadAll += v.wheels[i].weight || 0;
         for (var i = 0; i < 4; i++) {
             var w = v.wheels[i];
