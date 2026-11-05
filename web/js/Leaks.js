@@ -73,20 +73,21 @@ OpenRacer.Leaks = function (scene) {
     var nextStain = 0, usedStains = 0, clock = 0, dryTimer = 0;
     var DRY_TIME = 70;           // s: a coolant stain is gone after this
 
-    function stain(x, y, z, nx, ny, nz, radius, k, alpha) {
+    this.recorder = null;        // called with a row for every oil drop and every stain that is made (Replay.js): [time, 1 (a drop) or 2 (a stain), ...]
+    function stain(x, y, z, nx, ny, nz, radius, k, alpha, rotation, cellChosen) {
         var i = nextStain; nextStain = (nextStain + 1) % STAINS; usedStains = Math.min(STAINS, usedStains + 1);
         // two directions in the plane of the road
         var tx = Math.abs(ny) < 0.9 ? 0 : 1, ty = Math.abs(ny) < 0.9 ? 1 : 0;
         var e1x = ny * 0 - nz * ty, e1y = nz * tx - nx * 0, e1z = nx * ty - ny * tx;
         var l = Math.hypot(e1x, e1y, e1z) || 1; e1x /= l; e1y /= l; e1z /= l;
         var e2x = ny * e1z - nz * e1y, e2y = nz * e1x - nx * e1z, e2z = nx * e1y - ny * e1x;
-        var rot = Math.random() * 6.283, c = Math.cos(rot), sn = Math.sin(rot);
+        var rot = rotation !== undefined ? rotation : Math.random() * 6.283, c = Math.cos(rot), sn = Math.sin(rot);
         var ax = (e1x * c + e2x * sn) * radius, ay = (e1y * c + e2y * sn) * radius, az = (e1z * c + e2z * sn) * radius;
         var bx = (-e1x * sn + e2x * c) * radius, by = (-e1y * sn + e2y * c) * radius, bz = (-e1z * sn + e2z * c) * radius;
         var lift = 0.014 + (i % 7) * 0.0006;           // (a little different for every stain: two over each other do not fight)
         var px = x + nx * lift, py = y + ny * lift, pz = z + nz * lift;
         var corner = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
-        var cell = (Math.random() * 4) | 0, u0 = (cell % 2) * 0.5, v0 = Math.floor(cell / 2) * 0.5;
+        var cell = cellChosen !== undefined ? cellChosen : (Math.random() * 4) | 0, u0 = (cell % 2) * 0.5, v0 = Math.floor(cell / 2) * 0.5;
         var r = k === OIL ? 0.025 : 0.06, g = k === OIL ? 0.02 : 0.085, bl = k === OIL ? 0.018 : 0.07;
         for (var q = 0; q < 4; q++) {
             var o = (i * 4 + q);
@@ -95,6 +96,7 @@ OpenRacer.Leaks = function (scene) {
             sUv[o * 2] = u0 + (corner[q][0] > 0 ? 0.5 : 0); sUv[o * 2 + 1] = v0 + (corner[q][1] > 0 ? 0.5 : 0);
         }
         born[i] = clock; peakAlpha[i] = alpha; sKind[i] = k;
+        if (self.recorder && rotation === undefined) self.recorder(Float32Array.of(0, 2, x, y, z, nx, ny, nz, radius, k, alpha, rot, cell));
         sGeometry.attributes.position.needsUpdate = true; sGeometry.attributes.color.needsUpdate = true; sGeometry.attributes.uv.needsUpdate = true;
     }
     // coolant dries: its stains fade (looked at a few times a second)
@@ -111,11 +113,13 @@ OpenRacer.Leaks = function (scene) {
     }
 
     // ---- making drops
-    function drop(x, y, z, vx, vy, vz, k, big) {
+    function drop(x, y, z, vx, vy, vz, k, big, sizeChosen) {
         var i = nextDrop; nextDrop = (nextDrop + 1) % DROPS;
         pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z;
         vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz;
-        size[i] = (big ? 0.07 : 0.035) + Math.random() * 0.035;
+        size[i] = sizeChosen !== undefined ? sizeChosen : (big ? 0.07 : 0.035) + Math.random() * 0.035;
+        // (only the oil is seen as a drop and recorded; the coolant is drawn by Debris.js, which the replay keeps, and its stains are rows of their own)
+        if (self.recorder && sizeChosen === undefined && k === OIL) self.recorder(Float32Array.of(0, 1, x, y, z, vx, vy, vz, k, big ? 1 : 0, size[i], 0, 0));
         age[i] = 0; kind[i] = k; alive[i] = 1;
         if (k === OIL) { color[i * 4] = 0.06; color[i * 4 + 1] = 0.045; color[i * 4 + 2] = 0.03; color[i * 4 + 3] = 0.95; }
         else { color[i * 4] = 0.45; color[i * 4 + 1] = 0.85; color[i * 4 + 2] = 0.5; color[i * 4 + 3] = 0; }       // (the coolant is drawn by Debris.js: this one only finds the road for its stain)
@@ -133,6 +137,29 @@ OpenRacer.Leaks = function (scene) {
             var road = ground ? ground.query(cx, cz, cy + 0.4, 1.5) : null;
             debris.emit(cx, cy, cz, cvx, cvy, cvz, kindSeen, road ? road.y + 0.015 : v.py - 0.4);
         }
+    }
+    // the drops fall and land; with makeStains (the game) a drop that lands leaves a stain, in a replay the stains are the rows that were recorded
+    function stepDrops(delta, ground, makeStains) {
+        var any = false;
+        for (var i = 0; i < DROPS; i++) {
+            if (!alive[i]) continue;
+            age[i] += delta;
+            var dragK = Math.exp(-0.7 * delta);          // (as Debris.js, so that the stain is where the drop that is seen comes down)
+            vel[i * 3] *= dragK; vel[i * 3 + 2] *= dragK; vel[i * 3 + 1] = vel[i * 3 + 1] * dragK - 9.81 * delta;
+            pos[i * 3] += vel[i * 3] * delta; pos[i * 3 + 1] += vel[i * 3 + 1] * delta; pos[i * 3 + 2] += vel[i * 3 + 2] * delta;
+            var road = ground ? ground.query(pos[i * 3], pos[i * 3 + 2], pos[i * 3 + 1] + 0.4, 0.6) : { y: -1e9, nx: 0, ny: 1, nz: 0 };
+            if (age[i] > 4 || (road && pos[i * 3 + 1] <= road.y + 0.015)) {
+                alive[i] = 0; color[i * 4 + 3] = 0;
+                if (makeStains && road && age[i] <= 4) {
+                    var loose = road.surface === "grass" || road.surface === "ground" || road.surface === "gravel" || road.surface === "sand" || road.surface === "mud";
+                    if (kind[i] === OIL) { if (Math.random() < (loose ? 0.4 : 0.8)) stain(pos[i * 3], road.y, pos[i * 3 + 2], road.nx, road.ny, road.nz, 0.07 + Math.random() * 0.16 * (size[i] > 0.06 ? 1.5 : 1), OIL, loose ? 0.3 : 0.6); }
+                    else if (Math.random() < 0.3) stain(pos[i * 3], road.y, pos[i * 3 + 2], road.nx, road.ny, road.nz, 0.06 + Math.random() * 0.14, COOLANT, loose ? 0.15 : 0.32);
+                }
+            } else any = true;
+        }
+        liveDrops = any ? 1 : 0;
+        geometry.attributes.position.needsUpdate = true; geometry.attributes.color.needsUpdate = true; geometry.attributes.size.needsUpdate = true;
+        points.visible = any;
     }
     this.update = function (delta, v, camera, ground, debris) {
         delta = Math.min(delta || 0.016, 0.1);
@@ -179,29 +206,64 @@ OpenRacer.Leaks = function (scene) {
                 }
             }
         }
-        // the drops fall and land
-        var any = false;
-        for (var i = 0; i < DROPS; i++) {
-            if (!alive[i]) continue;
-            age[i] += delta;
-            var dragK = Math.exp(-0.7 * delta);          // (as Debris.js, so that the stain is where the drop that is seen comes down)
-            vel[i * 3] *= dragK; vel[i * 3 + 2] *= dragK; vel[i * 3 + 1] = vel[i * 3 + 1] * dragK - 9.81 * delta;
-            pos[i * 3] += vel[i * 3] * delta; pos[i * 3 + 1] += vel[i * 3 + 1] * delta; pos[i * 3 + 2] += vel[i * 3 + 2] * delta;
-            var road = ground ? ground.query(pos[i * 3], pos[i * 3 + 2], pos[i * 3 + 1] + 0.4, 0.6) : { y: -1e9, nx: 0, ny: 1, nz: 0 };
-            if (age[i] > 4 || (road && pos[i * 3 + 1] <= road.y + 0.015)) {
-                alive[i] = 0; color[i * 4 + 3] = 0;
-                if (road && age[i] <= 4) {
-                    var loose = road.surface === "grass" || road.surface === "ground" || road.surface === "gravel" || road.surface === "sand" || road.surface === "mud";
-                    if (kind[i] === OIL) { if (Math.random() < (loose ? 0.4 : 0.8)) stain(pos[i * 3], road.y, pos[i * 3 + 2], road.nx, road.ny, road.nz, 0.07 + Math.random() * 0.16 * (size[i] > 0.06 ? 1.5 : 1), OIL, loose ? 0.3 : 0.6); }
-                    else if (Math.random() < 0.3) stain(pos[i * 3], road.y, pos[i * 3 + 2], road.nx, road.ny, road.nz, 0.06 + Math.random() * 0.14, COOLANT, loose ? 0.15 : 0.32);
-                }
-            } else any = true;
-        }
-        liveDrops = any ? 1 : 0;
-        geometry.attributes.position.needsUpdate = true; geometry.attributes.color.needsUpdate = true; geometry.attributes.size.needsUpdate = true;
-        points.visible = any;
+        stepDrops(delta, ground, true);
         dryTimer += delta;
         if (dryTimer > 0.5) { dryTimer = 0; dry(); }
     };
     this.clear = function () { alive.fill(0); color.fill(0); points.visible = false; };
+
+    // ---- for the replay (Replay.js): the oil drops and the stains are recorded as they are made, and made again from the rows. What the game left on the road is not
+    // in the replay (it is kept and put back at the end): the stains are the ones that were made up to the time of the replay, no earlier ones.
+    var groundNow = function () { return typeof groundWorld !== "undefined" ? groundWorld : null; };
+    function clearStains() {
+        nextStain = 0; usedStains = 0; born.fill(0); peakAlpha.fill(0); sKind.fill(0); sCol.fill(0);
+        sGeometry.attributes.color.needsUpdate = true;
+    }
+    function replayStain(row) {
+        clock = row[0];
+        stain(row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10], row[11], row[12]);
+    }
+    this.replayAdd = function (row) {
+        if (row[1] === 2) replayStain(row);
+        else drop(row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9] > 0.5, row[10]);
+    };
+    this.replayStep = function (delta) {
+        clock += delta;
+        stepDrops(delta, groundNow(), false);
+        dryTimer += delta;
+        if (dryTimer > 0.5) { dryTimer = 0; dry(); }
+    };
+    this.replayClear = function () { this.clear(); clearStains(); };
+    // the leaks as they were at a time T: the stains of all the rows before it, and the oil drops of the last four seconds, flown from where they were made
+    this.replayRebuild = function (rows, end, T) {
+        this.clear(); clearStains();
+        var j, row;
+        for (j = 0; j < end; j++) { row = rows[j]; if (row[1] === 2) replayStain(row); }
+        clock = Math.max(0, T - 4);
+        var next = 0;
+        while (next < end && rows[next][0] < T - 4) next++;
+        for (var a = T - 4; a < T - 1e-9;) {
+            var b = Math.min(T, a + 1 / 20);
+            while (next < end && rows[next][0] <= b) { row = rows[next++]; if (row[1] === 1) this.replayAdd(row); }
+            this.replayStep(b - a);
+            a = b;
+        }
+        clock = T;
+        dry();
+    };
+    // how many stains are on the road (for the tests)
+    this.stainCount = function () { var n = 0; for (var i = 0; i < usedStains; i++) if (sCol[i * 16 + 3] > 0) n++; return n; };
+    var stateStains = [sPos, sCol, sUv, born, peakAlpha, sKind], stateDrops = [pos, vel, size, color, age, kind, alive];
+    this.replaySnapshot = function () {
+        return { stains: stateStains.map(function (a) { return a.slice(); }), drops: stateDrops.map(function (a) { return a.slice(); }), nextStain: nextStain, usedStains: usedStains, clock: clock, nextDrop: nextDrop };
+    };
+    this.replayRestore = function (snap) {
+        for (var k = 0; k < stateStains.length; k++) stateStains[k].set(snap.stains[k]);
+        for (k = 0; k < stateDrops.length; k++) stateDrops[k].set(snap.drops[k]);
+        nextStain = snap.nextStain; usedStains = snap.usedStains; clock = snap.clock; nextDrop = snap.nextDrop;
+        sGeometry.attributes.position.needsUpdate = true; sGeometry.attributes.color.needsUpdate = true; sGeometry.attributes.uv.needsUpdate = true;
+        geometry.attributes.position.needsUpdate = true; geometry.attributes.color.needsUpdate = true; geometry.attributes.size.needsUpdate = true;
+        points.visible = false;
+    };
+    if (typeof OpenRacer !== "undefined" && OpenRacer.Replay && OpenRacer.Replay.attach) OpenRacer.Replay.attach("leaks", this);
 };

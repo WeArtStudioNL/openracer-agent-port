@@ -6,6 +6,8 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 ## Unreleased
 
+- **Leaks are in the replay.** The coolant that sprays or runs down (it was not recorded: a replay showed none), the oil drops and the stains on the road are kept by the recording and made again, also after a jump or a way back (`Leaks.js`, `Debris.js`, `Replay.js`). The stains of the game are no longer on the road in a replay: a replay of a car that began to leak after 20 seconds starts with a clean road, and the trail grows as the car drives, where it left it. The game puts its own stains back when the replay ends. A replay file now has the version 6 (the rows of the debris have an opacity and a floor, and the leaks have rows of their own); files of version 5 and older can still be opened. `node tools/leaks-replay-test.js` checks it.
+
 - **Parts come loose from the turning of the car too, and move calmer.**
   - The load on a part (the force at which it comes off, the pins of a hinge, the latch of a door) now counts the turning of the car by itself: the angular acceleration times the arm (a car that a hit spins round, a roll) and the centripetal acceleration (a car that spins fast), on top of the change of its speed. The angular acceleration is smoothed over a few frames, because the angular speed of the body shakes from step to step. `part.rotLoad` shows it.
   - A part that is loose tumbles and settles: more damping (angular 1.2, linear 0.15, were 0.4 and 0.05), less bounce (0.12, was 0.25), more grip on the road (0.8), and a lower top spin (16 rad/s loose, 9 on a hinge, were 30 and 12).

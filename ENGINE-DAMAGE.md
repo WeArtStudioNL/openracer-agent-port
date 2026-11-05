@@ -62,6 +62,7 @@ the engine on the spot: the chance is `0.9 j^2 + 0.05 j` for a jolt `j` from 0 t
 * **Drops and stains** (`Leaks.js`): oil from the pan (black drops, `oilFlow`) and coolant from the radiator (a bent radiator makes drops that fall down, `coolFlow`; a torn open one makes jets that spray out in their own directions, `jets`). The coolant is drawn with the particles that a wheel in a puddle throws up (`Debris.js`: the blades and the droplets of the water), but thicker and bigger (kinds
   `coolant`, a blade a little thicker than the one of the water, and `coolantDrop`), pale grey-green and see-through (opacity 0.35 to 0.65, `Debris.emit`) fall with gravity and land on the road under them, where they leave a blot: oil stays (up to 3000 stains in all, with the other leaks), coolant
   fades in 70 s. A moving car drips a line, one that stands makes a puddle; on grass, sand and gravel the stains are fainter.
+* **In a replay** the coolant (the pieces of `Debris.js`, with their opacity and floor), the oil drops and the stains are recorded and made again by `Replay.js` (the effect `leaks`); the stains that the game made are put away for the replay and come back at the end, so a replay shows the trail as it grew (`node tools/leaks-replay-test.js`).
 * **Steam and smoke** from the engine bay: white steam when it is hot and leaking, dark smoke from oil that burns (a worn engine, a leaking pan).
 
 At 15 km/h into a wall nothing happens to the engine; at 30 km/h a slow radiator leak; at 50 km/h about 20 % of the power and a stumble; at 70 km/h a

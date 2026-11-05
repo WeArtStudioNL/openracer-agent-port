@@ -103,7 +103,7 @@ OpenRacer.Debris = function (scene, capacity) {
     var KINDS = ["grass", "clod", "sand", "gravel", "mud", "ground", "snow", "water", "droplet", "coolant", "coolantDrop"];     // (the number of a kind in the record of the replay)
     var self = this;
     this.recorder = null;                                 // called with a row for every piece that is made (Replay.js)
-    function spawn(x, y, z, vx, vy, vz, kind, fixed) {
+    function spawn(x, y, z, vx, vy, vz, kind, fixed, fromReplay) {
         if (limit <= 0) { limit = Math.min(capacity, 6000); geometry.setDrawRange(0, limit); }
         if (next >= limit) next = 0;
         var i = next, look = LOOK[kind] || LOOK.ground;
@@ -120,7 +120,8 @@ OpenRacer.Debris = function (scene, capacity) {
         if (fixed) { c = fixed.colour; colours[i * 3] = c[0]; colours[i * 3 + 1] = c[1]; colours[i * 3 + 2] = c[2]; }
         pendingNew = true;
         // the replay keeps what is made: the place, the speed, the kind, the size, the life, the tilt and the colour (so that it is made again as it was)
-        if (self.recorder && !fixed) self.recorder(Float32Array.of(0, x, y, z, vx, vy, vz, KINDS.indexOf(kind), sizes[i], life[i], tilts[i], colours[i * 3], colours[i * 3 + 1], colours[i * 3 + 2]));
+        // (the opacity and the floor too: the coolant of a leak is see-through and lands on the road, Leaks.js)
+        if (self.recorder && !fromReplay) self.recorder(Float32Array.of(0, x, y, z, vx, vy, vz, KINDS.indexOf(kind), sizes[i], life[i], tilts[i], colours[i * 3], colours[i * 3 + 1], colours[i * 3 + 2], caps[i], floor[i]));
     }
 
     var fwd = new THREE.Vector3(), lft = new THREE.Vector3(), sprayCarry = [0, 0, 0, 0];
@@ -142,7 +143,7 @@ OpenRacer.Debris = function (scene, capacity) {
     }
 
     // A piece from outside (the coolant that a leak sprays, Leaks.js): kind "coolant" (a thick green blade, as the spray of a puddle) or "coolantDrop", from (x, y, z) with a
-    // speed, down to the height floorY; it is see-through (opacity, 0.35 to 0.65 when it is not given) and not in the record of a replay
+    // speed, down to the height floorY; it is see-through (opacity, 0.35 to 0.65 when it is not given) (the replay has it, like the rest)
     this.emit = function (x, y, z, vx, vy, vz, kind, floorY, opacity) {
         var look = LOOK[kind] || LOOK.coolant;
         spawn(x, y, z, vx, vy, vz, kind, { size: look.size[0] + Math.random() * (look.size[1] - look.size[0]), tilt: (Math.random() - 0.5) * 1.2, life: 1.2 + Math.random() * 0.8,
@@ -237,7 +238,8 @@ OpenRacer.Debris = function (scene, capacity) {
     var state = [positions, colours, sizes, alphas, vel, shapes, tilts, age, life, floor, lying, quick, caps];
     this.replayLookback = 20;                             // seconds: a piece that lay has gone by then
     this.replayAdd = function (row) {
-        spawn(row[1], row[2], row[3], row[4], row[5], row[6], KINDS[row[7]] || "ground", { size: row[8], life: row[9], tilt: row[10], colour: [row[11], row[12], row[13]] });
+        spawn(row[1], row[2], row[3], row[4], row[5], row[6], KINDS[row[7]] || "ground", { size: row[8], life: row[9], tilt: row[10], colour: [row[11], row[12], row[13]],
+            opacity: row[14] > 0 ? row[14] : 1, floor: row[15] > -1e8 ? row[15] : undefined }, true);
     };
     this.replayStep = function (delta) { material.uniforms.aspect.value = window.innerWidth / Math.max(1, window.innerHeight); integrate(delta); };
     this.replaySnapshot = function () { return { arrays: state.map(function (a) { return a.slice(); }), next: next }; };
