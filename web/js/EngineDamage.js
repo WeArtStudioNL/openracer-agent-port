@@ -7,11 +7,15 @@
  *                block   all the nodes of the bay: the engine is bent, its mounts are torn (power, friction, wear);
  *                top     the nodes above the middle: the ignition, the wiring and the intake (misfires, stalling);
  *                pan     the nodes below it: the oil pan (an oil leak);
+ *                front     the nodes on the front face of the engine: the front seal and the timing cover (an oil leak);
  *                radiator  the nodes at the front of the car: the radiator and its hoses (a coolant leak). When the model has an object called radiator that is a
  *                          part of the car (Parts.js), its own nodes say how bent it is, and the coolant is gone in seconds when it comes off.
  *              Every place holds the worst that it has had (a bent node stays bent), 0 whole, 1 destroyed. From them come:
  *                misfires     the ignition cuts for a moment, now and then (a stumble, a bang in the exhaust), and stalls at a bad hit;
- *                leaks        coolant and oil run out, faster the worse the radiator and the pan are;
+ *                leaks        coolant and oil run out, faster the worse the radiator and the pan are; oil also from the front of the engine after a hard hit and
+ *                             through the seals when it is very hot (oil above 140 degrees);
+ *                head gasket  a hard hit, or heat above 125 degrees, blows it: coolant is burnt in the engine (it runs out, with no drops on the road), the engine
+ *                             misfires and loses power, the oil is thinned and white smoke comes out of the exhaust;
  *                heat         the engine warms from its power and cools in the radiator (less with less coolant, a hurt radiator, a low speed): it
  *                             loses power above 108 degrees, stumbles above 118 and boils its coolant away above 112;
  *                wear         without oil pressure (low oil, hot oil, a hard corner with little oil) the bearings wear; a worn engine has less power,
@@ -40,19 +44,19 @@ OpenRacer.EngineDamage = function (vehicle, config) {
 
     // the nodes that count, with how much: { node, weight in the bay, above the middle, below it, weight in the radiator }. The shell can be made again (the car
     // is built again in the tuning menu): the list follows vehicle.softBody
-    var list = [], sumB = 0, sumT = 0, sumP = 0, sumR = 0;
+    var list = [], sumB = 0, sumT = 0, sumP = 0, sumR = 0, sumF = 0;
     function bind(shell) {
-        sb = shell; list = []; sumB = sumT = sumP = sumR = 0;
+        sb = shell; list = []; sumB = sumT = sumP = sumR = sumF = 0;
         var tmp = { x: 0, y: 0, z: 0 };
         for (var k = 0; k < sb.bodyCount; k++) {
             sb.restPosition(k, tmp);
             var d = Math.hypot(tmp.x - bay[0], tmp.y - bay[1], tmp.z - bay[2]), dr = Math.hypot(tmp.x - rad[0], tmp.y - rad[1], tmp.z - rad[2]);
             var wb = Math.max(0, 1 - d / bayR), wr = Math.max(0, 1 - dr / radR);
             if (wb <= 0 && wr <= 0) continue;
-            var ny = (tmp.y - bay[1]) / bayR;
-            list.push({ k: k, wb: wb, wt: wb * (ny > -0.1 ? 1 : 0), wp: wb * (ny < 0.1 ? 1 : 0), wr: wr });
+            var ny = (tmp.y - bay[1]) / bayR, nz = (tmp.z - bay[2]) / bayR;
+            list.push({ k: k, wb: wb, wt: wb * (ny > -0.1 ? 1 : 0), wp: wb * (ny < 0.1 ? 1 : 0), wr: wr, wf: wb * (nz > 0.15 ? 1 : 0) });
         }
-        list.forEach(function (n) { sumB += n.wb; sumT += n.wt; sumP += n.wp; sumR += n.wr; });
+        list.forEach(function (n) { sumB += n.wb; sumT += n.wt; sumP += n.wp; sumR += n.wr; sumF += n.wf; });
         self.nodes = list.length;
         self.usable = config.enabled !== false && sumB > 0.3;
     }
@@ -62,7 +66,7 @@ OpenRacer.EngineDamage = function (vehicle, config) {
 
     // ---- the state (all of it is a number: vehicle.engineHealth goes to the main thread with the rest of the vehicle)
     var health = vehicle.engineHealth = { block: 0, top: 0, pan: 0, radiator: 0, ignition: 0, coolant: 1, oil: 1, temp: 78, oilTemp: 70, wear: 0, power: 1, misfire: 0, steam: 0, smoke: 0,
-        failed: 0, stalled: 0, leaking: 0, coolFlow: 0, oilFlow: 0, radiatorGone: 0, bx: bay[0], by: bay[1], bz: bay[2], br: bayR, rx: rad[0], ry: rad[1], rz: rad[2], rr: radR };
+        failed: 0, stalled: 0, leaking: 0, front: 0, gasket: 0, contam: 0, whiteSmoke: 0, coolFlow: 0, oilFlow: 0, radiatorGone: 0, bx: bay[0], by: bay[1], bz: bay[2], br: bayR, rx: rad[0], ry: rad[1], rz: rad[2], rr: radR };
     var CAP_COOLANT = config.coolant > 0 ? config.coolant : 7, CAP_OIL = config.oil > 0 ? config.oil : 5;
     var seized = false, cutLeft = 0, nextMisfire = 0, shockCool = 0, acc = 0, lastShock = 0;
     var peak = 0, peakCurve = null, peakScale = -1;
@@ -102,16 +106,17 @@ OpenRacer.EngineDamage = function (vehicle, config) {
 
     // ---- what the nodes say, every tick: the worst of every place is kept
     function readNodes(dt) {
-        var b = 0, t = 0, p = 0, r = 0, shock = 0;
+        var b = 0, t = 0, p = 0, r = 0, f = 0, shock = 0;
         for (var i = 0; i < list.length; i++) {
             var n = list[i], h = hurt(n.k);
-            b += n.wb * h; t += n.wt * h; p += n.wp * h; r += n.wr * h;
+            b += n.wb * h; t += n.wt * h; p += n.wp * h; r += n.wr * h; f += n.wf * h;
             if (n.wb > 0) shock += n.wb * sb.elasticOf(n.k);
         }
         if (sumB > 0) { health.block = Math.max(health.block, b / sumB); shock /= sumB; }
         if (sumT > 0) health.top = Math.max(health.top, t / sumT);
         if (sumP > 0) health.pan = Math.max(health.pan, p / sumP);
         if (sumR > 0) health.radiator = Math.max(health.radiator, r / sumR);
+        if (sumF > 0) health.front = Math.max(health.front, f / sumF);
         var rp = findRadiator();
         if (rp) {
             if (rp.state !== "held" && rp.state !== "hinged") { health.radiator = 1; health.radiatorGone = 1; }          // (torn off, or broken)
@@ -130,6 +135,8 @@ OpenRacer.EngineDamage = function (vehicle, config) {
             // the engine dies at a hard hit, now and then (a cut-out switch, a flooded cylinder, a hose off): the harder, the more often
             if (engine.running && random() < 0.9 * jolt * jolt + 0.05 * jolt) engine.running = false, engine.starting = false, health.stalled = 1;
         }
+        // the head gasket goes with a hard hit (the top and the block bent, or the engine thrown against its mounts), and with heat (tick)
+        health.gasket = Math.max(health.gasket, clamp(0.7 * health.top + 0.5 * health.block - 0.2, 0, 1), 0.5 * jolt * jolt);
         lastShock = shock;
         // the ignition is the wiring above the engine, and what the block has done to it
         health.ignition = clamp(Math.max(health.top * 0.85, health.block * 0.6), 0, 1);
@@ -146,7 +153,14 @@ OpenRacer.EngineDamage = function (vehicle, config) {
         var rpart = radiatorPart, full = rpart ? 1 / 40 : 1 / 90;
         var coolLeak = (Math.pow(health.radiator, rpart ? 1.3 : 1.6) * full + 0.3 * Math.pow(Math.max(0, health.block - 0.4), 1.5) / 90) * hotLeak;
         if (health.radiatorGone) coolLeak = 1 / 8;
-        var oilLeak = (Math.pow(health.pan, 1.5) + 0.2 * Math.pow(Math.max(0, health.block - 0.5), 1.5)) / 150;
+        // oil: the pan, a block that is bent, the front of the engine (the front seal and the timing cover, knocked in by a hit on the nose: empty in 2 minutes at the
+        // worst) and the heat (above 140 degrees of oil the seals and the gaskets let the thin oil through: 3 minutes at 170)
+        var oilLeak = (Math.pow(health.pan, 1.5) + 0.2 * Math.pow(Math.max(0, health.block - 0.5), 1.5)) / 150 + Math.pow(health.front, 1.5) / 120 + Math.pow(clamp((health.oilTemp - 140) / 30, 0, 1), 1.5) / 180;
+        // the head gasket: the coolant is burnt in the engine (a minute at the worst), and does not drip on the road
+        health.gasket = Math.min(1, health.gasket + Math.pow(clamp((health.temp - 125) / 30, 0, 1), 2) * 0.02 * dt);
+        var burn = health.coolant > 0 ? Math.pow(health.gasket, 1.5) / 60 * (engine.running ? 1 : 0.2) : 0;
+        health.coolant = Math.max(0, health.coolant - burn * dt);
+        health.contam += ((Math.pow(health.gasket, 1.2) * (health.coolant > 0.02 ? 1 : 0.3)) - health.contam) * Math.min(1, dt / 20);
         health.coolant = Math.max(0, health.coolant - coolLeak * dt);
         health.oil = Math.max(0, health.oil - oilLeak * dt);
         health.leaking = (coolLeak > 0.0005 ? 1 : 0) + (oilLeak > 0.0005 ? 2 : 0);
@@ -162,7 +176,7 @@ OpenRacer.EngineDamage = function (vehicle, config) {
         var airflow = 0.45 + 0.55 * Math.min(1, Math.abs(vehicle.speed !== undefined ? vehicle.speed : Math.hypot(vehicle.vx || 0, vehicle.vz || 0)) / 25);
         var thermostat = 0.04 + 0.96 * smooth((health.temp - 78) / 14);
         var coolant = 0.05 + 0.95 * smooth(health.coolant / 0.45);
-        var UA = 0.0122 * pk * airflow * thermostat * coolant * (1 - 0.85 * health.radiator);
+        var UA = 0.0122 * pk * airflow * thermostat * coolant * (1 - 0.85 * health.radiator) * (1 - 0.35 * health.gasket);       // (the gas of the cylinders in the coolant)
         var capacity = 25000 + 450 * pk / 1000;
         health.temp += (heat - UA * (health.temp - 20)) / capacity * dt;
         if (health.temp > 112 && health.coolant > 0) health.coolant = Math.max(0, health.coolant - 0.004 * (health.temp - 112) * dt);      // it boils over
@@ -172,21 +186,22 @@ OpenRacer.EngineDamage = function (vehicle, config) {
         health.oilTemp = clamp(health.oilTemp + (oilTarget - health.oilTemp) * Math.min(1, dt / 90), 15, 250);
 
         // --- wear: the bearings run dry (little oil, hot oil, a corner with the oil away from the pickup), a bent engine, and a boiled one
-        health.wear += (Math.pow(starve, 1.3) * 0.012 + Math.pow(health.block, 2) * 0.0015 * clamp(output / pk, 0, 1) + Math.pow(clamp((health.temp - 135) / 20, 0, 1), 2) * 0.02) * dt;
+        health.wear += (Math.pow(starve, 1.3) * 0.012 + Math.pow(health.block, 2) * 0.0015 * clamp(output / pk, 0, 1) + Math.pow(health.contam, 2) * 0.004 * clamp(output / pk, 0, 1) + Math.pow(clamp((health.temp - 135) / 20, 0, 1), 2) * 0.02) * dt;
         health.wear = clamp(health.wear, 0, 1);
 
         // --- what it does to the engine: power, friction, the ignition
         var overheat = clamp((health.temp - 108) / 40, 0, 1);
-        var power = (1 - 0.5 * Math.pow(health.block, 1.3)) * (1 - 0.2 * health.top) * (1 - 0.4 * overheat) * (1 - 0.35 * Math.pow(health.wear, 1.3)) * (1 - 0.15 * (1 - oilPressure()));
+        var power = (1 - 0.5 * Math.pow(health.block, 1.3)) * (1 - 0.2 * health.top) * (1 - 0.4 * overheat) * (1 - 0.35 * Math.pow(health.wear, 1.3)) * (1 - 0.3 * health.contam) * (1 - 0.15 * (1 - oilPressure()));
         health.power = clamp(power, 0.2, 1);
         engine.healthScale = health.power;
         engine.frictionScale = 1 + 1.2 * health.wear + 0.6 * Math.pow(health.block, 2) + 0.3 * (1 - oilPressure());
         // misfires (events a second): the ignition, the heat (above 118) and a worn engine
-        var rate = 9 * Math.pow(health.ignition, 1.8) + 6 * Math.pow(clamp((health.temp - 118) / 25, 0, 1), 1.5) + 3 * Math.pow(health.wear, 3);
+        var rate = 9 * Math.pow(health.ignition, 1.8) + 6 * Math.pow(clamp((health.temp - 118) / 25, 0, 1), 1.5) + 3 * Math.pow(health.wear, 3) + 8 * Math.pow(health.contam, 1.6);
         health.misfire = clamp(rate / 9, 0, 1);
         nextMisfire = rate;
         // the steam of a boiling or leaking cooling system, and the smoke of oil that burns (a worn engine, or oil that runs onto the exhaust)
         health.steam = health.temp > 100 && (health.leaking & 1 || health.temp > 112) ? clamp((health.temp - 100) / 25, 0.15, 1) : 0;
+        health.whiteSmoke = running ? clamp(health.contam * 1.3, 0, 1) : 0;           // (coolant in the cylinders: white smoke from the exhaust)
         health.smoke = running ? clamp(Math.max(health.wear - 0.35, (health.leaking & 2 ? 0.5 * health.pan : 0)) * 1.5, 0, 1) : 0;
         // the end: the engine seizes when the bearings are gone (or it is cooked), and a ruined ignition does not start again
         if (!seized && (health.wear >= 1 || health.temp >= 165)) { seized = true; engine.running = false; engine.starting = false; }
@@ -195,7 +210,7 @@ OpenRacer.EngineDamage = function (vehicle, config) {
     }
 
     // how well the oil pressure holds, 0..1: the level, and the heat that thins it
-    function oilPressure() { return smooth(health.oil / 0.55) * (1 - 0.5 * clamp((health.temp - 130) / 30, 0, 1)); }
+    function oilPressure() { return smooth(health.oil / 0.55) * (1 - 0.5 * clamp((health.temp - 130) / 30, 0, 1)) * (1 - 0.4 * health.contam); }
     // how far the bearings are from oil, 0..1, at the engine speed and load of now (and the oil that slides away from the pickup in a corner)
     function oilStarvation(rpm, limiter, load) {
         var dry = 1 - oilPressure();

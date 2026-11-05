@@ -170,10 +170,10 @@ var Hud = (function() {
     }
     // the engine, when something is wrong with it (EngineDamage.js, vehicle.engineHealth): the heat, the oil and the coolant, and what it is doing; nothing when it is whole and cool
     function engineHealthRow(eh) {
-        var hot = eh.temp > 104, trouble = hot || eh.coolant < 0.97 || eh.oil < 0.97 || eh.wear > 0.02 || eh.ignition > 0.02 || eh.failed;
+        var hot = eh.temp > 104, trouble = hot || eh.coolant < 0.97 || eh.oil < 0.97 || eh.wear > 0.02 || eh.ignition > 0.02 || eh.gasket > 0.02 || eh.failed;
         if(!trouble) return "";
         var colour = eh.failed || eh.temp > 125 || eh.oil < 0.2 || eh.coolant < 0.2 ? "#ff6b62" : (hot || eh.oil < 0.5 || eh.coolant < 0.5 || eh.misfire > 0.2 ? "#ffb347" : "#e8d98a");
-        var state = eh.failed ? "ENGINE FAILED" : (eh.temp > 118 ? "OVERHEATING" : (eh.misfire > 0.15 ? "MISFIRING" : (eh.wear > 0.5 ? "ENGINE WORN" : "")));
+        var state = eh.failed ? "ENGINE FAILED" : (eh.temp > 118 ? "OVERHEATING" : (eh.gasket > 0.3 ? "HEAD GASKET" : (eh.misfire > 0.15 ? "MISFIRING" : (eh.wear > 0.5 ? "ENGINE WORN" : ""))));
         return "<div class=\"engine\" style=\"margin-top: 6px; color: " + colour + ";\"><div class=\"label\">ENGINE " + Math.round(eh.temp) + "° · OIL " + Math.round(eh.oil * 100) + "% · COOLANT " + Math.round(eh.coolant * 100) + "%" +
             (state ? " · " + state : "") + "</div></div>";
     }

@@ -166,6 +166,7 @@ OpenRacer.ExhaustFlames = function (scene, car) {
         }
     };
 
+    this.tailPipes = function (vehicle) { return pipes(vehicle); };         // the pipes as { position, direction, diameter, ... } in the frame of the body (white smoke of a blown head gasket: Car.js)
     this.refresh = function () { local = null; };           // the points of car.exhaust have changed (the car editor)
     this.clear = function () { age.fill(1e9); sprites.forEach(function (sp) { sp.visible = false; }); };
 

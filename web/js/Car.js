@@ -212,6 +212,24 @@ OpenRacer.Car = function( config, domElement ) {
     var tyreSmoke = new OpenRacer.TyreSmoke(scene);
     var leaks = OpenRacer.Leaks ? new OpenRacer.Leaks(scene) : null;         // the drops of oil and coolant of a leaking engine, and the stains on the road (Leaks.js)
     // Steam from a hot or leaking cooling system (white) and smoke from oil that burns (dark), out of the engine bay (EngineDamage.js: vehicle.engineHealth)
+    // White smoke out of the tail pipes: coolant that burns in the cylinders after a blown head gasket (EngineDamage.js, engineHealth.whiteSmoke)
+    var pipeLeft = 0, pipeP = new THREE.Vector3(), pipeD = new THREE.Vector3();
+    function exhaustFume(delta, v, eh) {
+        var pipes = flames.tailPipes(v);
+        var body = flames.car && flames.car.body;
+        if(!pipes || !pipes.length || !body) return;
+        pipeLeft += delta * eh.whiteSmoke * 45;
+        if(pipeLeft > 10) pipeLeft = 10;
+        while(pipeLeft >= 1) {
+            pipeLeft -= 1;
+            var pipe = pipes[(Math.random() * pipes.length) | 0];
+            pipeP.copy(pipe.position).applyQuaternion(body.quaternion);
+            pipeD.copy(pipe.direction).applyQuaternion(body.quaternion);
+            tyreSmoke.spawn(body.position.x + pipeP.x + pipeD.x * 0.1, body.position.y + pipeP.y + pipeD.y * 0.1, body.position.z + pipeP.z + pipeD.z * 0.1,
+                pipeD.x * (0.6 + Math.random()) + v.vx * 0.6 + (Math.random() - 0.5) * 0.4, pipeD.y * 0.6 + 0.3 + Math.random() * 0.5 + v.vy * 0.6, pipeD.z * (0.6 + Math.random()) + v.vz * 0.6 + (Math.random() - 0.5) * 0.4,
+                0.15, false, true, false);
+        }
+    }
     var fumeLeft = 0, fumeQ = new THREE.Quaternion(), fumeP = new THREE.Vector3();
     function engineFume(delta, v, eh) {
         fumeLeft += delta * (eh.steam * 40 + eh.smoke * 22);
@@ -621,6 +639,7 @@ OpenRacer.Car = function( config, domElement ) {
         if(!(OpenRacer.Replay && OpenRacer.Replay.active)) {   // a replay does not make new smoke and marks from the state of the physics
             tyreSmoke.update(delta, v, camera);
             if(v.engineHealth && (v.engineHealth.steam > 0.05 || v.engineHealth.smoke > 0.05)) engineFume(delta, v, v.engineHealth);
+            if(v.engineHealth && v.engineHealth.whiteSmoke > 0.05 && flames) exhaustFume(delta, v, v.engineHealth);
             if(leaks) leaks.update(delta, v, camera, typeof groundWorld !== "undefined" ? groundWorld : null);
             if(debris) debris.update(delta, v);
             if(OpenRacer.Shatter) OpenRacer.Shatter.step(delta);      // the pieces and the particles of the parts that broke, of every car (Shatter.js)

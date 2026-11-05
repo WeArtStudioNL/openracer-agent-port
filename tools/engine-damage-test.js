@@ -45,6 +45,7 @@ function run(name, hurtOf, options) {
     var vehicle = { softBody: makeShell(hurtOf), engine: engine, af: 1.35, ar: 1.49, wheelbase: 2.84, cgHeight: 0.3, parameters: { engine_place: "front", engine: {} }, vx: 0, vz: options.speed || 0, ay: 0 };
     if (options.parts) vehicle.parts = { parts: options.parts(vehicle) };
     var damage = new OpenRacer.EngineDamage(vehicle, options.config);
+    if (options.init) options.init(vehicle.engineHealth);
     engine.omega = (options.rpm || 900) * Math.PI / 30;
     var dt = 1 / 120, log = [], misfireTime = 0, steps = 0, stalledAt = null, seizedAt = null, t = 0;
     for (t = 0; t < (options.seconds || 120); t += dt) {
@@ -118,6 +119,21 @@ var crushedPart = r.h.coolant;
 r = run("radiator only a place in the shell, crushed (33 cm), the same drive", function (n, bay) { return { bend: Math.hypot(n[0], n[1] - 0.3, n[2] - 1.7) < 0.5 ? 0.33 : 0 }; }, { rpm: 3000, throttle: 0.4, speed: 20, seconds: 60 });
 expect("a crushed radiator object drains faster than the same bend in the plain shell", crushedPart < r.h.coolant);
 expect("a crushed radiator object is nearly empty after a minute", crushedPart < 0.1);
+
+var front = function (n, bay) { return { bend: Math.hypot(n[0], n[1] - bay[1], n[2] - bay[2]) < 0.75 && n[2] > bay[2] + 0.12 ? 0.33 : 0 }; };
+r = run("a hard hit on the front of the engine (the front face bent 33 cm), 40 % throttle at 3000 rpm, 3 minutes", front, { rpm: 3000, throttle: 0.4, speed: 20, seconds: 180 });
+expect("oil runs out of the front of the engine (a pan that is whole)", r.h.oil < 0.2 && r.h.pan < 0.5);
+r = run("a whole engine, 30 s", whole, { rpm: 3000, throttle: 0.4, speed: 20, seconds: 30 });
+var coolOil = r.h.oil;
+r = run("a whole engine that is very hot (150 degrees, oil 165), 30 s", whole, { rpm: 3000, throttle: 0.4, speed: 20, seconds: 30, init: function (h) { h.temp = 150; h.oilTemp = 165; } });
+expect("a very hot engine leaks oil through its seals, a cool one does not", coolOil > 0.999 && r.h.oil < 0.97);
+r = run("a hard hit (block 33 cm): the head gasket, 40 % throttle at 3000 rpm, 25 s", block, { rpm: 3000, throttle: 0.4, speed: 20, seconds: 25 });
+expect("the head gasket is gone and white smoke comes out of the exhaust while there is coolant to burn", r.h.gasket > 0.6 && r.h.whiteSmoke > 0.5);
+expect("the coolant goes into the engine, a third of it in 25 s or more", r.h.coolant < 0.7);
+r = run("the same, 90 s", block, { rpm: 3000, throttle: 0.4, speed: 20, seconds: 90 });
+expect("with no coolant left there is no white smoke any more", r.h.coolant < 0.01 && r.h.whiteSmoke < 0.5);
+r = run("a hot engine (radiator gone) blows its head gasket, 60 % throttle at 4000 rpm and 30 m/s, 4 minutes", radiator, { rpm: 4000, throttle: 0.6, speed: 30, seconds: 240 });
+expect("overheating blows the head gasket", r.h.gasket > 0.3);
 
 console.log(failures.length ? "\n" + failures.length + " FAILED" : "\nall ok");
 process.exit(failures.length ? 1 : 0);

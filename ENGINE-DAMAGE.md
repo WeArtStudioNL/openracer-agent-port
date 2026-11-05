@@ -15,6 +15,7 @@ only counts as a **jolt**. Every place keeps the worst it has had: a bent engine
 | block | all nodes of the bay | the engine and its mounts | less power, more friction, slow wear, a leak of oil and coolant when badly bent |
 | top | the nodes above the middle of the bay | ignition, wiring, intake | misfires, stalling |
 | pan | the nodes below the middle | the oil pan | an oil leak |
+| front | the nodes on the front face of the engine (more than 0.15 of the radius ahead of its middle) | the front seal and the timing cover | an oil leak |
 | radiator | the nodes at the front of the car | radiator, hoses | a coolant leak, less cooling |
 
 The ignition is `max(0.85 top, 0.6 block)`. A hard jolt (the shell springs more than 10 cm in the bay) shakes the wiring loose (top, up to 0.3) and can kill
@@ -40,6 +41,16 @@ the engine on the spot: the chance is `0.9 j^2 + 0.05 j` for a jolt `j` from 0 t
   and in a hard corner (more than 9 m/s2 sideways) with less than 70 % oil the oil leaves the pickup. Wear grows by that, by a bent block under load and by
   boiling.
 * **Wear**: from 0 to 1. At 1 the engine seizes: it stops, and does not start again until it is repaired.
+* **Oil from the front and from the heat**: a hard hit on the nose of the engine knocks in the front seal and the timing cover (`front^1.5 / 120` of the oil a second, empty
+  in two minutes at the worst), and above 140 degrees of oil the seals and the gaskets let the thin oil through (up to `1 / 180` a second at 170 degrees). They add to
+  the pan. The drops come from where the pan is.
+* **The head gasket** (`gasket`, 0 to 1): a hard hit blows it (`0.7 top + 0.5 block - 0.2`, and half of the square of the jolt), and so does heat (above 125
+  degrees, up to 2 % a second at 155). A blown gasket
+  * burns the coolant in the engine: `gasket^1.5 / 60` of the system a second (a minute at the worst; a fifth of that when the engine stands). It does not drip on the road;
+  * puts coolant in the cylinders and the oil (`contam`, follows the gasket in 20 s while there is coolant): up to 30 % less power, misfires (`8 contam^1.6` a second),
+    thinner oil (pressure down by 40 %) and wear, and the gas of the cylinders in the coolant cools worse (35 % less at the worst);
+  * makes **white smoke out of the tail pipes** (`whiteSmoke`, from `contam`); it stops when there is no coolant left to burn.
+  The HUD says HEAD GASKET.
 * **A radiator that is an object of the model** (a part of the car whose name has *radiator* in it, `parts` in car.json, `Parts.js`): its own nodes give how hurt it is
   (the mean and the worst), and a crushed one is empty in 40 s (`radiator^1.3 / 40` of the system a second; the radiator that is only a place in the shell:
   `radiator^1.6 / 90`). A radiator that has come off (or was broken) is empty in 8 s, whatever the temperature. This needs the parts on the main thread (not
