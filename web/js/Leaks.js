@@ -122,7 +122,18 @@ OpenRacer.Leaks = function (scene) {
     }
 
     var q = new THREE.Quaternion(), p = new THREE.Vector3();
-    var oilLeft = 0, coolLeft = 0;
+    var oilLeft = 0, dripLeft = 0, jetLeft = [0, 0, 0, 0, 0];
+    // a number from 0 to 1 that is the same for the same seed, jet and use (the directions of the jets: the physics may run in a worker, so the main thread makes them from the seed)
+    function hash(seed, j, k) { var x = Math.sin(seed * 1000 + j * 12.9898 + k * 78.233) * 43758.5453; return x - Math.floor(x); }
+    // one drop of coolant at p (the frame of the car, rotated) from the car, with the speed out (m/s, in the world, on top of the speed of the car): the drop that makes the stain, and the one that is seen
+    function coolantDrop(v, p, out, kindSeen, carry, ground, debris) {
+        var cx = v.px + p.x, cy = v.py + p.y, cz = v.pz + p.z, cvx = v.vx * 0.9 * carry + out.x, cvy = v.vy * carry + out.y, cvz = v.vz * 0.9 * carry + out.z;
+        drop(cx, cy, cz, cvx, cvy, cvz, COOLANT, false);          // (this one makes the stain where it lands; it is not drawn)
+        if (debris && debris.emit) {                              // (what is seen: the spray of a puddle, pale green and see-through, Debris.js)
+            var road = ground ? ground.query(cx, cz, cy + 0.4, 1.5) : null;
+            debris.emit(cx, cy, cz, cvx, cvy, cvz, kindSeen, road ? road.y + 0.015 : v.py - 0.4);
+        }
+    }
     this.update = function (delta, v, camera, ground, debris) {
         delta = Math.min(delta || 0.016, 0.1);
         clock += delta;
@@ -141,20 +152,30 @@ OpenRacer.Leaks = function (scene) {
                     drop(v.px + p.x, v.py + p.y, v.pz + p.z, v.vx * 0.95 + (Math.random() - 0.5) * 0.3, v.vy - 0.3, v.vz * 0.95 + (Math.random() - 0.5) * 0.3, OIL, eh.oilFlow > 0.6);
                 }
             }
-            if (eh.coolFlow > 0.001) {
-                var spray = Math.min(1, eh.coolFlow);           // a hurt radiator sprays, a torn off one gushes
-                coolLeft += delta * (4 + 150 * Math.min(3, eh.coolFlow));
-                if (coolLeft > 40) coolLeft = 40;
-                while (coolLeft >= 1) {
-                    coolLeft -= 1;
-                    p.set(eh.rx + (Math.random() - 0.5) * 0.5, eh.ry - 0.1, eh.rz + (Math.random() - 0.5) * 0.2).applyQuaternion(q);
-                    var out = new THREE.Vector3((Math.random() - 0.5) * 2.5, 0.4 + Math.random() * 2.2, 0.8 + Math.random() * 2.2).multiplyScalar(spray).applyQuaternion(q);       // (forward and up in the frame of the car)
-                    var cx = v.px + p.x, cy = v.py + p.y, cz = v.pz + p.z, cvx = v.vx * 0.9 + out.x, cvy = v.vy + out.y * 0.5, cvz = v.vz * 0.9 + out.z;
-                    drop(cx, cy, cz, cvx, cvy, cvz, COOLANT, eh.coolFlow > 0.8);          // (this one makes the stain where it lands; it is not drawn)
-                    if (debris && debris.emit) {                                           // (what is seen: the spray of a puddle, thicker, green and see-through, Debris.js)
-                        var road = ground ? ground.query(cx, cz, cy + 0.4, 1.5) : null;
-                        debris.emit(cx, cy, cz, cvx, cvy, cvz, Math.random() < 0.55 ? "coolant" : "coolantDrop", road ? road.y + 0.015 : v.py - 0.4);
+            // a radiator that is torn open or off: 1 to 5 jets, each in a direction of its own (the same for as long as it runs: the seed is in engineHealth), every one makes its own drops
+            if (eh.jets > 0 && eh.coolant > 0.005) {
+                var pressure = 0.35 + 0.65 * Math.min(1, eh.coolant * 2);        // (the jets weaken as the system empties)
+                for (var j = 0; j < eh.jets && j < 5; j++) {
+                    jetLeft[j] += delta * 38 * pressure;
+                    if (jetLeft[j] > 14) jetLeft[j] = 14;
+                    var az = hash(eh.jetSeed, j, 1) * 6.2832, el = -0.15 + hash(eh.jetSeed, j, 2) * 1.05, speed = 1.6 + hash(eh.jetSeed, j, 3) * 2.2;
+                    while (jetLeft[j] >= 1) {
+                        jetLeft[j] -= 1;
+                        p.set(eh.rx + (Math.random() - 0.5) * 0.3, eh.ry - 0.05, eh.rz + (Math.random() - 0.5) * 0.15).applyQuaternion(q);
+                        var wob = 0.28;                                             // (a jet is not a laser: a little wide)
+                        var out = new THREE.Vector3(Math.cos(az + (Math.random() - 0.5) * wob) * Math.cos(el), Math.sin(el + (Math.random() - 0.5) * wob), Math.sin(az + (Math.random() - 0.5) * wob) * Math.cos(el))
+                            .multiplyScalar(speed * pressure * (0.8 + Math.random() * 0.4)).applyQuaternion(q);       // (a direction in the frame of the car, x to the left, z forward)
+                        coolantDrop(v, p, out, Math.random() < 0.6 ? "coolant" : "coolantDrop", 1, ground, debris);
                     }
+                }
+            } else if (eh.coolFlow > 0.001) {
+                // a bent radiator: no jet, the coolant runs down from the bottom of it (drops that fall where they are)
+                dripLeft += delta * (1.5 + 14 * Math.min(1, eh.coolFlow));
+                while (dripLeft >= 1) {
+                    dripLeft -= 1;
+                    p.set(eh.rx + (Math.random() - 0.5) * 0.5, eh.ry - 0.15, eh.rz + (Math.random() - 0.5) * 0.12).applyQuaternion(q);
+                    var out2 = new THREE.Vector3((Math.random() - 0.5) * 0.3, -0.1 - Math.random() * 0.3, (Math.random() - 0.5) * 0.3).applyQuaternion(q);
+                    coolantDrop(v, p, out2, "coolantDrop", 0.8, ground, debris);
                 }
             }
         }

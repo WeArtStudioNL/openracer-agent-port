@@ -66,7 +66,7 @@ OpenRacer.EngineDamage = function (vehicle, config) {
 
     // ---- the state (all of it is a number: vehicle.engineHealth goes to the main thread with the rest of the vehicle)
     var health = vehicle.engineHealth = { block: 0, top: 0, pan: 0, radiator: 0, ignition: 0, coolant: 1, oil: 1, temp: 78, oilTemp: 70, wear: 0, power: 1, misfire: 0, steam: 0, smoke: 0,
-        failed: 0, stalled: 0, leaking: 0, front: 0, gasket: 0, contam: 0, whiteSmoke: 0, coolFlow: 0, oilFlow: 0, radiatorGone: 0, bx: bay[0], by: bay[1], bz: bay[2], br: bayR, rx: rad[0], ry: rad[1], rz: rad[2], rr: radR };
+        failed: 0, stalled: 0, leaking: 0, jets: 0, jetSeed: 0, front: 0, gasket: 0, contam: 0, whiteSmoke: 0, coolFlow: 0, oilFlow: 0, radiatorGone: 0, bx: bay[0], by: bay[1], bz: bay[2], br: bayR, rx: rad[0], ry: rad[1], rz: rad[2], rr: radR };
     var CAP_COOLANT = config.coolant > 0 ? config.coolant : 7, CAP_OIL = config.oil > 0 ? config.oil : 5;
     var seized = false, cutLeft = 0, nextMisfire = 0, shockCool = 0, acc = 0, lastShock = 0;
     var peak = 0, peakCurve = null, peakScale = -1;
@@ -94,7 +94,9 @@ OpenRacer.EngineDamage = function (vehicle, config) {
         if (!list) { radiatorPart = null; return null; }
         if (radiatorPart && list.indexOf(radiatorPart) >= 0) return radiatorPart;
         radiatorPart = null;
-        for (var i = 0; i < list.length; i++) if (list[i].wheel === undefined && /radiator/i.test(list[i].name || "")) { radiatorPart = list[i]; break; }
+        // the part called radiator, or else the first with radiator in its name that is not its fan, hose, cap or cover
+        for (var i = 0; i < list.length && !radiatorPart; i++) if (list[i].wheel === undefined && /^radiator$/i.test(list[i].name || "")) radiatorPart = list[i];
+        for (var k = 0; k < list.length && !radiatorPart; k++) if (list[k].wheel === undefined && /radiator/i.test(list[k].name || "") && !/fan|hose|cap|cover/i.test(list[k].name)) radiatorPart = list[k];
         return radiatorPart;
     }
 
@@ -106,10 +108,11 @@ OpenRacer.EngineDamage = function (vehicle, config) {
 
     // ---- what the nodes say, every tick: the worst of every place is kept
     function readNodes(dt) {
-        var b = 0, t = 0, p = 0, r = 0, f = 0, shock = 0;
+        var b = 0, t = 0, p = 0, r = 0, rt = 0, f = 0, shock = 0;
         for (var i = 0; i < list.length; i++) {
             var n = list[i], h = hurt(n.k);
             b += n.wb * h; t += n.wt * h; p += n.wp * h; r += n.wr * h; f += n.wf * h;
+            if (n.wr > 0 && sb.torn(n.k)) rt += n.wr;
             if (n.wb > 0) shock += n.wb * sb.elasticOf(n.k);
         }
         if (sumB > 0) { health.block = Math.max(health.block, b / sumB); shock /= sumB; }
@@ -117,6 +120,8 @@ OpenRacer.EngineDamage = function (vehicle, config) {
         if (sumP > 0) health.pan = Math.max(health.pan, p / sumP);
         if (sumR > 0) health.radiator = Math.max(health.radiator, r / sumR);
         if (sumF > 0) health.front = Math.max(health.front, f / sumF);
+        // a radiator that is only a place in the shell is torn open when most of its nodes have torn off
+        if (!health.radiatorGone && sumR > 0 && rt / sumR > 0.4 && health.radiator > 0.8) health.radiatorGone = 1;
         var rp = findRadiator();
         if (rp) {
             if (rp.state !== "held" && rp.state !== "hinged") { health.radiator = 1; health.radiatorGone = 1; }          // (torn off, or broken)
@@ -150,9 +155,11 @@ OpenRacer.EngineDamage = function (vehicle, config) {
         // --- leaks: a hurt radiator drains the coolant in a minute and a half at the worst, a pan the oil in two and a half minutes (the hot system leaks faster)
         var hotLeak = 0.4 + 0.6 * clamp((health.temp - 20) / 80, 0, 1);
         // a radiator that is an object of the model: a crushed one is empty in 40 s, one that has come off in 8 s (a radiator that is only a place in the shell: 90 s)
-        var rpart = radiatorPart, full = rpart ? 1 / 40 : 1 / 90;
-        var coolLeak = (Math.pow(health.radiator, rpart ? 1.3 : 1.6) * full + 0.3 * Math.pow(Math.max(0, health.block - 0.4), 1.5) / 90) * hotLeak;
-        if (health.radiatorGone) coolLeak = 1 / 8;
+        // a radiator that is bent (an object of the model, or the place in the shell) does not spray: the coolant runs down and out, slowly (4 minutes at the worst, `radiator^1.5`).
+        // A radiator that is torn open or has come off sprays in 1 to 5 jets, in directions of their own, every one of them 1/25 of the system a second (25 s with one, 5 s with five)
+        if (health.radiatorGone && !health.jets) { health.jets = 1 + Math.floor(random() * 5); health.jetSeed = random(); }
+        var coolLeak = (Math.pow(health.radiator, 1.5) / 200 + 0.3 * Math.pow(Math.max(0, health.block - 0.4), 1.5) / 90) * hotLeak;
+        if (health.radiatorGone) coolLeak = health.jets / 25;
         // oil: the pan, a block that is bent, the front of the engine (the front seal and the timing cover, knocked in by a hit on the nose: empty in 2 minutes at the
         // worst) and the heat (above 140 degrees of oil the seals and the gaskets let the thin oil through: 3 minutes at 170)
         var oilLeak = (Math.pow(health.pan, 1.5) + 0.2 * Math.pow(Math.max(0, health.block - 0.5), 1.5)) / 150 + Math.pow(health.front, 1.5) / 120 + Math.pow(clamp((health.oilTemp - 140) / 30, 0, 1), 1.5) / 180;
@@ -164,8 +171,8 @@ OpenRacer.EngineDamage = function (vehicle, config) {
         health.coolant = Math.max(0, health.coolant - coolLeak * dt);
         health.oil = Math.max(0, health.oil - oilLeak * dt);
         health.leaking = (coolLeak > 0.0005 ? 1 : 0) + (oilLeak > 0.0005 ? 2 : 0);
-        // how hard it runs, for the drops and the stains (Leaks.js): 1 is the pace of a crushed radiator or a destroyed pan; nothing when the tank is dry
-        health.coolFlow = health.coolant > 0 ? clamp(coolLeak * 40, 0, 6) : 0;
+        // how hard it runs, for the drops and the stains (Leaks.js): 1 is the run of a crushed radiator (jets: the number of jets, and the seed of their directions) or a destroyed pan; nothing when the tank is dry
+        health.coolFlow = health.coolant > 0 && !health.jets ? clamp(coolLeak * 200, 0, 1) : 0;           // (the run of a bent radiator; the jets have their own number)
         health.oilFlow = health.oil > 0 ? clamp(oilLeak * 150, 0, 2) : 0;
 
         // --- heat

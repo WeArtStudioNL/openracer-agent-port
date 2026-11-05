@@ -79,7 +79,8 @@ var radiatorNodes = function (vehicle) {
     for (var k = 0; k < vehicle.softBody.bodyCount; k++) { vehicle.softBody.restPosition(k, tmp); if (Math.hypot(tmp.x, tmp.y - 0.3, tmp.z - 1.7) < 0.5) nodes.push(k); }
     return nodes;
 };
-var radiator = function (n, bay) { return { bend: Math.hypot(n[0], n[1] - (bay[1] + 0.05), n[2] - (bay[2] + 0.55)) < 0.55 ? 0.33 : 0 }; };
+var radiator = function (n, bay) { return { bend: Math.hypot(n[0], n[1] - (bay[1] + 0.05), n[2] - (bay[2] + 0.55)) < 0.55 ? 0.33 : 0, torn: Math.hypot(n[0], n[1] - (bay[1] + 0.05), n[2] - (bay[2] + 0.55)) < 0.55 }; };       // (torn open)
+var radiatorBent = function (n, bay) { return { bend: Math.hypot(n[0], n[1] - (bay[1] + 0.05), n[2] - (bay[2] + 0.55)) < 0.55 ? 0.33 : 0 }; };       // (bent, not torn)
 var pan = function (n, bay) { return { bend: Math.hypot(n[0], n[1] - bay[1], n[2] - bay[2]) < 0.75 && n[1] < bay[1] + 0.1 * 0.75 ? 0.33 : 0 }; };
 var top = function (n, bay) { return { bend: Math.hypot(n[0], n[1] - bay[1], n[2] - bay[2]) < 0.75 && n[1] > bay[1] - 0.075 ? 0.33 : 0 }; };
 var block = function (n, bay) { return { bend: Math.hypot(n[0], n[1] - bay[1], n[2] - bay[2]) < 0.75 ? 0.33 : 0 }; };
@@ -94,7 +95,7 @@ expect("no misfires, no wear, full power", r.misfire === 0 && r.h.wear < 0.001 &
 r = run("whole engine, flat out at 5000 rpm standing (fans only), 75 seconds", whole, { rpm: 5000, throttle: 1, speed: 0, seconds: 75 });
 expect("standing flat out gets hot (over 105) but does not fail in 75 s", r.h.temp > 105 && r.h.failed === 0);
 
-r = run("destroyed radiator, 60 % throttle at 4000 rpm and 30 m/s", radiator, { rpm: 4000, throttle: 0.6, speed: 30, seconds: 180 });
+r = run("radiator torn open (3 jets), 60 % throttle at 4000 rpm and 30 m/s", radiator, { rpm: 4000, throttle: 0.6, speed: 30, seconds: 180, init: function (h) { h.jets = 3; } });
 expect("the coolant runs out", r.h.coolant < 0.05);
 expect("it overheats above 118 degrees", r.h.temp > 118);
 expect("it loses power", r.engine.healthScale < 0.85);
@@ -112,13 +113,16 @@ expect("power is down by a third or more", r.engine.healthScale < 0.7);
 r = run("a dent of 10 cm round the engine, 60 % throttle at 4000 rpm", dented, { rpm: 4000, throttle: 0.6, speed: 30, seconds: 180 });
 expect("a small dent keeps most of the power and does not overheat", r.engine.healthScale > 0.8 && r.h.temp < 105);
 
-r = run("radiator part torn off, 40 % throttle at 3000 rpm and 20 m/s, 30 s", whole, { rpm: 3000, throttle: 0.4, speed: 20, seconds: 30, parts: function (v) { return [{ name: "radiator", state: "free", nodes: [] }]; } });
-expect("the coolant is gone in 10 s (a minute is far too slow for a radiator that is off)", r.h.coolant < 0.01);
-r = run("radiator part held, crushed (33 cm), 40 % throttle at 3000 rpm and 20 m/s, 60 s", function (n, bay) { return { bend: Math.hypot(n[0], n[1] - 0.3, n[2] - 1.7) < 0.5 ? 0.33 : 0 }; }, { rpm: 3000, throttle: 0.4, speed: 20, seconds: 60, parts: function (v) { return [{ name: "Radiator", state: "held", nodes: radiatorNodes(v) }]; } });
-var crushedPart = r.h.coolant;
-r = run("radiator only a place in the shell, crushed (33 cm), the same drive", function (n, bay) { return { bend: Math.hypot(n[0], n[1] - 0.3, n[2] - 1.7) < 0.5 ? 0.33 : 0 }; }, { rpm: 3000, throttle: 0.4, speed: 20, seconds: 60 });
-expect("a crushed radiator object drains faster than the same bend in the plain shell", crushedPart < r.h.coolant);
-expect("a crushed radiator object is nearly empty after a minute", crushedPart < 0.1);
+r = run("radiator part torn off, 5 jets, 40 % throttle at 3000 rpm and 20 m/s, 30 s", whole, { rpm: 3000, throttle: 0.4, speed: 20, seconds: 30, init: function (h) { h.jets = 5; }, parts: function (v) { return [{ name: "radiator", state: "free", nodes: [] }]; } });
+expect("with 5 jets the coolant is gone in 8 s", r.h.coolant < 0.01);
+r = run("the same with 1 jet, 12 s", whole, { rpm: 3000, throttle: 0.4, speed: 20, seconds: 12, init: function (h) { h.jets = 1; }, parts: function (v) { return [{ name: "radiator", state: "free", nodes: [] }]; } });
+var oneJet = r.h.coolant;
+r = run("the same with 5 jets, 12 s", whole, { rpm: 3000, throttle: 0.4, speed: 20, seconds: 12, init: function (h) { h.jets = 5; }, parts: function (v) { return [{ name: "radiator", state: "free", nodes: [] }]; } });
+expect("one jet empties it slower than five (it still has more than half of it after 12 s)", oneJet > 0.4 && r.h.coolant < 0.01);
+r = run("the same with the number of jets chosen by the model, 30 s", whole, { rpm: 3000, throttle: 0.4, speed: 20, seconds: 30, parts: function (v) { return [{ name: "radiator", state: "free", nodes: [] }]; } });
+expect("1 to 5 jets are chosen, with a seed for their directions", r.h.jets >= 1 && r.h.jets <= 5 && r.h.jetSeed > 0);
+r = run("radiator part held, crushed (33 cm), 40 % throttle at 3000 rpm and 20 m/s, 60 s", radiatorBent, { rpm: 3000, throttle: 0.4, speed: 20, seconds: 60, parts: function (v) { return [{ name: "Radiator", state: "held", nodes: radiatorNodes(v) }]; } });
+expect("a crushed radiator does not spray (no jets), it runs down slowly: most of the coolant is there after a minute", r.h.jets === 0 && r.h.coolant > 0.6 && r.h.coolant < 1 && r.h.coolFlow > 0.2);
 
 var front = function (n, bay) { return { bend: Math.hypot(n[0], n[1] - bay[1], n[2] - bay[2]) < 0.75 && n[2] > bay[2] + 0.12 ? 0.33 : 0 }; };
 r = run("a hard hit on the front of the engine (the front face bent 33 cm), 40 % throttle at 3000 rpm, 3 minutes", front, { rpm: 3000, throttle: 0.4, speed: 20, seconds: 180 });
