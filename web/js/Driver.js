@@ -111,6 +111,9 @@ OpenRacer.Driver = function (config, parent, steering) {
         self.bones.chest.forEach(function (bone) { rest.set(bone, bone.quaternion.clone()); });
         if (self.bones.head) rest.set(self.bones.head, self.bones.head.quaternion.clone());
         if (self.bones.hips) rest.set(self.bones.hips, self.bones.hips.quaternion.clone());
+        // the bones of the spine between the pelvis and the chest: the turn of the back is shared over them (the chest alone turned, the skin between it and the pelvis was stretched into a seam)
+        self.spineMid = [];
+        (function () { var cd = self.bones.chest.filter(function (b) { return /^DEF-/.test(b.name); })[0], b = cd && cd.parent; while (b && b !== self.bones.hips && self.spineMid.length < 4) { self.spineMid.unshift(b); rest.set(b, b.quaternion.clone()); b = b.parent; } if (b !== self.bones.hips) { self.spineMid.forEach(function (x) { rest.delete(x); }); self.spineMid = []; } })();
         // (a rig whose arms and legs hang on a tree of their own, not on the bones that deform the body: the parent of the thighs is the pelvis of that tree and has to turn with the pelvis, and
         // the parent of the arms with the chest, else the hips and the shoulders stay where they were while the body turns)
         self.legRoots = [];
@@ -243,10 +246,13 @@ OpenRacer.Driver = function (config, parent, steering) {
         // (the bones that the arms and the legs hang on are a tree of their own: they are put where the bones of the deformation went, the shoulders where the back is, the hips where the pelvis is)
         var followed = followPairs && followPairs.length > 0;
         if (!followed) (self.legRoots || []).forEach(function (bone) { turnBone(bone, [0, 0, hipRoll]); });
+        var share = 1 / (self.spineMid.length + 1);
+        self.spineMid.forEach(function (bone) { var q = self.torsoPose.chest; turnBone(bone, [q[0] * share, q[1] * share, q[2] * share]); });
         self.bones.chest.forEach(function (bone) {
             var org = !/^DEF-/.test(bone.name);
             if (org && followed) return;
             var pose = self.torsoPose.chest;
+            if (!org) pose = [pose[0] * share, pose[1] * share, pose[2] * share];
             if (hipRoll && org) pose = [pose[0], pose[1], pose[2] + hipRoll];
             turnBone(bone, pose);
         });
