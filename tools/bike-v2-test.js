@@ -87,6 +87,7 @@ function makeCar(config) {
         esc_gain: assists.esc_gain !== undefined ? assists.esc_gain : 1
     });
     v.reset(0, 0, 0);
+    if (process.argv.includes("--gripdbg")) console.log("gripScale", v.wheels.map(w => w.gripScale), "mu", v.wheels.map(w => w.frictionFor(1000, getSurface("road")).mu.toFixed(2)), "surf", JSON.stringify(getSurface("road")));
     return { v, input, config };
 }
 
@@ -240,16 +241,16 @@ for (const brake of [0, 1]) for (const speed of [100, 140, 180]) {
 }
 // a slide in a bend (flat track): a key held at a middle speed, the gas wide open in second gear after two seconds (the rear slides out): the slip angle of the body (the worst, and at the end),
 // the lean, whether the bike stays up. With --push the bars countersteer the slide by themselves (--set=push_slide=0 for none, a negative number for the other sign)
-for (const speed of [40, 55, 70]) for (const cmd of [0.6, 1]) {
-    if ((ONLY && ONLY !== "slide") || (SPEEDS.length && !SPEEDS.includes(speed)) || (!ONLY && !process.argv.includes("--rider"))) continue;
+for (const speed of (SPEEDS.length ? SPEEDS : [40, 55, 70])) for (const cmd of [0.6, 1]) {
+    if ((ONLY && ONLY !== "slide") || (!ONLY && !process.argv.includes("--rider"))) continue;
     const car = makeCar(config), v = car.v, lock = 0.38; let crash = null, maxBeta = 0, endBeta = 0, maxLean = 0, maxBars = 0;
     for (let t = 0; t < 16 && !crash; t += DT) {
         const input = car.input, tt = t - 10, err = speed * KMH - v.u;
         if (tt < 0) { input.throttle = err > 0 ? Math.min(1, err * 0.5) : 0; input.brakePedal = err < 0 ? Math.min(1, -err * 0.3) : 0; input.turnAngle = 0; input.manualGearbox = false; }
-        else { input.manualGearbox = true; input.current_gear = 1; input.throttle = tt > 2 && tt < 4.5 ? 1 : 0; input.brakePedal = 0; input.turnAngle = (tt > 0.3 ? cmd : 0) * lock; }
+        else { v.controller.options = Object.assign({}, v.controller.options, { wheelieControl: process.argv.includes("--wc") }); input.manualGearbox = true; input.current_gear = parseInt((process.argv.find(a => a.startsWith("--sgear=")) || "--sgear=1").split("=")[1]); input.throttle = tt > 2 && tt < 4.5 ? 1 : 0; input.brakePedal = 0; input.turnAngle = (tt > 0.3 ? cmd : 0) * lock; }
         v.update(DT);
         if (tt > 2) { const beta = Math.atan2(v.v, Math.max(1, Math.abs(v.u))) / DEG; if (Math.abs(v.u) > 4) { maxBeta = Math.max(maxBeta, Math.abs(beta)); endBeta = beta; } maxLean = Math.max(maxLean, Math.abs((v.lean || 0) / DEG)); maxBars = Math.max(maxBars, Math.abs((v.controller.steer || 0) / DEG)); }
-        if (process.argv.includes("--sldump") && tt > 0 && Math.round(tt / DT) % 3 === 0 && tt < 5) console.log(tt.toFixed(1), "kmh", (v.u * 3.6).toFixed(0), "lean", ((v.lean || 0) / DEG).toFixed(1), "beta", (Math.atan2(v.v, Math.max(1, Math.abs(v.u))) / DEG).toFixed(1), "bars", ((v.controller.steer || 0) / DEG).toFixed(1), "slideAsk", (((v.controller.slideAsk) || 0) / DEG).toFixed(1));
+        if (process.argv.includes("--sldump") && tt > 0 && Math.round(tt / DT) % 3 === 0 && tt < 5) console.log(tt.toFixed(1), "kmh", (v.u * 3.6).toFixed(0), "lean", ((v.lean || 0) / DEG).toFixed(1), "beta", (Math.atan2(v.v, Math.max(1, Math.abs(v.u))) / DEG).toFixed(1), "bars", ((v.controller.steer || 0) / DEG).toFixed(1), "slideAsk", (((v.controller.slideAsk) || 0) / DEG).toFixed(1), "drift", (v.controller.drift || 0).toFixed(2), "rearLat", v.wheels[2].lateralGrip.toFixed(2), "thr", v.input.throttle.toFixed(1));
         if (v.controller.crashed) crash = v.controller.crashReason || "crashed";
     }
     report("slide " + CAR.split("-")[0] + " " + speed + " km/h, key " + cmd + ", the gas wide open in 2nd" + (process.argv.includes("--push") ? " (flat track)" : ""), !crash && maxBeta < 35, "worst slip angle " + maxBeta.toFixed(0) + " deg, at the end " + endBeta.toFixed(0) + ", max lean " + maxLean.toFixed(0) + ", most bars " + maxBars.toFixed(1) + (crash ? ", crashed: " + crash : ""));

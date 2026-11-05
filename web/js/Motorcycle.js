@@ -67,6 +67,7 @@ OpenRacer.Motorcycle = function (settings) {
         self.balanceFrom = s.balance_from !== undefined ? s.balance_from : 6; self.balanceTo = s.balance_to !== undefined ? s.balance_to : 14;   // m/s: the rider's hold on the lean (the torque about the long axis) goes away between these speeds, in model v2
         self.push = !!s.push;      // the riding style of this bike (car.json motorcycle.push, the tuning menu); the menu of the game can turn it on for every bike
         self.pushExtraLean = (s.push_extra_lean_deg !== undefined ? s.push_extra_lean_deg : 4) * DEG; self.pushSlide = s.push_slide !== undefined ? s.push_slide : -0.6; self.pushSlideCap = (s.push_slide_cap_deg !== undefined ? s.push_slide_cap_deg : 7) * DEG;      // flat-track: the lean the bike may take beyond the usual (rad), and the countersteer of a slide (the bars follow the way the bike moves: the share of the slip angle, and the most)
+        self.pushDrift = s.push_drift !== undefined ? s.push_drift : 0.3;      // flat track: the share of the lateral grip of the rear tyre that full gas in a bend takes (the tail steps out: a slide on the gas)
         self.pushHang = s.push_hang !== undefined ? s.push_hang : -0.4; self.pushLockShare = s.push_lock_share !== undefined ? s.push_lock_share : 0.75;      // the flat-track style: the weight of the rider to the outside (a share of hang_off, negative), and the share of the lock for a low speed
         self.lockShare = s.lock_share !== undefined ? s.lock_share : 0.65;   // model v2: the share of the lock of the bars that a lean at a low speed may ask for
         self.gripFast = s.grip_fast !== undefined ? s.grip_fast : 0.2;   // model v2: the g more that the lean may ask for above 13 to 18 m/s (the bike is in the model of the rider and the tyres there; below it the lean is held)
@@ -117,6 +118,7 @@ OpenRacer.Motorcycle = function (settings) {
     var pushed = function () { return self.push || !!option("bikePush"); };
     this.pushStyle = pushed;
     this.command = 0;                                      // the lean that is asked (-1..1)
+    this.drift = 0;                                         // flat track: the share of the lateral grip of the rear tyre that is gone (0 to push_drift)
     this.targetLean = 0;                                   // what the rider takes (rad, left is positive)
     this.steer = 0;                                        // the angle of the front wheel that was given to the physics (rad, right is positive)
     this.frontBrake = 1;
@@ -206,7 +208,7 @@ OpenRacer.Motorcycle = function (settings) {
         var speedMax = self.maxLean - (self.maxLean - Math.min(self.maxLean, fastLean)) * smooth(self.fastFrom, self.fastFrom + 22, Math.abs(u));
         if (pushed()) speedMax += self.pushExtraLean * (1 - smooth(14, 26, Math.abs(u))) * (1 - smooth(0.05, 0.4, (v.input.brakePedal || 0)));      // (flat track: a deeper lean at a low and a middle speed, where the tyres slide and the rider catches it)
         // the tyres have so much grip, and what they give along the bike (the engine, the air, the brake: how much the speed goes down) they cannot give sideways: the circle of grip
-        var aLong = Math.max(0, -(accel.x * state.fx + accel.z * state.fz)), gripMax = (self.gripG + (self.v2 ? self.gripFast * smooth(13, 18, Math.abs(u)) : 0)) * G;
+        var aLong = Math.max(0, -(accel.x * state.fx + accel.z * state.fz)), gripMax = (self.gripG + (self.v2 ? self.gripFast * smooth(13, 18, Math.abs(u)) : 0)) * G * (1 - self.drift);      // (flat track: with the tail out the lean that the tyres hold is less: the rider stands the bike up a little as it steps out)
         speedMax = Math.min(speedMax, Math.atan(Math.sqrt(Math.max(0, gripMax * gripMax - aLong * aLong)) / G) + self.overLean + (pushed() ? self.pushExtraLean * (1 - smooth(14, 26, Math.abs(u))) * (1 - smooth(0.05, 0.4, (v.input.brakePedal || 0))) : 0));     // (a little past the grip: that is the lowside)
         var phiMax = speedMax + epsFull;
         var want = -c * Math.min(phiMax, cap) * fast;
@@ -511,6 +513,11 @@ OpenRacer.Motorcycle = function (settings) {
             if (Math.abs(pT) > 0.01) { torque.x += state.lx * pT; torque.y += state.ly * pT; torque.z += state.lz * pT; }
             self.pitchTq = pT;
         }
+        // Flat track: on the gas in a bend the rear tyre gives up a part of its grip across (what the power takes from it, and the rider's weight forward and out of the bike): the tail steps out, the body
+        // of the bike points further into the bend than it goes, and the bars follow the slide (slideAsk). It comes back with the gas, over a fifth of a second.
+        var driftT = pushed() && self.pushDrift > 0 && !self.limp ? self.pushDrift * smooth(0.45, 0.9, (v.input.throttle || 0) * (self.wheelieScale || 1)) * smooth(12 * DEG, 28 * DEG, Math.abs(state.lean)) * (1 - smooth(18, 30, Math.abs(u))) : 0;
+        self.drift += (driftT - self.drift) * Math.min(1, dt / 0.2);
+        for (var wi = 0; wi < 4; wi++) if (!v.wheels[wi].front) { var rw = v.wheels[wi]; if (rw.lateralGripBase === undefined) rw.lateralGripBase = rw.lateralGrip; rw.lateralGrip = rw.lateralGripBase * (1 - self.drift); }
         // the yaw that the steering did not ask for is damped
         var fast = smooth(1.5, 4.5, Math.abs(u));
         // the front wheel in the air (a wheelie): it does not steer, the lean does. A bike that leans turns at g tan(lean) / u, and the rider takes it round at that rate
