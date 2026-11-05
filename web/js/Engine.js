@@ -70,6 +70,13 @@ OpenRacer.Engine = function( parameters ) {
     this.onTime = 1;
     this.cutLength = 0.05;
     this.noFuel = false;  // the tank is empty: the engine dies and does not start (Vehicle.js sets it)
+    // What a crash does to the engine (EngineDamage.js, with Damage on): the power as a factor, the friction as a factor, a misfire (the ignition cuts for a moment),
+    // and an engine that does not run any more (seized, or the ignition is gone)
+    this.healthScale = 1;
+    this.frictionScale = 1;
+    this.misfireCut = false;
+    this.disabled = false;
+    this.lastTorque = 0;      // the net torque of the last step (Nm), for the heat
     // A turbo: a share of the torque of the curve only comes with boost, which builds up with the throttle open above a
     // threshold speed over the spool time (the lag) and falls away fast when the throttle is shut. "turbo" in the engine of
     // car.json: { share: 0..1, spool: s, threshold_rpm }. Without it the engine is naturally aspirated.
@@ -180,18 +187,18 @@ OpenRacer.Engine = function( parameters ) {
     var motoringScale = 1, motoringCurve = null;
     this.getMotoringTorque = function( rpm ) {
         if(this.torque_curve !== motoringCurve) { motoringCurve = this.torque_curve; motoringScale = Math.max(0.3, Math.min(2.5, this.getPeakTorque() / 580)); }
-        return (30 + 0.0355 * rpm) * motoringScale * this.motoringFactor;
+        return (30 + 0.0355 * rpm) * motoringScale * this.motoringFactor * this.frictionScale;
     };
 
     this.start = function() {
-        if(!this.running) this.starting = true;
+        if(!this.running && !this.disabled) this.starting = true;
     };
 
     // Net torque (Nm) the engine delivers to the clutch for a throttle position (0..1)
     this.getNetTorque = function( throttle ) {
         var rpm = this.getRPM();
 
-        if(this.noFuel) { this.running = false; this.starting = false; }
+        if(this.noFuel || this.disabled) { this.running = false; this.starting = false; }
         if(!this.running) {
             // no combustion: only the losses (and the starter motor when it is cranking)
             var t = -this.getMotoringTorque(rpm);
@@ -233,8 +240,11 @@ OpenRacer.Engine = function( parameters ) {
         }
         this.throttleCut = this.cutting ? 0 : 1;
         thr *= this.throttleCut;
+        if(this.misfireCut) thr = 0;           // (a misfire: no combustion for a moment, the engine brakes)
 
         var boosted = this.turboBar > 0 ? this.boostFactor(this.boost * this.turboBar) : 1 - this.turboShare * (1 - this.boost); // (the older model: the torque without boost is the share that is not from the turbo)
-        return this.getTorque(rpm) * this.torqueScale * boosted * thr - (1 - thr) * this.getMotoringTorque(rpm) * (this.alsActive ? 0.5 : 1);
+        var net = this.getTorque(rpm) * this.torqueScale * this.healthScale * boosted * thr - (1 - thr) * this.getMotoringTorque(rpm) * (this.alsActive ? 0.5 : 1);
+        this.lastTorque = net;
+        return net;
     };
 };

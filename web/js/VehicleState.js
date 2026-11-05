@@ -22,7 +22,7 @@
 
 OpenRacer.VehicleState = (function () {
     // what a snapshot leaves out: links to other objects, and what the main thread owns (the input, the ground, the model)
-    var SKIP = { input: 1, ground: 1, collision: 1, softBody: 1, parts: 1, engine: 1, controller: 1, wheels: 1, rig: 1, collisionSpheres: 1, otherCars: 1,
+    var SKIP = { input: 1, ground: 1, collision: 1, softBody: 1, engineDamage: 1, parts: 1, engine: 1, controller: 1, wheels: 1, rig: 1, collisionSpheres: 1, otherCars: 1,
         pushes: 1, proxy3: 1, liveAxle: 1, object: 1, comp: 1, tyreBody: 1, events: 1, torque_curve: 1, extras: 1, onWheelLost: 1, parameters: 1 };
     var TABLE = 5 * 72;         // the deformation of a shell tyre: at most 5 rings of 72 bins (TyreShell.js)
 

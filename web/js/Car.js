@@ -194,6 +194,7 @@ OpenRacer.Car = function( config, domElement ) {
         center_split: drivetrain.center_split,
         gearbox: drivetrain.gearbox, cvt_rpm: drivetrain.cvt_rpm, cvt_rate: drivetrain.cvt_rate, cvt_low: drivetrain.cvt_low, cvt_high: drivetrain.cvt_high,
         engine: config.engine,
+        engine_place: config.driveline && config.driveline.engine,
         brake_front: config.brakes && config.brakes.front,
         brake_rear: config.brakes && config.brakes.rear,
         tank: config.fuel && config.fuel.tank,
@@ -209,6 +210,19 @@ OpenRacer.Car = function( config, domElement ) {
     var jack = null;                                // where the car stood when it went on the jacks: { x, y, z, q }
     var onJacks = false;                            // the driver's input was taken for a pit stop (and is given back when it is done)
     var tyreSmoke = new OpenRacer.TyreSmoke(scene);
+    // Steam from a hot or leaking cooling system (white) and smoke from oil that burns (dark), out of the engine bay (EngineDamage.js: vehicle.engineHealth)
+    var fumeLeft = 0, fumeQ = new THREE.Quaternion(), fumeP = new THREE.Vector3();
+    function engineFume(delta, v, eh) {
+        fumeLeft += delta * (eh.steam * 40 + eh.smoke * 22);
+        if(fumeLeft > 12) fumeLeft = 12;
+        fumeQ.set(v.qx, v.qy, v.qz, v.qw);
+        while(fumeLeft >= 1) {
+            fumeLeft -= 1;
+            var steam = Math.random() * (eh.steam * 40 + eh.smoke * 22) < eh.steam * 40;
+            fumeP.set(eh.bx + (Math.random() - 0.5) * 0.4, eh.by + 0.25, eh.bz + (Math.random() - 0.5) * 0.4).applyQuaternion(fumeQ);
+            tyreSmoke.spawn(v.px + fumeP.x, v.py + fumeP.y, v.pz + fumeP.z, v.vx * 0.9 + (Math.random() - 0.5) * 0.5, v.vy * 0.9 + 1 + Math.random(), v.vz * 0.9 + (Math.random() - 0.5) * 0.5, 0.1, false, steam, !steam);
+        }
+    }
     var debris = OpenRacer.Debris ? new OpenRacer.Debris(scene) : null;          // the grass, sand and snow that a slipping wheel throws up (Debris.js)
     var flames = new OpenRacer.ExhaustFlames(scene, { length: this.length, width: this.width, exhaust: config.exhaust, exhaustSystems: (config.sound && config.sound.engine_sim && config.sound.engine_sim.exhaust_systems) || 1,
         smoke: function(x, y, z, vx, vy, vz, diameter) { tyreSmoke.spawn(x, y, z, vx, vy, vz, 0.15, false, true, true); } });
@@ -603,6 +617,7 @@ OpenRacer.Car = function( config, domElement ) {
 
         if(!(OpenRacer.Replay && OpenRacer.Replay.active)) {   // a replay does not make new smoke and marks from the state of the physics
             tyreSmoke.update(delta, v, camera);
+            if(v.engineHealth && (v.engineHealth.steam > 0.05 || v.engineHealth.smoke > 0.05)) engineFume(delta, v, v.engineHealth);
             if(debris) debris.update(delta, v);
             if(OpenRacer.Shatter) OpenRacer.Shatter.step(delta);      // the pieces and the particles of the parts that broke, of every car (Shatter.js)
             var marks = OpenRacer.skidMarks && OpenRacer.skidMarks();
@@ -1019,7 +1034,8 @@ OpenRacer.Car = function( config, domElement ) {
         } else if(jack) jack = null;
         this.engineRPM = this.engine.getRPM();
         // the rev limiter cuts the fuel: the engine sounds like it too
-        EngineSound.update(this.engineRPM, this.throttle * this.engine.throttleCut, this.engine.throttleCut > 0.5);
+        // (a misfire of a hurt engine, EngineDamage.js, is heard as the ignition that drops out)
+        EngineSound.update(this.engineRPM, this.throttle * this.engine.throttleCut, this.engine.throttleCut > 0.5 && !this.engine.misfireCut);
         if(swapPedals) { var back = this.throttle; this.throttle = this.brakePedal; this.brakePedal = back; }
         EngineSound.setTyres(v.squeal, Math.abs(v.u));
         // the road under the tyres (the surface of the wheels that touch it), and a landing or a hit on the bump stop

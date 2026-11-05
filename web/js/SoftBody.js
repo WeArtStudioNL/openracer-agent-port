@@ -197,6 +197,9 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
     this.radiusOf = function (k) { return radius[k]; };
     this.massOf = function (k) { return mass[k]; };
     this.alive = function (k) { return anchorAlive[k] === 1; };
+    this.torn = function (k) { return !anchorAlive[k] || gone[k] === 1; };         // the anchor of the node is gone (or the node itself is)
+    this.bendOf = function (k) { return Math.hypot(q[3 * k], q[3 * k + 1], q[3 * k + 2]); };        // m, the shape that stays (plastic)
+    this.elasticOf = function (k) { return Math.hypot(u[3 * k], u[3 * k + 1], u[3 * k + 2]); };    // m, the springing of the hit that goes back again
     this.force = f;                                   // the contacts of Vehicle.js add their force here (frame, newtons), once per step of the nodes
 
     // How bent the car is: the biggest permanent displacement (m), and how many anchors and beams are gone

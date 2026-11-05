@@ -732,6 +732,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     // Repairs the car where it stands: the shell (dents), the parts that came off, the wheels (bent, torn off) and the tyres (punctures)
     this.repair = function () {
         if(this.softBody) this.softBody.repair();
+        if(this.engineDamage) this.engineDamage.repair();
         if(this.parts) this.parts.repair();
         if(this.repairWheels) this.repairWheels();
         this.repairTyres();
@@ -2344,6 +2345,11 @@ OpenRacer.Vehicle = function (parameters, input) {
             else throttle *= self.gearbox === "torque-converter" ? 0.6 : 0.15;                                   // (a converter keeps the drive through a shift: less is taken off)
         }
         self.throttleUsed = throttle;                      // (for the debugging)
+        // what a crash did to the engine (EngineDamage.js): only a car with a shell has it (Damage on), and not the AI cars (they have no pit stop to mend it)
+        if(self.softBody && self.engineDamageOn !== false) {
+            if(!self.engineDamage && OpenRacer.EngineDamage) self.engineDamage = new OpenRacer.EngineDamage(self, self.parameters && self.parameters.engine && self.parameters.engine.damage);
+            if(self.engineDamage && self.engineDamage.usable) self.engineDamage.update(dt);
+        }
         engine.updateBoost(throttle, dt);
         var Te = engine.getNetTorque(throttle);
         var rpm = engine.getRPM();

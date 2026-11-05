@@ -156,9 +156,19 @@ var Hud = (function() {
         var h = Math.max(0, Math.min(1, (temp - 100) / 40));
         return "rgb(" + Math.round(90 + 150 * h) + ", " + Math.round(190 - 130 * h) + ", " + Math.round(110 - 70 * h) + ")";
     }
+    // the engine, when something is wrong with it (EngineDamage.js, vehicle.engineHealth): the heat, the oil and the coolant, and what it is doing; nothing when it is whole and cool
+    function engineHealthRow(eh) {
+        var hot = eh.temp > 104, trouble = hot || eh.coolant < 0.97 || eh.oil < 0.97 || eh.wear > 0.02 || eh.ignition > 0.02 || eh.failed;
+        if(!trouble) return "";
+        var colour = eh.failed || eh.temp > 125 || eh.oil < 0.2 || eh.coolant < 0.2 ? "#ff6b62" : (hot || eh.oil < 0.5 || eh.coolant < 0.5 || eh.misfire > 0.2 ? "#ffb347" : "#e8d98a");
+        var state = eh.failed ? "ENGINE FAILED" : (eh.temp > 118 ? "OVERHEATING" : (eh.misfire > 0.15 ? "MISFIRING" : (eh.wear > 0.5 ? "ENGINE WORN" : "")));
+        return "<div class=\"engine\" style=\"margin-top: 6px; color: " + colour + ";\"><div class=\"label\">ENGINE " + Math.round(eh.temp) + "° · OIL " + Math.round(eh.oil * 100) + "% · COOLANT " + Math.round(eh.coolant * 100) + "%" +
+            (state ? " · " + state : "") + "</div></div>";
+    }
     function updateCar(car) {
         var v = car.vehicle;
-        if(!v.wearEnabled) { if(carPanel.style.display !== "none") carPanel.style.display = "none"; return; }
+        var eh = v.engineHealth, engineRow = eh ? engineHealthRow(eh) : "";
+        if(!v.wearEnabled && !engineRow) { if(carPanel.style.display !== "none") carPanel.style.display = "none"; return; }
         if(carPanel.style.display !== "block" && Settings.option("hud")) carPanel.style.display = "block";
         // (under the lap times as they grow: the panel stood at 150 px, and the lap times of the second lap and the best lap went under it. Not when one of them was
         // moved in the HUD editor, which places them from where they stand by default)
@@ -166,6 +176,7 @@ var Hud = (function() {
         if(!carPanel.__hudLayout && !lapPanel.__hudLayout && lapPanel.offsetHeight > 0) { var under      /* (offsetHeight: a fixed element has no offsetParent) */ = (lapPanel.offsetTop + lapPanel.offsetHeight + 8) + "px"; if(carPanel.style.top !== under) carPanel.style.top = under; }
         else if(carPanel.style.top) carPanel.style.top = "";
         var order = [1, 0, 2, 3]; // FL FR / RL RR
+        if(!v.wearEnabled) { if(engineRow !== carHtml) { carHtml = engineRow; carPanel.innerHTML = engineRow; } return; }       // (no tyres and fuel: only the engine, when it is hurt)
         var html = "<div class=\"row\"><div class=\"tyres\">";
         order.forEach(function(i) {
             var w = v.wheels[i];
@@ -185,6 +196,7 @@ var Hud = (function() {
             var reasons = (v.maxWear() > 0.8 ? ["tyres"] : []).concat(fuelLow ? ["fuel"] : []);
             if(reasons.length) html += "<div class=\"pit\"" + (flash ? "" : " style=\"opacity: 0.4\"") + ">PIT · " + reasons.join(" · ") + "</div>";
         }
+        html += engineRow;
         if(html !== carHtml) { carHtml = html; carPanel.innerHTML = html; }
         updatePit(car);
     }

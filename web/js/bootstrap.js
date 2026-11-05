@@ -61,6 +61,7 @@ var scripts = [
     "js/Scene.js",
     "js/EnvironmentExport.js",
     "js/SoftBody.js",
+    "js/EngineDamage.js",
     "js/SoftBodyMesh.js",
     "js/Parts.js",
     "js/CollisionProxy.js",

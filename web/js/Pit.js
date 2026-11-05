@@ -66,6 +66,12 @@ OpenRacer.PitStop = function (vehicle) {
         if(OpenRacer.damageEnabled === false) return 0;
         var secs = 0, sb = v.softBody, d = sb && sb.damage ? sb.damage() : null;
         if(d && (d.mean > 0.002 || d.broken > 0)) secs += REPAIR_BASE + Math.min(REPAIR_DENTS_MAX, d.mean * 100 * REPAIR_PER_CM);
+        // the engine (EngineDamage.js): a leak, a bent block, a worn engine: fluids and parts, more time the worse it is
+        var eh = v.engineHealth;
+        if(eh) {
+            var worst = Math.max(eh.block, eh.top, eh.pan, eh.radiator, eh.wear);
+            if(worst > 0.02 || eh.coolant < 0.95 || eh.oil < 0.95 || eh.failed) secs += 3 + 6 * worst + (eh.failed ? 3 : 0);
+        }
         var parts = v.parts && v.parts.parts ? v.parts.parts : [];
         for(var p = 0; p < parts.length; p++) if(parts[p].state !== "held" && parts[p].wheel === undefined) secs += REPAIR_PART;
         for(var i = 0; i < 4; i++) {

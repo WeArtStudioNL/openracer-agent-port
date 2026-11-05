@@ -35,7 +35,7 @@ OpenRacer.vehicleParams = function (config, getSurface) {
         tc_stall_rpm: drivetrain.tc_stall_rpm, tc_ratio: drivetrain.tc_ratio, tc_lockup: drivetrain.tc_lockup,
         drive: drivetrain.drive, diff: drivetrain.diff, diff_preload: drivetrain.diff_preload, diff_lock: drivetrain.diff_lock, diff_power: drivetrain.diff_power,
         diff_coast: drivetrain.diff_coast, center_diff: drivetrain.center_diff, center_split: drivetrain.center_split,
-        engine: config.engine, brake_front: config.brakes && config.brakes.front, brake_rear: config.brakes && config.brakes.rear,
+        engine: config.engine, engine_place: config.driveline && config.driveline.engine, brake_front: config.brakes && config.brakes.front, brake_rear: config.brakes && config.brakes.rear,
         tank: config.fuel && config.fuel.tank, getSurface: getSurface
     };
 };
@@ -63,6 +63,7 @@ OpenRacer.Opponent = function (config, line, options) {
     var params = OpenRacer.vehicleParams(config, getSurface);
     params.simpleTyres = options.shellTyres ? false : true;
     this.vehicle = options.vehicle || new OpenRacer.Vehicle(params, this);
+    if(!options.vehicle) this.vehicle.engineDamageOn = false;       // (the AI cars have no engine damage: they have no pit stop to mend it)
     // the tyres, the power and the clutch as car.json has them (the player's car gets these through the tuning menu)
     var tyres = config.tyres || {}, engineConfig = config.engine || {}, assists = config.assists || {};
     if (!options.vehicle) this.vehicle.retune({

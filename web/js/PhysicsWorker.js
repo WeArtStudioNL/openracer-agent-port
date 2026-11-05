@@ -24,7 +24,7 @@
  */
 
 self.OpenRacer = {};
-importScripts("Surfaces.js", "Engine.js", "Wheel.js", "TyreShell.js", "SoftBody.js", "Ground.js", "Motorcycle.js", "Vehicle.js", "VehicleState.js");
+importScripts("Surfaces.js", "Engine.js", "Wheel.js", "TyreShell.js", "SoftBody.js", "EngineDamage.js", "Ground.js", "Motorcycle.js", "Vehicle.js", "VehicleState.js");
 
 var ground = null;
 var cars = {};       // id: { vehicle, input, cache }
