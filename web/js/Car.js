@@ -626,7 +626,7 @@ OpenRacer.Car = function( config, domElement ) {
             this.driver.setCockpit(inCockpit);
             // the driver can be hidden in the cockpit view as a whole (the tuning menu: Cameras, "hide the driver"; the hands and the feet go with him)
             this.driver.root.visible = !(inCockpit && this.cameraSettings.cockpit.hide_driver);
-            var rearWheel = this.vehicle.wheels[2], roadY = rearWheel && rearWheel.hasContact && rearWheel.center ? rearWheel.center.y - rearWheel.radius : undefined;     // (the road under the rear wheel, in the world: for the foot of a rider)
+            var rearWheel = this.vehicle.wheels[2], roadY = rearWheel && rearWheel.hasContact ? (rearWheel.contact && typeof rearWheel.contact.y === "number" ? rearWheel.contact.y : (rearWheel.center ? rearWheel.center.y - rearWheel.radius : undefined)) : undefined;     // (the road under the rear wheel, in the world: for the foot of a rider)
             // (in a replay the gear is the recorded label: "N", "3", "D3", ...)
             var gearNow = this.current_gear, neutralNow = this.neutral, label = OpenRacer.Replay && OpenRacer.Replay.active ? this.replayGear : undefined;
             if(label !== undefined) { var m = /(\d+)$/.exec(label); neutralNow = label === "N"; gearNow = m ? parseInt(m[1], 10) - 1 : gearNow; }

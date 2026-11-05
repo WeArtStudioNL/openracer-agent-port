@@ -177,7 +177,7 @@ OpenRacer.Driver = function (config, parent, steering) {
     function applyPosture() {
         var p = self.posture;
         self.root.position.sub(postureOff);
-        if (p) postureOff.set((p.lat + (p.assist || 0)) * 0.7, p.drop * 0.7, p.long * 0.7); else postureOff.set(0, 0, 0);
+        if (p) postureOff.set(((1 - (p.flat || 0)) * (p.lat + (p.assist || 0)) * 0.7 + (p.flat || 0) * ((p.inside || 0) * 0.09 * Math.min(1, Math.abs(p.lean || 0) / (25 * DEG)))), p.drop * 0.7, p.long * 0.7);      // (flat track: the pelvis slides a little to the inside on the saddle, the rest of the rider is in his place) else postureOff.set(0, 0, 0);
         self.root.position.add(postureOff);
     }
     this.headSign = 1;      // (the sign of the roll of the bike in the roll of the bones)
@@ -192,7 +192,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         var post = self.posture;
         if (post) {
             var pitch = 28 * post.tuck - 10 * post.sit, roll = -14 * (post.lat / 0.3);
-            roll += 0.35 * (post.push || 0) * (post.lean || 0) / DEG;      // (flat track: the body stays more upright than the bike, which leans under it: the trunk leans out of the bike by a share of its lean)
+            roll += 0.55 * (post.push || 0) * (post.lean || 0) / DEG;      // (flat track: the back stays more upright than the bike, which leans under it: the trunk leans out of the bike by a share of its lean)
             var c = self.torsoPose.chest, h = self.torsoPose.head;
             self.torsoPose.chest = [c[0] + pitch, c[1], c[2] + roll];
             // (the head turned into the bend, about the vertical)
@@ -688,7 +688,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         return offsetTmp.set(o ? o[0] || 0 : 0, o ? o[1] || 0 : 0, o ? o[2] || 0 : 0);
     }
     // the same for a foot: the pivot is the peg and an offset from it (feet.offset.left / right, in the frame of the peg)
-    var footTmp = new V(), footW = new V(), footL = new V(), footF = new V(), footA = new V(), footB = new V(), footC = new V(), feetDown = {}, FOOT_ANKLE = 0.09, FOOT_LEN = 0.27, toeFwd = new V(), toeDir = new V();       // (how far down each foot is, the height of the ankle over the road when the foot stands on its toes)
+    var lastRoadY = null, footTmp = new V(), footW = new V(), footL = new V(), footF = new V(), footA = new V(), footB = new V(), footC = new V(), feetDown = {}, FOOT_ANKLE = 0.09, FOOT_LEN = 0.27, toeFwd = new V(), toeDir = new V();       // (how far down each foot is, the height of the ankle over the road when the foot stands on its toes)
     function footOffset(side) {
         var o = self.config.feet.offset && self.config.feet.offset[side];
         return footTmp.set(o ? o[0] || 0 : 0, o ? o[1] || 0 : 0, o ? o[2] || 0 : 0);
@@ -819,6 +819,9 @@ OpenRacer.Driver = function (config, parent, steering) {
             var lever = riderRest.pos[e[4]] && rider[e[4]] ? bodyPos(rider[e[4]], new V()) : null;
             fingersAtLever(e[0], chain, lever, e[5]);
         });
+        // (the road under the rear wheel, held when the wheel has no contact for a moment, and smoothed: a foot that jumped between the peg and the road on every bump)
+        if (state && typeof state.roadY === "number") lastRoadY = lastRoadY === null || Math.abs(state.roadY - lastRoadY) > 1 ? state.roadY : lastRoadY + (state.roadY - lastRoadY) * 0.25;
+        var roadYNow = lastRoadY;
         // the feet on the pegs; the left foot is on the toe peg of the shift lever as far as the lever has moved
         [[legLeft, 1, "pegL"], [legLeft === "legL" ? "legR" : "legL", -1, "pegR"]].forEach(function (e) {
             var chain = self.bones[e[0]];
@@ -838,21 +841,21 @@ OpenRacer.Driver = function (config, parent, steering) {
             // the flat-track style: the inside foot comes off the peg and stands on the road (the global height of the road, state.roadY) beside the peg, forward and out as the lean goes up: with a bent
             // knee at a small lean, stretched out beside the front wheel at the most lean. The target is taken in the world, within the reach of the leg from the hip.
             var postF = self.posture, pushAmt = postF && postF.push > 0.01 && (postF.inside || 0) * e[1] > 0 ? postF.push : 0;
-            if (pushAmt > 0 && walk < 0.5 && state && typeof state.roadY === "number") {
+            if (pushAmt > 0 && walk < 0.5 && roadYNow !== null) {
                 var lv = Math.max(0, Math.min(1, (Math.abs(postF.lean || 0) / DEG - 12) / 36)); lv = lv * lv * (3 - 2 * lv);
                 self.parent.localToWorld(footW.copy(local));
                 footL.set(e[1], 0, 0).transformDirection(self.parent.matrixWorld); footL.y = 0; footL.normalize();
                 footF.set(0, 0, 1).transformDirection(self.parent.matrixWorld); footF.y = 0; footF.normalize();
                 footW.addScaledVector(footL, 0.1 + 0.14 * lv).addScaledVector(footF, 0.05 + 0.5 * lv);
-                footW.y = state.roadY + FOOT_ANKLE;
+                footW.y = roadYNow + FOOT_ANKLE + 0.03;
                 chain[0].getWorldPosition(footA); chain[1].getWorldPosition(footB); chain[2].getWorldPosition(footC);
                 var reach = 0.97 * (footA.distanceTo(footB) + footB.distanceTo(footC));
                 footC.copy(footW).sub(footA);
                 if (footC.length() > reach) { footC.setLength(reach); footW.copy(footA).add(footC); }
-                footW.y = Math.max(footW.y, state.roadY + FOOT_ANKLE);      // (never through the road)
+                footW.y = Math.max(footW.y, roadYNow + FOOT_ANKLE + 0.03);      // (never through the road)
                 self.parent.worldToLocal(footW);
                 local.lerp(footW, Math.min(1, pushAmt * 1.5));
-                feetDown[e[0]] = Math.max(feetDown[e[0]] || 0, pushAmt);
+                // (the foot is not laid flat on the road: it stays at its angle to the shin, as a boot that is stood on its edge, the sole turned out)
             }
             if (walk > 0.001) {
                 var pegAt = local.clone();
@@ -861,7 +864,7 @@ OpenRacer.Driver = function (config, parent, steering) {
                 local.lerp(tmp, walk);
             }
             self.parent.localToWorld(world.copy(local));
-            if (state && typeof state.roadY === "number" && world.y < state.roadY + FOOT_ANKLE) world.y = state.roadY + FOOT_ANKLE;      // (a foot is never below the road: a bike at a deep lean has its peg near it)
+            if (roadYNow !== null && world.y < roadYNow + FOOT_ANKLE) world.y = roadYNow + FOOT_ANKLE;      // (a foot is never below the road: a bike at a deep lean has its peg near it)
             chain[0].getWorldPosition(a);
             var setKnee = cfg.poles && cfg.poles[e[0]];
             if (setKnee) tmp.set(setKnee[0], setKnee[1], setKnee[2]);
