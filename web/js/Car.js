@@ -627,11 +627,13 @@ OpenRacer.Car = function( config, domElement ) {
             // the driver can be hidden in the cockpit view as a whole (the tuning menu: Cameras, "hide the driver"; the hands and the feet go with him)
             this.driver.root.visible = !(inCockpit && this.cameraSettings.cockpit.hide_driver);
             var rearWheel = this.vehicle.wheels[2], roadY = rearWheel && rearWheel.hasContact ? (rearWheel.contact && typeof rearWheel.contact.y === "number" ? rearWheel.contact.y : (rearWheel.center ? rearWheel.center.y - rearWheel.radius : undefined)) : undefined;     // (the road under the rear wheel, in the world: for the foot of a rider)
+            // the road under a point of the world (the foot of a rider, in a replay as well: the wheels do not touch anything there): a ray down from a metre over the point
+            var roadAtOf = function(vh) { var g = vh && vh.ground; return g && g.ray ? function(x, z, y) { var h = g.ray(x, y + 1.0, z, 0, -1, 0, 4, 0.17); return h ? (y + 1.0) - h.t : undefined; } : null; };
             // (in a replay the gear is the recorded label: "N", "3", "D3", ...)
             var gearNow = this.current_gear, neutralNow = this.neutral, label = OpenRacer.Replay && OpenRacer.Replay.active ? this.replayGear : undefined;
             if(label !== undefined) { var m = /(\d+)$/.exec(label); neutralNow = label === "N"; gearNow = m ? parseInt(m[1], 10) - 1 : gearNow; }
             if(this.vehicle.controller && this.vehicle.controller.lineLook) this.vehicle.controller.lineLook(typeof race !== "undefined" && race && !(OpenRacer.Replay && OpenRacer.Replay.active) ? race.line : null, this.vehicle, delta || 0.016);      // (the head looks along the racing line)
-            this.driver.update(delta || 0.016, this.throttle, this.brakePedal, { gear: gearNow, neutral: neutralNow, push: !!this.pushBack, footDown: this.vehicle.controller ? this.vehicle.controller.footDown : 0, footDownL: this.vehicle.controller ? this.vehicle.controller.footDownL || 0 : 0, speed: this.vehicle.u, groundY: -this.tire_diameter / 2, roadY: roadY, posture: this.vehicle.controller ? this.vehicle.controller.posture : null });
+            this.driver.update(delta || 0.016, this.throttle, this.brakePedal, { gear: gearNow, neutral: neutralNow, push: !!this.pushBack, footDown: this.vehicle.controller ? this.vehicle.controller.footDown : 0, footDownL: this.vehicle.controller ? this.vehicle.controller.footDownL || 0 : 0, speed: this.vehicle.u, groundY: -this.tire_diameter / 2, roadY: roadY, roadAt: roadAtOf(this.vehicle), posture: this.vehicle.controller ? this.vehicle.controller.posture : null });
         }
         // the checkpoint of the road under the rear wheel
         var rear = w[2];
