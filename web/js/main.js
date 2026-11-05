@@ -588,14 +588,7 @@ function startSkidpad() {
             // acceleration at this speed, tan(delta) = L a / u^2, is the lean atan(a / g)), as a = u^2 / R, plus a damped correction in metres per second
             // squared: critically damped on the distance to the circle and on the speed across it (a rider that steers on the distance only swings round the line)
             this.leanFromBendHeld = true;
-            var rv = r > 0.5 ? (v.x * v.vx + v.z * v.vz) / r : 0;       // (the speed outwards: the rate of the distance)
-            var w0 = 0.7;
-            var aRef = speed * speed / R + w0 * w0 * (r - R) + 2 * w0 * rv;
-            // (what the lean gives is not quite what it asks for: a slow trim on the acceleration that the bike really has, so that it does not run wide for ever)
-            sp.trim = Math.max(-6, Math.min(6, (sp.trim || 0) + 1.2 * Math.max(-2, Math.min(2, aRef - (sp.ayTrue || 0))) * dt * (speed > 4 ? 1 : 0)));
-            var aWanted = aRef + sp.trim;
-            var uu = Math.max(speed * speed, 36);
-            wanted = Math.atan(v.wheelbase * Math.max(0, aWanted) / uu);
+            wanted = OpenRacer.Motorcycle.circleSteer(sp, v, R, speed, dt);      // (Motorcycle.js: the lean of the bend, with a correction that grows with the distance to the line; the bench, tools/bike-v2-test.js --only=skidpad, drives the same)
         }
         else wanted = base + 0.08 * (r - R) + 0.6 * headingError;
         wanted = Math.max(-this.turnLimit, Math.min(this.turnLimit, wanted));
@@ -621,17 +614,11 @@ function startSkidpad() {
         var slip = speed > 2 ? Math.atan2(v.v, v.u) : 0;
         var ay = Math.abs(v.ay);
         if(v.controller) {
-            // a motorcycle: v.ay is the tyre force across the bike in its own (leaned) frame, without the thrust of the camber, and read half of what the bike really pulled; the
-            // acceleration across the road is the speed times the rate at which the course (the direction it moves in) turns
-            var vh = Math.hypot(v.vx, v.vz), course = Math.atan2(v.vx, v.vz);
-            if(sp.course !== undefined && vh > 2 && dt > 0) {
-                var dc = Math.atan2(Math.sin(course - sp.course), Math.cos(course - sp.course));
-                sp.ayTrue = (sp.ayTrue || 0) + (vh * Math.abs(dc) / dt - (sp.ayTrue || 0)) * Math.min(1, dt / 0.15);
-            }
-            sp.course = course;
+            // a motorcycle: v.ay is the tyre force across the bike in its own (leaned) frame and read half of what the bike really pulled: the acceleration across the road is the speed
+            // times the rate at which the course turns (circleSteer keeps it in sp.ayTrue)
             ay = sp.ayTrue || 0;
         }
-        var onLine = Math.abs(r - R) < 4 && Math.abs(slip) < 0.14;
+        var onLine = Math.abs(r - R) < (v.controller ? 1.5 : 4) && Math.abs(slip) < 0.14;      // (a bike: the rate of its course is the g, and one that is leaving the line sweeps in and out at 1.7 g for a moment: only on the line it counts)
         if(onLine && ay > sp.best) { sp.best = ay; sp.bestSpeed = speed; }
         if(speed > 2 && (Math.abs(r - R) > 6 || Math.abs(slip) > 0.25)) skidpadDone();
         // a car that understeers wide does not let go: it just cannot go faster; when the speed stays three metres per second

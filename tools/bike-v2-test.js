@@ -237,6 +237,53 @@ for (const brake of [0, 1]) for (const speed of [100, 140, 180]) {
     }
     report("wobble " + CAR.split("-")[0] + " " + speed + " km/h" + (brake ? ", brake" : ", coast"), !crash && maxLean < 8 && ring < 1, "bars after the tap (1.2 to 2 s) " + ring.toFixed(2) + " deg, max bars " + maxBars.toFixed(1) + ", max lean " + maxLean.toFixed(1) + (crash ? ", crashed: " + crash : ""));
 }
+// the skidpad (main.js startSkidpad): the bike goes round a circle of 50 m about the origin, a quarter of a metre per second faster every second, the angle from Motorcycle.circleSteer. The line:
+// how far from the circle it is while it is held (the worst, and the mean), the lateral g and the speed that it reached, and why the test ended (the rider lets go of the line at 6 m, or a slip angle of 14 degrees)
+const SK = {}; for (const a of process.argv) { const m = a.match(/^--sk=(\w+)=(.+)$/); if (m) SK[m[1]] = parseFloat(m[2]); }      // --sk=w0=1.5 --sk=ki=0.8
+for (const R of [50]) {
+    if ((ONLY && ONLY !== "skidpad") || (!ONLY && !process.argv.includes("--rider"))) continue;
+    const car = makeCar(config), v = car.v, st = {}; let target = 3, why = "time", best = 0, bestU = 0, worst = 0, sum = 0, n = 0, crash = null, worstAtBest = 0, leanAtBest = 0, epsAtBest = 0;
+    v.reset(R, 0, Math.PI / 2);
+    for (let t = 0; t < 150 && !crash; t += DT) {
+        const input = car.input, speed = Math.max(0, v.u);
+        input.leanFromBend = true; input.manualGearbox = false;
+        const wanted = sandbox.OpenRacer.Motorcycle.circleSteer(st, v, R, speed, DT, SK);
+        input.turnAngle += (Math.max(-0.38, Math.min(0.38, wanted)) - input.turnAngle) * (1 - Math.pow(0.5, DT * 60));
+        target += 0.25 * DT; const err = target - speed;
+        input.throttle = Math.max(0, Math.min(0.7, 0.12 + err * 0.25)); input.brakePedal = err < -1.5 ? Math.min(0.4, (-err - 1.5) * 0.2) : 0;
+        v.update(DT);
+        const r = Math.hypot(v.x, v.z), slip = speed > 2 ? Math.atan2(v.v, v.u) : 0, ay = st.ayTrue || 0, dev = Math.abs(r - R);
+        if (speed > 4) { sum += dev; n++; worst = Math.max(worst, dev); }
+        if (dev < 1.5 && Math.abs(slip) < 0.14 && ay > best) { best = ay; bestU = speed; worstAtBest = worst; leanAtBest = Math.abs(v.lean || 0); epsAtBest = Math.atan((v.controller.riderMass / v.mass) * Math.abs(v.controller.posture.lat) / v.cgHeight); }
+        if (process.argv.includes("--skdump") && Math.round(t / DT) % 60 === 0) console.log(t.toFixed(0), "kmh", (speed * 3.6).toFixed(0), "r-R", (r - R).toFixed(2), "ay", (ay / 9.81).toFixed(2), "lean", ((v.lean || 0) / DEG).toFixed(1), "slip", (slip / DEG).toFixed(1), "trim", (st.trim || 0).toFixed(2));
+        if (v.controller.crashed) { crash = v.controller.crashReason || "crashed"; why = "crash " + crash; }
+        else if (speed > 2 && (dev > 6 || Math.abs(slip) > 0.25)) { why = dev > 6 ? "left the line by " + dev.toFixed(1) + " m" : "slip " + (slip / DEG).toFixed(0) + " deg"; break; }
+        else if (target - speed > 3) { st.stalled = (st.stalled || 0) + DT; if (st.stalled > 3) { why = "cannot go faster"; break; } } else st.stalled = 0;
+    }
+    report("skidpad " + R + " m " + CAR.split("-")[0], !crash && best / 9.81 > 0.9 && worstAtBest < 1.5, "best " + (best / 9.81).toFixed(2) + " g at " + (bestU * 3.6).toFixed(0) + " km/h, worst distance to the line " + worst.toFixed(2) + " m (to the best " + worstAtBest.toFixed(2) + "), mean " + (sum / Math.max(1, n)).toFixed(2) + " m, ended: " + why + "\n     grip check (the friction ellipse): " + (best / 9.81).toFixed(2) + " g needs a lean of the whole of " + (Math.atan(best / 9.81) / DEG).toFixed(1) + " deg; the bike leans " + (leanAtBest / DEG).toFixed(1) + " + " + (epsAtBest / DEG).toFixed(1) + " (the rider hangs off) = " + ((leanAtBest + epsAtBest) / DEG).toFixed(1) + " deg, which holds " + Math.tan(leanAtBest + epsAtBest).toFixed(2) + " g; grip_g " + v.controller.gripG + " is the cap on the bike alone");
+}
+// a power wheelie: from a standstill, the gas wide open in first gear (or the gear in --gear=), wheelie control off, the clutch let go: when does the front wheel come up, how high does it go, does the bike
+// loop over (a setup with too much power for its wheelbase and weight does), and can the rider's weight (the keys forward: riderKey) hold it. --only=wheelie, --wdump for every 0.1 s
+const WSP = parseFloat((process.argv.find(a => a.startsWith("--wspeed=")) || "--wspeed=0").split("=")[1]);      // --wspeed=20: a rolling start at that speed (km/h) before the gas goes wide open
+const WFROM = parseFloat((process.argv.find(a => a.startsWith("--wfrom=")) || "--wfrom=0.4").split("=")[1]);
+const pitchOf = v => { const qx = v.qx, qy = v.qy, qz = v.qz, qw = v.qw; return Math.asin(Math.max(-1, Math.min(1, 2 * (qy * qz - qx * qw)))) / DEG; };
+for (const hold of [0, 1]) {
+    if ((ONLY && ONLY !== "wheelie") || (!ONLY && !process.argv.includes("--rider"))) continue;
+    const car = makeCar(config), v = car.v; v.controller.options = { wheelieControl: false }; let crash = null, up = null, maxPitch = 0, maxT = 0, uMax = 0, looped = false, aPeak = 0, armed = true; const uHist = [];
+    const gear = parseInt((process.argv.find(a => a.startsWith("--gear=")) || "--gear=0").split("=")[1]);
+    for (let t = 0; t < 8 && !crash; t += DT) {
+        const input = car.input; input.manualGearbox = true; input.current_gear = gear; input.throttle = t > 0.5 ? 1 : (WSP > 0 ? Math.max(0, Math.min(1, (WSP * KMH - v.u) * 0.5)) : 0); input.brakePedal = 0; input.turnAngle = 0;
+        v.controller.riderKey = hold && t > 0.5 && pitchOf(v) > 8 ? 1 : 0;      // (the keys for the rider forward, from 8 degrees of nose up)
+        v.update(DT);
+        const pit = pitchOf(v); if (t > 0.5) { if (pit > 8 && up === null) up = t - 0.5; if (pit > maxPitch) { maxPitch = pit; maxT = t - 0.5; } uMax = Math.max(uMax, v.u); if (pit > 80) looped = true; uHist.push(v.u); if (pit > 12) armed = false; if (armed && uHist.length > 6) aPeak = Math.max(aPeak, (v.u - uHist[uHist.length - 7]) / (6 * DT)); }
+        if (process.argv.includes("--wdump") && Math.round(t / DT) % 3 === 0 && t > WFROM) console.log(t.toFixed(2), "kmh", (v.u * 3.6).toFixed(0), "pitch", pit.toFixed(1), "gear", v.current_gear, "front", ((v.wheels[0].weight || 0) + (v.wheels[1].weight || 0)).toFixed(0));
+        if (v.controller.crashed) crash = v.controller.crashReason || "crashed";
+    }
+    // the acceleration at which the front wheel comes up: g x (the distance of the centre of gravity from the rear contact) / (its height); a setup that pulls more than that on the road (aPeak, the most while the nose was
+    // still down) loops over without wheelie control, whatever the rider does: that is the test for a bike with too much power or traction. The result is a warning (the wheelie control is the answer), not a failure.
+    const aWheelie = 9.81 * (v.wheelbase * v.weight_distribution) / v.cgHeight;
+    console.log((looped ? "WARN " : "ok   ") + "power wheelie " + CAR.split("-")[0] + " gear " + (gear + 1) + (hold ? ", the rider leans forward" : ", the rider does nothing") + ": " + (up === null ? "the front wheel stays down" : "front wheel up after " + up.toFixed(2) + " s") + ", highest " + maxPitch.toFixed(0) + " deg" + (looped ? " (LOOPS OVER: too much power for this wheelbase and weight)" : "") + ", pulls " + (aPeak / 9.81).toFixed(2) + " g with the nose down, the front comes up at " + (aWheelie / 9.81).toFixed(2) + " g" + (crash ? ", crashed: " + crash : ""));
+}
 // the rider's body (replays of a rider): the front wheel in the air (the gas wide open, the wheelie control off) with a key for a bend: the lean has to follow the key and the bike may not go over,
 // and the front wheel coming down in a bend. Then the brake in a bend: the path may not run wider than it did (the radius is the path's, from the heading of the speed)
 const AD = process.argv.includes("--adump");
@@ -246,7 +293,7 @@ for (const speed of [40, 60, 80]) for (const cmd of [0.5, 1]) {
     for (let t = 0; t < 16 && !crash; t += DT) {
         const input = car.input, tt = t - 10, err = speed * KMH - v.u;
         if (tt < 0) { v.controller.options = null; input.manualGearbox = false; input.throttle = err > 0 ? Math.min(1, err * 0.5) : 0; input.brakePedal = err < 0 ? Math.min(1, -err * 0.3) : 0; input.turnAngle = 0; }
-        else { v.controller.options = { wheelieControl: false }; input.manualGearbox = true; input.current_gear = 1; input.throttle = tt < 3 ? 1 : 0; input.brakePedal = 0; input.turnAngle = (tt > 0.5 && tt < 3.5 ? cmd : tt >= 3.5 && tt < 5 ? -cmd : 0) * lock; }
+        else { v.controller.options = { wheelieControl: process.argv.includes("--wc") }; input.manualGearbox = true; input.current_gear = 1; input.throttle = tt < 3 ? 1 : 0; input.brakePedal = 0; input.turnAngle = (tt > 0.5 && tt < 3.5 ? cmd : tt >= 3.5 && tt < 5 ? -cmd : 0) * lock; }
         if (tt > 0.55 && tt < 0.6 && !process.argv.includes("--noimpulse")) { const k = parseFloat((process.argv.find(a => a.startsWith("--lift=")) || "--lift=3").split("=")[1]); const qx = v.qx, qy = v.qy, qz = v.qz, qw = v.qw; const ax = 1 - 2 * (qy * qy + qz * qz), ay = 2 * (qx * qy + qz * qw), az = 2 * (qx * qz - qy * qw); v.wx -= k * ax * DT * 60 * 0.1; v.wy -= k * ay * DT * 60 * 0.1; v.wz -= k * az * DT * 60 * 0.1; }      // (--lift=3: a kick that brings the nose up, as a wheelie does; --noimpulse: none)
         v.update(DT);
         if (tt > 0) {

@@ -73,6 +73,8 @@ OpenRacer.Motorcycle = function (settings) {
         self.gainDownFrom = s.gain_down_from !== undefined ? s.gain_down_from : 8; self.gainDownTo = s.gain_down_to !== undefined ? s.gain_down_to : 14;   // m/s: the gains of the rider come down between these speeds while no lean is asked
         self.yawBrake = s.yaw_brake !== undefined ? s.yaw_brake : 1;   // model v2: how much of the yaw damping of the old model the rider has on the brake (0: none)
         self.bodyAssist = s.body_assist !== undefined ? s.body_assist : 1; self.bodyArm = s.body_arm !== undefined ? s.body_arm : 0.5;      // v2: the share of the help of the rider's body (0: none), and how far his weight goes out (m)
+        self.pitchAssist = s.pitch_assist !== undefined ? s.pitch_assist : 1; self.pitchArm = s.pitch_arm !== undefined ? s.pitch_arm : 0.5;      // v2: the weight of the rider forward over a wheelie that is going over (share, m)
+        self.pitchLead = s.pitch_lead !== undefined ? s.pitch_lead : 0.15;      // s: how far ahead the rider looks at the nose of a wheelie
         self.assistErrFrom = (s.assist_err_from_deg !== undefined ? s.assist_err_from_deg : 15) * DEG; self.assistErrTo = (s.assist_err_to_deg !== undefined ? s.assist_err_to_deg : 35) * DEG;      // the lean error from which the help comes in, and where it is all there
         self.riderBarsCap = (s.rider_bars_cap_deg !== undefined ? s.rider_bars_cap_deg : 12) * DEG;   // the most the bars are turned for the lean error (and the roll rate)
         self.armOmega = s.arm_omega !== undefined ? s.arm_omega : 40;   // rad/s: how stiff the hands hold the bars (the spring is steer_inertia * omega^2)
@@ -484,12 +486,22 @@ OpenRacer.Motorcycle = function (settings) {
             }
             self.posture.assist += (Math.max(-0.5, Math.min(0.5, assistT / (self.riderMass * G))) - self.posture.assist) * Math.min(1, dt / 0.12);      // (where the weight goes, for the model of the rider)
         }
+        // The same forward and back: a front wheel that goes up past the balance point (a power wheelie in first gear, the wheelie control off) he brings down with his weight forward over the tank,
+        // a torque about the left axis of at most mass x g x `pitch_arm` (the keys for the rider forward and back do it too, in full); on its own from 20 degrees of nose up in 0.15 s (in full at 37), the nose rate he sees included
+        if (self.v2 && self.pitchAssist > 0 && !v.airborne) {
+            var key = self.riderKey > 0 ? 1 : self.riderKey < 0 ? -1 : 0;
+            var noseRate = -(v.wx * state.lx + v.wy * state.ly + v.wz * state.lz);      // (the nose up, rad/s: he sees it come and goes forward before it is there: where it will be in 0.15 s)
+            var autoP = smooth(0.34, 0.6, state.noseUp + self.pitchLead * noseRate * Math.sqrt(Math.max(0, 1 - state.noseUp * state.noseUp)));
+            var pT = self.pitchAssist * self.riderMass * G * self.pitchArm * (key !== 0 ? key : autoP);
+            if (Math.abs(pT) > 0.01) { torque.x += state.lx * pT; torque.y += state.ly * pT; torque.z += state.lz * pT; }
+            self.pitchTq = pT;
+        }
         // the yaw that the steering did not ask for is damped
         var fast = smooth(1.5, 4.5, Math.abs(u));
         // the front wheel in the air (a wheelie): it does not steer, the lean does. A bike that leans turns at g tan(lean) / u, and the rider takes it round at that rate
         var frontLoad = ((v.wheels[0].weight || 0) + (v.wheels[1].weight || 0)) / Math.max(1, v.weight_distribution * v.mass * G);
         var lift = 1 - smooth(0.05, 0.5, frontLoad);
-        self.dbg = { T: T, yawDamp: 0, yawLift: 0, lift: lift, assist: assistW, assistT: assistT };
+        self.dbg = { T: T, yawDamp: 0, yawLift: 0, lift: lift, assist: assistW, assistT: assistT, pitchT: self.pitchTq || 0 };
         // The rider keeps the bike turning at the rate that its lean gives (a balanced bend: r = g tan(lean) / u): a torque about the vertical against the yaw that the tyres make on their own
         // (a front that is loaded on the brake and a light rear would swing the tail out, as a car oversteers). With the front wheel in the air it is all there is.
         // (model v2: only on the brake. The old model damped the yaw that the steering did not ask for all the time; v2 leaves it to the tyres, but a bike on the brake has a light rear wheel and
@@ -614,6 +626,27 @@ OpenRacer.Motorcycle.riderMass = function (config) {
     if(!config || config.type !== "motorcycle") return 0;
     var m = config.motorcycle && config.motorcycle.rider_mass;
     return m !== undefined ? m : 80;
+};
+
+// The rider of the skidpad (main.js, and the bench): the angle that asks the lean of the bend (leanFromBend: tan(delta) = L a / u^2, the lean atan(a / g)) for a circle of radius R about the
+// origin. a is the acceleration that the circle needs (u^2 / R) plus a correction that grows with the distance to the line and the speed across it (a spring and a damper in m/s^2: the
+// further from the line the more lean, critically damped so that the rider does not swing round it), plus a slow trim for what the lean does not give (the acceleration the bike really has,
+// from the turn of its course). st holds the state (trim, ayTrue, course); tune: w0 (the natural rate of the correction, rad/s), ki (the trim), cap (the most correction, m/s^2).
+OpenRacer.Motorcycle.circleSteer = function (st, v, R, speed, dt, tune) {
+    tune = tune || {};
+    var w0 = tune.w0 !== undefined ? tune.w0 : 1.5, ki = tune.ki !== undefined ? tune.ki : 1.2, cap = tune.cap !== undefined ? tune.cap : 5;
+    var vh = Math.hypot(v.vx, v.vz), course = Math.atan2(v.vx, v.vz);
+    if(st.course !== undefined && vh > 2 && dt > 0) {
+        var dc = Math.atan2(Math.sin(course - st.course), Math.cos(course - st.course));
+        st.ayTrue = (st.ayTrue || 0) + (vh * Math.abs(dc) / dt - (st.ayTrue || 0)) * Math.min(1, dt / 0.15);
+    }
+    st.course = course;
+    var r = Math.hypot(v.x, v.z), rv = r > 0.5 ? (v.x * v.vx + v.z * v.vz) / r : 0;      // (the distance to the middle, and the speed outwards)
+    var corr = Math.max(-cap, Math.min(cap, w0 * w0 * (r - R) + 2 * w0 * rv));
+    var aRef = speed * speed / R + corr;
+    st.trim = Math.max(-6, Math.min(6, (st.trim || 0) + ki * Math.max(-2, Math.min(2, aRef - (st.ayTrue || 0))) * dt * (speed > 4 ? 1 : 0)));
+    var aWanted = aRef + st.trim;
+    return Math.atan(v.wheelbase * Math.max(0, aWanted) / Math.max(speed * speed, 36));
 };
 
 // The options of the menu that a bike reads (see options in the controller)
