@@ -196,12 +196,12 @@ OpenRacer.Driver = function (config, parent, steering) {
             var c = self.torsoPose.chest, h = self.torsoPose.head;
             self.torsoPose.chest = [c[0] + pitch, c[1], c[2] + roll];
             // (the head turned into the bend, about the vertical)
-            self.torsoPose.head = [h[0] - 0.7 * pitch, h[1] + 35 * (post.look || 0), h[2] - 0.6 * roll];
+            self.torsoPose.head = [h[0] - 0.7 * pitch, h[1] + 35 * (post.look || 0) * (1 - (post.hasLine || 0)) + (post.lineYaw || 0) * (post.hasLine || 0), h[2] - 0.6 * roll];      // (the way along the racing line if there is one)
             // flat track: the head stays upright to the road whatever the bike and the trunk do: it only turns about the vertical, to look along the way (a little ahead into the bend). The roll of
             // the head is not worked out from the rotations of the bones (a chest of several bones, a model with its own rest turn): it is measured (headRoll: how far the head leans from the vertical
             // across the bike, in degrees) and taken out step by step, with the sign and the size of the effect of the roll of the bone found once (headSlope).
             var flat = post.flat || 0;
-            self.torsoPose.head = [h[0] - 0.7 * pitch - flat * 0.3 * pitch, h[1] + 35 * (post.look || 0), h[2] - 0.6 * roll + flat * headFix];
+            self.torsoPose.head = [h[0] - 0.7 * pitch - flat * 0.3 * pitch, h[1] + 35 * (post.look || 0) * (1 - (post.hasLine || 0)) + (post.lineYaw || 0) * (post.hasLine || 0), h[2] - 0.6 * roll + flat * headFix];
         }
         self.bones.chest.forEach(function (bone) { turnBone(bone, self.torsoPose.chest); });
         if (self.bones.head) turnBone(self.bones.head, self.torsoPose.head);

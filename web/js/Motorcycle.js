@@ -68,6 +68,7 @@ OpenRacer.Motorcycle = function (settings) {
         self.push = !!s.push;      // the riding style of this bike (car.json motorcycle.push, the tuning menu); the menu of the game can turn it on for every bike
         self.pushExtraLean = (s.push_extra_lean_deg !== undefined ? s.push_extra_lean_deg : 4) * DEG; self.pushSlide = s.push_slide !== undefined ? s.push_slide : -0.6; self.pushSlideCap = (s.push_slide_cap_deg !== undefined ? s.push_slide_cap_deg : 7) * DEG;      // flat-track: the lean the bike may take beyond the usual (rad), and the countersteer of a slide (the bars follow the way the bike moves: the share of the slip angle, and the most)
         self.pushDrift = s.push_drift !== undefined ? s.push_drift : 0.3;      // flat track: the share of the lateral grip of the rear tyre that full gas in a bend takes (the tail steps out: a slide on the gas)
+        self.pushFoot = (s.push_foot_kmh !== undefined ? s.push_foot_kmh : 110) / 3.6;      // flat track: up to this speed (m/s) the inside foot comes out in a bend (car.json motorcycle.push_foot_kmh, the tuning menu)
         self.pushHang = s.push_hang !== undefined ? s.push_hang : -0.4; self.pushLockShare = s.push_lock_share !== undefined ? s.push_lock_share : 0.75;      // the flat-track style: the weight of the rider to the outside (a share of hang_off, negative), and the share of the lock for a low speed
         self.lockShare = s.lock_share !== undefined ? s.lock_share : 0.65;   // model v2: the share of the lock of the bars that a lean at a low speed may ask for
         self.gripFast = s.grip_fast !== undefined ? s.grip_fast : 0.2;   // model v2: the g more that the lean may ask for above 13 to 18 m/s (the bike is in the model of the rider and the tyres there; below it the lean is held)
@@ -88,7 +89,7 @@ OpenRacer.Motorcycle = function (settings) {
     }
     readSettings();
     this.retune = function (changes) { Object.assign(s, changes || {}); self.settings = s; readSettings(); };
-    this.posture = { lat: 0, long: 0, drop: 0, tuck: 0, sit: 0, knee: 0, assist: 0, look: 0, push: 0, inside: 0, lean: 0, flat: 0 };      // assist: where the weight goes to the side for the help of the body (m); look: the head turned into the bend, -1 to 1 (left is positive)       // body space: lat to the left, long forward, drop up (m); tuck, sit, knee: 0 to 1
+    this.posture = { lat: 0, long: 0, drop: 0, tuck: 0, sit: 0, knee: 0, assist: 0, look: 0, push: 0, inside: 0, lean: 0, flat: 0, lineYaw: 0, hasLine: 0 };      // assist: where the weight goes to the side for the help of the body (m); look: the head turned into the bend, -1 to 1 (left is positive)       // body space: lat to the left, long forward, drop up (m); tuck, sit, knee: 0 to 1
     var vPrev = null, accel = { x: 0, y: 0, z: 0 }, dw = { x: 0, y: 0, z: 0 };
     this.riderKey = 0;                                      // -1: the rider is put back, 1: forward (keys, set by Car.js)
     this.sinceBrake = 99; this.counterGain = 1;
@@ -596,8 +597,8 @@ OpenRacer.Motorcycle = function (settings) {
         p.tuck += (tuck - p.tuck) * k(0.35); p.sit += (sit - p.sit) * k(0.25);
         var push = pushed();
         p.lat += (hang * self.maxHang * (push ? self.pushHang : 1) - p.lat) * k(0.25); p.knee += ((push ? 0 : bendT) - p.knee) * k(0.3);
-        // the flat-track style: the inside foot comes out in a bend at a low and a middle speed (a lean of 10 degrees and more, below 70 km/h), the inside elbow goes up; `inside` is the side of the bend either way
-        var pushT = push ? smooth(8 * DEG, 25 * DEG, Math.abs(lean)) * (1 - smooth(14, 22, Math.abs(u))) * smooth(1.5, 4, Math.abs(u)) : 0;
+        // the flat-track style: the inside foot comes out in a bend at a low and a middle speed (a lean of 8 degrees and more, below `push_foot_kmh`), the inside elbow goes up; `inside` is the side of the bend either way
+        var pushT = push ? smooth(8 * DEG, 25 * DEG, Math.abs(lean)) * (1 - smooth(0.8 * self.pushFoot, self.pushFoot, Math.abs(u))) * smooth(1.5, 4, Math.abs(u)) : 0;
         p.push += (pushT - p.push) * k(0.25); p.lean += (lean - p.lean) * k(0.15); p.flat += ((push ? 1 : 0) - p.flat) * k(0.3); p.inside += (Math.sign(lean) * smooth(2 * DEG, 8 * DEG, Math.abs(lean)) - p.inside) * k(0.2);
         p.long += ((-0.22 * sit + 0.12 * tuck) - p.long) * k(0.3);
         p.drop += ((-0.09 * tuck + 0.05 * sit) - p.drop) * k(0.3);
@@ -631,6 +632,28 @@ OpenRacer.Motorcycle = function (settings) {
         var tx = self.riderMass * (dw.y * gz - dw.z * gy), ty = self.riderMass * (dw.z * gx - dw.x * gz), tz = self.riderMass * (dw.x * gy - dw.y * gx);
         var along = tx * state.ax + ty * state.ay + tz * state.az;
         torque.x += tx - along * state.ax; torque.y += ty - along * state.ay; torque.z += tz - along * state.az;
+    };
+
+    // The head looks along the racing line, not along the bars: from a point on the line ahead of the bike (a second of riding at least 8 m and at most 45 m ahead, the nearest point of the line
+    // found from the last one), the angle between the way the bike points and the way to that point is the turn of the head (degrees, to the left positive, at most 60). Without a line (a track
+    // that has none, the replay) the head looks into the bend by the lean that is asked, as before. Called every frame from Car.js, with the line of the race (race.line).
+    var lineHint = -1;
+    this.lineLook = function (line, v, dt) {
+        var p = self.posture, on = 0, target = 0;
+        if (line && line.points && line.points.length > 4 && !self.crashed && Math.abs(v.u) > 3) {
+            var n = line.points.length, i0 = line.nearest(v.x, v.z, lineHint >= 0 ? lineHint : undefined);
+            lineHint = i0;
+            var ahead = Math.max(8, Math.min(45, Math.abs(v.u) * 1.0)), k = Math.max(1, Math.round(ahead / (line.step || 2)));
+            var pt = line.points[line.closed ? (i0 + k) % n : Math.min(n - 1, i0 + k)];
+            var fx = 2 * (v.qx * v.qz + v.qy * v.qw), fz = 1 - 2 * (v.qx * v.qx + v.qy * v.qy);          // (the way the bike points, flat)
+            var lx = 1 - 2 * (v.qy * v.qy + v.qz * v.qz), lz = 2 * (v.qx * v.qz - v.qy * v.qw);          // (its left, flat)
+            var fl = Math.hypot(fx, fz) || 1, ll = Math.hypot(lx, lz) || 1; fx /= fl; fz /= fl; lx /= ll; lz /= ll;
+            var dx = pt.x - v.x, dz = pt.z - v.z;
+            target = Math.max(-60, Math.min(60, Math.atan2(dx * lx + dz * lz, dx * fx + dz * fz) / DEG));
+            on = 1;
+        }
+        var k2 = Math.min(1, (dt || 0.016) / 0.15);
+        p.lineYaw += (target - p.lineYaw) * k2; p.hasLine += (on - p.hasLine) * Math.min(1, (dt || 0.016) / 0.3);
     };
 
     // the drag of the air: a rider that sits up (on the brake) has more of it, one that lies flat (on the throttle) has less

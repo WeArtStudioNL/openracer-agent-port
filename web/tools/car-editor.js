@@ -736,11 +736,11 @@ function syncBikeWheels() {
 function fillBike(m) {
     const v = Object.assign({}, BIKE_DEFAULTS, m || {});
     $("bikeMaxLean").value = v.max_lean_deg; $("bikeFastLean").value = v.fast_lean_deg; $("bikeRake").value = v.rake_deg;
-    $("bikeRiderMass").value = v.rider_mass; $("bikeHangOff").value = v.hang_off; $("bikeMaxLatG").value = v.max_lateral_g; $("bikeBalance").value = v.balance; $("bikeForkDive").value = v.fork_dive; $("bikePush").checked = !!v.push;
+    $("bikeRiderMass").value = v.rider_mass; $("bikeHangOff").value = v.hang_off; $("bikeMaxLatG").value = v.max_lateral_g; $("bikeBalance").value = v.balance; $("bikeForkDive").value = v.fork_dive; $("bikePush").checked = !!v.push; $("bikePushFoot").value = v.push_foot_kmh !== undefined ? v.push_foot_kmh : 110;
 }
 function readBike() {
     const n = (id, key) => { const x = parseFloat($(id).value); return Number.isFinite(x) ? x : BIKE_DEFAULTS[key]; };
-    return { max_lean_deg: n("bikeMaxLean", "max_lean_deg"), fast_lean_deg: n("bikeFastLean", "fast_lean_deg"), rake_deg: n("bikeRake", "rake_deg"), rider_mass: n("bikeRiderMass", "rider_mass"), hang_off: n("bikeHangOff", "hang_off"), max_lateral_g: n("bikeMaxLatG", "max_lateral_g"), balance: n("bikeBalance", "balance"), fork_dive: n("bikeForkDive", "fork_dive"), push: $("bikePush").checked };
+    return { max_lean_deg: n("bikeMaxLean", "max_lean_deg"), fast_lean_deg: n("bikeFastLean", "fast_lean_deg"), rake_deg: n("bikeRake", "rake_deg"), rider_mass: n("bikeRiderMass", "rider_mass"), hang_off: n("bikeHangOff", "hang_off"), max_lateral_g: n("bikeMaxLatG", "max_lateral_g"), balance: n("bikeBalance", "balance"), fork_dive: n("bikeForkDive", "fork_dive"), push: $("bikePush").checked, push_foot_kmh: Number.isFinite(parseFloat($("bikePushFoot").value)) ? parseFloat($("bikePushFoot").value) : 110 };
 }
 $("vehicleType").addEventListener("change", () => { applyTypeUI(); fillLibraryTyres(); });
 ["wFL", "wRL"].forEach((id) => $(id).addEventListener("change", syncBikeWheels));
@@ -2675,7 +2675,7 @@ const EDITOR_HAS = new Set(["mass", "front_weight", "cg_height", "drag_coefficie
     "efficiency", "length", "width", "height", "steering_degrees", "steering_stop", "gen_power", "gen_peak_rpm", "sb_max_nodes", "sb_wheel_strength",
     "cam_follow_distance", "cam_follow_height", "cam_follow_look_height", "cam_follow_look_z", "cam_follow_smoothing", "cam_follow_fov_standing", "cam_follow_fov_fast", "cam_follow_fov_full_speed", "cam_follow_dolly",
     "cam_cockpit_x", "cam_cockpit_y", "cam_cockpit_z", "cam_cockpit_fov", "cam_cockpit_hide_driver",
-    "bike_max_lean", "bike_fast_lean", "bike_rake", "bike_rider_mass", "bike_hang_off", "bike_max_lateral_g", "bike_balance", "bike_fork_dive", "bike_push"]);
+    "bike_max_lean", "bike_fast_lean", "bike_rake", "bike_rider_mass", "bike_hang_off", "bike_max_lateral_g", "bike_balance", "bike_fork_dive", "bike_push", "bike_push_foot_kmh"]);
 const TUNING_KEYS = OpenRacer.CarTuning.keys().filter((k) => !EDITOR_HAS.has(k));
 let tuning = {};
 const DEFAULT_CAR = { chassis: { mass: 1400, weight_distribution: 0.55, drag_coefficient: 0.35 }, drivetrain: { gear_ratios: [3, 2, 1.4, 1], final_drive: 3.5 }, engine: {} };
