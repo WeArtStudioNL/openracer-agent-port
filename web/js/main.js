@@ -582,9 +582,33 @@ function startSkidpad() {
         headingError = isFinite(headingError) ? Math.atan2(Math.sin(headingError), Math.cos(headingError)) : 0;      // (no loop: an infinite angle kept it going for ever)
         // a positive steering angle turns the car towards a bigger heading (the way the circle goes); too wide (r above R) and a
         // nose that points outside the tangent both ask for more of it
-        var wanted = base + 0.08 * (r - R) + 0.6 * headingError;
+        var wanted;
+        if(v.controller) {
+            // a motorcycle: the steering is a lean, not a wheel. Ask the lean of the bend (leanFromBend: the angle of the wheel that gives this lateral
+            // acceleration at this speed, tan(delta) = L a / u^2, is the lean atan(a / g)), as a = u^2 / R, plus a damped correction in metres per second
+            // squared: critically damped on the distance to the circle and on the speed across it (a rider that steers on the distance only swings round the line)
+            this.leanFromBendHeld = true;
+            var rv = r > 0.5 ? (v.x * v.vx + v.z * v.vz) / r : 0;       // (the speed outwards: the rate of the distance)
+            var w0 = 0.7;
+            var aRef = speed * speed / R + w0 * w0 * (r - R) + 2 * w0 * rv;
+            // (what the lean gives is not quite what it asks for: a slow trim on the acceleration that the bike really has, so that it does not run wide for ever)
+            sp.trim = Math.max(-6, Math.min(6, (sp.trim || 0) + 1.2 * Math.max(-2, Math.min(2, aRef - (sp.ayTrue || 0))) * dt * (speed > 4 ? 1 : 0)));
+            var aWanted = aRef + sp.trim;
+            var uu = Math.max(speed * speed, 36);
+            wanted = Math.atan(v.wheelbase * Math.max(0, aWanted) / uu);
+        }
+        else wanted = base + 0.08 * (r - R) + 0.6 * headingError;
         wanted = Math.max(-this.turnLimit, Math.min(this.turnLimit, wanted));
-        this.turnAngle += (wanted - this.turnAngle) * (1 - Math.pow(0.7, dt * 60));
+        this.turnAngle += (wanted - this.turnAngle) * (1 - Math.pow(v.controller ? 0.5 : 0.7, dt * 60));
+        // a manual gearbox is shifted as the autopilot does (a bike in first gear ran into its rev limiter at 56 km/h and the test ended on that, not on the tyres)
+        if(this.gearboxMode === "manual" && v.gearbox === "gears" && this.engine) {
+            sp.shiftClock = (sp.shiftClock || 0) + dt;
+            if(sp.shiftClock > 0.5) {
+                var rpmNow = this.engine.getRPM(), top = this.engine.limiterRPM || 6500;
+                if(rpmNow > top * 0.92 && this.current_gear < v.gear_ratios.length - 1) { this.shiftUp(); sp.shiftClock = 0; }
+                else if(rpmNow < top * 0.38 && this.current_gear > 0 && v.u > 3) { this.shiftDown(); sp.shiftClock = 0; }
+            }
+        }
         // the speed: up by a quarter of a metre per second every second
         targetSpeed += 0.25 * dt;
         // the throttle is set, not tapped: a little more than it takes to hold the speed, in the measure that the car is behind
@@ -596,6 +620,17 @@ function startSkidpad() {
         // the slip angle of the car means nothing until it moves (at a standstill it is the angle of noise)
         var slip = speed > 2 ? Math.atan2(v.v, v.u) : 0;
         var ay = Math.abs(v.ay);
+        if(v.controller) {
+            // a motorcycle: v.ay is the tyre force across the bike in its own (leaned) frame, without the thrust of the camber, and read half of what the bike really pulled; the
+            // acceleration across the road is the speed times the rate at which the course (the direction it moves in) turns
+            var vh = Math.hypot(v.vx, v.vz), course = Math.atan2(v.vx, v.vz);
+            if(sp.course !== undefined && vh > 2 && dt > 0) {
+                var dc = Math.atan2(Math.sin(course - sp.course), Math.cos(course - sp.course));
+                sp.ayTrue = (sp.ayTrue || 0) + (vh * Math.abs(dc) / dt - (sp.ayTrue || 0)) * Math.min(1, dt / 0.15);
+            }
+            sp.course = course;
+            ay = sp.ayTrue || 0;
+        }
         var onLine = Math.abs(r - R) < 4 && Math.abs(slip) < 0.14;
         if(onLine && ay > sp.best) { sp.best = ay; sp.bestSpeed = speed; }
         if(speed > 2 && (Math.abs(r - R) > 6 || Math.abs(slip) > 0.25)) skidpadDone();
@@ -640,7 +675,7 @@ function startSkidpad() {
 
     function skidpadReset() {
         if(sp.panel) { sp.panel.remove(); sp.panel = null; }
-        sp.best = 0; sp.bestSpeed = 0; sp.stalled = 0; targetSpeed = 3; sp.running = true;
+        sp.best = 0; sp.bestSpeed = 0; sp.stalled = 0; sp.trim = 0; sp.ayTrue = 0; sp.course = undefined; targetSpeed = 3; sp.running = true;
         car.turnAngle = 0;
         car.place(R, 0, Math.PI / 2);
         car.vehicle.freshTyres(85);
