@@ -884,7 +884,7 @@ var Tuning = (function() {
                 if(SELECTS[def[0]]) target.appendChild(selectRow(def[0]));
                 else if(COLORS[def[0]]) target.appendChild(colorRow(def[0]));
                 else if(def[0] === "gears") target.appendChild(gearsRow());
-                else if(def[0] === "cam_cockpit_hide_driver") target.appendChild(boolRow(def[0], def[1]));
+                else if(def[0] === "cam_cockpit_hide_driver" || def[0] === "bike_push") target.appendChild(boolRow(def[0], def[1]));
                 else target.appendChild(slider(def));
             });
             if(fineCount) details.appendChild(fine);

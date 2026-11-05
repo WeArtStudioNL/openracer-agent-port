@@ -176,7 +176,8 @@ OpenRacer.CarTuning = (function () {
             ["bike_hang_off", "The rider hangs off the seat by", "m", 0, 1, 0.02],
             ["bike_max_lateral_g", "Lateral grip of the tyres", "g", 0.3, 2.5, 0.05],
             ["bike_balance", "Balance of the rider", "", 0.1, 4, 0.05],
-            ["bike_fork_dive", "Dive of the fork on the brakes", "", 0, 3, 0.05]
+            ["bike_fork_dive", "Dive of the fork on the brakes", "", 0, 3, 0.05],
+            ["bike_push", "Flat-track style: upright, push the bike under you (deep lean, the inside foot out, countersteers a slide by itself); off: hang off to the inside", "", 0, 1, 1]
         ] },
         { name: "Engine sound", items: [
             ["es_volume", "Volume", "", 0, 5, 0.05],
@@ -253,7 +254,7 @@ OpenRacer.CarTuning = (function () {
             case "anti_squat": return v.unsprung !== "none" && v.vehicle_type !== "motorcycle" && v.drive !== "fwd";
             case "anti_lift_front": return v.unsprung !== "none" && v.vehicle_type !== "motorcycle" && (v.drive === "fwd" || v.drive === "awd");
             case "spring_front": case "spring_rear": case "damping_front": case "damping_rear": case "suspension_travel": case "suspension_length": case "spring_progression": case "damping_rebound": case "ride_front": case "ride_rear": return v.unsprung !== "none";
-            case "bike_max_lean": case "bike_fast_lean": case "bike_rake": case "bike_rider_mass": case "bike_hang_off": case "bike_max_lateral_g": case "bike_balance": case "bike_fork_dive": return v.vehicle_type === "motorcycle";
+            case "bike_max_lean": case "bike_fast_lean": case "bike_rake": case "bike_rider_mass": case "bike_hang_off": case "bike_push": case "bike_max_lateral_g": case "bike_balance": case "bike_fork_dive": return v.vehicle_type === "motorcycle";
             default: return true;
         }
     }
@@ -368,6 +369,7 @@ OpenRacer.CarTuning = (function () {
             bike_max_lateral_g: (c.motorcycle || {}).max_lateral_g !== undefined ? c.motorcycle.max_lateral_g : BIKE.max_lateral_g,
             bike_balance: (c.motorcycle || {}).balance !== undefined ? c.motorcycle.balance : BIKE.balance,
             bike_fork_dive: (c.motorcycle || {}).fork_dive !== undefined ? c.motorcycle.fork_dive : BIKE.fork_dive,
+            bike_push: !!(c.motorcycle || {}).push,
             engine_build: (c.engine && c.engine.build) || null,                    // the engine as it is built (EngineBuild.js); an object, not a number of the menu
             exhaust_type: (c.sound && c.sound.engine_sim && c.sound.engine_sim.exhaust_type) || "custom",
             tyre_diameter_front: Math.round((libChoice(c, "front").custom && libChoice(c, "front").custom.diameter > 0 ? libChoice(c, "front").custom.diameter : (ch.tire_diameter || 0.65)) * 1000 / 5) * 5,
@@ -754,7 +756,7 @@ OpenRacer.CarTuning = (function () {
         }
         if(c.type === "motorcycle" && v.bike_max_lean !== undefined) {
             c.motorcycle = Object.assign({}, c.motorcycle || {}, { max_lean_deg: v.bike_max_lean, fast_lean_deg: v.bike_fast_lean, rake_deg: v.bike_rake, rider_mass: v.bike_rider_mass,
-                hang_off: v.bike_hang_off, max_lateral_g: v.bike_max_lateral_g, balance: v.bike_balance, fork_dive: v.bike_fork_dive });
+                hang_off: v.bike_hang_off, max_lateral_g: v.bike_max_lateral_g, balance: v.bike_balance, fork_dive: v.bike_fork_dive, push: !!v.bike_push });
         }
         // the exhaust of the sound, and the engine that is built: the torque curve follows from the build, and so do the settings of the sound that the build has too
         c.sound = c.sound || {}; c.sound.engine_sim = Object.assign({}, c.sound.engine_sim || {});

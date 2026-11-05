@@ -65,6 +65,8 @@ OpenRacer.Motorcycle = function (settings) {
         self.riderKa = s.rider_ka !== undefined ? s.rider_ka : 1; self.riderKad = s.rider_kad !== undefined ? s.rider_kad : 0.2;   // the bars (rad) that a radian of lean error, and a radian a second of roll, ask at 10 m/s
         self.riderErrCap = (s.rider_err_cap_deg !== undefined ? s.rider_err_cap_deg : 90) * DEG;   // the most lean error that the bars answer
         self.balanceFrom = s.balance_from !== undefined ? s.balance_from : 6; self.balanceTo = s.balance_to !== undefined ? s.balance_to : 14;   // m/s: the rider's hold on the lean (the torque about the long axis) goes away between these speeds, in model v2
+        self.push = !!s.push;      // the riding style of this bike (car.json motorcycle.push, the tuning menu); the menu of the game can turn it on for every bike
+        self.pushExtraLean = (s.push_extra_lean_deg !== undefined ? s.push_extra_lean_deg : 4) * DEG; self.pushSlide = s.push_slide !== undefined ? s.push_slide : -0.6; self.pushSlideCap = (s.push_slide_cap_deg !== undefined ? s.push_slide_cap_deg : 7) * DEG;      // flat-track: the lean the bike may take beyond the usual (rad), and the countersteer of a slide (the bars follow the way the bike moves: the share of the slip angle, and the most)
         self.pushHang = s.push_hang !== undefined ? s.push_hang : -0.4; self.pushLockShare = s.push_lock_share !== undefined ? s.push_lock_share : 0.75;      // the flat-track style: the weight of the rider to the outside (a share of hang_off, negative), and the share of the lock for a low speed
         self.lockShare = s.lock_share !== undefined ? s.lock_share : 0.65;   // model v2: the share of the lock of the bars that a lean at a low speed may ask for
         self.gripFast = s.grip_fast !== undefined ? s.grip_fast : 0.2;   // model v2: the g more that the lean may ask for above 13 to 18 m/s (the bike is in the model of the rider and the tyres there; below it the lean is held)
@@ -85,7 +87,7 @@ OpenRacer.Motorcycle = function (settings) {
     }
     readSettings();
     this.retune = function (changes) { Object.assign(s, changes || {}); self.settings = s; readSettings(); };
-    this.posture = { lat: 0, long: 0, drop: 0, tuck: 0, sit: 0, knee: 0, assist: 0, look: 0, push: 0, inside: 0 };      // assist: where the weight goes to the side for the help of the body (m); look: the head turned into the bend, -1 to 1 (left is positive)       // body space: lat to the left, long forward, drop up (m); tuck, sit, knee: 0 to 1
+    this.posture = { lat: 0, long: 0, drop: 0, tuck: 0, sit: 0, knee: 0, assist: 0, look: 0, push: 0, inside: 0, lean: 0 };      // assist: where the weight goes to the side for the help of the body (m); look: the head turned into the bend, -1 to 1 (left is positive)       // body space: lat to the left, long forward, drop up (m); tuck, sit, knee: 0 to 1
     var vPrev = null, accel = { x: 0, y: 0, z: 0 }, dw = { x: 0, y: 0, z: 0 };
     this.riderKey = 0;                                      // -1: the rider is put back, 1: forward (keys, set by Car.js)
     this.sinceBrake = 99; this.counterGain = 1;
@@ -112,7 +114,7 @@ OpenRacer.Motorcycle = function (settings) {
     // the riding style (the menu: Flat-track style, bikes only): hang off the seat to the inside (road race, the default) or stay upright and push the bike under you (flat track, supermoto):
     // the weight goes to the outside a little instead, so the bike leans further for the same bend (a bit less speed through a fast bend), it may take a tighter bend at a low speed
     // (`push_lock_share`), and the inside foot comes out and skids on the road, the inside elbow goes up
-    var pushed = function () { return !!option("bikePush"); };
+    var pushed = function () { return self.push || !!option("bikePush"); };
     this.pushStyle = pushed;
     this.command = 0;                                      // the lean that is asked (-1..1)
     this.targetLean = 0;                                   // what the rider takes (rad, left is positive)
@@ -202,9 +204,10 @@ OpenRacer.Motorcycle = function (settings) {
         // held at 190 km/h is a gentle bend and not a slide
         var fastLean = option("bikeFastLean") ? option("bikeFastLean") * DEG : self.fastLean;      // (the menu: Motorcycle: lean at top speed)
         var speedMax = self.maxLean - (self.maxLean - Math.min(self.maxLean, fastLean)) * smooth(self.fastFrom, self.fastFrom + 22, Math.abs(u));
+        if (pushed()) speedMax += self.pushExtraLean * (1 - smooth(14, 26, Math.abs(u))) * (1 - smooth(0.05, 0.4, (v.input.brakePedal || 0)));      // (flat track: a deeper lean at a low and a middle speed, where the tyres slide and the rider catches it)
         // the tyres have so much grip, and what they give along the bike (the engine, the air, the brake: how much the speed goes down) they cannot give sideways: the circle of grip
         var aLong = Math.max(0, -(accel.x * state.fx + accel.z * state.fz)), gripMax = (self.gripG + (self.v2 ? self.gripFast * smooth(13, 18, Math.abs(u)) : 0)) * G;
-        speedMax = Math.min(speedMax, Math.atan(Math.sqrt(Math.max(0, gripMax * gripMax - aLong * aLong)) / G) + self.overLean);     // (a little past the grip: that is the lowside)
+        speedMax = Math.min(speedMax, Math.atan(Math.sqrt(Math.max(0, gripMax * gripMax - aLong * aLong)) / G) + self.overLean + (pushed() ? self.pushExtraLean * (1 - smooth(14, 26, Math.abs(u))) * (1 - smooth(0.05, 0.4, (v.input.brakePedal || 0))) : 0));     // (a little past the grip: that is the lowside)
         var phiMax = speedMax + epsFull;
         var want = -c * Math.min(phiMax, cap) * fast;
         // the AI (Opponent.js) asks the angle of the front wheel of a car on the path it wants: the lean is the one that bend needs at this speed. As a share of the
@@ -288,7 +291,13 @@ OpenRacer.Motorcycle = function (settings) {
         // (only while no lean is asked for: in a bend the full gain tracks the lean, and that was half of it at 140 km/h with the low gain)
         var fastDown = smooth(self.gainDownFrom, self.gainDownTo, Math.abs(u)) * (1 - smooth(2 * DEG, 8 * DEG, Math.abs(self.targetLean)));
         var react = (10 / uu) * (self.riderKa * (1 - (1 - self.riderFastKa) * fastDown) * eCap - self.riderKad * (1 - (1 - self.riderFastKad) * fastDown) * state.rate);
-        var ask = steadyWant + Math.max(-self.riderBarsCap, Math.min(self.riderBarsCap, react));      // (and the bars answer a lean error with so much at most: a flick from lock to lock did not throw the tyres)
+        var ask = steadyWant + Math.max(-self.riderBarsCap, Math.min(self.riderBarsCap, react));
+        // flat track: a bike that slides is countersteered by itself, subtly: the bars follow the way the bike moves (the slip angle of the body: the bend itself has 3 to 5 degrees of it, so from 6 degrees), so that the front wheel points along the slide; the sign is minus: a body that points into the bend of a bike that slides out turns the front the other way
+        if (pushed() && self.pushSlide) {
+            var beta = Math.atan2(v.v || 0, Math.max(Math.abs(u), 2));
+            self.slideAsk = self.pushSlide * Math.max(-self.pushSlideCap, Math.min(self.pushSlideCap, beta)) * smooth(6 * DEG, 12 * DEG, Math.abs(beta)) * smooth(6, 12, Math.abs(u)) * smooth(3 * DEG, 10 * DEG, Math.abs(self.targetLean));
+            ask += self.slideAsk;
+        } else self.slideAsk = 0;      // (and the bars answer a lean error with so much at most: a flick from lock to lock did not throw the tyres)
         var lock = v.input.turnLimit || v.input.maxTurn || 0.38;
         var kin = 1 - smooth(self.kinFrom, self.kinTo, Math.abs(u));      // 1: the angle of the old model, 0: the angle of the rider
         ask = Math.max(-lock, Math.min(lock, ask));
@@ -582,7 +591,7 @@ OpenRacer.Motorcycle = function (settings) {
         p.lat += (hang * self.maxHang * (push ? self.pushHang : 1) - p.lat) * k(0.25); p.knee += ((push ? 0 : bendT) - p.knee) * k(0.3);
         // the flat-track style: the inside foot comes out in a bend at a low and a middle speed (a lean of 10 degrees and more, below 70 km/h), the inside elbow goes up; `inside` is the side of the bend either way
         var pushT = push ? smooth(8 * DEG, 25 * DEG, Math.abs(lean)) * (1 - smooth(14, 22, Math.abs(u))) * smooth(1.5, 4, Math.abs(u)) : 0;
-        p.push += (pushT - p.push) * k(0.25); p.inside += (Math.sign(lean) * smooth(2 * DEG, 8 * DEG, Math.abs(lean)) - p.inside) * k(0.2);
+        p.push += (pushT - p.push) * k(0.25); p.lean += (lean - p.lean) * k(0.15); p.inside += (Math.sign(lean) * smooth(2 * DEG, 8 * DEG, Math.abs(lean)) - p.inside) * k(0.2);
         p.long += ((-0.22 * sit + 0.12 * tuck) - p.long) * k(0.3);
         p.drop += ((-0.09 * tuck + 0.05 * sit) - p.drop) * k(0.3);
         // the head looks where the bike is going: into the bend (the lean that is asked, so a little ahead of the bike), and straight on a straight; it comes round a little before the bike does

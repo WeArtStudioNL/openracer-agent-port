@@ -187,6 +187,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         var post = self.posture;
         if (post) {
             var pitch = 28 * post.tuck - 10 * post.sit, roll = -14 * (post.lat / 0.3);
+            roll += 0.35 * (post.push || 0) * (post.lean || 0) / DEG;      // (flat track: the body stays more upright than the bike, which leans under it: the trunk leans out of the bike by a share of its lean)
             var c = self.torsoPose.chest, h = self.torsoPose.head;
             self.torsoPose.chest = [c[0] + pitch, c[1], c[2] + roll];
             self.torsoPose.head = [h[0] - 0.7 * pitch, h[1] + 35 * (post.look || 0), h[2] - 0.6 * roll];      // (and the head turned into the bend)
