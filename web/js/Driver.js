@@ -186,9 +186,37 @@ OpenRacer.Driver = function (config, parent, steering) {
         self.root.position.add(postureOff);
     }
     this.headSign = 1;      // (the sign of the roll of the bike in the roll of the bones)
+    // ---- the two trees of bones of a Rigify rig: the ones that deform the body (DEF-...) hang on the pelvis and turn with it, the ones that the arms and the legs hang on (ORG-...) do not.
+    // After the body is posed the ORG bones are put where their DEF bones are: the same move of the bone in the space of the bike as the DEF bone made from its rest place.
+    var followPairs = null, followInv = new THREE.Matrix4(), followTmp = new THREE.Matrix4(), followWorld = new THREE.Matrix4(), followPos = new V(), followQuat = new Q(), followScale = new V();
+    function captureFollow() {
+        followPairs = [];
+        self.parent.updateMatrixWorld(true); self.model.updateMatrixWorld(true);
+        followInv.copy(self.parent.matrixWorld).invert();
+        var rel = function (bone) { bone.updateMatrixWorld(true); return new THREE.Matrix4().multiplyMatrices(followInv, bone.matrixWorld); };
+        var add = function (def, org) { if (def && org && def !== org) followPairs.push({ def: def, org: org, defRest: rel(def), orgRest: rel(org), defRestInv: rel(def).invert() }); };
+        var chestDef = self.bones.chest.filter(function (b) { return /^DEF-/.test(b.name); })[0];
+        self.bones.chest.forEach(function (b) { if (!/^DEF-/.test(b.name)) add(chestDef, b); });
+        (self.legRoots || []).forEach(function (b) { add(self.bones.hips, b); });
+    }
+    function followOrg() {
+        self.model.updateMatrixWorld(true);
+        followInv.copy(self.parent.matrixWorld).invert();
+        followPairs.forEach(function (pair) {
+            followTmp.multiplyMatrices(followInv, pair.def.matrixWorld);                    // the DEF bone now, in the space of the bike
+            followTmp.multiply(pair.defRestInv);                                           // its move from the rest
+            followTmp.multiply(pair.orgRest);                                              // the same move for the ORG bone
+            followWorld.multiplyMatrices(self.parent.matrixWorld, followTmp);              // in the world
+            if (pair.org.parent) { pair.org.parent.updateMatrixWorld(true); followWorld.premultiply(new THREE.Matrix4().copy(pair.org.parent.matrixWorld).invert()); }
+            followWorld.decompose(followPos, followQuat, followScale);
+            pair.org.position.copy(followPos); pair.org.quaternion.copy(followQuat); pair.org.scale.copy(followScale);
+            pair.org.updateMatrixWorld(true);
+        });
+    }
     this.pelvisTilt = 35;      // degrees: the most that the pelvis tilts against the lean of the bike in flat-track style
     function torso() {
         var cfg = self.config, hipRoll = 0;
+        if (!followPairs) captureFollow();
         if (!headUp && self.bones.head) {      // (the first time, with the bike upright and the head as the model has it: the up of the head in its own space is the up of the bike)
             self.parent.updateMatrixWorld(true); self.model.updateMatrixWorld(true);
             headUp = new V(0, 1, 0).transformDirection(self.parent.matrixWorld).transformDirection(new THREE.Matrix4().copy(self.bones.head.matrixWorld).invert());
@@ -212,13 +240,17 @@ OpenRacer.Driver = function (config, parent, steering) {
             self.torsoPose.head = [h[0] - 0.7 * pitch - flat * 0.3 * pitch, h[1] + 35 * (post.look || 0) * (1 - (post.hasLine || 0)) + (post.lineYaw || 0) * (post.hasLine || 0), h[2] - 0.6 * roll + flat * headFix];
         }
         if (self.bones.hips && self.bones.hips !== self.bones.chest[0]) turnBone(self.bones.hips, [0, 0, hipRoll]);
-        (self.legRoots || []).forEach(function (bone) { turnBone(bone, [0, 0, hipRoll]); });
+        // (the bones that the arms and the legs hang on are a tree of their own: they are put where the bones of the deformation went, the shoulders where the back is, the hips where the pelvis is)
+        var followed = followPairs && followPairs.length > 0;
+        if (!followed) (self.legRoots || []).forEach(function (bone) { turnBone(bone, [0, 0, hipRoll]); });
         self.bones.chest.forEach(function (bone) {
-            // (the bones of the deformation hang on the pelvis and turn with it: they have the turn less what the pelvis took; the bone of the arms does not, it has the whole of it)
+            var org = !/^DEF-/.test(bone.name);
+            if (org && followed) return;
             var pose = self.torsoPose.chest;
-            if (hipRoll && !/^DEF-/.test(bone.name)) pose = [pose[0], pose[1], pose[2] + hipRoll];
+            if (hipRoll && org) pose = [pose[0], pose[1], pose[2] + hipRoll];
             turnBone(bone, pose);
         });
+        if (followed) followOrg();
         if (self.bones.head) turnBone(self.bones.head, self.torsoPose.head);
         self.model.updateMatrixWorld(true);
         if (post && self.bones.head && (post.flat || 0) > 0.001) {
