@@ -61,7 +61,7 @@ OpenRacer.EngineDamage = function (vehicle, config) {
 
     // ---- the state (all of it is a number: vehicle.engineHealth goes to the main thread with the rest of the vehicle)
     var health = vehicle.engineHealth = { block: 0, top: 0, pan: 0, radiator: 0, ignition: 0, coolant: 1, oil: 1, temp: 78, wear: 0, power: 1, misfire: 0, steam: 0, smoke: 0,
-        failed: 0, stalled: 0, leaking: 0, bx: bay[0], by: bay[1], bz: bay[2] };
+        failed: 0, stalled: 0, leaking: 0, bx: bay[0], by: bay[1], bz: bay[2], br: bayR, rx: rad[0], ry: rad[1], rz: rad[2], rr: radR };
     var CAP_COOLANT = config.coolant > 0 ? config.coolant : 7, CAP_OIL = config.oil > 0 ? config.oil : 5;
     var seized = false, cutLeft = 0, nextMisfire = 0, shockCool = 0, acc = 0, lastShock = 0;
     var peak = 0, peakCurve = null, peakScale = -1;
@@ -192,7 +192,7 @@ OpenRacer.EngineDamage = function (vehicle, config) {
 
     // ---- a pit stop and a repair: the engine is whole, the oil and the coolant are full, and it is cool
     this.repair = function () {
-        for (var key in health) if (key !== "bx" && key !== "by" && key !== "bz") health[key] = 0;
+        for (var key in health) if (key.length > 2) health[key] = 0;          // (the two-letter ones are where the bay and the radiator are)
         health.coolant = 1; health.oil = 1; health.temp = 78; health.power = 1;
         seized = false; cutLeft = 0; nextMisfire = 0; shockCool = 0; lastShock = 0; acc = 0;
         engine.healthScale = 1; engine.frictionScale = 1; engine.misfireCut = false; engine.disabled = false;

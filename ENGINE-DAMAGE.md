@@ -51,6 +51,8 @@ bent block, a leaking radiator and pan, 35 % less power and a misfire a third of
   the engine; nothing when it is whole and cool. It is also shown when tyre wear and fuel are off.
 * A **pit stop** repairs the engine with the shell: the oil and the coolant are full, the heat is gone, nothing is bent. It takes `3 + 6 · worst + 3 (failed)`
   seconds, side by side with the other work. The reset key, which repairs the car, does the same.
+* **Debug view** (key 0): the engine bay is drawn as a sphere of three rings with dots (magenta) and the radiator as a white one; they go red as the block, the
+  ignition or the pan (bay) and the radiator are hurt. They follow the Show the nodes and the beams box of the panel.
 * The player's car only. The AI cars have no engine damage (they have no pit stop to mend it, `Vehicle.engineDamageOn`).
 * Only with a shell (Damage on). `?damage=0` and `softbody.enabled: false` leave it out.
 

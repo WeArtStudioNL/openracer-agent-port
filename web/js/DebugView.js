@@ -3,7 +3,7 @@
  *
  * Description: A view of what the physics sees, switched on and off with the 0 key (also on the numeric keypad): the triangles of the track near the car (green: road that is
  *              driven on, orange: walls, blue-grey: the rest that the body can hit), the nodes of the collision spheres of the car and the beams of the shell (yellow; a node that is
- *              bent or torn off is red; a broken beam is not drawn; the spheres themselves are not), the point and the normal of the contact of every
+ *              bent or torn off is red; a broken beam is not drawn; the spheres themselves are not), the engine bay and the radiator as spheres (magenta and white, red when hurt), the point and the normal of the contact of every
  *              wheel (cyan) and, with the tyre model of nodes, the ring of tread nodes of every wheel (green in the patch, red where a node slides, grey out of it).
  *              A motorcycle: the mass of the rider as a block (orange) where the physics has it (the centre of gravity of the bike, moved by the posture: back on the brake, flat on
  *              the gas, to the inside of a bend; the limp rider is where his ragdoll is), with its weight as an arrow (gravity less the acceleration of the bike: it tips forward on
@@ -88,6 +88,25 @@
                 sb.position(sb.beamB[k], nodePos); worldOf(nodePos.x, nodePos.y, nodePos.z, v2);
                 seg(lines, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z, YELLOW);
             }
+        }
+        // the engine bay (magenta) and the radiator (white) as spheres, the ones that the engine damage reads the nodes in (EngineDamage.js); they go red as the part is hurt
+        var eh = v.engineHealth;
+        if (eh && showShell) {
+            var ring = function (cx, cy, cz, r, plane, c) {
+                for (var a = 0; a < 24; a++) {
+                    var a0 = a / 24 * 6.2832, a1 = (a + 1) / 24 * 6.2832, c0 = Math.cos(a0) * r, s0 = Math.sin(a0) * r, c1 = Math.cos(a1) * r, s1 = Math.sin(a1) * r;
+                    if (plane === 0) { worldOf(cx + c0, cy + s0, cz, v1); worldOf(cx + c1, cy + s1, cz, v2); }
+                    else if (plane === 1) { worldOf(cx + c0, cy, cz + s0, v1); worldOf(cx + c1, cy, cz + s1, v2); }
+                    else { worldOf(cx, cy + c0, cz + s0, v1); worldOf(cx, cy + c1, cz + s1, v2); }
+                    seg(lines, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z, c);
+                    if (a % 3 === 0) push(points, v1.x, v1.y, v1.z, c);           // (dots on the rings: a thin line on a red car is hard to see)
+                }
+            };
+            var tint = function (base, hurt) { return [base[0] + (1 - base[0]) * hurt, base[1] * (1 - hurt) + 0.2 * hurt, base[2] * (1 - hurt) + 0.2 * hurt]; };
+            var bayColour = tint([1, 0.3, 1], Math.max(eh.block, eh.top, eh.pan)), radColour = tint([1, 1, 1], eh.radiator);
+            for (var pl = 0; pl < 3; pl++) { ring(eh.bx, eh.by, eh.bz, eh.br, pl, bayColour); ring(eh.rx, eh.ry, eh.rz, eh.rr, pl, radColour); }
+            worldOf(eh.bx, eh.by, eh.bz, v1); push(points, v1.x, v1.y, v1.z, bayColour);
+            worldOf(eh.rx, eh.ry, eh.rz, v1); push(points, v1.x, v1.y, v1.z, radColour);
         }
         // where the body of the car touches the track (the spheres on a triangle): magenta; a wheel that has no contact with the road: a red cross at its hub
         if (!(OpenRacer.Replay && OpenRacer.Replay.active) && v.debugContacts) {
