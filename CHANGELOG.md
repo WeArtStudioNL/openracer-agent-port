@@ -6,6 +6,8 @@ A version that only fixes things is a hotfix: the last number goes up (2.3.0 →
 
 ## Unreleased
 
+- **Free drive is simpler: track, car, start.** Free drive goes Play → Track → Car (→ Setup, when the car has one) and starts at once, in clear weather; the weather page is gone from it. A race keeps its weather page. The weather and the time of day are in the debug panel (key 0, under the node grabber), as on the Graphics page of the Escape menu.
+- **The ground always follows the weather.** The *Ground* choice (dry, wet, snow) is gone from the Escape menu and from the weather page of a race: rain wets the road, snow covers it, clear weather dries it. (A replay still shows the ground as it was recorded.)
 - **"Engine sound: off" only silences the engine.** The squeal of the tyres and the noise of gravel and grass are the tyres: they keep their own volume (Tyre volume) and go only with the pause. (A test player muted the engine and lost the tyre squeal as well.)
 - **Signs seen from behind.** `track.json` can list `"double_sided": ["<name of a material>"]`: the parts with that material are drawn from both sides. The Short track has it for its atlas (the OpenRacer billboards were gone from behind).
 - **A car that falls out of the world goes back sooner.** The limit is 15 m under the lowest triangle of the track (at least as high as before: -40 m, or 25 m under the racing line), so on a track that lies near 0 m the reset comes after a second or two.

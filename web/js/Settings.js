@@ -1223,8 +1223,6 @@ var Settings = (function() {
             page.appendChild(pickRow("Moon", options.gfxMoon, [[0, "New"], [0.25, "Crescent"], [0.5, "Half"], [0.75, "Gibbous"], [1, "Full"]], function(v) { setOption("gfxMoon", v); }));
             var weatherNames = { clear: "Clear", cloudy: "Cloudy", fog: "Fog", rain: "Rain", snow: "Snow" };
             page.appendChild(pickRow("Weather", options.gfxWeather, ["clear", "cloudy", "fog", "rain", "snow"].map(function(k) { return [k, weatherNames[k]]; }), function(v) { setOption("gfxWeather", v); }));
-            var groundNames = { auto: "Follows the weather", dry: "Dry", wet: "Wet", snow: "Snow" };
-            page.appendChild(pickRow("Ground", options.gfxGround, ["auto", "dry", "wet", "snow"].map(function(k) { return [k, groundNames[k]]; }), function(v) { setOption("gfxGround", v); }));
             var atmoNote = document.createElement("div");
             atmoNote.className = "sub";
             atmoNote.textContent = "The sky is the same on every track. Rain wets the road and snow lies on it and stays: both give less grip (the AI drives slower), snow most. Wet comes in about 40 seconds and dries in a few minutes; snow builds up in a few minutes and melts slowly. There are no headlights yet: the night is dark.";

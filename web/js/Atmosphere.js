@@ -11,7 +11,7 @@
  *
  *              Weather (gfxWeather): clear, cloudy, fog, rain and snow: the clouds, the sun and the sky light, the view (fog), and rain or snow that falls past the camera.
  *
- *              The ground (gfxGround: auto follows the weather; dry, wet, snow fix it): rain wets the road within a minute and it dries again in a few minutes after; snow builds up on the
+ *              The ground always follows the weather (a replay sets it as it was recorded): rain wets the road within a minute and it dries again in a few minutes after; snow builds up on the
  *              ground while it falls (a few minutes to cover it) and stays, melting slowly (faster in rain). A wet road is darker and shinier and has less grip; snow turns what faces up white
  *              and has a lot less grip (Helpers.js, setGroundCondition: the surfaces give less friction, for the car and for the AI, which then drives slower).
  *
@@ -134,6 +134,8 @@ OpenRacer.Atmosphere = (function () {
     function colour(hex) { return new THREE.Color(hex); }
     // (in a replay the options of the recording are used, not those of the menu: override is set by the replay)
     var override = null;
+    // the ground always follows the weather (there is no choice of a dry, wet or snowy ground); only a replay sets it ("replay": what was recorded)
+    function groundMode() { return override && override.gfxGround !== undefined ? override.gfxGround : "auto"; }
     function opt(name) { return override && override[name] !== undefined ? override[name] : Settings.option(name); }
 
     // what the weather does: the share of the sun and of the light of the sky that is left, how grey the sky gets, the clouds (how much of the sky they cover), the softness of the
@@ -407,7 +409,7 @@ OpenRacer.Atmosphere = (function () {
     }
     // fixed by the option: dry, wet or snow set the ground at once; auto leaves it to the weather
     function groundOverride() {
-        var g = opt("gfxGround");
+        var g = groundMode();
         if (g === "dry") { ground.wet = 0; ground.snow = 0; ground.puddle = 0; }
         else if (g === "wet") { ground.wet = 1; ground.snow = 0; ground.puddle = 0.7; }
         else if (g === "snow") { ground.wet = 0; ground.snow = 1; ground.puddle = 0; ground.roadMelt = Math.max(ground.roadMelt, 0.34); }
@@ -426,7 +428,7 @@ OpenRacer.Atmosphere = (function () {
         delta = Math.min(delta || 0, 0.25);
         recordAtmosphere(delta);
         snowWork(delta, vehicles);
-        if (opt("gfxGround") !== "auto") { groundOverride(); return; }
+        if (groundMode() !== "auto") { groundOverride(); return; }
         var kind = opt("gfxWeather"), snowing = kind === "snow", raining = kind === "rain";
         // the puddles fill in about a minute and a half of rain and are gone again in about 7 minutes
         ground.puddle = raining ? Math.min(1, ground.puddle + delta / 90) : Math.max(0, ground.puddle - delta / 420);
@@ -516,10 +518,10 @@ OpenRacer.Atmosphere = (function () {
     function recordAtmosphere(delta) {
         if (!atmosRecord.recorder) return;
         atmosClock += delta;
-        var key = [opt("gfxTime"), opt("gfxSunAzimuth"), opt("gfxMoon"), opt("gfxWeather"), opt("gfxGround")].join("|");
+        var key = [opt("gfxTime"), opt("gfxSunAzimuth"), opt("gfxMoon"), opt("gfxWeather"), groundMode()].join("|");
         if (key === lastAtmos && atmosClock < 1) return;
         lastAtmos = key; atmosClock = 0;
-        atmosRecord.recorder(Float32Array.of(0, opt("gfxTime"), opt("gfxSunAzimuth"), opt("gfxMoon"), Math.max(0, WEATHER_NAMES.indexOf(opt("gfxWeather"))), Math.max(0, GROUND_NAMES.indexOf(opt("gfxGround"))),
+        atmosRecord.recorder(Float32Array.of(0, opt("gfxTime"), opt("gfxSunAzimuth"), opt("gfxMoon"), Math.max(0, WEATHER_NAMES.indexOf(opt("gfxWeather"))), Math.max(0, GROUND_NAMES.indexOf(groundMode())),
             ground.wet, ground.snow, ground.puddle, ground.roadMelt));
     }
     function applyRow(row) {

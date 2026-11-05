@@ -223,7 +223,24 @@
             "<div style=\"display: flex; gap: 6px; margin-top: 10px;\"><button type=\"button\" data-tool=\"hinge\" title=\"Right click a hinge (a door, the hood) to open it with a small torque, again to close it where it was\">Open hinges</button>" +
             "<button type=\"button\" data-tool=\"break\" title=\"Right click a part to break it loose\">Break parts</button></div>" +
             "<button type=\"button\" class=\"pitNow\" style=\"width: 100%; margin-top: 6px; padding: 5px 4px; border-radius: 6px; cursor: pointer; font: 12px Arial, sans-serif; color: #dfe6ef; background: #232c38; border: 1px solid #3a4656;\" title=\"A pit stop where the car stands now: tyres, fuel and repair, with the car on the jacks\">Pit stop here</button>" +
+            "<div style=\"font-weight: bold; margin: 12px 0 6px;\">Weather</div>" +
+            "<div style=\"display: flex; justify-content: space-between; align-items: center; gap: 8px;\"><span>Weather</span><select class=\"wxWeather\" style=\"border-radius: 6px; font: 12px Arial, sans-serif; color: #dfe6ef; background: #232c38; border: 1px solid #3a4656; padding: 4px;\"></select></div>" +
+            "<div style=\"display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px;\"><span>Time of day</span><select class=\"wxTime\" style=\"border-radius: 6px; font: 12px Arial, sans-serif; color: #dfe6ef; background: #232c38; border: 1px solid #3a4656; padding: 4px;\"></select></div>" +
+            "<div style=\"color: #9fb0c4; margin-top: 4px;\">The ground follows the weather.</div>" +
             "<div class=\"grabTool\" style=\"color: #9fb0c4; margin-top: 6px; min-height: 1.2em;\"></div>";
+        // the weather and the time of day (the same options as the Graphics page of the Escape menu; a free drive starts in clear weather)
+        var weatherSelect = grabPanel.querySelector(".wxWeather"), timeSelect = grabPanel.querySelector(".wxTime");
+        [["clear", "Clear"], ["cloudy", "Cloudy"], ["fog", "Fog"], ["rain", "Rain"], ["snow", "Snow"]].forEach(function (w) { var o = document.createElement("option"); o.value = w[0]; o.textContent = w[1]; weatherSelect.appendChild(o); });
+        [[5.25, "Dawn"], [8, "Morning"], [12, "Noon"], [15, "Afternoon"], [17.5, "Evening"], [19, "Sunset"], [20.25, "Dusk"], [23.5, "Night"]].forEach(function (t) { var o = document.createElement("option"); o.value = String(t[0]); o.textContent = t[1]; timeSelect.appendChild(o); });
+        grabPanel.syncWeather = function () {
+            if (typeof Settings === "undefined") return;
+            weatherSelect.value = Settings.option("gfxWeather");
+            var hour = Settings.option("gfxTime"), best = null;       // (an hour set on the slider of the Escape menu: the nearest name)
+            Array.prototype.forEach.call(timeSelect.options, function (o) { if (best === null || Math.abs(parseFloat(o.value) - hour) < Math.abs(parseFloat(best.value) - hour)) best = o; });
+            if (best) timeSelect.value = best.value;
+        };
+        weatherSelect.onchange = function () { if (typeof Settings !== "undefined") Settings.setOption("gfxWeather", weatherSelect.value); };
+        timeSelect.onchange = function () { if (typeof Settings !== "undefined") Settings.setOption("gfxTime", parseFloat(timeSelect.value)); };
         var slider = grabPanel.querySelector(".grabSlider"), value = grabPanel.querySelector(".grabValue");
         var hitSlider = grabPanel.querySelector(".hitSlider"), hitValue = grabPanel.querySelector(".hitValue");
         hitSlider.value = hitKmh; hitValue.textContent = hitText();
@@ -313,6 +330,7 @@
         grabMode = value;
         if (value && !grabPanel) makeGrabPanel();
         if (grabPanel) grabPanel.style.display = value ? "block" : "none";
+        if (grabPanel && value && grabPanel.syncWeather) grabPanel.syncWeather();
         if (!value) dropNode();
     }
     function pointerAt(e) {

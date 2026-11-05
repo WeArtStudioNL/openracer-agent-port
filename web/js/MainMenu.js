@@ -996,7 +996,9 @@ var MainMenu = (function() {
     // the setups (tunes) of the car that is chosen (the tuning menu, the car editor; OpenRacer.Setups): a step of its own as soon as there is one (Default, the car as made, and the tune)
     function tunesOf() { return choice.car && OpenRacer.Setups ? OpenRacer.Setups.names(choice.car) : []; }
     function stepsOf() {
-        var steps = mode === "race" ? ["mode", "car", "track", "weather", "race", "opponents"] : (mode === "skidpad" ? ["mode", "car", "surface"] : ["mode", "car", "track", "weather"]);
+        // free drive: the track, then the car (and its setup), then it starts, in clear weather (the weather is in the debug panel, key 0); a race has its weather and options
+        if(mode !== "race" && mode !== "skidpad") return tunesOf().length >= 1 ? ["mode", "track", "car", "tune"] : ["mode", "track", "car"];
+        var steps = mode === "race" ? ["mode", "car", "track", "weather", "race", "opponents"] : ["mode", "car", "surface"];
         if(tunesOf().length >= 1) steps.splice(2, 0, "tune");
         return steps;
     }
@@ -1028,7 +1030,10 @@ var MainMenu = (function() {
         if(!choice.track) return;
         var free = mode !== "race";
         var saved = { laps: raceOptions.laps, ai: raceOptions.ai };
-        if(free) { raceOptions.laps = 0; raceOptions.ai = 0; }
+        if(free) {
+            raceOptions.laps = 0; raceOptions.ai = 0;
+            if(typeof Settings !== "undefined") Settings.setOption("gfxWeather", "clear");       // (a free drive starts in clear weather; the debug panel, key 0, changes it)
+        }
         start();
         raceOptions.laps = saved.laps; raceOptions.ai = saved.ai;
     }
@@ -1145,7 +1150,7 @@ var MainMenu = (function() {
             d.innerHTML = "<b></b><span></span>";
             d.firstChild.textContent = m[1];
             d.lastChild.textContent = m[2];
-            d.onclick = function() { setMode(m[0]); go("car"); };
+            d.onclick = function() { setMode(m[0]); go(stepsOf()[1]); };
             grid.appendChild(d);
         });
         inner.appendChild(grid);
@@ -1321,10 +1326,7 @@ var MainMenu = (function() {
                 c.className = "chip" + (item[0] === current ? " on" : "");
                 c.textContent = item[1];
                 c.onclick = function() {
-                    if(typeof Settings !== "undefined") {
-                        Settings.setOption(option, item[0]);
-                        if(option === "gfxWeather") Settings.setOption("gfxGround", "auto");        // (a new weather brings its own ground: rain wets the road, snow covers it)
-                    }
+                    if(typeof Settings !== "undefined") Settings.setOption(option, item[0]);
                     render();
                 };
                 group.appendChild(c);
@@ -1334,10 +1336,9 @@ var MainMenu = (function() {
         }
         pick("Weather", [["clear", "Clear"], ["cloudy", "Cloudy"], ["fog", "Fog"], ["rain", "Rain"], ["snow", "Snow"]], "gfxWeather");
         pick("Time of day", [[5.25, "Dawn"], [8, "Morning"], [12, "Noon"], [15, "Afternoon"], [17.5, "Evening"], [19, "Sunset"], [20.25, "Dusk"], [23.5, "Night"]], "gfxTime");
-        pick("Ground", [["auto", "Follows the weather"], ["dry", "Dry"], ["wet", "Wet"], ["snow", "Snow"]], "gfxGround");
         var hint = document.createElement("div");
         hint.className = "hint";
-        hint.textContent = "Rain wets the road and snow lies on it: both give less grip, and the AI drives slower. There are no headlights yet: the night is dark.";
+        hint.textContent = "The ground follows the weather. Rain wets the road and snow lies on it: both give less grip, and the AI drives slower. There are no headlights yet: the night is dark.";
         inner.appendChild(hint);
     }
 
@@ -1481,7 +1482,7 @@ var MainMenu = (function() {
         if(car && OpenRacer.Setups && tunesOf().length >= 1 && screen !== "mode" && screen !== "car" && screen !== "tune") parts.push(OpenRacer.Setups.active(car.id) || "Default");
         if(mode === "skidpad" && screen === "surface") parts.push((SKIDPAD_SURFACES.filter(function(s) { return s.id === skidSurface; })[0] || {}).name || "Asphalt");
         else if(car && screen === "car") parts.push(car.name || car.id);
-        if(track && mode !== "skidpad" && (screen === "track" || screen === "weather" || screen === "race" || screen === "opponents")) parts.push(track.name || track.id);
+        if(track && mode !== "skidpad" && (screen === "track" || screen === "weather" || screen === "race" || screen === "opponents" || (mode === "free" && (screen === "car" || screen === "tune")))) parts.push(track.name || track.id);
         if(screen === "race") parts.push(raceOptions.laps + " laps, " + raceOptions.ai + " opponents");
         if(screen === "opponents") parts.push(raceOptions.laps + " laps, " + (oppList().length || raceOptions.ai) + " opponents" + (oppList().length ? "" : " (chosen by the game)"));
         return parts;
