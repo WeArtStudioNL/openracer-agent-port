@@ -1855,14 +1855,23 @@ OpenRacer.Vehicle = function (parameters, input) {
             w.hasContact = false;
             tyreLoad[i] = 0;
             if(road && !self.wheelLost[i]) {
-                var pen = (w.susLength + w.radius) - t;      // how far the road pushes the tyre in
+                // (a bike, model v2: the tyre has a round crown, so a leaned wheel stands on its shoulder: along the axis of the wheel the road is (R - rc) + rc / cos(lean) from the hub, and the
+                // contact point is not where the axis meets the road but rc (-n - down / cos(lean)) from it, to the inside of the lean. A thin wheel, as it was, sinks by R (1 - cos) at a lean and
+                // the bike with it: at 44 degrees the pegs and the cases of the engine came to the road.)
+                var reach = w.radius, crownX = 0, crownY = 0, crownZ = 0;
+                if(self.bikeV2) {
+                    var cosA = Math.max(0.3, -(down.x * road.nx + down.y * road.ny + down.z * road.nz)), rc = Math.min(self.controller.crownRadius, 0.6 * w.radius);
+                    reach = w.radius - rc + rc / cosA;
+                    crownX = rc * (-road.nx - down.x / cosA); crownY = rc * (-road.ny - down.y / cosA); crownZ = rc * (-road.nz - down.z / cosA);
+                }
+                var pen = (w.susLength + reach) - t;      // how far the road pushes the tyre in
                 if(pen > 0) {
                     w.hasContact = true;
                     anyContact = true;
                     w.surface = (surfaceRoad || road).surface;
                     w.groundY = road.y;
                     w.normal = road;
-                    w.contact.x = mx + down.x * t; w.contact.y = my + down.y * t; w.contact.z = mz + down.z * t;
+                    w.contact.x = mx + down.x * t + crownX; w.contact.y = my + down.y * t + crownY; w.contact.z = mz + down.z * t + crownZ;
                     var penRate = w.susVel + mountDown;
                     // (the tyre gets hard when it is pushed in a long way)
                     var hard = pen > 0.22 * w.radius ? 1 + 10 * (pen - 0.22 * w.radius) / w.radius : 1;
@@ -2231,6 +2240,7 @@ OpenRacer.Vehicle = function (parameters, input) {
                     ? smoothstep(sqLo, sqLo + 1, wheel.s) * (1 - 0.4 * smoothstep(2.5, 4, wheel.s)) * smoothstep(self.controller ? 1.6 : 0.8, 5, slideSpeed) : 0;
                 fxW = wheel.fx;
                 fyW = wheel.fy;
+                wheel.fyUsed = fyW; wheel.fxUsed = fxW;      // (what the body got, for the tests)
                 // the temperature and the wear: the power that the slip burns
                 self.wearStep(wheel, dt, Math.abs(fxW * (wheel.omega * wheel.radius - vl)) + Math.abs(fyW * vt), fz, vl, true);
                 // the shell tyre turns the wheel itself in its substeps (the grip of the tread saturates within a step of the car): the torque that gives the turn it found

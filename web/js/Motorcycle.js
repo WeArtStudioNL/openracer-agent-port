@@ -66,6 +66,8 @@ OpenRacer.Motorcycle = function (settings) {
         self.riderErrCap = (s.rider_err_cap_deg !== undefined ? s.rider_err_cap_deg : 90) * DEG;   // the most lean error that the bars answer
         self.balanceFrom = s.balance_from !== undefined ? s.balance_from : 6; self.balanceTo = s.balance_to !== undefined ? s.balance_to : 14;   // m/s: the rider's hold on the lean (the torque about the long axis) goes away between these speeds, in model v2
         self.lockShare = s.lock_share !== undefined ? s.lock_share : 0.65;   // model v2: the share of the lock of the bars that a lean at a low speed may ask for
+        self.gripFast = s.grip_fast !== undefined ? s.grip_fast : 0.2;   // model v2: the g more that the lean may ask for above 13 to 18 m/s (the bike is in the model of the rider and the tyres there; below it the lean is held)
+        self.crownRadius = s.crown_radius !== undefined ? s.crown_radius : 0.1;   // m: the radius of the round crown of the tyre (v2): a leaned wheel stands on its shoulder, higher and further inside
         self.kinFrom = s.kin_from !== undefined ? s.kin_from : 7; self.kinTo = s.kin_to !== undefined ? s.kin_to : 13;   // m/s: the bars are the angle of the old model below the first speed, and the angle of the rider and the tyres above the second
         self.riderBarsCap = (s.rider_bars_cap_deg !== undefined ? s.rider_bars_cap_deg : 90) * DEG;   // the most the bars are turned for the lean error (and the roll rate)
         self.armOmega = s.arm_omega !== undefined ? s.arm_omega : 40;   // rad/s: how stiff the hands hold the bars (the spring is steer_inertia * omega^2)
@@ -188,7 +190,7 @@ OpenRacer.Motorcycle = function (settings) {
         var fastLean = option("bikeFastLean") ? option("bikeFastLean") * DEG : self.fastLean;      // (the menu: Motorcycle: lean at top speed)
         var speedMax = self.maxLean - (self.maxLean - Math.min(self.maxLean, fastLean)) * smooth(self.fastFrom, self.fastFrom + 22, Math.abs(u));
         // the tyres have so much grip, and what they give along the bike (the engine, the air, the brake: how much the speed goes down) they cannot give sideways: the circle of grip
-        var aLong = Math.max(0, -(accel.x * state.fx + accel.z * state.fz)), gripMax = self.gripG * G;
+        var aLong = Math.max(0, -(accel.x * state.fx + accel.z * state.fz)), gripMax = (self.gripG + (self.v2 ? self.gripFast * smooth(13, 18, Math.abs(u)) : 0)) * G;
         speedMax = Math.min(speedMax, Math.atan(Math.sqrt(Math.max(0, gripMax * gripMax - aLong * aLong)) / G) + self.overLean);     // (a little past the grip: that is the lowside)
         var phiMax = speedMax + epsFull;
         var want = -c * Math.min(phiMax, cap) * fast;
