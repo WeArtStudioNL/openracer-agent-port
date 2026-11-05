@@ -65,6 +65,7 @@ OpenRacer.Motorcycle = function (settings) {
         self.riderKa = s.rider_ka !== undefined ? s.rider_ka : 1; self.riderKad = s.rider_kad !== undefined ? s.rider_kad : 0.2;   // the bars (rad) that a radian of lean error, and a radian a second of roll, ask at 10 m/s
         self.riderErrCap = (s.rider_err_cap_deg !== undefined ? s.rider_err_cap_deg : 90) * DEG;   // the most lean error that the bars answer
         self.balanceFrom = s.balance_from !== undefined ? s.balance_from : 6; self.balanceTo = s.balance_to !== undefined ? s.balance_to : 14;   // m/s: the rider's hold on the lean (the torque about the long axis) goes away between these speeds, in model v2
+        self.pushHang = s.push_hang !== undefined ? s.push_hang : -0.4; self.pushLockShare = s.push_lock_share !== undefined ? s.push_lock_share : 0.75;      // the flat-track style: the weight of the rider to the outside (a share of hang_off, negative), and the share of the lock for a low speed
         self.lockShare = s.lock_share !== undefined ? s.lock_share : 0.65;   // model v2: the share of the lock of the bars that a lean at a low speed may ask for
         self.gripFast = s.grip_fast !== undefined ? s.grip_fast : 0.2;   // model v2: the g more that the lean may ask for above 13 to 18 m/s (the bike is in the model of the rider and the tyres there; below it the lean is held)
         self.crownRadius = s.crown_radius !== undefined ? s.crown_radius : 0.1;   // m: the radius of the round crown of the tyre (v2): a leaned wheel stands on its shoulder, higher and further inside
@@ -84,7 +85,7 @@ OpenRacer.Motorcycle = function (settings) {
     }
     readSettings();
     this.retune = function (changes) { Object.assign(s, changes || {}); self.settings = s; readSettings(); };
-    this.posture = { lat: 0, long: 0, drop: 0, tuck: 0, sit: 0, knee: 0, assist: 0, look: 0 };      // assist: where the weight goes to the side for the help of the body (m); look: the head turned into the bend, -1 to 1 (left is positive)       // body space: lat to the left, long forward, drop up (m); tuck, sit, knee: 0 to 1
+    this.posture = { lat: 0, long: 0, drop: 0, tuck: 0, sit: 0, knee: 0, assist: 0, look: 0, push: 0, inside: 0 };      // assist: where the weight goes to the side for the help of the body (m); look: the head turned into the bend, -1 to 1 (left is positive)       // body space: lat to the left, long forward, drop up (m); tuck, sit, knee: 0 to 1
     var vPrev = null, accel = { x: 0, y: 0, z: 0 }, dw = { x: 0, y: 0, z: 0 };
     this.riderKey = 0;                                      // -1: the rider is put back, 1: forward (keys, set by Car.js)
     this.sinceBrake = 99; this.counterGain = 1;
@@ -108,6 +109,11 @@ OpenRacer.Motorcycle = function (settings) {
     // Settings, is given them here (PHYSICS-WORKER.md)
     this.options = null;
     var option = function (name) { return self.options ? self.options[name] : (typeof Settings !== "undefined" ? Settings.option(name) : undefined); };
+    // the riding style (the menu: Flat-track style, bikes only): hang off the seat to the inside (road race, the default) or stay upright and push the bike under you (flat track, supermoto):
+    // the weight goes to the outside a little instead, so the bike leans further for the same bend (a bit less speed through a fast bend), it may take a tighter bend at a low speed
+    // (`push_lock_share`), and the inside foot comes out and skids on the road, the inside elbow goes up
+    var pushed = function () { return !!option("bikePush"); };
+    this.pushStyle = pushed;
     this.command = 0;                                      // the lean that is asked (-1..1)
     this.targetLean = 0;                                   // what the rider takes (rad, left is positive)
     this.steer = 0;                                        // the angle of the front wheel that was given to the physics (rad, right is positive)
@@ -188,9 +194,9 @@ OpenRacer.Motorcycle = function (settings) {
         var fast = smooth(1.5, 4.5, Math.abs(u));                  // at a walking pace the rider holds it up with a foot
         // the lean that the command asks for, less at a walking pace (a bend of that lean needs a speed: tan(lean) = u^2 tan(steering lock) / (L g)), and stood up a little by the throttle
         // (model v2: not for the whole lock of the bars: at the lock the front tyre is at 15 degrees of slip and the bike slides when the lean is let go)
-        var cap = Math.atan(u * u * Math.tan(lock * (self.v2 ? self.lockShare : 1)) / (v.wheelbase * G));
+        var cap = Math.atan(u * u * Math.tan(lock * (self.v2 ? (pushed() ? self.pushLockShare : self.lockShare) : 1)) / (v.wheelbase * G));
         // the lean of the whole (the bike and the rider that hangs off): tan(phi) = a / g. The bike itself leans phi less atan(share * hang off / height of the centre of gravity)
-        var share = self.riderMass / v.mass, epsFull = Math.atan(share * self.maxHang / v.cgHeight);
+        var share = self.riderMass / v.mass, epsFull = Math.atan(share * self.maxHang * (pushed() ? self.pushHang : 1) / v.cgHeight);
         var eps = Math.atan(share * self.posture.lat / v.cgHeight);       // to the left: positive
         // at speed the tyres have to give a slip angle for every bit of lean, and the body crabs: past about 40 m/s the lean that is allowed goes down (to 18 degrees at 60 m/s), so that a key
         // held at 190 km/h is a gentle bend and not a slide
@@ -572,7 +578,11 @@ OpenRacer.Motorcycle = function (settings) {
         var hang = Math.sign(lean) * hangT;
         var k = function (t) { return Math.min(1, dt / t); };
         p.tuck += (tuck - p.tuck) * k(0.35); p.sit += (sit - p.sit) * k(0.25);
-        p.lat += (hang * self.maxHang - p.lat) * k(0.25); p.knee += (bendT - p.knee) * k(0.3);
+        var push = pushed();
+        p.lat += (hang * self.maxHang * (push ? self.pushHang : 1) - p.lat) * k(0.25); p.knee += ((push ? 0 : bendT) - p.knee) * k(0.3);
+        // the flat-track style: the inside foot comes out in a bend at a low and a middle speed (a lean of 10 degrees and more, below 70 km/h), the inside elbow goes up; `inside` is the side of the bend either way
+        var pushT = push ? smooth(8 * DEG, 25 * DEG, Math.abs(lean)) * (1 - smooth(14, 22, Math.abs(u))) * smooth(1.5, 4, Math.abs(u)) : 0;
+        p.push += (pushT - p.push) * k(0.25); p.inside += (Math.sign(lean) * smooth(2 * DEG, 8 * DEG, Math.abs(lean)) - p.inside) * k(0.2);
         p.long += ((-0.22 * sit + 0.12 * tuck) - p.long) * k(0.3);
         p.drop += ((-0.09 * tuck + 0.05 * sit) - p.drop) * k(0.3);
         // the head looks where the bike is going: into the bend (the lean that is asked, so a little ahead of the bike), and straight on a straight; it comes round a little before the bike does
@@ -650,4 +660,4 @@ OpenRacer.Motorcycle.circleSteer = function (st, v, R, speed, dt, tune) {
 };
 
 // The options of the menu that a bike reads (see options in the controller)
-OpenRacer.Motorcycle.OPTIONS = ["bikeFastLean", "bikeSteering", "wheelieControl"];
+OpenRacer.Motorcycle.OPTIONS = ["bikeFastLean", "bikeSteering", "wheelieControl", "bikePush"];

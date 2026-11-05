@@ -107,7 +107,7 @@ var Settings = (function() {
     var DEFAULT_OPTIONS = { tc: true, launchControl: false, twoStep: false, autoReverse: true, autoReversePedals: true, autoReverseSpeed: 3, dragReady: 2, dragGreen: 1.5, abs: true, sound: true, wheelRange: 1, wheelMatch: false, wheelDegrees: 900, wheelDeadzone: 1, ffb: true, ffbStrength: 0.6, ffbSpring: 0.15, ffbDamping: 0.35, ffbRoad: 0.5, ffbInvert: false, hud: true, units: "metric", debug: false, esc: true, camera: 2, volume: 0.8, tyreVolume: 0.8,
         touchSteer: 1, padSlow: 1.5, padAssist: true, keySteer: 1, keySlow: 1, keyAssist: true,
         // a motorcycle: the steering ("counter": countersteering to start a lean and the lean; "lean": the lean only) and the follow camera ("lean": it rolls with the bike; "classic": as a car)
-        bikeSteering: "lean", bikeCamera: "lean", wheelieControl: true, bikeFastLean: 30,
+        bikeSteering: "lean", bikeCamera: "lean", wheelieControl: true, bikeFastLean: 30, bikePush: false,
         // the easing of the keys: the time that a key takes to bring the pedal or the wheels to the full value (s), and the curve of it (1 straight, below 1 quick at first, above 1 slow at first)
         keyThrottleTime: 0.5, keyThrottleCurve: 0.6, keyBrakeTime: 0.4, keyBrakeCurve: 0.6, keySteerTime: 0.9, keySteerCurve: 1,
         // the graphics (Graphics.js): a preset is a set of these
@@ -1054,6 +1054,7 @@ var Settings = (function() {
         if(typeof car !== "undefined" && car && car.vehicle && car.vehicle.controller) {
             page.appendChild(optionRow("Motorcycle steering", options.bikeSteering === "counter" ? "Countersteer + lean" : "Lean only", function() { setOption("bikeSteering", options.bikeSteering === "counter" ? "lean" : "counter"); }));
             page.appendChild(optionRow("Wheelie control (the rider rolls the gas off as the front wheel lifts)", options.wheelieControl !== false ? "On" : "Off", function() { setOption("wheelieControl", options.wheelieControl === false); }));
+            page.appendChild(optionRow("Flat-track style (stay upright and push the bike under you: the inside foot out, a tighter bend at a low speed; off: hang off to the inside, as in road racing)", options.bikePush ? "On" : "Off", function() { setOption("bikePush", !options.bikePush); }));
             page.appendChild(selectRow("Motorcycle follow camera", "bikeCamera", [["lean", "Motorcycle lean chase (the picture rolls with the bike)"], ["classic", "Classic chase (as a car)"]]));
             page.appendChild(sliderRow("Motorcycle: lean at top speed (the keys ask for less lean as the speed goes up; this is what is left at the top)", "bikeFastLean", 15, 45, 1, function(v) { return Math.round(v) + "°"; }));
         }

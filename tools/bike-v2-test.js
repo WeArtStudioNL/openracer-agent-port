@@ -68,6 +68,7 @@ function makeCar(config) {
     // the road. In the game the road is no wall and the spheres of the model come from the car: the bench has none of them)
     if (!process.argv.includes("--spheres-on")) v.collisionSpheres = [];
     if (process.argv.includes("--nosoft")) v.softBody = null;      // (without the soft body of the shell: to see whether a hit comes from it)
+    if (process.argv.includes("--push")) v.controller.options = Object.assign({}, v.controller.options, { bikePush: true });      // --push: the flat-track style
     v.absEnabled = true;
     v.tcEnabled = false;
     v.escEnabled = false;

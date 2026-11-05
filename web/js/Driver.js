@@ -746,6 +746,8 @@ OpenRacer.Driver = function (config, parent, steering) {
             var set = cfg.poles && cfg.poles[e[0]];
             if (set) tmp.set(set[0], set[1], set[2]);
             else { self.parent.worldToLocal(tmp.copy(a)); tmp.add(new V(e[2] * 0.45, -0.25, -0.35)); }
+            // (the flat-track style: the inside elbow goes up and out)
+            var postA = self.posture; if (postA && postA.push > 0.01 && (postA.inside || 0) * e[2] > 0) { tmp.y += 0.35 * postA.push; tmp.x += e[2] * 0.2 * postA.push; }
             (self.poles[e[0]] || (self.poles[e[0]] = new V())).copy(tmp);
             self.parent.localToWorld(pole.copy(tmp));
             // The hand on the grip: its turn relative to the grip is found once, with the rider in his neutral posture (the hand at the grip in its rest place, with the arm as the
@@ -796,6 +798,13 @@ OpenRacer.Driver = function (config, parent, steering) {
                 local.lerp(tmp, footDown);
                 feetDown[e[0]] = footDown;
             } else feetDown[e[0]] = 0;
+            // the flat-track style: the inside foot comes off the peg, out to the side and down to the road, where it skids
+            var postF = self.posture, pushAmt = postF && postF.push > 0.01 && (postF.inside || 0) * e[1] > 0 ? postF.push : 0;
+            if (pushAmt > 0 && walk < 0.5) {
+                tmp.set(local.x + e[1] * 0.4, groundY + FOOT_ANKLE + 0.03, local.z + 0.25);
+                if (state && typeof state.roadY === "number") { self.parent.localToWorld(tmp); tmp.y = state.roadY + FOOT_ANKLE + 0.03; self.parent.worldToLocal(tmp); }
+                local.lerp(tmp, 0.75 * pushAmt);
+            }
             if (walk > 0.001) {
                 var pegAt = local.clone();
                 var stride = Math.sin(walkPhase + (e[1] > 0 ? 0 : Math.PI)), lift = Math.max(0, Math.cos(walkPhase + (e[1] > 0 ? 0 : Math.PI)));
@@ -809,8 +818,8 @@ OpenRacer.Driver = function (config, parent, steering) {
             else { self.parent.worldToLocal(tmp.copy(a)); tmp.add(new V(e[1] * 0.3, 0.1, 0.8)); }
             // in a bend the knee of the inside goes out and down to the road, the other one goes out a little
             var post = self.posture;
-            if (post && post.knee > 0.01 && post.lat * e[1] !== 0) {
-                var inside = post.lat * e[1] > 0;
+            if (post && post.knee > 0.01 && (post.inside || post.lat) * e[1] !== 0) {
+                var inside = (post.inside || post.lat) * e[1] > 0;
                 tmp.x += e[1] * (inside ? 0.6 : 0.25) * post.knee;
                 if (inside) tmp.y -= 0.5 * post.knee;
             }
