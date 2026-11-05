@@ -230,7 +230,11 @@ OpenRacer.CarTuning = (function () {
             case "turbo_intercooler": case "turbo_efficiency": return v.turbo_boost > 0;
             case "tc_lockup": return g === "torque-converter";
             // (the tyre of a rim of the library is a custom one: made from the numbers; the tyres of the library stay for the cars that have one)
-            case "tyre_inner_ratio": return !(customTyre(v, "front") && customTyre(v, "rear"));
+            // (a tyre of the library has its own width and shell: the width sliders are for the axles without one, the rest of the shell for when an axle has no library tyre)
+            case "tyre_inner_ratio": return !((customTyre(v, "front") || libraryTyre(v, "front")) && (customTyre(v, "rear") || libraryTyre(v, "rear")));
+            case "tyre_width": return !libraryTyre(v, "front");
+            case "tyre_width_rear": return !libraryTyre(v, "rear");
+            case "tyre_rings": case "tyre_segments": case "tyre_carcass": return !(libraryTyre(v, "front") && libraryTyre(v, "rear"));
             case "rim_front": case "rim_rear": return v.model_tyres !== "on";
             // (a motorcycle chooses its tyre of the library, 120/70 and 180/55, once it has a rim of the library)
             case "tyre_front": return v.vehicle_type === "motorcycle" ? !!v.rim_front && v.model_tyres !== "on" : !!v.tyre_front && v.tyre_front !== "custom";
@@ -310,6 +314,8 @@ OpenRacer.CarTuning = (function () {
     // what car.json chose from the wheel library for an axle ({ rim, tyre } ids, "" for none; WheelLibrary.js)
     // a custom tyre on an axle: the one of a rim of the library, or one that was chosen
     function customTyre(v, axle) { var t = v["tyre_" + axle]; return t === "custom" || (!t && v.vehicle_type !== "motorcycle" && (!!v["rim_" + axle] || v.model_tyres === "on")) || (!t && v.vehicle_type === "motorcycle" && v.model_tyres === "on"); }
+    // a tyre of the wheel library on an axle (named, or the default of a motorcycle with a rim of the library)
+    function libraryTyre(v, axle) { var t = v["tyre_" + axle]; if(t === "custom") return false; if(t) return true; return v.vehicle_type === "motorcycle" && !!v["rim_" + axle] && v.model_tyres !== "on"; }
     // the height of the sidewall (mm) of a custom tyre: what is between the outer shell and the inner shell; the inner shell is a share of the diameter
     function heightOf(diameterM, ratio) { return Math.max(20, Math.min(300, Math.round(diameterM / 2 * (1 - ratio) * 1000 / 5) * 5)); }
     function libChoice(c, axle) { return OpenRacer.WheelLibrary ? OpenRacer.WheelLibrary.choiceOf(c, axle) : { rim: "", tyre: "" }; }

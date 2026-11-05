@@ -188,7 +188,10 @@ OpenRacer.WheelLibrary = (function () {
     // the size of a loaded scene: the diameter across the Y-Z plane and the width along X (the axle)
     function measure(scene) {
         var box = new THREE.Box3().setFromObject(scene), size = box.getSize(new THREE.Vector3());
-        return { diameter: Math.max(size.y, size.z), width: size.x, centre: box.getCenter(new THREE.Vector3()) };
+        // (the smallest radius about the axle: the bead of a tyre, the hub of a rim)
+        var inner = Infinity, v = new THREE.Vector3();
+        scene.traverse(function (m) { if(!m.isMesh || !m.geometry || !m.geometry.attributes.position) return; var p = m.geometry.attributes.position; for(var i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i).applyMatrix4(m.matrixWorld); var r = Math.sqrt(v.y * v.y + v.z * v.z); if(r < inner) inner = r; } });
+        return { diameter: Math.max(size.y, size.z), width: size.x, inner: inner, centre: box.getCenter(new THREE.Vector3()) };
     }
     // (the catalogue is loaded for every car, also one without a wheel of the library: the tuning menu lists it)
     function preload(config, manager, done) {
@@ -251,7 +254,16 @@ OpenRacer.WheelLibrary = (function () {
         inner.name = (c.rim || "") + (c.rim && c.tyre ? " + " : "") + (c.tyre || "");
         if(!LEFT[slot]) inner.rotation.y = Math.PI;          // (modelled for the left side: +X outwards)
         // ("flip": true in the catalogue: the file was modelled for the right side, it is turned round)
-        if(rf) { var rc = rf.scene.clone(true); rc.name = "rim_" + slot; if(r.flip) rc.rotation.y = Math.PI; inner.add(rc); }
+        if(rf) {
+            var rc = rf.scene.clone(true); rc.name = "rim_" + slot; if(r.flip) rc.rotation.y = Math.PI;
+            // (a rim and a tyre of a motorcycle: the rim is fitted to the tyre, its diameter to the bead of the tyre as the file measures it and its width to the tread, whatever size the file of the rim is)
+            if(tf && t && t.for === "motorcycle" && rf.size.diameter > 0 && tf.size.inner > 0 && tf.size.width > 0) {
+                var sd = Math.max(0.8, Math.min(1.25, (2 * tf.size.inner + 0.004) / rf.size.diameter)), sw = rf.size.width > 0 ? Math.max(0.5, Math.min(1.3, 0.8 * tf.size.width / rf.size.width)) : 1;
+                rc.scale.set(sw, sd, sd);
+                var holder = new THREE.Object3D(); holder.add(rc); rc = holder;
+            }
+            inner.add(rc);
+        }
         if(tf) { var tc = tf.scene.clone(true); tc.name = "tyre_" + slot; if(t.flip) tc.rotation.y = Math.PI; inner.add(tc); }
         object.add(inner);
         object.traverse(function (child) { if(child.isMesh) { child.castShadow = true; child.receiveShadow = false; } });
