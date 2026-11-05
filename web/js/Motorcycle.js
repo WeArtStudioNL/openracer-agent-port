@@ -69,7 +69,10 @@ OpenRacer.Motorcycle = function (settings) {
         self.gripFast = s.grip_fast !== undefined ? s.grip_fast : 0.2;   // model v2: the g more that the lean may ask for above 13 to 18 m/s (the bike is in the model of the rider and the tyres there; below it the lean is held)
         self.crownRadius = s.crown_radius !== undefined ? s.crown_radius : 0.1;   // m: the radius of the round crown of the tyre (v2): a leaned wheel stands on its shoulder, higher and further inside
         self.kinFrom = s.kin_from !== undefined ? s.kin_from : 7; self.kinTo = s.kin_to !== undefined ? s.kin_to : 13;   // m/s: the bars are the angle of the old model below the first speed, and the angle of the rider and the tyres above the second
-        self.riderBarsCap = (s.rider_bars_cap_deg !== undefined ? s.rider_bars_cap_deg : 90) * DEG;   // the most the bars are turned for the lean error (and the roll rate)
+        self.riderFastKa = s.rider_fast_ka !== undefined ? s.rider_fast_ka : 0.2; self.riderFastKad = s.rider_fast_kad !== undefined ? s.rider_fast_kad : 0.5;   // the share of the gains that is left at 28 m/s and above
+        self.gainDownFrom = s.gain_down_from !== undefined ? s.gain_down_from : 8; self.gainDownTo = s.gain_down_to !== undefined ? s.gain_down_to : 14;   // m/s: the gains of the rider come down between these speeds while no lean is asked
+        self.yawBrake = s.yaw_brake !== undefined ? s.yaw_brake : 1;   // model v2: how much of the yaw damping of the old model the rider has on the brake (0: none)
+        self.riderBarsCap = (s.rider_bars_cap_deg !== undefined ? s.rider_bars_cap_deg : 12) * DEG;   // the most the bars are turned for the lean error (and the roll rate)
         self.armOmega = s.arm_omega !== undefined ? s.arm_omega : 40;   // rad/s: how stiff the hands hold the bars (the spring is steer_inertia * omega^2)
         self.riderTorqueMax = s.rider_torque_max !== undefined ? s.rider_torque_max : 120;   // Nm on the bars
         self.camberSlip = s.camber_slip !== undefined ? s.camber_slip : 0.087;   // slip (tan) that a radian of lean is worth, to the tyre
@@ -270,7 +273,11 @@ OpenRacer.Motorcycle = function (settings) {
         var wantLean = Math.max(-1.05, Math.min(1.05, self.targetLean));
         var steadyWant = -Math.sign(wantLean) * Math.atan(v.wheelbase * G * Math.tan(Math.abs(wantLean)) / Math.max(u * u, 1)) * smooth(1.5, 4.5, Math.abs(u));
         var eCap = Math.max(-self.riderErrCap, Math.min(self.riderErrCap, e));      // (a rider asks for a little countersteer, not for the whole lean at once)
-        var react = (10 / uu) * (self.riderKa * eCap - self.riderKad * state.rate);
+        // (the gains come down above 15 to 28 m/s: with the full gain the bike weaved on the brake from 140 km/h, a weave of 1.7 Hz that grew until the bike was down (replays of a rider); the angle
+        // that the bend needs does the work of the lean at speed, the rider only keeps it up)
+        // (only while no lean is asked for: in a bend the full gain tracks the lean, and that was half of it at 140 km/h with the low gain)
+        var fastDown = smooth(self.gainDownFrom, self.gainDownTo, Math.abs(u)) * (1 - smooth(2 * DEG, 8 * DEG, Math.abs(self.targetLean)));
+        var react = (10 / uu) * (self.riderKa * (1 - (1 - self.riderFastKa) * fastDown) * eCap - self.riderKad * (1 - (1 - self.riderFastKad) * fastDown) * state.rate);
         var ask = steadyWant + Math.max(-self.riderBarsCap, Math.min(self.riderBarsCap, react));      // (and the bars answer a lean error with so much at most: a flick from lock to lock did not throw the tyres)
         var lock = v.input.turnLimit || v.input.maxTurn || 0.38;
         var kin = 1 - smooth(self.kinFrom, self.kinTo, Math.abs(u));      // 1: the angle of the old model, 0: the angle of the rider
@@ -466,13 +473,17 @@ OpenRacer.Motorcycle = function (settings) {
         self.dbg = { T: T, yawDamp: 0, yawLift: 0, lift: lift };
         // The rider keeps the bike turning at the rate that its lean gives (a balanced bend: r = g tan(lean) / u): a torque about the vertical against the yaw that the tyres make on their own
         // (a front that is loaded on the brake and a light rear would swing the tail out, as a car oversteers). With the front wheel in the air it is all there is.
-        if (Math.abs(u) > 2 && !self.v2) {
+        // (model v2: only on the brake. The old model damped the yaw that the steering did not ask for all the time; v2 leaves it to the tyres, but a bike on the brake has a light rear wheel and
+        // yaws at 1 rad/s and more, back and forth (the replays of a rider at 100 to 140 km/h, a weave of the whole bike with the bars still): the rider holds it with his knees and the bars, here a torque
+        // about the vertical against the yaw that the lean does not give)
+        var yawOn = self.v2 ? self.yawBrake * smooth(0.05, 0.3, v.input.brakePedal || 0) : 1;
+        if (Math.abs(u) > 2 && yawOn > 0) {
             var epsNow = Math.atan((self.riderMass / v.mass) * self.posture.lat / v.cgHeight);       // (the rider that hangs off: the lean of the whole)
             var rLean = -G * Math.tan(Math.max(-1.2, Math.min(1.2, state.lean + epsNow))) / Math.max(Math.abs(u), 4);
             var yawErr = c.r - rLean;
             // (on the brakes the rider holds the bars harder: with the rear nearly off the road the front alone turned the bike 14 degrees out of line in a second at 145 km/h)
             var yawCap = (self.yawCap + self.yawCapBrake * smooth(0.2, 0.8, v.input.brakePedal || 0)) * brace;
-            self.dbg.yawDamp = Math.max(-yawCap, Math.min(yawCap, self.balance * (c.inertiaY / 0.06) * yawErr * fast * brace * (1 + 2 * smooth(0.2, 0.8, v.input.brakePedal || 0))));
+            self.dbg.yawDamp = yawOn * Math.max(-yawCap, Math.min(yawCap, self.balance * (c.inertiaY / 0.06) * yawErr * fast * brace * (1 + 2 * smooth(0.2, 0.8, v.input.brakePedal || 0))));
             torque.y += self.dbg.yawDamp;
         }
         // no reverse gear: the rider walks the bike back (Car.js says when), slowly, with a small force
