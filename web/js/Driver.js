@@ -110,6 +110,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         rest.clear(); restScale.clear();
         self.bones.chest.forEach(function (bone) { rest.set(bone, bone.quaternion.clone()); });
         if (self.bones.head) rest.set(self.bones.head, self.bones.head.quaternion.clone());
+        if (self.bones.hips) rest.set(self.bones.hips, self.bones.hips.quaternion.clone());
         ["armL", "armR", "legL", "legR"].forEach(function (key) { self.bones[key].forEach(function (bone) { if (bone) rest.set(bone, bone.quaternion.clone()); }); });
         if (self.bones.head) restScale.set(self.bones.head, self.bones.head.scale.clone());
         findFingers();
@@ -181,8 +182,9 @@ OpenRacer.Driver = function (config, parent, steering) {
         self.root.position.add(postureOff);
     }
     this.headSign = 1;      // (the sign of the roll of the bike in the roll of the bones)
+    this.pelvisTilt = 35;      // degrees: the most that the pelvis tilts against the lean of the bike in flat-track style
     function torso() {
-        var cfg = self.config;
+        var cfg = self.config, hipRoll = 0;
         if (!headUp && self.bones.head) {      // (the first time, with the bike upright and the head as the model has it: the up of the head in its own space is the up of the bike)
             self.parent.updateMatrixWorld(true); self.model.updateMatrixWorld(true);
             headUp = new V(0, 1, 0).transformDirection(self.parent.matrixWorld).transformDirection(new THREE.Matrix4().copy(self.bones.head.matrixWorld).invert());
@@ -193,8 +195,10 @@ OpenRacer.Driver = function (config, parent, steering) {
         if (post) {
             var pitch = 28 * post.tuck - 10 * post.sit, roll = -14 * (post.lat / 0.3);
             roll += 0.55 * (post.push || 0) * (post.lean || 0) / DEG;      // (flat track: the back stays more upright than the bike, which leans under it: the trunk leans out of the bike by a share of its lean)
+            // flat track: the pelvis tilts the other way from the bike, up to 35 degrees (`pelvisTilt`), so that it stays about level with the road; the back keeps the turn that it had in the world
+            hipRoll = (post.flat || 0) * Math.max(-self.pelvisTilt, Math.min(self.pelvisTilt, 0.7 * (post.lean || 0) / DEG));
             var c = self.torsoPose.chest, h = self.torsoPose.head;
-            self.torsoPose.chest = [c[0] + pitch, c[1], c[2] + roll];
+            self.torsoPose.chest = [c[0] + pitch, c[1], c[2] + roll - hipRoll];
             // (the head turned into the bend, about the vertical)
             self.torsoPose.head = [h[0] - 0.7 * pitch, h[1] + 35 * (post.look || 0) * (1 - (post.hasLine || 0)) + (post.lineYaw || 0) * (post.hasLine || 0), h[2] - 0.6 * roll];      // (the way along the racing line if there is one)
             // flat track: the head stays upright to the road whatever the bike and the trunk do: it only turns about the vertical, to look along the way (a little ahead into the bend). The roll of
@@ -203,6 +207,7 @@ OpenRacer.Driver = function (config, parent, steering) {
             var flat = post.flat || 0;
             self.torsoPose.head = [h[0] - 0.7 * pitch - flat * 0.3 * pitch, h[1] + 35 * (post.look || 0) * (1 - (post.hasLine || 0)) + (post.lineYaw || 0) * (post.hasLine || 0), h[2] - 0.6 * roll + flat * headFix];
         }
+        if (self.bones.hips && self.bones.hips !== self.bones.chest[0]) turnBone(self.bones.hips, [0, 0, hipRoll]);
         self.bones.chest.forEach(function (bone) { turnBone(bone, self.torsoPose.chest); });
         if (self.bones.head) turnBone(self.bones.head, self.torsoPose.head);
         self.model.updateMatrixWorld(true);
