@@ -22,7 +22,7 @@ OpenRacer.CarTuning = (function () {
             ["rim_pattern", "Flake pattern of the rims", "", 0, 0, 0],
             ["rim_flake", "Flake size of the rims (metal flake)", "%", 2, 400, 1],
             ["rim_uv", "Flake map of the rims (the UV map)", "", 0, 0, 0],
-            ["mass", "Mass", "kg", 300, 6000, 10],
+            ["mass", "Mass", "kg", 50, 6000, 10],
             ["front_weight", "Weight on the front axle", "%", 25, 75, 0.5],
             ["cg_height", "Height of the centre of gravity", "m", 0.15, 1.5, 0.01],
             ["roll_front", "Roll stiffness at the front", "%", 10, 90, 1],
@@ -618,7 +618,7 @@ OpenRacer.CarTuning = (function () {
         c = clone(c);
         // (the rider of the menu: with the old one taken off, a heavier rider made the bike as much heavier at the next start, and the setup "(changed)" at once)
         var rider = c.type === "motorcycle" && v.bike_rider_mass !== undefined ? v.bike_rider_mass : (OpenRacer.Motorcycle ? OpenRacer.Motorcycle.riderMass(c) : 0);
-        c.chassis.mass = v.mass - rider;
+        c.chassis.mass = Math.max(20, v.mass - rider);      // (the vehicle without the rider is never lighter than 20 kg: the Mass slider goes down to 50 kg)
         c.chassis.weight_distribution = v.front_weight / 100;
         c.chassis.cg_height = v.cg_height;
         c.chassis.roll_front = v.roll_front / 100;
