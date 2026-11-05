@@ -57,7 +57,7 @@ the engine on the spot: the chance is `0.9 j^2 + 0.05 j` for a jolt `j` from 0 t
   `?worker=1`).
 * **Drops and stains** (`Leaks.js`): oil from the pan (black drops, `oilFlow`) and coolant from the radiator (`coolFlow`: a spray when it is hurt, a gush when it is
   off). The coolant is drawn with the particles that a wheel in a puddle throws up (`Debris.js`: the blades and the droplets of the water), but thicker and bigger (kinds
-  `coolant`, a thick blade, and `coolantDrop`), green and see-through (opacity 0.45 to 0.75, `Debris.emit`) fall with gravity and land on the road under them, where they leave a blot: oil stays (up to 3000 stains in all, with the other leaks), coolant
+  `coolant`, a blade a little thicker than the one of the water, and `coolantDrop`), pale grey-green and see-through (opacity 0.35 to 0.65, `Debris.emit`) fall with gravity and land on the road under them, where they leave a blot: oil stays (up to 3000 stains in all, with the other leaks), coolant
   fades in 70 s. A moving car drips a line, one that stands makes a puddle; on grass, sand and gravel the stains are fainter.
 * **Steam and smoke** from the engine bay: white steam when it is hot and leaking, dark smoke from oil that burns (a worn engine, a leaking pan).
 

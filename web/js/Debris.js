@@ -58,7 +58,7 @@ OpenRacer.Debris = function (scene, capacity) {
             "else if (vShape < 1.5) { float cs = cos(vAngle), sn = sin(vAngle); vec2 r = vec2(c.x * cs + c.y * sn, -c.x * sn + c.y * cs);" +
             "  float w = 0.035 + 0.07 * (1.0 - abs(r.x) * 2.0); a = smoothstep(w, w * 0.35, abs(r.y)) * smoothstep(0.5, 0.4, abs(r.x)); }" +      // (a blade: thin, wider in the middle, with a point at both ends)
             "else if (vShape > 2.5) { float cs = cos(vAngle), sn = sin(vAngle); vec2 r = vec2(c.x * cs + c.y * sn, -c.x * sn + c.y * cs);" +
-            "  float w = 0.12 + 0.2 * (1.0 - abs(r.x) * 2.0); a = smoothstep(w, w * 0.5, abs(r.y)) * smoothstep(0.5, 0.35, abs(r.x)); }" +       // (a thick blade: a fat streak with round ends, the spray of the coolant)
+            "  float w = 0.06 + 0.1 * (1.0 - abs(r.x) * 2.0); a = smoothstep(w, w * 0.5, abs(r.y)) * smoothstep(0.5, 0.35, abs(r.x)); }" +       // (a blade a little thicker than the one of the water: the spray of the coolant)
             "else a = smoothstep(0.5, 0.2, length(c));" +
             "if (a * vAlpha < 0.02) discard; gl_FragColor = vec4(vColour * light, a * vAlpha); }",
         transparent: true, depthWrite: false, fog: false
@@ -83,7 +83,7 @@ OpenRacer.Debris = function (scene, capacity) {
         ground: shades([[0.55, 0.43, 0.3], [0.46, 0.36, 0.24], [0.62, 0.5, 0.36]]),
         water: shades([[0.95, 0.97, 1.0], [0.78, 0.83, 0.9], [0.62, 0.68, 0.76], [0.88, 0.9, 0.94]]).map(function (c) { return [c[0] * 1.7, c[1] * 1.7, c[2] * 1.7]; }),      // spray: white and grey
         snow: shades([[1.0, 1.0, 1.0], [0.92, 0.95, 1.0], [1.0, 1.0, 1.0]]).map(function (c) { return [c[0] * 2.2, c[1] * 2.2, c[2] * 2.2]; }),       // (bright: lighter than the snow, which is itself lit)
-        coolant: shades([[0.25, 0.85, 0.3], [0.35, 0.92, 0.4], [0.2, 0.72, 0.25], [0.4, 0.9, 0.3]]).map(function (c) { return [c[0] * 1.5, c[1] * 1.5, c[2] * 1.5]; })       // the coolant of a leak (EngineDamage.js, Leaks.js): green
+        coolant: shades([[0.6, 0.76, 0.56], [0.68, 0.8, 0.6], [0.55, 0.7, 0.52], [0.72, 0.82, 0.64]]).map(function (c) { return [c[0] * 1.25, c[1] * 1.25, c[2] * 1.25]; })       // the coolant of a leak (EngineDamage.js, Leaks.js): a pale, grey green
     };
     // what each kind looks like: the shape, the size (m: the length of a blade, the width of the rest), the number made compared with the rest, how far they fly
     var LOOK = {
@@ -96,8 +96,8 @@ OpenRacer.Debris = function (scene, capacity) {
         snow: { shape: 2, size: [0.01, 0.026], rate: 1.1, fly: 0.9 },
         water: { shape: 1, size: [0.05, 0.12], rate: 1, fly: 1 },
         droplet: { shape: 2, size: [0.012, 0.03], rate: 1, fly: 1 },
-        coolant: { shape: 3, size: [0.14, 0.3], rate: 1, fly: 1 },                 // the spray of a puddle, thick and big, green
-        coolantDrop: { shape: 2, size: [0.06, 0.11], rate: 1, fly: 1 }
+        coolant: { shape: 3, size: [0.1, 0.22], rate: 1, fly: 1 },                 // the spray of a puddle, a little thicker and bigger, pale green
+        coolantDrop: { shape: 2, size: [0.04, 0.075], rate: 1, fly: 1 }
     };
 
     var KINDS = ["grass", "clod", "sand", "gravel", "mud", "ground", "snow", "water", "droplet", "coolant", "coolantDrop"];     // (the number of a kind in the record of the replay)
@@ -142,11 +142,11 @@ OpenRacer.Debris = function (scene, capacity) {
     }
 
     // A piece from outside (the coolant that a leak sprays, Leaks.js): kind "coolant" (a thick green blade, as the spray of a puddle) or "coolantDrop", from (x, y, z) with a
-    // speed, down to the height floorY; it is see-through (opacity, 0.45 to 0.75 when it is not given) and not in the record of a replay
+    // speed, down to the height floorY; it is see-through (opacity, 0.35 to 0.65 when it is not given) and not in the record of a replay
     this.emit = function (x, y, z, vx, vy, vz, kind, floorY, opacity) {
         var look = LOOK[kind] || LOOK.coolant;
         spawn(x, y, z, vx, vy, vz, kind, { size: look.size[0] + Math.random() * (look.size[1] - look.size[0]), tilt: (Math.random() - 0.5) * 1.2, life: 1.2 + Math.random() * 0.8,
-            colour: SHADES.coolant[(Math.random() * SHADES.coolant.length) | 0], floor: floorY, opacity: opacity !== undefined ? opacity : 0.45 + Math.random() * 0.3 });
+            colour: SHADES.coolant[(Math.random() * SHADES.coolant.length) | 0], floor: floorY, opacity: opacity !== undefined ? opacity : 0.35 + Math.random() * 0.3 });
     };
 
     // The pieces that fly: gravity and a little drag; one that comes down to the height where it began stays a moment and goes
