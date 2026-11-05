@@ -72,6 +72,8 @@ OpenRacer.Motorcycle = function (settings) {
         self.riderFastKa = s.rider_fast_ka !== undefined ? s.rider_fast_ka : 0.2; self.riderFastKad = s.rider_fast_kad !== undefined ? s.rider_fast_kad : 0.5;   // the share of the gains that is left at 28 m/s and above
         self.gainDownFrom = s.gain_down_from !== undefined ? s.gain_down_from : 8; self.gainDownTo = s.gain_down_to !== undefined ? s.gain_down_to : 14;   // m/s: the gains of the rider come down between these speeds while no lean is asked
         self.yawBrake = s.yaw_brake !== undefined ? s.yaw_brake : 1;   // model v2: how much of the yaw damping of the old model the rider has on the brake (0: none)
+        self.bodyAssist = s.body_assist !== undefined ? s.body_assist : 1; self.bodyArm = s.body_arm !== undefined ? s.body_arm : 0.5;      // v2: the share of the help of the rider's body (0: none), and how far his weight goes out (m)
+        self.assistErrFrom = (s.assist_err_from_deg !== undefined ? s.assist_err_from_deg : 15) * DEG; self.assistErrTo = (s.assist_err_to_deg !== undefined ? s.assist_err_to_deg : 35) * DEG;      // the lean error from which the help comes in, and where it is all there
         self.riderBarsCap = (s.rider_bars_cap_deg !== undefined ? s.rider_bars_cap_deg : 12) * DEG;   // the most the bars are turned for the lean error (and the roll rate)
         self.armOmega = s.arm_omega !== undefined ? s.arm_omega : 40;   // rad/s: how stiff the hands hold the bars (the spring is steer_inertia * omega^2)
         self.riderTorqueMax = s.rider_torque_max !== undefined ? s.rider_torque_max : 120;   // Nm on the bars
@@ -80,7 +82,7 @@ OpenRacer.Motorcycle = function (settings) {
     }
     readSettings();
     this.retune = function (changes) { Object.assign(s, changes || {}); self.settings = s; readSettings(); };
-    this.posture = { lat: 0, long: 0, drop: 0, tuck: 0, sit: 0, knee: 0 };       // body space: lat to the left, long forward, drop up (m); tuck, sit, knee: 0 to 1
+    this.posture = { lat: 0, long: 0, drop: 0, tuck: 0, sit: 0, knee: 0, assist: 0, look: 0 };      // assist: where the weight goes to the side for the help of the body (m); look: the head turned into the bend, -1 to 1 (left is positive)       // body space: lat to the left, long forward, drop up (m); tuck, sit, knee: 0 to 1
     var vPrev = null, accel = { x: 0, y: 0, z: 0 }, dw = { x: 0, y: 0, z: 0 };
     this.riderKey = 0;                                      // -1: the rider is put back, 1: forward (keys, set by Car.js)
     this.sinceBrake = 99; this.counterGain = 1;
@@ -465,12 +467,29 @@ OpenRacer.Motorcycle = function (settings) {
         T = alive * Math.max(-6 * gh * brace, Math.min(6 * gh * brace, T));
         if (self.v2) T *= 1 - smooth(self.balanceFrom, self.balanceTo, Math.abs(u));          // (model v2: from 7 m/s the rider keeps the bike up with the bars only; the torque about the long axis is for a walking pace)
         torque.x -= state.ax * T; torque.y -= state.ay * T; torque.z -= state.az * T;
+        // The body of the rider helps where the bars cannot (model v2, and the keys of a keyboard are not a pair of hands): with the front wheel light or in the air the bars do not steer the lean at all,
+        // and when the lean has got far from what he asked for (or runs away from it) he throws his weight to the one side or the other, as a rider does in a wheelie or a slide. It is the weight of
+        // the rider moved out to the side (`body_arm`, about half a metre with the body leaned over): a torque about the long axis of at most mass x g x arm, a spring and a damper on the lean error.
+        // It is nothing in a bend that goes as asked (the share is 0), and it is there in full when the front wheel is up.
+        var assistT = 0, assistW = 0;
+        if (self.v2 && self.bodyAssist > 0) {
+            var errL = self.targetLean - state.lean, rateL = state.rate;
+            var runaway = smooth(self.assistErrFrom, self.assistErrTo, Math.abs(errL)) * (errL * rateL < 0 ? 1 : 0.5);      // (the lean is going away from the target, or just far from it)
+            assistW = self.bodyAssist * Math.max(1 - smooth(0.05, 0.5, ((v.wheels[0].weight || 0) + (v.wheels[1].weight || 0)) / Math.max(1, v.weight_distribution * v.mass * G)), runaway)
+                * smooth(self.balanceFrom, self.balanceTo, Math.abs(u)) * alive;
+            if (assistW > 0.001) {
+                var akp = 2 * gh, akd = 1.2 * Math.sqrt(akp * inertia), aMax = self.riderMass * G * self.bodyArm;
+                assistT = assistW * Math.max(-aMax, Math.min(aMax, akp * errL - akd * rateL));
+                torque.x -= state.ax * assistT; torque.y -= state.ay * assistT; torque.z -= state.az * assistT;
+            }
+            self.posture.assist += (Math.max(-0.5, Math.min(0.5, assistT / (self.riderMass * G))) - self.posture.assist) * Math.min(1, dt / 0.12);      // (where the weight goes, for the model of the rider)
+        }
         // the yaw that the steering did not ask for is damped
         var fast = smooth(1.5, 4.5, Math.abs(u));
         // the front wheel in the air (a wheelie): it does not steer, the lean does. A bike that leans turns at g tan(lean) / u, and the rider takes it round at that rate
         var frontLoad = ((v.wheels[0].weight || 0) + (v.wheels[1].weight || 0)) / Math.max(1, v.weight_distribution * v.mass * G);
         var lift = 1 - smooth(0.05, 0.5, frontLoad);
-        self.dbg = { T: T, yawDamp: 0, yawLift: 0, lift: lift };
+        self.dbg = { T: T, yawDamp: 0, yawLift: 0, lift: lift, assist: assistW, assistT: assistT };
         // The rider keeps the bike turning at the rate that its lean gives (a balanced bend: r = g tan(lean) / u): a torque about the vertical against the yaw that the tyres make on their own
         // (a front that is loaded on the brake and a light rear would swing the tail out, as a car oversteers). With the front wheel in the air it is all there is.
         // (model v2: only on the brake. The old model damped the yaw that the steering did not ask for all the time; v2 leaves it to the tyres, but a bike on the brake has a light rear wheel and
@@ -544,6 +563,8 @@ OpenRacer.Motorcycle = function (settings) {
         p.lat += (hang * self.maxHang - p.lat) * k(0.25); p.knee += (bendT - p.knee) * k(0.3);
         p.long += ((-0.22 * sit + 0.12 * tuck) - p.long) * k(0.3);
         p.drop += ((-0.09 * tuck + 0.05 * sit) - p.drop) * k(0.3);
+        // the head looks where the bike is going: into the bend (the lean that is asked, so a little ahead of the bike), and straight on a straight; it comes round a little before the bike does
+        p.look += (Math.max(-1, Math.min(1, lean / (35 * DEG))) * smooth(2, 6, Math.abs(u)) - p.look) * k(0.2);
     };
     // a replay: the posture and the foot from the recording (the lean of the body, the speed and the pedals), nothing else
     this.replayStep = function (v, dt, thr, brk, snap) {

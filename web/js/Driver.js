@@ -177,7 +177,7 @@ OpenRacer.Driver = function (config, parent, steering) {
     function applyPosture() {
         var p = self.posture;
         self.root.position.sub(postureOff);
-        if (p) postureOff.set(p.lat * 0.7, p.drop * 0.7, p.long * 0.7); else postureOff.set(0, 0, 0);
+        if (p) postureOff.set((p.lat + (p.assist || 0)) * 0.7, p.drop * 0.7, p.long * 0.7); else postureOff.set(0, 0, 0);
         self.root.position.add(postureOff);
     }
     function torso() {
@@ -189,7 +189,7 @@ OpenRacer.Driver = function (config, parent, steering) {
             var pitch = 28 * post.tuck - 10 * post.sit, roll = -14 * (post.lat / 0.3);
             var c = self.torsoPose.chest, h = self.torsoPose.head;
             self.torsoPose.chest = [c[0] + pitch, c[1], c[2] + roll];
-            self.torsoPose.head = [h[0] - 0.7 * pitch, h[1], h[2] - 0.6 * roll];
+            self.torsoPose.head = [h[0] - 0.7 * pitch, h[1] + 35 * (post.look || 0), h[2] - 0.6 * roll];      // (and the head turned into the bend)
         }
         self.bones.chest.forEach(function (bone) { turnBone(bone, self.torsoPose.chest); });
         if (self.bones.head) turnBone(self.bones.head, self.torsoPose.head);

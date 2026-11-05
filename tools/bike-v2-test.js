@@ -237,6 +237,50 @@ for (const brake of [0, 1]) for (const speed of [100, 140, 180]) {
     }
     report("wobble " + CAR.split("-")[0] + " " + speed + " km/h" + (brake ? ", brake" : ", coast"), !crash && maxLean < 8 && ring < 1, "bars after the tap (1.2 to 2 s) " + ring.toFixed(2) + " deg, max bars " + maxBars.toFixed(1) + ", max lean " + maxLean.toFixed(1) + (crash ? ", crashed: " + crash : ""));
 }
+// the rider's body (replays of a rider): the front wheel in the air (the gas wide open, the wheelie control off) with a key for a bend: the lean has to follow the key and the bike may not go over,
+// and the front wheel coming down in a bend. Then the brake in a bend: the path may not run wider than it did (the radius is the path's, from the heading of the speed)
+const AD = process.argv.includes("--adump");
+for (const speed of [40, 60, 80]) for (const cmd of [0.5, 1]) {
+    if ((ONLY && ONLY !== "assist") || (SPEEDS.length && !SPEEDS.includes(speed)) || (!ONLY && !process.argv.includes("--rider"))) continue;
+    const car = makeCar(config), v = car.v, lock = 0.38; let crash = null, maxLean = 0, maxPitch = 0, overshoot = 0, nLift = 0, nT = 0; const L = [];
+    for (let t = 0; t < 16 && !crash; t += DT) {
+        const input = car.input, tt = t - 10, err = speed * KMH - v.u;
+        if (tt < 0) { v.controller.options = null; input.manualGearbox = false; input.throttle = err > 0 ? Math.min(1, err * 0.5) : 0; input.brakePedal = err < 0 ? Math.min(1, -err * 0.3) : 0; input.turnAngle = 0; }
+        else { v.controller.options = { wheelieControl: false }; input.manualGearbox = true; input.current_gear = 1; input.throttle = tt < 3 ? 1 : 0; input.brakePedal = 0; input.turnAngle = (tt > 0.5 && tt < 3.5 ? cmd : tt >= 3.5 && tt < 5 ? -cmd : 0) * lock; }
+        if (tt > 0.55 && tt < 0.6 && !process.argv.includes("--noimpulse")) { const k = parseFloat((process.argv.find(a => a.startsWith("--lift=")) || "--lift=3").split("=")[1]); const qx = v.qx, qy = v.qy, qz = v.qz, qw = v.qw; const ax = 1 - 2 * (qy * qy + qz * qz), ay = 2 * (qx * qy + qz * qw), az = 2 * (qx * qz - qy * qw); v.wx -= k * ax * DT * 60 * 0.1; v.wy -= k * ay * DT * 60 * 0.1; v.wz -= k * az * DT * 60 * 0.1; }      // (--lift=3: a kick that brings the nose up, as a wheelie does; --noimpulse: none)
+        v.update(DT);
+        if (tt > 0) {
+            const lean = (v.lean || 0) / DEG, tgt = (v.controller.targetLean || 0) / DEG, fl = ((v.wheels[0].weight || 0) + (v.wheels[1].weight || 0)) / Math.max(1, v.weight_distribution * v.mass * 9.81);
+            maxLean = Math.max(maxLean, Math.abs(lean)); nT++; if (fl < 0.1) nLift++; overshoot = Math.max(overshoot, Math.abs(lean) - Math.abs(tgt) * 1);
+            L.push({ lean, tgt });
+            if (AD && Math.round(tt / DT) % 6 === 0) console.log(tt.toFixed(1), "kmh", (v.u * 3.6).toFixed(0), "lean", lean.toFixed(1), "tgt", tgt.toFixed(1), "front", fl.toFixed(2), "bars", ((v.controller.steer || 0) / DEG).toFixed(1), "assist", ((v.controller.dbg && v.controller.dbg.assist) || 0).toFixed(2), "T", ((v.controller.dbg && v.controller.dbg.assistT) || 0).toFixed(0));
+        }
+        if (v.controller.crashed) crash = v.controller.crashReason || "crashed";
+    }
+    report("assist " + CAR.split("-")[0] + " " + speed + " km/h, key " + cmd + " with the gas wide open", !crash && maxLean < 62, "front light " + (100 * nLift / Math.max(1, nT)).toFixed(0) + " % of the time, max lean " + maxLean.toFixed(0) + ", most past the lean asked " + overshoot.toFixed(0) + (crash ? ", crashed: " + crash : ""));
+}
+for (const speed of [50, 70, 90]) for (const brake of [0, 0.6, 1]) {
+    if ((ONLY && ONLY !== "bendbrake") || (SPEEDS.length && !SPEEDS.includes(speed)) || (!ONLY && !process.argv.includes("--rider"))) continue;
+    const car = makeCar(config), v = car.v, lock = 0.38; let crash = null, maxLean = 0, h0 = null, hA = null, hB = null, tA = 0, tB = 0, uA = 0, uB = 0;
+    for (let t = 0; t < 16 && !crash; t += DT) {
+        const input = car.input, tt = t - 10, err = speed * KMH - v.u;
+        if (tt < 0) { input.throttle = err > 0 ? Math.min(1, err * 0.5) : 0; input.brakePedal = err < 0 ? Math.min(1, -err * 0.3) : 0; input.turnAngle = 0; }
+        else { input.throttle = 0; input.brakePedal = tt > 2.5 ? brake : 0; input.turnAngle = (tt > 0.3 ? 1 : 0) * lock; }
+        v.update(DT);
+        if (tt > 0) {
+            maxLean = Math.max(maxLean, Math.abs((v.lean || 0) / DEG)); const hd = Math.atan2(v.vx, v.vz);
+            if (tt >= 1.5 && hA === null) { hA = hd; tA = tt; uA = v.u; } if (tt >= 2.5 && hB === null) { hB = hd; tB = tt; uB = v.u; }      // a second of the bend before the brake (1.5 to 2.5 s)
+            if (tt >= 2.5 && Math.abs(tt - 3.5) < DT / 2) { h0 = [hd, tt, v.u]; }
+            if (AD && Math.round(tt / DT) % 6 === 0) console.log(tt.toFixed(1), "kmh", (v.u * 3.6).toFixed(0), "lean", ((v.lean || 0) / DEG).toFixed(1), "tgt", ((v.controller.targetLean || 0) / DEG).toFixed(1), "slip", (Math.atan2(v.v, Math.max(1, Math.abs(v.u))) / DEG).toFixed(1), "yawbias", ((v.controller.dbg && v.controller.dbg.yawBias) || 0).toFixed(2));
+        }
+        if (v.controller.crashed) crash = v.controller.crashReason || "crashed";
+    }
+    const wrap = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+    // the path's turn rate over the second before the brake and over the second of the brake: how much the bend widens (radius = speed / rate)
+    const rate1 = hB !== null ? Math.abs(wrap(hB - hA)) / (tB - tA) : 0, rate2 = h0 ? Math.abs(wrap(h0[0] - hB)) / (h0[1] - tB) : 0;
+    const r1 = (uA + uB) / 2 / Math.max(rate1, 1e-3), r2 = (uB + h0[2]) / 2 / Math.max(rate2, 1e-3);
+    report("bend + brake " + brake + " " + CAR.split("-")[0] + " " + speed + " km/h", !crash, "radius before the brake " + r1.toFixed(0) + " m, on the brake " + r2.toFixed(0) + " m (x" + (r2 / r1).toFixed(2) + "), max lean " + maxLean.toFixed(0) + (crash ? ", crashed: " + crash : ""));
+}
 // what the browser test did with the real keyboard (Car.js: the key ramps the command at lock / 0.9 s times key_steer_rate, the command decays by 0.75 per 1/60 s): three taps of 90 ms
 // (right, left, right, 250 ms apart) at speed, then the brake for 2.2 s, with the gas shut
 for (const speed of [60, 100, 140]) for (const nTaps of [3, 6]) {
