@@ -111,6 +111,10 @@ OpenRacer.Driver = function (config, parent, steering) {
         self.bones.chest.forEach(function (bone) { rest.set(bone, bone.quaternion.clone()); });
         if (self.bones.head) rest.set(self.bones.head, self.bones.head.quaternion.clone());
         if (self.bones.hips) rest.set(self.bones.hips, self.bones.hips.quaternion.clone());
+        // (a rig whose arms and legs hang on a tree of their own, not on the bones that deform the body: the parent of the thighs is the pelvis of that tree and has to turn with the pelvis, and
+        // the parent of the arms with the chest, else the hips and the shoulders stay where they were while the body turns)
+        self.legRoots = [];
+        ["legL", "legR"].forEach(function (key) { var b = self.bones[key] && self.bones[key][0], par = b && b.parent; if (par && self.legRoots.indexOf(par) < 0 && par !== self.bones.hips) { self.legRoots.push(par); rest.set(par, par.quaternion.clone()); } });
         ["armL", "armR", "legL", "legR"].forEach(function (key) { self.bones[key].forEach(function (bone) { if (bone) rest.set(bone, bone.quaternion.clone()); }); });
         if (self.bones.head) restScale.set(self.bones.head, self.bones.head.scale.clone());
         findFingers();
@@ -208,7 +212,13 @@ OpenRacer.Driver = function (config, parent, steering) {
             self.torsoPose.head = [h[0] - 0.7 * pitch - flat * 0.3 * pitch, h[1] + 35 * (post.look || 0) * (1 - (post.hasLine || 0)) + (post.lineYaw || 0) * (post.hasLine || 0), h[2] - 0.6 * roll + flat * headFix];
         }
         if (self.bones.hips && self.bones.hips !== self.bones.chest[0]) turnBone(self.bones.hips, [0, 0, hipRoll]);
-        self.bones.chest.forEach(function (bone) { turnBone(bone, self.torsoPose.chest); });
+        (self.legRoots || []).forEach(function (bone) { turnBone(bone, [0, 0, hipRoll]); });
+        self.bones.chest.forEach(function (bone) {
+            // (the bones of the deformation hang on the pelvis and turn with it: they have the turn less what the pelvis took; the bone of the arms does not, it has the whole of it)
+            var pose = self.torsoPose.chest;
+            if (hipRoll && !/^DEF-/.test(bone.name)) pose = [pose[0], pose[1], pose[2] + hipRoll];
+            turnBone(bone, pose);
+        });
         if (self.bones.head) turnBone(self.bones.head, self.torsoPose.head);
         self.model.updateMatrixWorld(true);
         if (post && self.bones.head && (post.flat || 0) > 0.001) {
