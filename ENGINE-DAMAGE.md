@@ -65,11 +65,11 @@ bent block, a leaking radiator and pan, 35 % less power and a misfire a third of
 
 ## The HUD, repair and who has it
 
-* **The round gauge**: the left arc is the oil temperature and the right arc the coolant temperature (they took the place of the throttle and the brake). The oil
-  follows the coolant plus 6 to 30 degrees with the engine speed and load (and more with little oil or dry bearings), slowly (a minute and a half). The icons beside
-  the arcs are `images/HUD/oil-idle.png`, `oil-warning.png`, `coolant-idle.png` and `coolant-warning.png`; the warning one blinks when it is too hot, when less
-  than 30 % of the oil or the coolant is left, or when the engine has failed.
-* The car panel gets a line **ENGINE 96° · OIL 80% · COOLANT 55%** (with MISFIRING, OVERHEATING, ENGINE WORN or ENGINE FAILED) as soon as something is wrong with
+* **The round gauge**: the right arc is the coolant temperature (it took the place of the brake). There is no oil gauge, as in a car: on the left there is only a
+  **red oil lamp** (`images/HUD/oil-warning.png`), dark until less than 20 % of the oil is left. The coolant icon beside its arc is `coolant-idle.png`, dim while all
+  is well, and `coolant-warning.png`, which blinks when it is too hot, when less than 30 % of the coolant is left, or when the engine has failed. (The game still
+  keeps an oil temperature, `engineHealth.oilTemp`: it drives the leak of a hot engine, it is not shown.)
+* The car panel gets a line **ENGINE 96° · COOLANT 55%** (with MISFIRING, OVERHEATING, ENGINE WORN or ENGINE FAILED) as soon as something is wrong with
   the engine; nothing when it is whole and cool. It is also shown when tyre wear and fuel are off.
 * A **pit stop** repairs the engine with the shell: the oil and the coolant are full, the heat is gone, nothing is bent. It takes `3 + 6 · worst + 3 (failed)`
   seconds, side by side with the other work. The reset key, which repairs the car, does the same.

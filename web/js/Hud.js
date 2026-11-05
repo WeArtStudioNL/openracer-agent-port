@@ -43,7 +43,7 @@ var Hud = (function() {
     var BADGE_FILE = { TC: "tc", LC: "launch", ESC: "esc", ABS: "abs", "2S": "2step" };
     var badges = {};         // name -> { active, inactive, off } images
     // the oil and coolant temperature arcs of the gauge (degrees): the range of the arc, and the bands: cold below the first, normal to the second, warm to the third, then hot
-    var OIL_RANGE = [40, 160], OIL_BANDS = [70, 130, 145], COOLANT_RANGE = [40, 140], COOLANT_BANDS = [70, 105, 118];
+    var COOLANT_RANGE = [40, 140], COOLANT_BANDS = [70, 105, 118];
     function gaugeColour(t, bands) { return t < bands[0] ? "#6ab0ff" : (t <= bands[1] ? "#37d67a" : (t <= bands[2] ? "#ffb347" : "#ff5a4f")); }
     // the icons beside them, images/HUD/oil-idle.png, oil-warning.png, coolant-idle.png and coolant-warning.png
     var gaugeIcons = { oil: {}, coolant: {} };
@@ -170,11 +170,11 @@ var Hud = (function() {
     }
     // the engine, when something is wrong with it (EngineDamage.js, vehicle.engineHealth): the heat, the oil and the coolant, and what it is doing; nothing when it is whole and cool
     function engineHealthRow(eh) {
-        var hot = eh.temp > 104, trouble = hot || eh.coolant < 0.97 || eh.oil < 0.97 || eh.wear > 0.02 || eh.ignition > 0.02 || eh.gasket > 0.02 || eh.failed;
+        var hot = eh.temp > 104, trouble = hot || eh.coolant < 0.97 || eh.wear > 0.02 || eh.ignition > 0.02 || eh.gasket > 0.02 || eh.failed;
         if(!trouble) return "";
-        var colour = eh.failed || eh.temp > 125 || eh.oil < 0.2 || eh.coolant < 0.2 ? "#ff6b62" : (hot || eh.oil < 0.5 || eh.coolant < 0.5 || eh.misfire > 0.2 ? "#ffb347" : "#e8d98a");
+        var colour = eh.failed || eh.temp > 125 || eh.coolant < 0.2 ? "#ff6b62" : (hot || eh.coolant < 0.5 || eh.misfire > 0.2 ? "#ffb347" : "#e8d98a");
         var state = eh.failed ? "ENGINE FAILED" : (eh.temp > 118 ? "OVERHEATING" : (eh.gasket > 0.3 ? "HEAD GASKET" : (eh.misfire > 0.15 ? "MISFIRING" : (eh.wear > 0.5 ? "ENGINE WORN" : ""))));
-        return "<div class=\"engine\" style=\"margin-top: 6px; color: " + colour + ";\"><div class=\"label\">ENGINE " + Math.round(eh.temp) + "° · OIL " + Math.round(eh.oil * 100) + "% · COOLANT " + Math.round(eh.coolant * 100) + "%" +
+        return "<div class=\"engine\" style=\"margin-top: 6px; color: " + colour + ";\"><div class=\"label\">ENGINE " + Math.round(eh.temp) + "° · COOLANT " + Math.round(eh.coolant * 100) + "%" +
             (state ? " · " + state : "") + "</div></div>";
     }
     function updateCar(car) {
@@ -339,27 +339,26 @@ var Hud = (function() {
             }
         }
 
-        // the oil temperature (left) and the coolant temperature (right) as small arcs, each with its icon beside it (EngineDamage.js, vehicle.engineHealth)
+        // the coolant temperature (right) as a small arc with its icon beside it, and on the left the red oil lamp, which is only lit when the oil is nearly gone (as in a car:
+        // there is no oil gauge) (EngineDamage.js, vehicle.engineHealth)
         var pedalRadius = R * 0.5;
         var pedalWidth = R * 0.07;
         var eh = car.vehicle.engineHealth;
-        arc(cx, cy, pedalRadius, 135 * Math.PI / 180, 225 * Math.PI / 180, pedalWidth, "rgba(255, 255, 255, 0.1)");
         arc(cx, cy, pedalRadius, 45 * Math.PI / 180, -45 * Math.PI / 180, pedalWidth, "rgba(255, 255, 255, 0.1)", true);
         var oilWarn = false, coolantWarn = false;
         if(eh) {
-            var oilFrac = Math.max(0, Math.min(1, (eh.oilTemp - OIL_RANGE[0]) / (OIL_RANGE[1] - OIL_RANGE[0])));
             var coolantFrac = Math.max(0, Math.min(1, (eh.temp - COOLANT_RANGE[0]) / (COOLANT_RANGE[1] - COOLANT_RANGE[0])));
-            if(oilFrac > 0.01) arc(cx, cy, pedalRadius, 135 * Math.PI / 180, (135 + 90 * oilFrac) * Math.PI / 180, pedalWidth, gaugeColour(eh.oilTemp, OIL_BANDS));
             if(coolantFrac > 0.01) arc(cx, cy, pedalRadius, 45 * Math.PI / 180, (45 - 90 * coolantFrac) * Math.PI / 180, pedalWidth, gaugeColour(eh.temp, COOLANT_BANDS), true);
-            oilWarn = eh.oilTemp > OIL_BANDS[2] || eh.oil < 0.3 || !!eh.failed;
+            oilWarn = eh.oil < 0.2;
             coolantWarn = eh.temp > COOLANT_BANDS[2] || eh.coolant < 0.3 || !!eh.failed;
         }
         // the icons: dim while all is well, bright (and blinking) with a warning; before the picture is there a short word stands in
         function gaugeIcon(name, warn, x, y, size) {
-            var set = gaugeIcons[name], img = warn ? (blinkNow ? set.idle : (set.warning || set.idle)) : set.idle;
+            if(name === "oil" && !warn) return;                // (the oil lamp is dark until the oil is nearly gone)
+            var set = gaugeIcons[name], img = name === "oil" ? set.warning : (warn ? (blinkNow ? set.idle : (set.warning || set.idle)) : set.idle);
             if(img) { context.globalAlpha = warn ? 1 : 0.55; context.drawImage(img, x - size / 2, y - size / 2, size, size); context.globalAlpha = 1; }
             else {
-                context.fillStyle = warn ? (blinkNow ? "#ffb347" : "#ff5a4f") : "rgba(255, 255, 255, 0.45)";
+                context.fillStyle = name === "oil" ? "#ff3b30" : (warn ? (blinkNow ? "#ffb347" : "#ff5a4f") : "rgba(255, 255, 255, 0.45)");
                 context.font = "bold " + Math.round(size * 0.55) + "px Arial";
                 context.fillText(name === "oil" ? "OIL" : "H2O", x, y);
             }
