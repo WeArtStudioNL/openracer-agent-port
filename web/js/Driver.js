@@ -185,7 +185,7 @@ OpenRacer.Driver = function (config, parent, steering) {
     function applyPosture() {
         var p = self.posture;
         self.root.position.sub(postureOff);
-        if (p) postureOff.set(((1 - (p.flat || 0)) * (p.lat + (p.assist || 0)) * 0.7 + (p.flat || 0) * (-(p.inside || 0) * (p.style && p.style.pelvisSlide !== undefined ? p.style.pelvisSlide : 0.09) * Math.min(1, Math.abs(p.lean || 0) / (25 * DEG)))), p.drop * 0.7, p.long * 0.7 + (p.flat || 0) * ((p.style && p.style.forward) || 0) * Math.min(1, Math.abs(p.lean || 0) / (20 * DEG)));      // (flat track: the pelvis slides a little to the outside on the saddle, the back leans in, the rest of the rider is in his place) else postureOff.set(0, 0, 0);
+        if (p) postureOff.set(((1 - (p.flat || 0)) * (p.lat + (p.assist || 0)) * (p.style && p.style.shift !== undefined ? p.style.shift : 0.7) + (p.flat || 0) * (-(p.inside || 0) * (p.style && p.style.pelvisSlide !== undefined ? p.style.pelvisSlide : 0.09) * Math.min(1, Math.abs(p.lean || 0) / (25 * DEG)))), p.drop * 0.7, p.long * 0.7 + (p.flat || 0) * ((p.style && p.style.forward) || 0) * Math.min(1, Math.abs(p.lean || 0) / (20 * DEG)));      // (flat track: the pelvis slides a little to the outside on the saddle, the back leans in, the rest of the rider is in his place) else postureOff.set(0, 0, 0);
         self.root.position.add(postureOff);
     }
     this.headSign = 1;      // (the sign of the roll of the bike in the roll of the bones)
@@ -228,7 +228,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         // a rider of a motorcycle: flat on the tank on the throttle, back on the brake, and over to the inside of a bend (the posture of Motorcycle.js)
         var post = self.posture;
         if (post) {
-            var pitch = 28 * post.tuck - 10 * post.sit, roll = -14 * (post.lat / 0.3);
+            var hst = post.style || {}, pitch = (hst.tuckPitch !== undefined ? hst.tuckPitch : 28) * post.tuck - (hst.sitPitch !== undefined ? hst.sitPitch : 10) * post.sit, roll = -(hst.chestRoll !== undefined ? hst.chestRoll : 14) * (post.lat / 0.3);
             var st = post.style || {}, flatLean = (post.flat || 0) * Math.min(1, Math.abs(post.lean || 0) / (20 * DEG));
             roll += (st.upright !== undefined ? st.upright : 0.55) * (post.push || 0) * (post.lean || 0) / DEG;
             pitch += (st.chestPitch || 0) * flatLean;      // (flat track: the back stays more upright than the bike, which leans under it: the trunk leans out of the bike by a share of its lean)
@@ -941,8 +941,9 @@ OpenRacer.Driver = function (config, parent, steering) {
             var post = self.posture;
             if (post && post.knee > 0.01 && (post.inside || post.lat) * e[1] !== 0) {
                 var inside = (post.inside || post.lat) * e[1] > 0;
-                tmp.x += e[1] * (inside ? 0.6 : 0.25) * post.knee;
-                if (inside) tmp.y -= 0.5 * post.knee;
+                var kst = post.style || {};
+                tmp.x += e[1] * (inside ? (kst.kneeOut !== undefined ? kst.kneeOut : 0.6) : 0.25) * post.knee;
+                if (inside) tmp.y -= (kst.kneeDown !== undefined ? kst.kneeDown : 0.5) * post.knee;
             }
             (self.poles[e[0]] || (self.poles[e[0]] = new V())).copy(tmp);
             self.parent.localToWorld(pole.copy(tmp));
