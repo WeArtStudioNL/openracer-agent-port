@@ -76,7 +76,7 @@ function run(speedKmh, cmdFn, T, settle) {
         const tt = t - settle;
         input.turnAngle = (tt > 0 ? cmdFn(tt) : 0) * lock;
         v.update(DT);
-        if (tt > 0) { log.push({ t: tt, lean: (v.lean || 0) / DEG, steer: (v.controller.steer || 0) / DEG, beta: Math.atan2(v.v, Math.max(1, Math.abs(v.u))) / DEG, yaw: v.r, u: v.u }); maxBeta = Math.max(maxBeta, Math.abs(log[log.length - 1].beta)); }
+        if (tt > 0) { log.push({ t: tt, target: (v.controller.targetLean || 0) / DEG, lean: (v.lean || 0) / DEG, steer: (v.controller.steer || 0) / DEG, beta: Math.atan2(v.v, Math.max(1, Math.abs(v.u))) / DEG, yaw: v.r, u: v.u }); maxBeta = Math.max(maxBeta, Math.abs(log[log.length - 1].beta)); }
         if (v.controller.crashed) crash = v.controller.crashReason || "crashed";
     }
     return { log, crash, maxBeta };
@@ -86,12 +86,20 @@ const report = (name, ok, text) => { if (!ok) failed++; console.log((ok ? "ok   
 
 if (process.argv.some(a => a.startsWith("--trace"))) {      // --trace=speed_kmh: lean, bars and torque every 0.25 s of a straight run
     const sp = parseFloat((process.argv.find(a => a.startsWith("--trace=")) || "--trace=40").split("=")[1]);
-    const car = makeCar(config), v = car.v;
-    for (let t = 0, n = 0; t < 8; t += DT, n++) {
+    const car = makeCar(config), v = car.v, CMD = parseFloat((process.argv.find(a => a.startsWith("--cmd=")) || "--cmd=0").split("=")[1]);
+    for (let t = 0, n = 0; t < 12; t += DT, n++) {
+        car.input.turnAngle = t > 3 ? CMD * 0.38 : 0;
         const err = sp * KMH - v.u; car.input.throttle = err > 0 ? Math.min(1, err * 0.5) : 0; car.input.brakePedal = err < 0 ? Math.min(1, -err * 0.3) : 0;
         v.update(DT);
-        if (n % 15 === 0) console.log(t.toFixed(2), "u", v.u.toFixed(1), "lean", ((v.lean || 0) / DEG).toFixed(2), "steer", ((v.controller.steer || 0) / DEG).toFixed(2), "dof", (v.controller.steerDof / DEG).toFixed(2), "T", (v.controller.steerTorque || 0).toFixed(1), "align", (v.controller.steerAlign || 0).toFixed(1), "target", (v.controller.targetLean / DEG).toFixed(2), "crash", v.controller.crashed);
+        if (n % 15 === 0) console.log(t.toFixed(2), "u", v.u.toFixed(1), "lean", ((v.lean || 0) / DEG).toFixed(2), "steer", ((v.controller.steer || 0) / DEG).toFixed(2), "dof", (v.controller.steerDof / DEG).toFixed(2), "T", (v.controller.steerTorque || 0).toFixed(1), "align", (v.controller.steerAlign || 0).toFixed(1), "target", (v.controller.targetLean / DEG).toFixed(2), "ask", ((v.controller.steerAsk || 0) / DEG).toFixed(2), "yaw", v.r.toFixed(3), "crash", v.controller.crashed);
     }
+    process.exit(0);
+}
+const SPEEDS = ((process.argv.find(a => a.startsWith("--speeds=")) || "").split("=")[1] || "").split(",").filter(Boolean).map(Number);      // --speeds=40,140: only these speeds
+if (process.argv.some(a => a.startsWith("--flick="))) {      // --flick=80: the first two seconds-pairs of a flick run, every 0.1 s
+    const sp = parseFloat(process.argv.find(a => a.startsWith("--flick=")).split("=")[1]), ramp = 0.3;
+    const r = run(sp, tt => { const k = Math.floor(tt / 2), ph = Math.min(1, (tt - k * 2) / ramp), from = (k % 2 === 1 ? -1 : 1); return k === 0 ? ph : from - 2 * from * ph; }, 9, 10);
+    r.log.filter((l, i) => i % 6 === 0 && l.t > 3.8).forEach(l => console.log(l.t.toFixed(1), "lean", l.lean.toFixed(1), "target", l.target.toFixed(1), "bars", l.steer.toFixed(1), "beta", l.beta.toFixed(1), "yaw", l.yaw.toFixed(2)));
     process.exit(0);
 }
 const ONLY = ((process.argv.find(a => a.startsWith("--only=")) || "").split("=")[1]) || "";      // --only=flick, --only=straight, --only=command: one kind of test
@@ -102,7 +110,7 @@ for (const speed of [40, 80, 140]) {
     report(speed + " km/h straight", !s.crash && maxLean < 3, "max lean " + maxLean.toFixed(1) + " deg" + (s.crash ? ", crashed: " + s.crash : ""));
 }
 for (const speed of [40, 80, 140]) for (const cmd of [0.4, 0.8]) {
-    if (ONLY && ONLY !== "command") continue;
+    if ((ONLY && ONLY !== "command") || (SPEEDS.length && !SPEEDS.includes(speed))) continue;
     const s = run(speed, t => (t < 0.5 ? 0 : cmd), 8, 10), L = s.log;
     // the first move of the bars while the lean is under a tenth of what came: against the lean?
     if (!L.length) { report(speed + " km/h, command " + cmd + " lock", false, "crashed before the command: " + s.crash); continue; }
@@ -110,10 +118,13 @@ for (const speed of [40, 80, 140]) for (const cmd of [0.4, 0.8]) {
     let first = 0; for (const l of L) { if (l.t < 0.5) continue; if (Math.abs(l.lean) < 0.1 * Math.abs(final.lean)) { if (Math.abs(l.steer) > Math.abs(first)) first = l.steer; } else break; }
     const t90 = (L.find(l => l.t > 0.5 && Math.abs(l.lean) >= 0.9 * Math.abs(final.lean)) || { t: NaN }).t - 0.5;
     const gTan = Math.atan(final.u * final.yaw / 9.81) / DEG;       // the lean that the yaw rate and the speed ask: tan(lean) = u r / g
-    report(speed + " km/h, command " + cmd + " lock", !s.crash && Math.abs(final.lean) > 5, "lean " + final.lean.toFixed(1) + " deg (the bend needs " + gTan.toFixed(1) + "), 90 % in " + t90.toFixed(2) + " s, first bars " + first.toFixed(2) + " deg, bars at the end " + final.steer.toFixed(2) + " deg, slip angle " + s.maxBeta.toFixed(1) + (s.crash ? ", crashed: " + s.crash : ""));
+    // how far the lean is from the one asked at the end (deg), and how much the bars hunt in the last 3 s (the standard deviation, deg)
+    const tail = L.filter(l => l.t > L[L.length - 1].t - 3), mean = tail.reduce((a, l) => a + l.steer, 0) / tail.length, hunt = Math.sqrt(tail.reduce((a, l) => a + (l.steer - mean) * (l.steer - mean), 0) / tail.length), miss = Math.abs(final.lean - final.target);
+    if (process.argv.includes("--score")) console.log("SCORE " + speed + " " + cmd + " " + (s.crash ? "crash" : miss.toFixed(2) + " " + hunt.toFixed(2)));
+    report(speed + " km/h, command " + cmd + " lock", !s.crash && Math.abs(final.lean) > 5 && miss < 6 && hunt < 1.5, "lean " + final.lean.toFixed(1) + " deg (asked " + final.target.toFixed(1) + ", the bend needs " + gTan.toFixed(1) + ", the bars hunt " + hunt.toFixed(2) + "), 90 % in " + t90.toFixed(2) + " s, first bars " + first.toFixed(2) + " deg, bars at the end " + final.steer.toFixed(2) + " deg, slip angle " + s.maxBeta.toFixed(1) + (s.crash ? ", crashed: " + s.crash : ""));
 }
 for (const speed of [45, 60, 80]) for (const ramp of [0.3, 0.15]) {
-    if (ONLY && ONLY !== "flick") continue;
+    if ((ONLY && ONLY !== "flick") || (SPEEDS.length && !SPEEDS.includes(speed))) continue;
     const s = run(speed, tt => { const k = Math.floor(tt / 2), ph = Math.min(1, (tt - k * 2) / ramp), from = (k % 2 === 1 ? -1 : 1); return k === 0 ? ph : from - 2 * from * ph; }, 8, 10);
     report(speed + " km/h flick in " + ramp + " s", !s.crash && s.maxBeta < 15, "slip angle " + s.maxBeta.toFixed(1) + ", lean " + Math.max(...s.log.map(l => Math.abs(l.lean))).toFixed(0) + (s.crash ? ", crashed: " + s.crash : ""));
 }
