@@ -36,7 +36,7 @@ const flatRoad = new sandbox.OpenRacer.FlatGround(0, "road");
 
 const MODEL = process.argv.includes("--v1") ? "v1" : "v2";
 const config = Object.assign({ id: "supermoto-700" }, JSON.parse(fs.readFileSync(path.join(ROOT, "cars", "supermoto-700", "car.json"), "utf8")));
-config.motorcycle = Object.assign({}, config.motorcycle, MODEL === "v2" ? { model: "v2" } : {});
+config.motorcycle = Object.assign({}, config.motorcycle, { model: MODEL });      // (whatever car.json says: --v1 is the old model)
 for (const a of process.argv) { const m = a.match(/^--set=(\w+)=(.+)$/); if (m) config.motorcycle[m[1]] = parseFloat(m[2]); }
 const DT = 1 / 60, DEG = Math.PI / 180;
 
