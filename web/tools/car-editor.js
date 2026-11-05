@@ -742,7 +742,7 @@ function readBike() {
     const n = (id, key) => { const x = parseFloat($(id).value); return Number.isFinite(x) ? x : BIKE_DEFAULTS[key]; };
     return { max_lean_deg: n("bikeMaxLean", "max_lean_deg"), fast_lean_deg: n("bikeFastLean", "fast_lean_deg"), rake_deg: n("bikeRake", "rake_deg"), rider_mass: n("bikeRiderMass", "rider_mass"), hang_off: n("bikeHangOff", "hang_off"), max_lateral_g: n("bikeMaxLatG", "max_lateral_g"), balance: n("bikeBalance", "balance"), fork_dive: n("bikeForkDive", "fork_dive") };
 }
-$("vehicleType").addEventListener("change", applyTypeUI);
+$("vehicleType").addEventListener("change", () => { applyTypeUI(); fillLibraryTyres(); });
 ["wFL", "wRL"].forEach((id) => $(id).addEventListener("change", syncBikeWheels));
 
 function wheelCenters() {
@@ -2476,19 +2476,38 @@ $("guessWheels").addEventListener("click", () => { withModelWheels(guessWheels);
 
 // ---- the wheel library (WheelLibrary.js, web/wheels/wheels.json): a rim and a tyre per axle in place of the wheel parts of the model
 OpenRacer.WheelLibrary.base = "../";
+// the tyres of a motorcycle are those of the library made for it (120/70 front, 180/55 rear; "for": "motorcycle" in wheels.json), shown once a rim is chosen; a car has none of them
+function fillLibraryTyres() {
+    if (!OpenRacer.WheelLibrary.ready()) return;
+    const bike = isBike();
+    for (const axle of ["front", "rear"]) {
+        const select = $(LIB_SELECTS[axle].tyre), keep = select.value;
+        select.length = 1;
+        select.options[0].textContent = bike ? "Default for the rim" : "From the model";
+        for (const entry of OpenRacer.WheelLibrary.tyresFor({ type: bike ? "motorcycle" : "car" })) {
+            const option = document.createElement("option");
+            option.value = entry.id;
+            option.textContent = entry.name || entry.id;
+            select.appendChild(option);
+        }
+        if (bike) { const custom = document.createElement("option"); custom.value = "custom"; custom.textContent = "Custom (made from the Tyres settings)"; select.appendChild(custom); }
+        select.value = [...select.options].some((o) => o.value === keep) ? keep : "";
+        select.parentNode.style.display = bike && $(LIB_SELECTS[axle].rim).value ? "" : "none";
+    }
+}
 OpenRacer.WheelLibrary.load().then(() => {
     for (const axle of ["front", "rear"]) {
-        for (const kind of ["rim", "tyre"]) {
-            const select = $(LIB_SELECTS[axle][kind]);
-            const list = kind === "rim" ? OpenRacer.WheelLibrary.rims() : OpenRacer.WheelLibrary.tyres();
-            for (const entry of list) {
-                const option = document.createElement("option");
-                option.value = entry.id;
-                option.textContent = entry.name || entry.id;
-                select.appendChild(option);
-            }
+        const select = $(LIB_SELECTS[axle].rim);
+        for (const entry of OpenRacer.WheelLibrary.rims()) {
+            const option = document.createElement("option");
+            option.value = entry.id;
+            option.textContent = entry.name || entry.id;
+            select.appendChild(option);
         }
+        // (a rim chosen on a motorcycle brings the tyre of the library for its end: the tyre select goes back to "Default for the rim")
+        select.addEventListener("change", () => { const t = $(LIB_SELECTS[axle].tyre); if (isBike()) { if (!select.value) t.value = ""; fillLibraryTyres(); } });
     }
+    fillLibraryTyres();
     if (!OpenRacer.WheelLibrary.rims().length && !OpenRacer.WheelLibrary.tyres().length) $("libInfo").textContent = "No wheel library found (web/wheels/wheels.json): tools/make-wheels.py writes a set of examples.";
     if (state.pendingLibrary) setLibraryChoice(state.pendingLibrary);
     updateLibraryPreview();
@@ -2496,20 +2515,24 @@ OpenRacer.WheelLibrary.load().then(() => {
 // what is chosen: { front: { rim, tyre, custom }, rear: { ... } } without the empty ones, or null. A rim brings a custom tyre, made from the numbers of the Tyres settings (width, diameter,
 // height of the sidewall, rubber: CarTuning.libraryOf); a tyre of the library only stays where a car has one
 function libraryChoice() {
-    const values = Object.assign({}, tuning, { rim_front: $("libRimFront").value, tyre_front: "", rim_rear: $("libRimRear").value, tyre_rear: "", model_tyres: $("libUseModel").checked ? "on" : "off" });
+    const values = Object.assign({}, tuning, { vehicle_type: isBike() ? "motorcycle" : "car", rim_front: $("libRimFront").value, tyre_front: $("libTyreFront").value, rim_rear: $("libRimRear").value, tyre_rear: $("libTyreRear").value, model_tyres: $("libUseModel").checked ? "on" : "off" });
     const out = OpenRacer.CarTuning.libraryOf(values);
     return Object.keys(out).length ? out : null;
 }
 function setLibraryChoice(library) {
     state.pendingLibrary = library;
-    const cfg = { wheels: { library: library || {} } };
+    const cfg = { type: isBike() ? "motorcycle" : "car", wheels: { library: library || {} } };
+    fillLibraryTyres();
     for (const axle of ["front", "rear"]) {
         const c = OpenRacer.WheelLibrary.choiceOf(cfg, axle);
         for (const kind of ["rim", "tyre"]) {
             const select = $(LIB_SELECTS[axle][kind]);
             select.value = [...select.options].some((o) => o.value === c[kind]) ? c[kind] : "";
         }
+        // (a motorcycle's default tyre of the library shows as "Default for the rim" unless the car names another)
+        if (cfg.type === "motorcycle" && c.tyre === OpenRacer.WheelLibrary.bikeTyre(axle) && !(library && library[axle] && library[axle].tyre)) $(LIB_SELECTS[axle].tyre).value = "";
     }
+    fillLibraryTyres();
     $("libUseModel").checked = ["front", "rear"].some((axle) => OpenRacer.WheelLibrary.choiceOf(cfg, axle).model);
     syncTuningVisibility();
     syncTyreField();
@@ -3046,7 +3069,7 @@ $("tuneShip").addEventListener("click", async () => {
 // the settings that cannot do anything with the others as they are (the gearbox, the differential, the drive, the turbo) are hidden, as in the tuning menu of the game (CarTuning.visible)
 function syncTuningVisibility() {
     const v = Object.assign({}, tuning, { drive: $("drive").value, diff: $("diff").value, center_diff: $("centerDiff").value, gearbox: $("gearbox").value },
-        { rim_front: $("libRimFront").value, tyre_front: "", rim_rear: $("libRimRear").value, tyre_rear: "", model_tyres: $("libUseModel").checked ? "on" : "off" });
+        { vehicle_type: isBike() ? "motorcycle" : "car", rim_front: $("libRimFront").value, tyre_front: $("libTyreFront").value, rim_rear: $("libRimRear").value, tyre_rear: $("libTyreRear").value, model_tyres: $("libUseModel").checked ? "on" : "off" });
     document.querySelectorAll("#tuningBox [data-tune-key], #tuningCard [data-tune-key], [data-tune-key]").forEach((cell) => { cell.style.display = OpenRacer.CarTuning.visible(cell.dataset.tuneKey, v) ? "" : "none"; });
     document.querySelectorAll("[data-tune-key]").forEach((cell) => { const row = cell.parentNode; if (row && row.classList.contains("row")) row.style.display = [...row.children].some((c) => c.style.display !== "none") ? "" : "none"; });
     document.querySelectorAll("[data-tune-feature]").forEach((wrap) => { wrap.style.display = OpenRacer.CarTuning.visibleFeature(wrap.dataset.tuneFeature, v) ? "" : "none"; });

@@ -255,6 +255,11 @@ var Tuning = (function() {
 
     function set(key, value) {
         values[key] = value;
+        // (a rim of the library on a motorcycle brings the tyre of the library for its end, 120/70 front and 180/55 rear; no rim, no tyre of the library)
+        if((key === "rim_front" || key === "rim_rear") && config.type === "motorcycle" && OpenRacer.WheelLibrary) {
+            var tk = key === "rim_front" ? "tyre_front" : "tyre_rear", bt = OpenRacer.WheelLibrary.bikeTyre(key === "rim_front" ? "front" : "rear");
+            if(!value) values[tk] = ""; else if(!values[tk] && OpenRacer.WheelLibrary.tyre(bt)) values[tk] = bt;
+        }
         apply();
         store();
         refresh();
@@ -503,7 +508,7 @@ var Tuning = (function() {
     function partsTypes() { var T = OpenRacer.PartsLibrary && OpenRacer.PartsLibrary.TYPES || {}; return Object.keys(T).map(function(id) { return [id, T[id].label || id]; }); }
     // the rims or the tyres of the wheel library (WheelLibrary.js; wheels/wheels.json), with "the wheel of the model" first
     function libraryList(kind) {
-        var L = OpenRacer.WheelLibrary, list = L ? L[kind]() : [];
+        var L = OpenRacer.WheelLibrary, list = L ? (kind === "tyres" ? L.tyresFor(config) : L[kind]()) : [];
         var out = [["", kind === "rims" ? "From the model" : "From the model (tyres.shell of the car)"]].concat(list.map(function(e) { return [e.id, e.name || e.id]; }));
         // (a custom tyre: made from the numbers of the shell, the rim fits its inner shell)
         if(kind === "tyres") out.push(["custom", "Custom (made from the shell settings)"]);

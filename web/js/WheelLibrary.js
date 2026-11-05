@@ -74,13 +74,18 @@ OpenRacer.WheelLibrary = (function () {
     function tyre(id) { return id ? find(catalog.tyres, id) : null; }
     function treadOf(pattern) { var t = find(catalog.treads, pattern); return t && t.file ? t : null; }
 
+    var BIKE_TYRE = { front: "moto-120-70-17", rear: "moto-180-55-17" };
+    // the tyres to offer a vehicle: those made for motorcycles only on a motorcycle (an entry with "for": "motorcycle"), none of them on a car
+    function tyresFor(config) { var bike = !!config && config.type === "motorcycle"; return catalog.tyres.filter(function (t) { return bike ? t.for === "motorcycle" : t.for !== "motorcycle"; }); }
+
     // what car.json chose for an axle ("library": { "front": { "rim", "tyre" }, "rear": { ... } }; or { "rim", "tyre" } for both axles)
     function choiceOf(config, axle) {
         var L = config && config.wheels && config.wheels.library;
         if(!L) return { rim: "", tyre: "" };
         var a = L[axle] || (L.rim !== undefined || L.tyre !== undefined ? L : null) || {};
         // (a rim of the library brings a custom tyre, made from the numbers: the tyres of the library are no longer chosen, only kept for the cars that have one)
-        var tyreId = a.tyre || (a.rim || a.model ? "custom" : "");
+        // (a motorcycle with a rim of the library and no tyre named: the tyre of the library for its end of the bike, 120/70 at the front and 180/55 at the rear, round in the crown)
+        var tyreId = a.tyre || (a.rim && !a.model && config.type === "motorcycle" && BIKE_TYRE[axle] && find(catalog.tyres, BIKE_TYRE[axle]) ? BIKE_TYRE[axle] : (a.rim || a.model ? "custom" : ""));
         return { rim: a.rim || "", tyre: tyreId, custom: tyreId === "custom" ? a.custom || {} : undefined, model: !!a.model };
     }
 
@@ -373,7 +378,7 @@ OpenRacer.WheelLibrary = (function () {
         return { object: object, diameter: spec.diameter, width: spec.width, shell: shell, offset: r && r.offset > 0 ? r.offset : 0, rim: r, tyre: { id: CUSTOM_ID, custom: spec }, rubber: spec.rubber };
     }
 
-    lib.load = load; lib.rims = rims; lib.tyres = tyres; lib.treads = function () { return catalog.treads; }; lib.rim = rim; lib.tyre = tyre; lib.choiceOf = choiceOf; lib.uses = uses; lib.usesAxle = usesAxle;
+    lib.load = load; lib.rims = rims; lib.tyres = tyres; lib.tyresFor = tyresFor; lib.bikeTyre = function (axle) { return BIKE_TYRE[axle] || ""; }; lib.treads = function () { return catalog.treads; }; lib.rim = rim; lib.tyre = tyre; lib.choiceOf = choiceOf; lib.uses = uses; lib.usesAxle = usesAxle;
     lib.preload = preload; lib.wheelFor = wheelFor; lib.modelParts = modelWheelParts; lib.modelObjects = modelObjects; lib.shellOf = shellOf; lib.filesFor = filesFor;
     lib.ready = function () { return loaded; }; lib.problems = problems;
     return lib;
