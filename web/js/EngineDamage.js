@@ -7,7 +7,8 @@
  *                block   all the nodes of the bay: the engine is bent, its mounts are torn (power, friction, wear);
  *                top     the nodes above the middle: the ignition, the wiring and the intake (misfires, stalling);
  *                pan     the nodes below it: the oil pan (an oil leak);
- *                radiator  the nodes at the front of the car: the radiator and its hoses (a coolant leak).
+ *                radiator  the nodes at the front of the car: the radiator and its hoses (a coolant leak). When the model has an object called radiator that is a
+ *                          part of the car (Parts.js), its own nodes say how bent it is, and the coolant is gone in seconds when it comes off.
  *              Every place holds the worst that it has had (a bent node stays bent), 0 whole, 1 destroyed. From them come:
  *                misfires     the ignition cuts for a moment, now and then (a stumble, a bang in the exhaust), and stalls at a bad hit;
  *                leaks        coolant and oil run out, faster the worse the radiator and the pan are;
@@ -61,7 +62,7 @@ OpenRacer.EngineDamage = function (vehicle, config) {
 
     // ---- the state (all of it is a number: vehicle.engineHealth goes to the main thread with the rest of the vehicle)
     var health = vehicle.engineHealth = { block: 0, top: 0, pan: 0, radiator: 0, ignition: 0, coolant: 1, oil: 1, temp: 78, oilTemp: 70, wear: 0, power: 1, misfire: 0, steam: 0, smoke: 0,
-        failed: 0, stalled: 0, leaking: 0, bx: bay[0], by: bay[1], bz: bay[2], br: bayR, rx: rad[0], ry: rad[1], rz: rad[2], rr: radR };
+        failed: 0, stalled: 0, leaking: 0, coolFlow: 0, oilFlow: 0, radiatorGone: 0, bx: bay[0], by: bay[1], bz: bay[2], br: bayR, rx: rad[0], ry: rad[1], rz: rad[2], rr: radR };
     var CAP_COOLANT = config.coolant > 0 ? config.coolant : 7, CAP_OIL = config.oil > 0 ? config.oil : 5;
     var seized = false, cutLeft = 0, nextMisfire = 0, shockCool = 0, acc = 0, lastShock = 0;
     var peak = 0, peakCurve = null, peakScale = -1;
@@ -82,6 +83,17 @@ OpenRacer.EngineDamage = function (vehicle, config) {
         return peak;
     }
 
+    // the radiator as an object of the model: a part (Parts.js) whose name has radiator in it. Its nodes say how bent it is; it is gone when it is not held any more
+    var radiatorPart = null;
+    function findRadiator() {
+        var list = vehicle.parts && vehicle.parts.parts;
+        if (!list) { radiatorPart = null; return null; }
+        if (radiatorPart && list.indexOf(radiatorPart) >= 0) return radiatorPart;
+        radiatorPart = null;
+        for (var i = 0; i < list.length; i++) if (list[i].wheel === undefined && /radiator/i.test(list[i].name || "")) { radiatorPart = list[i]; break; }
+        return radiatorPart;
+    }
+
     // how hurt a node is, 0..1: a bend of the shape that stays (5 cm is nothing, 30 cm is all of it), a node that is torn off is gone
     function hurt(k) {
         if (sb.torn(k)) return 1;
@@ -100,6 +112,15 @@ OpenRacer.EngineDamage = function (vehicle, config) {
         if (sumT > 0) health.top = Math.max(health.top, t / sumT);
         if (sumP > 0) health.pan = Math.max(health.pan, p / sumP);
         if (sumR > 0) health.radiator = Math.max(health.radiator, r / sumR);
+        var rp = findRadiator();
+        if (rp) {
+            if (rp.state !== "held" && rp.state !== "hinged") { health.radiator = 1; health.radiatorGone = 1; }          // (torn off, or broken)
+            else if (rp.nodes && rp.nodes.length) {
+                var sum = 0, worst = 0;
+                for (var q = 0; q < rp.nodes.length; q++) { var hq = hurt(rp.nodes[q]); sum += hq; worst = Math.max(worst, hq); }
+                health.radiator = Math.max(health.radiator, 0.5 * sum / rp.nodes.length + 0.5 * worst);               // (the mean and the worst place: a hole in one corner drains it too)
+            }
+        }
         // a hard hit shakes the wiring loose even when nothing stays bent (the springing of the shell in the bay: 10 cm is a hit, 40 cm a hard one)
         shockCool = Math.max(0, shockCool - dt);
         var jolt = clamp((shock - 0.10) / 0.30, 0, 1);
@@ -121,11 +142,17 @@ OpenRacer.EngineDamage = function (vehicle, config) {
 
         // --- leaks: a hurt radiator drains the coolant in a minute and a half at the worst, a pan the oil in two and a half minutes (the hot system leaks faster)
         var hotLeak = 0.4 + 0.6 * clamp((health.temp - 20) / 80, 0, 1);
-        var coolLeak = (Math.pow(health.radiator, 1.6) + 0.3 * Math.pow(Math.max(0, health.block - 0.4), 1.5)) / 90 * hotLeak;
+        // a radiator that is an object of the model: a crushed one is empty in 40 s, one that has come off in 8 s (a radiator that is only a place in the shell: 90 s)
+        var rpart = radiatorPart, full = rpart ? 1 / 40 : 1 / 90;
+        var coolLeak = (Math.pow(health.radiator, rpart ? 1.3 : 1.6) * full + 0.3 * Math.pow(Math.max(0, health.block - 0.4), 1.5) / 90) * hotLeak;
+        if (health.radiatorGone) coolLeak = 1 / 8;
         var oilLeak = (Math.pow(health.pan, 1.5) + 0.2 * Math.pow(Math.max(0, health.block - 0.5), 1.5)) / 150;
         health.coolant = Math.max(0, health.coolant - coolLeak * dt);
         health.oil = Math.max(0, health.oil - oilLeak * dt);
         health.leaking = (coolLeak > 0.0005 ? 1 : 0) + (oilLeak > 0.0005 ? 2 : 0);
+        // how hard it runs, for the drops and the stains (Leaks.js): 1 is the pace of a crushed radiator or a destroyed pan; nothing when the tank is dry
+        health.coolFlow = health.coolant > 0 ? clamp(coolLeak * 40, 0, 6) : 0;
+        health.oilFlow = health.oil > 0 ? clamp(oilLeak * 150, 0, 2) : 0;
 
         // --- heat
         var running = engine.running ? 1 : 0;

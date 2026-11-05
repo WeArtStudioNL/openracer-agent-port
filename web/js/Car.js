@@ -210,6 +210,7 @@ OpenRacer.Car = function( config, domElement ) {
     var jack = null;                                // where the car stood when it went on the jacks: { x, y, z, q }
     var onJacks = false;                            // the driver's input was taken for a pit stop (and is given back when it is done)
     var tyreSmoke = new OpenRacer.TyreSmoke(scene);
+    var leaks = OpenRacer.Leaks ? new OpenRacer.Leaks(scene) : null;         // the drops of oil and coolant of a leaking engine, and the stains on the road (Leaks.js)
     // Steam from a hot or leaking cooling system (white) and smoke from oil that burns (dark), out of the engine bay (EngineDamage.js: vehicle.engineHealth)
     var fumeLeft = 0, fumeQ = new THREE.Quaternion(), fumeP = new THREE.Vector3();
     function engineFume(delta, v, eh) {
@@ -347,6 +348,7 @@ OpenRacer.Car = function( config, domElement ) {
         this.parkingBrake = false;                  // (a car that is put back has the parking brake off)
         v.reset(x, z, heading);
         tyreSmoke.clear();
+        if(leaks) leaks.clear();
         if(debris) debris.clear();
         flames.clear();
         if(OpenRacer.DragStrip) OpenRacer.DragStrip.reset();
@@ -509,6 +511,7 @@ OpenRacer.Car = function( config, domElement ) {
         var samePlace = p.car === config.id;       // (a place saved before this was kept has no car: it is put on the road)
         v.relocate(p.x, p.z, p.psi, samePlace ? p.py : null, p.gy);
         tyreSmoke.clear();
+        if(leaks) leaks.clear();
         if(debris) debris.clear();
         flames.clear();
         if(OpenRacer.DragStrip) OpenRacer.DragStrip.reset();
@@ -618,6 +621,7 @@ OpenRacer.Car = function( config, domElement ) {
         if(!(OpenRacer.Replay && OpenRacer.Replay.active)) {   // a replay does not make new smoke and marks from the state of the physics
             tyreSmoke.update(delta, v, camera);
             if(v.engineHealth && (v.engineHealth.steam > 0.05 || v.engineHealth.smoke > 0.05)) engineFume(delta, v, v.engineHealth);
+            if(leaks) leaks.update(delta, v, camera, typeof groundWorld !== "undefined" ? groundWorld : null);
             if(debris) debris.update(delta, v);
             if(OpenRacer.Shatter) OpenRacer.Shatter.step(delta);      // the pieces and the particles of the parts that broke, of every car (Shatter.js)
             var marks = OpenRacer.skidMarks && OpenRacer.skidMarks();

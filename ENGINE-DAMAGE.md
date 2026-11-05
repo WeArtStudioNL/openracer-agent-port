@@ -40,6 +40,13 @@ the engine on the spot: the chance is `0.9 j^2 + 0.05 j` for a jolt `j` from 0 t
   and in a hard corner (more than 9 m/s2 sideways) with less than 70 % oil the oil leaves the pickup. Wear grows by that, by a bent block under load and by
   boiling.
 * **Wear**: from 0 to 1. At 1 the engine seizes: it stops, and does not start again until it is repaired.
+* **A radiator that is an object of the model** (a part of the car whose name has *radiator* in it, `parts` in car.json, `Parts.js`): its own nodes give how hurt it is
+  (the mean and the worst), and a crushed one is empty in 40 s (`radiator^1.3 / 40` of the system a second; the radiator that is only a place in the shell:
+  `radiator^1.6 / 90`). A radiator that has come off (or was broken) is empty in 8 s, whatever the temperature. This needs the parts on the main thread (not
+  `?worker=1`).
+* **Drops and stains** (`Leaks.js`): oil from the pan (black drops, `oilFlow`) and coolant from the radiator (pale green, a spray when it is hurt, a gush when it is
+  off: `coolFlow`) fall with gravity and land on the road under them, where they leave a blot: oil stays (up to 3000 stains in all, with the other leaks), coolant
+  fades in 70 s. A moving car drips a line, one that stands makes a puddle; on grass, sand and gravel the stains are fainter.
 * **Steam and smoke** from the engine bay: white steam when it is hot and leaking, dark smoke from oil that burns (a worn engine, a leaking pan).
 
 At 15 km/h into a wall nothing happens to the engine; at 30 km/h a slow radiator leak; at 50 km/h about 20 % of the power and a stumble; at 70 km/h a

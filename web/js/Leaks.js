@@ -1,0 +1,180 @@
+/*
+ * Leaks.js
+ *
+ * Description: What a leaking engine leaves behind (EngineDamage.js, vehicle.engineHealth): drops of oil (dark) from the pan and of coolant (pale green, a spray from a hurt radiator)
+ *              that fall on the road, and the stains where they land: black blots of oil that stay, darker wet patches of coolant that dry in a minute. A car that drives on
+ *              drips a line of blots behind it; one that stands still makes a puddle. The stains are flat quads on the road, in one mesh, a ring of the last 3000, as the marks
+ *              of the tyres (SkidMarks.js) are; the drops are points that fall with gravity and land on the road under them.
+ *
+ *              var leaks = new OpenRacer.Leaks(scene);
+ *              leaks.update(delta, vehicle, camera, ground)   every frame (not in a replay): makes drops from the flow that engineHealth says, moves them, makes stains
+ *              leaks.clear()                                  a new place: the drops go (the stains stay, they are on the road)
+ */
+
+OpenRacer.Leaks = function (scene) {
+    var self = this;
+    var DROPS = 500, STAINS = 3000;
+    var OIL = 0, COOLANT = 1;
+
+    // ---- the drops: points with a size and a colour of their own
+    var pos = new Float32Array(DROPS * 3), vel = new Float32Array(DROPS * 3), size = new Float32Array(DROPS), color = new Float32Array(DROPS * 4), age = new Float32Array(DROPS), kind = new Uint8Array(DROPS), alive = new Uint8Array(DROPS);
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geometry.setAttribute("size", new THREE.BufferAttribute(size, 1));
+    geometry.setAttribute("color", new THREE.BufferAttribute(color, 4));
+    geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
+    var uniforms = { scale: { value: 700 } };
+    var material = new THREE.ShaderMaterial({
+        uniforms: uniforms, transparent: true, depthWrite: false,
+        vertexShader: "attribute float size; attribute vec4 color; varying vec4 vColor; uniform float scale;\n" +
+            "void main() { vColor = color; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = max(1.5, size * scale / max(0.1, -mv.z)); gl_Position = projectionMatrix * mv; }",
+        fragmentShader: "varying vec4 vColor;\n" +
+            "void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_FragColor = vec4(vColor.rgb, vColor.a * smoothstep(0.5, 0.15, d)); }"
+    });
+    var points = new THREE.Points(geometry, material);
+    points.frustumCulled = false;
+    points.renderOrder = 3;
+    points.userData.noGBuffer = true;
+    scene.add(points);
+    var nextDrop = 0, liveDrops = 0;
+
+    // ---- the stains: quads on the road with a soft irregular blot (a canvas of four blots, one chosen for every stain)
+    var blotTexture = (function () {
+        var c = document.createElement("canvas"); c.width = c.height = 256;
+        var g = c.getContext("2d");
+        for (var cell = 0; cell < 4; cell++) {
+            var ox = (cell % 2) * 128 + 64, oy = Math.floor(cell / 2) * 128 + 64;
+            for (var k = 0; k < 14; k++) {
+                var a = Math.random() * 6.283, d = Math.random() * 20, r = 10 + Math.random() * 26;
+                var x = ox + Math.cos(a) * d, y = oy + Math.sin(a) * d, grad = g.createRadialGradient(x, y, 0, x, y, r);
+                grad.addColorStop(0, "rgba(255,255,255,0.9)"); grad.addColorStop(0.6, "rgba(255,255,255,0.55)"); grad.addColorStop(1, "rgba(255,255,255,0)");
+                g.fillStyle = grad; g.beginPath(); g.arc(x, y, r, 0, 6.283); g.fill();
+            }
+        }
+        var t = new THREE.CanvasTexture(c);
+        return t;
+    })();
+    var sPos = new Float32Array(STAINS * 4 * 3), sCol = new Float32Array(STAINS * 4 * 4), sUv = new Float32Array(STAINS * 4 * 2), sIdx = new Uint32Array(STAINS * 6);
+    var born = new Float32Array(STAINS), peakAlpha = new Float32Array(STAINS), sKind = new Uint8Array(STAINS);
+    for (var s = 0; s < STAINS; s++) { var b = s * 4, i = s * 6; sIdx[i] = b; sIdx[i + 1] = b + 2; sIdx[i + 2] = b + 1; sIdx[i + 3] = b + 1; sIdx[i + 4] = b + 2; sIdx[i + 5] = b + 3; }
+    var sGeometry = new THREE.BufferGeometry();
+    sGeometry.setAttribute("position", new THREE.BufferAttribute(sPos, 3));
+    sGeometry.setAttribute("color", new THREE.BufferAttribute(sCol, 4));
+    sGeometry.setAttribute("uv", new THREE.BufferAttribute(sUv, 2));
+    sGeometry.setIndex(new THREE.BufferAttribute(sIdx, 1));
+    sGeometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
+    var sMaterial = new THREE.MeshBasicMaterial({ vertexColors: true, map: blotTexture, transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    var stains = new THREE.Mesh(sGeometry, sMaterial);
+    stains.frustumCulled = false;
+    stains.renderOrder = 1;
+    stains.userData.noGBuffer = true;
+    scene.add(stains);
+    var nextStain = 0, usedStains = 0, clock = 0, dryTimer = 0;
+    var DRY_TIME = 70;           // s: a coolant stain is gone after this
+
+    function stain(x, y, z, nx, ny, nz, radius, k, alpha) {
+        var i = nextStain; nextStain = (nextStain + 1) % STAINS; usedStains = Math.min(STAINS, usedStains + 1);
+        // two directions in the plane of the road
+        var tx = Math.abs(ny) < 0.9 ? 0 : 1, ty = Math.abs(ny) < 0.9 ? 1 : 0;
+        var e1x = ny * 0 - nz * ty, e1y = nz * tx - nx * 0, e1z = nx * ty - ny * tx;
+        var l = Math.hypot(e1x, e1y, e1z) || 1; e1x /= l; e1y /= l; e1z /= l;
+        var e2x = ny * e1z - nz * e1y, e2y = nz * e1x - nx * e1z, e2z = nx * e1y - ny * e1x;
+        var rot = Math.random() * 6.283, c = Math.cos(rot), sn = Math.sin(rot);
+        var ax = (e1x * c + e2x * sn) * radius, ay = (e1y * c + e2y * sn) * radius, az = (e1z * c + e2z * sn) * radius;
+        var bx = (-e1x * sn + e2x * c) * radius, by = (-e1y * sn + e2y * c) * radius, bz = (-e1z * sn + e2z * c) * radius;
+        var lift = 0.014 + (i % 7) * 0.0006;           // (a little different for every stain: two over each other do not fight)
+        var px = x + nx * lift, py = y + ny * lift, pz = z + nz * lift;
+        var corner = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
+        var cell = (Math.random() * 4) | 0, u0 = (cell % 2) * 0.5, v0 = Math.floor(cell / 2) * 0.5;
+        var r = k === OIL ? 0.025 : 0.06, g = k === OIL ? 0.02 : 0.085, bl = k === OIL ? 0.018 : 0.07;
+        for (var q = 0; q < 4; q++) {
+            var o = (i * 4 + q);
+            sPos[o * 3] = px + ax * corner[q][0] + bx * corner[q][1]; sPos[o * 3 + 1] = py + ay * corner[q][0] + by * corner[q][1]; sPos[o * 3 + 2] = pz + az * corner[q][0] + bz * corner[q][1];
+            sCol[o * 4] = r; sCol[o * 4 + 1] = g; sCol[o * 4 + 2] = bl; sCol[o * 4 + 3] = alpha;
+            sUv[o * 2] = u0 + (corner[q][0] > 0 ? 0.5 : 0); sUv[o * 2 + 1] = v0 + (corner[q][1] > 0 ? 0.5 : 0);
+        }
+        born[i] = clock; peakAlpha[i] = alpha; sKind[i] = k;
+        sGeometry.attributes.position.needsUpdate = true; sGeometry.attributes.color.needsUpdate = true; sGeometry.attributes.uv.needsUpdate = true;
+    }
+    // coolant dries: its stains fade (looked at a few times a second)
+    function dry() {
+        var changed = false;
+        for (var i = 0; i < usedStains; i++) {
+            if (sKind[i] !== COOLANT || peakAlpha[i] <= 0) continue;
+            var left = 1 - (clock - born[i]) / DRY_TIME, a = left > 0 ? peakAlpha[i] * left : 0;
+            if (left <= 0) peakAlpha[i] = 0;
+            for (var q = 0; q < 4; q++) sCol[(i * 4 + q) * 4 + 3] = a;
+            changed = true;
+        }
+        if (changed) sGeometry.attributes.color.needsUpdate = true;
+    }
+
+    // ---- making drops
+    function drop(x, y, z, vx, vy, vz, k, big) {
+        var i = nextDrop; nextDrop = (nextDrop + 1) % DROPS;
+        pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z;
+        vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz;
+        size[i] = (big ? 0.07 : 0.035) + Math.random() * 0.035;
+        age[i] = 0; kind[i] = k; alive[i] = 1;
+        if (k === OIL) { color[i * 4] = 0.06; color[i * 4 + 1] = 0.045; color[i * 4 + 2] = 0.03; color[i * 4 + 3] = 0.95; }
+        else { color[i * 4] = 0.45; color[i * 4 + 1] = 0.85; color[i * 4 + 2] = 0.5; color[i * 4 + 3] = 0.75; }
+    }
+
+    var q = new THREE.Quaternion(), p = new THREE.Vector3();
+    var oilLeft = 0, coolLeft = 0;
+    this.update = function (delta, v, camera, ground) {
+        delta = Math.min(delta || 0.016, 0.1);
+        clock += delta;
+        var eh = v && v.engineHealth;
+        // the camera: the size of a point on the screen
+        if (camera && typeof renderer !== "undefined" && renderer) uniforms.scale.value = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360));
+        // new drops, from where the pan and the radiator are
+        if (eh && eh.leaking) {
+            q.set(v.qx, v.qy, v.qz, v.qw);
+            var speed = Math.hypot(v.vx, v.vz);
+            if (eh.oilFlow > 0.001) {
+                oilLeft += delta * (3 + 24 * Math.min(1, eh.oilFlow));
+                while (oilLeft >= 1) {
+                    oilLeft -= 1;
+                    p.set(eh.bx + (Math.random() - 0.5) * 0.4, eh.by - 0.35, eh.bz + (Math.random() - 0.5) * 0.4).applyQuaternion(q);
+                    drop(v.px + p.x, v.py + p.y, v.pz + p.z, v.vx * 0.95 + (Math.random() - 0.5) * 0.3, v.vy - 0.3, v.vz * 0.95 + (Math.random() - 0.5) * 0.3, OIL, eh.oilFlow > 0.6);
+                }
+            }
+            if (eh.coolFlow > 0.001) {
+                var spray = Math.min(1, eh.coolFlow);           // a hurt radiator sprays, a torn off one gushes
+                coolLeft += delta * (4 + 150 * Math.min(3, eh.coolFlow));
+                if (coolLeft > 40) coolLeft = 40;
+                while (coolLeft >= 1) {
+                    coolLeft -= 1;
+                    p.set(eh.rx + (Math.random() - 0.5) * 0.5, eh.ry - 0.1, eh.rz + (Math.random() - 0.5) * 0.2).applyQuaternion(q);
+                    var out = new THREE.Vector3((Math.random() - 0.5) * 2.5, 0.4 + Math.random() * 2.2, 0.8 + Math.random() * 2.2).multiplyScalar(spray).applyQuaternion(q);       // (forward and up in the frame of the car)
+                    drop(v.px + p.x, v.py + p.y, v.pz + p.z, v.vx * 0.9 + out.x, v.vy + out.y * 0.5, v.vz * 0.9 + out.z, COOLANT, eh.coolFlow > 0.8);
+                }
+            }
+        }
+        // the drops fall and land
+        var any = false;
+        for (var i = 0; i < DROPS; i++) {
+            if (!alive[i]) continue;
+            age[i] += delta;
+            vel[i * 3] *= 1 - 0.4 * delta; vel[i * 3 + 2] *= 1 - 0.4 * delta;
+            vel[i * 3 + 1] -= 9.81 * delta;
+            pos[i * 3] += vel[i * 3] * delta; pos[i * 3 + 1] += vel[i * 3 + 1] * delta; pos[i * 3 + 2] += vel[i * 3 + 2] * delta;
+            var road = ground ? ground.query(pos[i * 3], pos[i * 3 + 2], pos[i * 3 + 1] + 0.4, 0.6) : { y: -1e9, nx: 0, ny: 1, nz: 0 };
+            if (age[i] > 4 || (road && pos[i * 3 + 1] <= road.y + 0.015)) {
+                alive[i] = 0; color[i * 4 + 3] = 0;
+                if (road && age[i] <= 4) {
+                    var loose = road.surface === "grass" || road.surface === "ground" || road.surface === "gravel" || road.surface === "sand" || road.surface === "mud";
+                    if (kind[i] === OIL) { if (Math.random() < (loose ? 0.4 : 0.8)) stain(pos[i * 3], road.y, pos[i * 3 + 2], road.nx, road.ny, road.nz, 0.07 + Math.random() * 0.16 * (size[i] > 0.06 ? 1.5 : 1), OIL, loose ? 0.3 : 0.6); }
+                    else if (Math.random() < 0.3) stain(pos[i * 3], road.y, pos[i * 3 + 2], road.nx, road.ny, road.nz, 0.06 + Math.random() * 0.14, COOLANT, loose ? 0.15 : 0.32);
+                }
+            } else any = true;
+        }
+        liveDrops = any ? 1 : 0;
+        geometry.attributes.position.needsUpdate = true; geometry.attributes.color.needsUpdate = true; geometry.attributes.size.needsUpdate = true;
+        points.visible = any;
+        dryTimer += delta;
+        if (dryTimer > 0.5) { dryTimer = 0; dry(); }
+    };
+    this.clear = function () { alive.fill(0); color.fill(0); points.visible = false; };
+};

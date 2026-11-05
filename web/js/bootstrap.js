@@ -86,6 +86,7 @@ var scripts = [
     "js/Shatter.js",
     "js/Mirrors.js",
     "js/SkidMarks.js",
+    "js/Leaks.js",
     "js/Marbles.js",
     "js/Flames.js",
     "js/Driver.js",
