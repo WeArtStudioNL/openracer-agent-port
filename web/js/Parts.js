@@ -294,7 +294,7 @@ OpenRacer.Parts = (function () {
         // a point of the frame of the car in the world
         function toWorld(p, out) { return out.copy(p).applyQuaternion(q).add(carPos); }
         // the velocity of a point of the car (a is a point in the frame of the car)
-        var ROT_WEIGHT = 1.5;           // the turning of the car counts a half more than the sums say: the angular speed of the car is smoothed by the physics, and a hit turns it in a few ms
+        var ROT_WEIGHT = 1.25;          // the turning of the car counts a quarter more than the sums say: the angular speed of the car is smoothed by the physics, and a hit turns it in a few ms
         var rotArm = new THREE.Vector3(), cgAcc = new THREE.Vector3(), angAcc = new THREE.Vector3(), lastCG = new THREE.Vector3(), lastW = new THREE.Vector3(), haveFrame = false;
         function pointVelocity(p, out) {
             a.copy(p).applyQuaternion(q);
