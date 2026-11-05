@@ -69,6 +69,10 @@ OpenRacer.Motorcycle = function (settings) {
         self.pushExtraLean = (s.push_extra_lean_deg !== undefined ? s.push_extra_lean_deg : 4) * DEG; self.pushSlide = s.push_slide !== undefined ? s.push_slide : -0.6; self.pushSlideCap = (s.push_slide_cap_deg !== undefined ? s.push_slide_cap_deg : 7) * DEG;      // flat-track: the lean the bike may take beyond the usual (rad), and the countersteer of a slide (the bars follow the way the bike moves: the share of the slip angle, and the most)
         self.pushDrift = s.push_drift !== undefined ? s.push_drift : 0.3;      // flat track: the share of the lateral grip of the rear tyre that full gas in a bend takes (the tail steps out: a slide on the gas)
         self.pushFoot = (s.push_foot_kmh !== undefined ? s.push_foot_kmh : 110) / 3.6;      // flat track: up to this speed (m/s) the inside foot comes out in a bend (car.json motorcycle.push_foot_kmh, the tuning menu)
+        // the pose of the rider in flat-track style (the tuning menu, car.json motorcycle.push_...; Driver.js reads them from the posture): how far the back leans out of the bike (a share of its lean), how far forward the
+        // rider sits in a bend (m) and how far his chest leans forward (degrees), the most the pelvis tilts (degrees) and slides to the outside (m), how far the inside foot goes out and forward (m, at the most lean)
+        self.poseStyle = { upright: s.push_upright !== undefined ? s.push_upright : 0.55, forward: s.push_forward !== undefined ? s.push_forward : 0, chestPitch: s.push_chest_pitch !== undefined ? s.push_chest_pitch : 0,
+            pelvisTilt: s.push_pelvis_tilt !== undefined ? s.push_pelvis_tilt : 35, pelvisSlide: s.push_pelvis_slide !== undefined ? s.push_pelvis_slide : 0.09, footOut: s.push_foot_out !== undefined ? s.push_foot_out : 0.14, footForward: s.push_foot_forward !== undefined ? s.push_foot_forward : 0.5 };
         self.pushHang = s.push_hang !== undefined ? s.push_hang : -0.4; self.pushLockShare = s.push_lock_share !== undefined ? s.push_lock_share : 0.75;      // the flat-track style: the weight of the rider to the outside (a share of hang_off, negative), and the share of the lock for a low speed
         self.lockShare = s.lock_share !== undefined ? s.lock_share : 0.65;   // model v2: the share of the lock of the bars that a lean at a low speed may ask for
         self.gripFast = s.grip_fast !== undefined ? s.grip_fast : 0.2;   // model v2: the g more that the lean may ask for above 13 to 18 m/s (the bike is in the model of the rider and the tyres there; below it the lean is held)
@@ -88,8 +92,9 @@ OpenRacer.Motorcycle = function (settings) {
         self.footLean = (s.foot_lean_deg !== undefined ? s.foot_lean_deg : 7) * DEG;   // how far the bike rests to the right on the foot
     }
     readSettings();
-    this.retune = function (changes) { Object.assign(s, changes || {}); self.settings = s; readSettings(); };
+    this.retune = function (changes) { Object.assign(s, changes || {}); self.settings = s; readSettings(); if (self.posture) self.posture.style = self.poseStyle; };
     this.posture = { lat: 0, long: 0, drop: 0, tuck: 0, sit: 0, knee: 0, assist: 0, look: 0, push: 0, inside: 0, lean: 0, flat: 0, lineYaw: 0, hasLine: 0 };      // assist: where the weight goes to the side for the help of the body (m); look: the head turned into the bend, -1 to 1 (left is positive)       // body space: lat to the left, long forward, drop up (m); tuck, sit, knee: 0 to 1
+    this.posture.style = this.poseStyle;                    // (flat-track pose settings, see readSettings)
     var vPrev = null, accel = { x: 0, y: 0, z: 0 }, dw = { x: 0, y: 0, z: 0 };
     this.riderKey = 0;                                      // -1: the rider is put back, 1: forward (keys, set by Car.js)
     this.sinceBrake = 99; this.counterGain = 1;

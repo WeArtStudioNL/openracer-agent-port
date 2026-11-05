@@ -185,7 +185,7 @@ OpenRacer.Driver = function (config, parent, steering) {
     function applyPosture() {
         var p = self.posture;
         self.root.position.sub(postureOff);
-        if (p) postureOff.set(((1 - (p.flat || 0)) * (p.lat + (p.assist || 0)) * 0.7 + (p.flat || 0) * (-(p.inside || 0) * 0.09 * Math.min(1, Math.abs(p.lean || 0) / (25 * DEG)))), p.drop * 0.7, p.long * 0.7);      // (flat track: the pelvis slides a little to the outside on the saddle, the back leans in, the rest of the rider is in his place) else postureOff.set(0, 0, 0);
+        if (p) postureOff.set(((1 - (p.flat || 0)) * (p.lat + (p.assist || 0)) * 0.7 + (p.flat || 0) * (-(p.inside || 0) * (p.style && p.style.pelvisSlide !== undefined ? p.style.pelvisSlide : 0.09) * Math.min(1, Math.abs(p.lean || 0) / (25 * DEG)))), p.drop * 0.7, p.long * 0.7 + (p.flat || 0) * ((p.style && p.style.forward) || 0) * Math.min(1, Math.abs(p.lean || 0) / (20 * DEG)));      // (flat track: the pelvis slides a little to the outside on the saddle, the back leans in, the rest of the rider is in his place) else postureOff.set(0, 0, 0);
         self.root.position.add(postureOff);
     }
     this.headSign = 1;      // (the sign of the roll of the bike in the roll of the bones)
@@ -229,9 +229,12 @@ OpenRacer.Driver = function (config, parent, steering) {
         var post = self.posture;
         if (post) {
             var pitch = 28 * post.tuck - 10 * post.sit, roll = -14 * (post.lat / 0.3);
-            roll += 0.55 * (post.push || 0) * (post.lean || 0) / DEG;      // (flat track: the back stays more upright than the bike, which leans under it: the trunk leans out of the bike by a share of its lean)
+            var st = post.style || {}, flatLean = (post.flat || 0) * Math.min(1, Math.abs(post.lean || 0) / (20 * DEG));
+            roll += (st.upright !== undefined ? st.upright : 0.55) * (post.push || 0) * (post.lean || 0) / DEG;
+            pitch += (st.chestPitch || 0) * flatLean;      // (flat track: the back stays more upright than the bike, which leans under it: the trunk leans out of the bike by a share of its lean)
             // flat track: the pelvis tilts the other way from the bike, up to 35 degrees (`pelvisTilt`), so that it stays about level with the road; the back keeps the turn that it had in the world
-            hipRoll = (post.flat || 0) * Math.max(-self.pelvisTilt, Math.min(self.pelvisTilt, 0.7 * (post.lean || 0) / DEG));
+            var tiltMax = st.pelvisTilt !== undefined ? st.pelvisTilt : self.pelvisTilt;
+            hipRoll = (post.flat || 0) * Math.max(-tiltMax, Math.min(tiltMax, 0.7 * (post.lean || 0) / DEG));
             var c = self.torsoPose.chest, h = self.torsoPose.head;
             self.torsoPose.chest = [c[0] + pitch, c[1], c[2] + roll - hipRoll];
             // (the head turned into the bend, about the vertical)
@@ -907,7 +910,8 @@ OpenRacer.Driver = function (config, parent, steering) {
                 self.parent.localToWorld(footW.copy(local));
                 footL.set(e[1], 0, 0).transformDirection(self.parent.matrixWorld); footL.y = 0; footL.normalize();
                 footF.set(0, 0, 1).transformDirection(self.parent.matrixWorld); footF.y = 0; footF.normalize();
-                footW.addScaledVector(footL, 0.1 + 0.14 * lv).addScaledVector(footF, 0.05 + 0.5 * lv);
+                var fst = postF.style || {};
+                footW.addScaledVector(footL, 0.1 + (fst.footOut !== undefined ? fst.footOut : 0.14) * lv).addScaledVector(footF, 0.05 + (fst.footForward !== undefined ? fst.footForward : 0.5) * lv);
                 roadYNow = roadUnder(e[0], footW.x, footW.y, footW.z);
                 if (roadYNow === null) roadYNow = footW.y - 0.35;
                 footW.y = roadYNow + FOOT_ANKLE + 0.03;
