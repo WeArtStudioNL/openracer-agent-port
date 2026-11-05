@@ -1881,6 +1881,18 @@ function updateSummary() {
     if (dynoBest && dyno) parts.push(Math.round(dynoBest.hp) + " hp at the wheels");
     if (top) parts.push(top[1] + " km/h");
     el.textContent = parts.join(" · ");
+    // a motorcycle that lifts its front wheel on full throttle (OpenRacer.wheelieCheck, from the numbers of the form): a line of its own under the summary, so that a stronger engine or a shorter gear shows at once
+    let warn = $("wheelieWarn");
+    if (!warn) { warn = document.createElement("div"); warn.id = "wheelieWarn"; warn.style.cssText = "color: var(--warn); font-size: 12px; margin-top: 3px;"; el.parentNode.insertBefore(warn, el.nextSibling); }
+    let text = "";
+    try {
+        if (isBike() && OpenRacer.wheelieCheck && state.curve) {
+            const w = OpenRacer.wheelieCheck({ type: "motorcycle", chassis: { mass: num("mass"), wheelbase: num("wheelbase"), weight_distribution: num("front") / 100, cg_height: num("cgHeight"), tire_diameter: num("tyre") },
+                drivetrain: { gear_ratios: parseGears(), final_drive: num("finalDrive"), efficiency: num("efficiency") || 0.92 }, engine: { torque_curve: state.curve }, motorcycle: { rider_mass: num("bikeRiderMass") } });
+            if (w && w.text) text = "⚠ " + w.text;
+        }
+    } catch (e) { text = ""; }
+    warn.textContent = text;
 }
 setInterval(updateSummary, 800);
 function parseGears() {

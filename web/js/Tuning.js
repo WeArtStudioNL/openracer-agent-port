@@ -131,6 +131,11 @@ var Tuning = (function() {
         info.textContent = Math.round(peakHp) + " hp at " + peakHpRpm + " rpm · " + Math.round(peakNm) + " Nm · top speed ~" +
             (imperial ? Math.round(reach / 1.609344) + " mph" : Math.round(reach) + " km/h") + " · " +
             Math.round(car.mass) + " kg · " + (car.mass / Math.max(1, peakHp)).toFixed(1) + " kg/hp";
+        // a motorcycle whose front wheel comes up on full throttle (OpenRacer.wheelieCheck): a line under this one, live as the engine or the gears are changed
+        var wheelie = null;
+        try { wheelie = OpenRacer.wheelieCheck ? OpenRacer.wheelieCheck(tunedConfig()) : null; } catch(e) { wheelie = null; }
+        if(!info.wheelieLine && info.parentNode) { info.wheelieLine = document.createElement("div"); info.wheelieLine.style.cssText = "color: var(--warn); font-size: 12px; margin-top: 3px;"; info.parentNode.insertBefore(info.wheelieLine, info.nextSibling); }
+        if(info.wheelieLine) info.wheelieLine.textContent = wheelie && wheelie.text ? "⚠ " + wheelie.text : "";
     }
 
     // ---- storing

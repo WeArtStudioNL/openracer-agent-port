@@ -32,6 +32,32 @@ OpenRacer.cameraSettings = function (config) {
     return result;
 };
 
+// Does the front wheel come up on full throttle? (a motorcycle: the car editor and the tuning menu say so, from the numbers, no simulation). The front comes up when the thrust at the rear wheel
+// is more than the weight can hold down: a = g x (the distance of the centre of gravity from the rear contact) / (its height); the thrust is the peak torque of the engine through every gear, the
+// final drive and the efficiency, over the radius of the tyre, over the mass (with the rider), and the rear tyre cannot give more than its grip times g. The bench (tools/bike-v2-test.js
+// --only=wheelie) measures the same on the real model: a bike that pulls twice the limit loops over without the wheelie control. Returns null for anything but a motorcycle or without the numbers,
+// else { limit, gears: [{ gear, g }], first (the first gear that lifts the front, 1 based, or 0), level: "ok" | "wheelie" | "loops", text }; g in units of 9.81 m/s^2.
+OpenRacer.wheelieCheck = function (config) {
+    var ch = config && config.chassis, dt = (config && config.drivetrain) || {}, eng = (config && config.engine) || {};
+    if(!config || config.type !== "motorcycle" || !ch || !eng.torque_curve || !dt.gear_ratios || !dt.gear_ratios.length || !(dt.final_drive > 0) || !(ch.tire_diameter > 0) || !(ch.wheelbase > 0) || !(ch.cg_height > 0) || !(ch.mass > 0)) return null;
+    var fitted = config.wheels && config.wheels.library && config.wheels.library.rear, rider = OpenRacer.Motorcycle && OpenRacer.Motorcycle.riderMass ? OpenRacer.Motorcycle.riderMass(config) : 80;
+    var r = (fitted && fitted.custom && fitted.custom.diameter > 0 ? fitted.custom.diameter : ch.tire_diameter) / 2, scale = eng.power_scale !== undefined ? eng.power_scale : 1;
+    var peak = 0; eng.torque_curve.forEach(function (p) { peak = Math.max(peak, Array.isArray(p) ? p[1] : p.nm); });
+    var mass = ch.mass + (ch.includes_rider ? 0 : rider), efficiency = dt.efficiency !== undefined ? dt.efficiency : 0.9;
+    var wd = ch.weight_distribution > 0 ? ch.weight_distribution : 0.5, limit = (ch.wheelbase * wd) / ch.cg_height, grip = (config.tyres && config.tyres.grip) || 0;      // (no grip known: the tyre is taken to hold)
+    var gears = dt.gear_ratios.map(function (ratio, i) {
+        var thrust = peak * scale * efficiency * ratio * dt.final_drive / r;
+        return { gear: i + 1, g: thrust / (mass * 9.81), grip: grip };
+    });
+    // (the thrust is the first-order sum: the bench measures less in first gear while the clutch slips and more after a spinning wheel grips again; the rear tyre has to hold the limit too, else it spins first)
+    var holds = !(grip > 0) || grip >= 0.95 * limit, first = 0; gears.forEach(function (g) { if(!first && g.g > limit) first = g.gear; });
+    var worst = gears.reduce(function (m, g) { return Math.max(m, g.g); }, 0), level = !holds ? "ok" : worst > 1.8 * limit ? "loops" : worst > limit ? "wheelie" : "ok";
+    var lifted = gears.filter(function (g) { return g.g > limit; }).map(function (g) { return g.gear; });
+    var text = level === "ok" ? "" : (level === "loops" ? "loops over" : "wheelie") + " on full throttle in gear " + (lifted.length > 1 ? lifted[0] + "-" + lifted[lifted.length - 1] : lifted[0]) +
+        ": thrust up to " + worst.toFixed(2) + " g, the front comes up at " + limit.toFixed(2) + " g (wheelie control and traction control tame it)";
+    return { limit: limit, gears: gears, first: first, level: level, text: text };
+};
+
 // The top speed of a car in m/s, worked out from its configuration (no simulation): in every gear the speed at which the thrust at the wheels (the torque of the engine at that
 // speed, through the gears and the final drive and the efficiency of the drive) is as big as the drag of the air and the rolling resistance, up to the rev limit; the highest of them.
 // A car with one gear or a CVT is the same sum with its ratio (the lowest ratio of a CVT). Returns 0 when the numbers are not there. Downforce and wheel slip are not counted.
