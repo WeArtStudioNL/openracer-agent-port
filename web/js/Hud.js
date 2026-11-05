@@ -22,7 +22,7 @@
  * Description: What is shown on top of the game:
  *   - bottom right: a round gauge with the engine speed (the ring, with a red zone at the rev limit and a shift light),
  *     the speed, the gear (P R N D and the gear of the automatic, or the gear of the sequential and manual gearbox) and
- *     the throttle and the brake on the two sides, with the indicators of ABS and traction control next to it:
+ *     the oil temperature (left) and the coolant temperature (right) on the two sides, each with its icon, with the indicators of ABS and traction control below:
  *     red is off, green is on, yellow is working.
  *   - top left: the lap, the time of the lap that is going and the last laps.
  *   - bottom left: hints (the sound that still has to be switched on by a key press).
@@ -42,6 +42,11 @@ var Hud = (function() {
     // the badges of the systems (web/images/HUD): orange when the system is on, grey when it is switched off (TC has its own off badge), blinking while it works
     var BADGE_FILE = { TC: "tc", LC: "launch", ESC: "esc", ABS: "abs", "2S": "2step" };
     var badges = {};         // name -> { active, inactive, off } images
+    // the oil and coolant temperature arcs of the gauge (degrees): the range of the arc, and the bands: cold below the first, normal to the second, warm to the third, then hot
+    var OIL_RANGE = [40, 160], OIL_BANDS = [70, 130, 145], COOLANT_RANGE = [40, 140], COOLANT_BANDS = [70, 105, 118];
+    function gaugeColour(t, bands) { return t < bands[0] ? "#6ab0ff" : (t <= bands[1] ? "#37d67a" : (t <= bands[2] ? "#ffb347" : "#ff5a4f")); }
+    // the icons beside them, images/HUD/oil-idle.png, oil-warning.png, coolant-idle.png and coolant-warning.png
+    var gaugeIcons = { oil: {}, coolant: {} };
     var size = 0;
     var ratio = 1;
     var flash = 0;
@@ -98,6 +103,13 @@ var Hud = (function() {
         container.id = "hud";
         // the badges of the systems (TC, LC, ESC, ABS, 2S; P and the transbrake while they hold) are drawn in the gauge: a click or a tap on one switches the aid, as the keys do
         canvas = document.createElement("canvas");
+        Object.keys(gaugeIcons).forEach(function(n) {
+            ["idle", "warning"].forEach(function(st) {
+                var img = new Image();
+                img.src = "images/HUD/" + n + "-" + st + ".png";
+                img.onload = function() { gaugeIcons[n][st] = img; };
+            });
+        });
         Object.keys(BADGE_FILE).forEach(function(n) {
             var set = badges[n] = {};
             ["active", "inactive", "off"].forEach(function(st) {
@@ -327,13 +339,34 @@ var Hud = (function() {
             }
         }
 
-        // the throttle (left) and the brake (right) as small arcs
+        // the oil temperature (left) and the coolant temperature (right) as small arcs, each with its icon beside it (EngineDamage.js, vehicle.engineHealth)
         var pedalRadius = R * 0.5;
         var pedalWidth = R * 0.07;
+        var eh = car.vehicle.engineHealth;
         arc(cx, cy, pedalRadius, 135 * Math.PI / 180, 225 * Math.PI / 180, pedalWidth, "rgba(255, 255, 255, 0.1)");
-        if(car.throttle > 0.01) arc(cx, cy, pedalRadius, 135 * Math.PI / 180, (135 + 90 * car.throttle) * Math.PI / 180, pedalWidth, "#37d67a");
         arc(cx, cy, pedalRadius, 45 * Math.PI / 180, -45 * Math.PI / 180, pedalWidth, "rgba(255, 255, 255, 0.1)", true);
-        if(car.brakePedal > 0.01) arc(cx, cy, pedalRadius, 45 * Math.PI / 180, (45 - 90 * car.brakePedal) * Math.PI / 180, pedalWidth, "#ff5a4f", true);
+        var oilWarn = false, coolantWarn = false;
+        if(eh) {
+            var oilFrac = Math.max(0, Math.min(1, (eh.oilTemp - OIL_RANGE[0]) / (OIL_RANGE[1] - OIL_RANGE[0])));
+            var coolantFrac = Math.max(0, Math.min(1, (eh.temp - COOLANT_RANGE[0]) / (COOLANT_RANGE[1] - COOLANT_RANGE[0])));
+            if(oilFrac > 0.01) arc(cx, cy, pedalRadius, 135 * Math.PI / 180, (135 + 90 * oilFrac) * Math.PI / 180, pedalWidth, gaugeColour(eh.oilTemp, OIL_BANDS));
+            if(coolantFrac > 0.01) arc(cx, cy, pedalRadius, 45 * Math.PI / 180, (45 - 90 * coolantFrac) * Math.PI / 180, pedalWidth, gaugeColour(eh.temp, COOLANT_BANDS), true);
+            oilWarn = eh.oilTemp > OIL_BANDS[2] || eh.oil < 0.3 || !!eh.failed;
+            coolantWarn = eh.temp > COOLANT_BANDS[2] || eh.coolant < 0.3 || !!eh.failed;
+        }
+        // the icons: dim while all is well, bright (and blinking) with a warning; before the picture is there a short word stands in
+        function gaugeIcon(name, warn, x, y, size) {
+            var set = gaugeIcons[name], img = warn ? (blinkNow ? set.idle : (set.warning || set.idle)) : set.idle;
+            if(img) { context.globalAlpha = warn ? 1 : 0.55; context.drawImage(img, x - size / 2, y - size / 2, size, size); context.globalAlpha = 1; }
+            else {
+                context.fillStyle = warn ? (blinkNow ? "#ffb347" : "#ff5a4f") : "rgba(255, 255, 255, 0.45)";
+                context.font = "bold " + Math.round(size * 0.55) + "px Arial";
+                context.fillText(name === "oil" ? "OIL" : "H2O", x, y);
+            }
+        }
+        var blinkNow = Math.floor(Date.now() / 250) % 2 === 0;
+        gaugeIcon("oil", oilWarn, cx - R * 0.37, cy + R * 0.02, R * 0.17);
+        gaugeIcon("coolant", coolantWarn, cx + R * 0.37, cy + R * 0.02, R * 0.17);
 
         // the speed, the unit, the gear and the engine speed
         var metric = Settings.option("units") !== "imperial";

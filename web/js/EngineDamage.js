@@ -60,7 +60,7 @@ OpenRacer.EngineDamage = function (vehicle, config) {
     bind(sb);
 
     // ---- the state (all of it is a number: vehicle.engineHealth goes to the main thread with the rest of the vehicle)
-    var health = vehicle.engineHealth = { block: 0, top: 0, pan: 0, radiator: 0, ignition: 0, coolant: 1, oil: 1, temp: 78, wear: 0, power: 1, misfire: 0, steam: 0, smoke: 0,
+    var health = vehicle.engineHealth = { block: 0, top: 0, pan: 0, radiator: 0, ignition: 0, coolant: 1, oil: 1, temp: 78, oilTemp: 70, wear: 0, power: 1, misfire: 0, steam: 0, smoke: 0,
         failed: 0, stalled: 0, leaking: 0, bx: bay[0], by: bay[1], bz: bay[2], br: bayR, rx: rad[0], ry: rad[1], rz: rad[2], rr: radR };
     var CAP_COOLANT = config.coolant > 0 ? config.coolant : 7, CAP_OIL = config.oil > 0 ? config.oil : 5;
     var seized = false, cutLeft = 0, nextMisfire = 0, shockCool = 0, acc = 0, lastShock = 0;
@@ -140,6 +140,9 @@ OpenRacer.EngineDamage = function (vehicle, config) {
         health.temp += (heat - UA * (health.temp - 20)) / capacity * dt;
         if (health.temp > 112 && health.coolant > 0) health.coolant = Math.max(0, health.coolant - 0.004 * (health.temp - 112) * dt);      // it boils over
         health.temp = clamp(health.temp, 15, 220);
+        // the oil runs hotter than the coolant, with the engine speed and load, with little oil and with the bearings that run dry; it follows slowly (a minute and a half)
+        var oilTarget = health.temp + 6 + 24 * clamp(rpm / limiter, 0, 1.2) * (0.3 + 0.7 * clamp(output / pk, 0, 1)) + 40 * starve + 25 * clamp((0.4 - health.oil) / 0.4, 0, 1);
+        health.oilTemp = clamp(health.oilTemp + (oilTarget - health.oilTemp) * Math.min(1, dt / 90), 15, 250);
 
         // --- wear: the bearings run dry (little oil, hot oil, a corner with the oil away from the pickup), a bent engine, and a boiled one
         health.wear += (Math.pow(starve, 1.3) * 0.012 + Math.pow(health.block, 2) * 0.0015 * clamp(output / pk, 0, 1) + Math.pow(clamp((health.temp - 135) / 20, 0, 1), 2) * 0.02) * dt;
@@ -193,7 +196,7 @@ OpenRacer.EngineDamage = function (vehicle, config) {
     // ---- a pit stop and a repair: the engine is whole, the oil and the coolant are full, and it is cool
     this.repair = function () {
         for (var key in health) if (key.length > 2) health[key] = 0;          // (the two-letter ones are where the bay and the radiator are)
-        health.coolant = 1; health.oil = 1; health.temp = 78; health.power = 1;
+        health.coolant = 1; health.oil = 1; health.temp = 78; health.oilTemp = 70; health.power = 1;
         seized = false; cutLeft = 0; nextMisfire = 0; shockCool = 0; lastShock = 0; acc = 0;
         engine.healthScale = 1; engine.frictionScale = 1; engine.misfireCut = false; engine.disabled = false;
     };
