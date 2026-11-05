@@ -2548,9 +2548,12 @@ OpenRacer.Vehicle = function (parameters, input) {
             var pvx = self.vx + self.wy * prz - self.wz * pry, pvy = self.vy + self.wz * prx - self.wx * prz, pvz = self.vz + self.wx * pry - self.wy * prx;
             var pvn = -(pvx * pfo.x + pvy * pfo.y + pvz * pfo.z) / pfl;
             if(!(pvn > 0)) continue;
-            var pfs = Math.min(1, m * pvn / Math.max(dt, 1e-4) / pfl), pfx = pfo.x * pfs, pfy = pfo.y * pfs, pfz = pfo.z * pfs;
+            // (and to what a part can pass on: a bumper or a door that drags on the road under the car pushed with the whole contact force and turned the car over its nose: at most
+            // 500 N a kilo of the part, 1.5 kN at least, and the arm to the point where it touches counts for a third: it is held on by a hinge, it is not a wall)
+            var pfCap = Math.max(1500, 500 * (pfo.m || 10));
+            var pfs = Math.min(1, m * pvn / Math.max(dt, 1e-4) / pfl, pfCap / pfl), pfx = pfo.x * pfs, pfy = pfo.y * pfs, pfz = pfo.z * pfs;
             force.x += pfx; force.y += pfy; force.z += pfz;
-            torque.x += pry * pfz - prz * pfy; torque.y += prz * pfx - prx * pfz; torque.z += prx * pfy - pry * pfx;
+            torque.x += 0.33 * (pry * pfz - prz * pfy); torque.y += 0.33 * (prz * pfx - prx * pfz); torque.z += 0.33 * (prx * pfy - pry * pfx);
         }
 
         // ---- integrate: Newton for the movement, Euler for the rotation (with the gyroscopic term of a body that is not round)

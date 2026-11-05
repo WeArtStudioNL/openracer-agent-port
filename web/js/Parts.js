@@ -294,6 +294,8 @@ OpenRacer.Parts = (function () {
         // a point of the frame of the car in the world
         function toWorld(p, out) { return out.copy(p).applyQuaternion(q).add(carPos); }
         // the velocity of a point of the car (a is a point in the frame of the car)
+        var ROT_WEIGHT = 1.5;           // the turning of the car counts a half more than the sums say: the angular speed of the car is smoothed by the physics, and a hit turns it in a few ms
+        var rotArm = new THREE.Vector3(), cgAcc = new THREE.Vector3(), angAcc = new THREE.Vector3(), lastCG = new THREE.Vector3(), lastW = new THREE.Vector3(), haveFrame = false;
         function pointVelocity(p, out) {
             a.copy(p).applyQuaternion(q);
             return out.set(v.vx + v.wy * a.z - v.wz * a.y, v.vy + v.wz * a.x - v.wx * a.z, v.vz + v.wx * a.y - v.wy * a.x);
@@ -312,7 +314,7 @@ OpenRacer.Parts = (function () {
             // a hull of the points; a flat part (a plate) has none, so then a box of its size
             [R.ColliderDesc.convexHull(local), R.ColliderDesc.cuboid(Math.max(0.04, (hi[0] - lo[0]) / 2), Math.max(0.04, (hi[1] - lo[1]) / 2), Math.max(0.04, (hi[2] - lo[2]) / 2))].forEach(function (desc) {
                 if (collider || !desc) return;
-                try { collider = world.createCollider(desc.setMass(mass).setFriction(0.6).setRestitution(0.25).setCollisionGroups(groups(PART_HELD, GROUND)), body); } catch (e) { collider = null; }
+                try { collider = world.createCollider(desc.setMass(mass).setFriction(0.8).setRestitution(0.12).setCollisionGroups(groups(PART_HELD, GROUND)), body); } catch (e) { collider = null; }
             });
             if (!collider) { world.removeRigidBody(body); console.warn("Parts: no collider for '" + spec.object + "'"); return; }
 
@@ -680,7 +682,7 @@ OpenRacer.Parts = (function () {
             } else {
                 if (part.joint) { world.removeImpulseJoint(part.joint, true); part.joint = null; }
                 part.state = "free";
-                part.body.setAngularDamping(part.spec.damping !== undefined ? part.spec.damping : 0.4); part.body.setLinearDamping(0.05);
+                part.body.setAngularDamping(part.spec.damping !== undefined ? part.spec.damping : 1.2); part.body.setLinearDamping(0.15);          // (a loose part tumbles and settles: it did not stop turning)
                 waitForClear(part);                                          // not yet against the car, it is inside it
                 emit("detached", part);
             }
@@ -767,8 +769,8 @@ OpenRacer.Parts = (function () {
                 // (the weight of the part that rests on the track is the car's own load: only what pushes sideways or up beyond it counts as a hit)
                 if (!(mag > 1)) continue;
                 p.wallForce = mag;
-                if (wsum > 0) wallF.push({ x: fx, y: fy, z: fz, px: cx / wsum, py: cy / wsum, pz: cz / wsum });
-                else wallF.push({ x: fx, y: fy, z: fz, px: p.centre.x, py: p.centre.y, pz: p.centre.z });
+                if (wsum > 0) wallF.push({ x: fx, y: fy, z: fz, px: cx / wsum, py: cy / wsum, pz: cz / wsum, m: p.mass });
+                else wallF.push({ x: fx, y: fy, z: fz, px: p.centre.x, py: p.centre.y, pz: p.centre.z, m: p.mass });
             }
             v.partForces = wallF;
         }
@@ -799,7 +801,7 @@ OpenRacer.Parts = (function () {
 
         // A part that has come loose is damped and has a top speed (its spin, and its speed against the car): a hinge that flies open at the speed
         // of a crash, or a part that a hit has thrown, moved so fast that the joint and the walls could not keep up and it jittered or flew
-        var MAX_SPIN_HINGED = 12, MAX_SPIN_FREE = 30, EXTRA_SPEED = 12;       // rad/s, rad/s, m/s on top of the speed of the car
+        var MAX_SPIN_HINGED = 9, MAX_SPIN_FREE = 16, EXTRA_SPEED = 10;       // rad/s, rad/s, m/s on top of the speed of the car
         function limitSpeeds() {
             var carSpeed = Math.hypot(v.vx, v.vy, v.vz);
             for (var i = 0; i < parts.length; i++) {
@@ -823,6 +825,15 @@ OpenRacer.Parts = (function () {
             dt = frameDt;
             frame++;
             setPose();
+            // the acceleration of the centre of the car and the angular acceleration over this frame (the load of the turning, below)
+            if (still || !haveFrame) { cgAcc.set(0, 0, 0); angAcc.set(0, 0, 0); }
+            else {
+                cgAcc.set((v.vx - lastCG.x) / dt, (v.vy - lastCG.y) / dt + 9.81, (v.vz - lastCG.z) / dt);         // (a car that falls with its parts has no load on them)
+                // (smoothed over a few frames: the angular speed of the body shakes a little from step to step, and read as it is it tore the battery off a car that only drove)
+                var smoothK = Math.min(1, dt / 0.06);
+                angAcc.x += ((v.wx - lastW.x) / dt - angAcc.x) * smoothK; angAcc.y += ((v.wy - lastW.y) / dt - angAcc.y) * smoothK; angAcc.z += ((v.wz - lastW.z) / dt - angAcc.z) * smoothK;
+            }
+            lastCG.set(v.vx, v.vy, v.vz); lastW.set(v.wx, v.wy, v.wz); haveFrame = !still || haveFrame;
             var moving = false;
             for (var i = 0; i < parts.length; i++) {
                 var part = parts[i];
@@ -840,6 +851,19 @@ OpenRacer.Parts = (function () {
                 var inertia = 0;
                 if (part.hasVel && !still) inertia = part.mass * b.distanceTo(part.lastVel) / dt;
                 part.lastVel.copy(b); part.hasVel = true;
+                // the turning of the car loads the part too, not only the change of its speed: the acceleration of its place is that of the centre of the car, plus the angular
+                // acceleration of the car times the arm (a car that is spun round by a hit, a roll) and the centripetal acceleration (a car that spins or rolls fast): the part is
+                // thrown off by the turning, as by the stopping
+                if (!still && !onMoving) {
+                    rotArm.copy(part.centre).applyQuaternion(q);
+                    var rx = rotArm.x, ry = rotArm.y, rz = rotArm.z, wx = v.wx, wy = v.wy, wz = v.wz;
+                    var alx = angAcc.x, aly = angAcc.y, alz = angAcc.z, wr = wx * rx + wy * ry + wz * rz, w2 = wx * wx + wy * wy + wz * wz;
+                    // (acceleration of the place) = (acceleration of the centre) + (angular acceleration) x r + w x (w x r)
+                    var tx = alx * 0 + (aly * rz - alz * ry) + (wx * wr - rx * w2), ty = (alz * rx - alx * rz) + (wy * wr - ry * w2), tz = (alx * ry - aly * rx) + (wz * wr - rz * w2);
+                    var turning = ROT_WEIGHT * part.mass * Math.hypot(tx, ty, tz), full = part.mass * Math.hypot(ROT_WEIGHT * tx + cgAcc.x, ROT_WEIGHT * ty + cgAcc.y, ROT_WEIGHT * tz + cgAcc.z);
+                    part.rotLoad = turning;
+                    if (full > inertia) inertia = full;
+                }
                 var shell = 0, torn = false;
                 if (sb && !onMoving) {
                     for (var k = 0; k < part.nodes.length; k++) {
