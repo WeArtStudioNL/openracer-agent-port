@@ -38,6 +38,7 @@ OpenRacer.Motorcycle = function (settings) {
         self.overLean = (s.over_lean_deg !== undefined ? s.over_lean_deg : 10) * DEG;   // how far past what the tyres hold the rider can lean it: past that the tyres let go (a lowside)
         self.crashLean = (s.crash_lean_deg || 78) * DEG;                                   // from here the bike is down (78: a powerslide is ridden out until the bike nearly lies on the road)
         self.balance = s.balance || 1;
+        self.maxRollRate = (s.max_roll_rate_deg !== undefined ? s.max_roll_rate_deg : 90) * DEG;   // the most the lean that the rider takes can change (deg/s)
         self.leanResponse = s.lean_response || 0.1;          // s: how fast the lean follows what is asked
         self.camberThrust = s.camber_thrust !== undefined ? s.camber_thrust : 0.85;     // the part of load * tan(lean) that a leaned tyre gives by itself (a round tyre: nearly all of it)
         self.standUp = s.throttle_stand_up !== undefined ? s.throttle_stand_up : 0.18;
@@ -185,7 +186,12 @@ OpenRacer.Motorcycle = function (settings) {
         want = Math.max(-phiMax, Math.min(phiMax, want));
         want *= 1 - self.standUp * Math.max(0, Math.min(1, inp.throttle || 0)) * Math.min(1, Math.abs(want) / (15 * DEG));
         var bikeWant = Math.max(-speedMax, Math.min(speedMax, want - eps * Math.min(1, Math.abs(want) / (6 * DEG))));
-        self.targetLean += (bikeWant - self.targetLean) * Math.min(1, dt / self.leanResponse);
+        // (the lean cannot change faster than a rider can roll a bike: about 90 degrees a second (max_roll_rate_deg) at speed. The keys asked for the whole lean at once, and the rider's torque about
+        // the long axis, which the tyres do not hold, rolled the bike over at 130 degrees a second and more: both wheels were unloaded, the bike slid sideways at 60 km/h (to 88 degrees
+        // of slip angle in the test) or went over. Past about 120 degrees a second it let go. At a walking pace it can go faster.)
+        var rollStep = (bikeWant - self.targetLean) * Math.min(1, dt / self.leanResponse);
+        var rollMax = self.maxRollRate * (1 + 2.5 * (1 - smooth(4, 12, Math.abs(u)))) * dt;
+        self.targetLean += Math.max(-rollMax, Math.min(rollMax, rollStep));
         var target = self.targetLean;
         // the angle of the wheel that a bend of this lean needs: a = g tan(lean of the whole) less the camber thrust of the tyres, delta = L a / u^2 (to the left: negative)
         // (of the lean that the bike has, not the one that it is going to: a front wheel that is ahead of the lean pushes the bike sideways, and when the keys go from left to right quickly
