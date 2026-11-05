@@ -24,6 +24,7 @@ OpenRacer.Debris = function (scene, capacity) {
     var vel = new Float32Array(capacity * 3), shapes = new Float32Array(capacity), tilts = new Float32Array(capacity);
     var age = new Float32Array(capacity).fill(1e9), life = new Float32Array(capacity).fill(1), floor = new Float32Array(capacity);
     var quick = new Uint8Array(capacity);                  // 1 for water: it is gone soon after it came down
+    var caps = new Float32Array(capacity).fill(1);         // the most opaque that a piece gets (1; the coolant of a leak is see-through)
     var lying = new Uint8Array(capacity);                  // 1 for a piece that has come down and stays on the ground a while
     var limit = 0;
     var next = 0, alive = 0, pendingNew = true, last = [null, null, null, null], carry = [0, 0, 0, 0];
@@ -39,7 +40,7 @@ OpenRacer.Debris = function (scene, capacity) {
     geometry.setAttribute("velocity", velocityAttribute);
     geometry.setAttribute("shape", shapeAttribute);
     geometry.setAttribute("tilt", tiltAttribute);
-    // shape: 0 an angular chunk, 1 a thin blade (turned along the way that it flies on the screen), 2 a round grain or clump
+    // shape: 0 an angular chunk, 1 a thin blade (turned along the way that it flies on the screen), 2 a round grain or clump, 3 a thick blade
     var material = new THREE.ShaderMaterial({
         // (with the depth of the surfaces: drawn after the screen space effects, with the smoke, and hidden behind what is in front of them; Graphics.js SmokePass)
         uniforms: Object.assign({ light: { value: 1 }, scale: { value: 600 }, aspect: { value: 1 }, sizeScale: { value: 1 } }, OpenRacer.SmokeDepth || { tDepth: { value: null }, uUseDepth: { value: 0 }, uResolution: { value: new THREE.Vector2(1, 1) }, uNear: { value: 1 }, uFar: { value: 5000 } }),
@@ -49,13 +50,15 @@ OpenRacer.Debris = function (scene, capacity) {
             "vec4 mv = modelViewMatrix * vec4(position, 1.0);" +
             "vec4 p0 = projectionMatrix * mv; vec4 p1 = projectionMatrix * (mv + vec4(mat3(modelViewMatrix) * velocity * 0.05, 0.0));" +
             "vec2 d = p1.xy / p1.w - p0.xy / p0.w; d.x *= aspect; vAngle = (length(d) > 1e-5 ? atan(d.y, d.x) : 0.0) + tilt;" +        // (the way that it flies, on the screen, and a little of its own)
-            "gl_PointSize = max(shape > 0.5 && shape < 1.5 ? 4.0 : 1.5, size * sizeScale * scale / max(0.5, -mv.z)); gl_Position = p0; }",
+            "gl_PointSize = max((shape > 0.5 && shape < 1.5) || shape > 2.5 ? 4.0 : 1.5, size * sizeScale * scale / max(0.5, -mv.z)); gl_Position = p0; }",
         fragmentShader: "uniform float light; varying vec3 vColour; varying float vAlpha; varying float vShape; varying float vAngle;" +
             "uniform sampler2D tDepth; uniform float uUseDepth; uniform vec2 uResolution; uniform float uNear; uniform float uFar; float linD(float d) { return uNear * uFar / (uFar - d * (uFar - uNear)); }" +
             "void main() { if (uUseDepth > 0.5) { float sd = texture2D(tDepth, gl_FragCoord.xy / uResolution).x; if (sd < 0.99999 && linD(sd) < linD(gl_FragCoord.z) - 0.05) discard; } vec2 c = gl_PointCoord - 0.5; c.y = -c.y; float a;" +
             "if (vShape < 0.5) a = smoothstep(0.5, 0.36, max(abs(c.x), abs(c.y)));" +
             "else if (vShape < 1.5) { float cs = cos(vAngle), sn = sin(vAngle); vec2 r = vec2(c.x * cs + c.y * sn, -c.x * sn + c.y * cs);" +
             "  float w = 0.035 + 0.07 * (1.0 - abs(r.x) * 2.0); a = smoothstep(w, w * 0.35, abs(r.y)) * smoothstep(0.5, 0.4, abs(r.x)); }" +      // (a blade: thin, wider in the middle, with a point at both ends)
+            "else if (vShape > 2.5) { float cs = cos(vAngle), sn = sin(vAngle); vec2 r = vec2(c.x * cs + c.y * sn, -c.x * sn + c.y * cs);" +
+            "  float w = 0.12 + 0.2 * (1.0 - abs(r.x) * 2.0); a = smoothstep(w, w * 0.5, abs(r.y)) * smoothstep(0.5, 0.35, abs(r.x)); }" +       // (a thick blade: a fat streak with round ends, the spray of the coolant)
             "else a = smoothstep(0.5, 0.2, length(c));" +
             "if (a * vAlpha < 0.02) discard; gl_FragColor = vec4(vColour * light, a * vAlpha); }",
         transparent: true, depthWrite: false, fog: false
@@ -79,7 +82,8 @@ OpenRacer.Debris = function (scene, capacity) {
         mud: shades([[0.28, 0.2, 0.13], [0.2, 0.14, 0.09], [0.36, 0.26, 0.16]]),
         ground: shades([[0.55, 0.43, 0.3], [0.46, 0.36, 0.24], [0.62, 0.5, 0.36]]),
         water: shades([[0.95, 0.97, 1.0], [0.78, 0.83, 0.9], [0.62, 0.68, 0.76], [0.88, 0.9, 0.94]]).map(function (c) { return [c[0] * 1.7, c[1] * 1.7, c[2] * 1.7]; }),      // spray: white and grey
-        snow: shades([[1.0, 1.0, 1.0], [0.92, 0.95, 1.0], [1.0, 1.0, 1.0]]).map(function (c) { return [c[0] * 2.2, c[1] * 2.2, c[2] * 2.2]; })       // (bright: lighter than the snow, which is itself lit)
+        snow: shades([[1.0, 1.0, 1.0], [0.92, 0.95, 1.0], [1.0, 1.0, 1.0]]).map(function (c) { return [c[0] * 2.2, c[1] * 2.2, c[2] * 2.2]; }),       // (bright: lighter than the snow, which is itself lit)
+        coolant: shades([[0.25, 0.85, 0.3], [0.35, 0.92, 0.4], [0.2, 0.72, 0.25], [0.4, 0.9, 0.3]]).map(function (c) { return [c[0] * 1.5, c[1] * 1.5, c[2] * 1.5]; })       // the coolant of a leak (EngineDamage.js, Leaks.js): green
     };
     // what each kind looks like: the shape, the size (m: the length of a blade, the width of the rest), the number made compared with the rest, how far they fly
     var LOOK = {
@@ -91,10 +95,12 @@ OpenRacer.Debris = function (scene, capacity) {
         ground: { shape: 2, size: [0.02, 0.045], rate: 1.2, fly: 0.9 },
         snow: { shape: 2, size: [0.01, 0.026], rate: 1.1, fly: 0.9 },
         water: { shape: 1, size: [0.05, 0.12], rate: 1, fly: 1 },
-        droplet: { shape: 2, size: [0.012, 0.03], rate: 1, fly: 1 }
+        droplet: { shape: 2, size: [0.012, 0.03], rate: 1, fly: 1 },
+        coolant: { shape: 3, size: [0.14, 0.3], rate: 1, fly: 1 },                 // the spray of a puddle, thick and big, green
+        coolantDrop: { shape: 2, size: [0.06, 0.11], rate: 1, fly: 1 }
     };
 
-    var KINDS = ["grass", "clod", "sand", "gravel", "mud", "ground", "snow", "water", "droplet"];     // (the number of a kind in the record of the replay)
+    var KINDS = ["grass", "clod", "sand", "gravel", "mud", "ground", "snow", "water", "droplet", "coolant", "coolantDrop"];     // (the number of a kind in the record of the replay)
     var self = this;
     this.recorder = null;                                 // called with a row for every piece that is made (Replay.js)
     function spawn(x, y, z, vx, vy, vz, kind, fixed) {
@@ -102,14 +108,15 @@ OpenRacer.Debris = function (scene, capacity) {
         if (next >= limit) next = 0;
         var i = next, look = LOOK[kind] || LOOK.ground;
         next = (next + 1) % limit;
-        var shade = SHADES[kind === "droplet" ? "water" : kind] || SHADES.ground, c = shade[Math.floor(Math.random() * shade.length)];
-        quick[i] = kind === "water" || kind === "droplet" ? 1 : 0;
+        var shade = SHADES[kind === "droplet" ? "water" : (kind === "coolantDrop" ? "coolant" : kind)] || SHADES.ground, c = shade[Math.floor(Math.random() * shade.length)];
+        quick[i] = kind === "water" || kind === "droplet" || kind === "coolant" || kind === "coolantDrop" ? 1 : 0;
         positions[i * 3] = x; positions[i * 3 + 1] = y; positions[i * 3 + 2] = z;
         vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz;
         colours[i * 3] = c[0]; colours[i * 3 + 1] = c[1]; colours[i * 3 + 2] = c[2];
         sizes[i] = fixed ? fixed.size : look.size[0] + Math.random() * (look.size[1] - look.size[0]); alphas[i] = 1;
         shapes[i] = look.shape; tilts[i] = fixed ? fixed.tilt : (Math.random() - 0.5) * 1.2;
-        age[i] = 0; life[i] = fixed ? fixed.life : 0.7 + Math.random() * 0.9; floor[i] = y - 0.02; lying[i] = 0;
+        age[i] = 0; life[i] = fixed ? fixed.life : 0.7 + Math.random() * 0.9; floor[i] = fixed && fixed.floor !== undefined ? fixed.floor : y - 0.02; lying[i] = 0;
+        caps[i] = fixed && fixed.opacity !== undefined ? fixed.opacity : 1;
         if (fixed) { c = fixed.colour; colours[i * 3] = c[0]; colours[i * 3 + 1] = c[1]; colours[i * 3 + 2] = c[2]; }
         pendingNew = true;
         // the replay keeps what is made: the place, the speed, the kind, the size, the life, the tilt and the colour (so that it is made again as it was)
@@ -133,6 +140,14 @@ OpenRacer.Debris = function (scene, capacity) {
                 lft.x * side * out + fwd.x * (ahead + jitter) + vehicle.vx * 0.4, Math.min(5, up), lft.z * side * out + fwd.z * (ahead + jitter) + vehicle.vz * 0.4, kind);
         }
     }
+
+    // A piece from outside (the coolant that a leak sprays, Leaks.js): kind "coolant" (a thick green blade, as the spray of a puddle) or "coolantDrop", from (x, y, z) with a
+    // speed, down to the height floorY; it is see-through (opacity, 0.45 to 0.75 when it is not given) and not in the record of a replay
+    this.emit = function (x, y, z, vx, vy, vz, kind, floorY, opacity) {
+        var look = LOOK[kind] || LOOK.coolant;
+        spawn(x, y, z, vx, vy, vz, kind, { size: look.size[0] + Math.random() * (look.size[1] - look.size[0]), tilt: (Math.random() - 0.5) * 1.2, life: 1.2 + Math.random() * 0.8,
+            colour: SHADES.coolant[(Math.random() * SHADES.coolant.length) | 0], floor: floorY, opacity: opacity !== undefined ? opacity : 0.45 + Math.random() * 0.3 });
+    };
 
     // The pieces that fly: gravity and a little drag; one that comes down to the height where it began stays a moment and goes
     this.update = function (delta, vehicle) {
@@ -206,7 +221,7 @@ OpenRacer.Debris = function (scene, capacity) {
                     lying[i] = 1; life[i] = quick[i] ? age[i] + 0.15 : age[i] + 5 + Math.random() * 9;
                 }
             }
-            alphas[i] = Math.min(1, (life[i] - age[i]) / (lying[i] && !quick[i] ? 1.5 : 0.25));
+            alphas[i] = Math.min(caps[i], (life[i] - age[i]) / (lying[i] && !quick[i] ? 1.5 : 0.25));
             alive++;
         }
         // the light on them: as bright as the light of the scene (a night, or the weather, makes them dark as well)
@@ -219,7 +234,7 @@ OpenRacer.Debris = function (scene, capacity) {
     }
 
     // ---- for the replay (Replay.js): it records the pieces as they are made, and makes them again from the record (they fly and fall by the same code)
-    var state = [positions, colours, sizes, alphas, vel, shapes, tilts, age, life, floor, lying, quick];
+    var state = [positions, colours, sizes, alphas, vel, shapes, tilts, age, life, floor, lying, quick, caps];
     this.replayLookback = 20;                             // seconds: a piece that lay has gone by then
     this.replayAdd = function (row) {
         spawn(row[1], row[2], row[3], row[4], row[5], row[6], KINDS[row[7]] || "ground", { size: row[8], life: row[9], tilt: row[10], colour: [row[11], row[12], row[13]] });
@@ -231,7 +246,7 @@ OpenRacer.Debris = function (scene, capacity) {
 
     this.replayClear = function () { this.clear(); };
     this.clear = function () {
-        age.fill(1e9); alphas.fill(0); sizes.fill(0); lying.fill(0); quick.fill(0);
+        age.fill(1e9); alphas.fill(0); sizes.fill(0); lying.fill(0); quick.fill(0); caps.fill(1);
         alphaAttribute.needsUpdate = sizeAttribute.needsUpdate = true;
         last = [null, null, null, null]; alive = 0;
     };

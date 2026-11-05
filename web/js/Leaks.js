@@ -1,7 +1,8 @@
 /*
  * Leaks.js
  *
- * Description: What a leaking engine leaves behind (EngineDamage.js, vehicle.engineHealth): drops of oil (dark) from the pan and of coolant (pale green, a spray from a hurt radiator)
+ * Description: What a leaking engine leaves behind (EngineDamage.js, vehicle.engineHealth): drops of oil (dark) from the pan and of coolant (the spray of a hurt radiator: the
+ *              particles of a puddle that a wheel throws up, Debris.js, but thicker, green and see-through; this file only finds where they land)
  *              that fall on the road, and the stains where they land: black blots of oil that stay, darker wet patches of coolant that dry in a minute. A car that drives on
  *              drips a line of blots behind it; one that stands still makes a puddle. The stains are flat quads on the road, in one mesh, a ring of the last 3000, as the marks
  *              of the tyres (SkidMarks.js) are; the drops are points that fall with gravity and land on the road under them.
@@ -117,12 +118,12 @@ OpenRacer.Leaks = function (scene) {
         size[i] = (big ? 0.07 : 0.035) + Math.random() * 0.035;
         age[i] = 0; kind[i] = k; alive[i] = 1;
         if (k === OIL) { color[i * 4] = 0.06; color[i * 4 + 1] = 0.045; color[i * 4 + 2] = 0.03; color[i * 4 + 3] = 0.95; }
-        else { color[i * 4] = 0.45; color[i * 4 + 1] = 0.85; color[i * 4 + 2] = 0.5; color[i * 4 + 3] = 0.75; }
+        else { color[i * 4] = 0.45; color[i * 4 + 1] = 0.85; color[i * 4 + 2] = 0.5; color[i * 4 + 3] = 0; }       // (the coolant is drawn by Debris.js: this one only finds the road for its stain)
     }
 
     var q = new THREE.Quaternion(), p = new THREE.Vector3();
     var oilLeft = 0, coolLeft = 0;
-    this.update = function (delta, v, camera, ground) {
+    this.update = function (delta, v, camera, ground, debris) {
         delta = Math.min(delta || 0.016, 0.1);
         clock += delta;
         var eh = v && v.engineHealth;
@@ -148,7 +149,12 @@ OpenRacer.Leaks = function (scene) {
                     coolLeft -= 1;
                     p.set(eh.rx + (Math.random() - 0.5) * 0.5, eh.ry - 0.1, eh.rz + (Math.random() - 0.5) * 0.2).applyQuaternion(q);
                     var out = new THREE.Vector3((Math.random() - 0.5) * 2.5, 0.4 + Math.random() * 2.2, 0.8 + Math.random() * 2.2).multiplyScalar(spray).applyQuaternion(q);       // (forward and up in the frame of the car)
-                    drop(v.px + p.x, v.py + p.y, v.pz + p.z, v.vx * 0.9 + out.x, v.vy + out.y * 0.5, v.vz * 0.9 + out.z, COOLANT, eh.coolFlow > 0.8);
+                    var cx = v.px + p.x, cy = v.py + p.y, cz = v.pz + p.z, cvx = v.vx * 0.9 + out.x, cvy = v.vy + out.y * 0.5, cvz = v.vz * 0.9 + out.z;
+                    drop(cx, cy, cz, cvx, cvy, cvz, COOLANT, eh.coolFlow > 0.8);          // (this one makes the stain where it lands; it is not drawn)
+                    if (debris && debris.emit) {                                           // (what is seen: the spray of a puddle, thicker, green and see-through, Debris.js)
+                        var road = ground ? ground.query(cx, cz, cy + 0.4, 1.5) : null;
+                        debris.emit(cx, cy, cz, cvx, cvy, cvz, Math.random() < 0.55 ? "coolant" : "coolantDrop", road ? road.y + 0.015 : v.py - 0.4);
+                    }
                 }
             }
         }
@@ -157,8 +163,8 @@ OpenRacer.Leaks = function (scene) {
         for (var i = 0; i < DROPS; i++) {
             if (!alive[i]) continue;
             age[i] += delta;
-            vel[i * 3] *= 1 - 0.4 * delta; vel[i * 3 + 2] *= 1 - 0.4 * delta;
-            vel[i * 3 + 1] -= 9.81 * delta;
+            var dragK = Math.exp(-0.7 * delta);          // (as Debris.js, so that the stain is where the drop that is seen comes down)
+            vel[i * 3] *= dragK; vel[i * 3 + 2] *= dragK; vel[i * 3 + 1] = vel[i * 3 + 1] * dragK - 9.81 * delta;
             pos[i * 3] += vel[i * 3] * delta; pos[i * 3 + 1] += vel[i * 3 + 1] * delta; pos[i * 3 + 2] += vel[i * 3 + 2] * delta;
             var road = ground ? ground.query(pos[i * 3], pos[i * 3 + 2], pos[i * 3 + 1] + 0.4, 0.6) : { y: -1e9, nx: 0, ny: 1, nz: 0 };
             if (age[i] > 4 || (road && pos[i * 3 + 1] <= road.y + 0.015)) {

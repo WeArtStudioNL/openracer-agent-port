@@ -640,7 +640,7 @@ OpenRacer.Car = function( config, domElement ) {
             tyreSmoke.update(delta, v, camera);
             if(v.engineHealth && (v.engineHealth.steam > 0.05 || v.engineHealth.smoke > 0.05)) engineFume(delta, v, v.engineHealth);
             if(v.engineHealth && v.engineHealth.whiteSmoke > 0.05 && flames) exhaustFume(delta, v, v.engineHealth);
-            if(leaks) leaks.update(delta, v, camera, typeof groundWorld !== "undefined" ? groundWorld : null);
+            if(leaks) leaks.update(delta, v, camera, typeof groundWorld !== "undefined" ? groundWorld : null, debris);
             if(debris) debris.update(delta, v);
             if(OpenRacer.Shatter) OpenRacer.Shatter.step(delta);      // the pieces and the particles of the parts that broke, of every car (Shatter.js)
             var marks = OpenRacer.skidMarks && OpenRacer.skidMarks();
