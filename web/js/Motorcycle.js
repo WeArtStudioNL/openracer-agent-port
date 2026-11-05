@@ -88,7 +88,7 @@ OpenRacer.Motorcycle = function (settings) {
     }
     readSettings();
     this.retune = function (changes) { Object.assign(s, changes || {}); self.settings = s; readSettings(); };
-    this.posture = { lat: 0, long: 0, drop: 0, tuck: 0, sit: 0, knee: 0, assist: 0, look: 0, push: 0, inside: 0, lean: 0 };      // assist: where the weight goes to the side for the help of the body (m); look: the head turned into the bend, -1 to 1 (left is positive)       // body space: lat to the left, long forward, drop up (m); tuck, sit, knee: 0 to 1
+    this.posture = { lat: 0, long: 0, drop: 0, tuck: 0, sit: 0, knee: 0, assist: 0, look: 0, push: 0, inside: 0, lean: 0, flat: 0 };      // assist: where the weight goes to the side for the help of the body (m); look: the head turned into the bend, -1 to 1 (left is positive)       // body space: lat to the left, long forward, drop up (m); tuck, sit, knee: 0 to 1
     var vPrev = null, accel = { x: 0, y: 0, z: 0 }, dw = { x: 0, y: 0, z: 0 };
     this.riderKey = 0;                                      // -1: the rider is put back, 1: forward (keys, set by Car.js)
     this.sinceBrake = 99; this.counterGain = 1;
@@ -598,7 +598,7 @@ OpenRacer.Motorcycle = function (settings) {
         p.lat += (hang * self.maxHang * (push ? self.pushHang : 1) - p.lat) * k(0.25); p.knee += ((push ? 0 : bendT) - p.knee) * k(0.3);
         // the flat-track style: the inside foot comes out in a bend at a low and a middle speed (a lean of 10 degrees and more, below 70 km/h), the inside elbow goes up; `inside` is the side of the bend either way
         var pushT = push ? smooth(8 * DEG, 25 * DEG, Math.abs(lean)) * (1 - smooth(14, 22, Math.abs(u))) * smooth(1.5, 4, Math.abs(u)) : 0;
-        p.push += (pushT - p.push) * k(0.25); p.lean += (lean - p.lean) * k(0.15); p.inside += (Math.sign(lean) * smooth(2 * DEG, 8 * DEG, Math.abs(lean)) - p.inside) * k(0.2);
+        p.push += (pushT - p.push) * k(0.25); p.lean += (lean - p.lean) * k(0.15); p.flat += ((push ? 1 : 0) - p.flat) * k(0.3); p.inside += (Math.sign(lean) * smooth(2 * DEG, 8 * DEG, Math.abs(lean)) - p.inside) * k(0.2);
         p.long += ((-0.22 * sit + 0.12 * tuck) - p.long) * k(0.3);
         p.drop += ((-0.09 * tuck + 0.05 * sit) - p.drop) * k(0.3);
         // the head looks where the bike is going: into the bend (the lean that is asked, so a little ahead of the bike), and straight on a straight; it comes round a little before the bike does

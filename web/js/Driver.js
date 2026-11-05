@@ -180,8 +180,13 @@ OpenRacer.Driver = function (config, parent, steering) {
         if (p) postureOff.set((p.lat + (p.assist || 0)) * 0.7, p.drop * 0.7, p.long * 0.7); else postureOff.set(0, 0, 0);
         self.root.position.add(postureOff);
     }
+    this.headSign = 1;      // (the sign of the roll of the bike in the roll of the bones)
     function torso() {
         var cfg = self.config;
+        if (!headUp && self.bones.head) {      // (the first time, with the bike upright and the head as the model has it: the up of the head in its own space is the up of the bike)
+            self.parent.updateMatrixWorld(true); self.model.updateMatrixWorld(true);
+            headUp = new V(0, 1, 0).transformDirection(self.parent.matrixWorld).transformDirection(new THREE.Matrix4().copy(self.bones.head.matrixWorld).invert());
+        }
         ["chest", "head"].forEach(function (name) { self.torsoPose[name] = torsoKeyRot(name, self.turn) || (cfg[name] && cfg[name].rotation) || [0, 0, 0]; });
         // a rider of a motorcycle: flat on the tank on the throttle, back on the brake, and over to the inside of a bend (the posture of Motorcycle.js)
         var post = self.posture;
@@ -190,11 +195,42 @@ OpenRacer.Driver = function (config, parent, steering) {
             roll += 0.35 * (post.push || 0) * (post.lean || 0) / DEG;      // (flat track: the body stays more upright than the bike, which leans under it: the trunk leans out of the bike by a share of its lean)
             var c = self.torsoPose.chest, h = self.torsoPose.head;
             self.torsoPose.chest = [c[0] + pitch, c[1], c[2] + roll];
-            self.torsoPose.head = [h[0] - 0.7 * pitch, h[1] + 35 * (post.look || 0), h[2] - 0.6 * roll];      // (and the head turned into the bend)
+            // (the head turned into the bend, about the vertical)
+            self.torsoPose.head = [h[0] - 0.7 * pitch, h[1] + 35 * (post.look || 0), h[2] - 0.6 * roll];
+            // flat track: the head stays upright to the road whatever the bike and the trunk do: it only turns about the vertical, to look along the way (a little ahead into the bend). The roll of
+            // the head is not worked out from the rotations of the bones (a chest of several bones, a model with its own rest turn): it is measured (headRoll: how far the head leans from the vertical
+            // across the bike, in degrees) and taken out step by step, with the sign and the size of the effect of the roll of the bone found once (headSlope).
+            var flat = post.flat || 0;
+            self.torsoPose.head = [h[0] - 0.7 * pitch - flat * 0.3 * pitch, h[1] + 35 * (post.look || 0), h[2] - 0.6 * roll + flat * headFix];
         }
         self.bones.chest.forEach(function (bone) { turnBone(bone, self.torsoPose.chest); });
         if (self.bones.head) turnBone(self.bones.head, self.torsoPose.head);
         self.model.updateMatrixWorld(true);
+        if (post && self.bones.head && (post.flat || 0) > 0.001) {
+            if (headSlope === null) probeHead(post);
+            if (headSlope) { var err = headRoll(); headFix = Math.max(-90, Math.min(90, headFix - 0.6 * err / headSlope)); }
+        } else headFix *= 0.9;
+    }
+    // the lean of the head across the bike from the vertical of the world (degrees, to the left of the bike positive): where its up is, from where it was at rest
+    this.headRollNow = function () { return headRoll(); };      // (for the tests: how far the head leans from the vertical, in degrees)
+    var headFix = 0, headSlope = null, headUp = null, hUp = new V(), hLeft = new V();
+    function headRoll() {
+        var head = self.bones.head;
+        if (!headUp) return 0;
+        head.updateMatrixWorld(true);
+        hUp.copy(headUp).transformDirection(head.matrixWorld); hLeft.set(1, 0, 0).transformDirection(self.parent.matrixWorld); hLeft.y = 0; if (hLeft.lengthSq() < 1e-6) return 0; hLeft.normalize();
+        return Math.atan2(hUp.x * hLeft.x + hUp.z * hLeft.z, hUp.y) / DEG;
+    }
+    // once: which way the roll of the head bone goes in the world (a probe of plus and minus ten degrees), and the up of the head in its own space
+    function probeHead(post) {
+        var head = self.bones.head, keep = self.torsoPose.head.slice(), world = new V(0, 1, 0);
+        self.parent.updateMatrixWorld(true);
+        var bikeUp = new V(0, 1, 0).transformDirection(self.parent.matrixWorld);
+        var probe = function (z) { turnBone(head, [keep[0], keep[1], keep[2] + z]); self.model.updateMatrixWorld(true); return headRoll(); };
+        var r1 = probe(10), r2 = probe(-10);
+        turnBone(head, keep); self.model.updateMatrixWorld(true);
+        headSlope = (r1 - r2) / 20;
+        if (!(Math.abs(headSlope) > 0.2)) headSlope = 0;
     }
 
     // ---- the inverse kinematics of two bones: upper, lower, end (a hand or a foot); target and pole are in the world
@@ -652,7 +688,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         return offsetTmp.set(o ? o[0] || 0 : 0, o ? o[1] || 0 : 0, o ? o[2] || 0 : 0);
     }
     // the same for a foot: the pivot is the peg and an offset from it (feet.offset.left / right, in the frame of the peg)
-    var footTmp = new V(), feetDown = {}, FOOT_ANKLE = 0.09, FOOT_LEN = 0.27, toeFwd = new V(), toeDir = new V();       // (how far down each foot is, the height of the ankle over the road when the foot stands on its toes)
+    var footTmp = new V(), footW = new V(), footL = new V(), footF = new V(), footA = new V(), footB = new V(), footC = new V(), feetDown = {}, FOOT_ANKLE = 0.09, FOOT_LEN = 0.27, toeFwd = new V(), toeDir = new V();       // (how far down each foot is, the height of the ankle over the road when the foot stands on its toes)
     function footOffset(side) {
         var o = self.config.feet.offset && self.config.feet.offset[side];
         return footTmp.set(o ? o[0] || 0 : 0, o ? o[1] || 0 : 0, o ? o[2] || 0 : 0);
@@ -799,12 +835,24 @@ OpenRacer.Driver = function (config, parent, steering) {
                 local.lerp(tmp, footDown);
                 feetDown[e[0]] = footDown;
             } else feetDown[e[0]] = 0;
-            // the flat-track style: the inside foot comes off the peg, out to the side and down to the road, where it skids
+            // the flat-track style: the inside foot comes off the peg and stands on the road (the global height of the road, state.roadY) beside the peg, forward and out as the lean goes up: with a bent
+            // knee at a small lean, stretched out beside the front wheel at the most lean. The target is taken in the world, within the reach of the leg from the hip.
             var postF = self.posture, pushAmt = postF && postF.push > 0.01 && (postF.inside || 0) * e[1] > 0 ? postF.push : 0;
-            if (pushAmt > 0 && walk < 0.5) {
-                tmp.set(local.x + e[1] * 0.4, groundY + FOOT_ANKLE + 0.03, local.z + 0.25);
-                if (state && typeof state.roadY === "number") { self.parent.localToWorld(tmp); tmp.y = state.roadY + FOOT_ANKLE + 0.03; self.parent.worldToLocal(tmp); }
-                local.lerp(tmp, 0.75 * pushAmt);
+            if (pushAmt > 0 && walk < 0.5 && state && typeof state.roadY === "number") {
+                var lv = Math.max(0, Math.min(1, (Math.abs(postF.lean || 0) / DEG - 12) / 36)); lv = lv * lv * (3 - 2 * lv);
+                self.parent.localToWorld(footW.copy(local));
+                footL.set(e[1], 0, 0).transformDirection(self.parent.matrixWorld); footL.y = 0; footL.normalize();
+                footF.set(0, 0, 1).transformDirection(self.parent.matrixWorld); footF.y = 0; footF.normalize();
+                footW.addScaledVector(footL, 0.1 + 0.14 * lv).addScaledVector(footF, 0.05 + 0.5 * lv);
+                footW.y = state.roadY + FOOT_ANKLE;
+                chain[0].getWorldPosition(footA); chain[1].getWorldPosition(footB); chain[2].getWorldPosition(footC);
+                var reach = 0.97 * (footA.distanceTo(footB) + footB.distanceTo(footC));
+                footC.copy(footW).sub(footA);
+                if (footC.length() > reach) { footC.setLength(reach); footW.copy(footA).add(footC); }
+                footW.y = Math.max(footW.y, state.roadY + FOOT_ANKLE);      // (never through the road)
+                self.parent.worldToLocal(footW);
+                local.lerp(footW, Math.min(1, pushAmt * 1.5));
+                feetDown[e[0]] = Math.max(feetDown[e[0]] || 0, pushAmt);
             }
             if (walk > 0.001) {
                 var pegAt = local.clone();
@@ -813,6 +861,7 @@ OpenRacer.Driver = function (config, parent, steering) {
                 local.lerp(tmp, walk);
             }
             self.parent.localToWorld(world.copy(local));
+            if (state && typeof state.roadY === "number" && world.y < state.roadY + FOOT_ANKLE) world.y = state.roadY + FOOT_ANKLE;      // (a foot is never below the road: a bike at a deep lean has its peg near it)
             chain[0].getWorldPosition(a);
             var setKnee = cfg.poles && cfg.poles[e[0]];
             if (setKnee) tmp.set(setKnee[0], setKnee[1], setKnee[2]);
