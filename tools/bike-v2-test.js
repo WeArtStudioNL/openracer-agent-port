@@ -37,6 +37,7 @@ const flatRoad = new sandbox.OpenRacer.FlatGround(0, "road");
 const MODEL = process.argv.includes("--v1") ? "v1" : "v2";
 const config = Object.assign({ id: "supermoto-700" }, JSON.parse(fs.readFileSync(path.join(ROOT, "cars", "supermoto-700", "car.json"), "utf8")));
 config.motorcycle = Object.assign({}, config.motorcycle, { model: MODEL });      // (whatever car.json says: --v1 is the old model)
+config.tyres = Object.assign({}, config.tyres); for (const a of process.argv) { const g = a.match(/^--grip=(.+)$/); if (g) config.tyres.grip = parseFloat(g[1]); }      // --grip=1.3: the grip of the tyres (car.json tyres.grip)
 for (const a of process.argv) { const m = a.match(/^--set=(\w+)=(.+)$/); if (m) config.motorcycle[m[1]] = parseFloat(m[2]); }
 const DT = 1 / 60, DEG = Math.PI / 180;
 
@@ -67,16 +68,17 @@ function makeCar(config) {
 }
 
 
-function run(speedKmh, cmdFn, T, settle) {
+function run(speedKmh, cmdFn, T, settle, coast, brake) {
     const car = makeCar(config), v = car.v, lock = 0.38, log = [];
     let crash = null, maxBeta = 0;
     for (let t = 0; t < settle + T && !crash; t += DT) {
         const input = car.input, error = speedKmh * KMH - v.u;
         if (error > 0) { input.throttle = Math.min(1, error * 0.5); input.brakePedal = 0; } else { input.throttle = 0; input.brakePedal = Math.min(1, -error * 0.3); }
         const tt = t - settle;
+        if (coast && tt > 0) { input.throttle = 0; input.brakePedal = brake || 0; }      // (the gas is shut from the command on)
         input.turnAngle = (tt > 0 ? cmdFn(tt) : 0) * lock;
         v.update(DT);
-        if (tt > 0) { log.push({ t: tt, target: (v.controller.targetLean || 0) / DEG, lean: (v.lean || 0) / DEG, steer: (v.controller.steer || 0) / DEG, beta: Math.atan2(v.v, Math.max(1, Math.abs(v.u))) / DEG, yaw: v.r, u: v.u }); maxBeta = Math.max(maxBeta, Math.abs(log[log.length - 1].beta)); }
+        if (tt > 0) { log.push({ t: tt, T: (v.controller.dbg && v.controller.dbg.T) || 0, ff: v.wheels[0].fy, fz0: v.wheels[0].gripLoad, fr: v.wheels[2].fy, fz2: v.wheels[2].gripLoad, mass: v.mass, ap: v.wheels[2].anglePeak, target: (v.controller.targetLean || 0) / DEG, lean: (v.lean || 0) / DEG, steer: (v.controller.steer || 0) / DEG, beta: Math.atan2(v.v, Math.max(1, Math.abs(v.u))) / DEG, yaw: v.r, u: v.u }); maxBeta = Math.max(maxBeta, Math.abs(log[log.length - 1].beta)); }
         if (v.controller.crashed) crash = v.controller.crashReason || "crashed";
     }
     return { log, crash, maxBeta };
@@ -102,6 +104,13 @@ if (process.argv.some(a => a.startsWith("--flick="))) {      // --flick=80: the 
     r.log.filter((l, i) => i % 6 === 0 && l.t > 3.8).forEach(l => console.log(l.t.toFixed(1), "lean", l.lean.toFixed(1), "target", l.target.toFixed(1), "bars", l.steer.toFixed(1), "beta", l.beta.toFixed(1), "yaw", l.yaw.toFixed(2)));
     process.exit(0);
 }
+if (process.argv.some(a => a.startsWith("--bend="))) {      // --bend=40: the lean, the bars and the slip of a bend with the keys held from 0.5 to 5 s, every 0.1 s
+    const sp = parseFloat(process.argv.find(a => a.startsWith("--bend=")).split("=")[1]), cmd = parseFloat((process.argv.find(a => a.startsWith("--cmd=")) || "--cmd=1").split("=")[1]);
+    const r = run(sp, t => (t < 0.5 ? 0 : t < 5 ? cmd : 0), 8, 10, process.argv.includes("--coast"));
+    r.log.filter((l, i) => i % 6 === 0 && l.t > parseFloat((process.argv.find(a => a.startsWith("--from=")) || "--from=4.4").split("=")[1])).forEach(l => console.log(l.t.toFixed(1), "kmh", (l.u * 3.6).toFixed(0), "lean", l.lean.toFixed(1), "target", l.target.toFixed(1), "bars", l.steer.toFixed(1), "beta", l.beta.toFixed(1), "yaw", l.yaw.toFixed(2), "balanceT", l.T.toFixed(0), "Fy/Fz front", (l.ff / l.fz0).toFixed(2), "rear", (l.fr / l.fz2).toFixed(2), "sumFy/mg", ((l.ff + l.fr) / (l.mass * 9.81)).toFixed(2), "anglePeak", l.ap.toFixed(3)));
+    console.log("crash", r.crash);
+    process.exit(0);
+}
 const ONLY = ((process.argv.find(a => a.startsWith("--only=")) || "").split("=")[1]) || "";      // --only=flick, --only=straight, --only=command: one kind of test
 console.log("model " + MODEL);
 for (const speed of [40, 80, 140]) {
@@ -122,6 +131,33 @@ for (const speed of [40, 80, 140]) for (const cmd of [0.4, 0.8]) {
     const tail = L.filter(l => l.t > L[L.length - 1].t - 3), mean = tail.reduce((a, l) => a + l.steer, 0) / tail.length, hunt = Math.sqrt(tail.reduce((a, l) => a + (l.steer - mean) * (l.steer - mean), 0) / tail.length), miss = Math.abs(final.lean - final.target);
     if (process.argv.includes("--score")) console.log("SCORE " + speed + " " + cmd + " " + (s.crash ? "crash" : miss.toFixed(2) + " " + hunt.toFixed(2)));
     report(speed + " km/h, command " + cmd + " lock", !s.crash && Math.abs(final.lean) > 5 && miss < 6 && hunt < 1.5, "lean " + final.lean.toFixed(1) + " deg (asked " + final.target.toFixed(1) + ", the bend needs " + gTan.toFixed(1) + ", the bars hunt " + hunt.toFixed(2) + "), 90 % in " + t90.toFixed(2) + " s, first bars " + first.toFixed(2) + " deg, bars at the end " + final.steer.toFixed(2) + " deg, slip angle " + s.maxBeta.toFixed(1) + (s.crash ? ", crashed: " + s.crash : ""));
+}
+// the rider on the keys, at every speed, on the gas and with the gas shut: does it stay up, how tight is the bend (the radius from the speed and the yaw rate), do the bars hunt
+for (const coast of [false, true]) for (const speed of [8, 15, 25, 40, 60, 100, 140]) for (const cmd of [0.3, 1]) {
+    if ((ONLY && ONLY !== "rider") || (SPEEDS.length && !SPEEDS.includes(speed)) || (!ONLY && !process.argv.includes("--rider"))) continue;
+    const s = run(speed, t => (t < 0.5 ? 0 : t < 5 ? cmd : 0), 8, 10, coast), L = s.log;
+    const bend = L.filter(l => l.t > 3 && l.t < 5);
+    if (!bend.length) { report((coast ? "coast " : "gas   ") + speed + " km/h, " + cmd + " lock", false, "down before the end of the bend: " + s.crash); continue; }
+    const m = k => bend.reduce((a, l) => a + l[k], 0) / bend.length, u = m("u"), yaw = Math.abs(m("yaw")), lean = Math.abs(m("lean")), mean = m("steer"), hunt = Math.sqrt(bend.reduce((a, l) => a + (l.steer - mean) * (l.steer - mean), 0) / bend.length);
+    report((coast ? "coast " : "gas   ") + speed + " km/h, " + cmd + " lock", !s.crash && hunt < 2 && s.maxBeta < 30, "speed " + (u * 3.6).toFixed(0) + ", lean " + lean.toFixed(1) + " deg, radius " + (yaw > 0.01 ? (u / yaw).toFixed(0) : "inf") + " m, bars " + Math.abs(mean).toFixed(1) + " deg, hunt " + hunt.toFixed(2) + ", slip " + s.maxBeta.toFixed(1) + (s.crash ? ", crashed: " + s.crash : ""));
+}
+// straight with the gas shut, and on the brake: the bike has to stay straight (the lean and the bars hunt less than a degree)
+for (const brake of [0, 0.5, 1]) for (const speed of [40, 100, 140]) {
+    if ((ONLY && ONLY !== "straightcoast") || (SPEEDS.length && !SPEEDS.includes(speed)) || (!ONLY && !process.argv.includes("--rider"))) continue;
+    const s = run(speed, () => 0, 6, 10, true, brake), L = s.log;
+    const maxLean = L.length ? Math.max(...L.map(l => Math.abs(l.lean))) : 999, hunt = L.length ? Math.sqrt(L.reduce((a, l) => a + l.steer * l.steer, 0) / L.length) : 999;
+    report("coast straight " + speed + " km/h, brake " + brake, !s.crash && maxLean < 3 && hunt < 1, "max lean " + maxLean.toFixed(1) + " deg, bars rms " + hunt.toFixed(2) + " deg, slip " + s.maxBeta.toFixed(1) + (s.crash ? ", crashed: " + s.crash : ""));
+}
+// a start from a standstill with the gas open, and steering at once (the front comes up: the lean steers it)
+for (const cmd of [0.3, 1]) for (const at of [0.5, 2]) {
+    if ((ONLY && ONLY !== "launch") || (!ONLY && !process.argv.includes("--rider"))) continue;
+    const car = makeCar(config), v = car.v; let crash = null, maxLean = 0, maxUp = 0;
+    for (let t = 0; t < 8 && !crash; t += DT) {
+        car.input.throttle = 1; car.input.brakePedal = 0; car.input.turnAngle = t > at ? cmd * 0.38 : 0;
+        v.update(DT); maxLean = Math.max(maxLean, Math.abs((v.lean || 0) / DEG)); maxUp = Math.max(maxUp, Math.abs(v.pitch || 0) / DEG);
+        if (v.controller.crashed) crash = v.controller.crashReason || "crashed";
+    }
+    report("launch, steer " + cmd + " lock after " + at + " s", !crash, "end speed " + (v.u * 3.6).toFixed(0) + " km/h, max lean " + maxLean.toFixed(0) + " deg" + (crash ? ", crashed: " + crash : ""));
 }
 for (const speed of [45, 60, 80]) for (const ramp of [0.3, 0.15]) {
     if ((ONLY && ONLY !== "flick") || (SPEEDS.length && !SPEEDS.includes(speed))) continue;

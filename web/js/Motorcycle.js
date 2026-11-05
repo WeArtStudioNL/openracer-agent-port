@@ -64,6 +64,9 @@ OpenRacer.Motorcycle = function (settings) {
         self.steerDamp = s.steer_damp !== undefined ? s.steer_damp : 60;   // Nm s/rad: the damping of the bars (a steering damper and the hands)
         self.riderKa = s.rider_ka !== undefined ? s.rider_ka : 1; self.riderKad = s.rider_kad !== undefined ? s.rider_kad : 0.2;   // the bars (rad) that a radian of lean error, and a radian a second of roll, ask at 10 m/s
         self.riderErrCap = (s.rider_err_cap_deg !== undefined ? s.rider_err_cap_deg : 90) * DEG;   // the most lean error that the bars answer
+        self.balanceFrom = s.balance_from !== undefined ? s.balance_from : 6; self.balanceTo = s.balance_to !== undefined ? s.balance_to : 14;   // m/s: the rider's hold on the lean (the torque about the long axis) goes away between these speeds, in model v2
+        self.lockShare = s.lock_share !== undefined ? s.lock_share : 0.65;   // model v2: the share of the lock of the bars that a lean at a low speed may ask for
+        self.kinFrom = s.kin_from !== undefined ? s.kin_from : 7; self.kinTo = s.kin_to !== undefined ? s.kin_to : 13;   // m/s: the bars are the angle of the old model below the first speed, and the angle of the rider and the tyres above the second
         self.riderBarsCap = (s.rider_bars_cap_deg !== undefined ? s.rider_bars_cap_deg : 90) * DEG;   // the most the bars are turned for the lean error (and the roll rate)
         self.armOmega = s.arm_omega !== undefined ? s.arm_omega : 40;   // rad/s: how stiff the hands hold the bars (the spring is steer_inertia * omega^2)
         self.riderTorqueMax = s.rider_torque_max !== undefined ? s.rider_torque_max : 120;   // Nm on the bars
@@ -175,7 +178,8 @@ OpenRacer.Motorcycle = function (settings) {
         var state = leanOf(v, 0);
         var fast = smooth(1.5, 4.5, Math.abs(u));                  // at a walking pace the rider holds it up with a foot
         // the lean that the command asks for, less at a walking pace (a bend of that lean needs a speed: tan(lean) = u^2 tan(steering lock) / (L g)), and stood up a little by the throttle
-        var cap = Math.atan(u * u * Math.tan(lock) / (v.wheelbase * G));
+        // (model v2: not for the whole lock of the bars: at the lock the front tyre is at 15 degrees of slip and the bike slides when the lean is let go)
+        var cap = Math.atan(u * u * Math.tan(lock * (self.v2 ? self.lockShare : 1)) / (v.wheelbase * G));
         // the lean of the whole (the bike and the rider that hangs off): tan(phi) = a / g. The bike itself leans phi less atan(share * hang off / height of the centre of gravity)
         var share = self.riderMass / v.mass, epsFull = Math.atan(share * self.maxHang / v.cgHeight);
         var eps = Math.atan(share * self.posture.lat / v.cgHeight);       // to the left: positive
@@ -241,7 +245,7 @@ OpenRacer.Motorcycle = function (settings) {
         var upright = 1 - smooth(8 * DEG, 20 * DEG, Math.abs(state.lean)), onBrake = Math.max(smooth(0.05, 0.3, inp.brakePedal || 0), sliding);
         var comply = Math.max(-0.12, Math.min(0.12, -self.frontComply * slipFront)) * smooth(3, 8, Math.abs(u)) * upright * onBrake;
         self.complied += (comply - self.complied) * Math.min(1, dt / 0.04);
-        if (self.v2) return self.steeringV2(v, state, geometric, w, u, dt, steady);
+        if (self.v2) return self.steeringV2(v, state, w * geometric + (1 - w) * (steady + counter + self.complied), w, u, dt, steady);
         var wanted = w * geometric + (1 - w) * (steady + counter + self.complied);
         self.steer += (wanted - self.steer) * Math.min(1, dt / 0.05);
         return self.steer;
@@ -250,7 +254,10 @@ OpenRacer.Motorcycle = function (settings) {
     // ---- model v2: the bars as a degree of freedom. The rider's only input is a torque on them (a PID on the lean error: to lean to the left the bars go to the right first, countersteering
     // is not coded, it is what the tyres do); the side force of the front tyre's slip angle acts behind the steering axis (trail) and turns the wheel into its slip; a damper. At a walking
     // pace (w) the angle is the command, as before. Right is positive; the lean is to the left.
-    this.steeringV2 = function (v, state, geometric, w, u, dt, steady) {
+    this.steeringV2 = function (v, state, kinematic, w, u, dt, steady) {
+        // kinematic: the angle the old model gives (the command at a walking pace, then the bend of the lean with a countersteer and the castor of the front wheel). Below kin_from the bars are that;
+        // up to kin_to it goes over to the angle of the rider and the tyres. A bike at 20 km/h is not the bike at 100: below about 5 m/s it has to be steered into its fall, above it away from it, and between
+        // them the bars do little to the lean; the model that holds there is the old one (the video of a bike that went down on every steer at 20 to 40 km/h).
         var front = v.wheels[0], uu = Math.max(Math.abs(u), 5);
         // the rider steers into the fall and, to start a lean, the other way first: the angle he asks for is the one the bend needs now (steady) plus a gain on the lean error. The error
         // is positive when the bike has to lean further to the left, and the bars go to the right then (countersteering): it is the sign of the loop, not a rule of its own. The gain
@@ -264,12 +271,13 @@ OpenRacer.Motorcycle = function (settings) {
         var react = (10 / uu) * (self.riderKa * eCap - self.riderKad * state.rate);
         var ask = steadyWant + Math.max(-self.riderBarsCap, Math.min(self.riderBarsCap, react));      // (and the bars answer a lean error with so much at most: a flick from lock to lock did not throw the tyres)
         var lock = v.input.turnLimit || v.input.maxTurn || 0.38;
+        var kin = 1 - smooth(self.kinFrom, self.kinTo, Math.abs(u));      // 1: the angle of the old model, 0: the angle of the rider
         ask = Math.max(-lock, Math.min(lock, ask));
         // the hands: a spring and a damper on the bars, so that what the front tyre does with the trail pushes back (a wobble is damped, a bump is felt)
         var arm = self.steerInertia * self.armOmega * self.armOmega;
-        var T = Math.max(-self.riderTorqueMax, Math.min(self.riderTorqueMax, (v.mass / 87) * arm * (ask - self.steerDof))) * (1 - w);
+        var T = Math.max(-self.riderTorqueMax, Math.min(self.riderTorqueMax, (v.mass / 87) * arm * (ask - self.steerDof))) * (1 - kin);
         var align = front && front.hasContact ? self.trail * (front.fySlip || 0) : 0;
-        if (w > 0.5) { self.steerDof = geometric; self.steerRate = 0; }
+        if (kin > 0.5) { self.steerDof = kinematic; self.steerRate = 0; }
         else {
             // semi-implicit: the damper is solved with the step
             var acc = (T + align) / self.steerInertia;
@@ -278,7 +286,7 @@ OpenRacer.Motorcycle = function (settings) {
             if (Math.abs(self.steerDof) > lock) { self.steerDof = Math.sign(self.steerDof) * lock; self.steerRate = 0; }
         }
         self.steerTorque = T; self.steerAlign = align; self.steerAsk = ask;
-        self.steer = w * geometric + (1 - w) * self.steerDof;
+        self.steer = kin * kinematic + (1 - kin) * self.steerDof;
         return self.steer;
     };
 
@@ -446,7 +454,7 @@ OpenRacer.Motorcycle = function (settings) {
         kp *= brace; kd *= brace;
         var T = kp * (self.targetLean - state.lean) - kd * state.rate;                           // about the axis that leans it to the left
         T = alive * Math.max(-6 * gh * brace, Math.min(6 * gh * brace, T));
-        if (self.v2) T *= 1 - smooth(3, 7, Math.abs(u));          // (model v2: from 7 m/s the rider keeps the bike up with the bars only; the torque about the long axis is for a walking pace)
+        if (self.v2) T *= 1 - smooth(self.balanceFrom, self.balanceTo, Math.abs(u));          // (model v2: from 7 m/s the rider keeps the bike up with the bars only; the torque about the long axis is for a walking pace)
         torque.x -= state.ax * T; torque.y -= state.ay * T; torque.z -= state.az * T;
         // the yaw that the steering did not ask for is damped
         var fast = smooth(1.5, 4.5, Math.abs(u));
