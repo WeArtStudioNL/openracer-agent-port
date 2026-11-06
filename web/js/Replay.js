@@ -23,6 +23,9 @@
  *
  *              Keys in the replay: Enter pause/play, left and right arrow 5 seconds back and forward (in Free they move the camera),
  *              Home and End the start and the end, T the camera, H hides the bar, the speed box and the debug text, and shows them again.
+ *
+ *              A fragment: Mark in and Mark out (I and O) mark a part on the slider (an orange band); Save fragment asks how to keep it, as a replay file (.openracer-replay,
+ *              only that part) or as a video (.mp4: the part played at normal speed and filmed, with the camera as it is set). Without marks it is the whole replay.
  */
 
 OpenRacer.Replay = (function() {
@@ -493,6 +496,11 @@ OpenRacer.Replay = (function() {
             "#replayBar .exit { background: var(--accent); border-color: var(--accent); }" +
             "#replayBar .cameras, #replayBar .freecam { margin-top: 8px; } #replayBar .label { color: var(--muted); min-width: 56px; } #replayBar .hint { color: var(--muted); font-size: 12px; }" +
             "#replayBar .freecam input[type=range] { width: 160px; margin: 0; height: 20px; }" +
+            // the part between Mark in and Mark out: a band over the slider (and the two marks), the fragment that Save fragment keeps
+            "#replayBar .track { position: relative; } #replayBar .marks { position: absolute; left: 0; right: 0; top: 4px; height: 26px; pointer-events: none; }" +
+            "#replayBar .marks .band { position: absolute; top: 8px; height: 10px; background: rgba(110, 200, 255, 0.55); border-radius: 4px; display: none; }" +
+            "#replayBar .marks .mark { position: absolute; top: 1px; width: 3px; margin-left: -1px; height: 24px; background: #fff; box-shadow: 0 0 3px #000; display: none; }" +
+            "#replayBar .fragment { margin: 0 0 8px; } #replayBar .fragment .range { color: var(--muted); font-variant-numeric: tabular-nums; }" +
             "#replayInfo { position: fixed; left: 16px; top: 14px; z-index: 1400; padding: 8px 12px; background: rgba(24, 29, 35, 0.78); color: #fff; " +
                 "border-radius: 10px; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 15px; font-variant-numeric: tabular-nums; pointer-events: none; }" +
             "#replayInfo b { font-size: 22px; }" +
@@ -590,7 +598,9 @@ OpenRacer.Replay = (function() {
         var exit = button(right, api.viewer ? "Main menu" : "Back to the game", "Escape", function() { api.stop(); });
         exit.className = "exit";
 
-        var slider = el(bar, "input");
+        var track = el(bar, "div", "track");
+        var slider = el(track, "input");
+        var marks = el(track, "div", "marks"), markBand = el(marks, "div", "band"), markInLine = el(marks, "div", "mark"), markOutLine = el(marks, "div", "mark");
         slider.type = "range";
         slider.min = "0"; slider.max = "1"; slider.step = "any"; slider.value = "0";
         slider.setAttribute("aria-label", "Position in the replay");
@@ -599,6 +609,14 @@ OpenRacer.Replay = (function() {
         slider.addEventListener("change", endScrub);
         slider.addEventListener("pointerup", endScrub);
         slider.addEventListener("keyup", endScrub);
+
+        // Mark in and Mark out (the keys I and O): the part of the replay that Save fragment keeps, as a replay file or as a video (.mp4)
+        var fragmentRow = el(bar, "div", "row fragment");
+        button(fragmentRow, "[ Mark in", "The fragment starts here (I)", function() { setMark("in"); });
+        button(fragmentRow, "Mark out ]", "The fragment ends here (O)", function() { setMark("out"); });
+        var fragmentSave = button(fragmentRow, "Save fragment", "Keep the part from Mark in to Mark out: as a replay file or as a video (.mp4)", function() { saveFragment(fragmentSave); });
+        var fragmentClear = button(fragmentRow, "×", "Take the marks away", function() { marksOf.in = marksOf.out = null; });
+        var fragmentText = el(fragmentRow, "span", "range", "");
 
         var transport = el(bar, "div", "row");
         var toStart = button(transport, "⏮", "To the start (Home)", function() { jump(-1e9); });
@@ -694,12 +712,77 @@ OpenRacer.Replay = (function() {
         var info = el(document.body, "div");
         info.id = "replayInfo";
         left.style.cursor = "grab";
-        ui = { bar: bar, info: info, slider: slider, timeLabel: timeLabel, sync: sync };
+        ui = { bar: bar, info: info, slider: slider, timeLabel: timeLabel, sync: sync, marks: { band: markBand, inLine: markInLine, outLine: markOutLine, text: fragmentText, save: fragmentSave, clear: fragmentClear } };
         OpenRacer.Movable.make(bar, { key: "replaybar", handle: left });
         OpenRacer.Movable.make(info, { key: "replayinfo", handle: info });
         updateCameraUi();
         slider.min = String(api.start_time());
         sync();
+    }
+
+    // ---- the fragment: Mark in and Mark out (seconds of the recording), and Save fragment
+    var marksOf = { in: null, out: null };
+    function setMark(which) {
+        marksOf[which] = t;
+        // (an out before the in, or an in after the out: the other mark goes, it is a new fragment)
+        if(marksOf.in !== null && marksOf.out !== null && marksOf.out <= marksOf.in) { if(which === "in") marksOf.out = null; else marksOf.in = null; }
+    }
+    // the fragment, in seconds: from the in (or the start) to the out (or the end); null when it is less than half a second
+    function fragment() {
+        var from = marksOf.in !== null ? marksOf.in : api.start_time(), to = marksOf.out !== null ? marksOf.out : api.end_time();
+        from = Math.max(api.start_time(), from); to = Math.min(api.end_time(), to);
+        return to - from >= 0.5 ? { from: from, to: to } : null;
+    }
+    function showMarks() {
+        var m = ui && ui.marks;
+        if(!m) return;
+        var a = api.start_time(), b = Math.max(a + 0.001, api.end_time()), pos = function(x) { return (100 * Math.max(0, Math.min(1, (x - a) / (b - a)))) + "%"; };
+        var any = marksOf.in !== null || marksOf.out !== null, f = fragment();
+        m.inLine.style.display = marksOf.in !== null ? "block" : "none"; if(marksOf.in !== null) m.inLine.style.left = pos(marksOf.in);
+        m.outLine.style.display = marksOf.out !== null ? "block" : "none"; if(marksOf.out !== null) m.outLine.style.left = pos(marksOf.out);
+        m.band.style.display = any && f ? "block" : "none";
+        if(any && f) { m.band.style.left = pos(f.from); m.band.style.width = "calc(" + pos(f.to) + " - " + pos(f.from) + ")"; }
+        m.clear.style.display = any ? "" : "none";
+        var text = any ? (f ? format(f.from) + " – " + format(f.to) + " (" + (f.to - f.from).toFixed(1) + " s)" : "the fragment is too short") : "no marks: the whole replay";
+        if(m.text.textContent !== text) m.text.textContent = text;
+    }
+    // Save fragment: a small window asks how (a replay file, or a video of the part at normal speed), then keeps the part from Mark in to Mark out
+    function saveFragment(saveButton) {
+        var f = fragment();
+        if(!f) { saveButton.textContent = "Mark a longer part"; setTimeout(function() { saveButton.textContent = "Save fragment"; }, 2500); return; }
+        if(document.getElementById("replayFragmentAsk") || video.recorder) return;
+        var shade = el(document.body, "div");
+        shade.id = "replayFragmentAsk";
+        shade.style.cssText = "position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 6000; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;";
+        var box = el(shade, "div");
+        box.style.cssText = "width: 440px; max-width: calc(100% - 40px); background: var(--panel); border: 2px solid var(--line); border-radius: 10px; padding: 20px 24px; color: #fff;";
+        var title = el(box, "div", "", "Save the fragment");
+        title.style.cssText = "font-size: 20px; font-weight: bold; margin-bottom: 8px;";
+        var text = el(box, "div", "", format(f.from) + " to " + format(f.to) + " (" + (f.to - f.from).toFixed(1) + " s). A replay file can be opened again in Replays and in the video editor; the video is played and filmed at normal speed, with the camera as it is set now.");
+        text.style.cssText = "color: var(--muted); font-size: 14px; line-height: 1.5; margin-bottom: 16px;";
+        var row = el(box, "div");
+        row.style.cssText = "display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;";
+        var style = function(b, colour) { b.style.cssText = "padding: 9px 16px; font: bold 14px Arial; background: " + colour + "; color: #fff; border: 0; border-radius: 6px; cursor: pointer;"; };
+        var close = function() { shade.remove(); window.removeEventListener("keydown", onEsc, true); };
+        var onEsc = function(e) { if(e.code === "Escape") { e.stopPropagation(); e.preventDefault(); close(); } };
+        window.addEventListener("keydown", onEsc, true);
+        shade.addEventListener("pointerdown", function(e) { if(e.target === shade) close(); });
+        var cancel = button(row, "Cancel", "Keep nothing", close);
+        var asFile = button(row, "Replay file", "Download the part as a .openracer-replay file", function() {
+            asFile.disabled = true; asFile.textContent = "Saving…";
+            api.save(Math.round(f.from / DT), Math.round(f.to / DT) + 1, "fragment").then(close).catch(function(error) {
+                asFile.disabled = false; asFile.textContent = "Replay file"; text.textContent = (error && error.message) || "The fragment could not be saved."; text.style.color = "#ff8a80";
+            });
+        });
+        var asVideo = button(row, "MP4 video", "Play the part at normal speed and film it as a .mp4", function() {
+            close();
+            video.from = f.from; video.until = f.to; video.closeAfter = false;
+            video.name = "openracer-" + String(currentTrack.id).replace(/[^A-Za-z0-9_-]/g, "") + "-fragment-" + new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13);
+            toggleVideo();
+            if(!video.recorder) { video.from = video.until = undefined; video.name = null; }
+        });
+        if(typeof MediaRecorder === "undefined" || !document.createElement("canvas").captureStream) asVideo.style.display = "none";
+        style(cancel, "var(--line)"); style(asFile, "#3a4a5e"); style(asVideo, "var(--accent)");
     }
 
     function jump(seconds) {
@@ -711,6 +794,7 @@ OpenRacer.Replay = (function() {
         ui.slider.min = String(api.start_time());
         ui.slider.max = String(api.end_time());
         if(!scrubbing) ui.slider.value = String(t);
+        showMarks();
         ui.timeLabel.textContent = format(t) + " / " + format(api.end_time()) + (playing ? "   " + (direction < 0 ? "◀ " : "▶ ") + speed + "×" : "   paused");
         if(player) {
             var metric = Settings.option("units") !== "imperial";
@@ -734,6 +818,8 @@ OpenRacer.Replay = (function() {
             return;
         }
         if(event.code === "Tab" && cars.length > 1) { nextTarget(); event.preventDefault(); return; }
+        // the marks of the fragment (also with the free camera: it does not use I and O)
+        if((event.code === "KeyI" || event.code === "KeyO") && !event.repeat && !(target && target.tagName === "INPUT" && target.type !== "range")) { setMark(event.code === "KeyI" ? "in" : "out"); event.preventDefault(); return; }
         if(free.active) {
             // the keys of the free camera (the arrows move it, so they do not jump in time then)
             if(event.code === "KeyF" && !event.repeat) { toggleAim(); event.preventDefault(); return; }
@@ -1568,12 +1654,13 @@ OpenRacer.Replay = (function() {
     }
 
     // Saves the recording as a file for the user to keep or to share; gives a promise of { name, bytes }
-    api.save = function() {
+    // (from, to: a part, in samples, and label: a word in the name of the file; Save fragment of the bar)
+    api.save = function(from, to, label) {
         if(!cars.length || total < 2) return Promise.reject(new Error("Nothing is recorded yet."));
-        var raw = pack();
+        var raw = pack(from, to);
         return gzip(raw).then(function(bytes) {
             var stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13);
-            var name = "replay-" + String(currentTrack.id).replace(/[^A-Za-z0-9_-]/g, "") + "-" + stamp + ".openracer-replay";
+            var name = "replay-" + String(currentTrack.id).replace(/[^A-Za-z0-9_-]/g, "") + (label ? "-" + label : "") + "-" + stamp + ".openracer-replay";
             var url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
             var link = document.createElement("a");
             link.href = url;
