@@ -21,7 +21,7 @@
  *              goes with it, Tab chooses another car. All movements, the look and the zoom are smoothed and damped; a slider (0.01 to 3)
  *              sets how fast they are.
  *
- *              Keys in the replay: Enter pause/play, left and right arrow 5 seconds back and forward (in Free they move the camera),
+ *              Keys in the replay: Enter pause/play, left and right arrow one frame back and forward (held: they keep stepping), up and down arrow 1 second forward and back (in Free they move the camera),
  *              Home and End the start and the end, T the camera, H hides the bar, the speed box and the debug text, and shows them again.
  *
  *              A fragment: Mark in and Mark out (I and O) mark a part on the slider (an orange band); Save fragment asks how to keep it, as a replay file (.openracer-replay,
@@ -789,6 +789,13 @@ OpenRacer.Replay = (function() {
         t = Math.max(api.start_time(), Math.min(api.end_time(), t + seconds));
     }
 
+    // one frame (a sample, 1/30 s) back or forward: it pauses, and lands on the sample before or after (held, the key repeats and keeps stepping)
+    function stepFrame(dir) {
+        if(playing) { playing = false; ui.sync(); }
+        var i = t / DT, k = dir > 0 ? Math.floor(i + 1e-6) + 1 : Math.ceil(i - 1e-6) - 1;
+        t = Math.max(api.start_time(), Math.min(api.end_time(), k * DT));
+    }
+
     function updateUi() {
         if(!ui) return;
         ui.slider.min = String(api.start_time());
@@ -833,8 +840,8 @@ OpenRacer.Replay = (function() {
             playing = !playing;
             if(playing && direction > 0 && t >= api.end_time() - 0.01) t = api.start_time();
             ui.sync();
-        } else if(event.code === "ArrowLeft" && !(target && target.tagName === "INPUT")) { jump(-5); event.preventDefault(); }
-        else if(event.code === "ArrowRight" && !(target && target.tagName === "INPUT")) { jump(5); event.preventDefault(); }
+        } else if((event.code === "ArrowLeft" || event.code === "ArrowRight") && !(target && target.tagName === "INPUT")) { stepFrame(event.code === "ArrowLeft" ? -1 : 1); event.preventDefault(); }
+        else if((event.code === "ArrowUp" || event.code === "ArrowDown") && !(target && target.tagName === "INPUT")) { jump(event.code === "ArrowUp" ? 1 : -1); event.preventDefault(); }
         else if(event.code === "KeyH" && !event.repeat) { ui.bar.style.display = ui.bar.style.display === "none" ? "" : "none"; document.body.classList.toggle("replayClean", ui.bar.style.display === "none"); event.preventDefault(); }
         else if(event.code === "Home") { jump(-1e9); event.preventDefault(); }
         else if(event.code === "End") { jump(1e9); event.preventDefault(); }
