@@ -419,5 +419,47 @@ for (const pedal of ["gas", "brake"]) {
     const deg = turned / DEG;
     report("flip on the " + pedal, pedal === "gas" ? deg > 180 : deg < -120, "the nose turned " + deg.toFixed(0) + " degrees in a flight of " + flight.toFixed(2) + " s");
 }
+// a kicker of a motocross track (the test track of the user, 6 November: the bike crashed into some kickers instead of jumping off them): flat road, then a face that starts at
+// a0 degrees with a sharp edge and curves up to a1 at the lip, at height H, a flat top of 4 m and a landing of 30 degrees down. Ridden straight at it with the gas held.
+// --kick=a0,a1,H (one kicker), --kdump (every 0.05 s from 0.5 s before the face)
+function kickerWorld(a0, a1, H) {
+    const w = new sandbox.OpenRacer.GroundWorld(5); w.use3D = true;
+    const add = (ax, ay, az, bx, by, bz, cx, cy, cz) => { w.addTriangle(ax, ay, az, bx, by, bz, cx, cy, cz, "road", "kicker", 0); w.addTriangle3D(ax, ay, az, bx, by, bz, cx, cy, cz, "road", "kicker", 0, true); };
+    const quad = (z0, y0, z1, y1, x0, x1) => { add(z0, y0, x0, z0, y0, x1, z1, y1, x1); add(z0, y0, x0, z1, y1, x1, z1, y1, x0); };      // (along x: the bench's bike rides along +x; the profile's z is the world's x)
+    const Z0 = 60, prof = [[-100, 0], [Z0, 0]];
+    let z = Z0, y = 0, ang = a0 * DEG; const ds = 0.2, curve = (a1 - a0) * DEG / Math.max(0.5, H / Math.sin(((a0 + a1) / 2) * DEG));      // (rad per m of the face: from a0 to a1 over its length)
+    while (y < H) { z += ds * Math.cos(ang); y = Math.min(H, y + ds * Math.sin(ang)); prof.push([z, y]); ang = Math.min(a1 * DEG, ang + curve * ds); }
+    // --sliver: a triangle of no width across the face at a third of its height, with a normal against the bike (the kickers of the test track have them: two vertices at
+    // the same place, a triangle 8.4 m long and 0.0000001 m high)
+    if (process.argv.includes("--sliver")) { const k = Math.floor(prof.length * 0.6), [zs, ys] = prof[k]; w.addTriangle3D(zs, ys, -6, zs, ys + 2e-7, -6, zs, ys, 6, "road", "kicker", 0, true); }
+    prof.push([z + 4, H]); const zl = z + 4 + H / Math.tan(30 * DEG); prof.push([zl, 0]); prof.push([zl + 200, 0]);
+    for (let i = 0; i + 1 < prof.length; i++) {
+        const [za, ya] = prof[i], [zb, yb] = prof[i + 1], n = Math.max(1, Math.ceil((zb - za) / 4));
+        for (let k = 0; k < n; k++) quad(za + (zb - za) * k / n, ya + (yb - ya) * k / n, za + (zb - za) * (k + 1) / n, ya + (yb - ya) * (k + 1) / n, -6, 6);
+    }
+    return { world: w, Z0 };
+}
+const KICK = (process.argv.find(a => a.startsWith("--kick=")) || "").split("=")[1];
+const KICKERS = KICK ? [KICK.split(",").map(Number)] : [[14, 28, 1.85], [21, 39, 2.8], [35, 57, 5.3]];      // (the three kinds of the test track: Cube.014, Cube.011/012, Cube.013)
+for (const [a0, a1, H] of KICKERS) for (const speed of [30, 45, 60, 75]) {
+    if ((ONLY && ONLY !== "kicker") || (SPEEDS.length && !SPEEDS.includes(speed)) || (!ONLY && !process.argv.includes("--rider"))) continue;
+    const car = makeCar(config), v = car.v, kw = kickerWorld(a0, a1, H); v.ground = kw.world;
+    let crash = null, maxA = 0, airT = 0, faceAt = -1, top = 0;
+    for (let t = 0; t < 30 && !crash; t += DT) {
+        const err = speed * KMH - v.u; car.input.turnAngle = 0;
+        if (faceAt < 0) { car.input.throttle = err > 0 ? Math.min(1, err * 0.5) : 0; car.input.brakePedal = err < 0 ? Math.min(1, -err * 0.3) : 0; } else { car.input.throttle = v.airborne ? 0 : 0.6; car.input.brakePedal = 0; }      // (the gas off in the air: held, it turns the nose up, a flip)
+        v.update(DT);
+        if (faceAt < 0 && v.px > kw.Z0 - 2) faceAt = t;
+        const a = v.controller.dbgAccel || 0; if (faceAt >= 0) maxA = Math.max(maxA, a);
+        if (faceAt >= 0 && v.airborne) airT += DT;
+        top = Math.max(top, v.py);
+        if (process.argv.includes("--kdump") && faceAt >= 0 && t < faceAt + 3 && Math.round(t / DT) % 3 === 0) console.log((t - faceAt).toFixed(2), "kmh", (v.u * 3.6).toFixed(0), "px", v.px.toFixed(1), "py", v.py.toFixed(2), "vy", v.vy.toFixed(1), "pitch", ((v.pitch || 0) / DEG).toFixed(0), "air", v.airborne ? 1 : 0, "g", (a / G).toFixed(1), "fzF", (v.wheels[0].gripLoad || 0).toFixed(0), "fzR", (v.wheels[2].gripLoad || 0).toFixed(0), "pen", (v.wheels[0].tyreDeflection || 0).toFixed(3), (v.wheels[2].tyreDeflection || 0).toFixed(3), "thr", car.input.throttle, "AIR", JSON.stringify(v.controller.airDbg && Object.fromEntries(Object.entries(v.controller.airDbg).map(([k, x]) => [k, +(x / (k === "wy" ? 1 : DEG)).toFixed(0)]))));
+        if (v.controller.crashed) crash = v.controller.crashReason || "crashed";
+        if (faceAt >= 0 && t > faceAt + 6) break;
+        if (process.argv.includes("--kpos") && Math.round(t / DT) % 60 === 0) console.log(t.toFixed(0), "pos", v.px.toFixed(1), v.py.toFixed(2), v.pz.toFixed(1), "u", v.u.toFixed(1), "air", v.airborne);
+    }
+    if (process.argv.includes("--walls") && v.debugWalls && v.debugWalls.length) v.debugWalls.slice(0, 3).forEach(w => console.log("WALL", JSON.stringify(w), JSON.stringify(v.proxy3 && v.proxy3[w.sphere] && Object.fromEntries(Object.entries(v.proxy3[w.sphere]).filter(([k, x]) => typeof x !== "object")))));
+    report("kicker " + a0 + "-" + a1 + " deg, " + H + " m, " + speed + " km/h", !crash && airT > 0.2, "in the air " + airT.toFixed(2) + " s, top " + top.toFixed(1) + " m, peak " + (maxA / G).toFixed(1) + " g" + (crash ? ", crashed: " + crash : "") + (faceAt < 0 ? " (never reached the face: px " + v.px.toFixed(1) + ")" : ""));
+}
 console.log(failed ? failed + " failed" : "all ok");
 process.exit(failed ? 1 : 0);

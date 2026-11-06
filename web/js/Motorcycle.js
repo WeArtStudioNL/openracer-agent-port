@@ -436,8 +436,10 @@ OpenRacer.Motorcycle = function (settings) {
         var noseRate = -wDotL, leanRate = -wDotA;
         var hs = Math.sqrt(v.vx * v.vx + v.vz * v.vz), flightPitch = Math.atan2(v.vy, Math.max(hs, 3));       // (the nose along the flight; 3 m/s so that a jump straight up does not turn it)
         var noseNow = Math.asin(Math.max(-1, Math.min(1, fwd.y / fl)));
-        // (upright: the bike's up above the horizon and the nose not past 60 degrees; in a flip or a roll past that the rider does not level anything: it turns on as it turns)
-        var upright = up.y > 0.25 && Math.abs(noseNow) < 1.05;
+        // (upright: the bike's up above the horizon, so the nose not past the vertical and the bike not on its back; in a flip or a roll past that the rider does not level anything: it
+        // turns on as it turns. It was 60 degrees of nose: off a kicker of 57 degrees the bike was past it at once (82 degrees, the front light on the face), nothing brought the nose
+        // down and it went over backwards)
+        var upright = up.y > 0.03;
         // the pitch: asked, a rate; not asked, the nose goes towards the flight
         var pitchTarget = Math.abs(ask) > 0.05 ? ask * self.airPitchRate
             : upright ? Math.max(-1.2, Math.min(1.2, 2.2 * self.airLevel * (flightPitch - noseNow))) : noseRate;
@@ -483,19 +485,23 @@ OpenRacer.Motorcycle = function (settings) {
         // the bike is a body that slides (Vehicle.js: its spheres touch the road), and the rider is thrown off (Driver.js, a ragdoll), until a reset or a repair (Car.js)
         if (!self.crashed) {
             var aMag = Math.sqrt(accel.x * accel.x + accel.y * accel.y + accel.z * accel.z);
+            self.dbgAccel = aMag;      // (for the bench)
             var aLat = accel.x * state.lx + accel.y * state.ly + accel.z * state.lz;
             // a wall: the body of the bike hit something at more than 20 km/h (Vehicle.js: impactTime goes to 0 at a hit, lastImpact is the speed into it); the rider is thrown at the
             // speed the bike had before the hit (not the bounce)
             var wall = v.impactTime < 0.05 && v.lastImpact > 5.5 && v.impactTime !== self.wallHit;
             if (wall) self.wallHit = v.impactTime;
             // a hit that is not a wall of the body (the wheels into a barrier, a kerb): the speed lost in a tenth of a second, more than 8 m/s (over 8 g), at more than 20 km/h before it
-            now += dt; hist.push({ t: now, x: v.vx, z: v.vz, px: v.px, pz: v.pz });
+            // (the speed over the ground and the speed in 3D both: the speed over the ground alone fell by 8 m/s in a tenth of a second on the face of a kicker of 57 degrees at 75 km/h, where
+            // the bike went up and lost hardly anything, and that was a crash, "hit", instead of a jump; the speed in 3D alone falls as much in a landing from high up on the flat)
+            now += dt; hist.push({ t: now, x: v.vx, y: v.vy, z: v.vz, px: v.px, pz: v.pz });
             while (hist.length > 2 && hist[1].t < now - 0.1) hist.shift();
             var old = hist[0], last = hist[hist.length - 2] || old;
             // (a reset puts the bike somewhere else at once: that is no hit; the speeds before it are forgotten)
-            if (Math.abs(v.px - last.px) + Math.abs(v.pz - last.pz) > 3) { hist.length = 0; hist.push({ t: now, x: v.vx, z: v.vz, px: v.px, pz: v.pz }); old = hist[0]; }
+            if (Math.abs(v.px - last.px) + Math.abs(v.pz - last.pz) > 3) { hist.length = 0; hist.push({ t: now, x: v.vx, y: v.vy, z: v.vz, px: v.px, pz: v.pz }); old = hist[0]; }
             var speedOld = Math.sqrt(old.x * old.x + old.z * old.z), speedNow = Math.sqrt(v.vx * v.vx + v.vz * v.vz);
-            var hit = speedOld - speedNow > 8 && speedOld > 5.5;
+            var lost3 = Math.sqrt(old.x * old.x + old.y * old.y + old.z * old.z) - Math.sqrt(v.vx * v.vx + v.vy * v.vy + v.vz * v.vz);
+            var hit = speedOld - speedNow > 8 && lost3 > 8 && speedOld > 5.5;
             if (hit && !wall) { wall = true; v.lastWall = v.lastWall || {}; v.lastWall.v = [old.x, 0, old.z]; }
             // a wheelie that went over: the bike on its back (its up more than 100 degrees from the road); up to there the tail scrapes and the rear brake can still bring it down
             var over = state.upN < -0.17;
@@ -516,6 +522,7 @@ OpenRacer.Motorcycle = function (settings) {
             if (Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) || (self.limp && Math.abs(u) < 0.5) || over || lowside || spin || aMag > 7 * G || wall) {
                 self.crashed = true;
                 self.crashReason = Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) ? "lean" : (self.limp && Math.abs(u) < 0.5) ? "limp-still" : over ? "over" : lowside ? "lowside" : spin ? "spin" : aMag > 7 * G ? "accel " + (aMag / G).toFixed(1) + "g" : hit ? "hit " + (speedOld - speedNow).toFixed(1) : "wall";     // (for the debugging)
+                if (typeof console !== "undefined" && console.info) console.info("Motorcycle: down (" + self.crashReason + ") at " + (Math.sqrt(v.vx * v.vx + v.vy * v.vy + v.vz * v.vz) * 3.6).toFixed(0) + " km/h, lean " + (state.lean / DEG).toFixed(0) + " deg, " + (aMag / G).toFixed(1) + " g");      // (which rule put it down: for a track that throws the rider off)
                 var before = wall && v.lastWall && v.lastWall.v ? v.lastWall.v : null;
                 self.crashSpeed = before ? { x: before[0], y: before[1], z: before[2] } : { x: v.vx, y: v.vy, z: v.vz };
             }

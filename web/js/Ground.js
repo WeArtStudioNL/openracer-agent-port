@@ -66,6 +66,16 @@ OpenRacer.GroundWorld = function (cellSize) {
         return i;
     }
 
+    // A triangle that has no width (two of its corners at the same place, or the three on a line): less than half a millimetre high over its longest side. Its normal is
+    // anything (the cross product of two edges that are nearly parallel): in the kickers of a test track made in Blender (6 November: vertices that were doubled, triangles
+    // 8.4 m long and 0.0000001 m high, across the face) it was a wall that faced the bike, in the face of the ramp. It is left out.
+    // cross: the length of the cross product of the edges e1 and e2 (twice the area)
+    function sliver(cross, e1x, e1y, e1z, e2x, e2y, e2z) {
+        var dx = e2x - e1x, dy = e2y - e1y, dz = e2z - e1z;
+        var longest = Math.sqrt(Math.max(e1x * e1x + e1y * e1y + e1z * e1z, e2x * e2x + e2y * e2y + e2z * e2z, dx * dx + dy * dy + dz * dz));
+        return cross < 0.0005 * longest;
+    }
+
     // A triangle of the road, in world coordinates. priority: where roads lie over each other the lowest wins (a road over grass)
     this.addTriangle = function (x0, y0, z0, x1, y1, z1, x2, y2, z2, surface, mesh, priority) {
         // the normal, pointing up
@@ -73,7 +83,7 @@ OpenRacer.GroundWorld = function (cellSize) {
         var vx = x2 - x0, vy = y2 - y0, vz = z2 - z0;
         var nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
         var length = Math.sqrt(nx * nx + ny * ny + nz * nz);
-        if(length < 1e-9) return;
+        if(length < 1e-9 || sliver(length, ux, uy, uz, vx, vy, vz)) return;
         if(ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
         nx /= length; ny /= length; nz /= length;
         if(ny < 0.2) return; // a wall, not a road
@@ -181,7 +191,7 @@ OpenRacer.GroundWorld = function (cellSize) {
         var e1x = x1 - x0, e1y = y1 - y0, e1z = z1 - z0, e2x = x2 - x0, e2y = y2 - y0, e2z = z2 - z0;
         var nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
         var length = Math.sqrt(nx * nx + ny * ny + nz * nz);
-        if(length < 1e-9) return;
+        if(length < 1e-9 || sliver(length, e1x, e1y, e1z, e2x, e2y, e2z)) return;
         var minX = Math.min(x0, x1, x2), maxX = Math.max(x0, x1, x2), minY = Math.min(y0, y1, y2), maxY = Math.max(y0, y1, y2), minZ = Math.min(z0, z1, z2), maxZ = Math.max(z0, z1, z2);
         var i0 = Math.floor(minX / CELL3), i1 = Math.floor(maxX / CELL3), j0 = Math.floor(minY / CELL3), j1 = Math.floor(maxY / CELL3), k0 = Math.floor(minZ / CELL3), k1 = Math.floor(maxZ / CELL3);
         if((i1 - i0 + 1) * (j1 - j0 + 1) * (k1 - k0 + 1) > 60000) return;     // a triangle as big as a country: not a part of a track
