@@ -20,10 +20,10 @@
 
 OpenRacer.Graphics = (function () {
     var PRESETS = {
-        low: { gfxScale: 0.75, gfxAA: 0, gfxShadows: 1, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: false, gfxSmoke: 50, gfxDistance: 500, gfxAniso: 2, gfxSharpen: 0 },
-        medium: { gfxScale: 1, gfxAA: 2, gfxShadows: 2, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 75, gfxDistance: 1000, gfxAniso: 4, gfxSharpen: 0 },
-        high: { gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000, gfxAniso: 8, gfxSharpen: 1 },
-        ultra: { gfxScale: 1, gfxAA: 4, gfxShadows: 3, gfxReflections: 2, gfxAO: 2, gfxGI: 1, gfxVignette: true, gfxSmoke: 100, gfxDistance: 5000, gfxAniso: 16, gfxSharpen: 2 }
+        low: { gfxResolution: 720, gfxAA: 0, gfxShadows: 1, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: false, gfxSmoke: 50, gfxDistance: 500, gfxAniso: 2, gfxSharpen: 0 },
+        medium: { gfxResolution: "native", gfxAA: 2, gfxShadows: 2, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 75, gfxDistance: 1000, gfxAniso: 4, gfxSharpen: 0 },
+        high: { gfxResolution: "native", gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000, gfxAniso: 8, gfxSharpen: 1 },
+        ultra: { gfxResolution: "native", gfxAA: 4, gfxShadows: 3, gfxReflections: 2, gfxAO: 2, gfxGI: 1, gfxVignette: true, gfxSmoke: 100, gfxDistance: 5000, gfxAniso: 16, gfxSharpen: 2 }
     };
     var SHARPEN = [0, 0.18, 0.35, 0.55];                  // the strength of the sharpening (gfxSharpen: Off, Low, Medium, High)
     var SHADOW_SIZES = [0, 512, 1024, 2048, 4096];
@@ -423,15 +423,26 @@ OpenRacer.Graphics = (function () {
         ctx.camera.far = opt("gfxDistance") || 5000;
         ctx.camera.updateProjectionMatrix();
     }
-    function applyScale() {
-        ctx.renderer.setPixelRatio(ctx.basePixelRatio() * opt("gfxScale"));
+    // The resolution: "native" draws at the density of the screen (basePixelRatio, which on a phone is held to a budget of pixels); a height
+    // in pixels (720, 1080, 1440, 2160) draws the picture that many pixels high, whatever the size of the window, and the browser stretches
+    // it to the window. A height above the screen draws more than it shows (a sharper picture for a price); it stops at twice the density of
+    // the screen, and on a touch device at the native density (the buffers would not fit in the memory of a phone).
+    var RESOLUTIONS = ["native", 720, 1080, 1440, 2160];
+    function pixelRatio() {
+        var base = ctx.basePixelRatio(), res = opt("gfxResolution");
+        if (typeof res !== "number") return base;
+        var ratio = res / Math.max(1, window.innerHeight);
+        return Math.max(0.25, Math.min(ratio, touch() ? base : 2 * base));
+    }
+    function applyResolution() {
+        ctx.renderer.setPixelRatio(pixelRatio());
         ctx.resize();
     }
 
     // Starts the chain: ctx = { renderer, scene, camera, shadowLight, size(), basePixelRatio(), resize(), reflections(every), onComposer(composer) }
     function init(context) {
         ctx = context;
-        ctx.renderer.setPixelRatio(ctx.basePixelRatio() * opt("gfxScale"));
+        ctx.renderer.setPixelRatio(pixelRatio());
         applyShadows();
         applyReflections();
         applyDistance();
@@ -452,7 +463,7 @@ OpenRacer.Graphics = (function () {
     var applying = false;
     function changed(name) {
         if (!ctx || applying || name === "gfxPreset") return;
-        if (name === "gfxScale") { applyScale(); build(); }
+        if (name === "gfxResolution") { applyResolution(); build(); }
         else if (name.indexOf("gfxDebris") === 0) { /* (Debris.js reads them) */ }
         else if (name === "gfxSmoke") { if (currentPreset() !== opt("gfxPreset")) Settings.setOption("gfxPreset", currentPreset()); }       // (Smoke.js reads it)
         else if (name === "gfxDistance") { applyDistance(); if (currentPreset() !== opt("gfxPreset")) Settings.setOption("gfxPreset", currentPreset()); }
@@ -472,12 +483,14 @@ OpenRacer.Graphics = (function () {
         for (var k in p) Settings.setOption(k, p[k]);
         Settings.setOption("gfxPreset", name);
         applying = false;
-        applyScale(); applyShadows(); applyReflections(); applyDistance(); applyAniso(); build();
+        applyResolution(); applyShadows(); applyReflections(); applyDistance(); applyAniso(); build();
     }
 
     function setSize(width, height) {
-        if (ctx && ctx.composer) ctx.composer.setSize(width, height);      // the composer sizes its passes too
+        if (!ctx || !ctx.composer) return;
+        ctx.composer.setPixelRatio(ctx.renderer.getPixelRatio());      // (with a resolution in pixels the density follows the window: see pixelRatio)
+        ctx.composer.setSize(width, height);      // the composer sizes its passes too
     }
 
-    return { PRESETS: PRESETS, SHADOW_SIZES: SHADOW_SIZES, init: init, changed: changed, applyPreset: applyPreset, currentPreset: currentPreset, setSize: setSize, GBufferPass: GBufferPass, SSGIPass: SSGIPass };
+    return { PRESETS: PRESETS, SHADOW_SIZES: SHADOW_SIZES, RESOLUTIONS: RESOLUTIONS, pixelRatio: function() { return ctx ? pixelRatio() : null; }, init: init, changed: changed, applyPreset: applyPreset, currentPreset: currentPreset, setSize: setSize, GBufferPass: GBufferPass, SSGIPass: SSGIPass };
 })();

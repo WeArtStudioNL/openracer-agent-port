@@ -111,7 +111,7 @@ var Settings = (function() {
         // the easing of the keys: the time that a key takes to bring the pedal or the wheels to the full value (s), and the curve of it (1 straight, below 1 quick at first, above 1 slow at first)
         keyThrottleTime: 0.5, keyThrottleCurve: 0.6, keyBrakeTime: 0.4, keyBrakeCurve: 0.6, keySteerTime: 0.9, keySteerCurve: 1,
         // the graphics (Graphics.js): a preset is a set of these
-        gfxPreset: "high", gfxScale: 1, gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000, gfxAniso: 8, gfxSharpen: 1,
+        gfxPreset: "high", gfxResolution: "native", gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000, gfxAniso: 8, gfxSharpen: 1,
         // the look and the atmosphere (Graphics.js, Atmosphere.js): the tone mapping, the exposure, the contrast and the saturation; the hour (-1: as the track) and the weather
         mirrorLeftReal: false, mirrorRightReal: false, mirrorCentreReal: false, mirrorLeftYaw: 0, mirrorLeftTilt: 0, mirrorRightYaw: 0, mirrorRightTilt: 0, mirrorCentreYaw: 0, mirrorCentreTilt: 0, gfxDebrisRate: 1, gfxDebrisScale: 1, gfxDebrisMax: 6000, gfxTone: "neutral", gfxExposure: 0.9, gfxContrast: 1.05, gfxSaturation: 1, gfxTime: 14, gfxWeather: "clear", gfxSunAzimuth: 40, gfxMoon: 1, gfxGround: "auto", simAiDamage: "near", simAiRange: 60, simAiSteps: 3, simTyreDetail: "full" };
 
@@ -138,7 +138,7 @@ var Settings = (function() {
         options = clone(DEFAULT_OPTIONS);
         // a phone or a tablet starts with the low graphics (the first time; what is chosen is kept)
         var touchy = typeof OpenRacer !== "undefined" && OpenRacer.touchDevice ? OpenRacer.touchDevice() : false;
-        if(touchy) Object.assign(options, { gfxPreset: "low", gfxScale: 0.75, gfxAA: 0, gfxShadows: 1, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: false, gfxSmoke: 50, gfxDistance: 500, gfxAniso: 2, gfxSharpen: 0 });
+        if(touchy) Object.assign(options, { gfxPreset: "low", gfxResolution: 720, gfxAA: 0, gfxShadows: 1, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: false, gfxSmoke: 50, gfxDistance: 500, gfxAniso: 2, gfxSharpen: 0 });
     }
 
     function load() {
@@ -159,6 +159,8 @@ var Settings = (function() {
             if(stored && stored.options) {
                 // an earlier version had auto and manual, where manual is what is sequential now
                 if(stored.options.transmission && !stored.options.gearbox) stored.options.gearbox = stored.options.transmission === "manual" ? "sequential" : "automatic";
+                // an earlier version had a scale of the screen (50 to 150%) where the resolution is now: below 100% becomes 720p, the rest native
+                if(stored.options.gfxResolution === undefined && typeof stored.options.gfxScale === "number") stored.options.gfxResolution = stored.options.gfxScale < 1 ? 720 : "native";
                 for(var name in DEFAULT_OPTIONS) {
                     if(stored.options[name] !== undefined) options[name] = stored.options[name];
                 }
@@ -1196,7 +1198,8 @@ var Settings = (function() {
             page.appendChild(pickRow("Preset", G.currentPreset(), presetChoices, function(name) { if(name !== "custom") G.applyPreset(name); }));
             var section = function(title) { var h = document.createElement("h2"); h.textContent = title; page.appendChild(h); };
             section("Picture");
-            page.appendChild(pickRow("Resolution", options.gfxScale, [0.5, 0.75, 1, 1.25, 1.5].map(function(v) { return [v, Math.round(v * 100) + "% of the screen"]; }), gfxPick("gfxScale")));
+            var nativeHeight = Math.round(window.innerHeight * (window.devicePixelRatio || 1));
+            page.appendChild(pickRow("Resolution", options.gfxResolution, G.RESOLUTIONS.map(function(v) { return [v, v === "native" ? "Native (" + nativeHeight + "p)" : v === 2160 ? "2160p (4K)" : v + "p"]; }), gfxPick("gfxResolution")));
             page.appendChild(pickRow("Anti-aliasing", options.gfxAA, [0, 2, 4, 8].map(function(v) { return [v, v ? v + "\u00d7 MSAA" : "Off"]; }), gfxPick("gfxAA")));
             page.appendChild(pickRow("Texture sharpness at a slant (anisotropic)", options.gfxAniso, [1, 2, 4, 8, 16].map(function(v) { return [v, v === 1 ? "Off" : v + "\u00d7"]; }), gfxPick("gfxAniso")));
             page.appendChild(pickRow("Sharpening", options.gfxSharpen, [[0, "Off"], [1, "Low"], [2, "Medium"], [3, "High"]], gfxPick("gfxSharpen")));

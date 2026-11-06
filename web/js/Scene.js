@@ -83,6 +83,8 @@ function pickPixelRatio() {
 window.onresize = function() {
     if(!camera) return; // the game is not running (the main menu has a renderer of its own)
     updateScreenSize();
+    // the resolution of the graphics settings is a height in pixels: the density changes with the size of the window
+    if(useComposer && OpenRacer.Graphics.pixelRatio() !== null) renderer.setPixelRatio( OpenRacer.Graphics.pixelRatio() );
 
     renderer.setSize( SCREEN_WIDTH, SCREEN_HEIGHT );
     camera.aspect = SCREEN_WIDTH / SCREEN_HEIGHT;
