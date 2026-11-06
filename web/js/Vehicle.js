@@ -2507,6 +2507,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             react *= self.controller.airPitch;
             torque.x += react * axisX.x; torque.y += react * axisX.y; torque.z += react * axisX.z;
         }
+        if(self.airborne && self.controller && self.controller.airSteer) self.controller.airSteer(self, torque, dt, inertiaX, inertiaZ, inertiaY);
         // ---- locked: the wheels of an axle (welded), or the axles (locked centre) turn at the same speed. The speed they get keeps the angular momentum.
         if(self.diffType === "welded" && !self.soloWheels) {
             for(var ax2 = 0; ax2 < 2; ax2++) {

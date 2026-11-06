@@ -177,6 +177,9 @@ OpenRacer.CarTuning = (function () {
             ["bike_max_lateral_g", "Lateral grip of the tyres", "g", 0.3, 2.5, 0.05],
             ["bike_balance", "Balance of the rider", "", 0.1, 4, 0.05],
             ["bike_fork_dive", "Dive of the fork on the brakes", "", 0, 3, 0.05],
+            ["bike_lean_speed", "Lean speed: how quick the bike goes from the one side to the other (a factor on the roll rate and the keys)", "", 0.5, 3, 0.05],
+            ["bike_air_pitch_rate", "In the air: how fast the gas turns the nose up and the brake turns it down (held: it keeps turning, a flip)", "°/s", 0, 400, 5],
+            ["bike_air_roll_rate", "In the air: how fast the lean keys roll the bike (the weight of the rider to the side)", "°/s", 0, 360, 5],
             ["bike_push", "Flat-track style: upright, push the bike under you (deep lean, the inside foot out, countersteers a slide by itself); off: hang off to the inside", "", 0, 1, 1],
             ["bike_push_foot_kmh", "Flat-track style: the inside foot comes out in a bend up to this speed", "km/h", 20, 250, 5],
             ["bike_push_upright", "Flat-track: how far the back leans out of the bike (a share of the lean of the bike)", "", 0, 1.2, 0.05],
@@ -271,7 +274,7 @@ OpenRacer.CarTuning = (function () {
             case "bike_push": return v.vehicle_type === "motorcycle";
             case "bike_hang_chest_roll": case "bike_hang_knee_out": case "bike_hang_knee_down": case "bike_hang_tuck_pitch": case "bike_hang_sit_pitch": case "bike_hang_shift": return v.vehicle_type === "motorcycle" && !v.bike_push;
             case "bike_push_foot_kmh": case "bike_push_upright": case "bike_push_forward": case "bike_push_chest_pitch": case "bike_push_pelvis_tilt": case "bike_push_pelvis_slide": case "bike_push_foot_out": case "bike_push_foot_forward": return v.vehicle_type === "motorcycle" && !!v.bike_push;
-            case "bike_max_lean": case "bike_fast_lean": case "bike_rake": case "bike_rider_mass": case "bike_hang_off": case "bike_max_lateral_g": case "bike_balance": case "bike_fork_dive": return v.vehicle_type === "motorcycle";
+            case "bike_max_lean": case "bike_fast_lean": case "bike_rake": case "bike_rider_mass": case "bike_hang_off": case "bike_max_lateral_g": case "bike_balance": case "bike_fork_dive": case "bike_lean_speed": case "bike_air_pitch_rate": case "bike_air_roll_rate": return v.vehicle_type === "motorcycle";
             default: return true;
         }
     }
@@ -386,6 +389,9 @@ OpenRacer.CarTuning = (function () {
             bike_max_lateral_g: (c.motorcycle || {}).max_lateral_g !== undefined ? c.motorcycle.max_lateral_g : BIKE.max_lateral_g,
             bike_balance: (c.motorcycle || {}).balance !== undefined ? c.motorcycle.balance : BIKE.balance,
             bike_fork_dive: (c.motorcycle || {}).fork_dive !== undefined ? c.motorcycle.fork_dive : BIKE.fork_dive,
+            bike_lean_speed: (c.motorcycle || {}).lean_speed !== undefined ? c.motorcycle.lean_speed : 1,
+            bike_air_pitch_rate: (c.motorcycle || {}).air_pitch_rate_deg !== undefined ? c.motorcycle.air_pitch_rate_deg : 180,
+            bike_air_roll_rate: (c.motorcycle || {}).air_roll_rate_deg !== undefined ? c.motorcycle.air_roll_rate_deg : 120,
             bike_push: !!(c.motorcycle || {}).push,
             bike_push_foot_kmh: (c.motorcycle || {}).push_foot_kmh !== undefined ? c.motorcycle.push_foot_kmh : 110,
             bike_hang_chest_roll: (c.motorcycle || {}).hang_chest_roll !== undefined ? c.motorcycle.hang_chest_roll : 14,
@@ -787,7 +793,7 @@ OpenRacer.CarTuning = (function () {
         }
         if(c.type === "motorcycle" && v.bike_max_lean !== undefined) {
             c.motorcycle = Object.assign({}, c.motorcycle || {}, { max_lean_deg: v.bike_max_lean, fast_lean_deg: v.bike_fast_lean, rake_deg: v.bike_rake, rider_mass: v.bike_rider_mass,
-                hang_off: v.bike_hang_off, max_lateral_g: v.bike_max_lateral_g, balance: v.bike_balance, fork_dive: v.bike_fork_dive, push: !!v.bike_push, push_foot_kmh: v.bike_push_foot_kmh, hang_chest_roll: v.bike_hang_chest_roll, hang_knee_out: v.bike_hang_knee_out, hang_knee_down: v.bike_hang_knee_down, hang_tuck_pitch: v.bike_hang_tuck_pitch, hang_sit_pitch: v.bike_hang_sit_pitch, hang_shift: v.bike_hang_shift, push_upright: v.bike_push_upright, push_forward: v.bike_push_forward, push_chest_pitch: v.bike_push_chest_pitch, push_pelvis_tilt: v.bike_push_pelvis_tilt, push_pelvis_slide: v.bike_push_pelvis_slide, push_foot_out: v.bike_push_foot_out, push_foot_forward: v.bike_push_foot_forward });
+                hang_off: v.bike_hang_off, max_lateral_g: v.bike_max_lateral_g, balance: v.bike_balance, fork_dive: v.bike_fork_dive, lean_speed: v.bike_lean_speed, air_pitch_rate_deg: v.bike_air_pitch_rate, air_roll_rate_deg: v.bike_air_roll_rate, push: !!v.bike_push, push_foot_kmh: v.bike_push_foot_kmh, hang_chest_roll: v.bike_hang_chest_roll, hang_knee_out: v.bike_hang_knee_out, hang_knee_down: v.bike_hang_knee_down, hang_tuck_pitch: v.bike_hang_tuck_pitch, hang_sit_pitch: v.bike_hang_sit_pitch, hang_shift: v.bike_hang_shift, push_upright: v.bike_push_upright, push_forward: v.bike_push_forward, push_chest_pitch: v.bike_push_chest_pitch, push_pelvis_tilt: v.bike_push_pelvis_tilt, push_pelvis_slide: v.bike_push_pelvis_slide, push_foot_out: v.bike_push_foot_out, push_foot_forward: v.bike_push_foot_forward });
         }
         // the exhaust of the sound, and the engine that is built: the torque curve follows from the build, and so do the settings of the sound that the build has too
         c.sound = c.sound || {}; c.sound.engine_sim = Object.assign({}, c.sound.engine_sim || {});

@@ -374,5 +374,50 @@ for (const speed of [45, 60, 80]) for (const ramp of [0.3, 0.15]) {
     const s = run(speed, tt => { const k = Math.floor(tt / 2), ph = Math.min(1, (tt - k * 2) / ramp), from = (k % 2 === 1 ? -1 : 1); return k === 0 ? ph : from - 2 * from * ph; }, 8, 10);
     report(speed + " km/h flick in " + ramp + " s", !s.crash && s.maxBeta < 15, "slip angle " + s.maxBeta.toFixed(1) + ", lean " + Math.max(...s.log.map(l => Math.abs(l.lean))).toFixed(0) + (s.crash ? ", crashed: " + s.crash : ""));
 }
+// a jump in a bend (the replay of a rider on Dirt run, 6 November: a small jump taken in a lean with the key held, the bike rolled to 50 to 80 degrees in the air and landed sideways,
+// slid on and went down; a hop over a bump in a 50 degree lean kicked it 5 m/s sideways): ridden in a bend with the key held, the bike is thrown up (vy), the key stays held in the air (and
+// the gas, or not), and after the landing the gas is shut with the key still held. The lean at the landing, the slip after it and whether it stays up.
+// --jdump: every 0.05 s from the take-off
+const JV = ((process.argv.find(a => a.startsWith("--jv=")) || "").split("=")[1] || "").split(",").filter(Boolean).map(Number), JC = ((process.argv.find(a => a.startsWith("--jc=")) || "").split("=")[1] || "").split(",").filter(Boolean).map(Number), JG = ((process.argv.find(a => a.startsWith("--jg=")) || "").split("=")[1] || "").split(",").filter(Boolean).map(Number);      // --jv=2.5 --jc=1 --jg=0: one of them
+for (const speed of [40, 60, 80]) for (const cmd of (JC.length ? JC : [0.5, 1])) for (const vy of (JV.length ? JV : [0, 1.2, 2.5, 4.5])) for (const airGas of (JG.length ? JG : [0, 1])) {
+    if ((ONLY && ONLY !== "jump") || (SPEEDS.length && !SPEEDS.includes(speed)) || (!ONLY && !process.argv.includes("--rider"))) continue;
+    const car = makeCar(config), v = car.v, lock = 0.38; let crash = null, t0 = -1, tLand = -1, leanOff = 0, leanLand = 0, slipLand = 0, maxBeta = 0, slideT = 0, flight = 0;
+    for (let t = 0; t < 22 && !crash; t += DT) {
+        const input = car.input, tt = t - 10, err = speed * KMH - v.u;
+        input.turnAngle = tt > 0 ? cmd * lock : 0;
+        if (t0 < 0) { input.throttle = err > 0 ? Math.min(1, err * 0.5) : 0; input.brakePedal = err < 0 ? Math.min(1, -err * 0.3) : 0; }
+        else if (tLand < 0) { input.throttle = t < t0 + 0.2 ? airGas : 0; input.brakePedal = 0; }      // (the gas in the air: a blip of 0.2 s; held, it is a flip, below)
+        else { input.throttle = 0; input.brakePedal = 0; }
+        if (tt > 4 && t0 < 0) { t0 = t; leanOff = (v.lean || 0) / DEG; v.vy += vy; v.py += 0.03; }
+        v.update(DT);
+        const beta = Math.atan2(v.v || 0, Math.max(1, Math.abs(v.u))) / DEG;
+        if (t0 >= 0 && tLand < 0 && t > t0 + 0.1 && !v.airborne) { tLand = t; flight = t - t0; leanLand = (v.lean || 0) / DEG; slipLand = beta; }
+        if (tLand >= 0 && t < tLand + 2) { maxBeta = Math.max(maxBeta, Math.abs(beta)); if (Math.abs(beta) > 8) slideT += DT; }
+        if (process.argv.includes("--jdump") && t0 >= 0 && Math.round((t - t0) / DT) % 3 === 0 && t < t0 + 4) console.log((t - t0).toFixed(2), "kmh", (v.u * 3.6).toFixed(0), "lean", ((v.lean || 0) / DEG).toFixed(1), "beta", beta.toFixed(1), "air", v.airborne ? 1 : 0, "yaw", v.r.toFixed(2), "vy", v.vy.toFixed(2), "fzF", (v.wheels[0].gripLoad || 0).toFixed(0), "fzR", (v.wheels[2].gripLoad || 0).toFixed(0), "thr", input.throttle, "AIR", JSON.stringify(v.controller.airDbg && Object.fromEntries(Object.entries(v.controller.airDbg).map(([k, x]) => [k, +(x / (k === "wy" ? 1 : DEG)).toFixed(1)]))));
+        if (v.controller.crashed) crash = v.controller.crashReason || "crashed";
+        if (tLand >= 0 && t > tLand + 4) break;
+    }
+    report("jump " + speed + " km/h, key " + cmd + ", vy " + vy + (airGas ? ", a blip of gas in the air" : ""), !crash && maxBeta < 20 && slideT < 0.6, "flight " + flight.toFixed(2) + " s, lean " + leanOff.toFixed(0) + " at the take-off, " + leanLand.toFixed(0) + " at the landing, slip " + slipLand.toFixed(1) + " at the landing, max " + maxBeta.toFixed(1) + " after it, " + slideT.toFixed(2) + " s over 8" + (crash ? ", crashed: " + crash : ""));
+}
+// the gas held in the air turns the bike over (a flip), the brake held turns the nose down: the air control has no limit to the angle, only a rate (air_pitch_rate_deg)
+for (const pedal of ["gas", "brake"]) {
+    if ((ONLY && ONLY !== "flip") || (!ONLY && !process.argv.includes("--rider"))) continue;
+    const car = makeCar(config), v = car.v; let t0 = -1, turned = 0, last = null, flight = 0;
+    for (let t = 0; t < 16; t += DT) {
+        const input = car.input, err = 50 * KMH - v.u; input.turnAngle = 0;
+        if (t0 < 0) { input.throttle = err > 0 ? Math.min(1, err * 0.5) : 0; input.brakePedal = 0; }
+        else { input.throttle = pedal === "gas" ? 1 : 0; input.brakePedal = pedal === "brake" ? 1 : 0; }
+        if (t > 10 && t0 < 0) { t0 = t; v.vy += 7; v.py += 0.03; }
+        v.update(DT);
+        if (t0 >= 0) {
+            if (!v.airborne || v.controller.crashed || t > t0 + 1.2) { if (t > t0 + 0.1) { flight = t - t0; break; } }      // (1.2 s at most: a bike on its back has no wheel to land on, and the bench has no body spheres)
+            // the turn about the left axis of the bike, summed
+            const sx = 1 - 2 * (v.qy * v.qy + v.qz * v.qz), sy = 2 * (v.qx * v.qy + v.qw * v.qz), sz = 2 * (v.qx * v.qz - v.qw * v.qy);
+            turned += -(v.wx * sx + v.wy * sy + v.wz * sz) * DT;
+        }
+    }
+    const deg = turned / DEG;
+    report("flip on the " + pedal, pedal === "gas" ? deg > 180 : deg < -120, "the nose turned " + deg.toFixed(0) + " degrees in a flight of " + flight.toFixed(2) + " s");
+}
 console.log(failed ? failed + " failed" : "all ok");
 process.exit(failed ? 1 : 0);

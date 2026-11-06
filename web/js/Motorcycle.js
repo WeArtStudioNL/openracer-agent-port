@@ -35,15 +35,19 @@ OpenRacer.Motorcycle = function (settings) {
     // the settings of the bike (car.json "motorcycle"; the tuning menu changes them while it rides: retune)
     function readSettings() {
         self.maxLean = (s.max_lean_deg || 60) * DEG;
-        self.overLean = (s.over_lean_deg !== undefined ? s.over_lean_deg : 10) * DEG;   // how far past what the tyres hold the rider can lean it: past that the tyres let go (a lowside)
+        // how far past what the tyres hold the rider can lean it: past that the tyres let go (a lowside). 3 (it was 10: with a max lean of 75 the Supermoto held the key at 59 degrees, 1.7 g
+        // where the tyres give 1.1, and shutting the gas in that bend spun it round; a replay of a rider on Dirt run, 6 November)
+        self.overLean = (s.over_lean_deg !== undefined ? s.over_lean_deg : 3) * DEG;
         self.crashLean = (s.crash_lean_deg || 78) * DEG;                                   // from here the bike is down (78: a powerslide is ridden out until the bike nearly lies on the road)
         self.balance = s.balance || 1;
-        self.maxRollRate = (s.max_roll_rate_deg !== undefined ? s.max_roll_rate_deg : 90) * DEG;   // the most the lean that the rider takes can change (deg/s)
-        self.leanResponse = s.lean_response || 0.1;          // s: how fast the lean follows what is asked
+        // lean_speed (the tuning menu: how quick the bike goes from the one side to the other): a factor on the roll rate, on how fast the keys bring the command and on the response
+        self.leanSpeed = Math.max(0.25, Math.min(4, s.lean_speed !== undefined ? s.lean_speed : 1));
+        self.maxRollRate = (s.max_roll_rate_deg !== undefined ? s.max_roll_rate_deg : 90) * DEG * self.leanSpeed;   // the most the lean that the rider takes can change (deg/s)
+        self.leanResponse = (s.lean_response || 0.1) / self.leanSpeed;          // s: how fast the lean follows what is asked
         self.camberThrust = s.camber_thrust !== undefined ? s.camber_thrust : 0.85;     // the part of load * tan(lean) that a leaned tyre gives by itself (a round tyre: nearly all of it)
         self.standUp = s.throttle_stand_up !== undefined ? s.throttle_stand_up : 0.18;
         self.cameraRollFactor = s.camera_roll !== undefined ? s.camera_roll : 0.45;
-        self.keyRate = s.key_steer_rate || 2;                    // how much faster the steering keys bring the lean command than they turn the wheels of a car
+        self.keyRate = (s.key_steer_rate || 2) * self.leanSpeed;                    // how much faster the steering keys bring the lean command than they turn the wheels of a car
         self.cornerBrake = s.corner_brake !== undefined ? s.corner_brake : 0.2;    // how much further the bike leans into the bend on the rear brake
         self.riderMass = s.rider_mass !== undefined ? s.rider_mass : 80;
         self.maxHang = s.hang_off !== undefined ? s.hang_off : 0.3;                    // m: how far the rider hangs off the seat to the inside of a bend
@@ -53,6 +57,14 @@ OpenRacer.Motorcycle = function (settings) {
         self.fastLean = (s.fast_lean_deg !== undefined ? s.fast_lean_deg : 30) * DEG;   // the lean it can still ask for at fast_from + 22 m/s (it was 18 degrees: the bike hardly steered at 200 km/h)
         self.gripG = s.grip_g !== undefined ? s.grip_g : 1.05;                        // the lateral g that the tyres give when nothing else is asked of them
         self.frontComply = s.front_comply !== undefined ? s.front_comply : 3;            // how much the front wheel castors into its own slip on the brake (3: it keeps a quarter of the slip angle)
+        // control in the air (motocross): gas = nose up, brake = nose down (or the rider keys), the lean keys roll the bike about its long axis; without input the rider keeps the bike straight
+        // and lets the nose follow the way it flies (the landing is on both wheels, not on the nose or on the tail)
+        self.airControl = s.air_control !== undefined ? Math.max(0, s.air_control) : 1;                     // factor on the whole of it (0: off)
+        self.airPitchRate = (s.air_pitch_rate_deg !== undefined ? s.air_pitch_rate_deg : 180) * DEG;       // rad/s: how fast the nose turns with the gas (up) or the brake (down), held as long as it is asked
+        self.airRollRate = (s.air_roll_rate_deg !== undefined ? s.air_roll_rate_deg : 120) * DEG;          // rad/s: how fast the lean keys roll it (the weight of the rider to the side)
+        self.airYawRate = (s.air_yaw_rate_deg !== undefined ? s.air_yaw_rate_deg : 70) * DEG;              // rad/s: the fastest he turns the bike to the way it flies
+        self.airLevel = s.air_level !== undefined ? s.air_level : 1;                                          // 0 to 1: how much he levels the bike (roll and the nose along the flight) without input
+        self.airGain = s.air_gain !== undefined ? s.air_gain : 8;                                             // 1/s: how fast the rate follows what is asked
         self.airPitch = s.air_pitch !== undefined ? Math.max(0, s.air_pitch) : 1;      // in the air the wheels turn the bike: gas brings the nose up, the brake brings it down (a factor on the reaction of the wheels; 0: off)
         // the separate model (model "v2"): the bars are a degree of freedom with a torque from the rider; the tyre gives the camber thrust, the lean is the lean of the body
         self.v2 = s.model === "v2";
@@ -406,6 +418,59 @@ OpenRacer.Motorcycle = function (settings) {
         return self.frontBrake * (1 - 0.9 * smooth(8 * DEG, 30 * DEG, Math.abs(v.lean))) * solo;
     };
 
+    // ---- hook: the rider in the air (Vehicle.js calls it while no wheel touches the road). Rates, without a limit to the angle: the gas turns the nose up (held, the bike goes round:
+    // a backflip), the brake turns it down, the lean keys roll the bike by the weight of the rider (air_pitch_rate_deg, air_roll_rate_deg; sliders in the tuning menu). With nothing asked the
+    // rider levels the bike, lets the nose follow the flight and turns the bike along the way it flies, so that it lands straight.
+    // A lean key that was held already when the bike left the road (the key of the bend before the jump) does not roll it until it is let go: in the replay of a rider on Dirt run of
+    // 6 November a jump taken in a bend with the key held rolled the bike from 0 to 53 degrees in 0.6 s, it landed sideways, slid at 20 degrees of slip for a second and went down;
+    // on a bigger jump it rolled to 80 degrees. Four of the six crashes of that replay were that.
+    this.airSteer = function (v, torque, dt, Ix, Iz, Iy) {
+        if (self.crashed || self.limp || !(self.airControl > 0) || !(dt > 0)) return;
+        rotate(v, 1, 0, 0, side); rotate(v, 0, 0, 1, fwd); rotate(v, 0, 1, 0, up);
+        var fl = Math.sqrt(fwd.x * fwd.x + fwd.y * fwd.y + fwd.z * fwd.z) || 1, ax = fwd.x / fl, ay = fwd.y / fl, az = fwd.z / fl;
+        var inp = v.input || {}, thr = Math.max(0, Math.min(1, inp.throttle || 0)), brk = Math.max(0, Math.min(1, inp.brakePedal || 0));
+        var key = self.riderKey > 0 ? 1 : self.riderKey < 0 ? -1 : 0;
+        var ask = thr - brk - 0.8 * key;                                                       // nose up positive (the rider forward brings the nose down)
+        ask = Math.max(-1, Math.min(1, ask));
+        var wDotL = v.wx * side.x + v.wy * side.y + v.wz * side.z, wDotA = v.wx * ax + v.wy * ay + v.wz * az;
+        var noseRate = -wDotL, leanRate = -wDotA;
+        var hs = Math.sqrt(v.vx * v.vx + v.vz * v.vz), flightPitch = Math.atan2(v.vy, Math.max(hs, 3));       // (the nose along the flight; 3 m/s so that a jump straight up does not turn it)
+        var noseNow = Math.asin(Math.max(-1, Math.min(1, fwd.y / fl)));
+        // (upright: the bike's up above the horizon and the nose not past 60 degrees; in a flip or a roll past that the rider does not level anything: it turns on as it turns)
+        var upright = up.y > 0.25 && Math.abs(noseNow) < 1.05;
+        // the pitch: asked, a rate; not asked, the nose goes towards the flight
+        var pitchTarget = Math.abs(ask) > 0.05 ? ask * self.airPitchRate
+            : upright ? Math.max(-1.2, Math.min(1.2, 2.2 * self.airLevel * (flightPitch - noseNow))) : noseRate;
+        // the roll: the key asks a rate (left is negative, the same as the steering); nothing asked is level with the road. The key of the take-off counts once it has been let go.
+        var cmd = Math.max(-1, Math.min(1, self.command || 0)), st = leanOf(v, 0);
+        if ((v.airTime || 0) <= dt * 1.5) self.airKeyLock = Math.abs(cmd) > 0.3 ? Math.sign(cmd) : 0;
+        if (self.airKeyLock && (Math.abs(cmd) < 0.2 || Math.sign(cmd) !== self.airKeyLock)) self.airKeyLock = 0;
+        if (self.airKeyLock) cmd = 0;
+        var rollTarget = Math.abs(cmd) > 0.05 ? -cmd * self.airRollRate
+            : upright ? Math.max(-self.airRollRate, Math.min(self.airRollRate, 3 * self.airLevel * smooth(0.2, 0.45, v.airTime || 0) * (0 - st.lean))) : leanRate;
+        // (the levelling starts after a fifth of a second: a hop over a bump in a bend keeps its lean; levelled from 46 to 36 degrees in 0.17 s, the lean came back at the touchdown
+        // with the key still held and threw the bike over)
+        // the yaw: the bike is turned to the way it flies (in the air nothing pushes it sideways, so the flight is straight: a bike that points along it lands without a slip angle)
+        var fh = Math.sqrt(fwd.x * fwd.x + fwd.z * fwd.z), yawTarget = 0, headErr = 0, aligning = upright && fh > 0.4 && hs > 3;
+        if (aligning) {
+            headErr = Math.atan2(fwd.z * v.vx - fwd.x * v.vz, fwd.x * v.vx + fwd.z * v.vz);      // (positive: turn about the world's up)
+            yawTarget = self.airLevel * smooth(3, 6, hs) * Math.max(-self.airYawRate, Math.min(self.airYawRate, 6 * headErr));
+        }
+        var g = self.airGain * self.airControl, capP = 14 * self.airControl, capR = 18 * self.airControl, capY = 20 * self.airControl;
+        var aP = Math.max(-capP, Math.min(capP, g * (pitchTarget - noseRate)));       // rad/s2, nose up
+        var aR = Math.max(-capR, Math.min(capR, g * (rollTarget - leanRate)));        // rad/s2, lean to the left
+        // (how fast the heading turns: not only the turn about the world's up: with the nose up a roll or a pitch of a leaned bike swings the nose sideways too, and the yaw rate alone
+        // did not see that; the heading went 8 degrees off in a jump with the gas held. The rate of the heading is that of the forward axis, omega x forward, across it.)
+        var fdx = v.wy * fwd.z - v.wz * fwd.y, fdz = v.wx * fwd.y - v.wy * fwd.x;
+        var headRate = fh > 0.4 ? (fdx * fwd.z - fdz * fwd.x) / (fh * fh) : v.wy;
+        var aY = aligning ? Math.max(-capY, Math.min(capY, g * (yawTarget - headRate))) : 0;         // rad/s2, about the world's up
+        var dbgA = self.airDbg || (self.airDbg = {}); dbgA.head = headErr; dbgA.lean = st.lean; dbgA.nose = noseNow; dbgA.wy = headRate;      // (for the bench, --jdump)
+        // nose up is a torque about the left axis the other way; a lean to the left is a torque about the long axis the other way (the signs of the rider above)
+        torque.x += -side.x * aP * Ix - ax * aR * Iz;
+        torque.y += -side.y * aP * Ix - ay * aR * Iz + aY * Iy;
+        torque.z += -side.z * aP * Ix - az * aR * Iz;
+    };
+
     // ---- hook: the body of the bike does not touch the road in a lean (it is no crash until the bike is nearly on its side)
     // (a bike that lost its front or its rear wheel has nothing to stand on there: its spheres touch the road, or it falls through it)
     this.keepBodyOff = function (v) { return !self.crashed && Math.abs(v.lean) < 1.15 && !(v.wheelLost && (v.wheelLost[0] || v.wheelLost[2])); };
@@ -539,6 +604,9 @@ OpenRacer.Motorcycle = function (settings) {
         // yaws at 1 rad/s and more, back and forth (the replays of a rider at 100 to 140 km/h, a weave of the whole bike with the bars still): the rider holds it with his knees and the bars, here a torque
         // about the vertical against the yaw that the lean does not give)
         var yawOn = self.v2 ? self.yawBrake * smooth(0.05, 0.3, v.input.brakePedal || 0) : 1;
+        // (model v2, and for a short while after a landing as well: the bike that came down from a jump in a bend bounced, the rear wheel was off the road for a tenth of a second while
+        // the lean came back, and the front alone swung it round at 3 rad/s)
+        if (self.v2 && self.brace > 0) yawOn = Math.max(yawOn, Math.min(1, self.brace / 0.3));
         if (Math.abs(u) > 2 && yawOn > 0) {
             var epsNow = Math.atan((self.riderMass / v.mass) * self.posture.lat / v.cgHeight);       // (the rider that hangs off: the lean of the whole)
             var rLean = -G * Math.tan(Math.max(-1.2, Math.min(1.2, state.lean + epsNow))) / Math.max(Math.abs(u), 4);
@@ -565,6 +633,9 @@ OpenRacer.Motorcycle = function (settings) {
         // would otherwise turn the camber thrust into a yaw, a bike that tightens its line hard when the throttle is shut at speed, and the rider lost it)
         var camber = self.v2 ? 0 : self.camberThrust * Math.tan(Math.max(-1.05, Math.min(1.05, state.lean))) * alive, loadAll = 0;
         for (var i = 0; i < 4; i++) if (v.wheels[i].hasContact) loadAll += v.wheels[i].weight || 0;
+        // (at most twice the weight of the bike: the load of a landing, five times it and more for a tenth of a second, pushed a bike that came down from a hop in a lean of 50 degrees
+        // 5 m/s sideways in that tenth, and it went on sliding; the springs and the tyre take that blow, it is no push into the bend)
+        loadAll = Math.min(loadAll, 2 * v.mass * G);
         for (var i = 0; i < 4; i++) {
             var w = v.wheels[i];
             if (!w.hasContact || !(w.weight > 0) || !w.center) continue;
