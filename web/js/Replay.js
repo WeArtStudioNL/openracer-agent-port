@@ -711,9 +711,10 @@ OpenRacer.Replay = (function() {
         }
         var info = el(document.body, "div");
         info.id = "replayInfo";
-        left.style.cursor = "grab";
+
         ui = { bar: bar, info: info, slider: slider, timeLabel: timeLabel, sync: sync, marks: { band: markBand, inLine: markInLine, outLine: markOutLine, text: fragmentText, save: fragmentSave, clear: fragmentClear } };
-        OpenRacer.Movable.make(bar, { key: "replaybar", handle: left });
+        // (a window: its bar drags it and scales at the edges, the × leaves the replay as the button does)
+        OpenRacer.Movable.make(bar, { key: "replaybar", frame: { title: api.viewer ? "Replay" : "Replay · Escape goes back to the game", onClose: function() { api.stop(); }, closeTitle: api.viewer ? "To the main menu" : "Back to the game" } });
         OpenRacer.Movable.make(info, { key: "replayinfo", handle: info });
         updateCameraUi();
         slider.min = String(api.start_time());

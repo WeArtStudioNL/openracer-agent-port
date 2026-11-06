@@ -233,23 +233,17 @@ const EXHAUST_FIELDS = [
 const exhaustWindow = document.createElement("div");
 exhaustWindow.style.cssText = "position: absolute; left: 12px; bottom: 12px; width: 250px; padding: 10px 12px 12px; background: rgba(22, 27, 34, 0.94); border: 1px solid #323c4a; border-radius: 10px; color: #dfe6ef; font-size: 12.5px; display: none; z-index: 5;";
 $("view").appendChild(exhaustWindow);
-OpenRacer.Movable.make(exhaustWindow, { key: "editor-exhaust", handle: () => exhaustWindow.firstElementChild });
+// (a window of Movable.js: its bar drags it and has the ×, which lets go of the exhaust; the content is made in its body)
+let exhaustShown = null;
+OpenRacer.Movable.make(exhaustWindow, { key: "editor-exhaust", frame: { title: "Exhaust", onClose: () => { if (exhaustShown) selectLayer(exhaustShown.id); }, closeTitle: "Let go of the exhaust" } });
+const exhaustBody = OpenRacer.Movable.body(exhaustWindow);
 function updateExhaustWindow() {
     const entry = exhaust.find((e) => e.id === layers.selected);
     exhaustWindow.style.display = entry ? "block" : "none";
     if (!entry) return;
-    exhaustWindow.innerHTML = "";
-    const head = document.createElement("div");
-    head.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: bold;";
-    head.style.touchAction = "none";
-    head.style.cursor = "grab";
-    head.innerHTML = "<span>Exhaust " + (exhaust.indexOf(entry) + 1) + "</span>";
-    const close = document.createElement("button");
-    close.textContent = "×";
-    close.className = "small ghost";
-    close.addEventListener("click", () => selectLayer(entry.id));
-    head.appendChild(close);
-    exhaustWindow.appendChild(head);
+    exhaustBody.innerHTML = "";
+    exhaustShown = entry;
+    OpenRacer.Movable.setTitle(exhaustWindow, "Exhaust " + (exhaust.indexOf(entry) + 1));
     // the two gizmos, one at a time
     const modes = document.createElement("div");
     modes.style.cssText = "display: flex; gap: 6px; margin-bottom: 8px;";
@@ -261,7 +255,7 @@ function updateExhaustWindow() {
         b.addEventListener("click", () => { exhaustMode = mode; attachExhaustGizmo(); updateExhaustWindow(); });
         modes.appendChild(b);
     });
-    exhaustWindow.appendChild(modes);
+    exhaustBody.appendChild(modes);
     // the numbers of the place (m) and the turn (degrees), that can be typed too
     exhaustFields = { pos: [], rot: [] };
     [["Position", "pos", "m", 0.01], ["Rotation", "rot", "°", 1]].forEach(([label, key, unit, step]) => {
@@ -284,7 +278,7 @@ function updateExhaustWindow() {
             exhaustFields[key].push(input);
             row.appendChild(input);
         });
-        exhaustWindow.appendChild(row);
+        exhaustBody.appendChild(row);
     });
     syncExhaustFields();
     EXHAUST_FIELDS.forEach(([key, label, unit, min, max, step, scale]) => {
@@ -316,7 +310,7 @@ function updateExhaustWindow() {
         number.addEventListener("change", () => set(parseFloat(number.value)));
         show();
         row.append(line, range);
-        exhaustWindow.appendChild(row);
+        exhaustBody.appendChild(row);
     });
 }
 

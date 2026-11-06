@@ -71,7 +71,7 @@ OpenRacer.FreeCam = (function () {
         panel.id = "freeCam";
         var title = document.createElement("div");
         title.className = "title";
-        title.innerHTML = "<span>Free camera</span><span id=\"freeCamSpeed\"></span>";
+        title.innerHTML = "<span>Speed</span><span id=\"freeCamSpeed\"></span>";
         panel.appendChild(title);
         speedLabel = title.querySelector("#freeCamSpeed");
         var keys = document.createElement("details");
@@ -130,7 +130,9 @@ OpenRacer.FreeCam = (function () {
         line(recordButton);
         if (OpenRacer.Take) OpenRacer.Take.onChange(refreshUi);
         document.body.appendChild(panel);
-        OpenRacer.Movable.make(panel, { key: "freecam", handle: title });
+        // (a window: its bar drags it, the × goes back to the follow camera)
+        title.style.cursor = "default";
+        OpenRacer.Movable.make(panel, { key: "freecam", frame: { title: "Free camera", onClose: function () { if (typeof Settings !== "undefined") Settings.setOption("camera", 2); }, closeTitle: "Back to the follow camera" } });
         refreshUi();
     }
 

@@ -230,19 +230,12 @@
     function strengthText(n) { return n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + " kN/m" : Math.round(n) + " N/m"; }
     // the panel is a grid of cards: as many columns as its width holds (a card at least 220 px), four at most; it scales at every edge and corner (Movable, edges)
     var GRID_CSS = "<style>.dbgGrid { display: grid; gap: 10px 16px; grid-template-columns: repeat(auto-fill, minmax(max(220px, calc((100% - 48px) / 4)), 1fr)); align-items: start; }" +
-        ".dbgGrid .dbgWide { grid-column: 1 / -1; } .dbgCard { min-width: 0; }" +
-        // (the content scrolls inside the panel, with its scroll bar away from the edge: on the edge it took the drag that scales the panel)
-        // the bar at the top: the panel is dragged by it (also when its content is scrolled down), and its × closes the view
-        ".dbgHandle { flex: none; display: flex; align-items: center; justify-content: space-between; margin: -10px -14px 10px; padding: 7px 8px 7px 14px; background: #1c2430; " +
-        "border-bottom: 1px solid #323c4a; border-radius: 10px 10px 0 0; color: #9fb0c4; font-weight: bold; cursor: move; user-select: none; }" +
-        ".dbgClose { width: 26px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #dfe6ef; font: 18px/1 Arial, sans-serif; cursor: pointer; }" +
-        ".dbgClose:hover { background: #c2412d; color: #fff; }" +
-        ".dbgScroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: 10px; margin-right: -2px; }</style>";
+        ".dbgGrid .dbgWide { grid-column: 1 / -1; } .dbgCard { min-width: 0; }</style>";
     function makeGrabPanel() {
         grabPanel = document.createElement("div");
-        grabPanel.style.cssText = "position: fixed; right: 16px; top: 14px; z-index: 950; width: 260px; max-height: calc(100vh - 28px); overflow: hidden; flex-direction: column; padding: 10px 14px 12px; background: rgba(14, 18, 24, 0.86); border: 1px solid #323c4a; border-radius: 10px; " +
+        grabPanel.style.cssText = "position: fixed; right: 16px; top: 14px; z-index: 950; width: 260px; max-height: calc(100vh - 28px); padding: 10px 14px 12px; background: rgba(14, 18, 24, 0.86); border: 1px solid #323c4a; border-radius: 10px; " +
             "color: #dfe6ef; font: 12.5px Arial, sans-serif; display: none;";
-        grabPanel.innerHTML = GRID_CSS + "<div class=\"dbgHandle\">Debug view (0)<button type=\"button\" class=\"dbgClose\" title=\"Close the debug view (0)\">×</button></div><div class=\"dbgScroll\"><div class=\"dbgGrid\"><div class=\"dbgCard\"><div style=\"font-weight: bold; margin-bottom: 6px;\">Node grabber</div>" +
+        grabPanel.innerHTML = GRID_CSS + "<div class=\"dbgGrid\"><div class=\"dbgCard\"><div style=\"font-weight: bold; margin-bottom: 6px;\">Node grabber</div>" +
             "<div style=\"color: #9fb0c4; margin-bottom: 8px;\">Press on a node and drag it. Let go to drop it.</div>" +
             "<div style=\"display: flex; justify-content: space-between;\"><span>Elastic</span><b class=\"grabValue\"></b></div>" +
             "<input type=\"range\" class=\"grabSlider\" min=\"2\" max=\"5.3\" step=\"0.01\" style=\"width: 100%;\">" +
@@ -256,7 +249,7 @@
             "<div class=\"dbgCard\"><div style=\"font-weight: bold; margin: 0 0 6px;\">Weather</div>" +
             "<div style=\"display: flex; justify-content: space-between; align-items: center; gap: 8px;\"><span>Weather</span><select class=\"wxWeather\" style=\"border-radius: 6px; font: 12px Arial, sans-serif; color: #dfe6ef; background: #232c38; border: 1px solid #3a4656; padding: 4px;\"></select></div>" +
             "<div style=\"display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px;\"><span>Time of day</span><select class=\"wxTime\" style=\"border-radius: 6px; font: 12px Arial, sans-serif; color: #dfe6ef; background: #232c38; border: 1px solid #3a4656; padding: 4px;\"></select></div>" +
-            "<div style=\"color: #9fb0c4; margin-top: 4px;\">The ground follows the weather.</div></div></div></div>";
+            "<div style=\"color: #9fb0c4; margin-top: 4px;\">The ground follows the weather.</div></div></div>";
         // the weather and the time of day (the same options as the Graphics page of the Escape menu; a free drive starts in clear weather)
         var weatherSelect = grabPanel.querySelector(".wxWeather"), timeSelect = grabPanel.querySelector(".wxTime");
         [["clear", "Clear"], ["cloudy", "Cloudy"], ["fog", "Fog"], ["rain", "Rain"], ["snow", "Snow"]].forEach(function (w) { var o = document.createElement("option"); o.value = w[0]; o.textContent = w[1]; weatherSelect.appendChild(o); });
@@ -308,8 +301,7 @@
         grabPanel.addEventListener("change", giveBack);
         grabPanel.addEventListener("click", giveBack);
         crashSection(grabPanel.querySelector(".dbgGrid"));
-        grabPanel.querySelector(".dbgClose").addEventListener("click", function () { setOn(false); });
-        if (OpenRacer.Movable) OpenRacer.Movable.make(grabPanel, { key: "debug-panel", handle: grabPanel.querySelector(".dbgHandle"), edges: true });
+        if (OpenRacer.Movable) OpenRacer.Movable.make(grabPanel, { key: "debug-panel", frame: { title: "Debug view (0)", onClose: function () { setOn(false); }, closeTitle: "Close the debug view (0)" } });
         document.body.appendChild(grabPanel);
     }
     // ---- a motorcycle: the rules of a crash (Motorcycle.crashRules: each on or off with its limits, kept in OpenRacer.CrashRules and in the browser) and how the rider gives with the

@@ -670,15 +670,8 @@ var Tuning = (function() {
         addStyle();
         panel = document.createElement("div");
         panel.id = "tuning";
-        // the header (the title and a cross to close) is the handle: only it drags the panel, so the rest scrolls with the finger without moving the menu
-        header = document.createElement("div");
-        header.className = "tuneHeader";
-        header.innerHTML = "<h1>Tuning</h1>";
-        var cross = document.createElement("button");
-        cross.type = "button"; cross.textContent = "\u00d7"; cross.title = "Close the tuning menu"; cross.setAttribute("aria-label", "Close the tuning menu");
-        cross.onclick = function() { setVisible(false); };
-        header.appendChild(cross);
-        panel.appendChild(header);
+        // (the bar at the top with the title and a cross is the window of Movable.js: it drags the menu, the rest scrolls with the finger without moving it)
+        panel.style.paddingTop = "8px";
         panel.insertAdjacentHTML("beforeend", "<div class=\"sub\">Change the car while you drive. The tuning of this car is kept in the browser. " +
             "The key to show or hide this menu can be changed in the settings menu.</div>");
         info = document.createElement("div");
@@ -1005,7 +998,7 @@ var Tuning = (function() {
         mirrorGroup.addEventListener("toggle", function() { if(mirrorGroup.open) fillMirrors(); });
         panel.appendChild(mirrorGroup);
         document.body.appendChild(panel);
-        OpenRacer.Movable.make(panel, { key: "tuning", handle: header });
+        OpenRacer.Movable.make(panel, { key: "tuning", frame: { title: "Tuning", onClose: function() { setVisible(false); }, closeTitle: "Close the tuning menu" } });
     }
 
     // the list of the setups, with the one in use chosen (and "(changed)" when the tuning has moved away from it)

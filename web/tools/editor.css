@@ -367,3 +367,8 @@ footer.bar #status { flex: 1 1 100%; order: -1; }
 footer.bar #status:empty { display: none; }
 footer.bar button { flex: 1 1 auto; }
 html.compact #side:not(.open) { visibility: hidden; transition: transform 0.2s, visibility 0s 0.2s; }
+
+/* the dialogs as windows (editor-ui.js, Movable.js): moved by the head, scaled at every edge; the content fills the window and scrolls away from its edge */
+dialog.mvDialog[open] { display: flex; flex-direction: column; }
+dialog.mvDialog .head { flex: none; }
+dialog.mvDialog .content { flex: 1 1 auto; min-height: 0; max-height: none; margin: 0 7px 7px 0; }

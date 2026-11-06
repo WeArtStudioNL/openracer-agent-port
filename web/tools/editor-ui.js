@@ -19,12 +19,21 @@
             button.addEventListener("click", function () { dialog.close(); });
         });
         // a click on the dark backdrop closes the dialog (pressed and let go there: selecting the text of a field and letting go beside the window closed it)
+        // (beside the window, by the place: the edges of the window are the dialog too, and they scale it now)
+        var outside = function (event) { var r = dialog.getBoundingClientRect(); return event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom; };
         var downOnBackdrop = false;
-        dialog.addEventListener("pointerdown", function (event) { downOnBackdrop = event.target === dialog; });
+        dialog.addEventListener("pointerdown", function (event) { downOnBackdrop = event.target === dialog && outside(event); });
         dialog.addEventListener("click", function (event) {
-            if (event.target === dialog && downOnBackdrop) dialog.close();
+            if (event.target === dialog && downOnBackdrop && outside(event)) dialog.close();
             downOnBackdrop = false;
         });
+        // every window of the editor is moved by its head and scaled at its edges and corners (Movable.js); what it holds scrolls inside it, away from the edge
+        var head = dialog.querySelector(".head");
+        if (head && window.OpenRacer && OpenRacer.Movable) {
+            dialog.classList.add("mvDialog");
+            head.style.cursor = "move";
+            OpenRacer.Movable.make(dialog, { key: "dialog-" + (dialog.id || "x"), handle: head, edges: true });
+        }
     });
 
     // cards: all folded when the editor opens (the ones the page marks open too)

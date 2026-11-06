@@ -1487,10 +1487,14 @@ function dragChanged() {
 $("dragLength").addEventListener("change", dragChanged);
 $("dragRemove").addEventListener("click", () => { state.drag = null; updateMarkers(); });
 $("dragClose").addEventListener("click", () => setMode("view"));
-OpenRacer.Movable.make($("dragWindow"), { key: "track-editor-drag", handle: $("dragWindow").firstElementChild });
-// the Layers panel and the drawer of the track (Track, Prefabs) are moved by their heads too, as the other windows: they lay over each other at the bottom right
-OpenRacer.Movable.make($("eventLayers"), { key: "track-editor-layers", handle: $("eventLayers").firstElementChild });
-OpenRacer.Movable.make($("drawer"), { key: "track-editor-drawer", handle: $("drawer").querySelector(".head") });
+// the windows of the editor (Movable.js): a bar at the top that moves them, with a × where they can be closed, scaled at every edge, their content scrolls inside
+// (the old head line of the drag strip and of the Layers panel: the bar has their title now)
+$("dragWindow").firstElementChild.remove();
+OpenRacer.Movable.make($("dragWindow"), { key: "track-editor-drag", frame: { title: "Drag strip", onClose: () => setMode("view"), closeTitle: "Close" } });
+// the Layers panel and the drawer of the track (Track, Prefabs) are moved too: they lay over each other at the bottom right
+$("eventLayers").firstElementChild.remove();
+OpenRacer.Movable.make($("eventLayers"), { key: "track-editor-layers", frame: { title: "Layers", onClose: () => showLayers(false), closeTitle: "Hide the layers (the Layers button shows them again)" } });
+OpenRacer.Movable.make($("drawer"), { key: "track-editor-drawer", handle: $("drawer").querySelector(".head"), edges: true });
 // a drag strip that was loaded: the window shows its distance
 function showDrag() {
     if (!state.drag) return;
