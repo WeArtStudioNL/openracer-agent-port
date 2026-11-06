@@ -589,7 +589,9 @@ OpenRacer.setForkGeometry = function(vehicle, model, config) {
 };
 OpenRacer.updateSwingarm = function(arm, rear, body) {
     if(!arm || !rear || !rear.object) return;
-    var up = (rear.restLengthWheel || 0) - (rear.susLength || 0);                       // how far the wheel is up from where it sits at rest
+    // (in a replay the physics does not run: the length of the spring is the recorded one, visualLength, as the suspension rig takes it; susLength stood where the replay began and the arm did not move)
+    var length = OpenRacer.Replay && OpenRacer.Replay.active && rear.visualLength !== undefined ? rear.visualLength : (rear.susLength || 0);
+    var up = (rear.restLengthWheel || 0) - length;                                      // how far the wheel is up from where it sits at rest
     var a = Math.asin(Math.max(-1, Math.min(1, up / arm.length)));
     if(arm.pivotZ < arm.axleZ) a = -a;                                                  // (a pivot behind the axle: the other way round)
     OpenRacer.updateSwingarm.q = OpenRacer.updateSwingarm.q || new THREE.Quaternion();
