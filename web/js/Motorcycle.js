@@ -489,9 +489,9 @@ OpenRacer.Motorcycle = function (settings) {
             // (wall, hit, blow) only counts when it is more than its limit: a knock that the rider can take does not put him down
             forceHist.push({ t: now + dt, f: v.contactForce || 0 });
             while (forceHist.length > 1 && forceHist[0].t < now + dt - 0.1) forceHist.shift();
-            var pushed = 0; for (var fi = 0; fi < forceHist.length; fi++) pushed = Math.max(pushed, forceHist[fi].f);
-            self.dbgForce = pushed;
-            var hard = !R.force.on || pushed > R.force.kN * 1000;
+            var pushNow = 0; for (var fi = 0; fi < forceHist.length; fi++) pushNow = Math.max(pushNow, forceHist[fi].f);      // (not "pushed": that is the function of the flat-track style)
+            self.dbgForce = pushNow;
+            var hard = !R.force.on || pushNow > R.force.kN * 1000;
             // a wall: the body of the bike hit something at more than 20 km/h (Vehicle.js: impactTime goes to 0 at a hit, lastImpact is the speed into it); the rider is thrown at the
             // speed the bike had before the hit (not the bounce)
             var wall = R.wall.on && hard && v.impactTime < 0.05 && v.lastImpact > R.wall.kmh / 3.6 && v.impactTime !== self.wallHit;
@@ -529,7 +529,7 @@ OpenRacer.Motorcycle = function (settings) {
             if (leaned || (self.limp && Math.abs(u) < 0.5) || over || lowside || spin || blow || wall) {
                 self.crashed = true;
                 self.crashReason = leaned ? "lean" : (self.limp && Math.abs(u) < 0.5) ? "limp-still" : over ? "over" : lowside ? "lowside" : spin ? "spin" : blow ? "blow " + (aMag / G).toFixed(1) + "g" : hit ? "hit " + (speedOld - speedNow).toFixed(1) : "wall";     // (for the debugging)
-                if (typeof console !== "undefined" && console.info) console.info("Motorcycle: down (" + self.crashReason + ") at " + (Math.sqrt(v.vx * v.vx + v.vy * v.vy + v.vz * v.vz) * 3.6).toFixed(0) + " km/h, lean " + (state.lean / DEG).toFixed(0) + " deg, " + (aMag / G).toFixed(1) + " g, pushed " + (pushed / 1000).toFixed(1) + " kN");      // (which rule put it down: for a track that throws the rider off)
+                if (typeof console !== "undefined" && console.info) console.info("Motorcycle: down (" + self.crashReason + ") at " + (Math.sqrt(v.vx * v.vx + v.vy * v.vy + v.vz * v.vz) * 3.6).toFixed(0) + " km/h, lean " + (state.lean / DEG).toFixed(0) + " deg, " + (aMag / G).toFixed(1) + " g, pushed " + (pushNow / 1000).toFixed(1) + " kN");      // (which rule put it down: for a track that throws the rider off)
                 var before = wall && v.lastWall && v.lastWall.v ? v.lastWall.v : null;
                 self.crashSpeed = before ? { x: before[0], y: before[1], z: before[2] } : { x: v.vx, y: v.vy, z: v.vz };
             }
