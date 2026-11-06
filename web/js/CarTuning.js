@@ -880,6 +880,8 @@ OpenRacer.Setups = (function () {
             shipped[id] = {};
             (list || []).forEach(function (t) { if(t && t.name && t.config) shipped[id][t.name] = { config: clone(t.config), file: t.file || null }; });
         },
+        // a tune that comes with the car was written to its file (the tuning menu, Export to vehicle): the tune of the car is this configuration from now
+        reship: function (id, name, config) { if(shipped[id] && shipped[id][name]) shipped[id][name].config = clone(config); },
         // the name of the tune file next to car.json of a tune that comes with the car, or null
         shippedFile: function (id, name) { return shipped[id] && shipped[id][name] ? shipped[id][name].file : null; },
         // "car": the tune comes with the car (and the browser has no copy of it), "copy": the browser has its own copy of a tune of the car, null: a tune of the browser only

@@ -814,6 +814,35 @@ var Tuning = (function() {
             OpenRacer.Setups.exportFile(config.id, name || ((config.name || config.id) + " as tuned"), name ? Object.assign({}, original, cfg) : cfg);
             message("Tune " + (name || "as tuned now") + " saved as a file (in your downloads).");
         };
+        // Export to vehicle: a tune that comes with the car (its file next to car.json) is overwritten on the disk with the car as it is tuned now, through the API of the
+        // game's own server (tools/serve.py, from this computer); the copy of this browser goes, the file is the tune. Only shown when the game is served from this computer
+        var exportCar = document.createElement("button");
+        exportCar.textContent = "Export to vehicle";
+        exportCar.style.display = "none";
+        exportCar.onclick = function() {
+            var name = setupSelect.value, file = name ? OpenRacer.Setups.shippedFile(config.id, name) : null;
+            if(!file) return;
+            if(source) { message("This car is in your " + source + ": change its tunes in the car editor."); return; }
+            OpenRacerDialog.ask({ title: "Overwrite " + file + "?", text: "The tune “" + name + "” that comes with the car becomes the car as it is tuned now: this writes cars/" + config.id + "/" + file + " on the disk.", ok: "Overwrite", danger: true }).then(function(yes) {
+                if(!yes) return;
+                var cfg = tunedConfig(), out = OpenRacer.Setups.shipFile(config.id, name, cfg);
+                return fetch("api/cars/" + encodeURIComponent(config.id) + "/" + encodeURIComponent(file), { method: "PUT", body: out.text }).then(function(response) {
+                    if(response.ok) {
+                        OpenRacer.Setups.reship(config.id, name, cfg);
+                        OpenRacer.Setups.remove(config.id, name);          // (the copy of this browser is the file now)
+                        OpenRacer.Setups.setActive(config.id, name);
+                        refresh();
+                        message(file + " saved: the tune " + name + " that comes with the car is the car as it is tuned now.");
+                        return;
+                    }
+                    return response.json().catch(function() { return {}; }).then(function(data) {
+                        message(response.status === 403 ? "The tune file is only written from this computer, by the game's own server (tools/serve.py)."
+                            : [404, 405, 501].indexOf(response.status) >= 0 ? "This server does not write the files of a car (the game's own server, tools/serve.py, does)."
+                            : file + " was not saved: " + (data && data.error ? data.error : "HTTP " + response.status) + ".");
+                    });
+                }).catch(function() { message(file + " was not saved: there is no server that writes it (tools/serve.py)."); });
+            });
+        };
         var importTune = document.createElement("button");
         importTune.textContent = "Import…";
         importTune.title = "A tune file of someone else: it becomes a setup of this car, and is chosen";
@@ -846,10 +875,11 @@ var Tuning = (function() {
         setupLine.appendChild(saveNew);
         setupLine.appendChild(dropSetup);
         setupLine.appendChild(exportTune);
+        setupLine.appendChild(exportCar);
         setupLine.appendChild(importTune);
         setupLine.appendChild(importInput);
         panel.appendChild(setupLine);
-        setupButtons = { save: saveSetup, drop: dropSetup };
+        setupButtons = { save: saveSetup, drop: dropSetup, ship: exportCar };
 
         // the cards of the car editor, with the same names and the same order: each holds its groups of settings (a group with the name of its card is "<name> settings"), and
         // the Assists and extras card the systems and the extras. Cards without a setting that the car can use do not show. (The torque curve is not set here: it follows from
@@ -1028,6 +1058,10 @@ var Tuning = (function() {
             setupButtons.drop.style.opacity = setupButtons.drop.disabled ? 0.45 : 1;
             setupButtons.drop.textContent = ship === "copy" ? "Undo changes" : "Delete";
             setupButtons.drop.title = ship === "car" ? "This setup comes with the car" : ship === "copy" ? "The setup as it comes with the car, without the changes saved here" : "";
+            // (Export to vehicle: a tune that comes with the car, a car of the server, the game served from this computer)
+            var host = window.location.hostname, here = host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
+            setupButtons.ship.style.display = ship && here && !source ? "" : "none";
+            setupButtons.ship.title = ship ? "Overwrite " + (OpenRacer.Setups.shippedFile(config.id, setupSelect.value) || "the tune file") + " in the folder of the car with the car as it is tuned now" : "";
         }
     }
 
