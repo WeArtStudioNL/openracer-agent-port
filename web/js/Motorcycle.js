@@ -421,9 +421,8 @@ OpenRacer.Motorcycle = function (settings) {
     // ---- hook: the rider in the air (Vehicle.js calls it while no wheel touches the road). Rates, without a limit to the angle: the gas turns the nose up (held, the bike goes round:
     // a backflip), the brake turns it down, the lean keys roll the bike by the weight of the rider (air_pitch_rate_deg, air_roll_rate_deg; sliders in the tuning menu). With nothing asked the
     // rider levels the bike, lets the nose follow the flight and turns the bike along the way it flies, so that it lands straight.
-    // A lean key that was held already when the bike left the road (the key of the bend before the jump) does not roll it until it is let go: in the replay of a rider on Dirt run of
-    // 6 November a jump taken in a bend with the key held rolled the bike from 0 to 53 degrees in 0.6 s, it landed sideways, slid at 20 degrees of slip for a second and went down;
-    // on a bigger jump it rolled to 80 degrees. Four of the six crashes of that replay were that.
+    // A lean key that is held when the bike leaves the road rolls it at once (for a whip). (For a while it did not until it was let go: in the replay of a rider on Dirt run of
+    // 6 November a jump taken in a bend with the key held rolled the bike from 0 to 53 degrees in 0.6 s at the old rate of 100 degrees a second, and it landed sideways.)
     this.airSteer = function (v, torque, dt, Ix, Iz, Iy) {
         if (self.crashed || self.limp || !(self.airControl > 0) || !(dt > 0)) return;
         rotate(v, 1, 0, 0, side); rotate(v, 0, 0, 1, fwd); rotate(v, 0, 1, 0, up);
@@ -443,11 +442,9 @@ OpenRacer.Motorcycle = function (settings) {
         // the pitch: asked, a rate; not asked, the nose goes towards the flight
         var pitchTarget = Math.abs(ask) > 0.05 ? ask * self.airPitchRate
             : upright ? Math.max(-1.2, Math.min(1.2, 2.2 * self.airLevel * (flightPitch - noseNow))) : noseRate;
-        // the roll: the key asks a rate (left is negative, the same as the steering); nothing asked is level with the road. The key of the take-off counts once it has been let go.
+        // the roll: the key asks a rate (left is negative, the same as the steering); nothing asked is level with the road. A key that is held from the take-off rolls the bike at once
+        // (a whip starts flat at the lip of the kicker; the user asked for it on 6 November: the key had to be let go first, which kept a bend before a jump from rolling the bike over)
         var cmd = Math.max(-1, Math.min(1, self.command || 0)), st = leanOf(v, 0);
-        if ((v.airTime || 0) <= dt * 1.5) self.airKeyLock = Math.abs(cmd) > 0.3 ? Math.sign(cmd) : 0;
-        if (self.airKeyLock && (Math.abs(cmd) < 0.2 || Math.sign(cmd) !== self.airKeyLock)) self.airKeyLock = 0;
-        if (self.airKeyLock) cmd = 0;
         var rollTarget = Math.abs(cmd) > 0.05 ? -cmd * self.airRollRate
             : upright ? Math.max(-self.airRollRate, Math.min(self.airRollRate, 3 * self.airLevel * smooth(0.2, 0.45, v.airTime || 0) * (0 - st.lean))) : leanRate;
         // (the levelling starts after a fifth of a second: a hop over a bump in a bend keeps its lean; levelled from 46 to 36 degrees in 0.17 s, the lean came back at the touchdown
