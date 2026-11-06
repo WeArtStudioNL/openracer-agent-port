@@ -290,8 +290,20 @@ OpenRacer.Garage = (function () {
                 if (!response.ok) return serverError(response);
             });
         }
-        var server = names.reduce(function (chain, name) { return chain.then(function () { return putOne(name, files[name]); }); }, Promise.resolve())
+        // A copy of this item in the garage (a zip that was imported) wins over the server in the menu, so a save to the server was never seen in the game
+        // (the driver of a car that was edited was gone), and the model of that copy is not on the server. The files of the garage go along to the server,
+        // and the copy is dropped when the server has it all.
+        var inGarage = null;
+        var drop = (options.remove || []);
+        var server = (available() ? get(kind, id).catch(function () { return null; }) : Promise.resolve(null))
+            .then(function (record) {
+                inGarage = record;
+                var extra = record ? Object.keys(record.files || {}).filter(function (name) { return names.indexOf(name) < 0 && drop.indexOf(name) < 0; }) : [];
+                return extra.reduce(function (chain, name) { return chain.then(function () { return putOne(name, record.files[name]); }); }, Promise.resolve());
+            })
+            .then(function () { return names.reduce(function (chain, name) { return chain.then(function () { return putOne(name, files[name]); }); }, Promise.resolve()); })
             .then(function () { return putOne(CONFIG_FILE[kind], body); })
+            .then(function () { return inGarage ? remove(kind, id).catch(function () {}) : null; })
             .then(function () {
                 return Promise.all((options.remove || []).map(function (name) {
                     return fetch(base + "api/" + kind + "/" + encodeURIComponent(id) + "/" + encodeURIComponent(name), { method: "DELETE" }).catch(function () {});

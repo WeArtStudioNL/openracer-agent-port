@@ -617,7 +617,15 @@ OpenRacer.Driver = function (config, parent, steering) {
     var SHIFT_FULL = 0.34, SHIFT_HALF = 0.13, SHIFT_UP = 0.07, SHIFT_BACK = 0.2, THROTTLE_ROLL = 0.75;
     var rw = new V(), rl = new V(), rq1 = new Q(), rq2 = new Q(), rq3 = new Q(), rAxisX = new V(1, 0, 0);
     function findRider() {
-        var get = function (name) { return self.parent.getObjectByName(name) || null; };
+        // (by name, and also when the modeller wrote it in lower case: grip_l, footpeg_r)
+        var lower = name => name.toLowerCase();
+        var get = function (name) {
+            var exact = self.parent.getObjectByName(name);
+            if (exact) return exact;
+            var found = null;
+            self.parent.traverse(function (o) { if (!found && o.name && lower(o.name) === lower(name)) found = o; });
+            return found;
+        };
         var r = { gripL: get("grip_L"), gripR: get("grip_R"), pegL: get("footpeg_L"), pegR: get("footpeg_R"), brake: get("frontbrake_R"), clutch: get("clutch_L"), shifter: get("shifter_L") };
         return r.gripL && r.gripR && r.pegL && r.pegR ? r : null;
     }
