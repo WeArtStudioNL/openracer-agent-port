@@ -25,7 +25,7 @@
  *              Home and End the start and the end, T the camera, H hides the bar, the speed box and the debug text, and shows them again.
  *
  *              A fragment: Mark in and Mark out (I and O) mark a part on the slider (an orange band); Save fragment asks how to keep it, as a replay file (.openracer-replay,
- *              only that part) or as a video (.mp4: the part played at normal speed and filmed, with the camera as it is set). Without marks it is the whole replay.
+ *              only that part) or as a video (.mp4: the part played at the speed that is chosen and filmed, with the camera as it is set). Without marks it is the whole replay.
  */
 
 OpenRacer.Replay = (function() {
@@ -747,7 +747,7 @@ OpenRacer.Replay = (function() {
         var text = any ? (f ? format(f.from) + " – " + format(f.to) + " (" + (f.to - f.from).toFixed(1) + " s)" : "the fragment is too short") : "no marks: the whole replay";
         if(m.text.textContent !== text) m.text.textContent = text;
     }
-    // Save fragment: a small window asks how (a replay file, or a video of the part at normal speed), then keeps the part from Mark in to Mark out
+    // Save fragment: a small window asks how (a replay file, or a video of the part at the playback speed that is chosen), then keeps the part from Mark in to Mark out
     function saveFragment(saveButton) {
         var f = fragment();
         if(!f) { saveButton.textContent = "Mark a longer part"; setTimeout(function() { saveButton.textContent = "Save fragment"; }, 2500); return; }
@@ -759,7 +759,7 @@ OpenRacer.Replay = (function() {
         box.style.cssText = "width: 440px; max-width: calc(100% - 40px); background: var(--panel); border: 2px solid var(--line); border-radius: 10px; padding: 20px 24px; color: #fff;";
         var title = el(box, "div", "", "Save the fragment");
         title.style.cssText = "font-size: 20px; font-weight: bold; margin-bottom: 8px;";
-        var text = el(box, "div", "", format(f.from) + " to " + format(f.to) + " (" + (f.to - f.from).toFixed(1) + " s). A replay file can be opened again in Replays and in the video editor; the video is played and filmed at normal speed, with the camera as it is set now.");
+        var text = el(box, "div", "", format(f.from) + " to " + format(f.to) + " (" + (f.to - f.from).toFixed(1) + " s). A replay file can be opened again in Replays and in the video editor; the video is played and filmed at " + speed + "× (the playback speed that is chosen), with the camera as it is set now.");
         text.style.cssText = "color: var(--muted); font-size: 14px; line-height: 1.5; margin-bottom: 16px;";
         var row = el(box, "div");
         row.style.cssText = "display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;";
@@ -775,12 +775,12 @@ OpenRacer.Replay = (function() {
                 asFile.disabled = false; asFile.textContent = "Replay file"; text.textContent = (error && error.message) || "The fragment could not be saved."; text.style.color = "#ff8a80";
             });
         });
-        var asVideo = button(row, "MP4 video", "Play the part at normal speed and film it as a .mp4", function() {
+        var asVideo = button(row, "MP4 video", "Play the part at " + speed + "× and film it as a .mp4", function() {
             close();
-            video.from = f.from; video.until = f.to; video.closeAfter = false;
+            video.from = f.from; video.until = f.to; video.closeAfter = false; video.speed = speed;
             video.name = "openracer-" + String(currentTrack.id).replace(/[^A-Za-z0-9_-]/g, "") + "-fragment-" + new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13);
             toggleVideo();
-            if(!video.recorder) { video.from = video.until = undefined; video.name = null; }
+            if(!video.recorder) { video.from = video.until = video.speed = undefined; video.name = null; }
         });
         if(typeof MediaRecorder === "undefined" || !document.createElement("canvas").captureStream) asVideo.style.display = "none";
         style(cancel, "var(--line)"); style(asFile, "#3a4a5e"); style(asVideo, "var(--accent)");
@@ -1207,8 +1207,8 @@ OpenRacer.Replay = (function() {
                 .then(function(mp4) { save(mp4, ".mp4"); done(); })
                 .catch(function() { save(blob, kept); done(); });
         };
-        // from the start (or from where a take begins), at normal speed
-        t = video.from !== undefined ? video.from : api.start_time(); video.from = undefined; direction = 1; speed = 1; playing = true;
+        // from the start (or from where a take begins), at normal speed (a fragment: at the playback speed that was chosen)
+        t = video.from !== undefined ? video.from : api.start_time(); video.from = undefined; direction = 1; speed = video.speed !== undefined ? video.speed : 1; video.speed = undefined; playing = true;
         if(ui) ui.sync();
         document.body.classList.add("replayFilming");
         videoButton.textContent = sound ? "■ Stop (recording)" : "■ Stop (recording, no sound: press a key first)";
