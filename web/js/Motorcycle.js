@@ -127,7 +127,7 @@ OpenRacer.Motorcycle = function (settings) {
     this.yawCap = 3000; this.yawCapBrake = 6000;             // N m: what the rider's hold on the yaw can give, and the extra on the brakes
     this.slideTime = 0;                                      // s that the bike has slid sideways past 15 degrees while leaning: a lowside after half a second
     this.wallHit = 0;                                        // the last wall hit that was seen (Vehicle.impactTime), so that one hit crashes once
-    var hist = [], now = 0;                                  // the speed of the last tenth of a second: a hit that the smoothed acceleration misses (a wall through the wheels, a kerb)
+    var hist = [], forceHist = [], now = 0;                                  // the speed of the last tenth of a second: a hit that the smoothed acceleration misses (a wall through the wheels, a kerb)
     this.pushing = false;                                   // the rider walks the bike back (set by Car.js)
     // the options of the menu that the bike reads (OpenRacer.Motorcycle.OPTIONS): null reads them from Settings; a physics worker, which has no
     // Settings, is given them here (PHYSICS-WORKER.md)
@@ -481,12 +481,20 @@ OpenRacer.Motorcycle = function (settings) {
         // A crash: the bike is nearly on its side, or a hit (a change of speed of more than 6 g, or more than 2.2 g sideways at speed: a wall, a kerb). From then on the rider does nothing,
         // the bike is a body that slides (Vehicle.js: its spheres touch the road), and the rider is thrown off (Driver.js, a ragdoll), until a reset or a repair (Car.js)
         if (!self.crashed) {
+            // the rules of a crash: OpenRacer.CrashRules (the panel of the 0 key), each one on or off with its limit; crashRules() fills in what is not set
+            var R = OpenRacer.Motorcycle.crashRules(), crashLean = R.lean.deg !== undefined ? R.lean.deg * DEG : self.crashLean;
             var aMag = Math.sqrt(accel.x * accel.x + accel.y * accel.y + accel.z * accel.z);
             self.dbgAccel = aMag;      // (for the bench)
-            var aLat = accel.x * state.lx + accel.y * state.ly + accel.z * state.lz;
+            // how hard the road and the things around push on the body of the bike (Vehicle.js contactForce, N): the most of the last tenth of a second. With the rule "force" on, a hit
+            // (wall, hit, blow) only counts when it is more than its limit: a knock that the rider can take does not put him down
+            forceHist.push({ t: now + dt, f: v.contactForce || 0 });
+            while (forceHist.length > 1 && forceHist[0].t < now + dt - 0.1) forceHist.shift();
+            var pushed = 0; for (var fi = 0; fi < forceHist.length; fi++) pushed = Math.max(pushed, forceHist[fi].f);
+            self.dbgForce = pushed;
+            var hard = !R.force.on || pushed > R.force.kN * 1000;
             // a wall: the body of the bike hit something at more than 20 km/h (Vehicle.js: impactTime goes to 0 at a hit, lastImpact is the speed into it); the rider is thrown at the
             // speed the bike had before the hit (not the bounce)
-            var wall = v.impactTime < 0.05 && v.lastImpact > 5.5 && v.impactTime !== self.wallHit;
+            var wall = R.wall.on && hard && v.impactTime < 0.05 && v.lastImpact > R.wall.kmh / 3.6 && v.impactTime !== self.wallHit;
             if (wall) self.wallHit = v.impactTime;
             // a hit that is not a wall of the body (the wheels into a barrier, a kerb): the speed lost in a tenth of a second, more than 8 m/s (over 8 g), at more than 20 km/h before it
             // (the speed over the ground and the speed in 3D both: the speed over the ground alone fell by 8 m/s in a tenth of a second on the face of a kicker of 57 degrees at 75 km/h, where
@@ -498,28 +506,30 @@ OpenRacer.Motorcycle = function (settings) {
             if (Math.abs(v.px - last.px) + Math.abs(v.pz - last.pz) > 3) { hist.length = 0; hist.push({ t: now, x: v.vx, y: v.vy, z: v.vz, px: v.px, pz: v.pz }); old = hist[0]; }
             var speedOld = Math.sqrt(old.x * old.x + old.z * old.z), speedNow = Math.sqrt(v.vx * v.vx + v.vz * v.vz);
             var lost3 = Math.sqrt(old.x * old.x + old.y * old.y + old.z * old.z) - Math.sqrt(v.vx * v.vx + v.vy * v.vy + v.vz * v.vz);
-            var hit = speedOld - speedNow > 8 && lost3 > 8 && speedOld > 5.5;
+            var hit = R.hit.on && hard && speedOld - speedNow > R.hit.loss && lost3 > R.hit.loss && speedOld > 5.5;
             if (hit && !wall) { wall = true; v.lastWall = v.lastWall || {}; v.lastWall.v = [old.x, 0, old.z]; }
             // a wheelie that went over: the bike on its back (its up more than 100 degrees from the road); up to there the tail scrapes and the rear brake can still bring it down
-            var over = state.upN < -0.17;
+            var over = R.over.on && state.upN < -0.17;
             // a lowside: the bike slides sideways past 15 degrees for half a second while it leans (the tyres have let go; it crabbed along for seconds at the limit of the lean)
             var betaNow = Math.atan2(v.v || 0, Math.max(Math.abs(u), 1));
             // (a powerslide is no lowside: the rear wheel spins under power and the rider holds the bike on the throttle, sliding as long as he likes; it goes down by the lean alone,
             // at crashLean. A slide with the rear wheel rolling is the tyres letting go.)
             var rear = v.wheels && v.wheels[2], powerslide = !!rear && c.throttle > 0.2 && rear.omega * rear.radius - (rear.forwardSpeed || u) > 1.5;
             // (a slide of more than 25 degrees for two seconds, leaning, without power: backing it in, the rear sliding at 45 degrees for a second with the gas shut, is ridden out)
-            self.slideTime = Math.abs(betaNow) > 25 * DEG && Math.abs(state.lean) > 25 * DEG && Math.abs(u) > 5 && !powerslide ? self.slideTime + dt : 0;
-            var lowside = self.slideTime > 2.0;
+            self.slideTime = Math.abs(betaNow) > R.lowside.slip * DEG && Math.abs(state.lean) > R.lowside.lean * DEG && Math.abs(u) > 5 && !powerslide ? self.slideTime + dt : 0;
+            var lowside = R.lowside.on && self.slideTime > R.lowside.time;
             // a spin: the bike turns about its vertical faster than 4 rad/s at speed (a jump landed on a lean: the front took the hit with the rear in the air, and the bike was
             // thrown round in a tenth of a second and went on backwards at 100 km/h)
-            var spin = Math.abs(v.wy || 0) > 4 && Math.abs(u) > 5;
+            var spin = R.spin.on && Math.abs(v.wy || 0) > R.spin.rate && Math.abs(u) > 5;
             // (a wheel torn off is no crash by itself: the rider can hold the bike up on its fork or its swingarm, which touch the road (keepBodyOff); it goes down when it leans)
             // (an acceleration alone is no crash: the tyres that bite again after a long slide give 4 to 8 g sideways for a moment, and that threw the rider off a slide he had held
             // at 53 degrees; a hit is the body of the bike against something (wall) or a loss of speed (hit). Only a blow of more than 7 g counts by itself.)
-            if (Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) || (self.limp && Math.abs(u) < 0.5) || over || lowside || spin || aMag > 7 * G || wall) {
+            var blow = R.blow.on && hard && aMag > R.blow.g * G;
+            var leaned = Math.abs(state.lean) > (self.limp ? 0.7 : crashLean) && (R.lean.on || self.limp);
+            if (leaned || (self.limp && Math.abs(u) < 0.5) || over || lowside || spin || blow || wall) {
                 self.crashed = true;
-                self.crashReason = Math.abs(state.lean) > (self.limp ? 0.7 : self.crashLean) ? "lean" : (self.limp && Math.abs(u) < 0.5) ? "limp-still" : over ? "over" : lowside ? "lowside" : spin ? "spin" : aMag > 7 * G ? "accel " + (aMag / G).toFixed(1) + "g" : hit ? "hit " + (speedOld - speedNow).toFixed(1) : "wall";     // (for the debugging)
-                if (typeof console !== "undefined" && console.info) console.info("Motorcycle: down (" + self.crashReason + ") at " + (Math.sqrt(v.vx * v.vx + v.vy * v.vy + v.vz * v.vz) * 3.6).toFixed(0) + " km/h, lean " + (state.lean / DEG).toFixed(0) + " deg, " + (aMag / G).toFixed(1) + " g");      // (which rule put it down: for a track that throws the rider off)
+                self.crashReason = leaned ? "lean" : (self.limp && Math.abs(u) < 0.5) ? "limp-still" : over ? "over" : lowside ? "lowside" : spin ? "spin" : blow ? "blow " + (aMag / G).toFixed(1) + "g" : hit ? "hit " + (speedOld - speedNow).toFixed(1) : "wall";     // (for the debugging)
+                if (typeof console !== "undefined" && console.info) console.info("Motorcycle: down (" + self.crashReason + ") at " + (Math.sqrt(v.vx * v.vx + v.vy * v.vy + v.vz * v.vz) * 3.6).toFixed(0) + " km/h, lean " + (state.lean / DEG).toFixed(0) + " deg, " + (aMag / G).toFixed(1) + " g, pushed " + (pushed / 1000).toFixed(1) + " kN");      // (which rule put it down: for a track that throws the rider off)
                 var before = wall && v.lastWall && v.lastWall.v ? v.lastWall.v : null;
                 self.crashSpeed = before ? { x: before[0], y: before[1], z: before[2] } : { x: v.vx, y: v.vy, z: v.vz };
             }
@@ -744,7 +754,7 @@ OpenRacer.Motorcycle = function (settings) {
 
     // ---- hook for the camera: it rolls with the lean, a part of it, smoothed. camera: the three.js camera, after it was placed
     // after a reset or a repair: the rider is back on the bike
-    this.recover = function () { hist.length = 0; self.slideTime = 0; self.crashed = false; self.limp = false; self.riderLoad = null; self.footDown = 0; self.footDownL = 0; self.footStill = false; self.footWait = 0; self.brace = 0; self.lastFlightSeen = 0; self.targetLean = 0; self.steer = 0; self.wheelieScale = 1; vPrev = null; accel.x = accel.y = accel.z = 0; };
+    this.recover = function () { hist.length = 0; forceHist.length = 0; self.slideTime = 0; self.crashed = false; self.limp = false; self.riderLoad = null; self.footDown = 0; self.footDownL = 0; self.footStill = false; self.footWait = 0; self.brace = 0; self.lastFlightSeen = 0; self.targetLean = 0; self.steer = 0; self.wheelieScale = 1; vPrev = null; accel.x = accel.y = accel.z = 0; };
 
     this.cameraRoll = function (camera, v, dt) {
         var classic = typeof Settings !== "undefined" && Settings.option("bikeCamera") === "classic";       // (the menu: the chase camera of a car, that does not roll)
@@ -754,6 +764,30 @@ OpenRacer.Motorcycle = function (settings) {
 };
 
 // The mass of the rider of a motorcycle (car.json "motorcycle.rider_mass", 80 kg), which is on top of the "mass" of the bike; 0 for a car
+// ---- The rules of a crash of a motorcycle, as the panel of the 0 key sets them (DebugView.js; kept in the browser, localStorage "openracer.crashRules"). Each rule is on or off
+// with its limit; the standard is the game as it was. force: with it on, a hit (wall, hit, blow) only counts when the road or a thing pushes on the body of the bike with more than
+// kN kilonewton (Vehicle.js contactForce, the most of the last tenth of a second): a knock that a rider takes does not put him down.
+OpenRacer.Motorcycle.CRASH_DEFAULTS = {
+    lean: { on: true, deg: 78 },                          // past this lean (the bike's own crash_lean_deg when the panel has not set it)
+    lowside: { on: true, slip: 25, lean: 25, time: 2 },   // a slide of more than slip degrees, leaning more than lean, for time seconds, without power
+    spin: { on: true, rate: 4 },                          // a turn about the vertical faster than rate rad/s, at speed
+    over: { on: true },                                   // on its back
+    blow: { on: true, g: 7 },                             // an acceleration of more than g
+    hit: { on: true, loss: 8 },                           // more than loss m/s of speed lost in a tenth of a second
+    wall: { on: true, kmh: 20 },                          // the body hits something faster than kmh
+    force: { on: false, kN: 15 }                          // a hit only counts above this push on the body
+};
+OpenRacer.Motorcycle.crashRules = function () {
+    var D = OpenRacer.Motorcycle.CRASH_DEFAULTS, set = OpenRacer.CrashRules || {}, out = OpenRacer.Motorcycle._rules || (OpenRacer.Motorcycle._rules = {});
+    for (var k in D) {
+        var o = out[k] || (out[k] = {}), d = D[k], x = set[k] || {};
+        for (var f in d) o[f] = x[f] !== undefined ? x[f] : d[f];
+    }
+    if (!set.lean || set.lean.deg === undefined) out.lean.deg = undefined;      // (the bike's own)
+    return out;
+};
+if (typeof localStorage !== "undefined") { try { var keptRules = JSON.parse(localStorage.getItem("openracer.crashRules")); if (keptRules && typeof keptRules === "object") OpenRacer.CrashRules = keptRules; } catch (e) { /* no storage */ } }
+
 OpenRacer.Motorcycle.riderMass = function (config) {
     if(!config || config.type !== "motorcycle") return 0;
     var m = config.motorcycle && config.motorcycle.rider_mass;

@@ -181,11 +181,47 @@ OpenRacer.Driver = function (config, parent, steering) {
     this.torsoPose = { chest: [0, 0, 0], head: [0, 0, 0] };
     this.posture = null;                                 // the posture of a rider on a motorcycle (Motorcycle.js), set by update()
     var postureOff = new V();
+    // ---- The rider gives with the g-forces (a rider of a motorcycle): his body is a mass on a spring and a damper on the bike. What the bike does (its acceleration, in its own
+    // frame: forward, to the left, up) pushes him the other way (on the gas back, on the brake forward, in a landing down, in a kick sideways), and he comes back to his place,
+    // smoothly. It is only what is drawn: the weight of the rider in the physics (Motorcycle.js, the posture) is as before. The settings are in the panel of the 0 key
+    // (OpenRacer.RiderFeel: amount, a factor; hz, how quick he comes back; damping, 0 to 1). It reads the speed of the bike from frame to frame, so a replay has it too.
+    var gOff = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0, last: null };
+    function feel() { var f = OpenRacer.RiderFeel || {}; return { amount: f.amount !== undefined ? f.amount : 1, hz: f.hz || 1.4, damping: f.damping !== undefined ? f.damping : 0.55 }; }
+    function gSpring(dt, vh) {
+        var f = feel();
+        if (!vh || !(dt > 0) || !(f.amount > 0)) { gOff.x = gOff.y = gOff.z = gOff.vx = gOff.vy = gOff.vz = 0; gOff.last = null; return; }
+        var L = gOff.last;
+        if (!L || Math.abs(vh.px - L.px) + Math.abs(vh.pz - L.pz) > 5) { gOff.last = { vx: vh.vx, vy: vh.vy, vz: vh.vz, px: vh.px, pz: vh.pz }; return; }      // (the first frame, or a reset)
+        // the acceleration of the bike in the world, smoothed over 40 ms (a landing gives a spike of a frame), at most 4 g
+        var cap = 4 * 9.81, k = Math.min(1, dt / 0.04);
+        gOff.ax += (Math.max(-cap, Math.min(cap, (vh.vx - L.vx) / dt)) - gOff.ax) * k;
+        gOff.ay += (Math.max(-cap, Math.min(cap, (vh.vy - L.vy) / dt)) - gOff.ay) * k;
+        gOff.az += (Math.max(-cap, Math.min(cap, (vh.vz - L.vz) / dt)) - gOff.az) * k;
+        L.vx = vh.vx; L.vy = vh.vy; L.vz = vh.vz; L.px = vh.px; L.pz = vh.pz;
+        // in the frame of the bike: left (x), up (y), forward (z)
+        var qx = vh.qx, qy = vh.qy, qz = vh.qz, qw = vh.qw;
+        var lx = 1 - 2 * (qy * qy + qz * qz), ly = 2 * (qx * qy + qw * qz), lz = 2 * (qx * qz - qw * qy);
+        var ux = 2 * (qx * qy - qw * qz), uy = 1 - 2 * (qx * qx + qz * qz), uz = 2 * (qy * qz + qw * qx);
+        var fx = 2 * (qx * qz + qw * qy), fy = 2 * (qy * qz - qw * qx), fz = 1 - 2 * (qx * qx + qy * qy);
+        var aL = gOff.ax * lx + gOff.ay * ly + gOff.az * lz, aU = gOff.ax * ux + gOff.ay * uy + gOff.az * uz, aF = gOff.ax * fx + gOff.ay * fy + gOff.az * fz;
+        // the spring: x'' = -w^2 x - 2 z w x' - gain a; at 1 g the body is 6 cm off its place (gain = 0.06 w^2 / g, times the amount); in steps of at most 1/120 s
+        var w = 2 * Math.PI * f.hz, z = f.damping, gain = f.amount * 0.06 / 9.81 * w * w;
+        var n = Math.max(1, Math.ceil(dt / (1 / 120))), h = dt / n;
+        for (var i = 0; i < n; i++) {
+            gOff.vx += (-w * w * gOff.x - 2 * z * w * gOff.vx - gain * aL) * h; gOff.x += gOff.vx * h;
+            gOff.vy += (-w * w * gOff.y - 2 * z * w * gOff.vy - gain * aU) * h; gOff.y += gOff.vy * h;
+            gOff.vz += (-w * w * gOff.z - 2 * z * w * gOff.vz - gain * aF) * h; gOff.z += gOff.vz * h;
+        }
+        // (how far he can go: 10 cm to the side, 8 cm down and 4 up, 12 cm forward and back)
+        var clampV = function (key, vkey, lo, hi) { if (gOff[key] < lo) { gOff[key] = lo; if (gOff[vkey] < 0) gOff[vkey] = 0; } else if (gOff[key] > hi) { gOff[key] = hi; if (gOff[vkey] > 0) gOff[vkey] = 0; } };
+        clampV("x", "vx", -0.1, 0.1); clampV("y", "vy", -0.08, 0.04); clampV("z", "vz", -0.12, 0.12);
+    }
     // the rider is moved on the bike (the hands and the feet stay on the grips and the pegs: the arms and the legs follow)
     function applyPosture() {
         var p = self.posture;
         self.root.position.sub(postureOff);
         if (p) postureOff.set(((1 - (p.flat || 0)) * (p.lat + (p.assist || 0)) * (p.style && p.style.shift !== undefined ? p.style.shift : 0.7) + (p.flat || 0) * (-(p.inside || 0) * (p.style && p.style.pelvisSlide !== undefined ? p.style.pelvisSlide : 0.09) * Math.min(1, Math.abs(p.lean || 0) / (25 * DEG)))), p.drop * 0.7, p.long * 0.7 + (p.flat || 0) * ((p.style && p.style.forward) || 0) * Math.min(1, Math.abs(p.lean || 0) / (20 * DEG)));      // (flat track: the pelvis slides a little to the outside on the saddle, the back leans in, the rest of the rider is in his place) else postureOff.set(0, 0, 0);
+        if (p) postureOff.x += gOff.x, postureOff.y += gOff.y, postureOff.z += gOff.z;      // (the give in the g-forces)
         self.root.position.add(postureOff);
     }
     this.headSign = 1;      // (the sign of the roll of the bike in the roll of the bones)
@@ -235,6 +271,8 @@ OpenRacer.Driver = function (config, parent, steering) {
             // flat track: the pelvis tilts the other way from the bike, up to 35 degrees (`pelvisTilt`), so that it stays about level with the road; the back keeps the turn that it had in the world
             var tiltMax = st.pelvisTilt !== undefined ? st.pelvisTilt : self.pelvisTilt;
             hipRoll = (post.flat || 0) * Math.max(-tiltMax, Math.min(tiltMax, 0.7 * (post.lean || 0) / DEG));
+            // (the give in the g-forces turns the trunk too: pushed back it leans back, pushed to the side it leans that way; 1.2 degrees per cm)
+            pitch += 120 * gOff.z; roll -= 120 * gOff.x;
             var c = self.torsoPose.chest, h = self.torsoPose.head;
             self.torsoPose.chest = [c[0] + pitch, c[1], c[2] + roll - hipRoll];
             // (the head turned into the bend, about the vertical)
@@ -1020,8 +1058,9 @@ OpenRacer.Driver = function (config, parent, steering) {
         for (var i = 0; i < RIGID.length; i++) for (var j = i + 1; j < RIGID.length; j++) stick(RIGID[i], RIGID[j]);
         [["shL", "elL", "haL"], ["shR", "elR", "haR"], ["hiL", "knL", "ftL"], ["hiR", "knR", "ftR"]].forEach(function (c, k) {
             stick(c[0], c[1]); stick(c[1], c[2]);
-            var len = P[c[0]].p.distanceTo(P[c[1]].p) + P[c[1]].p.distanceTo(P[c[2]].p);
-            mins.push({ a: P[c[0]], b: P[c[2]], len: len * (k < 2 ? 0.3 : 0.45) });            // an arm or a leg folds no further than this
+            // an arm or a leg folds no further than this: the distance from root to end at the fold of the elbow or the knee (LIMITS)
+            var la = P[c[0]].p.distanceTo(P[c[1]].p), lb = P[c[1]].p.distanceTo(P[c[2]].p), fold = Math.min(175, (k < 2 ? LIMITS.elbow : LIMITS.knee) + MUSCLE.beyond) * Math.PI / 180;
+            mins.push({ a: P[c[0]], b: P[c[2]], len: Math.sqrt(Math.max(0, la * la + lb * lb + 2 * la * lb * Math.cos(fold))) });
         });
         // the parts of him that keep out of each other: every pair of particles that no stick or fold limit joins (a leg through the other leg, a hand through the chest), each with a
         // radius of at least 7 cm (the particles are the joints; the limbs between them are thicker than that)
@@ -1165,9 +1204,29 @@ OpenRacer.Driver = function (config, parent, steering) {
         }
         return hit;
     }
-    // ---- the limits of the joints (what a body can do): the elbows bend only backwards and the knees only forwards (the middle of a limb kept on its side of the line from
-    // its root to its end), the upper arm within 120 degrees of hanging down and out, the thigh within 100 degrees of down and a little forward. A limb that is moved into a
-    // limit is put at the limit, and most of its speed into it is taken out (no bounce off the limit)
+    // ---- the limits of the joints (what a body can do, in degrees): the shoulder and the hip swing in a cone that is not round, as far as the joint goes forwards, backwards,
+    // out and in from hanging straight down along the torso (an ellipse between those four); the hip folds less far forwards with the knee straight (the hamstrings); the elbows
+    // bend only forwards and the knees only backwards, from straight to their fold. A limb that is moved past a limit is put at the limit, and its speed into it is taken out
+    // (no bounce off the limit). Before a limit there is a soft zone where the muscles and the tendons stretch: a pull back that grows the further in, and a damping of the swing
+    // (the muscles, below), so that a limb is caught before it reaches the hard stop, not thrown against it.
+    var LIMITS = {
+        shoulder: { centre: { theta: 80, phi: 45 }, radius: 115 },   // (about forwards and out: hanging down is 80 off it, over the head 100, straight back 134)
+        hip: { fwd: 135, fwdStraight: 90, back: 20, out: 45, inn: 25 },
+        elbow: 145, knee: 135
+    };
+    // the neutral body posture (NASA, Skylab: the body with no muscle doing anything on purpose): upper arms a little forwards and out, elbows bent 50 degrees, hips bent some 50
+    // degrees and the thighs a little out, knees bent 50 degrees. The tone of the muscles pulls every limb there, weakly (he is limp: gravity and the road win)
+    var NBP = { shoulder: { theta: 40, phi: 35 }, hip: { theta: 50, phi: 12 }, elbow: 50, knee: 50 };
+    var MUSCLE = {
+        tone: 2.5,              // 1/s: the tone towards the neutral posture (about a fifth of what gravity does to a limb)
+        zone: 22,               // degrees before a limit where the muscles start to stretch
+        zoneStraight: 8,        // degrees before straight where an elbow or a knee is caught
+        limit: 32,              // 1/s: how hard the stretched muscle pulls back at the limit itself (some 10 g on the end of a limb)
+        damp: 4,                // 1/s: the damping of every joint (the muscles are never quite slack)
+        dampLimit: 45,          // 1/s: more damping in the soft zone (the stretched muscle takes the swing out)
+        beyond: 12              // degrees past a limit to the hard stop: the muscles catch a limb, the stop is only for a hit they cannot hold (a stop that works all the time
+                                // is a motor: it moves the particle without its speed, the sticks pull the rest after it, and the body was thrown 20 m up)
+    };
     var jUp = new V(), jSide = new V(), jFwd = new V(), jRest = new V(), jDir = new V(), jTmp = new V(), DEG = Math.PI / 180;
     // (the side of the line that counts is the one in the frame of the limb itself: the forward of the limb is the line from its root to its end crossed with the axis of the joint,
     // the side axis of the body. It was the forward of the torso, which is along the thigh of a rider that sits, and of a rider that lies on the road it is anything: the knees
@@ -1208,28 +1267,168 @@ OpenRacer.Driver = function (config, parent, steering) {
         var lat = (mid.p.x - jTmp.x) * jLat.x + (mid.p.y - jTmp.y) * jLat.y + (mid.p.z - jTmp.z) * jLat.z, latMax = Math.max(0.05, 0.7 * Math.abs(d));
         if (Math.abs(lat) > latMax) toLimit(mid, jLat, -(lat - Math.sign(lat) * latMax) * w);
     }
-    function cone(root, end, rest, maxDeg) {
-        jDir.subVectors(end.p, root.p);
-        var len = jDir.length(); if (len < 1e-6) return;
-        jDir.divideScalar(len);
-        var c = jDir.dot(rest), lim = maxDeg * DEG;
-        if (c >= Math.cos(lim)) return;
-        jTmp.crossVectors(jDir, rest); if (jTmp.lengthSq() < 1e-10) return;
-        jTmp.normalize();
-        jDir.applyAxisAngle(jTmp, Math.acos(Math.max(-1, c)) - lim);
-        jTmp.copy(root.p).addScaledVector(jDir, len).sub(end.p);
-        var move = jTmp.length(); if (move < 1e-9) return;
-        toLimit(end, jTmp.divideScalar(move), move);
-    }
-    function jointLimits(P) {
+    // the frame of the torso (jUp, jSide to his left, jFwd)
+    function torsoFrame(P) {
         jUp.subVectors(P.chest.p, P.hips.p).normalize();
         jSide.subVectors(P.shL.p, P.shR.p); jSide.addScaledVector(jUp, -jSide.dot(jUp)).normalize();
         jFwd.crossVectors(jSide, jUp);
+    }
+    // the swing of a limb from its root (the shoulder, the hip) to its end (the elbow, the knee) in the frame of the torso: theta, its angle from the middle of its range
+    // (mZ: straight down for the hip, the middle of a round cone for the shoulder); mH, the way round that it points (square to mZ); and max, how far it may go that way.
+    // (out: the sign of jSide that is out for this limb.) The hip's range is not round: as far as it goes forwards, backwards, out and in from straight down, an ellipse between.
+    // The shoulder's is a round cone about forwards and out: a range that is not round about straight down jumped from forwards (170) to backwards (55) as the arm went over the
+    // head, and the stop threw the elbow from one to the other
+    var mD = new V(), mH = new V(), mZ = new V(), mT = new V(), mA = new V(), mB = new V(), mC = new V(), mW = new V(), mX = new V();
+    var sw = { len: 0, theta: 0, max: 0 };
+    function swingOf(root, end, out, lim, fwdMax) {
+        mD.subVectors(end.p, root.p);
+        var len = mD.length(); sw.len = len; if (len < 1e-6) return false;
+        if (lim.radius) {
+            var th = lim.centre.theta * DEG, ph = lim.centre.phi * DEG;
+            mZ.copy(jUp).multiplyScalar(-Math.cos(th)).addScaledVector(jFwd, Math.sin(th) * Math.cos(ph)).addScaledVector(jSide, out * Math.sin(th) * Math.sin(ph));
+        } else mZ.copy(jUp).negate();
+        var z = mD.dot(mZ) / len;
+        mH.copy(mD).divideScalar(len).addScaledVector(mZ, -z);
+        var hl = mH.length();
+        sw.theta = Math.atan2(hl, z);
+        if (hl > 1e-6) mH.divideScalar(hl); else mH.copy(jFwd);
+        if (lim.radius) { sw.max = lim.radius * DEG; return true; }
+        var cphi = mH.dot(jFwd), sphi = out * mH.dot(jSide);
+        var a = (cphi >= 0 ? fwdMax : lim.back) * DEG, b = (sphi >= 0 ? lim.out : lim.inn) * DEG;
+        sw.max = 1 / Math.sqrt(cphi * cphi / (a * a) + sphi * sphi / (b * b));
+        return true;
+    }
+    // the bend of an elbow or a knee: beta, from straight (0) to folded, about the axis of the joint (the side axis of the body, square to the upper limb; sign: which way it
+    // folds); below 0 it is bent the wrong way. mA the upper limb, mB the lower (unit), mC the axis; w fades it out where the axis is not defined (the upper limb along the side axis)
+    var bd = { up: 0, lo: 0, beta: 0, w: 0 };
+    function bendOf(root, mid, end, sign) {
+        mA.subVectors(mid.p, root.p); mB.subVectors(end.p, mid.p);
+        bd.up = mA.length(); bd.lo = mB.length(); if (bd.up < 1e-6 || bd.lo < 1e-6) return false;
+        mA.divideScalar(bd.up); mB.divideScalar(bd.lo);
+        mC.copy(jSide).multiplyScalar(sign); mC.addScaledVector(mA, -mC.dot(mA));
+        var l = mC.length(); bd.w = Math.max(0, Math.min(1, (l - 0.25) / 0.25)); if (bd.w <= 0) return false;
+        mC.divideScalar(l);
+        mW.crossVectors(mA, mB);
+        bd.beta = Math.atan2(mW.dot(mC), mA.dot(mB));
+        return true;
+    }
+    // how far the hip goes forwards: less with the knee straight (the hamstrings), the whole way with it bent 90 degrees
+    function hipFwd(hi, kn, ft) {
+        var L = LIMITS.hip;
+        if (!bendOf(hi, kn, ft, 1)) return L.fwd;
+        var k = Math.max(0, Math.min(1, bd.beta / (90 * DEG)));
+        return L.fwdStraight + (L.fwd - L.fwdStraight) * k;
+    }
+    // the hard stop of a swing: the end put back on the edge of its cone (the same way round)
+    function swingStop(root, end, out, lim, fwdMax) {
+        if (!swingOf(root, end, out, lim, fwdMax)) return;
+        var stop = Math.min(Math.PI, sw.max + MUSCLE.beyond * DEG);
+        if (sw.theta <= stop) return;
+        mT.copy(mZ).multiplyScalar(Math.cos(stop)).addScaledVector(mH, Math.sin(stop)).multiplyScalar(sw.len).add(root.p).sub(end.p);
+        var move = mT.length(); if (move < 1e-9) return;
+        toLimit(end, mT.divideScalar(move), move);
+    }
+    function jointLimits(P) {
+        torsoFrame(P);
         hinge(P.shL, P.elL, P.haL, jSide, -1); hinge(P.shR, P.elR, P.haR, jSide, -1);
         hinge(P.hiL, P.knL, P.ftL, jSide, 1); hinge(P.hiR, P.knR, P.ftR, jSide, 1);
-        jRest.copy(jUp).multiplyScalar(-0.8).addScaledVector(jSide, 0.6).normalize(); cone(P.shL, P.elL, jRest, 120);
-        jRest.copy(jUp).multiplyScalar(-0.8).addScaledVector(jSide, -0.6).normalize(); cone(P.shR, P.elR, jRest, 120);
-        jRest.copy(jUp).multiplyScalar(-1).addScaledVector(jFwd, 0.35).normalize(); cone(P.hiL, P.knL, jRest, 100); cone(P.hiR, P.knR, jRest, 100);
+        swingStop(P.shL, P.elL, 1, LIMITS.shoulder, 0); swingStop(P.shR, P.elR, -1, LIMITS.shoulder, 0);
+        swingStop(P.hiL, P.knL, 1, LIMITS.hip, hipFwd(P.hiL, P.knL, P.ftL)); swingStop(P.hiR, P.knR, -1, LIMITS.hip, hipFwd(P.hiR, P.knR, P.ftR));
+    }
+    // ---- the muscles: once a substep, before the constraints. A pull on the end of a limb, and the same the other way on the part it hangs from (the shoulder, the hip, the
+    // elbow, the knee: the muscles push nothing as a whole, he cannot move himself), from three things: the tone towards the neutral posture, the stretch of the muscles in the
+    // soft zone before a limit (it grows with the square of how far in: soft at first, then firm, like a tendon), and a damping of the swing of the joint relative to the part it
+    // hangs from (the turn of the torso, or of the upper limb, is not damped: a tumble in the air goes on)
+    var tU = new V(), tUq = new V(), tS = new V(), tSq = new V(), tF = new V(), tFq = new V(), tX = new V(), tW = new V(), uW = new V();
+    // the turn of the torso in this substep (radians, as a vector): half the sum of e x de over its three axes
+    function torsoSpin(P, out) {
+        tU.subVectors(P.chest.p, P.hips.p).normalize(); tUq.subVectors(P.chest.q, P.hips.q).normalize();
+        tS.subVectors(P.shL.p, P.shR.p).normalize(); tSq.subVectors(P.shL.q, P.shR.q).normalize();
+        tF.crossVectors(tS, tU); tFq.crossVectors(tSq, tUq);
+        out.set(0, 0, 0);
+        tX.subVectors(tU, tUq); out.add(tX.crossVectors(tU, tX));
+        tX.subVectors(tS, tSq); out.add(tX.crossVectors(tS, tX));
+        tX.subVectors(tF, tFq); out.add(tX.crossVectors(tF, tX));
+        return out.multiplyScalar(0.5);
+    }
+    // a pull (an acceleration, m/s2) on the end e and the other way on r, and the turn that this gives the limb the other way on the part it hangs from (a muscle turns the
+    // limb and the torso, or the upper and the lower limb, against each other: without that turn back it was a motor, and a body held by the road at one end was pushed along
+    // or thrown up by it): a pair of pulls on pa and pb (square to the line from pb to pa), and what is left of the turn (about that line) on pc and pd. Then the damping of the
+    // speed of e relative to r (less what the turn spin of the parent gives it at that arm) square to the limb, by c (1/s)
+    var cT = new V(), cG = new V(), cA = new V();
+    function muscle(e, r, ax, ay, az, spin, c, h, pa, pb, pc, pd) {
+        var h2 = h * h;
+        e.p.x += ax * h2; e.p.y += ay * h2; e.p.z += az * h2;
+        r.p.x -= ax * h2; r.p.y -= ay * h2; r.p.z -= az * h2;
+        if (pa) {
+            // the turn back: tau = -(arm x pull)
+            mX.subVectors(e.p, r.p); cT.set(ax, ay, az); cT.crossVectors(mX, cT).negate();
+            cA.subVectors(pa.p, pb.p); var l2 = cA.lengthSq();
+            if (l2 > 1e-8) {
+                var along = cT.dot(cA) / l2;
+                cG.crossVectors(cT, cA).multiplyScalar(h2 / l2); pa.p.add(cG); pb.p.sub(cG);
+                if (pc) {
+                    cT.copy(cA).multiplyScalar(along);                                     // (the part about the line from pb to pa)
+                    cA.subVectors(pc.p, pd.p); l2 = cA.lengthSq();
+                    if (l2 > 1e-8) { cG.crossVectors(cT, cA).multiplyScalar(h2 / l2); pc.p.add(cG); pd.p.sub(cG); }
+                }
+            }
+        }
+        mX.subVectors(e.p, r.p); var len = mX.length(); if (len < 1e-6) return;
+        mX.divideScalar(len);
+        tW.crossVectors(spin, mX).multiplyScalar(len);                                   // (where the turn of the parent takes the end in this step)
+        var vx = (e.p.x - e.q.x) - (r.p.x - r.q.x) - tW.x, vy = (e.p.y - e.q.y) - (r.p.y - r.q.y) - tW.y, vz = (e.p.z - e.q.z) - (r.p.z - r.q.z) - tW.z;
+        var along2 = vx * mX.x + vy * mX.y + vz * mX.z;
+        vx -= along2 * mX.x; vy -= along2 * mX.y; vz -= along2 * mX.z;
+        var k = 0.5 * (1 - Math.exp(-c * h));                                            // (half on each: the two have the same mass)
+        e.q.x += vx * k; e.q.y += vy * k; e.q.z += vz * k;
+        r.q.x -= vx * k; r.q.y -= vy * k; r.q.z -= vz * k;
+    }
+    var spinT = new V();
+    function swingMuscle(P, root, end, out, lim, fwdMax, nbp, h) {
+        if (!swingOf(root, end, out, lim, fwdMax)) return;
+        var M = MUSCLE, ax = 0, ay = 0, az = 0, zone = M.zone * DEG, c = M.damp;
+        // the tone: towards the direction of the neutral posture, square to the limb
+        var th = nbp.theta * DEG, ph = nbp.phi * DEG;
+        mT.copy(jUp).multiplyScalar(-Math.cos(th)).addScaledVector(jFwd, Math.sin(th) * Math.cos(ph)).addScaledVector(jSide, out * Math.sin(th) * Math.sin(ph)).multiplyScalar(sw.len).sub(mD);
+        mX.copy(mD).divideScalar(sw.len); mT.addScaledVector(mX, -mT.dot(mX));
+        ax += M.tone * M.tone * mT.x; ay += M.tone * M.tone * mT.y; az += M.tone * M.tone * mT.z;
+        // the stretch before the limit: back towards the middle of the range (the way theta gets smaller)
+        var x = (sw.theta - (sw.max - zone)) / zone;
+        if (x > 0) {
+            var xs = Math.min(x, 1 + M.beyond / M.zone), a = M.limit * M.limit * sw.len * zone * xs * xs, st = Math.sin(sw.theta), ct = Math.cos(sw.theta);
+            ax += a * (st * mZ.x - ct * mH.x); ay += a * (st * mZ.y - ct * mH.y); az += a * (st * mZ.z - ct * mH.z);
+            c += M.dampLimit * Math.min(1, x);
+        }
+        muscle(end, root, ax, ay, az, spinT, c, h, P.chest, P.hips, P.shL, P.shR);
+    }
+    function bendMuscle(root, mid, end, sign, fold, nbp, h) {
+        if (!bendOf(root, mid, end, sign)) return;
+        var M = MUSCLE, zone = M.zone * DEG, zs = M.zoneStraight * DEG, c = M.damp, w = bd.w;
+        // the turn of the upper limb in this step (for what the damping leaves alone)
+        mX.subVectors(mid.p, root.p); tX.set(mid.p.x - mid.q.x - root.p.x + root.q.x, mid.p.y - mid.q.y - root.p.y + root.q.y, mid.p.z - mid.q.z - root.p.z + root.q.z);
+        uW.crossVectors(mX, tX).divideScalar(Math.max(1e-6, mX.lengthSq()));
+        // the way the end goes when the joint bends further: the axis x the lower limb
+        mW.crossVectors(mC, mB);
+        var a = M.tone * M.tone * bd.lo * (nbp * DEG - bd.beta);
+        var x = (bd.beta - (fold * DEG - zone)) / zone;
+        if (x > 0) { var xs = Math.min(x, 1 + M.beyond / M.zone); a -= M.limit * M.limit * bd.lo * zone * xs * xs; c += M.dampLimit * Math.min(1, x); }
+        var y = (zs - bd.beta) / zs;
+        if (y > 0) { var ys = Math.min(y, 2); a += M.limit * M.limit * bd.lo * zs * ys * ys; c += M.dampLimit * Math.min(1, y); }
+        a *= w;
+        muscle(end, mid, a * mW.x, a * mW.y, a * mW.z, uW, M.damp + (c - M.damp) * w, h, mid, root);
+    }
+    function muscles(P, h) {
+        torsoFrame(P);
+        torsoSpin(P, spinT);
+        var L = LIMITS;
+        swingMuscle(P, P.shL, P.elL, 1, L.shoulder, 0, NBP.shoulder, h); swingMuscle(P, P.shR, P.elR, -1, L.shoulder, 0, NBP.shoulder, h);
+        var fl = hipFwd(P.hiL, P.knL, P.ftL), fr = hipFwd(P.hiR, P.knR, P.ftR);
+        torsoFrame(P);
+        swingMuscle(P, P.hiL, P.knL, 1, L.hip, fl, NBP.hip, h); swingMuscle(P, P.hiR, P.knR, -1, L.hip, fr, NBP.hip, h);
+        torsoFrame(P);
+        bendMuscle(P.shL, P.elL, P.haL, -1, L.elbow, NBP.elbow, h); bendMuscle(P.shR, P.elR, P.haR, -1, L.elbow, NBP.elbow, h);
+        bendMuscle(P.hiL, P.knL, P.ftL, 1, L.knee, NBP.knee, h); bendMuscle(P.hiR, P.knR, P.ftR, 1, L.knee, NBP.knee, h);
     }
     function ragdollStep(dt) {
         var r = ragdoll, P = r.pts, key;
@@ -1276,6 +1475,7 @@ OpenRacer.Driver = function (config, parent, steering) {
             pt.floor = fl;
         }
         var most = 0;
+        for (key in P) (P[key].f || (P[key].f = new V())).copy(P[key].p);          // (where it was before this frame: the sleep test goes by how far it really went)
         if (!r.started) { r.started = true; for (key in P) P[key].q.copy(P[key].p).addScaledVector(P[key].v, -h); }      // (the speed in the length of the first substep)
         for (var s = 0; s < n; s++) {
             for (key in P) {
@@ -1283,6 +1483,7 @@ OpenRacer.Driver = function (config, parent, steering) {
                 q.q.copy(q.p);
                 q.p.x += vx * 0.998; q.p.y += vy * 0.998 - 9.81 * h * h; q.p.z += vz * 0.998;
             }
+            muscles(P, h);
             // the spheres of the bike go on with their speed within the frame (they are found once a frame; a bike at 25 m/s moves 10 cm a substep, and a particle held to a sphere that
             // stood still for the frame was dragged back every substep: that was a ragdoll that shook at speed)
             if (s > 0) for (var si2 = 0; si2 < r.sphereCount; si2++) { var o2 = 8 * si2; r.spheres[o2] += r.spheres[o2 + 4] * h; r.spheres[o2 + 1] += r.spheres[o2 + 5] * h; r.spheres[o2 + 2] += r.spheres[o2 + 6] * h; }
@@ -1332,9 +1533,10 @@ OpenRacer.Driver = function (config, parent, steering) {
             }
         }
         r.centre.set(0, 0, 0);
-        for (key in P) { most = Math.max(most, P[key].p.distanceToSquared(P[key].q)); r.centre.add(P[key].p); }
+        for (key in P) { most = Math.max(most, P[key].p.distanceToSquared(P[key].f)); r.centre.add(P[key].p); }
         r.centre.divideScalar(ORDER.length);
-        if (Math.sqrt(most) / h < 0.08 && !r.sphereCount) r.asleep += dt; else r.asleep = 0;
+        // (by the move over the frame, not the speed of the last substep: a limb that a muscle holds against the road has a speed in Verlet that the road takes away every substep)
+        if (Math.sqrt(most) / (n * h) < 0.08 && !r.sphereCount) r.asleep += dt; else r.asleep = 0;
         ragdollPose();
     }
     var rgPole = new V(), rgLimb = new V();
@@ -1379,6 +1581,7 @@ OpenRacer.Driver = function (config, parent, steering) {
         if (ragdoll) { ragdollStep(Math.min(0.05, dt || 0.016)); return; }
         trackJoints(dt || 0.016);                                                   // (the pose of the last frame, before this one moves it)
         self.posture = (state && state.posture) || null;
+        gSpring(dt || 0.016, self.posture && state ? state.vehicle : null);
         applyPosture();
         self.root.updateMatrixWorld(true);
         if (self.steering) {

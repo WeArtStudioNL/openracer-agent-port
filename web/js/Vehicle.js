@@ -1623,6 +1623,7 @@ OpenRacer.Vehicle = function (parameters, input) {
         var fx = Rm[0] * rc[0] + Rm[1] * rc[1] + Rm[2] * rc[2], fy = Rm[3] * rc[0] + Rm[4] * rc[1] + Rm[5] * rc[2], fz = Rm[6] * rc[0] + Rm[7] * rc[1] + Rm[8] * rc[2];
         var tx = Rm[0] * rc[3] + Rm[1] * rc[4] + Rm[2] * rc[5], ty = Rm[3] * rc[3] + Rm[4] * rc[4] + Rm[5] * rc[5], tz = Rm[6] * rc[3] + Rm[7] * rc[4] + Rm[8] * rc[5];
         if(sb.pinned) return;                         // the car is clamped (the car editor pushes a plate on it): the anchors do not move the car
+        stepForce += Math.sqrt(fx * fx + fy * fy + fz * fz);
         force.x += fx; force.y += fy; force.z += fz;
         torque.x += tx; torque.y += ty; torque.z += tz;
     }
@@ -1642,6 +1643,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             var cz = self.vz + (self.wx * ry - self.wy * rx);
             var vn = cx * c.nx + cy * c.ny + cz * c.nz;
             var fn = Math.max(0, kc * c.depth - cc * vn);
+            stepForce += fn;
             var tx = cx - vn * c.nx, ty = cy - vn * c.ny, tz = cz - vn * c.nz;
             var tl = Math.sqrt(tx * tx + ty * ty + tz * tz);
             var ft = Math.min(self.bodyFriction * fn, tl * 0.5 * self.mass / 4);    // the underside of a car slides on the road with about 0.3
@@ -1652,6 +1654,11 @@ OpenRacer.Vehicle = function (parameters, input) {
         }
     }
 
+    // How hard the road and the things around push on the body of the car in a step (N): the soft contacts of the body, the shell's nodes on the road and the walls (the reaction of the
+    // shell), and the impulses of the walls over the step. contactForce: of the last step; a motorcycle's crash rules can ask for more than a force before a hit counts (Motorcycle.js,
+    // the panel of the 0 key). The tyres on the road are not in it.
+    this.contactForce = 0;
+    var stepForce = 0, stepDt = 0.003;
     // walls: the car is pushed out along the normal and gets an impulse, like the walls of the standard physics but in 3D
     var impactSpeed3 = { value: 0 };
     function resolveCollisions3D() {
@@ -1675,6 +1682,7 @@ OpenRacer.Vehicle = function (parameters, input) {
             candX = 1e9;     // the car moved: look again for the triangles around it
             var jn = impulseAt(rx, ry, rz, c.nx, c.ny, c.nz, self.wallRestitution, impactSpeed3);
             if(jn === 0) continue;                                    // already moving away
+            stepForce += Math.abs(jn) / stepDt;
             wheelHit(c.sphere, jn);
             // scraping along the wall: an impulse along the surface, at most a share of the impulse of the hit
             var cx = self.vx + (self.wy * rz - self.wz * ry);
@@ -1739,6 +1747,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     var lastBodyAccDown = 0;
 
     function step(dt) {
+        self.contactForce = stepForce; stepForce = 0; stepDt = dt;      // (of the step before: the controller reads it in this one)
         var inp = self.input;
         var engine = self.engine;
         var wheels = self.wheels;

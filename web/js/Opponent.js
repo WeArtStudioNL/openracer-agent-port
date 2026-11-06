@@ -722,7 +722,7 @@ OpenRacer.Opponent = function (config, line, options) {
             if (label !== undefined) { var m = /(\d+)$/.exec(label); neutralNow = label === "N"; gearNow = m ? parseInt(m[1], 10) - 1 : gearNow; }
             var controller = v.controller;
             this.driver.update(delta || 0.016, this.throttle, this.brakePedal, { gear: gearNow, neutral: neutralNow, push: false, footDown: controller ? controller.footDown : 0, footDownL: controller ? controller.footDownL || 0 : 0,
-                speed: v.u, groundY: -(this.config.chassis.tire_diameter || 0.6) / 2, roadY: roadY, posture: controller ? controller.posture : null });
+                speed: v.u, groundY: -(this.config.chassis.tire_diameter || 0.6) / 2, roadY: roadY, posture: controller ? controller.posture : null, vehicle: v });
         }
     };
 };

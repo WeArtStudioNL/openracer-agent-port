@@ -296,9 +296,80 @@
         grabPanel.addEventListener("pointerup", giveBack);
         grabPanel.addEventListener("change", giveBack);
         grabPanel.addEventListener("click", giveBack);
+        crashSection(grabPanel);
         if (OpenRacer.Movable) OpenRacer.Movable.make(grabPanel, { key: "node-grabber", handle: grabPanel.firstElementChild });
         document.body.appendChild(grabPanel);
     }
+    // ---- a motorcycle: the rules of a crash (Motorcycle.crashRules: each on or off with its limits, kept in OpenRacer.CrashRules and in the browser) and how the rider gives with the
+    // g-forces (Driver.js, OpenRacer.RiderFeel). A line under them shows what the bike gets now: the push of the road and of the things around on its body (kN) and the g, the most of
+    // the last second, so that a limit can be set from a knock that should or should not put the rider down.
+    var CRASH_ROWS = [
+        ["lean", "Lean past", "deg", 40, 120, 1],
+        ["lowside", "Lowside: a slide past", "slip", 5, 80, 1, "deg"], ["lowside", "Lowside: leaning more than", "lean", 0, 70, 1, "deg"], ["lowside", "Lowside: for", "time", 0.2, 8, 0.1, "s"],
+        ["spin", "Spin faster than", "rate", 1, 20, 0.5, "rad/s"],
+        ["over", "On its back", null],
+        ["blow", "A blow of more than", "g", 2, 40, 0.5, "g"],
+        ["hit", "Speed lost in 0.1 s more than", "loss", 2, 40, 0.5, "m/s"],
+        ["wall", "The body hits something faster than", "kmh", 5, 150, 1, "km/h"],
+        ["force", "Only when the ground or a thing pushes on the bike with more than", "kN", 1, 200, 1, "kN"]
+    ];
+    var FEEL_ROWS = [["amount", "Rider gives with the g-forces", 0, 3, 0.05, ""], ["hz", "Comes back at", 0.3, 4, 0.05, "Hz"], ["damping", "Damping", 0.05, 1.5, 0.05, ""]];
+    function saveRules() { try { localStorage.setItem("openracer.crashRules", JSON.stringify(OpenRacer.CrashRules || {})); } catch (e) { /* no storage */ } }
+    function saveFeel() { try { localStorage.setItem("openracer.riderFeel", JSON.stringify(OpenRacer.RiderFeel || {})); } catch (e) { /* no storage */ } }
+    try { var keptFeel = JSON.parse(localStorage.getItem("openracer.riderFeel")); if (keptFeel && typeof keptFeel === "object") OpenRacer.RiderFeel = keptFeel; } catch (e) { /* no storage */ }
+    function crashSection(panel) {
+        if (!OpenRacer.Motorcycle || !OpenRacer.Motorcycle.crashRules) return;
+        var box = document.createElement("div");
+        box.innerHTML = "<div style=\"font-weight: bold; margin: 12px 0 4px;\">Motorcycle crash</div><div style=\"color: #9fb0c4; margin-bottom: 4px;\">Tick a rule to use it. The console names the rule of every crash.</div>";
+        var rows = document.createElement("div"); rows.style.cssText = "max-height: 46vh; overflow-y: auto; padding-right: 4px;"; box.appendChild(rows);
+        var head = {};
+        CRASH_ROWS.forEach(function (r) {
+            var key = r[0], field = r[2];
+            var rules = OpenRacer.Motorcycle.crashRules(), now = rules[key], row = document.createElement("div"); row.style.marginTop = "6px";
+            if (!head[key]) {
+                head[key] = true;
+                var label = document.createElement("label"); label.style.cssText = "display: flex; gap: 6px; align-items: center; cursor: pointer;";
+                var box2 = document.createElement("input"); box2.type = "checkbox"; box2.checked = !!now.on;
+                box2.onchange = function () { var set = OpenRacer.CrashRules = OpenRacer.CrashRules || {}; set[key] = set[key] || {}; set[key].on = box2.checked; saveRules(); };
+                label.appendChild(box2); label.appendChild(document.createTextNode(r[1])); row.appendChild(label);
+            } else { var t = document.createElement("div"); t.style.color = "#9fb0c4"; t.textContent = r[1]; row.appendChild(t); }
+            if (field) {
+                var value = now[field] !== undefined ? now[field] : 78, line = document.createElement("div"); line.style.cssText = "display: flex; gap: 8px; align-items: center;";
+                var slider = document.createElement("input"); slider.type = "range"; slider.min = r[3]; slider.max = r[4]; slider.step = r[5]; slider.value = value; slider.style.flex = "1";
+                var out = document.createElement("b"); out.style.minWidth = "64px"; out.style.textAlign = "right";
+                var unit = r[6] || field; out.textContent = value + " " + unit;
+                slider.oninput = function () { var x = parseFloat(slider.value), set = OpenRacer.CrashRules = OpenRacer.CrashRules || {}; set[key] = set[key] || {}; set[key][field] = x; out.textContent = x + " " + unit; saveRules(); };
+                line.appendChild(slider); line.appendChild(out); row.appendChild(line);
+            }
+            rows.appendChild(row);
+        });
+        var feelHead = document.createElement("div"); feelHead.style.cssText = "font-weight: bold; margin: 12px 0 4px;"; feelHead.textContent = "Rider"; rows.appendChild(feelHead);
+        FEEL_ROWS.forEach(function (r) {
+            var f = OpenRacer.RiderFeel || {}, dflt = { amount: 1, hz: 1.4, damping: 0.55 }[r[0]], value = f[r[0]] !== undefined ? f[r[0]] : dflt;
+            var row = document.createElement("div"); row.style.marginTop = "6px";
+            var t = document.createElement("div"); t.textContent = r[1]; row.appendChild(t);
+            var line = document.createElement("div"); line.style.cssText = "display: flex; gap: 8px; align-items: center;";
+            var slider = document.createElement("input"); slider.type = "range"; slider.min = r[2]; slider.max = r[3]; slider.step = r[4]; slider.value = value; slider.style.flex = "1";
+            var out = document.createElement("b"); out.style.minWidth = "64px"; out.style.textAlign = "right"; out.textContent = value + (r[5] ? " " + r[5] : "");
+            slider.oninput = function () { var x = parseFloat(slider.value); OpenRacer.RiderFeel = OpenRacer.RiderFeel || {}; OpenRacer.RiderFeel[r[0]] = x; out.textContent = x + (r[5] ? " " + r[5] : ""); saveFeel(); };
+            line.appendChild(slider); line.appendChild(out); row.appendChild(line); rows.appendChild(row);
+        });
+        var reset = document.createElement("button"); reset.type = "button"; reset.textContent = "Back to the standard rules";
+        reset.style.cssText = "width: 100%; margin-top: 8px; padding: 5px 4px; border-radius: 6px; cursor: pointer; font: 12px Arial, sans-serif; color: #dfe6ef; background: #232c38; border: 1px solid #3a4656;";
+        reset.onclick = function () { OpenRacer.CrashRules = {}; OpenRacer.RiderFeel = {}; saveRules(); saveFeel(); box.remove(); crashSection(panel); };
+        rows.appendChild(reset);
+        var meter = document.createElement("div"); meter.style.cssText = "color: #f0b83a; margin-top: 8px; font-family: monospace;"; box.appendChild(meter);
+        var peakF = [], timer = setInterval(function () {
+            if (!box.isConnected) { clearInterval(timer); return; }
+            var c = typeof car !== "undefined" && car ? car : null, ctl = c && c.vehicle && c.vehicle.controller;
+            if (!ctl || ctl.dbgForce === undefined) { meter.textContent = ""; return; }
+            peakF.push({ f: ctl.dbgForce || 0, g: (ctl.dbgAccel || 0) / 9.81 }); if (peakF.length > 10) peakF.shift();
+            var f = 0, g = 0; peakF.forEach(function (p) { f = Math.max(f, p.f); g = Math.max(g, p.g); });
+            meter.textContent = "push " + (f / 1000).toFixed(1) + " kN  ·  " + g.toFixed(1) + " g  (the most of 1 s)";
+        }, 100);
+        panel.appendChild(box);
+    }
+
     // ---- the tools for the parts in the same panel, switched on and off (one at a time): Open hinges, a right click on a hinge opens it with a small torque (Parts.toggleHinge)
     // and another one closes it where it was made; Break parts, a right click on a part breaks it loose (Parts.breakLoose)
     var partTool = null, toolRay = new THREE.Raycaster(), toolPointer = new THREE.Vector2();
