@@ -926,8 +926,11 @@ OpenRacer.Driver = function (config, parent, steering) {
         var roadUnder = function (key, wx, wy, wz) {
             var r = state && state.roadAt ? state.roadAt(wx, wz, wy) : undefined;
             if (r === undefined && state && typeof state.roadY === "number") r = state.roadY;
+            // (no road found, high in the air: the road is not known, and nothing is held. The height of the take-off was held before, and once the bike had fallen below it the foot
+            // was lifted to it, so the leg stood straight up until the ray found the ground again)
+            if (r === undefined || r === null || !isFinite(r)) { delete roadHold[key]; return null; }
             var h = roadHold[key];
-            if (r !== undefined) h = h === undefined || Math.abs(r - h) > 0.6 ? r : h + (r - h) * 0.35;
+            h = h === undefined || Math.abs(r - h) > 0.6 ? r : h + (r - h) * 0.35;
             roadHold[key] = h;
             return h === undefined ? null : h;
         };

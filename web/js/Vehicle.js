@@ -1236,6 +1236,25 @@ OpenRacer.Vehicle = function (parameters, input) {
     }
     var wallCandidates = [];
 
+    // A sphere (or a node of the shell) whose centre went through a surface that the car rides on, in one step of a hard landing: the push of the contact is from the nearest
+    // point of the triangle to the centre, which is then down, and it held the body under the road (a motorcycle that landed from 11 m sat on its bump stops, its tyres flat,
+    // and slid to a stop at full throttle). When the face lies flat (its normal more up than 0.5), the centre is under it and the middle of the body is above it, the push is up,
+    // out along the face, by the depth of the centre under it plus the radius. Returns that depth (flipN the normal), or 0 when the sphere is on the right side.
+    // (nearest: the closest point of t to the centre, as ground.closest left it. A ceiling touched from below, or a ramp whose plane runs under the body, is not this: there the
+    // middle of the body is on the same side of the face as the centre)
+    var flipN = { x: 0, y: 0, z: 0 };
+    function throughFloor(t, cx, cy, cz, r) {
+        self.ground.normalOf(t, flipN);
+        var s = flipN.y < 0 ? -1 : 1;
+        if(flipN.y * s < 0.5) return 0;
+        flipN.x *= s; flipN.y *= s; flipN.z *= s;
+        var under = (cx - nearest.x) * flipN.x + (cy - nearest.y) * flipN.y + (cz - nearest.z) * flipN.z;
+        if(under >= 0) return 0;
+        var body = (self.px - nearest.x) * flipN.x + (self.py - nearest.y) * flipN.y + (self.pz - nearest.z) * flipN.z;
+        if(body <= 0) return 0;
+        return r - under;
+    }
+
     function testSphere(i, cx, cy, cz, r, tyreWheel, wantSoft, list) {
         var ground = self.ground, yUnder = -self.cgHeight + self.groundClearance;
         var ux = self.px + carUp.x * yUnder, uy = self.py + carUp.y * yUnder, uz = self.pz + carUp.z * yUnder;
@@ -1250,7 +1269,12 @@ OpenRacer.Vehicle = function (parameters, input) {
             else { ground.normalOf(t, triNormal); nx = triNormal.x; ny = triNormal.y; nz = triNormal.z; dist = 0; }
             var depth = r - dist;
             if(depth < 1e-4) continue;
-            if(nearest.region !== 0) {
+            var through = throughFloor(t, cx, cy, cz, r);
+            if(through > 0) {
+                // (through the face: pushed up out of it; at an edge the triangle beside it has the centre over its face and does the push)
+                if(nearest.region !== 0) continue;
+                nx = flipN.x; ny = flipN.y; nz = flipN.z; depth = through;
+            } else if(nearest.region !== 0) {
                 // a contact with an edge or a corner of a triangle: when its direction is not that of the face, it is the seam between two
                 // triangles of a surface (the neighbour has the contact), and it would push the car sideways along the surface
                 ground.normalOf(t, triNormal);
@@ -1569,6 +1593,8 @@ OpenRacer.Vehicle = function (parameters, input) {
                 else { ground.normalOf(t, triNormal); nx = triNormal.x; ny = triNormal.y; nz = triNormal.z; dist = 0; }
                 var depth = r - dist;
                 if(depth < 1e-4) continue;
+                // a node that went through the road (a hard landing) is not in a wall: the road pushes it up, in the contacts of the body (testSphere, throughFloor)
+                if(throughFloor(t, cx, cy, cz, r) > 0) continue;
                 if(nearest.region !== 0) {
                     ground.normalOf(t, triNormal);
                     var along = nx * triNormal.x + ny * triNormal.y + nz * triNormal.z;
