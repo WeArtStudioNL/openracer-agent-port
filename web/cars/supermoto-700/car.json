@@ -64,7 +64,10 @@
     "roll_camber": 0,
     "suspension_length": 0.32,
     "spring_progression": 0,
-    "damping_rebound": 1.7
+    "damping_rebound": 1.7,
+    "front_axle_offset": 0,
+    "rear_axle_offset": 0,
+    "unsprung": false
   },
   "drivetrain": {
     "drive": "rwd",
@@ -89,7 +92,12 @@
     "clutch": 3,
     "diff_lock": 0,
     "clutch_start_rpm": 2800,
-    "clutch_full_rpm": 4200
+    "clutch_full_rpm": 4200,
+    "gearbox": "amt",
+    "cvt_rpm": 7700,
+    "tc_stall_rpm": 3150,
+    "tc_ratio": 1.9,
+    "tc_lockup": true
   },
   "engine": {
     "idle_rpm": 2000,
@@ -184,8 +192,8 @@
     "launch_rpm": 6500
   },
   "brakes": {
-    "front": 1100,
-    "rear": 300
+    "front": 680,
+    "rear": 2720
   },
   "cameras": {
     "follow": {
@@ -205,16 +213,19 @@
         0.98,
         0.05
       ],
-      "fov": 80
+      "fov": 80,
+      "hide_driver": false
     }
   },
   "steering_wheel": {
-    "degrees": 450
+    "degrees": 450,
+    "stop": "rods"
   },
   "sound": {
     "engine_sim": {
       "layout": "single",
       "impulse_response": "mild_exhaust",
+      "exhaust_type": "custom",
       "convolution": 1,
       "bore": 105,
       "stroke": 80,
@@ -273,14 +284,23 @@
   },
   "type": "motorcycle",
   "motorcycle": {
-    "max_lean_deg": 50,
-    "fast_lean_deg": 30,
-    "rake_deg": 26.5,
+    "max_lean_deg": 75,
+    "fast_lean_deg": 60,
+    "rake_deg": 40,
     "rider_mass": 80,
-    "hang_off": 0.3,
-    "max_lateral_g": 0.9,
-    "balance": 1,
-    "fork_dive": 1
+    "hang_off": 0.4,
+    "max_lateral_g": 1,
+    "balance": 2,
+    "fork_dive": 1,
+    "push": true,
+    "push_foot_kmh": 125,
+    "push_upright": 0.25,
+    "push_forward": 0.11,
+    "push_chest_pitch": 5,
+    "push_pelvis_tilt": 45,
+    "push_pelvis_slide": 0.09,
+    "push_foot_out": 0.34,
+    "push_foot_forward": 0.9
   },
   "tyres": {
     "compound": "semislick",
@@ -311,6 +331,31 @@
     "tc_allowance": 1,
     "esc_gain": 0
   },
+  "extras": {
+    "tc_on": true,
+    "abs_on": true,
+    "esc_on": true,
+    "launch_control_on": true,
+    "two_step_on": true,
+    "governor_on": false,
+    "governor_rpm": 7700,
+    "pops_on": false,
+    "pops_amount": 60,
+    "pops_overrun": 4,
+    "pops_rpm": 1000,
+    "pops_loud": 300,
+    "pops_flames": 100,
+    "antilag_on": false,
+    "antilag_mode": "lift",
+    "antilag_boost": 60,
+    "antilag_rpm": 3000,
+    "antilag_time": 5,
+    "antilag_bangs": 100,
+    "antilag_fuel": 60,
+    "boost_gauge_on": false,
+    "boost_full": 1,
+    "boost_scale": 2
+  },
   "exhaust": [
     {
       "position": [
@@ -335,8 +380,8 @@
     "file": "cars/supermoto-700/driver.glb",
     "position": [
       0,
-      0.6,
-      -0.28
+      0.52,
+      -0.215
     ],
     "rotation": [
       -170.961,
@@ -382,14 +427,14 @@
       ],
       "rotation": {
         "left": [
-          13.096,
-          -2.851,
-          19.741
+          -24.759,
+          -39.002,
+          36.696
         ],
         "right": [
-          -13.121,
-          3.282,
-          -28.906
+          -31.973,
+          26.508,
+          -40.615
         ]
       },
       "grip": {
@@ -399,13 +444,13 @@
       "offset": {
         "left": [
           0.019,
-          0.06,
-          -0.049
+          0.042,
+          -0.071
         ],
         "right": [
-          0.007,
-          0.023,
-          -0.065
+          -0.012,
+          0.018,
+          -0.085
         ]
       }
     },
@@ -430,29 +475,29 @@
       "offset": {
         "left": [
           0.01,
-          0.121,
-          0.035
+          0.127,
+          -0.01
         ],
         "right": [
           -0.017,
-          0.119,
-          0.031
+          0.136,
+          -0.016
         ]
       }
     },
     "elbow_out": 0.5,
-    "knee_out": 0.15,
+    "knee_out": 0.35,
     "pivot": "hips",
     "chest": {
       "rotation": [
-        15.519,
+        19.335,
         0,
         0
       ]
     },
     "head": {
       "rotation": [
-        -8.544,
+        -14.783,
         0,
         0
       ]
@@ -520,24 +565,21 @@
         "z": -0.41135453110324266,
         "r": 0.3
       }
-    ]
+    ],
+    "layout_cg": 0.66,
+    "layout_radius": 0.303,
+    "max_nodes": 120,
+    "wheel_strength": 25
   },
-  "extras": {
-    "pops_on": true,
-    "pops_amount": 60,
-    "pops_overrun": 4,
-    "pops_rpm": 1000,
-    "pops_loud": 300,
-    "pops_flames": 100,
-    "antilag_on": false,
-    "antilag_mode": "lift",
-    "antilag_boost": 60,
-    "antilag_rpm": 3000,
-    "antilag_time": 5,
-    "antilag_bangs": 100,
-    "antilag_fuel": 60,
-    "boost_gauge_on": false,
-    "boost_full": 1,
-    "boost_scale": 2
+  "suspension": {
+    "front": {
+      "type": "model"
+    },
+    "rear": {
+      "type": "model"
+    }
+  },
+  "driveline": {
+    "engine": "front"
   }
 }

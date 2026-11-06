@@ -3,7 +3,7 @@
   "description": "A 600 cc supersport motorcycle.",
   "model": {
     "type": "gltf",
-    "file": "cars/sports-motorcycle-600cc/sports-motorcycle-600cc.glb",
+    "file": "cars/sports-motorcycle-600cc/Sports motorcycle 600cc.glb",
     "rotation_y": 0,
     "scale": 1,
     "offset": [
@@ -64,7 +64,10 @@
     "roll_camber": 0,
     "suspension_length": 0.28,
     "spring_progression": 0,
-    "damping_rebound": 1.7
+    "damping_rebound": 1.7,
+    "unsprung": false,
+    "front_axle_offset": 0,
+    "rear_axle_offset": 0
   },
   "drivetrain": {
     "drive": "rwd",
@@ -89,7 +92,12 @@
     "clutch": 3,
     "diff_lock": 0,
     "clutch_start_rpm": 3500,
-    "clutch_full_rpm": 5000
+    "clutch_full_rpm": 5000,
+    "gearbox": "gears",
+    "cvt_rpm": 13200,
+    "tc_stall_rpm": 5450,
+    "tc_ratio": 1.9,
+    "tc_lockup": true
   },
   "engine": {
     "idle_rpm": 1400,
@@ -257,16 +265,19 @@
         0.87,
         0.03
       ],
-      "fov": 80
+      "fov": 80,
+      "hide_driver": false
     }
   },
   "steering_wheel": {
-    "degrees": 450
+    "degrees": 450,
+    "stop": "rods"
   },
   "sound": {
     "engine_sim": {
       "layout": "inline-4",
       "impulse_response": "sharp_01",
+      "exhaust_type": "custom",
       "convolution": 1,
       "bore": 67,
       "stroke": 42.5,
@@ -332,15 +343,17 @@
     "hang_off": 0.3,
     "max_lateral_g": 0.9,
     "balance": 1,
-    "fork_dive": 1
+    "fork_dive": 1,
+    "push": false,
+    "push_foot_kmh": 110
   },
   "tyres": {
     "compound": "slick",
     "damage": false,
     "shell": {
-      "width": 0.16,
+      "width": 0.56,
       "rings": 5,
-      "segments": 72,
+      "segments": 18,
       "inner_ratio": 0.62,
       "carcass": 0
     },
@@ -363,13 +376,41 @@
     "tc_allowance": 1,
     "esc_gain": 0
   },
+  "extras": {
+    "tc_on": true,
+    "abs_on": true,
+    "esc_on": true,
+    "launch_control_on": true,
+    "two_step_on": true,
+    "governor_on": false,
+    "governor_rpm": 13200,
+    "pops_on": false,
+    "pops_amount": 60,
+    "pops_overrun": 2,
+    "pops_rpm": 3000,
+    "pops_loud": 100,
+    "pops_flames": 100,
+    "antilag_on": false,
+    "antilag_mode": "lift",
+    "antilag_boost": 60,
+    "antilag_rpm": 3000,
+    "antilag_time": 5,
+    "antilag_bangs": 100,
+    "antilag_fuel": 60,
+    "boost_gauge_on": false,
+    "boost_full": 1,
+    "boost_scale": 2
+  },
+  "colors": {
+    "rim": "#7b2d2d"
+  },
   "driver": {
     "enabled": true,
     "file": "cars/sports-motorcycle-600cc/driver.glb",
     "position": [
       0,
-      0.603,
-      -0.304
+      0.525,
+      -0.365
     ],
     "rotation": [
       -136.523,
@@ -415,14 +456,14 @@
       ],
       "rotation": {
         "left": [
-          -17.295,
-          15.706,
-          13.63
+          -52.671,
+          -10.286,
+          13.604
         ],
         "right": [
-          -14.418,
-          -12.545,
-          -5.553
+          -77.714,
+          23.116,
+          -6.99
         ]
       },
       "grip": {
@@ -432,13 +473,13 @@
       "offset": {
         "left": [
           0.012,
-          0.036,
-          -0.075
+          0.034,
+          -0.071
         ],
         "right": [
-          -0.013,
-          0.049,
-          -0.058
+          -0.053,
+          0.021,
+          -0.051
         ]
       }
     },
@@ -463,13 +504,13 @@
       "offset": {
         "left": [
           0.01,
-          0.121,
-          0.035
+          0.112,
+          0.012
         ],
         "right": [
           -0.017,
-          0.119,
-          0.031
+          0.102,
+          0.033
         ]
       }
     },
@@ -492,6 +533,8 @@
     }
   },
   "softbody": {
+    "max_nodes": 120,
+    "wheel_strength": 25,
     "layout": [
       {
         "x": 0.18362212908729575,
@@ -768,6 +811,8 @@
         "r": 0.2
       }
     ],
+    "layout_cg": 0.62,
+    "layout_radius": 0.3025,
     "nodes": [
       {
         "i": 0,
@@ -960,23 +1005,5 @@
         "break_force": 50000
       }
     ]
-  },
-  "extras": {
-    "pops_on": false,
-    "pops_amount": 60,
-    "pops_overrun": 2,
-    "pops_rpm": 3000,
-    "pops_loud": 100,
-    "pops_flames": 100,
-    "antilag_on": false,
-    "antilag_mode": "lift",
-    "antilag_boost": 60,
-    "antilag_rpm": 3000,
-    "antilag_time": 5,
-    "antilag_bangs": 100,
-    "antilag_fuel": 60,
-    "boost_gauge_on": false,
-    "boost_full": 1,
-    "boost_scale": 2
   }
 }

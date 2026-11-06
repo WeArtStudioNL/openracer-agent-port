@@ -115,8 +115,8 @@
       "width": 0.12,
       "diameter": 0.5998,
       "shell": {
-        "rings": 5,
-        "segments": 72,
+        "rings": 3,
+        "segments": 12,
         "inner_ratio": 0.72,
         "carcass": 0
       }
@@ -129,8 +129,8 @@
       "width": 0.18,
       "diameter": 0.6298,
       "shell": {
-        "rings": 4,
-        "segments": 28,
+        "rings": 3,
+        "segments": 12,
         "inner_ratio": 0.686,
         "carcass": 0
       }
