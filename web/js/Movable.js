@@ -7,6 +7,7 @@
  *              OpenRacer.Movable.make(element, { key: "tuning" }); OpenRacer.Movable.reset(element) puts it back as the page made it.
  *              With { handle: element } (or a function that gives it) the panel is only dragged by that part (a header), and nothing else of it takes the drag: a panel that
  *              scrolls can then be scrolled with the finger without moving it (the handle stops the browser from scrolling: touch-action none; the corner still scales).
+ *              With { edges: true } every edge and every corner scales it (a band of 7 px along the border), not only the bottom right corner.
  */
 
 OpenRacer.Movable = (function () {
@@ -76,11 +77,20 @@ OpenRacer.Movable = (function () {
         var gesture = null;
         var handleAtStart = options && (typeof options.handle === "function" ? options.handle() : options.handle);
         if(handleAtStart) handleAtStart.style.touchAction = "none";
-        var inCorner = function (e) { var r = el.getBoundingClientRect(); return r.right - e.clientX < CORNER && r.bottom - e.clientY < CORNER; };
+        var edges = !!(options && options.edges), EDGE = 7;
+        // the side that is taken: { l, r, t, b } (the bottom right corner is { r, b }), or null
+        var inCorner = function (e) {
+            var r = el.getBoundingClientRect();
+            if (!edges) return r.right - e.clientX < CORNER && r.bottom - e.clientY < CORNER ? { r: true, b: true } : null;
+            var z = { l: e.clientX - r.left < EDGE, r: r.right - e.clientX < EDGE, t: e.clientY - r.top < EDGE, b: r.bottom - e.clientY < EDGE };
+            if (r.right - e.clientX < CORNER && r.bottom - e.clientY < CORNER) z.r = z.b = true;
+            return z.l || z.r || z.t || z.b ? z : null;
+        };
+        var cursorOf = function (z) { return !z ? "" : (z.l && z.t) || (z.r && z.b) ? "nwse-resize" : (z.r && z.t) || (z.l && z.b) ? "nesw-resize" : z.l || z.r ? "ew-resize" : "ns-resize"; };
 
         el.addEventListener("pointermove", function (e) {
             if (gesture) return;
-            el.style.cursor = inCorner(e) ? "nwse-resize" : "";
+            el.style.cursor = cursorOf(inCorner(e));
         });
         el.addEventListener("pointerdown", function (e) {
             if (e.button !== 0) return;
@@ -98,8 +108,13 @@ OpenRacer.Movable = (function () {
             if (!gesture || e.pointerId !== gesture.id) return;
             var dx = e.clientX - gesture.x, dy = e.clientY - gesture.y;
             if (gesture.corner) {
-                el.style.width = Math.max(MIN_W, gesture.width + dx) + "px";
-                el.style.height = Math.max(MIN_H, gesture.height + dy) + "px";
+                var z = gesture.corner, left = gesture.left, top = gesture.top, width = gesture.width, height = gesture.height;
+                if (z.r) width = Math.max(MIN_W, gesture.width + dx);
+                if (z.b) height = Math.max(MIN_H, gesture.height + dy);
+                if (z.l) { width = Math.max(MIN_W, gesture.width - dx); left = gesture.left + gesture.width - width; }
+                if (z.t) { height = Math.max(MIN_H, gesture.height - dy); top = gesture.top + gesture.height - height; }
+                el.style.width = width + "px"; el.style.height = height + "px";
+                if (z.l || z.t) place(el, left, top);
             } else {
                 place(el, gesture.left + dx, gesture.top + dy);
             }
