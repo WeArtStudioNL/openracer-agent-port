@@ -60,7 +60,7 @@ OpenRacer.Car = function( config, domElement ) {
         window.addEventListener("pointerdown", function(e) {
             if(e.button !== 2 || e.pointerType === "touch" || tobj.cameraMode !== 2 || typeof renderer === "undefined" || e.target !== renderer.domElement) return;
             if(OpenRacer.Replay && OpenRacer.Replay.active && OpenRacer.Replay.free && OpenRacer.Replay.free.active) return;          // (the free camera of a replay has the mouse)
-            if(OpenRacer.DebugView && OpenRacer.DebugView.isOn() && OpenRacer.DebugView.partToolOn && OpenRacer.DebugView.partToolOn()) return;       // (the right button of the debug tools)
+            if(OpenRacer.DebugView && OpenRacer.DebugView.isOn() && OpenRacer.DebugView.partToolOn && OpenRacer.DebugView.partToolOn() && !(OpenRacer.Replay && OpenRacer.Replay.active)) return;       // (the right button of the debug tools; not in a replay: the tools do nothing there, and the orbit of the follow camera was gone)
             orbit = { x: e.clientX, y: e.clientY, id: e.pointerId };
             try { renderer.domElement.setPointerCapture(e.pointerId); } catch(err) { /* a synthetic event */ }
             e.preventDefault();

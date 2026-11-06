@@ -556,10 +556,10 @@
         return true;
     }
     window.addEventListener("pointerdown", function (e) {
-        if (e.button !== 1 || !on || typeof renderer === "undefined" || e.target !== renderer.domElement) return;
+        if (e.button !== 1 || !on || typeof renderer === "undefined" || e.target !== renderer.domElement || (OpenRacer.Replay && OpenRacer.Replay.active)) return;      // (not in a replay: there is no physics to hit)
         if (hitCar(e)) e.preventDefault();
     });
-    window.addEventListener("auxclick", function (e) { if (on && e.button === 1 && typeof renderer !== "undefined" && e.target === renderer.domElement) e.preventDefault(); });
+    window.addEventListener("auxclick", function (e) { if (on && e.button === 1 && !(OpenRacer.Replay && OpenRacer.Replay.active) && typeof renderer !== "undefined" && e.target === renderer.domElement) e.preventDefault(); });
 
     OpenRacer.DebugView = { partToolOn: function () { return grabMode && !!partTool; }, toggle: toggle, isOn: function () { return on; }, modelsHidden: function () { return on && modelsHidden; }, hitCar: hitCar, setGrabMode: setGrabMode, grabbing: function () { return grabbed; } };
 })();
