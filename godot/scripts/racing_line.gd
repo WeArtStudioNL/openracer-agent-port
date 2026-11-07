@@ -89,8 +89,9 @@ func nearest_facing(pos: Vector3, dir: Vector3) -> int:
 
 ## The speed at every point (computeSpeeds of RacingLine.js): the bend (lateral acceleration a_lat), the braking
 ## (a_brake) that the slower points ahead ask for, at most v_max.
-func compute_speeds(a_lat: float, a_brake: float, v_max: float) -> void:
+func compute_speeds(a_lat: float, a_brake: float, v_max: float) -> PackedFloat32Array:
 	var n := points.size()
+	speeds = PackedFloat32Array()
 	speeds.resize(n)
 	for i in n:
 		var a := point(i - 4)
@@ -110,3 +111,14 @@ func compute_speeds(a_lat: float, a_brake: float, v_max: float) -> void:
 			var allowed := sqrt(speeds[nxt] * speeds[nxt] + 2.0 * a_brake * STEP)
 			if speeds[k] > allowed:
 				speeds[k] = allowed
+	return speeds
+
+
+## The braking before the points: no point may be faster than the next one allows (after a change of the speeds).
+static func brake_pass(sp: PackedFloat32Array, a_brake: float) -> void:
+	var n := sp.size()
+	for k in range(n - 1, -1, -1):
+		var nxt := (k + 1) % n
+		var allowed := sqrt(sp[nxt] * sp[nxt] + 2.0 * a_brake * STEP)
+		if sp[k] > allowed:
+			sp[k] = allowed

@@ -41,6 +41,7 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	var ccfg: Variant = Content.load_json("cars/%s/car.json" % car_id)
 	car.setup(car_id, ccfg if ccfg is Dictionary else {})
 	car.set_meta("track_name", track.config.get("name", track_id))
+	car.set_meta("track_id", track_id)
 	car.freeze = true
 	add_child(car)
 	camera = ChaseCamera.new()
@@ -160,6 +161,15 @@ func put_on_line(c: Car) -> void:
 
 
 ## The race again from the grid (a new Race with the same options).
+func _exit_tree() -> void:
+	if ai != null and race == null:
+		ai.save_learned()
+	if race != null:
+		for e in race.entries:
+			if e.driver != null:
+				e.driver.save_learned()
+
+
 func _restart_race() -> void:
 	RunLog.event("race again")
 	var opts := options
@@ -176,8 +186,7 @@ func _restart_race() -> void:
 ## The player finished: the results, and the AI drives the player's car slowly on.
 func _race_finished() -> void:
 	ai = AIDriver.new()
-	ai.setup(car, line)
-	ai.pace = 0.5
+	ai.setup(car, line, 0.5)
 	_results = CanvasLayer.new()
 	_results.layer = 5
 	add_child(_results)

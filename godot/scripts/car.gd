@@ -234,6 +234,12 @@ func setup(id: String, cfg: Dictionary) -> void:
 		mass / 12.0 * (length * length + width * width) * k,
 		mass / 12.0 * (width * width + height * height) * k)
 	can_sleep = false
+	# no damping of Godot's own (0.1 by default: a drag of 0.1 x mass x speed, 4200 N at 30 m/s on a car of 1400 kg);
+	# the air and the tyres are worked out here
+	linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
+	linear_damp = 0.0
+	angular_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
+	angular_damp = 0.0
 	continuous_cd = true
 	var mat := PhysicsMaterial.new()
 	mat.friction = 0.35

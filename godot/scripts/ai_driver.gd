@@ -12,15 +12,55 @@ var others: Array[Car] = []       # the other cars of the race (to back off behi
 var _index := -1
 var _speed_error_i := 0.0
 var _side := 0.0                  # m to the side of the line, to pass a car
+var _passing: Car = null
+var _pass_side := 0.0
+var _pass_for := 0.0
+var _brake := 9.0
+var _speeds := PackedFloat32Array()
+var _learned_at := -100
+var _was_off := false
+var _last_index := -1
+var _base_speeds := PackedFloat32Array()
 
 
-func setup(c: Car, l: RacingLine) -> void:
+func setup(c: Car, l: RacingLine, p := -1.0) -> void:
 	car = c
 	line = l
-	if Content.arg("ai-pace") != "":
+	if p > 0.0:
+		pace = p
+	elif Content.arg("ai-pace") != "":
 		pace = float(Content.arg("ai-pace"))
 	var grip := 1.2 * float(c.config.get("tyres", {}).get("grip", 1.0))
-	line.compute_speeds(grip * Car.G * pace, grip * Car.G * 0.75, 90.0)
+	# (its own speeds: the cars of a race differ, and it learns where it was too fast)
+	_speeds = line.compute_speeds(grip * Car.G * pace, grip * Car.G * 0.75, 90.0).duplicate()
+	_brake = grip * Car.G * 0.75
+	_base_speeds = _speeds.duplicate()
+	# what an AI with this car learned on this track before (where it ran off the road), as factors on the speeds
+	var f := _learned_path()
+	if FileAccess.file_exists(f):
+		var factors: Variant = bytes_to_var(FileAccess.get_file_as_bytes(f))
+		if factors is PackedFloat32Array and factors.size() == _speeds.size():
+			for i in _speeds.size():
+				_speeds[i] = maxf(6.0, _base_speeds[i] * factors[i])
+			RacingLine.brake_pass(_speeds, _brake)
+
+
+## Keeps what it learned (the speeds as factors of those of the line) for the next time.
+func save_learned() -> void:
+	if _speeds.is_empty() or car == null:
+		return
+	var factors := PackedFloat32Array()
+	factors.resize(_speeds.size())
+	for i in _speeds.size():
+		factors[i] = _speeds[i] / maxf(0.1, _base_speeds[i])
+	DirAccess.make_dir_recursive_absolute("user://ai")
+	var file := FileAccess.open(_learned_path(), FileAccess.WRITE)
+	if file:
+		file.store_buffer(var_to_bytes(factors))
+
+
+func _learned_path() -> String:
+	return "user://ai/%s__%s__%d.learned" % [car.get_meta("track_id", "track"), car.car_id, roundi(pace * 100)]
 
 
 ## Looks for the car on the line again (after a reset).
@@ -35,21 +75,35 @@ func drive(dt: float) -> void:
 	# the point to steer at
 	var ahead := int((5.0 + v * 0.45) / RacingLine.STEP)
 	var target := line.point(_index + ahead)
-	var want := line.speeds[posmod(_index + int((3.0 + v * 0.3) / RacingLine.STEP), line.count())]
-	# a car right ahead: back off to its speed, and move aside to the side that has more room from it
-	var side_want := 0.0
+	var want := _speeds[posmod(_index + int((3.0 + v * 0.3) / RacingLine.STEP), line.count())]
+	# the front tyres at their limit (understeer: the car runs wide): off the throttle, a little slower; and the
+	# bend is learned: the line before here a little slower, for the next lap (what a driver learns, RacingLine.js factorOf)
+	var front_s := maxf(car.wheels[0].s, car.wheels[1].s)
+	if front_s > 1.0 and v > 8.0:
+		want = minf(want, v - 1.5 * (front_s - 0.9))
+	# (it learns when it ran off the road: a wheel on loose ground, away from the line; what it learned comes back
+	# slowly while it stays on the road)
+	var off_road := false
+	for w in car.wheels:
+		if w.contact and Content.surface(w.surface).get("loose", false):
+			off_road = true
+	if _index != _last_index:
+		_speeds[_index] = minf(_base_speeds[_index], _speeds[_index] * 1.003)
+		_last_index = _index
+	var off_line := absf(_lane(_index, xf.origin))
+	var off := off_road and off_line > 2.0 and v > 8.0 and absf(_side) < 0.5
+	# (once for a trip off the road, when it starts)
+	if off and not _was_off:
+		for k in range(-30, 4):
+			var j := posmod(_index + k, _speeds.size())
+			_speeds[j] = maxf(6.0, _speeds[j] * 0.97)
+		RacingLine.brake_pass(_speeds, _brake)
+		_learned_at = _index
+		RunLog.line("AI %s learned: slower before point %d (%.0f km/h, %.1f m off the line)" % [car.name, _index, v * 3.6, off_line])
+	_was_off = off
 	var inv := xf.affine_inverse()
-	for o in others:
-		if o == car or not is_instance_valid(o):
-			continue
-		var rel := inv * o.global_position
-		var reach := 4.0 + v * 0.7
-		if rel.z > 0.0 and rel.z < reach and absf(rel.x) < 2.4:
-			var closing := v - absf(o.speed)
-			if closing > -1.0:
-				want = minf(want, absf(o.speed) + rel.z * 0.3)
-				side_want = -2.8 if rel.x > 0.0 else 2.8
-	_side = move_toward(_side, side_want, dt * 1.5)
+	var cap := _traffic(xf, inv, v, dt)
+	want = minf(want, cap)
 	if absf(_side) > 0.01:
 		var nxt := line.point(_index + ahead + 1)
 		var dir := Vector3(nxt.x - target.x, 0.0, nxt.z - target.z).normalized()
@@ -77,6 +131,80 @@ func drive(dt: float) -> void:
 	car.throttle_input = clampf(u, 0.0, 1.0) * traction * lock
 	car.brake_input = clampf(-u * 0.5, 0.0, 1.0) if err < -1.0 else 0.0
 	car.handbrake_input = 0.0
+
+
+## The other cars (Opponent.js drive): the car ahead is passed on a side that is chosen once and kept until it is
+## by (or a second without it ahead); the car in its path, close by along its heading or further along the line in
+## its lane, gives the speed at which it can still stop behind it. Returns that speed (INF: none).
+func _traffic(xf: Transform3D, inv: Transform3D, v: float, dt: float) -> float:
+	var ahead: Car = null
+	var ahead_along := INF
+	var ahead_across := 0.0
+	var blocker_along := INF
+	var blocker_speed := 0.0
+	var blocker_len := 4.5
+	var my_lane := _lane(_index, xf.origin)
+	var fwd := xf.basis.z
+	var reach := maxf(25.0, v * 1.5)
+	for o in others:
+		if o == car or not is_instance_valid(o):
+			continue
+		var rel := inv * o.global_position
+		var along := rel.z
+		var across := rel.x
+		if absf(rel.y) > 3.0:
+			continue                        # (a bridge, an underpass)
+		var box := 5.5 if o == _passing else 3.2
+		if along > -2.0 and along < 22.0 and absf(across) < box and (along > 0.0 or o == _passing) and along < ahead_along:
+			ahead = o
+			ahead_along = along
+			ahead_across = across
+		var closing := maxf(0.0, o.linear_velocity.dot(fwd))
+		var o_len := float(o.config.get("dimensions", {}).get("length", 4.2))
+		if along > 1.5 and along < 10.0 and absf(across) < 2.2:
+			if along < blocker_along:
+				blocker_along = along
+				blocker_speed = closing
+				blocker_len = o_len
+		elif along > 0.0 and rel.length() < reach + 5.0:
+			var oi := line.nearest(o.global_position, _index)
+			var on_line := posmod(oi - _index, line.count()) * RacingLine.STEP
+			if on_line > 1.5 and on_line < reach and absf(_lane(oi, o.global_position) - my_lane) < 2.2 and on_line < blocker_along:
+				blocker_along = on_line
+				blocker_speed = closing
+				blocker_len = o_len
+	var side_want := 0.0
+	if ahead != null:
+		if ahead != _passing or _pass_side == 0.0:
+			_passing = ahead
+			_pass_side = -1.0 if ahead_across > 0.0 else 1.0
+		_pass_for = 0.0
+		side_want = _pass_side * 2.6
+	elif _passing != null:
+		_pass_for += dt
+		if _pass_for < 1.0:
+			side_want = _pass_side * 2.6
+		else:
+			_passing = null
+			_pass_side = 0.0
+	_side = move_toward(_side, side_want, dt * 1.5)
+	if blocker_along == INF:
+		return INF
+	var my_len := float(car.config.get("dimensions", {}).get("length", 4.2))
+	var gap := blocker_along - (my_len + blocker_len) / 2.0 - 0.3
+	if gap < 2.0:
+		return maxf(0.0, blocker_speed * 0.85 - (2.0 - gap))
+	return blocker_speed + sqrt(2.0 * _brake * 0.8 * (gap - 2.0))
+
+
+## How far to the left of the line a point is, at point i of the line.
+func _lane(i: int, p: Vector3) -> float:
+	var a := line.point(i)
+	var b := line.point(i + 1)
+	var d := Vector2(b.x - a.x, b.z - a.z)
+	var l := maxf(1e-3, d.length())
+	# (left of forward is + x in the car's terms; along the line (d.x, d.y) the left is (d.y, -d.x))
+	return ((p.x - a.x) * d.y - (p.z - a.z) * d.x) / l
 
 
 ## How far along the line the car is (0..1 of a lap, from the first point).

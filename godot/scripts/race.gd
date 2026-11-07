@@ -21,6 +21,9 @@ class Entry:
 	var best_lap := -1.0
 	var stuck := 0.0
 	var going := false
+	var touching: Array = []
+	var knocks := 0
+	var put_back := 0
 
 var world: Node
 var line: RacingLine
@@ -71,13 +74,15 @@ func setup(w: Node, l: RacingLine, track: Track, player_car: Car, opponents: int
 		var e := Entry.new()
 		e.car = Car.new()
 		e.car.setup(id, cfg if cfg is Dictionary else {})
+		e.car.set_meta("track_id", track.track_id)
 		e.car.name = "AI%d" % (i + 1)
 		e.name = "%s %d" % [e.car.config.get("name", id), i + 1]
 		world.add_child(e.car)
 		e.driver = AIDriver.new()
-		e.driver.setup(e.car, line)
-		e.driver.pace = 0.8 * (1.0 - 0.03 * (i % 4))
+		e.driver.setup(e.car, line, 0.8 * (1.0 - 0.03 * (i % 4)))
 		e.car.set_meta("slot", slots[slot_i])
+		e.car.contact_monitor = true
+		e.car.max_contacts_reported = 4
 		entries.append(e)
 		slot_i += 1
 	player_car.set_meta("slot", slots[player_slot])
@@ -103,7 +108,10 @@ func _slot(s: int, track: Track) -> Dictionary:
 
 ## The cars of the player's kind (a car against cars, a kart against karts), not the player's own; else the player's.
 func _opponent_cars(player_car: Car) -> Array:
-	var kind := func(cfg: Dictionary) -> String: return "kart" if float(cfg.get("chassis", {}).get("mass", 1000)) < 300 else "car"
+	# (a kart: light, or a kart by its name; the go-kart 250cc weighs 330 kg)
+	var kind := func(cfg: Dictionary) -> String:
+		var light := float(cfg.get("chassis", {}).get("mass", 1000)) < 400
+		return "kart" if light or str(cfg.get("name", "")).to_lower().contains("kart") else "car"
 	var own: String = kind.call(player_car.config)
 	var out := []
 	for c in Content.list_cars():
@@ -146,6 +154,14 @@ func _physics_process(dt: float) -> void:
 		others.append(e.car)
 	for e in entries:
 		_progress(e)
+		# a touch of two cars (for the racecraft of the AI): a new contact with another car
+		var now: Array = []
+		for b in e.car.get_colliding_bodies():
+			if b is Car:
+				now.append(b)
+				if not e.touching.has(b) and not is_held():
+					e.knocks += 1
+		e.touching = now
 		if e.driver == null:
 			continue
 		if is_held():
@@ -164,6 +180,7 @@ func _physics_process(dt: float) -> void:
 			e.going = false
 			world.put_on_line(e.car)
 			e.driver.lost()
+			e.put_back += 1
 			RunLog.event("race: %s put back on the line" % e.name)
 
 
@@ -192,9 +209,18 @@ func _crossed(e: Entry) -> void:
 	if e.laps > laps and state != State.COUNTDOWN:
 		e.finish_time = clock
 		RunLog.event("race: %s finished P%d in %s" % [e.name, position_of(e), LapTimer.format_time(clock)])
+		if e.driver != null:
+			e.driver.save_learned()
 		if e == player:
 			state = State.DONE
 			finished.emit()
+			var knocks := 0
+			var back := 0
+			for x in entries:
+				if x.driver != null:
+					knocks += x.knocks
+					back += x.put_back
+			RunLog.event("race stats: touches between cars %d (each counted by both), AI put back %d" % [knocks, back])
 
 
 ## 1 for the leader: the finished cars by their time, then the others by laps and the part of the lap.
