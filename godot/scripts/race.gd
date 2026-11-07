@@ -9,6 +9,8 @@ signal finished
 
 enum State { COUNTDOWN, RACING, DONE }
 
+const AUDIBLE := 3                  # the AI cars that are heard at once (the nearest)
+
 class Entry:
 	var car: Car
 	var name := ""
@@ -21,6 +23,7 @@ class Entry:
 	var best_lap := -1.0
 	var stuck := 0.0
 	var going := false
+	var audio: CarAudio = null
 	var touching: Array = []
 	var knocks := 0
 	var put_back := 0
@@ -75,6 +78,10 @@ func setup(w: Node, l: RacingLine, track: Track, player_car: Car, opponents: int
 		e.car = Car.new()
 		e.car.setup(id, cfg if cfg is Dictionary else {})
 		e.car.set_meta("track_id", track.track_id)
+		CarModel.paint(e.car.model_root, CarModel.AI_COLOURS[i % CarModel.AI_COLOURS.size()])
+		e.audio = CarAudio.new()
+		e.audio.setup(e.car, true)
+		world.add_child(e.audio)
 		e.car.name = "AI%d" % (i + 1)
 		e.name = "%s %d" % [e.car.config.get("name", id), i + 1]
 		world.add_child(e.car)
@@ -237,6 +244,21 @@ func order() -> Array[Entry]:
 			return a.finish_time >= 0.0
 		return a.laps + a.fraction > b.laps + b.fraction)
 	return list
+
+
+## The AI cars that are heard: the three nearest to the camera.
+func _process(_delta: float) -> void:
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	var ais: Array[Entry] = []
+	for e in entries:
+		if e.audio != null:
+			ais.append(e)
+	var at := cam.global_position
+	ais.sort_custom(func(a: Entry, b: Entry) -> bool: return a.car.global_position.distance_squared_to(at) < b.car.global_position.distance_squared_to(at))
+	for k in ais.size():
+		ais[k].audio.set_audible(k < AUDIBLE)
 
 
 func countdown_text() -> String:

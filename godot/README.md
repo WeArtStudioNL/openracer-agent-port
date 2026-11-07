@@ -82,7 +82,10 @@ In the menu: Mode "Race against the AI", the number of opponents (1 to 7), the l
 the grid or on pole). The opponents are cars of the player's kind (a car against cars, a kart against karts),
 on the grid of track.json; 3, 2, 1, GO holds everyone; the positions and the laps of the race are measured along
 the racing line from the finish; the AI backs off behind a slower car and moves aside to pass, and a car that is
-stuck is put back on the line. When the player finishes, the results show and the AI drives the player's car
+stuck is put back on the line. The AI learns where it ran off the road (the line before there a little slower)
+and keeps that per track and car (`user://ai/`), so it races cleaner the next time. The AI cars have the colours
+of the browser game (the materials called carpaint, or body); the three nearest are heard (3D, a lighter engine
+simulation). When the player finishes, the results show and the AI drives the player's car
 on. Backspace or "Race again" starts it again. A track without a racing line has no race (free driving).
 
     Godot --path godot -- --car=openracer-muscle --track=short-track --race --opponents=5 --laps=3 [--pole] [--ai]
@@ -135,8 +138,8 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
 2. **Feel and sound**: the engine sound (EngineSim), tyre squeal, skid marks and smoke *(done)*; settings for
    the steering and the controls, racing wheels and force feedback *(done)*.
 3. **Racing**: laps and gates from track.json, timing, records and the ghost; AI opponents on the racing
-   line, grid start, a race of some laps, positions and results *(done)*. Still to come: the colours of the
-   AI cars, their engine sound, better racecraft (they still bump into each other a lot).
+   line, grid start, a race of some laps, positions and results, the colours and the engine sound of the AI
+   cars, racecraft after Opponent.js and the AI that learns where it ran off *(done)*.
    Later in the settings: setting the keys and the buttons of a gamepad.
 4. **The rest of the physics**: tyre heat and wear, pressure, camber, downforce, turbo, torque converter,
    traction and stability control, launch control; damage and the soft body.

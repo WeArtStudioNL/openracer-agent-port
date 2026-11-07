@@ -2,27 +2,36 @@ class_name CarAudio
 extends Node
 ## The sound of a car: the engine (EngineSimSynth, the native port of the engine sound of the browser game, fed to
 ## an AudioStreamGenerator) and the squeal of the tyres (web/sounds/tyre-squeal.wav, pitched with the speed and as
-## loud as the tyres slide, the way web/js/EngineSound.js plays it).
+## loud as the tyres slide, the way web/js/EngineSound.js plays it). The player's car is heard as it is; an AI car
+## is heard where it is (3D), with a lighter simulation, and only while it is one of the nearest (audible).
 
 const MIX_RATE := 44100.0
 
 var car: Car
 var inside := false
 var synth: Object = null
-var engine_player: AudioStreamPlayer
+var positional := false
+var audible := true
+var engine_player: Node              # AudioStreamPlayer, or AudioStreamPlayer3D for an AI car
 var playback: AudioStreamGeneratorPlayback
-var squeal_player: AudioStreamPlayer
+var squeal_player: Node
 var _squeal_volume := 0.0
 var _squeal_pitch := 1.0
 
 
-func setup(c: Car) -> void:
+func setup(c: Car, in_3d := false) -> void:
 	car = c
+	positional = in_3d
 	name = "Audio"
 	if ClassDB.class_exists("EngineSimSynth"):
 		synth = ClassDB.instantiate("EngineSimSynth")
 		var p := EngineSimParams.params(car.config)
-		synth.configure(EngineSimParams.options(p), MIX_RATE)
+		var o := EngineSimParams.options(p)
+		if positional:
+			# (an AI car: half the rate of the simulation, one step of the gas a step: a seventh of the cost)
+			o["simulation_frequency"] = minf(float(o["simulation_frequency"]), 5000.0)
+			o["fluid_steps"] = 1
+		synth.configure(o, MIX_RATE)
 		var ir_file: String = EngineSimParams.IMPULSE_RESPONSES.get(str(p["impulse_response"]), "smooth_39.wav")
 		var bytes := FileAccess.get_file_as_bytes(Content.path("sounds/ir/" + ir_file))
 		if bytes.size() > 0:
@@ -30,9 +39,8 @@ func setup(c: Car) -> void:
 		var gen := AudioStreamGenerator.new()
 		gen.mix_rate = MIX_RATE
 		gen.buffer_length = 0.08
-		engine_player = AudioStreamPlayer.new()
+		engine_player = _player()
 		engine_player.stream = gen
-		add_child(engine_player)
 	else:
 		push_warning("CarAudio: the native engine sound (EngineSimSynth) is not loaded: build godot/native (see README)")
 	var squeal := AudioStreamWAV.load_from_file(Content.path("sounds/tyre-squeal.wav"))
@@ -40,10 +48,40 @@ func setup(c: Car) -> void:
 		squeal.loop_mode = AudioStreamWAV.LOOP_FORWARD
 		squeal.loop_begin = 0
 		squeal.loop_end = int(squeal.get_length() * squeal.mix_rate)
-		squeal_player = AudioStreamPlayer.new()
+		squeal_player = _player()
 		squeal_player.stream = squeal
 		squeal_player.volume_db = -80.0
-		add_child(squeal_player)
+
+
+## A player of the sound: for an AI car in 3D, on the car (a plain Node between would cut it off from where the car is).
+func _player() -> Node:
+	if not positional:
+		var p := AudioStreamPlayer.new()
+		add_child(p)
+		return p
+	var p3 := AudioStreamPlayer3D.new()
+	p3.unit_size = 10.0
+	p3.max_distance = 220.0
+	p3.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+	p3.doppler_tracking = AudioStreamPlayer3D.DOPPLER_TRACKING_PHYSICS_STEP
+	car.add_child(p3)
+	return p3
+
+
+## An AI car is heard only while it is one of the nearest: the others make no sound (and cost nothing).
+func set_audible(on: bool) -> void:
+	if on == audible:
+		return
+	audible = on
+	for p in [engine_player, squeal_player]:
+		if p == null:
+			continue
+		if on:
+			p.play()
+		else:
+			p.stop()
+	if on and engine_player != null:
+		playback = engine_player.get_stream_playback()
 
 
 func _ready() -> void:
@@ -59,6 +97,8 @@ func _process(delta: float) -> void:
 		return
 	if engine_player != null:
 		engine_player.volume_db = linear_to_db(maxf(1e-4, float(Settings.get_value("volume")) / 0.8))
+	if not audible:
+		return
 	if synth != null and playback != null:
 		synth.set_rpm(car.engine.rpm())
 		synth.set_throttle(car.engine.throttle_used)
