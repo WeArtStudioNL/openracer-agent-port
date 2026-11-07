@@ -217,10 +217,11 @@ the lists with "(garage)". Not yet: export to a zip, deleting from the menu, the
 The replay (`scripts/replay.gd`, Replay.js): every car of the session (the player and the opponents) is recorded
 30 times a second, the last half hour. Esc, Replay: the game stays paused behind it and the recording plays through
 the same code that draws the cars. The bar: a slider over the whole recording, start, -10 s, play/pause, +10 s, end,
-the speed (0.1x to 5x), the camera (T) and the car it follows (Tab); Exit (Esc) goes back to the game where it was
+the speed (0.1x to 5x), the camera (T: follow, cockpit, bonnet, and a free camera: W A S D, Space/Z up, X down, drag the
+mouse to look, F aims at the car, L goes with it, [ and ] the field of view) and the car it follows (Tab); Exit (Esc) goes back to the game where it was
 left. Keys: Enter play/pause, left and right one frame (held: on), up and down one second, Home and End, H hides the
 bar. Save replay (in the bar) keeps it in `user://replays` (the ids of the track and the cars, and the recording); the main
-menu, Replays…, plays one in a viewer. Test: `res://tools/test_replay.tscn -- --ai=1`. Not yet: the free camera, marks and fragments, video, the soft body and the parts in the replay.
+menu, Replays…, plays one in a viewer. Test: `res://tools/test_replay.tscn -- --ai=1`. Not yet: marks and fragments, video, the soft body and the parts in the replay.
 
 ## Pit stops and the drag strip
 

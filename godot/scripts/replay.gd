@@ -7,7 +7,8 @@ extends Node
 ## Esc, Replay: the game stops where it is and the recording is played back through the same code that draws the
 ## cars of the game. A bar at the bottom has a slider over the whole recording, play and pause, jumps of ten
 ## seconds, the speed (0.1x to 5x), the camera and the car the camera is on; Exit (or Esc) goes back to the game,
-## which goes on where it was left. Keys: Enter play/pause, left and right one frame (held: they keep stepping), up
+## which goes on where it was left. The camera (T) goes through the cameras of the game and a free camera
+## (ReplayFreeCamera: W A S D, the mouse, F aims at the car, L goes with it). Keys: Enter play/pause, left and right one frame (held: they keep stepping), up
 ## and down one second, Home and End, T the camera, Tab the next car, H hides the bar.
 ##
 ## Save replay (in the bar) keeps it as a file in user://replays (the ids of the track and the cars and the
@@ -45,6 +46,7 @@ var _camera_was: Car
 var _sliding := false
 var _step_held := 0.0
 var _note_for := 0.0
+var _free: ReplayFreeCamera = null
 
 
 func setup(w: Node, list: Array) -> void:
@@ -159,9 +161,13 @@ func stop() -> void:
 		c.physics_interpolation_mode = s["interp"]
 		c.reset_physics_interpolation()
 	var cam := _camera()
+	if _free != null:
+		_free.queue_free()
+		_free = null
 	if cam != null:
 		cam.car = _camera_was
 		cam.process_mode = Node.PROCESS_MODE_INHERIT
+		cam.make_current()
 	_set_hud(true)
 	if _ui != null:
 		_ui.queue_free()
@@ -246,8 +252,13 @@ func _input(event: InputEvent) -> void:
 	match event.physical_keycode:
 		KEY_ESCAPE:
 			_exit()
-		KEY_ENTER, KEY_KP_ENTER, KEY_SPACE:
+		KEY_ENTER, KEY_KP_ENTER:
 			_toggle()
+		KEY_SPACE:
+			if _free == null or not _free.current:
+				_toggle()
+			else:
+				handled = false
 		KEY_LEFT:
 			_jump(-1.0 / RATE)
 		KEY_RIGHT:
@@ -284,15 +295,33 @@ func _jump(dt: float) -> void:
 	running = running and time < duration()
 
 
+## The cameras of the game (follow, cockpit, bonnet), then the free camera (ReplayFreeCamera), then follow again.
 func _next_camera() -> void:
 	var cam := _camera()
-	if cam != null and cam.has_method("next_mode"):
-		cam.next_mode()
+	if cam == null:
+		return
+	if _free != null and _free.current:
+		_free.current = false
+		cam.make_current()
+		while cam.mode != ChaseCamera.Mode.FOLLOW:
+			cam.next_mode()
+		return
+	if cam.mode == ChaseCamera.Mode.BONNET:
+		if _free == null:
+			_free = ReplayFreeCamera.new()
+			add_child(_free)
+		_free.start_from(cam)
+		_free.target = cars[_focus] if _focus < cars.size() else null
+		_free.make_current()
+		return
+	cam.next_mode()
 
 
 func _next_car() -> void:
 	if cars.size() > 1:
 		_focus = (_focus + 1) % cars.size()
+		if _free != null:
+			_free.target = cars[_focus]
 
 
 func _exit() -> void:

@@ -1,6 +1,6 @@
 extends Node
 ## (a scene, for the autoloads: Godot --headless --fixed-fps 120 --path godot res://tools/test_replay.tscn -- --ai
-## [--car=openracer-muscle] [--track=kartbaan-oldenzaal] [--shot=file.png]) The replay (Replay.js): the AI drives
+## [--car=openracer-muscle] [--track=kartbaan-oldenzaal] [--shot=file.png] [--free=1: the free camera, aimed at the car]) The replay (Replay.js): the AI drives
 ## for 12 s, the replay opens, jumps 5 s back and plays 2 s, then the game goes on; it prints where the car was and
 ## is, and that the car drives on from where it was left. Without --headless --shot saves a picture of the replay.
 
@@ -35,7 +35,18 @@ func _process(dt: float) -> void:
 				_step = 1
 				_time = 0.0
 		1:
-			if _time > 2.0:
+			if _time > 2.0 and Content.arg("free") != "" and r._free == null:
+				for k in 3:
+					r._next_camera()
+				r._free.global_position = world.car.global_position + Vector3(6, 3, 6)
+				r._free.aim = true
+				r.running = false
+				_time = 1.0
+			elif _time > 2.0:
+				if r._free != null:
+					var fc := r._free
+					print("free camera: current %s, %.1f m from the car, looking at it %s" % [fc.current, fc.global_position.distance_to(world.car.global_position),
+						(-fc.global_transform.basis.z).dot((world.car.global_position + Vector3.UP * 0.6 - fc.global_position).normalized()) > 0.95])
 				print("after 2 s of play from 5 s back: time %.2f s, the car %.1f m from where the game stopped, %s" % [r.time,
 					world.car.global_position.distance_to(_left_at), "playing" if r.running else "paused"])
 				if Content.arg("shot") != "":
