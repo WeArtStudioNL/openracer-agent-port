@@ -210,7 +210,51 @@ The garage (`scripts/garage.gd`, Garage.js): cars and tracks of the player next 
 `garage_folder`, with cars/ and tracks/ in it). An item with the id of one of the game wins over it; an item with
 only its car.json keeps using the files of the game's one. Main menu, "Import a car or track (zip)…" puts the item of
 a zip (car.json or track.json at its root or in one folder, as the browser game exports it) in the garage; it shows in
-the lists with "(garage)". Not yet: export to a zip, deleting from the menu, the car and track editors.
+the lists with "(garage)". The track editor saves into the garage and deletes from it. Not yet: the car editor.
+
+## Track editor
+
+The track editor of the browser (`web/tools/track-editor.html`, track-editor.js, track-design.js, heightmap.js) in
+`scripts/editor/`: main menu, "Track editor", or `-- --editor` (`--editor=<id>` opens that track). The side bar has
+the cards of the browser: Track (open a track, New track, Delete… for a track of the garage, Height map…, name, id,
+description), Ready to race, Reference image (a picture to draw over: opacity, place, Scale by two points), Model
+(import a .glb or .gltf), Surfaces (the role of every part: road, pit lane, grass, ground, sand, gravel, mud,
+scenery, decor), Start and lap gates (Fill the grid, Gate 1 at the start, Auto gates, Show the checkpoints), Pit
+boxes and the pit line, Objects (the library of `web/objects` and `user://garage/objects`, + adds a glb; the
+prefabs on a track with a model; rigid, static or decor, mass, origin), Curbs (width, height, colour, connect to the
+road, the size and the offset of a node, Taper the ends), Cinematic cameras (and their range), AI racing line (Edit
+the line, Draw the line, Apply, Forget) and Sky and light; at the bottom Thumbnail (preview.webp), Export zip, Test
+drive (saves and drives it with the car of the menu) and Save. The view: the tools in a bar at the bottom (1 to 0:
+Look, Grid box, Pit box, Pit line, Add gate, Drag strip, Place object, Add camera, Draw curb, Measure; on a road of
+nodes N, B, G, P: Edit road, Branch, Surfaces, Prefabs with Draw/Points and Attach to road), at the top right Save,
+the colours of the surfaces, Snap 1/2/5 m, From above, Undo/Redo (all of the track), Layers and ? (the keys); the
+panel of what is chosen with its numbers, the drag strip window and the drawer of the road (Track, Branches,
+Surfaces, Prefabs). Left drag turns the view, right drag moves it, the wheel zooms to the pointer; what is chosen
+has handles: the middle moves it, the ring turns it, the square scales it, the arrow lifts a node of the road.
+Keys as in the browser: Delete, Escape, Enter, Ctrl+Z/Y/D/S, F, T, End, W E R.
+
+A track is saved as `track.json` in the format of the browser (the numbers rounded as it does) with its files, in
+the garage (`user://garage/tracks/<id>/`; files it has not got come from the game's folder of that id) or, when the
+game runs from the repository and "Save in the repository" is ticked, in `web/tracks/<id>/` (and `index.json`). A
+road of nodes is built as track-design.js builds it (the same centripetal Catmull-Rom curve as three.js,
+`scripts/catmull_rom.gd`; the road, shoulders, terrain, branches, surfaces and prefabs come out part for part as
+the browser's, `res://tools/test_design.tscn -- --track=go-kart-track-1`) and written as `<id>.glb` with
+GLTFDocument, the hidden triangles left out. The game draws what the editor makes: curbs (`scripts/curbs.gd`, road),
+the grid boxes, the pit area and the checkpoints with the arrow to the next gate (`scripts/track_marks.gd`), the
+objects (`scripts/track_objects.gd`: a rigid one sleeps until a car's box pushes it and the push comes back to the
+car, a static one is a wall, decor only shows), `double_sided`, and on a road of nodes without a recorded line the
+middle of the road as the racing line (`scripts/racing_line.gd`).
+
+Test (never in the garage or in web/): `Godot --path godot res://tools/test_track_editor.tscn -- --out=/tmp/te`
+(with a window and `--shot-dir=/tmp` it takes screenshots) uses the tools with the mouse on testtrack, draws a new
+road with a node, a prefab row, a tree and a gravel area, saves both into `/tmp/te/tracks/`, checks the fields of
+track.json, and saves go-kart-track-1 again unchanged (its design, grid, gates, pit, objects and surfaces equal,
+the curb points within 1 mm). A saved track drives with `-- --content=<a folder with tracks/ and links to web/cars>`.
+Not yet: recording the racing line by driving (draw or edit it instead), the touch layout and the loupe of the
+browser, the draft that is kept every few seconds, thumbnails of the library models, the cinematic cameras in the
+replay. On desert-drag-strip the barrier on the strip (`prefab_barrier_1` of the design) is scenery in the browser
+too: its rail and posts (0.78 m) are higher than what a car drives over (0.13 + 0.3 m, Vehicle.js), so both games
+stop a car there.
 
 ## Replay
 

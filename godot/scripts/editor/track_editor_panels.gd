@@ -53,7 +53,7 @@ static func build(ed: TrackEditor) -> void:
 	hint.position = Vector2(16, 62)
 	hint.size = Vector2(620, 40)
 	hint.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
-	hint.add_theme_constant_override("outline_size", 5)
+	hint.add_theme_constant_override("outline_size", 3)
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vu.add_child(hint)
 	ed.ui["hint"] = hint
