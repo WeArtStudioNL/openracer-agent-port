@@ -201,6 +201,37 @@ func dispose() -> void:
 		_task = -1
 
 
+## The mesh of an object of the model as it was made (it is in a bending copy now), or null.
+func original(mi: MeshInstance3D) -> Mesh:
+	for bent in meshes:
+		if source_of[bent]["node"] == mi:
+			return source_of[bent]["old"]
+	return null
+
+
+## Another shell with the same nodes (new strengths, the tuning menu).
+func use(s: SoftBody) -> void:
+	sb = s
+	_seen = -1
+
+
+## The model as it was, without the bones (the nodes of the shell changed).
+func restore() -> void:
+	dispose()
+	for bent in meshes:
+		var src: Dictionary = source_of[bent]
+		var node: MeshInstance3D = src["node"]
+		if is_instance_valid(node):
+			node.mesh = src["old"]
+		bent.queue_free()
+	meshes.clear()
+	source_of.clear()
+	if skeleton != null:
+		skeleton.queue_free()
+		skeleton = null
+	_jobs.clear()
+
+
 func _build() -> void:
 	skeleton = Skeleton3D.new()
 	skeleton.name = "Shell"
@@ -249,5 +280,5 @@ func _build() -> void:
 		bent.skeleton = NodePath("..")
 		mi.mesh = null
 		meshes.append(bent)
-		source_of[bent] = {"node": mi, "group": job["group"], "surfaces": job["surfaces"], "out": outs}
+		source_of[bent] = {"node": mi, "old": old, "group": job["group"], "surfaces": job["surfaces"], "out": outs}
 	_jobs.clear()

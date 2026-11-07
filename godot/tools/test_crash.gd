@@ -103,6 +103,12 @@ func _physics_process(dt: float) -> void:
 	_last_v = v
 	if car.shell != null:
 		_max_step_us = maxi(_max_step_us, car.shell.step_usec)
+	if Content.arg("max-nodes") != "" and absf(_time - 1.0) < dt / 2.0:
+		# (the tuning menu: another number of nodes made from the model, while the car drives)
+		var cfg := car.config.duplicate(true)
+		Tuning.write(cfg, "softbody.max_nodes", int(Content.arg("max-nodes")))
+		car.apply_config(cfg)
+		print("max_nodes %s: %d nodes" % [Content.arg("max-nodes"), car.shell.sb.count if car.shell else 0])
 	match _phase:
 		"accelerate":
 			car.steer_input = clampf(-car.global_position.x * 0.3 - fwd.x * 2.0, -0.2, 0.2)

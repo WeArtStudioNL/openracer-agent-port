@@ -109,6 +109,16 @@ const GROUPS := [
 		["ackermann", "Ackermann (the inner wheel steers more)", "%", -50, 150, 5, "chassis.ackermann", 0.01],
 		["steering_degrees", "Steering wheel: turn at full lock (each way)", "°", 30, 1000, 10, "steering_wheel.degrees", 1.0],
 	]],
+	["Soft body", [
+		["sb_enabled", "The car dents (the soft body, with Damage on in Settings)", "bool", "softbody.enabled", true, false],
+		["sb_max_nodes", "Most nodes made from the model (a car without a list of nodes)", "", 10, 120, 1, "softbody.max_nodes", 1.0],
+		["sb_anchor_yield", "Anchors: bend for good from (the nodes without a strength of their own)", "kN", 1, 400, 1, "softbody.anchor.yield_force", 1000.0],
+		["sb_anchor_break", "Anchors: tear off at", "kN", 5, 1000, 5, "softbody.anchor.break_force", 1000.0],
+		["sb_beam_yield", "Beams: bend for good from", "kN", 1, 200, 1, "softbody.beam.yield_force", 1000.0],
+		["sb_beam_break", "Beams: snap at", "kN", 5, 600, 5, "softbody.beam.break_force", 1000.0],
+		["sb_hardening", "Hardening: how much the force goes on rising after the yield", "%", 0, 100, 1, "softbody.hardening", 0.01],
+		["sb_shell_mass", "Mass of the shell", "kg", 20, 400, 5, "softbody.shell_mass", 1.0],
+	]],
 	["Assists", [
 		["tc_on", "Traction control fitted", "bool", "extras.tc_on", true, false],
 		["abs_on", "ABS fitted", "bool", "extras.abs_on", true, false],
@@ -154,6 +164,8 @@ const FALLBACK := {
 	"extras.pops_overrun": 2.0, "extras.pops_rpm": 3000.0, "extras.pops_loud": 100.0, "extras.pops_flames": 100.0, "extras.antilag_boost": 60.0,
 	"extras.antilag_rpm": 3000.0, "extras.antilag_time": 5.0, "extras.antilag_bangs": 100.0, "extras.antilag_fuel": 60.0,
 	"engine.launch_rpm": 3500.0, "engine.two_step_rpm": 4500.0,
+	"softbody.max_nodes": 90.0, "softbody.anchor.yield_force": 80000.0, "softbody.anchor.break_force": 250000.0,
+	"softbody.beam.yield_force": 40000.0, "softbody.beam.break_force": 120000.0, "softbody.hardening": 0.2, "softbody.shell_mass": 300.0,
 }
 
 

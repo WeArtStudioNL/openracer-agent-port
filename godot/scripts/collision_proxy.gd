@@ -73,13 +73,15 @@ static func _surface_points(car: Car) -> PackedVector3Array:
 	var pts := PackedVector3Array()
 	for m in car.model_root.find_children("*", "MeshInstance3D", true, false):
 		var mi := m as MeshInstance3D
-		if mi.mesh == null or not mi.is_visible_in_tree() or hidden_object(mi):
+		# (a model that bends already: its meshes as they were made are kept by SoftBodyMesh)
+		var mesh: Mesh = mi.mesh if mi.mesh != null or car.shell_mesh == null else car.shell_mesh.original(mi)
+		if mesh == null or not mi.is_visible_in_tree() or hidden_object(mi):
 			continue
 		var xf := CarModel.relative(mi, car)
-		for s in mi.mesh.get_surface_count():
-			if mi.mesh is ArrayMesh and (mi.mesh as ArrayMesh).surface_get_primitive_type(s) != Mesh.PRIMITIVE_TRIANGLES:
+		for s in mesh.get_surface_count():
+			if mesh is ArrayMesh and (mesh as ArrayMesh).surface_get_primitive_type(s) != Mesh.PRIMITIVE_TRIANGLES:
 				continue
-			var arrays := mi.mesh.surface_get_arrays(s)
+			var arrays := mesh.surface_get_arrays(s)
 			var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 			var step := maxi(1, verts.size() / 20000)
 			for i in range(0, verts.size(), step):

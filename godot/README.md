@@ -160,6 +160,10 @@ steps) and the force of the shell on the nodes it hangs on. A detachable part be
 and the other cars; a breakable part (glass, a lamp) is gone at once in a cloud of shards; a hinged part sits shut
 until all its pins break and then falls off.
 
+The tuning menu (U) has a tab "Soft body" (the items of the Soft body card of the car editor): the car dents or not,
+the most nodes made from the model, the yield and break forces of the anchors and the beams, the hardening and the
+mass of the shell. A change makes a new shell, whole (and the model is made again when the nodes changed).
+
 Test: `Godot --headless --fixed-fps 120 --path godot res://tools/test_crash.tscn -- --car=openracer-muscle
 --speed=60 [--angle=40] [--set=damage:false]` drives into a wall and prints the bend, the energy and what tore,
 then drives the car on and repairs it; without `--headless`, `--shot=file.png` saves a picture of the dent.

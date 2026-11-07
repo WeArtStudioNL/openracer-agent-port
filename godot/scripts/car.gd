@@ -305,13 +305,19 @@ func apply_config(cfg: Dictionary) -> void:
 	_read_config()
 	engine.omega = rpm_omega
 	if cfg.get("softbody", {}) != shell_before:
-		# (new strengths of the shell: a new shell, whole; the model keeps its weights when the nodes are the same)
+		# (new strengths of the shell: a new shell, whole, and the parts back; the model keeps its weights when the nodes
+		# are the same, else it is made again for the new nodes)
+		if parts != null:
+			parts.repair()
 		_make_shell()
 		if shell_mesh != null:
 			if shell != null and shell.sb.count == shell_mesh.sb.count:
-				shell_mesh.sb = shell.sb
+				shell_mesh.use(shell.sb)
 			else:
-				shell_mesh.sb.repair()
+				shell_mesh.restore()
+				shell_mesh = null
+		if parts != null:
+			parts = CarParts.new(self)
 
 
 ## Everything the physics take from car.json (setup, and the tuning menu). The wheels are made the first time and
