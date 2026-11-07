@@ -114,7 +114,11 @@ Zoals BeamNG: de node-beam-kern native, de rest van de logica in een scripttaal.
 
 ### Fase M4: de DMG uitbrengen (dagen)
 
-- Certificaat *Developer ID Application* aanmaken (developer.apple.com, Certificates).
+**Stand 7 november 2026:** `macos/scripts/make-dmg.sh` werkt. De eerste DMG (2.5.0, 152 MB, universal) is getekend met *Developer ID Application: Glenn Hofman (HNQM5R9NGR)*, genotariseerd en gestapled. Als download getest (met quarantainevlag): Gatekeeper accepteert de app. Er is **geen certificaat op de Mac nodig**: Xcode tekent en notariseert via het ingelogde account (cloud signing). De DMG zelf is niet getekend (cloud signing tekent alleen apps), dat hoeft niet voor Gatekeeper. Nog te doen: Sparkle, en een eerste test op een andere Mac.
+
+Oorspronkelijk plan:
+
+- Certificaat *Developer ID Application* aanmaken (developer.apple.com, Certificates). Niet nodig gebleken: cloud signing.
 - Build-configuratie `Direct`: hardened runtime, geen sandbox, `IOHIDManager` voor force feedback (fase 3 van MACOS-PORT wordt dan eenvoudiger).
 - `make-dmg.sh`: archive, export met Developer ID, `notarytool submit --wait`, `stapler staple`, `hdiutil create`.
 - Sparkle voor updates, met een appcast op openracer.eu.
@@ -146,6 +150,7 @@ Let op: de instellingen worden bewaard. Wie *high* al had (met de oude waarden),
 
 ## Volgende stappen
 
-1. Certificaat *Developer ID Application*, dan M4 (de DMG).
+1. De DMG op een andere Mac testen; dan op openracer.eu en itch.io (itch.io kan met `butler` worden geüpload).
 2. M3: de physics-kern in WebAssembly (de grens in een race).
+3. Sparkle voor updates.
 3. Een proef met `WebGPURenderer` op één baan zonder eigen shaders, om de winst te meten voordat de shaders worden omgezet.

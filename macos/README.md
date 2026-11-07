@@ -20,7 +20,7 @@ The project is made from `project.yml` and is not in git. Once, put the team ID 
 The script takes the version from `web/js/Version.js` and uses the number of commits as the build number, so every upload has a higher one. Run it again after a new commit or when a Swift file is added.
 
 - **Run**: ⌘R.
-- **A DMG**: Product → Archive, then *Distribute App* → *Direct Distribution* (Developer ID, notarized by Apple), then a disk image of the exported app (see MACOS-METAL.md, phase M4).
+- **A DMG**: `macos/scripts/make-dmg.sh`. It archives, signs with Developer ID, has Apple notarize the app, staples the ticket and makes `macos/build/release/OpenRacer-<version>.dmg` with its SHA-256. Signing and notarizing go through the Apple account signed in in Xcode (cloud signing): no certificate on this Mac, no password. By hand: Product → Archive → *Distribute App* → *Direct Distribution*.
 
 While developing, the app can serve the folder of the repository directly, so a change to the JavaScript only needs a reload (⌘R in the debug build's View menu): in Xcode, Edit Scheme → Run → Arguments → Environment Variables, `OPENRACER_WEB` = the full path of `web/`. In a debug build the page can be inspected with Safari's Web Inspector (Develop menu → the name of the Mac → OpenRacer).
 
@@ -49,6 +49,7 @@ A universal binary with `web/` in it, signed ad hoc and without the sandbox: onl
 | `Resources/Assets.xcassets` | the app icon (AppIcon), every size made from `icon_1024.png` |
 | `Resources/PrivacyInfo.xcprivacy` | the privacy manifest that the App Store asks for (no tracking, no data collected) |
 | `scripts/generate-project.sh` | makes `OpenRacer.xcodeproj` with the version, the build number and the team |
+| `scripts/make-dmg.sh` | the DMG for openracer.eu and itch.io: Developer ID, notarized, stapled |
 | `scripts/build-app.sh` | makes `build/OpenRacer.app` without Xcode |
 
 ## Where the player's files are
