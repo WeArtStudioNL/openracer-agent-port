@@ -9,6 +9,7 @@ var car: Car
 var line: RacingLine
 var pace := 0.8                  # a share of the grip that it uses
 var others: Array[Car] = []       # the other cars of the race (to back off behind one and to move aside)
+var pit: AIPit = null             # an AI car of a race: its pit stops (AIPit)
 var _index := -1
 var _speed_error_i := 0.0
 var _side := 0.0                  # m to the side of the line, to pass a car
@@ -81,6 +82,8 @@ func _learned_path() -> String:
 func lost() -> void:
 	_index = -1
 	_yaw_i = 0.0
+	if pit != null:
+		pit.reset()
 
 
 func drive(dt: float) -> void:
@@ -93,6 +96,12 @@ func drive(dt: float) -> void:
 		ahead = int(clampf(3.0 + v * 0.75, 7.0, 35.0) / RacingLine.STEP)      # (Opponent.js: a bike leans into a bend before it turns)
 	var target := line.point(_index + ahead)
 	var want := _speeds[posmod(_index + int((3.0 + v * 0.3) / RacingLine.STEP), line.count())]
+	# the pits (AIPit): a speed of the pit lane, and a point on the pit line or at the box to steer at
+	var pits: Dictionary = pit.update(dt, _index, v) if pit != null else {}
+	if not pits.is_empty():
+		want = minf(want, float(pits["speed"]))
+		if pits.has("target"):
+			target = pits["target"]
 	# the front tyres at their limit (understeer: the car runs wide): off the throttle, a little slower; and the
 	# bend is learned: the line before here a little slower, for the next lap (what a driver learns, RacingLine.js factorOf)
 	var front_s := maxf(car.wheels[0].s, car.wheels[1].s)
@@ -108,7 +117,7 @@ func drive(dt: float) -> void:
 		_speeds[_index] = minf(_base_speeds[_index], _speeds[_index] * 1.003)
 		_last_index = _index
 	var off_line := absf(_lane(_index, xf.origin))
-	var off := off_road and off_line > 2.0 and v > 8.0 and absf(_side) < 0.5
+	var off := off_road and off_line > 2.0 and v > 8.0 and absf(_side) < 0.5 and pits.is_empty()
 	# (once for a trip off the road, when it starts)
 	if off and not _was_off:
 		for k in range(-30, 4):
@@ -121,7 +130,11 @@ func drive(dt: float) -> void:
 	var inv := xf.affine_inverse()
 	var cap := _traffic(xf, inv, v, dt)
 	want = minf(want, cap)
-	if absf(_side) > 0.01:
+	if pit != null:
+		pit.waiting = cap < 0.5
+	if not pits.is_empty():
+		_side = 0.0
+	if absf(_side) > 0.01 and not pits.has("target"):
 		var nxt := line.point(_index + ahead + 1)
 		var dir := Vector3(nxt.x - target.x, 0.0, nxt.z - target.z).normalized()
 		target += Vector3(dir.z, 0.0, -dir.x) * _side     # (to the left of the line: +; x is to the left of forward)
@@ -140,7 +153,7 @@ func drive(dt: float) -> void:
 		steer += 0.12 * yaw_error + 0.25 * _yaw_i
 	else:
 		# (a motorcycle, Opponent.js: a pull towards the line itself, scaled to the speed and damped by how fast it closes in)
-		var beside := _lane(_index, xf.origin) - _side
+		var beside := 0.0 if pits.has("target") else _lane(_index, xf.origin) - _side
 		var rate := 0.0 if is_nan(_beside) else (beside - _beside) / maxf(dt, 1e-3)
 		_beside = beside
 		steer += clampf((-beside * 0.012 - rate * 0.01) * minf(1.0, 225.0 / maxf(225.0, v * v)), -0.05, 0.05)
@@ -166,6 +179,10 @@ func drive(dt: float) -> void:
 		car.throttle_input = _rolled
 	car.brake_input = clampf(-u * 0.5, 0.0, 1.0) if err < -1.0 else 0.0
 	car.handbrake_input = 0.0
+	if pit != null and pit.at_stop:
+		# in its box until the stop is done
+		car.throttle_input = 0.0
+		car.brake_input = 1.0 if v < 1.0 else maxf(car.brake_input, 0.2)
 
 
 ## The other cars (Opponent.js drive): the car ahead is passed on a side that is chosen once and kept until it is

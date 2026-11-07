@@ -92,6 +92,9 @@ func setup(w: Node, l: RacingLine, track: Track, player_car: Car, opponents: int
 		world.add_child(e.car)
 		e.driver = AIDriver.new()
 		e.driver.setup(e.car, line, 0.8 * (1.0 - 0.03 * (i % 4)))
+		# its pit stops: box i + 2 of the track (box 1 is the player's), with tyre wear on (AIPit)
+		e.driver.pit = AIPit.new()
+		e.driver.pit.setup(e.car, line, track.config, i + 1, e.name)
 		e.car.set_meta("slot", slots[slot_i])
 		e.car.contact_monitor = true
 		e.car.max_contacts_reported = 4
@@ -159,6 +162,9 @@ func place_all() -> void:
 		e.car.freeze = false
 		e.index = -1
 		e.laps = 0
+		# (a test: the AI cars start with this many litres, to make them pit soon)
+		if e.driver != null and Content.arg("ai-fuel") != "":
+			e.car.fuel = minf(e.car.tank, float(Content.arg("ai-fuel")))
 
 
 func is_held() -> bool:
@@ -195,18 +201,23 @@ func _physics_process(dt: float) -> void:
 			e.car.steer_input = 0.0
 			continue
 		e.driver.others = others
+		var pit := e.driver.pit
+		pit.laps_left = laps - maxi(0, e.laps - 1)
+		pit.finished = e.finish_time >= 0.0
 		e.driver.drive(dt)
-		# stuck (against a wall, on its side): back on the line
+		# stuck (against a wall, on its side): back on the line; in the pits only when it gets nowhere away from its
+		# stop for a while (not while it waits in its box)
 		if absf(e.car.speed) > 5.0:
 			e.going = true
-		e.stuck = e.stuck + dt if absf(e.car.speed) < 1.0 else 0.0
-		if e.stuck > (4.0 if e.going else 8.0):
+		e.stuck = e.stuck + dt if absf(e.car.speed) < 1.0 and not pit.pitting else 0.0
+		if e.stuck > (4.0 if e.going else 8.0) or pit.stuck(dt):
 			e.stuck = 0.0
 			e.going = false
+			var in_pits := pit.pitting
 			world.put_on_line(e.car)
 			e.driver.lost()
 			e.put_back += 1
-			RunLog.event("race: %s put back on the line" % e.name)
+			RunLog.event("race: %s put back on the line%s" % [e.name, " (stuck in the pits)" if in_pits else ""])
 
 
 ## The lap and the part of it, along the line from the finish.
@@ -231,9 +242,12 @@ func _crossed(e: Entry) -> void:
 			e.best_lap = t
 	e.lap_start = clock
 	e.laps += 1
+	if e.driver != null and e.driver.pit != null:
+		e.driver.pit.lap_done()
 	if e.laps > laps and state != State.COUNTDOWN:
 		e.finish_time = clock
-		RunLog.event("race: %s finished P%d in %s" % [e.name, position_of(e), LapTimer.format_time(clock)])
+		var pitted := "" if e.driver == null or e.driver.pit == null else ", %d pit stops" % e.driver.pit.stops
+		RunLog.event("race: %s finished P%d in %s%s" % [e.name, position_of(e), LapTimer.format_time(clock), pitted])
 		if e.driver != null:
 			e.driver.save_learned()
 		if e == player:
@@ -241,11 +255,13 @@ func _crossed(e: Entry) -> void:
 			finished.emit()
 			var knocks := 0
 			var back := 0
+			var stops := PackedStringArray()
 			for x in entries:
 				if x.driver != null:
 					knocks += x.knocks
 					back += x.put_back
-			RunLog.event("race stats: touches between cars %d (each counted by both), AI put back %d" % [knocks, back])
+					stops.append("%s %d" % [x.name, x.driver.pit.stops])
+			RunLog.event("race stats: touches between cars %d (each counted by both), AI put back %d, pit stops: %s" % [knocks, back, ", ".join(stops)])
 
 
 ## 1 for the leader: the finished cars by their time, then the others by laps and the part of the lap.

@@ -229,7 +229,15 @@ in pit box 1 of the track (track.json `pit.boxes`, drawn on the road with their 
 filled at 6 L/s, the tyres are changed when the most worn is past 15 % or one leaks, and with damage on the car is
 repaired; the parts go side by side, with 1.2 s to lift the car and to drop it, and the car is held until it is done.
 The HUD shows "PIT STOP 3.2 s · repair · tyres · fuel". Test: `res://tools/test_pit.tscn -- --set=tyre_wear:1`.
-Not yet: the AI cars do not pit (the pit line of Opponent.js), the car is not lifted in the picture.
+The AI cars of a race pit too (`scripts/ai_pit.gd`, Opponent.js): when the most worn tyre is past 75 % with two
+laps or more to go, or the fuel will not last the laps that are left (the fuel of a lap measured, else 12 % of the
+tank), each drives to its own box (box 2 for the first AI car, and so on; a car without a box does not pit):
+along the pit line of the track (track.json `pit.line`) at 16 m/s, braking for its box and straightening up on its
+axis, or without a pit line to a point behind the box and into it; it stands until its stop is done and rejoins.
+Not after the finish. The log says "race: Hatchback 2 pits (fuel 5.1 L, wear 0.12)" and the stop; the race's
+put-back leaves a car alone while it stands in its box. Tests: `--set=tyre_wear:1 --ai-fuel=6` (the AI cars start
+with 6 L) and `--ai-pit-line=0` (the box mode on a track with a pit line).
+Not yet: the car is not lifted in the picture.
 
 The drag strip (`scripts/drag_strip.gd`, DragStrip.js): on a track with `dragstrip` the front wheels at the line,
 the car still, "Get ready" for 2 s, then the tree (stage, three ambers half a second apart, green, red for a false
