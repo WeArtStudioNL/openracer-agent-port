@@ -58,6 +58,10 @@ func setup(c: Car) -> void:
 		_dust.append(d)
 		add_child(s)
 		add_child(d)
+	# the water of the puddles and the snow (the condition of the ground, Ground)
+	var spray := GroundSpray.new()
+	spray.setup(c)
+	add_child(spray)
 
 
 ## Across the strip: soft edges, a little uneven along it.
