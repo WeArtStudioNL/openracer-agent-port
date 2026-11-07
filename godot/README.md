@@ -203,6 +203,22 @@ comes off), hinged parts that swing open (doors, a hood) and the link beams of p
 pieces of a part that shatters (`Shatter.js`), a loose part that hits its own car, the shell of the model drawn as an
 object "beams", the replay of the shell.
 
+## Pit stops and the drag strip
+
+The pit stop (`scripts/pit_stop.gd`, Pit.js): with "Tyre temperature and wear" on, the player's car standing still
+in pit box 1 of the track (track.json `pit.boxes`, drawn on the road with their numbers) is serviced: the tank is
+filled at 6 L/s, the tyres are changed when the most worn is past 15 % or one leaks, and with damage on the car is
+repaired; the parts go side by side, with 1.2 s to lift the car and to drop it, and the car is held until it is done.
+The HUD shows "PIT STOP 3.2 s · repair · tyres · fuel". Test: `res://tools/test_pit.tscn -- --set=tyre_wear:1`.
+Not yet: the AI cars do not pit (the pit line of Opponent.js), the car is not lifted in the picture.
+
+The drag strip (`scripts/drag_strip.gd`, DragStrip.js): on a track with `dragstrip` the front wheels at the line,
+the car still, "Get ready" for 2 s, then the tree (stage, three ambers half a second apart, green, red for a false
+start); reaction time, the times and speeds at 60 ft, 330 ft, 1/8 mile, 1000 ft and 1/4 mile as notes, and a time
+slip at the finish; the 50 best runs per track in `user://drag.cfg`. Test: `res://tools/test_drag.tscn -- --ai=1`.
+Note: on desert-drag-strip a barrier of the track model (`prefab_barrier_12`) lies along the middle of the strip
+just past the line, in the path of a car from the start position; the test starts in the right lane.
+
 ## Controls
 
 Arrows or WASD drive, Space is the handbrake, Q/E shift (the first shift switches to a manual gearbox),

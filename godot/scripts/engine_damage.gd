@@ -60,7 +60,8 @@ func bind(sb: SoftBody) -> void:
 	var rear_z := car.wheels[2].hub.z
 	var af := front_z - com.z
 	var ar := com.z - rear_z
-	var place := str(car.config.get("engine_place", "front"))
+	var dl: Variant = car.config.get("driveline", {})
+	var place := str(dl.get("engine", "front")) if dl is Dictionary else "front"
 	var p: Array = _cfg.get("position", [])
 	var b := Vector3(0.0, -car.cg_height + 0.55, -ar + 0.1 if place == "rear" else (-ar * 0.35 if place == "mid" else af - 0.2))
 	if p.size() == 3:

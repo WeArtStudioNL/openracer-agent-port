@@ -73,6 +73,13 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	var flames := ExhaustFlames.new()
 	flames.setup(car)
 	add_child(flames)
+	# the pit stop of the player's car (box 1; Pit.js) and the drag strip of the track (DragStrip.js)
+	var pit := PitStop.new()
+	pit.setup(car, track.config, 0, true)
+	car.add_child(pit)
+	var drag := DragStrip.make(car, track, track.config, track_id)
+	if drag != null:
+		add_child(drag)
 	laps = LapTimer.new()
 	laps.setup(car, track)
 	laps.message.connect(hud.toast)
