@@ -49,3 +49,8 @@ __pycache__/
 
 # the certificate that start-server.sh --https makes
 tools/.certs/
+
+# the macOS app (macos/scripts/build-app.sh, swift build)
+macos/build/
+macos/.build/
+macos/.swiftpm/
