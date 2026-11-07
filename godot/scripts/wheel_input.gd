@@ -19,7 +19,8 @@ const STEPS := [
 	{"id": "shift_down", "kind": "button", "optional": true, "text": "Press SHIFT DOWN (paddle or button)"},
 ]
 const AXES := 10
-const HOLD := 0.6             # s that a step has to be held still
+const HOLD := 0.5             # s that the end of an axis has to be held
+const HOLD_LONG := 2.5        # s held still anywhere that also counts (an axis that does not reach its end)
 
 var device := -1
 var guid := ""
@@ -37,6 +38,8 @@ var _step := 0
 var _rest: PackedFloat32Array = []
 var _best_axis := -1
 var _best_value := 0.0
+var _extreme := 0.0
+var _step_text := ""
 var _held := 0.0
 var _new_profile := {}
 var _buttons_before := {}
@@ -112,7 +115,8 @@ func _start_step(i: int) -> void:
 	_best_axis = -1
 	_held = 0.0
 	var s: Dictionary = STEPS[_step]
-	calibration_text.emit("Wheel calibration %d/%d: %s%s   [Esc] cancel" % [_step + 1, STEPS.size(), s["text"], "   [N] skip" if s.get("optional", false) else ""])
+	_step_text = "Wheel calibration %d/%d: %s%s   [Esc] cancel" % [_step + 1, STEPS.size(), s["text"], "   [N] skip" if s.get("optional", false) else ""]
+	calibration_text.emit(_step_text)
 
 
 func _next() -> void:
@@ -182,41 +186,57 @@ func _calibration_step(delta: float) -> void:
 				_next()
 				return
 		return
-	# the axis that moved most from where it was at the start of the step
+	# the axis that moved most from where it rested at the start; for the right turn: the steering axis, once it is
+	# past the middle, on the other side of the left turn by half of it at least
 	var axis := -1
 	var most := 0.0
 	var used := _used_axes()
-	for a in AXES:
-		if used.has(a) and s["id"] != "steer_right":
-			continue
-		var d := absf(_axis(a) - _rest[a])
-		if d > most:
-			most = d
-			axis = a
+	if s["id"] == "steer_right":
+		axis = int(_new_profile["steer_axis"])
+		var left := float(_new_profile["steer_left"]) - _rest[axis]
+		var now_d := _axis(axis) - _rest[axis]
+		most = absf(now_d) if now_d * left < 0.0 and absf(now_d) > absf(left) / 2.0 else 0.0
+	else:
+		for a in AXES:
+			if used.has(a):
+				continue
+			var d := absf(_axis(a) - _rest[a])
+			if d > most:
+				most = d
+				axis = a
 	if most < 0.3:
 		_held = 0.0
+		_best_axis = -1
+		_show_live(-1, 0.0)
 		return
 	var value := _axis(axis)
-	if axis == _best_axis and absf(value - _best_value) < 0.03:
+	if axis != _best_axis:
+		_best_axis = axis
+		_extreme = value
+		_held = 0.0
+	# the end of the travel: the furthest it got from rest
+	if absf(value - _rest[axis]) > absf(_extreme - _rest[axis]):
+		_extreme = value
+	if absf(value - _best_value) < 0.02:
 		_held += delta
 	else:
 		_held = 0.0
-	_best_axis = axis
 	_best_value = value
-	if _held < HOLD:
+	_show_live(axis, value)
+	# accepted at the end of the range of the axis (a wheel at full lock, a pedal down, held a moment), or when it
+	# is held still for long (a wheel or a pedal that does not reach the end of its axis)
+	var at_end := absf(value) >= 0.95 and absf(value - _extreme) < 0.03
+	if not ((at_end and _held >= HOLD) or _held >= HOLD_LONG):
 		return
 	match s["id"]:
 		"steer_left":
 			_new_profile["steer_axis"] = axis
-			_new_profile["steer_left"] = value
+			_new_profile["steer_left"] = _extreme
 		"steer_right":
-			_new_profile["steer_right"] = value
-			if axis != int(_new_profile.get("steer_axis", axis)):
-				calibration_text.emit("That was another axis than the left turn: start again with K")
-				calibrating = false
-				return
+			_new_profile["steer_right"] = _extreme
 		_:
-			_new_profile[s["id"]] = {"axis": axis, "rest": _rest[axis], "full": value}
+			_new_profile[s["id"]] = {"axis": axis, "rest": _rest[axis], "full": _extreme}
+	RunLog.event("calibration %s: axis %d, rest %.3f, end %.3f" % [s["id"], axis, _rest[axis], _extreme])
 	_next()
 
 
@@ -248,6 +268,14 @@ func _finish() -> void:
 ## The sign of the force for this wheel (from the calibration).
 func ffb_sign() -> float:
 	return float(_profile.get("ffb_sign", 1.0))
+
+
+## The step, with where the axis is now (so a slow turn can be seen going).
+func _show_live(axis: int, value: float) -> void:
+	if axis < 0:
+		calibration_text.emit(_step_text)
+	else:
+		calibration_text.emit("%s\naxis %d: %+.2f%s" % [_step_text, axis, value, "  hold it there" if absf(value) >= 0.95 else ""])
 
 
 ## The axes that earlier steps took.

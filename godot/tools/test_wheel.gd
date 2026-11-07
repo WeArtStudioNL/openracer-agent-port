@@ -27,18 +27,35 @@ func _init() -> void:
 	var settings: Node = root.get_node("/root/Settings")
 	w.calibration_text.connect(func(t): _texts.append(t))
 	w.calibrate()
-	for step in [[0, -0.9], [0, 0.95], [5, 1.0], [4, 0.8], ["skip"], [5, "button"], [4, "button"]]:
+	# slowly to the left, with pauses on the way (they must not end the step), then full lock
+	for v in [-0.3, -0.6, -0.8, -1.0]:
+		_move(0, v)
+		await _hold(1.0)
+	print("after left: ", w._new_profile)
+	# still at the left lock for a while: that is not the right turn
+	await _hold(1.0)
+	print("still left, step %d (expect 1)" % w._step)
+	for v in [-0.5, 0.0, 0.4, 0.7, 1.0]:
+		_move(0, v)
+		await _hold(1.0)
+	_move(0, 0.0)
+	print("after right: step %d (expect 2)" % w._step)
+	# the throttle slowly down; then let go while the brake step starts
+	for v in [0.4, 1.0]:
+		_move(5, v)
+		await _hold(1.0)
+	_move(5, 0.0)
+	# a brake that does not reach the end of its axis: taken after holding it still
+	_move(4, 0.7)
+	await _hold(3.0)
+	_move(4, 0.0)
+	await _hold(0.1)
+	w.skip()
+	for b in [5, 4]:
 		await _hold(0.1)
-		if step[0] is String:
-			w.skip()
-		elif step[1] is String:
-			_button(step[0], true)
-			await _hold(0.1)
-			_button(step[0], false)
-		else:
-			_move(step[0], step[1])
-			await _hold(1.0)
-			_move(step[0], 0.0)
+		_button(b, true)
+		await _hold(0.1)
+		_button(b, false)
 	await _hold(0.2)
 	print("texts: ", _texts.size(), "  last: '", _texts[-1], "'")
 	print("profile: ", settings.profile(w.guid))
