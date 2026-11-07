@@ -191,6 +191,15 @@ func _ready() -> void:
 	if Content.arg("settings") != "":
 		pause()
 		_show_settings()
+	if Content.arg("edit-hud") != "":
+		# (the screenshots of the tests: the HUD editor, with an element chosen and moved)
+		await get_tree().create_timer(1.0).timeout
+		hud.edit_layout()
+		if Content.arg("edit-hud") != "1":
+			hud.editor.selected = Content.arg("edit-hud")
+			hud.editor._entry(hud.editor.selected).merge({"x": -0.3, "y": -0.1, "s": 0.8, "o": 0.7}, true)
+			HudLayout.apply(get_tree(), hud.editor.working)
+			hud.editor._refresh()
 	if Content.arg("tuning") != "":
 		open_tuning.call_deferred()
 	RunLog.event("start  %s on %s  mass %d kg  %s %s  %s" % [car.config.get("name", car.car_id), track.config.get("name", track.track_id),
