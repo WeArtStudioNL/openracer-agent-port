@@ -363,7 +363,6 @@ const SOUND_KEYS := ["volume", "convolution", "audio_volume", "hf_gain", "noise"
 
 ## The values that the Godot physics do not use yet (the menu shows them grey, with NOT_YET as the tooltip).
 const NOT_IN_GODOT := [
-	"body_color", "rim_color", "body_finish", "rim_finish", "body_pattern", "body_flake", "body_uv", "rim_pattern", "rim_flake", "rim_uv",
 	"rim_front", "tyre_front", "rim_rear", "tyre_rear", "tyre_height_front", "tyre_height_rear",
 	"tyre_width", "tyre_width_rear", "tyre_rings", "tyre_segments", "tyre_inner_ratio", "tyre_carcass", "tyre_stiff_x", "tyre_stiff_y",
 	"tyre_heating", "tyre_life", "shift_style", "diff_lock", "center_diff", "susp_front", "susp_rear", "steering_stop",
