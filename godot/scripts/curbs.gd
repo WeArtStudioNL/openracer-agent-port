@@ -97,11 +97,11 @@ static func mesh_of(curb: Dictionary) -> ArrayMesh:
 		var b: Array = points[mini(points.size() - 1, i + 1)]
 		var tx: float = b[0] - a[0]
 		var tz: float = b[1] - a[1]
-		var len := Vector2(tx, tz).length()
-		if len == 0.0:
-			len = 1.0
-		var sx := tz / len
-		var sz := -tx / len
+		var n_len := Vector2(tx, tz).length()
+		if n_len == 0.0:
+			n_len = 1.0
+		var sx := tz / n_len
+		var sz := -tx / n_len
 		var size := maxf(0.0, float(p[5])) if p.size() > 5 else 1.0
 		var lift := height * size * (_smooth(minf(along[i], total - along[i]) / ramp) if ramp > 0.0 else 1.0)
 		var row: Array = []
