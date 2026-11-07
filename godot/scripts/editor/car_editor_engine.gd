@@ -747,9 +747,35 @@ func build_test_bar() -> void:
 		if _synth != null:
 			_synth.set_inside(on))
 	row.add_child(_inside)
-	var note := EditorStyle.hint("Drop car, Drive and the crash test: Save and test drives the car in the game.")
-	note.custom_minimum_size.x = 170
-	row.add_child(note)
+	var sep := ColorRect.new()
+	sep.color = Color("#2f3845")
+	sep.custom_minimum_size = Vector2(1, 34)
+	row.add_child(sep)
+	var drop := EditorStyle.button("Drop car", "small accent", "Lets the car fall on its wheels from a height, with the physics of the game")
+	row.add_child(drop)
+	var h: Array = slider.call("Height", 0.1, 5.0, 1.0)
+	(h[0] as HSlider).step = 0.1
+	(h[0] as HSlider).custom_minimum_size.x = 90
+	var tl: Array = slider.call("Tilt", 0.0, 30.0, 0.0)
+	(tl[0] as HSlider).custom_minimum_size.x = 90
+	var show_drop := func(_v: float):
+		h[1].text = "Height  %.1f m" % h[0].value
+		tl[1].text = "Tilt  %d°" % roundi(tl[0].value)
+	(h[0] as HSlider).value_changed.connect(show_drop)
+	(tl[0] as HSlider).value_changed.connect(show_drop)
+	show_drop.call(0.0)
+	drop.pressed.connect(func(): ed.bench.drop(h[0].value, tl[0].value))
+	var drive := EditorStyle.button("Drive", "small accent", "Drive the car on the floor with the keys of the game: arrows or WASD, space is the handbrake, " +
+		"the shift keys shift, R puts it back")
+	drive.pressed.connect(func():
+		ed.bench.toggle_drive()
+		drive.text = "Stop driving" if ed.bench.driving else "Drive")
+	row.add_child(drive)
+	var back := EditorStyle.button("↺", "small ghost", "Stop the test: back to the model as it is")
+	back.pressed.connect(func():
+		ed.bench.stop()
+		drive.text = "Drive")
+	row.add_child(back)
 	_labels()
 
 

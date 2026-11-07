@@ -133,6 +133,12 @@ func apply_paint() -> void:
 				(n as Node).set_meta("painted", true)
 
 
+## A colour of car.json (colors.body, colors.rim), or null for the colour of the model.
+func colour_of(path: String) -> Variant:
+	var v: Variant = Tuning.read(ed.cfg, path)
+	return Color(str(v)) if v is String and str(v) != "" else null
+
+
 ## The window: a material each, with a preset, Reset and its fields.
 func render() -> void:
 	if _dialog.is_empty():

@@ -56,6 +56,20 @@ func _run() -> void:
 	check(ed.engine._has_build(), "the engine block is there (%s)" % Tuning.read(ed.cfg, "engine.build.block"))
 	check(ed.problems().is_empty(), "nothing is missing (%s)" % ", ".join(ed.problems()))
 	check(ed.layers.exhaust.size() == 1, "the exhaust point is there")
+	print("1b. drop it on the bench (the physics of the game)")
+	ed.bench.drop(1.0, 5.0)
+	check(ed.bench.car != null and not ed.view.pivot.visible, "the car of the bench is made, the model is hidden")
+	await get_tree().create_timer(3.0).timeout
+	if ed.bench.car != null:
+		var bc := ed.bench.car
+		var touching := 0
+		for w in bc.wheels:
+			touching += 1 if w.contact else 0
+		check(touching == 4 and bc.linear_velocity.length() < 0.3, "it stands on its four wheels (%d, %.2f m/s)" % [touching, bc.linear_velocity.length()])
+		check(absf(bc.global_position.y - ed.view.grid.position.y - ed.num("chassis.tire_diameter") / 2.0) < 0.25,
+			"at the height of its axles (%.2f m)" % bc.global_position.y)
+	ed.bench.stop()
+	check(ed.bench.car == null and ed.view.pivot.visible, "↺: back to the model")
 	print("2. change it as a user does")
 	_type(ed, "name", "Hatchback editor test")
 	ed.form._id_edit.text = "zz-editor-test"

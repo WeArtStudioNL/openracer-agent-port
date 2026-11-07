@@ -56,6 +56,7 @@ var layers: CarEditorLayers
 var suspension: CarEditorSuspension
 var mats: CarEditorMaterials
 var io: CarEditorIO
+var bench: CarEditorBench
 
 var side: PanelContainer
 var cards_box: VBoxContainer
@@ -86,6 +87,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	theme = EditorStyle.make_theme()
 	io = CarEditorIO.new(self)
+	bench = CarEditorBench.new(self)
 	var bg := ColorRect.new()
 	bg.color = EditorStyle.BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -472,6 +474,7 @@ func _refresh_list(select := "") -> void:
 ## A new car (or motorcycle): the defaults of the browser editor's form.
 func new_car(kind := "car") -> void:
 	engine.stop_sound()
+	bench.stop()
 	cfg = io.default_car(kind)
 	car_id = ""
 	id_edited = false
@@ -1119,6 +1122,7 @@ func _process(delta: float) -> void:
 		refresh_ready()
 	layers.frame()
 	engine.frame(delta)
+	bench.frame(delta)
 	_hook_call("frame", [delta])
 
 

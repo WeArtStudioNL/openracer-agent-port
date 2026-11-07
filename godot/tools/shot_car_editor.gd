@@ -25,6 +25,8 @@ func _ready() -> void:
 		ed.layers.select(sel)
 	if Content.arg("tests") != "":
 		ed.engine.toggle_test_bar()
+	if Content.arg("drop") != "":
+		ed.bench.drop(float(Content.arg("drop")), 8.0)
 	if Content.arg("dyno") != "":
 		ed.engine.run_dyno()
 	match Content.arg("window"):

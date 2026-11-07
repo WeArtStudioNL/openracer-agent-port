@@ -66,6 +66,8 @@ func arg(name: String) -> String:
 
 ## The file for a path of the game (cars/<id>/car.json): the player's garage first (Garage), else the game's.
 func path(rel: String) -> String:
+	if rel.begins_with("/"):          # (an absolute path: the car editor tests a model that is not saved yet)
+		return rel
 	var own := Garage.resolve(rel)
 	return own if own != "" else root.path_join(rel)
 
