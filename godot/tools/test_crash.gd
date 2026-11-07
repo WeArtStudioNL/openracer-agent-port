@@ -5,6 +5,7 @@ extends Node3D
 ## deceleration, the bend of the shell, the energy it took up and the torn anchors and beams, then puts the car on
 ## the floor again facing away and drives it on (the car must still drive), and repairs it. Without --headless,
 ## --shot=file.png saves a picture of the dent a moment after the hit. --set=damage:false: the same with a rigid car.
+## --puncture=1 punctures the front left tyre as it drives on, and prints its pressure.
 
 var car: Car
 var cam: Camera3D
@@ -144,11 +145,16 @@ func _physics_process(dt: float) -> void:
 				car.throttle_input = 1.0
 				_phase = "drive"
 				_hit_time = _time
+				if Content.arg("puncture") != "":
+					TyreDamage.puncture(car, 0, 0.3)
 		"drive":
 			car.steer_input = clampf(car.global_position.x * 0.3 + fwd.x * 2.0, -0.2, 0.2)
 			if _time - _hit_time > 4.0:
 				print("drives on: %.1f km/h after 4 s, %s" % [car.speed * 3.6, "bend kept %.1f cm, the shell %s (anchors pull %.0f N in sum)" % [
 					car.shell.sb.stats()["max_bend"] * 100.0, "quiet" if car.shell.sb.quiet else "moving", car.shell.sb.reaction_force.length()] if car.shell else ""])
+				if TyreDamage.punctured(car):
+					var fl := car.wheels[0]
+					print("puncture FL: %.2f bar of %.2f, grip %.2f" % [fl.pressure - fl.pressure_loss, fl.pressure, fl.pressure_grip])
 				if car.engine_damage != null:
 					var h: Dictionary = car.engine_damage.health
 					print("engine: %d nodes in the bay, block %.2f top %.2f pan %.2f radiator %.2f%s, coolant %.0f %%, oil %.0f %%, %.0f C, power %.0f %%, misfire %.2f, %s" % [
@@ -157,6 +163,7 @@ func _physics_process(dt: float) -> void:
 				car.repair()
 				if car.engine_damage != null:
 					print("engine repaired: power %.0f %%, coolant %.0f %%" % [car.engine_damage.health["power"] * 100.0, car.engine_damage.health["coolant"] * 100.0])
+				print("tyres after the repair: %s" % ("leaking" if TyreDamage.punctured(car) else "whole, FL %.2f bar" % car.wheels[0].pressure))
 				if car.shell:
 					print("repaired: bend %.1f cm, parts off %d" % [car.shell.sb.stats()["max_bend"] * 100.0, car.parts.count_off() if car.parts else 0])
 				get_tree().quit()

@@ -59,6 +59,9 @@ class Wheel:
 	var pressure_grip := 1.0
 	var pressure_corner := 1.0
 	var pressure_roll := 1.0
+	var pressure := 2.2             # bar, as set (the tuning)
+	var leak := 0.0                 # a puncture: bar a second (0: none)
+	var pressure_loss := 0.0        # bar lost so far
 	var stiffness_bias := 1.0       # the rear tyres are a bit stiffer against the slip angle
 	var tc := false                 # the traction control holds this wheel back
 	var esc := false                # the stability control brakes this wheel
@@ -198,6 +201,7 @@ var shell_mesh: SoftBodyMesh = null
 var parts: CarParts = null      # the parts that come off (damage on)
 var engine_damage: EngineDamage = null   # what a crash does to the engine (damage on, not for the AI)
 var engine_damage_on := true    # (the AI cars have none: they have no pit stop to mend it)
+var tyre_damage := false        # car.json tyres.damage: a hard hit can puncture a tyre (with damage on)
 var _box: CollisionShape3D
 var _box_full := Vector3.ZERO   # the size of the box of the body (x, z) and its place along the car, without a shell
 var _box_shell := Vector3.ZERO  # and inside what the nodes can be crushed to
@@ -288,6 +292,7 @@ func repair() -> void:
 		parts.repair()
 	if engine_damage != null:
 		engine_damage.repair()
+	TyreDamage.repair(self)
 
 
 ## The car was moved (put back on its wheels): the shell stops moving and keeps its dents.
@@ -336,6 +341,7 @@ func _read_config() -> void:
 	var dims: Dictionary = cfg.get("dimensions", {})
 	var dt: Dictionary = cfg.get("drivetrain", {})
 	var ty: Dictionary = cfg.get("tyres", {})
+	tyre_damage = bool(ty.get("damage", false))
 	var br: Dictionary = cfg.get("brakes", {})
 	mass = float(ch.get("mass", 1200))
 	wheelbase = float(ch.get("wheelbase", 2.6))
@@ -459,7 +465,8 @@ func _read_config() -> void:
 		w.stiffness_bias = 1.0 if w.front else 1.08
 		if fresh:
 			w.temp = float(w.kind.get("optimum", 85))
-		_pressure(w, pressure)
+		w.pressure = pressure
+		set_pressure(w, maxf(0.15, pressure - w.pressure_loss))
 		if fresh:
 			wheels.append(w)
 	for i in 4:
@@ -506,7 +513,7 @@ func _read_config() -> void:
 
 ## The pressure of a tyre (applyPressure of Vehicle.js): best around 2.2 bar; 0.8 bar off costs 8 % of the grip;
 ## higher is stiffer against the slip angle; lower rolls harder and heats more.
-func _pressure(w: Wheel, p: float) -> void:
+func set_pressure(w: Wheel, p: float) -> void:
 	var off := (p - 2.2) / 0.8
 	w.pressure_grip = maxf(0.6, 1.0 - 0.08 * off * off)
 	w.pressure_corner = clampf(1.0 + 0.15 * (p - 2.2), 0.7, 1.25)
@@ -906,6 +913,8 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	for i in 4:
 		var w := wheels[i]
 		w.load = maxf(0.0, loads[i])
+		if w.contact and (tyre_damage or w.leak > 0.0) and Settings.get_value("damage"):
+			TyreDamage.step(self, w, dt)
 		w.fx = 0.0
 		w.fy = 0.0
 		if not w.contact:
