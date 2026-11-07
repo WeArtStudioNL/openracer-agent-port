@@ -284,13 +284,76 @@ that folder with `--set=garage_folder:'"/tmp/folder"'` (add `--keep` to the test
 ## Replay
 
 The replay (`scripts/replay.gd`, Replay.js): every car of the session (the player and the opponents) is recorded
-30 times a second, the last half hour. Esc, Replay: the game stays paused behind it and the recording plays through
-the same code that draws the cars. The bar: a slider over the whole recording, start, -10 s, play/pause, +10 s, end,
-the speed (0.1x to 5x), the camera (T: follow, cockpit, bonnet, and a free camera: W A S D, Space/Z up, X down, drag the
-mouse to look, F aims at the car, L goes with it, [ and ] the field of view) and the car it follows (Tab); Exit (Esc) goes back to the game where it was
-left. Keys: Enter play/pause, left and right one frame (held: on), up and down one second, Home and End, H hides the
-bar. Save replay (in the bar) keeps it in `user://replays` (the ids of the track and the cars, and the recording); the main
-menu, Replays…, plays one in a viewer. Test: `res://tools/test_replay.tscn -- --ai=1`. Not yet: marks and fragments, video, the soft body and the parts in the replay.
+30 times a second, the last half hour: the place, the turn, the velocity, the steering, the engine, the pedals, the
+gear, how hard the tyres squeal, and per wheel the spring, the steering and the turn. Esc, Replay: the game stays
+paused behind it and the recording plays through the same code that draws the cars; the engine and the tyres are
+heard as they were (while it plays forwards). The bar (`scripts/replay_bar.gd`): Save replay, Photo (F2: a PNG
+without the bar), ● Video (the whole replay as an mp4), Video editor, Exit; the slider with the fragment on it; Mark in
+and Mark out (I and O; × takes them away) and Save fragment (a replay file of that part, or an mp4 of it played at
+the chosen speed with the camera as it is set); start, -10 s, Rewind, Pause, Play, +10 s, end, the speed (0.1x to
+5x); the frame (16:9, 9:16, 1:1: an orange outline, what a video takes of the picture); the cameras: Follow, Cockpit,
+Bonnet, Free, Cinematic (the cameras of the track, track.json `cameras`: the one whose range the car is in, turning to
+follow it; a field of view slider ×0.2..3 and a look ahead 0..40 m; [ ] zoom), and the car (Tab). At the top left the
+speed, the gear, the revs and the pedals. Keys: Enter or Space play/pause, left and right one frame (held: on), up and
+down one second, Home and End, T the next camera, H hides the bar.
+
+The free camera of the replay (`scripts/replay_free_camera.gd`): W A S D or the arrows (W the way it looks), Z, Space,
+Shift up, X, Alt, Ctrl down, Q E tilt, [ ] field of view, click the scene to look with the mouse (Esc lets it go), a
+gamepad (left stick moves, right stick looks, triggers up and down, shoulders zoom); F aims at the car, L fixes it to
+the car (its frame), K fixes it with the sky up; a speed slider 0.01..3 (log) and the smoothing of the look (5 and 6),
+both remembered. It starts fixed to the car where the camera was. (In the free camera the arrows move it, not the time.)
+
+The files (`scripts/replay_files.gd`): `.oreplay` in `user://replays` (a Godot Variant: the ids of the track and the
+cars, the recording; and when there are a name, the camera track, the cameras of the clips and the zoom of an edit,
+the project of the video editor and the edit as it plays). Version 1 files are still read. The browser's
+`.openracer-replay` files open as well (gzip, "ORRP", the JSON header, 36 floats per car per sample): the place is
+fitted to where the wheels were, the rpm, the pedals, the gear labels and the squeal are taken over, and their camera
+track, clip cameras and zoom play; the blocks after the numbers (the dents and parts of the soft body, the skid marks,
+the smoke and the other effects, the rider as a ragdoll) are left out, as the Godot replay has none of these yet.
+The main menu, Replays…: Watch (an edit when there is one), Edit (the video editor on the recording), Delete (to the
+Trash), Open a file… (copies a .oreplay or a browser file into the folder), Show the folder. Going to the main menu
+from a drive of a minute or more that was not saved asks Save the replay?
+
+Video files (`scripts/replay_film.gd`, `scripts/video_writer.gd`): a part of the replay is played at the chosen speed
+and rendered a second time in a SubViewport of the video's size (the same world, the camera of the screen with its
+field of view narrowed to the orange outline; at most 1920 on the long side), every frame exactly 1/30 s of replay
+time, paced to real time so the sound of the replay is recorded with it (an AudioEffectRecord on Master). The frames
+go straight into ffmpeg (a pipe, raw RGBA to H.264, crf 20, at most 20 Mbit/s, + AAC sound; when the frames came slower
+than real time the sound is stretched to the picture with atempo). ffmpeg is looked for on the PATH and in
+/opt/homebrew/bin, /usr/local/bin, /usr/bin; without it the frames are a PNG sequence in a folder with sound.wav.
+Videos go to Movies/OpenRacer, photos to Pictures/OpenRacer. Esc stops a video (it is kept as far as it went).
+
+The video editor (`scripts/video_editor.gd`, `scripts/video_timeline.gd`, VideoEditor.js), from the bar (over the
+game, which stays paused) or Edit in Replays: the source monitor (from behind the car, a scrubber, play Shift+Enter,
+In and Out I/O, Insert at playhead, Add to end) and the program monitor (in the aspect: 1280x720, 720x1280, 960x960;
+Enter, Home, End, arrows a frame, Shift a second); the timeline with the ruler, the clips (trim handles, the speed
+ramp keys, zoom keys and look-ahead keys drawn and dragged in them) and the camera lane (keys; click: go there, double
+click: edit it with the free camera; K or Key here puts one, Delete removes); the inspector: the camera of the clip
+(camera track, a fixed shot of the free camera with Take camera and Go to shot, follow, cockpit, cinematic with a
+look ahead), the speed 0.05..8 with a ramp, the zoom 0.5..4 with keys, ease in/out per key, split, move, delete.
+Save keeps the project and the edit with the replay's file (a replay of the game is saved first); Save as replay
+writes a new named replay (cuts, speeds, camera track `CameraTrack`, clip cameras, zoom); Save as mp4 films the program.
+The two monitors are SubViewports sharing the world: the source is drawn every other frame (the cars put at its time,
+and back after the draw).
+
+A take (`scripts/take.gd`, Take.js): 5 in the game asks for the picture (16:9, 9:16, 1:1), Video or Replay and
+whether the HUD goes away; a count of 5 s in the frame, then REC with the time (a dark passepartout outside the
+frame); 5 again stops it and asks for a name and what to cut off at the start and the end. A replay goes to Replays; a
+video is filmed afterwards from the recording with the camera of the take (also without a cut: the browser films
+that live from the screen).
+
+The free camera of the game (`scripts/game_free_camera.gd`, FreeCam.js): the fourth camera of C (follow, cockpit,
+bonnet, free; settings `camera` 3 starts with it). W A S D, Space/Z up, Alt/X down, mouse look (click, Esc lets go), Q E
+tilt, 3 4 slower/faster, 7 8 look smoothing, [ ] field of view; P looks at the car, O moves with it, I fixes it to it
+(rays keep it out of the walls). These keys are taken from the controls while it is on (the arrows still drive). The
+panel (with the HUD): the toggles, sliders for speed, movement smoothing, look smoothing, field of view, tilt (Level),
+tilt speed and smoothing, and Record (the take). Remembered per car in `user://video.cfg` with the aspect and the rest.
+
+Test: `res://tools/test_replay.tscn -- --ai --replay-dir=<tmp> --video-cfg=<tmp> --video-dir=<tmp> [--editor=1]
+[--video=1] [--take=1] [--browser=<file>] [--watch=<file> [--edit-file=1]] [--shot=<folder>]` (the folders are
+required, so a test never writes into the player's data; --video needs a window). Not yet: the soft body, the parts,
+the effects (skid marks, smoke) and the rider's ragdoll in the replay; Godot does not write browser files (it reads
+them); the live "cinematic camera after a race" of main.js; the Godot replay of the weather is the weather of now.
 
 ## Pit stops and the drag strip
 
@@ -356,7 +419,7 @@ browser).
 ## Controls
 
 Arrows or WASD drive, Space is the handbrake, Q/E shift (the first shift switches to a manual gearbox),
-C changes the camera (behind, cockpit, bonnet), R puts the car back on its wheels, Backspace goes back to
+C changes the camera (behind, cockpit, bonnet, free), 5 starts and stops a take, R puts the car back on its wheels, Backspace goes back to
 the start, K calibrates a racing wheel, F3 shows the data of the tyres, F8 marks a moment in the log, Esc
 pauses (resume, settings, back to the start, main menu). A gamepad: the triggers for gas and brake,
 the left stick to steer, A handbrake, the shoulders shift, Y camera, X reset, Start pause.
