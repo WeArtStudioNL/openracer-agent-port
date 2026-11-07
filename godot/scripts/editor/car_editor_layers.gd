@@ -589,7 +589,6 @@ func render() -> void:
 		return
 	for c in _list.get_children():
 		c.queue_free()
-	var centres: Variant = ed.wheel_centers()
 	for l in LAYERS:
 		if l.size() == 1:
 			var g := EditorStyle.group(l[0])
@@ -606,8 +605,11 @@ func render() -> void:
 			dim = ed.model_root == null
 			meta = "none" if dim else ""
 		elif id.begins_with("w"):
-			dim = not (centres is Dictionary)
-			meta = "not set" if dim else ""
+			# (the parts of the wheel; a car with Dynamic wheels and no parts has its wheels where the Chassis card puts them: the browser said
+			# "not set" for those, but they are set)
+			var parts: Array = ed.wheel_parts[id.substr(1)]
+			dim = parts.is_empty() and ed.wheel_mode() == "model"
+			meta = str(parts[0]) if not parts.is_empty() else ("not set" if dim else "dynamic")
 		elif id == "steering":
 			dim = true
 			for n in ed.nodes:
