@@ -51,6 +51,8 @@ final class Profiler: NSObject, WKScriptMessageHandler {
             window[name] = function () { var t = performance.now(); try { return f.apply(this, arguments); } finally { add(label, performance.now() - t); } };
         }
         var carWrapped = false, hiddenFrames = 0;
+        window.addEventListener("error", function (e) { post({ note: "error: " + e.message + " at " + (e.filename || "").split("/").pop() + ":" + e.lineno }); });
+        var beat = setInterval(function () { post({ note: "beat", t: Math.round(performance.now()), steps: OpenRacer.PhysicsWasm ? OpenRacer.PhysicsWasm.stats.steps : null }); }, 2000);
         function tick(now) {
             if (last) add("interval", now - last);
             if (measuring && document.hidden) hiddenFrames++;
@@ -73,7 +75,7 @@ final class Profiler: NSObject, WKScriptMessageHandler {
                 var out = { done: true, seconds: seconds, frames: (samples.interval || []).length, ua: navigator.userAgent,
                             canvas: (typeof renderer !== "undefined" && renderer) ? renderer.domElement.width + "x" + renderer.domElement.height + " @" + window.devicePixelRatio : "?",
                             simCost_ms_per_game_s: typeof simCost === "number" ? +simCost.toFixed(1) : null, simLimit: typeof simLimit === "number" ? simLimit : null,
-                            speed_kmh: car && car.vehicle ? Math.round(Math.hypot(car.vehicle.u || 0, car.vehicle.v || 0) * 3.6) : null, hidden_frames: hiddenFrames, auto_resolution: OpenRacer.Graphics && OpenRacer.Graphics.autoResolution ? OpenRacer.Graphics.autoResolution() : null, ai: typeof race !== "undefined" && race.opponents ? race.opponents.length : 0, parts: {} };
+                            speed_kmh: car && car.vehicle ? Math.round(Math.hypot(car.vehicle.u || 0, car.vehicle.v || 0) * 3.6) : null, hidden_frames: hiddenFrames, auto_resolution: OpenRacer.Graphics && OpenRacer.Graphics.autoResolution ? OpenRacer.Graphics.autoResolution() : null, physics_wasm: OpenRacer.PhysicsWasm ? { mode: OpenRacer.PhysicsWasm.mode(), ready: OpenRacer.PhysicsWasm.ready(), stats: OpenRacer.PhysicsWasm.stats } : null, ai: typeof race !== "undefined" && race.opponents ? race.opponents.length : 0, parts: {} };
                 Object.keys(samples).forEach(function (k) {
                     var s = samples[k].slice().sort(function (a, b) { return a - b; }), n = s.length;
                     out.parts[k] = { mean: +(s.reduce(function (a, b) { return a + b; }, 0) / n).toFixed(2), p95: +s[Math.floor(n * 0.95)].toFixed(2), max: +s[n - 1].toFixed(2), n: n };

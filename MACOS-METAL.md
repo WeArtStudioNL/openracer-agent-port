@@ -112,6 +112,16 @@ Zoals BeamNG: de node-beam-kern native, de rest van de logica in een scripttaal.
 - Daarna in de physics-worker (bestaat al als studie, `PhysicsLink.js`), en meerdere auto's tegelijk op meerdere cores. WebAssembly-threads hebben `SharedArrayBuffer` nodig, en dus de headers COOP/COEP: `LocalServer.swift` en `serve.py` kunnen die sturen.
 - Werkt in de browser en in de app: één codebase.
 
+**Stand 7 november 2026, de eerste stap is klaar:** de substeps van de schilband (`TyreShell.js`, de lus die volgens `PHYSICS-WORKER.md` 80 % van een physics-stap is) draaien in WebAssembly.
+
+- `wasm/tyre_shell.c`: dezelfde code als de JavaScript, regel voor regel, met de grond (`Ground.closest`) erbij. Gebouwd met `wasm/build.sh` (clang en wasm-ld van LLVM via Homebrew: `brew install llvm lld`) naar `web/js/wasm/tyre_shell.wasm` (15 KB, in git, zodat de game geen compiler nodig heeft).
+- `web/js/PhysicsWasm.js` laadt hem en beheert het geheugen. De arrays van een band staan in het geheugen van de module: JavaScript en WebAssembly gebruiken dezelfde getallen, er wordt niets gekopieerd. `sin`, `cos` en `exp` komen van JavaScript, zodat de uitkomst tot op de bit gelijk is.
+- **Tot op de bit gelijk**: met `?wasm=verify` doet elke stap van een band beide en vergelijkt alle arrays en uitkomsten. In races op vier banen (Muscle op Desert met 3 AI, Stadium truck op Dirt run, Hatchback op Kartbaan Oldenzaal, Sports motorcycle op Short track): ruim 97.000 stappen, **0 verschillen**.
+- **Twee keer zo snel**: de physics van de speler van 4,2–4,9 naar 2,2 ms per frame; alle physics per seconde spel van ~370 naar ~220 ms (−40 %). In een race met 3 AI-auto's: 55 → 61 fps. De AI-auto's gebruiken een ander bandmodel en zijn nog JavaScript.
+- Standaard aan in de game (`?wasm=0` geeft de JavaScript). De editors en de physics-worker laden hem niet en blijven JavaScript. Gemeten en gecontroleerd in de Mac-app (WebKit); in Chrome nog niet (de test kon de lokale server niet bereiken).
+
+Volgende stappen in M3: het bandmodel van de AI-auto's, de soft body (`SoftBody.js`), daarna SIMD en meerdere auto's tegelijk op meerdere cores.
+
 ### Fase M4: de DMG uitbrengen (dagen)
 
 **Stand 7 november 2026:** `macos/scripts/make-dmg.sh` werkt. De eerste DMG (2.5.0, 152 MB, universal) is getekend met *Developer ID Application: Glenn Hofman (HNQM5R9NGR)*, genotariseerd en gestapled. Als download getest (met quarantainevlag): Gatekeeper accepteert de app. Er is **geen certificaat op de Mac nodig**: Xcode tekent en notariseert via het ingelogde account (cloud signing). De DMG zelf is niet getekend (cloud signing tekent alleen apps), dat hoeft niet voor Gatekeeper. Nog te doen: Sparkle, en een eerste test op een andere Mac.

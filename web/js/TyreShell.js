@@ -134,6 +134,92 @@ OpenRacer.TyreShell = function (wheel) {
         bA = Int32Array.from(A); bB = Int32Array.from(B); bL0 = Float64Array.from(L0); bLmin = Float64Array.from(LM); bClass = Uint8Array.from(CL); bKind = Uint8Array.from(KD);
         bStrain = new Float32Array(beamCount); bK = new Float64Array(beamCount); bDx = new Float64Array(beamCount); bDy = new Float64Array(beamCount); bDz = new Float64Array(beamCount);
         self.count = N; self.builtFor = key(); started = false;
+        toWasm();
+    }
+
+    // ---- the WebAssembly (PhysicsWasm.js, wasm/tyre_shell.c): the arrays of the tyre are moved into the memory of the module, in one block, and the substeps run there.
+    // NAMES lists every array with its type and length; get/set reach the variables of this closure. P and A are the scalars and the addresses that the C reads, in the
+    // order of its enums.
+    var W = OpenRacer.PhysicsWasm, block = null;     // { at, bytes, gen, offsets }
+    var P_NAMES = ["N", "RINGS", "SEGS", "BEAMS", "STEPS", "DT", "H", "MN", "PA", "R", "SPACING", "TOL", "KSHEART", "KSHEARL", "CSHEART", "CSHEARL", "KG", "KSTOP", "ZETA",
+        "CLASSK0", "CLASSK1", "CLASSK2", "CLASSK3", "CLASSK4", "HUBX", "HUBY", "HUBZ", "VELX", "VELY", "VELZ", "LX", "LY", "LZ", "FX", "FY", "FZ", "UX", "UY", "UZ",
+        "OMEGA", "PHASE", "INERTIA", "LOADPREV", "SURFMU", "SURFSLIDING", "LATGRIP", "BELT2", "ROADDAMP", "ROADSTOP", "STIFFX", "STIFFY", "STRIBECK", "BRISTLEDAMP",
+        "IMPLICIT", "THETA", "LOCKED", "HALFPATCH", "SAMPLES",
+        "HUBACC0", "HUBACC1", "HUBACC2", "HUBACC3", "OMS", "OMSUM", "COUNT", "SUMFN", "SLIDELOAD", "MAXDEPTH", "CXS", "CYS", "CZS", "NXS", "NYS", "NZS",
+        "MINF", "MAXF", "BESTFN", "BESTTRI", "ALONGSUM", "DAMPED", "GTESTS"];
+    var Pi = {}; P_NAMES.forEach(function (name, i) { Pi[name] = i; });
+    // [name in the C (A_*), type, length in nodes (N), rings (R) or beams (B)]
+    var ARRAYS = [["PX", "f64", "N"], ["PY", "f64", "N"], ["PZ", "f64", "N"], ["VX", "f64", "N"], ["VY", "f64", "N"], ["VZ", "f64", "N"], ["FX", "f64", "N"], ["FY", "f64", "N"], ["FZ", "f64", "N"],
+        ["IX", "f64", "N"], ["IY", "f64", "N"], ["IZ", "f64", "N"], ["IVX", "f64", "N"], ["IVY", "f64", "N"], ["IVZ", "f64", "N"],
+        ["OX", "f64", "N"], ["OY", "f64", "N"], ["OZ", "f64", "N"], ["OVX", "f64", "N"], ["OVY", "f64", "N"], ["OVZ", "f64", "N"], ["TX", "f64", "N"], ["TY", "f64", "N"], ["TZ", "f64", "N"],
+        ["NX", "f64", "N"], ["NY", "f64", "N"], ["NZ", "f64", "N"], ["T1X", "f64", "N"], ["T1Y", "f64", "N"], ["T1Z", "f64", "N"], ["T2X", "f64", "N"], ["T2Y", "f64", "N"], ["T2Z", "f64", "N"],
+        ["BX", "f64", "N"], ["BY", "f64", "N"], ["BZ", "f64", "N"], ["KXX", "f64", "N"], ["KXY", "f64", "N"], ["KXZ", "f64", "N"], ["KYY", "f64", "N"], ["KYZ", "f64", "N"], ["KZZ", "f64", "N"],
+        ["EFN", "f64", "N"], ["ENX", "f64", "N"], ["ENY", "f64", "N"], ["ENZ", "f64", "N"],
+        ["NEARNODE", "u8", "N"], ["HOLD", "u8", "N"], ["INCONTACT", "u8", "N"], ["SLIDING", "u8", "N"],
+        ["FNNODE", "f32", "N"], ["CNX", "f32", "N"], ["CNY", "f32", "N"], ["CNZ", "f32", "N"], ["UXB", "f32", "N"], ["UYB", "f32", "N"], ["CTRI", "i32", "N"],
+        ["NODELAT", "f32", "R"], ["NODERAD", "f32", "R"], ["INNERLAT", "f32", "R"], ["INNERRAD", "f32", "R"],
+        ["BA", "i32", "B"], ["BB", "i32", "B"], ["BL0", "f64", "B"], ["BLMIN", "f64", "B"], ["BCLASS", "u8", "B"], ["BKIND", "u8", "B"], ["BSTRAIN", "f32", "B"],
+        ["BK", "f64", "B"], ["BDX", "f64", "B"], ["BDY", "f64", "B"], ["BDZ", "f64", "B"],
+        ["LISTOFF", "i32", "N1"], ["LISTIDX", null], ["GBOX", null], ["GTRI", null]];
+    var A_INDEX = {}; ARRAYS.forEach(function (a, i) { A_INDEX[a[0]] = i; });
+    var TYPES = { f64: Float64Array, f32: Float32Array, u8: Uint8Array, i32: Int32Array };
+    function arrays() {
+        return { PX: Px, PY: Py, PZ: Pz, VX: Vx, VY: Vy, VZ: Vz, FX: Fx, FY: Fy, FZ: Fz, IX: Ix, IY: Iy, IZ: Iz, IVX: IVx, IVY: IVy, IVZ: IVz,
+            OX: Ox, OY: Oy, OZ: Oz, OVX: OVx, OVY: OVy, OVZ: OVz, TX: Tx, TY: Ty, TZ: Tz, NX: Nx, NY: Ny, NZ: Nz,
+            T1X: t1xA, T1Y: t1yA, T1Z: t1zA, T2X: t2xA, T2Y: t2yA, T2Z: t2zA, BX: Bx, BY: By, BZ: Bz, KXX: Kxx, KXY: Kxy, KXZ: Kxz, KYY: Kyy, KYZ: Kyz, KZZ: Kzz,
+            EFN: eFn, ENX: eNx, ENY: eNy, ENZ: eNz, NEARNODE: nearNode, HOLD: holdA, INCONTACT: inContact, SLIDING: sliding,
+            FNNODE: fnNode, CNX: cnx, CNY: cny, CNZ: cnz, UXB: ux, UYB: uy, CTRI: ctri, NODELAT: nodeLat, NODERAD: nodeRad, INNERLAT: innerLat, INNERRAD: innerRad,
+            BA: bA, BB: bB, BL0: bL0, BLMIN: bLmin, BCLASS: bClass, BKIND: bKind, BSTRAIN: bStrain, BK: bK, BDX: bDx, BDY: bDy, BDZ: bDz };
+    }
+    function setArrays(a) {
+        Px = a.PX; Py = a.PY; Pz = a.PZ; Vx = a.VX; Vy = a.VY; Vz = a.VZ; Fx = a.FX; Fy = a.FY; Fz = a.FZ; Ix = a.IX; Iy = a.IY; Iz = a.IZ; IVx = a.IVX; IVy = a.IVY; IVz = a.IVZ;
+        Ox = a.OX; Oy = a.OY; Oz = a.OZ; OVx = a.OVX; OVy = a.OVY; OVz = a.OVZ; Tx = a.TX; Ty = a.TY; Tz = a.TZ; Nx = a.NX; Ny = a.NY; Nz = a.NZ;
+        t1xA = a.T1X; t1yA = a.T1Y; t1zA = a.T1Z; t2xA = a.T2X; t2yA = a.T2Y; t2zA = a.T2Z; Bx = a.BX; By = a.BY; Bz = a.BZ; Kxx = a.KXX; Kxy = a.KXY; Kxz = a.KXZ; Kyy = a.KYY; Kyz = a.KYZ; Kzz = a.KZZ;
+        eFn = a.EFN; eNx = a.ENX; eNy = a.ENY; eNz = a.ENZ; nearNode = a.NEARNODE; holdA = a.HOLD; inContact = a.INCONTACT; sliding = a.SLIDING;
+        fnNode = a.FNNODE; cnx = a.CNX; cny = a.CNY; cnz = a.CNZ; ux = a.UXB; uy = a.UYB; ctri = a.CTRI; nodeLat = a.NODELAT; nodeRad = a.NODERAD; innerLat = a.INNERLAT; innerRad = a.INNERRAD;
+        bA = a.BA; bB = a.BB; bL0 = a.BL0; bLmin = a.BLMIN; bClass = a.BCLASS; bKind = a.BKIND; bStrain = a.BSTRAIN; bK = a.BK; bDx = a.BDX; bDy = a.BDY; bDz = a.BDZ;
+    }
+    var wasmP = null, wasmA = null, listOff = null, listIdx = null, listAt = 0, listCap = 0, listGen = -1;
+    // the views on the block (again after the memory grew: the old ones are then dead)
+    function views() {
+        var buf = W.buffer(), o = block.offsets, a = {};
+        ARRAYS.forEach(function (d) { if (d[1] && d[0] !== "LISTOFF") a[d[0]] = new TYPES[d[1]](buf, o[d[0]], o[d[0] + "#"]); });
+        setArrays(a);
+        listOff = new Int32Array(buf, o.LISTOFF, N + 1);
+        wasmP = new Float64Array(buf, o.P, P_NAMES.length);
+        wasmA = new Int32Array(buf, o.A, ARRAYS.length);
+        ARRAYS.forEach(function (d, i) { if (o[d[0]] !== undefined) wasmA[i] = o[d[0]]; });
+        block.gen = W.generation();
+        listGen = -1;
+    }
+    function toWasm() {
+        if (block) { W.release(block.at, block.bytes); block = null; }
+        if (!W || !W.ready() || W.mode() === "0") return;
+        var counts = { N: N, R: rings, B: beamCount, N1: N + 1 }, size = { f64: 8, f32: 4, u8: 1, i32: 4 }, bytes = 0, offsets = {};
+        var layout = ARRAYS.filter(function (d) { return d[1]; }).map(function (d) { return [d[0], d[1], counts[d[2]]]; });
+        layout.push(["P", "f64", P_NAMES.length], ["A", "i32", ARRAYS.length]);
+        layout.forEach(function (d) { bytes = (bytes + 7) & ~7; offsets[d[0]] = bytes; offsets[d[0] + "#"] = d[2]; bytes += d[2] * size[d[1]]; });
+        var at = W.alloc(bytes), old = arrays();
+        Object.keys(offsets).forEach(function (k) { if (k.indexOf("#") < 0) offsets[k] += at; });
+        block = { at: at, bytes: bytes, gen: -1, offsets: offsets };
+        views();
+        var now = arrays();
+        Object.keys(now).forEach(function (k) { now[k].set(old[k]); });       // (what build made: the beams, the rings)
+    }
+    // the triangles near each node (nodeList) as one list in the memory: an offset per node and the numbers of the triangles
+    function flattenLists() {
+        var total = 0;
+        for (var i = 0; i < N; i++) total += nodeList[i].length;
+        if (total > listCap || listGen !== W.generation()) {
+            if (total > listCap) { if (listCap) W.release(listAt, listCap * 4); listCap = Math.max(256, total * 2); listAt = W.alloc(listCap * 4); }
+            if (block.gen !== W.generation()) views();
+            listIdx = new Int32Array(W.buffer(), listAt, listCap);
+            wasmA[A_INDEX.LISTIDX] = listAt;
+            listGen = W.generation();
+        }
+        var at = 0;
+        for (var j = 0; j < N; j++) { listOff[j] = at; var l = nodeList[j]; for (var q = 0; q < l.length; q++) listIdx[at++] = l[q]; }
+        listOff[N] = at;
     }
 
     // where the nodes of the two shells are on a tyre that is not deformed: from the hub c and the axes L (along the axle, to the left), F (forward in the plane of the wheel), U (up)
@@ -226,6 +312,26 @@ OpenRacer.TyreShell = function (wheel) {
         var kv = k * (vax * dx + vay * dy + vaz * dz); Bx[i] += kv * dx; By[i] += kv * dy; Bz[i] += kv * dz;
     }
     var halfPatch = 0.1, contactSamples = 4;
+    var SCALAR_NAMES = ["hubFx", "hubFy", "hubFz", "torque", "omS", "omSum", "count", "sumFn", "slideLoad", "maxDepth", "cxs", "cys", "czs", "nxs", "nys", "nzs", "minF", "maxF", "bestFn", "bestTri", "alongSum", "damped", "gTests", "halfPatch"];
+    // ?wasm=verify: the results of the WebAssembly (wasm) against those of the JavaScript (the arrays as they are now, and js), to the bit
+    function verifyStep(wasm, js) {
+        var st = W.stats, now = new Uint8Array(W.buffer(), block.at, block.bytes), diff = [];
+        st.verified++;
+        for(var i = 0; i < js.length; i++) if(!Object.is(js[i], wasm.scalars[i])) diff.push(SCALAR_NAMES[i] + " " + js[i] + " / " + wasm.scalars[i]);
+        var o = block.offsets;
+        ARRAYS.forEach(function (d) {
+            if(!d[1] || o[d[0]] === undefined) return;
+            var from = o[d[0]] - block.at, len = o[d[0] + "#"] * TYPES[d[1]].BYTES_PER_ELEMENT;
+            for(var b = from; b < from + len; b++) if(now[b] !== wasm.bytes[b]) {
+                diff.push(d[0] + "[" + Math.floor((b - from) / TYPES[d[1]].BYTES_PER_ELEMENT) + "]");
+                break;
+            }
+        });
+        if(diff.length) {
+            st.mismatches++;
+            if(!st.firstMismatch) { st.firstMismatch = diff.slice(0, 12); console.warn("PhysicsWasm: the WebAssembly and the JavaScript differ: " + diff.slice(0, 12).join(", ")); }
+        }
+    }
     // The softness of the carcass that gives the tyre the stiffness of the cylinder tyre at its static load: a node that is pushed in by d holds with a force of k d (k = pA / softness) up
     // to pA (the cable is slack from there: the air carries it), and the patch of a tyre that is pushed in by d is as long as 2 sqrt(2 R d), so the load of the whole patch is the sum
     // over its nodes; it is looked for by halving (the load grows as the carcass gets stiffer).
@@ -253,6 +359,7 @@ OpenRacer.TyreShell = function (wheel) {
     // One step of the car: hub, vel, the axes, the turn of the wheel, the road (Ground.js) and its triangles near the wheel, friction(load, name): { mu, sliding }.
     this.step = function (dt, hub, vel, L, F, U, omega, ground, list, frictionOf, lateralGrip, carMass) {
         if(!Px || self.builtFor !== key()) build();
+        else if(block && block.gen !== W.generation()) views();
         gBox = ground.boxes ? ground.boxes() : null; gTri = ground.triangleData ? ground.triangleData() : null; gTests = 0;
         var R = radius, mn = Math.max(0.01, (self.tyreMass > 0 ? self.tyreMass : 8) / N);     // the mass of a node (kg)
         // ---- the constants of the beams from the pressure and the stiffness
@@ -320,13 +427,47 @@ OpenRacer.TyreShell = function (wheel) {
         }
         // ---- the steps
         var damped = 0;
+        var viaWasm = !!(block && gBox && gTri), verifying = viaWasm && W.verify(), saved = null, wasmOut = null;
         // the wheel turns with the tread in the substeps: the tread holds the rim with a stiff grip that saturates within a few millimetres of turn, which one step of the car (3 ms) cannot
         // follow (a wheel at a standstill was thrown back and forth between the two limits of the grip, 4 rad/s); so the shell turns the wheel itself with the torque of the tread, and the
         // car adds what the engine and the brake do (omegaOut, Vehicle.js)
         var omS = omega, omSum = 0, phS = phase - 0.5 * omega * dt, inertiaW = Math.max(0.05, wheel.inertia || 1.6);
         var alongSum = 0;
         var maxDepth = 0, count = 0, sumFn = 0, slideLoad = 0, cxs = 0, cys = 0, czs = 0, nxs = 0, nys = 0, nzs = 0, minF = 1e9, maxF = -1e9, bestFn = 0, bestTri = -1, sag = 0;
-        for(var s = 0; s < n; s++) {
+        if(viaWasm) {
+            if(block.gen !== W.generation()) views();
+            var gw = W.groundIn(gBox, gTri);
+            wasmA[A_INDEX.GBOX] = gw.boxAt; wasmA[A_INDEX.GTRI] = gw.triAt;
+            flattenLists();
+            var p = wasmP;
+            p[Pi.N] = N; p[Pi.RINGS] = rings; p[Pi.SEGS] = segs; p[Pi.BEAMS] = beamCount; p[Pi.STEPS] = n; p[Pi.DT] = dt; p[Pi.H] = h; p[Pi.MN] = mn; p[Pi.PA] = pA; p[Pi.R] = R;
+            p[Pi.SPACING] = spacing; p[Pi.TOL] = tol; p[Pi.KSHEART] = kShearT; p[Pi.KSHEARL] = kShearL; p[Pi.CSHEART] = cShearT; p[Pi.CSHEARL] = cShearL; p[Pi.KG] = kg; p[Pi.KSTOP] = kStop; p[Pi.ZETA] = zeta;
+            for(var ck = 0; ck < 5; ck++) p[Pi.CLASSK0 + ck] = classK[ck];
+            p[Pi.HUBX] = hub.x; p[Pi.HUBY] = hub.y; p[Pi.HUBZ] = hub.z; p[Pi.VELX] = vel.x; p[Pi.VELY] = vel.y; p[Pi.VELZ] = vel.z;
+            p[Pi.LX] = L.x; p[Pi.LY] = L.y; p[Pi.LZ] = L.z; p[Pi.FX] = F.x; p[Pi.FY] = F.y; p[Pi.FZ] = F.z; p[Pi.UX] = U.x; p[Pi.UY] = U.y; p[Pi.UZ] = U.z;
+            p[Pi.OMEGA] = omega; p[Pi.PHASE] = phase; p[Pi.INERTIA] = inertiaW; p[Pi.LOADPREV] = loadPrev; p[Pi.SURFMU] = surf.mu; p[Pi.SURFSLIDING] = surf.sliding; p[Pi.LATGRIP] = lateralGrip;
+            p[Pi.BELT2] = self.beltTwoSided ? 1 : 0; p[Pi.ROADDAMP] = self.roadDamping; p[Pi.ROADSTOP] = self.roadStop; p[Pi.STIFFX] = self.stiffX; p[Pi.STIFFY] = self.stiffY;
+            p[Pi.STRIBECK] = self.stribeck; p[Pi.BRISTLEDAMP] = self.bristleDamping; p[Pi.IMPLICIT] = self.implicit ? 1 : 0; p[Pi.THETA] = self.theta; p[Pi.LOCKED] = self.lockedSpin ? 1 : 0;
+            p[Pi.HALFPATCH] = halfPatch; p[Pi.SAMPLES] = contactSamples;
+            p[Pi.HUBACC0] = p[Pi.HUBACC1] = p[Pi.HUBACC2] = p[Pi.HUBACC3] = 0; p[Pi.GTESTS] = gTests;
+            if(verifying) saved = { bytes: new Uint8Array(W.buffer(), block.at, block.bytes).slice(), halfPatch: halfPatch, gTests: gTests };
+            W.tyreSubsteps(block.offsets.P, block.offsets.A);
+            hubAcc[0] = p[Pi.HUBACC0]; hubAcc[1] = p[Pi.HUBACC1]; hubAcc[2] = p[Pi.HUBACC2]; hubAcc[3] = p[Pi.HUBACC3];
+            omS = p[Pi.OMS]; omSum = p[Pi.OMSUM]; count = p[Pi.COUNT]; sumFn = p[Pi.SUMFN]; slideLoad = p[Pi.SLIDELOAD]; maxDepth = p[Pi.MAXDEPTH];
+            cxs = p[Pi.CXS]; cys = p[Pi.CYS]; czs = p[Pi.CZS]; nxs = p[Pi.NXS]; nys = p[Pi.NYS]; nzs = p[Pi.NZS];
+            minF = p[Pi.MINF]; maxF = p[Pi.MAXF]; bestFn = p[Pi.BESTFN]; bestTri = p[Pi.BESTTRI]; alongSum = p[Pi.ALONGSUM]; damped = p[Pi.DAMPED]; gTests = p[Pi.GTESTS]; halfPatch = p[Pi.HALFPATCH];
+            W.stats.steps++;
+            if(verifying) {
+                // the same step again in JavaScript, from the state before it; then the two are compared to the bit
+                wasmOut = { bytes: new Uint8Array(W.buffer(), block.at, block.bytes).slice(), scalars: [hubAcc[0], hubAcc[1], hubAcc[2], hubAcc[3], omS, omSum, count, sumFn, slideLoad, maxDepth, cxs, cys, czs, nxs, nys, nzs, minF, maxF, bestFn, bestTri, alongSum, damped, gTests, halfPatch] };
+                new Uint8Array(W.buffer(), block.at, block.bytes).set(saved.bytes);
+                halfPatch = saved.halfPatch; hubAcc[0] = hubAcc[1] = hubAcc[2] = hubAcc[3] = 0;
+                omS = omega; omSum = 0; phS = phase - 0.5 * omega * dt; damped = 0; gTests = saved.gTests;
+                maxDepth = 0; count = 0; sumFn = 0; slideLoad = 0; cxs = cys = czs = nxs = nys = nzs = 0; minF = 1e9; maxF = -1e9; bestFn = 0; bestTri = -1; alongSum = 0;
+                hcx = hubx; hcy = huby; hcz = hubz; hubC[0] = hcx; hubC[1] = hcy; hubC[2] = hcz;
+            }
+        }
+        if(!viaWasm || verifying) for(var s = 0; s < n; s++) {
             // (the path of the rim is centred on the hub of now, from half a step before to half a step after: the force of the step is then the force at the place where the car has the wheel; a path that ran ahead of the hub gave a force that led the motion, which is a negative damping)
             var tc = h * (s + 1) - 0.5 * dt, tq0 = hubAcc[3];
             phS += omS * h;
@@ -518,6 +659,7 @@ OpenRacer.TyreShell = function (wheel) {
             if(!self.lockedSpin) omS += h * (hubAcc[3] - tq0) / inertiaW;
             omSum += omS;
         }
+        if(verifying) verifyStep(wasmOut, [hubAcc[0], hubAcc[1], hubAcc[2], hubAcc[3], omS, omSum, count, sumFn, slideLoad, maxDepth, cxs, cys, czs, nxs, nys, nzs, minF, maxF, bestFn, bestTri, alongSum, damped, gTests, halfPatch]);
         if(gBox && ground.stats) ground.stats.boxes += gTests;      // (the count of the debug text, as boxNear keeps it)
         var fHubX = hubAcc[0], fHubY = hubAcc[1], fHubZ = hubAcc[2], torque = hubAcc[3];
         self.omegaOut = omS; self.omegaAvg = omSum / n;
