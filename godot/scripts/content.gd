@@ -36,8 +36,12 @@ func _find_root() -> String:
 		candidates.append(arg_root)
 	# in the repository: godot/ next to web/
 	candidates.append(ProjectSettings.globalize_path("res://").path_join("../web").simplify_path())
-	# an exported game: a web folder next to the program
-	candidates.append(OS.get_executable_path().get_base_dir().path_join("web"))
+	# an exported game: a web folder next to the program, in the bundle of a macOS app (Contents/Resources/web), or
+	# next to the app
+	var exe_dir := OS.get_executable_path().get_base_dir()
+	candidates.append(exe_dir.path_join("web"))
+	candidates.append(exe_dir.path_join("../Resources/web").simplify_path())
+	candidates.append(exe_dir.path_join("../../../web").simplify_path())
 	candidates.append("res://content")
 	for c in candidates:
 		if FileAccess.file_exists(c.path_join("cars/index.json")):
@@ -71,14 +75,14 @@ func load_json(rel: String) -> Variant:
 	return JSON.parse_string(FileAccess.get_file_as_string(p))
 
 
-## The cars that the prototype can drive: { id, name } (the motorcycles come in a later phase).
+## The cars (and the motorcycles) that can be driven: { id, name }.
 func list_cars() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var ids: Variant = load_json("cars/index.json")
 	if ids is Array:
 		for id in ids:
 			var c: Variant = load_json("cars/%s/car.json" % id)
-			if c is Dictionary and c.get("type", "car") != "motorcycle":
+			if c is Dictionary:
 				out.append({"id": id, "name": c.get("name", id)})
 	return out
 

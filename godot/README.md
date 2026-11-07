@@ -281,7 +281,11 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
    model that bends with it, the parts that come off *(done)*.
 5. **Motorcycles**: the bike model of Motorcycle.js with its rider.
 6. **Garage, tuning and editors**: tuning menu, car and track editor, garage, replays.
-7. **Release**: export for the web (openracer.eu), macOS, Windows and Linux.
+7. **Release**: export for the web (openracer.eu), macOS, Windows and Linux. macOS *(done)*: `sh godot/tools/export_macos.sh`
+   makes `godot/build/macos/O-Racer.app` (universal, signed ad hoc, not notarised: the first start needs a right
+   click, Open), with the cars, tracks, wheels and sounds of web/ inside it (Contents/Resources/web; about 380 MB).
+   It needs the release build of the native part first (`cd godot/native && scons target=template_release
+   arch=universal`). The exported game keeps its logs in its user folder (`logs/`), next to the settings.
 
 Known in phase 1: one texture of the hatchback (a jpeg) does not load in Godot; the acceleration of the
 cars with a centrifugal clutch (karts) or a torque converter is close to, but not yet compared with, the
