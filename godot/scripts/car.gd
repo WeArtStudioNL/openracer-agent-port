@@ -61,6 +61,7 @@ class Wheel:
 	var esc := false                # the stability control brakes this wheel
 	var side_speed := 0.0           # m/s across the tyre
 	var comp_rate := 0.0            # m/s that the spring is pushed in (for the force feedback)
+	var offset := 0.0               # m that the wheel is pulled up (a kart: the twist of the frame, the lift of the inner rear wheel)
 	var squeal := 0.0               # how loud it squeals (0..1)
 	var smoke := 0.0                # how much it smokes or throws up dust (0..1)
 	var mark := 0.0                 # how dark a mark it leaves on the road (0..1)
@@ -94,6 +95,13 @@ var drag_area := 0.7            # Cd times the frontal area
 var arb_front := 0.0            # anti-roll bars, N per m of difference in compression
 var arb_rear := 0.0
 var rolling := 0.015
+var unsprung := false           # a kart: the frame stands on its tyres
+var frame_torsion := 0.0        # N m per degree of twist of a kart frame (0: rigid)
+var inner_lift := 0.0           # m: how far the inner rear wheel of a kart is pulled up in a fast bend
+var tyre_rate := 220000.0
+var tyre_damping := 3000.0
+var frame_twist := 0.0
+var inner_lift_now := 0.0
 var downforce_front := 0.0      # N per (m/s)^2 at each axle
 var downforce_rear := 0.0
 var cornering := 1.0
@@ -156,12 +164,42 @@ var brake := 0.0
 var model_root: Node3D
 var _esc_brake := [0.0, 0.0, 0.0, 0.0]
 var _esc_cut := 0.0
+var _auto_time := 0.0
 
 
 func setup(id: String, cfg: Dictionary) -> void:
 	car_id = id
 	config = cfg
 	name = "Car"
+	_read_config()
+	# the body for knocks against walls and other things: from a little above the road to the roof
+	var dims: Dictionary = cfg.get("dimensions", {})
+	var width := float(dims.get("width", 1.8))
+	var height := float(dims.get("height", 1.4))
+	var length := float(dims.get("length", 4.2))
+	var mean_r := (wheels[0].radius + wheels[2].radius) / 2.0
+	var bottom := -mean_r + 0.12
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(width * 0.95, maxf(0.2, height - 0.12 - 0.05), length * 0.97)
+	var col := CollisionShape3D.new()
+	col.shape = shape
+	col.position = Vector3(0.0, bottom + shape.size.y / 2.0, 0.0)
+	add_child(col)
+	_build_visual()
+
+
+## A new configuration while the car drives (the tuning menu): the physics take it at once; the model stays.
+func apply_config(cfg: Dictionary) -> void:
+	config = cfg
+	var rpm_omega := engine.omega
+	_read_config()
+	engine.omega = rpm_omega
+
+
+## Everything the physics take from car.json (setup, and the tuning menu). The wheels are made the first time and
+## kept after that (their place in the scene and their state stay).
+func _read_config() -> void:
+	var cfg := config
 	var ch: Dictionary = cfg.get("chassis", {})
 	var dims: Dictionary = cfg.get("dimensions", {})
 	var dt: Dictionary = cfg.get("drivetrain", {})
@@ -195,6 +233,13 @@ func setup(id: String, cfg: Dictionary) -> void:
 	tc_stall_rpm = float(dt.get("tc_stall_rpm", 2000))
 	tc_ratio = float(dt.get("tc_ratio", 2.0))
 	tc_lockup = dt.get("tc_lockup", true) != false
+	# a kart: no suspension, the frame stands on its tyres (the tyre is the spring), and the frame twists
+	unsprung = bool(ch.get("unsprung", false))
+	frame_torsion = maxf(0.0, float(ch.get("frame_torsion", 0)))
+	inner_lift = maxf(0.0, float(ch.get("inner_lift", 0)))
+	var light := mass / 1230.0 if mass < 600.0 else 1.0
+	tyre_rate = float(ch.get("tyre_rate", 220000.0 * sqrt(light)))
+	tyre_damping = float(ch.get("tyre_damping", 3000.0 * sqrt(light)))
 
 	drive = str(dt.get("drive", "rwd"))
 	diff = str(dt.get("diff", "open"))
@@ -227,9 +272,9 @@ func setup(id: String, cfg: Dictionary) -> void:
 	var diameters := _diameters(cfg)
 	var static_front := mass * G * weight_front / 2.0
 	var static_rear := mass * G * (1.0 - weight_front) / 2.0
-	wheels.clear()
+	var fresh := wheels.size() != 4
 	for i in 4:
-		var w := Wheel.new()
+		var w: Wheel = Wheel.new() if fresh else wheels[i]
 		w.slot = CarModel.SLOTS[i]
 		w.front = i < 2
 		w.left = i % 2 == 0
@@ -238,22 +283,30 @@ func setup(id: String, cfg: Dictionary) -> void:
 		w.hub = Vector3(track / 2.0 * (1.0 if w.left else -1.0), 0.0, z)
 		w.radius = diameters[0 if w.front else 1] / 2.0
 		w.inertia = clampf(1.6 * pow(w.radius / 0.33, 3.0), 0.12, 6.0)
+		var pressure := float(ty.get("pressure_front" if w.front else "pressure_rear", 2.2))
 		w.spring = float(ch.get("spring_front" if w.front else "spring_rear", 30000))
 		var corner_mass := (static_front if w.front else static_rear) / G
 		var ratio := float(ch.get("damping_front" if w.front else "damping_rear", 0.35))
 		w.damper = ratio * 2.0 * sqrt(w.spring * corner_mass)
+		if unsprung:
+			# (the tyre is the spring: its rate with the pressure, and its own little damping)
+			w.spring = tyre_rate * pow(maxf(0.15, pressure) / 2.2, 0.8)
+			w.damper = tyre_damping
 		w.rebound = float(ch.get("damping_rebound", 1.5))
 		w.free_length = susp_length + (static_front if w.front else static_rear) / w.spring
-		w.length = susp_length
+		if fresh:
+			w.length = susp_length
 		w.max_brake = float(br.get("front" if w.front else "rear", 1500))
 		w.grip = float(ty.get("grip", 1.0)) * (1.0 if w.front else float(ty.get("grip_balance", 1.0)))
 		w.roll_centre = float(ch.get("roll_center_front" if w.front else "roll_center_rear", 0.1))
 		w.driven = drive == "awd" or (drive == "fwd" and w.front) or (drive == "rwd" and not w.front)
 		w.kind = TyreCompounds.of_axle(cfg, w.front)
 		w.stiffness_bias = 1.0 if w.front else 1.08
-		w.temp = float(w.kind.get("optimum", 85))
-		_pressure(w, float(ty.get("pressure_front" if w.front else "pressure_rear", 2.2)))
-		wheels.append(w)
+		if fresh:
+			w.temp = float(w.kind.get("optimum", 85))
+		_pressure(w, pressure)
+		if fresh:
+			wheels.append(w)
 	for i in 4:
 		if not wheels[i].driven:
 			shares[i] = 0.0
@@ -272,6 +325,9 @@ func setup(id: String, cfg: Dictionary) -> void:
 
 	# the rigid body
 	var mean_r := (wheels[0].radius + wheels[2].radius) / 2.0
+	if unsprung:
+		arb_front = 0.0
+		arb_rear = 0.0
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 	center_of_mass = Vector3(0.0, cg_height - mean_r, wheelbase * (weight_front - 0.5))
 	var k := 0.7
@@ -291,15 +347,6 @@ func setup(id: String, cfg: Dictionary) -> void:
 	mat.friction = 0.35
 	mat.bounce = 0.05
 	physics_material_override = mat
-	# the body for knocks against walls and other things: from a little above the road to the roof
-	var bottom := -mean_r + 0.12
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(width * 0.95, maxf(0.2, height - 0.12 - 0.05), length * 0.97)
-	var col := CollisionShape3D.new()
-	col.shape = shape
-	col.position = Vector3(0.0, bottom + shape.size.y / 2.0, 0.0)
-	add_child(col)
-	_build_visual()
 
 
 ## The pressure of a tyre (applyPressure of Vehicle.js): best around 2.2 bar; 0.8 bar off costs 8 % of the grip;
@@ -449,9 +496,13 @@ func heading() -> float:
 
 func _physics_process(dt: float) -> void:
 	if autopilot:
-		throttle_input = 1.0
+		# (--steer=x from the start, or after --steer-after=seconds, once --drive-speed=km/h is held: lift to hold it)
+		_auto_time += dt
+		var hold := float(Content.arg("drive-speed")) / 3.6 if Content.arg("drive-speed") != "" else 1000.0
+		throttle_input = 1.0 if speed < hold else 0.0
 		brake_input = 0.0
-		steer_input = float(Content.arg("steer")) if Content.arg("steer") != "" else 0.0
+		var after := float(Content.arg("steer-after")) if Content.arg("steer-after") != "" else 0.0
+		steer_input = float(Content.arg("steer")) if Content.arg("steer") != "" and _auto_time >= after else 0.0
 	_controls(dt)
 
 
@@ -596,17 +647,19 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		comp_rate[i] = -pv.dot(up)          # + while the spring is pushed in
 		w.comp_rate = comp_rate[i]
 
+	_kart_frame(dt, speed * av.dot(up))
+
 	# ---- spring, damper, bump stop and anti-roll bars: the load on each tyre
 	var loads := [0.0, 0.0, 0.0, 0.0]
 	for i in 4:
 		var w := wheels[i]
 		if not w.contact:
 			continue
-		var f := w.spring * (w.free_length - w.length)
+		var f := w.spring * (w.free_length - w.length - w.offset)
 		var rate: float = comp_rate[i]
 		f += w.damper * rate * (1.0 if rate > 0.0 else w.rebound)
 		var bump := susp_length - susp_travel - w.length
-		if bump > 0.0:
+		if bump > 0.0 and not unsprung:
 			f += bump * w.spring * 12.0 + maxf(0.0, rate) * w.damper * 2.0
 		loads[i] = f
 	for axle in 2:
@@ -724,6 +777,41 @@ func _tyre_effects(w: Wheel, dt: float) -> void:
 	w.smoke = smoking * (0.4 + 0.6 * minf(1.0, burnt / 40000.0)) * (0.3 + 0.7 * spin_share)
 	w.squeal = smoothstep(1.0, 2.0, w.s) * (1.0 - 0.4 * smoothstep(2.5, 4.0, w.s)) * smoothstep(0.8, 5.0, slide_speed)
 	w.mark = smoothstep(1.1, 2.0, w.s) * smoothstep(1.0, 4.0, slide_speed)
+
+
+## A kart (Vehicle.js, unsprung): the roll moment of the front axle and the one of the rear axle differ, and the
+## difference twists the frame; the twist moves the wheels along their axes, so the wheel of the lighter diagonal
+## gives way and the load evens out. And the inner rear wheel is pulled up in a bend, the more the lateral
+## acceleration, fully at 0.8 g: the rigid rear axle has no differential, and it would scrub through the bend.
+## ay_left: the lateral acceleration to the left (m/s2).
+func _kart_frame(dt: float, ay_left: float) -> void:
+	for w in wheels:
+		w.offset = 0.0
+	if not unsprung:
+		frame_twist = 0.0
+		inner_lift_now = 0.0
+		return
+	if frame_torsion > 0.0:
+		var moment_f := (wheels[0].load - wheels[1].load) * front_track
+		var moment_r := (wheels[2].load - wheels[3].load) * rear_track
+		var target := clampf((moment_f - moment_r) / 2.0 / (frame_torsion * 180.0 / PI), -0.05, 0.05)
+		frame_twist += (target - frame_twist) * minf(1.0, dt / 0.02)
+		for w in wheels:
+			# (the front axle one way, the rear the other, and the left wheel against the right)
+			w.offset += frame_twist * (1.0 if w.front else -1.0) * (1.0 if w.left else -1.0) * (front_track if w.front else rear_track) / 4.0
+	else:
+		frame_twist = 0.0
+	# (an addition to the browser game: the caster of the front axle lifts the inner rear wheel as the wheels are
+	# turned, also at a low speed, where there is little lateral acceleration; the rigid axle scrubbed through a
+	# hairpin and stopped the kart. By lateral acceleration as in Vehicle.js, or by the steering, whichever is more;
+	# the inside is the side the car turns to, or the side it is steered to)
+	var by_ay := smoothstep(0.2, 0.8, absf(ay_left) / G)
+	var by_steer := smoothstep(0.25, 0.75, absf(steer_angle) / maxf(0.05, max_steer))
+	var lift_to := inner_lift * maxf(by_ay, by_steer) if inner_lift > 0.0 else 0.0
+	inner_lift_now += (lift_to - inner_lift_now) * minf(1.0, dt / 0.05)
+	var left_inside := ay_left > 0.0 if by_ay >= by_steer else steer_angle > 0.0
+	if inner_lift_now > 0.0:
+		wheels[2 if left_inside else 3].offset += inner_lift_now      # (the rear wheel on the inside of the bend)
 
 
 ## The temperature and the wear of a tyre (wearStep of Vehicle.js): the power that the slip burns and the flexing
@@ -896,8 +984,12 @@ func _drivetrain(dt: float, tyre_torque: Array) -> void:
 				continue
 			var wk := wheels[k]
 			var ext: float = tyre_torque[k] - brake_torque[k] * tanh(wk.omega / 0.5)
-			# (the inertia of the wheel with the grip of the tyre, as the wheel step below takes it)
+			# (the inertia of the wheel with the grip of the tyre, as the wheel step below takes it; a welded axle: of
+			# both wheels, which turn as one)
 			var ik := wk.inertia + dt * wk.tyre_slope
+			if diff == "welded" or diff == "locked":
+				var mate := wheels[k ^ 1]
+				ik = (wk.inertia + mate.inertia + dt * (wk.tyre_slope + mate.tyre_slope)) / 2.0
 			omega_s += gs * sh * wk.omega
 			inv_jd += gs * gs * sh * sh / ik
 			a_ext += gs * sh * ext / ik
@@ -954,7 +1046,32 @@ func _drivetrain(dt: float, tyre_torque: Array) -> void:
 			wheel_drive[ir] += lock
 
 	# ---- the wheel speeds; the grip of the tyre is taken implicitly (it falls as the wheel speeds up)
+	# A welded or locked axle is one body: both wheels turn at one speed, with the inertia of both, the torques of
+	# both and the grip of both taken implicitly together. (Each wheel stepped on its own and the two then averaged
+	# lost energy where the two tyres pull against each other, as a kart at full lock does: it was a brake, and the
+	# kart stopped in a hairpin.)
+	var done := [false, false, false, false]
+	if diff == "welded" or diff == "locked":
+		for axle in 2:
+			var ia := axle * 2
+			var a := wheels[ia]
+			var b := wheels[ia + 1]
+			if not a.driven:
+				continue
+			var i_sum := a.inertia + b.inertia
+			var i_eff := i_sum + dt * (a.tyre_slope + b.tyre_slope)
+			var om: float = a.omega + dt * (tyre_torque[ia] + tyre_torque[ia + 1] + wheel_drive[ia] + wheel_drive[ia + 1]) / i_eff
+			var bt: float = brake_torque[ia] + brake_torque[ia + 1]
+			if bt > 0.0:
+				var dw := dt * bt / i_sum
+				om = 0.0 if absf(om) <= dw else om - dw * signf(om)
+			a.omega = om
+			b.omega = om
+			done[ia] = true
+			done[ia + 1] = true
 	for j in 4:
+		if done[j]:
+			continue
 		var wj := wheels[j]
 		var i_eff := wj.inertia + dt * wj.tyre_slope
 		var d_om: float = dt * tyre_torque[j] / i_eff
@@ -970,16 +1087,6 @@ func _drivetrain(dt: float, tyre_torque: Array) -> void:
 			else:
 				om -= dw * signf(om)
 		wj.omega = om
-	# a welded or locked differential: both wheels of the driven axle turn at the same speed
-	if diff == "welded" or diff == "locked":
-		for axle in 2:
-			var a := wheels[axle * 2]
-			var b := wheels[axle * 2 + 1]
-			if not a.driven:
-				continue
-			var common := (a.inertia * a.omega + b.inertia * b.omega) / (a.inertia + b.inertia)
-			a.omega = common
-			b.omega = common
 	for w in wheels:
 		w.spin = fmod(w.spin + w.omega * dt, TAU)
 
@@ -988,7 +1095,7 @@ func _process(_delta: float) -> void:
 	for w in wheels:
 		if w.hub_node == null:
 			continue
-		w.hub_node.position = w.hub + w.visual_offset + Vector3.UP * (susp_length - w.length)
+		w.hub_node.position = w.hub + w.visual_offset + Vector3.UP * (susp_length - w.length + w.offset)
 		w.steer_node.rotation.y = w.steer
 		w.spin_node.rotation.x = w.spin
 

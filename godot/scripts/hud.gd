@@ -70,7 +70,7 @@ func _ready() -> void:
 	_help.position = Vector2(20, 40)
 	_help.modulate.a = 0.75
 	_help.text = ("Arrows/WASD drive  ·  Space handbrake  ·  Q/E shift (manual)  ·  C camera  ·  R put back on its wheels  ·  "
-		+ "Backspace start  ·  K calibrate wheel  ·  F3 data  ·  F8 mark  ·  Esc pause")
+		+ "Backspace start  ·  K calibrate wheel  ·  U tuning  ·  F3 data  ·  F8 mark  ·  Esc pause")
 	add_child(_help)
 	_toast = _label(22)
 	_toast.anchor_left = 0.5

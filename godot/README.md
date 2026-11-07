@@ -90,6 +90,20 @@ in Settings, Driving); TC, ESC and ABS light up on the dashboard when they work.
 
 `--set=tyre_wear:3.0,tc:false` changes settings for one run (the tests).
 
+## Tuning
+
+**U** opens the tuning menu (as in the browser game): the chassis, the tyres, the engine, the transmission, the
+brakes, the aerodynamics and the steering, the assists, with the units and ranges of CarTuning.js. A change works
+at once. A setup can be saved as a tune (`user://tunes/<car>/<name>.openracer-tune.json`, the format of the browser
+game: a whole car.json); the tunes that come with a car (car.json "tunes") can be loaded too. The tune in use is
+remembered per car and used at the next start; "The car as made" goes back to car.json. Test:
+`Godot --headless --path godot res://tools/test_tuning.tscn`.
+
+A kart (chassis.unsprung) stands on its tyres: the tyre is the spring (its rate with the pressure), the frame
+twists (frame_torsion) and the inner rear wheel is lifted (inner_lift) by the lateral acceleration, as in
+Vehicle.js, and also by the steering (an addition: the caster of a kart lifts the inner rear wheel in a slow
+hairpin). A welded or locked axle is solved as one body.
+
 ## Racing against the AI
 
 In the menu: Mode "Race against the AI", the number of opponents (1 to 7), the laps and the start (at the back of

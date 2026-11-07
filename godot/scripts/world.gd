@@ -16,6 +16,7 @@ var line: RacingLine
 var ai: AIDriver = null
 var race: Race = null
 var options := {}
+var base_config := {}
 var pause_layer: CanvasLayer
 var _pause_box: Control
 var _results: CanvasLayer
@@ -39,7 +40,16 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	add_child(track)
 	car = Car.new()
 	var ccfg: Variant = Content.load_json("cars/%s/car.json" % car_id)
-	car.setup(car_id, ccfg if ccfg is Dictionary else {})
+	base_config = ccfg if ccfg is Dictionary else {}
+	# the tune in use for this car (the tuning menu), else the car as car.json makes it
+	var cfg_use := base_config
+	var tune_path: String = Settings.get_value("tunes").get(car_id, "")
+	if tune_path != "":
+		var tuned := Tuning.load_tune(tune_path)
+		if not tuned.is_empty():
+			cfg_use = tuned
+			RunLog.event("tune in use: %s" % tune_path)
+	car.setup(car_id, cfg_use)
 	car.set_meta("track_name", track.config.get("name", track_id))
 	car.set_meta("track_id", track_id)
 	car.freeze = true
@@ -115,6 +125,8 @@ func _ready() -> void:
 	if Content.arg("settings") != "":
 		pause()
 		_show_settings()
+	if Content.arg("tuning") != "":
+		open_tuning.call_deferred()
 	RunLog.event("start  %s on %s  mass %d kg  %s %s  %s" % [car.config.get("name", car.car_id), track.config.get("name", track.track_id),
 		roundi(car.mass), car.drive, car.gearbox, "engine sound on" if audio.synth != null else "NO engine sound"])
 
@@ -296,6 +308,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		WheelInput.calibrate()
 	elif event.is_action_pressed("menu"):
 		pause()
+	elif event.is_action_pressed("tuning"):
+		open_tuning()
 	elif event.is_action_pressed("camera"):
 		camera.next_mode()
 		audio.set_inside(camera.mode != ChaseCamera.Mode.FOLLOW)
@@ -359,6 +373,22 @@ func _show_pause_buttons() -> void:
 	(box.get_child(0) as Button).grab_focus.call_deferred()
 
 
+## The tuning menu (U): the game is paused while it is open.
+func open_tuning() -> void:
+	if get_tree().paused:
+		return
+	pause()
+	_pause_box.queue_free()
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_layer.add_child(centre)
+	_pause_box = centre
+	var menu := TuningMenu.new()
+	menu.setup(self, car, base_config)
+	menu.closed.connect(resume)
+	centre.add_child(menu)
+
+
 func _show_settings() -> void:
 	_pause_box.queue_free()
 	var centre := CenterContainer.new()
@@ -399,6 +429,9 @@ func _process(delta: float) -> void:
 			car.global_transform.basis.y.y, audio.engine_level(), fx])
 		if Content.arg("verbose") != "":
 			for w in car.wheels:
-				print("   %s fx %+6.0f fy %+6.0f slip %+.3f wr %.2f v %.2f %s" % [
-					w.slot, w.fx, w.fy, w.slip_ratio, w.omega * w.radius, w.forward_speed, w.surface])
+				print("   %s fx %+6.0f fy %+6.0f slip %+.3f/%+.3f steer %+5.1f wr %.2f v %.2f side %+.2f off %.3f %s" % [
+					w.slot, w.fx, w.fy, w.slip_ratio, w.slip_tan, rad_to_deg(w.steer), w.omega * w.radius, w.forward_speed, w.side_speed, w.offset, w.surface])
+			var r := car.angular_velocity.dot(car.global_transform.basis.y)
+			print("   yaw %.2f rad/s, geometry asks %.2f  (steer %.1f, speed %.2f)" % [
+				r, car.speed * tan(car.steer_angle) / car.wheelbase, rad_to_deg(car.steer_angle), car.speed])
 

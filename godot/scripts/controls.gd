@@ -17,7 +17,7 @@ const ACTIONS := [
 	["throttle", "Throttle"], ["brake", "Brake"], ["steer_left", "Steer left"], ["steer_right", "Steer right"],
 	["handbrake", "Handbrake"], ["shift_up", "Shift up"], ["shift_down", "Shift down"], ["camera", "Camera"],
 	["reset", "Back on the wheels (reset)"], ["restart", "Back to the start"], ["menu", "Pause"],
-	["calibrate", "Calibrate the wheel"], ["mark", "Mark in the log"], ["debug", "Tyre data"],
+	["tuning", "Tuning menu"], ["calibrate", "Calibrate the wheel"], ["mark", "Mark in the log"], ["debug", "Tyre data"],
 ]
 
 const KEYS := {
@@ -32,6 +32,7 @@ const KEYS := {
 	"reset": [KEY_R],
 	"restart": [KEY_BACKSPACE],
 	"menu": [KEY_ESCAPE],
+	"tuning": [KEY_U],
 	"calibrate": [KEY_K],
 	"mark": [KEY_F8],
 	"debug": [KEY_F3],

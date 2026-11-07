@@ -28,7 +28,8 @@ const DEFAULTS := {
 	"ffb_damping": 0.35,
 	"ffb_road": 0.5,
 	"ffb_invert": false,
-	"controls": {},               # the bindings that the player set (Controls)
+	"controls": {},
+	"tunes": {},                  # car -> the tune in use (its file)               # the bindings that the player set (Controls)
 }
 
 var _values := {}
