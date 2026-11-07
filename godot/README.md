@@ -45,12 +45,26 @@ commit, what happened when (a drive, the camera, a reset, a shift, a knock) and 
 the car and every tyre. **F8** marks a moment: a line `MARK n` and a screenshot next to the log. Godot's own
 errors and warnings are in the `godot.log` whose path is at the top of the log.
 
+## Racing wheel and force feedback
+
+A racing wheel is calibrated once (**K** while driving, or Settings, Wheel): turn it left and right, press the
+pedals and the paddles; what it found is kept per device in `user://settings.cfg`. At the end a short push finds
+which way a positive force turns that wheel. The force feedback (the aligning torque of the front tyres, bumps,
+loose ground, slides, ABS, knocks, the hard stop at the lock) follows `web/js/ForceFeedback.js` and is sent to a
+wheel that speaks HID PID (PXN, Thrustmaster, Fanatec, Moza, Simagic, Logitech G920/G923 ...) by
+`native/src/wheel_force.cpp`, through the HID functions of the SDL3 inside Godot. Tested on a PXN-V99. Tests:
+`tools/test_wheel.gd` (the calibration with made-up input), `tools/ffb_probe.gd -- --pulse` (opens the wheel and
+pushes it both ways), `tools/list_pads.gd`, `tools/watch_pad.gd`.
+
+Building the native part needs the headers of SDL3 (`brew install sdl3`); the game does not load that library.
+
 ## Controls
 
 Arrows or WASD drive, Space is the handbrake, Q/E shift (the first shift switches to a manual gearbox),
 C changes the camera (behind, cockpit, bonnet), R puts the car back on its wheels, Backspace goes back to
-the start, F3 shows the data of the tyres, Esc goes to the menu. A gamepad: the triggers for gas and brake,
-the left stick to steer, A handbrake, the shoulders shift, Y camera, X reset, Start menu.
+the start, K calibrates a racing wheel, F3 shows the data of the tyres, F8 marks a moment in the log, Esc
+pauses (resume, settings, back to the start, main menu). A gamepad: the triggers for gas and brake,
+the left stick to steer, A handbrake, the shoulders shift, Y camera, X reset, Start pause.
 
 Holding the brake at a standstill puts the car in reverse; then the brake drives and the throttle brakes.
 
@@ -90,7 +104,7 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
 1. **Prototype** (this): menu, the cars (no motorcycles yet) on the tracks, suspension, tyres, engine,
    clutch, gearbox, differentials, ABS, chase/cockpit/bonnet camera, speed and rpm. *Done.*
 2. **Feel and sound**: the engine sound (EngineSim), tyre squeal, skid marks and smoke *(done)*; settings for
-   the steering and the controls; racing wheels (SDL3 axes) and force feedback (in the GDExtension).
+   the steering and the controls, racing wheels and force feedback *(done)*.
 3. **Racing**: laps and gates from track.json, timing, ghosts, AI opponents on the racing line, grid start.
 4. **The rest of the physics**: tyre heat and wear, pressure, camber, downforce, turbo, torque converter,
    traction and stability control, launch control; damage and the soft body.

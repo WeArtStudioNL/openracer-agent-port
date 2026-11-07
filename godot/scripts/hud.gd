@@ -12,6 +12,7 @@ var _debug: Label
 var _help: Label
 var _toast: Label
 var _toast_time := 0.0
+var _calibration: Label
 
 
 func _ready() -> void:
@@ -53,7 +54,7 @@ func _ready() -> void:
 	_help.position = Vector2(20, 40)
 	_help.modulate.a = 0.75
 	_help.text = ("Arrows/WASD drive  ·  Space handbrake  ·  Q/E shift (manual)  ·  C camera  ·  R put back on its wheels  ·  "
-		+ "Backspace start  ·  F3 data  ·  F8 mark in the log  ·  Esc menu")
+		+ "Backspace start  ·  K calibrate wheel  ·  F3 data  ·  F8 mark  ·  Esc pause")
 	add_child(_help)
 	_toast = _label(22)
 	_toast.anchor_left = 0.5
@@ -63,6 +64,15 @@ func _ready() -> void:
 	_toast.offset_top = 90
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_toast)
+	_calibration = _label(24)
+	_calibration.anchor_left = 0.5
+	_calibration.anchor_right = 0.5
+	_calibration.offset_left = -500
+	_calibration.offset_right = 500
+	_calibration.offset_top = 140
+	_calibration.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_calibration.autowrap_mode = TextServer.AUTOWRAP_WORD
+	add_child(_calibration)
 	_debug = _label(14)
 	_debug.position = Vector2(20, 70)
 	_debug.visible = false
@@ -75,6 +85,13 @@ func _label(size: int) -> Label:
 	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
 	l.add_theme_constant_override("outline_size", maxi(2, size / 8))
 	return l
+
+
+## What the wheel calibration asks ("" hides it).
+func calibration(text: String) -> void:
+	_calibration.text = text
+	if text == "" and not WheelInput.calibrating and WheelInput.active:
+		toast("Wheel calibrated")
 
 
 ## A message in the middle of the screen for a few seconds.

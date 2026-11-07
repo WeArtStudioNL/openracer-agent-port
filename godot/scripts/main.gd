@@ -64,7 +64,7 @@ func _build_menu() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 	var sub := Label.new()
-	sub.text = "Godot prototype · phase 1 · " + str(ProjectSettings.get_setting("application/config/version"))
+	sub.text = "Godot prototype · phase 2 · " + str(ProjectSettings.get_setting("application/config/version"))
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sub.modulate.a = 0.7
 	box.add_child(sub)
@@ -92,11 +92,27 @@ func _build_menu() -> void:
 	go.custom_minimum_size.y = 48
 	go.pressed.connect(func(): _start(_cars[_car_pick.selected]["id"], _tracks[_track_pick.selected]["id"]))
 	box.add_child(go)
+	var settings := Button.new()
+	settings.text = "Settings"
+	settings.pressed.connect(_open_settings)
+	box.add_child(settings)
 	var quit := Button.new()
 	quit.text = "Quit"
 	quit.pressed.connect(get_tree().quit)
 	box.add_child(quit)
 	go.grab_focus.call_deferred()
+
+
+func _open_settings() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 10
+	add_child(layer)
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(centre)
+	var m := SettingsMenu.new()
+	m.closed.connect(layer.queue_free)
+	centre.add_child(m)
 
 
 func _caption(text: String) -> Label:

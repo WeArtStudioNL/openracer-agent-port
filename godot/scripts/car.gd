@@ -50,6 +50,7 @@ class Wheel:
 	var tyre_slope := 0.0
 	var abs_factor := 1.0
 	var side_speed := 0.0           # m/s across the tyre
+	var comp_rate := 0.0            # m/s that the spring is pushed in (for the force feedback)
 	var squeal := 0.0               # how loud it squeals (0..1)
 	var smoke := 0.0                # how much it smokes or throws up dust (0..1)
 	var mark := 0.0                 # how dark a mark it leaves on the road (0..1)
@@ -108,6 +109,7 @@ var throttle_input := 0.0
 var brake_input := 0.0
 var handbrake_input := 0.0
 var autopilot := false          # (the --drive test: full throttle, straight on)
+var steer_direct := false       # a racing wheel: steer_input is the position of the wheel, as a part of the lock
 var abs_on := true
 var manual := false
 
@@ -381,7 +383,7 @@ func _controls(dt: float) -> void:
 	if gear < 0:
 		t = brake_input
 		b = throttle_input
-	if not manual:
+	if not manual and Settings.get_value("auto_reverse"):
 		if gear >= 0 and absf(speed) < 0.6 and brake_input > 0.5 and throttle_input < 0.1:
 			reverse_hold += dt
 			if reverse_hold > 0.35:
@@ -393,10 +395,16 @@ func _controls(dt: float) -> void:
 			reverse_hold = 0.0
 	throttle = t
 	brake = b
-	# the steering: slower and less far at speed (a keyboard gives full lock at once)
-	var limit := max_steer / (1.0 + absf(speed) / 22.0)
+	abs_on = bool(Settings.get_value("abs"))
+	if steer_direct:
+		# a racing wheel turns the wheels as far as it is turned
+		steer_angle = clampf(steer_input, -1.0, 1.0) * max_steer
+		return
+	# the keys and the stick: slower and less far at speed (a key gives full lock at once)
+	var at_speed := float(Settings.get_value("key_steer_at_speed"))
+	var limit := max_steer / (1.0 + at_speed * absf(speed) / 22.0)
 	var target := clampf(steer_input, -1.0, 1.0) * limit
-	var rate := 2.2 if absf(target) > absf(steer_angle) else 4.0
+	var rate := (2.2 if absf(target) > absf(steer_angle) else 4.0) * float(Settings.get_value("key_steer_speed"))
 	steer_angle = move_toward(steer_angle, target, rate * dt)
 
 
@@ -503,6 +511,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		var hub_world := top - up * w.length
 		var pv := v + av.cross(hub_world - origin - com)
 		comp_rate[i] = -pv.dot(up)          # + while the spring is pushed in
+		w.comp_rate = comp_rate[i]
 
 	# ---- spring, damper, bump stop and anti-roll bars: the load on each tyre
 	var loads := [0.0, 0.0, 0.0, 0.0]

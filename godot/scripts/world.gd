@@ -10,6 +10,8 @@ var camera: ChaseCamera
 var hud: Hud
 var audio: CarAudio
 var effects: TyreEffects
+var pause_layer: CanvasLayer
+var _pause_box: Control
 var _shot_path := ""
 var _shot_at := -1.0
 var _log_every := 0.0
@@ -51,7 +53,18 @@ func setup(car_id: String, track_id: String) -> void:
 	_log_every = float(Content.arg("log")) if Content.arg("log") != "" else 0.0
 
 
+func _shot() -> void:
+	var img := get_viewport().get_texture().get_image()
+	img.save_png(_shot_path)
+	print("shot: ", _shot_path)
+	if Content.arg("quit") != "":
+		get_tree().quit()
+
+
 func _ready() -> void:
+	if _shot_path != "":
+		# (a timer that also runs while the game is paused: the screenshot of a menu)
+		get_tree().create_timer(_shot_at, true, false, true).timeout.connect(_shot)
 	# the collision of the track is there after a physics frame
 	await get_tree().physics_frame
 	await get_tree().physics_frame
@@ -61,6 +74,13 @@ func _ready() -> void:
 	camera.make_current()
 	RunLog.car = car
 	RunLog.on_mark = hud.toast
+	WheelInput.calibration_text.connect(hud.calibration)
+	camera.mode = int(Settings.get_value("camera")) as ChaseCamera.Mode
+	camera.snap()
+	audio.set_inside(camera.mode != ChaseCamera.Mode.FOLLOW)
+	if Content.arg("settings") != "":
+		pause()
+		_show_settings()
 	RunLog.event("start  %s on %s  mass %d kg  %s %s  %s" % [car.config.get("name", car.car_id), track.config.get("name", track.track_id),
 		roundi(car.mass), car.drive, car.gearbox, "engine sound on" if audio.synth != null else "NO engine sound"])
 
@@ -92,19 +112,47 @@ func _physics_process(_delta: float) -> void:
 		var dv := (car.linear_velocity - _last_velocity).length()
 		if dv > 4.0 and _last_velocity.length() > 2.0:
 			RunLog.event("impact %.1f m/s at %.0f km/h" % [dv, _last_velocity.length() * 3.6])
+			ForceFeedback.knock(dv)
 		_last_velocity = car.linear_velocity
 	if car.autopilot:
 		return
-	car.steer_input = Input.get_axis("steer_right", "steer_left")
+	var keys_steer := Input.get_axis("steer_right", "steer_left")
 	car.throttle_input = Input.get_action_strength("throttle")
 	car.brake_input = Input.get_action_strength("brake")
 	car.handbrake_input = Input.get_action_strength("handbrake")
+	var stop := 0.0
+	var wheel_on: bool = WheelInput.active and not WheelInput.calibrating
+	if wheel_on and absf(keys_steer) < 0.01:
+		# a racing wheel: as a part of the lock of the car; with "turn as far as the steering wheel of the car" the
+		# wheel turns as far as the steering wheel in car.json and the force feedback stops it there
+		var s: float = WheelInput.steer
+		if Settings.get_value("wheel_match"):
+			var car_degrees := float(car.config.get("steering_wheel", {}).get("degrees", 450))
+			s *= float(Settings.get_value("wheel_degrees")) / maxf(90.0, car_degrees)
+		stop = s
+		car.steer_direct = true
+		car.steer_input = clampf(s, -1.0, 1.0)
+		car.throttle_input = maxf(car.throttle_input, WheelInput.throttle)
+		car.brake_input = maxf(car.brake_input, WheelInput.brake)
+	else:
+		car.steer_direct = false
+		car.steer_input = keys_steer
+	if wheel_on:
+		ForceFeedback.update(car, get_physics_process_delta_time(), stop)
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("menu"):
-		RunLog.car = null
-		leave.emit()
+	if WheelInput.calibrating and event is InputEventKey and event.pressed:
+		if event.physical_keycode == KEY_ESCAPE:
+			WheelInput.cancel()
+		elif event.physical_keycode == KEY_N:
+			WheelInput.skip()
+		get_viewport().set_input_as_handled()
+		return
+	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_K:
+		WheelInput.calibrate()
+	elif event.is_action_pressed("menu"):
+		pause()
 	elif event.is_action_pressed("camera"):
 		camera.next_mode()
 		audio.set_inside(camera.mode != ChaseCamera.Mode.FOLLOW)
@@ -121,6 +169,75 @@ func _unhandled_input(event: InputEvent) -> void:
 		RunLog.event("shift down -> %s" % car.gear_name())
 	elif event.is_action_pressed("debug"):
 		hud.toggle_debug()
+
+
+## The pause menu: the game stops, the wheel is let go.
+func pause() -> void:
+	if get_tree().paused:
+		return
+	get_tree().paused = true
+	ForceFeedback.neutral()
+	RunLog.event("pause")
+	pause_layer = CanvasLayer.new()
+	pause_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	pause_layer.layer = 10
+	add_child(pause_layer)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.5)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_layer.add_child(dim)
+	_show_pause_buttons()
+
+
+func _show_pause_buttons() -> void:
+	if _pause_box != null:
+		_pause_box.queue_free()
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_layer.add_child(centre)
+	_pause_box = centre
+	var box := VBoxContainer.new()
+	box.custom_minimum_size = Vector2(320, 0)
+	box.add_theme_constant_override("separation", 10)
+	centre.add_child(box)
+	var items := [["Resume", resume], ["Settings", _show_settings], ["Back to the start", func():
+		resume()
+		to_start()], ["Main menu", func():
+		resume()
+		RunLog.car = null
+		ForceFeedback.neutral()
+		leave.emit()]]
+	for item in items:
+		var b := Button.new()
+		b.text = item[0]
+		b.custom_minimum_size.y = 44
+		b.pressed.connect(item[1])
+		box.add_child(b)
+	(box.get_child(0) as Button).grab_focus.call_deferred()
+
+
+func _show_settings() -> void:
+	_pause_box.queue_free()
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_layer.add_child(centre)
+	_pause_box = centre
+	var menu := SettingsMenu.new()
+	menu.closed.connect(func():
+		if WheelInput.calibrating:
+			resume()
+		else:
+			_show_pause_buttons())
+	centre.add_child(menu)
+
+
+func resume() -> void:
+	if pause_layer != null:
+		pause_layer.queue_free()
+		pause_layer = null
+		_pause_box = null
+	get_tree().paused = false
+	RunLog.event("resume")
 
 
 func _process(delta: float) -> void:
@@ -141,10 +258,4 @@ func _process(delta: float) -> void:
 			for w in car.wheels:
 				print("   %s fx %+6.0f fy %+6.0f slip %+.3f wr %.2f v %.2f %s" % [
 					w.slot, w.fx, w.fy, w.slip_ratio, w.omega * w.radius, w.forward_speed, w.surface])
-	if _shot_path != "" and _time >= _shot_at:
-		var img := get_viewport().get_texture().get_image()
-		img.save_png(_shot_path)
-		print("shot: ", _shot_path)
-		_shot_path = ""
-		if Content.arg("quit") != "":
-			get_tree().quit()
+

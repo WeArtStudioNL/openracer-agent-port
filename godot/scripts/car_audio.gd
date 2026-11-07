@@ -57,6 +57,8 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if car == null:
 		return
+	if engine_player != null:
+		engine_player.volume_db = linear_to_db(maxf(1e-4, float(Settings.get_value("volume")) / 0.8))
 	if synth != null and playback != null:
 		synth.set_rpm(car.engine.rpm())
 		synth.set_throttle(car.engine.throttle_used)
@@ -70,7 +72,7 @@ func _process(delta: float) -> void:
 		for w in car.wheels:
 			amount = maxf(amount, w.squeal)
 		amount = maxf(0.0, (amount - 0.1) / 0.9)
-		var loud := 0.8 * (0.12 if inside else 0.3) * 0.75 * 2.5 * pow(amount, 1.6)
+		var loud := float(Settings.get_value("tyre_volume")) * (0.12 if inside else 0.3) * 0.75 * 2.5 * pow(amount, 1.6)
 		var rate := 0.12 if loud > _squeal_volume else 0.08
 		_squeal_volume = lerpf(_squeal_volume, loud, 1.0 - exp(-delta / rate))
 		_squeal_pitch = lerpf(_squeal_pitch, 0.85 + minf(1.0, absf(car.speed) / 40.0) * 0.4 + amount * 0.1, 1.0 - exp(-delta / 0.1))

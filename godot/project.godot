@@ -21,6 +21,9 @@ config/icon="res://icon.svg"
 Content="*res://scripts/content.gd"
 Controls="*res://scripts/controls.gd"
 RunLog="*res://scripts/run_log.gd"
+Settings="*res://scripts/settings.gd"
+WheelInput="*res://scripts/wheel_input.gd"
+ForceFeedback="*res://scripts/force_feedback.gd"
 
 [display]
 
@@ -34,6 +37,10 @@ window/stretch/aspect="expand"
 file_logging/enable_file_logging=true
 file_logging/enable_file_logging.pc=true
 file_logging/max_log_files=30
+
+[input_devices]
+
+joypads/ignore_joypad_on_unfocused_application=false
 
 [physics]
 
