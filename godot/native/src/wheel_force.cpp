@@ -7,7 +7,12 @@
 
 #include <SDL3/SDL_hidapi.h>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
 
 #include <algorithm>
 #include <chrono>
@@ -224,7 +229,13 @@ struct Hid {
 		if (ok) {
 			return true;
 		}
+#ifdef _WIN32
+		// (the SDL of Godot is in the executable; when it does not export these, force feedback stays off)
+		HMODULE self_module = GetModuleHandleW(nullptr);
+#define OR_HID(field, name) field = reinterpret_cast<decltype(field)>(reinterpret_cast<void *>(GetProcAddress(self_module, name)))
+#else
 #define OR_HID(field, name) field = reinterpret_cast<decltype(field)>(dlsym(RTLD_DEFAULT, name))
+#endif
 		OR_HID(init, "SDL_hid_init");
 		OR_HID(enumerate, "SDL_hid_enumerate");
 		OR_HID(free_enumeration, "SDL_hid_free_enumeration");

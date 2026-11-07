@@ -317,6 +317,17 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
    click, Open), with the cars, tracks, wheels and sounds of web/ inside it (Contents/Resources/web; about 380 MB).
    It needs the release build of the native part first (`cd godot/native && scons target=template_release
    arch=universal`). The exported game keeps its logs in its user folder (`logs/`), next to the settings.
+   Windows and Linux *(done, built on a Mac)*: `sh godot/tools/export_desktop.sh` makes `godot/build/windows/`
+   (O-Racer.exe) and `godot/build/linux/` (O-Racer.x86_64), each with a folder `web` (cars, tracks, wheels, sounds)
+   next to the program, and a zip of each. The native part for them is cross-compiled: Windows with MinGW
+   (`brew install mingw-w64`; `cd godot/native && scons platform=windows use_mingw=yes arch=x86_64
+   target=template_release`: it needs only the Windows system libraries), Linux with zig (`brew install zig`; the
+   objects with `scons platform=linux arch=x86_64 target=template_release use_static_cpp=no` through wrappers that
+   call `zig cc/c++ -target x86_64-linux-gnu.2.28` and turn `-march=x86-64` into `-march=x86_64`, then linked by hand:
+   `zig c++ -target x86_64-linux-gnu.2.28 -shared -o ../bin/liboracer.linux.template_release.x86_64.so
+   src/*.o godot-cpp/bin/libgodot-cpp.linux.template_release.x86_64.a`, as scons on a Mac names the objects .os;
+   glibc 2.28 or newer). On Windows the force feedback looks up the SDL HID functions in the executable
+   (GetProcAddress); when Godot does not export them there, force feedback is off and the rest works.
 
 Known in phase 1: the acceleration of the
 cars with a centrifugal clutch (karts) or a torque converter is close to, but not yet compared with, the
