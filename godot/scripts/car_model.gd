@@ -7,19 +7,6 @@ extends RefCounted
 
 const SLOTS := ["FL", "FR", "RL", "RR"]
 
-## The finishes of the paint (OpenRacer.carFinishes of CarColors.js): roughness, metalness, clear coat.
-const FINISHES := {
-	"gloss": [0.22, 0.1, 1.0, 0.03],
-	"satin": [0.5, 0.12, 0.25, 0.35],
-	"matte": [0.92, 0.0, 0.0, 0.0],
-	"metallic": [0.33, 0.75, 1.0, 0.05],
-	"pearl": [0.28, 0.3, 1.0, 0.04],
-	"flake": [0.38, 0.9, 1.0, 0.06],
-	"candy": [0.15, 0.85, 1.0, 0.02],
-	"chrome": [0.04, 1.0, 0.0, 0.0],
-	"brushed": [0.42, 1.0, 0.0, 0.0],
-}
-
 ## The colours of the AI cars of a race (main.js).
 const AI_COLOURS := [Color("#d94a3d"), Color("#3d7bd9"), Color("#e3b53a"), Color("#3fae5a"), Color("#f0f0f0"), Color("#8a4fd1"), Color("#f07a2a")]
 
@@ -133,56 +120,8 @@ static func library_rim(rim_id: String, diameter: float, width: float) -> Node3D
 	return holder
 
 
-## Paints a car (applyCarColors of CarColors.js): every material called carpaint (car paint, Car_Paint.001 ...) gets
-## the colour of the body, every material called rimpaint the colour of the rims, each with its finish. The other
-## materials stay as the model made them.
+## Paints a car with one colour for the body and one for the rims, each with its finish (the AI cars of a race, the
+## car editor): CarPaint.paint (CarColors.js). A model without a carpaint has its material called body painted (the karts).
 static func paint(root: Node, body: Variant, body_finish := "gloss", rim: Variant = null, rim_finish := "metallic") -> int:
-	var body_re := RegEx.create_from_string("(?i)car[ _-]?paint")
-	# (a model without a carpaint, the karts: its material called body is the paint)
-	if not _has_material(root, body_re):
-		body_re = RegEx.create_from_string("(?i)^body$")
-	var rim_re := RegEx.create_from_string("(?i)rim[ _-]?paint")
-	var count := 0
-	for m in root.find_children("*", "MeshInstance3D", true, false):
-		var mi := m as MeshInstance3D
-		if mi.mesh == null:
-			continue
-		for i in mi.mesh.get_surface_count():
-			var mat := mi.get_active_material(i) as BaseMaterial3D
-			if mat == null:
-				continue
-			var colour: Variant = null
-			var finish := ""
-			if body != null and body_re.search(mat.resource_name) != null:
-				colour = body
-				finish = body_finish
-			elif rim != null and rim_re.search(mat.resource_name) != null:
-				colour = rim
-				finish = rim_finish
-			if colour == null:
-				continue
-			var own := mat.duplicate() as BaseMaterial3D
-			own.albedo_color = colour
-			own.albedo_texture = null
-			var f: Array = FINISHES.get(finish, FINISHES["gloss"])
-			own.roughness = f[0]
-			own.metallic = f[1]
-			own.clearcoat_enabled = f[2] > 0.0
-			own.clearcoat = f[2]
-			own.clearcoat_roughness = f[3]
-			mi.set_surface_override_material(i, own)
-			count += 1
-	return count
-
-
-static func _has_material(root: Node, re: RegEx) -> bool:
-	for m in root.find_children("*", "MeshInstance3D", true, false):
-		var mi := m as MeshInstance3D
-		if mi.mesh == null:
-			continue
-		for i in mi.mesh.get_surface_count():
-			var mat := mi.get_active_material(i)
-			if mat != null and re.search(mat.resource_name) != null:
-				return true
-	return false
-
+	var colors := {"body": body, "bodyFinish": body_finish if body != null else "", "rim": rim, "rimFinish": rim_finish if rim != null else ""}
+	return CarPaint.paint(root, colors, true)

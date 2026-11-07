@@ -56,6 +56,10 @@ const DEFAULTS := {
 	"gfx_sun_azimuth": 40.0,
 	"gfx_moon": 1.0,
 	"gfx_weather": "clear",       # clear, cloudy, fog, rain, snow
+	# the mirrors of the car (CarMirrors, Mirrors.js): the turn and the tilt of each glass (degrees), and a real mirror
+	"mirror_left_yaw": 0.0, "mirror_left_tilt": 0.0, "mirror_left_real": true,
+	"mirror_right_yaw": 0.0, "mirror_right_tilt": 0.0, "mirror_right_real": true,
+	"mirror_centre_yaw": 0.0, "mirror_centre_tilt": 0.0, "mirror_centre_real": true,
 }
 
 var _values := {}

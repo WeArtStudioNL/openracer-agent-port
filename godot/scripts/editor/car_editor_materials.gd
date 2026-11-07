@@ -4,7 +4,7 @@ extends RefCounted
 ## editor): a model does not always arrive the way it looked in Blender (the glass of many models becomes opaque white
 ## metal), so a material can be set right with a preset or by hand. The changes are saved with the car (car.json
 ## "materials": { material name: { color, metalness, roughness, opacity, clearcoat, clearcoatRoughness, envMapIntensity } }).
-## The paint of the tuning settings (the materials carpaint and rimpaint, CarModel.paint) is laid on top.
+## The paint of the tuning settings (the materials carpaint and rimpaint, CarPaint.paint) is laid on top.
 
 const PRESETS := {
 	"Glass": {"color": "#0b1116", "metalness": 0, "roughness": 0.04, "opacity": 0.3, "clearcoat": 0, "envMapIntensity": 1.2},
@@ -39,9 +39,7 @@ func build_card() -> void:
 
 
 static func values_of(m: BaseMaterial3D) -> Dictionary:
-	return {"color": "#" + m.albedo_color.to_html(false), "metalness": m.metallic, "roughness": m.roughness, "opacity": m.albedo_color.a,
-		"clearcoat": m.clearcoat if m.clearcoat_enabled else 0.0, "clearcoatRoughness": m.clearcoat_roughness, "envMapIntensity": 1.0,
-		"transparency": m.transparency}
+	return CarPaint.values_of(m)
 
 
 ## The materials of a model, every one once, with what they were as made.
@@ -80,21 +78,9 @@ func plain_opaque(n: String) -> bool:
 	return true
 
 
-## A material as it was in the model, with an override (or none) on it.
+## A material as it was in the model, with an override (or none) on it (CarPaint.apply_override, which the game uses).
 static func apply_override(m: BaseMaterial3D, o: Variant) -> void:
-	var v: Dictionary = (m.get_meta("original") as Dictionary).duplicate() if m.has_meta("original") else values_of(m)
-	if o is Dictionary:
-		v.merge(o, true)
-	var c := Color(str(v["color"]))
-	var opacity := float(v["opacity"])
-	m.albedo_color = Color(c.r, c.g, c.b, opacity)
-	m.metallic = float(v["metalness"])
-	m.roughness = float(v["roughness"])
-	m.clearcoat_enabled = float(v["clearcoat"]) > 0.0
-	m.clearcoat = float(v["clearcoat"])
-	m.clearcoat_roughness = float(v["clearcoatRoughness"])
-	m.metallic_specular = clampf(0.5 * float(v["envMapIntensity"]), 0.0, 1.0)
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA if opacity < 1.0 else int(v.get("transparency", BaseMaterial3D.TRANSPARENCY_DISABLED))
+	CarPaint.apply_override(m, o)
 
 
 func apply(n: String) -> void:
@@ -110,27 +96,12 @@ func apply_all() -> void:
 	apply_paint()
 
 
-## The paint of the body and the rims (colors of car.json) on the model and the library wheels.
+## The paint of the body and the rims (colors of car.json, with every finish of CarColors.js) on the model and the
+## library wheels (CarPaint.paint, as the game does it).
 func apply_paint() -> void:
 	for root in [ed.model_root, ed.view.lib_preview]:
-		if root == null:
-			continue
-		for n in (root as Node).find_children("*", "MeshInstance3D", true, false):
-			var mi := n as MeshInstance3D
-			if mi.mesh == null:
-				continue
-			for i in mi.mesh.get_surface_count():
-				if mi.get_surface_override_material(i) != null and mi.has_meta("painted"):
-					mi.set_surface_override_material(i, null)
-		var body: Variant = Tuning.read(ed.cfg, "colors.body")
-		var rim: Variant = Tuning.read(ed.cfg, "colors.rim")
-		var bf: Variant = Tuning.read(ed.cfg, "colors.bodyFinish")
-		var rf: Variant = Tuning.read(ed.cfg, "colors.rimFinish")
-		if (body is String and str(body) != "") or (rim is String and str(rim) != ""):
-			CarModel.paint(root, Color(str(body)) if body is String and str(body) != "" else null, str(bf) if bf is String and str(bf) != "" else "gloss",
-				Color(str(rim)) if rim is String and str(rim) != "" else null, str(rf) if rf is String and str(rf) != "" else "metallic")
-			for n in (root as Node).find_children("*", "MeshInstance3D", true, false):
-				(n as Node).set_meta("painted", true)
+		if root != null:
+			CarPaint.paint(root, CarPaint.colors_of(ed.cfg.get("colors")))
 
 
 ## A colour of car.json (colors.body, colors.rim), or null for the colour of the model.
