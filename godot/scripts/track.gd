@@ -7,6 +7,8 @@ extends Node3D
 var config: Dictionary = {}
 var track_id := ""
 var start := {"x": 0.0, "z": 0.0, "heading": 0.0}
+var marks: TrackMarks = null       # the grid boxes, the pit area and the checkpoints (TrackMarks)
+var objects: TrackObjects = null   # the objects of track.json and the rigid parts of the model (TrackObjects)
 var _colliders: Array[CollisionShape3D] = []
 var _walls: WallGrid = null
 
@@ -24,36 +26,83 @@ func setup(id: String, cfg: Dictionary) -> void:
 		return
 	add_child(model)
 	var surfaces: Dictionary = cfg.get("surfaces", {}).get("meshes", {})
+	var double_sided: Array = cfg.get("double_sided", []) if cfg.get("double_sided") is Array else []
+	var rigid: Array = []
 	for m in model.find_children("*", "MeshInstance3D", true, false):
 		var mi := m as MeshInstance3D
 		if mi.mesh == null:
 			continue
+		if not double_sided.is_empty():
+			_double_sided(mi, double_sided)
+		if _is_rigid(mi):
+			rigid.append(mi)
+			continue
 		var kind := _surface_of(mi, surfaces)
 		if kind == "decor":
 			continue
-		var shape := mi.mesh.create_trimesh_shape()
-		if shape == null:
-			continue
-		shape.backface_collision = true
-		var body := StaticBody3D.new()
-		body.set_meta("surface", kind)
-		var mat := PhysicsMaterial.new()
-		mat.friction = 0.6
-		body.physics_material_override = mat
-		var col := CollisionShape3D.new()
-		col.shape = shape
-		body.add_child(col)
-		mi.add_child(body)
-		_colliders.append(col)
-	# the pit boxes on the road (Pit.js), once the track is in the scene (their height comes from a ray)
-	var boxes := PitStop.boxes_of(cfg)
-	if not boxes.is_empty():
-		_add_pit_boxes.call_deferred(boxes)
+		_add_body(mi, kind)
+	# the curbs of the track editor (Curbs.js): road, a few centimetres above what is under them
+	for curb in Curbs.meshes(cfg.get("curbs")):
+		add_child(curb)
+		_add_body(curb, "road")
+	# the pit boxes on the road (Pit.js), the grid, the pit area and the checkpoints (TrackMarks.js, GateMarkers.js) and the
+	# objects (RigidObjects.js), once the track is in the scene (their heights come from a ray)
+	_add_marks.call_deferred(PitStop.boxes_of(cfg), rigid)
 
 
-func _add_pit_boxes(boxes: Array) -> void:
+func _add_marks(boxes: Array, rigid: Array) -> void:
 	await get_tree().physics_frame
-	add_child(PitStop.markings(boxes, self))
+	if not boxes.is_empty():
+		add_child(PitStop.markings(boxes, self))
+	marks = TrackMarks.new()
+	add_child(marks)
+	marks.setup(self, config)
+	objects = TrackObjects.new()
+	add_child(objects)
+	objects.setup(self, config, track_id, rigid)
+
+
+## A part of the model with collision: a static body under it with its surface.
+func _add_body(mi: MeshInstance3D, kind: String) -> void:
+	var shape := mi.mesh.create_trimesh_shape()
+	if shape == null:
+		return
+	shape.backface_collision = true
+	var body := StaticBody3D.new()
+	body.set_meta("surface", kind)
+	var mat := PhysicsMaterial.new()
+	mat.friction = 0.6
+	body.physics_material_override = mat
+	var col := CollisionShape3D.new()
+	col.shape = shape
+	body.add_child(col)
+	mi.add_child(body)
+	_colliders.append(col)
+
+
+## A collision shape that is a wall of the track too (a static object): the shells of the cars meet it.
+func add_collider(col: CollisionShape3D) -> void:
+	_colliders.append(col)
+	if _walls != null and col.shape is ConcavePolygonShape3D and col.is_inside_tree():
+		_walls.add_faces((col.shape as ConcavePolygonShape3D).get_faces(), col.global_transform, "scenery")
+
+
+## A part named rigid... (or under a node so named) is a body of its own (TrackObjects).
+func _is_rigid(mi: MeshInstance3D) -> bool:
+	var n: Node = mi
+	while n != null and n != self:
+		if str(n.name).to_lower().begins_with("rigid"):
+			return true
+		n = n.get_parent()
+	return false
+
+
+## track.json "double_sided": the materials that are seen from both sides (a sign of one flat panel).
+func _double_sided(mi: MeshInstance3D, names: Array) -> void:
+	for s in mi.mesh.get_surface_count():
+		var m := mi.mesh.surface_get_material(s) as BaseMaterial3D
+		if m != null and names.has(m.resource_name):
+			m.cull_mode = BaseMaterial3D.CULL_DISABLED
 
 
 ## The walls of the track for the shells of the cars (WallGrid), made the first time they are asked for (the track

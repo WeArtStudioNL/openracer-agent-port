@@ -138,6 +138,8 @@ func _ready() -> void:
 	await get_tree().physics_frame
 	to_start()
 	car.freeze = false
+	if track.marks != null:
+		track.marks.follow(car)          # (the checkpoints follow the lap of the player: TrackMarks)
 	if race != null:
 		race.place_all()
 	camera.follow(car)
@@ -166,6 +168,10 @@ func to_start() -> void:
 	car.place(Vector3(x, y + car.wheels[0].radius + 0.15, z), float(s.get("heading", 0)))
 	car.repair()                       # (as the browser game: back at the start the car is whole again)
 	effects.clear()
+	if track.marks != null:
+		track.marks.restart()
+	if track.objects != null:
+		track.objects.reset()
 	if laps:
 		laps.restart()
 	if ai != null:
