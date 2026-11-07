@@ -180,10 +180,15 @@ and radiator, as in the browser. The crash test prints what the hit did to the e
 the tail pipes after a blown head gasket, drops of oil and coolant (a dripping radiator, or 1 to 5 jets from one torn
 open) and the stains they leave on the road (oil stays, coolant dries in 70 s).
 
+Punctures (`scripts/tyre_damage.gd`, Vehicle.js): with car.json `tyres.damage` (the tuning row "Tyre damage") and
+damage on, a hard hit on a tyre (more than five times its static load: a kerb, a landing) punctures it now and then;
+it leaks 0.05 to 0.15 bar a second down to 0.15 bar, and its grip, its sidewall and (a kart) its spring follow. A
+repair makes the tyres whole. The crash test takes `--puncture=1`.
+
 Not yet from the browser game: the suspension as nodes and beams (a bent arm that pulls the car aside, a wheel that
 comes off), hinged parts that swing open (doors, a hood) and the link beams of parts with nodes of their own, the
-pieces of a part that shatters (`Shatter.js`), a loose part that hits its own car, the damage to the engine
-(`EngineDamage.js`), punctures, the shell of the model drawn as an object "beams", the replay of the shell.
+pieces of a part that shatters (`Shatter.js`), a loose part that hits its own car, the shell of the model drawn as an
+object "beams", the replay of the shell.
 
 ## Controls
 
