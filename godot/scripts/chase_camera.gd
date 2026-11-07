@@ -78,6 +78,8 @@ func _process(delta: float) -> void:
 			var target := xf.origin - _look_dir * distance + Vector3.UP * height
 			_pos = _pos.lerp(target, 1.0 - exp(-delta * smoothing * 2.5))
 			global_transform = Transform3D(Basis.IDENTITY, _pos).looking_at(xf.origin + Vector3.UP * look_height, Vector3.UP)
+			if car.bike != null:
+				rotate_object_local(Vector3.BACK, car.bike.camera_roll(delta))      # (a motorcycle: the camera rolls with the lean)
 			fov = lerpf(fov_standing, fov_fast, clampf(spd / 60.0, 0.0, 1.0))
 		Mode.COCKPIT:
 			global_transform = xf * Transform3D(Basis(Vector3.UP, PI), cockpit)

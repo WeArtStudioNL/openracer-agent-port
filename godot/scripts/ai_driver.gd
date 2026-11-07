@@ -22,6 +22,8 @@ var _was_off := false
 var _yaw_i := 0.0
 var _last_index := -1
 var _base_speeds := PackedFloat32Array()
+var _rolled := 0.0                # a motorcycle: the throttle as it is rolled on
+var _beside := NAN                # a motorcycle: how far it was to the left of the line
 
 
 func setup(c: Car, l: RacingLine, p := -1.0) -> void:
@@ -32,9 +34,18 @@ func setup(c: Car, l: RacingLine, p := -1.0) -> void:
 	elif Content.arg("ai-pace") != "":
 		pace = float(Content.arg("ai-pace"))
 	var grip := 1.2 * float(c.config.get("tyres", {}).get("grip", 1.0))
+	var lateral := grip
+	var braking := grip * 0.75
+	if c.bike != null:
+		# a motorcycle holds what its lean and its max_lateral_g allow, and it cannot brake hard and lean at once
+		# (Opponent.js); it leans as much as the bend that is asked needs
+		var m: Dictionary = c.config.get("motorcycle", {})
+		lateral = minf(minf(grip, c.bike.lateral_g(c)), minf(float(m.get("max_lateral_g", 0.9)), tan(deg_to_rad(minf(55.0, float(m.get("max_lean_deg", 50))))))) * 0.9
+		braking = minf(braking, 0.8) * pace
+		c.bike.lean_from_bend = true
 	# (its own speeds: the cars of a race differ, and it learns where it was too fast)
-	_speeds = line.compute_speeds(grip * Car.G * pace, grip * Car.G * 0.75, 90.0).duplicate()
-	_brake = grip * Car.G * 0.75
+	_speeds = line.compute_speeds(lateral * Car.G * pace, braking * Car.G, 90.0).duplicate()
+	_brake = braking * Car.G
 	_base_speeds = _speeds.duplicate()
 	# what an AI with this car learned on this track before (where it ran off the road), as factors on the speeds
 	var f := _learned_path()
@@ -54,14 +65,16 @@ func save_learned() -> void:
 	factors.resize(_speeds.size())
 	for i in _speeds.size():
 		factors[i] = _speeds[i] / maxf(0.1, _base_speeds[i])
-	DirAccess.make_dir_recursive_absolute("user://ai")
+	DirAccess.make_dir_recursive_absolute(_learned_path().get_base_dir())
 	var file := FileAccess.open(_learned_path(), FileAccess.WRITE)
 	if file:
 		file.store_buffer(var_to_bytes(factors))
 
 
 func _learned_path() -> String:
-	return "user://ai/%s__%s__%d.learned" % [car.get_meta("track_id", "track"), car.car_id, roundi(pace * 100)]
+	# (the AI of the tests, --ai, learns apart: not into what the AI of the player's races learned)
+	var folder := "user://test-ai" if Content.arg("ai") != "" else "user://ai"
+	return "%s/%s__%s__%d.learned" % [folder, car.get_meta("track_id", "track"), car.car_id, roundi(pace * 100)]
 
 
 ## Looks for the car on the line again (after a reset).
@@ -76,6 +89,8 @@ func drive(dt: float) -> void:
 	var v := absf(car.speed)
 	# the point to steer at
 	var ahead := int((5.0 + v * 0.45) / RacingLine.STEP)
+	if car.bike != null:
+		ahead = int(clampf(3.0 + v * 0.75, 7.0, 35.0) / RacingLine.STEP)      # (Opponent.js: a bike leans into a bend before it turns)
 	var target := line.point(_index + ahead)
 	var want := _speeds[posmod(_index + int((3.0 + v * 0.3) / RacingLine.STEP), line.count())]
 	# the front tyres at their limit (understeer: the car runs wide): off the throttle, a little slower; and the
@@ -121,7 +136,14 @@ func drive(dt: float) -> void:
 	var curvature := 2.0 * sin(angle) / maxf(1.0, dist)
 	var yaw_error := v * curvature - car.angular_velocity.dot(xf.basis.y)
 	_yaw_i = clampf(_yaw_i + yaw_error * dt, -0.6, 0.6)
-	steer += 0.12 * yaw_error + 0.25 * _yaw_i
+	if car.bike == null:
+		steer += 0.12 * yaw_error + 0.25 * _yaw_i
+	else:
+		# (a motorcycle, Opponent.js: a pull towards the line itself, scaled to the speed and damped by how fast it closes in)
+		var beside := _lane(_index, xf.origin) - _side
+		var rate := 0.0 if is_nan(_beside) else (beside - _beside) / maxf(dt, 1e-3)
+		_beside = beside
+		steer += clampf((-beside * 0.012 - rate * 0.01) * minf(1.0, 225.0 / maxf(225.0, v * v)), -0.05, 0.05)
 	car.steer_direct = true
 	car.steer_input = clampf(steer / car.max_steer, -1.0, 1.0)
 	var err := want - v
@@ -137,6 +159,11 @@ func drive(dt: float) -> void:
 	# (not at low speed: a car that has to pull away round a bend needs its throttle)
 	var lock := lerpf(1.0, clampf(1.3 - absf(car.steer_input) * 1.2, 0.3, 1.0), clampf(v / 3.0, 0.0, 1.0))
 	car.throttle_input = clampf(u, 0.0, 1.0) * traction * lock
+	if car.bike != null:
+		# a motorcycle rolls the throttle on, and less of it the more it leans
+		var max_lean := deg_to_rad(float(car.config.get("motorcycle", {}).get("max_lean_deg", 50)))
+		_rolled = minf(minf(car.throttle_input, 1.0 - 0.7 * minf(1.0, absf(car.bike.lean) / max_lean)), _rolled + 2.5 * dt)
+		car.throttle_input = _rolled
 	car.brake_input = clampf(-u * 0.5, 0.0, 1.0) if err < -1.0 else 0.0
 	car.handbrake_input = 0.0
 

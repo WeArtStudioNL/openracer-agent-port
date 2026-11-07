@@ -109,6 +109,10 @@ func _telemetry() -> void:
 	line("CAR pos %.1f %.2f %.1f  head %.0f  %5.1f km/h  gear %s  %4d rpm  thr %.2f brk %.2f hb %.2f steer %+.1f  clutch %.2f  fps %d | %s" % [
 		p.x, p.y, p.z, rad_to_deg(car.heading()), car.speed * 3.6, car.gear_name(), roundi(car.engine.rpm()), car.throttle, car.brake,
 		car.handbrake_input, rad_to_deg(car.steer_angle), car.clutch_engagement, Engine.get_frames_per_second(), " | ".join(parts)])
+	if car.bike != null:
+		var b := car.bike
+		line("BIKE lean %+.1f want %+.1f cmd %+.2f  front brake %.2f rear %.2f  thr x%.2f  hang %+.2f%s" % [rad_to_deg(b.lean), rad_to_deg(b.target_lean),
+			b.command, b.front_brake, b.rear_brake, b.throttle_scale, float(b.posture["lat"]), "  DOWN " + b.crash_reason if b.crashed else ""])
 
 
 ## Keeps the newest logs (and their screenshots).

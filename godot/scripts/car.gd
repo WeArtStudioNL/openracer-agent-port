@@ -79,6 +79,8 @@ class Wheel:
 	var lf := Vector3.LEFT
 	var vref := 1.5
 	var visual_offset := Vector3.ZERO
+	var lost := false               # a motorcycle: the second wheel of a pair is not there (no road, spring, drive, brake)
+	var lat_grip := 1.0             # a share of the grip across (a motorcycle in flat-track style: the tail steps out)
 	var hub_node: Node3D
 	var steer_node: Node3D
 	var spin_node: Node3D
@@ -202,6 +204,8 @@ var parts: CarParts = null      # the parts that come off (damage on)
 var engine_damage: EngineDamage = null   # what a crash does to the engine (damage on, not for the AI)
 var engine_damage_on := true    # (the AI cars have none: they have no pit stop to mend it)
 var tyre_damage := false        # car.json tyres.damage: a hard hit can puncture a tyre (with damage on)
+var bike: Motorcycle = null     # a motorcycle ("type": "motorcycle"): its rider (motorcycle.gd)
+var bike_model: MotorcycleModel = null
 var _box: CollisionShape3D
 var _box_full := Vector3.ZERO   # the size of the box of the body (x, z) and its place along the car, without a shell
 var _box_shell := Vector3.ZERO  # and inside what the nodes can be crushed to
@@ -293,6 +297,8 @@ func repair() -> void:
 	if engine_damage != null:
 		engine_damage.repair()
 	TyreDamage.repair(self)
+	if bike != null:
+		bike.recover()
 
 
 ## The car was moved (put back on its wheels): the shell stops moving and keeps its dents.
@@ -343,7 +349,14 @@ func _read_config() -> void:
 	var ty: Dictionary = cfg.get("tyres", {})
 	tyre_damage = bool(ty.get("damage", false))
 	var br: Dictionary = cfg.get("brakes", {})
-	mass = float(ch.get("mass", 1200))
+	mass = float(ch.get("mass", 1200)) + Motorcycle.rider_mass_of(cfg)
+	if str(cfg.get("type", "car")) == "motorcycle":
+		if bike == null:
+			bike = Motorcycle.new(cfg.get("motorcycle", {}))
+		else:
+			bike.retune(cfg.get("motorcycle", {}))
+	else:
+		bike = null
 	wheelbase = float(ch.get("wheelbase", 2.6))
 	front_track = float(ch.get("front_track", 1.5))
 	rear_track = float(ch.get("rear_track", 1.5))
@@ -382,7 +395,7 @@ func _read_config() -> void:
 	tyre_damping = float(ch.get("tyre_damping", 3000.0 * sqrt(light)))
 
 	drive = str(dt.get("drive", "rwd"))
-	diff = str(dt.get("diff", "open"))
+	diff = str(dt.get("diff", "open")) if bike == null else "open"
 	if Content.arg("diff") != "":
 		diff = Content.arg("diff")      # (a test: --diff=open)
 	diff_preload = float(dt.get("diff_preload", 100))
@@ -452,6 +465,13 @@ func _read_config() -> void:
 			# (the tyre is the spring: its rate with the pressure, and its own little damping)
 			w.spring = tyre_rate * pow(maxf(0.15, pressure) / 2.2, 0.8)
 			w.damper = tyre_damping
+		w.lost = bike != null and not w.left
+		if bike != null:
+			# (the one wheel of an end carries it all, on the spring and the damper of both)
+			w.spring *= 2.0
+			w.damper *= 2.0
+			if w.front:
+				w.inertia = maxf(w.inertia, 1.2)
 		w.rebound = float(ch.get("damping_rebound", 1.5))
 		# (the ride height: the wheel sits further out at rest, the body higher)
 		w.free_length = susp_length + (ride_front if w.front else ride_rear) + (static_front if w.front else static_rear) / w.spring
@@ -476,6 +496,8 @@ func _read_config() -> void:
 			shares[i] = (centre_split if wheels[i].front else 1.0 - centre_split) / 2.0
 		else:
 			shares[i] = 0.5
+		if bike != null:
+			shares[i] = 0.0 if wheels[i].lost else shares[i] * 2.0
 
 	# the anti-roll bars give the front the share of the roll stiffness that car.json asks for
 	var kf := wheels[0].spring * front_track * front_track / 2.0
@@ -487,12 +509,12 @@ func _read_config() -> void:
 
 	# the rigid body
 	var mean_r := (wheels[0].radius + wheels[2].radius) / 2.0
-	if unsprung:
+	if unsprung or bike != null:
 		arb_front = 0.0
 		arb_rear = 0.0
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 	center_of_mass = Vector3(0.0, cg_height - mean_r, wheelbase * (weight_front - 0.5))
-	var k := 0.7
+	var k := 0.7 if bike == null else 1.0      # (a motorcycle: the box of Vehicle.js)
 	inertia = Vector3(
 		mass / 12.0 * (height * height + length * length) * k,
 		mass / 12.0 * (length * length + width * width) * k,
@@ -572,6 +594,8 @@ func _build_visual() -> void:
 		w.hub_node.add_child(w.steer_node)
 		w.steer_node.add_child(w.spin_node)
 		w.hub_node.position = w.hub
+		if w.lost:
+			continue
 		var parts: Array[Node3D] = []
 		if body != null:
 			for n in nodes.get(w.slot, []):
@@ -598,6 +622,8 @@ func _build_visual() -> void:
 			part.get_parent().remove_child(part)
 			part.queue_free()
 		_library_wheel(w, lib.get("front" if w.front else "rear", {}))
+	if bike != null:
+		bike_model = MotorcycleModel.new(self, body)
 
 
 func _library_wheel(w: Wheel, axle: Dictionary) -> void:
@@ -634,6 +660,8 @@ func place(pos: Vector3, heading: float) -> void:
 		w.length = susp_length
 	engine.omega = engine.idle_rpm * PI / 30.0
 	gear = 1
+	if bike != null:
+		bike.recover()
 	shift_timer = 0.0
 	if parts != null:
 		parts.settle()
@@ -675,7 +703,9 @@ func _physics_process(dt: float) -> void:
 	_controls(dt)
 	if parts != null and not freeze:
 		parts.update(dt)
-	if shell != null:
+	if bike != null:
+		bike.fit_box(self, _box)
+	elif shell != null:
 		_fit_box()
 
 
@@ -701,7 +731,12 @@ func _controls(dt: float) -> void:
 	if gear < 0:
 		t = brake_input
 		b = throttle_input
-	if not manual and Settings.get_value("auto_reverse"):
+	if bike != null:
+		# (no reverse gear: held at a standstill, the brake has the rider walk the bike back)
+		reverse_hold = reverse_hold + dt if absf(speed) < 0.6 and brake_input > 0.5 and throttle_input < 0.1 else 0.0
+		bike.pushing = reverse_hold > 0.35 or (bike.pushing and brake_input > 0.5 and throttle_input < 0.1)
+		gear = maxi(gear, 0)
+	elif not manual and Settings.get_value("auto_reverse"):
 		if gear >= 0 and absf(speed) < 0.6 and brake_input > 0.5 and throttle_input < 0.1:
 			reverse_hold += dt
 			if reverse_hold > 0.35:
@@ -714,6 +749,12 @@ func _controls(dt: float) -> void:
 	throttle = t
 	brake = b
 	abs_on = bool(Settings.get_value("abs"))
+	if bike != null:
+		if bike.pushing:
+			throttle = 0.0
+			brake = 0.0
+		steer_angle = bike.steer_angle(self, dt)
+		return
 	if steer_direct:
 		# a racing wheel turns the wheels as far as it is turned
 		steer_angle = clampf(steer_input, -1.0, 1.0) * max_steer
@@ -859,21 +900,25 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		var w := wheels[i]
 		w.steer = angles[i]
 		var top := xf * (w.hub + Vector3.UP * susp_length)
-		var reach := max_len + w.radius
+		var reach := max_len + w.radius + (0.25 if bike != null else 0.0)
 		var q := PhysicsRayQueryParameters3D.create(top, top - up * reach, 1, exclude)
-		var hit := space.intersect_ray(q)
-		if hit.is_empty():
+		var hit := {} if w.lost else space.intersect_ray(q)
+		# (a motorcycle: the round crown of the tyre, a leaned wheel stands on its shoulder)
+		var along := 0.0
+		if not hit.is_empty():
+			w.point = hit["position"]
+			w.normal = hit["normal"]
+			along = bike.crown(w, up) if bike != null else w.radius
+		if hit.is_empty() or top.distance_to(hit["position"]) - along > max_len:
 			w.contact = false
 			w.length = max_len
 			continue
 		w.contact = true
-		w.point = hit["position"]
-		w.normal = hit["normal"]
 		w.surface = "road"
 		var col: Object = hit.get("collider")
 		if col != null and col.has_meta("surface"):
 			w.surface = str(col.get_meta("surface"))
-		w.length = clampf(top.distance_to(w.point) - w.radius, 0.0, max_len)
+		w.length = clampf(top.distance_to(hit["position"]) - along, 0.0, max_len)
 		var hub_world := top - up * w.length
 		var pv := v + av.cross(hub_world - origin - com)
 		comp_rate[i] = -pv.dot(up)          # + while the spring is pushed in
@@ -922,7 +967,12 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 			w.tyre_slope = 0.0
 			continue
 		var hub_world := xf * (w.hub + Vector3.UP * (susp_length - w.length))
-		state.apply_force(up * w.load, hub_world - origin)
+		if bike != null:
+			# (a motorcycle: the road pushes along its normal at the contact; a leaned spring carries load / cos(lean))
+			w.load *= maxf(0.3, w.normal.dot(up))
+			state.apply_force(w.normal * w.load, w.point - origin)
+		else:
+			state.apply_force(up * w.load, hub_world - origin)
 		# forward along the wheel on the road, and to the left of it
 		var n := w.normal
 		var dir := basis * Vector3(sin(w.steer), 0.0, cos(w.steer))
@@ -942,8 +992,10 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		var track := front_track if w.front else rear_track
 		var geometric: float = (-1.0 if w.left else 1.0) * _axle_fy[axle] * w.roll_centre / track
 		geometric += (-1.0 if w.front else 1.0) * _pitch_links / maxf(0.5, wheelbase) / 2.0
-		w.grip_load = maxf(0.0, w.load + geometric)
-		w.lean = _lean(w)
+		w.grip_load = maxf(0.0, w.load + (geometric if bike == null else 0.0))
+		w.lean = _lean(w) if bike == null else 0.0
+	if bike != null:
+		bike.before_tyres(self, dt)
 
 	# ---- the wheels and the drivetrain, in substeps: the tyre is stiff against the wheel speed, so the wheel
 	# speed, the clutch and the engine are stepped SUBSTEPS times with the road speed of this step, and the body
@@ -987,8 +1039,8 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	_axle_fy = new_axle_fy
 	_pitch_links = new_pitch
 	for w in wheels:
-		_tyre_effects(w, dt)
-		_wear_step(w, dt)
+		CarWear.tyre_effects(w, dt)
+		CarWear.wear_step(w, dt)
 	_fuel_step(dt)
 	if engine_damage != null and (shell == null or not engine_damage_on):
 		engine_damage.repair()
@@ -1009,49 +1061,18 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	# ---- the air: the drag, and the downforce (or lift) of each axle along the up axis of the body, at the axle
 	var vv := v.length()
 	if vv > 0.1:
-		state.apply_central_force(-v * vv * 0.5 * AIR * drag_area)
+		state.apply_central_force(-v * vv * 0.5 * AIR * drag_area * (bike.drag_scale() if bike != null else 1.0))
 	var u2 := speed * speed
 	if u2 > 1.0 and (downforce_front != 0.0 or downforce_rear != 0.0):
 		state.apply_force(-up * downforce_front * u2, basis * Vector3(0.0, 0.0, wheels[0].hub.z))
 		state.apply_force(-up * downforce_rear * u2, basis * Vector3(0.0, 0.0, wheels[2].hub.z))
 
+	# ---- a motorcycle: the rider and the camber thrust of the tyres
+	if bike != null:
+		bike.physics(self, state, dt)
 	# ---- the shell: the walls and the other cars on its nodes, and its anchors on the body
 	if shell != null:
 		shell.step(state)
-
-
-## Squeal, smoke and marks (web/js/Vehicle.js): the power that the slip burns heats the surface of the tread; from
-## about 220 C it smokes. A tyre that spins throws a thick cloud, one that is locked or slides sideways smokes
-## thinner and leaves more of a mark. On loose ground it throws up dust instead.
-func _tyre_effects(w: Wheel, dt: float) -> void:
-	const AMBIENT := 25.0
-	if not w.contact or w.load < 200.0:
-		w.squeal = 0.0
-		w.smoke = maxf(0.0, w.smoke - dt * 2.0)
-		w.mark = 0.0
-		w.surf_t = maxf(AMBIENT, w.surf_t - (w.surf_t - AMBIENT) * dt / 6.0)
-		return
-	var spin := w.omega * w.radius - w.forward_speed
-	var slide_speed := sqrt(spin * spin + w.side_speed * w.side_speed)
-	var burnt := absf(w.fx * spin) + absf(w.fy * w.side_speed)
-	var strip := absf(w.forward_speed) / 0.15 + 0.15
-	w.road_t = clampf(w.road_t + ((0.7 * burnt / 2500.0) - (w.road_t - AMBIENT) * strip) * dt, AMBIENT, 300.0)
-	var spin_hot := smoothstep(4.0, 14.0, spin) * (1.0 - smoothstep(1.0, 3.0, absf(w.forward_speed)))
-	var share := 0.3 + 0.3 * minf(1.0, (w.road_t - AMBIENT) / 150.0) + 0.3 * spin_hot
-	w.surf_t = clampf(w.surf_t + (share * burnt / 350.0 - (w.surf_t - AMBIENT) / 6.0) * dt, AMBIENT, 330.0)
-	var surf := Content.surface(w.surface)
-	var sliding := smoothstep(1.2, 2.2, w.s) * smoothstep(1.5, 6.0, slide_speed)
-	if surf.get("loose", false):
-		var rolling_dust := minf(0.28, maxf(0.0, (absf(w.forward_speed) - 5.0) / 40.0))
-		w.smoke = maxf(minf(1.0, 0.15 + 0.85 * sliding) * sliding, rolling_dust)
-		w.squeal = 0.0
-		w.mark = sliding * 0.6
-		return
-	var spin_share := clampf(maxf(0.0, spin) / maxf(2.0, slide_speed), 0.0, 1.0)
-	var smoking := 0.12 * smoothstep(180.0, 220.0, w.surf_t) + 0.88 * smoothstep(220.0, 260.0, w.surf_t)
-	w.smoke = smoking * (0.4 + 0.6 * minf(1.0, burnt / 40000.0)) * (0.3 + 0.7 * spin_share)
-	w.squeal = smoothstep(1.0, 2.0, w.s) * (1.0 - 0.4 * smoothstep(2.5, 4.0, w.s)) * smoothstep(0.8, 5.0, slide_speed)
-	w.mark = smoothstep(1.1, 2.0, w.s) * smoothstep(1.0, 4.0, slide_speed)
 
 
 ## Launch control, two-step and transbrake (Vehicle.js). Launch control (Settings; when the car has it): the brake
@@ -1153,33 +1174,6 @@ func _kart_frame(dt: float, ay_left: float) -> void:
 		wheels[2 if left_inside else 3].offset += inner_lift_now      # (the rear wheel on the inside of the bend)
 
 
-## The temperature and the wear of a tyre (wearStep of Vehicle.js): the power that the slip burns and the flexing
-## under the load heat it, the air cools it; outside its window it grips less; it wears with the slip, faster when
-## it is too hot. Off (Settings "tyre_wear" 0): the tyre is at its best temperature and does not wear.
-func _wear_step(w: Wheel, dt: float) -> void:
-	var k := w.kind
-	var scale := float(Settings.get_value("tyre_wear"))
-	if scale <= 0.0:
-		w.temp = float(k.get("optimum", 85))
-		w.condition = w.pressure_grip
-		return
-	var spin := w.omega * w.radius - w.forward_speed
-	var slide_power := (absf(w.fx * spin) + absf(w.fy * w.side_speed)) if w.contact else 0.0
-	var heat_in := (slide_power + (w.load * absf(w.forward_speed) * 0.025 if w.contact else 0.0)) * float(k.get("heating", 1.0)) * w.pressure_roll
-	var size := clampf(pow(w.radius / 0.315, 3.0), 0.04, 2.5)
-	var cooling := (40.0 + 3.0 * absf(w.forward_speed)) * size * (w.temp - 25.0)
-	w.temp += (heat_in - cooling) / (20000.0 * size) * dt
-	var optimum := float(k.get("optimum", 85))
-	var window := float(k.get("window", 15))
-	var overheated := clampf((w.temp - (optimum + window)) / 30.0, 0.0, 2.0)
-	var counted := slide_power * 0.35 if absf(w.forward_speed) < 8.0 else slide_power
-	w.wear += counted * (1.0 + 2.0 * overheated) * dt / (4.8e7 * float(k.get("life", 1.0))) * scale
-	var off := maxf(0.0, absf(w.temp - optimum) - window) / float(k.get("cold", 45))
-	var by_temp := 1.0 - float(k.get("coldLoss", 0.22)) * minf(1.0, off)
-	var by_wear := 1.0 - 0.2 * pow(minf(1.0, w.wear), 1.5) - (0.15 if w.wear >= 1.0 else 0.0)
-	w.condition = by_temp * by_wear * w.pressure_grip
-
-
 ## Traction control (Vehicle.js): when a driven wheel turns faster than the road under it, more than one metre per
 ## second and 12 % of the speed, power is taken off, as a controller (not a switch), down to a fifth.
 func _traction_control(dt: float) -> void:
@@ -1204,7 +1198,7 @@ func _traction_control(dt: float) -> void:
 func _stability_control(dt: float, r: float, v_left: float) -> void:
 	_esc_brake = [0.0, 0.0, 0.0, 0.0]
 	var u := speed
-	if esc_fitted and Settings.get_value("esc") and handbrake_input < 0.1 and u > 5.0 and _any_contact():
+	if esc_fitted and bike == null and Settings.get_value("esc") and handbrake_input < 0.1 and u > 5.0 and _any_contact():
 		var steady := u * steer_angle / (wheelbase + understeer_gradient * u * u)
 		yaw_wanted += (steady - yaw_wanted) * minf(1.0, dt / 0.25)
 		var error := r - yaw_wanted
@@ -1268,7 +1262,7 @@ func _tyre_force(w: Wheel, load: float, surf: Dictionary, vref: float) -> void:
 	var d := mu * load
 	if s > 1e-9:
 		w.fx = d * f * sx / s
-		w.fy = -d * 1.05 * f * sy / s
+		w.fy = -d * 1.05 * f * sy / s * w.lat_grip
 	else:
 		w.fx = 0.0
 		w.fy = 0.0
@@ -1289,10 +1283,12 @@ func _drivetrain(dt: float, tyre_torque: Array) -> void:
 			w.abs_factor = maxf(0.2, w.abs_factor - dt * 12.0)
 		else:
 			w.abs_factor = minf(1.0, w.abs_factor + dt * 6.0)
-		brake_torque[i] = brake * w.max_brake * w.abs_factor + _esc_brake[i]
+		brake_torque[i] = brake * w.max_brake * w.abs_factor * (bike.brake_scale(w) if bike != null else 1.0) + _esc_brake[i]
 		if transbrake_held and w.driven:
 			brake_torque[i] = maxf(brake_torque[i], 4000.0)          # (the transbrake holds the driven wheels)
-		if not w.front:
+		if not w.front and bike != null:
+			brake_torque[i] = maxf(brake_torque[i], handbrake_input * w.max_brake * w.abs_factor)      # (a motorcycle: the rear brake alone)
+		elif not w.front:
 			brake_torque[i] += handbrake_input * maxf(1800.0, w.max_brake)
 
 	# the gearbox: a CVT holds the engine near its speed for power
@@ -1308,7 +1304,7 @@ func _drivetrain(dt: float, tyre_torque: Array) -> void:
 	# the engine and the clutch, solved implicitly (web/js/Vehicle.js): stable for a clutch that is locked
 	# the throttle as the engine gets it: less by the traction and the stability control, and while the gearbox shifts
 	# (a converter keeps the drive through a shift: less is taken off)
-	var thr := throttle * tc_factor * (1.0 - 0.85 * _esc_cut)
+	var thr := throttle * tc_factor * (1.0 - 0.85 * _esc_cut) * (bike.throttle_scale if bike != null else 1.0)
 	if shift_timer > 0.0:
 		thr *= 0.6 if gearbox == "torque-converter" else (0.15 if shift_timer < shift_time * 0.5 else 0.0)
 	# a stalled engine starts again by itself (no clutch pedal here: Vehicle.js restarts it automatically then)
@@ -1460,6 +1456,8 @@ func _process(_delta: float) -> void:
 		w.hub_node.position = w.hub + w.visual_offset + Vector3.UP * (susp_length - w.length + w.offset)
 		w.steer_node.rotation.y = w.steer
 		w.spin_node.rotation.x = w.spin
+	if bike_model != null:
+		bike_model.update(get_process_delta_time())
 
 
 ## The objects of the model that are parts (car.json "parts").
