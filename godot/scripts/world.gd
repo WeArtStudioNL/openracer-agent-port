@@ -16,6 +16,8 @@ var line: RacingLine
 var ai: AIDriver = null
 var race: Race = null
 var replay: Replay = null
+var free_cam: GameFreeCamera = null    # the fourth camera (C: follow, cockpit, bonnet, free)
+var take: Take = null                  # the 5 key (Take)
 var options := {}
 var base_config := {}
 var pause_layer: CanvasLayer
@@ -114,6 +116,9 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 				all.append(e.car)
 	replay.setup(self, all)
 	add_child(replay)
+	take = Take.new()
+	take.setup(self)
+	add_child(take)
 	# the tests and the screenshots of the command line: --drive (full throttle), --shot=file.png --shot-at=seconds, --log=seconds
 	car.autopilot = Content.arg("drive") != ""
 	_shot_path = Content.arg("shot")
@@ -147,8 +152,10 @@ func _ready() -> void:
 	RunLog.car = car
 	RunLog.on_mark = hud.toast
 	WheelInput.calibration_text.connect(hud.calibration)
-	camera.mode = int(Settings.get_value("camera")) as ChaseCamera.Mode
+	camera.mode = mini(int(Settings.get_value("camera")), 2) as ChaseCamera.Mode
 	camera.snap()
+	if int(Settings.get_value("camera")) == 3 and options.get("mode", "") != "replay":
+		set_free_camera(true)
 	audio.set_inside(camera.mode != ChaseCamera.Mode.FOLLOW)
 	if Content.arg("settings") != "":
 		pause()
@@ -347,9 +354,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("tuning"):
 		open_tuning()
 	elif event.is_action_pressed("camera"):
-		camera.next_mode()
-		audio.set_inside(camera.mode != ChaseCamera.Mode.FOLLOW)
-		RunLog.event("camera %s" % ChaseCamera.Mode.keys()[camera.mode])
+		if free_cam != null and free_cam.active:
+			set_free_camera(false)
+		elif camera.mode == ChaseCamera.Mode.BONNET:
+			set_free_camera(true)
+		else:
+			camera.next_mode()
+			audio.set_inside(camera.mode != ChaseCamera.Mode.FOLLOW)
+			RunLog.event("camera %s" % ChaseCamera.Mode.keys()[camera.mode])
 	elif event.is_action_pressed("reset"):
 		recover()
 	elif event.is_action_pressed("restart"):
@@ -393,13 +405,18 @@ func _show_pause_buttons() -> void:
 	box.custom_minimum_size = Vector2(320, 0)
 	box.add_theme_constant_override("separation", 10)
 	centre.add_child(box)
-	var items := [["Resume", resume], ["Replay", _start_replay], ["Settings", _show_settings], ["Back to the start", func():
-		resume()
-		to_start()], ["Main menu", func():
+	var to_menu := func():
 		resume()
 		RunLog.car = null
 		ForceFeedback.neutral()
-		leave.emit()]]
+		leave.emit()
+	var items := [["Resume", resume], ["Replay", _start_replay], ["Settings", _show_settings], ["Back to the start", func():
+		resume()
+		to_start()], ["Main menu", func():
+		if replay != null:
+			replay.confirm_leave(to_menu, pause_layer)
+		else:
+			to_menu.call()]]
 	for item in items:
 		var b := Button.new()
 		b.text = item[0]
@@ -411,7 +428,7 @@ func _show_pause_buttons() -> void:
 
 func _open_replay_file(path: String) -> void:
 	replay = Replay.new()
-	if not replay.open_file(path, self, car):
+	if not replay.open_file(path, self, car, not options.get("edit", false)):
 		hud.toast("This is not a replay of this version")
 		replay = null
 		return
@@ -421,6 +438,33 @@ func _open_replay_file(path: String) -> void:
 		(m as MeshInstance3D).transparency = 0.0
 	get_tree().paused = true
 	replay.play()
+	# (Edit in Replays: the video editor on the recording itself, Close goes back to the main menu)
+	if options.get("edit", false):
+		var ed := VideoEditor.new()
+		ed.standalone = true
+		ed.setup(replay)
+		replay.add_child(ed)
+
+
+## The free camera of the game (GameFreeCamera, FreeCam.js) on or off; off: the follow camera.
+func set_free_camera(on: bool) -> void:
+	if on:
+		if free_cam == null:
+			free_cam = GameFreeCamera.new()
+			free_cam.take = take
+			free_cam.left_camera.connect(func(): set_free_camera(false))
+			if take != null:
+				take.state_changed.connect(func(_s: String): free_cam.refresh())
+			add_child(free_cam)
+		free_cam.enter(camera, car)
+		audio.set_inside(false)
+	elif free_cam != null and free_cam.active:
+		free_cam.leave()
+		camera.mode = ChaseCamera.Mode.FOLLOW
+		camera.make_current()
+		camera.snap()
+		audio.set_inside(false)
+		RunLog.event("camera FOLLOW")
 
 
 ## The replay of what was driven (Replay.js): the pause menu goes, the game stays paused behind it.
