@@ -25,6 +25,10 @@ var power_rpm := 5000.0
 var cut := false               # the limiter cuts the fuel
 var throttle_used := 0.0       # the throttle after the idle control and the limiter (for the sound)
 var no_fuel := false           # the tank is empty: no combustion
+var running := true            # it runs; a stalled engine only brakes until the starter turns it over again
+var starting := false          # the starter cranks it
+var stall_rpm := 360.0         # below this speed it stalls
+var starter_torque := 150.0    # N m of the starter motor
 var two_step_rpm := 4500.0
 var launch_rpm := 3500.0
 var hold_rpm := 0.0            # a lower limit the car asks for (the two-step, the launch control); 0: none
@@ -58,6 +62,7 @@ func setup(e: Dictionary) -> void:
 	curve = e.get("torque_curve", [[0, 0], [1000, 150], [4000, 250], [7000, 180]]).duplicate(true)
 	curve.sort_custom(func(a, b): return a[0] < b[0])
 	idle_rpm = float(e.get("idle_rpm", 900))
+	stall_rpm = idle_rpm * 0.4
 	limiter_rpm = float(e.get("limiter_rpm", 6500))
 	limiter_hz = maxf(1.0, float(e.get("limiter_hz", 12)))
 	power_scale = float(e.get("power_scale", 1))
@@ -87,7 +92,9 @@ func setup(e: Dictionary) -> void:
 			best = full_torque(r) * r
 			power_rpm = r
 	power_rpm = minf(limiter_rpm * 0.97, power_rpm * 1.06)
-	_motoring_scale = clampf(peak_torque / 580.0, 0.3, 2.5)
+	# (Engine.js has a floor of 0.3 here: a kart engine of 30 N m then loses more than its idle controller gives it,
+	# and stalls and restarts at idle; 0.04 lets it idle and leaves every car of more than 175 N m as it was)
+	_motoring_scale = clampf(peak_torque / 580.0, 0.04, 2.5)
 	if omega == 0.0:
 		omega = idle_rpm * PI / 30.0
 
@@ -206,11 +213,32 @@ func update_boost(throttle: float, dt: float) -> void:
 	boost += (wanted - boost) * minf(1.0, dt / maxf(0.01, tau))
 
 
+## The starter turns a stalled engine over (Engine.js start).
+func start() -> void:
+	if not running:
+		starting = true
+
+
 ## The torque on the crank for the pedal (0..1), after the idle control, the limiter and the turbo.
 func net_torque(throttle: float, dt: float) -> float:
 	update_boost(throttle, dt)
 	var r := rpm()
 	if no_fuel:
+		running = false
+		starting = false
+	if not running:
+		# no combustion: only the losses (and the starter motor while it cranks)
+		throttle_used = 0.0
+		var t0 := -motoring(r)
+		if starting:
+			t0 += starter_torque
+			if r > 550.0:
+				running = true
+				starting = false
+		return t0
+	if r < stall_rpm:
+		running = false
+		starting = false
 		throttle_used = 0.0
 		return -motoring(r)
 	# the idle controller opens the throttle to hold the idle speed, also against a load

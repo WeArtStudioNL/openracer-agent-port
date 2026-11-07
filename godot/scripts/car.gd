@@ -1284,6 +1284,9 @@ func _drivetrain(dt: float, tyre_torque: Array) -> void:
 	var thr := throttle * tc_factor * (1.0 - 0.85 * _esc_cut)
 	if shift_timer > 0.0:
 		thr *= 0.6 if gearbox == "torque-converter" else (0.15 if shift_timer < shift_time * 0.5 else 0.0)
+	# a stalled engine starts again by itself (no clutch pedal here: Vehicle.js restarts it automatically then)
+	if not engine.running and not engine.starting:
+		engine.start()
 	var te := engine.net_torque(thr, dt)
 	var je := engine.inertia
 	var td := 0.0
