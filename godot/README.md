@@ -109,7 +109,7 @@ and a slider with the units, ranges and steps of CarTuning.js; a changed value i
 a bias, the gears a summary with Advanced (gear by gear, − and +) and a list of kinds of transmission, the tyre's fine
 settings are folded apart, the systems and the extras have a tick that opens their settings. A setting that cannot do
 anything with the others is hidden (CarTuning.visible); one that the Godot physics do not use yet is grey with a
-tooltip (Tuning.NOT_IN_GODOT: the paint, the wheel library, the tyre shell and tread stiffness, heating and life,
+tooltip (Tuning.NOT_IN_GODOT: the wheel library, the tyre shell and tread stiffness, heating and life,
 tyre damage, the shift pattern, diff build-up, the centre differential, the parts library suspension and engine
 place, the steering wheel stops, look-ahead/fov-speed/dolly/hide-driver of the cameras, the boost gauge). A change
 works at once while the car drives (the cameras and the engine sound follow too); in a race the game waits while the
@@ -118,7 +118,7 @@ new… asks a name, Delete (or Undo changes for a tune that comes with the car).
 (`user://tunes/<car>/<name>.openracer-tune.json`, the format of the browser game: a whole car.json); the tunes that
 come with a car (car.json "tunes") are in the list too. The setup in use is remembered per car and used at the next
 start. Not ported: the engine build with its chart and dyno (the browser's Engine card), Export/Import of a tune
-file, the Mirrors card, the Motorcycle card. `--tuning` opens the menu at the start, `--tuning-open=Chassis,Chassis/Brakes`
+file, the Mirrors card (the mirrors are in Settings, Mirrors), the Motorcycle card. `--tuning` opens the menu at the start, `--tuning-open=Chassis,Chassis/Brakes`
 opens cards and groups (for screenshots). Test: `Godot --headless --path godot res://tools/test_tuning.tscn`.
 
 A kart (chassis.unsprung) stands on its tyres: the tyre is the spring (its rate with the pressure), the frame
@@ -353,6 +353,39 @@ in snow (it gets slower as the snow builds up). Not yet: the debris of loose gro
 Debris.js), the weather in the replay (a replay shows the weather of now), headlights (the night is dark, as in the
 browser).
 
+## The look of a car: suspension rig, paint and mirrors
+
+`scripts/car_visuals.gd` (one node per car, made by `Car._build_visual`) holds three parts:
+
+- **The suspension rig** (`scripts/suspension_rig.gd`, SuspensionRig.js): the parts of the model named `susp_lowerarm_FL`,
+  `susp_upperarm_FL`, `susp_upright_FL`, `susp_spring_FL`/`susp_strut_FL`/`susp_damper_FL` (a coilover's `_piston` slides
+  and its `_coil` is squeezed), `steer_rack`, `steer_tierod_FL`, `susp_axle_rear`, trailing arms, a Panhard rod,
+  driveshafts and propshafts, and the same parts that the parts library builds from car.json `suspension` and `driveline`
+  (`PartsLibrary.assemble`, as CarLoader.js does), follow the travel of every wheel and the steering: arms swing, uprights
+  go up and turn, springs get shorter, the rack slides, a live axle rises and rolls, shafts turn with the wheels. The
+  muscle car (double wishbone front, live axle on leaf springs rear) and the hatchback (MacPherson) use the library. The
+  fixed tie rods on a steering column (a kart) are ported but need a steering wheel to give the column (`rig.column`).
+- **Materials and paint** (`scripts/car_paint.gd`, MaterialOverrides.js and CarColors.js): car.json `materials` (colour,
+  metalness, roughness, opacity, clear coat, "reflection" as the specular) and `colors` (the body: materials called
+  carpaint, the rims: rimpaint) with every finish: gloss, satin, matte, metallic, pearl, metal flake (the patterns noise,
+  voronoi, hexagons, marble as normal maps made in code, at a size, on the UV map of the model or generated: Godot's
+  triplanar mapping), candy, chrome, brushed. A changed material is a copy per car (surface override), so the model and
+  the parts library keep theirs; the tuning menu's paint rows work while driving. The car editor uses the same code
+  (`CarEditorMaterials.apply_override`, `apply_paint`). Pearl is approximated (Godot has no thin-film iridescence: a rim
+  light stands in).
+- **Mirrors** (`scripts/car_mirrors.gd`, Mirrors.js): the glass of the model (a material called mirror or spiegel that is
+  a metal) turns about its middle by Settings, Mirrors (turn and tilt per mirror, at most 25 degrees), and a real mirror
+  (on by default; the browser's option mirror*Real) shows what is behind it: a SubViewport 512 pixels wide with a camera
+  at the mirror image of the eye, whose frustum is the glass (its near plane on the glass), projected onto the glass;
+  every second frame, only for the car the camera rides in with the cockpit or bonnet camera, only when the glass is in
+  view. The glass is left out of the soft body (it does not dent) and out of the pictures of the mirrors.
+
+Test: `Godot --headless --path godot res://tools/test_car_visuals.tscn` (the rig of the muscle car and the hatchback found and
+moving with travel and steering, the overrides and the paint, the patterns, the mirrors aimed and made real from the
+cockpit). Pictures (without --headless): `-- --car=hatchback --shot=file.png [--view=side|below|front] [--hide-body=1]
+[--corner=FL --travel=0.06 --steer=0.35]` (a corner with the wheel up and steered), `-- --mirror-shot=file.png
+[--set=mirror_left_tilt:25]` (the cockpit with marks behind the car, and the picture of each mirror).
+
 ## Controls
 
 Arrows or WASD drive, Space is the handbrake, Q/E shift (the first shift switches to a manual gearbox),
@@ -376,6 +409,7 @@ Holding the brake at a standstill puts the car in reverse; then the brake drives
 | `scripts/car.gd` | the car: rigid body (Jolt), raycast suspension, tyres, drivetrain |
 | `scripts/engine.gd` | torque curve, friction, idle control, limiter |
 | `scripts/car_model.gd` | the body model and the wheels (model wheels or library rim + tyre) |
+| `scripts/car_visuals.gd`, `suspension_rig.gd`, `car_paint.gd`, `car_mirrors.gd` | the suspension rig, the materials and paint, the mirrors |
 | `scripts/track.gd` | the track model, a collision shape per mesh with its surface |
 | `scripts/atmosphere.gd`, `ground.gd`, `ground_material.gd`, `graphics.gd` | the sky, light and weather; the wet and the snow and their grip; the look of the ground; the graphics settings |
 | `scripts/chase_camera.gd`, `hud.gd`, `world.gd`, `main.gd`, `controls.gd` | camera, dashboard, a drive, menu, keys |

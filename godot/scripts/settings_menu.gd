@@ -81,6 +81,13 @@ func _ready() -> void:
 	_build_controls()
 	Controls.changed.connect(_build_controls)
 
+	# the mirrors of the car (CarMirrors; the Car page of the browser's settings)
+	var mirrors := _page(tabs, "Mirrors")
+	for side in [["left", "Left mirror", "outwards"], ["right", "Right mirror", "outwards"], ["centre", "Mirror inside", "to the left"]]:
+		_slider(mirrors, "%s: turn (positive %s)" % [side[1], side[2]], "mirror_%s_yaw" % side[0], -25.0, 25.0, 1.0, false)
+		_slider(mirrors, "%s: tilt (positive up)" % side[1], "mirror_%s_tilt" % side[0], -25.0, 25.0, 1.0, false)
+		_check(mirrors, "%s: a real mirror (shows what is behind, from the cockpit and the bonnet)" % side[1], "mirror_%s_real" % side[0])
+
 	_capture_label = Label.new()
 	_capture_label.add_theme_color_override("font_color", Color(1, 0.8, 0.3))
 	_capture_label.autowrap_mode = TextServer.AUTOWRAP_WORD
