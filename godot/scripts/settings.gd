@@ -8,6 +8,7 @@ signal changed(key: String)
 const PATH := "user://settings.cfg"
 
 const DEFAULTS := {
+	"garage_folder": "",                 # a folder of the player's own cars and tracks (Garage), "" for none
 	"volume": 0.8,                # the engine
 	"tyre_volume": 0.8,
 	"abs": true,

@@ -203,6 +203,15 @@ comes off), hinged parts that swing open (doors, a hood) and the link beams of p
 pieces of a part that shatters (`Shatter.js`), a loose part that hits its own car, the shell of the model drawn as an
 object "beams", the replay of the shell.
 
+## Garage
+
+The garage (`scripts/garage.gd`, Garage.js): cars and tracks of the player next to the game's own, in the user folder
+(`user://garage/cars/<id>/`, `user://garage/tracks/<id>/`) and in a folder of the player's own (setting
+`garage_folder`, with cars/ and tracks/ in it). An item with the id of one of the game wins over it; an item with
+only its car.json keeps using the files of the game's one. Main menu, "Import a car or track (zip)…" puts the item of
+a zip (car.json or track.json at its root or in one folder, as the browser game exports it) in the garage; it shows in
+the lists with "(garage)". Not yet: export to a zip, deleting from the menu, the car and track editors.
+
 ## Replay
 
 The replay (`scripts/replay.gd`, Replay.js): every car of the session (the player and the opponents) is recorded

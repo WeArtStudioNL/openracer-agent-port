@@ -63,8 +63,10 @@ func arg(name: String) -> String:
 	return _arg(name)
 
 
+## The file for a path of the game (cars/<id>/car.json): the player's garage first (Garage), else the game's.
 func path(rel: String) -> String:
-	return root.path_join(rel)
+	var own := Garage.resolve(rel)
+	return own if own != "" else root.path_join(rel)
 
 
 func load_json(rel: String) -> Variant:
@@ -77,24 +79,28 @@ func load_json(rel: String) -> Variant:
 
 ## The cars (and the motorcycles) that can be driven: { id, name }.
 func list_cars() -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	var ids: Variant = load_json("cars/index.json")
-	if ids is Array:
-		for id in ids:
-			var c: Variant = load_json("cars/%s/car.json" % id)
-			if c is Dictionary:
-				out.append({"id": id, "name": c.get("name", id)})
-	return out
+	return _list("cars", "car.json")
 
 
 func list_tracks() -> Array[Dictionary]:
+	return _list("tracks", "track.json")
+
+
+## The items of the game (its index.json) and of the garage: { id, name, garage }.
+func _list(kind: String, file: String) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	var ids: Variant = load_json("tracks/index.json")
-	if ids is Array:
-		for id in ids:
-			var t: Variant = load_json("tracks/%s/track.json" % id)
-			if t is Dictionary:
-				out.append({"id": id, "name": t.get("name", id)})
+	var ids: Array = []
+	var game: Variant = JSON.parse_string(FileAccess.get_file_as_string(root.path_join(kind + "/index.json"))) if root != "" else null
+	if game is Array:
+		ids.append_array(game)
+	var own := Garage.ids(kind)
+	for id in own:
+		if not ids.has(id):
+			ids.append(id)
+	for id in ids:
+		var c: Variant = load_json("%s/%s/%s" % [kind, id, file])
+		if c is Dictionary:
+			out.append({"id": id, "name": str(c.get("name", id)) + ("  (garage)" if own.has(id) else ""), "garage": own.has(id)})
 	return out
 
 

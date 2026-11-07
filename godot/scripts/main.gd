@@ -113,6 +113,10 @@ func _build_menu() -> void:
 				"laps": int(_laps_pick.get_item_text(_laps_pick.selected)), "pole": _grid_pick.selected == 1}
 		_start(_cars[_car_pick.selected]["id"], _tracks[_track_pick.selected]["id"], opts))
 	box.add_child(go)
+	var garage := Button.new()
+	garage.text = "Import a car or track (zip)…"
+	garage.pressed.connect(_import_zip)
+	box.add_child(garage)
 	var settings := Button.new()
 	settings.text = "Settings"
 	settings.pressed.connect(_open_settings)
@@ -186,6 +190,37 @@ func _start(car_id: String, track_id: String, opts := {}) -> void:
 
 
 ## (Race again: the world made a new one of itself)
+## A car or a track from a zip into the garage (Garage): the menu is made again with it in its list.
+func _import_zip() -> void:
+	var dlg := FileDialog.new()
+	dlg.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	dlg.access = FileDialog.ACCESS_FILESYSTEM
+	dlg.use_native_dialog = true
+	dlg.filters = PackedStringArray(["*.zip ; Car or track"])
+	dlg.title = "A car or a track (zip)"
+	add_child(dlg)
+	dlg.file_selected.connect(func(p: String):
+		var r := Garage.import_zip(p)
+		dlg.queue_free()
+		_rebuild_menu(str(r.get("error", "")) if r.has("error") else "%s imported: %s" % ["Car" if r["kind"] == "cars" else "Track", r["id"]]))
+	dlg.canceled.connect(dlg.queue_free)
+	dlg.popup_centered_ratio(0.6)
+
+
+func _rebuild_menu(message: String) -> void:
+	_cars = Content.list_cars()
+	_tracks = Content.list_tracks()
+	if menu != null:
+		menu.queue_free()
+	_build_menu()
+	if message != "":
+		var note := Label.new()
+		note.text = message
+		note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		note.position = Vector2(20, 20)
+		menu.add_child(note)
+
+
 func set_world(w: World) -> void:
 	world = w
 
