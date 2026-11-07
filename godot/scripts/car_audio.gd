@@ -43,6 +43,9 @@ func setup(c: Car, in_3d := false) -> void:
 		engine_player.stream = gen
 	else:
 		push_warning("CarAudio: the native engine sound (EngineSimSynth) is not loaded: build godot/native (see README)")
+	car.bang.connect(func(e: Dictionary):
+		if synth != null and audible:
+			synth.pop(600.0 * float(e.get("strength", 1.0)) * float(e.get("loud", 1.0))))
 	var squeal := AudioStreamWAV.load_from_file(Content.path("sounds/tyre-squeal.wav"))
 	if squeal != null:
 		squeal.loop_mode = AudioStreamWAV.LOOP_FORWARD

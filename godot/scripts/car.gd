@@ -11,6 +11,9 @@ extends RigidBody3D
 ## Space of the body: x to the left, y up, z forward; the origin is at the height of the axles, in the middle
 ## between them (the origin of the model in CarLoader.js).
 
+## A bang in the exhaust (pops, anti-lag): { strength, loud, flame } (the sound and the flames take it)
+signal bang(event: Dictionary)
+
 const G := 9.81
 const AIR := 1.225
 const SUBSTEPS := 8
@@ -126,6 +129,15 @@ var downforce_rear := 0.0
 var cornering := 1.0
 var understeer_gradient := 0.0008
 # assists (car.json extras: fitted; the settings: switched on)
+var launch_control_fitted := true
+var two_step_fitted := true
+var two_step_input := false      # the two-step key is held
+var transbrake_input := false    # the transbrake key is held
+var lc_armed := false            # the launch control holds the engine now
+var transbrake_held := false
+var two_step_active := false
+var launch_release := 0.0        # s left of the take-up of the clutch after a launch
+var launching := 0.0             # s left of a launch, with the traction control on
 var tc_fitted := true
 var esc_fitted := true
 var tc_allowance := 1.0
@@ -251,6 +263,8 @@ func _read_config() -> void:
 	var extras: Dictionary = cfg.get("extras", {})
 	var assists: Dictionary = cfg.get("assists", {})
 	tc_fitted = extras.get("tc_on", true) != false
+	launch_control_fitted = extras.get("launch_control_on", true) != false
+	two_step_fitted = extras.get("two_step_on", true) != false
 	esc_fitted = extras.get("esc_on", true) != false
 	tc_allowance = float(assists.get("tc_allowance", 1.0))
 	esc_gain = float(assists.get("esc_gain", 1.0))
@@ -281,6 +295,7 @@ func _read_config() -> void:
 	gearbox = str(dt.get("gearbox", "gears"))
 	cvt_rpm = float(dt.get("cvt_rpm", 4000))
 	engine.setup(cfg.get("engine", {}))
+	engine.set_extras(cfg.get("extras", {}))
 	camber_front = float(ch.get("camber_front", 0))
 	camber_rear = float(ch.get("camber_rear", 0))
 	roll_camber = float(ch.get("roll_camber", 0.6))
@@ -684,6 +699,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	if shift_timer > 0.0:
 		shift_timer = maxf(0.0, shift_timer - dt)
 	_auto_shift(dt)
+	_launch(dt)
 
 	_stability_control(dt, av.dot(up), v.dot(basis.x))
 
@@ -889,6 +905,38 @@ func _tyre_effects(w: Wheel, dt: float) -> void:
 	w.mark = smoothstep(1.1, 2.0, w.s) * smoothstep(1.0, 4.0, slide_speed)
 
 
+## Launch control, two-step and transbrake (Vehicle.js). Launch control (Settings; when the car has it): the brake
+## and full throttle at a standstill hold the engine at its launch speed with the clutch open; letting go of the
+## brake launches, the clutch takes up in 0.15 s and the traction control works for the launch. The two-step key
+## holds the engine at its two-step speed; the transbrake key holds the driven wheels with the engine free.
+func _launch(dt: float) -> void:
+	var was_held := lc_armed or transbrake_held
+	var was_lc := lc_armed
+	transbrake_held = transbrake_input and gear != 0 and _any_contact()
+	if Settings.get_value("launch_control") and launch_control_fitted and gear > 0 and absf(speed) < 2.0:
+		lc_armed = (brake > 0.15 and throttle > 0.5) if lc_armed else (brake > 0.5 and throttle > 0.7)
+	else:
+		lc_armed = false
+	if was_held and not (lc_armed or transbrake_held) and throttle > 0.3:
+		launch_release = 0.15
+		if was_lc and not transbrake_held and gear > 0:
+			launching = 6.0
+	if launching > 0.0:
+		launching -= dt
+		if speed > 25.0 or throttle < 0.3 or speed < -0.5:
+			launching = 0.0
+	var was_two_step := two_step_active
+	two_step_active = two_step_fitted and absf(speed) < 3.0 and two_step_input
+	if was_two_step and not two_step_active and throttle > 0.3:
+		launch_release = 0.15
+	engine.hold_rpm = engine.two_step_rpm if two_step_active else (engine.launch_rpm if lc_armed else 0.0)
+	engine.holding = lc_armed or transbrake_held or two_step_active
+
+
+func _held_for_launch() -> bool:
+	return lc_armed or transbrake_held or two_step_active
+
+
 ## The lean of a wheel to the left (rad): its static camber (negative: the top in), and the share of the roll of
 ## the body on its springs that the wheel takes along (roll_camber).
 func _lean(w: Wheel) -> float:
@@ -912,7 +960,7 @@ func _fuel_step(dt: float) -> void:
 		fuel_flow = 0.0
 		return
 	var power := maxf(0.0, engine.throttle_used * engine.full_torque(engine.rpm())) * engine.omega
-	fuel_flow = (0.0003 + power / (0.25 * 34e6) * 4.0) * fuel_use * scale
+	fuel_flow = (0.0003 + power / (0.25 * 34e6) * 4.0) * fuel_use * scale * engine.fuel_factor
 	fuel = maxf(0.0, fuel - fuel_flow * dt)
 	engine.no_fuel = fuel <= 0.0
 	_fuel_mass_in -= dt
@@ -991,7 +1039,7 @@ func _traction_control(dt: float) -> void:
 		if w.driven and w.contact:
 			max_slip = maxf(max_slip, (w.omega * w.radius - w.forward_speed) / (tc_allowance * (1.2 + 0.12 * absf(w.forward_speed))))
 	var err := max_slip - 1.0
-	if tc_fitted and Settings.get_value("tc"):
+	if (tc_fitted and Settings.get_value("tc")) or launching > 0.0:
 		var rate := -(4.0 + 8.0 * err) * minf(1.0, err * 4.0) if err > 0.0 else minf(1.0, -err * 6.0) + 1.5 * clampf((-err - 0.5) / 0.4, 0.0, 1.0)
 		var floor_f := 0.2 * (1.0 - minf(1.0, (err - 0.3) / 1.2)) if err > 0.3 else 0.2
 		tc_factor = clampf(tc_factor + dt * rate, floor_f, 1.0)
@@ -1093,6 +1141,8 @@ func _drivetrain(dt: float, tyre_torque: Array) -> void:
 		else:
 			w.abs_factor = minf(1.0, w.abs_factor + dt * 6.0)
 		brake_torque[i] = brake * w.max_brake * w.abs_factor + _esc_brake[i]
+		if transbrake_held and w.driven:
+			brake_torque[i] = maxf(brake_torque[i], 4000.0)          # (the transbrake holds the driven wheels)
 		if not w.front:
 			brake_torque[i] += handbrake_input * maxf(1800.0, w.max_brake)
 
@@ -1139,6 +1189,12 @@ func _drivetrain(dt: float, tyre_torque: Array) -> void:
 		var engagement := smoothstep(clutch_start, clutch_full, maxf(engine.rpm(), drive_rpm))
 		if shift_timer > 0.0:
 			engagement = minf(engagement, 1.0 - shift_timer / maxf(0.01, shift_time))
+		# held for a launch: the engine turns free; after it, the clutch takes up in 0.15 s
+		if _held_for_launch():
+			engagement = 0.0
+		elif launch_release > 0.0:
+			engagement = minf(engagement, 1.0 - launch_release / 0.15)
+			launch_release = maxf(0.0, launch_release - dt)
 		clutch_engagement = engagement
 		var cap := clutch_capacity * engagement
 		var k_cl := cap / 1.5
@@ -1158,6 +1214,9 @@ func _drivetrain(dt: float, tyre_torque: Array) -> void:
 			var tp := ccoef * we * we * (1.0 - sr) * soft * (0.5 if sr > 1.0 else 1.0)
 			var tr := 1.0 + (tc_ratio - 1.0) * maxf(0.0, 1.0 - maxf(0.0, sr) / 0.85)
 			var tt := tp * (tr if sr < 1.0 else 1.0)
+			if _held_for_launch() or launch_release > 0.0:
+				tp = 0.0
+				tt = 0.0
 			var u := absf(speed)
 			var want_lock := 1.0 if tc_lockup and u > 7.0 and sr > 0.93 and sr < 1.07 and shift_timer <= 0.0 and not (throttle > 0.9 and u < 15.0) else 0.0
 			if shift_timer > 0.0 or u < 5.0:
@@ -1235,6 +1294,10 @@ func _drivetrain(dt: float, tyre_torque: Array) -> void:
 
 
 func _process(_delta: float) -> void:
+	if not engine.events.is_empty():
+		for e in engine.events:
+			bang.emit(e)
+		engine.events.clear()
 	for w in wheels:
 		if w.hub_node == null:
 			continue

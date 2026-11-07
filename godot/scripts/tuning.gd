@@ -115,6 +115,25 @@ const GROUPS := [
 		["esc_on", "Stability control fitted", "bool", "extras.esc_on", true, false],
 		["tc_allowance", "Traction control: wheel spin allowed", "%", 20, 400, 5, "assists.tc_allowance", 0.01],
 		["esc_gain", "Stability control: strength", "%", 10, 300, 5, "assists.esc_gain", 0.01],
+		["launch_control_on", "Launch control fitted", "bool", "extras.launch_control_on", true, false],
+		["launch_rpm", "Launch control: engine speed", "rpm", 1000, 15000, 100, "engine.launch_rpm", 1.0],
+		["two_step_on", "Two-step fitted", "bool", "extras.two_step_on", true, false],
+		["two_step_rpm", "Two-step: engine speed", "rpm", 1000, 15000, 100, "engine.two_step_rpm", 1.0],
+		["governor_on", "Governor (a soft rev limit)", "bool", "extras.governor_on", true, false],
+		["governor_rpm", "Governor: engine speed", "rpm", 1000, 20000, 100, "extras.governor_rpm", 1.0],
+		["pops_on", "Pops and bangs (unburnt fuel burns in the exhaust)", "bool", "extras.pops_on", true, false],
+		["pops_amount", "Pops: how many", "%", 0, 100, 5, "extras.pops_amount", 1.0],
+		["pops_overrun", "Pops: for how long after lifting off", "s", 0.2, 10, 0.1, "extras.pops_overrun", 1.0],
+		["pops_rpm", "Pops: from", "rpm", 500, 15000, 100, "extras.pops_rpm", 1.0],
+		["pops_loud", "Pops: loudness", "%", 0, 300, 5, "extras.pops_loud", 1.0],
+		["pops_flames", "Pops: flames", "%", 0, 300, 5, "extras.pops_flames", 1.0],
+		["antilag_on", "Anti-lag (keeps the turbo spinning off the throttle)", "bool", "extras.antilag_on", true, false],
+		["antilag_mode", "Anti-lag: when", "select", ["lift", "launch"], "extras.antilag_mode"],
+		["antilag_boost", "Anti-lag: boost it keeps", "%", 0, 100, 5, "extras.antilag_boost", 1.0],
+		["antilag_rpm", "Anti-lag: from", "rpm", 500, 15000, 100, "extras.antilag_rpm", 1.0],
+		["antilag_time", "Anti-lag: for at most", "s", 0.5, 60, 0.5, "extras.antilag_time", 1.0],
+		["antilag_bangs", "Anti-lag: bangs", "%", 0, 300, 5, "extras.antilag_bangs", 1.0],
+		["antilag_fuel", "Anti-lag: extra fuel", "%", 0, 300, 5, "extras.antilag_fuel", 1.0],
 	]],
 ]
 
@@ -131,7 +150,10 @@ const FALLBACK := {
 	"chassis.toe_rear": 0.0, "chassis.camber_front": 0.0, "chassis.camber_rear": 0.0, "chassis.roll_camber": 0.6,
 	"engine.limiter_hz": 12.0, "engine.braking_scale": 1.0, "engine.turbo.share": 0.0, "engine.turbo.spool": 0.4,
 	"engine.turbo.threshold_rpm": 2500.0, "engine.turbo.boost_bar": 0.0, "engine.turbo.intercooler": 0.75,
-	"engine.turbo.efficiency": 0.7, "fuel.tank": 60.0, "fuel.use": 1.0,
+	"engine.turbo.efficiency": 0.7, "fuel.tank": 60.0, "fuel.use": 1.0, "extras.governor_rpm": 0.0, "extras.pops_amount": 60.0,
+	"extras.pops_overrun": 2.0, "extras.pops_rpm": 3000.0, "extras.pops_loud": 100.0, "extras.pops_flames": 100.0, "extras.antilag_boost": 60.0,
+	"extras.antilag_rpm": 3000.0, "extras.antilag_time": 5.0, "extras.antilag_bangs": 100.0, "extras.antilag_fuel": 60.0,
+	"engine.launch_rpm": 3500.0, "engine.two_step_rpm": 4500.0,
 }
 
 

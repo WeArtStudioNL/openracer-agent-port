@@ -82,6 +82,9 @@ func setup(w: Node, l: RacingLine, track: Track, player_car: Car, opponents: int
 		e.audio = CarAudio.new()
 		e.audio.setup(e.car, true)
 		world.add_child(e.audio)
+		var flames := ExhaustFlames.new()
+		flames.setup(e.car)
+		world.add_child(flames)
 		e.car.name = "AI%d" % (i + 1)
 		e.name = "%s %d" % [e.car.config.get("name", id), i + 1]
 		world.add_child(e.car)
@@ -93,6 +96,8 @@ func setup(w: Node, l: RacingLine, track: Track, player_car: Car, opponents: int
 		entries.append(e)
 		slot_i += 1
 	player_car.set_meta("slot", slots[player_slot])
+	player_car.contact_monitor = true
+	player_car.max_contacts_reported = 4
 	RunLog.event("race: %d laps, %d opponents (%s), the player %s" % [laps, opponents, ", ".join(cars), "on pole" if from_pole else "at the back"])
 
 

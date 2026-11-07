@@ -68,6 +68,9 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	effects = TyreEffects.new()
 	effects.setup(car)
 	add_child(effects)
+	var flames := ExhaustFlames.new()
+	flames.setup(car)
+	add_child(flames)
 	laps = LapTimer.new()
 	laps.setup(car, track)
 	laps.message.connect(hud.toast)
@@ -275,6 +278,8 @@ func _physics_process(_delta: float) -> void:
 	car.throttle_input = Input.get_action_strength("throttle")
 	car.brake_input = Input.get_action_strength("brake")
 	car.handbrake_input = Input.get_action_strength("handbrake")
+	car.two_step_input = Input.is_action_pressed("two_step")
+	car.transbrake_input = Input.is_action_pressed("transbrake")
 	var stop := 0.0
 	var wheel_on: bool = WheelInput.active and not WheelInput.calibrating
 	if wheel_on and absf(keys_steer) < 0.01:

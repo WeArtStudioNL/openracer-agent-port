@@ -185,7 +185,8 @@ func _item(page: VBoxContainer, item: Array) -> void:
 			var path: String = item[3]
 			var c := CheckBox.new()
 			var v: Variant = Tuning.read(car.config, path)
-			c.button_pressed = (v == item[4]) if v != null else key != "unsprung"     # (not in car.json: fitted, and a car has suspension)
+			# (not in car.json: fitted, and a car has suspension; the extras that make noise are off)
+			c.button_pressed = (v == item[4]) if v != null else not (key in ["unsprung", "governor_on", "pops_on", "antilag_on"])
 			c.toggled.connect(func(on: bool): _apply(key, path, item[4] if on else item[5]))
 			row.add_child(c)
 		_:

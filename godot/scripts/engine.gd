@@ -6,6 +6,12 @@ extends RefCounted
 ## and a turbo: a share of the torque that comes with boost (or a boost pressure in bar), which builds up over the
 ## spool time above a threshold speed. It turns with its own inertia; the clutch (Car.gd) couples it to the wheels.
 
+const EXTRAS_DEFAULTS := {
+	"governor_on": false, "governor_rpm": 0,
+	"pops_on": false, "pops_amount": 60, "pops_overrun": 2, "pops_rpm": 3000, "pops_loud": 100, "pops_flames": 100,
+	"antilag_on": false, "antilag_mode": "lift", "antilag_boost": 60, "antilag_rpm": 3000, "antilag_time": 5, "antilag_bangs": 100, "antilag_fuel": 60,
+}
+
 var curve: Array = []          # [[rpm, N m], ...], sorted
 var idle_rpm := 900.0
 var limiter_rpm := 6500.0
@@ -19,6 +25,15 @@ var power_rpm := 5000.0
 var cut := false               # the limiter cuts the fuel
 var throttle_used := 0.0       # the throttle after the idle control and the limiter (for the sound)
 var no_fuel := false           # the tank is empty: no combustion
+var two_step_rpm := 4500.0
+var launch_rpm := 3500.0
+var hold_rpm := 0.0            # a lower limit the car asks for (the two-step, the launch control); 0: none
+var holding := false           # the car holds the engine for a launch
+## the extras of car.json (governor, pops and bangs, anti-lag: CarTuning.js FEATURE_DEFAULTS)
+var extras := {}
+var als_active := false        # the anti-lag works now
+var fuel_factor := 1.0         # the fuel use as a factor (more while the anti-lag works)
+var events: Array = []         # the bangs of this step: { strength, loud, flame } (the sound and the flames take them)
 # the turbo
 var turbo_share := 0.0
 var turbo_spool := 0.4
@@ -32,6 +47,11 @@ var _cut_time := 0.0
 var _on_time := 1.0
 var _cut_length := 0.05
 var _motoring_scale := 1.0
+var _overrun := 0.0
+var _previous_throttle := 0.0
+var _cut_was := false
+var _als_timer := 0.0
+
 
 
 func setup(e: Dictionary) -> void:
@@ -54,6 +74,8 @@ func setup(e: Dictionary) -> void:
 	turbo_intercooler = float(turbo.get("intercooler", 0.75))
 	turbo_efficiency = maxf(0.3, float(turbo.get("efficiency", 0.7)))
 	turbo_built = e.has("build")
+	two_step_rpm = float(e.get("two_step_rpm", roundf(limiter_rpm * 0.7 / 100.0) * 100.0))
+	launch_rpm = float(e.get("launch_rpm", roundf(limiter_rpm * 0.6 / 100.0) * 100.0))
 	peak_torque = 1.0
 	var best := 0.0
 	for p in curve:
@@ -121,15 +143,65 @@ func boost_factor(bar: float) -> float:
 	return ratio * (t0 / manifold) * (1.0 - 0.035 * bar)
 
 
+## The extras of car.json "extras" (the defaults of CarTuning.js where it has none).
+func set_extras(x: Dictionary) -> void:
+	extras = EXTRAS_DEFAULTS.duplicate()
+	extras.merge(x, true)
+
+
+## Pops and bangs and the anti-lag (stepExtras of Engine.js): unburnt fuel burns in the exhaust after lifting off
+## the throttle, at every cut of the rev limiter, and while the anti-lag keeps the turbo spinning off the throttle.
+func _step_extras(throttle: float, dt: float, r: float) -> void:
+	var x := extras
+	var pops_on := bool(x.get("pops_on", false))
+	var als := bool(x.get("antilag_on", false)) and has_turbo()
+	var off := throttle < 0.15
+	var want_als := als and not no_fuel and r > float(x["antilag_rpm"]) and (holding if x["antilag_mode"] == "launch" else (off or holding))
+	if want_als:
+		_als_timer += dt
+	elif not als or (throttle > 0.3 and not holding):
+		_als_timer = 0.0
+	als_active = want_als and _als_timer < float(x["antilag_time"])
+	fuel_factor = 1.0 + float(x["antilag_fuel"]) / 100.0 if als_active else 1.0
+	if _previous_throttle > 0.5 and throttle < 0.1 and r > float(x["pops_rpm"]):
+		_overrun = float(x["pops_overrun"])
+	if throttle > 0.3:
+		_overrun = 0.0
+	elif _overrun > 0.0:
+		_overrun -= dt
+	_previous_throttle = throttle
+	var loud := float(x["pops_loud"]) / 100.0 if pops_on else 1.0
+	var flame := float(x["pops_flames"]) / 100.0 if pops_on else 1.0
+	var rate := 0.0
+	if pops_on and r > float(x["pops_rpm"]) and _overrun > 0.0 and throttle < 0.1:
+		rate = 14.0 * float(x["pops_amount"]) / 100.0 * sqrt(_overrun / maxf(0.1, float(x["pops_overrun"]))) * clampf(r / limiter_rpm, 0.3, 1.0)
+	if als_active:
+		rate = maxf(rate, 16.0 * float(x["antilag_bangs"]) / 100.0)
+	if rate > 0.0 and randf() < rate * dt:
+		_bang((0.8 if als_active else 0.5) + randf() * 0.7, loud, flame)
+	if cut and not _cut_was:
+		if (pops_on and randf() < float(x["pops_amount"]) / 100.0 * (1.0 if holding else 0.6)) or (als_active and randf() < 0.8 * float(x["antilag_bangs"]) / 100.0):
+			_bang(0.7 + randf() * 0.6, loud, flame)
+	_cut_was = cut
+
+
+func _bang(strength: float, loud: float, flame: float) -> void:
+	if events.size() < 40:
+		events.append({"strength": strength, "loud": loud, "flame": flame})
+
+
 ## The boost builds up with the throttle open (above the threshold speed) over the spool time, and falls fast.
 func update_boost(throttle: float, dt: float) -> void:
 	_cut_time += dt
 	_on_time += dt
+	_step_extras(throttle, dt, rpm())
 	if not has_turbo():
 		boost = 0.0
 		return
 	var r := rpm()
 	var wanted := clampf(throttle, 0.0, 1.0) * (1.0 if turbo_built else clampf((r - turbo_threshold) / 2000.0, 0.0, 1.0))
+	if als_active:
+		wanted = maxf(wanted, float(extras["antilag_boost"]) / 100.0 * minf(1.0, 0.4 + (r - float(extras["antilag_rpm"])) / 3000.0))
 	var tau := turbo_spool if wanted > boost else turbo_spool * 0.35
 	boost += (wanted - boost) * minf(1.0, dt / maxf(0.01, tau))
 
@@ -146,12 +218,17 @@ func net_torque(throttle: float, dt: float) -> float:
 	# the pedal opens the throttle plate faster than the torque grows: half a pedal is already 70 % of the air
 	var pedal := 1.0 - pow(1.0 - clampf(throttle, 0.0, 1.0), 1.8)
 	var t := maxf(pedal, idle_throttle)
-	# the rev limiter cuts the fuel at the limit, and gives it back so that the cuts come limiter_hz times a second
+	# the governor (an extra): around its engine speed the throttle closes gently, so the engine holds that speed
+	if extras.get("governor_on", false) and float(extras.get("governor_rpm", 0)) > 0.0:
+		t = minf(t, clampf((float(extras["governor_rpm"]) + 125.0 - r) / 250.0, 0.0, 1.0))
+	# the rev limiter cuts the fuel at the limit (or at the speed the car holds the engine at for a launch), and gives
+	# it back so that the cuts come limiter_hz times a second
+	var limit := minf(hold_rpm, limiter_rpm) if hold_rpm > 0.0 else limiter_rpm
 	if cut:
 		if _cut_time >= _cut_length:
 			cut = false
 			_on_time = 0.0
-	elif r >= limiter_rpm:
+	elif r >= limit:
 		cut = true
 		_cut_time = 0.0
 		_cut_length = maxf(0.008, 1.0 / limiter_hz - _on_time)
@@ -159,4 +236,4 @@ func net_torque(throttle: float, dt: float) -> float:
 		t = 0.0
 	throttle_used = t
 	var boosted := boost_factor(boost * turbo_bar) if turbo_bar > 0.0 else 1.0 - turbo_share * (1.0 - boost)
-	return full_torque(r) * power_scale * boosted * t - (1.0 - t) * motoring(r)
+	return full_torque(r) * power_scale * boosted * t - (1.0 - t) * motoring(r) * (0.5 if als_active else 1.0)

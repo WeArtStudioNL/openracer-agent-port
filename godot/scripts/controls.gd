@@ -15,7 +15,9 @@ signal changed
 ## The actions in the order of the menu, with their names.
 const ACTIONS := [
 	["throttle", "Throttle"], ["brake", "Brake"], ["steer_left", "Steer left"], ["steer_right", "Steer right"],
-	["handbrake", "Handbrake"], ["shift_up", "Shift up"], ["shift_down", "Shift down"], ["camera", "Camera"],
+	["handbrake", "Handbrake"],
+	["two_step", "Two-step (hold)"], ["transbrake", "Transbrake (hold, let go to launch)"],
+	["shift_up", "Shift up"], ["shift_down", "Shift down"], ["camera", "Camera"],
 	["reset", "Back on the wheels (reset)"], ["restart", "Back to the start"], ["menu", "Pause"],
 	["tuning", "Tuning menu"], ["calibrate", "Calibrate the wheel"], ["mark", "Mark in the log"], ["debug", "Tyre data"],
 ]
@@ -26,6 +28,8 @@ const KEYS := {
 	"steer_left": [KEY_LEFT, KEY_A],
 	"steer_right": [KEY_RIGHT, KEY_D],
 	"handbrake": [KEY_SPACE],
+	"two_step": [KEY_X],
+	"transbrake": [KEY_F],
 	"shift_up": [KEY_E],
 	"shift_down": [KEY_Q],
 	"camera": [KEY_C],

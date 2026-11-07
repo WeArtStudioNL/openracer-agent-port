@@ -38,6 +38,7 @@ func _ready() -> void:
 	_check(driving, "ABS", "abs")
 	_check(driving, "Traction control", "tc")
 	_check(driving, "Stability control", "esc")
+	_check(driving, "Launch control (brake and full throttle at a standstill, let go of the brake)", "launch_control")
 	_slider(driving, "Tyre temperature and wear (0: off)", "tyre_wear", 0.0, 5.0, 0.5, false)
 	_check(driving, "Hold the brake at a standstill for reverse", "auto_reverse")
 	_slider(driving, "Keys: steering speed", "key_steer_speed", 0.4, 2.0, 0.1, true)

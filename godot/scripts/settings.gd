@@ -13,6 +13,7 @@ const DEFAULTS := {
 	"abs": true,
 	"tc": true,                   # traction control (when the car has it)
 	"esc": true,                  # stability control (when the car has it)
+	"launch_control": false,      # brake and full throttle at a standstill hold the engine; the brake let go: a launch
 	"tyre_wear": 0.0,             # tyre temperature and wear: 0 off (the tyres at their best), else how fast they wear
 	"auto_reverse": true,         # holding the brake at a standstill puts the car in reverse
 	"key_steer_speed": 1.0,       # how fast the keys turn the wheels (a factor)
