@@ -22,9 +22,11 @@ func _ready() -> void:
 	_cars = Content.list_cars()
 	_tracks = Content.list_tracks()
 	_build_menu()
+	if Content.arg("editor") != "":
+		_open_track_editor.call_deferred(Content.arg("editor") if Content.arg("editor") != "1" else "")
 	var c := Content.arg("car")
 	var t := Content.arg("track")
-	if c != "" or t != "":
+	if (c != "" or t != "") and Content.arg("editor") == "":
 		var opts := {}
 		if Content.arg("race") != "":
 			opts = {"mode": "race", "opponents": int(Content.arg("opponents")) if Content.arg("opponents") != "" else 5,
@@ -125,6 +127,10 @@ func _build_menu() -> void:
 	replays.text = "Replays…"
 	replays.pressed.connect(_open_replays)
 	box.add_child(replays)
+	var editor := Button.new()
+	editor.text = "Track editor"
+	editor.pressed.connect(_open_track_editor)
+	box.add_child(editor)
 	var garage := Button.new()
 	garage.text = "Import a car or track (zip)…"
 	garage.pressed.connect(_import_zip)
@@ -246,6 +252,24 @@ func _open_replays() -> void:
 	dlg.canceled.connect(dlg.queue_free)
 	add_child(dlg)
 	dlg.popup_centered()
+
+
+## The track editor (TrackEditor): Test drive saves the track and drives it with the car chosen in the menu; leaving it
+## comes back here with the tracks of the garage in the list.
+func _open_track_editor(track_id := "") -> void:
+	menu.visible = false
+	var ed := TrackEditor.new()
+	if track_id != "":
+		ed.set_meta("open", track_id)
+	ed.leave.connect(func():
+		ed.queue_free()
+		_rebuild_menu(""))
+	ed.drive.connect(func(id: String):
+		ed.queue_free()
+		_rebuild_menu("")
+		menu.visible = false
+		_start(_cars[_car_pick.selected]["id"] if _car_pick != null else "openracer-muscle", id, {"mode": "practice"}))
+	add_child(ed)
 
 
 ## A car or a track from a zip into the garage (Garage): the menu is made again with it in its list.
