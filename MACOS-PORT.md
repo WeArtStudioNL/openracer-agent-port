@@ -40,7 +40,7 @@ OpenRacer is een web-app: ongeveer 90 JavaScript-bestanden in `web/js` (three.js
 
 ## Hoe de app de game serveert
 
-De app start een **HTTP-server** (Network.framework, `NWListener`, een vrije poort) en laadt `http://127.0.0.1:<poort>/`. Waarom geen custom URL-scheme (`openracer://`):
+De app start een **HTTP-server** (Network.framework, `NWListener`) op **vaste poort 47185** en laadt `http://127.0.0.1:47185/`. De poort moet vast zijn: localStorage en IndexedDB (garage, instellingen, records) horen bij de origin, en de poort hoort daarbij. Is 47185 bezet, dan kiest de app een andere en onthoudt die (UserDefaults). Waarom geen custom URL-scheme (`openracer://`):
 
 - `127.0.0.1` is een *secure context*; een custom scheme niet zonder meer. De AudioWorklet (`EngineSimWorklet.js`), de clipboard-API en pointer lock hebben een secure context nodig.
 - Workers, `audioWorklet.addModule`, `fetch` met `PUT`-body en relatieve URL's gedragen zich dan precies zoals in de browser.
@@ -62,7 +62,9 @@ De app-bundle is alleen-lezen en wordt bij een update vervangen. Daarom twee lag
 
 **Een map op de Mac koppelen** (nu `showDirectoryPicker` in Chrome): in de app een `NSOpenPanel`, met een *security-scoped bookmark* zodat de map na een herstart nog leesbaar is (`files.user-selected.read-write`, `files.bookmarks.app-scope`). De server leest die map als derde bron.
 
-De opslag van de webview (localStorage, IndexedDB) staat in de container van de app en blijft bewaard. **Nog te controleren** op een echte Mac.
+De opslag van de webview (localStorage, IndexedDB) staat in de container van de app (`websiteDataStore = .default()`) en blijft bewaard, zolang de origin (de poort) gelijk blijft.
+
+Een auto of baan van de game die in de app wordt opgeslagen (car editor, tuning, de preview van het menu) komt in Application Support en vervangt vanaf dan die van de game, per bestand. `DELETE` verwijdert alleen de kopie van de speler; dan is die van de game er weer. Een auto die alleen in de game zit kan niet verwijderd worden (409). De gekoppelde map wordt alleen gelezen. Volgorde: speler → gekoppelde map → game. Alleen `cars/`, `tracks/` en `objects/` hebben lagen; js/html/css komen altijd uit de bundle.
 
 ## Inventaris: browser-API's en wat er in WKWebView nodig is
 
@@ -92,20 +94,21 @@ Gevonden met grep in `web/` (versie 2.5.0).
 - Een Xcode-project via XcodeGen (`project.yml`), met sandbox, entitlements, privacy manifest, versie uit `Version.js` en een oplopend buildnummer.
 - `scripts/build-app.sh` voor een snelle build zonder Xcode.
 
-### Fase 1: de game draait
-- Bouwen en starten op een Mac (universal binary), ook in de sandbox.
+### Fase 1: de game draait ✅ (7 november 2026)
+- Bouwen en starten op een Mac (universal binary), ook in de sandbox. Getest: menu, auto- en baankeuze, vrij rijden op Desert (WebGL, HUD, physics).
 - Statische bestanden met MIME-types, `no-store` en `Range` (in het skelet).
 - Zonder API valt `Catalog.js` terug op `cars/index.json` en `tracks/index.json`; de garage werkt via IndexedDB.
 - Menubalk: About, Fullscreen, Quit, Reload (debug). Web Inspector in debug-builds.
-- **App-icoon** (`Assets.xcassets`, 1024×1024): nodig voor TestFlight.
+- **App-icoon** (`Assets.xcassets`, 1024×1024): nodig voor TestFlight. ✅
 - **Eerste TestFlight-build** (intern), zodra de licentievraag beantwoord is.
 
-### Fase 2: de API van serve.py
-- `GET /api/cars`, `/api/tracks`; `/api/convert` geeft `{"ffmpeg": false}`.
-- `PUT`/`DELETE /api/cars|tracks|objects/...` naar Application Support, met dezelfde padcontroles als `serve.py`. Request bodies lezen (nu nog 405).
-- Een map koppelen (`NSOpenPanel`, bookmark); menu *Show my cars and tracks in Finder*.
-- Downloads via `WKDownloadDelegate` naar Downloads.
-- De editors testen.
+### Fase 2: de API van serve.py ✅ (7 november 2026, behalve de editors)
+- `GET /api/cars`, `/api/tracks` (samengevoegd uit de drie lagen); `cars/index.json` en `tracks/index.json` worden ook samengesteld; `/api/convert` geeft `{"ffmpeg": false}`, `POST /api/convert/mp4` geeft 501. ✅ getest met curl
+- `PUT`/`DELETE /api/cars|tracks|objects/...` naar Application Support, met dezelfde padcontroles als `serve.py` (id- en bestandsnaampatroon, geblokkeerde typen, Host en Origin), gestreamd naar een `.part`-bestand en dan op zijn plaats gezet. ✅ getest met curl
+- Een map koppelen (*File → Link a Folder with Cars and Tracks…*, security-scoped bookmark, alleen lezen); *File → Show My Cars and Tracks in Finder*. Gebouwd, nog niet met de hand getest.
+- `WKUIDelegate`: `<input type="file">` opent een Open-paneel ✅ getest (Garage → Import); `alert`/`confirm`/`prompt` als NSAlert (zonder dit is `confirm()` altijd false); links naar andere sites openen in de browser van de Mac.
+- Downloads via `WKDownloadDelegate` naar Downloads. Gebouwd, **nog niet getest** in de app.
+- De editors testen (car editor, track editor: opslaan naar Application Support).
 
 ### Fase 3: racewielen en force feedback
 - Een JS-shim die het deel van `navigator.hid` nabootst dat `ForceFeedback.js` gebruikt (`requestDevice`, `getDevices`, `open`, `sendReport`, `sendFeatureReport`, `receiveFeatureReport`, `inputreport`, `connect`/`disconnect`), via `WKScriptMessageHandler` naar Swift. `ForceFeedback.js` blijft dan ongewijzigd.

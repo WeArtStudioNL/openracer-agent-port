@@ -2,7 +2,7 @@
 
 The beginning of a native macOS app of OpenRacer, for the Mac App Store and TestFlight: an AppKit window with a `WKWebView` that plays the game of `../web`, served by a small HTTP server inside the app on `127.0.0.1`. The plan, the choices and what is still to be done are in [`../MACOS-PORT.md`](../MACOS-PORT.md).
 
-**State: phase 0.** The skeleton has not been built on a Mac yet. Read the licence question in the plan before the first upload to TestFlight.
+**State: phases 1 and 2.** The game runs in the sandboxed app, with the API of `tools/serve.py` (the cars and tracks of the player are kept in Application Support). Read the licence question in the plan before the first upload to TestFlight.
 
 ## Requirements
 
@@ -38,10 +38,20 @@ A universal binary with `web/` in it, signed ad hoc and without the sandbox: onl
 | `project.yml` | the Xcode project (XcodeGen): target, signing, sandbox, the folder `web/` as a resource |
 | `Package.swift` | the same sources as a Swift package, for `swift run` and `build-app.sh` |
 | `Sources/OpenRacer/main.swift` | the start of the app |
-| `Sources/OpenRacer/AppDelegate.swift` | the window, the web view, the menu, where `web/` is found |
-| `Sources/OpenRacer/LocalServer.swift` | the HTTP server on loopback: static files with Range and no caching (the API of `tools/serve.py` follows in phase 2) |
+| `Sources/OpenRacer/AppDelegate.swift` | the window, the web view, the menu, the linked folder, where `web/` is found |
+| `Sources/OpenRacer/LocalServer.swift` | the HTTP server on loopback (port 47185): static files with Range and no caching, and the API of `tools/serve.py` |
+| `Sources/OpenRacer/Library.swift` | where cars, tracks and objects are: the player's (Application Support), a linked folder, the game; the paths of the API |
+| `Sources/OpenRacer/WebViewHandlers.swift` | downloads, file pickers, alert/confirm/prompt, links to other sites |
 | `Resources/Info.plist` | the bundle: version, category, local network (multiplayer later), export compliance |
 | `Resources/OpenRacer.entitlements` | the sandbox and what the app may do in it |
+| `Resources/Assets.xcassets` | the app icon (AppIcon), every size made from `icon_1024.png` |
 | `Resources/PrivacyInfo.xcprivacy` | the privacy manifest that the App Store asks for (no tracking, no data collected) |
 | `scripts/generate-project.sh` | makes `OpenRacer.xcodeproj` with the version, the build number and the team |
 | `scripts/build-app.sh` | makes `build/OpenRacer.app` without Xcode |
+
+## Where the player's files are
+
+Cars, tracks and objects that are saved in the app (the car editor, the tuning menu, the track editor) are in
+`~/Library/Containers/eu.openracer.OpenRacer/Data/Library/Application Support/OpenRacer/` (File → Show My Cars and Tracks in Finder).
+A car there with the id of a car of the game replaces it; deleting it brings back the one of the game.
+

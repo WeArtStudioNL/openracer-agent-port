@@ -6,6 +6,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow!
     private var webView: WKWebView!
     private var server: LocalServer!
+    private var library: Library!
+    private let handlers = WebViewHandlers()
+    private let linkedFolder = LinkedFolder()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let root = WebRoot.locate() else {
@@ -13,7 +16,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        server = LocalServer(root: root)
+        library = Library(bundle: root)
+        library.linked = linkedFolder.restore()
+        server = LocalServer(library: library)
         do {
             try server.start { [weak self] port in
                 self?.load(port: port)
@@ -27,8 +32,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let config = WKWebViewConfiguration()
         config.mediaTypesRequiringUserActionForPlayback = []   // the engine sound starts without a click on the page
+        config.websiteDataStore = .default()                   // localStorage and IndexedDB are kept (the garage, settings, records)
 
         webView = WKWebView(frame: .zero, configuration: config)
+        webView.navigationDelegate = handlers
+        webView.uiDelegate = handlers
         #if DEBUG
         if #available(macOS 13.3, *) { webView.isInspectable = true }
         #endif
@@ -53,11 +61,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) { server?.stop() }
 
     private func load(port: UInt16) {
+        handlers.origin = "http://127.0.0.1:\(port)"
         guard let url = URL(string: "http://127.0.0.1:\(port)/index.html") else { return }
         webView.load(URLRequest(url: url))
     }
 
     @objc private func reload(_ sender: Any?) { webView.reloadFromOrigin() }
+
+    // MARK: - Cars and tracks on the Mac
+
+    @objc private func showLibrary(_ sender: Any?) {
+        NSWorkspace.shared.activateFileViewerSelecting([library.user.appendingPathComponent("cars")])
+    }
+
+    @objc private func linkFolder(_ sender: Any?) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Link"
+        panel.message = "Choose a folder with cars/ and tracks/ in it (laid out like web/ of OpenRacer). The game reads it; it does not write to it."
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .OK, let url = panel.url else { return }
+            self.library.linked = self.linkedFolder.link(url)
+            self.webView.reload()
+        }
+    }
+
+    @objc private func unlinkFolder(_ sender: Any?) {
+        linkedFolder.unlink()
+        library.linked = nil
+        webView.reload()
+    }
 
     private func buildMenu() {
         let main = NSMenu()
@@ -72,9 +107,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appItem.submenu = appMenu
         main.addItem(appItem)
 
+        let fileItem = NSMenuItem()
+        let fileMenu = NSMenu(title: "File")
+        fileMenu.addItem(withTitle: "Show My Cars and Tracks in Finder", action: #selector(showLibrary(_:)), keyEquivalent: "")
+        fileMenu.addItem(.separator())
+        fileMenu.addItem(withTitle: "Link a Folder with Cars and Tracks…", action: #selector(linkFolder(_:)), keyEquivalent: "")
+        fileMenu.addItem(withTitle: "Unlink the Folder", action: #selector(unlinkFolder(_:)), keyEquivalent: "")
+        fileMenu.addItem(.separator())
+        fileMenu.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        fileItem.submenu = fileMenu
+        main.addItem(fileItem)
+
         // Copy and paste in the text fields of the editors need the Edit menu
         let editItem = NSMenuItem()
         let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(.separator())
         editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
@@ -93,6 +142,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewItem.submenu = viewMenu
         main.addItem(viewItem)
 
+        let windowItem = NSMenuItem()
+        let windowMenu = NSMenu(title: "Window")
+        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        windowItem.submenu = windowMenu
+        main.addItem(windowItem)
+        NSApp.windowsMenu = windowMenu
+
         NSApp.mainMenu = main
     }
 
@@ -102,6 +159,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.informativeText = message
         alert.runModal()
         NSApp.terminate(nil)
+    }
+}
+
+extension AppDelegate: NSMenuItemValidation {
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(unlinkFolder(_:)) {
+            if let linked = library?.linked {
+                item.title = "Unlink “\(linked.lastPathComponent)”"
+                return true
+            }
+            item.title = "Unlink the Folder"
+            return false
+        }
+        return true
+    }
+}
+
+/// The folder that the player linked, kept as a security-scoped bookmark so the sandbox lets the app read it again after a restart
+final class LinkedFolder {
+    private let key = "LinkedFolderBookmark"
+    private var current: URL?
+
+    func restore() -> URL? {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        var stale = false
+        guard let url = try? URL(resolvingBookmarkData: data, options: [.withSecurityScope], relativeTo: nil, bookmarkDataIsStale: &stale),
+              url.startAccessingSecurityScopedResource() else {
+            UserDefaults.standard.removeObject(forKey: key)
+            return nil
+        }
+        if stale, let fresh = try? url.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess]) {
+            UserDefaults.standard.set(fresh, forKey: key)
+        }
+        current = url
+        return url
+    }
+
+    func link(_ url: URL) -> URL? {
+        unlink()
+        guard let data = try? url.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess]) else { return nil }
+        UserDefaults.standard.set(data, forKey: key)
+        return restore()
+    }
+
+    func unlink() {
+        current?.stopAccessingSecurityScopedResource()
+        current = nil
+        UserDefaults.standard.removeObject(forKey: key)
     }
 }
 
