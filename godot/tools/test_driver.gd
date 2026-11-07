@@ -5,6 +5,9 @@ extends Node
 ## the driver is, that the hands reach their grips and the feet their pedals, that the hands go round with the steering
 ## wheel, and the keys (set, mirror, make from the automatic movement). With a window and --shot=/folder it saves
 ## pictures of each car from the side and the front, the wheel straight and turned (--cars=hatchback,go-kart-250cc).
+## Then the Driver card of the car editor (car_editor_driver.gd): the driver of the hatchback read into the card and
+## written back the same, a field, a new driver model picked for the go-kart and saved with the car into a temporary
+## folder (--out=folder; never the garage, never web/), as driver.glb. --editor=0 leaves it out.
 
 var failures := 0
 
@@ -19,6 +22,8 @@ func _ready() -> void:
 		_scene()
 	for id in list:
 		await _car(id, shot)
+	if Content.arg("editor") != "0" and shot == "":
+		await _editor()
 	print("RESULT: %s (%d failures)" % ["ok" if failures == 0 else "FAILED", failures])
 	get_tree().quit(1 if failures > 0 else 0)
 
@@ -192,3 +197,99 @@ func _cockpit(car: Car, id: String, folder: String) -> void:
 	print("saved ", path)
 	cam.fov = 40.0
 	await _shots(car, id, folder, "cockpit-cut")
+
+
+# ---- the Driver card of the car editor
+
+func _editor() -> void:
+	print("== the Driver card of the car editor")
+	var out := Content.arg("out")
+	if out == "":
+		out = OS.get_temp_dir().path_join("oracer-driver-test")
+	DirAccess.make_dir_recursive_absolute(out.path_join("cars"))
+	var ed := CarEditor.new()
+	ed.save_root_override = out.path_join("cars")
+	add_child(ed)
+	await get_tree().process_frame
+	var card: Object = ed.hooks.get("Driver")
+	check(card != null, "the editor has the Driver card")
+	if card == null:
+		return
+	ed.load_existing("hatchback")
+	await get_tree().process_frame
+	var raw: Dictionary = Content.load_json("cars/hatchback/car.json")["driver"]
+	var d: CarDriver = card.get("driver")
+	check(d != null and d.complete() and bool(card.get("enabled")), "the driver of the hatchback is in the card, every bone found")
+	var back: Dictionary = card.call("to_config")
+	var diff := []
+	for k in raw:
+		if not _same(raw[k], back.get(k)):
+			diff.append(k)
+	check(diff.is_empty(), "the card writes back what car.json has (different: %s)" % ", ".join(diff))
+	# a field: the scale; the steering slider turns the steering wheel of the model and the hands
+	var f: EditorStyle.NumberField = card.get("ui")["fields"]["p1"]
+	f.edit.text = "0.2"
+	f.edit.text_changed.emit("0.2")
+	check(absf(float(ed.cfg["driver"]["position"][1]) - 0.2) < 1e-6 and absf(d.root.position.y - 0.2) < 1e-6, "the field y moves the driver (car.json follows)")
+	var hand_before := CarModel.relative(d.skel, d.parent) * BoneIK.global(d.skel, d.bones["armL"][2]).origin
+	(card.get("ui")["steer"] as HSlider).value = -120
+	for i in 60:
+		card.call("frame", 1.0 / 60.0)
+	var sw: SteeringWheel = card.get("wheel")
+	check(sw != null and absf(sw.angle - 120.0 * CarDriver.DEG) < 1e-3, "the steering wheel of the model turns with the slider")
+	var hand_after := CarModel.relative(d.skel, d.parent) * BoneIK.global(d.skel, d.bones["armL"][2]).origin
+	check(hand_after.distance_to(hand_before) > 0.03, "the hand goes with it (%.3f m)" % hand_after.distance_to(hand_before))
+	card.call("set_editing", true)
+	card.call("select", "handL")
+	check(ed.view.gizmo.target == card.get("targets")["handL"], "Left hand takes the gizmo")
+	card.call("select", "handL")
+	card.call("set_editing", false)
+	# a new driver model for the go-kart, saved with the car
+	ed.load_existing("go-kart-250cc")
+	await get_tree().process_frame
+	var picked := Content.path("cars/hatchback/driver.glb")
+	check(card.call("load_file", picked), "a driver model picked from the disk is loaded")
+	ed.car_id = "zz-driver-test"
+	ed.cfg["name"] = "zz driver test"
+	var ok: bool = await ed.save()
+	check(ok, "the car is saved into the temporary folder")
+	var dir := out.path_join("cars/zz-driver-test")
+	check(FileAccess.file_exists(dir.path_join("driver.glb")), "the driver model went with it as driver.glb")
+	var saved: Variant = JSON.parse_string(FileAccess.get_file_as_string(dir.path_join("car.json")))
+	var sd: Dictionary = saved["driver"] if saved is Dictionary and saved.get("driver") is Dictionary else {}
+	check(str(sd.get("file", "")) == "cars/zz-driver-test/driver.glb", "car.json has the driver file of the car (%s)" % sd.get("file", ""))
+	check(sd.get("bones") is Dictionary and (sd["bones"] as Dictionary).has("armL"), "and its bones")
+	check(str(card.get("file")) == "cars/zz-driver-test/driver.glb", "the card has the saved file now")
+	card.call("remove")
+	var c := ed.build_config("zz-driver-test")
+	check(not c.has("driver"), "a removed driver is not in the car.json")
+	ed.queue_free()
+	await get_tree().process_frame
+	if Content.arg("keep") == "":
+		_remove(out)
+
+
+static func _same(a: Variant, b: Variant) -> bool:
+	if (a is int or a is float) and (b is int or b is float):
+		return absf(float(a) - float(b)) < 1e-6
+	if a is Array and b is Array:
+		if (a as Array).size() != (b as Array).size():
+			return false
+		for i in (a as Array).size():
+			if not _same(a[i], b[i]):
+				return false
+		return true
+	if a is Dictionary and b is Dictionary:
+		for k in a:
+			if not _same(a[k], (b as Dictionary).get(k)):
+				return false
+		return true
+	return a == b
+
+
+func _remove(dir: String) -> void:
+	for f in DirAccess.get_files_at(dir):
+		DirAccess.remove_absolute(dir.path_join(f))
+	for d in DirAccess.get_directories_at(dir):
+		_remove(dir.path_join(d))
+	DirAccess.remove_absolute(dir)

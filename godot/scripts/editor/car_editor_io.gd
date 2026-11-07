@@ -570,7 +570,9 @@ func _finish(c: Dictionary, id: String, uploads: Array) -> void:
 		c["model"]["offset"] = (mm.get("offset", [0, 0, 0]) as Array).duplicate()
 	if c.get("driver") is Dictionary and str(c["driver"].get("file", "")) != "":
 		var f := str(c["driver"]["file"])
-		if id != ed.existing_id and f.begins_with("cars/") and FileAccess.file_exists(Content.path(f)):
+		# (a driver model picked in the Driver card is an absolute path: it goes with the car as driver.glb)
+		var picked := f.is_absolute_path() and FileAccess.file_exists(f)
+		if picked or (id != ed.existing_id and f.begins_with("cars/") and FileAccess.file_exists(Content.path(f))):
 			uploads.append([Content.path(f), "driver.glb"])
 			c["driver"]["file"] = "cars/%s/driver.glb" % id
 	var old := ed.existing
@@ -612,6 +614,7 @@ func _write(dir: String, plan: Dictionary) -> String:
 
 func _saved(id: String, dir: String, c: Dictionary) -> void:
 	ed.replaced_model = {}
+	ed._hook_call("saved", [c])
 	ed.existing_id = id
 	ed.car_id = id
 	ed.existing = c.duplicate(true)

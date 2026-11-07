@@ -1,7 +1,8 @@
 extends Node
 ## (with a window: Godot --path godot res://tools/shot_car_editor.tscn -- --car=hatchback --shot=/tmp/editor.png)
 ## Opens the car editor on a car, opens cards (--open=Wheels,Chassis), selects a layer (--select=follow, ex1, model), shows
-## the test bar (--tests), or opens a window (--window=Cameras, Materials, Sound), waits and saves a picture of the window.
+## the test bar (--tests), edits the driver (--driver=edit|handL|model|wheel, --steer=-90), or opens a window
+## (--window=Cameras, Materials, Sound), waits and saves a picture of the window.
 ## Nothing is saved.
 
 
@@ -23,6 +24,14 @@ func _ready() -> void:
 	var sel := Content.arg("select")
 	if sel != "":
 		ed.layers.select(sel)
+	var drv: Object = ed.hooks.get("Driver")
+	if Content.arg("driver") != "" and drv != null:
+		# (--driver=handL: the Driver card edits, that node has the gizmo; --steer=degrees turns the slider)
+		drv.call("set_editing", true)
+		if Content.arg("driver") != "edit":
+			drv.call("select", Content.arg("driver"))
+		if Content.arg("steer") != "":
+			(drv.get("ui")["steer"] as HSlider).value = float(Content.arg("steer"))
 	if Content.arg("tests") != "":
 		ed.engine.toggle_test_bar()
 	if Content.arg("drop") != "":

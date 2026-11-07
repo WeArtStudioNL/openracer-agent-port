@@ -203,6 +203,22 @@ comes off), hinged parts that swing open (doors, a hood) and the link beams of p
 pieces of a part that shatters (`Shatter.js`), a loose part that hits its own car, the shell of the model drawn as an
 object "beams", the replay of the shell.
 
+## The driver
+
+A car with car.json "driver" (enabled, with a file: the hatchback, the go-karts, the stadium truck) has its driver in it
+(`scripts/car_driver.gd`, Driver.js): the glb placed, turned and scaled about its hips, the bones of car.json or guessed
+from their names (Rigify, Mixamo), the hands on the steering wheel turning with it (the hand over at a long turn, or the
+keys of the car editor), the fingers closed by grip_curl, the feet on the pedals (left the brake, right the throttle), the
+elbows and the knees to their poles (`scripts/bone_ik.gd`, the two-bone IK shared with the motorcycle rider), the chest
+and the head as set (or by their keys). In the cockpit view the head and the torso are not drawn (a copy of the mesh
+with the torso weight in CUSTOM0, made the first time), or the whole driver with cameras.cockpit.hide_driver. A part of
+the model called steeringwheel turns with the steering (`scripts/steering_wheel.gd`, CarLoader.js: about its middle and
+its flattest axis, steering_wheel.degrees at full lock; the shell that dents leaves it alone). A driver more than 80 m from
+the camera is not moved. The places of "driver" and the cockpit camera are in the space of the body of the car, as in the
+browser (the cockpit camera no longer adds model.offset). Test: `Godot --headless --path godot res://tools/test_driver.tscn`
+(add `--cars=hatchback --shot=/tmp/folder` with a window for pictures). Not ported: the ragdoll of a crash and the give in
+the g-forces (motorcycle only in the browser).
+
 ## Garage
 
 The garage (`scripts/garage.gd`, Garage.js): cars and tracks of the player next to the game's own, in the user folder
@@ -263,7 +279,19 @@ cards of the browser editor in its order, the 3D view in the middle and the laye
 - **Tests**: Drop car (`car_editor_bench.gd`: the car built by the game's Car from the form, saved or not, dropped from a
   height and a tilt on a floor), Drive (the keys of the game, the view follows, the engine heard), ↺ back to the model.
 
-The Soft body and the Driver cards are ported apart: the editor loads `scripts/editor/car_editor_softbody.gd` and
+- **Driver** (`scripts/editor/car_editor_driver.gd`, driver-editor.js): The car has a driver, Load the driver model… (a
+  native file dialog; a model picked here is saved with the car as `driver.glb`), Remove; Edit driver shows the nodes in
+  the view (the hands with their turn, the feet, the chest, the head, the elbows and the knees, the ring of the wheel the
+  hands hold) and the buttons that give one the gizmo (a click on a node or on the figure takes it too; W moves, E turns,
+  Escape stops), the grip of a hand and the way the fingers close, Reset the elbows and knees; the place, turn and scale
+  of the figure, the pedal travel, elbows and knees out and the radius of the ring as fields; Try it: the steering slider
+  (the hands and the steering wheel of the model turn), the strip of the keys, Make keys from the automatic movement,
+  Back to automatic, Add or Delete a key here, Mirror the + keys, rides the wheel, Throttle and Brake; the bones of the
+  arms and the legs, the chest, the hips and the head (Guess them from the names). The figure is the game's (CarDriver);
+  on the test bench the car of the game has its own. Not here: the rider of a motorcycle on its grips and pegs (the card
+  places the figure and its bones; the game poses the rider), scaling the ring with the gizmo (its radius is a field).
+
+The Soft body card is ported apart: the editor loads `scripts/editor/car_editor_softbody.gd` and
 `car_editor_driver.gd` when they are there (`CarEditor.CARD_HOOKS`): an object with `setup(editor, card_body)`,
 `fill(cfg)`, `read(cfg)` (writes its part into the car.json that is saved), and if it likes `frame(dt)`,
 `on_model(root)`, `picked(hit)` (a click on the model) and `open_part(name)` (a click on a part in the layers). Until
@@ -272,6 +300,9 @@ then the car keeps what car.json has for them.
 Not ported: the crash test, Apply force and Full test of the bench, the flame test of the exhaust points, the nodes of the
 tyre shells on the bench (the Godot physics have no tyre shells), the weather, time of day and ground of Save and test,
 Ship with the car of a tune, and the material field "reflection" (envMapIntensity) is saved but only approximated (the specular of the material).
+
+Test of the Driver card and the driver: `Godot --headless --path godot res://tools/test_driver.tscn -- --out=/tmp/folder`
+(see "The driver"); pictures: `shot_car_editor.tscn -- --car=go-kart-250cc --open=Driver --scroll=Driver --driver=handL --steer=-90`.
 
 Tests: `Godot --headless --path godot res://tools/test_car_editor.tscn -- --out=/tmp/folder` opens the hatchback, drops it
 on the bench, changes fields, saves it as zz-editor-test into that folder (never the garage or web/), checks the car.json
