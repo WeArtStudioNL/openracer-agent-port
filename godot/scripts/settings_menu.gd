@@ -6,6 +6,10 @@ extends PanelContainer
 signal closed
 
 var _wheel_status: Label
+var _controls_page: VBoxContainer
+var _capture_label: Label
+var _capture_action := ""            # the action that waits for an input ("" when none)
+var _capture_index := 0
 
 
 func _ready() -> void:
@@ -63,6 +67,17 @@ func _ready() -> void:
 	_slider(wheel, "Road detail", "ffb_road", 0.0, 1.5, 0.05, true)
 	_check(wheel, "Reverse the force", "ffb_invert")
 
+	_controls_page = _page(tabs, "Controls")
+	if Content.arg("settings-tab") != "":
+		tabs.set_deferred("current_tab", int(Content.arg("settings-tab")))      # (the screenshots of the tests)
+	_build_controls()
+	Controls.changed.connect(_build_controls)
+
+	_capture_label = Label.new()
+	_capture_label.add_theme_color_override("font_color", Color(1, 0.8, 0.3))
+	_capture_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	box.add_child(_capture_label)
+
 	var done := Button.new()
 	done.text = "Done"
 	done.custom_minimum_size.y = 40
@@ -78,6 +93,80 @@ func _process(_delta: float) -> void:
 	if WheelInput.device >= 0:
 		w = "%s: %s" % [WheelInput.wheel_name, "calibrated" if WheelInput.active else "not calibrated yet"]
 	_wheel_status.text = "%s\n%s" % [w, ForceFeedback.status]
+
+
+## Every action with what works it: a button per binding (click: a new one in its place) and + (add one).
+func _build_controls() -> void:
+	for c in _controls_page.get_children():
+		c.queue_free()
+	var note := Label.new()
+	note.text = ("Click a binding and press a key, a button or a stick of a gamepad, or a button of the wheel. + adds one. "
+		+ "The steering and the pedals of a wheel are set with its calibration (Wheel tab).")
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD
+	note.modulate.a = 0.75
+	_controls_page.add_child(note)
+	for a in Controls.ACTIONS:
+		var action: String = a[0]
+		var row := HBoxContainer.new()
+		var l := Label.new()
+		l.text = a[1]
+		l.custom_minimum_size.x = 210
+		row.add_child(l)
+		var list: Array = Controls.bindings(action)
+		for i in list.size():
+			var b := Button.new()
+			b.text = Controls.describe(list[i])
+			b.pressed.connect(_capture.bind(action, i))
+			row.add_child(b)
+		var add := Button.new()
+		add.text = "+"
+		add.tooltip_text = "Add a binding"
+		add.pressed.connect(_capture.bind(action, list.size()))
+		row.add_child(add)
+		_controls_page.add_child(row)
+	var reset := Button.new()
+	reset.text = "Reset all to the defaults"
+	reset.pressed.connect(Controls.reset_defaults)
+	_controls_page.add_child(reset)
+
+
+func _capture(action: String, index: int) -> void:
+	_capture_action = action
+	_capture_index = index
+	var name_text := ""
+	for a in Controls.ACTIONS:
+		if a[0] == action:
+			name_text = a[1]
+	_capture_label.text = "%s: press a key, a gamepad button or stick, or a wheel button  (Esc: cancel, Delete: remove this one)" % name_text
+
+
+## While a binding waits for an input, every input goes here (and to nothing else).
+func _input(event: InputEvent) -> void:
+	if _capture_action == "":
+		return
+	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_ESCAPE:
+		_end_capture()
+		get_viewport().set_input_as_handled()
+		return
+	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_DELETE:
+		Controls.clear_binding(_capture_action, _capture_index)
+		_end_capture()
+		get_viewport().set_input_as_handled()
+		return
+	var b: Variant = Controls.binding_of(event)
+	if b == null:
+		if event is InputEventKey or event is InputEventJoypadButton or event is InputEventJoypadMotion:
+			get_viewport().set_input_as_handled()
+		return
+	RunLog.event("binding %s %d = %s" % [_capture_action, _capture_index, Controls.describe(b)])
+	Controls.set_binding(_capture_action, _capture_index, b)
+	_end_capture()
+	get_viewport().set_input_as_handled()
+
+
+func _end_capture() -> void:
+	_capture_action = ""
+	_capture_label.text = ""
 
 
 func _page(tabs: TabContainer, name_text: String) -> VBoxContainer:

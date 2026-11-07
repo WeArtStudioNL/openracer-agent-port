@@ -32,8 +32,10 @@ var throttle := 0.0
 var brake := 0.0
 var clutch := 0.0
 var calibrating := false
+var button_actions := {}         # a button of the wheel -> the action it works (Controls)
 var fake := {}                    # (the tests: axis -> value, "b<n>" -> pressed, instead of the device)
 
+var _buttons_down := {}
 var _profile := {}
 var _step := 0
 var _rest: PackedFloat32Array = []
@@ -174,6 +176,20 @@ func _process(delta: float) -> void:
 	clutch = _pedal(p.get("clutch", {}))
 	_press("shift_up", int(p.get("shift_up", -1)))
 	_press("shift_down", int(p.get("shift_down", -1)))
+	_bound_buttons()
+
+
+## The buttons of the wheel that the player bound to actions (Controls): pressed and let go as the action.
+func _bound_buttons() -> void:
+	for b in button_actions:
+		var down := _pressed(int(b))
+		if down != bool(_buttons_down.get(b, false)):
+			_buttons_down[b] = down
+			var e := InputEventAction.new()
+			e.action = button_actions[b]
+			e.pressed = down
+			e.strength = 1.0 if down else 0.0
+			Input.parse_input_event(e)
 
 
 func _pedal(a: Dictionary) -> float:

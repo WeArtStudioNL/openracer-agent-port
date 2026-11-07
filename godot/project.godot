@@ -19,9 +19,9 @@ config/icon="res://icon.svg"
 [autoload]
 
 Content="*res://scripts/content.gd"
-Controls="*res://scripts/controls.gd"
 RunLog="*res://scripts/run_log.gd"
 Settings="*res://scripts/settings.gd"
+Controls="*res://scripts/controls.gd"
 WheelInput="*res://scripts/wheel_input.gd"
 ForceFeedback="*res://scripts/force_feedback.gd"
 

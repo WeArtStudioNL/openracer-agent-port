@@ -98,6 +98,11 @@ the start, K calibrates a racing wheel, F3 shows the data of the tyres, F8 marks
 pauses (resume, settings, back to the start, main menu). A gamepad: the triggers for gas and brake,
 the left stick to steer, A handbrake, the shoulders shift, Y camera, X reset, Start pause.
 
+All of it can be set in Settings, Controls: every action takes keys, gamepad buttons and sticks, and buttons of
+the racing wheel (click a binding and press what it should be; + adds one, Delete removes one; an input that
+another action had is taken from it). A gamepad binding works on every joypad but the wheel. The bindings are
+kept in `user://settings.cfg`. Test: `Godot --headless --path godot res://tools/test_controls.tscn`.
+
 Holding the brake at a standstill puts the car in reverse; then the brake drives and the throttle brakes.
 
 ## How it works
@@ -140,7 +145,6 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
 3. **Racing**: laps and gates from track.json, timing, records and the ghost; AI opponents on the racing
    line, grid start, a race of some laps, positions and results, the colours and the engine sound of the AI
    cars, racecraft after Opponent.js and the AI that learns where it ran off *(done)*.
-   Later in the settings: setting the keys and the buttons of a gamepad.
 4. **The rest of the physics**: tyre heat and wear, pressure, camber, downforce, turbo, torque converter,
    traction and stability control, launch control; damage and the soft body.
 5. **Motorcycles**: the bike model of Motorcycle.js with its rider.

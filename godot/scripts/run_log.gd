@@ -69,7 +69,7 @@ func event(text: String) -> void:
 
 
 func _unhandled_input(event_in: InputEvent) -> void:
-	if event_in is InputEventKey and event_in.pressed and not event_in.echo and event_in.physical_keycode == KEY_F8:
+	if event_in.is_action_pressed("mark"):
 		mark()
 
 

@@ -25,6 +25,7 @@ const DEFAULTS := {
 	"ffb_damping": 0.35,
 	"ffb_road": 0.5,
 	"ffb_invert": false,
+	"controls": {},               # the bindings that the player set (Controls)
 }
 
 var _values := {}
@@ -49,7 +50,7 @@ func set_value(key: String, value: Variant) -> void:
 	_values[key] = value
 	_save()
 	changed.emit(key)
-	RunLog.event("setting %s = %s" % [key, value])
+	RunLog.event("setting %s = %s" % [key, value if key != "controls" else "(the bindings)"])
 
 
 func profile(guid: String) -> Dictionary:

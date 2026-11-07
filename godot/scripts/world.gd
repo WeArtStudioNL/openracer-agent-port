@@ -292,7 +292,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			WheelInput.skip()
 		get_viewport().set_input_as_handled()
 		return
-	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_K:
+	if event.is_action_pressed("calibrate"):
 		WheelInput.calibrate()
 	elif event.is_action_pressed("menu"):
 		pause()
