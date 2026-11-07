@@ -7,15 +7,15 @@
 	<key>CFBundleDisplayName</key>
 	<string>OpenRacer</string>
 	<key>CFBundleIdentifier</key>
-	<string>eu.openracer.OpenRacer</string>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleExecutable</key>
 	<string>OpenRacer</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>__VERSION__</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
-	<string>__VERSION__</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>LSApplicationCategoryType</key>
@@ -26,6 +26,16 @@
 	<false/>
 	<key>GCSupportsControllerUserInteraction</key>
 	<true/>
+	<!-- Only standard encryption (https of the OS): no export documentation needed for TestFlight and the App Store -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<!-- Multiplayer on the local network (later): macOS asks the player once for this -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>OpenRacer looks for other players on your local network to race together.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_openracer._tcp</string>
+	</array>
 	<key>NSHumanReadableCopyright</key>
 	<string>OpenRacer, GPLv3</string>
 </dict>

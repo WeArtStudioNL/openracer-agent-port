@@ -1,32 +1,47 @@
 # OpenRacer for macOS
 
-The beginning of a native macOS app of OpenRacer: an AppKit window with a `WKWebView` that plays the game of `../web`, served by a small HTTP server inside the app on `127.0.0.1` (never on the network). The plan, the choices and what is still to be done are in [`../MACOS-PORT.md`](../MACOS-PORT.md).
+The beginning of a native macOS app of OpenRacer, for the Mac App Store and TestFlight: an AppKit window with a `WKWebView` that plays the game of `../web`, served by a small HTTP server inside the app on `127.0.0.1`. The plan, the choices and what is still to be done are in [`../MACOS-PORT.md`](../MACOS-PORT.md).
 
-**State: phase 0.** The skeleton has not been built on a Mac yet.
+**State: phase 0.** The skeleton has not been built on a Mac yet. Read the licence question in the plan before the first upload to TestFlight.
 
-## Build
+## Requirements
 
-On a Mac with macOS 13 or newer and Xcode (or the Command Line Tools):
+- macOS 13 or newer, Xcode 15 or newer.
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen): `brew install xcodegen`.
+- For TestFlight: membership of the Apple Developer Program, and the ID of the team (developer.apple.com → Membership).
+
+## The Xcode project (TestFlight and the App Store)
+
+The project is made from `project.yml` and is not in git. Once, put the team ID in `macos/team.local` (one line; it is not in git), then:
+
+    macos/scripts/generate-project.sh
+    open macos/OpenRacer.xcodeproj
+
+The script takes the version from `web/js/Version.js` and uses the number of commits as the build number, so every upload has a higher one. Run it again after a new commit or when a Swift file is added.
+
+- **Run**: ⌘R. The app is sandboxed, as in the App Store.
+- **TestFlight**: Product → Archive, then *Distribute App* → *App Store Connect* → *Upload*. The build appears in App Store Connect under TestFlight after processing. The app has to exist in App Store Connect first, with the bundle ID `eu.openracer.OpenRacer`.
+
+While developing, the app can serve the folder of the repository directly, so a change to the JavaScript only needs a reload (⌘R in the debug build's View menu): in Xcode, Edit Scheme → Run → Arguments → Environment Variables, `OPENRACER_WEB` = the full path of `web/`. The sandbox may refuse to read a folder outside the container: then turn the sandbox off for Debug only, or use the copy in the bundle. In a debug build the page can be inspected with Safari's Web Inspector (Develop menu → the name of the Mac → OpenRacer).
+
+## Quickly, without Xcode
 
     macos/scripts/build-app.sh            # release; or: debug
     open macos/build/OpenRacer.app
 
-The script compiles a universal binary (Apple Silicon and Intel), copies `web/` into `Contents/Resources/web`, takes the version from `web/js/Version.js` and signs the app ad hoc.
-
-While developing, the app can serve the folder of the repository directly, so a change to the JavaScript only needs a reload (⌘R in a debug build):
-
-    cd macos
-    OPENRACER_WEB="$PWD/../web" swift run
-
-Or open `Package.swift` in Xcode, and set `OPENRACER_WEB` in the scheme (Edit Scheme → Run → Arguments → Environment Variables). In a debug build the page can be inspected with Safari's Web Inspector (Develop menu → the name of the Mac → OpenRacer).
+A universal binary with `web/` in it, signed ad hoc and without the sandbox: only for trying it on this Mac. Or `cd macos && OPENRACER_WEB="$PWD/../web" swift run`.
 
 ## Layout
 
 | File | What it is |
 |---|---|
-| `Package.swift` | the Swift package (macOS 13+) |
+| `project.yml` | the Xcode project (XcodeGen): target, signing, sandbox, the folder `web/` as a resource |
+| `Package.swift` | the same sources as a Swift package, for `swift run` and `build-app.sh` |
 | `Sources/OpenRacer/main.swift` | the start of the app |
 | `Sources/OpenRacer/AppDelegate.swift` | the window, the web view, the menu, where `web/` is found |
 | `Sources/OpenRacer/LocalServer.swift` | the HTTP server on loopback: static files with Range and no caching (the API of `tools/serve.py` follows in phase 2) |
-| `Resources/Info.plist` | the bundle; `__VERSION__` is filled in by the build script |
-| `scripts/build-app.sh` | makes `build/OpenRacer.app` |
+| `Resources/Info.plist` | the bundle: version, category, local network (multiplayer later), export compliance |
+| `Resources/OpenRacer.entitlements` | the sandbox and what the app may do in it |
+| `Resources/PrivacyInfo.xcprivacy` | the privacy manifest that the App Store asks for (no tracking, no data collected) |
+| `scripts/generate-project.sh` | makes `OpenRacer.xcodeproj` with the version, the build number and the team |
+| `scripts/build-app.sh` | makes `build/OpenRacer.app` without Xcode |

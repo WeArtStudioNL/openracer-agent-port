@@ -54,3 +54,6 @@ tools/.certs/
 macos/build/
 macos/.build/
 macos/.swiftpm/
+macos/OpenRacer.xcodeproj/
+# the ID of the Apple Developer team (scripts/generate-project.sh)
+macos/team.local

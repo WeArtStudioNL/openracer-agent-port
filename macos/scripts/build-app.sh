@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Builds OpenRacer.app (macOS): compiles the Swift package and puts the game (../web) in the bundle.
+# Builds OpenRacer.app (macOS) quickly without Xcode, to try it on this Mac: compiles the Swift package and puts the game (../web)
+# in the bundle. It is signed ad hoc and without the sandbox. For TestFlight and the App Store use the Xcode project
+# (scripts/generate-project.sh, then Product → Archive): see README.md.
 # Usage: macos/scripts/build-app.sh [debug|release]   (default: release). The app is made in macos/build/OpenRacer.app.
-# Needs Xcode or the Command Line Tools (swift). Not signed: see MACOS-PORT.md, phase 4.
+# Needs Xcode or the Command Line Tools (swift).
 set -euo pipefail
 
 CONFIG="${1:-release}"
@@ -24,7 +26,11 @@ BIN="$(swift build --package-path "$HERE" -c "$CONFIG" --arch arm64 --arch x86_6
 rm -rf "$OUT"
 mkdir -p "$OUT/Contents/MacOS" "$OUT/Contents/Resources"
 cp "$BIN" "$OUT/Contents/MacOS/OpenRacer"
-sed "s/__VERSION__/$VERSION/g" "$HERE/Resources/Info.plist" > "$OUT/Contents/Info.plist"
+sed -e "s/\$(MARKETING_VERSION)/$VERSION/g" \
+    -e "s/\$(CURRENT_PROJECT_VERSION)/$(git -C "$REPO" rev-list --count HEAD)/g" \
+    -e "s/\$(PRODUCT_BUNDLE_IDENTIFIER)/eu.openracer.OpenRacer/g" \
+    "$HERE/Resources/Info.plist" > "$OUT/Contents/Info.plist"
+cp "$HERE/Resources/PrivacyInfo.xcprivacy" "$OUT/Contents/Resources/"
 
 # The game: everything of web/ except the tools of development (the editors in web/tools stay: they are part of the game)
 rsync -a --delete \

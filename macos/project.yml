@@ -1,0 +1,46 @@
+# The Xcode project of the macOS app, for XcodeGen (brew install xcodegen). Do not run xcodegen by hand: use
+# scripts/generate-project.sh, which fills in the version (web/js/Version.js), the build number and the team.
+# The project itself (OpenRacer.xcodeproj) is not in git: it is made from this file.
+name: OpenRacer
+options:
+  bundleIdPrefix: eu.openracer
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: ${OPENRACER_VERSION}
+    CURRENT_PROJECT_VERSION: ${OPENRACER_BUILD}
+    DEVELOPMENT_TEAM: ${OPENRACER_TEAM_ID}
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+targets:
+  OpenRacer:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/OpenRacer
+      - path: Resources/PrivacyInfo.xcprivacy
+        buildPhase: resources
+      # The game: the folder web/ as it is, as Contents/Resources/web
+      - path: ../web
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: eu.openracer.OpenRacer
+        PRODUCT_NAME: OpenRacer
+        INFOPLIST_FILE: Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Resources/OpenRacer.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_APP_SANDBOX: YES
+        COMBINE_HIDPI_IMAGES: YES
+        ARCHS: $(ARCHS_STANDARD)
+        # The category in the App Store
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.racing-games
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+    scheme:
+      environmentVariables: {}
