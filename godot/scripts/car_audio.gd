@@ -99,7 +99,9 @@ func _process(delta: float) -> void:
 	if car == null:
 		return
 	if engine_player != null:
-		engine_player.volume_db = linear_to_db(maxf(1e-4, float(Settings.get_value("volume")) / 0.8))
+		# (the engine sound on or off: Settings "sound", the key E)
+		var on := 1.0 if Settings.get_value("sound") else 0.0
+		engine_player.volume_db = linear_to_db(maxf(1e-4, on * float(Settings.get_value("volume")) / 0.8))
 	if not audible:
 		return
 	if synth != null and playback != null:
