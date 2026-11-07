@@ -39,12 +39,16 @@ var _saved_place := {}              # the place for the reset on a track without
 var _key_held := {"throttle": 0.0, "brake": 0.0}   # s that the key of a pedal is held (the easing of the keys)
 
 
-## options: mode ("practice" or "race"), opponents, laps, pole (the player starts in front).
+## options: mode ("practice", "race", "skidpad" or "replay"), opponents, laps, pole (the player starts in front), and from the
+## menu: difficulty, grid ("front", "random", "back"), opp (the chosen opponents: [{car, tune}]), ghost and records (bool),
+## surface (the ground of the skidpad).
 func setup(car_id: String, track_id: String, opts := {}) -> void:
 	options = opts
 	name = "World"
 	track = Track.new()
 	var tcfg: Variant = Content.load_json("tracks/%s/track.json" % track_id)
+	if tcfg is Dictionary and options.get("mode", "") == "skidpad":
+		Skidpad.set_ground(tcfg, str(options.get("surface", "road")))
 	track.setup(track_id, tcfg if tcfg is Dictionary else {})
 	add_child(track)
 	car = Car.new()
@@ -53,10 +57,15 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	# the tune in use for this car (the tuning menu), else the car as car.json makes it
 	var cfg_use := base_config
 	var tune_path: String = Settings.get_value("tunes").get(car_id, "")
+	var tune_name := ""
 	if tune_path != "":
 		var tuned := Tuning.load_tune(tune_path)
 		if not tuned.is_empty():
 			cfg_use = tuned
+			var tunes := Tuning.list(car_id, base_config)
+			for n in tunes:
+				if tunes[n] == tune_path:
+					tune_name = str(n)
 			RunLog.event("tune in use: %s" % tune_path)
 	car.setup(car_id, cfg_use)
 	car.set_meta("track_name", track.config.get("name", track_id))
@@ -90,7 +99,7 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	if drag != null:
 		add_child(drag)
 	laps = LapTimer.new()
-	laps.setup(car, track)
+	laps.setup(car, track, {"records": options.get("records", true), "ghost": options.get("ghost", true), "tune": tune_name})
 	laps.message.connect(hud.toast)
 	add_child(laps)
 	hud.laps = laps
@@ -105,10 +114,17 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 			RunLog.event("race asked, but the track has no racing line")
 		else:
 			race = Race.new()
-			race.setup(self, line, track, car, int(options.get("opponents", 5)), int(options.get("laps", 3)), bool(options.get("pole", false)))
+			race.setup(self, line, track, car, int(options.get("opponents", 5)), int(options.get("laps", 3)), bool(options.get("pole", false)),
+				{"difficulty": options.get("difficulty", "normal"), "grid": options.get("grid", "front" if options.get("pole", false) else "back"),
+				"opp": options.get("opp", [])})
 			race.finished.connect(_race_finished)
 			add_child(race)
 			hud.race = race
+	# the skidpad (main.js startSkidpad): the car drives round the circle by itself
+	if options.get("mode", "") == "skidpad":
+		var pad := Skidpad.new()
+		pad.setup(self, str(options.get("surface", "road")))
+		add_child(pad)
 	# a replay from a file (the main menu, Replays): a viewer, no game behind it
 	if options.get("mode", "") == "replay":
 		_open_replay_file.call_deferred(str(options.get("file", "")))
@@ -527,28 +543,10 @@ func pause() -> void:
 func _show_pause_buttons() -> void:
 	if _pause_box != null:
 		_pause_box.queue_free()
-	var centre := CenterContainer.new()
-	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
-	pause_layer.add_child(centre)
-	_pause_box = centre
-	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(320, 0)
-	box.add_theme_constant_override("separation", 10)
-	centre.add_child(box)
-	var items := [["Resume", resume], ["Replay", _start_replay], ["Settings", _show_settings], ["Back to the start", func():
-		resume()
-		to_start()], ["Main menu", func():
-		resume()
-		RunLog.car = null
-		ForceFeedback.neutral()
-		leave.emit()]]
-	for item in items:
-		var b := Button.new()
-		b.text = item[0]
-		b.custom_minimum_size.y = 44
-		b.pressed.connect(item[1])
-		box.add_child(b)
-	(box.get_child(0) as Button).grab_focus.call_deferred()
+	var m := PauseMenu.new()
+	m.setup(self)
+	pause_layer.add_child(m)
+	_pause_box = m
 
 
 func _open_replay_file(path: String) -> void:
@@ -609,18 +607,9 @@ func close_tuning() -> void:
 
 
 func _show_settings() -> void:
-	_pause_box.queue_free()
-	var centre := CenterContainer.new()
-	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
-	pause_layer.add_child(centre)
-	_pause_box = centre
-	var menu := SettingsMenu.new()
-	menu.closed.connect(func():
-		if WheelInput.calibrating:
-			resume()
-		else:
-			_show_pause_buttons())
-	centre.add_child(menu)
+	if _pause_box == null:
+		_show_pause_buttons()
+	(_pause_box as PauseMenu).show_settings.call_deferred()
 
 
 func resume() -> void:

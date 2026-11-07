@@ -10,6 +10,8 @@ signal finished
 enum State { COUNTDOWN, RACING, DONE }
 
 const AUDIBLE := 3                  # the AI cars that are heard at once (the nearest)
+## The pace of the AI for the difficulty of the menu (MainMenu.js raceStep: easy, normal, hard)
+const DIFFICULTY := {"easy": 0.7, "normal": 0.8, "hard": 0.92}
 
 class Entry:
 	var car: Car
@@ -40,7 +42,9 @@ var origin := 0                     # the index of the line at the finish
 var results_shown := false
 
 
-func setup(w: Node, l: RacingLine, track: Track, player_car: Car, opponents: int, race_laps: int, from_pole: bool) -> void:
+## extra (the menu): difficulty ("easy", "normal", "hard"), grid ("front", "random", "back": the player's place; else
+## from_pole), opp (the cars chosen for the first places: [{car, tune}], the rest of the places as before).
+func setup(w: Node, l: RacingLine, track: Track, player_car: Car, opponents: int, race_laps: int, from_pole: bool, extra := {}) -> void:
 	name = "Race"
 	world = w
 	line = l
@@ -56,24 +60,33 @@ func setup(w: Node, l: RacingLine, track: Track, player_car: Car, opponents: int
 	for s in opponents + 1:
 		slots.append(_slot(s, track))
 	var player_slot := 0
-	if not from_pole:
+	var grid := str(extra.get("grid", "front" if from_pole else "back"))
+	if grid != "front":
 		# front to back along the start: the player takes the last
 		var h := float(start.get("heading", 0))
 		var dir := Vector2(cos(h), sin(h))
 		var s0 := Vector2(float(start.get("x", 0)), float(start.get("z", 0)))
 		slots.sort_custom(func(a, b): return (Vector2(a["x"], a["z"]) - s0).dot(dir) > (Vector2(b["x"], b["z"]) - s0).dot(dir))
-		player_slot = opponents
+		player_slot = opponents if grid == "back" else randi_range(0, opponents)
 	player = Entry.new()
 	player.car = player_car
 	player.name = "You"
 	entries.append(player)
 	var cars := _opponent_cars(player_car)
+	var chosen: Array = extra.get("opp", [])
+	var pace := float(DIFFICULTY.get(str(extra.get("difficulty", "normal")), 0.8))
 	var slot_i := 0
 	for i in opponents:
 		if slot_i == player_slot:
 			slot_i += 1
-		var id: String = cars[i % cars.size()]
+		var id: String = cars[(i - chosen.size()) % cars.size()] if i >= chosen.size() else str(chosen[i].get("car", cars[0]))
 		var cfg: Variant = Content.load_json("cars/%s/car.json" % id)
+		# (a car of the menu with a setup of its own: the tune, as the player's car takes one)
+		if i < chosen.size() and str(chosen[i].get("tune", "")) != "" and cfg is Dictionary:
+			var tune_path: String = Tuning.list(id, cfg).get(str(chosen[i]["tune"]), "")
+			var tuned := Tuning.load_tune(tune_path) if tune_path != "" else {}
+			if not tuned.is_empty():
+				cfg = tuned
 		var e := Entry.new()
 		e.car = Car.new()
 		e.car.engine_damage_on = false
@@ -91,7 +104,7 @@ func setup(w: Node, l: RacingLine, track: Track, player_car: Car, opponents: int
 		e.name = "%s %d" % [e.car.config.get("name", id), i + 1]
 		world.add_child(e.car)
 		e.driver = AIDriver.new()
-		e.driver.setup(e.car, line, 0.8 * (1.0 - 0.03 * (i % 4)))
+		e.driver.setup(e.car, line, pace * (1.0 - 0.03 * (i % 4)))
 		# its pit stops: box i + 2 of the track (box 1 is the player's), with tyre wear on (AIPit)
 		e.driver.pit = AIPit.new()
 		e.driver.pit.setup(e.car, line, track.config, i + 1, e.name)
@@ -103,7 +116,10 @@ func setup(w: Node, l: RacingLine, track: Track, player_car: Car, opponents: int
 	player_car.set_meta("slot", slots[player_slot])
 	player_car.contact_monitor = true
 	player_car.max_contacts_reported = 4
-	RunLog.event("race: %d laps, %d opponents (%s), the player %s" % [laps, opponents, ", ".join(cars), "on pole" if from_pole else "at the back"])
+	var chosen_text := ", ".join(chosen.map(func(o): return "%s%s" % [o.get("car"), "~" + str(o["tune"]) if str(o.get("tune", "")) != "" else ""]))
+	RunLog.event("race: %d laps, %d opponents (%s%s), the player %s (place %d), %s" % [laps, opponents, ", ".join(cars),
+		"; chosen: %s" % chosen_text if not chosen.is_empty() else "",
+		"on pole" if player_slot == 0 else ("at the back" if player_slot == opponents else "random"), player_slot + 1, str(extra.get("difficulty", "normal"))])
 
 
 func _slot(s: int, track: Track) -> Dictionary:
