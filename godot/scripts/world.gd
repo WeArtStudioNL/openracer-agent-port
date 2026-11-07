@@ -18,6 +18,7 @@ var race: Race = null
 var options := {}
 var base_config := {}
 var pause_layer: CanvasLayer
+var tuning_layer: CanvasLayer = null
 var _pause_box: Control
 var _results: CanvasLayer
 var _shot_path := ""
@@ -28,6 +29,7 @@ var _next_log := 0.0
 var _last_velocity := Vector3.ZERO
 var _stuck := 0.0
 var _going := false
+var _tuning_paused := false
 
 
 ## options: mode ("practice" or "race"), opponents, laps, pole (the player starts in front).
@@ -380,20 +382,38 @@ func _show_pause_buttons() -> void:
 	(box.get_child(0) as Button).grab_focus.call_deferred()
 
 
-## The tuning menu (U): the game is paused while it is open.
+## The tuning menu (U), at the right of the screen (Tuning.js): in free driving the car is tuned while it drives; in
+## a race the game waits while the menu is open. U again (or Esc) closes it.
 func open_tuning() -> void:
+	if tuning_layer != null:
+		close_tuning()
+		return
 	if get_tree().paused:
 		return
-	pause()
-	_pause_box.queue_free()
-	var centre := CenterContainer.new()
-	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
-	pause_layer.add_child(centre)
-	_pause_box = centre
+	tuning_layer = CanvasLayer.new()
+	tuning_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	tuning_layer.layer = 9
+	add_child(tuning_layer)
 	var menu := TuningMenu.new()
 	menu.setup(self, car, base_config)
-	menu.closed.connect(resume)
-	centre.add_child(menu)
+	menu.closed.connect(close_tuning)
+	tuning_layer.add_child(menu)
+	_tuning_paused = race != null and race.state != Race.State.DONE
+	if _tuning_paused:
+		get_tree().paused = true
+		ForceFeedback.neutral()
+	RunLog.event("tuning menu open%s" % (" (the race waits)" if _tuning_paused else ""))
+
+
+func close_tuning() -> void:
+	if tuning_layer == null:
+		return
+	tuning_layer.queue_free()
+	tuning_layer = null
+	if _tuning_paused:
+		get_tree().paused = false
+		_tuning_paused = false
+	RunLog.event("tuning menu closed")
 
 
 func _show_settings() -> void:

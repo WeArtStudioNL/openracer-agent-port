@@ -129,6 +129,19 @@ func set_inside(value: bool) -> void:
 		synth.set_inside(value)
 
 
+## The sound of the engine made again from car.json (the tuning menu changed it).
+func reconfigure() -> void:
+	if synth == null:
+		return
+	var p := EngineSimParams.params(car.config)
+	var o := EngineSimParams.options(p)
+	if positional:
+		o["simulation_frequency"] = minf(float(o["simulation_frequency"]), 5000.0)
+		o["fluid_steps"] = 1
+	synth.configure(o, MIX_RATE)
+	synth.set_inside(inside)
+
+
 ## The loudness of the engine sound now (the rms of the last frames), for the tests.
 func engine_level() -> float:
 	return synth.get_level() if synth != null else 0.0

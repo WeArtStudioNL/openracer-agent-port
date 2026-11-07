@@ -101,12 +101,25 @@ engine, the mass goes down with it, an empty tank stops the engine.
 
 ## Tuning
 
-**U** opens the tuning menu (as in the browser game): the chassis, the tyres, the engine, the transmission, the
-brakes, the aerodynamics and the steering, the assists, with the units and ranges of CarTuning.js. A change works
-at once. A setup can be saved as a tune (`user://tunes/<car>/<name>.openracer-tune.json`, the format of the browser
-game: a whole car.json); the tunes that come with a car (car.json "tunes") can be loaded too. The tune in use is
-remembered per car and used at the next start; "The car as made" goes back to car.json. Test:
-`Godot --headless --path godot res://tools/test_tuning.tscn`.
+**U** opens the tuning menu, as the browser game has it (web/js/Tuning.js, CarTuning.js): a panel at the right of
+the screen with the cards of the car editor in the browser's order (Wheels; Suspension and driveline; Chassis with
+Brakes, Aero and Size; Drivetrain; Engine with Fuel; Engine sound; Assists and extras; Cameras; Soft body), every
+group folded away. A row has the label, a number, the unit, ↺ (back to the setup that is chosen, or the car as made)
+and a slider with the units, ranges and steps of CarTuning.js; a changed value is orange. The brakes are a total and
+a bias, the gears a summary with Advanced (gear by gear, − and +) and a list of kinds of transmission, the tyre's fine
+settings are folded apart, the systems and the extras have a tick that opens their settings. A setting that cannot do
+anything with the others is hidden (CarTuning.visible); one that the Godot physics do not use yet is grey with a
+tooltip (Tuning.NOT_IN_GODOT: the paint, the wheel library, the tyre shell and tread stiffness, heating and life,
+tyre damage, the shift pattern, diff build-up, the centre differential, the parts library suspension and engine
+place, the steering wheel stops, look-ahead/fov-speed/dolly/hide-driver of the cameras, the boost gauge). A change
+works at once while the car drives (the cameras and the engine sound follow too); in a race the game waits while the
+menu is open. Setups: "Default (the car as made)" is car.json; Save overwrites the setup that is chosen, Save as
+new… asks a name, Delete (or Undo changes for a tune that comes with the car). A setup is a tune
+(`user://tunes/<car>/<name>.openracer-tune.json`, the format of the browser game: a whole car.json); the tunes that
+come with a car (car.json "tunes") are in the list too. The setup in use is remembered per car and used at the next
+start. Not ported: the engine build with its chart and dyno (the browser's Engine card), Export/Import of a tune
+file, the Mirrors card, the Motorcycle card. `--tuning` opens the menu at the start, `--tuning-open=Chassis,Chassis/Brakes`
+opens cards and groups (for screenshots). Test: `Godot --headless --path godot res://tools/test_tuning.tscn`.
 
 A kart (chassis.unsprung) stands on its tyres: the tyre is the spring (its rate with the pressure), the frame
 twists (frame_torsion) and the inner rear wheel is lifted (inner_lift) by the lateral acceleration, as in
@@ -161,7 +174,7 @@ steps) and the force of the shell on the nodes it hangs on. A detachable part be
 and the other cars; a breakable part (glass, a lamp) is gone at once in a cloud of shards; a hinged part sits shut
 until all its pins break and then falls off.
 
-The tuning menu (U) has a tab "Soft body" (the items of the Soft body card of the car editor): the car dents or not,
+The tuning menu (U) has a card "Soft body" (in the browser it is read-only; here it can be set): the car dents or not,
 the most nodes made from the model, the yield and break forces of the anchors and the beams, the hardening and the
 mass of the shell. A change makes a new shell, whole (and the model is made again when the nodes changed).
 

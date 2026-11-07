@@ -20,6 +20,13 @@ var _look_dir := Vector3.FORWARD
 
 func follow(c: Car) -> void:
 	car = c
+	read_config(c)
+	snap()
+
+
+## The cameras of car.json (at the start, and again when the tuning menu changes them); what car.json does not
+## give stays as it is.
+func read_config(c: Car) -> void:
 	var cams: Dictionary = c.config.get("cameras", {})
 	var f: Dictionary = cams.get("follow", {})
 	distance = float(f.get("distance", distance))
@@ -33,7 +40,6 @@ func follow(c: Car) -> void:
 		var p: Array = cp["position"]
 		cockpit = Vector3(float(p[0]), float(p[1]), float(p[2])) + c.model_root.position
 	cockpit_fov = float(cp.get("fov", cockpit_fov))
-	snap()
 
 
 func snap() -> void:
