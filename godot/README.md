@@ -307,6 +307,9 @@ axis, or without a pit line to a point behind the box and into it; it stands unt
 Not after the finish. The log says "race: Hatchback 2 pits (fuel 5.1 L, wear 0.12)" and the stop; the race's
 put-back leaves a car alone while it stands in its box. Tests: `--set=tyre_wear:1 --ai-fuel=6` (the AI cars start
 with 6 L) and `--ai-pit-line=0` (the box mode on a track with a pit line).
+A track without pit boxes has the pit lane instead (`scripts/pit_lane.gd`, PitLane of Pit.js): the road of the
+surface `track01` beside the racing line; the AI cars drive through it at 16 m/s and stop in its middle, and a car
+standing still with its wheels on it is serviced (the player's too). No track of the game has one now.
 Not yet: the car is not lifted in the picture.
 
 The drag strip (`scripts/drag_strip.gd`, DragStrip.js): on a track with `dragstrip` the front wheels at the line,

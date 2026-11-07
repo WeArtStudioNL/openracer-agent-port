@@ -27,6 +27,7 @@ var stops := 0
 var at_stop := false
 var waiting := false                # set by the driver: it waits behind a car (one that stands in its box)
 var name := ""
+var lane: PitLane = null            # the pit lane of a track without boxes (PitLane), made at the first look
 var _pit_idx := 0
 var _stop_idx := 0
 var _stop_wait := 0.0
@@ -35,6 +36,8 @@ var _fuel_at_lap := -1.0
 var _fuel_per_lap := -1.0
 var _pitted_this_lap := false
 var _anchor := Vector3.ZERO
+var _lane_looked := false
+var _lane_stopped := false
 var _failed := 0                    # visits to the pits that ended with the car put back on the line
 
 
@@ -154,9 +157,11 @@ func update(dt: float, i: int, speed: float) -> Dictionary:
 	at_stop = false
 	if pit.active:
 		_pitted_this_lap = true
-	if box.is_empty() or float(Settings.get_value("tyre_wear")) <= 0.0:
+	if float(Settings.get_value("tyre_wear")) <= 0.0:
 		pitting = false
 		return {}
+	if box.is_empty():
+		return _lane_update(i, speed)
 	var n := line.count()
 	var p := car.global_position
 	if not pitting and _needs_stop():
@@ -236,6 +241,48 @@ func update(dt: float, i: int, speed: float) -> Dictionary:
 		_stop_wait = 0.0
 	if at_stop:
 		out["speed"] = 0.0
+	return out
+
+
+## A track without pit boxes (Opponent.js): through the pit lane (PitLane) at the speed of the lane, a stop in its
+## middle (once a visit).
+func _lane_update(i: int, speed: float) -> Dictionary:
+	if not _lane_looked:
+		_lane_looked = true
+		var track := car.get_tree().get_first_node_in_group("track") as Track if car.is_inside_tree() else null
+		lane = PitLane.build(track, line)
+		if lane != null:
+			RunLog.event("race: %s has the pit lane (%d points, from line point %d to %d)" % [name, lane.points.size(), lane.entry, lane.exit])
+	if lane == null:
+		pitting = false
+		return {}
+	var n := line.count()
+	var to_entry := posmod(lane.entry - i, n) * RacingLine.STEP
+	if not pitting and _needs_stop() and to_entry < 60.0:
+		pitting = true
+		_lane_stopped = false
+		RunLog.event("race: %s pits (the lane; fuel %.1f L, wear %.2f)" % [name, car.fuel, _max_wear()])
+	if not pitting:
+		return {}
+	if not (lane.covers(i) or to_entry < 60.0):
+		pitting = false
+		stops += 1
+		RunLog.event("race: %s back on the track (stop %d)" % [name, stops])
+		return {}
+	if pit.done:
+		_lane_stopped = true
+	var out := {"speed": PIT_SPEED}
+	var look := clampf(3.0 + speed * 0.6, 5.0, 14.0)
+	out["target"] = lane.point_at(i + roundi(look / RacingLine.STEP))
+	var stop_index: int = lane.points[lane.stop][1]
+	var at := posmod(i - lane.entry, n)
+	var stop_at := posmod(stop_index - lane.entry, n)
+	if not pit.done and not _lane_stopped:
+		if at <= stop_at:
+			out["speed"] = minf(PIT_SPEED, sqrt(2.0 * BRAKE * maxf(0.0, (stop_at - at) * RacingLine.STEP - 1.0)) + 0.6)
+		if at >= stop_at - 1 and at <= stop_at + 2:
+			at_stop = true
+			out["speed"] = 0.0
 	return out
 
 

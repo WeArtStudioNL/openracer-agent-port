@@ -59,6 +59,19 @@ func _add_pit_boxes(boxes: Array) -> void:
 	add_child(PitStop.markings(boxes, self))
 
 
+## The middles of the triangles of a surface (the pit lane of a track without pit boxes, PitLane).
+func surface_centroids(kind: String) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for col in _colliders:
+		if str(col.get_parent().get_meta("surface", "road")) != kind or not col.is_inside_tree():
+			continue
+		var faces := (col.shape as ConcavePolygonShape3D).get_faces()
+		var xf := col.global_transform
+		for t in range(0, faces.size() - 2, 3):
+			out.append(xf * ((faces[t] + faces[t + 1] + faces[t + 2]) / 3.0))
+	return out
+
+
 ## The walls of the track for the shells of the cars (WallGrid), made the first time they are asked for (the track
 ## must be in the scene by then).
 func walls() -> WallGrid:
