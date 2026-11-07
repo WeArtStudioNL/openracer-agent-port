@@ -279,7 +279,10 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
    traction and stability control, camber, toe, ride height, anti geometry, the engine of Engine.js with turbo,
    the automatic gearbox, fuel, launch control and the extras *(done)*; damage: the soft body that dents, the
    model that bends with it, the parts that come off *(done)*.
-5. **Motorcycles**: the bike model of Motorcycle.js with its rider.
+5. **Motorcycles**: the bike model of Motorcycle.js with its rider (`scripts/motorcycle.gd`): lean, steering from the
+   lean, balance, camber thrust, posture, wheelie control, brakes, crash rules, camera roll; the front end, swingarm,
+   shock and chain (`motorcycle_model.gd`), the rider with IK (`motorcycle_rider.gd`), the AI rides them *(done; not
+   yet: the ragdoll of a crash, the levers and fingers, model v2, the menu options of the bikes)*.
 6. **Garage, tuning and editors**: tuning menu, car and track editor, garage, replays.
 7. **Release**: export for the web (openracer.eu), macOS, Windows and Linux. macOS *(done)*: `sh godot/tools/export_macos.sh`
    makes `godot/build/macos/O-Racer.app` (universal, signed ad hoc, not notarised: the first start needs a right
