@@ -17,6 +17,8 @@ const SURFACES := {
 	"mud": {"static": 0.5, "kinetic": 0.44, "loose": true, "drag": 6.0},
 	"ground": {"static": 0.7, "kinetic": 0.58, "loose": true},
 }
+## The pack with the content in the web version (in the file system of the page, next to index.pck).
+const WEB_PACK := "content.pck"
 
 
 ## The folder with cars/, tracks/ and wheels/ (an absolute path), or "" when it was not found.
@@ -25,9 +27,22 @@ var root := ""
 
 func _ready() -> void:
 	GLTFDocument.register_gltf_document_extension(GltfJpegFix.new())
+	_load_web_pack()
 	root = _find_root()
 	if root == "":
 		push_error("Content: the web folder of OpenRacer was not found (cars/index.json)")
+
+
+## The web version (tools/export_web.sh): the page fetches content.pck next to index.pck before the game starts
+## (the html/head_include of the Web preset) and it holds the content as res://content.
+func _load_web_pack() -> void:
+	if not OS.has_feature("web") or FileAccess.file_exists("res://content/cars/index.json"):
+		return
+	if not FileAccess.file_exists(WEB_PACK):
+		push_error("Content: %s is not there (tools/export_web.sh builds it)" % WEB_PACK)
+		return
+	if not ProjectSettings.load_resource_pack(WEB_PACK, false):
+		push_error("Content: could not load " + WEB_PACK)
 
 
 func _find_root() -> String:

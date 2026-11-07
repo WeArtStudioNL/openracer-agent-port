@@ -435,6 +435,24 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
    src/*.o godot-cpp/bin/libgodot-cpp.linux.template_release.x86_64.a`, as scons on a Mac names the objects .os;
    glibc 2.28 or newer). On Windows the force feedback looks up the SDL HID functions in the executable
    (GetProcAddress); when Godot does not export them there, force feedback is off and the rest works.
+   Web *(done, tested locally, not on openracer.eu yet)*: `sh godot/tools/export_web.sh` makes `godot/build/web/`:
+   index.html (the shell `tools/web_shell.html`), the engine (index.js, index.wasm, index.side.wasm, the audio
+   worklets), the game (index.pck, under 1 MB), the native part (liboracer.web.template_release.wasm32.wasm, 1.1 MB)
+   and the content: `content.pck` (the cars, tracks, wheels and sounds of web/ as res://content, packed by
+   `tools/pack_content.gd`; about 207 MB, so about 254 MB for the folder). The page fetches content.pck together
+   with the game and puts it next to index.pck before the engine starts; `scripts/content.gd` loads it
+   (ProjectSettings.load_resource_pack), so GLTFDocument reads the models from res://content. The export preset "Web"
+   has threads and GDExtension on (the web_dlink templates; the renderer there is Compatibility, WebGL 2) and plays
+   all sound as a stream (audio/general/default_playback_type.web), as the engine sound is an AudioStreamGenerator.
+   The native part is built with Emscripten **4.0.20** (the version of the 4.7.2 templates; emsdk in ~/emsdk:
+   `./emsdk install 4.0.20 && ./emsdk activate 4.0.20`, then with its PATH: `cd godot/native && scons platform=web
+   target=template_release threads=yes`, and `threads=no` for a build without threads). The engine sound
+   (EngineSimSynth) loads and runs in the browser ("engine sound on" in the log; not yet listened to); the force feedback (WheelForce) is built but has no HID there and reports
+   no wheel. Without the native part the game runs silent (the scripts check ClassDB.class_exists). Threads need
+   cross-origin isolation: the server must send `Cross-Origin-Opener-Policy: same-origin` and
+   `Cross-Origin-Embedder-Policy: require-corp` for the files of the game; `python3 godot/tools/serve_web.py`
+   serves godot/build/web with them on http://localhost:8060. In the browser the run log goes to the console
+   (without the telemetry). The keyboard works as on the desktop; gamepads go through the browser's Gamepad API (not tested yet).
 
 Known in phase 1: the acceleration of the
 cars with a centrifugal clutch (karts) or a torque converter is close to, but not yet compared with, the

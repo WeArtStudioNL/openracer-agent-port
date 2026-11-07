@@ -96,6 +96,10 @@ func _flat_ground() -> void:
 
 ## The height of the road under (x, z): the highest thing a ray from far above finds; 0 when there is nothing.
 func ground_at(x: float, z: float) -> float:
+	# (not in the world yet, as while World.setup builds the drag strip: no ground to find; the web version crashed on
+	# the null world, the desktop one gave an error and 0)
+	if not is_inside_tree():
+		return 0.0
 	var space := get_world_3d().direct_space_state
 	var q := PhysicsRayQueryParameters3D.create(Vector3(x, 2000, z), Vector3(x, -2000, z))
 	var hit := space.intersect_ray(q)
