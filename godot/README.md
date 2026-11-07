@@ -203,6 +203,16 @@ comes off), hinged parts that swing open (doors, a hood) and the link beams of p
 pieces of a part that shatters (`Shatter.js`), a loose part that hits its own car, the shell of the model drawn as an
 object "beams", the replay of the shell.
 
+## Replay
+
+The replay (`scripts/replay.gd`, Replay.js): every car of the session (the player and the opponents) is recorded
+30 times a second, the last half hour. Esc, Replay: the game stays paused behind it and the recording plays through
+the same code that draws the cars. The bar: a slider over the whole recording, start, -10 s, play/pause, +10 s, end,
+the speed (0.1x to 5x), the camera (T) and the car it follows (Tab); Exit (Esc) goes back to the game where it was
+left. Keys: Enter play/pause, left and right one frame (held: on), up and down one second, Home and End, H hides the
+bar. Test: `res://tools/test_replay.tscn -- --ai=1`. Not yet: saving a replay to a file and opening it from the main
+menu, the free camera, marks and fragments, video, the soft body and the parts in the replay.
+
 ## Pit stops and the drag strip
 
 The pit stop (`scripts/pit_stop.gd`, Pit.js): with "Tyre temperature and wear" on, the player's car standing still
@@ -283,7 +293,7 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
    lean, balance, camber thrust, posture, wheelie control, brakes, crash rules, camera roll; the front end, swingarm,
    shock and chain (`motorcycle_model.gd`), the rider with IK (`motorcycle_rider.gd`), the AI rides them *(done; not
    yet: the ragdoll of a crash, the levers and fingers, model v2, the menu options of the bikes)*.
-6. **Garage, tuning and editors**: tuning menu, car and track editor, garage, replays.
+6. **Garage, tuning and editors**: tuning menu *(done)*, replays *(the core done)*, car and track editor, garage.
 7. **Release**: export for the web (openracer.eu), macOS, Windows and Linux. macOS *(done)*: `sh godot/tools/export_macos.sh`
    makes `godot/build/macos/O-Racer.app` (universal, signed ad hoc, not notarised: the first start needs a right
    click, Open), with the cars, tracks, wheels and sounds of web/ inside it (Contents/Resources/web; about 380 MB).

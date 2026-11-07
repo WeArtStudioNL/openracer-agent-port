@@ -15,6 +15,7 @@ var laps: LapTimer
 var line: RacingLine
 var ai: AIDriver = null
 var race: Race = null
+var replay: Replay = null
 var options := {}
 var base_config := {}
 var pause_layer: CanvasLayer
@@ -100,6 +101,15 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 			race.finished.connect(_race_finished)
 			add_child(race)
 			hud.race = race
+	# the replay: every car, from the start (Replay.js)
+	replay = Replay.new()
+	var all: Array = [car]
+	if race != null:
+		for e in race.entries:
+			if e.car != car:
+				all.append(e.car)
+	replay.setup(self, all)
+	add_child(replay)
 	# the tests and the screenshots of the command line: --drive (full throttle), --shot=file.png --shot-at=seconds, --log=seconds
 	car.autopilot = Content.arg("drive") != ""
 	_shot_path = Content.arg("shot")
@@ -373,7 +383,7 @@ func _show_pause_buttons() -> void:
 	box.custom_minimum_size = Vector2(320, 0)
 	box.add_theme_constant_override("separation", 10)
 	centre.add_child(box)
-	var items := [["Resume", resume], ["Settings", _show_settings], ["Back to the start", func():
+	var items := [["Resume", resume], ["Replay", _start_replay], ["Settings", _show_settings], ["Back to the start", func():
 		resume()
 		to_start()], ["Main menu", func():
 		resume()
@@ -387,6 +397,15 @@ func _show_pause_buttons() -> void:
 		b.pressed.connect(item[1])
 		box.add_child(b)
 	(box.get_child(0) as Button).grab_focus.call_deferred()
+
+
+## The replay of what was driven (Replay.js): the pause menu goes, the game stays paused behind it.
+func _start_replay() -> void:
+	if replay == null or replay.count < 2:
+		return
+	if pause_layer != null:
+		pause_layer.visible = false
+	replay.play()
 
 
 ## The tuning menu (U), at the right of the screen (Tuning.js): in free driving the car is tuned while it drives; in
