@@ -1,7 +1,7 @@
 class_name SettingsMenu
 extends PanelContainer
 ## The settings: sound, driving, keyboard, racing wheel and force feedback (Settings), with the calibration and the
-## test of the force feedback. Used by the main menu and the pause menu.
+## test of the force feedback, and the graphics and the atmosphere (GraphicsPage). Used by the main menu and the pause menu.
 
 signal closed
 
@@ -71,6 +71,9 @@ func _ready() -> void:
 	_slider(wheel, "Damping", "ffb_damping", 0.0, 1.0, 0.05, true)
 	_slider(wheel, "Road detail", "ffb_road", 0.0, 1.5, 0.05, true)
 	_check(wheel, "Reverse the force", "ffb_invert")
+
+	var graphics := GraphicsPage.new()
+	_page(tabs, "Graphics").add_child(graphics)
 
 	_controls_page = _page(tabs, "Controls")
 	if Content.arg("settings-tab") != "":

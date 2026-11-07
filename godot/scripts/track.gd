@@ -2,7 +2,7 @@ class_name Track
 extends Node3D
 ## A track of OpenRacer, from its track.json: the glb model, a collision shape for each of its meshes with the
 ## surface that track.json gives it ("surfaces.meshes": road, grass, sand ...; "decor" has no collision), the
-## sky, the sun and the start.
+## start, and its Atmosphere (the sky, the sun, the weather and the ground).
 
 var config: Dictionary = {}
 var track_id := ""
@@ -17,8 +17,11 @@ func setup(id: String, cfg: Dictionary) -> void:
 	name = "Track"
 	add_to_group("track")
 	start = cfg.get("start", start)
-	_environment(cfg.get("environment", {}))
 	var model := Content.load_model("tracks/%s/%s" % [id, cfg.get("model", id + ".glb")])
+	# the sky, the light, the weather and the ground (the same on every track; the track gives how bright it likes the light)
+	var atmosphere := Atmosphere.new()
+	atmosphere.setup(cfg.get("environment", {}), model)
+	add_child(atmosphere)
 	if model == null:
 		_flat_ground()
 		return
@@ -89,46 +92,6 @@ func _flat_ground() -> void:
 	pm.size = Vector2(2000, 2000)
 	plane.mesh = pm
 	add_child(plane)
-
-
-func _environment(env: Dictionary) -> void:
-	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(str(env.get("sky_top", "#4a82c4")))
-	sky_mat.sky_horizon_color = Color(str(env.get("sky_horizon", "#d3e4f4")))
-	sky_mat.ground_horizon_color = sky_mat.sky_horizon_color
-	sky_mat.ground_bottom_color = Color(0.25, 0.27, 0.25)
-	var sky := Sky.new()
-	sky.sky_material = sky_mat
-	var e := Environment.new()
-	e.background_mode = Environment.BG_SKY
-	e.sky = sky
-	var amb: Dictionary = env.get("ambient", {})
-	e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	e.ambient_light_color = Color(str(amb.get("color", "#576777")))
-	e.ambient_light_sky_contribution = 0.6
-	e.ambient_light_energy = float(amb.get("intensity", 1.0))
-	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	e.ssao_enabled = true
-	var fog: Dictionary = env.get("fog", {})
-	if fog.get("enabled", false):
-		e.fog_enabled = true
-		e.fog_mode = Environment.FOG_MODE_DEPTH
-		e.fog_light_color = Color(str(fog.get("color", "#cfdbe8")))
-		e.fog_depth_begin = float(fog.get("near", 300))
-		e.fog_depth_end = float(fog.get("far", 2500))
-	var we := WorldEnvironment.new()
-	we.environment = e
-	add_child(we)
-
-	var sun_cfg: Dictionary = env.get("sun", {})
-	var sun := DirectionalLight3D.new()
-	sun.name = "Sun"
-	sun.light_color = Color(str(sun_cfg.get("color", "#ffffff")))
-	sun.light_energy = float(sun_cfg.get("intensity", 1.0)) * 1.2
-	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 220.0
-	sun.rotation = Vector3(-deg_to_rad(float(sun_cfg.get("elevation", 45))), deg_to_rad(float(sun_cfg.get("azimuth", 40))), 0.0)
-	add_child(sun)
 
 
 ## The height of the road under (x, z): the highest thing a ray from far above finds; 0 when there is nothing.

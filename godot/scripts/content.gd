@@ -120,5 +120,6 @@ func load_model(rel: String) -> Node3D:
 	return doc.generate_scene(state) as Node3D
 
 
+## The grip of a surface with the condition of the ground (Ground: the wet and the snow take from it).
 func surface(id: String) -> Dictionary:
-	return SURFACES.get(id, SURFACES["road"])
+	return Ground.surface(id)
