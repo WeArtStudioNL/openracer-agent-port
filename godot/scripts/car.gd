@@ -193,6 +193,9 @@ var reverse_hold := 0.0
 var throttle := 0.0
 var brake := 0.0
 var model_root: Node3D
+var shell: CarShell = null      # the shell that dents (damage on, Settings), or null
+var shell_mesh: SoftBodyMesh = null
+var _box: CollisionShape3D
 var _esc_brake := [0.0, 0.0, 0.0, 0.0]
 var _esc_cut := 0.0
 var _axle_fy := [0.0, 0.0]      # the side force of each axle in the last step (the geometric load transfer)
@@ -221,15 +224,87 @@ func setup(id: String, cfg: Dictionary) -> void:
 	col.shape = shape
 	col.position = Vector3(0.0, bottom + shape.size.y / 2.0, 0.0)
 	add_child(col)
+	_box = col
 	_build_visual()
+	_make_shell()
+
+
+## The shell that dents (SoftBody, CarShell), with damage on (Settings) and unless car.json says
+## "softbody": {"enabled": false}. With a shell the walls and the other cars meet its nodes first: the box of the body
+## is made smaller across and along by what a node can be crushed (it stays for the road under the car, a car on
+## its roof and as a backstop); without a shell the car is a rigid body, as before.
+func _make_shell() -> void:
+	if shell != null:
+		shell.dispose()
+		shell = null
+	var cfg: Dictionary = config.get("softbody", {})
+	if Settings.get_value("damage") and cfg.get("enabled", true) != false:
+		shell = CarShell.new(self)
+		if shell.sb == null:
+			shell.dispose()
+			shell = null
+	var dims: Dictionary = config.get("dimensions", {})
+	var box := _box.shape as BoxShape3D
+	box.size.x = float(dims.get("width", 1.8)) * 0.95
+	box.size.z = float(dims.get("length", 4.2)) * 0.97
+	_box.position.z = 0.0
+	if shell != null:
+		# (the box inside what the nodes can be crushed to: max_bend and the springing on top of it)
+		var lo := Vector3(INF, 0.0, INF)
+		var hi := Vector3(-INF, 0.0, -INF)
+		for k in shell.sb.count:
+			var p := shell.sb.rest[k]
+			var r: float = shell.sb.radius[k]
+			lo = Vector3(minf(lo.x, p.x - r), 0.0, minf(lo.z, p.z - r))
+			hi = Vector3(maxf(hi.x, p.x + r), 0.0, maxf(hi.z, p.z + r))
+		var inset := shell.sb.anchor_max_bend + 0.15
+		var x0 := maxf(lo.x + inset, -box.size.x / 2.0 + inset)
+		var x1 := minf(hi.x - inset, box.size.x / 2.0 - inset)
+		var z0 := maxf(lo.z + inset, -box.size.z / 2.0 + inset)
+		var z1 := minf(hi.z - inset, box.size.z / 2.0 - inset)
+		box.size.x = maxf(0.4, x1 - x0)
+		box.size.z = maxf(0.6, z1 - z0)
+		_box.position.z = (z0 + z1) / 2.0
+	if shell != null:
+		RunLog.event("soft body %s: %d nodes, %d beams, a small step of %.2f ms is stable" % [car_id, shell.sb.count, shell.sb.beam_count,
+			shell.sb.safe_h * 1000.0])
+
+
+## Makes the car whole again: the shell, its model and the parts (the browser game does it when the car is put back
+## at the start).
+func repair() -> void:
+	if shell != null:
+		shell.repair()
+
+
+## The car was moved (put back on its wheels): the shell stops moving and keeps its dents.
+func settle_shell() -> void:
+	if shell != null:
+		shell.sb.settle()
+
+
+func _exit_tree() -> void:
+	if shell_mesh != null:
+		shell_mesh.dispose()
+	if shell != null:
+		shell.dispose()
 
 
 ## A new configuration while the car drives (the tuning menu): the physics take it at once; the model stays.
 func apply_config(cfg: Dictionary) -> void:
+	var shell_before: Variant = config.get("softbody", {})
 	config = cfg
 	var rpm_omega := engine.omega
 	_read_config()
 	engine.omega = rpm_omega
+	if cfg.get("softbody", {}) != shell_before:
+		# (new strengths of the shell: a new shell, whole; the model keeps its weights when the nodes are the same)
+		_make_shell()
+		if shell_mesh != null:
+			if shell != null and shell.sb.count == shell_mesh.sb.count:
+				shell_mesh.sb = shell.sb
+			else:
+				shell_mesh.sb.repair()
 
 
 ## Everything the physics take from car.json (setup, and the tuning menu). The wheels are made the first time and
@@ -447,6 +522,7 @@ func _build_visual() -> void:
 		body = Content.load_model(str(m["file"]))
 	if body != null:
 		pivot.add_child(body)
+		CollisionProxy.hide_objects(body)
 	else:
 		var box := MeshInstance3D.new()
 		var bm := BoxMesh.new()
@@ -537,6 +613,9 @@ func place(pos: Vector3, heading: float) -> void:
 func make_ghost() -> void:
 	is_ghost = true
 	name = "Ghost"
+	if shell != null:
+		shell.dispose()
+		shell = null
 	freeze = true
 	collision_layer = 0
 	collision_mask = 0
@@ -869,6 +948,10 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	if u2 > 1.0 and (downforce_front != 0.0 or downforce_rear != 0.0):
 		state.apply_force(-up * downforce_front * u2, basis * Vector3(0.0, 0.0, wheels[0].hub.z))
 		state.apply_force(-up * downforce_rear * u2, basis * Vector3(0.0, 0.0, wheels[2].hub.z))
+
+	# ---- the shell: the walls and the other cars on its nodes, and its anchors on the body
+	if shell != null:
+		shell.step(state)
 
 
 ## Squeal, smoke and marks (web/js/Vehicle.js): the power that the slip burns heats the surface of the tread; from
@@ -1294,6 +1377,10 @@ func _drivetrain(dt: float, tyre_torque: Array) -> void:
 
 
 func _process(_delta: float) -> void:
+	if shell != null and shell_mesh == null:
+		shell_mesh = SoftBodyMesh.new(self, shell.sb, _part_objects())
+	if shell_mesh != null:
+		shell_mesh.update()
 	if not engine.events.is_empty():
 		for e in engine.events:
 			bang.emit(e)
@@ -1304,6 +1391,15 @@ func _process(_delta: float) -> void:
 		w.hub_node.position = w.hub + w.visual_offset + Vector3.UP * (susp_length - w.length + w.offset)
 		w.steer_node.rotation.y = w.steer
 		w.spin_node.rotation.x = w.spin
+
+
+## The objects of the model that are parts (car.json "parts").
+func _part_objects() -> Dictionary:
+	var out := {}
+	for p in config.get("parts", []):
+		if p is Dictionary and p.has("object") and str(p.get("mode", "fixed")) != "fixed":
+			out[str(p["object"])] = p
+	return out
 
 
 func gear_name() -> String:

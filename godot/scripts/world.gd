@@ -141,6 +141,7 @@ func to_start() -> void:
 	var z := float(s.get("z", 0))
 	var y := track.ground_at(x, z)
 	car.place(Vector3(x, y + car.wheels[0].radius + 0.15, z), float(s.get("heading", 0)))
+	car.repair()                       # (as the browser game: back at the start the car is whole again)
 	effects.clear()
 	if laps:
 		laps.restart()
@@ -173,6 +174,7 @@ func put_on_line(c: Car) -> void:
 		h = atan2(b.z - a.z, b.x - a.x)
 	var y := track.ground_at(p.x, p.z)
 	c.place(Vector3(p.x, y + c.wheels[0].radius + 0.4, p.z), h)
+	c.settle_shell()                   # (put back on its wheels: it keeps its dents)
 
 
 ## The race again from the grid (a new Race with the same options).

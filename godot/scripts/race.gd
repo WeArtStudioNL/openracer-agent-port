@@ -77,6 +77,7 @@ func setup(w: Node, l: RacingLine, track: Track, player_car: Car, opponents: int
 		var e := Entry.new()
 		e.car = Car.new()
 		e.car.setup(id, cfg if cfg is Dictionary else {})
+		e.car.freeze = true              # (until it is on its slot: the cars are all at the origin until then)
 		e.car.set_meta("track_id", track.track_id)
 		CarModel.paint(e.car.model_root, CarModel.AI_COLOURS[i % CarModel.AI_COLOURS.size()])
 		e.audio = CarAudio.new()
@@ -143,6 +144,7 @@ func place_all() -> void:
 		var s: Dictionary = e.car.get_meta("slot")
 		var y: float = world.track.ground_at(s["x"], s["z"])
 		e.car.place(Vector3(s["x"], y + e.car.wheels[0].radius + 0.15, s["z"]), s["heading"])
+		e.car.repair()
 		e.car.freeze = false
 		e.index = -1
 		e.laps = 0

@@ -15,6 +15,7 @@ const DEFAULTS := {
 	"esc": true,                  # stability control (when the car has it)
 	"launch_control": false,      # brake and full throttle at a standstill hold the engine; the brake let go: a launch
 	"tyre_wear": 0.0,             # tyre temperature and wear: 0 off (the tyres at their best), else how fast they wear
+	"damage": true,               # the cars dent and lose parts (the soft body); off: rigid bodies, as main.js &damage=0
 	"auto_reverse": true,         # holding the brake at a standstill puts the car in reverse
 	"key_steer_speed": 1.0,       # how fast the keys turn the wheels (a factor)
 	"key_steer_at_speed": 1.0,    # how much less the keys steer at speed (a factor: 0 none, 1 as the browser game)

@@ -127,6 +127,39 @@ on. Backspace or "Race again" starts it again. A track without a racing line has
 
     Godot --path godot -- --car=openracer-muscle --track=short-track --race --opponents=5 --laps=3 [--pole] [--ai]
 
+## Damage: the soft body
+
+With "Damage" on (Settings, Driving; on by default, as in the browser game, where `&damage=0` switches it off) a
+car dents. It is the shell of `web/js/SoftBody.js` (see `SOFTBODY.md` in the root): a node for every collision
+sphere of the car (car.json `softbody.layout`, the list of the car editor; without it a cloud of spheres made from
+the model, as `CollisionProxy.js` does), beams to the nearest neighbours, and an anchor that holds every node to the
+body. An anchor is elastic up to its yield force, then the node bends for good (with hardening), a node bent
+`max_bend` (35 cm) is crushed solid, an anchor tears at its break force and a beam snaps when it is stretched too
+far. The strengths come from car.json `softbody` (`anchor`, `beam`, `contact`, `hardening`, `shell_mass`, per node
+`nodes`, per beam `beams`).
+
+The nodes meet the walls of the track (the triangles of its collision that do not lie flat, found in a grid,
+`scripts/wall_grid.gd`; a wall lower than 30 cm above the underside is driven over) and the nodes of the other
+cars, as stiff springs with a damper and friction (`scripts/car_shell.gd`). The body feels a hit only through the
+anchors, so the peak of a hit is limited by what yields and the energy goes into the bending. The shell is worked
+out in 16 small steps per physics step (0.5 ms: what the explicit springs need to stay stable), and only while
+something touches it or moves in it: a car that drives without hitting anything costs nothing. With a shell the
+box of the body is made smaller by what a node can be crushed (it stays for the road, a car on its roof and as a
+backstop); with damage off the car is the rigid body it was.
+
+The model bends with the nodes (`scripts/soft_body_mesh.gd`, as `SoftBodyMesh.js`): every vertex is tied to its
+four nearest nodes with weights, and the skinning of Godot moves it (a Skeleton3D "Shell" with a bone per node;
+the meshes of the body are made again once with the nodes as bones, in a thread when the car is made). Back to
+the start (Backspace, or the pause menu) repairs the car; R puts it back on its wheels and keeps the dents.
+
+Test: `Godot --headless --fixed-fps 120 --path godot res://tools/test_crash.tscn -- --car=openracer-muscle
+--speed=60 [--angle=40] [--set=damage:false]` drives into a wall and prints the bend, the energy and what tore,
+then drives the car on and repairs it; without `--headless`, `--shot=file.png` saves a picture of the dent.
+
+Not yet from the browser game: the suspension as nodes and beams (a bent arm that pulls the car aside, a wheel that
+comes off), the damage to the engine (`EngineDamage.js`), punctures, the shell of the model drawn as an object
+"beams", the replay of the shell.
+
 ## Controls
 
 Arrows or WASD drive, Space is the handbrake, Q/E shift (the first shift switches to a manual gearbox),
@@ -155,6 +188,7 @@ Holding the brake at a standstill puts the car in reverse; then the brake drives
 | `native/src/engine_sim.cpp` | the engine sound: EngineSimWorklet.js and the exhaust chain of EngineSim.js in C++ |
 | `scripts/engine_sim_params.gd`, `car_audio.gd` | the sound parameters of car.json; the engine and the tyre squeal of a car |
 | `scripts/tyre_effects.gd` | skid marks, tyre smoke and dust |
+| `scripts/soft_body.gd`, `car_shell.gd`, `collision_proxy.gd`, `wall_grid.gd`, `soft_body_mesh.gd` | the shell that dents, its contacts, its nodes, the walls of the track, the model that bends |
 | `tools/render_engine.gd` | renders the engine sound of a car to a wav (a test) |
 
 The engine sound is the one of the browser game, calculated: the gas in every cylinder at 10 kHz (the valves, the
@@ -184,7 +218,8 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
    cars, racecraft after Opponent.js and the AI that learns where it ran off *(done)*.
 4. **The rest of the physics**: the kinds of tyre, tyre heat and wear, pressure, downforce, torque converter,
    traction and stability control, camber, toe, ride height, anti geometry, the engine of Engine.js with turbo,
-   the automatic gearbox, fuel *(done)*; launch control and the extras; damage and the soft body.
+   the automatic gearbox, fuel, launch control and the extras *(done)*; damage: the soft body that dents, the
+   model that bends with it *(done)*.
 5. **Motorcycles**: the bike model of Motorcycle.js with its rider.
 6. **Garage, tuning and editors**: tuning menu, car and track editor, garage, replays.
 7. **Release**: export for the web (openracer.eu), macOS, Windows and Linux.

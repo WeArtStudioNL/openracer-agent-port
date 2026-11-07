@@ -7,12 +7,15 @@ extends Node3D
 var config: Dictionary = {}
 var track_id := ""
 var start := {"x": 0.0, "z": 0.0, "heading": 0.0}
+var _colliders: Array[CollisionShape3D] = []
+var _walls: WallGrid = null
 
 
 func setup(id: String, cfg: Dictionary) -> void:
 	track_id = id
 	config = cfg
 	name = "Track"
+	add_to_group("track")
 	start = cfg.get("start", start)
 	_environment(cfg.get("environment", {}))
 	var model := Content.load_model("tracks/%s/%s" % [id, cfg.get("model", id + ".glb")])
@@ -41,6 +44,21 @@ func setup(id: String, cfg: Dictionary) -> void:
 		col.shape = shape
 		body.add_child(col)
 		mi.add_child(body)
+		_colliders.append(col)
+
+
+## The walls of the track for the shells of the cars (WallGrid), made the first time they are asked for (the track
+## must be in the scene by then).
+func walls() -> WallGrid:
+	if _walls == null:
+		var t0 := Time.get_ticks_msec()
+		_walls = WallGrid.new()
+		for col in _colliders:
+			var shape := col.shape as ConcavePolygonShape3D
+			if shape != null and col.is_inside_tree():
+				_walls.add_faces(shape.get_faces(), col.global_transform, str(col.get_parent().get_meta("surface", "road")))
+		RunLog.event("walls of the track for the soft bodies: %d triangles in %d ms" % [_walls.count, Time.get_ticks_msec() - t0])
+	return _walls
 
 
 func _surface_of(mi: MeshInstance3D, surfaces: Dictionary) -> String:
