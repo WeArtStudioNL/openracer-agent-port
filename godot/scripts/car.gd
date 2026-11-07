@@ -40,6 +40,9 @@ class Wheel:
 	var point := Vector3.ZERO       # the contact patch (world)
 	var normal := Vector3.UP
 	var surface := "road"
+	var local_snow := -1.0          # the snow at the patch (Ground: what the cars left of it; -1 the whole ground)
+	var local_water := 0.0          # the water of a puddle at the patch (Ground)
+	var ring_time := 0.0
 	var load := 0.0
 	var omega := 0.0
 	var spin := 0.0
@@ -1015,7 +1018,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 				tyre_torque[i] = 0.0
 				continue
 			w.slip_ratio = clampf((w.omega * w.radius - w.forward_speed) / w.vref, -12.0, 12.0)
-			var surf := Content.surface(w.surface)
+			var surf := Ground.surface(w.surface, w.local_snow, w.local_water)
 			_tyre_force(w, w.grip_load, surf, w.vref)
 			sum_fx[i] += w.fx
 			sum_fy[i] += w.fy
