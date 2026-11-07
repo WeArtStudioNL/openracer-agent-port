@@ -19,6 +19,7 @@ var _brake := 9.0
 var _speeds := PackedFloat32Array()
 var _learned_at := -100
 var _was_off := false
+var _yaw_i := 0.0
 var _last_index := -1
 var _base_speeds := PackedFloat32Array()
 
@@ -66,6 +67,7 @@ func _learned_path() -> String:
 ## Looks for the car on the line again (after a reset).
 func lost() -> void:
 	_index = -1
+	_yaw_i = 0.0
 
 
 func drive(dt: float) -> void:
@@ -114,6 +116,12 @@ func drive(dt: float) -> void:
 	# pure pursuit: the curvature of the arc through the point, as a steering angle of the front wheels
 	var dist := Vector2(local.x, local.z).length()
 	var steer := atan(2.0 * car.wheelbase * sin(angle) / maxf(1.0, dist))
+	# the tyres need a slip angle to turn the car (a soft tyre a large one): the yaw rate that the arc asks for against
+	# the one the car has adds steering (less when the car turns too fast)
+	var curvature := 2.0 * sin(angle) / maxf(1.0, dist)
+	var yaw_error := v * curvature - car.angular_velocity.dot(xf.basis.y)
+	_yaw_i = clampf(_yaw_i + yaw_error * dt, -0.6, 0.6)
+	steer += 0.12 * yaw_error + 0.25 * _yaw_i
 	car.steer_direct = true
 	car.steer_input = clampf(steer / car.max_steer, -1.0, 1.0)
 	var err := want - v

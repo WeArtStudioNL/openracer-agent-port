@@ -76,6 +76,20 @@ of RacingLine.js); for now it drives the player's car in the tests, the first st
 (`--fixed-fps 120` runs the simulation as fast as the computer can; `--ai-pace=0.7` drives slower; the laps of
 the AI go to `user://test-records.cfg`, not to the player's records.)
 
+## Tyres, aero and assists
+
+The tyres have the kinds of Wheel.js (eco to drag slick, off-road, winter; a custom tyre has a rubber of 0 to 100
+between them, and a tread): grip, the stiffness across the tyre, the rolling resistance, what they do on loose
+ground. The pressure of car.json works on the grip (best at 2.2 bar), the stiffness and the rolling. With "Tyre
+temperature and wear" (Settings, Driving; off by default, as in the browser game) the tyres heat with the power
+of their slip and the flexing, grip less outside their window, and wear; the dashboard shows the temperature and
+what is left of each. Downforce per axle (chassis.downforce_front/rear) presses with the square of the speed.
+The torque converter of Vehicle.js (it multiplies the torque while it slips, creeps at idle, locks up at speed).
+Traction control and stability control after Vehicle.js (when the car has them: extras.tc_on, esc_on; switched
+in Settings, Driving); TC, ESC and ABS light up on the dashboard when they work.
+
+`--set=tyre_wear:3.0,tc:false` changes settings for one run (the tests).
+
 ## Racing against the AI
 
 In the menu: Mode "Race against the AI", the number of opponents (1 to 7), the laps and the start (at the back of
@@ -145,8 +159,8 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
 3. **Racing**: laps and gates from track.json, timing, records and the ghost; AI opponents on the racing
    line, grid start, a race of some laps, positions and results, the colours and the engine sound of the AI
    cars, racecraft after Opponent.js and the AI that learns where it ran off *(done)*.
-4. **The rest of the physics**: tyre heat and wear, pressure, camber, downforce, turbo, torque converter,
-   traction and stability control, launch control; damage and the soft body.
+4. **The rest of the physics**: the kinds of tyre, tyre heat and wear, pressure, downforce, torque converter,
+   traction and stability control *(done)*; camber, turbo, launch control, fuel; damage and the soft body.
 5. **Motorcycles**: the bike model of Motorcycle.js with its rider.
 6. **Garage, tuning and editors**: tuning menu, car and track editor, garage, replays.
 7. **Release**: export for the web (openracer.eu), macOS, Windows and Linux.

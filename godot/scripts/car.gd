@@ -49,6 +49,16 @@ class Wheel:
 	var s := 0.0                    # the slip in units of the peak (1: the tyre is at its limit)
 	var tyre_slope := 0.0
 	var abs_factor := 1.0
+	var kind: Dictionary = {}       # the kind of tyre (TyreCompounds)
+	var temp := 25.0                # the core of the tyre, C
+	var wear := 0.0                 # 0 new, 1 worn through
+	var condition := 1.0            # the grip of the temperature, the wear and the pressure (a factor)
+	var pressure_grip := 1.0
+	var pressure_corner := 1.0
+	var pressure_roll := 1.0
+	var stiffness_bias := 1.0       # the rear tyres are a bit stiffer against the slip angle
+	var tc := false                 # the traction control holds this wheel back
+	var esc := false                # the stability control brakes this wheel
 	var side_speed := 0.0           # m/s across the tyre
 	var comp_rate := 0.0            # m/s that the spring is pushed in (for the force feedback)
 	var squeal := 0.0               # how loud it squeals (0..1)
@@ -84,6 +94,24 @@ var drag_area := 0.7            # Cd times the frontal area
 var arb_front := 0.0            # anti-roll bars, N per m of difference in compression
 var arb_rear := 0.0
 var rolling := 0.015
+var downforce_front := 0.0      # N per (m/s)^2 at each axle
+var downforce_rear := 0.0
+var cornering := 1.0
+var understeer_gradient := 0.0008
+# assists (car.json extras: fitted; the settings: switched on)
+var tc_fitted := true
+var esc_fitted := true
+var tc_allowance := 1.0
+var esc_gain := 1.0
+var tc_factor := 1.0
+var esc_level := 0.0
+var yaw_wanted := 0.0
+# the torque converter
+var tc_stall_rpm := 2000.0
+var tc_ratio := 2.0
+var tc_lockup := true
+var tc_lock := 0.0
+var tc_slip := 0.0
 # drivetrain
 var drive := "rwd"
 var diff := "open"
@@ -126,6 +154,8 @@ var reverse_hold := 0.0
 var throttle := 0.0
 var brake := 0.0
 var model_root: Node3D
+var _esc_brake := [0.0, 0.0, 0.0, 0.0]
+var _esc_cut := 0.0
 
 
 func setup(id: String, cfg: Dictionary) -> void:
@@ -153,6 +183,18 @@ func setup(id: String, cfg: Dictionary) -> void:
 	var height := float(dims.get("height", 1.4))
 	drag_area = float(ch.get("drag_coefficient", 0.35)) * width * height * 0.82
 	rolling = float(ty.get("rolling_resistance", 0.015))
+	cornering = float(ty.get("cornering", 1.0))
+	downforce_front = float(ch.get("downforce_front", float(ch.get("downforce", 0)) * weight_front))
+	downforce_rear = float(ch.get("downforce_rear", float(ch.get("downforce", 0)) * (1.0 - weight_front)))
+	var extras: Dictionary = cfg.get("extras", {})
+	var assists: Dictionary = cfg.get("assists", {})
+	tc_fitted = extras.get("tc_on", true) != false
+	esc_fitted = extras.get("esc_on", true) != false
+	tc_allowance = float(assists.get("tc_allowance", 1.0))
+	esc_gain = float(assists.get("esc_gain", 1.0))
+	tc_stall_rpm = float(dt.get("tc_stall_rpm", 2000))
+	tc_ratio = float(dt.get("tc_ratio", 2.0))
+	tc_lockup = dt.get("tc_lockup", true) != false
 
 	drive = str(dt.get("drive", "rwd"))
 	diff = str(dt.get("diff", "open"))
@@ -207,6 +249,10 @@ func setup(id: String, cfg: Dictionary) -> void:
 		w.grip = float(ty.get("grip", 1.0)) * (1.0 if w.front else float(ty.get("grip_balance", 1.0)))
 		w.roll_centre = float(ch.get("roll_center_front" if w.front else "roll_center_rear", 0.1))
 		w.driven = drive == "awd" or (drive == "fwd" and w.front) or (drive == "rwd" and not w.front)
+		w.kind = TyreCompounds.of_axle(cfg, w.front)
+		w.stiffness_bias = 1.0 if w.front else 1.08
+		w.temp = float(w.kind.get("optimum", 85))
+		_pressure(w, float(ty.get("pressure_front" if w.front else "pressure_rear", 2.2)))
 		wheels.append(w)
 	for i in 4:
 		if not wheels[i].driven:
@@ -254,6 +300,16 @@ func setup(id: String, cfg: Dictionary) -> void:
 	col.position = Vector3(0.0, bottom + shape.size.y / 2.0, 0.0)
 	add_child(col)
 	_build_visual()
+
+
+## The pressure of a tyre (applyPressure of Vehicle.js): best around 2.2 bar; 0.8 bar off costs 8 % of the grip;
+## higher is stiffer against the slip angle; lower rolls harder and heats more.
+func _pressure(w: Wheel, p: float) -> void:
+	var off := (p - 2.2) / 0.8
+	w.pressure_grip = maxf(0.6, 1.0 - 0.08 * off * off)
+	w.pressure_corner = clampf(1.0 + 0.15 * (p - 2.2), 0.7, 1.25)
+	w.pressure_roll = sqrt(2.2 / maxf(0.15, p))
+	w.condition = w.pressure_grip
 
 
 func _diameters(cfg: Dictionary) -> Array[float]:
@@ -498,6 +554,8 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		shift_timer = maxf(0.0, shift_timer - dt)
 	_auto_shift(dt)
 
+	_stability_control(dt, av.dot(up), v.dot(basis.x))
+
 	# ---- the steering of the front wheels, with Ackermann (the inner wheel turns further)
 	var angles := [steer_angle, steer_angle, 0.0, 0.0]
 	if absf(steer_angle) > 1e-4 and ackermann > 0.0:
@@ -606,7 +664,8 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 			_tyre_force(w, w.load, surf, w.vref)
 			sum_fx[i] += w.fx
 			sum_fy[i] += w.fy
-			var rr := rolling * float(surf.get("drag", 1.0)) * w.load * w.radius
+			var loose_roll := float(w.kind.get("looseRolling", 1.0)) if surf.get("loose", false) else 1.0
+			var rr := rolling * float(w.kind.get("rolling", 1.0)) * w.pressure_roll * loose_roll * float(surf.get("drag", 1.0)) * w.load * w.radius
 			tyre_torque[i] = -w.fx * w.radius - rr * tanh(w.omega / 1.0)
 		_drivetrain(h, tyre_torque)
 	for i in 4:
@@ -620,11 +679,17 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		state.apply_force(w.fp * w.fx + w.lf * w.fy, at - origin)
 	for w in wheels:
 		_tyre_effects(w, dt)
+		_wear_step(w, dt)
+	_traction_control(dt)
 
-	# ---- the air
+	# ---- the air: the drag, and the downforce (or lift) of each axle along the up axis of the body, at the axle
 	var vv := v.length()
 	if vv > 0.1:
 		state.apply_central_force(-v * vv * 0.5 * AIR * drag_area)
+	var u2 := speed * speed
+	if u2 > 1.0 and (downforce_front != 0.0 or downforce_rear != 0.0):
+		state.apply_force(-up * downforce_front * u2, basis * Vector3(0.0, 0.0, wheels[0].hub.z))
+		state.apply_force(-up * downforce_rear * u2, basis * Vector3(0.0, 0.0, wheels[2].hub.z))
 
 
 ## Squeal, smoke and marks (web/js/Vehicle.js): the power that the slip burns heats the surface of the tread; from
@@ -661,19 +726,112 @@ func _tyre_effects(w: Wheel, dt: float) -> void:
 	w.mark = smoothstep(1.1, 2.0, w.s) * smoothstep(1.0, 4.0, slide_speed)
 
 
+## The temperature and the wear of a tyre (wearStep of Vehicle.js): the power that the slip burns and the flexing
+## under the load heat it, the air cools it; outside its window it grips less; it wears with the slip, faster when
+## it is too hot. Off (Settings "tyre_wear" 0): the tyre is at its best temperature and does not wear.
+func _wear_step(w: Wheel, dt: float) -> void:
+	var k := w.kind
+	var scale := float(Settings.get_value("tyre_wear"))
+	if scale <= 0.0:
+		w.temp = float(k.get("optimum", 85))
+		w.condition = w.pressure_grip
+		return
+	var spin := w.omega * w.radius - w.forward_speed
+	var slide_power := (absf(w.fx * spin) + absf(w.fy * w.side_speed)) if w.contact else 0.0
+	var heat_in := (slide_power + (w.load * absf(w.forward_speed) * 0.025 if w.contact else 0.0)) * float(k.get("heating", 1.0)) * w.pressure_roll
+	var size := clampf(pow(w.radius / 0.315, 3.0), 0.04, 2.5)
+	var cooling := (40.0 + 3.0 * absf(w.forward_speed)) * size * (w.temp - 25.0)
+	w.temp += (heat_in - cooling) / (20000.0 * size) * dt
+	var optimum := float(k.get("optimum", 85))
+	var window := float(k.get("window", 15))
+	var overheated := clampf((w.temp - (optimum + window)) / 30.0, 0.0, 2.0)
+	var counted := slide_power * 0.35 if absf(w.forward_speed) < 8.0 else slide_power
+	w.wear += counted * (1.0 + 2.0 * overheated) * dt / (4.8e7 * float(k.get("life", 1.0))) * scale
+	var off := maxf(0.0, absf(w.temp - optimum) - window) / float(k.get("cold", 45))
+	var by_temp := 1.0 - float(k.get("coldLoss", 0.22)) * minf(1.0, off)
+	var by_wear := 1.0 - 0.2 * pow(minf(1.0, w.wear), 1.5) - (0.15 if w.wear >= 1.0 else 0.0)
+	w.condition = by_temp * by_wear * w.pressure_grip
+
+
+## Traction control (Vehicle.js): when a driven wheel turns faster than the road under it, more than one metre per
+## second and 12 % of the speed, power is taken off, as a controller (not a switch), down to a fifth.
+func _traction_control(dt: float) -> void:
+	var max_slip := 0.0
+	for w in wheels:
+		if w.driven and w.contact:
+			max_slip = maxf(max_slip, (w.omega * w.radius - w.forward_speed) / (tc_allowance * (1.2 + 0.12 * absf(w.forward_speed))))
+	var err := max_slip - 1.0
+	if tc_fitted and Settings.get_value("tc"):
+		var rate := -(4.0 + 8.0 * err) * minf(1.0, err * 4.0) if err > 0.0 else minf(1.0, -err * 6.0) + 1.5 * clampf((-err - 0.5) / 0.4, 0.0, 1.0)
+		var floor_f := 0.2 * (1.0 - minf(1.0, (err - 0.3) / 1.2)) if err > 0.3 else 0.2
+		tc_factor = clampf(tc_factor + dt * rate, floor_f, 1.0)
+	else:
+		tc_factor = minf(1.0, tc_factor + dt * 2.0)
+	for w in wheels:
+		w.tc = w.driven and tc_factor < 0.98 and err > 0.05
+
+
+## Stability control (Vehicle.js): the yaw rate that the steering asks for against the one the car has; oversteer
+## (or the rear sliding out) brakes the outer front wheel, understeer the inner rear one, and takes power off.
+## r: the yaw rate (+ to the left), v_left: the speed to the left.
+func _stability_control(dt: float, r: float, v_left: float) -> void:
+	_esc_brake = [0.0, 0.0, 0.0, 0.0]
+	var u := speed
+	if esc_fitted and Settings.get_value("esc") and handbrake_input < 0.1 and u > 5.0 and _any_contact():
+		var steady := u * steer_angle / (wheelbase + understeer_gradient * u * u)
+		yaw_wanted += (steady - yaw_wanted) * minf(1.0, dt / 0.25)
+		var error := r - yaw_wanted
+		var amount := clampf((absf(error) - 0.1) / 0.3, 0.0, 1.0) * esc_gain
+		var magnitude := 0.0
+		var slip_angle := atan2(v_left, u)
+		var rear_out := clampf((-signf(r) * slip_angle - 0.05) / 0.12, 0.0, 1.0) * minf(1.0, absf(r) / 0.15)
+		var target := -1
+		var share := 1.0
+		if (absf(r) > absf(yaw_wanted) and r * error > 0.0) or rear_out > 0.0:
+			target = 1 if r > 0.0 else 0               # oversteer: the outer front wheel (turning left: the right one)
+			magnitude = maxf(amount, rear_out)
+		elif absf(r) < absf(yaw_wanted) and yaw_wanted * error < 0.0:
+			target = 2 if yaw_wanted > 0.0 else 3      # understeer: the inner rear wheel
+			share = 0.7
+			magnitude = amount * 0.7
+		esc_level += (magnitude - esc_level) * minf(1.0, dt / 0.04)
+		_esc_cut = esc_level
+		if target >= 0:
+			var w := wheels[target]
+			_esc_brake[target] = share * esc_level * w.max_brake * minf(1.5, esc_gain)
+	else:
+		esc_level = 0.0
+		_esc_cut = 0.0
+		yaw_wanted = 0.0
+	for i in 4:
+		wheels[i].esc = _esc_brake[i] > 30.0
+
+
+func _any_contact() -> bool:
+	for w in wheels:
+		if w.contact:
+			return true
+	return false
+
+
 ## The magic formula of Wheel.js (tyreForce): the slip along and across in units of the slip at the peak gives
 ## how far the tyre is towards its limit; the curve gives the share of the peak force, which is the friction
 ## times the load, in the direction of the slip.
 func _tyre_force(w: Wheel, load: float, surf: Dictionary, vref: float) -> void:
-	var grip := float(surf["static"]) * w.grip
+	# the grip of the surface, the tyre (its kind, its grip of car.json), its condition (temperature, wear, pressure)
+	var loose: bool = surf.get("loose", false)
+	var grip := float(surf["static"]) * w.grip * w.condition * float(w.kind.get("grip", 1.0)) * (float(w.kind.get("looseGrip", 1.0)) if loose else 1.0)
 	var mu := clampf(grip - 0.00007 * (load * 0.1 - 3500.0), 0.2 * grip, 1.4 * grip)
 	var spin_slide := w.omega * w.radius - w.forward_speed
 	var melt := smoothstep(4.0, 14.0, spin_slide)
-	var sliding_ratio := minf(0.98, float(surf["kinetic"]) / float(surf["static"])) * (1.0 - 0.45 * melt)
+	var ratio := float(surf["kinetic"]) / float(surf["static"])
+	if loose and float(w.kind.get("looseSlide", 0.0)) > ratio:
+		ratio = float(w.kind["looseSlide"])            # (a knobbly tyre that slides keeps its grip)
+	var sliding_ratio := minf(0.98, ratio) * (1.0 - 0.45 * melt)
 	var c := 2.0 - (2.0 / PI) * asin(sliding_ratio)
 	var peak := tan(PI / (2.0 * c))
 	var slip_peak := 0.14
-	var angle_peak := 0.15 / float(config.get("tyres", {}).get("cornering", 1.0))
+	var angle_peak := 0.15 / (cornering * float(w.kind.get("lateral", 1.0)) * w.stiffness_bias * w.pressure_corner)
 	var sx := w.slip_ratio / slip_peak
 	var sy := w.slip_tan / angle_peak
 	var s := sqrt(sx * sx + sy * sy)
@@ -703,7 +861,7 @@ func _drivetrain(dt: float, tyre_torque: Array) -> void:
 			w.abs_factor = maxf(0.2, w.abs_factor - dt * 12.0)
 		else:
 			w.abs_factor = minf(1.0, w.abs_factor + dt * 6.0)
-		brake_torque[i] = brake * w.max_brake * w.abs_factor
+		brake_torque[i] = brake * w.max_brake * w.abs_factor + _esc_brake[i]
 		if not w.front:
 			brake_torque[i] += handbrake_input * maxf(1800.0, w.max_brake)
 
@@ -718,7 +876,12 @@ func _drivetrain(dt: float, tyre_torque: Array) -> void:
 	var gs := _gear_total()
 
 	# the engine and the clutch, solved implicitly (web/js/Vehicle.js): stable for a clutch that is locked
-	var te := engine.net_torque(throttle if shift_timer <= shift_time * 0.5 else 0.0, dt)
+	# the throttle as the engine gets it: less by the traction and the stability control, and while the gearbox shifts
+	# (a converter keeps the drive through a shift: less is taken off)
+	var thr := throttle * tc_factor * (1.0 - 0.85 * _esc_cut)
+	if shift_timer > 0.0:
+		thr *= 0.6 if gearbox == "torque-converter" else (0.15 if shift_timer < shift_time * 0.5 else 0.0)
+	var te := engine.net_torque(thr, dt)
 	var je := engine.inertia
 	var td := 0.0
 	var tc := 0.0
@@ -748,8 +911,30 @@ func _drivetrain(dt: float, tyre_torque: Array) -> void:
 		var den := 1.0 + dt * k_cl * (1.0 / je + inv_jd)
 		tc = clampf(k_cl * base / den, -cap, cap)
 		td = tc
+		if gearbox == "torque-converter":
+			# the fluid coupling (Vehicle.js): the pump on the engine, the turbine on the gearbox; it multiplies the torque
+			# while it slips, creeps at idle, and a lock-up clutch closes it at speed
+			var we := maxf(1.0, engine.omega)
+			var sr := clampf(omega_s / we, -1.0, 2.0)
+			var stall := tc_stall_rpm * PI / 30.0
+			var ccoef := engine.peak_torque * engine.power_scale / (stall * stall)
+			var idle_w := engine.idle_rpm * PI / 30.0
+			var soft := 0.16 + 0.84 * smoothstep(idle_w * 1.05, idle_w * 1.9, we)
+			var tp := ccoef * we * we * (1.0 - sr) * soft * (0.5 if sr > 1.0 else 1.0)
+			var tr := 1.0 + (tc_ratio - 1.0) * maxf(0.0, 1.0 - maxf(0.0, sr) / 0.85)
+			var tt := tp * (tr if sr < 1.0 else 1.0)
+			var u := absf(speed)
+			var want_lock := 1.0 if tc_lockup and u > 7.0 and sr > 0.93 and sr < 1.07 and shift_timer <= 0.0 and not (throttle > 0.9 and u < 15.0) else 0.0
+			if shift_timer > 0.0 or u < 5.0:
+				want_lock = 0.0
+			tc_lock += (want_lock - tc_lock) * minf(1.0, dt / (0.3 if want_lock > 0.0 else 0.1))
+			tc = tc_lock * tc + (1.0 - tc_lock) * tp
+			td = tc_lock * td + (1.0 - tc_lock) * tt
+			tc_slip = sr
+			clutch_engagement = tc_lock
 	else:
 		clutch_engagement = 0.0
+		tc_lock = 0.0
 	engine.omega = clampf(engine.omega + dt * (te - tc) / je, 0.0, engine.limiter_rpm * 1.08 * PI / 30.0)
 	var drive_total := td * gs * efficiency
 	var wheel_drive := [0.0, 0.0, 0.0, 0.0]

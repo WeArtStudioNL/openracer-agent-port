@@ -7,6 +7,8 @@ var laps: LapTimer
 var race: Race
 var _lights: Label
 var _race: Label
+var _assists: Label
+var _tyres: Label
 var _delta: Label
 var _speed: Label
 var _gear: Label
@@ -51,6 +53,15 @@ func _ready() -> void:
 	_rpm_text = _label(16)
 	_rpm_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	box.add_child(_rpm_text)
+	_assists = _label(18)
+	_assists.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	box.add_child(_assists)
+	box.move_child(_assists, 0)
+	_tyres = _label(15)
+	_tyres.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	box.add_child(_tyres)
+	box.move_child(_tyres, 0)
+	box.offset_top = -250
 
 	_info = _label(16)
 	_info.position = Vector2(20, 14)
@@ -126,6 +137,32 @@ func toast(text: String) -> void:
 	_toast_time = 3.0
 
 
+## TC, ESC and ABS when they work; the temperature (C) and what is left of every tyre when tyre wear is on.
+func _assist_lights() -> void:
+	var tc := false
+	var esc := false
+	var abs_active := false
+	for w in car.wheels:
+		tc = tc or w.tc
+		esc = esc or w.esc
+		abs_active = abs_active or w.abs_factor < 0.95
+	var parts := PackedStringArray()
+	if tc:
+		parts.append("TC")
+	if esc:
+		parts.append("ESC")
+	if abs_active:
+		parts.append("ABS")
+	_assists.text = "  ".join(parts)
+	_assists.add_theme_color_override("font_color", Color(1, 0.75, 0.2))
+	if float(Settings.get_value("tyre_wear")) > 0.0:
+		var t := car.wheels
+		_tyres.text = "%d° %d%%   %d° %d%%\n%d° %d%%   %d° %d%%" % [roundi(t[0].temp), roundi((1.0 - t[0].wear) * 100), roundi(t[1].temp), roundi((1.0 - t[1].wear) * 100),
+			roundi(t[2].temp), roundi((1.0 - t[2].wear) * 100), roundi(t[3].temp), roundi((1.0 - t[3].wear) * 100)]
+	else:
+		_tyres.text = ""
+
+
 func _race_panel() -> void:
 	if race != null:
 		var t := race.countdown_text()
@@ -140,7 +177,7 @@ func _race_panel() -> void:
 		_delta.text = ""
 		return
 	if laps == null or not laps.has_laps():
-		_race.text = "Free driving (this track has no finish line)" if laps != null else ""
+		_race.text = "Free driving: no finish line" if laps != null else ""
 		_delta.text = ""
 		return
 	var lines := PackedStringArray()
@@ -169,6 +206,7 @@ func _process(delta: float) -> void:
 		return
 	_speed.text = "%d" % roundi(absf(car.speed) * 3.6)
 	_race_panel()
+	_assist_lights()
 	_gear.text = car.gear_name()
 	var rpm := car.engine.rpm()
 	_rpm.max_value = car.engine.limiter_rpm

@@ -11,6 +11,9 @@ const DEFAULTS := {
 	"volume": 0.8,                # the engine
 	"tyre_volume": 0.8,
 	"abs": true,
+	"tc": true,                   # traction control (when the car has it)
+	"esc": true,                  # stability control (when the car has it)
+	"tyre_wear": 0.0,             # tyre temperature and wear: 0 off (the tyres at their best), else how fast they wear
 	"auto_reverse": true,         # holding the brake at a standstill puts the car in reverse
 	"key_steer_speed": 1.0,       # how fast the keys turn the wheels (a factor)
 	"key_steer_at_speed": 1.0,    # how much less the keys steer at speed (a factor: 0 none, 1 as the browser game)
@@ -31,6 +34,7 @@ const DEFAULTS := {
 var _values := {}
 var _profiles := {}                # guid -> the profile of a calibrated wheel
 var _config := ConfigFile.new()
+var _overrides := {}               # (the tests: --set=key:value,key:value, for this run only, not saved)
 
 
 func _ready() -> void:
@@ -40,9 +44,17 @@ func _ready() -> void:
 			if _config.has_section_key("settings", key):
 				_values[key] = _config.get_value("settings", key)
 		_profiles = _config.get_value("wheels", "profiles", {})
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--set="):
+			for pair in a.substr(6).split(","):
+				var kv := pair.split(":")
+				if kv.size() == 2 and DEFAULTS.has(kv[0]):
+					_overrides[kv[0]] = str_to_var(kv[1])
 
 
 func get_value(key: String) -> Variant:
+	if _overrides.has(key):
+		return _overrides[key]
 	return _values.get(key, DEFAULTS.get(key))
 
 
