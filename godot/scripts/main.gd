@@ -127,18 +127,18 @@ func _build_menu() -> void:
 	replays.text = "Replays…"
 	replays.pressed.connect(_open_replays)
 	box.add_child(replays)
-	var editor := Button.new()
-	editor.text = "Track editor"
-	editor.pressed.connect(_open_track_editor)
-	box.add_child(editor)
+	var track_editor := Button.new()
+	track_editor.text = "Track editor"
+	track_editor.pressed.connect(_open_track_editor)
+	box.add_child(track_editor)
 	var garage := Button.new()
 	garage.text = "Import a car or track (zip)…"
 	garage.pressed.connect(_import_zip)
 	box.add_child(garage)
-	var editor := Button.new()
-	editor.text = "Car editor"
-	editor.pressed.connect(_open_car_editor)
-	box.add_child(editor)
+	var car_editor := Button.new()
+	car_editor.text = "Car editor"
+	car_editor.pressed.connect(_open_car_editor)
+	box.add_child(car_editor)
 	var settings := Button.new()
 	settings.text = "Settings"
 	settings.pressed.connect(_open_settings)
