@@ -109,6 +109,7 @@ var throttle_input := 0.0
 var brake_input := 0.0
 var handbrake_input := 0.0
 var autopilot := false          # (the --drive test: full throttle, straight on)
+var is_ghost := false           # the see-through car of the best lap (LapTimer): no physics, placed from a recording
 var steer_direct := false       # a racing wheel: steer_input is the position of the wheel, as a part of the lock
 var abs_on := true
 var manual := false
@@ -363,6 +364,21 @@ func place(pos: Vector3, heading: float) -> void:
 	shift_timer = 0.0
 
 
+## The car as a ghost: it is not simulated and touches nothing; it is seen through.
+func make_ghost() -> void:
+	is_ghost = true
+	name = "Ghost"
+	freeze = true
+	collision_layer = 0
+	collision_mask = 0
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	set_physics_process(false)
+	for m in find_children("*", "MeshInstance3D", true, false):
+		var mi := m as MeshInstance3D
+		mi.transparency = 0.6
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
 func heading() -> float:
 	var f := global_transform.basis.z
 	return atan2(f.z, f.x)
@@ -459,6 +475,8 @@ func _driven_omega() -> float:
 
 
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
+	if is_ghost:
+		return
 	var dt := state.step
 	var xf := state.transform
 	var basis := xf.basis

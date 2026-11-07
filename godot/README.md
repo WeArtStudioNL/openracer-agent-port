@@ -58,6 +58,24 @@ pushes it both ways), `tools/list_pads.gd`, `tools/watch_pad.gd`.
 
 Building the native part needs the headers of SDL3 (`brew install sdl3`); the game does not load that library.
 
+## Laps, records and the ghost
+
+A track with gates (track.json "gates": the first is the finish) counts laps: crossing the finish starts the
+timing, and a lap counts when every gate was crossed in its direction (after a reset in the lap it counts, but
+it is no record). The dashboard shows the lap, the last and the best time, and at every gate how far ahead or
+behind the best lap you are. The best lap per track and car is kept in `user://records.cfg`, its recording in
+`user://ghosts/`, and a see-through car drives it again in the next laps.
+
+R puts the car back on the racing line where it is nearest, facing along it.
+
+The AI (`scripts/ai_driver.gd`) drives along the racing line (`scripts/racing_line.gd`, with the speed profile
+of RacingLine.js); for now it drives the player's car in the tests, the first step to opponents:
+
+    Godot --headless --fixed-fps 120 --path godot -- --car=openracer-kart --track=kartbaan-oldenzaal --ai --quit-after=200
+
+(`--fixed-fps 120` runs the simulation as fast as the computer can; `--ai-pace=0.7` drives slower; the laps of
+the AI go to `user://test-records.cfg`, not to the player's records.)
+
 ## Controls
 
 Arrows or WASD drive, Space is the handbrake, Q/E shift (the first shift switches to a manual gearbox),
@@ -105,7 +123,9 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
    clutch, gearbox, differentials, ABS, chase/cockpit/bonnet camera, speed and rpm. *Done.*
 2. **Feel and sound**: the engine sound (EngineSim), tyre squeal, skid marks and smoke *(done)*; settings for
    the steering and the controls, racing wheels and force feedback *(done)*.
-3. **Racing**: laps and gates from track.json, timing, ghosts, AI opponents on the racing line, grid start.
+3. **Racing**: laps and gates from track.json, timing, records and the ghost *(done)*; AI opponents on the
+   racing line, grid start, a race of some laps.
+   Later in the settings: setting the keys and the buttons of a gamepad.
 4. **The rest of the physics**: tyre heat and wear, pressure, camber, downforce, turbo, torque converter,
    traction and stability control, launch control; damage and the soft body.
 5. **Motorcycles**: the bike model of Motorcycle.js with its rider.

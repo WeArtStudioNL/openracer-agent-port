@@ -13,6 +13,7 @@ var path := ""
 var folder := ""
 var _file: FileAccess
 var _start_ms := 0
+var _time := 0.0                    # s of game time (the sum of the frames: with --fixed-fps faster than the clock)
 var _marks := 0
 var _next_telemetry := 0.0
 
@@ -59,7 +60,7 @@ func _header() -> void:
 func line(text: String) -> void:
 	if _file == null:
 		return
-	_file.store_line("%9.3f  %s" % [(Time.get_ticks_msec() - _start_ms) / 1000.0, text])
+	_file.store_line("%9.3f  %s" % [_time, text])
 	_file.flush()
 
 
@@ -86,10 +87,14 @@ func mark() -> void:
 		on_mark.call("Marked %d (F8): written to the log" % _marks)
 
 
+func _process(delta: float) -> void:
+	_time += delta
+
+
 func _physics_process(_delta: float) -> void:
 	if car == null or not is_instance_valid(car) or car.freeze:
 		return
-	var t := (Time.get_ticks_msec() - _start_ms) / 1000.0
+	var t := _time
 	if t >= _next_telemetry:
 		_next_telemetry = t + TELEMETRY_EVERY
 		_telemetry()

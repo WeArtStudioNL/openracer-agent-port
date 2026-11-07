@@ -3,6 +3,9 @@ extends CanvasLayer
 ## The prototype's dashboard: speed, gear and rev counter, and with F3 the state of each wheel.
 
 var car: Car
+var laps: LapTimer
+var _race: Label
+var _delta: Label
 var _speed: Label
 var _gear: Label
 var _rpm: ProgressBar
@@ -64,6 +67,19 @@ func _ready() -> void:
 	_toast.offset_top = 90
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_toast)
+	var race_box := VBoxContainer.new()
+	race_box.anchor_left = 1.0
+	race_box.anchor_right = 1.0
+	race_box.offset_left = -360
+	race_box.offset_right = -30
+	race_box.offset_top = 16
+	add_child(race_box)
+	_race = _label(22)
+	_race.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	race_box.add_child(_race)
+	_delta = _label(30)
+	_delta.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	race_box.add_child(_delta)
 	_calibration = _label(24)
 	_calibration.anchor_left = 0.5
 	_calibration.anchor_right = 0.5
@@ -100,6 +116,26 @@ func toast(text: String) -> void:
 	_toast_time = 3.0
 
 
+func _race_panel() -> void:
+	if laps == null or not laps.has_laps():
+		_race.text = "Free driving (this track has no finish line)" if laps != null else ""
+		_delta.text = ""
+		return
+	var lines := PackedStringArray()
+	if laps.lap_started:
+		lines.append("Lap %d   %s%s" % [laps.laps_done + 1, LapTimer.format_time(laps.lap_time()), "  (reset)" if laps.lap_invalid else ""])
+	else:
+		lines.append("Cross the finish line to start")
+	lines.append("Last  %s" % LapTimer.format_time(laps.last_lap))
+	lines.append("Best  %s" % LapTimer.format_time(laps.best_lap))
+	_race.text = "\n".join(lines)
+	if laps.clock - laps.delta_time < 4.0:
+		_delta.text = "%+.2f" % laps.delta
+		_delta.add_theme_color_override("font_color", Color(0.4, 1, 0.45) if laps.delta < 0.0 else Color(1, 0.45, 0.4))
+	else:
+		_delta.text = ""
+
+
 func toggle_debug() -> void:
 	_debug.visible = not _debug.visible
 
@@ -110,6 +146,7 @@ func _process(delta: float) -> void:
 	if car == null:
 		return
 	_speed.text = "%d" % roundi(absf(car.speed) * 3.6)
+	_race_panel()
 	_gear.text = car.gear_name()
 	var rpm := car.engine.rpm()
 	_rpm.max_value = car.engine.limiter_rpm

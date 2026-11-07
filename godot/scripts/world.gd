@@ -10,6 +10,9 @@ var camera: ChaseCamera
 var hud: Hud
 var audio: CarAudio
 var effects: TyreEffects
+var laps: LapTimer
+var line: RacingLine
+var ai: AIDriver = null
 var pause_layer: CanvasLayer
 var _pause_box: Control
 var _shot_path := ""
@@ -18,6 +21,8 @@ var _log_every := 0.0
 var _time := 0.0
 var _next_log := 0.0
 var _last_velocity := Vector3.ZERO
+var _stuck := 0.0
+var _going := false
 
 
 func setup(car_id: String, track_id: String) -> void:
@@ -46,6 +51,16 @@ func setup(car_id: String, track_id: String) -> void:
 	effects = TyreEffects.new()
 	effects.setup(car)
 	add_child(effects)
+	laps = LapTimer.new()
+	laps.setup(car, track)
+	laps.message.connect(hud.toast)
+	add_child(laps)
+	hud.laps = laps
+	line = RacingLine.from_track(track.config)
+	# (a test: the AI drives the player's car along the racing line)
+	if Content.arg("ai") != "" and line != null:
+		ai = AIDriver.new()
+		ai.setup(car, line)
 	# the tests and the screenshots of the command line: --drive (full throttle), --shot=file.png --shot-at=seconds, --log=seconds
 	car.autopilot = Content.arg("drive") != ""
 	_shot_path = Content.arg("shot")
@@ -93,17 +108,32 @@ func to_start() -> void:
 	var y := track.ground_at(x, z)
 	car.place(Vector3(x, y + car.wheels[0].radius + 0.15, z), float(s.get("heading", 0)))
 	effects.clear()
+	if laps:
+		laps.restart()
+	if ai != null:
+		ai.lost()
 	if camera.car != null:
 		camera.snap()
 
 
-## Puts the car back on its wheels where it is, facing the way it faced.
+## Puts the car back on its wheels: on the racing line where it is nearest, facing along it (a track without a
+## line: where it is, facing the way it faced).
 func recover() -> void:
 	RunLog.event("reset (R)")
+	laps.invalidate()
 	var p := car.global_position
+	var h := car.heading()
+	if line != null:
+		var i := line.nearest_facing(p, car.global_transform.basis.z)
+		var a := line.point(i)
+		var b := line.point(i + 2)
+		p = a
+		h = atan2(b.z - a.z, b.x - a.x)
 	var y := track.ground_at(p.x, p.z)
-	car.place(Vector3(p.x, y + car.wheels[0].radius + 0.4, p.z), car.heading())
+	car.place(Vector3(p.x, y + car.wheels[0].radius + 0.4, p.z), h)
 	camera.snap()
+	if ai != null:
+		ai.lost()
 
 
 func _physics_process(_delta: float) -> void:
@@ -115,6 +145,20 @@ func _physics_process(_delta: float) -> void:
 			ForceFeedback.knock(dv)
 		_last_velocity = car.linear_velocity
 	if car.autopilot:
+		return
+	if ai != null:
+		if car.freeze:
+			return
+		ai.drive(get_physics_process_delta_time())
+		# stuck (against a wall, on its side): back on the line
+		# (only once it was going: a car at the start is not stuck)
+		if absf(car.speed) > 5.0:
+			_going = true
+		_stuck = _stuck + get_physics_process_delta_time() if absf(car.speed) < 1.0 else 0.0
+		if _stuck > (4.0 if _going else 8.0):
+			_going = false
+			_stuck = 0.0
+			recover()
 		return
 	var keys_steer := Input.get_axis("steer_right", "steer_left")
 	car.throttle_input = Input.get_action_strength("throttle")
