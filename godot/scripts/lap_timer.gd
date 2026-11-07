@@ -25,6 +25,8 @@ var lap_invalid := false            # a reset in the lap: no record
 var laps_done := 0
 var last_lap := -1.0
 var best_lap := -1.0
+var lap_times: Array[float] = []    # every lap of this drive (the HUD shows the last three)
+var new_record := false             # the best lap of this drive is a record
 var best_splits := PackedFloat32Array()
 var splits := PackedFloat32Array()  # the time of every gate in this lap (-1: not yet)
 var delta := 0.0                    # against the best lap at the last gate
@@ -151,6 +153,7 @@ func _gate(g: int) -> void:
 		else:
 			var t := lap_time()
 			last_lap = t
+			lap_times.append(t)
 			laps_done += 1
 			var record := not lap_invalid and (best_lap < 0.0 or t < best_lap)
 			RunLog.event("lap %d: %s%s%s" % [laps_done, format_time(t), "  RECORD" if record else "", "  (reset in the lap)" if lap_invalid else ""])
@@ -158,6 +161,7 @@ func _gate(g: int) -> void:
 				delta = t - best_lap
 				delta_time = clock
 			if record:
+				new_record = true
 				best_lap = t
 				splits[0] = t
 				best_splits = splits.duplicate()
