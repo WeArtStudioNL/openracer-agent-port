@@ -20,6 +20,10 @@ var options := {}
 var base_config := {}
 var pause_layer: CanvasLayer
 var tuning_layer: CanvasLayer = null
+var parking_brake := false          # the parking brake (P): on until it is pressed again
+var touch: Node = null              # the controls of a touch screen (TouchControls), when there is one
+var debug_view: Node = null         # what the physics sees (DebugView, the key 0)
+var telemetry: Node = null          # the values of the car (Telemetry, V)
 var _pause_box: Control
 var _results: CanvasLayer
 var _shot_path := ""
@@ -31,6 +35,8 @@ var _last_velocity := Vector3.ZERO
 var _stuck := 0.0
 var _going := false
 var _tuning_paused := false
+var _saved_place := {}              # the place for the reset on a track without a racing line (the key 4)
+var _key_held := {"throttle": 0.0, "brake": 0.0}   # s that the key of a pedal is held (the easing of the keys)
 
 
 ## options: mode ("practice" or "race"), opponents, laps, pole (the player starts in front).
@@ -64,7 +70,9 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	add_child(camera)
 	hud = Hud.new()
 	hud.car = car
+	hud.world = self
 	add_child(hud)
+	_add_extras()
 	audio = CarAudio.new()
 	audio.setup(car)
 	add_child(audio)
@@ -119,6 +127,22 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	_shot_path = Content.arg("shot")
 	_shot_at = float(Content.arg("shot-at")) if Content.arg("shot-at") != "" else 3.0
 	_log_every = float(Content.arg("log")) if Content.arg("log") != "" else 0.0
+
+
+## The parts of the browser game that are scripts of their own (made when they are there): the touch controls, the
+## debug view (0) and the telemetry (V).
+func _add_extras() -> void:
+	for spec in [["res://scripts/touch_controls.gd", "touch"], ["res://scripts/debug_view.gd", "debug_view"],
+			["res://scripts/telemetry.gd", "telemetry"]]:
+		if not ResourceLoader.exists(spec[0]):
+			continue
+		var script: Script = load(spec[0])
+		if spec[1] == "touch" and not script.call("wanted"):
+			continue
+		var n: Node = script.new()
+		n.call("setup", self)
+		add_child(n)
+		set(spec[1], n)
 
 
 func _shot() -> void:
@@ -189,7 +213,10 @@ func recover() -> void:
 func put_on_line(c: Car) -> void:
 	var p := c.global_position
 	var h := c.heading()
-	if line != null:
+	if line == null and c == car and not _saved_place.is_empty():
+		p = _saved_place["p"]
+		h = _saved_place["h"]
+	elif line != null:
 		var i := line.nearest_facing(p, c.global_transform.basis.z)
 		var a := line.point(i)
 		var b := line.point(i + 2)
@@ -300,10 +327,17 @@ func _physics_process(_delta: float) -> void:
 			recover()
 		return
 	var keys_steer := Input.get_axis("steer_right", "steer_left")
-	car.throttle_input = Input.get_action_strength("throttle")
-	car.brake_input = Input.get_action_strength("brake")
-	car.handbrake_input = Input.get_action_strength("handbrake")
-	car.two_step_input = Input.is_action_pressed("two_step")
+	var dt := get_physics_process_delta_time()
+	car.throttle_input = _pedal("throttle", dt)
+	car.brake_input = _pedal("brake", dt)
+	car.handbrake_input = 1.0 if parking_brake else Input.get_action_strength("handbrake")
+	if touch != null and bool(touch.get("engaged")):
+		keys_steer = float(touch.get("steer"))
+		car.throttle_input = maxf(car.throttle_input, float(touch.get("throttle")))
+		car.brake_input = maxf(car.brake_input, float(touch.get("brake")))
+	# (the two-step option: at a standstill the engine is held at the two-step speed without the key, Settings.js twoStep)
+	car.two_step_input = Input.is_action_pressed("two_step") or (bool(Settings.get_value("two_step")) and absf(car.speed) < 1.0)
+	car.pedal_input = not Controls.key_held("brake") and car.brake_input > 0.0
 	car.transbrake_input = Input.is_action_pressed("transbrake")
 	var stop := 0.0
 	var wheel_on: bool = WheelInput.active and not WheelInput.calibrating
@@ -324,6 +358,19 @@ func _physics_process(_delta: float) -> void:
 		car.steer_input = keys_steer
 	if wheel_on:
 		ForceFeedback.update(car, get_physics_process_delta_time(), stop)
+
+
+## A pedal from its action: a key comes up over the time and the curve of the Keyboard settings (Settings.js
+## keyThrottleTime, keyThrottleCurve), a trigger of a gamepad as it is.
+func _pedal(action: String, dt: float) -> float:
+	var analog := Input.get_action_strength(action)
+	if not Controls.key_held(action):
+		_key_held[action] = 0.0
+		return analog
+	_key_held[action] += dt
+	var time := maxf(0.02, float(Settings.get_value("key_%s_time" % action)))
+	var curve := float(Settings.get_value("key_%s_curve" % action))
+	return maxf(analog if analog < 0.99 else 0.0, pow(minf(1.0, _key_held[action] / time), curve))
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -355,7 +402,108 @@ func _unhandled_input(event: InputEvent) -> void:
 		car.shift(false)
 		RunLog.event("shift down -> %s" % car.gear_name())
 	elif event.is_action_pressed("debug"):
-		hud.toggle_debug()
+		Settings.set_value("debug", not Settings.get_value("debug"))
+	else:
+		_more_actions(event)
+
+
+## The other actions of the browser game (Settings.js handlers).
+func _more_actions(event: InputEvent) -> void:
+	for g in 8:
+		if event.is_action_pressed("gear%d" % (g + 1)):
+			_select_gear(g + 1)
+		elif event.is_action_released("gear%d" % (g + 1)) and car.gear == g + 1:
+			_select_gear(0)
+	if event.is_action_pressed("reverse_gear") or event.is_action_pressed("reverse"):
+		_select_gear(-1)
+	elif event.is_action_released("reverse_gear"):
+		_select_gear(0)
+	elif event.is_action_released("reverse") and car.gear < 0:
+		car.gear = 1
+	elif event.is_action_pressed("parking_brake"):
+		parking_brake = not parking_brake
+		hud.notice("Parking brake %s" % ("on" if parking_brake else "off"))
+	elif event.is_action_pressed("toggle_tc"):
+		_aid("tc", "Traction control", "toggle_tc")
+	elif event.is_action_pressed("toggle_abs"):
+		_aid("abs", "ABS", "toggle_abs")
+	elif event.is_action_pressed("toggle_esc"):
+		_aid("esc", "Stability control (ESC)", "toggle_esc")
+	elif event.is_action_pressed("toggle_launch"):
+		_aid("launch_control", "Launch control", "toggle_launch")
+	elif event.is_action_pressed("toggle_two_step"):
+		_aid("two_step", "Two-step", "toggle_two_step")
+	elif event.is_action_pressed("mute"):
+		_aid("sound", "Engine sound", "mute")
+	elif event.is_action_pressed("hud_toggle"):
+		Settings.set_value("hud", not Settings.get_value("hud"))
+	elif event.is_action_pressed("camera_left") or event.is_action_pressed("camera_right"):
+		camera.orbit = wrapf(camera.orbit + (0.35 if event.is_action_pressed("camera_left") else -0.35), -PI, PI)
+	elif event.is_action_pressed("camera_reset"):
+		camera.orbit = 0.0
+	elif event.is_action_pressed("start_engine"):
+		car.engine.start()
+	elif event.is_action_pressed("repair"):
+		repair_here()
+	elif event.is_action_pressed("save_reset_position"):
+		_saved_place = {"p": car.global_position, "h": car.heading()}
+		hud.notice("Place saved for the reset")
+	elif event.is_action_pressed("photo"):
+		photo()
+	elif event.is_action_pressed("wheel_toggle"):
+		WheelInput.active = not WheelInput.active and not Settings.profile(WheelInput.guid).is_empty()
+		Controls.rebind(WheelInput.device if WheelInput.active else -1)
+		hud.notice("Wheel %s" % ("on" if WheelInput.active else "off"))
+	elif event.is_action_pressed("ragdoll") or event.is_action_pressed("rider_back") or event.is_action_pressed("rider_forward"):
+		if car.bike != null:
+			hud.notice("Not in the Godot version yet")
+
+
+## A driver aid on or off by its key, with a short line in the middle of the screen (Settings.js aid).
+func _aid(key: String, text: String, action: String) -> void:
+	Settings.set_value(key, not Settings.get_value(key))
+	var k := Controls.key_name(action)
+	hud.notice("%s %s%s" % [text, "on" if Settings.get_value(key) else "off", " (%s)" % k if k != "" else ""])
+
+
+## A gear of the H-shifter (0: neutral, -1: reverse): the gearbox is manual from then on.
+func _select_gear(g: int) -> void:
+	if car.bike != null and g < 0:
+		return
+	car.manual = true
+	car.gear = clampi(g, -1, car.gear_ratios.size())
+	car.shift_timer = car.shift_time
+	RunLog.event("H-shifter -> %s" % car.gear_name())
+
+
+## Repaired and on its wheels where it is (Settings.js repairCar); in a race the lap is no record.
+func repair_here() -> void:
+	RunLog.event("repair where it is")
+	var p := car.global_position
+	car.place(Vector3(p.x, track.ground_at(p.x, p.z) + car.wheels[0].radius + 0.3, p.z), car.heading())
+	car.repair()
+	laps.invalidate()
+	camera.snap()
+
+
+## A photo of the game without the HUD (F2), in the pictures folder of the computer.
+func photo() -> void:
+	var layers := find_children("*", "CanvasLayer", true, false)
+	var shown := []
+	for l: CanvasLayer in layers:
+		if l.visible:
+			shown.append(l)
+			l.visible = false
+	await RenderingServer.frame_post_draw
+	var img := get_viewport().get_texture().get_image()
+	for l: CanvasLayer in shown:
+		l.visible = true
+	var dir := OS.get_system_dir(OS.SYSTEM_DIR_PICTURES).path_join("O-Racer")
+	DirAccess.make_dir_recursive_absolute(dir)
+	var file := dir.path_join("openracer-%s.png" % Time.get_datetime_string_from_system().replace(":", "-"))
+	img.save_png(file)
+	hud.notice("Photo saved: %s" % file)
+	RunLog.event("photo %s" % file)
 
 
 ## The pause menu: the game stops, the wheel is let go.

@@ -12,43 +12,91 @@ extends Node
 
 signal changed
 
-## The actions in the order of the menu, with their names.
+## The actions in the order of the menu (the groups of web/js/Settings.js), with their names. An action with "wheel" is
+## set up by the calibration of the racing wheel (WheelInput), not by a binding.
 const ACTIONS := [
-	["throttle", "Throttle"], ["brake", "Brake"], ["steer_left", "Steer left"], ["steer_right", "Steer right"],
-	["handbrake", "Handbrake"],
-	["two_step", "Two-step (hold)"], ["transbrake", "Transbrake (hold, let go to launch)"],
-	["shift_up", "Shift up"], ["shift_down", "Shift down"], ["camera", "Camera"],
-	["reset", "Back on the wheels (reset)"], ["restart", "Back to the start"], ["menu", "Pause"],
-	["tuning", "Tuning menu"], ["calibrate", "Calibrate the wheel"], ["mark", "Mark in the log"], ["debug", "Tyre data"],
+	["throttle", "Throttle", "Driving"], ["brake", "Brake", "Driving"],
+	["steer_left", "Steer left", "Driving"], ["steer_right", "Steer right", "Driving"],
+	["steer_wheel", "Steering wheel", "Driving", "wheel"], ["clutch", "Clutch", "Driving", "wheel"],
+	["handbrake", "Handbrake", "Driving"],
+	["parking_brake", "Parking brake on/off (it stays on until you press it again)", "Driving"],
+	["reverse", "Reverse (hold)", "Driving"],
+	["rider_back", "Motorcycle: rider back (hold)", "Driving"], ["rider_forward", "Motorcycle: rider forward (hold)", "Driving"],
+	["ragdoll", "Motorcycle: the rider goes limp (a crash, to try it)", "Driving"],
+	["two_step", "Two-step: hold the engine at the two-step speed at a standstill (hold)", "Driving"],
+	["transbrake", "Transbrake: hold the car with the engine free, let go to launch (hold)", "Driving"],
+	["shift_up", "Shift up", "Gearbox"], ["shift_down", "Shift down", "Gearbox"],
+	["gear1", "H-shifter: gear 1", "Gearbox"], ["gear2", "H-shifter: gear 2", "Gearbox"], ["gear3", "H-shifter: gear 3", "Gearbox"],
+	["gear4", "H-shifter: gear 4", "Gearbox"], ["gear5", "H-shifter: gear 5", "Gearbox"], ["gear6", "H-shifter: gear 6", "Gearbox"],
+	["gear7", "H-shifter: gear 7", "Gearbox"], ["gear8", "H-shifter: gear 8", "Gearbox"], ["reverse_gear", "H-shifter: reverse", "Gearbox"],
+	["reset", "Reset the car to the nearest point of the racing line, nose forward (a track without one: the saved place), as it is", "Other"],
+	["save_reset_position", "Save the place of the car for the reset (a track without a racing line)", "Other"],
+	["repair", "Repair the car and put it on its wheels where it is (in a race: the lap is no record)", "Other"],
+	["restart", "Back to the start (repaired)", "Other"],
+	["camera_left", "Camera left", "Other"], ["camera_right", "Camera right", "Other"], ["camera_reset", "Camera behind the car", "Other"],
+	["hud_toggle", "HUD on/off", "Other"], ["debug", "Debug text on/off", "Other"],
+	["photo", "Photo: save the picture of the game as a PNG (no HUD)", "Other"],
+	["camera", "Switch camera (follow, cockpit, bonnet)", "Other"],
+	["toggle_esc", "ESC (stability control) on/off", "Other"], ["tuning", "Tuning menu on/off", "Other"],
+	["toggle_tc", "Traction control on/off", "Other"], ["toggle_two_step", "Two-step on/off", "Other"],
+	["toggle_launch", "Launch control on/off", "Other"], ["toggle_abs", "ABS on/off", "Other"],
+	["start_engine", "Start the engine", "Other"], ["telemetry", "Telemetry", "Other"], ["mute", "Engine sound on/off", "Other"],
+	["calibrate", "Calibrate the wheel", "Other"], ["wheel_toggle", "Wheel on/off", "Other"],
+	["debug_view", "Debug view: what the physics sees", "Other"], ["debug_models", "Debug view: hide the car", "Other"],
+	["menu", "Pause", "Other"], ["mark", "Mark in the log", "Other"],
 ]
 
+## The keys of the browser game (Settings.js), and Esc for the pause, F8 for a mark in the log, Home back to the start.
 const KEYS := {
-	"throttle": [KEY_UP, KEY_W],
-	"brake": [KEY_DOWN, KEY_S],
-	"steer_left": [KEY_LEFT, KEY_A],
-	"steer_right": [KEY_RIGHT, KEY_D],
+	"throttle": [KEY_W, KEY_UP],
+	"brake": [KEY_S, KEY_DOWN],
+	"steer_left": [KEY_A, KEY_LEFT],
+	"steer_right": [KEY_D, KEY_RIGHT],
 	"handbrake": [KEY_SPACE],
-	"two_step": [KEY_X],
+	"parking_brake": [KEY_P],
+	"reverse": [KEY_PERIOD],
+	"rider_back": [KEY_COMMA],
+	"rider_forward": [KEY_PERIOD],
+	"ragdoll": [KEY_9],
+	"two_step": [KEY_Q],
 	"transbrake": [KEY_F],
-	"shift_up": [KEY_E],
-	"shift_down": [KEY_Q],
-	"camera": [KEY_C],
+	"shift_up": [KEY_X],
+	"shift_down": [KEY_Z],
 	"reset": [KEY_R],
-	"restart": [KEY_BACKSPACE],
-	"menu": [KEY_ESCAPE],
-	"tuning": [KEY_U],
-	"calibrate": [KEY_K],
-	"mark": [KEY_F8],
+	"save_reset_position": [KEY_4],
+	"repair": [KEY_BACKSPACE],
+	"restart": [KEY_HOME],
+	"camera_left": [KEY_BRACKETLEFT],
+	"camera_right": [KEY_BRACKETRIGHT],
+	"camera_reset": [KEY_QUOTELEFT],
+	"hud_toggle": [KEY_H],
 	"debug": [KEY_F3],
+	"photo": [KEY_F2],
+	"camera": [KEY_T],
+	"toggle_esc": [KEY_N],
+	"tuning": [KEY_U],
+	"toggle_tc": [KEY_C],
+	"toggle_two_step": [KEY_Y],
+	"toggle_launch": [KEY_J],
+	"toggle_abs": [KEY_B],
+	"start_engine": [KEY_I],
+	"telemetry": [KEY_V],
+	"mute": [KEY_E],
+	"calibrate": [KEY_K],
+	"wheel_toggle": [KEY_M],
+	"debug_view": [KEY_0, KEY_KP_0],
+	"debug_models": [KEY_MINUS, KEY_KP_SUBTRACT],
+	"menu": [KEY_ESCAPE],
+	"mark": [KEY_F8],
 }
 
 const PAD_BUTTONS := {
 	"handbrake": [JOY_BUTTON_A],
 	"shift_up": [JOY_BUTTON_RIGHT_SHOULDER],
 	"shift_down": [JOY_BUTTON_LEFT_SHOULDER],
-	"camera": [JOY_BUTTON_Y],
-	"reset": [JOY_BUTTON_X],
-	"restart": [JOY_BUTTON_BACK],
+	"camera": [JOY_BUTTON_X],
+	"reset": [JOY_BUTTON_Y],
+	"repair": [JOY_BUTTON_BACK],
 	"menu": [JOY_BUTTON_START],
 }
 
@@ -85,10 +133,24 @@ func _ready() -> void:
 		InputMap.action_set_deadzone(action, 0.05)
 	_bindings = defaults()
 	var saved: Variant = Settings.get_value("controls")
-	if saved is Dictionary:
+	if saved is Dictionary and not saved.is_empty():
 		for action in saved:
 			if _bindings.has(action):
 				_bindings[action] = saved[action]
+		# an action that came later (the player saved before it was there) gets its defaults, but not an input that a
+		# saved action has (the player put the camera on T: T stays the camera's)
+		for a in ACTIONS:
+			if saved.has(a[0]):
+				continue
+			var kept := []
+			for b: Dictionary in _bindings[a[0]]:
+				var taken := false
+				for other in saved:
+					for o: Dictionary in saved[other]:
+						taken = taken or _same(o, b)
+				if not taken:
+					kept.append(b)
+			_bindings[a[0]] = kept
 	Input.joy_connection_changed.connect(func(_d: int, _c: bool): rebind())
 	rebind()
 
@@ -112,13 +174,40 @@ func bindings(action: String) -> Array:
 	return _bindings.get(action, [])
 
 
+## The name of an action, for the menu and the notes.
+static func label(action: String) -> String:
+	for a in ACTIONS:
+		if a[0] == action:
+			return a[1]
+	return action
+
+
+## The first key of an action ("" when it has none), for the notes ("Traction control off (C)").
+func key_name(action: String) -> String:
+	for b: Dictionary in bindings(action):
+		if b.get("type") == "key":
+			return describe(b)
+	return ""
+
+
+## True while a key of the action is held (the easing of the keys: a gamepad trigger is analog of its own).
+func key_held(action: String) -> bool:
+	for b: Dictionary in bindings(action):
+		if b.get("type") == "key" and Input.is_physical_key_pressed(int(b["code"]) as Key):
+			return true
+	return false
+
+
 ## Sets the binding at index (one past the end: adds one). The same input is taken from any other action that had it.
-func set_binding(action: String, index: int, b: Dictionary) -> void:
+func set_binding(action: String, index: int, b: Dictionary) -> String:
+	var taken := PackedStringArray()
 	for other in _bindings:
 		var list: Array = _bindings[other]
 		for i in range(list.size() - 1, -1, -1):
 			if _same(list[i], b) and not (other == action and i == index):
 				list.remove_at(i)
+				if other != action:
+					taken.append(label(other))
 				if other == action and i < index:
 					index -= 1
 	var mine: Array = _bindings[action]
@@ -127,6 +216,7 @@ func set_binding(action: String, index: int, b: Dictionary) -> void:
 	else:
 		mine[index] = b
 	_save()
+	return " and ".join(taken)
 
 
 func clear_binding(action: String, index: int) -> void:

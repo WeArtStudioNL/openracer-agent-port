@@ -3,6 +3,7 @@ extends CanvasLayer
 ## The prototype's dashboard: speed, gear and rev counter, and with F3 the state of each wheel.
 
 var car: Car
+var world: Node
 var laps: LapTimer
 var race: Race
 var _lights: Label
@@ -238,6 +239,10 @@ func _race_panel() -> void:
 		_delta.add_theme_color_override("font_color", Color(0.4, 1, 0.45) if laps.delta < 0.0 else Color(1, 0.45, 0.4))
 	else:
 		_delta.text = ""
+
+
+func notice(text: String) -> void:
+	toast(text)
 
 
 func toggle_debug() -> void:
