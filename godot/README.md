@@ -247,6 +247,43 @@ slip at the finish; the 50 best runs per track in `user://drag.cfg`. Test: `res:
 Note: on desert-drag-strip a barrier of the track model (`prefab_barrier_12`) lies along the middle of the strip
 just past the line, in the path of a car from the start position; the test starts in the right lane.
 
+## Atmosphere, weather and graphics
+
+The sky, the light and the weather of `web/js/Atmosphere.js` (`scripts/atmosphere.gd`): the sky is a shader made from
+the time of day and the weather, the same on every track (the track's environment only gives how bright it likes the
+sun and the sky light). The sun rises at 5:00, is highest at noon and sets at 19:00; its light goes warm and weak near
+the horizon, the sky orange and then dark blue; from dusk to dawn the moon (its phase) gives a faint light under the
+stars. The weather (clear, cloudy, fog, rain, snow) sets the clouds, the light, the grey of the sky, the shadows and the
+fog, and rain or snow falls past the camera. The ground follows it (`scripts/ground.gd`): rain wets the road in about
+40 s and it dries in about 3 minutes, the puddles fill in a minute and a half, snow covers the ground in about 2.5
+minutes and melts slowly; a race in snow starts with the road partly bare. The wet and the snow take the grip of
+`Surfaces.js` from every surface (a wet road keeps 72 %, a snowy road 38 %; loose ground loses less), per wheel: a wheel
+in a puddle loses more, and where the cars scraped the snow away (a sliding tyre most, a rolling one a little; the heat
+under the car melts it) the grip comes back; it is kept in tiles of 25.6 m, and grows back while it snows. The AI makes
+its speeds again for the grip of the road. The surfaces of the track get the look (`scripts/ground_material.gd`: the
+StandardMaterial3D of the glb made again as a shader with the wet, the puddles with the rings of the wheels and of the
+rain, and the snow); the wheels throw up the water of a puddle and the snow (`scripts/ground_spray.gd`).
+
+Settings, Graphics (`scripts/graphics_page.gd`, `scripts/graphics.gd`; the Graphics page of the browser's Escape menu)
+works at once while driving: the preset (low, medium, high, ultra; a change makes it Custom), the resolution (the 3D
+scale of the viewport), MSAA and an edge smoothing over it (FXAA, SMAA, TAA: Godot's own), anisotropic filtering (the
+track's textures), sharpening and the vignette (a pass over the picture), the draw distance, the shadows (the size of
+the atlas and the distance), the reflections (screen space), SSAO, global illumination (SSIL, Godot's counterpart of
+the browser's SSGI), the tone mapping (Neutral is Filmic in Godot), exposure, contrast and saturation, the time of day,
+the sun direction, the moon, the weather and the smoke. In a drive it also has "Save as HDR"
+(`scripts/environment_export.gd`, EnvironmentExport.js): the surroundings of the car as an equirect .hdr (Radiance)
+in `user://environments/`, for the world of Blender. The main menu chooses the weather and the time of day of a race;
+a free drive starts clear, as in the browser.
+
+    Godot --headless --fixed-fps 120 --path godot -- --car=openracer-muscle --track=kartbaan-oldenzaal --ai --quit-after=100 --set=gfx_weather:rain
+    Godot --path godot res://tools/test_graphics.tscn -- --ai [--shot=file.png] [--hdr=file.hdr]
+
+The test sets the presets and the weathers for that run only and prints what the viewport, the environment and the
+ground are. The AI on kartbaan-oldenzaal with the muscle car: 35.9 s dry, 41.1 s in the rain, 45.3 s for the first lap
+in snow (it gets slower as the snow builds up). Not yet: the debris of loose ground (grass, sand, gravel of
+Debris.js), the weather in the replay (a replay shows the weather of now), headlights (the night is dark, as in the
+browser).
+
 ## Controls
 
 Arrows or WASD drive, Space is the handbrake, Q/E shift (the first shift switches to a manual gearbox),
@@ -270,7 +307,8 @@ Holding the brake at a standstill puts the car in reverse; then the brake drives
 | `scripts/car.gd` | the car: rigid body (Jolt), raycast suspension, tyres, drivetrain |
 | `scripts/engine.gd` | torque curve, friction, idle control, limiter |
 | `scripts/car_model.gd` | the body model and the wheels (model wheels or library rim + tyre) |
-| `scripts/track.gd` | the track model, a collision shape per mesh with its surface, sky and sun |
+| `scripts/track.gd` | the track model, a collision shape per mesh with its surface |
+| `scripts/atmosphere.gd`, `ground.gd`, `ground_material.gd`, `graphics.gd` | the sky, light and weather; the wet and the snow and their grip; the look of the ground; the graphics settings |
 | `scripts/chase_camera.gd`, `hud.gd`, `world.gd`, `main.gd`, `controls.gd` | camera, dashboard, a drive, menu, keys |
 | `native/src/engine_sim.cpp` | the engine sound: EngineSimWorklet.js and the exhaust chain of EngineSim.js in C++ |
 | `scripts/engine_sim_params.gd`, `car_audio.gd` | the sound parameters of car.json; the engine and the tyre squeal of a car |
