@@ -71,6 +71,8 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	effects = TyreEffects.new()
 	effects.setup(car)
 	add_child(effects)
+	for fx: Node in [RigidObjects.make(track), Marbles.new(), Debris.make(car)]:     # (the objects, the marbles, the debris)
+		add_child(fx)
 	var flames := ExhaustFlames.new()
 	flames.setup(car)
 	add_child(flames)
@@ -166,6 +168,7 @@ func to_start() -> void:
 	car.place(Vector3(x, y + car.wheels[0].radius + 0.15, z), float(s.get("heading", 0)))
 	car.repair()                       # (as the browser game: back at the start the car is whole again)
 	effects.clear()
+	get_tree().call_group("clear_at_start", "clear")
 	if laps:
 		laps.restart()
 	if ai != null:

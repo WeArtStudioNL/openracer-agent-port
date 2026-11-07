@@ -72,7 +72,7 @@ func bind(sb: SoftBody) -> void:
 		r = Vector3(float(rp[0]), float(rp[1]), float(rp[2]))
 	bay = com + b
 	radiator_at = com + r
-	for k in sb.count:
+	for k in sb.body_count:
 		var at := sb.rest[k]
 		var wb := maxf(0.0, 1.0 - at.distance_to(bay) / _bay_r)
 		var wr := maxf(0.0, 1.0 - at.distance_to(radiator_at) / _rad_r)

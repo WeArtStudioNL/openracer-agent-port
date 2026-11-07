@@ -32,6 +32,7 @@ var playing := false                # the replay is on the screen
 var running := false                # it plays (not paused)
 var time := 0.0                     # s from the first sample kept
 var speed := 1.0
+var soft: ReplaySoft = null          # the shells, the parts and the wheels (ReplaySoft)
 var viewer := false                 # a replay from a file: Exit goes back to the menu
 var _record_in := 0.0
 var _saved: Array = []              # the cars as the game left them
@@ -55,6 +56,7 @@ func setup(w: Node, list: Array) -> void:
 	for c in list:
 		if c is Car and not c.is_ghost:
 			cars.append(c)
+	soft = ReplaySoft.new(cars)
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 
@@ -96,6 +98,7 @@ func _physics_process(dt: float) -> void:
 			row[p + 1] = w.steer
 			row[p + 2] = w.spin
 	samples.append_array(row)
+	soft.record(cars, count)
 	count += 1
 	var most := int(MAX_SECONDS * RATE)
 	if count > most + int(RATE * 60.0):
@@ -103,6 +106,7 @@ func _physics_process(dt: float) -> void:
 		var drop := count - most
 		samples = samples.slice(drop * cars.size() * STRIDE)
 		count -= drop
+		soft.trim(drop)
 
 
 ## Starts the replay at the end of the recording (the game is paused).
@@ -132,6 +136,7 @@ func play() -> void:
 		_focus = maxi(0, cars.find(cam.car))
 	_set_hud(false)
 	_build_ui()
+	soft.begin(cars)
 	_show(time)
 	RunLog.event("replay: %.1f s of recording" % duration())
 
@@ -141,6 +146,7 @@ func stop() -> void:
 	if not playing:
 		return
 	playing = false
+	soft.end(cars)
 	for n in cars.size():
 		var c := cars[n]
 		var s: Variant = _saved[n] if n < _saved.size() else null
@@ -241,6 +247,7 @@ func _show(t: float) -> void:
 			wh.steer = lerpf(samples[a + p + 1], samples[b + p + 1], k)
 			wh.spin = lerp_angle(samples[a + p + 2], samples[b + p + 2], k)
 		c.linear_velocity = (pb - pa) * RATE
+	soft.show(cars, f)
 	if cam != null and _focus < cars.size() and is_instance_valid(cars[_focus]):
 		cam.car = cars[_focus]
 
@@ -345,7 +352,8 @@ func save() -> String:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
 		return ""
-	f.store_var({"version": 1, "track": track_id, "cars": ids, "rate": RATE, "count": count, "stride": STRIDE, "samples": samples})
+	f.store_var({"version": 1, "track": track_id, "cars": ids, "rate": RATE, "count": count, "stride": STRIDE, "samples": samples,
+		"soft": soft.save_data()})
 	f.close()
 	RunLog.event("replay saved: %s (%.1f s, %d cars)" % [path, duration(), ids.size()])
 	return path
@@ -405,6 +413,8 @@ func open_file(path: String, w: Node, first: Car) -> bool:
 		cars.append(c)
 	samples = data["samples"]
 	count = int(data["count"])
+	soft = ReplaySoft.new(cars)
+	soft.load_data(data.get("soft"), cars)
 	return true
 
 

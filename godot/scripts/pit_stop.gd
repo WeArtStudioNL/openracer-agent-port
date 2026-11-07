@@ -4,8 +4,9 @@ extends Node
 ## "boxes": [{ x, z, heading }] }: box 1 is the player's, 2 to 8 the AI cars' in the order of the grid; a track with
 ## fewer boxes than cars lets a car without a box use any) is serviced, with tyre wear on (Settings): the tank is
 ## filled, the tyres are changed when the most worn is past 15 % or one leaks, and with damage on the car is
-## repaired (the shell, the parts, the engine). What it needs sets how long it takes; the fuel, the tyres and the
-## repair go side by side, with a moment to lift the car and to drop it. The player's car is held on the jacks
+## repaired (the shell, the parts, the engine, the wheels that are bent or torn off: 1.5 s each). What it needs sets
+## how long it takes; the fuel, the tyres and the repair go side by side, with a moment to lift the car and to drop
+## it; through the repair the dents and the bent wheels go back bit by bit. The player's car is held on the jacks
 ## until the stop is done; a car that pulls away early (the AI) keeps what was done.
 
 const BOX_W := 4.0
@@ -19,6 +20,7 @@ const REPAIR_BASE := 1.0
 const REPAIR_PER_CM := 1.5
 const REPAIR_DENTS_MAX := 7.0
 const REPAIR_PART := 1.0
+const REPAIR_WHEEL := 1.5
 const REPAIR_MAX := 10.0
 
 var car: Car
@@ -33,6 +35,7 @@ var _fuel_given := 0.0
 var _fuel_wanted := 0.0
 var _changed: Array = []
 var _repaired := false
+var _repairing := false
 var _held := false
 
 
@@ -142,11 +145,11 @@ func _repair_time() -> float:
 		var sb := car.shell.sb
 		var sum := 0.0
 		var broken := 0
-		for k in sb.count:
+		for k in sb.body_count:
 			sum += sb.q[k].length()
 			if not sb.alive(k):
 				broken += 1
-		var mean := sum / maxf(1.0, sb.count)
+		var mean := sum / maxf(1.0, sb.body_count)
 		if mean > 0.002 or broken > 0:
 			secs += REPAIR_BASE + minf(REPAIR_DENTS_MAX, mean * 100.0 * REPAIR_PER_CM)
 	if car.engine_damage != null:
@@ -156,6 +159,8 @@ func _repair_time() -> float:
 			secs += 3.0 + 6.0 * worst + (3.0 if h["failed"] > 0.0 else 0.0)
 	if car.parts != null:
 		secs += REPAIR_PART * car.parts.count_off()
+	if car.shell != null and car.shell.rig != null:
+		secs += REPAIR_WHEEL * car.shell.rig.bent()
 	return minf(REPAIR_MAX, secs)
 
 
@@ -200,6 +205,7 @@ func _physics_process(dt: float) -> void:
 		_fuel_wanted = car.tank - car.fuel
 		_changed.clear()
 		_repaired = false
+		_repairing = false
 		if plan["fuel"] <= 0.0 and plan["tyres"] <= 0.0 and plan["repair"] <= 0.0:
 			done = true
 			active = false
@@ -223,6 +229,14 @@ func _physics_process(dt: float) -> void:
 			if not _changed[c] and t >= slot * (c + 0.5):
 				_changed[c] = true
 				_fresh_tyre(car.wheels[list[c]])
+	if plan["repair"] > 0.0 and not _repaired and t > 0.0 and car.shell != null:
+		# (the dents and the bent wheels go back bit by bit through the work; then all is whole)
+		if not _repairing:
+			_repairing = true
+			car.shell.sb.repair_start()
+			car.shell.rig.repair_start()
+		car.shell.sb.repair_to(t / maxf(0.01, plan["work"]))
+		car.shell.rig.repair_to(t / maxf(0.01, plan["work"]))
 	if plan["repair"] > 0.0 and not _repaired and t >= plan["work"]:
 		_repaired = true
 		car.repair()

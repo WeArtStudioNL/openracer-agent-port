@@ -5,7 +5,9 @@ extends Node3D
 ## deceleration, the bend of the shell, the energy it took up and the torn anchors and beams, then puts the car on
 ## the floor again facing away and drives it on (the car must still drive), and repairs it. Without --headless,
 ## --shot=file.png saves a picture of the dent a moment after the hit. --set=damage:false: the same with a rigid car.
-## --puncture=1 punctures the front left tyre as it drives on, and prints its pressure.
+## --puncture=1 punctures the front left tyre as it drives on, and prints its pressure. --replay=1 records the crash
+## (Replay, ReplaySoft) and plays it back after the hit: the dent before and after, the parts that were off, the game
+## as it was afterwards.
 
 var car: Car
 var cam: Camera3D
@@ -20,6 +22,8 @@ var _last_v := Vector3.ZERO
 var _max_step_us := 0
 var _shot := ""
 var _speed_at_hit := 0.0
+var _replay: Replay = null
+var _rec_hit := 0
 
 
 func _ready() -> void:
@@ -93,6 +97,10 @@ func _ready() -> void:
 	cam = Camera3D.new()
 	add_child(cam)
 	cam.make_current()
+	if Content.arg("replay") != "":
+		_replay = Replay.new()
+		_replay.setup(self, [car])
+		add_child(_replay)
 	print("crash test: %s at %.0f km/h, wall %.1f m ahead at %.0f degrees, damage %s, %s" % [id, _target * 3.6, distance,
 		rad_to_deg(angle), Settings.get_value("damage"), "%d nodes %d beams" % [car.shell.sb.count, car.shell.sb.beam_count] if car.shell else "no shell"])
 
@@ -138,6 +146,8 @@ func _physics_process(dt: float) -> void:
 		"hit":
 			if _time - _hit_time > 2.0:
 				_report("after the hit")
+				if _replay != null:
+					_check_replay()
 				# on the floor again, facing away from the wall: it must drive
 				car.place(Vector3(0, car.wheels[0].radius + 0.15, -5), -PI / 2.0)
 				car.settle_shell()
@@ -187,6 +197,46 @@ func _process(_delta: float) -> void:
 		_shot = ""
 
 
+## The replay of the crash: 1 s before the hit the model is whole and every part on the car; at the end it is the dent of
+## the game, and the parts that are off are copies where their bodies are; afterwards the game is seen as it was.
+func _check_replay() -> void:
+	var r := _replay
+	var sb := car.shell.sb
+	var sk := car.shell_mesh.skeleton if car.shell_mesh != null else null
+	var recs: Array = r.soft.entries[0]["records"] if r.soft.entries[0] != null else []
+	r.play()
+	r.time = maxf(0.0, r.duration() - 3.0)
+	r._show(r.time)
+	var before := 0.0
+	var seen_on := 0
+	for k in sb.body_count:
+		before = maxf(before, sk.get_bone_pose_position(k).length() if sk else 0.0)
+	if car.parts != null:
+		for p in car.parts.parts:
+			for m in car.parts.meshes_on_car(p):
+				if m.visible:
+					seen_on += 1
+	r.time = r.duration()
+	r._show(r.time)
+	var diff := 0.0
+	for k in sb.body_count:
+		diff = maxf(diff, (sk.get_bone_pose_position(k) - sb.displacement[k]).length() if sk else 0.0)
+	var copies := 0
+	for c: Node in get_children():
+		if c is Node3D and c.get_class() == "Node3D" and (c as Node3D).visible and c.get_child_count() > 0 and not (c is Car):
+			copies += 1
+	r.stop()
+	var off := car.parts.count_off() if car.parts else 0
+	var shown_off := 0
+	if car.parts != null:
+		for p in car.parts.parts:
+			if p.state != "held" and car.parts.meshes_on_car(p).any(func(m: Node3D) -> bool: return m.visible):
+				shown_off += 1
+	print("replay: %d records; 3 s before the end the model is bent at most %.1f cm with %d meshes of parts on the car; " % [recs.size(),
+		before * 100.0, seen_on] + "at the end %.1f mm from the shell of the game and %d copies of parts off (%d off in the game); " % [diff * 1000.0,
+		copies, off] + "after it %d parts off are seen on the car" % shown_off)
+
+
 func _report(when: String) -> void:
 	var line := "%s: hit at %.1f km/h, peak %.1f g, now %.1f km/h" % [when, _speed_at_hit * 3.6, _peak_g, car.speed * 3.6]
 	if car.shell != null:
@@ -205,4 +255,13 @@ func _report(when: String) -> void:
 			if p.state != "held":
 				off.append("%s (%s)" % [p.name, p.state])
 		line += "\n  parts: %d of %d off: %s" % [off.size(), car.parts.parts.size(), ", ".join(off)]
+		line += "\n  part events: %s" % ", ".join(car.parts.events)
+	if car.shell != null and car.shell.rig != null:
+		var ws := []
+		for i in 4:
+			var w := car.wheels[i]
+			ws.append("%s %s toe %.1f camber %.1f deg, shift %.1f cm, damage %.0f %%" % [w.slot, "OFF" if car.shell.rig.lost[i] else "on",
+				rad_to_deg(w.toe_bend), rad_to_deg(w.camber_bend), (w.hub - car.shell.rig._base_hub[i]).length() * 100.0 if car.shell.rig._base_hub[i] != null else 0.0,
+				car.shell.rig.damage[i] * 100.0])
+		line += "\n  wheels: %s" % "; ".join(ws)
 	print(line)
