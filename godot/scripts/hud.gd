@@ -157,8 +157,10 @@ func _assist_lights() -> void:
 	_assists.add_theme_color_override("font_color", Color(1, 0.75, 0.2))
 	if float(Settings.get_value("tyre_wear")) > 0.0:
 		var t := car.wheels
-		_tyres.text = "%d° %d%%   %d° %d%%\n%d° %d%%   %d° %d%%" % [roundi(t[0].temp), roundi((1.0 - t[0].wear) * 100), roundi(t[1].temp), roundi((1.0 - t[1].wear) * 100),
-			roundi(t[2].temp), roundi((1.0 - t[2].wear) * 100), roundi(t[3].temp), roundi((1.0 - t[3].wear) * 100)]
+		var cells := PackedStringArray()
+		for w in car.wheels:
+			cells.append("%d° %d%%" % [roundi(w.temp), roundi((1.0 - w.wear) * 100)])
+		_tyres.text = "fuel %.1f L\n%s   %s\n%s   %s" % [car.fuel, cells[0], cells[1], cells[2], cells[3]]
 	else:
 		_tyres.text = ""
 

@@ -88,6 +88,15 @@ The torque converter of Vehicle.js (it multiplies the torque while it slips, cre
 Traction control and stability control after Vehicle.js (when the car has them: extras.tc_on, esc_on; switched
 in Settings, Driving); TC, ESC and ABS light up on the dashboard when they work.
 
+Camber (a leaning tyre pushes to the side it leans to; the wheels lean with the roll of the body, roll_camber),
+toe, the ride height, progressive springs, anti-dive, anti-squat and anti-lift, and the geometric load transfer
+of the roll centres and of the anti geometry straight to the tyres, as in Vehicle.js. The engine of Engine.js:
+the idle controller, the pedal curve, the rev limiter at limiter_hz, the engine braking (braking_scale) and a
+turbo (a share of the torque, or a boost pressure, with spool time and threshold). The automatic gearbox of
+Vehicle.js (shift points with the throttle, a kick-down, up at the limiter when the wheels spin). Fuel, with
+"Tyre temperature and wear" on (as the browser game has it with wear): the tank empties with the work of the
+engine, the mass goes down with it, an empty tank stops the engine.
+
 `--set=tyre_wear:3.0,tc:false` changes settings for one run (the tests).
 
 ## Tuning
@@ -174,7 +183,8 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
    line, grid start, a race of some laps, positions and results, the colours and the engine sound of the AI
    cars, racecraft after Opponent.js and the AI that learns where it ran off *(done)*.
 4. **The rest of the physics**: the kinds of tyre, tyre heat and wear, pressure, downforce, torque converter,
-   traction and stability control *(done)*; camber, turbo, launch control, fuel; damage and the soft body.
+   traction and stability control, camber, toe, ride height, anti geometry, the engine of Engine.js with turbo,
+   the automatic gearbox, fuel *(done)*; launch control and the extras; damage and the soft body.
 5. **Motorcycles**: the bike model of Motorcycle.js with its rider.
 6. **Garage, tuning and editors**: tuning menu, car and track editor, garage, replays.
 7. **Release**: export for the web (openracer.eu), macOS, Windows and Linux.

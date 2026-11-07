@@ -61,6 +61,8 @@ class Wheel:
 	var esc := false                # the stability control brakes this wheel
 	var side_speed := 0.0           # m/s across the tyre
 	var comp_rate := 0.0            # m/s that the spring is pushed in (for the force feedback)
+	var grip_load := 0.0            # the load the tyre grips with (with the geometric load transfer)
+	var lean := 0.0                 # rad: the lean of the wheel to the left (camber, and the roll of the body)
 	var offset := 0.0               # m that the wheel is pulled up (a kart: the twist of the frame, the lift of the inner rear wheel)
 	var squeal := 0.0               # how loud it squeals (0..1)
 	var smoke := 0.0                # how much it smokes or throws up dust (0..1)
@@ -102,6 +104,23 @@ var tyre_rate := 220000.0
 var tyre_damping := 3000.0
 var frame_twist := 0.0
 var inner_lift_now := 0.0
+var camber_front := 0.0         # degrees, negative: the top of the wheel in
+var camber_rear := 0.0
+var roll_camber := 0.6          # the share of the roll of the body that the wheels lean with
+var toe_front := 0.0            # degrees, positive: toe-in
+var toe_rear := 0.0
+var ride_front := 0.0           # m: the ride height, from the car as made
+var ride_rear := 0.0
+var spring_progression := 0.0   # extra stiffness at the end of the travel
+var anti_dive := 0.0            # the share of the pitch of the brake and drive forces that the linkage takes
+var anti_squat := 0.0
+var anti_lift_front := 0.0
+var anti_lift_rear := 0.0
+var tank := 60.0                # litres
+var fuel := 60.0
+var fuel_use := 1.0
+var fuel_flow := 0.0            # litres a second
+var base_mass := 1200.0
 var downforce_front := 0.0      # N per (m/s)^2 at each axle
 var downforce_rear := 0.0
 var cornering := 1.0
@@ -164,7 +183,12 @@ var brake := 0.0
 var model_root: Node3D
 var _esc_brake := [0.0, 0.0, 0.0, 0.0]
 var _esc_cut := 0.0
+var _axle_fy := [0.0, 0.0]      # the side force of each axle in the last step (the geometric load transfer)
+var _pitch_links := 0.0         # the pitch moment that the linkage took in the last step
+var _fuel_mass_in := 0.0
 var _auto_time := 0.0
+var _limiter_time := 0.0
+var _no_downshift := 0.0
 
 
 func setup(id: String, cfg: Dictionary) -> void:
@@ -257,6 +281,25 @@ func _read_config() -> void:
 	gearbox = str(dt.get("gearbox", "gears"))
 	cvt_rpm = float(dt.get("cvt_rpm", 4000))
 	engine.setup(cfg.get("engine", {}))
+	camber_front = float(ch.get("camber_front", 0))
+	camber_rear = float(ch.get("camber_rear", 0))
+	roll_camber = float(ch.get("roll_camber", 0.6))
+	toe_front = float(ch.get("toe_front", 0))
+	toe_rear = float(ch.get("toe_rear", 0))
+	ride_front = float(ch.get("ride_front", 0))
+	ride_rear = float(ch.get("ride_rear", 0))
+	spring_progression = maxf(0.0, float(ch.get("spring_progression", 0)))
+	anti_dive = clampf(float(ch.get("anti_dive", 0)), 0.0, 1.5)
+	anti_squat = clampf(float(ch.get("anti_squat", 0)), 0.0, 1.5)
+	anti_lift_front = clampf(float(ch.get("anti_lift_front", 0)), 0.0, 1.5)
+	anti_lift_rear = clampf(float(ch.get("anti_lift_rear", 0)), 0.0, 1.5)
+	var fuel_cfg: Dictionary = cfg.get("fuel", {})
+	var new_tank := float(fuel_cfg.get("tank", 60))
+	if wheels.size() != 4 or new_tank != tank:
+		fuel = new_tank
+	tank = new_tank
+	fuel_use = float(fuel_cfg.get("use", 1))
+	base_mass = mass
 	clutch_capacity = float(dt.get("clutch", 1.5)) * engine.peak_torque * engine.power_scale
 	if gearbox == "torque-converter":
 		clutch_start = engine.idle_rpm * 1.05
@@ -293,7 +336,8 @@ func _read_config() -> void:
 			w.spring = tyre_rate * pow(maxf(0.15, pressure) / 2.2, 0.8)
 			w.damper = tyre_damping
 		w.rebound = float(ch.get("damping_rebound", 1.5))
-		w.free_length = susp_length + (static_front if w.front else static_rear) / w.spring
+		# (the ride height: the wheel sits further out at rest, the body higher)
+		w.free_length = susp_length + (ride_front if w.front else ride_rear) + (static_front if w.front else static_rear) / w.spring
 		if fresh:
 			w.length = susp_length
 		w.max_brake = float(br.get("front" if w.front else "rear", 1500))
@@ -560,26 +604,62 @@ func _gear_total() -> float:
 
 func _auto_shift(dt: float) -> void:
 	since_shift += dt
-	if manual or gear <= 0 or gearbox == "cvt" or shift_timer > 0.0 or since_shift < 0.7:
+	if manual or gear <= 0 or gearbox == "cvt" or shift_timer > 0.0:
 		return
-	# the engine speed that the road speed asks for in this gear: spinning wheels must not cause a shift
-	var radius := (wheels[0].radius + wheels[2].radius) / 2.0
-	var rpm := maxf(0.0, speed) / radius * absf(_gear_total()) * 30.0 / PI
+	# (the automatic gearbox of Vehicle.js) the engine speed that the road speed asks for in this gear: spinning
+	# wheels must not cause a shift
+	var radius := (wheels[0].radius + wheels[2].radius) / 2.0 if drive == "awd" else (wheels[0].radius if drive == "fwd" else wheels[2].radius)
+	var ratio := absf(_gear_total())
+	var road_rpm := maxf(0.0, speed) / radius * ratio * 30.0 / PI
 	var top := gear_ratios.size()
-	var wheel_omega := maxf(0.0, speed) / radius
-	if gear < top and rpm > (engine.power_rpm if throttle > 0.8 else engine.power_rpm * 0.75) and throttle > 0.3:
-		gear += 1
-		shift_timer = shift_time
-		since_shift = 0.0
-	elif gear > 1:
-		var lower := float(gear_ratios[gear - 2]) * final_drive * wheel_omega * 30.0 / PI
-		# down only when the lower gear has room: well under the limiter (kick-down with the throttle open)
-		var room := 0.72 if throttle > 0.6 else 0.5
-		if rpm < engine.limiter_rpm * 0.5 and lower < engine.limiter_rpm * room:
-			gear -= 1
-			shift_timer = shift_time * 0.7
-			since_shift = 0.0
+	var limit := engine.limiter_rpm
+	var thr := throttle
+	var engine_rpm := engine.rpm()
+	# the engine on the limiter with the throttle open while the wheels spin faster than the road asks: after a
+	# moment it shifts up, as an automatic does at the redline (a leaky time: the engine speed jumps about)
+	var spin := 0.0
+	for w in wheels:
+		if w.driven:
+			spin = maxf(spin, w.slip_ratio)
+	var slipping := gearbox == "torque-converter" and tc_lock < 0.9 and spin < 0.2
+	# (a cut of the limiter counts as on the limiter: the engine braking of the cut drops the engine speed far under
+	# the limit at once, and the gearbox of a truck with a strong engine stayed in first on the limiter)
+	var on_limiter := (engine_rpm >= limit * 0.8 and engine_rpm > road_rpm * 1.1 + 100.0 and not slipping) or engine_rpm >= limit * 0.97 or engine.cut
+	var spinning := on_limiter and thr > 0.5 and speed > 1.0
+	_limiter_time = _limiter_time + dt if spinning else maxf(0.0, _limiter_time - dt * 0.3)
+	_no_downshift = maxf(0.0, _no_downshift - dt)
+	if since_shift < 0.6:
+		return
+	var up_rpm := limit * (0.45 + 0.42 * thr)
+	var down_rpm := limit * (0.23 + 0.17 * thr)
+	var next_ratio := float(gear_ratios[gear]) / float(gear_ratios[gear - 1]) if gear < top else 1.0
+	var prev_ratio := float(gear_ratios[gear - 2]) / float(gear_ratios[gear - 1]) if gear > 1 else 1.0
+	# the downshift is where the engine is still in its torque band (60 % of the speed of the peak torque off the
+	# throttle, 90 % wide open), and the upshift not under a quarter above the peak torque
+	var peak := engine.peak_torque_rpm()
+	if peak > 0.0:
+		up_rpm = maxf(up_rpm, peak * 1.25)
+		down_rpm = minf(peak * (0.6 + 0.3 * thr), up_rpm / maxf(1.0, prev_ratio) * 0.9)
+	down_rpm = minf(down_rpm, up_rpm / maxf(1.0, prev_ratio) * 0.9)
+	up_rpm = minf(up_rpm, limit * 0.94)
+	# (a converter that is not locked runs the engine faster than the road: at full throttle the engine speed counts)
+	var shift_rpm := road_rpm
+	if gearbox == "torque-converter" and tc_lock < 0.9 and thr > 0.5:
+		shift_rpm = maxf(road_rpm, engine_rpm)
+	if gear < top and _limiter_time > 0.35:
+		_shift_to(gear + 1)
+		_limiter_time = 0.0
+		_no_downshift = 3.0
+	elif gear < top and shift_rpm > up_rpm and road_rpm * next_ratio > 0.35 * limit and speed > 1.0:
+		_shift_to(gear + 1)
+	elif gear > 1 and ((road_rpm < down_rpm and road_rpm * prev_ratio < 0.86 * limit and _no_downshift <= 0.0) or (speed < 1.5 and thr < 0.1)):
+		_shift_to(gear - 1)
 
+
+func _shift_to(g: int) -> void:
+	shift_timer = shift_time if g > gear else shift_time * 0.7
+	gear = g
+	since_shift = 0.0
 
 func _driven_omega() -> float:
 	var sum := 0.0
@@ -618,6 +698,13 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		# turning left (+): the left wheel is the inner one
 		angles[0] = a_in if steer_angle > 0.0 else a_out
 		angles[1] = a_out if steer_angle > 0.0 else a_in
+	# toe-in: each wheel points a little inwards (the left one to the right, the right one to the left)
+	var tf := deg_to_rad(toe_front)
+	var tr := deg_to_rad(toe_rear)
+	angles[0] -= tf
+	angles[1] += tf
+	angles[2] = -tr
+	angles[3] = tr
 
 	# ---- the suspension: each wheel looks down for the road
 	var max_len := susp_length + droop
@@ -656,6 +743,9 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		if not w.contact:
 			continue
 		var f := w.spring * (w.free_length - w.length - w.offset)
+		if spring_progression > 0.0 and not unsprung:
+			var used := maxf(0.0, susp_length + (ride_front if w.front else ride_rear) - w.length)
+			f += spring_progression * w.spring * used * used / maxf(0.01, susp_travel)
 		var rate: float = comp_rate[i]
 		f += w.damper * rate * (1.0 if rate > 0.0 else w.rebound)
 		var bump := susp_length - susp_travel - w.length
@@ -698,11 +788,22 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		w.side_speed = cv.dot(w.lf)
 		var tan_a := clampf(w.side_speed / w.vref, -12.0, 12.0)
 		w.slip_tan += (tan_a - w.slip_tan) * (1.0 - exp(-dt * w.vref / 0.35))
+		# the load that the tyre grips with: its load, and the geometric load transfer that the linkage passes at
+		# once (Vehicle.js): the side force of the axle at its roll centre (to the outer wheel), and the pitch of
+		# the brake and drive forces that anti-dive and anti-squat take
+		var axle := 0 if w.front else 1
+		var track := front_track if w.front else rear_track
+		var geometric: float = (-1.0 if w.left else 1.0) * _axle_fy[axle] * w.roll_centre / track
+		geometric += (-1.0 if w.front else 1.0) * _pitch_links / maxf(0.5, wheelbase) / 2.0
+		w.grip_load = maxf(0.0, w.load + geometric)
+		w.lean = _lean(w)
 
 	# ---- the wheels and the drivetrain, in substeps: the tyre is stiff against the wheel speed, so the wheel
 	# speed, the clutch and the engine are stepped SUBSTEPS times with the road speed of this step, and the body
 	# gets the mean force of the tyres
 	var h := dt / SUBSTEPS
+	var new_axle_fy := [0.0, 0.0]
+	var new_pitch := 0.0
 	var sum_fx := [0.0, 0.0, 0.0, 0.0]
 	var sum_fy := [0.0, 0.0, 0.0, 0.0]
 	var tyre_torque := [0.0, 0.0, 0.0, 0.0]
@@ -714,7 +815,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 				continue
 			w.slip_ratio = clampf((w.omega * w.radius - w.forward_speed) / w.vref, -12.0, 12.0)
 			var surf := Content.surface(w.surface)
-			_tyre_force(w, w.load, surf, w.vref)
+			_tyre_force(w, w.grip_load, surf, w.vref)
 			sum_fx[i] += w.fx
 			sum_fy[i] += w.fy
 			var loose_roll := float(w.kind.get("looseRolling", 1.0)) if surf.get("loose", false) else 1.0
@@ -727,12 +828,21 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 			continue
 		w.fx = sum_fx[i] / SUBSTEPS
 		w.fy = sum_fy[i] / SUBSTEPS
-		# the side force acts at the roll centre (the geometric load transfer of the browser game)
+		# the side force acts at the roll centre (the geometric load transfer of the browser game); the force along
+		# the wheel at the contact, raised by anti-dive or anti-squat (the linkage passes that share higher up)
 		var at := w.point + up * w.roll_centre
-		state.apply_force(w.fp * w.fx + w.lf * w.fy, at - origin)
+		state.apply_force(w.lf * w.fy, at - origin)
+		var anti := (anti_dive if w.fx < 0.0 else anti_lift_front) if w.front else (anti_lift_rear if w.fx < 0.0 else anti_squat)
+		var below := (origin + com - w.point).dot(up)
+		state.apply_force(w.fp * w.fx, w.point + up * (anti * below) - origin)
+		new_axle_fy[0 if w.front else 1] += w.fy
+		new_pitch += anti * w.fx * below
+	_axle_fy = new_axle_fy
+	_pitch_links = new_pitch
 	for w in wheels:
 		_tyre_effects(w, dt)
 		_wear_step(w, dt)
+	_fuel_step(dt)
 	_traction_control(dt)
 
 	# ---- the air: the drag, and the downforce (or lift) of each axle along the up axis of the body, at the axle
@@ -777,6 +887,38 @@ func _tyre_effects(w: Wheel, dt: float) -> void:
 	w.smoke = smoking * (0.4 + 0.6 * minf(1.0, burnt / 40000.0)) * (0.3 + 0.7 * spin_share)
 	w.squeal = smoothstep(1.0, 2.0, w.s) * (1.0 - 0.4 * smoothstep(2.5, 4.0, w.s)) * smoothstep(0.8, 5.0, slide_speed)
 	w.mark = smoothstep(1.1, 2.0, w.s) * smoothstep(1.0, 4.0, slide_speed)
+
+
+## The lean of a wheel to the left (rad): its static camber (negative: the top in), and the share of the roll of
+## the body on its springs that the wheel takes along (roll_camber).
+func _lean(w: Wheel) -> float:
+	var camber := deg_to_rad(camber_front if w.front else camber_rear)
+	var lean := camber if w.left else -camber
+	if not unsprung:
+		var l := wheels[0 if w.front else 2]
+		var r := wheels[1 if w.front else 3]
+		var track := front_track if w.front else rear_track
+		var roll_right := clampf(atan2(l.length - r.length, track), -0.26, 0.26)      # (the left side extended: the body leans right)
+		lean -= roll_right * roll_camber
+	return lean
+
+
+## The fuel (fuelStep of Vehicle.js, with "Tyre temperature and wear" on, as the browser game has it with wear):
+## a racing engine burns about four times what its work says; the mass goes down with the fuel; empty, it stops.
+func _fuel_step(dt: float) -> void:
+	var scale := float(Settings.get_value("tyre_wear"))
+	if scale <= 0.0:
+		engine.no_fuel = false
+		fuel_flow = 0.0
+		return
+	var power := maxf(0.0, engine.throttle_used * engine.full_torque(engine.rpm())) * engine.omega
+	fuel_flow = (0.0003 + power / (0.25 * 34e6) * 4.0) * fuel_use * scale
+	fuel = maxf(0.0, fuel - fuel_flow * dt)
+	engine.no_fuel = fuel <= 0.0
+	_fuel_mass_in -= dt
+	if _fuel_mass_in <= 0.0:
+		_fuel_mass_in = 1.0
+		mass = base_mass + fuel * 0.75
 
 
 ## A kart (Vehicle.js, unsprung): the roll moment of the front axle and the one of the rear axle differ, and the
@@ -921,7 +1063,8 @@ func _tyre_force(w: Wheel, load: float, surf: Dictionary, vref: float) -> void:
 	var slip_peak := 0.14
 	var angle_peak := 0.15 / (cornering * float(w.kind.get("lateral", 1.0)) * w.stiffness_bias * w.pressure_corner)
 	var sx := w.slip_ratio / slip_peak
-	var sy := w.slip_tan / angle_peak
+	# the camber: a leaning tyre pushes to the side it leans to, like a little slip angle (camber thrust, Vehicle.js)
+	var sy := (w.slip_tan - 0.5 * w.lean * angle_peak / 0.15) / angle_peak
 	var s := sqrt(sx * sx + sy * sy)
 	w.s = s
 	var f := sin(c * atan(peak * s))
