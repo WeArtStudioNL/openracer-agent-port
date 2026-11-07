@@ -309,6 +309,6 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
    It needs the release build of the native part first (`cd godot/native && scons target=template_release
    arch=universal`). The exported game keeps its logs in its user folder (`logs/`), next to the settings.
 
-Known in phase 1: one texture of the hatchback (a jpeg) does not load in Godot; the acceleration of the
+Known in phase 1: the acceleration of the
 cars with a centrifugal clutch (karts) or a torque converter is close to, but not yet compared with, the
 browser game.

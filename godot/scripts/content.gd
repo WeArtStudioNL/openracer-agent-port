@@ -24,6 +24,7 @@ var root := ""
 
 
 func _ready() -> void:
+	GLTFDocument.register_gltf_document_extension(GltfJpegFix.new())
 	root = _find_root()
 	if root == "":
 		push_error("Content: the web folder of OpenRacer was not found (cars/index.json)")
