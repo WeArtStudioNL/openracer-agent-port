@@ -1,6 +1,7 @@
 class_name World
 extends Node3D
-## One drive: a track, the player's car on its start, the camera and the dashboard.
+## One drive: a track, the player's car on its start, the camera and the dashboard; in a race (Race) the AI cars
+## on the grid as well.
 
 signal leave
 
@@ -13,8 +14,11 @@ var effects: TyreEffects
 var laps: LapTimer
 var line: RacingLine
 var ai: AIDriver = null
+var race: Race = null
+var options := {}
 var pause_layer: CanvasLayer
 var _pause_box: Control
+var _results: CanvasLayer
 var _shot_path := ""
 var _shot_at := -1.0
 var _log_every := 0.0
@@ -25,7 +29,9 @@ var _stuck := 0.0
 var _going := false
 
 
-func setup(car_id: String, track_id: String) -> void:
+## options: mode ("practice" or "race"), opponents, laps, pole (the player starts in front).
+func setup(car_id: String, track_id: String, opts := {}) -> void:
+	options = opts
 	name = "World"
 	track = Track.new()
 	var tcfg: Variant = Content.load_json("tracks/%s/track.json" % track_id)
@@ -61,6 +67,16 @@ func setup(car_id: String, track_id: String) -> void:
 	if Content.arg("ai") != "" and line != null:
 		ai = AIDriver.new()
 		ai.setup(car, line)
+	if options.get("mode", "practice") == "race":
+		if line == null:
+			hud.toast.call_deferred("This track has no racing line for the AI: free driving")
+			RunLog.event("race asked, but the track has no racing line")
+		else:
+			race = Race.new()
+			race.setup(self, line, track, car, int(options.get("opponents", 5)), int(options.get("laps", 3)), bool(options.get("pole", false)))
+			race.finished.connect(_race_finished)
+			add_child(race)
+			hud.race = race
 	# the tests and the screenshots of the command line: --drive (full throttle), --shot=file.png --shot-at=seconds, --log=seconds
 	car.autopilot = Content.arg("drive") != ""
 	_shot_path = Content.arg("shot")
@@ -85,6 +101,8 @@ func _ready() -> void:
 	await get_tree().physics_frame
 	to_start()
 	car.freeze = false
+	if race != null:
+		race.place_all()
 	camera.follow(car)
 	camera.make_current()
 	RunLog.car = car
@@ -112,6 +130,9 @@ func to_start() -> void:
 		laps.restart()
 	if ai != null:
 		ai.lost()
+	if race != null and race.state != Race.State.COUNTDOWN:
+		_restart_race()
+		return
 	if camera.car != null:
 		camera.snap()
 
@@ -121,17 +142,75 @@ func to_start() -> void:
 func recover() -> void:
 	RunLog.event("reset (R)")
 	laps.invalidate()
-	var p := car.global_position
-	var h := car.heading()
+	put_on_line(car)
+	camera.snap()
+
+
+func put_on_line(c: Car) -> void:
+	var p := c.global_position
+	var h := c.heading()
 	if line != null:
-		var i := line.nearest_facing(p, car.global_transform.basis.z)
+		var i := line.nearest_facing(p, c.global_transform.basis.z)
 		var a := line.point(i)
 		var b := line.point(i + 2)
 		p = a
 		h = atan2(b.z - a.z, b.x - a.x)
 	var y := track.ground_at(p.x, p.z)
-	car.place(Vector3(p.x, y + car.wheels[0].radius + 0.4, p.z), h)
-	camera.snap()
+	c.place(Vector3(p.x, y + c.wheels[0].radius + 0.4, p.z), h)
+
+
+## The race again from the grid (a new Race with the same options).
+func _restart_race() -> void:
+	RunLog.event("race again")
+	var opts := options
+	var w := World.new()
+	w.setup(car.car_id, track.track_id, opts)
+	if get_parent().has_method("_back_to_menu"):
+		w.leave.connect(get_parent()._back_to_menu)
+	get_parent().add_child(w)
+	if get_parent().has_method("set_world"):
+		get_parent().set_world(w)
+	queue_free()
+
+
+## The player finished: the results, and the AI drives the player's car slowly on.
+func _race_finished() -> void:
+	ai = AIDriver.new()
+	ai.setup(car, line)
+	ai.pace = 0.5
+	_results = CanvasLayer.new()
+	_results.layer = 5
+	add_child(_results)
+	var panel := PanelContainer.new()
+	panel.anchor_left = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_top = 0.5
+	panel.anchor_bottom = 0.5
+	panel.offset_left = -330
+	panel.offset_right = 330
+	panel.offset_top = -200
+	panel.offset_bottom = 200
+	_results.add_child(panel)
+	var box := VBoxContainer.new()
+	panel.add_child(box)
+	var text := Label.new()
+	text.text = race.results_text()
+	text.add_theme_font_override("font", SystemFont.new())
+	text.add_theme_font_size_override("font_size", 18)
+	box.add_child(text)
+	var again := Button.new()
+	again.text = "Race again"
+	again.pressed.connect(_restart_race)
+	box.add_child(again)
+	var menu := Button.new()
+	menu.text = "Main menu"
+	menu.pressed.connect(func():
+		RunLog.car = null
+		ForceFeedback.neutral()
+		leave.emit())
+	box.add_child(menu)
+	again.grab_focus.call_deferred()
+	RunLog.line("RESULTS\n" + race.results_text())
 	if ai != null:
 		ai.lost()
 
@@ -146,9 +225,20 @@ func _physics_process(_delta: float) -> void:
 		_last_velocity = car.linear_velocity
 	if car.autopilot:
 		return
+	if race != null and race.is_held():
+		# the countdown: everyone is held on the grid (the throttle may rev the engine)
+		car.steer_input = 0.0
+		car.throttle_input = Input.get_action_strength("throttle")
+		car.brake_input = 1.0
+		car.handbrake_input = 1.0
+		if WheelInput.active:
+			car.throttle_input = maxf(car.throttle_input, WheelInput.throttle)
+		return
 	if ai != null:
 		if car.freeze:
 			return
+		if race != null:
+			ai.others.assign(race.entries.map(func(e): return e.car))
 		ai.drive(get_physics_process_delta_time())
 		# stuck (against a wall, on its side): back on the line
 		# (only once it was going: a car at the start is not stuck)

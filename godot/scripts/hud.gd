@@ -4,6 +4,8 @@ extends CanvasLayer
 
 var car: Car
 var laps: LapTimer
+var race: Race
+var _lights: Label
 var _race: Label
 var _delta: Label
 var _speed: Label
@@ -80,6 +82,14 @@ func _ready() -> void:
 	_delta = _label(30)
 	_delta.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	race_box.add_child(_delta)
+	_lights = _label(120)
+	_lights.anchor_left = 0.5
+	_lights.anchor_right = 0.5
+	_lights.offset_left = -200
+	_lights.offset_right = 200
+	_lights.offset_top = 120
+	_lights.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_child(_lights)
 	_calibration = _label(24)
 	_calibration.anchor_left = 0.5
 	_calibration.anchor_right = 0.5
@@ -117,6 +127,18 @@ func toast(text: String) -> void:
 
 
 func _race_panel() -> void:
+	if race != null:
+		var t := race.countdown_text()
+		_lights.text = t
+		_lights.add_theme_color_override("font_color", Color(0.35, 0.9, 0.45) if t == "GO" else (Color(1, 0.75, 0.2) if t == "1" else Color.WHITE))
+		var lap := clampi(race.player.laps, 1, race.laps)
+		var lines := PackedStringArray()
+		lines.append("P%d / %d" % [race.position_of(race.player), race.entries.size()])
+		lines.append("Lap %d / %d   %s" % [lap, race.laps, LapTimer.format_time(race.clock - race.player.lap_start) if race.player.laps > 0 else ""])
+		lines.append("Best  %s" % LapTimer.format_time(race.player.best_lap))
+		_race.text = "\n".join(lines)
+		_delta.text = ""
+		return
 	if laps == null or not laps.has_laps():
 		_race.text = "Free driving (this track has no finish line)" if laps != null else ""
 		_delta.text = ""

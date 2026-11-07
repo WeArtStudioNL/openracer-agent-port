@@ -8,6 +8,11 @@ var _cars: Array[Dictionary] = []
 var _tracks: Array[Dictionary] = []
 var _car_pick: OptionButton
 var _track_pick: OptionButton
+var _mode_pick: OptionButton
+var _opponents_pick: OptionButton
+var _laps_pick: OptionButton
+var _grid_pick: OptionButton
+var _race_rows: Array[Control] = []
 
 
 func _ready() -> void:
@@ -18,7 +23,11 @@ func _ready() -> void:
 	var c := Content.arg("car")
 	var t := Content.arg("track")
 	if c != "" or t != "":
-		_start(c if c != "" else "openracer-muscle", t if t != "" else "testtrack")
+		var opts := {}
+		if Content.arg("race") != "":
+			opts = {"mode": "race", "opponents": int(Content.arg("opponents")) if Content.arg("opponents") != "" else 5,
+				"laps": int(Content.arg("laps")) if Content.arg("laps") != "" else 3, "pole": Content.arg("pole") != ""}
+		_start(c if c != "" else "openracer-muscle", t if t != "" else "testtrack", opts)
 	var quit_after := Content.arg("quit-after")
 	if quit_after != "":
 		get_tree().create_timer(float(quit_after)).timeout.connect(get_tree().quit)
@@ -64,7 +73,7 @@ func _build_menu() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 	var sub := Label.new()
-	sub.text = "Godot prototype · phase 2 · " + str(ProjectSettings.get_setting("application/config/version"))
+	sub.text = "Godot prototype · phase 3 · " + str(ProjectSettings.get_setting("application/config/version"))
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sub.modulate.a = 0.7
 	box.add_child(sub)
@@ -87,10 +96,22 @@ func _build_menu() -> void:
 		if t["id"] == "testtrack":
 			_track_pick.select(_track_pick.item_count - 1)
 	box.add_child(_track_pick)
+	box.add_child(_caption("Mode"))
+	_mode_pick = _options(box, ["Practice (free driving, laps and the ghost)", "Race against the AI"], 0)
+	_opponents_pick = _race_row(box, "Opponents", ["1", "2", "3", "4", "5", "6", "7"], 4)
+	_laps_pick = _race_row(box, "Laps", ["1", "2", "3", "4", "5", "8", "10"], 2)
+	_grid_pick = _race_row(box, "Start", ["At the back of the grid", "On pole"], 0)
+	_mode_pick.item_selected.connect(func(_i: int): _show_race_rows())
+	_show_race_rows()
 	var go := Button.new()
 	go.text = "Drive"
 	go.custom_minimum_size.y = 48
-	go.pressed.connect(func(): _start(_cars[_car_pick.selected]["id"], _tracks[_track_pick.selected]["id"]))
+	go.pressed.connect(func():
+		var opts := {"mode": "practice"}
+		if _mode_pick.selected == 1:
+			opts = {"mode": "race", "opponents": int(_opponents_pick.get_item_text(_opponents_pick.selected)),
+				"laps": int(_laps_pick.get_item_text(_laps_pick.selected)), "pole": _grid_pick.selected == 1}
+		_start(_cars[_car_pick.selected]["id"], _tracks[_track_pick.selected]["id"], opts))
 	box.add_child(go)
 	var settings := Button.new()
 	settings.text = "Settings"
@@ -101,6 +122,37 @@ func _build_menu() -> void:
 	quit.pressed.connect(get_tree().quit)
 	box.add_child(quit)
 	go.grab_focus.call_deferred()
+
+
+func _options(box: Control, items: Array, selected: int) -> OptionButton:
+	var o := OptionButton.new()
+	for it in items:
+		o.add_item(str(it))
+	o.select(selected)
+	box.add_child(o)
+	return o
+
+
+## A choice of the race, with its caption beside it (shown in race mode).
+func _race_row(box: Control, caption: String, items: Array, selected: int) -> OptionButton:
+	var row := HBoxContainer.new()
+	var l := _caption(caption)
+	l.custom_minimum_size.x = 110
+	row.add_child(l)
+	var o := OptionButton.new()
+	for it in items:
+		o.add_item(str(it))
+	o.select(selected)
+	o.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(o)
+	box.add_child(row)
+	_race_rows.append(row)
+	return o
+
+
+func _show_race_rows() -> void:
+	for r in _race_rows:
+		r.visible = _mode_pick.selected == 1
 
 
 func _open_settings() -> void:
@@ -122,15 +174,20 @@ func _caption(text: String) -> Label:
 	return l
 
 
-func _start(car_id: String, track_id: String) -> void:
+func _start(car_id: String, track_id: String, opts := {}) -> void:
 	if world != null:
 		world.queue_free()
 	menu.visible = false
-	RunLog.event("drive  car %s  track %s" % [car_id, track_id])
+	RunLog.event("drive  car %s  track %s  %s" % [car_id, track_id, opts])
 	world = World.new()
-	world.setup(car_id, track_id)
+	world.setup(car_id, track_id, opts)
 	world.leave.connect(_back_to_menu)
 	add_child(world)
+
+
+## (Race again: the world made a new one of itself)
+func set_world(w: World) -> void:
+	world = w
 
 
 func _back_to_menu() -> void:

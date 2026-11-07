@@ -318,6 +318,7 @@ func _build_visual() -> void:
 			for part in parts:
 				var t := CarModel.relative(part, self)
 				part.get_parent().remove_child(part)
+				part.owner = null
 				w.spin_node.add_child(part)
 				part.transform = Transform3D(Basis.IDENTITY, -w.hub_node.position) * t
 			continue
