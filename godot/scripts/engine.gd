@@ -13,6 +13,7 @@ var omega := 0.0               # rad/s
 var peak_torque := 1.0
 var power_rpm := 5000.0
 var cut := false               # the limiter cuts the fuel
+var throttle_used := 0.0       # the throttle after the idle control and the limiter (for the sound)
 var _cut_time := 0.0
 
 
@@ -72,5 +73,6 @@ func net_torque(throttle: float, dt: float) -> float:
 	cut = _cut_time > 0.0
 	if cut:
 		t = 0.0
+	throttle_used = t
 	var friction := peak_torque * (0.04 + 0.12 * clampf(r / limiter_rpm, 0.0, 1.5))
 	return t * full_torque(r) * power_scale - (1.0 - t) * friction

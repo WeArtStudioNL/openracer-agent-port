@@ -8,6 +8,8 @@ var track: Track
 var car: Car
 var camera: ChaseCamera
 var hud: Hud
+var audio: CarAudio
+var effects: TyreEffects
 var _shot_path := ""
 var _shot_at := -1.0
 var _log_every := 0.0
@@ -33,6 +35,12 @@ func setup(car_id: String, track_id: String) -> void:
 	hud = Hud.new()
 	hud.car = car
 	add_child(hud)
+	audio = CarAudio.new()
+	audio.setup(car)
+	add_child(audio)
+	effects = TyreEffects.new()
+	effects.setup(car)
+	add_child(effects)
 	# the tests and the screenshots of the command line: --drive (full throttle), --shot=file.png --shot-at=seconds, --log=seconds
 	car.autopilot = Content.arg("drive") != ""
 	_shot_path = Content.arg("shot")
@@ -56,6 +64,7 @@ func to_start() -> void:
 	var z := float(s.get("z", 0))
 	var y := track.ground_at(x, z)
 	car.place(Vector3(x, y + car.wheels[0].radius + 0.15, z), float(s.get("heading", 0)))
+	effects.clear()
 	if camera.car != null:
 		camera.snap()
 
@@ -82,6 +91,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		leave.emit()
 	elif event.is_action_pressed("camera"):
 		camera.next_mode()
+		audio.set_inside(camera.mode != ChaseCamera.Mode.FOLLOW)
 	elif event.is_action_pressed("reset"):
 		recover()
 	elif event.is_action_pressed("restart"):
@@ -102,8 +112,12 @@ func _process(delta: float) -> void:
 		var loads := []
 		for w in car.wheels:
 			loads.append(roundi(w.load))
-		print("t %5.2f  pos (%.1f %.2f %.1f)  %5.1f km/h  gear %s  %4d rpm  clutch %.2f  loads %s  up %.2f" % [
-			_time, p.x, p.y, p.z, car.speed * 3.6, car.gear_name(), roundi(car.engine.rpm()), car.clutch_engagement, loads, car.global_transform.basis.y.y])
+		var fx := []
+		for w in car.wheels:
+			fx.append("%.1f/%.1f/%d" % [w.squeal, w.smoke, roundi(w.surf_t)])
+		print("t %5.2f  pos (%.1f %.2f %.1f)  %5.1f km/h  gear %s  %4d rpm  clutch %.2f  loads %s  up %.2f  sound %.3f  tyres %s" % [
+			_time, p.x, p.y, p.z, car.speed * 3.6, car.gear_name(), roundi(car.engine.rpm()), car.clutch_engagement, loads,
+			car.global_transform.basis.y.y, audio.engine_level(), fx])
 		if Content.arg("verbose") != "":
 			for w in car.wheels:
 				print("   %s fx %+6.0f fy %+6.0f slip %+.3f wr %.2f v %.2f %s" % [

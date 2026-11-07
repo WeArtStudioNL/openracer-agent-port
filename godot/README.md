@@ -7,6 +7,17 @@ The Godot version reads the same content as the browser game: the cars, tracks a
 (`car.json`, `track.json` and the glb models), loaded while the game runs. Nothing is copied, and a car or
 a track made for the browser game drives here too.
 
+## Building the native part
+
+The engine sound is C++ (a GDExtension in `native/`, built on godot-cpp, a git submodule). Build it once, and
+again after a change in `native/src/`:
+
+    git submodule update --init
+    cd godot && /Applications/Godot.app/Contents/MacOS/Godot --headless --dump-extension-api && mv extension_api.json native/
+    cd native && scons            # makes godot/bin/liboracer.macos.template_debug.universal.dylib
+
+Without it the game runs, without the engine sound (a warning says so).
+
 ## Running
 
 Open `godot/project.godot` in Godot 4.7 and press Play (F5), or from the command line:
@@ -46,6 +57,17 @@ Holding the brake at a standstill puts the car in reverse; then the brake drives
 | `scripts/car_model.gd` | the body model and the wheels (model wheels or library rim + tyre) |
 | `scripts/track.gd` | the track model, a collision shape per mesh with its surface, sky and sun |
 | `scripts/chase_camera.gd`, `hud.gd`, `world.gd`, `main.gd`, `controls.gd` | camera, dashboard, a drive, menu, keys |
+| `native/src/engine_sim.cpp` | the engine sound: EngineSimWorklet.js and the exhaust chain of EngineSim.js in C++ |
+| `scripts/engine_sim_params.gd`, `car_audio.gd` | the sound parameters of car.json; the engine and the tyre squeal of a car |
+| `scripts/tyre_effects.gd` | skid marks, tyre smoke and dust |
+| `tools/render_engine.gd` | renders the engine sound of a car to a wav (a test) |
+
+The engine sound is the one of the browser game, calculated: the gas in every cylinder at 10 kHz (the valves, the
+burn, the exhaust runners and the collectors, after engine-sim of Ange Yaghi), then the impulse response of the
+exhaust (a partitioned convolution), the drive, the tone, the muffler and a limiter. It follows the rpm, the
+throttle and the ignition (the rev limiter cuts it, and unburnt fuel bangs in the exhaust). The cockpit and the
+bonnet camera hear it from inside (duller). The tyres heat with the power their slip burns: they squeal past the
+peak of their grip, smoke from about 220 C, and leave marks; on loose ground they throw up dust.
 
 The physics follow `web/js/Vehicle.js` and `Wheel.js`: the body is a rigid body; each wheel casts a ray
 down its suspension; the spring, the damper, the bump stop and the anti-roll bars give the load of each
@@ -60,8 +82,8 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
 
 1. **Prototype** (this): menu, the cars (no motorcycles yet) on the tracks, suspension, tyres, engine,
    clutch, gearbox, differentials, ABS, chase/cockpit/bonnet camera, speed and rpm. *Done.*
-2. **Feel and sound**: the engine sound (EngineSim), tyre squeal, skid marks and smoke; settings for the
-   steering and the controls; racing wheels (SDL3 axes) and force feedback (a GDExtension).
+2. **Feel and sound**: the engine sound (EngineSim), tyre squeal, skid marks and smoke *(done)*; settings for
+   the steering and the controls; racing wheels (SDL3 axes) and force feedback (in the GDExtension).
 3. **Racing**: laps and gates from track.json, timing, ghosts, AI opponents on the racing line, grid start.
 4. **The rest of the physics**: tyre heat and wear, pressure, camber, downforce, turbo, torque converter,
    traction and stability control, launch control; damage and the soft body.

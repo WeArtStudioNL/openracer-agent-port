@@ -2,3 +2,12 @@
 .godot/
 /build/
 *.tmp
+# the native part: what scons builds, and the API that Godot dumps for it
+/bin/*.dylib
+/bin/*.so
+/bin/*.dll
+/bin/*.framework/
+/native/extension_api.json
+*.os
+*.o
+.sconsign.dblite

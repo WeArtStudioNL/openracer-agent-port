@@ -49,6 +49,12 @@ class Wheel:
 	var s := 0.0                    # the slip in units of the peak (1: the tyre is at its limit)
 	var tyre_slope := 0.0
 	var abs_factor := 1.0
+	var side_speed := 0.0           # m/s across the tyre
+	var squeal := 0.0               # how loud it squeals (0..1)
+	var smoke := 0.0                # how much it smokes or throws up dust (0..1)
+	var mark := 0.0                 # how dark a mark it leaves on the road (0..1)
+	var surf_t := 25.0              # the surface of the tread, C
+	var road_t := 25.0              # the strip of road under it, C
 	var fp := Vector3.FORWARD       # the tyre on the road: forward and to the left (world)
 	var lf := Vector3.LEFT
 	var vref := 1.5
@@ -544,7 +550,8 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		w.forward_speed = cv.dot(w.fp)
 		w.vref = maxf(absf(w.forward_speed), 1.5)
 		# the slip across builds up over the relaxation length of the tyre (0.35 m)
-		var tan_a := clampf(cv.dot(w.lf) / w.vref, -12.0, 12.0)
+		w.side_speed = cv.dot(w.lf)
+		var tan_a := clampf(w.side_speed / w.vref, -12.0, 12.0)
 		w.slip_tan += (tan_a - w.slip_tan) * (1.0 - exp(-dt * w.vref / 0.35))
 
 	# ---- the wheels and the drivetrain, in substeps: the tyre is stiff against the wheel speed, so the wheel
@@ -577,11 +584,47 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		# the side force acts at the roll centre (the geometric load transfer of the browser game)
 		var at := w.point + up * w.roll_centre
 		state.apply_force(w.fp * w.fx + w.lf * w.fy, at - origin)
+	for w in wheels:
+		_tyre_effects(w, dt)
 
 	# ---- the air
 	var vv := v.length()
 	if vv > 0.1:
 		state.apply_central_force(-v * vv * 0.5 * AIR * drag_area)
+
+
+## Squeal, smoke and marks (web/js/Vehicle.js): the power that the slip burns heats the surface of the tread; from
+## about 220 C it smokes. A tyre that spins throws a thick cloud, one that is locked or slides sideways smokes
+## thinner and leaves more of a mark. On loose ground it throws up dust instead.
+func _tyre_effects(w: Wheel, dt: float) -> void:
+	const AMBIENT := 25.0
+	if not w.contact or w.load < 200.0:
+		w.squeal = 0.0
+		w.smoke = maxf(0.0, w.smoke - dt * 2.0)
+		w.mark = 0.0
+		w.surf_t = maxf(AMBIENT, w.surf_t - (w.surf_t - AMBIENT) * dt / 6.0)
+		return
+	var spin := w.omega * w.radius - w.forward_speed
+	var slide_speed := sqrt(spin * spin + w.side_speed * w.side_speed)
+	var burnt := absf(w.fx * spin) + absf(w.fy * w.side_speed)
+	var strip := absf(w.forward_speed) / 0.15 + 0.15
+	w.road_t = clampf(w.road_t + ((0.7 * burnt / 2500.0) - (w.road_t - AMBIENT) * strip) * dt, AMBIENT, 300.0)
+	var spin_hot := smoothstep(4.0, 14.0, spin) * (1.0 - smoothstep(1.0, 3.0, absf(w.forward_speed)))
+	var share := 0.3 + 0.3 * minf(1.0, (w.road_t - AMBIENT) / 150.0) + 0.3 * spin_hot
+	w.surf_t = clampf(w.surf_t + (share * burnt / 350.0 - (w.surf_t - AMBIENT) / 6.0) * dt, AMBIENT, 330.0)
+	var surf := Content.surface(w.surface)
+	var sliding := smoothstep(1.2, 2.2, w.s) * smoothstep(1.5, 6.0, slide_speed)
+	if surf.get("loose", false):
+		var rolling_dust := minf(0.28, maxf(0.0, (absf(w.forward_speed) - 5.0) / 40.0))
+		w.smoke = maxf(minf(1.0, 0.15 + 0.85 * sliding) * sliding, rolling_dust)
+		w.squeal = 0.0
+		w.mark = sliding * 0.6
+		return
+	var spin_share := clampf(maxf(0.0, spin) / maxf(2.0, slide_speed), 0.0, 1.0)
+	var smoking := 0.12 * smoothstep(180.0, 220.0, w.surf_t) + 0.88 * smoothstep(220.0, 260.0, w.surf_t)
+	w.smoke = smoking * (0.4 + 0.6 * minf(1.0, burnt / 40000.0)) * (0.3 + 0.7 * spin_share)
+	w.squeal = smoothstep(1.0, 2.0, w.s) * (1.0 - 0.4 * smoothstep(2.5, 4.0, w.s)) * smoothstep(0.8, 5.0, slide_speed)
+	w.mark = smoothstep(1.1, 2.0, w.s) * smoothstep(1.0, 4.0, slide_speed)
 
 
 ## The magic formula of Wheel.js (tyreForce): the slip along and across in units of the slip at the peak gives

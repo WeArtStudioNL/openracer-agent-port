@@ -1,5 +1,10 @@
 ; Engine configuration file.
-; The project of O-Racer in Godot 4: see README.md.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
@@ -23,9 +28,8 @@ window/size/viewport_height=900
 
 [physics]
 
-3d/physics_engine="Jolt Physics"
 common/physics_ticks_per_second=120
-common/max_physics_steps_per_frame=8
+3d/physics_engine="Jolt Physics"
 common/physics_interpolation=true
 
 [rendering]
