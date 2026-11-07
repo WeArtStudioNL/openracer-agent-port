@@ -21,9 +21,9 @@
 OpenRacer.Graphics = (function () {
     var PRESETS = {
         low: { gfxResolution: 720, gfxAA: 0, gfxShadows: 1, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: false, gfxSmoke: 50, gfxDistance: 500, gfxAniso: 2, gfxSharpen: 0 },
-        medium: { gfxResolution: "native", gfxAA: 2, gfxShadows: 2, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 75, gfxDistance: 1000, gfxAniso: 4, gfxSharpen: 0 },
-        high: { gfxResolution: "native", gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000, gfxAniso: 8, gfxSharpen: 1 },
-        ultra: { gfxResolution: "native", gfxAA: 4, gfxShadows: 3, gfxReflections: 2, gfxAO: 2, gfxGI: 1, gfxVignette: true, gfxSmoke: 100, gfxDistance: 5000, gfxAniso: 16, gfxSharpen: 2 }
+        medium: { gfxResolution: "auto", gfxAA: 2, gfxShadows: 2, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 75, gfxDistance: 1000, gfxAniso: 4, gfxSharpen: 0 },
+        high: { gfxResolution: "auto", gfxAA: 4, gfxShadows: 2, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000, gfxAniso: 8, gfxSharpen: 1 },
+        ultra: { gfxResolution: "auto", gfxAA: 4, gfxShadows: 3, gfxReflections: 2, gfxAO: 2, gfxGI: 1, gfxVignette: true, gfxSmoke: 100, gfxDistance: 5000, gfxAniso: 16, gfxSharpen: 2 }
     };
     var SHARPEN = [0, 0.18, 0.35, 0.55];                  // the strength of the sharpening (gfxSharpen: Off, Low, Medium, High)
     var SHADOW_SIZES = [0, 512, 1024, 2048, 4096];
@@ -427,9 +427,10 @@ OpenRacer.Graphics = (function () {
     // in pixels (720, 1080, 1440, 2160) draws the picture that many pixels high, whatever the size of the window, and the browser stretches
     // it to the window. A height above the screen draws more than it shows (a sharper picture for a price); it stops at twice the density of
     // the screen, and on a touch device at the native density (the buffers would not fit in the memory of a phone).
-    var RESOLUTIONS = ["native", 720, 1080, 1440, 2160];
+    var RESOLUTIONS = ["auto", "native", 720, 1080, 1440, 2160];
     function pixelRatio() {
         var base = ctx.basePixelRatio(), res = opt("gfxResolution");
+        if (res === "auto") return auto.ratio(base);
         if (typeof res !== "number") return base;
         var ratio = res / Math.max(1, window.innerHeight);
         return Math.max(0.25, Math.min(ratio, touch() ? base : 2 * base));
@@ -439,9 +440,77 @@ OpenRacer.Graphics = (function () {
         ctx.resize();
     }
 
+    // "auto": the resolution follows the frames. A screen of a laptop has 4 to 5 million pixels in a window, and the GPU is what limits the
+    // game there (MACOS-METAL.md: 20 fps at the density of the screen with the High preset on an M5, 60 at 720p). The picture is drawn at
+    // a lower density, between 720p and the density of the screen, and the browser stretches it to the window; the sharpening pass helps.
+    //   - frames slower than 57 a second (an average over about half a second): fewer pixels, in proportion to how much too slow;
+    //   - room to spare (faster than 83 a second, or on a 60 Hz screen steady at its refresh for three seconds): 10 % more pixels per step;
+    //     a step up that makes the frames too slow is taken back, and the next try waits 20 s;
+    //   - fewer pixels that did not help (the physics or the CPU is the limit, not the GPU): taken back, and the density holds for 10 s.
+    // At most one change a second, in steps of 0.05 of the density: a change makes the buffers of the post-processing again.
+    var auto = (function () {
+        var value = null, ema = 0, samples = 0, last = 0, lastChange = 0, holdUntil = 0, ceiling = Infinity, ceilingUntil = 0;
+        var undo = null;               // { ratio, ema, up } of the last change, to judge it a second later
+        var steady = 0, refresh = 16.7, running = false;
+        var SLOW = 1000 / 57, FAST = 1000 / 83;
+        function min(base) { return Math.min(base, 720 / Math.max(1, window.innerHeight)); }
+        function clamp(r, base) { return Math.max(min(base), Math.min(base, ceiling, r)); }
+        function ratio(base) {
+            if (value === null) value = clamp(Math.min(base, 1080 / Math.max(1, window.innerHeight)), base);   // a start at 1080p
+            return clamp(value, base);
+        }
+        function set(r, now) {
+            var base = ctx.basePixelRatio();
+            r = clamp(Math.round(r / 0.05) * 0.05, base);
+            if (Math.abs(r - ratio(base)) < 0.01) return false;
+            value = r; lastChange = now; samples = 0;
+            applyResolution();
+            return true;
+        }
+        function tick(now) {
+            if (!running) return;
+            requestAnimationFrame(tick);
+            var interval = last ? now - last : 0;
+            last = now;
+            if (!ctx || opt("gfxResolution") !== "auto" || interval <= 0 || interval > 250 || document.hidden) return;
+            ema += (samples ? 0.08 : 1) * (interval - ema);
+            samples++;
+            refresh = Math.min(16.7, refresh + 0.002 * (interval - refresh));       // (the shortest interval: 8.3 on a screen of 120 Hz)
+            if (interval < refresh) refresh = interval;
+            if (samples < 30 || now - lastChange < 1000) return;
+            var base = ctx.basePixelRatio(), r = ratio(base);
+            if (undo) {
+                var u = undo; undo = null;
+                if (u.up && ema > SLOW) { ceiling = u.ratio + 0.001; ceilingUntil = now + 20000; set(u.ratio, now); return; }
+                if (!u.up && ema > u.ema * 0.92) { holdUntil = now + 10000; set(u.ratio, now); return; }
+            }
+            if (now > ceilingUntil) ceiling = Infinity;
+            if (now < holdUntil) return;
+            if (ema > SLOW) {
+                if (r <= min(base) + 0.001) return;
+                var down = r * Math.max(0.75, Math.min(0.95, Math.sqrt(14 / ema)));          // (the work of the GPU goes with the number of pixels)
+                undo = { ratio: r, ema: ema, up: false };
+                if (!set(down, now)) undo = null;
+                return;
+            }
+            steady = ema < refresh * 1.04 ? steady + 1 : 0;
+            if (r < Math.min(base, ceiling) - 0.001 && (ema < FAST || (refresh > 12 && steady > 180))) {
+                steady = 0;
+                undo = { ratio: r, ema: ema, up: true };
+                if (!set(r * 1.05, now)) undo = null;            // (1.05 in the density is 10 % more pixels)
+            }
+        }
+        return {
+            ratio: ratio,
+            start: function () { if (!running) { running = true; requestAnimationFrame(tick); } },
+            state: function () { return { ratio: value, ema: +ema.toFixed(2), refresh: +refresh.toFixed(2), height: value ? Math.round(value * window.innerHeight) : null }; }
+        };
+    })();
+
     // Starts the chain: ctx = { renderer, scene, camera, shadowLight, size(), basePixelRatio(), resize(), reflections(every), onComposer(composer) }
     function init(context) {
         ctx = context;
+        auto.start();
         ctx.renderer.setPixelRatio(pixelRatio());
         applyShadows();
         applyReflections();
@@ -492,5 +561,5 @@ OpenRacer.Graphics = (function () {
         ctx.composer.setSize(width, height);      // the composer sizes its passes too
     }
 
-    return { PRESETS: PRESETS, SHADOW_SIZES: SHADOW_SIZES, RESOLUTIONS: RESOLUTIONS, pixelRatio: function() { return ctx ? pixelRatio() : null; }, init: init, changed: changed, applyPreset: applyPreset, currentPreset: currentPreset, setSize: setSize, GBufferPass: GBufferPass, SSGIPass: SSGIPass };
+    return { PRESETS: PRESETS, SHADOW_SIZES: SHADOW_SIZES, RESOLUTIONS: RESOLUTIONS, pixelRatio: function() { return ctx ? pixelRatio() : null; }, autoResolution: function() { return auto.state(); }, init: init, changed: changed, applyPreset: applyPreset, currentPreset: currentPreset, setSize: setSize, GBufferPass: GBufferPass, SSGIPass: SSGIPass };
 })();

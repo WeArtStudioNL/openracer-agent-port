@@ -1,7 +1,7 @@
 // Where the cars, tracks and objects (the library of the track editor) are, and how the API of tools/serve.py writes them in the app.
 //
 // Three layers, the first that has a file wins:
-//   1. the player's: Application Support/OpenRacer/{cars,tracks,objects} (in the sandbox inside the container of the app); the API writes here only
+//   1. the player's: Application Support/OpenRacer/{cars,tracks,objects} ; the API writes here only
 //   2. a folder on the Mac that the player linked (File → Link a Folder…), read only, laid out like web/ (cars/<id>/car.json, tracks/<id>/track.json)
 //   3. the game: Contents/Resources/web of the bundle, read only (it is replaced by an update)
 //

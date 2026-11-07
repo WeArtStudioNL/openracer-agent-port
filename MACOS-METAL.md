@@ -125,8 +125,27 @@ De echte BeamNG-opbouw in de app: een Metal-renderer in Swift, de physics native
 
 Wat het kost: three.js valt weg, dus de hele scène, de materialen, de glTF-lader en de editors krijgen een eigen versie. De browser-versie en de Mac-versie gaan uit elkaar. Maanden tot een jaar. Alleen doen als metingen na M2 en M3 laten zien dat de webview de grens is.
 
+## Fase M1: wat er gedaan is (7 november 2026)
+
+- **Geen App Store, een DMG**: de sandbox is uit het project (hardened runtime blijft aan, voor de notarisatie).
+- **120 Hz**: de app zet de WebKit-instelling `PreferPageRenderingUpdatesNear60FPSEnabled` uit (`WebKitFeatures.swift`). *Low* op 720p rijdend: van 60 naar 105 fps.
+- **Resolutie "Auto"** (`Graphics.js`, standaard in *medium*, *high* en *ultra*): de renderresolutie volgt de frames, tussen 720p en de dichtheid van het scherm, zodat de game boven 57 fps blijft. Bij ruimte (boven 83 fps, of drie seconden vast op de verversing van een 60 Hz-scherm) 10 % meer pixels; een stap omhoog die te traag blijkt wordt teruggedraaid. Minder pixels die niet helpen (de CPU is de grens) worden ook teruggedraaid. Ook in de browser.
+- **Reflecties in *high* elke 8 frames** in plaats van elke frame (de cube camera tekent de scène zes keer per update). In een race met 3 AI-auto's op 720p was dat de grootste losse kostenpost: 27 → 48 fps. *Ultra* houdt elke frame.
+
+Gemeten, *high*, Muscle op Desert tenzij anders vermeld:
+
+| Situatie | Voor M1 | Na M1 | Resolutie (auto) | CPU-frame | Waarvan physics en AI |
+|---|---|---|---|---|---|
+| Race, 3 AI | 14 fps | 43 fps | 720p | 17,1 ms | 13,3 ms |
+| Alleen | 20 fps | 69 fps | 800p | 8,4 ms | 6,3 ms |
+| Hatchback, Short track | – | 76 fps | 968p | 4,6 ms | 2,0 ms |
+
+In een race is nu de CPU de grens: de physics van vier auto's op één thread. Dat is fase M3. Nog open in M1: stof en rook (overdraw) meten, en de cijfers op een tragere Mac.
+
+Let op: de instellingen worden bewaard. Wie *high* al had (met de oude waarden), staat nu op *Custom*; kies *High* opnieuw.
+
 ## Volgende stappen
 
-1. M1: render-schaal en standaardpreset, en de stof/rook-overdraw meten.
-2. Certificaat *Developer ID Application* aanmaken (Glenn), dan M4 parallel.
+1. Certificaat *Developer ID Application*, dan M4 (de DMG).
+2. M3: de physics-kern in WebAssembly (de grens in een race).
 3. Een proef met `WebGPURenderer` op één baan zonder eigen shaders, om de winst te meten voordat de shaders worden omgezet.

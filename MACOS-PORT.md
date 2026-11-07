@@ -6,14 +6,14 @@ Voorbereiding van een native macOS-app van OpenRacer. Opgesteld op 7 november 20
 
 | Vraag | Besluit | Gevolg |
 |---|---|---|
-| Distributie | **Mac App Store**, testen met **TestFlight** | sandbox verplicht; een Xcode-project (archiveren en uploaden); entitlements en een privacy manifest; ffmpeg valt af |
+| Distributie | ~~Mac App Store en TestFlight~~ → **een DMG** op openracer.eu en itch.io (besluit van 7 november, later op de dag) | Developer ID en notarisatie (MACOS-METAL.md, fase M4); **geen sandbox**: force feedback via `IOHIDManager` en ffmpeg kunnen; de GPL-vraag hieronder blokkeert niet meer |
 | Minimale macOS | **macOS 13 Ventura** | `GCRacingWheel` (Game Controller) is beschikbaar als alternatief voor HID |
 | Lokaal netwerk | **ja**, voor peer-to-peer multiplayer later | `NSLocalNetworkUsageDescription`, Bonjour (`_openracer._tcp`), de server moet later ook op het netwerk kunnen luisteren |
 | Developer-account | **ja**, op de Mac van Glenn | signing via Xcode (automatic), team-ID in `macos/team.local` |
 
 Metingen van de prestaties, de inventaris van de code van Chris en het plan voor Metal en een DMG: [`MACOS-METAL.md`](MACOS-METAL.md).
 
-## ⚠️ Eerst uitzoeken: GPLv3 en de App Store
+## GPLv3 en de App Store (alleen nog van belang als de App Store later toch komt)
 
 OpenRacer staat onder **GPLv3**, en de code is niet alleen van Glenn: de fork is gebaseerd op [digi-chris/OpenRacer](https://github.com/digi-chris/OpenRacer) van Chris Barnard. De voorwaarden van de App Store (en TestFlight) leggen gebruiksbeperkingen op die volgens de FSF botsen met de GPL (§10: geen verdere beperkingen opleggen). Daarom is bijvoorbeeld VLC in 2011 uit de App Store gehaald na een klacht van een van de auteurs.
 

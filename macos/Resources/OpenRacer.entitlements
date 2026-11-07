@@ -2,27 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- The Mac App Store and TestFlight need the sandbox -->
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
-	<!-- The server of the game (127.0.0.1; later also the local network for multiplayer) -->
-	<key>com.apple.security.network.server</key>
-	<true/>
-	<!-- Connecting to other players on the local network (later), and the links of the game (Discord, openracer.eu) -->
-	<key>com.apple.security.network.client</key>
-	<true/>
-	<!-- A folder with cars and tracks chosen by the player (NSOpenPanel), kept for the next start -->
-	<key>com.apple.security.files.user-selected.read-write</key>
-	<true/>
-	<key>com.apple.security.files.bookmarks.app-scope</key>
-	<true/>
-	<!-- Saving a replay or a zip of a car or a track to Downloads -->
-	<key>com.apple.security.files.downloads.read-write</key>
-	<true/>
-	<!-- Racing wheels: force feedback is sent to the wheel as HID reports (phase 3; to be checked on a Mac whether this is enough) -->
-	<key>com.apple.security.device.usb</key>
-	<true/>
-	<key>com.apple.security.device.bluetooth</key>
-	<true/>
+	<!-- OpenRacer is given out as a DMG (openracer.eu, itch.io), signed with Developer ID and notarized, not through the App Store:
+	     no sandbox, so the game reads racing wheels and sends them force feedback (IOHIDManager) and may start ffmpeg. The hardened
+	     runtime is on (project.yml), as notarization asks; the game needs none of its exceptions (the JavaScript runs in the web
+	     content process of WebKit, which has its own). -->
 </dict>
 </plist>

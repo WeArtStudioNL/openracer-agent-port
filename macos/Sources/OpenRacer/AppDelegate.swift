@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let config = WKWebViewConfiguration()
         config.mediaTypesRequiringUserActionForPlayback = []   // the engine sound starts without a click on the page
         config.websiteDataStore = .default()                   // localStorage and IndexedDB are kept (the garage, settings, records)
+        WebKitFeatures.set("PreferPageRenderingUpdatesNear60FPSEnabled", false, in: config.preferences)   // the refresh rate of the screen, not 60
 
         #if DEBUG
         profiler?.install(in: config)

@@ -111,7 +111,7 @@ var Settings = (function() {
         // the easing of the keys: the time that a key takes to bring the pedal or the wheels to the full value (s), and the curve of it (1 straight, below 1 quick at first, above 1 slow at first)
         keyThrottleTime: 0.5, keyThrottleCurve: 0.6, keyBrakeTime: 0.4, keyBrakeCurve: 0.6, keySteerTime: 0.9, keySteerCurve: 1,
         // the graphics (Graphics.js): a preset is a set of these
-        gfxPreset: "high", gfxResolution: "native", gfxAA: 4, gfxShadows: 2, gfxReflections: 2, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000, gfxAniso: 8, gfxSharpen: 1,
+        gfxPreset: "high", gfxResolution: "auto", gfxAA: 4, gfxShadows: 2, gfxReflections: 1, gfxAO: 0, gfxGI: 0, gfxVignette: true, gfxSmoke: 100, gfxDistance: 2000, gfxAniso: 8, gfxSharpen: 1,
         // the look and the atmosphere (Graphics.js, Atmosphere.js): the tone mapping, the exposure, the contrast and the saturation; the hour (-1: as the track) and the weather
         mirrorLeftReal: false, mirrorRightReal: false, mirrorCentreReal: false, mirrorLeftYaw: 0, mirrorLeftTilt: 0, mirrorRightYaw: 0, mirrorRightTilt: 0, mirrorCentreYaw: 0, mirrorCentreTilt: 0, gfxDebrisRate: 1, gfxDebrisScale: 1, gfxDebrisMax: 6000, gfxTone: "neutral", gfxExposure: 0.9, gfxContrast: 1.05, gfxSaturation: 1, gfxTime: 14, gfxWeather: "clear", gfxSunAzimuth: 40, gfxMoon: 1, gfxGround: "auto", simAiDamage: "near", simAiRange: 60, simAiSteps: 3, simTyreDetail: "full" };
 
@@ -1199,7 +1199,7 @@ var Settings = (function() {
             var section = function(title) { var h = document.createElement("h2"); h.textContent = title; page.appendChild(h); };
             section("Picture");
             var nativeHeight = Math.round(window.innerHeight * (window.devicePixelRatio || 1));
-            page.appendChild(pickRow("Resolution", options.gfxResolution, G.RESOLUTIONS.map(function(v) { return [v, v === "native" ? "Native (" + nativeHeight + "p)" : v === 2160 ? "2160p (4K)" : v + "p"]; }), gfxPick("gfxResolution")));
+            page.appendChild(pickRow("Resolution", options.gfxResolution, G.RESOLUTIONS.map(function(v) { return [v, v === "auto" ? "Automatic (keeps 60 fps)" : v === "native" ? "Native (" + nativeHeight + "p)" : v === 2160 ? "2160p (4K)" : v + "p"]; }), gfxPick("gfxResolution")));
             page.appendChild(pickRow("Anti-aliasing", options.gfxAA, [0, 2, 4, 8].map(function(v) { return [v, v ? v + "\u00d7 MSAA" : "Off"]; }), gfxPick("gfxAA")));
             page.appendChild(pickRow("Texture sharpness at a slant (anisotropic)", options.gfxAniso, [1, 2, 4, 8, 16].map(function(v) { return [v, v === 1 ? "Off" : v + "\u00d7"]; }), gfxPick("gfxAniso")));
             page.appendChild(pickRow("Sharpening", options.gfxSharpen, [[0, "Off"], [1, "Low"], [2, "Medium"], [3, "High"]], gfxPick("gfxSharpen")));
