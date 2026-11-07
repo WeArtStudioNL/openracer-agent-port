@@ -203,7 +203,7 @@ OpenRacer.Car = function( config, domElement ) {
     this.vehicle.collision = collisionWorld;
     this.vehicle.ground = groundWorld;
     // the physics of the car in a Web Worker (PhysicsLink.js, ?worker=1): from here on what is done to the vehicle is also sent there
-    this.physicsLink = OpenRacer.PhysicsLink && OpenRacer.PhysicsLink.wanted() ? new OpenRacer.PhysicsLink(this) : null;
+    this.physicsLink = OpenRacer.PhysicsLink && OpenRacer.PhysicsLink.wanted() ? new OpenRacer.PhysicsLink(this, "player") : null;
     if(OpenRacer.PhysicsLink) OpenRacer.PhysicsLink.badge(this);       // (worker=1 or worker=0 in the address: the frames and the cost of the physics, to compare)
     this.pit = new OpenRacer.PitStop(this.vehicle); // the pit stop on the pit lane (Pit.js), when the race has wear and fuel
     this.pit.holdCar = true;                        // (the player's car goes on the jacks: see the pit stop in update)

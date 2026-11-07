@@ -38,6 +38,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         config.websiteDataStore = .default()                   // localStorage and IndexedDB are kept (the garage, settings, records)
         WebKitFeatures.set("PreferPageRenderingUpdatesNear60FPSEnabled", false, in: config.preferences)   // the refresh rate of the screen, not 60
 
+        installPageSettings(in: config.userContentController)
+
         #if DEBUG
         profiler?.install(in: config)
         #endif
@@ -79,6 +81,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func reload(_ sender: Any?) { webView.reloadFromOrigin() }
+
+    // ---- what the app tells the page (window.OpenRacerApp, before the scripts of the game): the physics of the cars in a worker (PhysicsLink.js), on by default
+    private static let physicsWorkerKey = "PhysicsWorker"
+    private var physicsWorker: Bool {
+        get { UserDefaults.standard.object(forKey: Self.physicsWorkerKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: Self.physicsWorkerKey) }
+    }
+    private var settingsScript: WKUserScript?
+    private func installPageSettings(in controller: WKUserContentController) {
+        let script = WKUserScript(source: "window.OpenRacerApp = { physicsWorker: \(physicsWorker) };", injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        controller.addUserScript(script)
+        settingsScript = script
+    }
+    @objc private func togglePhysicsWorker(_ sender: Any?) {
+        physicsWorker.toggle()
+        // the scripts again with the new setting (the others, such as the profiler of a debug build, stay)
+        let controller = webView.configuration.userContentController
+        let others = controller.userScripts.filter { $0 !== settingsScript }
+        controller.removeAllUserScripts()
+        installPageSettings(in: controller)
+        others.forEach { controller.addUserScript($0) }
+        webView.reload()
+    }
 
     // MARK: - Cars and tracks on the Mac
 
@@ -148,6 +173,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fullscreen = NSMenuItem(title: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
         fullscreen.keyEquivalentModifierMask = [.control, .command]
         viewMenu.addItem(fullscreen)
+        viewMenu.addItem(.separator())
+        viewMenu.addItem(withTitle: "Physics in a Separate Thread", action: #selector(togglePhysicsWorker(_:)), keyEquivalent: "")
         #if DEBUG
         viewMenu.addItem(withTitle: "Reload", action: #selector(reload(_:)), keyEquivalent: "r")
         #endif
@@ -176,6 +203,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension AppDelegate: NSMenuItemValidation {
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(togglePhysicsWorker(_:)) {
+            item.state = (UserDefaults.standard.object(forKey: "PhysicsWorker") as? Bool ?? true) ? .on : .off
+            return true
+        }
         if item.action == #selector(unlinkFolder(_:)) {
             if let linked = library?.linked {
                 item.title = "Unlink “\(linked.lastPathComponent)”"

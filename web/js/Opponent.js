@@ -63,7 +63,10 @@ OpenRacer.Opponent = function (config, line, options) {
     var params = OpenRacer.vehicleParams(config, getSurface);
     params.simpleTyres = options.shellTyres ? false : true;
     this.vehicle = options.vehicle || new OpenRacer.Vehicle(params, this);
-    if(!options.vehicle) this.vehicle.engineDamageOn = false;       // (the AI cars have no engine damage: they have no pit stop to mend it)
+    if(!options.vehicle) this.vehicle.engineDamageOn = false;
+    // the physics in the worker with the player's car (PhysicsLink.js, ?worker=1): this car's vehicle is then a view of the one there; the driver stays here
+    this.isReady = function () { return self.loaded; };
+    this.physicsLink = !options.vehicle && OpenRacer.PhysicsLink && OpenRacer.PhysicsLink.wanted() ? new OpenRacer.PhysicsLink(this, "ai" + (OpenRacer.Opponent.count = (OpenRacer.Opponent.count || 0) + 1), { preControls: true }) : null;       // (the AI cars have no engine damage: they have no pit stop to mend it)
     // the tyres, the power and the clutch as car.json has them (the player's car gets these through the tuning menu)
     var tyres = config.tyres || {}, engineConfig = config.engine || {}, assists = config.assists || {};
     if (!options.vehicle) this.vehicle.retune({
@@ -630,7 +633,7 @@ OpenRacer.Opponent = function (config, line, options) {
             if (this.clock - this.crashedAt >= this.crashWait) { this.crashedAt = 0; this.putBack(); }
         }
         else this.drive(delta, others);
-        this.vehicle.updateControls(delta);
+        if (!this.physicsLink) this.vehicle.updateControls(delta);       // (with a link it is done in the worker, or by the link, before the step)
         // the simulation options (Settings, tab Simulation): an AI car far from the player's car, or all of them, do not step their shell (no new dents, a lot less time)
         var sim = OpenRacer.sim, own = this.vehicle;
         if(sim && !options.vehicle && own.softBody) {
@@ -638,7 +641,7 @@ OpenRacer.Opponent = function (config, line, options) {
             own.shellSkip = sim.aiDamage === "off" || (sim.aiDamage === "near" && !!focus && Math.hypot(own.px - focus.px, own.pz - focus.pz) > sim.range);
             own.softBody.minSteps = sim.aiSteps;
         }
-        this.vehicle.update(delta);
+        if (this.physicsLink) this.physicsLink.update(delta); else this.vehicle.update(delta);
         this.pit.update(delta);
         var marks = OpenRacer.skidMarks && OpenRacer.skidMarks();
         if (marks) marks.update(this.vehicle);

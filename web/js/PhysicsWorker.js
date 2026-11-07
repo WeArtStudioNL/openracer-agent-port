@@ -17,14 +17,14 @@
  *                                                      vehicle; the ops first: { op: "set", name, value } (a value the page wrote, by its name in
  *                                                      VehicleState) and { op: "call", target, method, args } (vehicle, engine, softBody, controller)
  *              Messages out:
- *                { type: "ready" }, { type: "added", id }
+ *                { type: "ready", wasm }, { type: "added", id }   (ready once PhysicsWasm.js has loaded the WebAssembly)
  *                { type: "state", frame, ms, cars: { id: snapshot } }   after a step: the snapshots (their buffers are transferred); a snapshot has
  *                                                      softState (SoftBody.exportState) when the car has a shell
  *                { type: "error", message }
  */
 
 self.OpenRacer = {};
-importScripts("Surfaces.js", "Engine.js", "Wheel.js", "TyreShell.js", "SoftBody.js", "EngineDamage.js", "Ground.js", "Motorcycle.js", "Vehicle.js", "VehicleState.js");
+importScripts("Surfaces.js", "PhysicsWasm.js", "Engine.js", "Wheel.js", "TyreShell.js", "SoftBody.js", "EngineDamage.js", "Ground.js", "Motorcycle.js", "Vehicle.js", "VehicleState.js", "Opponent.js");
 
 var ground = null;
 var cars = {};       // id: { vehicle, input, cache }
@@ -69,7 +69,7 @@ self.onmessage = function (e) {
             var input = Object.assign({}, m.input);
             var vehicle = new OpenRacer.Vehicle(Object.assign({}, m.params, { getSurface: getSurface }), input);
             vehicle.ground = ground;
-            cars[m.id] = { vehicle: vehicle, input: input, cache: {} };
+            cars[m.id] = { vehicle: vehicle, input: input, cache: {}, preControls: !!m.preControls };
             place(cars[m.id], m.place);
             if(m.setup) setup(cars[m.id], m.setup);
             self.postMessage({ type: "added", id: m.id });
@@ -84,8 +84,12 @@ self.onmessage = function (e) {
                 if(m.ops && m.ops[id]) m.ops[id].forEach(function (op) { run(car, op); });
                 if(m.inputs && m.inputs[id]) Object.assign(car.input, m.inputs[id]);
                 if(m.controllers && m.controllers[id] && car.vehicle.controller) Object.assign(car.vehicle.controller, m.controllers[id]);
+                if(car.preControls) car.vehicle.updateControls(m.d);           // (an AI car: Opponent.update does this before the step)
                 car.vehicle.update(m.d);
             }
+            // the cars meet each other here, as they do in the page after the AI cars have stepped (main.js updateRace)
+            var all = Object.keys(cars).map(function (id) { return cars[id].vehicle; });
+            if(all.length > 1) OpenRacer.collideCars(all);
             var ms = performance.now() - start;
             for(var id in cars) {
                 var v = cars[id].vehicle, snap = OpenRacer.VehicleState.snapshot(v, cars[id].cache);
@@ -98,10 +102,11 @@ self.onmessage = function (e) {
                 if(snap.soft) transfer.push(snap.soft.buffer);
                 if(snap.tyres) snap.tyres.forEach(function (t) { if(t) transfer.push(t.table.buffer); });
             }
-            self.postMessage({ type: "state", frame: m.frame, ms: ms, cars: out }, transfer);
+            self.postMessage({ type: "state", frame: m.frame, ms: ms, snapMs: performance.now() - start - ms, cars: out }, transfer);
         }
     } catch(error) {
         self.postMessage({ type: "error", message: String(error && error.stack || error) });
     }
 };
-self.postMessage({ type: "ready" });
+// ready once the WebAssembly of the physics is there (or did not load: then the JavaScript)
+OpenRacer.PhysicsWasm.load("").then(function () { var f = OpenRacer.PhysicsWasm.failed(); self.postMessage({ type: "ready", wasm: OpenRacer.PhysicsWasm.ready(), wasmFailed: f ? String(f.message || f) : null }); });

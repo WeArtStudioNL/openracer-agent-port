@@ -236,6 +236,14 @@ What was measured (the Mac, 10 cores):
   Windows PC, an iPhone and an Android phone, and compare the label; then smooth the pose between snapshots, and move the contacts
   with the AI cars into the worker.
 
+### Steps 2 and 3 together — built (7 November 2026), on by default in the Mac app
+
+All the cars in one worker, with the WebAssembly of PhysicsWasm.js: PhysicsLink.js is a hub (one step a frame for every car, `PhysicsLink.endFrame`)
+with a link per car (the player's and every AI car; the AI drivers stay in the page). collideCars runs in the worker after the cars, so the cars
+meet as in the page. A car is shown at the time of the frame: its last snapshot is carried forward by its speed and its turn. The measurements and
+what is not tested yet: MACOS-METAL.md, phase M3, step 3. The Mac app turns it on (View → Physics in a Separate Thread, `window.OpenRacerApp`);
+in a browser it stays behind `?worker=1`.
+
 ### Step 3: the player's car in a worker (the plan)
 
 The main thread sends the input of frame N+1 and draws frame N while the worker steps (pipelined). That is one frame more between

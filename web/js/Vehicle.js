@@ -750,6 +750,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     // Repairs the car and puts it back on its wheels where it is: the same place and heading, the roof up, 30 cm above the road, not moving (for a car that lies on its roof or its side)
     this.repairUpright = function (keepTyresAndFuel) {
         var heading = this.psi;
+        rotate(this.qx, this.qy, this.qz, this.qw, 0, 0, 1, axisZ);        // (the front from the pose of now: a vehicle that is a view of one in a worker, PhysicsLink.js, is not stepped here)
         var fx = axisZ.x, fz = axisZ.z;
         if(fx * fx + fz * fz > 0.09) heading = Math.atan2(fz, fx);          // (a car that stands on its nose or tail has no heading from its front: it keeps the last one)
         var x = this.px, z = this.pz;
@@ -799,6 +800,7 @@ OpenRacer.Vehicle = function (parameters, input) {
     // Where the car is (for a place to come back to): { x, z, psi (the heading), py (the height of the body, null when the car is not on its wheels) }
     this.pose = function () {
         var heading = this.psi;
+        rotate(this.qx, this.qy, this.qz, this.qw, 0, 0, 1, axisZ);        // (as in repairUpright)
         if(axisZ.x * axisZ.x + axisZ.z * axisZ.z > 0.09) heading = Math.atan2(axisZ.z, axisZ.x);
         var up = rotate(this.qx, this.qy, this.qz, this.qw, 0, 1, 0, { x: 0, y: 0, z: 0 });
         return { x: this.px, z: this.pz, psi: heading, py: up.y > 0.7 ? this.py : null };

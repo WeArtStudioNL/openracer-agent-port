@@ -128,6 +128,19 @@ Zoals BeamNG: de node-beam-kern native, de rest van de logica in een scripttaal.
 - **Tot op de bit gelijk**: `?wasm=verify` op Short track (5 AI), Desert (3 AI) en Kartbaan Oldenzaal (Stadium truck, 4 AI): ruim 240.000 kleine stappen van schillen, 0 verschillen (en de banden ook).
 - **Snelheid**, dezelfde schil vanuit dezelfde vervormde stand, 600 stappen (`sb.wasmEnabled` aan en uit): de Muscle (166 nodes, 300 balken) 0,057 → 0,048 ms per stap (1,2×), een AI-auto (57–103 nodes) 1,5–1,6×. Minder winst dan bij de band: dit is eenvoudige luscode waar de JIT van WebKit al goed in is. In races is het verschil kleiner dan de spreiding tussen twee races.
 
+**Stap 3, de physics op een eigen thread (7 november 2026).** Alle auto's, die van de speler en de AI-auto's, rekenen samen in één Web Worker (`PhysicsWorker.js`), met de WebAssembly; de pagina tekent ondertussen. Gebouwd op het experiment van `PHYSICS-WORKER.md` (stap 3, alleen de auto van de speler), met de twee problemen die daar stonden opgelost:
+
+- **Auto's raken elkaar weer goed.** `PhysicsLink.js` is nu een hub (één worker, één stap per frame voor alle auto's, `PhysicsLink.endFrame` in `main.js`) met een link per auto. `Opponent.js` heeft er ook een; de AI-bestuurders blijven in de pagina (wat ze indrukken gaat met de volgende stap mee). `collideCars` draait in de worker na alle auto's, zoals in de pagina. Getest: de Muscle met volgas 15 m achter een stilstaande AI-auto op Short track: in de pagina raakt hij die met 38 km/h, kaatst terug met −10 km/h en staat 3,5 m erachter; in de worker 39 km/h, −6 km/h, 3,5 m. (In het oude experiment vlogen de AI-auto's weg met 138 km/h.)
+- **Geen haperen.** Een auto wordt getoond op de tijd van het frame: de laatste snapshot wordt doorgezet met zijn snelheid en draaiing (lichaam en wielen) over de tijd die er nog niet in zit (de hub houdt bij tot welke speltijd elke stap gaat). Binnen de klok van de game beweegt de auto nu elk frame precies snelheid × frametijd (gemeten: verhouding 1,00, spreiding 0,00), net als in de pagina. Frames zonder nieuwe snapshot: 1–3 %.
+- **De WebAssembly laadde niet in de worker** (een leeg pad werd als "geen" gelezen: 404); de worker rekende in JavaScript, 0,6 ms per ms spel. Met de WebAssembly: 0,29.
+- `Vehicle.pose()` en `repairUpright()` namen hun richting van de laatste stap: in een view (die niet stapt) was die oud. Nu uit de rotatie van nu.
+- **Terugvallen**: faalt de worker, of is hij te traag, dan rekent de pagina alle auto's weer (getest: midden in een race gestopt, alle auto's rijden door, geen fouten).
+- **Aan of uit**: in de Mac-app standaard aan, met *View → Physics in a Separate Thread*; de app geeft het door als `window.OpenRacerApp.physicsWorker`. In de browser uit, tenzij `?worker=1`.
+
+Gemeten (M5, *high*, Desert met 3 AI-auto's): de hoofdthread 5,8–7,8 ms per frame tegen 8,7–9,4 in de pagina, 73–79 fps tegen 67–70. In een groep auto's die elkaar raken (Short track, 5 AI): 48–64 fps tegen 14–25, de hoofdthread 10–11 ms tegen 26.
+
+Nog niet getest met de worker: de pitstop van de AI, het terugzetten van een gecrashte AI-auto, de replay, de parts, het tuningmenu tijdens een race, en of het met het oog soepel is (de meting ten opzichte van de verversing van het scherm gaf 12–14 % van de frames meer dan 50 % ernaast, tegen 5 % in de pagina; binnen de klok van de game is het exact).
+
 Volgende stappen in M3: het zoeken van contacten (`scanContacts`/`testSphere` tegen de driehoeken, `bodyContacts3D`, `buildCarPairs`: samen het grootste deel van een AI-stap in een groep), daarna meerdere auto's tegelijk op meerdere cores (dat is waar de grote winst zit: elke auto is los te rekenen) en SIMD.
 
 ### Fase M4: de DMG uitbrengen (dagen)

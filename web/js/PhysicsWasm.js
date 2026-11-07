@@ -28,7 +28,7 @@ OpenRacer.PhysicsWasm = (function () {
     function load(base) {
         if (mode === "0" || typeof WebAssembly === "undefined") return Promise.resolve(false);
         var imports = { env: { sin: Math.sin, cos: Math.cos, exp: Math.exp } };
-        var url = (base || "js/") + "wasm/physics.wasm";
+        var url = (base === undefined ? "js/" : base) + "wasm/physics.wasm";        // (a worker in js/ passes "")
         return fetch(url).then(function (r) { if (!r.ok) throw new Error(url + ": HTTP " + r.status); return r.arrayBuffer(); })
             .then(function (bytes) { return WebAssembly.instantiate(bytes, imports); })
             .then(function (result) {

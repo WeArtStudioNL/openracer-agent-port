@@ -677,7 +677,8 @@ function updateRace(delta) {
     var vehicles = [car.vehicle].concat(race.opponents.map(function(o) { return o.vehicle; }));
     if(OpenRacer.Atmosphere) OpenRacer.Atmosphere.update(delta, vehicles);       // (the ground gets wet in the rain and white in the snow, and dries and melts again)
     race.opponents.forEach(function(o) { o.update(delta, vehicles); });
-    if(race.opponents.length) OpenRacer.collideCars(vehicles);
+    // (the cars in the physics worker meet each other there, PhysicsLink.js)
+    if(race.opponents.length && !(OpenRacer.PhysicsHub && OpenRacer.PhysicsHub.anyLive())) OpenRacer.collideCars(vehicles);
     if(OpenRacer.RigidObjects) OpenRacer.RigidObjects.update(delta, vehicles);
     race.ghost.update(car, delta);
     if(race.opponents.length && race.line && !race.playerFinished) {
@@ -756,6 +757,7 @@ function onEnterFrame() {
         }
         if(OpenRacer.GateMarkers) OpenRacer.GateMarkers.update(car);
         updateRace(d);
+        if(OpenRacer.PhysicsLink) OpenRacer.PhysicsLink.endFrame(d);      // (the step of every car in the physics worker, ?worker=1)
         if(OpenRacer.Replay) OpenRacer.Replay.record(d);   // everything is recorded from the start, for the replay
     }
 }
