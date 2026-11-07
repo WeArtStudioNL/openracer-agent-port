@@ -1,8 +1,9 @@
 /*
  * PhysicsWasm.js
  *
- * Description: The physics in WebAssembly (MACOS-METAL.md, phase M3). For now one part: the substeps of the shell tyre (TyreShell.js), which is most of the
- *              time of a step of a car (PHYSICS-WORKER.md). The C is in wasm/tyre_shell.c, built by wasm/build.sh into js/wasm/tyre_shell.wasm.
+ * Description: The physics in WebAssembly (MACOS-METAL.md, phase M3): the substeps of the shell tyre (TyreShell.js, most of the time of a step of a car,
+ *              PHYSICS-WORKER.md) and the small steps of the shell of a car (SoftBody.js, the cost of a pack of cars that touch). The C is in wasm/*.c, built
+ *              by wasm/build.sh into js/wasm/physics.wasm.
  *
  *              The arrays of a tyre are made on the memory of the module (alloc), so TyreShell.js and the WebAssembly use the same numbers and nothing is
  *              copied for a step. The memory can grow; the typed arrays on the old buffer are then dead, so a user of alloc keeps the generation it made its
@@ -21,12 +22,13 @@ OpenRacer.PhysicsWasm = (function () {
     try { var q = new URLSearchParams(self.location.search).get("wasm"); if (q === "0" || q === "1" || q === "verify") mode = q; } catch (e) { /* no address (a worker) */ }
 
     var instance = null, memory = null, generation = 0, top = 0, free = {}, failed = null;
-    var stats = { steps: 0, verified: 0, mismatches: 0, firstMismatch: null };
+    var growListeners = [];                  // (weak: a car that is gone does not keep its views function alive)
+    var stats = { steps: 0, verified: 0, mismatches: 0, firstMismatch: null, soft: { steps: 0, verified: 0, mismatches: 0, firstMismatch: null } };
 
     function load(base) {
         if (mode === "0" || typeof WebAssembly === "undefined") return Promise.resolve(false);
         var imports = { env: { sin: Math.sin, cos: Math.cos, exp: Math.exp } };
-        var url = (base || "js/") + "wasm/tyre_shell.wasm";
+        var url = (base || "js/") + "wasm/physics.wasm";
         return fetch(url).then(function (r) { if (!r.ok) throw new Error(url + ": HTTP " + r.status); return r.arrayBuffer(); })
             .then(function (bytes) { return WebAssembly.instantiate(bytes, imports); })
             .then(function (result) {
@@ -47,6 +49,11 @@ OpenRacer.PhysicsWasm = (function () {
         if (top > memory.buffer.byteLength) {
             memory.grow(Math.ceil((top - memory.buffer.byteLength) / 65536) + 64);       // (and some room, so it does not grow at every tyre)
             generation++;
+            // every user makes its typed arrays again at once: a car between two steps (its shell read by the debug view, its contacts) would otherwise read a dead view
+            for (var i = growListeners.length - 1; i >= 0; i--) {
+                var fn = growListeners[i].deref ? growListeners[i].deref() : growListeners[i];
+                if (fn) fn(); else growListeners.splice(i, 1);
+            }
         }
         return at;
     }
@@ -78,9 +85,11 @@ OpenRacer.PhysicsWasm = (function () {
         generation: function () { return generation; },
         buffer: function () { return memory.buffer; },
         alloc: alloc,
+        onGrow: function (fn) { growListeners.push(typeof WeakRef === "function" ? new WeakRef(fn) : fn); },
         release: release,
         groundIn: groundIn,
         tyreSubsteps: function (pAt, aAt) { instance.exports.tyre_substeps(pAt, aAt); },
+        softSubstep: function (pAt, aAt) { instance.exports.soft_substep(pAt, aAt); },
         stats: stats
     };
 })();

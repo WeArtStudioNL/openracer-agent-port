@@ -10,12 +10,10 @@ WASMLD="${WASMLD:-$(command -v wasm-ld || ls /opt/homebrew/opt/lld*/bin/wasm-ld 
 [[ -x "$CLANG" ]] || { echo "No clang with wasm32: brew install llvm" >&2; exit 1; }
 [[ -x "$WASMLD" ]] || { echo "No wasm-ld: brew install lld" >&2; exit 1; }
 mkdir -p "$OUT"
-for src in "$HERE"/*.c; do
-    name="$(basename "$src" .c)"
-    # -ffp-contract=off: no fused multiply-add, so the numbers are those of the JavaScript to the last bit
-    # -fno-builtin: no calls to memset and memcpy (there is no libc)
-    "$CLANG" --target=wasm32 -O3 -ffp-contract=off -fno-builtin -nostdlib -fuse-ld="$WASMLD" \
-        -Wl,--no-entry -Wl,--initial-memory=33554432 -Wl,--max-memory=1073741824 -Wl,--stack-first -Wl,-z,stack-size=1048576 \
-        -o "$OUT/$name.wasm" "$src"
-    echo "$OUT/$name.wasm ($(wc -c < "$OUT/$name.wasm" | tr -d ' ') bytes)"
-done
+# all the C goes into one module (one memory, which TyreShell.js and SoftBody.js share): js/wasm/physics.wasm
+# -ffp-contract=off: no fused multiply-add, so the numbers are those of the JavaScript to the last bit
+# -fno-builtin: no calls to memset and memcpy (there is no libc)
+"$CLANG" --target=wasm32 -O3 -ffp-contract=off -fno-builtin -nostdlib -fuse-ld="$WASMLD" \
+    -Wl,--no-entry -Wl,--initial-memory=33554432 -Wl,--max-memory=1073741824 -Wl,--stack-first -Wl,-z,stack-size=1048576 \
+    -o "$OUT/physics.wasm" "$HERE"/*.c
+echo "$OUT/physics.wasm ($(wc -c < "$OUT/physics.wasm" | tr -d ' ') bytes)"

@@ -133,6 +133,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         beamRig.push(isRig[a] || isRig[b] ? 1 : 0);
         B = beamA.length;
         self.beamCount = B;
+        beamsDirty = true;
         safeStep();
         return B - 1;
     };
@@ -245,6 +246,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
             beamRest[j] = Math.hypot(rest[3 * a] - rest[3 * b], rest[3 * a + 1] - rest[3 * b + 1], rest[3 * a + 2] - rest[3 * b + 2]);
         }
         this.absorbed = 0;
+        beamsDirty = true;
         this.plate = null; this.pinned = false;
         this.displacement.fill(0);
         this.version++;
@@ -413,90 +415,205 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         gone[k] = 1; w[3 * k] = w[3 * k + 1] = w[3 * k + 2] = 0;
     }
 
+    // The anchors, the beams, the integration and the suspension of one small step of h seconds (in a step of dt), after the contacts have put their forces
+    // in f. acc: { moved, maxMove, maxMove2 } of the step so far, updated. (wasmSubstep below does the same in WebAssembly, wasm/soft_body.c.)
+    var acc = { moved: false, maxMove: 0, maxMove2: 0 };
+    this.wasmEnabled = true;                           // (false: the JavaScript, for a comparison; the arrays stay where they are)
+    function substepJS(h, dt, acc) {
+        var hard = P.hardening, reaction = self.reaction;
+        var moved = acc.moved, maxMove = acc.maxMove, maxMove2 = acc.maxMove2;
+        for (var k = 0; k < N; k++) {
+            if (!anchorAlive[k] || isRig[k]) continue;
+            var ix = 3 * k;
+            // the anchor is stretched by the elastic part u only: the node stands at rest + q + u, and q is the shape that stays
+            var dx = u[ix], dy = u[ix + 1], dz = u[ix + 2];
+            var d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            var kA = P.anchorK * aScale[k];
+            var yieldD = anchorYield[k] / kA;
+            if (d > yieldD) {
+                // past the yield force: the shape stays bent. What is beyond it goes from the spring into the shape, but for a share that is
+                // still a spring (the force goes on rising); the node does not move by it (before, the bend was added and not taken from u:
+                // the node jumped, and a dent stood twice as deep as the energy it took)
+                var excess = d - yieldD;
+                var shift = Math.min(excess * (1 - hard), room(ix));      // (a node that is crushed as far as it goes bends no further, see room)
+                var sx = dx / d * shift, sy = dy / d * shift, sz = dz / d * shift;
+                q[ix] += sx; q[ix + 1] += sy; q[ix + 2] += sz;
+                u[ix] -= sx; u[ix + 1] -= sy; u[ix + 2] -= sz;
+                self.absorbed += anchorYield[k] * shift;
+                dx = u[ix]; dy = u[ix + 1]; dz = u[ix + 2];
+                d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                moved = true;
+            }
+            if(d > maxMove) maxMove = d;
+            var c = 2 * P.anchorDamping * Math.sqrt(kA * mass[k]);
+            var fx = kA * dx + c * w[ix], fy = kA * dy + c * w[ix + 1], fz = kA * dz + c * w[ix + 2];   // the anchor pulls the node back; this is what it pulls on the car
+            if (torn(k, kA, d)) { anchorAlive[k] = 0; loose(k); moved = true; continue; }       // it tears off
+            f[ix] -= fx; f[ix + 1] -= fy; f[ix + 2] -= fz;
+            // on the car, at the place of the node
+            var px = rest[ix] + u[ix] + q[ix], py = rest[ix + 1] + u[ix + 1] + q[ix + 1], pz = rest[ix + 2] + u[ix + 2] + q[ix + 2];
+            reaction[0] += fx * h / dt; reaction[1] += fy * h / dt; reaction[2] += fz * h / dt;
+            reaction[3] += (py * fz - pz * fy) * h / dt; reaction[4] += (pz * fx - px * fz) * h / dt; reaction[5] += (px * fy - py * fx) * h / dt;
+        }
+        for (var i = 0; i < B; i++) {
+            if (!beamAlive[i] || beamRig[i] || gone[beamA[i]] || gone[beamB[i]]) continue;
+            var a = beamA[i] * 3, b = beamB[i] * 3;
+            var ex = rest[b] + u[b] + q[b] - rest[a] - u[a] - q[a], ey = rest[b + 1] + u[b + 1] + q[b + 1] - rest[a + 1] - u[a + 1] - q[a + 1], ez = rest[b + 2] + u[b + 2] + q[b + 2] - rest[a + 2] - u[a + 2] - q[a + 2];
+            var len = Math.sqrt(ex * ex + ey * ey + ez * ez);
+            if (len < 1e-6) continue;
+            var nx = ex / len, ny = ey / len, nz = ez / len;
+            var ext = len - beamRest[i];
+            var force = beamK[i] * ext;
+            // yield: the rest length follows what is beyond the yield force
+            if (Math.abs(force) > beamYield[i]) {
+                var beyond = Math.abs(ext) - beamYield[i] / beamK[i];
+                var change = Math.sign(ext) * beyond * (1 - hard);
+                beamRest[i] += change;
+                self.absorbed += beamYield[i] * Math.abs(change);
+                ext = len - beamRest[i];
+                force = beamK[i] * ext;
+                moved = true;
+            }
+            if (snapped(i, force)) { beamAlive[i] = 0; loose(beamA[i]); loose(beamB[i]); moved = true; continue; }
+            var rv = (w[b] - w[a]) * nx + (w[b + 1] - w[a + 1]) * ny + (w[b + 2] - w[a + 2]) * nz;
+            var cb = 2 * P.beamDamping * Math.sqrt(beamK[i] * Math.min(mass[beamA[i]], mass[beamB[i]]));
+            var fb = force + cb * rv;
+            f[a] += fb * nx; f[a + 1] += fb * ny; f[a + 2] += fb * nz;
+            f[b] -= fb * nx; f[b + 1] -= fb * ny; f[b + 2] -= fb * nz;
+        }
+        // integrate: semi-implicit Euler
+        for (var j = 0; j < N; j++) {
+            if (gone[j]) { f[3 * j] = f[3 * j + 1] = f[3 * j + 2] = 0; continue; }
+            var o = 3 * j;
+            var im = 1 / mass[j];
+            w[o] += f[o] * im * h; w[o + 1] += f[o + 1] * im * h; w[o + 2] += f[o + 2] * im * h;
+            var speedSq = w[o] * w[o] + w[o + 1] * w[o + 1] + w[o + 2] * w[o + 2];
+            if(speedSq > maxMove2) maxMove2 = speedSq;
+            if (isRig[j]) { rigOld[o] = u[o]; rigOld[o + 1] = u[o + 1]; rigOld[o + 2] = u[o + 2]; }
+            u[o] += w[o] * h; u[o + 1] += w[o + 1] * h; u[o + 2] += w[o + 2] * h;
+            f[o] = 0; f[o + 1] = 0; f[o + 2] = 0;
+        }
+        if (rigNodes.length) { if (rigSolve(h, dt)) moved = true; if (rigMaxMove > maxMove) maxMove = rigMaxMove; if (rigMaxSpeed2 > maxMove2) maxMove2 = rigMaxSpeed2; }
+        acc.moved = moved; acc.maxMove = maxMove; acc.maxMove2 = maxMove2;
+    }
+
+    // ---- the WebAssembly (PhysicsWasm.js, wasm/soft_body.c). The arrays of the nodes are moved into the memory of the module, in one block (block); the beams
+    // stay plain arrays here (the debug view, Parts.js and the editors read them), and a copy of them is kept there (beamBlock): beamsIn before a step, beamsOut after it
+    // (their rest length and whether they are alive: the step changes those). S and A are the scalars and the addresses that the C reads, in the order of its enums.
+    var W = OpenRacer.PhysicsWasm, block = null, beamBlock = null, isRigU8 = null, rigNodesI32 = null, wasmP = null, wasmA = null, mB = null;
+    var S_NAMES = ["N", "B", "RIGCOUNT", "RIGITERS", "H", "DT", "HARD", "ANCHORK", "ANCHORDAMP", "BEAMDAMP", "MAXBEND", "BREAKSTRAIN", "ABSORBED", "MOVED", "MAXMOVE", "MAXMOVE2"];
+    var NODE_ARRAYS = [["REST", "f64", 3], ["U", "f64", 3], ["W", "f64", 3], ["Q", "f64", 3], ["F", "f64", 3], ["MASS", "f64", 1], ["ASCALE", "f64", 1], ["AYIELD", "f64", 1], ["ABREAK", "f64", 1],
+        ["AALIVE", "u8", 1], ["GONE", "u8", 1], ["ISRIG", "u8", 1], ["RIGOLD", "f64", 3], ["RIGLAMA", "f64", 1]];
+    var BEAM_ARRAYS = [["BA", "i32"], ["BB", "i32"], ["BREST", "f64"], ["BMADE", "f64"], ["BK", "f64"], ["BYIELD", "f64"], ["BBREAK", "f64"], ["BALIVE", "u8"], ["BRIG", "u8"], ["RIGLAMB", "f64"]];
+    var A_ORDER = ["REST", "U", "W", "Q", "F", "MASS", "ASCALE", "AYIELD", "ABREAK", "AALIVE", "GONE", "ISRIG", "RIGOLD", "RIGLAMA", "RIGNODES", "REACTION",
+        "BA", "BB", "BREST", "BMADE", "BK", "BYIELD", "BBREAK", "BALIVE", "BRIG", "RIGLAMB"];
+    var TYPES = { f64: Float64Array, u8: Uint8Array, i32: Int32Array }, SIZE = { f64: 8, u8: 1, i32: 4 };
+    function layout(list) {
+        var bytes = 0, o = {};
+        list.forEach(function (d) { bytes = (bytes + 7) & ~7; o[d[0]] = bytes; o[d[0] + "#"] = d[2]; o[d[0] + "@"] = d[1]; bytes += d[2] * SIZE[d[1]]; });
+        return { bytes: bytes, o: o };
+    }
+    function views() {
+        var buf = W.buffer(), o = block.o, v = {};
+        NODE_ARRAYS.concat([["RIGNODES"], ["REACTION"]]).forEach(function (d) { v[d[0]] = new TYPES[o[d[0] + "@"]](buf, o[d[0]], o[d[0] + "#"]); });
+        rest = v.REST; u = v.U; w = v.W; q = v.Q; f = v.F; mass = v.MASS; aScale = v.ASCALE; anchorYield = v.AYIELD; anchorBreak = v.ABREAK; anchorAlive = v.AALIVE; gone = v.GONE;
+        isRigU8 = v.ISRIG; rigOld = v.RIGOLD; rigLamA = v.RIGLAMA; rigNodesI32 = v.RIGNODES;
+        self.force = f; self.nodeYield = anchorYield; self.nodeBreak = anchorBreak; self.reaction = v.REACTION;
+        wasmP = new Float64Array(buf, o.P, S_NAMES.length);
+        wasmA = new Int32Array(buf, o.A, A_ORDER.length);
+        A_ORDER.forEach(function (name, i) { if (o[name] !== undefined) wasmA[i] = o[name]; });
+        if (beamBlock) { mB = {}; BEAM_ARRAYS.forEach(function (d, i) { mB[d[0]] = new TYPES[d[1]](buf, beamBlock.o[d[0]], beamBlock.cap); wasmA[A_ORDER.indexOf(d[0])] = beamBlock.o[d[0]]; }); }
+        block.gen = W.generation();
+    }
+    function toWasm() {
+        if (!W || !W.ready() || W.mode() === "0" || block) return;
+        var list = NODE_ARRAYS.map(function (d) { return [d[0], d[1], d[2] * N]; });
+        list.push(["RIGNODES", "i32", Math.max(1, rigNodes.length)], ["REACTION", "f64", 6], ["P", "f64", S_NAMES.length], ["A", "i32", A_ORDER.length]);
+        var l = layout(list), at = W.alloc(l.bytes);
+        Object.keys(l.o).forEach(function (k) { if (k.indexOf("#") < 0 && k.indexOf("@") < 0) l.o[k] += at; });
+        block = { at: at, bytes: l.bytes, o: l.o, gen: -1 };
+        W.onGrow(views);
+        var old = { REST: rest, U: u, W: w, Q: q, F: f, MASS: mass, ASCALE: aScale, AYIELD: anchorYield, ABREAK: anchorBreak, AALIVE: anchorAlive, GONE: gone, RIGOLD: rigOld, RIGLAMA: rigLamA, REACTION: self.reaction };
+        views();
+        var now = { REST: rest, U: u, W: w, Q: q, F: f, MASS: mass, ASCALE: aScale, AYIELD: anchorYield, ABREAK: anchorBreak, AALIVE: anchorAlive, GONE: gone, RIGOLD: rigOld, RIGLAMA: rigLamA, REACTION: self.reaction };
+        Object.keys(now).forEach(function (k) { now[k].set(old[k]); });
+        for (var k = 0; k < N; k++) isRigU8[k] = isRig[k] ? 1 : 0;
+        for (var r = 0; r < rigNodes.length; r++) rigNodesI32[r] = rigNodes[r];
+    }
+    // the beams into the memory (the room for them grows with addBeam)
+    // (only when the beams here changed since the last copy: a beam added, a repair, a snapshot taken over, a step in JavaScript; force: always, for ?wasm=verify)
+    var beamsDirty = true, lastUseWasm = true;
+    function beamsIn(force) {
+        if (block.gen !== W.generation()) views();
+        if (!force && !beamsDirty && beamBlock && beamBlock.cap >= B) return;
+        beamsDirty = false;
+        if (!beamBlock || beamBlock.cap < B) {
+            if (beamBlock) W.release(beamBlock.at, beamBlock.bytes);
+            var cap = Math.max(64, B * 2), l = layout(BEAM_ARRAYS.map(function (d) { return [d[0], d[1], cap]; })), at = W.alloc(l.bytes);
+            Object.keys(l.o).forEach(function (k) { if (k.indexOf("#") < 0 && k.indexOf("@") < 0) l.o[k] += at; });
+            beamBlock = { at: at, bytes: l.bytes, o: l.o, cap: cap };
+            views();
+        }
+        mB.BA.set(beamA); mB.BB.set(beamB); mB.BREST.set(beamRest); mB.BMADE.set(beamMade); mB.BK.set(beamK); mB.BYIELD.set(beamYield); mB.BBREAK.set(beamBreak);
+        mB.BALIVE.set(beamAlive); mB.BRIG.set(beamRig);
+    }
+    function beamsOut() {
+        var r = mB.BREST, a = mB.BALIVE;
+        for (var i = 0; i < B; i++) { beamRest[i] = r[i]; beamAlive[i] = a[i]; }
+    }
+    var SOFT_OUT = ["absorbed", "moved", "maxMove", "maxMove2"];
+    function wasmSubstep(h, dt, acc) {
+        if (block.gen !== W.generation()) views();
+        var verifying = W.verify(), saved = null;
+        if (verifying) { beamsIn(true); saved = { bytes: new Uint8Array(W.buffer(), block.at, block.bytes).slice(), absorbed: self.absorbed, moved: acc.moved, maxMove: acc.maxMove, maxMove2: acc.maxMove2 }; }
+        var p = wasmP;
+        p[0] = N; p[1] = B; p[2] = rigNodes.length; p[3] = rigIters; p[4] = h; p[5] = dt; p[6] = P.hardening; p[7] = P.anchorK; p[8] = P.anchorDamping; p[9] = P.beamDamping;
+        p[10] = P.anchorMaxBend; p[11] = P.beamBreakStrain; p[12] = self.absorbed; p[13] = acc.moved ? 1 : 0; p[14] = acc.maxMove; p[15] = acc.maxMove2;
+        W.softSubstep(block.o.P, block.o.A);
+        self.absorbed = p[12]; acc.moved = p[13] !== 0; acc.maxMove = p[14]; acc.maxMove2 = p[15];
+        var st = W.stats.soft;
+        st.steps++;
+        if (!verifying) return;
+        // the same small step again in JavaScript, from the state before it, and the two compared to the bit
+        var out = { bytes: new Uint8Array(W.buffer(), block.at, block.bytes).slice(), rest: mB.BREST.slice(0, B), alive: mB.BALIVE.slice(0, B), scalars: [self.absorbed, acc.moved, acc.maxMove, acc.maxMove2] };
+        new Uint8Array(W.buffer(), block.at, block.bytes).set(saved.bytes);
+        self.absorbed = saved.absorbed; acc.moved = saved.moved; acc.maxMove = saved.maxMove; acc.maxMove2 = saved.maxMove2;
+        substepJS(h, dt, acc);
+        var diff = [], now = new Uint8Array(W.buffer(), block.at, block.bytes), js = [self.absorbed, acc.moved, acc.maxMove, acc.maxMove2];
+        js.forEach(function (x, i) { if (!Object.is(x, out.scalars[i])) diff.push(SOFT_OUT[i] + " " + x + " / " + out.scalars[i]); });
+        for (var i = 0; i < B; i++) {
+            if (!Object.is(beamRest[i], out.rest[i])) { diff.push("beamRest[" + i + "]"); break; }
+            if (beamAlive[i] !== out.alive[i]) { diff.push("beamAlive[" + i + "]"); break; }
+        }
+        NODE_ARRAYS.concat([["REACTION"]]).forEach(function (d) {
+            var from = block.o[d[0]] - block.at, len = block.o[d[0] + "#"] * SIZE[block.o[d[0] + "@"]];
+            for (var b = from; b < from + len; b++) if (now[b] !== out.bytes[b]) { diff.push(d[0] + "[" + Math.floor((b - from) / SIZE[block.o[d[0] + "@"]]) + "]"); break; }
+        });
+        st.verified++;
+        if (diff.length) {
+            st.mismatches++;
+            if (!st.firstMismatch) { st.firstMismatch = diff.slice(0, 12); console.warn("PhysicsWasm: the shell in WebAssembly and in JavaScript differ: " + diff.slice(0, 12).join(", ")); }
+        }
+    }
+
     this.step = function (dt, contacts) {
         var hard = P.hardening;
         var reaction = this.reaction;
         reaction.fill(0);
         goodU.set(u); goodQ.set(q);
-        var moved = false, maxMove = 0, maxMove2 = 0;
+        acc.moved = false; acc.maxMove = 0; acc.maxMove2 = 0;
+        var useWasm = !!block && this.wasmEnabled;
+        if (useWasm !== lastUseWasm) { beamsDirty = true; lastUseWasm = useWasm; }
+        if (useWasm) beamsIn();
         var steps = Math.max(this.minSteps, Math.min(8, Math.ceil(dt / hSafe))), h = dt / steps;      // small enough for the stiffest and densest place (see safeStep)
         for (var s = 0; s < steps; s++) {
             // the forces of the hits (the callback fills this.force), then the anchors and the beams
             if (contacts) contacts(h);
             if (this.plate) { pushPlate(this.plate, h); if (this.plate.done) { this.lastPlate = this.plate; this.plate = null; this.pinned = false; } }
             if (this.pull) pullNode(this.pull);
-            for (var k = 0; k < N; k++) {
-                if (!anchorAlive[k] || isRig[k]) continue;
-                var ix = 3 * k;
-                // the anchor is stretched by the elastic part u only: the node stands at rest + q + u, and q is the shape that stays
-                var dx = u[ix], dy = u[ix + 1], dz = u[ix + 2];
-                var d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                var kA = P.anchorK * aScale[k];
-                var yieldD = anchorYield[k] / kA;
-                if (d > yieldD) {
-                    // past the yield force: the shape stays bent. What is beyond it goes from the spring into the shape, but for a share that is
-                    // still a spring (the force goes on rising); the node does not move by it (before, the bend was added and not taken from u:
-                    // the node jumped, and a dent stood twice as deep as the energy it took)
-                    var excess = d - yieldD;
-                    var shift = Math.min(excess * (1 - hard), room(ix));      // (a node that is crushed as far as it goes bends no further, see room)
-                    var sx = dx / d * shift, sy = dy / d * shift, sz = dz / d * shift;
-                    q[ix] += sx; q[ix + 1] += sy; q[ix + 2] += sz;
-                    u[ix] -= sx; u[ix + 1] -= sy; u[ix + 2] -= sz;
-                    this.absorbed += anchorYield[k] * shift;
-                    dx = u[ix]; dy = u[ix + 1]; dz = u[ix + 2];
-                    d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                    moved = true;
-                }
-                if(d > maxMove) maxMove = d;
-                var c = 2 * P.anchorDamping * Math.sqrt(kA * mass[k]);
-                var fx = kA * dx + c * w[ix], fy = kA * dy + c * w[ix + 1], fz = kA * dz + c * w[ix + 2];   // the anchor pulls the node back; this is what it pulls on the car
-                if (torn(k, kA, d)) { anchorAlive[k] = 0; loose(k); moved = true; continue; }       // it tears off
-                f[ix] -= fx; f[ix + 1] -= fy; f[ix + 2] -= fz;
-                // on the car, at the place of the node
-                var px = rest[ix] + u[ix] + q[ix], py = rest[ix + 1] + u[ix + 1] + q[ix + 1], pz = rest[ix + 2] + u[ix + 2] + q[ix + 2];
-                reaction[0] += fx * h / dt; reaction[1] += fy * h / dt; reaction[2] += fz * h / dt;
-                reaction[3] += (py * fz - pz * fy) * h / dt; reaction[4] += (pz * fx - px * fz) * h / dt; reaction[5] += (px * fy - py * fx) * h / dt;
-            }
-            for (var i = 0; i < B; i++) {
-                if (!beamAlive[i] || beamRig[i] || gone[beamA[i]] || gone[beamB[i]]) continue;
-                var a = beamA[i] * 3, b = beamB[i] * 3;
-                var ex = rest[b] + u[b] + q[b] - rest[a] - u[a] - q[a], ey = rest[b + 1] + u[b + 1] + q[b + 1] - rest[a + 1] - u[a + 1] - q[a + 1], ez = rest[b + 2] + u[b + 2] + q[b + 2] - rest[a + 2] - u[a + 2] - q[a + 2];
-                var len = Math.sqrt(ex * ex + ey * ey + ez * ez);
-                if (len < 1e-6) continue;
-                var nx = ex / len, ny = ey / len, nz = ez / len;
-                var ext = len - beamRest[i];
-                var force = beamK[i] * ext;
-                // yield: the rest length follows what is beyond the yield force
-                if (Math.abs(force) > beamYield[i]) {
-                    var beyond = Math.abs(ext) - beamYield[i] / beamK[i];
-                    var change = Math.sign(ext) * beyond * (1 - hard);
-                    beamRest[i] += change;
-                    this.absorbed += beamYield[i] * Math.abs(change);
-                    ext = len - beamRest[i];
-                    force = beamK[i] * ext;
-                    moved = true;
-                }
-                if (snapped(i, force)) { beamAlive[i] = 0; loose(beamA[i]); loose(beamB[i]); moved = true; continue; }
-                var rv = (w[b] - w[a]) * nx + (w[b + 1] - w[a + 1]) * ny + (w[b + 2] - w[a + 2]) * nz;
-                var cb = 2 * P.beamDamping * Math.sqrt(beamK[i] * Math.min(mass[beamA[i]], mass[beamB[i]]));
-                var fb = force + cb * rv;
-                f[a] += fb * nx; f[a + 1] += fb * ny; f[a + 2] += fb * nz;
-                f[b] -= fb * nx; f[b + 1] -= fb * ny; f[b + 2] -= fb * nz;
-            }
-            // integrate: semi-implicit Euler
-            for (var j = 0; j < N; j++) {
-                if (gone[j]) { f[3 * j] = f[3 * j + 1] = f[3 * j + 2] = 0; continue; }
-                var o = 3 * j;
-                var im = 1 / mass[j];
-                w[o] += f[o] * im * h; w[o + 1] += f[o + 1] * im * h; w[o + 2] += f[o + 2] * im * h;
-                var speedSq = w[o] * w[o] + w[o + 1] * w[o + 1] + w[o + 2] * w[o + 2];
-                if(speedSq > maxMove2) maxMove2 = speedSq;
-                if (isRig[j]) { rigOld[o] = u[o]; rigOld[o + 1] = u[o + 1]; rigOld[o + 2] = u[o + 2]; }
-                u[o] += w[o] * h; u[o + 1] += w[o + 1] * h; u[o + 2] += w[o + 2] * h;
-                f[o] = 0; f[o + 1] = 0; f[o + 2] = 0;
-            }
-            if (rigNodes.length) { if (rigSolve(h, dt)) moved = true; if (rigMaxMove > maxMove) maxMove = rigMaxMove; if (rigMaxSpeed2 > maxMove2) maxMove2 = rigMaxSpeed2; }
+            if (useWasm) wasmSubstep(h, dt, acc); else substepJS(h, dt, acc);
         }
+        if (useWasm) { if (acc.moved) beamsOut(); }       // (a beam only yields or snaps in a step that moved something)
+        else if (block) beamsDirty = true;
         if (!sane() || !(reaction[0] === reaction[0] && reaction[1] === reaction[1] && reaction[2] === reaction[2] && reaction[3] === reaction[3] && reaction[4] === reaction[4] && reaction[5] === reaction[5])) {
             blewUp++;
             if (!blowUpSaid) { blowUpSaid = true; console.warn("SoftBody: the shell blew up (" + N + " nodes); it goes back to its last good state" + (blewUp > 1 ? " and is made whole" : "")); }
@@ -506,6 +623,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
             return false;
         }
         blewUp = 0;
+        var moved = acc.moved, maxMove = acc.maxMove, maxMove2 = acc.maxMove2;
         this.quiet = !moved && maxMove < 1e-4 && maxMove2 < 1e-6 && !this.plate && !this.pull;
         // the displacement for the model, when something moved
         var any = moved;
@@ -619,6 +737,7 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
         if (s.u.length !== u.length) return false;           // (not the same shell)
         u.set(s.u); w.set(s.w); q.set(s.q); gone.set(s.gone); anchorAlive.set(s.anchorAlive);
         for (var i = 0; i < s.beamRest.length && i < beamRest.length; i++) { beamRest[i] = s.beamRest[i]; beamAlive[i] = s.beamAlive[i]; }
+        beamsDirty = true;
         this.displacement.set(s.displacement);
         this.version = s.version; this.absorbed = s.absorbed; this.quiet = s.quiet; this.pinned = s.pinned;
         // (the cube of the hit tool and the elastic of the node grabber keep their objects here, also through a snapshot of before them: the debug view knows them by it)
@@ -632,4 +751,5 @@ OpenRacer.SoftBody = function (vehicle, spheres, config) {
 
     safeStep();
     this.repair();
+    toWasm();
 };

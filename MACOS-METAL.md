@@ -120,7 +120,15 @@ Zoals BeamNG: de node-beam-kern native, de rest van de logica in een scripttaal.
 - **Twee keer zo snel**: de physics van de speler van 4,2–4,9 naar 2,2 ms per frame; alle physics per seconde spel van ~370 naar ~220 ms (−40 %). In een race met 3 AI-auto's: 55 → 61 fps. De AI-auto's gebruiken een ander bandmodel en zijn nog JavaScript.
 - Standaard aan in de game (`?wasm=0` geeft de JavaScript). De editors en de physics-worker laden hem niet en blijven JavaScript. Gemeten en gecontroleerd in de Mac-app (WebKit); in Chrome nog niet (de test kon de lokale server niet bereiken).
 
-Volgende stappen in M3: het bandmodel van de AI-auto's, de soft body (`SoftBody.js`), daarna SIMD en meerdere auto's tegelijk op meerdere cores.
+**Stap 2, de soft body (7 november 2026).** Eerst gemeten waar een AI-auto zijn tijd kwijt is (`Profiler.swift` met tijdelijke meetpunten in `Vehicle.js`): de bestuurder 0,06 ms per frame voor 3 auto's, `vehicle.update` 1,3, de rest van `Opponent.update` (bandensporen, marbles, het model) 0,9. Een soft body doet niets zolang niets de auto raakt (`quiet`), maar in een groep auto's die elkaar raken (Short track, 6 auto's) is hij er wel: `shellStep` was het grootste deel van een stap, met daarnaast het zoeken van contacten (`scanContacts`/`testSphere`, `bodyContacts3D`, `buildCarPairs`).
+
+- `wasm/soft_body.c`: een kleine stap van de schil (de ankers, de balken, de integratie en de XPBD-ophanging, `rigSolve`), regel voor regel. De contacten blijven JavaScript (de callback van `Vehicle.js` vóór elke kleine stap). Beide C-bestanden zitten in één module, `web/js/wasm/physics.wasm` (22 KB, één geheugen).
+- De arrays van de nodes staan in het geheugen van de module. De balken blijven gewone arrays in `SoftBody.js` (de debug view, `Parts.js` en de editors lezen ze); WebAssembly heeft een kopie, die alleen opnieuw wordt gevuld als de balken hier veranderden (een nieuwe balk, een reparatie, een snapshot), en die alleen terug wordt gezet als er iets boog of brak.
+- Groeit het geheugen (een baan met veel driehoeken, zoals Desert), dan maken alle banden en schillen hun views meteen opnieuw (`PhysicsWasm.onGrow`): eerst gaf dat een fout op Desert.
+- **Tot op de bit gelijk**: `?wasm=verify` op Short track (5 AI), Desert (3 AI) en Kartbaan Oldenzaal (Stadium truck, 4 AI): ruim 240.000 kleine stappen van schillen, 0 verschillen (en de banden ook).
+- **Snelheid**, dezelfde schil vanuit dezelfde vervormde stand, 600 stappen (`sb.wasmEnabled` aan en uit): de Muscle (166 nodes, 300 balken) 0,057 → 0,048 ms per stap (1,2×), een AI-auto (57–103 nodes) 1,5–1,6×. Minder winst dan bij de band: dit is eenvoudige luscode waar de JIT van WebKit al goed in is. In races is het verschil kleiner dan de spreiding tussen twee races.
+
+Volgende stappen in M3: het zoeken van contacten (`scanContacts`/`testSphere` tegen de driehoeken, `bodyContacts3D`, `buildCarPairs`: samen het grootste deel van een AI-stap in een groep), daarna meerdere auto's tegelijk op meerdere cores (dat is waar de grote winst zit: elke auto is los te rekenen) en SIMD.
 
 ### Fase M4: de DMG uitbrengen (dagen)
 

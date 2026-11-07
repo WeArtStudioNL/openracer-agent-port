@@ -52,7 +52,7 @@ final class Profiler: NSObject, WKScriptMessageHandler {
         }
         var carWrapped = false, hiddenFrames = 0;
         window.addEventListener("error", function (e) { post({ note: "error: " + e.message + " at " + (e.filename || "").split("/").pop() + ":" + e.lineno }); });
-        var beat = setInterval(function () { post({ note: "beat", t: Math.round(performance.now()), steps: OpenRacer.PhysicsWasm ? OpenRacer.PhysicsWasm.stats.steps : null }); }, 2000);
+        var beat = setInterval(function () { post({ note: "beat", t: Math.round(performance.now()), steps: OpenRacer.PhysicsWasm ? OpenRacer.PhysicsWasm.stats.steps : null, soft: OpenRacer.PhysicsWasm ? OpenRacer.PhysicsWasm.stats.soft.steps : null }); }, 2000);
         function tick(now) {
             if (last) add("interval", now - last);
             if (measuring && document.hidden) hiddenFrames++;

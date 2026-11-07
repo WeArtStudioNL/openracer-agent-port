@@ -140,7 +140,7 @@ OpenRacer.TyreShell = function (wheel) {
     // ---- the WebAssembly (PhysicsWasm.js, wasm/tyre_shell.c): the arrays of the tyre are moved into the memory of the module, in one block, and the substeps run there.
     // NAMES lists every array with its type and length; get/set reach the variables of this closure. P and A are the scalars and the addresses that the C reads, in the
     // order of its enums.
-    var W = OpenRacer.PhysicsWasm, block = null;     // { at, bytes, gen, offsets }
+    var W = OpenRacer.PhysicsWasm, block = null, registered = false;     // { at, bytes, gen, offsets }
     var P_NAMES = ["N", "RINGS", "SEGS", "BEAMS", "STEPS", "DT", "H", "MN", "PA", "R", "SPACING", "TOL", "KSHEART", "KSHEARL", "CSHEART", "CSHEARL", "KG", "KSTOP", "ZETA",
         "CLASSK0", "CLASSK1", "CLASSK2", "CLASSK3", "CLASSK4", "HUBX", "HUBY", "HUBZ", "VELX", "VELY", "VELZ", "LX", "LY", "LZ", "FX", "FY", "FZ", "UX", "UY", "UZ",
         "OMEGA", "PHASE", "INERTIA", "LOADPREV", "SURFMU", "SURFSLIDING", "LATGRIP", "BELT2", "ROADDAMP", "ROADSTOP", "STIFFX", "STIFFY", "STRIBECK", "BRISTLEDAMP",
@@ -182,6 +182,7 @@ OpenRacer.TyreShell = function (wheel) {
     var wasmP = null, wasmA = null, listOff = null, listIdx = null, listAt = 0, listCap = 0, listGen = -1;
     // the views on the block (again after the memory grew: the old ones are then dead)
     function views() {
+        if (!block) return;
         var buf = W.buffer(), o = block.offsets, a = {};
         ARRAYS.forEach(function (d) { if (d[1] && d[0] !== "LISTOFF") a[d[0]] = new TYPES[d[1]](buf, o[d[0]], o[d[0] + "#"]); });
         setArrays(a);
@@ -202,6 +203,7 @@ OpenRacer.TyreShell = function (wheel) {
         var at = W.alloc(bytes), old = arrays();
         Object.keys(offsets).forEach(function (k) { if (k.indexOf("#") < 0) offsets[k] += at; });
         block = { at: at, bytes: bytes, gen: -1, offsets: offsets };
+        if (!registered) { registered = true; W.onGrow(views); }      // (views itself: it lives as long as this tyre, which a weak listener needs)
         views();
         var now = arrays();
         Object.keys(now).forEach(function (k) { now[k].set(old[k]); });       // (what build made: the beams, the rings)
