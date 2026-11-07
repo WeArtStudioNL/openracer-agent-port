@@ -145,7 +145,8 @@ anchors, so the peak of a hit is limited by what yields and the energy goes into
 out in 16 small steps per physics step (0.5 ms: what the explicit springs need to stay stable), and only while
 something touches it or moves in it: a car that drives without hitting anything costs nothing. With a shell the
 box of the body is made smaller by what a node can be crushed (it stays for the road, a car on its roof and as a
-backstop); with damage off the car is the rigid body it was.
+backstop; it grows to the full car again as the car tips onto its side or its nose, which the nodes do not
+take); with damage off the car is the rigid body it was.
 
 The model bends with the nodes (`scripts/soft_body_mesh.gd`, as `SoftBodyMesh.js`): every vertex is tied to its
 four nearest nodes with weights, and the skinning of Godot moves it (a Skeleton3D "Shell" with a bone per node;

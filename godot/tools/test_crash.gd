@@ -81,6 +81,12 @@ func _ready() -> void:
 	car.setup(id, cfg if cfg is Dictionary else {})
 	add_child(car)
 	car.place(Vector3(0, car.wheels[0].radius + 0.15, 0), PI / 2.0)
+	if Content.arg("roll") != "":
+		# (a car that lies on its side: it lies on its box, as without a shell)
+		var xf := Transform3D(Basis(Vector3.BACK, PI / 2.0), Vector3(0, 1.5, 0))
+		PhysicsServer3D.body_set_state(car.get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, xf)
+		car.global_transform = xf
+		_phase = "roll"
 	if car.shell != null and Content.arg("steps") != "":
 		car.shell.sb.max_steps = int(Content.arg("steps"))
 	cam = Camera3D.new()
@@ -122,6 +128,12 @@ func _physics_process(dt: float) -> void:
 				car.throttle_input = 0.0
 				car.brake_input = 1.0
 				car.steer_input = 0.0
+		"roll":
+			car.throttle_input = 0.0
+			if _time > 3.0:
+				print("on its side: the middle %.2f m above the floor, up %.2f, half the width %.2f m" % [car.global_position.y, car.global_transform.basis.y.y,
+					float(car.config.get("dimensions", {}).get("width", 1.8)) / 2.0])
+				get_tree().quit()
 		"hit":
 			if _time - _hit_time > 2.0:
 				_report("after the hit")

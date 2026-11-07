@@ -197,6 +197,8 @@ var shell: CarShell = null      # the shell that dents (damage on, Settings), or
 var shell_mesh: SoftBodyMesh = null
 var parts: CarParts = null      # the parts that come off (damage on)
 var _box: CollisionShape3D
+var _box_full := Vector3.ZERO   # the size of the box of the body (x, z) and its place along the car, without a shell
+var _box_shell := Vector3.ZERO  # and inside what the nodes can be crushed to
 var _esc_brake := [0.0, 0.0, 0.0, 0.0]
 var _esc_cut := 0.0
 var _axle_fy := [0.0, 0.0]      # the side force of each axle in the last step (the geometric load transfer)
@@ -268,6 +270,8 @@ func _make_shell() -> void:
 		box.size.x = maxf(0.4, x1 - x0)
 		box.size.z = maxf(0.6, z1 - z0)
 		_box.position.z = (z0 + z1) / 2.0
+	_box_shell = Vector3(box.size.x, _box.position.z, box.size.z)
+	_box_full = Vector3(float(dims.get("width", 1.8)) * 0.95, 0.0, float(dims.get("length", 4.2)) * 0.97)
 	if shell != null:
 		RunLog.event("soft body %s: %d nodes, %d beams, a small step of %.2f ms is stable" % [car_id, shell.sb.count, shell.sb.beam_count,
 			shell.sb.safe_h * 1000.0])
@@ -660,6 +664,23 @@ func _physics_process(dt: float) -> void:
 	_controls(dt)
 	if parts != null and not freeze:
 		parts.update(dt)
+	if shell != null:
+		_fit_box()
+
+
+## The box of a car with a shell is smaller than the car (the walls meet the nodes first); a car on its side or on its
+## nose lies on the box, not on the nodes (they only meet walls), so the box grows to the full size of the car as it
+## tips over, in steps of 2 cm.
+func _fit_box() -> void:
+	var b := global_transform.basis
+	var side := clampf((0.85 - absf(b.y.y)) / 0.45, 0.0, 1.0)
+	var nose := clampf((absf(b.z.y) - 0.5) / 0.4, 0.0, 1.0)
+	var box := _box.shape as BoxShape3D
+	var want_x := lerpf(_box_shell.x, _box_full.x, maxf(side, nose))
+	var want_z := lerpf(_box_shell.z, _box_full.z, nose)
+	if absf(box.size.x - want_x) > 0.02 or absf(box.size.z - want_z) > 0.02:
+		box.size = Vector3(want_x, box.size.y, want_z)
+		_box.position.z = lerpf(_box_shell.y, _box_full.y, nose)
 
 
 func _controls(dt: float) -> void:
