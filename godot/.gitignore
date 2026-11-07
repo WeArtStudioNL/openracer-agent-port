@@ -11,3 +11,4 @@
 *.os
 *.o
 .sconsign.dblite
+/logs/

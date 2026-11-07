@@ -11,6 +11,7 @@ var _track_pick: OptionButton
 
 
 func _ready() -> void:
+	_fit_window()
 	_cars = Content.list_cars()
 	_tracks = Content.list_tracks()
 	_build_menu()
@@ -21,6 +22,25 @@ func _ready() -> void:
 	var quit_after := Content.arg("quit-after")
 	if quit_after != "":
 		get_tree().create_timer(float(quit_after)).timeout.connect(get_tree().quit)
+
+
+## On a screen with a scale (a Retina screen: 2), the window of 1600 x 900 pixels is half as big as meant: it is
+## made as big as the scale asks, at most nine tenths of the screen, in the middle. The menu and the dashboard
+## grow with the window (the stretch mode canvas_items of project.godot).
+func _fit_window() -> void:
+	if DisplayServer.get_name() == "headless" or DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
+		return
+	var screen := DisplayServer.window_get_current_screen()
+	var scale := DisplayServer.screen_get_scale(screen)
+	if scale <= 1.0:
+		return
+	var usable := DisplayServer.screen_get_usable_rect(screen)
+	var want := Vector2(DisplayServer.window_get_size()) * scale
+	want = want * minf(1.0, minf(usable.size.x * 0.9 / want.x, usable.size.y * 0.9 / want.y))
+	var size := Vector2i(want)
+	DisplayServer.window_set_size(size)
+	DisplayServer.window_set_position(usable.position + (usable.size - size) / 2)
+	RunLog.line("window fitted to the screen scale %.1f: %s" % [scale, size])
 
 
 func _build_menu() -> void:
@@ -90,6 +110,7 @@ func _start(car_id: String, track_id: String) -> void:
 	if world != null:
 		world.queue_free()
 	menu.visible = false
+	RunLog.event("drive  car %s  track %s" % [car_id, track_id])
 	world = World.new()
 	world.setup(car_id, track_id)
 	world.leave.connect(_back_to_menu)
@@ -97,6 +118,7 @@ func _start(car_id: String, track_id: String) -> void:
 
 
 func _back_to_menu() -> void:
+	RunLog.event("menu")
 	if world != null:
 		world.queue_free()
 		world = null

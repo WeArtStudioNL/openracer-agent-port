@@ -38,6 +38,13 @@ For example, a test without a window:
 
     Godot --headless --path godot -- --car=hatchback --track=skidpad --drive --log=1 --quit-after=10
 
+## The log of a run
+
+Every start writes `godot/logs/run-<date>-<time>.log` (not in git; the newest 30 are kept): the machine and the
+commit, what happened when (a drive, the camera, a reset, a shift, a knock) and four times a second the state of
+the car and every tyre. **F8** marks a moment: a line `MARK n` and a screenshot next to the log. Godot's own
+errors and warnings are in the `godot.log` whose path is at the top of the log.
+
 ## Controls
 
 Arrows or WASD drive, Space is the handbrake, Q/E shift (the first shift switches to a manual gearbox),

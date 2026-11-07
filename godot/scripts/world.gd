@@ -15,6 +15,7 @@ var _shot_at := -1.0
 var _log_every := 0.0
 var _time := 0.0
 var _next_log := 0.0
+var _last_velocity := Vector3.ZERO
 
 
 func setup(car_id: String, track_id: String) -> void:
@@ -30,6 +31,8 @@ func setup(car_id: String, track_id: String) -> void:
 	car.freeze = true
 	add_child(car)
 	camera = ChaseCamera.new()
+	# (the camera is moved every frame, after the interpolated car: it is not interpolated itself)
+	camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	camera.far = 4000.0
 	add_child(camera)
 	hud = Hud.new()
@@ -56,9 +59,14 @@ func _ready() -> void:
 	car.freeze = false
 	camera.follow(car)
 	camera.make_current()
+	RunLog.car = car
+	RunLog.on_mark = hud.toast
+	RunLog.event("start  %s on %s  mass %d kg  %s %s  %s" % [car.config.get("name", car.car_id), track.config.get("name", track.track_id),
+		roundi(car.mass), car.drive, car.gearbox, "engine sound on" if audio.synth != null else "NO engine sound"])
 
 
 func to_start() -> void:
+	RunLog.event("to the start")
 	var s: Dictionary = track.start
 	var x := float(s.get("x", 0))
 	var z := float(s.get("z", 0))
@@ -71,6 +79,7 @@ func to_start() -> void:
 
 ## Puts the car back on its wheels where it is, facing the way it faced.
 func recover() -> void:
+	RunLog.event("reset (R)")
 	var p := car.global_position
 	var y := track.ground_at(p.x, p.z)
 	car.place(Vector3(p.x, y + car.wheels[0].radius + 0.4, p.z), car.heading())
@@ -78,6 +87,12 @@ func recover() -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	# a knock: the speed of the car changed by more than 4 m/s in one physics step
+	if not car.freeze:
+		var dv := (car.linear_velocity - _last_velocity).length()
+		if dv > 4.0 and _last_velocity.length() > 2.0:
+			RunLog.event("impact %.1f m/s at %.0f km/h" % [dv, _last_velocity.length() * 3.6])
+		_last_velocity = car.linear_velocity
 	if car.autopilot:
 		return
 	car.steer_input = Input.get_axis("steer_right", "steer_left")
@@ -88,18 +103,22 @@ func _physics_process(_delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("menu"):
+		RunLog.car = null
 		leave.emit()
 	elif event.is_action_pressed("camera"):
 		camera.next_mode()
 		audio.set_inside(camera.mode != ChaseCamera.Mode.FOLLOW)
+		RunLog.event("camera %s" % ChaseCamera.Mode.keys()[camera.mode])
 	elif event.is_action_pressed("reset"):
 		recover()
 	elif event.is_action_pressed("restart"):
 		to_start()
 	elif event.is_action_pressed("shift_up"):
 		car.shift(true)
+		RunLog.event("shift up -> %s" % car.gear_name())
 	elif event.is_action_pressed("shift_down"):
 		car.shift(false)
+		RunLog.event("shift down -> %s" % car.gear_name())
 	elif event.is_action_pressed("debug"):
 		hud.toggle_debug()
 

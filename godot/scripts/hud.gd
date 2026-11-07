@@ -10,6 +10,8 @@ var _rpm_text: Label
 var _info: Label
 var _debug: Label
 var _help: Label
+var _toast: Label
+var _toast_time := 0.0
 
 
 func _ready() -> void:
@@ -50,8 +52,17 @@ func _ready() -> void:
 	_help = _label(14)
 	_help.position = Vector2(20, 40)
 	_help.modulate.a = 0.75
-	_help.text = "Arrows/WASD drive  ·  Space handbrake  ·  Q/E shift (manual)  ·  C camera  ·  R put back on its wheels  ·  Backspace start  ·  F3 data  ·  Esc menu"
+	_help.text = ("Arrows/WASD drive  ·  Space handbrake  ·  Q/E shift (manual)  ·  C camera  ·  R put back on its wheels  ·  "
+		+ "Backspace start  ·  F3 data  ·  F8 mark in the log  ·  Esc menu")
 	add_child(_help)
+	_toast = _label(22)
+	_toast.anchor_left = 0.5
+	_toast.anchor_right = 0.5
+	_toast.offset_left = -300
+	_toast.offset_right = 300
+	_toast.offset_top = 90
+	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_child(_toast)
 	_debug = _label(14)
 	_debug.position = Vector2(20, 70)
 	_debug.visible = false
@@ -66,11 +77,19 @@ func _label(size: int) -> Label:
 	return l
 
 
+## A message in the middle of the screen for a few seconds.
+func toast(text: String) -> void:
+	_toast.text = text
+	_toast_time = 3.0
+
+
 func toggle_debug() -> void:
 	_debug.visible = not _debug.visible
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_toast_time -= delta
+	_toast.visible = _toast_time > 0.0
 	if car == null:
 		return
 	_speed.text = "%d" % roundi(absf(car.speed) * 3.6)
