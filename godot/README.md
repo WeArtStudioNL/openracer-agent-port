@@ -24,7 +24,8 @@ Open `godot/project.godot` in Godot 4.7 and press Play (F5), or from the command
 
     /Applications/Godot.app/Contents/MacOS/Godot --path godot
 
-The menu chooses a car and a track. Arguments after `--` start a drive at once and help to test:
+The main menu (see Menus, settings and the HUD) chooses the way to play, the car and the track. Arguments after `--` start a
+drive at once and help to test:
 
     --car=openracer-muscle --track=short-track   start this drive (without the menu)
     --drive                                      full throttle (and --steer=0.5 for a circle, + is left)
@@ -33,6 +34,8 @@ The menu chooses a car and a track. Arguments after `--` start a drive at once a
     --quit-after=10                              stop after 10 seconds
     --diff=open                                  another differential than car.json's
     --content=/path/to/web                       another content folder
+    --user-dir=/tmp/folder                       keep settings.cfg and the files of the menus there (the tests: never the player's)
+    --race --opponents=3 --laps=1 --pole --difficulty=hard   a race;  --mode=skidpad --surface=gravel   the skidpad
 
 For example, a test without a window:
 
@@ -136,7 +139,7 @@ stuck is put back on the line. The AI learns where it ran off the road (the line
 and keeps that per track and car (`user://ai/`), so it races cleaner the next time. The AI cars have the colours
 of the browser game (the materials called carpaint, or body); the three nearest are heard (3D, a lighter engine
 simulation). When the player finishes, the results show and the AI drives the player's car
-on. Backspace or "Race again" starts it again. A track without a racing line has no race (free driving).
+on. Home (back to the start), Restart in the pause menu or "Race again" starts it again. A track without a racing line has no race (free driving).
 
     Godot --path godot -- --car=openracer-muscle --track=short-track --race --opponents=5 --laps=3 [--pole] [--ai]
 
@@ -164,7 +167,7 @@ take); with damage off the car is the rigid body it was.
 The model bends with the nodes (`scripts/soft_body_mesh.gd`, as `SoftBodyMesh.js`): every vertex is tied to its
 four nearest nodes with weights, and the skinning of Godot moves it (a Skeleton3D "Shell" with a bone per node;
 the meshes of the body are made again once with the nodes as bones, in a thread when the car is made). Back to
-the start (Backspace, or the pause menu) repairs the car and puts its parts back; R puts it back on its wheels and
+the start (Home, or the pause menu) and Backspace (repair where it is) repair the car and puts its parts back; R puts it back on its wheels and
 keeps the dents and the parts that are off.
 
 The parts of car.json `parts` (`scripts/car_parts.gd`, after `Parts.js`) come off when the load on them passes
@@ -355,18 +358,72 @@ browser).
 
 ## Controls
 
-Arrows or WASD drive, Space is the handbrake, Q/E shift (the first shift switches to a manual gearbox),
-C changes the camera (behind, cockpit, bonnet), R puts the car back on its wheels, Backspace goes back to
-the start, K calibrates a racing wheel, F3 shows the data of the tyres, F8 marks a moment in the log, Esc
-pauses (resume, settings, back to the start, main menu). A gamepad: the triggers for gas and brake,
-the left stick to steer, A handbrake, the shoulders shift, Y camera, X reset, Start pause.
+The keys of the browser game (web/js/Settings.js): W A S D or the arrows drive, Space handbrake, P parking brake, . reverse
+(held), Q two-step, F transbrake, X / Z shift (the first shift makes the gearbox manual), an H-shifter (gear 1 to 8 and
+reverse, buttons of a wheel), R back on the racing line, 4 saves the place for R on a track without a line, Backspace repairs
+the car where it is, Home back to the start, T camera, [ ] turn the follow camera round the car and ` puts it back, H the
+HUD, F3 the debug text, F2 a photo without the HUD (in the pictures folder, O-Racer), C / B / N / J / Y traction control,
+ABS, ESC, launch control, two-step on and off (a short note says it), I starts the engine, E the engine sound, V the
+telemetry, 0 the debug view (- hides the car), U tuning, K calibrates a wheel, M the wheel on and off, F8 a mark in the
+log, Esc pause. A gamepad: the triggers gas and brake, the left stick steers, A handbrake, the shoulders shift, X camera,
+Y back on the line, Back repair, Start pause. The rider keys and the ragdoll of a motorcycle are bound but not in the
+Godot physics yet.
 
-All of it can be set in Settings, Controls: every action takes keys, gamepad buttons and sticks, and buttons of
-the racing wheel (click a binding and press what it should be; + adds one, Delete removes one; an input that
-another action had is taken from it). A gamepad binding works on every joypad but the wheel. The bindings are
-kept in `user://settings.cfg`. Test: `Godot --headless --path godot res://tools/test_controls.tscn`.
+All of it can be set in Settings, Controls: every action, by group, has chips of its inputs (Key, Pad, Wheel; ✎ a new one,
+✕ removes it, + adds one); the steering and the pedals of a wheel come from its calibration. An input that another action
+had is taken from it (the menu says so). A gamepad binding works on every joypad but the wheel. A player who saved bindings
+before keeps them; an action that came later gets its defaults without the inputs that are taken. The bindings are kept
+in `user://settings.cfg`. Tests: `Godot --headless --path godot res://tools/test_controls.tscn -- --user-dir=/tmp/t` and
+`res://tools/test_settings_menu.tscn` (the gamepad in the settings).
 
-Holding the brake at a standstill puts the car in reverse; then the brake drives and the throttle brakes.
+Holding the brake at a standstill puts the car in reverse (Settings, Car: with the key, with a pedal, below a speed).
+The keys bring the pedals up over a time and a curve (Settings, Keyboard).
+
+## Menus, settings and the HUD
+
+**Main menu** (`scripts/main_menu.gd`, `scripts/menu/`, after MainMenu.js): the home screen (Play, the quick start in the
+stadium truck the first time, Garage, Replays, Import, Car editor, Settings, Quit, openracer.eu, Discord, the version), then
+the steps with the chips at the top and Back / Next at the bottom: the way to play (free drive, race, skidpad), the car
+(tiles with preview.webp, a garage car without one is drawn once and kept in `previews/`; the specs, the top speed in the
+units, the power), its setup (the tunes), the track (cards with the picture, the best lap of the car and setup, Drag top 50,
+the wear, the damage and More options), the weather, the race (laps, opponents, difficulty, the start: pole, random,
+last; damage, wear, the ghost, save records) and the opponents (the cars and their setups on the places of the grid). The
+skidpad (`scripts/skidpad.gd`): the car circles faster and faster on the chosen ground until it lets go; the g it held.
+The Garage window (export, delete to the Trash, import, link a folder, Load and New open the car editor) and the Replays
+window (watch, download, delete, import). The choice is kept in `user://menu.cfg`. Screenshots: `--menu-step=car --mode=race
+--menu-shot=file.png --shot-at=3` (home, mode, car, tune, track, weather, race, opponents, surface, garage, replays).
+
+**Settings** (`scripts/settings_menu.gd`, `settings_pages.gd`, `settings_rows.gd`, `settings_controls_page.gd`): the tabs of
+the browser, Car, Keyboard, Gamepad, Wheel (with the calibrated wheels and Forget), Display and sound, Mobile (with the touch
+controls), Graphics, Simulation, Tools (debug text, back up and restore the settings, the records and the tunes in one file,
+forget the records of a track, Save as HDR), Controls; Reset all settings. What the Godot game does not do yet is grey with
+the tooltip "Not in the Godot version yet" (the steering assists, the pad steering at speed, the motorcycle options, the
+debris, the simulation rows). The pause menu (`scripts/pause_menu.gd`): Resume, Replay, Tune the car, Restart, Back to the
+start, Settings, the drag strip Top 50, Main menu. `--settings --settings-tab=Wheel` opens a tab (`pause`: the pause menu).
+
+**HUD** (`scripts/hud.gd`, `hud_gauge.gd`, after Hud.js): the round gauge (the engine speed with the red zone and the shift
+light, the speed, the gear, the coolant arc and the oil lamp, the badges of TC, ESC, ABS, launch control and two-step from
+`web/images/HUD`, P and TB; a click on a badge switches it), the boost gauge of a turbo (the extra of the tuning), the lap
+panel (the lap, the place and the gaps in a race, the last three laps, the best and a new record), the car panel (the
+tyres by temperature and wear, the fuel in litres and laps, the pit stop, the engine when it is hurt), the pit stop in
+the middle, the notes of the keys, and the first time the keys that matter. **Edit HUD…** (Settings, Display and sound;
+`scripts/hud_layout.gd`, HudLayout.js): the game is held, every element (and the touch controls) can be moved, scaled and
+faded, Save keeps it (`hud_layout`). `--edit-hud=gauge` opens it for a screenshot.
+
+**Gamepad in the menus** (PadNav.js): the D-pad or the stick moves the focus, A chooses, B goes back, Start pauses and
+resumes (in the main menu it goes on), L1/R1 change the tab of the settings; the tuning menu takes the pad while it holds
+a race.
+
+**Debug view** (0, `scripts/debug_view.gd`, DebugView.js): the triangles of the track near the car, the nodes and beams of
+the shell, the engine bay and the radiator, the contacts of the wheels; a panel with the weather and the time of day.
+**Telemetry** (V, `scripts/telemetry.gd`): every value of the car and the wheels. **Touch controls**
+(`scripts/touch_controls.gd`, TouchControls.js): on a touch screen (or `--touch=1`, Settings Mobile): the steering stick
+on the left half, the pedals, the gear buttons and the top buttons. **Movable panels** (`scripts/movable.gd`): the tuning
+menu, the debug panel and the HUD editor are dragged and scaled, and kept. Icons of Lucide (`scripts/icons.gd`).
+
+Not ported: the turning 3D cars on the tiles (stills), a picture per setup, the ghost files (Save lap, Race a ghost), saving
+a lap as the racing line, the node grabber and the hit of the debug view, the Take button of the touch controls (the video
+editor), import from a link, the browser's storage notes; TextureBudget.js (the phones of the browser) has no use here.
 
 ## How it works
 
@@ -379,6 +436,7 @@ Holding the brake at a standstill puts the car in reverse; then the brake drives
 | `scripts/track.gd` | the track model, a collision shape per mesh with its surface |
 | `scripts/atmosphere.gd`, `ground.gd`, `ground_material.gd`, `graphics.gd` | the sky, light and weather; the wet and the snow and their grip; the look of the ground; the graphics settings |
 | `scripts/chase_camera.gd`, `hud.gd`, `world.gd`, `main.gd`, `controls.gd` | camera, dashboard, a drive, menu, keys |
+| `scripts/main_menu.gd`, `menu/`, `settings_*.gd`, `pause_menu.gd`, `hud_*.gd` | the main menu, the settings, the pause menu, the gauge and the HUD editor |
 | `native/src/engine_sim.cpp` | the engine sound: EngineSimWorklet.js and the exhaust chain of EngineSim.js in C++ |
 | `scripts/engine_sim_params.gd`, `car_audio.gd` | the sound parameters of car.json; the engine and the tyre squeal of a car |
 | `scripts/tyre_effects.gd` | skid marks, tyre smoke and dust |

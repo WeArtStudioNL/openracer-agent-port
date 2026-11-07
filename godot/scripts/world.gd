@@ -601,7 +601,17 @@ func open_tuning() -> void:
 	if _tuning_paused:
 		get_tree().paused = true
 		ForceFeedback.neutral()
+		# (the gamepad works the menu while it holds the race, PadNav.js; in free driving the pad drives)
+		_focus_first.call_deferred(menu)
 	RunLog.event("tuning menu open%s" % (" (the race waits)" if _tuning_paused else ""))
+
+
+func _focus_first(root: Node) -> void:
+	for c in root.find_children("*", "Control", true, false):
+		var ctl := c as Control
+		if ctl.focus_mode == Control.FOCUS_ALL and ctl.is_visible_in_tree() and not (ctl is BaseButton and (ctl as BaseButton).disabled):
+			ctl.grab_focus()
+			return
 
 
 func close_tuning() -> void:

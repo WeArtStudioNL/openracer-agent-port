@@ -152,6 +152,8 @@ func _ready() -> void:
 					kept.append(b)
 			_bindings[a[0]] = kept
 	Input.joy_connection_changed.connect(func(_d: int, _c: bool): rebind())
+	# the menus with a gamepad (PadNav.js): A chooses, B goes back, in every menu from the start
+	SettingsMenu.pad_ui()
 	rebind()
 
 
