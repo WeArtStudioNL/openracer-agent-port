@@ -29,6 +29,12 @@ var running := true            # it runs; a stalled engine only brakes until the
 var starting := false          # the starter cranks it
 var stall_rpm := 360.0         # below this speed it stalls
 var starter_torque := 150.0    # N m of the starter motor
+# what a crash did to it (EngineDamage)
+var health_scale := 1.0        # the torque as a factor
+var friction_scale := 1.0      # the losses as a factor
+var misfire_cut := false       # a misfire: no combustion for a moment
+var disabled := false          # seized, or the ignition is ruined: it does not start
+var last_torque := 0.0         # the net torque of the last step
 var two_step_rpm := 4500.0
 var launch_rpm := 3500.0
 var hold_rpm := 0.0            # a lower limit the car asks for (the two-step, the launch control); 0: none
@@ -135,7 +141,7 @@ func full_torque(r: float) -> float:
 
 ## The losses of the engine with the throttle shut (the engine braking), N m.
 func motoring(r: float) -> float:
-	return (30.0 + 0.0355 * r) * _motoring_scale * braking_scale
+	return (30.0 + 0.0355 * r) * _motoring_scale * braking_scale * friction_scale
 
 
 ## The power as a factor for a boost pressure (bar above the atmosphere): the pressure ratio, the heat of the
@@ -215,7 +221,7 @@ func update_boost(throttle: float, dt: float) -> void:
 
 ## The starter turns a stalled engine over (Engine.js start).
 func start() -> void:
-	if not running:
+	if not running and not disabled:
 		starting = true
 
 
@@ -223,7 +229,7 @@ func start() -> void:
 func net_torque(throttle: float, dt: float) -> float:
 	update_boost(throttle, dt)
 	var r := rpm()
-	if no_fuel:
+	if no_fuel or disabled:
 		running = false
 		starting = false
 	if not running:
@@ -260,8 +266,9 @@ func net_torque(throttle: float, dt: float) -> float:
 		cut = true
 		_cut_time = 0.0
 		_cut_length = maxf(0.008, 1.0 / limiter_hz - _on_time)
-	if cut:
+	if cut or misfire_cut:
 		t = 0.0
 	throttle_used = t
 	var boosted := boost_factor(boost * turbo_bar) if turbo_bar > 0.0 else 1.0 - turbo_share * (1.0 - boost)
-	return full_torque(r) * power_scale * boosted * t - (1.0 - t) * motoring(r) * (0.5 if als_active else 1.0)
+	last_torque = full_torque(r) * power_scale * health_scale * boosted * t - (1.0 - t) * motoring(r) * (0.5 if als_active else 1.0)
+	return last_torque

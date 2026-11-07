@@ -169,6 +169,15 @@ Test: `Godot --headless --fixed-fps 120 --path godot res://tools/test_crash.tscn
 --speed=60 [--angle=40] [--set=damage:false]` drives into a wall and prints the bend, the energy and what tore,
 then drives the car on and repairs it; without `--headless`, `--shot=file.png` saves a picture of the dent.
 
+The engine takes damage as in the browser game (`EngineDamage.js`, `scripts/engine_damage.gd`; not for the AI cars,
+which have no pit stop): the nodes of the shell in the engine bay and at the radiator say how hurt the block, the
+top, the oil pan, the front of the engine and the radiator are; from that come misfires (a bang in the exhaust),
+stalls at a hard hit, coolant and oil leaks, a blown head gasket, the heat of the engine (less power above 108 C),
+the wear of the bearings without oil pressure, and an engine that seizes. The HUD shows a line "ENGINE ...° ·
+COOLANT ...%" with what is wrong once something is; a repair makes it whole. car.json `engine.damage` sets the bay
+and radiator, as in the browser. The crash test prints what the hit did to the engine. Not yet: the steam, the
+smoke and the drops and stains of the leaks (`Leaks.js`).
+
 Not yet from the browser game: the suspension as nodes and beams (a bent arm that pulls the car aside, a wheel that
 comes off), hinged parts that swing open (doors, a hood) and the link beams of parts with nodes of their own, the
 pieces of a part that shatters (`Shatter.js`), a loose part that hits its own car, the damage to the engine

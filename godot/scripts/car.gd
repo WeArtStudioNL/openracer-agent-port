@@ -196,6 +196,8 @@ var model_root: Node3D
 var shell: CarShell = null      # the shell that dents (damage on, Settings), or null
 var shell_mesh: SoftBodyMesh = null
 var parts: CarParts = null      # the parts that come off (damage on)
+var engine_damage: EngineDamage = null   # what a crash does to the engine (damage on, not for the AI)
+var engine_damage_on := true    # (the AI cars have none: they have no pit stop to mend it)
 var _box: CollisionShape3D
 var _box_full := Vector3.ZERO   # the size of the box of the body (x, z) and its place along the car, without a shell
 var _box_shell := Vector3.ZERO  # and inside what the nodes can be crushed to
@@ -284,6 +286,8 @@ func repair() -> void:
 		shell.repair()
 	if parts != null:
 		parts.repair()
+	if engine_damage != null:
+		engine_damage.repair()
 
 
 ## The car was moved (put back on its wheels): the shell stops moving and keeps its dents.
@@ -977,6 +981,14 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		_tyre_effects(w, dt)
 		_wear_step(w, dt)
 	_fuel_step(dt)
+	if engine_damage != null and (shell == null or not engine_damage_on):
+		engine_damage.repair()
+		engine_damage = null
+	if shell != null and engine_damage_on:
+		if engine_damage == null:
+			var ed: Variant = config.get("engine", {}).get("damage", {})
+			engine_damage = EngineDamage.new(self, ed if ed is Dictionary else {})
+		engine_damage.update(dt)
 	_traction_control(dt)
 
 	# ---- the air: the drag, and the downforce (or lift) of each axle along the up axis of the body, at the axle

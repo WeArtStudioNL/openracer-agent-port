@@ -163,6 +163,35 @@ func _assist_lights() -> void:
 		_tyres.text = "fuel %.1f L\n%s   %s\n%s   %s" % [car.fuel, cells[0], cells[1], cells[2], cells[3]]
 	else:
 		_tyres.text = ""
+	var row := _engine_row()
+	if row != "":
+		_tyres.text = row if _tyres.text == "" else _tyres.text + "\n" + row
+
+
+## The engine when something is wrong with it (EngineDamage, Hud.js engineHealthRow): the heat, the coolant and what
+## it does; nothing when it is whole and cool.
+func _engine_row() -> String:
+	if car.engine_damage == null:
+		return ""
+	var h := car.engine_damage.health
+	var hot: bool = h["temp"] > 104.0
+	var trouble: bool = hot or h["coolant"] < 0.97 or h["wear"] > 0.02 or h["ignition"] > 0.02 or h["gasket"] > 0.02 or h["failed"] > 0.0
+	if not trouble:
+		return ""
+	var state := ""
+	if h["failed"] > 0.0:
+		state = "ENGINE FAILED"
+	elif h["temp"] > 118.0:
+		state = "OVERHEATING"
+	elif h["gasket"] > 0.3:
+		state = "HEAD GASKET"
+	elif h["misfire"] > 0.15:
+		state = "MISFIRING"
+	elif h["wear"] > 0.5:
+		state = "ENGINE WORN"
+	if h["oil"] < 0.2:
+		state += (" · " if state != "" else "") + "OIL"
+	return "ENGINE %d° · COOLANT %d%%%s" % [roundi(h["temp"]), roundi(h["coolant"] * 100.0), " · " + state if state != "" else ""]
 
 
 func _race_panel() -> void:

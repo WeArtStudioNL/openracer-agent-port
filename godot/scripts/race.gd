@@ -76,6 +76,7 @@ func setup(w: Node, l: RacingLine, track: Track, player_car: Car, opponents: int
 		var cfg: Variant = Content.load_json("cars/%s/car.json" % id)
 		var e := Entry.new()
 		e.car = Car.new()
+		e.car.engine_damage_on = false
 		e.car.setup(id, cfg if cfg is Dictionary else {})
 		e.car.freeze = true              # (until it is on its slot: the cars are all at the origin until then)
 		e.car.set_meta("track_id", track.track_id)

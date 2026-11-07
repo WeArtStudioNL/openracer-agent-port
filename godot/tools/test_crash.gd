@@ -149,7 +149,14 @@ func _physics_process(dt: float) -> void:
 			if _time - _hit_time > 4.0:
 				print("drives on: %.1f km/h after 4 s, %s" % [car.speed * 3.6, "bend kept %.1f cm, the shell %s (anchors pull %.0f N in sum)" % [
 					car.shell.sb.stats()["max_bend"] * 100.0, "quiet" if car.shell.sb.quiet else "moving", car.shell.sb.reaction_force.length()] if car.shell else ""])
+				if car.engine_damage != null:
+					var h: Dictionary = car.engine_damage.health
+					print("engine: %d nodes in the bay, block %.2f top %.2f pan %.2f radiator %.2f%s, coolant %.0f %%, oil %.0f %%, %.0f C, power %.0f %%, misfire %.2f, %s" % [
+						car.engine_damage.nodes, h["block"], h["top"], h["pan"], h["radiator"], " (torn open)" if h["radiator_gone"] else "",
+						h["coolant"] * 100.0, h["oil"] * 100.0, h["temp"], h["power"] * 100.0, h["misfire"], "running" if car.engine.running else "stalled"])
 				car.repair()
+				if car.engine_damage != null:
+					print("engine repaired: power %.0f %%, coolant %.0f %%" % [car.engine_damage.health["power"] * 100.0, car.engine_damage.health["coolant"] * 100.0])
 				if car.shell:
 					print("repaired: bend %.1f cm, parts off %d" % [car.shell.sb.stats()["max_bend"] * 100.0, car.parts.count_off() if car.parts else 0])
 				get_tree().quit()
