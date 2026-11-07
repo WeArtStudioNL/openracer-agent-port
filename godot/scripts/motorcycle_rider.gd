@@ -66,18 +66,10 @@ func _init(c: Car, driver: Dictionary) -> void:
 		leg_left = "legL" if _car_pos(bones["legL"][0]).x >= _car_pos(bones["legR"][0]).x else "legR"
 
 
-static func _key(s: String) -> String:
-	var out := ""
-	for ch in s.to_lower():
-		if (ch >= "a" and ch <= "z") or (ch >= "0" and ch <= "9"):
-			out += ch
-	return out
-
-
 func _bone(name: String) -> int:
-	var want := _key(name)
+	var want := BoneIK.key(name)
 	for i in skel.get_bone_count():
-		if _key(skel.get_bone_name(i)) == want:
+		if BoneIK.key(skel.get_bone_name(i)) == want:
 			return i
 	return -1
 
@@ -105,40 +97,15 @@ func _complete() -> bool:
 
 ## A part of the bike by its name (the grips hang on the steering head, the pegs on the body).
 func _part(name: String) -> Node3D:
-	var want := _key(name)
+	var want := BoneIK.key(name)
 	for n in car.find_children("*", "Node3D", true, false):
-		if _key(str(n.name)) == want:
+		if BoneIK.key(str(n.name)) == want:
 			return n as Node3D
 	return null
 
 
-## The pose of a bone in the space of the skeleton, from the local poses as they are now.
-func _global(b: int) -> Transform3D:
-	var t := skel.get_bone_pose(b)
-	var p := skel.get_bone_parent(b)
-	while p >= 0:
-		t = skel.get_bone_pose(p) * t
-		p = skel.get_bone_parent(p)
-	return t
-
-
 func _car_pos(b: int) -> Vector3:
-	return CarModel.relative(skel, car) * _global(b).origin
-
-
-## Turns a bone (in the space of the skeleton) so that the direction "from" goes to "to".
-func _rotate_to(b: int, from: Vector3, to: Vector3) -> void:
-	if from.length_squared() < 1e-10 or to.length_squared() < 1e-10:
-		return
-	var f := from.normalized()
-	var t := to.normalized()
-	if f.dot(t) > 0.999999:
-		return
-	var g := _global(b).basis.orthonormalized()
-	var turned := Basis(Quaternion(f, t)) * g
-	var p := skel.get_bone_parent(b)
-	var local := (_global(p).basis.orthonormalized().inverse() * turned) if p >= 0 else turned
-	skel.set_bone_pose_rotation(b, local.get_rotation_quaternion())
+	return CarModel.relative(skel, car) * BoneIK.global(skel, b).origin
 
 
 ## Turns a bone by degrees about the axes of the car (on top of its rest), as the car editor sets the chest and the head.
@@ -147,39 +114,10 @@ func _turn(b: int, deg: Vector3, to_skel: Basis) -> void:
 		return
 	var q := Basis(Vector3.RIGHT, deg_to_rad(deg.x)) * Basis(Vector3.UP, deg_to_rad(deg.y)) * Basis(Vector3.BACK, deg_to_rad(deg.z))
 	var in_skel := to_skel * q * to_skel.inverse()
-	var g := in_skel * _global(b).basis.orthonormalized()
+	var g := in_skel * BoneIK.global(skel, b).basis.orthonormalized()
 	var p := skel.get_bone_parent(b)
-	var local := (_global(p).basis.orthonormalized().inverse() * g) if p >= 0 else g
+	var local := (BoneIK.global(skel, p).basis.orthonormalized().inverse() * g) if p >= 0 else g
 	skel.set_bone_pose_rotation(b, local.get_rotation_quaternion())
-
-
-## The inverse kinematics of two bones: the upper one points at the elbow (or the knee), which is on the side of the
-## pole, the lower one at the target (all in the space of the skeleton).
-func _solve(chain: Array, target: Vector3, pole: Vector3) -> void:
-	var a := _global(chain[0]).origin
-	var bp := _global(chain[1]).origin
-	var c := _global(chain[2]).origin
-	var l1 := a.distance_to(bp)
-	var l2 := bp.distance_to(c)
-	if l1 < 1e-5 or l2 < 1e-5:
-		return
-	var u := target - a
-	var d := u.length()
-	if d < 1e-5:
-		return
-	u /= d
-	var reach := clampf(d, absf(l1 - l2) + 1e-3, l1 + l2 - 1e-3)
-	var x := (l1 * l1 - l2 * l2 + reach * reach) / (2.0 * reach)
-	var h := sqrt(maxf(0.0, l1 * l1 - x * x))
-	var n := (pole - a) - u * (pole - a).dot(u)
-	if n.length_squared() < 1e-8:
-		n = Vector3.UP - u * u.y
-	n = n.normalized()
-	var elbow := a + u * x + n * h
-	_rotate_to(chain[0], bp - a, elbow - a)
-	bp = _global(chain[1]).origin
-	c = _global(chain[2]).origin
-	_rotate_to(chain[1], c - bp, a + u * reach - bp)
 
 
 ## Every frame: the posture, the torso, the arms and the legs.
@@ -218,18 +156,18 @@ func update(_dt: float, bike: Motorcycle) -> void:
 	for e in [[arm_left, "left", 1.0], ["armR" if arm_left == "armL" else "armL", "right", -1.0]]:
 		var chain: Array = bones[e[0]]
 		var g := CarModel.relative(grips[e[1]], car)
-		var target: Vector3 = g * _vec(hoff.get(e[1], [0, 0, 0]))
+		var target: Vector3 = g * BoneIK.vec(hoff.get(e[1], [0, 0, 0]))
 		var pole := _car_pos(chain[0]) + Vector3(float(e[2]) * 0.45, -0.25, -0.35)
 		if float(p["push"]) > 0.01 and float(p["inside"]) * float(e[2]) > 0.0:
 			pole += Vector3(float(e[2]) * 0.2, 0.35, 0.0) * float(p["push"])
-		_solve(chain, to_skel * target, to_skel * pole)
+		BoneIK.solve(skel, chain, to_skel * target, to_skel * pole)
 	# the feet on the pegs, down on the road at a standstill; the inside knee out and down in a bend
 	var feet: Dictionary = cfg.get("feet", {})
 	var foff: Dictionary = feet.get("offset", {})
 	var ground := -car.wheels[0].radius
 	for e in [[leg_left, "left", 1.0, bike.foot_down_l], ["legR" if leg_left == "legL" else "legL", "right", -1.0, bike.foot_down]]:
 		var chain: Array = bones[e[0]]
-		var target: Vector3 = CarModel.relative(pegs[e[1]], car) * _vec(foff.get(e[1], [0, 0, 0]))
+		var target: Vector3 = CarModel.relative(pegs[e[1]], car) * BoneIK.vec(foff.get(e[1], [0, 0, 0]))
 		var down := float(e[3])
 		if down > 0.001:
 			target = target.lerp(Vector3(target.x + float(e[2]) * 0.04, ground + FOOT_ANKLE, target.z + 0.06), down)
@@ -240,10 +178,5 @@ func update(_dt: float, bike: Motorcycle) -> void:
 			pole.x += float(e[2]) * (float(st["knee_out"]) if inside else 0.25) * knee
 			if inside:
 				pole.y -= float(st["knee_down"]) * knee
-		_solve(chain, to_skel * target, to_skel * pole)
+		BoneIK.solve(skel, chain, to_skel * target, to_skel * pole)
 
-
-static func _vec(a: Variant) -> Vector3:
-	if a is Array and (a as Array).size() >= 3:
-		return Vector3(float(a[0]), float(a[1]), float(a[2]))
-	return Vector3.ZERO

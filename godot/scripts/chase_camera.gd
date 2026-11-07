@@ -38,7 +38,7 @@ func read_config(c: Car) -> void:
 	var cp: Dictionary = cams.get("cockpit", {})
 	if cp.has("position"):
 		var p: Array = cp["position"]
-		cockpit = Vector3(float(p[0]), float(p[1]), float(p[2])) + c.model_root.position
+		cockpit = Vector3(float(p[0]), float(p[1]), float(p[2]))      # (the space of the body, as the driver: car.json "driver")
 	cockpit_fov = float(cp.get("fov", cockpit_fov))
 
 
@@ -66,6 +66,7 @@ func _process(delta: float) -> void:
 		return
 	var xf := car.get_global_transform_interpolated()
 	var spd := absf(car.speed)
+	CarDriver.camera_inside(car, mode == Mode.COCKPIT)
 	match mode:
 		Mode.FOLLOW:
 			# the camera turns after the direction the car moves, so a slide is seen from behind the car
