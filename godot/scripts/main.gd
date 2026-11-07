@@ -113,6 +113,10 @@ func _build_menu() -> void:
 				"laps": int(_laps_pick.get_item_text(_laps_pick.selected)), "pole": _grid_pick.selected == 1}
 		_start(_cars[_car_pick.selected]["id"], _tracks[_track_pick.selected]["id"], opts))
 	box.add_child(go)
+	var replays := Button.new()
+	replays.text = "Replays…"
+	replays.pressed.connect(_open_replays)
+	box.add_child(replays)
 	var garage := Button.new()
 	garage.text = "Import a car or track (zip)…"
 	garage.pressed.connect(_import_zip)
@@ -190,6 +194,37 @@ func _start(car_id: String, track_id: String, opts := {}) -> void:
 
 
 ## (Race again: the world made a new one of itself)
+## The saved replays (Replay): one is played in a viewer, Exit comes back here.
+func _open_replays() -> void:
+	var files := Replay.list_files()
+	var dlg := AcceptDialog.new()
+	dlg.title = "Replays"
+	dlg.ok_button_text = "Close"
+	var list := ItemList.new()
+	list.custom_minimum_size = Vector2(620, 360)
+	var heads: Array = []
+	for f in files:
+		var h := Replay.read_head(f)
+		if h.is_empty():
+			continue
+		heads.append([f, h])
+		var stamp := f.get_file().get_basename().get_slice("__", 1)
+		list.add_item("%s · %s · %d car%s · %s · %s" % [h["track"], h["cars"][0], h["cars"].size(), "" if h["cars"].size() == 1 else "s",
+			LapTimer.format_time(h["seconds"]), stamp])
+	if heads.is_empty():
+		list.add_item("No replays yet: Esc, Replay, Save replay while you drive.")
+	list.item_activated.connect(func(i: int):
+		if i < heads.size():
+			dlg.queue_free()
+			var h: Dictionary = heads[i][1]
+			_start(str(h["cars"][0]), str(h["track"]), {"mode": "replay", "file": heads[i][0]}))
+	dlg.add_child(list)
+	dlg.confirmed.connect(dlg.queue_free)
+	dlg.canceled.connect(dlg.queue_free)
+	add_child(dlg)
+	dlg.popup_centered()
+
+
 ## A car or a track from a zip into the garage (Garage): the menu is made again with it in its list.
 func _import_zip() -> void:
 	var dlg := FileDialog.new()

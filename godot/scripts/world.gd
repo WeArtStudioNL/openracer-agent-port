@@ -101,6 +101,10 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 			race.finished.connect(_race_finished)
 			add_child(race)
 			hud.race = race
+	# a replay from a file (the main menu, Replays): a viewer, no game behind it
+	if options.get("mode", "") == "replay":
+		_open_replay_file.call_deferred(str(options.get("file", "")))
+		return
 	# the replay: every car, from the start (Replay.js)
 	replay = Replay.new()
 	var all: Array = [car]
@@ -397,6 +401,20 @@ func _show_pause_buttons() -> void:
 		b.pressed.connect(item[1])
 		box.add_child(b)
 	(box.get_child(0) as Button).grab_focus.call_deferred()
+
+
+func _open_replay_file(path: String) -> void:
+	replay = Replay.new()
+	if not replay.open_file(path, self, car):
+		hud.toast("This is not a replay of this version")
+		replay = null
+		return
+	add_child(replay)
+	car.make_ghost()
+	for m in car.find_children("*", "MeshInstance3D", true, false):
+		(m as MeshInstance3D).transparency = 0.0
+	get_tree().paused = true
+	replay.play()
 
 
 ## The replay of what was driven (Replay.js): the pause menu goes, the game stays paused behind it.

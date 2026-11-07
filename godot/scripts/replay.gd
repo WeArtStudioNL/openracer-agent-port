@@ -9,6 +9,9 @@ extends Node
 ## seconds, the speed (0.1x to 5x), the camera and the car the camera is on; Exit (or Esc) goes back to the game,
 ## which goes on where it was left. Keys: Enter play/pause, left and right one frame (held: they keep stepping), up
 ## and down one second, Home and End, T the camera, Tab the next car, H hides the bar.
+##
+## Save replay (in the bar) keeps it as a file in user://replays (the ids of the track and the cars and the
+## recording, not the models); the main menu, Replays, opens one: a viewer with no game behind it.
 
 const RATE := 30.0
 const MAX_SECONDS := 1800.0
@@ -17,6 +20,8 @@ const WHEEL_FIELDS := 3             # spring length, steering, turn
 const STRIDE := CAR_FIELDS + 4 * WHEEL_FIELDS
 const SPEEDS := [0.1, 0.25, 0.5, 1.0, 2.0, 3.0, 5.0]
 const JUMP := 15.0                  # m between two samples: the car was put back (no sliding in between)
+const DIR := "user://replays"
+const EXT := "oreplay"
 
 var world: Node
 var cars: Array[Car] = []
@@ -26,6 +31,7 @@ var playing := false                # the replay is on the screen
 var running := false                # it plays (not paused)
 var time := 0.0                     # s from the first sample kept
 var speed := 1.0
+var viewer := false                 # a replay from a file: Exit goes back to the menu
 var _record_in := 0.0
 var _saved: Array = []              # the cars as the game left them
 var _focus := 0
@@ -38,6 +44,7 @@ var _speed_button: OptionButton
 var _camera_was: Car
 var _sliding := false
 var _step_held := 0.0
+var _note_for := 0.0
 
 
 func setup(w: Node, list: Array) -> void:
@@ -192,7 +199,8 @@ func _process(delta: float) -> void:
 	_show(time)
 	if _slider != null and not _sliding:
 		_slider.set_value_no_signal(time)
-	if _time_label != null:
+	_note_for -= delta
+	if _time_label != null and _note_for <= 0.0:
 		_time_label.text = "%s / %s" % [LapTimer.format_time(time), LapTimer.format_time(duration())]
 	if _play_button != null:
 		_play_button.text = "Pause" if running else "Play"
@@ -289,8 +297,93 @@ func _next_car() -> void:
 
 func _exit() -> void:
 	stop()
-	if world != null and world.has_method("resume"):
+	if viewer:
+		get_tree().paused = false
+		world.leave.emit()
+	elif world != null and world.has_method("resume"):
 		world.resume()
+
+
+## Keeps the recording as a file: user://replays/<track>__<date>.oreplay. The path, or "" when it failed.
+func save() -> String:
+	DirAccess.make_dir_recursive_absolute(DIR)
+	var ids: Array = []
+	for c in cars:
+		ids.append(c.car_id if is_instance_valid(c) else "")
+	var track_id := str(cars[0].get_meta("track_id", "")) if not cars.is_empty() else ""
+	var stamp := Time.get_datetime_string_from_system().replace(":", "-").replace("T", "_")
+	var path := DIR.path_join("%s__%s.%s" % [track_id, stamp, EXT])
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		return ""
+	f.store_var({"version": 1, "track": track_id, "cars": ids, "rate": RATE, "count": count, "stride": STRIDE, "samples": samples})
+	f.close()
+	RunLog.event("replay saved: %s (%.1f s, %d cars)" % [path, duration(), ids.size()])
+	return path
+
+
+## The head of a replay file: { track, cars, seconds } (without the recording), or {} when it is not one.
+static func read_head(path: String) -> Dictionary:
+	var data := _read(path)
+	if data.is_empty():
+		return {}
+	return {"track": data["track"], "cars": data["cars"], "seconds": maxf(0.0, (int(data["count"]) - 1) / float(data["rate"]))}
+
+
+static func _read(path: String) -> Dictionary:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return {}
+	var data: Variant = f.get_var()
+	f.close()
+	if not (data is Dictionary) or int(data.get("stride", 0)) != STRIDE or not data.has("samples"):
+		return {}
+	return data
+
+
+## The files of the replays, the newest first.
+static func list_files() -> Array[String]:
+	var out: Array[String] = []
+	for f in DirAccess.get_files_at(DIR):
+		if f.ends_with("." + EXT):
+			out.append(DIR.path_join(f))
+	out.sort()
+	out.reverse()
+	return out
+
+
+## A viewer of a file: the cars (the first the world's own, the others made here, seen as they were) and the
+## recording. False when the file is not a replay.
+func open_file(path: String, w: Node, first: Car) -> bool:
+	var data := _read(path)
+	if data.is_empty():
+		return false
+	world = w
+	name = "Replay"
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	viewer = true
+	cars = [first]
+	var ids: Array = data["cars"]
+	for k in range(1, ids.size()):
+		var c := Car.new()
+		var cfg: Variant = Content.load_json("cars/%s/car.json" % ids[k])
+		c.setup(str(ids[k]), cfg if cfg is Dictionary else {})
+		c.make_ghost()
+		for m in c.find_children("*", "MeshInstance3D", true, false):
+			(m as MeshInstance3D).transparency = 0.0
+			(m as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		w.add_child(c)
+		cars.append(c)
+	samples = data["samples"]
+	count = int(data["count"])
+	return true
+
+
+func _save_button() -> void:
+	var p := save()
+	if _time_label != null:
+		_time_label.text = "Saved" if p != "" else "Could not save"
+		_note_for = 2.0
 
 
 func _build_ui() -> void:
@@ -338,7 +431,7 @@ func _build_ui() -> void:
 	_speed_button.select(SPEEDS.find(1.0))
 	_speed_button.item_selected.connect(func(i: int): speed = SPEEDS[i])
 	row.add_child(_speed_button)
-	for item in [["Camera (T)", _next_camera], ["Next car (Tab)", _next_car], ["Exit (Esc)", _exit]]:
+	for item in [["Camera (T)", _next_camera], ["Next car (Tab)", _next_car], ["Save replay", _save_button], ["Exit (Esc)", _exit]]:
 		var b := Button.new()
 		b.text = item[0]
 		b.custom_minimum_size.y = 36

@@ -219,8 +219,8 @@ The replay (`scripts/replay.gd`, Replay.js): every car of the session (the playe
 the same code that draws the cars. The bar: a slider over the whole recording, start, -10 s, play/pause, +10 s, end,
 the speed (0.1x to 5x), the camera (T) and the car it follows (Tab); Exit (Esc) goes back to the game where it was
 left. Keys: Enter play/pause, left and right one frame (held: on), up and down one second, Home and End, H hides the
-bar. Test: `res://tools/test_replay.tscn -- --ai=1`. Not yet: saving a replay to a file and opening it from the main
-menu, the free camera, marks and fragments, video, the soft body and the parts in the replay.
+bar. Save replay (in the bar) keeps it in `user://replays` (the ids of the track and the cars, and the recording); the main
+menu, Replays…, plays one in a viewer. Test: `res://tools/test_replay.tscn -- --ai=1`. Not yet: the free camera, marks and fragments, video, the soft body and the parts in the replay.
 
 ## Pit stops and the drag strip
 
