@@ -554,7 +554,7 @@ func _crash_rules(car: Car, st: Dictionary, v: Vector3, pos: Vector3, u: float, 
 	if leaned or over or lowside or spin or blow or hit:
 		crashed = true
 		crash_reason = "lean" if leaned else ("over" if over else ("lowside" if lowside else ("spin" if spin else ("blow" if blow else "hit"))))
-		RunLog.event("motorcycle down (%s) at %.0f km/h, lean %.0f deg" % [crash_reason, v.length() * 3.6, lean / DEG])
+		RunLog.event("motorcycle %s down (%s) at %.0f km/h, lean %.0f deg" % [car.name, crash_reason, v.length() * 3.6, lean / DEG])
 		_crash_speed = vo if hit else v
 
 

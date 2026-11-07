@@ -120,10 +120,12 @@ func _slot(s: int, track: Track) -> Dictionary:
 	return {"x": p.x - sin(h) * side, "z": p.z + cos(h) * side, "heading": h}
 
 
-## The cars of the player's kind (a car against cars, a kart against karts), not the player's own; else the player's.
+## The cars of the player's kind (a car against cars, a kart against karts, a motorcycle against motorcycles), not the player's own; else the player's.
 func _opponent_cars(player_car: Car) -> Array:
 	# (a kart: light, or a kart by its name; the go-kart 250cc weighs 330 kg)
 	var kind := func(cfg: Dictionary) -> String:
+		if str(cfg.get("type", "car")) == "motorcycle":
+			return "motorcycle"
 		var light := float(cfg.get("chassis", {}).get("mass", 1000)) < 400
 		return "kart" if light or str(cfg.get("name", "")).to_lower().contains("kart") else "car"
 	var own: String = kind.call(player_car.config)
@@ -141,9 +143,17 @@ func _opponent_cars(player_car: Car) -> Array:
 
 ## Places every car on its slot (the start of the race).
 func place_all() -> void:
+	# (the road under a slot, through the cars: the ray found the roof of a car that stood there, and the car was
+	# dropped from more than a metre, which threw a motorcycle over on the grid)
+	var cars: Array[RID] = []
+	for e in entries:
+		cars.append(e.car.get_rid())
+	var space: PhysicsDirectSpaceState3D = (world.track as Node3D).get_world_3d().direct_space_state
 	for e in entries:
 		var s: Dictionary = e.car.get_meta("slot")
-		var y: float = world.track.ground_at(s["x"], s["z"])
+		var q := PhysicsRayQueryParameters3D.create(Vector3(s["x"], 2000.0, s["z"]), Vector3(s["x"], -2000.0, s["z"]), 0xFFFFFFFF, cars)
+		var hit: Dictionary = space.intersect_ray(q)
+		var y: float = float(hit["position"].y) if not hit.is_empty() else world.track.ground_at(s["x"], s["z"])
 		e.car.place(Vector3(s["x"], y + e.car.wheels[0].radius + 0.15, s["z"]), s["heading"])
 		e.car.repair()
 		e.car.freeze = false

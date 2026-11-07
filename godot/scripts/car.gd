@@ -733,8 +733,10 @@ func _controls(dt: float) -> void:
 		b = throttle_input
 	if bike != null:
 		# (no reverse gear: held at a standstill, the brake has the rider walk the bike back)
-		reverse_hold = reverse_hold + dt if absf(speed) < 0.6 and brake_input > 0.5 and throttle_input < 0.1 else 0.0
-		bike.pushing = reverse_hold > 0.35 or (bike.pushing and brake_input > 0.5 and throttle_input < 0.1)
+		# (not while it is held on the grid, the brake and the handbrake on, and not for the AI)
+		var walk := brake_input > 0.5 and throttle_input < 0.1 and handbrake_input < 0.5 and not bike.lean_from_bend
+		reverse_hold = reverse_hold + dt if absf(speed) < 0.6 and walk else 0.0
+		bike.pushing = reverse_hold > 0.35 or (bike.pushing and walk)
 		gear = maxi(gear, 0)
 	elif not manual and Settings.get_value("auto_reverse"):
 		if gear >= 0 and absf(speed) < 0.6 and brake_input > 0.5 and throttle_input < 0.1:
