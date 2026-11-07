@@ -210,7 +210,76 @@ The garage (`scripts/garage.gd`, Garage.js): cars and tracks of the player next 
 `garage_folder`, with cars/ and tracks/ in it). An item with the id of one of the game wins over it; an item with
 only its car.json keeps using the files of the game's one. Main menu, "Import a car or track (zip)…" puts the item of
 a zip (car.json or track.json at its root or in one folder, as the browser game exports it) in the garage; it shows in
-the lists with "(garage)". Not yet: export to a zip, deleting from the menu, the car and track editors.
+the lists with "(garage)". Not yet: deleting from the menu, the track editor (the car editor below exports a car as a zip).
+
+## Car editor
+
+Main menu, "Car editor" (`scripts/editor/`, after `web/tools/car-editor.html` and `car-editor.js`): the side bar with the
+cards of the browser editor in its order, the 3D view in the middle and the layers on the right, in the colours of
+`editor.css`.
+
+- **Header**: the tune of the car (Default is car.json; Save writes to what is chosen, + New tune, Tune file: delete,
+  export and import a tune file; the tunes are those of the tuning menu, `user://tunes/<car>/`), the summary (mass,
+  front/rear, power, top speed, a wheelie warning for a motorcycle). Footer: Changes (what differs from the saved car),
+  the ready check (what is missing before it can be saved), the status, Delete (to the Trash), Save and test (saves,
+  asks a track and drives it in the game; Esc, Main menu comes back to the editor). Ctrl/Cmd+S saves, Ctrl/Cmd+Z undoes
+  (Shift: redo).
+- **Car**: open a car of the list (the game's and the garage's; the tune in use goes into the form), + Car, + Motorcycle,
+  Make a copy, Export zip, the type, name, id (`^[a-z0-9][a-z0-9_-]{0,63}$`, made from the name until it is typed) and
+  description, and where Save writes: the garage (`user://garage/cars/<id>/`, the default) or, when the game runs from the
+  repository, the game's folder `web/cars/<id>/` (and `web/cars/index.json`, as tools/serve.py does).
+- **Model**: Import model… (a native file dialog: a .glb, or a .gltf with its .bin and textures; a name the game does not
+  allow is made safe), turn, scale, the offset, Fit to the wheels and the floor. A new model is set up by itself (the
+  wheels found, the size and the chassis measured, the model on the floor, glass that arrived opaque made see-through);
+  a new model for a car that exists keeps what still fits (the transform, the wheels by name, the materials).
+- **Wheels**: Dynamic wheels or Wheels from model, Find the wheels (by their names: FL, front left …, and their places),
+  the parts by hand (four lists, Ctrl/Cmd adds), the rims of the wheel library per axle (the tyre made from the Tyres
+  settings, or the rim and tyre of the model; the motorcycle tyres of the library), Rear = front, the steering wheel
+  (degrees, stops). The boxes of the wheels, the library wheels or the grey dynamic wheels are drawn in the view.
+- **Suspension and driveline**: the parts library (`scripts/editor/parts_library.gd`, PartsLibrary.js): a type per axle,
+  where the engine is, the parts placed from `web/parts/` and shown in the view, an eye per part, every mount a row with
+  move, turn and reset; Edit origins makes only the mounts clickable (W moves, E turns, Escape leaves).
+- **Chassis**, **Motorcycle**, **Drivetrain**: the fields of the form, a slider under every number with a range, and the
+  groups of the tuning table that the form has no field for (Tuning.GROUPS: Chassis settings with the paint, Brakes,
+  Aerodynamics and steering, Tyres in Wheels, Fuel and Engine in Engine, Transmission in Drivetrain), hidden when they
+  cannot do anything (Tuning.visible), ↺ back to the car as loaded.
+- **Engine**: the engine block (`scripts/editor/engine_build.gd`, EngineBuild.js: the curve is worked out from the block,
+  the cam, inlet and exhaust, the fuel and a turbo or supercharger, every field within the limits the others allow; the
+  turbo of the game and the engine sound follow), the exhaust, Simple or Advanced, the chart of torque and power with Run
+  dyno (a pull at the wheels, with the sound), the engine speeds. **Engine sound**: the exhaust effect and All settings…
+  (every field of engine_sim and the ignition timing); the Tests bar of the view plays it (EngineSimSynth, rpm, throttle,
+  Rev, cockpit).
+- **Assists and extras**, **Cameras** (the window with the follow and cockpit cameras, Defaults for the size of the car),
+  **Materials** (a preset or the fields per material: colour, metalness, roughness, opacity, clear coat; car.json
+  "materials").
+- **View**: orbit (left button), pan (right or middle, or Shift), the wheel zooms to the point under the mouse; O
+  perspective/orthographic, Home reset, the numpad (4 6 8 2 5, 1) or View… for the standard views; the bars fold away at
+  the edges. The gizmo (`editor_gizmo.gd`, where the browser has TransformControls) moves the cameras (follow, its look
+  point, cockpit), the model and the exhaust points, and turns the exhaust points and the mounts (W, E). A click on a dot
+  selects it; a click on the model shows its part in the layers.
+- **Layers**: the cameras, the model, the steering wheel, the suspension rig, the wheels, the exhaust points (+ Add, ×,
+  a window with the place, the turn, the diameter, smoke, flame length and width, brightness), every named object of the
+  model with an eye and folding, a search, and the thumbnail of the selected camera.
+- **Tests**: Drop car (`car_editor_bench.gd`: the car built by the game's Car from the form, saved or not, dropped from a
+  height and a tilt on a floor), Drive (the keys of the game, the view follows, the engine heard), ↺ back to the model.
+
+The Soft body and the Driver cards are ported apart: the editor loads `scripts/editor/car_editor_softbody.gd` and
+`car_editor_driver.gd` when they are there (`CarEditor.CARD_HOOKS`): an object with `setup(editor, card_body)`,
+`fill(cfg)`, `read(cfg)` (writes its part into the car.json that is saved), and if it likes `frame(dt)`,
+`on_model(root)`, `picked(hit)` (a click on the model) and `open_part(name)` (a click on a part in the layers). Until
+then the car keeps what car.json has for them.
+
+Not ported: the crash test, Apply force and Full test of the bench, the flame test of the exhaust points, the nodes of the
+tyre shells on the bench (the Godot physics have no tyre shells), the weather, time of day and ground of Save and test,
+Ship with the car of a tune, and the material field "reflection" (envMapIntensity) is saved but only approximated (the specular of the material).
+
+Tests: `Godot --headless --path godot res://tools/test_car_editor.tscn -- --out=/tmp/folder` opens the hatchback, drops it
+on the bench, changes fields, saves it as zz-editor-test into that folder (never the garage or web/), checks the car.json
+(the keys, their order and the number format of the browser), and makes a new car from Kart.glb. The game drives a car of
+that folder with `--set=garage_folder:'"/tmp/folder"'` (add `--keep` to the test to keep the files). Pictures:
+`Godot --path godot res://tools/shot_car_editor.tscn -- --car=openracer-muscle --open=Engine --scroll=Engine --dyno=1
+--shot=/tmp/editor.png` (also `--select=follow|ex1|model|mt:front:lower_ball`, `--suspension=1`, `--tests`, `--drop=1`,
+`--window=Cameras|Materials|Sound`).
 
 ## Replay
 
@@ -349,7 +418,7 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
    lean, balance, camber thrust, posture, wheelie control, brakes, crash rules, camera roll; the front end, swingarm,
    shock and chain (`motorcycle_model.gd`), the rider with IK (`motorcycle_rider.gd`), the AI rides them *(done; not
    yet: the ragdoll of a crash, the levers and fingers, model v2, the menu options of the bikes)*.
-6. **Garage, tuning and editors**: tuning menu *(done)*, replays *(the core done)*, car and track editor, garage.
+6. **Garage, tuning and editors**: tuning menu *(done)*, replays *(the core done)*, car editor *(done, see Car editor)*, track editor, garage.
 7. **Release**: export for the web (openracer.eu), macOS, Windows and Linux. macOS *(done)*: `sh godot/tools/export_macos.sh`
    makes `godot/build/macos/O-Racer.app` (universal, signed ad hoc, not notarised: the first start needs a right
    click, Open), with the cars, tracks, wheels and sounds of web/ inside it (Contents/Resources/web; about 380 MB).

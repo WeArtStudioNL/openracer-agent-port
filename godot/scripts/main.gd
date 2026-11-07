@@ -129,6 +129,10 @@ func _build_menu() -> void:
 	garage.text = "Import a car or track (zip)…"
 	garage.pressed.connect(_import_zip)
 	box.add_child(garage)
+	var editor := Button.new()
+	editor.text = "Car editor"
+	editor.pressed.connect(_open_car_editor)
+	box.add_child(editor)
 	var settings := Button.new()
 	settings.text = "Settings"
 	settings.pressed.connect(_open_settings)
@@ -259,6 +263,17 @@ func _import_zip() -> void:
 		_rebuild_menu(str(r.get("error", "")) if r.has("error") else "%s imported: %s" % ["Car" if r["kind"] == "cars" else "Track", r["id"]]))
 	dlg.canceled.connect(dlg.queue_free)
 	dlg.popup_centered_ratio(0.6)
+
+
+## The car editor (scripts/editor/car_editor.gd): over the menu; Save and test drives the car, back in the editor after.
+func _open_car_editor() -> void:
+	var ed := CarEditor.new()
+	add_child(ed)
+	menu.visible = false
+	ed.closed.connect(func():
+		ed.queue_free()
+		_rebuild_menu(""))
+	ed.test_drive.connect(func(car_id: String, track_id: String): _start(car_id, track_id, {"mode": "practice"}))
 
 
 func _rebuild_menu(message: String) -> void:
