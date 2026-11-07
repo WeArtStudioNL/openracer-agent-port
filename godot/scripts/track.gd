@@ -45,6 +45,15 @@ func setup(id: String, cfg: Dictionary) -> void:
 		body.add_child(col)
 		mi.add_child(body)
 		_colliders.append(col)
+	# the pit boxes on the road (Pit.js), once the track is in the scene (their height comes from a ray)
+	var boxes := PitStop.boxes_of(cfg)
+	if not boxes.is_empty():
+		_add_pit_boxes.call_deferred(boxes)
+
+
+func _add_pit_boxes(boxes: Array) -> void:
+	await get_tree().physics_frame
+	add_child(PitStop.markings(boxes, self))
 
 
 ## The walls of the track for the shells of the cars (WallGrid), made the first time they are asked for (the track

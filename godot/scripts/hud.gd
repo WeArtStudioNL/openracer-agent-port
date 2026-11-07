@@ -166,6 +166,20 @@ func _assist_lights() -> void:
 	var row := _engine_row()
 	if row != "":
 		_tyres.text = row if _tyres.text == "" else _tyres.text + "\n" + row
+	var pit := car.get_node_or_null("PitStop") as PitStop
+	if pit != null and float(Settings.get_value("tyre_wear")) > 0.0:
+		var line := ""
+		if pit.active:
+			line = "PIT STOP %.1f s" % pit.remaining()
+			for k in ["repair", "tyres", "fuel"]:
+				if float(pit.plan.get(k, 0.0)) > 0.0:
+					line += " · " + k
+		elif pit.done:
+			line = "PIT STOP DONE · go"
+		elif car.fuel <= 0.0:
+			line = "OUT OF FUEL"
+		if line != "":
+			_tyres.text += "\n" + line
 
 
 ## The engine when something is wrong with it (EngineDamage, Hud.js engineHealthRow): the heat, the coolant and what
