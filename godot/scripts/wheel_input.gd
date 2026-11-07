@@ -20,6 +20,7 @@ const STEPS := [
 ]
 const AXES := 10
 const HOLD := 0.5             # s that the end of an axis has to be held
+const RELEASE := 3.0          # s to let go of the wheel after a turn
 const HOLD_LONG := 2.5        # s held still anywhere that also counts (an axis that does not reach its end)
 
 var device := -1
@@ -39,6 +40,8 @@ var _rest: PackedFloat32Array = []
 var _best_axis := -1
 var _best_value := 0.0
 var _extreme := 0.0
+var _release_left := 0.0
+var _released := false
 var _step_text := ""
 var _held := 0.0
 var _new_profile := {}
@@ -72,6 +75,7 @@ func _pick() -> void:
 		_profile = Settings.profile(guid)
 		active = not _profile.is_empty()
 		RunLog.event("wheel %s (%s) %s" % [wheel_name, guid, "calibrated" if active else "not calibrated: press K"])
+	Controls.rebind(device if active else -1)
 
 
 ## Starts the calibration on the wheel (or on the first joypad).
@@ -86,6 +90,8 @@ func calibrate() -> void:
 		return
 	calibrating = true
 	_new_profile = {}
+	_release_left = 0.0
+	Controls.rebind(device)
 	# where every axis rests, once, at the start (the wheel in the middle, the pedals up): a pedal that is let go after
 	# its step must not be taken for the next one
 	_rest.resize(AXES)
@@ -98,6 +104,8 @@ func calibrate() -> void:
 func cancel() -> void:
 	if calibrating:
 		calibrating = false
+		_end_release()
+		Controls.rebind(device if active else -1)
 		calibration_text.emit("")
 		RunLog.event("calibration cancelled")
 
@@ -120,6 +128,15 @@ func _start_step(i: int) -> void:
 
 
 func _next() -> void:
+	# after a turn of the wheel: let go of it for a moment, so that it goes back to the middle (the spring of the
+	# force feedback pulls it there) before the next step
+	if STEPS[_step]["id"] in ["steer_left", "steer_right"] and _release_left <= 0.0 and not _released:
+		_release_left = RELEASE
+		_released = true
+		if ForceFeedback.is_open():
+			ForceFeedback.ffb.set_spring(0.6)
+		return
+	_released = false
 	if _step + 1 >= STEPS.size():
 		_finish()
 		return
@@ -130,6 +147,13 @@ func _process(delta: float) -> void:
 	if device < 0:
 		return
 	if calibrating:
+		if _release_left > 0.0:
+			_release_left -= delta
+			calibration_text.emit("Release the wheel: it goes back to the middle   %d" % ceili(maxf(0.0, _release_left)))
+			if _release_left <= 0.0:
+				_end_release()
+				_next()
+			return
 		_calibration_step(delta)
 		return
 	if not active:
@@ -261,6 +285,7 @@ func _finish() -> void:
 	Settings.set_profile(guid, _new_profile)
 	_profile = _new_profile
 	active = true
+	Controls.rebind(device)
 	calibration_text.emit("")
 	RunLog.event("calibration done: %s" % [_new_profile])
 
@@ -268,6 +293,12 @@ func _finish() -> void:
 ## The sign of the force for this wheel (from the calibration).
 func ffb_sign() -> float:
 	return float(_profile.get("ffb_sign", 1.0))
+
+
+func _end_release() -> void:
+	_release_left = 0.0
+	if ForceFeedback.is_open():
+		ForceFeedback.ffb.set_spring(float(Settings.get_value("ffb_spring")))
 
 
 ## The step, with where the axis is now (so a slow turn can be seen going).
