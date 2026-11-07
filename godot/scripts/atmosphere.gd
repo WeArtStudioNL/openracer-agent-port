@@ -112,7 +112,6 @@ func _on_setting(key: String) -> void:
 			RunLog.event("weather: %s" % Settings.get_value("gfx_weather"))
 		apply()
 	elif key.begins_with("gfx_"):
-		Graphics.preset_follows(key)
 		if is_inside_tree():
 			Graphics.apply_all(get_viewport(), env, sun, post)
 

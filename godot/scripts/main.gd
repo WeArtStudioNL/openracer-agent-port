@@ -12,6 +12,8 @@ var _mode_pick: OptionButton
 var _opponents_pick: OptionButton
 var _laps_pick: OptionButton
 var _grid_pick: OptionButton
+var _weather_pick: OptionButton
+var _time_pick: OptionButton
 var _race_rows: Array[Control] = []
 
 
@@ -101,6 +103,11 @@ func _build_menu() -> void:
 	_opponents_pick = _race_row(box, "Opponents", ["1", "2", "3", "4", "5", "6", "7"], 4)
 	_laps_pick = _race_row(box, "Laps", ["1", "2", "3", "4", "5", "8", "10"], 2)
 	_grid_pick = _race_row(box, "Start", ["At the back of the grid", "On pole"], 0)
+	# the weather of a race (MainMenu.js weatherStep; a free drive starts in clear weather, the Graphics settings change it)
+	_weather_pick = _race_row(box, "Weather", GraphicsPage.WEATHERS.map(func(w): return w[1]), 0)
+	_time_pick = _race_row(box, "Time of day", GraphicsPage.TIMES.map(func(t): return t[1]), 3)
+	_select_weather()
+	_time_pick.item_selected.connect(func(i: int): Settings.set_value("gfx_time", GraphicsPage.TIMES[i][0]))
 	_mode_pick.item_selected.connect(func(_i: int): _show_race_rows())
 	_show_race_rows()
 	var go := Button.new()
@@ -108,6 +115,7 @@ func _build_menu() -> void:
 	go.custom_minimum_size.y = 48
 	go.pressed.connect(func():
 		var opts := {"mode": "practice"}
+		Settings.set_value("gfx_weather", GraphicsPage.WEATHERS[_weather_pick.selected][0] if _mode_pick.selected == 1 else "clear")
 		if _mode_pick.selected == 1:
 			opts = {"mode": "race", "opponents": int(_opponents_pick.get_item_text(_opponents_pick.selected)),
 				"laps": int(_laps_pick.get_item_text(_laps_pick.selected)), "pole": _grid_pick.selected == 1}
@@ -156,6 +164,17 @@ func _race_row(box: Control, caption: String, items: Array, selected: int) -> Op
 	box.add_child(row)
 	_race_rows.append(row)
 	return o
+
+
+## The weather and the time of day of the settings in the race rows.
+func _select_weather() -> void:
+	_time_pick.select(-1)
+	for i in GraphicsPage.WEATHERS.size():
+		if GraphicsPage.WEATHERS[i][0] == str(Settings.get_value("gfx_weather")):
+			_weather_pick.select(i)
+	for i in GraphicsPage.TIMES.size():
+		if is_equal_approx(float(GraphicsPage.TIMES[i][0]), float(Settings.get_value("gfx_time"))):
+			_time_pick.select(i)
 
 
 func _show_race_rows() -> void:
