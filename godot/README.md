@@ -150,15 +150,24 @@ backstop); with damage off the car is the rigid body it was.
 The model bends with the nodes (`scripts/soft_body_mesh.gd`, as `SoftBodyMesh.js`): every vertex is tied to its
 four nearest nodes with weights, and the skinning of Godot moves it (a Skeleton3D "Shell" with a bone per node;
 the meshes of the body are made again once with the nodes as bones, in a thread when the car is made). Back to
-the start (Backspace, or the pause menu) repairs the car; R puts it back on its wheels and keeps the dents.
+the start (Backspace, or the pause menu) repairs the car and puts its parts back; R puts it back on its wheels and
+keeps the dents and the parts that are off.
+
+The parts of car.json `parts` (`scripts/car_parts.gd`, after `Parts.js`) come off when the load on them passes
+their `break_force`: the larger of the mass of the part times the acceleration of its place (smoothed over a few
+steps) and the force of the shell on the nodes it hangs on. A detachable part bends on with the body for its
+`break_delay` and then falls off as a RigidBody3D with a box of its size, with the dent it had, and hits the track
+and the other cars; a breakable part (glass, a lamp) is gone at once in a cloud of shards; a hinged part sits shut
+until all its pins break and then falls off.
 
 Test: `Godot --headless --fixed-fps 120 --path godot res://tools/test_crash.tscn -- --car=openracer-muscle
 --speed=60 [--angle=40] [--set=damage:false]` drives into a wall and prints the bend, the energy and what tore,
 then drives the car on and repairs it; without `--headless`, `--shot=file.png` saves a picture of the dent.
 
 Not yet from the browser game: the suspension as nodes and beams (a bent arm that pulls the car aside, a wheel that
-comes off), the damage to the engine (`EngineDamage.js`), punctures, the shell of the model drawn as an object
-"beams", the replay of the shell.
+comes off), hinged parts that swing open (doors, a hood) and the link beams of parts with nodes of their own, the
+pieces of a part that shatters (`Shatter.js`), a loose part that hits its own car, the damage to the engine
+(`EngineDamage.js`), punctures, the shell of the model drawn as an object "beams", the replay of the shell.
 
 ## Controls
 
@@ -188,7 +197,7 @@ Holding the brake at a standstill puts the car in reverse; then the brake drives
 | `native/src/engine_sim.cpp` | the engine sound: EngineSimWorklet.js and the exhaust chain of EngineSim.js in C++ |
 | `scripts/engine_sim_params.gd`, `car_audio.gd` | the sound parameters of car.json; the engine and the tyre squeal of a car |
 | `scripts/tyre_effects.gd` | skid marks, tyre smoke and dust |
-| `scripts/soft_body.gd`, `car_shell.gd`, `collision_proxy.gd`, `wall_grid.gd`, `soft_body_mesh.gd` | the shell that dents, its contacts, its nodes, the walls of the track, the model that bends |
+| `scripts/soft_body.gd`, `car_shell.gd`, `collision_proxy.gd`, `wall_grid.gd`, `soft_body_mesh.gd`, `car_parts.gd` | the shell that dents, its contacts, its nodes, the walls of the track, the model that bends, the parts that come off |
 | `tools/render_engine.gd` | renders the engine sound of a car to a wav (a test) |
 
 The engine sound is the one of the browser game, calculated: the gas in every cylinder at 10 kHz (the valves, the
@@ -219,7 +228,7 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
 4. **The rest of the physics**: the kinds of tyre, tyre heat and wear, pressure, downforce, torque converter,
    traction and stability control, camber, toe, ride height, anti geometry, the engine of Engine.js with turbo,
    the automatic gearbox, fuel, launch control and the extras *(done)*; damage: the soft body that dents, the
-   model that bends with it *(done)*.
+   model that bends with it, the parts that come off *(done)*.
 5. **Motorcycles**: the bike model of Motorcycle.js with its rider.
 6. **Garage, tuning and editors**: tuning menu, car and track editor, garage, replays.
 7. **Release**: export for the web (openracer.eu), macOS, Windows and Linux.

@@ -195,6 +195,7 @@ var brake := 0.0
 var model_root: Node3D
 var shell: CarShell = null      # the shell that dents (damage on, Settings), or null
 var shell_mesh: SoftBodyMesh = null
+var parts: CarParts = null      # the parts that come off (damage on)
 var _box: CollisionShape3D
 var _esc_brake := [0.0, 0.0, 0.0, 0.0]
 var _esc_cut := 0.0
@@ -227,6 +228,8 @@ func setup(id: String, cfg: Dictionary) -> void:
 	_box = col
 	_build_visual()
 	_make_shell()
+	if Settings.get_value("damage") and not config.get("parts", []).is_empty():
+		parts = CarParts.new(self)
 
 
 ## The shell that dents (SoftBody, CarShell), with damage on (Settings) and unless car.json says
@@ -275,6 +278,8 @@ func _make_shell() -> void:
 func repair() -> void:
 	if shell != null:
 		shell.repair()
+	if parts != null:
+		parts.repair()
 
 
 ## The car was moved (put back on its wheels): the shell stops moving and keeps its dents.
@@ -284,6 +289,8 @@ func settle_shell() -> void:
 
 
 func _exit_tree() -> void:
+	if parts != null:
+		parts.dispose()
 	if shell_mesh != null:
 		shell_mesh.dispose()
 	if shell != null:
@@ -607,6 +614,8 @@ func place(pos: Vector3, heading: float) -> void:
 	engine.omega = engine.idle_rpm * PI / 30.0
 	gear = 1
 	shift_timer = 0.0
+	if parts != null:
+		parts.settle()
 
 
 ## The car as a ghost: it is not simulated and touches nothing; it is seen through.
@@ -616,6 +625,7 @@ func make_ghost() -> void:
 	if shell != null:
 		shell.dispose()
 		shell = null
+	parts = null
 	freeze = true
 	collision_layer = 0
 	collision_mask = 0
@@ -642,6 +652,8 @@ func _physics_process(dt: float) -> void:
 		var after := float(Content.arg("steer-after")) if Content.arg("steer-after") != "" else 0.0
 		steer_input = float(Content.arg("steer")) if Content.arg("steer") != "" and _auto_time >= after else 0.0
 	_controls(dt)
+	if parts != null and not freeze:
+		parts.update(dt)
 
 
 func _controls(dt: float) -> void:

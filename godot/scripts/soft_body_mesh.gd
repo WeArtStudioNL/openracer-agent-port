@@ -212,7 +212,8 @@ func _build() -> void:
 		skin.add_bind(k, Transform3D.IDENTITY)
 	for job: Dictionary in _jobs:
 		var mi: MeshInstance3D = job["mi"]
-		if not is_instance_valid(mi) or mi.mesh == null:
+		# (a part that came off or broke before the weights were there keeps its own mesh)
+		if not is_instance_valid(mi) or mi.mesh == null or not mi.is_visible_in_tree() or not car.model_root.is_ancestor_of(mi):
 			continue
 		var old := mi.mesh
 		var mesh := ArrayMesh.new()
@@ -232,6 +233,7 @@ func _build() -> void:
 					var shift := Mesh.ARRAY_FORMAT_CUSTOM_BASE + ci * Mesh.ARRAY_FORMAT_CUSTOM_BITS
 					flags |= (old as ArrayMesh).surface_get_format(si) & (Mesh.ARRAY_FORMAT_CUSTOM_MASK << shift)
 			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, flags)
+			res["flags"] = flags
 			mesh.surface_set_material(si, old.surface_get_material(si))
 		var bent := MeshInstance3D.new()
 		bent.name = str(mi.name)

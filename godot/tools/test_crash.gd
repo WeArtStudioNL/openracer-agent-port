@@ -133,7 +133,7 @@ func _physics_process(dt: float) -> void:
 					car.shell.sb.stats()["max_bend"] * 100.0, "quiet" if car.shell.sb.quiet else "moving", car.shell.sb.reaction_force.length()] if car.shell else ""])
 				car.repair()
 				if car.shell:
-					print("repaired: bend %.1f cm" % (car.shell.sb.stats()["max_bend"] * 100.0))
+					print("repaired: bend %.1f cm, parts off %d" % [car.shell.sb.stats()["max_bend"] * 100.0, car.parts.count_off() if car.parts else 0])
 				get_tree().quit()
 
 
@@ -167,4 +167,10 @@ func _report(when: String) -> void:
 			s["max_bend"] * 100.0, s["max_elastic"] * 100.0, s["absorbed"] / 1000.0, s["torn_anchors"], s["torn_beams"],
 			car.shell.steps, _max_step_us / 1000.0, car.shell.sb.steps_used]
 		line += "\n  nodes bent more than 1 cm (node:cm): %s" % " ".join(front)
+	if car.parts != null:
+		var off := []
+		for p in car.parts.parts:
+			if p.state != "held":
+				off.append("%s (%s)" % [p.name, p.state])
+		line += "\n  parts: %d of %d off: %s" % [off.size(), car.parts.parts.size(), ", ".join(off)]
 	print(line)
