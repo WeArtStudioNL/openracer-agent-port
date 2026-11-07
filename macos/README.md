@@ -41,6 +41,7 @@ A universal binary with `web/` in it, signed ad hoc and without the sandbox: onl
 | `Sources/OpenRacer/AppDelegate.swift` | the window, the web view, the menu, the linked folder, where `web/` is found |
 | `Sources/OpenRacer/LocalServer.swift` | the HTTP server on loopback (port 47185): static files with Range and no caching, and the API of `tools/serve.py` |
 | `Sources/OpenRacer/Library.swift` | where cars, tracks and objects are: the player's (Application Support), a linked folder, the game; the paths of the API |
+| `Sources/OpenRacer/Profiler.swift` | debug builds only: measures where the time of a frame goes (`OPENRACER_PROFILE=<seconds>`, see `../MACOS-METAL.md`) |
 | `Sources/OpenRacer/WebViewHandlers.swift` | downloads, file pickers, alert/confirm/prompt, links to other sites |
 | `Resources/Info.plist` | the bundle: version, category, local network (multiplayer later), export compliance |
 | `Resources/OpenRacer.entitlements` | the sandbox and what the app may do in it |

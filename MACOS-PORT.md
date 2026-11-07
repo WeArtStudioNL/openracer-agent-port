@@ -11,6 +11,8 @@ Voorbereiding van een native macOS-app van OpenRacer. Opgesteld op 7 november 20
 | Lokaal netwerk | **ja**, voor peer-to-peer multiplayer later | `NSLocalNetworkUsageDescription`, Bonjour (`_openracer._tcp`), de server moet later ook op het netwerk kunnen luisteren |
 | Developer-account | **ja**, op de Mac van Glenn | signing via Xcode (automatic), team-ID in `macos/team.local` |
 
+Metingen van de prestaties, de inventaris van de code van Chris en het plan voor Metal en een DMG: [`MACOS-METAL.md`](MACOS-METAL.md).
+
 ## ⚠️ Eerst uitzoeken: GPLv3 en de App Store
 
 OpenRacer staat onder **GPLv3**, en de code is niet alleen van Glenn: de fork is gebaseerd op [digi-chris/OpenRacer](https://github.com/digi-chris/OpenRacer) van Chris Barnard. De voorwaarden van de App Store (en TestFlight) leggen gebruiksbeperkingen op die volgens de FSF botsen met de GPL (§10: geen verdere beperkingen opleggen). Daarom is bijvoorbeeld VLC in 2011 uit de App Store gehaald na een klacht van een van de auteurs.

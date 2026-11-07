@@ -9,6 +9,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var library: Library!
     private let handlers = WebViewHandlers()
     private let linkedFolder = LinkedFolder()
+    #if DEBUG
+    private let profiler = Profiler(environment: ProcessInfo.processInfo.environment)
+    #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let root = WebRoot.locate() else {
@@ -33,6 +36,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let config = WKWebViewConfiguration()
         config.mediaTypesRequiringUserActionForPlayback = []   // the engine sound starts without a click on the page
         config.websiteDataStore = .default()                   // localStorage and IndexedDB are kept (the garage, settings, records)
+
+        #if DEBUG
+        profiler?.install(in: config)
+        #endif
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = handlers
@@ -62,7 +69,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func load(port: UInt16) {
         handlers.origin = "http://127.0.0.1:\(port)"
-        guard let url = URL(string: "http://127.0.0.1:\(port)/index.html") else { return }
+        var page = "index.html"
+        #if DEBUG
+        if let profiler { page += "?" + profiler.query }
+        #endif
+        guard let url = URL(string: "http://127.0.0.1:\(port)/\(page)") else { return }
         webView.load(URLRequest(url: url))
     }
 
