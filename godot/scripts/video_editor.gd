@@ -776,7 +776,7 @@ func _refresh_timeline() -> void:
 	if _timeline == null:
 		return
 	var sc := _ui["scroller"] as ScrollContainer
-	_timeline.custom_minimum_size = Vector2(maxf(sc.size.x, (total() + 4.0) * scale_px), 130)
+	_timeline.custom_minimum_size = Vector2(maxf(sc.size.x, (total() + 1.2) * scale_px), 130)
 	_timeline.queue_redraw()
 
 
