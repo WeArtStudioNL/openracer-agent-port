@@ -50,10 +50,10 @@ func setup(c: Car) -> void:
 		add_child(mi)
 		_chunks.append(mi)
 		_strips.append([])
-	var atlas := _smoke_atlas()
+	var atlas := smoke_atlas()
 	for i in 4:
-		var s := _emitter(atlas, false)
-		var d := _emitter(atlas, true)
+		var s := emitter(atlas, false)
+		var d := emitter(atlas, true)
 		_smoke.append(s)
 		_dust.append(d)
 		add_child(s)
@@ -75,7 +75,7 @@ static func _strip_texture() -> Texture2D:
 
 
 ## The four pictures of a puff (Smoke.js makeAtlas), made once and kept in the user folder.
-static func _smoke_atlas() -> ImageTexture:
+static func smoke_atlas() -> ImageTexture:
 	if _atlas != null:
 		return _atlas
 	var img := Image.load_from_file(ATLAS_CACHE) if FileAccess.file_exists(ATLAS_CACHE) else null
@@ -143,7 +143,9 @@ static func _noise(a: PackedFloat32Array, x: float, y: float) -> float:
 	return lerpf(lerpf(a[y0 * 16 + x0], a[y0 * 16 + x1], fx), lerpf(a[y1 * 16 + x0], a[y1 * 16 + x1], fx), fy)
 
 
-func _emitter(atlas: Texture2D, dust: bool) -> GPUParticles3D:
+## A cloud of puffs of the smoke atlas (also the steam and the smoke of a hurt engine, EngineFumes): the colour of the
+## smoke (a light grey when not given) or of the dust.
+static func emitter(atlas: Texture2D, dust: bool, colour := Color(0.9, 0.91, 0.94)) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
 	p.amount = 160 if dust else 500
 	p.lifetime = 1.8 if dust else 7.0
@@ -194,7 +196,7 @@ func _emitter(atlas: Texture2D, dust: bool) -> GPUParticles3D:
 	var fade_tex := GradientTexture1D.new()
 	fade_tex.gradient = fade
 	m.color_ramp = fade_tex
-	m.color = Color(0.66, 0.55, 0.4) if dust else Color(0.9, 0.91, 0.94)
+	m.color = Color(0.66, 0.55, 0.4) if dust else colour
 	p.process_material = m
 	var quad := QuadMesh.new()
 	quad.size = Vector2(1, 1)

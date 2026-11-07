@@ -984,10 +984,16 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	if engine_damage != null and (shell == null or not engine_damage_on):
 		engine_damage.repair()
 		engine_damage = null
+		if has_node("EngineFumes"):
+			get_node("EngineFumes").queue_free()
 	if shell != null and engine_damage_on:
 		if engine_damage == null:
 			var ed: Variant = config.get("engine", {}).get("damage", {})
 			engine_damage = EngineDamage.new(self, ed if ed is Dictionary else {})
+			if not is_ghost and is_inside_tree():
+				var fumes := EngineFumes.new()
+				fumes.setup(self)
+				add_child.call_deferred(fumes)
 		engine_damage.update(dt)
 	_traction_control(dt)
 

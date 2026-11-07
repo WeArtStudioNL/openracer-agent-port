@@ -175,8 +175,10 @@ top, the oil pan, the front of the engine and the radiator are; from that come m
 stalls at a hard hit, coolant and oil leaks, a blown head gasket, the heat of the engine (less power above 108 C),
 the wear of the bearings without oil pressure, and an engine that seizes. The HUD shows a line "ENGINE ...° ·
 COOLANT ...%" with what is wrong once something is; a repair makes it whole. car.json `engine.damage` sets the bay
-and radiator, as in the browser. The crash test prints what the hit did to the engine. Not yet: the steam, the
-smoke and the drops and stains of the leaks (`Leaks.js`).
+and radiator, as in the browser. The crash test prints what the hit did to the engine. What it shows
+(`scripts/engine_fumes.gd`, after `Car.js` and `Leaks.js`): steam and oil smoke out of the bay, white smoke out of
+the tail pipes after a blown head gasket, drops of oil and coolant (a dripping radiator, or 1 to 5 jets from one torn
+open) and the stains they leave on the road (oil stays, coolant dries in 70 s).
 
 Not yet from the browser game: the suspension as nodes and beams (a bent arm that pulls the car aside, a wheel that
 comes off), hinged parts that swing open (doors, a hood) and the link beams of parts with nodes of their own, the

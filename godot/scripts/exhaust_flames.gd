@@ -22,22 +22,7 @@ func setup(c: Car) -> void:
 	car = c
 	name = "Flames"
 	top_level = true
-	var list: Array = c.config.get("exhaust", [])
-	for e in list:
-		var pos: Array = e.get("position", e) if e is Dictionary else e
-		var rot: Array = e.get("rotation", [0, 0, 0]) if e is Dictionary else [0, 0, 0]
-		var b := Basis.from_euler(Vector3(deg_to_rad(float(rot[0])), deg_to_rad(float(rot[1])), deg_to_rad(float(rot[2]))))
-		_pipes.append({
-			"position": Vector3(float(pos[0]), float(pos[1]), float(pos[2])),
-			"direction": (b * Vector3(0, 0, -1)).normalized(),
-			"diameter": float(e.get("diameter", 0.06)) if e is Dictionary else 0.06,
-			"length": float(e.get("flame_length_cm", 30)) / 100.0 if e is Dictionary else 0.3,
-			"brightness": float(e.get("brightness", 1.0)) if e is Dictionary else 1.0,
-		})
-	if _pipes.is_empty():
-		var dims: Dictionary = c.config.get("dimensions", {})
-		_pipes.append({"position": Vector3(-0.4, 0.1, -float(dims.get("length", 4.2)) / 2.0), "direction": Vector3(0, 0, -1),
-			"diameter": 0.06, "length": 0.3, "brightness": 1.0})
+	_pipes = pipes_of(c.config)
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
@@ -68,6 +53,29 @@ func setup(c: Car) -> void:
 	_life.resize(POOL)
 	_size.resize(POOL)
 	c.bang.connect(emit_bang)
+
+
+## The tail pipes of car.json "exhaust" in the frame of the model ({ position, direction, diameter, length,
+## brightness }), or a guess at the back.
+static func pipes_of(config: Dictionary) -> Array:
+	var pipes: Array = []
+	var list: Array = config.get("exhaust", [])
+	for e in list:
+		var pos: Array = e.get("position", e) if e is Dictionary else e
+		var rot: Array = e.get("rotation", [0, 0, 0]) if e is Dictionary else [0, 0, 0]
+		var b := Basis.from_euler(Vector3(deg_to_rad(float(rot[0])), deg_to_rad(float(rot[1])), deg_to_rad(float(rot[2]))))
+		pipes.append({
+			"position": Vector3(float(pos[0]), float(pos[1]), float(pos[2])),
+			"direction": (b * Vector3(0, 0, -1)).normalized(),
+			"diameter": float(e.get("diameter", 0.06)) if e is Dictionary else 0.06,
+			"length": float(e.get("flame_length_cm", 30)) / 100.0 if e is Dictionary else 0.3,
+			"brightness": float(e.get("brightness", 1.0)) if e is Dictionary else 1.0,
+		})
+	if pipes.is_empty():
+		var dims: Dictionary = config.get("dimensions", {})
+		pipes.append({"position": Vector3(-0.4, 0.1, -float(dims.get("length", 4.2)) / 2.0), "direction": Vector3(0, 0, -1),
+			"diameter": 0.06, "length": 0.3, "brightness": 1.0})
+	return pipes
 
 
 ## A bang: { strength (0.5 to 1.5), loud, flame (a factor) }: a few puffs from every pipe.

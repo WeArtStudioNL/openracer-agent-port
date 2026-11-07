@@ -94,7 +94,7 @@ func bind(sb: SoftBody) -> void:
 func repair() -> void:
 	health = {"block": 0.0, "top": 0.0, "pan": 0.0, "radiator": 0.0, "ignition": 0.0, "coolant": 1.0, "oil": 1.0, "temp": 78.0,
 		"oil_temp": 70.0, "wear": 0.0, "power": 1.0, "misfire": 0.0, "steam": 0.0, "smoke": 0.0, "white_smoke": 0.0, "failed": 0.0,
-		"stalled": 0.0, "leaking": 0, "jets": 0, "front": 0.0, "gasket": 0.0, "contam": 0.0, "radiator_gone": false}
+		"stalled": 0.0, "leaking": 0, "jets": 0, "cool_flow": 0.0, "oil_flow": 0.0, "front": 0.0, "gasket": 0.0, "contam": 0.0, "radiator_gone": false}
 	_seized = false
 	_cut_left = 0.0
 	_next_misfire = 0.0
@@ -268,6 +268,9 @@ func _tick(dt: float) -> void:
 	h["coolant"] = maxf(0.0, h["coolant"] - cool_leak * dt)
 	h["oil"] = maxf(0.0, h["oil"] - oil_leak * dt)
 	h["leaking"] = (1 if cool_leak > 0.0005 else 0) + (2 if oil_leak > 0.0005 else 0)
+	# how hard it runs, for the drops and the stains (EngineFumes): 1 is a crushed radiator or a destroyed pan
+	h["cool_flow"] = clampf(cool_leak * 200.0, 0.0, 1.0) if h["coolant"] > 0.0 and h["jets"] == 0 else 0.0
+	h["oil_flow"] = clampf(oil_leak * 150.0, 0.0, 2.0) if h["oil"] > 0.0 else 0.0
 
 	# heat
 	var running := 1.0 if e.running else 0.0
