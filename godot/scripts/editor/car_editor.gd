@@ -1056,7 +1056,9 @@ func _named_ancestor(n: Node) -> String:
 # ---- undo, changes, keys
 
 func _snapshot() -> Dictionary:
-	return {"cfg": cfg.duplicate(true), "overrides": overrides.duplicate(true), "wheels": wheel_parts.duplicate(true), "radio": wheel_radio, "id": car_id}
+	var c := cfg.duplicate(true)
+	c["exhaust"] = layers.exhaust_config()
+	return {"cfg": c, "overrides": overrides.duplicate(true), "wheels": wheel_parts.duplicate(true), "radio": wheel_radio, "id": car_id}
 
 
 func _restore(shot: Dictionary) -> void:

@@ -87,6 +87,31 @@ func _run() -> void:
 	ed.layers.select(e["id"])
 	(e["target"] as Node3D).position += Vector3(0.1, 0, 0)
 	ed.layers.gizmo_moved()
+	# the gizmo: the arrow of z of the new exhaust point dragged 60 pixels
+	await get_tree().process_frame
+	var cam := ed.view.camera
+	var g := ed.view.gizmo
+	g.update_view(cam)
+	var o: Vector3 = (e["target"] as Node3D).global_position
+	var before_z := o.z
+	var tip := cam.unproject_position(o + Vector3.BACK * g._scale_for(cam) * 0.7)
+	var grabbed := g.grab(cam, tip)
+	var along := (cam.unproject_position(o + Vector3.BACK) - cam.unproject_position(o)).normalized()
+	g.drag(cam, tip + along * 60.0)
+	g.release()
+	ed.layers.gizmo_moved()
+	check(grabbed and (e["target"] as Node3D).global_position.z > before_z + 0.05 and absf((e["target"] as Node3D).global_position.x - o.x) < 1e-4,
+		"the gizmo moves the exhaust point along z (%.3f → %.3f)" % [before_z, (e["target"] as Node3D).global_position.z])
+	# undo: a step back and forth
+	ed._remember()
+	var mass_now := ed.num("chassis.mass")
+	_type(ed, "chassis.mass", "999")
+	ed._remember()
+	ed.undo()
+	check(ed.num("chassis.mass") == mass_now, "Ctrl+Z puts the mass back (%s)" % ed.num("chassis.mass"))
+	ed.undo(true)
+	check(ed.num("chassis.mass") == 999.0, "Shift+Ctrl+Z again (%s)" % ed.num("chassis.mass"))
+	_type(ed, "chassis.mass", "1310")
 	check(ed.dirty, "the car is marked changed")
 	check(ed.car_id == "zz-editor-test", "the id is zz-editor-test")
 	var bad := ed.build_config("zz-editor-test")
