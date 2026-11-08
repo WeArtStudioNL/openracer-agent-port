@@ -156,7 +156,21 @@ The bench, browser (node) against Godot, the same tyre on a flat road:
 | relaxation length (m) | 0.09 | 0.09 | | 0.12 |
 | cost (ms a step of a tyre) | 1.09 | 0.09 | | 0.13 |
 
-ROADTEST
+The road test of the Muscle (`node tools/physics-bench.js openracer-muscle`, the browser game's car on its shell
+tyres, against test_shell_car with the traction control on and no ESC):
+
+| | browser (shell) | Godot shell | Godot simple |
+|---|---|---|---|
+| 0-100 km/h with TC (s) | 6.3 | 5.19 | 4.21 |
+| 100-0 km/h (m) | 36.5 | 33.5 | 28.9 |
+| skidpad (g) | 1.14 at 75 km/h | 1.26 at 114 km/h | 1.65 at 200 km/h |
+
+At rest the Muscle stands 8.9 mm in on its tyres (a patch of 347 mm, 6 nodes on the road). The rest of the gap is
+the car around the tyres, which is Godot's own (the engine and drivetrain, the body, how the skidpad is measured:
+the browser takes the lateral acceleration from the tyre forces, the test the speed times the yaw rate). The AI is
+made for the simple tyre: on the shell (`--ai --tyres=shell`) it reads the slip of the shell (sliding nodes at the
+back of the patch under drive) as wheelspin and lifts, and the Muscle laps Kartbaan Oldenzaal in 44.9 s against 36.1 s;
+the kart on the shell leaves the track and gets stuck on the grass, so the AI tests keep the simple tyre.
 
 ## Tuning
 
