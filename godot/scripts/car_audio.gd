@@ -152,6 +152,11 @@ func _process(delta: float) -> void:
 func _physics_process(_dt: float) -> void:
 	if car == null or positional:
 		return
+	if ReplayFx.active:
+		# (a replay: the gravel and the grass of the moment it began are not heard over it)
+		car.sound_impact = 0.0
+		_ground_under("")
+		return
 	var vy := car.linear_velocity.y
 	for i in 4:
 		var c: bool = car.wheels[i].contact
@@ -188,8 +193,10 @@ func _ground(speed: float) -> void:
 	for w in car.wheels:
 		if w.contact and w.surface != "road" and w.surface != "track01":
 			under = w.surface
-	if not GROUND_SOUND.has(under):
-		under = ""
+	_ground_under(under if GROUND_SOUND.has(under) else "", speed)
+
+
+func _ground_under(under: String, speed := 0.0) -> void:
 	if under != ground_kind:
 		if under != "":
 			_log("ground " + under, absf(speed))
