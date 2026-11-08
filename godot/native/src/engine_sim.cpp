@@ -719,6 +719,12 @@ struct Chain {
 	Convolver convolver;
 	double wet = 1, dry = 0, wet_target = 1;
 	double drive_pre = 0.25, drive_post = 1;
+	// The drive is only as hard as the signal that reaches it, and that is not constant: where a harmonic of the firing
+	// falls on a resonance of the pipe (the performance exhaust: 54 Hz, a cross-plane V8 at 3200 rpm) the signal is four
+	// times what it is at the rpm around it, and the tanh turns it into a square wave: nothing clips, but the sound is
+	// raspy in that band. So the rms into the drive is held under drive_ceiling (of the exhaust, 0 = not held), slowly:
+	// the rms over 50 ms, the gain follows in 30 ms down and 400 ms up, so it does not change the shape of a wave.
+	double drive_ceiling = 0, drive_env = 0, drive_gain = 1, drive_rms = 0, drive_attack = 0, drive_release = 0;
 	Biquad bass, mid, treble, muffler, inside_filter;
 	double master = 0, master_target = 0;
 	// the limiter (a DynamicsCompressorNode: threshold -10 dB, knee 8 dB, ratio 6, attack 3 ms, release 250 ms)
@@ -763,6 +769,10 @@ struct Chain {
 		volume = num(p, "volume", 1);
 		attack = std::exp(-1 / (0.003 * rate));
 		release = std::exp(-1 / (0.25 * rate));
+		drive_ceiling = num(p, "drive_ceiling", 0);
+		drive_rms = 1 - std::exp(-1 / (0.05 * rate));
+		drive_attack = 1 - std::exp(-1 / (0.03 * rate));
+		drive_release = 1 - std::exp(-1 / (0.4 * rate));
 		makeup = std::pow(1 / std::pow(10.0, curve_db(0) / 20), 0.6);
 		apply();
 	}
@@ -785,6 +795,13 @@ struct Chain {
 		wet += (wet_target - wet) * smooth;
 		master += (master_target - master) * smooth;
 		double v = x * (1 - wet) + convolver.run(x) * wet;
+		if (drive_ceiling > 0) {
+			drive_env += (v * v - drive_env) * drive_rms;
+			const double rms = std::sqrt(drive_env);
+			const double target = rms > drive_ceiling ? drive_ceiling / rms : 1;
+			drive_gain += (target - drive_gain) * (target < drive_gain ? drive_attack : drive_release);
+			v *= drive_gain;
+		}
 		// the drive: tanh(4 z) over -1..1, as the WaveShaperNode of the browser game
 		const double z = std::max(-1.0, std::min(1.0, v * drive_pre));
 		v = std::tanh(4 * z) * drive_post;

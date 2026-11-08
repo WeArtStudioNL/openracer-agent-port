@@ -31,6 +31,7 @@ var ground_players := {}              # kind -> AudioStreamPlayer (made the firs
 var ground_kind := ""                 # what the tyres are on now ("" the road)
 var thud_player: AudioStreamPlayer
 var sound_log: Array = []             # what was played: [time, what, strength] (the tests; the last 64)
+var _ir_name := ""                    # the impulse response in the synth
 var _squeal_volume := 0.0
 var _squeal_pitch := 1.0
 var _ground_volume := {}
@@ -50,10 +51,7 @@ func setup(c: Car, in_3d := false) -> void:
 			o["simulation_frequency"] = minf(float(o["simulation_frequency"]), 5000.0)
 			o["fluid_steps"] = 1
 		synth.configure(o, MIX_RATE)
-		var ir_file: String = EngineSimParams.IMPULSE_RESPONSES.get(str(p["impulse_response"]), "smooth_39.wav")
-		var bytes := FileAccess.get_file_as_bytes(Content.path("sounds/ir/" + ir_file))
-		if bytes.size() > 0:
-			synth.set_impulse_response_wav(bytes)
+		_load_impulse_response(str(p["impulse_response"]))
 		var gen := AudioStreamGenerator.new()
 		gen.mix_rate = MIX_RATE
 		gen.buffer_length = 0.08
@@ -336,7 +334,18 @@ func reconfigure() -> void:
 		o["simulation_frequency"] = minf(float(o["simulation_frequency"]), 5000.0)
 		o["fluid_steps"] = 1
 	synth.configure(o, MIX_RATE)
+	_load_impulse_response(str(p["impulse_response"]))
 	synth.set_inside(inside)
+
+
+## The impulse response of the exhaust into the synth, when it is another one than the one that is in it.
+func _load_impulse_response(ir: String) -> void:
+	if ir == _ir_name:
+		return
+	var bytes := FileAccess.get_file_as_bytes(Content.path("sounds/ir/" + str(EngineSimParams.IMPULSE_RESPONSES.get(ir, "smooth_39.wav"))))
+	if bytes.size() > 0:
+		synth.set_impulse_response_wav(bytes)
+		_ir_name = ir
 
 
 ## The loudness of the engine sound now (the rms of the last frames), for the tests.

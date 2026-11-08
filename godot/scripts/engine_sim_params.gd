@@ -37,18 +37,20 @@ const IMPULSE_RESPONSES := {
 
 ## The exhausts ("exhaust_type"): the impulse response and how much of it, the drive, the tone, the muffler, the
 ## volume, and what the exhaust does to the engine (the outlet flow and the length of the pipe, as factors).
+## drive_ceiling: the rms of the signal the drive gets at most, a little above what it gets at the usual rpm, so that a
+## resonance of the pipe at one rpm does not turn the sound into a square wave there (0: not held, no drive to protect).
 const EXHAUSTS := {
-	"standard": {"ir": "exhaust_standard", "wet": 1.0, "drive": 0.0,
+	"standard": {"ir": "exhaust_standard", "wet": 1.0, "drive": 0.0, "drive_ceiling": 0.0,
 		"lowpass": 2500, "bass": 3, "mid": 0, "mid_hz": 600, "treble": 0, "volume": 0.9, "outlet": 0.7, "length": 1.15},
-	"sport": {"ir": "exhaust_sport", "wet": 0.9, "drive": 2.5,
+	"sport": {"ir": "exhaust_sport", "wet": 0.9, "drive": 2.5, "drive_ceiling": 0.13,
 		"lowpass": 6000, "bass": 0, "mid": 6, "mid_hz": 700, "treble": 2, "volume": 1.0, "outlet": 1.0, "length": 1.0},
-	"performance": {"ir": "exhaust_performance", "wet": 0.8, "drive": 4.0,
+	"performance": {"ir": "exhaust_performance", "wet": 0.8, "drive": 4.0, "drive_ceiling": 0.09,
 		"lowpass": 10000, "bass": -2, "mid": 8, "mid_hz": 1100, "treble": 4, "volume": 1.05, "outlet": 1.6, "length": 0.9},
-	"straight": {"ir": "exhaust_straight", "wet": 0.7, "drive": 5.0,
+	"straight": {"ir": "exhaust_straight", "wet": 0.7, "drive": 5.0, "drive_ceiling": 0.08,
 		"lowpass": 20000, "bass": -3, "mid": 6, "mid_hz": 1400, "treble": 4, "volume": 1.15, "outlet": 2.5, "length": 0.6},
-	"open": {"ir": "exhaust_open", "wet": 0.5, "drive": 8.0,
+	"open": {"ir": "exhaust_open", "wet": 0.5, "drive": 8.0, "drive_ceiling": 0.11,
 		"lowpass": 20000, "bass": -6, "mid": 6, "mid_hz": 2000, "treble": 6, "volume": 1.2, "outlet": 4.0, "length": 0.35},
-	"quiet": {"ir": "mild_exhaust", "wet": 1.0, "drive": 0.0,
+	"quiet": {"ir": "mild_exhaust", "wet": 1.0, "drive": 0.0, "drive_ceiling": 0.0,
 		"lowpass": 1600, "bass": 4, "mid": -2, "mid_hz": 600, "treble": -3, "volume": 0.8, "outlet": 0.4, "length": 1.4},
 }
 
@@ -106,7 +108,7 @@ static func options(p: Dictionary) -> Dictionary:
 	if not ex.is_empty():
 		o["outlet_flow"] = float(p["outlet_flow"]) * float(ex["outlet"])
 		o["exhaust_length"] = float(p["exhaust_length"]) * float(ex["length"])
-		for k in ["drive", "lowpass", "bass", "mid", "mid_hz", "treble"]:
+		for k in ["drive", "drive_ceiling", "lowpass", "bass", "mid", "mid_hz", "treble"]:
 			o[k] = ex[k]
 		o["exhaust_volume"] = ex["volume"]
 	o["cylinders"] = cylinders
