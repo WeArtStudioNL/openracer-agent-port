@@ -64,6 +64,16 @@ static func wear_step(w: Car.Wheel, dt: float) -> void:
 	w.condition = by_temp * by_wear * w.pressure_grip
 
 
+## The rolling resistance of a tyre (Vehicle.js): a force against the travel at the contact (N), by the kind of tyre,
+## its pressure and the ground (its drag, or four times on a soft ground without one: grass). vl: the speed along it.
+static func rolling_force(c: Car, w: Car.Wheel, vl := INF) -> float:
+	var surf := Ground.surface(w.surface, w.local_snow, w.local_water)
+	var loose_roll := float(w.kind.get("looseRolling", 1.0)) if surf.get("loose", false) else 1.0
+	var ground := float(surf["drag"]) * loose_roll if surf.has("drag") else (4.0 * loose_roll if float(surf["static"]) < 0.8 else 1.0)
+	var speed := w.forward_speed if vl == INF else vl
+	return c.rolling * float(w.kind.get("rolling", 1.0)) * w.pressure_roll * ground * w.load * tanh(speed / 0.3)
+
+
 ## The magic formula of Wheel.js (tyreForce): the slip along and across in units of the slip at the peak gives
 ## how far the tyre is towards its limit; the curve gives the share of the peak force, which is the friction
 ## times the load, in the direction of the slip.

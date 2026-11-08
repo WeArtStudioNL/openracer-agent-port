@@ -348,10 +348,7 @@ func _tyre_forces(i: int, res: Dictionary, h: float, cg: Vector3, v: Vector3, av
 	_sum_fx[i] += fx
 	_sum_fy[i] += fy
 	# the rolling resistance (more on soft ground), on the body
-	var surf := Ground.surface(w.surface, w.local_snow, w.local_water)
-	var loose_roll := float(w.kind.get("looseRolling", 1.0)) if surf.get("loose", false) else 1.0
-	var rr := car.rolling * float(w.kind.get("rolling", 1.0)) * w.pressure_roll * loose_roll * float(surf.get("drag", 1.0)) * w.load * tanh(vl / 0.3)
-	var fx_body := fx - rr
+	var fx_body := fx - CarWear.rolling_force(car, w, vl)
 	var anti := (car.anti_dive if fx_body < 0.0 else car.anti_lift_front) if w.front else (car.anti_lift_rear if fx_body < 0.0 else car.anti_squat)
 	var below := (cg - w.point).dot(up)
 	_force += w.fp * fx_body + w.lf * fy

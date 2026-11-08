@@ -57,6 +57,7 @@ var _cut_time := 0.0
 var _on_time := 1.0
 var _cut_length := 0.05
 var _motoring_scale := 1.0
+var _motoring_browser := 1.0
 var _overrun := 0.0
 var _previous_throttle := 0.0
 var _cut_was := false
@@ -73,8 +74,9 @@ func setup(e: Dictionary) -> void:
 	limiter_hz = maxf(1.0, float(e.get("limiter_hz", 12)))
 	power_scale = float(e.get("power_scale", 1))
 	braking_scale = float(e.get("braking_scale", 1))
-	# (at least 0.06: lighter, one physics step at 120 Hz throws the engine speed around)
-	inertia = maxf(0.06, float(e.get("inertia", 0.15)))
+	# (as Engine.js: 0.4 when car.json has none; the clutch is solved implicitly in the small steps of CarDrivetrain, so
+	# a light engine, 0.02 kg m2, is stable; at least 0.01)
+	inertia = maxf(0.01, float(e.get("inertia", 0.4)))
 	var turbo: Dictionary = e.get("turbo") if e.get("turbo") is Dictionary else {}
 	# (no share: no turbo by share, also when the tuning menu set its spool or its threshold first; Engine.js takes
 	# 0.5 for a turbo of car.json without a share)
@@ -99,8 +101,11 @@ func setup(e: Dictionary) -> void:
 			power_rpm = r
 	power_rpm = minf(limiter_rpm * 0.97, power_rpm * 1.06)
 	# (Engine.js has a floor of 0.3 here: a kart engine of 30 N m then loses more than its idle controller gives it,
-	# and stalls and restarts at idle; 0.04 lets it idle and leaves every car of more than 175 N m as it was)
+	# and stalls and restarts at idle. Godot keeps 0.04 around idle, so it idles, and has the floor of Engine.js from
+	# twice the idle speed up, so the engine braking of a small engine on the move is the browser game's; every
+	# engine of more than 175 N m is as Engine.js has it)
 	_motoring_scale = clampf(peak_torque / 580.0, 0.04, 2.5)
+	_motoring_browser = clampf(peak_torque / 580.0, 0.3, 2.5)
 	if omega == 0.0:
 		omega = idle_rpm * PI / 30.0
 
@@ -141,7 +146,8 @@ func full_torque(r: float) -> float:
 
 ## The losses of the engine with the throttle shut (the engine braking), N m.
 func motoring(r: float) -> float:
-	return (30.0 + 0.0355 * r) * _motoring_scale * braking_scale * friction_scale
+	var k := lerpf(_motoring_scale, _motoring_browser, smoothstep(idle_rpm * 1.3, idle_rpm * 2.0, r))
+	return (30.0 + 0.0355 * r) * k * braking_scale * friction_scale
 
 
 ## The power as a factor for a boost pressure (bar above the atmosphere): the pressure ratio, the heat of the
