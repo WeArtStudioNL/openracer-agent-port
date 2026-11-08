@@ -6,7 +6,8 @@ extends RefCounted
 ## and tie rods that follow it, a live axle that goes up and down and rolls, trailing arms, a Panhard rod, driveshafts and
 ## propshafts that turn. A part is used when a part of the model (or of the parts library, PartsLibrary.assemble, car.json
 ## "suspension" and "driveline") has its name: susp_lowerarm_FL, susp_upperarm_FL, susp_upright_FL, susp_spring_FL,
-## susp_strut_FL, susp_damper_FL, steer_rack, steer_tierod_FL, susp_axle_rear, susp_trailingarm_RL, susp_panhard_rear,
+## susp_strut_FL, susp_damper_FL, steer_rack, steer_tierod_FL, susp_toelink_RL (a rigid rod from the frame to the upright, that
+## keeps a wheel without steering straight: the tie rod of the rear; ball_toelink_RL is its point on the upright), susp_axle_rear, susp_trailingarm_RL, susp_panhard_rear,
 ## susp_driveshaft_FL, propshaft_rear, susp_propshaft_rear ... (case and other characters do not matter, the corner at the
 ## end). The physics is not changed by it; the parts follow the travel of every wheel and its steering.
 ##
@@ -123,7 +124,7 @@ static func _classify_susp(n: String, wheel: int) -> Dictionary:
 		return {"kind": "panhard", "wheel": -1, "rear": not n.contains("front")}
 	if wheel < 0:
 		return {}
-	var kinds := [["trailing", ["trailing"]], ["shaft", ["driveshaft", "halfshaft", "shaft"]], ["arm", ["arm", "wishbone", "link"]],
+	var kinds := [["trailing", ["trailing"]], ["tierod", ["toelink"]], ["shaft", ["driveshaft", "halfshaft", "shaft"]], ["arm", ["arm", "wishbone", "link"]],
 		["upright", ["upright", "hub", "knuckle"]], ["spring", ["spring", "damper", "strut", "shock", "coilover"]], ["tierod", ["tierod", "trackrod"]]]
 	for k in kinds:
 		for word in k[1]:
@@ -266,7 +267,7 @@ func _find_balls(roots: Array[Node3D]) -> void:
 ## The empty of the ball joint of an arm or a tie rod, or null.
 func _ball_of(node: Node3D, kind: String) -> Variant:
 	var n := clean(str(node.name))
-	var part := "tierod" if kind == "tierod" else ("upperarm" if n.contains("upper") else "lowerarm")
+	var part := ("toelink" if n.contains("toelink") else "tierod") if kind == "tierod" else ("upperarm" if n.contains("upper") else "lowerarm")
 	return _balls.get("ball" + part + n.right(2))
 
 
@@ -315,7 +316,7 @@ func _attach_calipers(roots: Array[Node3D]) -> void:
 	for n in list:
 		var c := clean(str(n.name))
 		var wheel: int = CORNERS.get(c.right(2), -1)
-		var joint := _re("^ball(lowerarm|upperarm|tierod)").search(c) != null        # (a ball joint is bolted to the upright: it goes with it, not with its arm)
+		var joint := _re("^ball(lowerarm|upperarm|tierod|toelink(?!mount))").search(c) != null        # (a ball joint is bolted to the upright: it goes with it, not with its arm)
 		var mount := c.begins_with("balltierodmount")                                 # (but this one is on the rack, at the inner end of the rod)
 		if wheel < 0 or not (joint or (_re("caliper|brake").search(c) != null and _re("disc|disk|rotor").search(c) == null)):
 			continue
