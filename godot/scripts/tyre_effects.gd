@@ -10,6 +10,11 @@ extends Node3D
 ## Smoke and dust: puffs of a picture of smoke (four, in an atlas that is made once: noise with a ragged, curled
 ## edge, a lit top and a darker underside), each turned by its own angle, that rise, are carried by a little
 ## turbulence, grow and fade. Smoke lives long and grows to a wide plume; dust is lower and gone in a second or two.
+## As in Smoke.js there are two layers: the plume (from a tyre that smokes hard and turns) and small dense puffs that
+## hug the tyre and are gone in a second or two; both are thrown the other way from where the tread spins.
+## The car is not a place for smoke: young smoke is pushed out of the box of its body (an attractor that repels), and
+## where the car drives through a plume that has hung in the air a while it takes small wisps of it along (new
+## short-lived puffs at its nose or tail with its speed), the way Smoke.js does it.
 
 const CHUNK := 400                   # strips per mesh
 const CHUNKS := 20                   # 8000 strips: about a kilometre of marks
@@ -17,10 +22,17 @@ const STEP := 0.12                   # m between the points of a mark
 const LIFT := 0.012                  # m above the road
 const TILE := 64                     # pixels of a puff in the atlas
 const ATLAS_CACHE := "user://smoke_atlas.png"
+const PLUME_AGE := 1.5               # s: from this age a plume is no longer pushed by the car (it makes wisps)
+const PLUME_LIFE := 11.0             # s that a puff of the plume lives (Smoke.js: 10 + up to 1.4 + the heat)
+const PLUME_POINTS := 600            # the places of the plumes that are kept for the wisps
+const SMOKE := Color(0.9, 0.91, 0.94)
+const DUST := Color(0.66, 0.55, 0.4)
 
 static var _atlas: ImageTexture
 
 var car: Car
+var wisps: GPUParticles3D                      # the wisps that the car takes out of a plume
+var wisps_made := 0                            # (the tests)
 var _chunks: Array[MeshInstance3D] = []
 var _strips: Array = []              # per chunk: Array of strips [p0a, p0b, p1a, p1b, a0, a1, dust]
 var _chunk := 0
@@ -29,6 +41,13 @@ var _rebuild_in := 0.0
 var _last: Array = [null, null, null, null]       # per wheel: {p, side, a}
 var _smoke: Array[GPUParticles3D] = []
 var _dust: Array[GPUParticles3D] = []
+var _fine: Array[GPUParticles3D] = []          # the small dense puffs at the tyre (Smoke.js "fine")
+var _repel: GPUParticlesAttractorBox3D         # the body of the car pushes the young smoke away
+var _box := AABB()                             # the body in the frame of the car (without the wheels)
+var _box_of: Node = null
+var _plume: Array = []                         # [where, when it was made, when the car last took a wisp from it]
+var _plume_in := [0.0, 0.0, 0.0, 0.0]
+var _time := 0.0
 var _mark_material: StandardMaterial3D
 var _smoke_in := [0.0, 0.0, 0.0, 0.0]          # (the replay: a row of the smoke of a wheel 15 times a second)
 var _hold := [0.0, 0.0, 0.0, 0.0]              # (in the replay: how long the smoke of a row goes on)
@@ -55,11 +74,28 @@ func setup(c: Car) -> void:
 	var atlas := smoke_atlas()
 	for i in 4:
 		var s := emitter(atlas, false)
+		# (the plume of a tyre lives long: Smoke.js 10 to 12 s, made at up to 90 puffs a second)
+		s.lifetime = PLUME_LIFE
+		s.amount = 1000
+		(s.process_material as ParticleProcessMaterial).inherit_velocity_ratio = 0.06
 		var d := emitter(atlas, true)
+		d.amount = 90                    # (45 a second)
+		d.lifetime = 2.0
+		var f := fine_emitter(atlas)
 		_smoke.append(s)
 		_dust.append(d)
+		_fine.append(f)
 		add_child(s)
 		add_child(d)
+		add_child(f)
+	wisps = wisp_emitter(atlas)
+	add_child(wisps)
+	_repel = GPUParticlesAttractorBox3D.new()
+	_repel.strength = -6.0
+	_repel.attenuation = 0.5
+	_repel.directionality = 0.0
+	_repel.size = Vector3(1, 1, 1)
+	add_child(_repel)
 	# the water of the puddles and the snow (the condition of the ground, Ground)
 	var spray := GroundSpray.new()
 	spray.setup(c)
@@ -163,7 +199,8 @@ static func emitter(atlas: Texture2D, dust: bool, colour := Color(0.9, 0.91, 0.9
 	p.fract_delta = true
 	p.emitting = false
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	p.visibility_aabb = AABB(Vector3(-60, -5, -60), Vector3(120, 40, 120))
+	# (the emitter goes with the wheel, its smoke stays where it was made: a plume 300 m back is still drawn, as in Smoke.js)
+	p.visibility_aabb = AABB(Vector3(-300, -10, -300), Vector3(600, 60, 600))
 	var m := ParticleProcessMaterial.new()
 	m.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
 	m.emission_sphere_radius = 0.15
@@ -224,6 +261,73 @@ static func emitter(atlas: Texture2D, dust: bool, colour := Color(0.9, 0.91, 0.9
 	return p
 
 
+## The size over the life of a puff (from s0 to s1 as the root of the age, Smoke.js) and its fade (in over the
+## first 5 %, out as (1 - t)^1.4).
+static func _shape(m: ParticleProcessMaterial, s0: float, s1: float, a0: float) -> void:
+	var grow := Curve.new()
+	grow.max_value = maxf(1.0, s1 * 1.1)
+	for k in 9:
+		var t := k / 8.0
+		grow.add_point(Vector2(t, s0 + (s1 - s0) * sqrt(t)))
+	var grow_tex := CurveTexture.new()
+	grow_tex.curve = grow
+	m.scale_curve = grow_tex
+	var fade := Gradient.new()
+	var offsets := PackedFloat32Array([0.0, 0.05])
+	var colors := PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, a0 * pow(0.95, 1.4))])
+	for k in range(1, 7):
+		var t := 0.05 + 0.95 * k / 6.0
+		offsets.append(t)
+		colors.append(Color(1, 1, 1, a0 * pow(1.0 - t, 1.4)))
+	fade.offsets = offsets
+	fade.colors = colors
+	var fade_tex := GradientTexture1D.new()
+	fade_tex.gradient = fade
+	m.color_ramp = fade_tex
+
+
+## The second layer of the smoke of a tyre (Smoke.js "fine"): small dense puffs close to the tyre that curl up behind
+## it, gone in a second or two (up to 300 a second).
+static func fine_emitter(atlas: Texture2D) -> GPUParticles3D:
+	var p := emitter(atlas, false)
+	p.amount = 400
+	p.lifetime = 1.8
+	p.randomness = 0.5
+	var m := p.process_material as ParticleProcessMaterial
+	m.emission_sphere_radius = 0.12
+	m.emission_shape_offset = Vector3(0, 0.15, 0)
+	m.initial_velocity_min = 0.5
+	m.initial_velocity_max = 1.6
+	m.spread = 30.0
+	m.inherit_velocity_ratio = 0.05
+	m.scale_min = 0.8
+	m.scale_max = 1.3
+	_shape(m, 0.2, 0.7, 0.55)
+	return p
+
+
+## The wisps that the car takes out of a plume (Smoke.js): small puffs with the speed of the car, gone in a second or
+## two; made one by one (emit_particle), at the nose or the tail of the car.
+static func wisp_emitter(atlas: Texture2D) -> GPUParticles3D:
+	var p := emitter(atlas, false)
+	p.amount = 64
+	p.lifetime = 1.7
+	p.randomness = 0.5
+	p.emitting = false
+	p.amount_ratio = 1.0
+	var m := p.process_material as ParticleProcessMaterial
+	m.initial_velocity_min = 0.0
+	m.initial_velocity_max = 0.0
+	m.inherit_velocity_ratio = 0.0
+	m.damping_min = 8.0             # (the air takes their speed quickly: Smoke.js e^-2.2 t)
+	m.damping_max = 14.0
+	m.gravity = Vector3(0, 0.22, 0)
+	m.scale_min = 0.85
+	m.scale_max = 1.2
+	_shape(m, 0.3, 1.2, 0.35)
+	return p
+
+
 ## Takes the marks away (a new start).
 func clear() -> void:
 	for n in CHUNKS:
@@ -236,25 +340,133 @@ func clear() -> void:
 func _process(delta: float) -> void:
 	if car == null or ReplayFx.active:
 		return
+	_time += delta
+	var setting := float(Settings.get_value("gfx_smoke")) / 100.0         # (the Smoke of the Graphics settings)
+	var fwd := car.global_transform.basis.z
+	fwd = Vector3(fwd.x, 0.0, fwd.z).normalized() if Vector2(fwd.x, fwd.z).length() > 1e-3 else Vector3.RIGHT
+	var left := Vector3(fwd.z, 0.0, -fwd.x)
 	for i in 4:
 		var w := car.wheels[i]
 		var loose: bool = Content.surface(w.surface).get("loose", false)
 		_mark(i, w, loose)
 		var at := w.point if w.contact else car.to_global(w.hub)
-		var amount := clampf(w.smoke * float(Settings.get_value("gfx_smoke")) / 100.0, 0.0, 1.0)       # (the Smoke of the Graphics settings)
-		for e: GPUParticles3D in [_smoke[i], _dust[i]]:
-			var mine := amount if (e == _dust[i]) == loose else 0.0
+		var amount := clampf(w.smoke * setting, 0.0, 1.0)
+		if not w.contact:
+			amount = 0.0
+		# the plume comes when the tyre smokes hard and turns (a tyre that stands still makes only a few small
+		# puffs); the small layer from the first smoke (Smoke.js bigShare, fineShare)
+		var tread := w.omega * w.radius
+		var along := w.forward_speed
+		var turning := minf(1.0, maxf(absf(tread), absf(along)) / 3.0)
+		var big := amount if loose else amount * clampf((w.smoke - 0.25) / 0.45, 0.0, 1.0) * turning
+		var fine := minf(1.0, w.smoke * 20.0) * (0.12 + 0.88 * turning) * minf(1.0, setting) * (40.0 / 300.0 if loose else 1.0)
+		if amount <= 0.02:
+			fine = 0.0
+		# thrown the other way from where the tread spins, at the speed it spins faster than the car moves
+		var spun := maxf(0.0, absf(tread) - absf(along)) * (1.0 if tread * along >= 0.0 or absf(along) < 1.0 else 0.5)
+		var dir := -1.0 if tread >= 0.0 else 1.0
+		var outward := left * (1.0 if w.left else -1.0)
+		var throw := fwd * dir * minf(6.0, spun * 0.29) + outward * minf(1.2, spun * 0.03)
+		for e: GPUParticles3D in [_smoke[i], _dust[i], _fine[i]]:
+			var mine := fine if e == _fine[i] else (big if (e == _dust[i]) == loose else 0.0)
 			e.global_position = at
 			e.amount_ratio = mine
-			e.emitting = mine > 0.02
+			e.emitting = mine > 0.005
+			if e == _dust[i] or not e.emitting:
+				continue
+			var m := e.process_material as ParticleProcessMaterial
+			var up := 0.85 + minf(2.0, spun * 0.08) if e == _smoke[i] else 1.05 + minf(1.2, spun * 0.05)
+			var v := throw * (1.0 if e == _smoke[i] else 0.5) + Vector3.UP * up
+			m.direction = v.normalized()
+			m.initial_velocity_min = v.length() * 0.6
+			m.initial_velocity_max = v.length() * 1.3
+			m.damping_max = 0.9 + 1.4 * throw.length()
+			m.damping_min = m.damping_max * 0.5
+			if e == _fine[i]:
+				m.color = DUST if loose else SMOKE
 		_smoke_in[i] -= delta
 		if amount > 0.02 and _smoke_in[i] <= 0.0:
 			_smoke_in[i] = 1.0 / 15.0
 			ReplayFx.add("smoke", car, [0.0, i, at.x, at.y, at.z, amount, 1.0 if loose else 0.0])
+		# the plume where it was made, for the wisps (not the dust: it is gone before it is a cloud)
+		_plume_in[i] -= delta
+		if big > 0.1 and not loose and _plume_in[i] <= 0.0:
+			_plume_in[i] = 0.1
+			_plume.append([at, _time, -1e9])
+			if _plume.size() > PLUME_POINTS:
+				_plume.pop_front()
+	_body_smoke()
 	_rebuild_in -= delta
 	if _dirty and _rebuild_in <= 0.0:
 		_build(_chunk)
 		_rebuild_in = 0.05
+
+
+## The box of the body in the frame of the car: the meshes of the model without the wheels (Smoke.js takes the
+## collision spheres of the shell), or the dimensions of car.json.
+func _body_box() -> AABB:
+	if _box_of == car.model_root and _box.size != Vector3.ZERO:
+		return _box
+	_box_of = car.model_root
+	if car.model_root != null:
+		_box = CarModel.bounds(car.model_root, car)
+	if car.model_root == null or _box.size == Vector3.ZERO:
+		var dims: Dictionary = car.config.get("dimensions", {})
+		var size := Vector3(float(dims.get("width", 1.8)), float(dims.get("height", 1.3)), float(dims.get("length", 4.2)))
+		_box = AABB(Vector3(-size.x / 2.0, 0.0, -size.z / 2.0), size)
+	return _box
+
+
+## The car and the smoke: the young smoke is pushed out of the body (the car pushes the air away, it does not carry
+## it); where the car drives through a plume that has hung in the air for a while (PLUME_AGE), it takes small wisps of
+## it along: two new puffs at its nose or its tail, with nine tenths of its speed, at most six a frame and from one
+## place of the plume every half second.
+func _body_smoke() -> void:
+	var box := _body_box()
+	var xf := car.global_transform
+	# (under the floor the smoke can go: the car stands a hand above the road)
+	var low := box.position.y + 0.1
+	var top := box.end.y + 0.12
+	var centre := Vector3(box.get_center().x, (low + top) / 2.0, box.get_center().z)
+	_repel.global_transform = Transform3D(xf.basis.orthonormalized(), xf * centre)
+	_repel.size = Vector3(box.size.x + 0.24, top - low, box.size.z + 0.24)
+	var v := car.linear_velocity
+	wisps.global_position = xf.origin             # (its box of what is seen goes with the car)
+	if _plume.is_empty():
+		return
+	var oldest := _time - PLUME_LIFE * 0.9
+	while not _plume.is_empty() and float(_plume[0][1]) < oldest:
+		_plume.pop_front()
+	if Vector2(v.x, v.z).length() < 3.0 or not wisps.is_inside_tree():
+		return
+	var inv := xf.affine_inverse()
+	var reach := box.size.length() / 2.0 + 0.5
+	var made := 0
+	var m := 0.12
+	for pt: Array in _plume:
+		if made >= 6:
+			break
+		var age := _time - float(pt[1])
+		if age < PLUME_AGE or _time - float(pt[2]) < 0.5:
+			continue
+		# (the plume has risen a little from the road where it was made, and grown: its middle is about 0.6 m up)
+		var p: Vector3 = pt[0] + Vector3(0.0, 0.6, 0.0)
+		if p.distance_to(xf.origin) > reach:
+			continue
+		var lp := inv * p
+		if lp.x < box.position.x - m or lp.x > box.end.x + m or lp.z < box.position.z - m or lp.z > box.end.z + m:
+			continue
+		if lp.y < low - 0.6 or lp.y > top + 0.6:
+			continue
+		pt[2] = _time
+		var out := Vector3(clampf(lp.x, box.position.x, box.end.x), clampf(lp.y, low, box.position.y + 0.55 * box.size.y),
+			box.end.z + m if lp.z > box.get_center().z else box.position.z - m)
+		var wp := xf * out
+		for k in 2:
+			var t := Transform3D(Basis.IDENTITY, wp + Vector3(randf_range(-0.15, 0.15), -0.04, randf_range(-0.15, 0.15)))
+			wisps.emit_particle(t, v * 0.9 + Vector3(0.0, 0.2, 0.0), Color(SMOKE, 1.0), Color(), GPUParticles3D.EMIT_FLAG_POSITION | GPUParticles3D.EMIT_FLAG_VELOCITY)
+			wisps_made += 1
+		made += 2
 
 
 func _mark(i: int, w: Car.Wheel, dust: bool) -> void:
@@ -362,8 +574,10 @@ func replay_add(kind: String, r: Array) -> void:
 		return
 	var i := int(r[1])
 	var dust := float(r[6]) > 0.5
-	for e: GPUParticles3D in [_smoke[i], _dust[i]]:
+	for e: GPUParticles3D in [_smoke[i], _dust[i], _fine[i]]:
 		var mine: float = r[5] if (e == _dust[i]) == dust else 0.0
+		if e == _fine[i]:
+			mine = minf(1.0, float(r[5]) * 20.0) * (40.0 / 300.0 if dust else 1.0)
 		e.global_position = Vector3(r[2], r[3], r[4])
 		e.amount_ratio = mine
 		e.emitting = mine > 0.02
@@ -381,13 +595,14 @@ func replay_step(kind: String, dt: float) -> void:
 			if _hold[i] <= 0.0:
 				_smoke[i].emitting = false
 				_dust[i].emitting = false
+				_fine[i].emitting = false
 
 
 func replay_clear(kind: String) -> void:
 	if kind == "skid":
 		clear()
 		return
-	for e: GPUParticles3D in _smoke + _dust:
+	for e: GPUParticles3D in _smoke + _dust + _fine:
 		e.emitting = false
 		e.restart()
 		e.emitting = false
@@ -412,7 +627,7 @@ func replay_snapshot(kind: String) -> Variant:
 			copy.append(st.duplicate())
 		return {"strips": copy, "chunk": _chunk}
 	# (the smoke goes on in the replay, while the game is paused)
-	for e: GPUParticles3D in _smoke + _dust:
+	for e: GPUParticles3D in _smoke + _dust + _fine:
 		e.process_mode = Node.PROCESS_MODE_ALWAYS
 	replay_clear(kind)
 	return null
@@ -427,5 +642,5 @@ func replay_restore(kind: String, snap: Variant) -> void:
 			_build(n)
 		return
 	replay_clear(kind)
-	for e: GPUParticles3D in _smoke + _dust:
+	for e: GPUParticles3D in _smoke + _dust + _fine:
 		e.process_mode = Node.PROCESS_MODE_INHERIT
