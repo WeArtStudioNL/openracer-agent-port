@@ -37,6 +37,7 @@ var key := ""                       # the record of: the car, or "car~tune" with
 var save_records := true            # the menu: "Save lap records" (off: no record is kept)
 var use_ghost := true               # the menu: "Ghost of your best lap"
 var ghosts_dir := GHOSTS
+var friend := {}                    # a ghost of a file that someone sent (GhostFiles): { name, time, samples }; shown instead of the best lap
 
 var _passed: Array[bool] = []
 var _last_pos := Vector3.INF
@@ -67,7 +68,8 @@ func setup(c: Car, track: Track, opts := {}) -> void:
 	var f := _ghost_path()
 	if FileAccess.file_exists(f):
 		_best_samples = bytes_to_var(FileAccess.get_file_as_bytes(f))
-	if not _best_samples.is_empty() and use_ghost:
+	friend = GhostFiles.load_friend(self)
+	if (not _best_samples.is_empty() and use_ghost) or not friend.is_empty():
 		_make_ghost.call_deferred()
 
 
@@ -176,7 +178,7 @@ func _gate(g: int) -> void:
 				if save_records:
 					_save()
 				message.emit("New best lap  %s" % format_time(t))
-				if ghost == null and use_ghost:
+				if ghost == null and use_ghost and friend.is_empty():
 					_make_ghost()
 			else:
 				message.emit("Lap %s" % format_time(t))
@@ -191,7 +193,8 @@ func _gate(g: int) -> void:
 	_record_in = 0.0
 	if ghost:
 		ghost.visible = true
-		RunLog.event("the ghost of the best lap (%s) drives" % format_time(best_lap))
+		RunLog.event(("the ghost of %s (%s) drives" % [friend["name"], format_time(friend["time"])]) if not friend.is_empty()
+			else "the ghost of the best lap (%s) drives" % format_time(best_lap))
 
 
 func _save() -> void:
@@ -199,6 +202,7 @@ func _save() -> void:
 	cfg.load(records_file)
 	cfg.set_value(track_id, key, best_lap)
 	cfg.set_value(track_id, key + ":splits", best_splits)
+	cfg.set_value(track_id, key + ":date", Time.get_datetime_string_from_system(true) + "Z")     # (Records.js date: the line of the AI)
 	cfg.save(records_file)
 	DirAccess.make_dir_recursive_absolute(ghosts_dir)
 	var f := FileAccess.open(_ghost_path(), FileAccess.WRITE)
@@ -207,7 +211,12 @@ func _save() -> void:
 
 
 func _ghost_path() -> String:
-	return ghosts_dir.path_join("%s__%s.ghost" % [track_id, key.replace("~", "__tune__").validate_filename()])
+	return ghosts_dir.path_join(ghost_file(track_id, key))
+
+
+## The file of the ghost of a record (a track and a car, "car~tune" with a setup of its own).
+static func ghost_file(track: String, record_key: String) -> String:
+	return "%s__%s.ghost" % [track, record_key.replace("~", "__tune__").validate_filename()]
 
 
 func _record(dt: float) -> void:
@@ -232,9 +241,10 @@ func _make_ghost() -> void:
 
 
 func _drive_ghost() -> void:
-	if ghost == null or _best_samples.is_empty():
+	var src: PackedFloat32Array = friend["samples"] if not friend.is_empty() else _best_samples
+	if ghost == null or src.is_empty():
 		return
-	var n := _best_samples.size() / FIELDS
+	var n := src.size() / FIELDS
 	var f := lap_time() * RATE
 	var i := int(f)
 	if i >= n - 1:
@@ -244,17 +254,45 @@ func _drive_ghost() -> void:
 	var t := f - i
 	var a := i * FIELDS
 	var b := (i + 1) * FIELDS
-	var pos := Vector3(_best_samples[a], _best_samples[a + 1], _best_samples[a + 2]).lerp(Vector3(_best_samples[b], _best_samples[b + 1], _best_samples[b + 2]), t)
-	var qa := Quaternion(_best_samples[a + 3], _best_samples[a + 4], _best_samples[a + 5], _best_samples[a + 6])
-	var qb := Quaternion(_best_samples[b + 3], _best_samples[b + 4], _best_samples[b + 5], _best_samples[b + 6])
+	var pos := Vector3(src[a], src[a + 1], src[a + 2]).lerp(Vector3(src[b], src[b + 1], src[b + 2]), t)
+	var qa := Quaternion(src[a + 3], src[a + 4], src[a + 5], src[a + 6])
+	var qb := Quaternion(src[b + 3], src[b + 4], src[b + 5], src[b + 6])
 	ghost.global_transform = Transform3D(Basis(qa.slerp(qb, t)), pos)
-	ghost.steer_angle = lerpf(_best_samples[a + 7], _best_samples[b + 7], t)
-	var speed := pos.distance_to(Vector3(_best_samples[b], _best_samples[b + 1], _best_samples[b + 2])) * RATE
+	ghost.steer_angle = lerpf(src[a + 7], src[b + 7], t)
+	var speed := pos.distance_to(Vector3(src[b], src[b + 1], src[b + 2])) * RATE
 	for k in 4:
 		var w := ghost.wheels[k]
-		w.length = lerpf(_best_samples[a + 8 + k], _best_samples[b + 8 + k], t)
+		w.length = lerpf(src[a + 8 + k], src[b + 8 + k], t)
 		w.steer = ghost.steer_angle if w.front else 0.0
 		w.spin = fmod(w.spin + speed / w.radius * get_physics_process_delta_time(), TAU)
+
+
+## The best lap of this car on this track (the samples of the ghost, 30 a second; empty without one).
+func best_samples() -> PackedFloat32Array:
+	return _best_samples
+
+
+## The time that the HUD shows as the best: the lap of a ghost file that is raced, else the record (Ghost.js bestTime).
+func shown_best() -> float:
+	return float(friend["time"]) if not friend.is_empty() else best_lap
+
+
+## Races the lap of a ghost file (GhostFiles.read): it is shown instead of the best lap, also in the next drives.
+func set_friend(g: Dictionary) -> void:
+	friend = g
+	if ghost == null:
+		_make_ghost()
+	if not lap_started:
+		ghost.visible = false
+
+
+## Back to the own best lap as the ghost.
+func clear_friend() -> void:
+	friend = {}
+	GhostFiles.forget_friend(self)
+	if ghost != null and (_best_samples.is_empty() or not use_ghost):
+		ghost.queue_free()
+		ghost = null
 
 
 static func format_time(t: float) -> String:

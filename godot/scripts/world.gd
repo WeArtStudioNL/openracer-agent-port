@@ -105,7 +105,15 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	laps.message.connect(hud.toast)
 	add_child(laps)
 	hud.laps = laps
-	line = RacingLine.from_track(track.config)
+	# the best lap that was driven here (by any car, since the road or the line was last changed) is the line of the
+	# AI, as main.js has it; else the line of track.json (--bestline=0 leaves the lap out; the tests of --ai do too)
+	line = null
+	if Content.arg("ai") == "" and Content.arg("bestline") != "0":
+		line = RacingLine.from_lap(RacingLine.best_lap_of(track_id, str(track.config.get("line_date", ""))))
+		if line != null:
+			RunLog.event("racing line: the best lap driven on this track")
+	if line == null:
+		line = RacingLine.from_track(track.config)
 	# (a test: the AI drives the player's car along the racing line)
 	if Content.arg("ai") != "" and line != null:
 		ai = AIDriver.new()

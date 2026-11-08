@@ -497,8 +497,8 @@ func _update_laps() -> void:
 				var t := LapTimer.format_time(times[i])
 				lines.append("[font_size=14][color=#cfd8e3]%d. %s[/color][/font_size]" % [i + 1, "[color=#7ee7a0][b]%s[/b][/color]" % t if is_equal_approx(times[i], best) else t])
 				shown += 1
-		if laps.best_lap > 0.0:
-			lines.append("[font_size=14][color=#cfd8e3]best %s%s[/color][/font_size]" % [LapTimer.format_time(laps.best_lap),
+		if laps.shown_best() > 0.0:
+			lines.append("[font_size=14][color=#cfd8e3]best %s%s[/color][/font_size]" % [LapTimer.format_time(laps.shown_best()),
 				" [color=#7ee7a0][b]new record[/b][/color]" if laps.new_record else ""])
 		if race == null and laps.clock - laps.delta_time < 4.0:
 			lines.append("[font_size=22][color=%s]%+.2f[/color][/font_size]" % ["#66ff73" if laps.delta < 0.0 else "#ff7366", laps.delta])

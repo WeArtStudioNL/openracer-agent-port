@@ -245,8 +245,17 @@ func tools_page(page: VBoxContainer) -> void:
 	var track: Track = world.get("track")
 	if track.config.get("dragstrip") is Dictionary:
 		R.action(page, "Drag strip of this track", "Top 50 and tickets", func(): DragTopWindow.open(menu, track.track_id, track.config))
-	var line_b := R.action(page, "Racing line of this track", "Save my best lap as the line", func(): pass)
-	R.grey(line_b.get_parent(), "The Godot version does not write tracks: draw the line in the track editor of the browser game")
+	R.action(page, "Racing line of this track", "Save my best lap as the line", func():
+		var laps: LapTimer = world.get("laps")
+		if laps == null or laps.best_samples().size() < 10 * LapTimer.FIELDS:
+			menu.hint("No best lap yet: drive a lap first.")
+			return
+		var count := RacingLine.save_lap(track.track_id, laps.best_samples())
+		if count < 0:
+			menu.hint("Could not save the line.")
+		else:
+			track.config["racing_line"] = Content.load_json("tracks/%s/track.json" % track.track_id).get("racing_line", [])
+			menu.hint("The line is saved with the track in your garage (%d points): the AI drives it from the next start." % count))
 	R.action(page, "Records of this track", "Forget them", _forget_records.bind(track))
 	var hdr_status := Label.new()
 	var hdr := R.action(page, "Surroundings for Blender", "Save as HDR", func(): pass)

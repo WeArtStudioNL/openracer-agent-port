@@ -35,6 +35,7 @@ func show_buttons() -> void:
 	title.add_theme_font_size_override("font_size", 30)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_box.add_child(title)
+	_ghost_row()
 	var can_replay: bool = world.replay != null and world.replay.count >= 2
 	var items := [
 		["Resume", world.resume, ""],
@@ -58,7 +59,63 @@ func show_buttons() -> void:
 		if item[2] != "":
 			b.tooltip_text = item[2]
 		_box.add_child(b)
-	(_box.get_child(1) as Button).grab_focus.call_deferred()
+	for c in _box.get_children():
+		if c is Button:
+			(c as Button).grab_focus.call_deferred()
+			break
+
+
+## The ghost as a file (Settings.js, the top of the Escape menu; GhostFiles): Save lap (the best lap of this car on
+## this track, to send), Race a ghost (the lap of a file someone sent), Own lap (back to the own best lap).
+func _ghost_row() -> void:
+	var laps: LapTimer = world.laps
+	if laps == null or not laps.has_laps():
+		return
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	var label := Label.new()
+	label.text = ("Ghost: %s %s" % [laps.friend["name"], LapTimer.format_time(laps.friend["time"])]) if not laps.friend.is_empty() else "Ghost"
+	label.modulate.a = 0.8
+	row.add_child(label)
+	var small := func(text: String, tip: String, action: Callable, off := false) -> Button:
+		var b := Button.new()
+		b.text = text
+		b.tooltip_text = tip
+		b.disabled = off
+		b.add_theme_font_size_override("font_size", 13)
+		b.pressed.connect(action)
+		row.add_child(b)
+		return b
+	small.call("Save lap", "Save your best lap with this car on this track as a file to send", func():
+		var path := GhostFiles.save_best(laps)
+		label.text = ("Ghost: saved in %s" % path.get_base_dir().get_file()) if path != "" else "Ghost: no best lap yet"
+		if path != "":
+			label.tooltip_text = path, laps.best_samples().size() < 10 * LapTimer.FIELDS)
+	small.call("Race a ghost", "Race against the lap in a ghost file that someone sent", func():
+		var fd := FileDialog.new()
+		fd.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+		fd.access = FileDialog.ACCESS_FILESYSTEM
+		fd.use_native_dialog = true
+		fd.filters = PackedStringArray(["*.openracer-ghost, *.json ; Ghost files"])
+		fd.title = "A ghost file"
+		fd.process_mode = Node.PROCESS_MODE_ALWAYS
+		add_child(fd)
+		fd.file_selected.connect(func(p: String):
+			fd.queue_free()
+			var err := GhostFiles.open(laps, p)
+			if err != "":
+				label.text = err
+				label.add_theme_color_override("font_color", Color("#ff8a80"))
+			else:
+				show_buttons())
+		fd.canceled.connect(fd.queue_free)
+		fd.popup_centered_ratio(0.6))
+	if not laps.friend.is_empty():
+		small.call("Own lap", "Back to your own best lap as the ghost", func():
+			laps.clear_friend()
+			show_buttons())
+	_box.add_child(row)
 
 
 func show_settings() -> void:
