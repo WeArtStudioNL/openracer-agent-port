@@ -31,6 +31,7 @@ var column_angle := 0.0
 var column_error := 0.0
 var built: Dictionary = {}        # what PartsLibrary.assemble made (or {})
 var _rod_inner := {}              # wheel -> how far the inner end of its tie rod is along the rack from where the model has it
+var _balls := {}                  # clean name of a ball joint empty -> its place in the frame of the car
 var _rods: Variant = null         # the fixed tie rods (found once), or []
 var _column_key := ""
 
@@ -217,6 +218,7 @@ func _inner_parts(node: Node3D, axis: Vector3, rest_length: float) -> Array:
 
 
 func _find(roots: Array[Node3D]) -> void:
+	_find_balls(roots)
 	_gather_coilovers(roots)
 	var found: Array[Dictionary] = []
 	for r in roots:
@@ -247,6 +249,24 @@ func _find(roots: Array[Node3D]) -> void:
 	_seat_parts()
 	_find_corners()
 	_attach_calipers(roots)
+
+
+## The ball joints that a model marks with empties: ball_lowerarm_FL, ball_upperarm_FL, ball_tierod_FL (the point on the upright
+## about which the arm or the rod turns; without one the end of the part that is farthest from its origin is taken).
+func _find_balls(roots: Array[Node3D]) -> void:
+	_balls = {}
+	for r in roots:
+		for n in r.find_children("*", "Node3D", true, false):
+			var c := clean(str(n.name))
+			if c.begins_with("ball") and CORNERS.has(c.right(2)):
+				_balls[c] = CarModel.relative(n as Node3D, car).origin
+
+
+## The empty of the ball joint of an arm or a tie rod, or null.
+func _ball_of(node: Node3D, kind: String) -> Variant:
+	var n := clean(str(node.name))
+	var part := "tierod" if kind == "tierod" else ("upperarm" if n.contains("upper") else "lowerarm")
+	return _balls.get("ball" + part + n.right(2))
 
 
 ## The wheels whose upright hangs on wishbones: their lowest arm and, with two, their highest.
@@ -322,8 +342,9 @@ func _add_part(node: Node3D, what: Dictionary, has_rack: bool) -> void:
 		e["arm_length"] = maxf(0.05, absf(e["far"].z - origin.z))
 		e["ahead"] = 1.0 if e["far"].z >= origin.z else -1.0
 	elif kind in SPRINGLIKE:
-		var tip: Variant = _tip_of(node, origin) if kind == "tierod" and not has_rack and exact == null else null
-		e["far"] = exact if exact != null else (tip if tip != null else _far_end(node, origin))
+		var marked: Variant = _ball_of(node, kind) if kind == "tierod" and exact == null else null
+		var tip: Variant = _tip_of(node, origin) if kind == "tierod" and not has_rack and exact == null and marked == null else null
+		e["far"] = exact if exact != null else (marked if marked != null else (tip if tip != null else _far_end(node, origin)))
 		var d: Vector3 = e["far"] - origin
 		e["rest_length"] = maxf(0.01, d.length())
 		e["rest_dir"] = d.normalized() if d.length() > 1e-6 else Vector3.DOWN
@@ -341,7 +362,9 @@ func _add_part(node: Node3D, what: Dictionary, has_rack: bool) -> void:
 			var s := box.size
 			e["axis"] = Vector3.RIGHT if s.x >= s.y and s.x >= s.z else (Vector3.UP if s.y >= s.z else Vector3.BACK)
 	elif kind == "arm":
-		var ball: Variant = _tip_of(node, origin) if exact == null else exact     # (the ball joint: the end of the arm farthest from its hinge)
+		var ball: Variant = exact if exact != null else _ball_of(node, "arm")      # (the ball joint: its empty, or the end of the arm farthest from its hinge)
+		if ball == null:
+			ball = _tip_of(node, origin)
 		e["far"] = ball if ball != null else _far_end(node, origin)
 		e["arm_length"] = maxf(0.05, absf(e["far"].x - origin.x))
 		e["side"] = 1.0 if e["far"].x >= origin.x else -1.0

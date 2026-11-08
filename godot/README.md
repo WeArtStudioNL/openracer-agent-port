@@ -849,6 +849,8 @@ Car.js have no light of the car; its menu says so too).
 
 ## The look of a car: suspension rig, paint and mirrors
 
+The wishbones and the tie rods are rigid. Empties called `ball_lowerarm_FL`, `ball_upperarm_FL` and `ball_tierod_FL` (and the other corners) mark the ball joints on the upright; without them the end of the part farthest from its origin is taken. The browser game does not read them yet.
+
 `scripts/car_visuals.gd` (one node per car, made by `Car._build_visual`) holds three parts:
 
 - **The suspension rig** (`scripts/suspension_rig.gd`, SuspensionRig.js): the parts of the model named `susp_lowerarm_FL`,
