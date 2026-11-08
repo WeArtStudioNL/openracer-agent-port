@@ -140,6 +140,14 @@ func _tune() -> void:
 
 
 func _restart() -> void:
+	# (a race starts again in a new world, without this recording: the replay asks first whether to save it)
+	if world.race != null and world.replay != null:
+		world.replay.confirm_leave(_restart_now, world.pause_layer)
+	else:
+		_restart_now()
+
+
+func _restart_now() -> void:
 	world.resume()
 	if world.race != null:
 		world._restart_race()

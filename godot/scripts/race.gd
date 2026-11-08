@@ -3,15 +3,18 @@ extends Node
 ## A race against AI cars (web/js/main.js startRace, Opponent.js): the cars on the grid of track.json, a countdown
 ## (3, 2, 1, GO: everyone is held), a number of laps, the positions along the racing line, and the results when
 ## the player finishes. The laps of the race are counted along the line from the finish line (the first gate), for
-## everyone in the same way: the grid is behind the line, the first crossing starts lap 1.
+## everyone in the same way: the grid is behind the line, the first crossing starts lap 1. Before the countdown the
+## camera flies over the grid (main.js beginFlyby; Enter, Space or a click skips it). A track without a racing line
+## has a race without AI cars: the laps are those of the gates (LapTimer), as the browser counts the player's.
 
 signal finished
 
-enum State { COUNTDOWN, RACING, DONE }
+enum State { FLYBY, COUNTDOWN, RACING, DONE }
 
 const AUDIBLE := 3                  # the AI cars that are heard at once (the nearest)
 ## The pace of the AI for the difficulty of the menu (MainMenu.js raceStep: easy, normal, hard)
 const DIFFICULTY := {"easy": 0.7, "normal": 0.8, "hard": 0.92}
+const FLYBY_SECONDS := 6.0
 
 class Entry:
 	var car: Car
@@ -27,50 +30,52 @@ class Entry:
 	var touching: Array = []
 	var knocks := 0
 	var put_back := 0
+	var slot := 0                   # its place on the grid (an index of the slots, front to back when not on pole)
 
 var world: Node
-var line: RacingLine
+var line: RacingLine                # null: a race without AI cars, the laps by the gates (lap_timer)
+var lap_timer: LapTimer = null
+var track: Track
 var laps := 3
-var state := State.COUNTDOWN
+var state := State.FLYBY
 var countdown := 4.0
+var flyby_time := 0.0
+var flyby_skip := false
+var track_name := ""
 var clock := 0.0
 var entries: Array[Entry] = []
 var player: Entry
 var origin := 0                     # the index of the line at the finish
 var results_shown := false
+var _grid := "front"
+var _slots: Array = []
 
 
 ## extra (the menu): difficulty ("easy", "normal", "hard"), grid ("front", "random", "back": the player's place; else
 ## from_pole), opp (the cars chosen for the first places: [{car, tune}], the rest of the places as before).
-func setup(w: Node, l: RacingLine, track: Track, player_car: Car, opponents: int, race_laps: int, from_pole: bool, extra := {}) -> void:
+func setup(w: Node, l: RacingLine, t: Track, player_car: Car, opponents: int, race_laps: int, from_pole: bool, extra := {}) -> void:
 	name = "Race"
 	world = w
 	line = l
+	track = t
 	laps = race_laps
-	var gates: Array = track.config.get("gates", [])
-	var start: Dictionary = track.start
-	if not gates.is_empty():
-		origin = line.nearest(Vector3(float(gates[0]["x"]), 0, float(gates[0]["z"])))
-	else:
-		origin = line.nearest(Vector3(float(start.get("x", 0)), 0, float(start.get("z", 0))))
-	# the places on the grid: 0 is the start, then the grid boxes of the track, else two by two behind it on the line
-	var slots := []
-	for s in opponents + 1:
-		slots.append(_slot(s, track))
+	track_name = str(t.config.get("name", t.track_id))
+	if line == null:
+		opponents = 0
+	# (--flyby=0: the countdown at once; the tests that drive with --ai have none, --flyby=1 asks for it)
+	var flyby := Content.arg("flyby")
+	if flyby == "0" or (flyby == "" and Content.arg("ai") != ""):
+		state = State.COUNTDOWN
 	var player_slot := 0
-	var grid := str(extra.get("grid", "front" if from_pole else "back"))
-	if grid != "front":
-		# front to back along the start: the player takes the last
-		var h := float(start.get("heading", 0))
-		var dir := Vector2(cos(h), sin(h))
-		var s0 := Vector2(float(start.get("x", 0)), float(start.get("z", 0)))
-		slots.sort_custom(func(a, b): return (Vector2(a["x"], a["z"]) - s0).dot(dir) > (Vector2(b["x"], b["z"]) - s0).dot(dir))
-		player_slot = opponents if grid == "back" else randi_range(0, opponents)
+	_grid = str(extra.get("grid", "front" if from_pole else "back"))
+	if _grid != "front":
+		player_slot = opponents if _grid == "back" else randi_range(0, opponents)
 	player = Entry.new()
 	player.car = player_car
-	player.name = "You"
+	player.name = "You (%s)" % str(player_car.config.get("name", player_car.car_id))
+	player.slot = player_slot
 	entries.append(player)
-	var cars := _opponent_cars(player_car)
+	var cars := _opponent_cars(player_car) if opponents > 0 else []
 	var chosen: Array = extra.get("opp", [])
 	var pace := float(DIFFICULTY.get(str(extra.get("difficulty", "normal")), 0.8))
 	var slot_i := 0
@@ -95,7 +100,7 @@ func setup(w: Node, l: RacingLine, track: Track, player_car: Car, opponents: int
 		e.car.engine_damage_on = false
 		e.car.setup(id, cfg if cfg is Dictionary else {})
 		e.car.freeze = true              # (until it is on its slot: the cars are all at the origin until then)
-		e.car.set_meta("track_id", track.track_id)
+		e.car.set_meta("track_id", t.track_id)
 		CarModel.paint(e.car.model_root, CarModel.AI_COLOURS[i % CarModel.AI_COLOURS.size()])
 		e.audio = CarAudio.new()
 		e.audio.setup(e.car, true)
@@ -110,22 +115,43 @@ func setup(w: Node, l: RacingLine, track: Track, player_car: Car, opponents: int
 		e.driver.setup(e.car, line, pace * (1.0 - 0.03 * (i % 4)))
 		# its pit stops: box i + 2 of the track (box 1 is the player's), with tyre wear on (AIPit)
 		e.driver.pit = AIPit.new()
-		e.driver.pit.setup(e.car, line, track.config, i + 1, e.name)
-		e.car.set_meta("slot", slots[slot_i])
+		e.driver.pit.setup(e.car, line, t.config, i + 1, e.name)
+		e.slot = slot_i
 		e.car.contact_monitor = true
 		e.car.max_contacts_reported = 4
 		entries.append(e)
 		slot_i += 1
-	player_car.set_meta("slot", slots[player_slot])
 	player_car.contact_monitor = true
 	player_car.max_contacts_reported = 4
 	var chosen_text := ", ".join(chosen.map(func(o): return "%s%s" % [o.get("car"), "~" + str(o["tune"]) if str(o.get("tune", "")) != "" else ""]))
-	RunLog.event("race: %d laps, %d opponents (%s%s), the player %s (place %d), %s" % [laps, opponents, ", ".join(cars),
+	RunLog.event("race: %d laps, %d opponents (%s%s), the player %s (place %d), %s%s" % [laps, opponents, ", ".join(cars),
 		"; chosen: %s" % chosen_text if not chosen.is_empty() else "",
-		"on pole" if player_slot == 0 else ("at the back" if player_slot == opponents else "random"), player_slot + 1, str(extra.get("difficulty", "normal"))])
+		"on pole" if player_slot == 0 else ("at the back" if player_slot == opponents else "random"), player_slot + 1,
+		str(extra.get("difficulty", "normal")), "" if line != null else ", no racing line: no AI cars, the laps by the gates"])
 
 
-func _slot(s: int, track: Track) -> Dictionary:
+## The places on the grid, once the line is as it will be (World settles and shortens it when the road can be felt):
+## 0 is the start, then the grid boxes of the track, else two by two behind it on the line; from another place than
+## pole the places go front to back along the start. And where the laps are counted from: the finish (the first gate).
+func _make_slots() -> void:
+	var start: Dictionary = track.start
+	var gates: Array = track.config.get("gates", [])
+	if line != null:
+		if not gates.is_empty():
+			origin = line.nearest(Vector3(float(gates[0]["x"]), 0, float(gates[0]["z"])))
+		else:
+			origin = line.nearest(Vector3(float(start.get("x", 0)), 0, float(start.get("z", 0))))
+	_slots.clear()
+	for s in entries.size():
+		_slots.append(_slot(s))
+	if _grid != "front":
+		var h := float(start.get("heading", 0))
+		var dir := Vector2(cos(h), sin(h))
+		var s0 := Vector2(float(start.get("x", 0)), float(start.get("z", 0)))
+		_slots.sort_custom(func(a, b): return (Vector2(a["x"], a["z"]) - s0).dot(dir) > (Vector2(b["x"], b["z"]) - s0).dot(dir))
+
+
+func _slot(s: int) -> Dictionary:
 	var start: Dictionary = track.start
 	if s == 0:
 		return {"x": float(start.get("x", 0)), "z": float(start.get("z", 0)), "heading": float(start.get("heading", 0))}
@@ -133,6 +159,8 @@ func _slot(s: int, track: Track) -> Dictionary:
 	if s < grid.size():
 		var b: Dictionary = grid[s]
 		return {"x": float(b.get("x", 0)), "z": float(b.get("z", 0)), "heading": float(b.get("heading", 0))}
+	if line == null:
+		return {"x": float(start.get("x", 0)), "z": float(start.get("z", 0)), "heading": float(start.get("heading", 0))}
 	var start_i := line.nearest(Vector3(float(start.get("x", 0)), 0, float(start.get("z", 0))))
 	var i := start_i - roundi((7.0 * s + 4.0) / RacingLine.STEP)
 	var p := line.point(i)
@@ -171,8 +199,10 @@ func place_all() -> void:
 	for e in entries:
 		cars.append(e.car.get_rid())
 	var space: PhysicsDirectSpaceState3D = (world.track as Node3D).get_world_3d().direct_space_state
+	_make_slots()
 	for e in entries:
-		var s: Dictionary = e.car.get_meta("slot")
+		var s: Dictionary = _slots[e.slot]
+		e.car.set_meta("slot", s)
 		var q := PhysicsRayQueryParameters3D.create(Vector3(s["x"], 2000.0, s["z"]), Vector3(s["x"], -2000.0, s["z"]), 0xFFFFFFFF, cars)
 		var hit: Dictionary = space.intersect_ray(q)
 		var y: float = float(hit["position"].y) if not hit.is_empty() else world.track.ground_at(s["x"], s["z"])
@@ -187,10 +217,50 @@ func place_all() -> void:
 
 
 func is_held() -> bool:
-	return state == State.COUNTDOWN and countdown > 1.0
+	return state == State.FLYBY or (state == State.COUNTDOWN and countdown > 1.0)
+
+
+## The fly-by ends (its time, or Enter, Space or a click): the countdown.
+func skip_flyby() -> void:
+	if state == State.FLYBY:
+		flyby_skip = true
+
+
+## The camera of the fly-by now (main.js beginFlyby): over the grid from the front to the back, at the side of it,
+## 2.4 m up, looking a little ahead along the grid; [position, the point it looks at].
+func flyby_camera() -> Array:
+	var s: Dictionary = track.start
+	var h := float(s.get("heading", 0))
+	var d := Vector3(cos(h), 0.0, sin(h))
+	var s0 := Vector3(float(s.get("x", 0)), 0.0, float(s.get("z", 0)))
+	var front := 0.0
+	var back := 0.0
+	for e in entries:
+		var at := (e.car.global_position - s0).dot(d)
+		if e.driver != null:
+			front = maxf(front, at)
+		back = minf(back, at)
+	front += 14.0
+	back -= 14.0
+	var t := minf(1.0, flyby_time / FLYBY_SECONDS)
+	var k := t * t * (3.0 - 2.0 * t)
+	var along := front + (back - front) * k
+	var ground := player.car.global_position.y - player.car.wheels[0].radius
+	var across := Vector3(-d.z, 0.0, d.x)
+	var eye := s0 + d * along + across * 8.0
+	eye.y = ground + 2.4
+	var look := s0 + d * (along - 5.0) - across * 0.5
+	look.y = ground + 0.7
+	return [eye, look]
 
 
 func _physics_process(dt: float) -> void:
+	if state == State.FLYBY:
+		flyby_time += minf(dt, 1.0)
+		if flyby_skip or flyby_time >= FLYBY_SECONDS:
+			state = State.COUNTDOWN
+			countdown = 4.0
+			RunLog.event("race: the fly-by %s" % ("skipped" if flyby_skip else "done"))
 	if state == State.COUNTDOWN:
 		countdown -= dt
 		if countdown <= 1.0 and countdown + dt > 1.0:
@@ -241,8 +311,15 @@ func _physics_process(dt: float) -> void:
 			RunLog.event("race: %s put back on the line (%s)" % [e.name, why])
 
 
-## The lap and the part of it, along the line from the finish.
+## The lap and the part of it, along the line from the finish (no line: the laps of the gates, LapTimer).
 func _progress(e: Entry) -> void:
+	if line == null:
+		if lap_timer == null:
+			return
+		var n := lap_timer.laps_done + (1 if lap_timer.lap_started else 0)
+		while e.laps < n and e.finish_time < 0.0:
+			_crossed(e)
+		return
 	var p := e.car.global_position
 	e.index = line.nearest_facing(p, e.car.global_transform.basis.z) if e.index < 0 else line.nearest(p, e.index)
 	var n := line.count()
@@ -323,11 +400,39 @@ func countdown_text() -> String:
 	return str(n) if n > 0 else "GO"
 
 
+## The results as the browser shows them (main.js renderResults): a headline ("You won!", "Finished P2"), the laps and
+## the track, and a row per car: the place, the name, the best lap and the time of the winner, the gap of the others
+## (+1.234) or how many laps a car that still runs is behind the leader (+1 lap). The rows change as the others come in.
+## [headline, subtitle, rows: [place, name, best, time, player]].
+func results() -> Array:
+	var rows := order()
+	var position := rows.find(player) + 1
+	var head := "Finished" if rows.size() < 2 else ("You won!" if position == 1 else "Finished P%d" % position)
+	var leader: Entry = rows[0]
+	var leader_progress := float(laps) if leader.finish_time >= 0.0 else _progress_of(leader)
+	var out: Array = []
+	for i in rows.size():
+		var r: Entry = rows[i]
+		var time := ""
+		if r.finish_time < 0.0:
+			var down := maxi(0, floori(leader_progress - _progress_of(r) + 1e-6))
+			time = ("+%d lap%s" % [down, "s" if down > 1 else ""]) if down > 0 else "running"
+		elif i == 0:
+			time = LapTimer.format_time(r.finish_time)
+		else:
+			time = "+" + LapTimer.format_time(r.finish_time - leader.finish_time)
+		out.append([i + 1, r.name, "–" if r.best_lap < 0.0 else LapTimer.format_time(r.best_lap), time, r == player])
+	return [head, "%d laps · %s" % [laps, track_name], out]
+
+
+## The laps that a car has done, and the part of the one it drives (on the grid a little under 0).
+func _progress_of(e: Entry) -> float:
+	return e.laps - 1 + e.fraction
+
+
 func results_text() -> String:
-	var lines := PackedStringArray(["Results"])
-	var i := 1
-	for e in order():
-		var t := LapTimer.format_time(e.finish_time) if e.finish_time >= 0.0 else "lap %d" % mini(e.laps, laps)
-		lines.append("%d.  %-24s %10s   best %s" % [i, e.name, t, LapTimer.format_time(e.best_lap)])
-		i += 1
+	var r := results()
+	var lines := PackedStringArray([r[0], r[1]])
+	for row: Array in r[2]:
+		lines.append("%d.  %-28s %10s   best %s" % [row[0], row[1], row[3], row[2]])
 	return "\n".join(lines)

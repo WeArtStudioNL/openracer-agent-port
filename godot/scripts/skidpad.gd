@@ -5,6 +5,8 @@ extends Node
 ## result. Reset starts again (with the tuning as it is now), Tune opens the tuning menu, Back to the menu goes there.
 ## The ground can be another than asphalt (TrackLoader.js SKIDPAD_SURFACES: the pad gets that surface).
 
+const GRIP_FILE := "grip.cfg"        # (the grip measured here, per car and setup: grip_key)
+
 var world: Node
 var car: Car
 var radius := 50.0
@@ -20,6 +22,36 @@ var _last_v := Vector3.ZERO
 var _layer: CanvasLayer
 var _overlay: Label
 var _panel: PanelContainer
+
+
+## The grip that a car holds as the skidpad measured it (OpenRacer.SkidpadGrip of Opponent.js), kept per car and setup
+## in grip.cfg: the AI drives the bends with it (AIDriver). The key is the car and a hash of its whole configuration
+## (the keys sorted), so a changed setup is a car that has not been measured yet.
+
+
+static func grip_key(cfg: Dictionary, car_id: String) -> String:
+	var copy := {}
+	for k in cfg:
+		if not (str(k) in ["name", "description", "preview", "folder", "source", "model", "tunes", "setupName", "id"]):
+			copy[k] = cfg[k]
+	return "%s.%s" % [car_id, JSON.stringify(copy, "", true).md5_text().substr(0, 12)]
+
+
+## The g that was measured for this car and setup, or 0 when it was not.
+static func measured_grip(cfg: Dictionary, car_id: String) -> float:
+	var f := ConfigFile.new()
+	if f.load(Settings.path(GRIP_FILE)) != OK:
+		return 0.0
+	var g := float(f.get_value("grip", grip_key(cfg, car_id), 0.0))
+	return g if g > 0.3 and g < 4.0 else 0.0
+
+
+static func keep_grip(cfg: Dictionary, car_id: String, g: float) -> void:
+	var f := ConfigFile.new()
+	f.load(Settings.path(GRIP_FILE))
+	f.set_value("grip", grip_key(cfg, car_id), roundf(g * 1000.0) / 1000.0)
+	f.save(Settings.path(GRIP_FILE))
+	RunLog.event("skidpad: %.2f g kept for the AI (%s)" % [g, grip_key(cfg, car_id)])
 
 
 ## The pad of the skidpad gets the ground of the menu (not the field around it).
@@ -124,6 +156,10 @@ func _done() -> void:
 	running = false
 	var g := best / 9.81
 	RunLog.event("skidpad: %.2f g at %.1f km/h" % [g, best_speed * 3.6])
+	# (on asphalt, for the AI: it drives this car with this setup in the bends with the grip that it held here; the
+	# car as it is tuned now)
+	if surface == "road" and g > 0.3:
+		keep_grip(car.config, car.car_id, g)
 	var verdict := "a van"
 	for v in [[1.1, "a racing car on slicks"], [0.95, "a sports car"], [0.85, "a good road car"], [0.75, "an ordinary road car"]]:
 		if g > v[0] and verdict == "a van":
