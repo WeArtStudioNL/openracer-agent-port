@@ -157,11 +157,16 @@ func _test_mirrors(car: Car, v: CarVisuals) -> void:
 	var cam := ChaseCamera.new()
 	add_child(cam)
 	cam.follow(car)
+	# (real mirrors are off by default, as in Settings.js: on here, as the Car page of the settings turns them on)
+	for side in ["left", "right", "centre"]:
+		Settings._overrides["mirror_%s_real" % side] = true
 	cam.mode = ChaseCamera.Mode.COCKPIT
 	cam.current = true
 	for i in 6:
 		await get_tree().process_frame
 	_check(v.mirrors.real_count() >= 1, "real mirrors on from the cockpit: %d" % v.mirrors.real_count())
+	for side in ["left", "right", "centre"]:
+		Settings._overrides.erase("mirror_%s_real" % side)
 	cam.mode = ChaseCamera.Mode.FOLLOW
 	for i in 3:
 		await get_tree().process_frame
