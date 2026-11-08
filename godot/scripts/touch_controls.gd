@@ -19,6 +19,7 @@ const MOUSE := -100                  # (the index of the mouse, with --touch=1)
 const PANEL := Color(0.153, 0.18, 0.216, 0.88)
 const LINE := Color(0.227, 0.267, 0.322)
 const ACCENT := Color(1.0, 0.353, 0.122)
+const REC := Color(0.851, 0.216, 0.184)
 
 var steer := 0.0
 var throttle := 0.0
@@ -35,6 +36,7 @@ var _buttons: Array = []             # [{"node": Panel, "action": String, "tap":
 var _held := {}                      # index of a finger -> the button it holds (an entry of _buttons)
 var _forced := false
 var _shown := true
+var _take_on := false                # a take runs (or counts): the Record button is red and says Stop
 
 
 ## Whether the touch controls are wanted: a touch screen (setting "auto"), the setting on, or --touch=1.
@@ -73,14 +75,14 @@ func _ready() -> void:
 	_button(grid, Rect2(62, 62, 54, 54), "reverse", "", "REV")
 	_pedal(_group("brake", "Brake", Vector2(86, 128), Vector2(-14 - 104 - 12 - 86, -18 - 128)), "brake", "BRAKE", Color(0.9, 0.235, 0.196, 0.6))
 	_pedal(_group("gas", "Gas", Vector2(104, 176), Vector2(-14 - 104, -18 - 176)), "gas", "GAS", Color(0.275, 0.784, 0.353, 0.55))
-	# the top row: reset, repair, camera, tuning, menu (the Record button of the browser is the video of the replay)
+	# the top row: reset, repair, camera, record (a take: Take), tuning, menu
 	var top_items := [["reset", "rotate-ccw", "Reset"], ["repair", "wrench", "Repair"], ["camera", "camera", "Camera"],
-		["tuning", "sliders", "Tune"], ["menu", "menu", "Menu"]]
+		["take", "video", "Record"], ["tuning", "sliders", "Tune"], ["menu", "menu", "Menu"]]
 	var width := top_items.size() * 52.0 - 8.0
 	var top := _group("top", "Top buttons", Vector2(width, 44), Vector2(-12 - width, 12), true)
 	for i in top_items.size():
 		var it: Array = top_items[i]
-		_button(top, Rect2(i * 52.0, 0, 44, 44), it[0], it[1], it[2], it[0] == "menu")
+		_button(top, Rect2(i * 52.0, 0, 44, 44), it[0], it[1], it[2], it[0] in ["menu", "take"])
 	RunLog.event("touch controls on%s" % (" (--touch=1: the mouse works them too)" if _forced else ""))
 
 
@@ -278,7 +280,25 @@ func _up(index: int) -> void:
 
 
 func _box_of(b: Dictionary, down: bool) -> void:
-	(b["node"] as Panel).add_theme_stylebox_override("panel", _box(ACCENT if down else PANEL, 8))
+	var colour := ACCENT if down else (REC if b["action"] == "take" and _take_on else PANEL)
+	(b["node"] as Panel).add_theme_stylebox_override("panel", _box(colour, 8))
+
+
+## The Record button as the take is (TouchControls.js: red with a square and Stop while it runs or counts).
+func _take_look() -> void:
+	var t: Variant = world.get("take") if world != null else null
+	var on: bool = t != null and str(t.call("state")) in ["taking", "counting"]
+	if on == _take_on:
+		return
+	_take_on = on
+	for b in _buttons:
+		if b["action"] != "take":
+			continue
+		var box := (b["node"] as Control).get_child(0)
+		(box.get_child(0) as TextureRect).texture = Icons.texture("square" if on else "video", 20)
+		(box.get_child(1) as Label).text = "Stop" if on else "Record"
+		if not _held.values().has(b):
+			_box_of(b, false)
 
 
 ## An action pressed or let go, as a key does it (World reads the events and the state of the actions).
@@ -319,6 +339,7 @@ func _draw_stick() -> void:
 
 ## Hidden while the game is paused (the menus), and everything let go then; the pedals build up as the keys do.
 func _process(delta: float) -> void:
+	_take_look()
 	var show := not get_tree().paused
 	if show != _shown:
 		_shown = show
