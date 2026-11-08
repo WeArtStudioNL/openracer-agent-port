@@ -481,6 +481,7 @@ func _build_window() -> void:
 	col.add_child(head)
 	_window_body = VBoxContainer.new()
 	col.add_child(_window_body)
+	Movable.framed(_window, "editor-exhaust", head, col)
 
 
 func _update_window() -> void:
@@ -493,7 +494,9 @@ func _update_window() -> void:
 	_window.visible = entry != null
 	if entry == null:
 		return
-	_window.position = Vector2(12, 96)
+	if not _window.has_meta("placed"):
+		_window.set_meta("placed", true)
+		_window.position = Vector2(12, 96)
 	for c in _window_body.get_children():
 		c.queue_free()
 	_window_title.text = "Exhaust %d" % (exhaust.find(entry) + 1)

@@ -405,7 +405,7 @@ func _build_panel() -> void:
 	note.modulate.a = 0.7
 	box.add_child(note)
 	if ResourceLoader.exists("res://scripts/movable.gd"):
-		load("res://scripts/movable.gd").call("make", _panel, "debug-panel", bar)
+		load("res://scripts/movable.gd").call("framed", _panel, "debug-panel", bar, box)
 
 
 ## The node grabber, the hit and the part tools (DebugView.js makeGrabPanel): the left mouse button on a node of the

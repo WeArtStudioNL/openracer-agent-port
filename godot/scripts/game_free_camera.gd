@@ -431,6 +431,7 @@ func _build_panel() -> void:
 			take.call("toggle"))
 	v.add_child(rec)
 	_buttons["record"] = rec
+	Movable.framed(_box, "freecam", head, v)
 
 
 func _heading(v: Control, text: String) -> void:

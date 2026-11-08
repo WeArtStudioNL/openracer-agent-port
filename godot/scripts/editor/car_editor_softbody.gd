@@ -855,7 +855,8 @@ func _input(event: InputEvent) -> bool:
 		return true
 	if crash.input(event):
 		return true
-	if event is InputEventMouseMotion and _lasso.is_empty() and not ed.driver_editing():
+	# (no part lights up under the mouse while the driver is edited, a test runs or the node grabber is on)
+	if event is InputEventMouseMotion and _lasso.is_empty() and not ed.driver_editing() and (ed.bench.car == null or ed.bench.parked):
 		partwin.hover((event as InputEventMouseMotion).position)
 	if not shown or soft() == null:
 		return false

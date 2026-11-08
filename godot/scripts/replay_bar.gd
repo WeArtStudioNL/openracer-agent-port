@@ -107,6 +107,7 @@ func _ready() -> void:
 	_buttons["video"] = _button(head, "● Video", "Record the replay from the start to the end as a video (.mp4)", _toggle_video)
 	_button(head, "Video editor", "Cut this replay, change the speed, place the camera, and save it as a replay or as a video", _open_editor)
 	_buttons["exit"] = _button(head, "Main menu" if replay.viewer else "Back to the game", "Escape", replay.exit)
+	_button(head, "×", "Close the replay (Escape)", replay.exit)
 	# the slider and the fragment on it
 	var track := Control.new()
 	track.custom_minimum_size.y = 28
@@ -192,6 +193,7 @@ func _ready() -> void:
 	var hint := _label(_free_row, "Move camera: WASD/arrows move · Space up · Alt down · Q E tilt · mouse looks · [ ] zoom · Esc stops")
 	hint.modulate.a = 0.55
 	hint.add_theme_font_size_override("font_size", 12)
+	Movable.framed(_panel, "replaybar", head, box)
 
 
 func _row(parent: Control) -> HBoxContainer:

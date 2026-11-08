@@ -149,11 +149,18 @@ static func _layers(ed: TrackEditor) -> void:
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(240, 360)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	p.add_child(scroll)
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var outer := VBoxContainer.new()
+	p.add_child(outer)
+	var bar_title := TrackEditorUI.label("Layers", false, 14)
+	bar_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var bar: Control = TrackEditorUI.hbox([bar_title, TrackEditorUI.button("×", func(): p.visible = false, "Hide the layers (the Layers button shows them again)")])
+	outer.add_child(bar)
+	outer.add_child(scroll)
+	Movable.make(p, "track-editor-layers", bar, true, scroll)
 	var v := VBoxContainer.new()
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(v)
-	v.add_child(TrackEditorUI.label("Layers", false, 14))
 	for s in [["Events", "layEvents"], ["Objects", "layObjects"], ["Gates", "layGates"], ["Curbs", "layCurbs"], ["Surfaces", "laySurfaces"], ["Grid", "layGrid"],
 			["Pit boxes", "layPit"], ["Cameras", "layCameras"]]:
 		var head := TrackEditorUI.label(str(s[0]).to_upper(), true, 11)
@@ -191,7 +198,8 @@ static func _drag_window(ed: TrackEditor) -> void:
 	var close := kit.button("×", func(): ed.set_mode("view"), "Close")
 	var title := kit.label("Drag strip", false, 14)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.add_child(kit.hbox([title, close]))
+	var drag_head: Control = kit.hbox([title, close])
+	v.add_child(drag_head)
 	v.add_child(kit.label("Click on the road where the start line is and drag in the direction of the strip. The finish line is that far from it.", true, 12))
 	var changed := func() -> void:
 		if not ed.drag.is_empty() and not ed.has_meta("filling"):
@@ -213,6 +221,7 @@ static func _drag_window(ed: TrackEditor) -> void:
 	v.add_child(kit.button("Remove the drag strip", func():
 		ed.drag = {}
 		ed.changed()))
+	Movable.framed(p, "track-editor-drag", drag_head, v)
 
 
 static func _drawer(ed: TrackEditor) -> void:
@@ -415,6 +424,7 @@ static func _drawer(ed: TrackEditor) -> void:
 	pr.add_child(kit.label("Pick a prefab: a click on the ground puts one down, a dragged line (Draw) or a line of clicked points (Points) makes a row of them that " +
 		"follows the line. A chosen row: click on its line to add a node, drag its nodes.", true, 12))
 	v.add_child(pr)
+	Movable.framed(panel, "track-editor-drawer", tabs, v)
 
 
 static func _node_field(ed: TrackEditor, key: String, v: float) -> void:
