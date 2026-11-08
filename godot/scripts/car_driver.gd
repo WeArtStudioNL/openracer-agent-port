@@ -1023,6 +1023,8 @@ class Frame:
 	var wheel: SteeringWheel = null
 	var driver: CarDriver = null
 	var inside := false
+	var _last := []
+	var _still := 0.0
 
 	func _process(dt: float) -> void:
 		var angle := 0.0
@@ -1037,6 +1039,13 @@ class Frame:
 			# (a driver far from the camera is not moved: he is a few pixels)
 			var cam := get_viewport().get_camera_3d()
 			if cam != null and cam.global_position.distance_squared_to(global_position) > FAR * FAR:
+				return
+			# (the pose follows the wheel and the pedals: when they have not moved for a while the driver sits as he sits,
+			# and the bones are not worked out again; the hands may still be moving round the wheel in the first moments)
+			var now := [snappedf(angle, 0.002), snappedf(car.throttle, 0.01), snappedf(car.brake, 0.01), driver.show_head]
+			_still = _still + dt if now == _last else 0.0
+			_last = now
+			if _still > 0.6:
 				return
 			if not driver.steering.is_empty():
 				driver.steering["angle"] = angle
