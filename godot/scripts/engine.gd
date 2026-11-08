@@ -53,6 +53,10 @@ var turbo_intercooler := 0.75
 var turbo_efficiency := 0.7
 var turbo_built := false
 var boost := 0.0               # 0..1: how much of the boost is there
+## the engine braking of Engine.js on the move (a car); a motorcycle keeps the lighter one of Godot: with the floor of
+## Engine.js the rear of the Sports 600 went light on the brakes into the last bend of Kartbaan Oldenzaal and the AI
+## ran wide on to the grass and fell (its braking_scale of 0.3 was set on the lighter engine braking)
+var browser_braking := true
 var _cut_time := 0.0
 var _on_time := 1.0
 var _cut_length := 0.05
@@ -146,7 +150,7 @@ func full_torque(r: float) -> float:
 
 ## The losses of the engine with the throttle shut (the engine braking), N m.
 func motoring(r: float) -> float:
-	var k := lerpf(_motoring_scale, _motoring_browser, smoothstep(idle_rpm * 1.3, idle_rpm * 2.0, r))
+	var k := lerpf(_motoring_scale, _motoring_browser, smoothstep(idle_rpm * 1.3, idle_rpm * 2.0, r)) if browser_braking else _motoring_scale
 	return (30.0 + 0.0355 * r) * k * braking_scale * friction_scale
 
 

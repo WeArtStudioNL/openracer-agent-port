@@ -444,6 +444,7 @@ func _read_config() -> void:
 	cvt_low = float(dt.get("cvt_low", gear_ratios[0]))
 	cvt_high = float(dt.get("cvt_high", gear_ratios[-1]))
 	engine.setup(cfg.get("engine", {}))
+	engine.browser_braking = bike == null
 	engine.set_extras(cfg.get("extras", {}))
 	camber_front = float(ch.get("camber_front", 0))
 	camber_rear = float(ch.get("camber_rear", 0))
