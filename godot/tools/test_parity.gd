@@ -61,6 +61,8 @@ func _new_car() -> void:
 	car.place(Vector3(0, car.wheels[0].radius + 0.05, -9000.0), PI / 2.0)
 	car.freeze = false
 	car.steer_direct = true
+	car.contact_monitor = true
+	car.max_contacts_reported = 8
 	if car.bike != null:
 		car.bike.lean_from_bend = true
 	car.manual = false
@@ -79,7 +81,7 @@ func _physics_process(dt: float) -> void:
 			if _t >= 2.0 and Content.arg("only") != "":
 				# (--only=brake|skidpad --from=100: one test, for a look at it with --verbose)
 				_from = float(Content.arg("from")) if Content.arg("from") != "" else 100.0
-				_phase = "to brake" if Content.arg("only") == "brake" else "skidpad"
+				_phase = "skidpad" if Content.arg("only") == "skidpad" else "to brake"
 				_t = 0.0
 			elif _t >= 2.0:
 				_phase = "accelerate"
@@ -99,7 +101,11 @@ func _physics_process(dt: float) -> void:
 				_top = u
 				_top_at = _t
 			if Content.arg("verbose") != "" and fmod(_t, 1.0) < dt:
-				print("   t %.0f  %.1f km/h  gear %d  rpm %d  clutch %.2f" % [_t, u / KMH, car.gear, roundi(car.engine.rpm()), car.clutch_engagement])
+				var ws := []
+				for w in car.wheels:
+					ws.append("%.1f/%d/%d/%.3f" % [w.omega, roundi(w.load), roundi(w.fx), w.slip_ratio])
+				print("   t %.0f  %.1f km/h  gear %d  rpm %d  clutch %.2f  slip %.2f  thr %.2f  %s" % [_t, u / KMH, car.gear, roundi(car.engine.rpm()),
+					car.clutch_engagement, car.tc_slip, car.tc_factor, ws])
 			if (_t - _top_at > 8.0 and _t > 20.0) or _t > 120.0:
 				_out["0-50 (s)"] = _t50 if _t50 >= 0.0 else null
 				_out["0-100 (s)"] = _t100 if _t100 >= 0.0 else null
@@ -112,8 +118,21 @@ func _physics_process(dt: float) -> void:
 			car.throttle_input = 1.0
 			if u >= _from * KMH or _t > 120.0:
 				_x0 = car.global_position
-				_phase = "brake"
+				_phase = "coast" if Content.arg("only") == "coast" else "brake"
 				_t = 0.0
+				_rpm = u
+		"coast":
+			# (--only=coast: in neutral, off the throttle, the deceleration of the air and the tyres over 3 s)
+			car.manual = true
+			car.gear = 0
+			car.throttle_input = 0.0
+			if _t >= 3.0:
+				var ws := []
+				for w in car.wheels:
+					ws.append("%.3f/%d/%d/%d/%.4f" % [w.length, roundi(w.load), roundi(w.fx), roundi(w.fy), w.slip_ratio])
+				print("   coast from %.1f km/h: %.3f m/s2  body contacts %d  origin %.3f m up, length/load/fx/fy/slip %s" % [_rpm / KMH, (_rpm - u) / _t, car.get_contact_count(),
+					car.global_position.y, ws])
+				get_tree().quit()
 		"brake":
 			car.throttle_input = 0.0
 			car.brake_input = 1.0

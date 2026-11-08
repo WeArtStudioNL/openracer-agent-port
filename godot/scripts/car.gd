@@ -549,7 +549,10 @@ func _read_config() -> void:
 		arb_front = 0.0
 		arb_rear = 0.0
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
-	center_of_mass = Vector3(0.0, cg_height - mean_r, wheelbase * (weight_front - 0.5))
+	# (between the axles where the weight distribution puts it: the axles can be moved along the model, front_axle_offset
+	# and rear_axle_offset, and the centre of gravity goes with them, as Vehicle.js has it from the axles)
+	var mid_z := (wheels[0].hub.z + wheels[2].hub.z) / 2.0
+	center_of_mass = Vector3(0.0, cg_height - mean_r, mid_z + wheelbase * (weight_front - 0.5))
 	var k := 0.7 if bike == null else 1.0      # (a motorcycle: the box of Vehicle.js)
 	inertia = Vector3(
 		mass / 12.0 * (height * height + length * length) * k,
