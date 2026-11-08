@@ -384,6 +384,7 @@ func _slider_row(parent: Control, d: Array) -> void:
 	reset.add_theme_constant_override("h_separation", 0)
 	line.add_child(reset)
 	var slider := HSlider.new()
+	slider.scrollable = false              # (the wheel scrolls the page)
 	slider.min_value = lo
 	slider.max_value = hi
 	slider.step = float(d[5])

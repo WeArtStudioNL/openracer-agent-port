@@ -205,6 +205,7 @@ func _field(parent: Control, d: Array) -> void:
 	num.get_line_edit().text_submitted.connect(func(_t: String): num.get_line_edit().release_focus())
 	row.add_child(num)
 	var slider := HSlider.new()
+	slider.scrollable = false              # (the wheel scrolls the page)
 	slider.step = d[2]
 	slider.focus_mode = Control.FOCUS_NONE
 	item.add_child(slider)

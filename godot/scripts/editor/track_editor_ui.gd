@@ -313,6 +313,7 @@ static func _reference_card(ed: TrackEditor) -> void:
 		TrackEditorIO.place_reference(ed)
 		ed.changed()
 	var op := HSlider.new()
+	op.scrollable = false              # (the wheel scrolls the page)
 	op.min_value = 0
 	op.max_value = 100
 	op.value_changed.connect(func(v: float): set_ref.call("opacity", v / 100.0))
@@ -555,6 +556,7 @@ static func _curbs_card(ed: TrackEditor) -> void:
 	ed.ui["curbNodeBox"] = node_box
 	edit.add_child(node_box)
 	var size := HSlider.new()
+	size.scrollable = false              # (the wheel scrolls the page)
 	size.min_value = 0
 	size.max_value = 1.5
 	size.step = 0.05
@@ -566,6 +568,7 @@ static func _curbs_card(ed: TrackEditor) -> void:
 	ed.ui["curbSize"] = size
 	node_box.add_child(field("Size at this node", size))
 	var off := HSlider.new()
+	off.scrollable = false              # (the wheel scrolls the page)
 	off.min_value = -6
 	off.max_value = 6
 	off.step = 0.05
