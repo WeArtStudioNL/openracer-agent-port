@@ -5,7 +5,8 @@ extends Node3D
 ## forward by the g-forces, the front brake lever is pulled and the fingers close), goes on, the rider goes limp at 40
 ## km/h (the key 9: the bike goes down and he slides off as a ragdoll), is put back, and rides into a wall at 50 km/h
 ## (the crash throws him off). Every step is checked; with a window and --shot=/folder it saves brake.png, levers.png,
-## limp.png and crash.png there. --user-dir as for the game.
+## limp.png and crash.png there, and limp_<t>.png, crash_<t>.png (the limp rider and the crash a few moments after).
+## --user-dir as for the game.
 
 var car: Car
 var cam: Camera3D
@@ -173,6 +174,9 @@ func _physics_process(dt: float) -> void:
 			car.steer_input = 0.0
 			if _since > 0.5 and _since < 0.5 + dt * 1.5:
 				_save("limp_ride.png", "side")
+			for at in [0.25, 1.0, 1.5]:
+				if _since > at and _since < at + dt * 1.5:
+					_save("limp_%.2f.png" % at, "side")
 			if Content.arg("debug") != "" and int(_since * 60.0) % 6 == 0 and _since < 1.0:
 				var r := rider.ragdoll
 				var inv := car.global_transform.affine_inverse()
@@ -180,7 +184,7 @@ func _physics_process(dt: float) -> void:
 				for i in RiderRagdoll.COUNT:
 					var l := inv * r.p[i]
 					parts.append("%d:%.2f,%.2f,%.2f" % [i, l.x, l.y, l.z])
-				print("t %.2f lean %.0f  %s" % [_since, rad_to_deg(car.bike.lean), " ".join(parts)])
+				print("t %.2f lean %.0f v %.2f  %s" % [_since, rad_to_deg(car.bike.lean), car.speed, " ".join(parts)])
 				if _since < 0.02:
 					var vs := PackedStringArray()
 					for i in RiderRagdoll.COUNT:
@@ -215,6 +219,9 @@ func _physics_process(dt: float) -> void:
 				check(false, "the bike hit the wall")
 				_end()
 		"crash":
+			for at in [0.15, 0.5, 1.0, 1.8]:
+				if _since > at and _since < at + dt * 1.5:
+					_save("crash_%.2f.png" % at, "ragdoll")
 			if _since > 3.0:
 				check(rider.ragdoll != null, "the rider is thrown off as a ragdoll")
 				_check_ragdoll("crash")

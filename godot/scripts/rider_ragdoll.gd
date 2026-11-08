@@ -6,9 +6,10 @@ extends RefCounted
 ## rigid, a limb folds no further than a minimum), Verlet at 240 Hz. The joints have the limits of a body and muscles
 ## (a soft zone before every limit, a weak tone towards the neutral posture, damping); the limbs keep out of each
 ## other; the road takes 0.55 g of speed out of him; a floor that is suddenly much higher is a wall. He collides with
-## the body of the bike (here its collision box: a part that starts inside it is not pushed out of it until it has
-## left it; the seat holds the hips and the knees of a limp rider while the bike is upright) and gives the bike what he
-## hits it with (the hit in the first 0.3 s, then no more than half his weight). The skeleton is posed on the
+## the body of the bike (its spheres, as Driver.js bikeSpheres: the nodes of the shell, or the spheres of the
+## collision proxy; a sphere a part starts in is not solid for it until it has left it; the seat holds the hips, the
+## hip joints and the knees in the sphere they sit deepest in while the bike is upright; without spheres the
+## collision box) and gives the bike what he hits it with (the hit in the first 0.3 s, then no more than half his weight). The skeleton is posed on the
 ## particles: the root on the hips and the chest, the arms and the legs by the inverse kinematics on the hand or the
 ## foot with the elbow or the knee as the pole, the head along the neck.
 
@@ -20,8 +21,10 @@ const DEG := PI / 180.0
 const H := 1.0 / 240.0
 const PART_MASS := 80.0 / 15.0
 const COUNT := 15
+const AIR := 0.004                     # 1/m: the drag of the air on him (0.5 rho Cd A / m: 0.5 * 1.2 * 0.5 m2 / 80 kg)
 const RIGID := [HIPS, CHEST, SH_L, SH_R, HI_L, HI_R, HEAD]
-const SEAT := [HIPS, HI_L, HI_R]
+const SEAT := [HIPS, HI_L, HI_R, KN_L, KN_R]
+const MAX_SPHERES := 256
 ## the limits of the joints (degrees): the shoulder a round cone about forwards and out, the hip an ellipse between how
 ## far it goes forwards (less with the knee straight), back, out and in; the elbow and the knee fold this far
 const SHOULDER := {"theta": 80.0, "phi": 45.0, "radius": 115.0}
@@ -53,6 +56,7 @@ var rad := PackedFloat32Array()
 var floor_y := PackedFloat32Array()
 var inside := []                       # a part that started inside the body of the bike (not pushed out until it left)
 var hold := []                         # a part held by the seat (a limp rider): its place in the frame of the body box
+var in_sphere := []                    # per part: the spheres it started in, [{id, d, hold}] (Driver.js particle.inside)
 var sticks := []                       # [a, b, length]
 var mins := []                         # [a, b, the least length]
 var pairs := []                        # [a, b, the least distance]: parts that keep out of each other
@@ -94,7 +98,21 @@ var _m_b := Vector3.ZERO
 var _m_c := Vector3.ZERO
 var _spin := Vector3.ZERO
 var _out := Vector3.UP
+# the riding pose is within his range: a shoulder or a hip that starts past the soft zone before its limit (a rider
+# with his knees out against the tank, his hips folded forward and out: past the ellipse of the hip) has its limit
+# widened towards the way it started, as far as that pose. end particle -> [the extra (rad), the way round it started
+# (forward, out, up of the torso)]
+var _allow := {}
 var _box: CollisionShape3D = null
+# the spheres of the bike near him this frame (Driver.js bikeSpheres): the place, the speed (of the bike as a body),
+# the radius and the number of the sphere; _proxy: the spheres of a bike without a shell (its frame), found once
+var _sph_p := PackedVector3Array()
+var _sph_v := PackedVector3Array()
+var _sph_r := PackedFloat32Array()
+var _sph_id := PackedInt32Array()
+var _sph_n := 0
+var _proxy: Array = []
+var _proxy_done := false
 
 
 ## The particles where the joints of the rider are now, with the speed they have: the bike's at that place and the
@@ -119,6 +137,7 @@ func _init(r: MotorcycleRider, world_joints: Dictionary, own: Dictionary, on_bik
 	p[HEAD] = ((world_joints[HEAD] as Vector3) + up_dir * 0.1) if world_joints.has(HEAD) else p[CHEST] + up_dir * 0.3
 	q = p.duplicate()
 	_y0 = p[HIPS].y
+	_start_allowance()
 	for i in RIGID.size():
 		for j in range(i + 1, RIGID.size()):
 			_stick(RIGID[i], RIGID[j])
@@ -158,11 +177,44 @@ func _init(r: MotorcycleRider, world_joints: Dictionary, own: Dictionary, on_bik
 	inside.resize(COUNT)
 	hold.resize(COUNT)
 	seated = on_bike
+	in_sphere.resize(COUNT)
 	_read_bike()
 	for i in COUNT:
 		inside[i] = _box_on and _box_depth(p[i], rad[i]) > 0.0
 		# (a limp rider: the hips, the hip joints and the knees sit in the seat; it holds them while the bike is upright)
 		hold[i] = (_box_inv * p[i]) if on_bike and _box_on and i in SEAT else null
+		# the spheres a part is in now are the ones he sits in (the seat, the tank between the knees): they do not push
+		# it out; a part that sits is held in the one it is deepest in (the seat holds him until he slides off it)
+		var list: Array = []
+		var deepest := -1
+		var deep := 0.0
+		for s in _sph_n:
+			var dd := p[i].distance_to(_sph_p[s])
+			var rs := _sph_r[s] + rad[i]
+			if dd >= rs:
+				continue
+			list.append({"id": _sph_id[s], "d": 0.0, "hold": false})
+			if rs - dd > deep:
+				deep = rs - dd
+				deepest = list.size() - 1
+				list[deepest]["d"] = dd
+		if i in SEAT and deepest >= 0:
+			list[deepest]["hold"] = true
+		in_sphere[i] = list
+
+
+## The limits widened to the pose he starts in (_allow): without it the muscles of the soft zone pushed the limb back
+## at once, the seat and the tank held the thigh, and the push went into the torso: a limp rider sat up and threw his
+## arms over his head (the browser game does that too).
+func _start_allowance() -> void:
+	_torso_frame()
+	for e in [[SH_L, EL_L, 1.0, true], [SH_R, EL_R, -1.0, true], [HI_L, KN_L, 1.0, false], [HI_R, KN_R, -1.0, false]]:
+		var fwd_max := 0.0 if e[3] else _hip_fwd(e[0], e[1], e[1] + 1)
+		if not _swing_of(e[0], e[1], e[2], e[3], fwd_max):
+			continue
+		var need := _sw_theta - (_sw_max - ZONE * DEG) + 3.0 * DEG
+		if need > 0.0:
+			_allow[e[1]] = [need, Vector3(_m_h.dot(_fwd), float(e[2]) * _m_h.dot(_side), _m_h.dot(_up))]
 
 
 func _stick(a: int, b: int) -> void:
@@ -185,15 +237,59 @@ func _read_bike() -> void:
 			if c is CollisionShape3D and (c as CollisionShape3D).shape is BoxShape3D:
 				_box = c
 				break
-	_box_on = _box != null
+	_bike_v = car.linear_velocity
+	_bike_w = car.angular_velocity
+	_bike_c = car.global_transform * car.center_of_mass
+	_bike_spheres()
+	_box_on = _box != null and _sph_n == 0
 	if not _box_on:
 		return
 	_box_xf = _box.global_transform
 	_box_half = (_box.shape as BoxShape3D).size / 2.0
 	_box_inv = _box_xf.affine_inverse()
-	_bike_v = car.linear_velocity
-	_bike_w = car.angular_velocity
-	_bike_c = car.global_transform * car.center_of_mass
+
+
+## The spheres of the bike that are near the body this frame (Driver.js bikeSpheres): the nodes of its shell as they
+## are (dented or not), or, without a shell, the spheres of its collision proxy; each with the speed of the bike as a
+## body at that place (v + w x r, at most 60 m/s), not that of a node that dents.
+func _bike_spheres() -> void:
+	_sph_n = 0
+	var sb: SoftBody = car.shell.sb if car.shell != null else null
+	if sb == null and not _proxy_done:
+		_proxy_done = true
+		for sp in CollisionProxy.spheres_of(car):
+			_proxy.append([Vector3(float(sp["x"]), float(sp["y"]), float(sp["z"])), float(sp["r"])])
+	var n := sb.count if sb != null else _proxy.size()
+	if _sph_p.size() < mini(n, MAX_SPHERES):
+		_sph_p.resize(mini(n, MAX_SPHERES))
+		_sph_v.resize(_sph_p.size())
+		_sph_r.resize(_sph_p.size())
+		_sph_id.resize(_sph_p.size())
+	var xf := car.global_transform
+	for k in n:
+		if _sph_n >= MAX_SPHERES:
+			break
+		var local: Vector3
+		var r: float
+		if sb != null:
+			if sb.gone[k] != 0:
+				continue
+			local = sb.position(k)
+			r = sb.radius[k]
+		else:
+			local = _proxy[k][0]
+			r = _proxy[k][1]
+		var w := xf * local
+		if w.distance_squared_to(centre) > (r + 1.6) * (r + 1.6):
+			continue
+		var v := _bike_v + _bike_w.cross(w - _bike_c)
+		if v.length() > 60.0:
+			v = v.normalized() * 60.0
+		_sph_p[_sph_n] = w
+		_sph_v[_sph_n] = v
+		_sph_r[_sph_n] = r
+		_sph_id[_sph_n] = k
+		_sph_n += 1
 
 
 ## How far a sphere of radius r at x is in the box (> 0: in it), and the way out (world: _out).
@@ -222,7 +318,68 @@ func _box_depth(x: Vector3, r: float) -> float:
 	return depth + r
 
 
-## A particle against the body of the bike: pushed out (a move, not a speed), its speed into it taken away and some of
+## A particle against the spheres of the bike (Driver.js bikeContact): pushed out, its speed into the sphere taken away
+## (the sphere's own speed is kept: he goes with the bike that he lies on) and some of the speed along it; a sphere it
+## started in does not push it (a seat part is held in it, at the distance it had, while the bike is upright); the
+## bike gets the speed that the part lost into a solid sphere, as an impulse. Positions only, a step at a time.
+func _sphere_contact(i: int, first: bool) -> void:
+	var list: Array = in_sphere[i]
+	# (a part that the seat holds, while it holds it, is not pushed by the other spheres: on a bike of many small
+	# spheres the hips slid into the next ones, those pushed them out and the seat pulled them back, every substep,
+	# and the fight tipped the torso back off the bike)
+	var on_seat := false
+	if seated:
+		for e in list:
+			on_seat = on_seat or bool(e["hold"])
+	for s in _sph_n:
+		var c := _sph_p[s]
+		var dv := p[i] - c
+		var rr := _sph_r[s] + rad[i]
+		var d2 := dv.length_squared()
+		var was := -1
+		for k in list.size():
+			if int(list[k]["id"]) == _sph_id[s]:
+				was = k
+				break
+		if d2 >= rr * rr:
+			if was >= 0:
+				list.remove_at(was)        # (out of a sphere it started in: from now on it is solid for it)
+			continue
+		if d2 < 1e-12:
+			continue
+		var d := sqrt(d2)
+		var n := dv / d
+		var held: bool = was >= 0 and bool(list[was]["hold"])
+		if on_seat and not held:
+			continue
+		var push := ((float(list[was]["d"]) - d) if held and seated else 0.0) if was >= 0 else rr - d
+		if push < 0.0 and not held:
+			push = 0.0
+		if push > 0.0 and n.y < 0.0 and p[i].y <= floor_y[i] + 0.002:
+			# (never into the road: a limb under the bike that lies on it is pushed out along the road)
+			n.y = 0.0
+			if n.length_squared() < 1e-6:
+				continue
+			n = n.normalized()
+		var sv := _sph_v[s]
+		var vel := p[i] - q[i] - sv * H
+		if push != 0.0:
+			p[i] += n * push
+			var vn := vel.dot(n)
+			if vn < 0.0 if push > 0.0 else vn > 0.0:
+				vel -= vn * n
+				if first and was < 0 and _impulse_left > 0.0:
+					var jn := minf(_impulse_left, absf(vn) / H * PART_MASS)
+					_impulse_left -= jn
+					car.apply_impulse(-n * jn, c - car.global_position)
+		vel *= exp(-(40.0 if held else 6.0) * H)      # (the grip of the leathers on the bike)
+		var cap := 4.0 * H                     # (never faster than 4 m/s relative to the bike out of a contact)
+		if vel.length() > cap:
+			vel = vel.normalized() * cap
+		q[i] = p[i] - vel - sv * H
+
+
+## A particle against the body of the bike (a bike without spheres: its collision box): pushed out (a move, not a speed), its speed into it taken away and some of
 ## the speed along it (the leathers grip); the bike gets the speed that the part lost into it, as an impulse.
 func _bike_contact(i: int, first: bool) -> void:
 	var sv := _bike_v + _bike_w.cross(p[i] - _bike_c)
@@ -349,12 +506,19 @@ func _swing_of(root: int, end: int, out: float, shoulder: bool, fwd_max: float) 
 	_m_h = _m_h / hl if hl > 1e-6 else _fwd
 	if shoulder:
 		_sw_max = float(SHOULDER["radius"]) * DEG
-		return true
-	var cphi := _m_h.dot(_fwd)
-	var sphi := out * _m_h.dot(_side)
-	var a := (fwd_max if cphi >= 0.0 else float(HIP["back"])) * DEG
-	var b := (float(HIP["out"]) if sphi >= 0.0 else float(HIP["inn"])) * DEG
-	_sw_max = 1.0 / sqrt(cphi * cphi / (a * a) + sphi * sphi / (b * b))
+	else:
+		var cphi := _m_h.dot(_fwd)
+		var sphi := out * _m_h.dot(_side)
+		var a := (fwd_max if cphi >= 0.0 else float(HIP["back"])) * DEG
+		var b := (float(HIP["out"]) if sphi >= 0.0 else float(HIP["inn"])) * DEG
+		_sw_max = 1.0 / sqrt(cphi * cphi / (a * a) + sphi * sphi / (b * b))
+	var al: Variant = _allow.get(end)
+	if al != null:
+		# (the way it points now against the way it started: the whole extra that way, none square to it)
+		var w0: Vector3 = al[1]
+		var k := (_m_h.dot(_fwd) * w0.x + out * _m_h.dot(_side) * w0.y + _m_h.dot(_up) * w0.z)
+		if k > 0.0:
+			_sw_max += float(al[0]) * k
 	return true
 
 
@@ -531,14 +695,23 @@ func step(dt: float) -> void:
 	if asleep > 1.0:
 		return                         # lying still: nothing moves any more
 	_acc += dt
-	var n := mini(12, floori(_acc / H))
-	_acc -= n * H
+	var n := mini(12, floori(_acc / H + 1e-4))     # (1/60 s is four substeps, not three and then five)
+	_acc = maxf(0.0, _acc - n * H)
 	if n == 0:
 		return
 	_read_bike()
+	# (the bike is where it is at the end of this frame, the parts where they were at its start: the first substep
+	# meets the spheres where they were n - 1 substeps ago. Found where they are now, they were a frame ahead of him,
+	# 18 cm at 40 km/h: the seat dragged his hips forward under him and the rest of him tipped back)
+	for k in _sph_n:
+		_sph_p[k] -= _sph_v[k] * (H * (n - 1))
+	if _box_on:
+		_box_xf.origin -= _bike_v * (H * (n - 1))
+		_box_inv = _box_xf.affine_inverse()
 	# (what he may give the bike this frame: the hit in the first moments, then no more than half his weight)
 	_impulse_left = 160.0 if time < 0.3 else 40.0 * G * minf(dt, 0.1)
 	var near := _box_on and _box_xf.origin.distance_to(centre) < 3.5
+	var spheres := _sph_n > 0
 	for i in COUNT:
 		var fl := _ground_y(p[i].x, p[i].z) + rad[i]
 		# (a floor that is suddenly much higher is a wall or a kerb: he bounces back off it)
@@ -557,18 +730,34 @@ func step(dt: float) -> void:
 			q[i] = p[i] - v0[i] * H
 	var box_step := _bike_v * H
 	for s in n:
+		# the damping of every part (0.998 a substep, Driver.js) on its speed relative to the body as a whole, and the
+		# air on the body as a whole (AIR: about 0.45 m/s2 at 40 km/h). (Driver.js damps the speed itself: a drag of
+		# 0.5 g at 40 km/h, which on a limp rider held by the seat pulled his torso and his arms back off the bike.)
+		var mean := Vector3.ZERO
+		for i in COUNT:
+			mean += p[i] - q[i]
+		mean /= COUNT
+		var air := mean * (1.0 - minf(0.05, AIR * mean.length() / H * H))
 		for i in COUNT:
 			var vel := p[i] - q[i]
 			q[i] = p[i]
-			p[i] += vel * 0.998 + Vector3(0.0, -G * H * H, 0.0)
+			p[i] += air + (vel - mean) * 0.998 + Vector3(0.0, -G * H * H, 0.0)
 		_muscles()
+		if s > 0 and spheres:
+			# (the spheres go on with their speed within the frame: a part held to one that stood still for the frame
+			# was dragged back every substep)
+			for k in _sph_n:
+				_sph_p[k] += _sph_v[k] * H
 		if s > 0 and near:
 			# (the body of the bike goes on with its speed within the frame)
 			_box_xf.origin += box_step
 			_bike_c += box_step
 			_box_inv = _box_xf.affine_inverse()
 		for it in 5:
-			if near:
+			if spheres:
+				for i in COUNT:
+					_sphere_contact(i, it == 0)
+			elif near:
 				for i in COUNT:
 					_bike_contact(i, it == 0)
 			for st in sticks:
@@ -631,7 +820,7 @@ func step(dt: float) -> void:
 		most = maxf(most, p[i].distance_squared_to(f[i]))
 		centre += p[i]
 	centre /= COUNT
-	if sqrt(most) / (n * H) < 0.08 and not near:
+	if sqrt(most) / (n * H) < 0.08 and not near and not spheres:
 		asleep += dt
 	else:
 		asleep = 0.0
