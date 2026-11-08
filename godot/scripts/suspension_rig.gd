@@ -22,6 +22,7 @@ var car: Car
 var root: Node3D                  # "SuspensionRig": the holders and the parts of the library that the rig did not take
 var parts: Array[Dictionary] = []
 var uprights := {}                # wheel -> the entry of its upright
+var corners := {}                 # wheel -> {lower, upper, up, a, moved, camber}: wishbones and upright, solved as rigid parts
 var rack: Dictionary = {}
 var rack_travel := 0.1            # m per radian of the front wheels (car.json steering.rack_travel)
 var hubs := {}                    # wheel -> the middle of the wheel (the upright turns it about its pin)
@@ -243,7 +244,19 @@ func _find(roots: Array[Node3D]) -> void:
 	for p in top:
 		_add_part(p["node"], p["what"], has_rack)
 	_seat_parts()
+	_find_corners()
 	_attach_calipers(roots)
+
+
+## The wheels whose upright hangs on wishbones: their lowest arm and, with two, their highest.
+func _find_corners() -> void:
+	corners = {}
+	for w: int in uprights:
+		var arms: Array = parts.filter(func(p: Dictionary) -> bool: return p["kind"] == "arm" and p["wheel"] == w)
+		if arms.is_empty():
+			continue
+		arms.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["origin"].y < b["origin"].y)
+		corners[w] = {"lower": arms[0], "upper": arms[arms.size() - 1] if arms.size() > 1 else null, "up": uprights[w], "a": 0.0}
 
 
 ## The piston and the coil of a coilover are parts of its cylinder, also when the model has them loose beside it (Blender
@@ -437,6 +450,10 @@ func _steer(i: int) -> float:
 	return car.wheels[i].steer if i < 2 else 0.0
 
 
+func _solved(wheel: int) -> bool:
+	return corners.has(wheel) and corners[wheel].has("moved")
+
+
 func _swing(travel: float, length: float) -> float:
 	return asin(clampf(travel / length, -1.0, 1.0))
 
@@ -445,9 +462,10 @@ func update() -> void:
 	var rack_shift := -rack_travel * car.steer_angle         # along +x (to the left) for a steer to the right
 	_init_rods()
 	var col_angle: Variant = _fit_column() if not (_rods as Array).is_empty() else null
-	for p in parts:                  # (the arms first: the springs sit on them)
-		if p["kind"] == "arm":
-			_update_arm(p, p["holder"])
+	_solve_corners()                 # (the arms and the uprights first: the springs and the rods sit on them)
+	for p in parts:
+		if p["kind"] == "arm" and not corners.has(p["wheel"]):
+			(p["holder"] as Node3D).basis = Basis(Vector3.BACK, _swing(_travel(p["wheel"]), p["arm_length"]) * float(p["side"])) * (p["rest_basis"] as Basis)
 	for p in parts:
 		var h: Node3D = p["holder"]
 		match p["kind"]:
@@ -458,9 +476,12 @@ func update() -> void:
 				h.basis = Basis(p["axis"], turn / 4.0)
 			"upright":
 				var o: Vector3 = p["origin"]
-				h.position = Vector3(o.x, o.y + _travel(p["wheel"]), o.z)
-				if p["wheel"] < 2:
-					h.basis = Basis(Vector3.UP, _steer(p["wheel"])) * (p["rest_basis"] as Basis)
+				if corners.has(p["wheel"]) and corners[p["wheel"]].has("moved"):
+					h.transform = _upright_pose(corners[p["wheel"]], _steer(p["wheel"])) * Transform3D(p["rest_basis"], o)
+				else:
+					h.position = Vector3(o.x, o.y + _travel(p["wheel"]), o.z)
+					if p["wheel"] < 2:
+						h.basis = Basis(Vector3.UP, _steer(p["wheel"])) * (p["rest_basis"] as Basis)
 			"spring":
 				_update_spring(p, h)
 			"rack":
@@ -474,7 +495,10 @@ func update() -> void:
 			"shaft":
 				var hub: Dictionary = uprights.get(p["wheel"], {})
 				var target: Vector3 = hub["origin"] if not hub.is_empty() else p["far"]
-				_stretch(p, h, target + Vector3.UP * _travel(p["wheel"]))
+				if _solved(p["wheel"]):
+					_stretch(p, h, _on_upright(p["wheel"], target, 0.0))
+				else:
+					_stretch(p, h, target + Vector3.UP * _travel(p["wheel"]))
 			"panhard":
 				_stretch(p, h, p["far"] + Vector3.UP * _axle_travel_at(p["rear"], p["far"].x))
 			"axle":
@@ -487,43 +511,119 @@ func update() -> void:
 				h.basis = _aim(d) * Basis(Vector3.UP, spin) * Basis.from_scale(Vector3(1.0, maxf(0.2, d.length() / float(p["rest_length"])), 1.0))
 
 
-## A wishbone stays on its upright: it turns about its hinge to where its ball joint has gone with the upright (the travel,
-## the steering) and is as much longer or shorter as that takes. Without an upright it swings with the travel.
-func _update_arm(p: Dictionary, h: Node3D) -> void:
-	var wheel: int = p["wheel"]
-	var up: Dictionary = uprights.get(wheel, {})
-	if up.is_empty():
-		h.basis = Basis(Vector3.BACK, _swing(_travel(wheel), p["arm_length"]) * float(p["side"])) * (p["rest_basis"] as Basis)
-		return
-	h.basis = _arm_basis(p, _steer(wheel) if wheel < 2 else 0.0)
-	p["travel_basis"] = _arm_basis(p, 0.0)         # (what a spring on it sees: the steering does not press the spring)
+## The wishbones and the upright of a wheel as the rigid parts they are. The arms turn about their hinges (along the car),
+## the balls at their ends are on the upright, so the upright is where the two arcs let it be: the lower arm is turned until
+## the middle of the wheel is at the height of the travel, the upper ball follows at its distance from the lower one. That
+## gives the wheel its way in or out and its camber. With only a lower arm (a strut) the upright keeps its lean.
+func _solve_corners() -> void:
+	for w: int in corners:
+		var c: Dictionary = corners[w]
+		var want: float = (c["up"]["origin"] as Vector3).y + _travel(w)
+		var a: float = c["a"]
+		for _i in 8:
+			var s := _corner_at(c, a)
+			if s.is_empty():
+				break
+			var e: float = s["hub"].y - want
+			if absf(e) < 1e-5:
+				break
+			var s2 := _corner_at(c, a + 1e-3)
+			if s2.is_empty():
+				break
+			var slope: float = (s2["hub"].y - s["hub"].y) / 1e-3
+			if absf(slope) < 1e-4:
+				break
+			a = clampf(a - e / slope, -1.3, 1.3)
+		var got := _corner_at(c, a)
+		if got.is_empty():
+			continue
+		c["a"] = a
+		(c["lower"]["holder"] as Node3D).basis = Basis(Vector3.BACK, a)
+		if c["upper"] != null:
+			(c["upper"]["holder"] as Node3D).basis = Basis(Vector3.BACK, got["upper_angle"])
+		var bl0: Vector3 = c["lower"]["far"]
+		var turn := Basis(Vector3.BACK, got["camber"])
+		var bl := Vector3(got["bl"].x, got["bl"].y, bl0.z)
+		c["camber"] = got["camber"]
+		c["moved"] = Transform3D(turn, bl - turn * bl0)
+		c["bl"] = bl
+		if c["upper"] != null:
+			var bu0: Vector3 = c["upper"]["far"]
+			c["pin"] = Vector3(got["bu"].x - bl.x, got["bu"].y - bl.y, bu0.z - bl0.z).normalized()
+		else:
+			c["pin"] = turn * Vector3.UP
+		if c["pin"].y < 0.0:
+			c["pin"] = -c["pin"]
 
 
-func _arm_basis(p: Dictionary, steer: float) -> Basis:
-	var up: Dictionary = uprights[p["wheel"]]
-	var o: Vector3 = p["origin"]
-	var far: Vector3 = p["far"]
-	var t := far
-	if steer != 0.0:
-		t = (t - up["origin"]).rotated(Vector3.UP, steer) + up["origin"]
-	t.y += _travel(p["wheel"])
-	var was := far - o
-	var now := t - o
-	if was.length() < 1e-4 or now.length() < 1e-4:
-		return Basis.IDENTITY
-	var u := was.normalized()
-	var k := now.length() / was.length() - 1.0
-	var stretch := Basis(Vector3(1.0 + k * u.x * u.x, k * u.x * u.y, k * u.x * u.z), Vector3(k * u.y * u.x, 1.0 + k * u.y * u.y, k * u.y * u.z),
-		Vector3(k * u.z * u.x, k * u.z * u.y, 1.0 + k * u.z * u.z))
-	return Basis(Quaternion(u, now.normalized())) * stretch
+## Where the balls are with the lower arm turned by a: {bl, bu, camber, upper_angle, hub} in the plane across the car; {}
+## when the upper arm cannot reach.
+func _corner_at(c: Dictionary, a: float) -> Dictionary:
+	var ol := _xy(c["lower"]["origin"])
+	var b0 := _xy(c["lower"]["far"])
+	var bl := ol + (b0 - ol).rotated(a)
+	var camber := 0.0
+	var upper_angle := 0.0
+	var bu := bl
+	if c["upper"] != null:
+		var ou := _xy(c["upper"]["origin"])
+		var bu0 := _xy(c["upper"]["far"])
+		var hit: Variant = _circles(ou, (bu0 - ou).length(), bl, (bu0 - b0).length(), bu0)
+		if hit == null:
+			return {}
+		bu = hit
+		camber = (bu0 - b0).angle_to(bu - bl)
+		upper_angle = (bu0 - ou).angle_to(bu - ou)
+	var hub := bl + (_xy(c["up"]["origin"]) - b0).rotated(camber)
+	return {"bl": bl, "bu": bu, "camber": camber, "upper_angle": upper_angle, "hub": hub}
+
+
+static func _xy(v: Vector3) -> Vector2:
+	return Vector2(v.x, v.y)
+
+
+## The point where two circles meet that is nearest to near, or null.
+static func _circles(p1: Vector2, r1: float, p2: Vector2, r2: float, near: Vector2) -> Variant:
+	var d := p1.distance_to(p2)
+	if d < 1e-6 or d > r1 + r2 or d < absf(r1 - r2):
+		return null
+	var along := (r1 * r1 - r2 * r2 + d * d) / (2.0 * d)
+	var h := sqrt(maxf(0.0, r1 * r1 - along * along))
+	var u := (p2 - p1) / d
+	var m := p1 + u * along
+	var s := Vector2(-u.y, u.x) * h
+	return m + s if (m + s).distance_squared_to(near) <= (m - s).distance_squared_to(near) else m - s
+
+
+## How the upright has moved from where the model has it (the frame of the body), with a steering angle: the steering
+## turns it about the line through its ball joints.
+func _upright_pose(c: Dictionary, steer: float) -> Transform3D:
+	var m: Transform3D = c["moved"]
+	if absf(steer) < 1e-6:
+		return m
+	var at: Vector3 = c["bl"]
+	return Transform3D(Basis.IDENTITY, at) * Transform3D(Basis(c["pin"], steer), Vector3.ZERO) * Transform3D(Basis.IDENTITY, -at) * m
+
+
+## Where a point that is fixed on the upright of a solved wheel is now.
+func _on_upright(wheel: int, point: Vector3, steer: float) -> Vector3:
+	return _upright_pose(corners[wheel], steer) * point
 
 
 ## The wheels turn about the pin of their upright, not about their own middle: the hub moves along an arc. Called
 ## after the car has placed the wheels.
 func move_hubs() -> void:
+	for i in 4:
+		var w: Car.Wheel = car.wheels[i]
+		if w.hub_node == null or not _solved(i):
+			continue
+		var rest := w.hub + w.visual_offset
+		var at := _upright_pose(corners[i], _steer(i)) * rest
+		w.hub_node.position += at - (rest + Vector3.UP * _travel(i))
+		w.hub_node.rotation.z = float(corners[i]["camber"]) - w.camber_bend
 	for i in 2:
 		var w: Car.Wheel = car.wheels[i]
-		if not uprights.has(i) or w.hub_node == null or not hubs.has(i):
+		if not uprights.has(i) or w.hub_node == null or not hubs.has(i) or _solved(i):
 			continue
 		var o: Vector3 = uprights[i]["origin"]
 		var off := Vector3(hubs[i].x - o.x, 0.0, hubs[i].z - o.z)
@@ -542,14 +642,15 @@ func _update_spring(p: Dictionary, h: Node3D) -> void:
 	var t := far
 	if p.has("on_arm"):
 		var arm: Dictionary = p["on_arm"]
-		var arm_basis: Basis = arm["travel_basis"] if arm.has("travel_basis") else (arm["holder"] as Node3D).basis
-		t = (arm["origin"] as Vector3) + arm_basis * (far - (arm["origin"] as Vector3))
+		t = (arm["origin"] as Vector3) + (arm["holder"] as Node3D).basis * (far - (arm["origin"] as Vector3))
 	elif p.has("on_trailing"):
 		var tr: Dictionary = p["on_trailing"]
 		var tt: float = _axle_travel_at(tr["on_axle"]["rear"], tr["far"].x) if tr.has("on_axle") else _travel(wheel)
 		t = (far - tr["origin"]).rotated(Vector3.RIGHT, -float(tr["ahead"]) * _swing(tt, tr["arm_length"])) + tr["origin"]
 	elif p.has("on_axle"):
 		t.y += _axle_travel_at(p["on_axle"]["rear"], far.x)
+	elif _solved(wheel):
+		t = _on_upright(wheel, far, 0.0)
 	else:
 		t.y += _travel(wheel)
 	var d := t - (p["origin"] as Vector3)
@@ -579,9 +680,12 @@ func _update_tierod(p: Dictionary, h: Node3D, rack_shift: float, col_angle: Vari
 	var t: Vector3 = p["far"]
 	var wheel: int = p["wheel"]
 	var up: Dictionary = uprights.get(wheel, {})
-	if not up.is_empty() and wheel < 2:
-		t = (t - up["origin"]).rotated(Vector3.UP, _steer(wheel)) + up["origin"]
-	t.y += _travel(wheel)
+	if _solved(wheel):
+		t = _on_upright(wheel, t, _steer(wheel))
+	else:
+		if not up.is_empty() and wheel < 2:
+			t = (t - up["origin"]).rotated(Vector3.UP, _steer(wheel)) + up["origin"]
+		t.y += _travel(wheel)
 	var o: Vector3 = p["origin"]
 	if col_angle != null and p.has("far_now"):
 		h.position = (o - column["centre"]).rotated(column["axis"], col_angle) + column["centre"]
@@ -616,6 +720,8 @@ func _init_rods() -> void:
 
 
 func _far_point(p: Dictionary, steer: float) -> Vector3:
+	if _solved(p["wheel"]):
+		return _on_upright(p["wheel"], p["far"], steer)
 	var up: Dictionary = uprights[p["wheel"]]
 	var out: Vector3 = ((p["far"] as Vector3) - up["origin"]).rotated(Vector3.UP, steer) + up["origin"]
 	out.y += _travel(p["wheel"])
