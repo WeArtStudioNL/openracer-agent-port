@@ -15,6 +15,7 @@ var track_id := ""
 var start := {"x": 0.0, "z": 0.0, "heading": 0.0}
 var marks: TrackMarks = null       # the grid boxes, the pit area and the checkpoints (TrackMarks)
 var objects: TrackObjects = null   # the objects of track.json and the rigid parts of the model (TrackObjects)
+var _loose_names := {}             # (the names of a list of track.json without dots and underscores, _named)
 var _colliders: Array[CollisionShape3D] = []
 var _walls: WallGrid = null
 
@@ -147,18 +148,46 @@ func walls() -> WallGrid:
 ## node above it, else of "surfaces.materials" for its material; a part that is not mentioned is scenery (it is hit, not
 ## driven on).
 func _surface_of(mi: MeshInstance3D, surfaces: Dictionary) -> String:
-	if surfaces.has(mi.mesh.resource_name):
-		return str(surfaces[mi.mesh.resource_name])
+	var hit := _named(surfaces, mi.mesh.resource_name)
+	if hit != "":
+		return hit
 	var n: Node = mi
 	while n != null and n != self:
-		if surfaces.has(str(n.name)):
-			return str(surfaces[str(n.name)])
+		hit = _named(surfaces, str(n.name))
+		if hit != "":
+			return hit
 		n = n.get_parent()
 	var materials: Dictionary = config.get("surfaces", {}).get("materials", {}) if config.get("surfaces") is Dictionary else {}
 	var mat := mi.mesh.surface_get_material(0) if mi.mesh.get_surface_count() > 0 else null
-	if mat != null and materials.has(mat.resource_name):
-		return str(materials[mat.resource_name])
+	if mat != null:
+		hit = _named(materials, mat.resource_name)
+		if hit != "":
+			return hit
 	return "scenery"
+
+
+## The value for a name of the model in a list of track.json, "" when it is not there. The names in track.json are
+## the ones three.js gives (it drops the dots of Blender: "road_tile.001" is "road_tile001"), Godot's importer makes
+## "road_tile_001" of it: without an exact match the names are compared without their dots and underscores.
+func _named(list: Dictionary, name: String) -> String:
+	if name == "":
+		return ""
+	if list.has(name):
+		return str(list[name])
+	if _loose_names.is_empty() and not list.is_empty():
+		for k in list:
+			_loose_names[_loose(str(k))] = str(list[k])
+		_loose_names["__of"] = str(list.hash())
+	if str(_loose_names.get("__of", "")) != str(list.hash()):
+		_loose_names.clear()
+		for k in list:
+			_loose_names[_loose(str(k))] = str(list[k])
+		_loose_names["__of"] = str(list.hash())
+	return str(_loose_names.get(_loose(name), ""))
+
+
+static func _loose(name: String) -> String:
+	return name.replace(".", "").replace("_", "").replace(" ", "").to_lower()
 
 
 func _flat_ground() -> void:
