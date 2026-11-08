@@ -369,6 +369,8 @@ const NOT_IN_GODOT := [
 	"cam_follow_look_z", "cam_follow_fov_full_speed", "cam_follow_dolly", "cam_cockpit_hide_driver", "boost_gauge_on", "boost_full", "boost_scale",
 ]
 
+static var tunes_root := "user://tunes"     # (the tests put the tunes of the player in a folder of their own)
+
 
 ## The value at a path of car.json ("chassis.mass", "drivetrain.gear_ratios.2"), or null when it is not there.
 static func read(cfg: Dictionary, path: String) -> Variant:
@@ -762,7 +764,7 @@ static func top_speed(cfg: Dictionary) -> float:
 
 
 static func tunes_dir(car_id: String) -> String:
-	return "user://tunes/%s" % car_id
+	return tunes_root.path_join(car_id)
 
 
 ## The tunes of a car: { name: path } (its own from web/cars/<car>/, and the player's: a tune of the player with the
@@ -819,6 +821,6 @@ static func save_tune(car_id: String, tune_name: String, cfg: Dictionary) -> Str
 
 ## Deletes a tune of the player (never one that comes with a car).
 static func delete_tune(path: String) -> bool:
-	if not path.begins_with("user://"):
+	if not path.begins_with(tunes_root):
 		return false
 	return DirAccess.remove_absolute(path) == OK

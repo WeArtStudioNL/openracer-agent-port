@@ -10,7 +10,7 @@ var failures := 0
 
 
 func _ready() -> void:
-	get_tree().create_timer(120.0).timeout.connect(func():
+	get_tree().create_timer(240.0).timeout.connect(func():
 		print("TIMEOUT")
 		get_tree().quit(2))
 	out = Content.arg("out")
@@ -70,6 +70,37 @@ func _run() -> void:
 			"at the height of its axles (%.2f m)" % bc.global_position.y)
 	ed.bench.stop()
 	check(ed.bench.car == null and ed.view.pivot.visible, "↺: back to the model")
+	print("1c. the Full test of the bench")
+	ed.bench.full_test()
+	var seen := {}
+	var top_rpm := 0.0
+	var moved := {}
+	var steer := [0.0, 0.0]
+	var hit_kmh := -1.0
+	var waited := 0.0
+	while not ed.bench.test_run.is_empty() and waited < 90.0:
+		await get_tree().process_frame
+		waited += get_process_delta_time()
+		var run := ed.bench.test_run
+		if run.is_empty() or ed.bench.car == null:
+			break
+		var stage: String = run["stage"]
+		seen[stage] = true
+		if stage == "rev":
+			top_rpm = maxf(top_rpm, ed.bench.car.engine.rpm())
+		if stage in ["forward", "back"] and run.has("start_z"):
+			moved[stage] = absf(ed.bench.car.global_position.z - float(run["start_z"]))
+		steer = [float(run.get("min_steer", 0.0)), float(run.get("max_steer", 0.0))]
+		if run.get("hit", false) and hit_kmh < 0.0:
+			hit_kmh = absf(float(run.get("hit_speed", 0.0))) * 3.6
+	check(seen.has("rev") and seen.has("forward") and seen.has("back") and seen.has("steer") and seen.has("wall"), "every stage ran (%s)" % ", ".join(seen.keys()))
+	var lim := float(Tuning.read(ed.cfg, "engine.limiter_rpm") if Tuning.read(ed.cfg, "engine.limiter_rpm") != null else 6000.0)
+	check(top_rpm > lim - 400.0, "the engine went to the rev limiter in neutral (%d of %d rpm)" % [roundi(top_rpm), roundi(lim)])
+	check(absf(float(moved.get("forward", 0.0)) - 1.0) < 0.4 and absf(float(moved.get("back", 0.0)) - 1.0) < 0.4,
+		"a metre forwards and a metre back (%.2f, %.2f m)" % [moved.get("forward", 0.0), moved.get("back", 0.0)])
+	check(steer[0] < -0.3 and steer[1] > 0.3, "the steering to both locks (%.0f°, %.0f°)" % [rad_to_deg(steer[0]), rad_to_deg(steer[1])])
+	check(hit_kmh > 40.0, "full throttle into the wall (%d km/h)" % roundi(hit_kmh))
+	check(ed.bench.car == null and ed.bench.test_run.is_empty(), "the full test ends by itself, back at the model")
 	print("2. change it as a user does")
 	_type(ed, "name", "Hatchback editor test")
 	ed.form._id_edit.text = "zz-editor-test"
@@ -154,6 +185,32 @@ func _run() -> void:
 	check(c.has("softbody") and c.has("parts") and c.has("driver"), "the soft body, the parts and the driver are kept")
 	check(c["driver"]["file"] == "cars/zz-editor-test/driver.glb", "the driver file follows the id")
 	check(not c.has("id") and not c.has("tunes"), "no id, and the tunes stay with the car they came with")
+	print("3b. a tune shipped with the car, and taken off again (the tunes of the test folder)")
+	Tuning.tunes_root = out.path_join("tunes")
+	Settings._overrides["garage_folder"] = out
+	var tune_cfg := ed.build_config("zz-editor-test")
+	tune_cfg.erase("model")
+	Tuning.save_tune("zz-editor-test", "Test tune", tune_cfg)
+	ed.tuning.render_setups()
+	EditorStyle.select_value(ed.tuning._setup_pick, "Test tune")
+	check(ed.tuning.chosen_tune() == "Test tune" and ed.tuning.shipped_state("Test tune") == "", "a tune of the player is chosen")
+	await ed.tuning.ship_pressed()
+	var shipped: Variant = JSON.parse_string(FileAccess.get_file_as_string(dir.path_join("car.json")))
+	check(FileAccess.file_exists(dir.path_join("test-tune.openracer-tune.json")) and shipped is Dictionary and shipped.get("tunes") == ["test-tune.openracer-tune.json"],
+		"Ship with the car: the file next to car.json and in its tunes (%s)" % (shipped.get("tunes") if shipped is Dictionary else "?"))
+	check(ed.tuning.shipped_state("Test tune") == "car" and not FileAccess.file_exists(Tuning.tunes_dir("zz-editor-test").path_join("test-tune.openracer-tune.json")),
+		"it comes with the car now, the copy of the player is gone")
+	var t_file: Variant = JSON.parse_string(FileAccess.get_file_as_string(dir.path_join("test-tune.openracer-tune.json")))
+	check(t_file is Dictionary and t_file.get("openracer-tune") == 1.0 and not (t_file["config"] as Dictionary).has("model"), "the file is a tune file without the model")
+	check(ed.tuning._ship.visible and ed.tuning._ship.text == "Take off the car", "the button says Take off the car")
+	_confirm_soon(ed)
+	await ed.tuning.ship_pressed()
+	shipped = JSON.parse_string(FileAccess.get_file_as_string(dir.path_join("car.json")))
+	check(not FileAccess.file_exists(dir.path_join("test-tune.openracer-tune.json")) and shipped is Dictionary and not shipped.has("tunes"),
+		"Take off the car: the file and the list are gone")
+	Settings._overrides.erase("garage_folder")
+	Tuning.tunes_root = "user://tunes"
+	EditorStyle.select_value(ed.tuning._setup_pick, "")
 	print("4. a new car from a glb (the kart of the game)")
 	ed.new_car("car")
 	ed.load_model_files(PackedStringArray([Content.root.path_join("cars/openracer-kart/Kart.glb")]))
@@ -179,6 +236,15 @@ func _run() -> void:
 	print("     wheels of the new car: mode %s, %d of 4 with parts" % [c2["wheels"]["mode"] if c2 is Dictionary else "?", found])
 	print("5. open the saved car again (the garage folder of the test)")
 	ed.queue_free()
+
+
+## Presses OK of the question that the editor asks next.
+func _confirm_soon(ed: Node) -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	for d in ed.get_children():
+		if d is ConfirmationDialog and (d as ConfirmationDialog).visible:
+			(d as ConfirmationDialog).get_ok_button().pressed.emit()
 
 
 func _remove(path: String) -> void:

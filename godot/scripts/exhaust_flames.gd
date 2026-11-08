@@ -9,6 +9,7 @@ extends Node3D
 const POOL := 32
 
 var car: Car
+var root: Node3D                     # the frame of the pipes: the model of the car, or of the car editor (setup_preview)
 var _pipes: Array = []               # { position (model), direction (model), diameter, length, width, brightness }
 var _sprites: Array[MeshInstance3D] = []
 var _vel: Array[Vector3] = []
@@ -20,9 +21,26 @@ var _next := 0
 
 func setup(c: Car) -> void:
 	car = c
+	root = c.model_root
+	_make(c.config)
+	c.bang.connect(emit_bang)
+
+
+## The flame test of the car editor (car-editor.js setFlameTest): no car, the pipes in the frame of the node given.
+func setup_preview(frame: Node3D, config: Dictionary) -> void:
+	root = frame
+	_make(config)
+
+
+## The pipes again (the exhaust points were moved or changed).
+func refresh(config: Dictionary) -> void:
+	_pipes = pipes_of(config)
+
+
+func _make(config: Dictionary) -> void:
 	name = "Flames"
 	top_level = true
-	_pipes = pipes_of(c.config)
+	_pipes = pipes_of(config)
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
@@ -52,7 +70,6 @@ func setup(c: Car) -> void:
 	_age.resize(POOL)
 	_life.resize(POOL)
 	_size.resize(POOL)
-	c.bang.connect(emit_bang)
 
 
 ## The tail pipes of car.json "exhaust" in the frame of the model ({ position, direction, diameter, length,
@@ -81,10 +98,11 @@ static func pipes_of(config: Dictionary) -> Array:
 ## A bang: { strength (0.5 to 1.5), loud, flame (a factor) }: a few puffs from every pipe.
 func emit_bang(event: Dictionary) -> void:
 	var flame := float(event.get("flame", 1.0))
-	if flame <= 0.01 or car == null:
+	if flame <= 0.01 or root == null or not is_instance_valid(root):
 		return
 	var s := float(event.get("strength", 1.0)) * minf(2.0, flame)
-	var xf := car.model_root.global_transform
+	var xf := root.global_transform
+	var moving := car.linear_velocity if car != null else Vector3.ZERO
 	for p in _pipes:
 		var at: Vector3 = xf * p["position"]
 		var dir: Vector3 = (xf.basis * p["direction"]).normalized()
@@ -93,7 +111,7 @@ func emit_bang(event: Dictionary) -> void:
 			_next = (_next + 1) % POOL
 			var m := _sprites[i]
 			m.global_position = at + dir * randf() * 0.15
-			_vel[i] = dir * (2.5 + randf() * 5.0 * s) + car.linear_velocity * 0.95 + Vector3(randf() - 0.5, randf() * 0.5, randf() - 0.5) * 0.8
+			_vel[i] = dir * (2.5 + randf() * 5.0 * s) + moving * 0.95 + Vector3(randf() - 0.5, randf() * 0.5, randf() - 0.5) * 0.8
 			_age[i] = 0.0
 			_life[i] = 0.07 + randf() * 0.13 * minf(1.5, s)
 			_size[i] = float(p["length"]) * (0.4 + 0.4 * randf()) * minf(2.0, flame) * float(p["brightness"])

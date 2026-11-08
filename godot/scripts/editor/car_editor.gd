@@ -315,6 +315,8 @@ func ask(title: String, text: String, ok := "OK", cancel := "Cancel") -> bool:
 	d.confirmed.connect(func(): result[0] = true)
 	d.popup_centered()
 	await d.visibility_changed
+	# (OK hides the dialog before it sends confirmed: the answer is there a frame later)
+	await get_tree().process_frame
 	d.queue_free()
 	return result[0]
 
@@ -336,6 +338,7 @@ func ask_text(title: String, text: String, value := "") -> String:
 	d.popup_centered()
 	edit.grab_focus.call_deferred()
 	await d.visibility_changed
+	await get_tree().process_frame
 	d.queue_free()
 	return result[0]
 
@@ -1133,6 +1136,7 @@ func _process(delta: float) -> void:
 		update_summary()
 		refresh_ready()
 	layers.frame()
+	layers.flames_frame(delta)
 	engine.frame(delta)
 	bench.frame(delta)
 	_hook_call("frame", [delta])

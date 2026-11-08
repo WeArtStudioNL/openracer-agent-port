@@ -775,6 +775,10 @@ func build_test_bar() -> void:
 	(tl[0] as HSlider).value_changed.connect(show_drop)
 	show_drop.call(0.0)
 	drop.pressed.connect(func(): ed.bench.drop(h[0].value, tl[0].value))
+	var full := EditorStyle.button("Full test", "small accent", "A drop from 1 m at 5°, the engine to the rev limiter in neutral, a metre " +
+		"forwards and back, the steering to both locks, then a wall far ahead and full throttle into it")
+	full.pressed.connect(func(): ed.bench.full_test())
+	row.add_child(full)
 	var drive := EditorStyle.button("Drive", "small accent", "Drive the car on the floor with the keys of the game: arrows or WASD, space is the handbrake, " +
 		"the shift keys shift, R puts it back")
 	drive.pressed.connect(func():
