@@ -709,7 +709,7 @@ func build_test_bar() -> void:
 	var tabs := HBoxContainer.new()
 	col.add_child(tabs)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
+	row.add_theme_constant_override("separation", 8)
 	col.add_child(row)
 	crash_pane = VBoxContainer.new()
 	crash_pane.visible = false
@@ -731,7 +731,7 @@ func build_test_bar() -> void:
 		s.min_value = lo
 		s.max_value = hi
 		s.value = value
-		s.custom_minimum_size.x = 150
+		s.custom_minimum_size.x = 112                # (room for the buttons of the tests: Drop car, Full test, Drive, ↺)
 		s.focus_mode = Control.FOCUS_NONE
 		box.add_child(s)
 		row.add_child(box)

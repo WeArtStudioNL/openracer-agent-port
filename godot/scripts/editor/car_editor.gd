@@ -1040,7 +1040,12 @@ func open_test_dialog() -> ConfirmationDialog:
 	d.visibility_changed.connect(func():
 		if not d.visible:
 			d.queue_free())
-	d.popup_centered(Vector2i(520, 0))
+	d.min_size = Vector2i(580, 0)
+	d.popup_centered(Vector2i(580, 0))
+	# (the rows of chips knew their height only once they were laid out: the window is made as small as they let it)
+	(func():
+		d.reset_size()
+		d.move_to_center()).call_deferred()
 	return d
 
 
