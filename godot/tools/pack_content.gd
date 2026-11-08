@@ -1,10 +1,10 @@
 extends SceneTree
-## Packs the content of the game (cars, tracks, wheels and sounds of web/) into a pck as res://content, for the web
-## version (tools/export_web.sh): Content loads it at start.
+## Packs the content of the game (cars, tracks, wheels, sounds and the flame pictures of web/) into a pck as
+## res://content, for the web version (tools/export_web.sh): Content loads it at start.
 ##
 ##   Godot --headless --path godot --script tools/pack_content.gd -- <web folder> <out.pck>
 
-const KINDS := ["cars", "tracks", "wheels", "sounds"]
+const KINDS := ["cars", "tracks", "wheels", "sounds", "images/flames"]
 ## What the game does not read (sources, archives, notes)
 const SKIP_EXT := ["zip", "py", "md", "blend", "blend1", "import"]
 
