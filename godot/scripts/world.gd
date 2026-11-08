@@ -374,6 +374,9 @@ func _physics_process(_delta: float) -> void:
 		return
 	var keys_steer := Input.get_axis("steer_right", "steer_left")
 	var dt := get_physics_process_delta_time()
+	if car.bike != null:
+		# (a motorcycle: < and > put the rider back or forward while they are held)
+		car.bike.rider_key = int(Input.is_action_pressed("rider_forward")) - int(Input.is_action_pressed("rider_back"))
 	car.throttle_input = _pedal("throttle", dt)
 	car.brake_input = _pedal("brake", dt)
 	car.handbrake_input = 1.0 if parking_brake else Input.get_action_strength("handbrake")
@@ -505,9 +508,9 @@ func _more_actions(event: InputEvent) -> void:
 		WheelInput.active = not WheelInput.active and not Settings.profile(WheelInput.guid).is_empty()
 		Controls.rebind(WheelInput.device if WheelInput.active else -1)
 		hud.notice("Wheel %s" % ("on" if WheelInput.active else "off"))
-	elif event.is_action_pressed("ragdoll") or event.is_action_pressed("rider_back") or event.is_action_pressed("rider_forward"):
-		if car.bike != null:
-			hud.notice("Not in the Godot version yet")
+	elif event.is_action_pressed("ragdoll"):
+		if car.bike_model != null:
+			car.bike_model.go_limp()
 
 
 ## A driver aid on or off by its key, with a short line in the middle of the screen (Settings.js aid).

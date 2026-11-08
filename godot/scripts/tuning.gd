@@ -175,6 +175,35 @@ const GROUPS := [
 		["es_primary_length", "Primary tube length", "m", 0.1, 2, 0.05],
 		["es_idle_pressure", "Manifold pressure at idle", "atm", 0.1, 0.9, 0.05],
 	]],
+	["Motorcycle", [
+		["bike_max_lean", "Lean at most", "°", 20, 75, 1],
+		["bike_fast_lean", "Lean the keys can ask for at speed", "°", 5, 60, 1],
+		["bike_rake", "Rake of the fork", "°", 15, 40, 0.5],
+		["bike_rider_mass", "Rider", "kg", 30, 200, 1],
+		["bike_hang_off", "The rider hangs off the seat by", "m", 0, 1, 0.02],
+		["bike_max_lateral_g", "Lateral grip of the tyres", "g", 0.3, 2.5, 0.05],
+		["bike_balance", "Balance of the rider", "", 0.1, 4, 0.05],
+		["bike_fork_dive", "Dive of the fork on the brakes", "", 0, 3, 0.05],
+		["bike_lean_speed", "Lean speed: how quick the bike goes from the one side to the other (a factor on the roll rate and the keys)", "", 0.5, 3, 0.05],
+		["bike_air_pitch_rate", "In the air: how fast the gas turns the nose up and the brake turns it down (held: it keeps turning, a flip)", "°/s", 0, 400, 5],
+		["bike_air_roll_rate", "In the air: how fast the lean keys roll the bike (the weight of the rider to the side)", "°/s", 0, 360, 5],
+		["bike_push", "Flat-track style: upright, push the bike under you (deep lean, the inside foot out, countersteers a slide by itself); "
+			+ "off: hang off to the inside", "", 0, 1, 1],
+		["bike_push_foot_kmh", "Flat-track style: the inside foot comes out in a bend up to this speed", "km/h", 20, 250, 5],
+		["bike_push_upright", "Flat-track: how far the back leans out of the bike (a share of the lean of the bike)", "", 0, 1.2, 0.05],
+		["bike_push_forward", "Flat-track: how far forward the rider sits in a bend", "m", -0.1, 0.4, 0.01],
+		["bike_push_chest_pitch", "Flat-track: how far the chest leans forward in a bend", "°", -10, 45, 1],
+		["bike_push_pelvis_tilt", "Flat-track: the most that the pelvis tilts against the bike", "°", 0, 45, 1],
+		["bike_push_pelvis_slide", "Flat-track: how far the pelvis slides to the outside", "m", -0.15, 0.25, 0.01],
+		["bike_push_foot_out", "Flat-track: how far the inside foot goes out at the most lean", "m", 0, 0.6, 0.01],
+		["bike_push_foot_forward", "Flat-track: how far the inside foot goes forward at the most lean", "m", 0, 0.9, 0.02],
+		["bike_hang_chest_roll", "Road race: how far the trunk rolls into the bend at the most hang off", "°", 0, 40, 1],
+		["bike_hang_knee_out", "Road race: how far the inside knee goes out in a bend", "m", 0, 1.2, 0.02],
+		["bike_hang_knee_down", "Road race: how far the inside knee goes down in a bend", "m", 0, 1, 0.02],
+		["bike_hang_tuck_pitch", "Road race: how far the trunk goes forward on the gas", "°", 0, 50, 1],
+		["bike_hang_sit_pitch", "Road race: how far the trunk goes back on the brake", "°", 0, 30, 1],
+		["bike_hang_shift", "Road race: the share of the hang off that the whole body moves", "", 0, 1.5, 0.05],
+	]],
 	# (the browser shows the soft body read-only, as the car has it; the Godot version sets it here, see README)
 	["Soft body", [
 		["sb_enabled", "The car dents (the soft body, with Damage on in Settings)", "", 0, 0, 0],
@@ -189,7 +218,7 @@ const GROUPS := [
 ]
 
 ## The cards of the menu, in the order of the browser (CarTuning.CARDS); a group with the name of its card is
-## "<name> settings". (Motorcycle: the Godot version has no motorcycles yet.)
+## "<name> settings". (Motorcycle: only for a motorcycle.)
 const CARDS := [
 	["Wheels", ["Tyres"]],
 	["Suspension and driveline", ["Suspension and driveline"]],
@@ -200,6 +229,7 @@ const CARDS := [
 	["Assists and extras", []],
 	["Cameras", ["Cameras"]],
 	["Soft body", ["Soft body"]],
+	["Motorcycle", ["Motorcycle"]],
 ]
 
 ## The settings of the tyre on top of its kind: folded away in a part of their own.
@@ -356,6 +386,20 @@ const MAP := {
 	"sb_shell_mass": ["softbody.shell_mass", 1.0, 300.0],
 	"tc_allowance": ["assists.tc_allowance", 0.01, 1.0], "esc_gain": ["assists.esc_gain", 0.01, 1.0],
 	"launch_rpm": ["engine.launch_rpm", 1.0, null], "two_step_rpm": ["engine.two_step_rpm", 1.0, null],
+	# a motorcycle (car.json "motorcycle"; the defaults of CarTuning.js)
+	"bike_max_lean": ["motorcycle.max_lean_deg", 1.0, 52.0], "bike_fast_lean": ["motorcycle.fast_lean_deg", 1.0, 30.0],
+	"bike_rake": ["motorcycle.rake_deg", 1.0, 24.5], "bike_rider_mass": ["motorcycle.rider_mass", 1.0, 80.0],
+	"bike_hang_off": ["motorcycle.hang_off", 1.0, 0.3], "bike_max_lateral_g": ["motorcycle.max_lateral_g", 1.0, 0.9],
+	"bike_balance": ["motorcycle.balance", 1.0, 1.0], "bike_fork_dive": ["motorcycle.fork_dive", 1.0, 1.0],
+	"bike_lean_speed": ["motorcycle.lean_speed", 1.0, 1.0], "bike_air_pitch_rate": ["motorcycle.air_pitch_rate_deg", 1.0, 180.0],
+	"bike_air_roll_rate": ["motorcycle.air_roll_rate_deg", 1.0, 120.0], "bike_push": ["motorcycle.push", 0, false],
+	"bike_push_foot_kmh": ["motorcycle.push_foot_kmh", 1.0, 110.0], "bike_push_upright": ["motorcycle.push_upright", 1.0, 0.55],
+	"bike_push_forward": ["motorcycle.push_forward", 1.0, 0.0], "bike_push_chest_pitch": ["motorcycle.push_chest_pitch", 1.0, 0.0],
+	"bike_push_pelvis_tilt": ["motorcycle.push_pelvis_tilt", 1.0, 35.0], "bike_push_pelvis_slide": ["motorcycle.push_pelvis_slide", 1.0, 0.09],
+	"bike_push_foot_out": ["motorcycle.push_foot_out", 1.0, 0.14], "bike_push_foot_forward": ["motorcycle.push_foot_forward", 1.0, 0.5],
+	"bike_hang_chest_roll": ["motorcycle.hang_chest_roll", 1.0, 14.0], "bike_hang_knee_out": ["motorcycle.hang_knee_out", 1.0, 0.6],
+	"bike_hang_knee_down": ["motorcycle.hang_knee_down", 1.0, 0.5], "bike_hang_tuck_pitch": ["motorcycle.hang_tuck_pitch", 1.0, 28.0],
+	"bike_hang_sit_pitch": ["motorcycle.hang_sit_pitch", 1.0, 10.0], "bike_hang_shift": ["motorcycle.hang_shift", 1.0, 0.7],
 }
 
 ## The sound of the engine (car.json sound.engine_sim): es_<key>.
@@ -683,6 +727,13 @@ static func visible(key: String, v: Dictionary) -> bool:
 		"spring_front", "spring_rear", "damping_front", "damping_rear", "suspension_travel", "suspension_length", "spring_progression", \
 				"damping_rebound", "ride_front", "ride_rear":
 			return not kart
+		"bike_hang_chest_roll", "bike_hang_knee_out", "bike_hang_knee_down", "bike_hang_tuck_pitch", "bike_hang_sit_pitch", "bike_hang_shift":
+			return bike and not v.get("bike_push", false)
+		"bike_push_foot_kmh", "bike_push_upright", "bike_push_forward", "bike_push_chest_pitch", "bike_push_pelvis_tilt", "bike_push_pelvis_slide", \
+				"bike_push_foot_out", "bike_push_foot_forward":
+			return bike and bool(v.get("bike_push", false))
+	if key.begins_with("bike_"):
+		return bike
 	return true
 
 

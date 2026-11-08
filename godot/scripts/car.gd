@@ -84,6 +84,7 @@ class Wheel:
 	var visual_offset := Vector3.ZERO
 	var lost := false               # a motorcycle: the second wheel of a pair is not there (no road, spring, drive, brake)
 	var lat_grip := 1.0             # a share of the grip across (a motorcycle in flat-track style: the tail steps out)
+	var fe_load := 0.0              # a motorcycle: the load of the road force along the travel of the fork or the swingarm (N)
 	var toe_bend := 0.0             # rad to the left, a bent suspension (WheelRig)
 	var camber_bend := 0.0          # rad of lean to the left, a bent knuckle
 	var damage_grip := 1.0          # a bent wheel grips up to 40 % less
@@ -764,7 +765,7 @@ func _controls(dt: float) -> void:
 	brake = b
 	abs_on = bool(Settings.get_value("abs"))
 	if bike != null:
-		if bike.pushing:
+		if bike.pushing or bike.crashed or bike.limp:
 			throttle = 0.0
 			brake = 0.0
 		steer_angle = bike.steer_angle(self, dt)
@@ -957,7 +958,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		var bump := susp_length - susp_travel - w.length
 		if bump > 0.0 and not unsprung:
 			f += bump * w.spring * 12.0 + maxf(0.0, rate) * w.damper * 2.0
-		loads[i] = f
+		loads[i] = f - (bike.fork_load(self, w, dt) if bike != null else 0.0)      # (the fork and the swingarm)
 	for axle in 2:
 		var il := axle * 2
 		var ir := il + 1
