@@ -27,7 +27,8 @@ static func make_globals(clear: Texture2D, rings: Texture2D) -> void:
 	if _globals_made:
 		return
 	_globals_made = true
-	var have := RenderingServer.global_shader_parameter_get_list()
+	# (the list is only there in the editor: an exported game reports an error for it, and has none of these yet)
+	var have: Array = RenderingServer.global_shader_parameter_get_list() if OS.has_feature("editor") else []
 	for key: String in GLOBALS:
 		if have.has(StringName(key)):
 			continue

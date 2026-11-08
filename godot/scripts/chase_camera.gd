@@ -14,6 +14,7 @@ var fov_standing := 50.0
 var fov_fast := 70.0
 var cockpit := Vector3(0.35, 0.9, -0.2)
 var cockpit_fov := 75.0
+var orbit := 0.0                  # rad: the follow camera turned round the car (the keys [ and ], ` back behind it)
 var _pos := Vector3.ZERO
 var _look_dir := Vector3.FORWARD
 
@@ -76,7 +77,7 @@ func _process(delta: float) -> void:
 			if vel.length() > 3.0 and car.gear >= 0:
 				want = want.lerp(vel.normalized(), 0.35).normalized()
 			_look_dir = _look_dir.slerp(want, 1.0 - exp(-delta * smoothing)).normalized()
-			var target := xf.origin - _look_dir * distance + Vector3.UP * height
+			var target := xf.origin - _look_dir.rotated(Vector3.UP, orbit) * distance + Vector3.UP * height
 			_pos = _pos.lerp(target, 1.0 - exp(-delta * smoothing * 2.5))
 			global_transform = Transform3D(Basis.IDENTITY, _pos).looking_at(xf.origin + Vector3.UP * look_height, Vector3.UP)
 			if car.bike != null:

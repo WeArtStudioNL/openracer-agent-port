@@ -6,6 +6,7 @@
 /bin/*.dylib
 /bin/*.so
 /bin/*.dll
+/bin/*.wasm
 /bin/*.framework/
 /native/extension_api.json
 *.os

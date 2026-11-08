@@ -24,7 +24,8 @@ Open `godot/project.godot` in Godot 4.7 and press Play (F5), or from the command
 
     /Applications/Godot.app/Contents/MacOS/Godot --path godot
 
-The menu chooses a car and a track. Arguments after `--` start a drive at once and help to test:
+The main menu (see Menus, settings and the HUD) chooses the way to play, the car and the track. Arguments after `--` start a
+drive at once and help to test:
 
     --car=openracer-muscle --track=short-track   start this drive (without the menu)
     --drive                                      full throttle (and --steer=0.5 for a circle, + is left)
@@ -33,6 +34,8 @@ The menu chooses a car and a track. Arguments after `--` start a drive at once a
     --quit-after=10                              stop after 10 seconds
     --diff=open                                  another differential than car.json's
     --content=/path/to/web                       another content folder
+    --user-dir=/tmp/folder                       keep settings.cfg and the files of the menus there (the tests: never the player's)
+    --race --opponents=3 --laps=1 --pole --difficulty=hard   a race;  --mode=skidpad --surface=gravel   the skidpad
 
 For example, a test without a window:
 
@@ -136,7 +139,7 @@ stuck is put back on the line. The AI learns where it ran off the road (the line
 and keeps that per track and car (`user://ai/`), so it races cleaner the next time. The AI cars have the colours
 of the browser game (the materials called carpaint, or body); the three nearest are heard (3D, a lighter engine
 simulation). When the player finishes, the results show and the AI drives the player's car
-on. Backspace or "Race again" starts it again. A track without a racing line has no race (free driving).
+on. Home (back to the start), Restart in the pause menu or "Race again" starts it again. A track without a racing line has no race (free driving).
 
     Godot --path godot -- --car=openracer-muscle --track=short-track --race --opponents=5 --laps=3 [--pole] [--ai]
 
@@ -164,7 +167,7 @@ take); with damage off the car is the rigid body it was.
 The model bends with the nodes (`scripts/soft_body_mesh.gd`, as `SoftBodyMesh.js`): every vertex is tied to its
 four nearest nodes with weights, and the skinning of Godot moves it (a Skeleton3D "Shell" with a bone per node;
 the meshes of the body are made again once with the nodes as bones, in a thread when the car is made). Back to
-the start (Backspace, or the pause menu) repairs the car and puts its parts back; R puts it back on its wheels and
+the start (Home, or the pause menu) and Backspace (repair where it is) repair the car and puts its parts back; R puts it back on its wheels and
 keeps the dents and the parts that are off.
 
 The parts of car.json `parts` (`scripts/car_parts.gd`, after `Parts.js`) come off when the load on them passes
@@ -226,7 +229,8 @@ The garage (`scripts/garage.gd`, Garage.js): cars and tracks of the player next 
 `garage_folder`, with cars/ and tracks/ in it). An item with the id of one of the game wins over it; an item with
 only its car.json keeps using the files of the game's one. Main menu, "Import a car or track (zip)…" puts the item of
 a zip (car.json or track.json at its root or in one folder, as the browser game exports it) in the garage; it shows in
-the lists with "(garage)". Not yet: deleting from the menu, the track editor (the car editor below exports a car as a zip).
+the lists with "(garage)". The car editor and the track editor save into the garage (the track editor also deletes from
+it, the car editor exports a car as a zip). Not yet: deleting from the main menu.
 
 ## Car editor
 
@@ -346,16 +350,126 @@ that folder with `--set=garage_folder:'"/tmp/folder"'` (add `--keep` to the test
 --shot=/tmp/editor.png` (also `--select=follow|ex1|model|mt:front:lower_ball`, `--suspension=1`, `--tests`, `--drop=1`,
 `--window=Cameras|Materials|Sound`).
 
+## Track editor
+
+The track editor of the browser (`web/tools/track-editor.html`, track-editor.js, track-design.js, heightmap.js) in
+`scripts/editor/`: main menu, "Track editor", or `-- --editor` (`--editor=<id>` opens that track). The side bar has
+the cards of the browser: Track (open a track, New track, Delete… for a track of the garage, Height map…, name, id,
+description), Ready to race, Reference image (a picture to draw over: opacity, place, Scale by two points), Model
+(import a .glb or .gltf), Surfaces (the role of every part: road, pit lane, grass, ground, sand, gravel, mud,
+scenery, decor), Start and lap gates (Fill the grid, Gate 1 at the start, Auto gates, Show the checkpoints), Pit
+boxes and the pit line, Objects (the library of `web/objects` and `user://garage/objects`, + adds a glb; the
+prefabs on a track with a model; rigid, static or decor, mass, origin), Curbs (width, height, colour, connect to the
+road, the size and the offset of a node, Taper the ends), Cinematic cameras (and their range), AI racing line (Edit
+the line, Draw the line, Apply, Forget) and Sky and light; at the bottom Thumbnail (preview.webp), Export zip, Test
+drive (saves and drives it with the car of the menu) and Save. The view: the tools in a bar at the bottom (1 to 0:
+Look, Grid box, Pit box, Pit line, Add gate, Drag strip, Place object, Add camera, Draw curb, Measure; on a road of
+nodes N, B, G, P: Edit road, Branch, Surfaces, Prefabs with Draw/Points and Attach to road), at the top right Save,
+the colours of the surfaces, Snap 1/2/5 m, From above, Undo/Redo (all of the track), Layers and ? (the keys); the
+panel of what is chosen with its numbers, the drag strip window and the drawer of the road (Track, Branches,
+Surfaces, Prefabs). Left drag turns the view, right drag moves it, the wheel zooms to the pointer; what is chosen
+has handles: the middle moves it, the ring turns it, the square scales it, the arrow lifts a node of the road.
+Keys as in the browser: Delete, Escape, Enter, Ctrl+Z/Y/D/S, F, T, End, W E R.
+
+A track is saved as `track.json` in the format of the browser (the numbers rounded as it does) with its files, in
+the garage (`user://garage/tracks/<id>/`; files it has not got come from the game's folder of that id) or, when the
+game runs from the repository and "Save in the repository" is ticked, in `web/tracks/<id>/` (and `index.json`). A
+road of nodes is built as track-design.js builds it (the same centripetal Catmull-Rom curve as three.js,
+`scripts/catmull_rom.gd`; the road, shoulders, terrain, branches, surfaces and prefabs come out part for part as
+the browser's, `res://tools/test_design.tscn -- --track=go-kart-track-1`) and written as `<id>.glb` with
+GLTFDocument, the hidden triangles left out. The game draws what the editor makes: curbs (`scripts/curbs.gd`, road),
+the grid boxes, the pit area and the checkpoints with the arrow to the next gate (`scripts/track_marks.gd`), the
+objects (`scripts/track_objects.gd`: a rigid one sleeps until a car's box pushes it and the push comes back to the
+car, a static one is a wall, decor only shows), `double_sided`, and on a road of nodes without a recorded line the
+middle of the road as the racing line (`scripts/racing_line.gd`). A part of a model that track.json does not name is scenery, as in
+TrackLoader.js (it was road): scenery and static objects lie on a layer of their own (`Track.SCENERY_LAYER`) that the
+body of a car and the loose parts meet and the wheels do not, as the wheels of the browser meet only the drivable
+triangles (Ground.js).
+
+Test (never in the garage or in web/): `Godot --path godot res://tools/test_track_editor.tscn -- --out=/tmp/te`
+(with a window and `--shot-dir=/tmp` it takes screenshots) uses the tools with the mouse on testtrack, draws a new
+road with a node, a prefab row, a tree and a gravel area, saves both into `/tmp/te/tracks/`, checks the fields of
+track.json, and saves go-kart-track-1 again unchanged (its design, grid, gates, pit, objects and surfaces equal,
+the curb points within 1 mm). A saved track drives with `-- --content=<a folder with tracks/ and links to web/cars>`.
+Not yet: recording the racing line by driving (draw or edit it instead), the touch layout and the loupe of the
+browser, the draft that is kept every few seconds, thumbnails of the library models, the cinematic cameras in the
+replay. On desert-drag-strip the barrier on the strip (`prefab_barrier_1` of the design) is scenery in the browser
+too: its rail and posts (0.78 m) are higher than what a car drives over (0.13 + 0.3 m, Vehicle.js), so both games
+stop a car there.
+
 ## Replay
 
 The replay (`scripts/replay.gd`, Replay.js): every car of the session (the player and the opponents) is recorded
-30 times a second, the last half hour. Esc, Replay: the game stays paused behind it and the recording plays through
-the same code that draws the cars. The bar: a slider over the whole recording, start, -10 s, play/pause, +10 s, end,
-the speed (0.1x to 5x), the camera (T: follow, cockpit, bonnet, and a free camera: W A S D, Space/Z up, X down, drag the
-mouse to look, F aims at the car, L goes with it, [ and ] the field of view) and the car it follows (Tab); Exit (Esc) goes back to the game where it was
-left. Keys: Enter play/pause, left and right one frame (held: on), up and down one second, Home and End, H hides the
-bar. Save replay (in the bar) keeps it in `user://replays` (the ids of the track and the cars, and the recording); the main
-menu, Replays…, plays one in a viewer. Test: `res://tools/test_replay.tscn -- --ai=1`. Not yet: marks and fragments, video, the soft body and the parts in the replay.
+30 times a second, the last half hour: the place, the turn, the velocity, the steering, the engine, the pedals, the
+gear, how hard the tyres squeal, and per wheel the spring, the steering and the turn. Esc, Replay: the game stays
+paused behind it and the recording plays through the same code that draws the cars; the engine and the tyres are
+heard as they were (while it plays forwards). The bar (`scripts/replay_bar.gd`): Save replay, Photo (F2: a PNG
+without the bar), ● Video (the whole replay as an mp4), Video editor, Exit; the slider with the fragment on it; Mark in
+and Mark out (I and O; × takes them away) and Save fragment (a replay file of that part, or an mp4 of it played at
+the chosen speed with the camera as it is set); start, -10 s, Rewind, Pause, Play, +10 s, end, the speed (0.1x to
+5x); the frame (16:9, 9:16, 1:1: an orange outline, what a video takes of the picture); the cameras: Follow, Cockpit,
+Bonnet, Free, Cinematic (the cameras of the track, track.json `cameras`: the one whose range the car is in, turning to
+follow it; a field of view slider ×0.2..3 and a look ahead 0..40 m; [ ] zoom), and the car (Tab). At the top left the
+speed, the gear, the revs and the pedals. Keys: Enter or Space play/pause, left and right one frame (held: on), up and
+down one second, Home and End, T the next camera, H hides the bar.
+
+The free camera of the replay (`scripts/replay_free_camera.gd`): W A S D or the arrows (W the way it looks), Z, Space,
+Shift up, X, Alt, Ctrl down, Q E tilt, [ ] field of view, click the scene to look with the mouse (Esc lets it go), a
+gamepad (left stick moves, right stick looks, triggers up and down, shoulders zoom); F aims at the car, L fixes it to
+the car (its frame), K fixes it with the sky up; a speed slider 0.01..3 (log) and the smoothing of the look (5 and 6),
+both remembered. It starts fixed to the car where the camera was. (In the free camera the arrows move it, not the time.)
+
+The files (`scripts/replay_files.gd`): `.oreplay` in `user://replays` (a Godot Variant: the ids of the track and the
+cars, the recording; and when there are a name, the camera track, the cameras of the clips and the zoom of an edit,
+the project of the video editor and the edit as it plays). Version 1 files are still read. The browser's
+`.openracer-replay` files open as well (gzip, "ORRP", the JSON header, 36 floats per car per sample): the place is
+fitted to where the wheels were, the rpm, the pedals, the gear labels and the squeal are taken over, and their camera
+track, clip cameras and zoom play; the blocks after the numbers (the dents and parts of the soft body, the skid marks,
+the smoke and the other effects, the rider as a ragdoll) are left out, as the Godot replay has none of these yet.
+The main menu, Replays…: Watch (an edit when there is one), Edit (the video editor on the recording), Delete (to the
+Trash), Open a file… (copies a .oreplay or a browser file into the folder), Show the folder. Going to the main menu
+from a drive of a minute or more that was not saved asks Save the replay?
+
+Video files (`scripts/replay_film.gd`, `scripts/video_writer.gd`): a part of the replay is played at the chosen speed
+and rendered a second time in a SubViewport of the video's size (the same world, the camera of the screen with its
+field of view narrowed to the orange outline; at most 1920 on the long side), every frame exactly 1/30 s of replay
+time, paced to real time so the sound of the replay is recorded with it (an AudioEffectRecord on Master). The frames
+go straight into ffmpeg (a pipe, raw RGBA to H.264, crf 20, at most 20 Mbit/s, + AAC sound; when the frames came slower
+than real time the sound is stretched to the picture with atempo). ffmpeg is looked for on the PATH and in
+/opt/homebrew/bin, /usr/local/bin, /usr/bin; without it the frames are a PNG sequence in a folder with sound.wav.
+Videos go to Movies/OpenRacer, photos to Pictures/OpenRacer. Esc stops a video (it is kept as far as it went).
+
+The video editor (`scripts/video_editor.gd`, `scripts/video_timeline.gd`, VideoEditor.js), from the bar (over the
+game, which stays paused) or Edit in Replays: the source monitor (from behind the car, a scrubber, play Shift+Enter,
+In and Out I/O, Insert at playhead, Add to end) and the program monitor (in the aspect: 1280x720, 720x1280, 960x960;
+Enter, Home, End, arrows a frame, Shift a second); the timeline with the ruler, the clips (trim handles, the speed
+ramp keys, zoom keys and look-ahead keys drawn and dragged in them) and the camera lane (keys; click: go there, double
+click: edit it with the free camera; K or Key here puts one, Delete removes); the inspector: the camera of the clip
+(camera track, a fixed shot of the free camera with Take camera and Go to shot, follow, cockpit, cinematic with a
+look ahead), the speed 0.05..8 with a ramp, the zoom 0.5..4 with keys, ease in/out per key, split, move, delete.
+Save keeps the project and the edit with the replay's file (a replay of the game is saved first); Save as replay
+writes a new named replay (cuts, speeds, camera track `CameraTrack`, clip cameras, zoom); Save as mp4 films the program.
+The two monitors are SubViewports sharing the world: the source is drawn every other frame (the cars put at its time,
+and back after the draw).
+
+A take (`scripts/take.gd`, Take.js): 5 in the game asks for the picture (16:9, 9:16, 1:1), Video or Replay and
+whether the HUD goes away; a count of 5 s in the frame, then REC with the time (a dark passepartout outside the
+frame); 5 again stops it and asks for a name and what to cut off at the start and the end. A replay goes to Replays; a
+video is filmed afterwards from the recording with the camera of the take (also without a cut: the browser films
+that live from the screen).
+
+The free camera of the game (`scripts/game_free_camera.gd`, FreeCam.js): the fourth camera of C (follow, cockpit,
+bonnet, free; settings `camera` 3 starts with it). W A S D, Space/Z up, Alt/X down, mouse look (click, Esc lets go), Q E
+tilt, 3 4 slower/faster, 7 8 look smoothing, [ ] field of view; P looks at the car, O moves with it, I fixes it to it
+(rays keep it out of the walls). These keys are taken from the controls while it is on (the arrows still drive). The
+panel (with the HUD): the toggles, sliders for speed, movement smoothing, look smoothing, field of view, tilt (Level),
+tilt speed and smoothing, and Record (the take). Remembered per car in `user://video.cfg` with the aspect and the rest.
+
+Test: `res://tools/test_replay.tscn -- --ai --replay-dir=<tmp> --video-cfg=<tmp> --video-dir=<tmp> [--editor=1]
+[--video=1] [--take=1] [--browser=<file>] [--watch=<file> [--edit-file=1]] [--shot=<folder>]` (the folders are
+required, so a test never writes into the player's data; --video needs a window). Not yet: the soft body, the parts,
+the effects (skid marks, smoke) and the rider's ragdoll in the replay; Godot does not write browser files (it reads
+them); the live "cinematic camera after a race" of main.js; the Godot replay of the weather is the weather of now.
 
 ## Pit stops and the drag strip
 
@@ -372,6 +486,9 @@ axis, or without a pit line to a point behind the box and into it; it stands unt
 Not after the finish. The log says "race: Hatchback 2 pits (fuel 5.1 L, wear 0.12)" and the stop; the race's
 put-back leaves a car alone while it stands in its box. Tests: `--set=tyre_wear:1 --ai-fuel=6` (the AI cars start
 with 6 L) and `--ai-pit-line=0` (the box mode on a track with a pit line).
+A track without pit boxes has the pit lane instead (`scripts/pit_lane.gd`, PitLane of Pit.js): the road of the
+surface `track01` beside the racing line; the AI cars drive through it at 16 m/s and stop in its middle, and a car
+standing still with its wheels on it is serviced (the player's too). No track of the game has one now.
 Not yet: the car is not lifted in the picture.
 
 The drag strip (`scripts/drag_strip.gd`, DragStrip.js): on a track with `dragstrip` the front wheels at the line,
@@ -453,18 +570,73 @@ cockpit). Pictures (without --headless): `-- --car=hatchback --shot=file.png [--
 
 ## Controls
 
-Arrows or WASD drive, Space is the handbrake, Q/E shift (the first shift switches to a manual gearbox),
-C changes the camera (behind, cockpit, bonnet), R puts the car back on its wheels, Backspace goes back to
-the start, K calibrates a racing wheel, F3 shows the data of the tyres, F8 marks a moment in the log, Esc
-pauses (resume, settings, back to the start, main menu). A gamepad: the triggers for gas and brake,
-the left stick to steer, A handbrake, the shoulders shift, Y camera, X reset, Start pause.
+The keys of the browser game (web/js/Settings.js): W A S D or the arrows drive, Space handbrake, P parking brake, . reverse
+(held), Q two-step, F transbrake, X / Z shift (the first shift makes the gearbox manual), an H-shifter (gear 1 to 8 and
+reverse, buttons of a wheel), R back on the racing line, 4 saves the place for R on a track without a line, Backspace repairs
+the car where it is, Home back to the start, T camera, [ ] turn the follow camera round the car and ` puts it back, H the
+HUD, F3 the debug text, F2 a photo without the HUD (in the pictures folder, O-Racer), C / B / N / J / Y traction control,
+ABS, ESC, launch control, two-step on and off (a short note says it), I starts the engine, E the engine sound, V the
+telemetry, 0 the debug view (- hides the car), U tuning, K calibrates a wheel, M the wheel on and off, F8 a mark in the
+log, Esc pause. A gamepad: the triggers gas and brake, the left stick steers, A handbrake, the shoulders shift, X camera,
+Y back on the line, Back repair, Start pause. The rider keys and the ragdoll of a motorcycle are bound but not in the
+Godot physics yet. 5 starts and stops a take (Take.js); the camera key goes through follow, cockpit, bonnet and the free
+camera (FreeCam.js: its own keys while it is on, see Replay).
 
-All of it can be set in Settings, Controls: every action takes keys, gamepad buttons and sticks, and buttons of
-the racing wheel (click a binding and press what it should be; + adds one, Delete removes one; an input that
-another action had is taken from it). A gamepad binding works on every joypad but the wheel. The bindings are
-kept in `user://settings.cfg`. Test: `Godot --headless --path godot res://tools/test_controls.tscn`.
+All of it can be set in Settings, Controls: every action, by group, has chips of its inputs (Key, Pad, Wheel; ✎ a new one,
+✕ removes it, + adds one); the steering and the pedals of a wheel come from its calibration. An input that another action
+had is taken from it (the menu says so). A gamepad binding works on every joypad but the wheel. A player who saved bindings
+before keeps them; an action that came later gets its defaults without the inputs that are taken. The bindings are kept
+in `user://settings.cfg`. Tests: `Godot --headless --path godot res://tools/test_controls.tscn -- --user-dir=/tmp/t` and
+`res://tools/test_settings_menu.tscn` (the gamepad in the settings).
 
-Holding the brake at a standstill puts the car in reverse; then the brake drives and the throttle brakes.
+Holding the brake at a standstill puts the car in reverse (Settings, Car: with the key, with a pedal, below a speed).
+The keys bring the pedals up over a time and a curve (Settings, Keyboard).
+
+## Menus, settings and the HUD
+
+**Main menu** (`scripts/main_menu.gd`, `scripts/menu/`, after MainMenu.js): the home screen (Play, the quick start in the
+stadium truck the first time, Garage, Replays, Import, Car editor, Settings, Quit, openracer.eu, Discord, the version), then
+the steps with the chips at the top and Back / Next at the bottom: the way to play (free drive, race, skidpad), the car
+(tiles with preview.webp, a garage car without one is drawn once and kept in `previews/`; the specs, the top speed in the
+units, the power), its setup (the tunes), the track (cards with the picture, the best lap of the car and setup, Drag top 50,
+the wear, the damage and More options), the weather, the race (laps, opponents, difficulty, the start: pole, random,
+last; damage, wear, the ghost, save records) and the opponents (the cars and their setups on the places of the grid). The
+skidpad (`scripts/skidpad.gd`): the car circles faster and faster on the chosen ground until it lets go; the g it held.
+The Garage window (export, delete to the Trash, import, link a folder, Load and New open the car editor) and the Replays
+window (watch, download, delete, import). The choice is kept in `user://menu.cfg`. Screenshots: `--menu-step=car --mode=race
+--menu-shot=file.png --shot-at=3` (home, mode, car, tune, track, weather, race, opponents, surface, garage, replays).
+
+**Settings** (`scripts/settings_menu.gd`, `settings_pages.gd`, `settings_rows.gd`, `settings_controls_page.gd`): the tabs of
+the browser, Car, Keyboard, Gamepad, Wheel (with the calibrated wheels and Forget), Display and sound, Mobile (with the touch
+controls), Graphics, Simulation, Tools (debug text, back up and restore the settings, the records and the tunes in one file,
+forget the records of a track, Save as HDR), Controls; Reset all settings. What the Godot game does not do yet is grey with
+the tooltip "Not in the Godot version yet" (the steering assists, the pad steering at speed, the motorcycle options, the
+debris, the simulation rows). The pause menu (`scripts/pause_menu.gd`): Resume, Replay, Tune the car, Restart, Back to the
+start, Settings, the drag strip Top 50, Main menu. `--settings --settings-tab=Wheel` opens a tab (`pause`: the pause menu).
+
+**HUD** (`scripts/hud.gd`, `hud_gauge.gd`, after Hud.js): the round gauge (the engine speed with the red zone and the shift
+light, the speed, the gear, the coolant arc and the oil lamp, the badges of TC, ESC, ABS, launch control and two-step from
+`web/images/HUD`, P and TB; a click on a badge switches it), the boost gauge of a turbo (the extra of the tuning), the lap
+panel (the lap, the place and the gaps in a race, the last three laps, the best and a new record), the car panel (the
+tyres by temperature and wear, the fuel in litres and laps, the pit stop, the engine when it is hurt), the pit stop in
+the middle, the notes of the keys, and the first time the keys that matter. **Edit HUD…** (Settings, Display and sound;
+`scripts/hud_layout.gd`, HudLayout.js): the game is held, every element (and the touch controls) can be moved, scaled and
+faded, Save keeps it (`hud_layout`). `--edit-hud=gauge` opens it for a screenshot.
+
+**Gamepad in the menus** (PadNav.js): the D-pad or the stick moves the focus, A chooses, B goes back, Start pauses and
+resumes (in the main menu it goes on), L1/R1 change the tab of the settings; the tuning menu takes the pad while it holds
+a race.
+
+**Debug view** (0, `scripts/debug_view.gd`, DebugView.js): the triangles of the track near the car, the nodes and beams of
+the shell, the engine bay and the radiator, the contacts of the wheels; a panel with the weather and the time of day.
+**Telemetry** (V, `scripts/telemetry.gd`): every value of the car and the wheels. **Touch controls**
+(`scripts/touch_controls.gd`, TouchControls.js): on a touch screen (or `--touch=1`, Settings Mobile): the steering stick
+on the left half, the pedals, the gear buttons and the top buttons. **Movable panels** (`scripts/movable.gd`): the tuning
+menu, the debug panel and the HUD editor are dragged and scaled, and kept. Icons of Lucide (`scripts/icons.gd`).
+
+Not ported: the turning 3D cars on the tiles (stills), a picture per setup, the ghost files (Save lap, Race a ghost), saving
+a lap as the racing line, the node grabber and the hit of the debug view, the Take button of the touch controls (the video
+editor), import from a link, the browser's storage notes; TextureBudget.js (the phones of the browser) has no use here.
 
 ## How it works
 
@@ -478,6 +650,7 @@ Holding the brake at a standstill puts the car in reverse; then the brake drives
 | `scripts/track.gd` | the track model, a collision shape per mesh with its surface |
 | `scripts/atmosphere.gd`, `ground.gd`, `ground_material.gd`, `graphics.gd` | the sky, light and weather; the wet and the snow and their grip; the look of the ground; the graphics settings |
 | `scripts/chase_camera.gd`, `hud.gd`, `world.gd`, `main.gd`, `controls.gd` | camera, dashboard, a drive, menu, keys |
+| `scripts/main_menu.gd`, `menu/`, `settings_*.gd`, `pause_menu.gd`, `hud_*.gd` | the main menu, the settings, the pause menu, the gauge and the HUD editor |
 | `native/src/engine_sim.cpp` | the engine sound: EngineSimWorklet.js and the exhaust chain of EngineSim.js in C++ |
 | `scripts/engine_sim_params.gd`, `car_audio.gd` | the sound parameters of car.json; the engine and the tyre squeal of a car |
 | `scripts/tyre_effects.gd` | skid marks, tyre smoke and dust |
@@ -534,6 +707,24 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
    src/*.o godot-cpp/bin/libgodot-cpp.linux.template_release.x86_64.a`, as scons on a Mac names the objects .os;
    glibc 2.28 or newer). On Windows the force feedback looks up the SDL HID functions in the executable
    (GetProcAddress); when Godot does not export them there, force feedback is off and the rest works.
+   Web *(done, tested locally, not on openracer.eu yet)*: `sh godot/tools/export_web.sh` makes `godot/build/web/`:
+   index.html (the shell `tools/web_shell.html`), the engine (index.js, index.wasm, index.side.wasm, the audio
+   worklets), the game (index.pck, under 1 MB), the native part (liboracer.web.template_release.wasm32.wasm, 1.1 MB)
+   and the content: `content.pck` (the cars, tracks, wheels and sounds of web/ as res://content, packed by
+   `tools/pack_content.gd`; about 207 MB, so about 254 MB for the folder). The page fetches content.pck together
+   with the game and puts it next to index.pck before the engine starts; `scripts/content.gd` loads it
+   (ProjectSettings.load_resource_pack), so GLTFDocument reads the models from res://content. The export preset "Web"
+   has threads and GDExtension on (the web_dlink templates; the renderer there is Compatibility, WebGL 2) and plays
+   all sound as a stream (audio/general/default_playback_type.web), as the engine sound is an AudioStreamGenerator.
+   The native part is built with Emscripten **4.0.20** (the version of the 4.7.2 templates; emsdk in ~/emsdk:
+   `./emsdk install 4.0.20 && ./emsdk activate 4.0.20`, then with its PATH: `cd godot/native && scons platform=web
+   target=template_release threads=yes`, and `threads=no` for a build without threads). The engine sound
+   (EngineSimSynth) loads and runs in the browser ("engine sound on" in the log; not yet listened to); the force feedback (WheelForce) is built but has no HID there and reports
+   no wheel. Without the native part the game runs silent (the scripts check ClassDB.class_exists). Threads need
+   cross-origin isolation: the server must send `Cross-Origin-Opener-Policy: same-origin` and
+   `Cross-Origin-Embedder-Policy: require-corp` for the files of the game; `python3 godot/tools/serve_web.py`
+   serves godot/build/web with them on http://localhost:8060. In the browser the run log goes to the console
+   (without the telemetry). The keyboard works as on the desktop; gamepads go through the browser's Gamepad API (not tested yet).
 
 Known in phase 1: the acceleration of the
 cars with a centrifugal clutch (karts) or a torque converter is close to, but not yet compared with, the

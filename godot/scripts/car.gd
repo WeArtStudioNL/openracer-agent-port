@@ -187,6 +187,7 @@ var autopilot := false          # (the --drive test: full throttle, straight on)
 var is_ghost := false           # the see-through car of the best lap (LapTimer): no physics, placed from a recording
 var steer_direct := false       # a racing wheel: steer_input is the position of the wheel, as a part of the lock
 var abs_on := true
+var pedal_input := false        # the brake comes from a pedal (a wheel, a pad, the touch screen), not a key (World)
 var manual := false
 
 # state
@@ -240,6 +241,7 @@ func setup(id: String, cfg: Dictionary) -> void:
 	col.shape = shape
 	col.position = Vector3(0.0, bottom + shape.size.y / 2.0, 0.0)
 	add_child(col)
+	collision_mask = 1 | Track.SCENERY_LAYER       # (the road and the scenery of the track, Track)
 	_box = col
 	_build_visual()
 	_make_shell()
@@ -744,8 +746,9 @@ func _controls(dt: float) -> void:
 		reverse_hold = reverse_hold + dt if absf(speed) < 0.6 and walk else 0.0
 		bike.pushing = reverse_hold > 0.35 or (bike.pushing and walk)
 		gear = maxi(gear, 0)
-	elif not manual and Settings.get_value("auto_reverse"):
-		if gear >= 0 and absf(speed) < 0.6 and brake_input > 0.5 and throttle_input < 0.1:
+	elif not manual and Settings.get_value("auto_reverse_pedals" if pedal_input else "auto_reverse"):
+		var below := maxf(0.6, float(Settings.get_value("auto_reverse_speed")) / 3.6)      # (Settings.js autoReverseSpeed)
+		if gear >= 0 and absf(speed) < below and brake_input > 0.5 and throttle_input < 0.1:
 			reverse_hold += dt
 			if reverse_hold > 0.35:
 				gear = -1

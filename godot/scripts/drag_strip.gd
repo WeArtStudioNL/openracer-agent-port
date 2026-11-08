@@ -16,8 +16,6 @@ const STAGE_MIN := -0.4
 const STAGE_MAX := 0.25
 const ROLLOUT := 0.3
 const AMBER := 0.5
-const READY := 2.0
-const GREEN_SHOWN := 1.5
 
 var car: Car
 var track_id := ""
@@ -238,7 +236,7 @@ func _physics_process(dt: float) -> void:
 		"ready":
 			if s < STAGE_MIN - 0.3 or s > STAGE_MAX + 0.3 or speed > 1.5 or not in_lane:
 				state = "approach"
-			elif _clock - _t_ready >= READY:
+			elif _clock - _t_ready >= float(Settings.get_value("drag_ready")):
 				state = "tree"
 				_t_tree = _clock
 				_staged_s = s
@@ -307,7 +305,7 @@ func _show(s: float) -> void:
 			text = "FALSE START\nDrive back behind the line and come up slowly"
 	_status.text = text
 	_status.add_theme_color_override("font_color", Color(1, 0.4, 0.35) if state == "false" or state == "void" else Color.WHITE)
-	var tree_on := state == "tree" or state == "false" or (state == "go" and _clock - _t_green < GREEN_SHOWN)
+	var tree_on := state == "tree" or state == "false" or (state == "go" and _clock - _t_green < float(Settings.get_value("drag_green")))
 	var ambers := mini(3, int((_clock - _t_tree) / AMBER)) if state == "tree" else (3 if state == "go" else 0)
 	_lamp("pre", tree_on or state == "ready" or (state == "approach" and s > -1.0 and s <= STAGE_MAX))
 	_lamp("stage", tree_on or state == "ready")

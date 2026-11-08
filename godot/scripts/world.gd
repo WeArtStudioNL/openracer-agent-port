@@ -16,10 +16,16 @@ var line: RacingLine
 var ai: AIDriver = null
 var race: Race = null
 var replay: Replay = null
+var free_cam: GameFreeCamera = null    # the fourth camera (C: follow, cockpit, bonnet, free)
+var take: Take = null                  # the 5 key (Take)
 var options := {}
 var base_config := {}
 var pause_layer: CanvasLayer
 var tuning_layer: CanvasLayer = null
+var parking_brake := false          # the parking brake (P): on until it is pressed again
+var touch: Node = null              # the controls of a touch screen (TouchControls), when there is one
+var debug_view: Node = null         # what the physics sees (DebugView, the key 0)
+var telemetry: Node = null          # the values of the car (Telemetry, V)
 var _pause_box: Control
 var _results: CanvasLayer
 var _shot_path := ""
@@ -31,14 +37,20 @@ var _last_velocity := Vector3.ZERO
 var _stuck := 0.0
 var _going := false
 var _tuning_paused := false
+var _saved_place := {}              # the place for the reset on a track without a racing line (the key 4)
+var _key_held := {"throttle": 0.0, "brake": 0.0}   # s that the key of a pedal is held (the easing of the keys)
 
 
-## options: mode ("practice" or "race"), opponents, laps, pole (the player starts in front).
+## options: mode ("practice", "race", "skidpad" or "replay"), opponents, laps, pole (the player starts in front), and from the
+## menu: difficulty, grid ("front", "random", "back"), opp (the chosen opponents: [{car, tune}]), ghost and records (bool),
+## surface (the ground of the skidpad).
 func setup(car_id: String, track_id: String, opts := {}) -> void:
 	options = opts
 	name = "World"
 	track = Track.new()
 	var tcfg: Variant = Content.load_json("tracks/%s/track.json" % track_id)
+	if tcfg is Dictionary and options.get("mode", "") == "skidpad":
+		Skidpad.set_ground(tcfg, str(options.get("surface", "road")))
 	track.setup(track_id, tcfg if tcfg is Dictionary else {})
 	add_child(track)
 	car = Car.new()
@@ -47,10 +59,15 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	# the tune in use for this car (the tuning menu), else the car as car.json makes it
 	var cfg_use := base_config
 	var tune_path: String = Settings.get_value("tunes").get(car_id, "")
+	var tune_name := ""
 	if tune_path != "":
 		var tuned := Tuning.load_tune(tune_path)
 		if not tuned.is_empty():
 			cfg_use = tuned
+			var tunes := Tuning.list(car_id, base_config)
+			for n in tunes:
+				if tunes[n] == tune_path:
+					tune_name = str(n)
 			RunLog.event("tune in use: %s" % tune_path)
 	car.setup(car_id, cfg_use)
 	car.set_meta("track_name", track.config.get("name", track_id))
@@ -64,7 +81,9 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	add_child(camera)
 	hud = Hud.new()
 	hud.car = car
+	hud.world = self
 	add_child(hud)
+	_add_extras()
 	audio = CarAudio.new()
 	audio.setup(car)
 	add_child(audio)
@@ -82,7 +101,7 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	if drag != null:
 		add_child(drag)
 	laps = LapTimer.new()
-	laps.setup(car, track)
+	laps.setup(car, track, {"records": options.get("records", true), "ghost": options.get("ghost", true), "tune": tune_name})
 	laps.message.connect(hud.toast)
 	add_child(laps)
 	hud.laps = laps
@@ -97,10 +116,17 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 			RunLog.event("race asked, but the track has no racing line")
 		else:
 			race = Race.new()
-			race.setup(self, line, track, car, int(options.get("opponents", 5)), int(options.get("laps", 3)), bool(options.get("pole", false)))
+			race.setup(self, line, track, car, int(options.get("opponents", 5)), int(options.get("laps", 3)), bool(options.get("pole", false)),
+				{"difficulty": options.get("difficulty", "normal"), "grid": options.get("grid", "front" if options.get("pole", false) else "back"),
+				"opp": options.get("opp", [])})
 			race.finished.connect(_race_finished)
 			add_child(race)
 			hud.race = race
+	# the skidpad (main.js startSkidpad): the car drives round the circle by itself
+	if options.get("mode", "") == "skidpad":
+		var pad := Skidpad.new()
+		pad.setup(self, str(options.get("surface", "road")))
+		add_child(pad)
 	# a replay from a file (the main menu, Replays): a viewer, no game behind it
 	if options.get("mode", "") == "replay":
 		_open_replay_file.call_deferred(str(options.get("file", "")))
@@ -114,11 +140,30 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 				all.append(e.car)
 	replay.setup(self, all)
 	add_child(replay)
+	take = Take.new()
+	take.setup(self)
+	add_child(take)
 	# the tests and the screenshots of the command line: --drive (full throttle), --shot=file.png --shot-at=seconds, --log=seconds
 	car.autopilot = Content.arg("drive") != ""
 	_shot_path = Content.arg("shot")
 	_shot_at = float(Content.arg("shot-at")) if Content.arg("shot-at") != "" else 3.0
 	_log_every = float(Content.arg("log")) if Content.arg("log") != "" else 0.0
+
+
+## The parts of the browser game that are scripts of their own (made when they are there): the touch controls, the
+## debug view (0) and the telemetry (V).
+func _add_extras() -> void:
+	for spec in [["res://scripts/touch_controls.gd", "touch"], ["res://scripts/debug_view.gd", "debug_view"],
+			["res://scripts/telemetry.gd", "telemetry"]]:
+		if not ResourceLoader.exists(spec[0]):
+			continue
+		var script: Script = load(spec[0])
+		if spec[1] == "touch" and not script.call("wanted"):
+			continue
+		var n: Node = script.new()
+		n.call("setup", self)
+		add_child(n)
+		set(spec[1], n)
 
 
 func _shot() -> void:
@@ -138,6 +183,8 @@ func _ready() -> void:
 	await get_tree().physics_frame
 	to_start()
 	car.freeze = false
+	if track.marks != null:
+		track.marks.follow(car)          # (the checkpoints follow the lap of the player: TrackMarks)
 	if race != null:
 		race.place_all()
 	camera.follow(car)
@@ -145,12 +192,23 @@ func _ready() -> void:
 	RunLog.car = car
 	RunLog.on_mark = hud.toast
 	WheelInput.calibration_text.connect(hud.calibration)
-	camera.mode = int(Settings.get_value("camera")) as ChaseCamera.Mode
+	camera.mode = mini(int(Settings.get_value("camera")), 2) as ChaseCamera.Mode
 	camera.snap()
+	if int(Settings.get_value("camera")) == 3 and options.get("mode", "") != "replay":
+		set_free_camera(true)
 	audio.set_inside(camera.mode != ChaseCamera.Mode.FOLLOW)
 	if Content.arg("settings") != "":
 		pause()
 		_show_settings()
+	if Content.arg("edit-hud") != "":
+		# (the screenshots of the tests: the HUD editor, with an element chosen and moved)
+		await get_tree().create_timer(1.0).timeout
+		hud.edit_layout()
+		if Content.arg("edit-hud") != "1":
+			hud.editor.selected = Content.arg("edit-hud")
+			hud.editor._entry(hud.editor.selected).merge({"x": -0.3, "y": -0.1, "s": 0.8, "o": 0.7}, true)
+			HudLayout.apply(get_tree(), hud.editor.working)
+			hud.editor._refresh()
 	if Content.arg("tuning") != "":
 		open_tuning.call_deferred()
 	RunLog.event("start  %s on %s  mass %d kg  %s %s  %s" % [car.config.get("name", car.car_id), track.config.get("name", track.track_id),
@@ -166,6 +224,10 @@ func to_start() -> void:
 	car.place(Vector3(x, y + car.wheels[0].radius + 0.15, z), float(s.get("heading", 0)))
 	car.repair()                       # (as the browser game: back at the start the car is whole again)
 	effects.clear()
+	if track.marks != null:
+		track.marks.restart()
+	if track.objects != null:
+		track.objects.reset()
 	if laps:
 		laps.restart()
 	if ai != null:
@@ -189,7 +251,10 @@ func recover() -> void:
 func put_on_line(c: Car) -> void:
 	var p := c.global_position
 	var h := c.heading()
-	if line != null:
+	if line == null and c == car and not _saved_place.is_empty():
+		p = _saved_place["p"]
+		h = _saved_place["h"]
+	elif line != null:
 		var i := line.nearest_facing(p, c.global_transform.basis.z)
 		var a := line.point(i)
 		var b := line.point(i + 2)
@@ -300,10 +365,17 @@ func _physics_process(_delta: float) -> void:
 			recover()
 		return
 	var keys_steer := Input.get_axis("steer_right", "steer_left")
-	car.throttle_input = Input.get_action_strength("throttle")
-	car.brake_input = Input.get_action_strength("brake")
-	car.handbrake_input = Input.get_action_strength("handbrake")
-	car.two_step_input = Input.is_action_pressed("two_step")
+	var dt := get_physics_process_delta_time()
+	car.throttle_input = _pedal("throttle", dt)
+	car.brake_input = _pedal("brake", dt)
+	car.handbrake_input = 1.0 if parking_brake else Input.get_action_strength("handbrake")
+	if touch != null and bool(touch.get("engaged")):
+		keys_steer = float(touch.get("steer"))
+		car.throttle_input = maxf(car.throttle_input, float(touch.get("throttle")))
+		car.brake_input = maxf(car.brake_input, float(touch.get("brake")))
+	# (the two-step option: at a standstill the engine is held at the two-step speed without the key, Settings.js twoStep)
+	car.two_step_input = Input.is_action_pressed("two_step") or (bool(Settings.get_value("two_step")) and absf(car.speed) < 1.0)
+	car.pedal_input = not Controls.key_held("brake") and car.brake_input > 0.0
 	car.transbrake_input = Input.is_action_pressed("transbrake")
 	var stop := 0.0
 	var wheel_on: bool = WheelInput.active and not WheelInput.calibrating
@@ -326,6 +398,19 @@ func _physics_process(_delta: float) -> void:
 		ForceFeedback.update(car, get_physics_process_delta_time(), stop)
 
 
+## A pedal from its action: a key comes up over the time and the curve of the Keyboard settings (Settings.js
+## keyThrottleTime, keyThrottleCurve), a trigger of a gamepad as it is.
+func _pedal(action: String, dt: float) -> float:
+	var analog := Input.get_action_strength(action)
+	if not Controls.key_held(action):
+		_key_held[action] = 0.0
+		return analog
+	_key_held[action] += dt
+	var time := maxf(0.02, float(Settings.get_value("key_%s_time" % action)))
+	var curve := float(Settings.get_value("key_%s_curve" % action))
+	return maxf(analog if analog < 0.99 else 0.0, pow(minf(1.0, _key_held[action] / time), curve))
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if WheelInput.calibrating and event is InputEventKey and event.pressed:
 		if event.physical_keycode == KEY_ESCAPE:
@@ -341,9 +426,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("tuning"):
 		open_tuning()
 	elif event.is_action_pressed("camera"):
-		camera.next_mode()
-		audio.set_inside(camera.mode != ChaseCamera.Mode.FOLLOW)
-		RunLog.event("camera %s" % ChaseCamera.Mode.keys()[camera.mode])
+		if free_cam != null and free_cam.active:
+			set_free_camera(false)
+		elif camera.mode == ChaseCamera.Mode.BONNET:
+			set_free_camera(true)
+		else:
+			camera.next_mode()
+			audio.set_inside(camera.mode != ChaseCamera.Mode.FOLLOW)
+			RunLog.event("camera %s" % ChaseCamera.Mode.keys()[camera.mode])
 	elif event.is_action_pressed("reset"):
 		recover()
 	elif event.is_action_pressed("restart"):
@@ -355,7 +445,108 @@ func _unhandled_input(event: InputEvent) -> void:
 		car.shift(false)
 		RunLog.event("shift down -> %s" % car.gear_name())
 	elif event.is_action_pressed("debug"):
-		hud.toggle_debug()
+		Settings.set_value("debug", not Settings.get_value("debug"))
+	else:
+		_more_actions(event)
+
+
+## The other actions of the browser game (Settings.js handlers).
+func _more_actions(event: InputEvent) -> void:
+	for g in 8:
+		if event.is_action_pressed("gear%d" % (g + 1)):
+			_select_gear(g + 1)
+		elif event.is_action_released("gear%d" % (g + 1)) and car.gear == g + 1:
+			_select_gear(0)
+	if event.is_action_pressed("reverse_gear") or event.is_action_pressed("reverse"):
+		_select_gear(-1)
+	elif event.is_action_released("reverse_gear"):
+		_select_gear(0)
+	elif event.is_action_released("reverse") and car.gear < 0:
+		car.gear = 1
+	elif event.is_action_pressed("parking_brake"):
+		parking_brake = not parking_brake
+		hud.notice("Parking brake %s" % ("on" if parking_brake else "off"))
+	elif event.is_action_pressed("toggle_tc"):
+		_aid("tc", "Traction control", "toggle_tc")
+	elif event.is_action_pressed("toggle_abs"):
+		_aid("abs", "ABS", "toggle_abs")
+	elif event.is_action_pressed("toggle_esc"):
+		_aid("esc", "Stability control (ESC)", "toggle_esc")
+	elif event.is_action_pressed("toggle_launch"):
+		_aid("launch_control", "Launch control", "toggle_launch")
+	elif event.is_action_pressed("toggle_two_step"):
+		_aid("two_step", "Two-step", "toggle_two_step")
+	elif event.is_action_pressed("mute"):
+		_aid("sound", "Engine sound", "mute")
+	elif event.is_action_pressed("hud_toggle"):
+		Settings.set_value("hud", not Settings.get_value("hud"))
+	elif event.is_action_pressed("camera_left") or event.is_action_pressed("camera_right"):
+		camera.orbit = wrapf(camera.orbit + (0.35 if event.is_action_pressed("camera_left") else -0.35), -PI, PI)
+	elif event.is_action_pressed("camera_reset"):
+		camera.orbit = 0.0
+	elif event.is_action_pressed("start_engine"):
+		car.engine.start()
+	elif event.is_action_pressed("repair"):
+		repair_here()
+	elif event.is_action_pressed("save_reset_position"):
+		_saved_place = {"p": car.global_position, "h": car.heading()}
+		hud.notice("Place saved for the reset")
+	elif event.is_action_pressed("photo"):
+		photo()
+	elif event.is_action_pressed("wheel_toggle"):
+		WheelInput.active = not WheelInput.active and not Settings.profile(WheelInput.guid).is_empty()
+		Controls.rebind(WheelInput.device if WheelInput.active else -1)
+		hud.notice("Wheel %s" % ("on" if WheelInput.active else "off"))
+	elif event.is_action_pressed("ragdoll") or event.is_action_pressed("rider_back") or event.is_action_pressed("rider_forward"):
+		if car.bike != null:
+			hud.notice("Not in the Godot version yet")
+
+
+## A driver aid on or off by its key, with a short line in the middle of the screen (Settings.js aid).
+func _aid(key: String, text: String, action: String) -> void:
+	Settings.set_value(key, not Settings.get_value(key))
+	var k := Controls.key_name(action)
+	hud.notice("%s %s%s" % [text, "on" if Settings.get_value(key) else "off", " (%s)" % k if k != "" else ""])
+
+
+## A gear of the H-shifter (0: neutral, -1: reverse): the gearbox is manual from then on.
+func _select_gear(g: int) -> void:
+	if car.bike != null and g < 0:
+		return
+	car.manual = true
+	car.gear = clampi(g, -1, car.gear_ratios.size())
+	car.shift_timer = car.shift_time
+	RunLog.event("H-shifter -> %s" % car.gear_name())
+
+
+## Repaired and on its wheels where it is (Settings.js repairCar); in a race the lap is no record.
+func repair_here() -> void:
+	RunLog.event("repair where it is")
+	var p := car.global_position
+	car.place(Vector3(p.x, track.ground_at(p.x, p.z) + car.wheels[0].radius + 0.3, p.z), car.heading())
+	car.repair()
+	laps.invalidate()
+	camera.snap()
+
+
+## A photo of the game without the HUD (F2), in the pictures folder of the computer.
+func photo() -> void:
+	var layers := find_children("*", "CanvasLayer", true, false)
+	var shown := []
+	for l: CanvasLayer in layers:
+		if l.visible:
+			shown.append(l)
+			l.visible = false
+	await RenderingServer.frame_post_draw
+	var img := get_viewport().get_texture().get_image()
+	for l: CanvasLayer in shown:
+		l.visible = true
+	var dir := OS.get_system_dir(OS.SYSTEM_DIR_PICTURES).path_join("O-Racer")
+	DirAccess.make_dir_recursive_absolute(dir)
+	var file := dir.path_join("openracer-%s.png" % Time.get_datetime_string_from_system().replace(":", "-"))
+	img.save_png(file)
+	hud.notice("Photo saved: %s" % file)
+	RunLog.event("photo %s" % file)
 
 
 ## The pause menu: the game stops, the wheel is let go.
@@ -379,33 +570,15 @@ func pause() -> void:
 func _show_pause_buttons() -> void:
 	if _pause_box != null:
 		_pause_box.queue_free()
-	var centre := CenterContainer.new()
-	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
-	pause_layer.add_child(centre)
-	_pause_box = centre
-	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(320, 0)
-	box.add_theme_constant_override("separation", 10)
-	centre.add_child(box)
-	var items := [["Resume", resume], ["Replay", _start_replay], ["Settings", _show_settings], ["Back to the start", func():
-		resume()
-		to_start()], ["Main menu", func():
-		resume()
-		RunLog.car = null
-		ForceFeedback.neutral()
-		leave.emit()]]
-	for item in items:
-		var b := Button.new()
-		b.text = item[0]
-		b.custom_minimum_size.y = 44
-		b.pressed.connect(item[1])
-		box.add_child(b)
-	(box.get_child(0) as Button).grab_focus.call_deferred()
+	var m := PauseMenu.new()
+	m.setup(self)
+	pause_layer.add_child(m)
+	_pause_box = m
 
 
 func _open_replay_file(path: String) -> void:
 	replay = Replay.new()
-	if not replay.open_file(path, self, car):
+	if not replay.open_file(path, self, car, not options.get("edit", false)):
 		hud.toast("This is not a replay of this version")
 		replay = null
 		return
@@ -415,6 +588,33 @@ func _open_replay_file(path: String) -> void:
 		(m as MeshInstance3D).transparency = 0.0
 	get_tree().paused = true
 	replay.play()
+	# (Edit in Replays: the video editor on the recording itself, Close goes back to the main menu)
+	if options.get("edit", false):
+		var ed := VideoEditor.new()
+		ed.standalone = true
+		ed.setup(replay)
+		replay.add_child(ed)
+
+
+## The free camera of the game (GameFreeCamera, FreeCam.js) on or off; off: the follow camera.
+func set_free_camera(on: bool) -> void:
+	if on:
+		if free_cam == null:
+			free_cam = GameFreeCamera.new()
+			free_cam.take = take
+			free_cam.left_camera.connect(func(): set_free_camera(false))
+			if take != null:
+				take.state_changed.connect(func(_s: String): free_cam.refresh())
+			add_child(free_cam)
+		free_cam.enter(camera, car)
+		audio.set_inside(false)
+	elif free_cam != null and free_cam.active:
+		free_cam.leave()
+		camera.mode = ChaseCamera.Mode.FOLLOW
+		camera.make_current()
+		camera.snap()
+		audio.set_inside(false)
+		RunLog.event("camera FOLLOW")
 
 
 ## The replay of what was driven (Replay.js): the pause menu goes, the game stays paused behind it.
@@ -446,7 +646,17 @@ func open_tuning() -> void:
 	if _tuning_paused:
 		get_tree().paused = true
 		ForceFeedback.neutral()
+		# (the gamepad works the menu while it holds the race, PadNav.js; in free driving the pad drives)
+		_focus_first.call_deferred(menu)
 	RunLog.event("tuning menu open%s" % (" (the race waits)" if _tuning_paused else ""))
+
+
+func _focus_first(root: Node) -> void:
+	for c in root.find_children("*", "Control", true, false):
+		var ctl := c as Control
+		if ctl.focus_mode == Control.FOCUS_ALL and ctl.is_visible_in_tree() and not (ctl is BaseButton and (ctl as BaseButton).disabled):
+			ctl.grab_focus()
+			return
 
 
 func close_tuning() -> void:
@@ -461,18 +671,9 @@ func close_tuning() -> void:
 
 
 func _show_settings() -> void:
-	_pause_box.queue_free()
-	var centre := CenterContainer.new()
-	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
-	pause_layer.add_child(centre)
-	_pause_box = centre
-	var menu := SettingsMenu.new()
-	menu.closed.connect(func():
-		if WheelInput.calibrating:
-			resume()
-		else:
-			_show_pause_buttons())
-	centre.add_child(menu)
+	if _pause_box == null:
+		_show_pause_buttons()
+	(_pause_box as PauseMenu).show_settings.call_deferred()
 
 
 func resume() -> void:

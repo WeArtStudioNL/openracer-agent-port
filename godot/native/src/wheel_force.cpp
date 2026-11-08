@@ -229,6 +229,10 @@ struct Hid {
 		if (ok) {
 			return true;
 		}
+#ifdef __EMSCRIPTEN__
+		// the web: no HID here (Godot has no SDL HID in the browser), so there is no wheel to open
+		return false;
+#endif
 #ifdef _WIN32
 		// (the SDL of Godot is in the executable; when it does not export these, force feedback stays off)
 		HMODULE self_module = GetModuleHandleW(nullptr);
@@ -584,6 +588,9 @@ WheelForce::~WheelForce() { close(); }
 
 String WheelForce::open(int vendor_id, int product_id) {
 	close();
+#ifdef __EMSCRIPTEN__
+	return "no HID in the browser (force feedback is only in the desktop versions)";
+#endif
 	if (!hid_api.load()) {
 		return "the HID functions of SDL were not found in Godot";
 	}

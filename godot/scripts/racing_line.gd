@@ -14,6 +14,8 @@ var length := 0.0
 static func from_track(cfg: Dictionary) -> RacingLine:
 	var raw: Array = cfg.get("racing_line", [])
 	if raw.size() < 10:
+		raw = _from_design(cfg)
+	if raw.size() < 10:
 		return null
 	var line := RacingLine.new()
 	var src := PackedVector3Array()
@@ -37,6 +39,38 @@ static func from_track(cfg: Dictionary) -> RacingLine:
 	line.points.remove_at(0)
 	line.length = line.points.size() * STEP
 	return line
+
+
+## A designed track without a recorded line: the middle of the road (RacingLine.fromDesign), in the direction of the start.
+static func _from_design(cfg: Dictionary) -> Array:
+	var design: Variant = cfg.get("design")
+	if not (design is Dictionary) or not (design.get("nodes") is Array) or (design["nodes"] as Array).size() < 3:
+		return []
+	var pts := PackedVector3Array()
+	for n in design["nodes"]:
+		pts.append(Vector3(float(n.get("x", 0)), float(n.get("y", 0)), float(n.get("z", 0))))
+	var curve := CatmullRom.make(pts, design.get("closed", true) != false)
+	var samples := maxi(32, roundi(curve.length() / 2.0))
+	var out: Array = []
+	for i in samples:
+		var p := curve.point_at(float(i) / samples)
+		out.append({"x": p.x, "y": p.y, "z": p.z})
+	# (the line runs the way the track is driven: the direction of the start)
+	var start: Dictionary = cfg.get("start", {})
+	var sx := float(start.get("x", 0))
+	var sz := float(start.get("z", 0))
+	var best := 0
+	var best_d := INF
+	for i in out.size():
+		var d := Vector2(out[i]["x"] - sx, out[i]["z"] - sz).length_squared()
+		if d < best_d:
+			best_d = d
+			best = i
+	var a: Dictionary = out[best]
+	var b: Dictionary = out[(best + 1) % out.size()]
+	if cos(atan2(b["z"] - a["z"], b["x"] - a["x"]) - float(start.get("heading", 0))) < 0.0:
+		out.reverse()
+	return out
 
 
 func count() -> int:

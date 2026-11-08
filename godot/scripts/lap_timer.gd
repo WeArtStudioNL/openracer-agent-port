@@ -25,12 +25,17 @@ var lap_invalid := false            # a reset in the lap: no record
 var laps_done := 0
 var last_lap := -1.0
 var best_lap := -1.0
+var lap_times: Array[float] = []    # every lap of this drive (the HUD shows the last three)
+var new_record := false             # the best lap of this drive is a record
 var best_splits := PackedFloat32Array()
 var splits := PackedFloat32Array()  # the time of every gate in this lap (-1: not yet)
 var delta := 0.0                    # against the best lap at the last gate
 var delta_time := -100.0            # the clock when it was shown
 var ghost: Car = null
 var records_file := RECORDS
+var key := ""                       # the record of: the car, or "car~tune" with a setup of its own (Records.js key)
+var save_records := true            # the menu: "Save lap records" (off: no record is kept)
+var use_ghost := true               # the menu: "Ghost of your best lap"
 var ghosts_dir := GHOSTS
 
 var _passed: Array[bool] = []
@@ -40,9 +45,13 @@ var _record_in := 0.0
 var _best_samples := PackedFloat32Array()
 
 
-func setup(c: Car, track: Track) -> void:
+## opts (the menu): records (bool), ghost (bool), tune (the name of the setup in use, "" for the car as made).
+func setup(c: Car, track: Track, opts := {}) -> void:
 	name = "LapTimer"
 	car = c
+	key = car.car_id + ("~" + str(opts["tune"]) if str(opts.get("tune", "")) != "" else "")
+	save_records = bool(opts.get("records", true))
+	use_ghost = bool(opts.get("ghost", true))
 	track_id = track.track_id
 	gates = track.config.get("gates", [])
 	if Content.arg("ai") != "":
@@ -53,12 +62,12 @@ func setup(c: Car, track: Track) -> void:
 	splits.fill(-1.0)
 	var cfg := ConfigFile.new()
 	if cfg.load(records_file) == OK:
-		best_lap = float(cfg.get_value(track_id, car.car_id, -1.0))
-		best_splits = cfg.get_value(track_id, car.car_id + ":splits", PackedFloat32Array())
+		best_lap = float(cfg.get_value(track_id, key, -1.0))
+		best_splits = cfg.get_value(track_id, key + ":splits", PackedFloat32Array())
 	var f := _ghost_path()
 	if FileAccess.file_exists(f):
 		_best_samples = bytes_to_var(FileAccess.get_file_as_bytes(f))
-	if not _best_samples.is_empty():
+	if not _best_samples.is_empty() and use_ghost:
 		_make_ghost.call_deferred()
 
 
@@ -151,6 +160,7 @@ func _gate(g: int) -> void:
 		else:
 			var t := lap_time()
 			last_lap = t
+			lap_times.append(t)
 			laps_done += 1
 			var record := not lap_invalid and (best_lap < 0.0 or t < best_lap)
 			RunLog.event("lap %d: %s%s%s" % [laps_done, format_time(t), "  RECORD" if record else "", "  (reset in the lap)" if lap_invalid else ""])
@@ -158,13 +168,15 @@ func _gate(g: int) -> void:
 				delta = t - best_lap
 				delta_time = clock
 			if record:
+				new_record = save_records
 				best_lap = t
 				splits[0] = t
 				best_splits = splits.duplicate()
 				_best_samples = _recording
-				_save()
+				if save_records:
+					_save()
 				message.emit("New best lap  %s" % format_time(t))
-				if ghost == null:
+				if ghost == null and use_ghost:
 					_make_ghost()
 			else:
 				message.emit("Lap %s" % format_time(t))
@@ -185,8 +197,8 @@ func _gate(g: int) -> void:
 func _save() -> void:
 	var cfg := ConfigFile.new()
 	cfg.load(records_file)
-	cfg.set_value(track_id, car.car_id, best_lap)
-	cfg.set_value(track_id, car.car_id + ":splits", best_splits)
+	cfg.set_value(track_id, key, best_lap)
+	cfg.set_value(track_id, key + ":splits", best_splits)
 	cfg.save(records_file)
 	DirAccess.make_dir_recursive_absolute(ghosts_dir)
 	var f := FileAccess.open(_ghost_path(), FileAccess.WRITE)
@@ -195,7 +207,7 @@ func _save() -> void:
 
 
 func _ghost_path() -> String:
-	return ghosts_dir.path_join("%s__%s.ghost" % [track_id, car.car_id])
+	return ghosts_dir.path_join("%s__%s.ghost" % [track_id, key.replace("~", "__tune__").validate_filename()])
 
 
 func _record(dt: float) -> void:
