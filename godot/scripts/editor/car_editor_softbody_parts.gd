@@ -432,7 +432,7 @@ func _hinge_point(f: Dictionary, side: String, s: SoftBody) -> Variant:
 	if pt != null:
 		return vec(pt)
 	var k: float = f["m" + side].value()
-	if s != null and k >= 0.0 and int(k) < s.count:
+	if s != null and k >= 0.0 and int(k) < s.body_count:
 		return s.rest[int(k)] - card.call("com")
 	return null
 

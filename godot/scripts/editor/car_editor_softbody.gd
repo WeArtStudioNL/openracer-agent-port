@@ -521,7 +521,7 @@ func restart_bench() -> void:
 	car = ed.bench.car
 	var s := soft()
 	if s != null:
-		sel_nodes = sel_nodes.filter(func(k: int) -> bool: return k < s.count)
+		sel_nodes = sel_nodes.filter(func(k: int) -> bool: return k < s.body_count)
 		if sel_beam >= s.beam_count:
 			sel_beam = -1
 	_hide_driver()
@@ -648,7 +648,7 @@ func _draw_hinges(s: SoftBody) -> void:
 	for part in parts.list():
 		var m := []
 		for mount in part.get("mounts", []):
-			if mount is Dictionary and (mount.get("point") is Array or int(mount.get("node", -1)) in range(s.count)):
+			if mount is Dictionary and (mount.get("point") is Array or int(mount.get("node", -1)) in range(s.body_count)):
 				m.append(mount)
 		var at := func(mount: Dictionary) -> Vector3:
 			return (PartsPanel.vec(mount["point"]) + com()) if mount.get("point") is Array else s.position(int(mount["node"]))
@@ -657,7 +657,7 @@ func _draw_hinges(s: SoftBody) -> void:
 			pts.append(at.call(m[1]))
 		if m.size() >= 1:
 			for k in part.get("nodes", []):
-				if int(k) >= 0 and int(k) < s.count:
+				if int(k) >= 0 and int(k) < s.body_count:
 					pts.append(at.call(m[0]))
 					pts.append(s.position(int(k)))
 		var h: Variant = part.get("hinge")
@@ -692,7 +692,7 @@ func node_at(mouse: Vector2) -> int:
 	var s := soft()
 	var best := -1
 	var best_d := NODE_PIXELS
-	for k in s.count:
+	for k in s.body_count:
 		var p: Variant = _screen(s.position(k))
 		if p != null and (p as Vector2).distance_to(mouse) < best_d:
 			best_d = (p as Vector2).distance_to(mouse)
@@ -846,7 +846,7 @@ func lasso_select(polygon: PackedVector2Array, add: bool) -> void:
 	if not add:
 		sel_nodes.clear()
 	sel_beam = -1
-	for k in s.count:
+	for k in s.body_count:
 		var p: Variant = _screen(s.position(k))
 		if p != null and Geometry2D.is_point_in_polygon(p, polygon) and not sel_nodes.has(k):
 			sel_nodes.append(k)
@@ -980,7 +980,7 @@ func freeze() -> void:
 	if layout() != null or s == null:
 		return
 	var list := []
-	for k in s.count:
+	for k in s.body_count:
 		var e := layout_entry(s.rest[k], s.radius[k])
 		if s.part_of[k] != "":
 			e["part"] = s.part_of[k]
@@ -1016,7 +1016,7 @@ func add_node_at(mouse: Vector2) -> bool:
 	var hit := surface_at(mouse)
 	if hit.is_empty():
 		return false
-	var n := (layout() as Array).size() if layout() != null else soft().count
+	var n := (layout() as Array).size() if layout() != null else soft().body_count
 	if n >= MOST_NODES:
 		status("A car can have %d nodes at most." % MOST_NODES, "error")
 		return true
@@ -1042,7 +1042,7 @@ func remove_nodes(gone: Array) -> void:
 	var s := soft()
 	if s == null or gone.is_empty():
 		return
-	if s.count - gone.size() < 3:
+	if s.body_count - gone.size() < 3:
 		status("A car needs at least 3 nodes.", "error")
 		return
 	freeze()

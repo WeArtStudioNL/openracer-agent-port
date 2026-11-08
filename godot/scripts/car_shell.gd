@@ -15,6 +15,7 @@ static var shells: Array[CarShell] = []    # the cars with a shell, for the hits
 
 var car: Car
 var sb: SoftBody
+var rig: WheelRig = null             # the suspension of the wheels in the shell (wheel_hubs)
 var walls: WallGrid = null
 var floor_y := -0.2                 # the underside of the car in its frame
 var bound := 1.0                    # m from the origin of the frame to the farthest edge of a node
@@ -48,7 +49,11 @@ func _init(c: Car) -> void:
 	var spheres := CollisionProxy.spheres_of(car)
 	if spheres.size() < 3:
 		return
+	if car.has_meta("model_beams"):
+		cfg = cfg.duplicate()
+		cfg["explicit_beams"] = car.get_meta("model_beams")
 	sb = SoftBody.new(spheres, cfg, car.mass)
+	rig = WheelRig.new(car, sb, spheres, cfg)
 	floor_y = float(car.get_meta("floor_y", floor_y))
 	for k in sb.count:
 		bound = maxf(bound, sb.position(k).length() + sb.radius[k])
@@ -59,11 +64,18 @@ func _init(c: Car) -> void:
 
 func dispose() -> void:
 	shells.erase(self)
+	rig.dispose()
 
 
 func repair() -> void:
 	sb.repair()
+	rig.repair()
 	_logged = 0.0
+
+
+## Once a physics step, before the suspension: the bend of the wheels from the nodes of their suspension.
+func wheels(dt: float) -> void:
+	rig.update(dt)
 
 
 ## Other walls than those of the track (the wall of the crash test of the car editor).

@@ -179,20 +179,55 @@ the meshes of the body are made again once with the nodes as bones, in a thread 
 the start (Home, or the pause menu) and Backspace (repair where it is) repair the car and puts its parts back; R puts it back on its wheels and
 keeps the dents and the parts that are off.
 
+A model can bring its own shell (`collision_proxy.gd`, as `CollisionProxy.js`): an object called `beams` (also
+`softbody_beams`, `shell_beams`) of vertices and edges (glTF lines: Blender, Data > Mesh > Loose Edges in the export).
+Every vertex is a node and every edge a beam (at most 200 nodes, radius `softbody.beam_node_radius` or a third of the
+mean edge); a `softbody.layout` (the car editor) goes before it, as SOFTBODY.md has it (the browser's code puts the
+model first; the muscle car and the hatchback have both and keep their layouts). The debug view (key 0,
+DebugView) draws the nodes and the beams, the suspension too.
+
+The suspension is part of the shell (`scripts/wheel_rig.gd`, the rig of SOFTBODY.md; unless `softbody.wheel_hubs` is
+false): per wheel the hub (the collision sphere of the wheel), the knuckle (ball joints above and below, the end of the
+tie rod) and the pivots of the arms and of the tie rod on the body, joined by stiff knuckle beams and by the arms and
+the tie rod that bend (14 and 36 kN, 12 and 36 kN: `softbody.arm_yield`, `arm_break`, `tie_yield`, `tie_break` in
+kN). Their beams and anchors are solved by position (XPBD, `SoftBody._rig_solve` after rigSolve of SoftBody.js; a rig
+that nothing touches is left out). Every step the wheel is read from its nodes: the camber from the lean of the knuckle,
+the toe from its turn, and the hub gives the place of the wheel on the car; a bent wheel grips up to 40 % less, so a
+car with a bent arm pulls to a side. When both beams of an arm tear, or the hub has moved `softbody.hub_limit` (0.3
+m), the wheel is off: no road, spring, drive or brake on that corner, and it flies off as a RigidBody3D (a cylinder of
+its size, with its rim and tyre) with the speed and spin it had, rolls away and, once it is clear of it, hits the car.
+
 The parts of car.json `parts` (`scripts/car_parts.gd`, after `Parts.js`) come off when the load on them passes
-their `break_force`: the larger of the mass of the part times the acceleration of its place (smoothed over a few
-steps) and the force of the shell on the nodes it hangs on. A detachable part bends on with the body for its
-`break_delay` and then falls off as a RigidBody3D with a box of its size, with the dent it had, and hits the track
-and the other cars; a breakable part (glass, a lamp) is gone at once in a cloud of shards; a hinged part sits shut
-until all its pins break and then falls off.
+their force: the larger of the mass of the part times the acceleration of its place (smoothed over a few steps) and
+the force of the shell on the nodes it hangs on. A detachable part bends on with the body for its `break_delay` and
+then falls off as a RigidBody3D with a box of its size, with the dent it had; it does not hit its own car for 0.35 s,
+then as soon as it is clear of it. A breakable part (glass, a lamp) breaks at once (`scripts/shatter.gd`, Shatter.js):
+its pieces (clusters of its faces, at most `shatter.max_pieces`, or the pieces of the hidden object `<name>_broken`
+with `"pieces": "mesh"`) fly off, bounce off the walls, lie down flat and shrink away, with a cloud of particles of its
+material (shards, splinters or grains; `scripts/specks.gd`). A hinged part hangs on its pins (`mounts`: a point or a
+node; axes, limits, a turn `rot`, `activate_force` "opens at", `break_force` "breaks off at") or on the hinge of
+`hinge` (origin, axis, limits, spring, damper, `latch_force`, default 3 g of the part): it sits shut until the load
+passes its latch or the "opens at" of a pin, bends on for its delay, then swings on a Generic6DOFJoint3D of Jolt (one
+axis a hinge between its angles, more axes a joint with a range about each, none a rigid pin; two pins without axes a
+hinge on the line between them, one a ball). The joints hang on a body that is moved where the car will be (no force
+goes from a joint into the car); what the track pushes on a hinged part goes to the car, as Vehicle.js partForces does
+(only what stops the car at that place, at most 500 N a kilo of the part). A pin tears at its force (the load shared
+over the pins that hold, the force of the shell on its node, or the push of the track); with one left the part swings
+on it, with none it is free. A part with nodes of its own (the layout names it) dents by itself and hangs on link
+beams (a torn link is a torn pin); its nodes take the hit for 0.3 s after it opens. A part in the object of another
+rides on it and comes off it at its own force. Loose parts are damped and held to a top speed.
 
 The tuning menu (U) has a card "Soft body" (in the browser it is read-only; here it can be set): the car dents or not,
 the most nodes made from the model, the yield and break forces of the anchors and the beams, the hardening and the
 mass of the shell. A change makes a new shell, whole (and the model is made again when the nodes changed).
 
 Test: `Godot --headless --fixed-fps 120 --path godot res://tools/test_crash.tscn -- --car=openracer-muscle
---speed=60 [--angle=40] [--set=damage:false]` drives into a wall and prints the bend, the energy and what tore,
-then drives the car on and repairs it; without `--headless`, `--shot=file.png` saves a picture of the dent.
+--speed=60 [--angle=40] [--set=damage:false] [--replay=1]` drives into a wall and prints the bend, the energy, what
+tore, the parts and the wheels (toe, camber, shift, off), then drives the car on and repairs it; with `--replay=1` it
+plays the crash back and compares; without `--headless`, `--shot=file.png` saves a picture of the dent.
+`res://tools/test_parts.tscn -- --car=hatchback` opens every hinged part while the car weaves and brakes (the angle of
+each against the range of its pin), tears a wheel off (it must roll away and the car drive on three), breaks a part
+and repairs the car.
 
 The engine takes damage as in the browser game (`EngineDamage.js`, `scripts/engine_damage.gd`; not for the AI cars,
 which have no pit stop): the nodes of the shell in the engine bay and at the radiator say how hurt the block, the
@@ -210,10 +245,27 @@ damage on, a hard hit on a tyre (more than five times its static load: a kerb, a
 it leaks 0.05 to 0.15 bar a second down to 0.15 bar, and its grip, its sidewall and (a kart) its spring follow. A
 repair makes the tyres whole. The crash test takes `--puncture=1`.
 
-Not yet from the browser game: the suspension as nodes and beams (a bent arm that pulls the car aside, a wheel that
-comes off), hinged parts that swing open (doors, a hood) and the link beams of parts with nodes of their own, the
-pieces of a part that shatters (`Shatter.js`), a loose part that hits its own car, the shell of the model drawn as an
-object "beams", the replay of the shell.
+Not yet from the browser game: the shell tyre (TyreShell.js, TyreDeform.js: the tyres of the player's car as rings of
+nodes; Godot has the ray and the slip curve of the simple tyre of the AI cars), the hit of a loose part of one car on
+another car, a wheel of the other car feeling a hit, the plate and the node grabber of the debug view, the fading of
+the parts in the pit stop (they are put back at the end of the repair).
+
+## Marbles, debris and the parts library
+
+The rigid objects of a track (RigidObjects.js) are `scripts/track_objects.gd` (the track editor); the loose parts
+and the wheels that come off of a car meet them.
+
+Marbles (`scripts/marbles.gd`, Marbles.js): a tyre whose tread is soft and hot (150 to 180 C, before it smokes) and
+slides on the road sheds pellets of rubber of 4 to 10 mm, thrown back and to the side, that bounce and lie (up to
+10000, for every car; they are only seen, as in the browser game). Debris (`scripts/debris.gd`, Debris.js): a wheel
+that slips on grass, sand, gravel, mud or earth throws blades, grains, chunks and clumps the way its tread moves
+against the ground (Settings, Graphics: Debris; the water and the snow are GroundSpray). Test: `res://tools/test_effects.tscn` (the desert: a stack of boxes (track objects), the sand, hot tyres;
+`--shot=prefix` without `--headless` saves pictures).
+
+The parts library (`scripts/editor/parts_library.gd`) and the suspension rig (`scripts/suspension_rig.gd`, CarVisuals)
+are described with the look of a car below. The lean of the wheels of a live axle (Vehicle.axleLean) is not in the
+physics: with it the lap of the muscle car at kartbaan-oldenzaal was 0.06 s slower. Test of the rig on its own:
+`res://tools/test_rig.tscn -- --car=stadium-truck [--shot=file.png]`.
 
 ## The driver
 
@@ -476,7 +528,11 @@ tilt speed and smoothing, and Record (the take). Remembered per car in `user://v
 
 Test: `res://tools/test_replay.tscn -- --ai --replay-dir=<tmp> --video-cfg=<tmp> --video-dir=<tmp> [--editor=1]
 [--video=1] [--take=1] [--browser=<file>] [--watch=<file> [--edit-file=1]] [--shot=<folder>]` (the folders are
-required, so a test never writes into the player's data; --video needs a window). Not yet: the soft body, the parts,
+required, so a test never writes into the player's data; --video needs a window). The soft body is in it
+(`scripts/replay_soft.gd`): a record of the shell, the parts and the wheels of a car whenever one changed, played
+back with the dent of the time, the parts that were off as copies where they were (with the dent they had when they
+came off) and the wheels with their bend or off; it is in the saved file too (`test_crash.tscn -- --replay=1`). Not
+yet: the pieces of a part that broke, the marbles, the debris,
 the effects (skid marks, smoke) and the rider's ragdoll in the replay; Godot does not write browser files (it reads
 them); the live "cinematic camera after a race" of main.js; the Godot replay of the weather is the weather of now.
 
@@ -486,7 +542,9 @@ The pit stop (`scripts/pit_stop.gd`, Pit.js): with "Tyre temperature and wear" o
 in pit box 1 of the track (track.json `pit.boxes`, drawn on the road with their numbers) is serviced: the tank is
 filled at 6 L/s, the tyres are changed when the most worn is past 15 % or one leaks, and with damage on the car is
 repaired; the parts go side by side, with 1.2 s to lift the car and to drop it, and the car is held until it is done.
-The HUD shows "PIT STOP 3.2 s · repair · tyres · fuel". Test: `res://tools/test_pit.tscn -- --set=tyre_wear:1`.
+The HUD shows "PIT STOP 3.2 s · repair · tyres · fuel". A repair takes 1.5 s more for every wheel that is bent or off,
+and the dents and the bent wheels go back bit by bit through it. Test: `res://tools/test_pit.tscn -- --set=tyre_wear:1
+[--bend=1]`.
 The AI cars of a race pit too (`scripts/ai_pit.gd`, Opponent.js): when the most worn tyre is past 75 % with two
 laps or more to go, or the fuel will not last the laps that are left (the fuel of a lap measured, else 12 % of the
 tank), each drives to its own box (box 2 for the first AI car, and so on; a car without a box does not pit):
@@ -664,6 +722,8 @@ editor), import from a link, the browser's storage notes; TextureBudget.js (the 
 | `scripts/engine_sim_params.gd`, `car_audio.gd` | the sound parameters of car.json; the engine and the tyre squeal of a car |
 | `scripts/tyre_effects.gd` | skid marks, tyre smoke and dust |
 | `scripts/soft_body.gd`, `car_shell.gd`, `collision_proxy.gd`, `wall_grid.gd`, `soft_body_mesh.gd`, `car_parts.gd` | the shell that dents, its contacts, its nodes, the walls of the track, the model that bends, the parts that come off |
+| `scripts/wheel_rig.gd`, `shatter.gd`, `specks.gd`, `replay_soft.gd` | the suspension in the shell, a part that breaks, the small particles, the soft body in the replay |
+| `scripts/marbles.gd`, `debris.gd` | marbles, debris |
 | `tools/render_engine.gd` | renders the engine sound of a car to a wav (a test) |
 
 The engine sound is the one of the browser game, calculated: the gas in every cylinder at 10 kHz (the valves, the
@@ -694,7 +754,8 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
 4. **The rest of the physics**: the kinds of tyre, tyre heat and wear, pressure, downforce, torque converter,
    traction and stability control, camber, toe, ride height, anti geometry, the engine of Engine.js with turbo,
    the automatic gearbox, fuel, launch control and the extras *(done)*; damage: the soft body that dents, the
-   model that bends with it, the parts that come off *(done)*.
+   model that bends with it, the parts that come off, the suspension in the shell, hinges, shatter, the things
+   on a track, marbles, debris *(done)*.
 5. **Motorcycles**: the bike model of Motorcycle.js with its rider (`scripts/motorcycle.gd`): lean, steering from the
    lean, balance, camber thrust, posture, wheelie control, brakes, crash rules, camera roll; the front end, swingarm,
    shock and chain (`motorcycle_model.gd`), the rider with IK (`motorcycle_rider.gd`), the AI rides them *(done; not

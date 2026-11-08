@@ -12,8 +12,12 @@ extends RefCounted
 ##
 ## The frame is the space of the body of the car in Godot (x to the left, y up, z forward, the origin at the height
 ## of the axles, midway between them). Strengths in newtons, stiffnesses in N/m; every default can be set per car
-## (car.json "softbody") and per node and beam. Not ported: the suspension as nodes and beams (the rig), the plate
-## and the node grabber of the car editor, the copy for a physics worker.
+## (car.json "softbody") and per node and beam. The suspension of every wheel is in the shell too (the rig, made by
+## WheelRig: a hub, a knuckle and the pivots of the arms, joined by beams that bend and tear); its stiff beams and
+## anchors are solved by position (XPBD, rigSolve of SoftBody.js), the rest explicitly. Not ported: the plate and the
+## node grabber of the car editor, the copy for a physics worker.
+
+const RIG_ITERS := 6               # the passes of the position solver over the suspension
 
 var shell_mass := 300.0         # kg that the nodes share
 var anchor_k := 8.0e5
@@ -35,6 +39,9 @@ var reach := 1.1                # beams are not longer than this (m)
 
 var count := 0
 var part_of := PackedStringArray()     # the part (car.json "parts") a node belongs to, "" for the body
+var is_rig := PackedByteArray()        # a node of the suspension (they come last: body_count is the number of the others)
+var body_count := 0                    # the nodes of the car itself: the model and the parts only know these
+var a_scale := PackedFloat64Array()    # the stiffness of the anchor of a node as a factor (a hub is held by its arms)
 var rest := PackedVector3Array()       # where the node is when the car is whole
 var radius := PackedFloat64Array()
 var mass := PackedFloat64Array()
@@ -54,6 +61,7 @@ var beam_k_of := PackedFloat64Array()
 var beam_yield_of := PackedFloat64Array()
 var beam_break_of := PackedFloat64Array()
 var beam_alive := PackedByteArray()
+var beam_rig := PackedByteArray()      # a beam of the suspension: the position solver has it, not the explicit loop
 var beam_count := 0
 
 var displacement := PackedVector3Array()   # u + q of every node, for the model
@@ -70,6 +78,14 @@ var blew_up := 0
 
 var _good_u := PackedVector3Array()
 var _good_q := PackedVector3Array()
+var _repair_from: Array = []           # [u, q] when a repair that takes time began (the pit stop)
+# the position solver of the suspension: per wheel its nodes and beams (a rig is joined to nothing else, so a wheel
+# that nothing touches is left out)
+var _rig_groups: Array = []            # [{nodes: PackedInt32Array, beams: PackedInt32Array}]
+var _rig_old := PackedVector3Array()
+var _rig_lam_a := PackedFloat64Array()
+var _rig_lam_b := PackedFloat64Array()
+var _rig_speed2 := 0.0
 
 
 ## spheres: [{x, y, z, r, part}] in the frame of the car; cfg: car.json "softbody"; car_mass in kg.
@@ -109,12 +125,21 @@ func _init(spheres: Array, cfg: Dictionary, car_mass: float) -> void:
 	anchor_alive.resize(n)
 	gone.resize(n)
 	part_of.resize(n)
+	is_rig.resize(n)
+	a_scale.resize(n)
+	a_scale.fill(1.0)
+	_rig_old.resize(n)
+	_rig_lam_a.resize(n)
 	displacement.resize(n)
+	body_count = n
 	for k in n:
 		var s: Dictionary = spheres[k]
 		rest[k] = Vector3(float(s["x"]), float(s["y"]), float(s["z"]))
 		radius[k] = float(s["r"])
 		part_of[k] = str(s.get("part", ""))
+		is_rig[k] = 1 if s.get("rig", false) else 0
+		if is_rig[k] == 1 and body_count == n:
+			body_count = k
 		mass[k] = maxf(2.0, shell_mass / n)
 		node_yield[k] = anchor_yield
 		node_break[k] = anchor_break
@@ -135,7 +160,7 @@ func _init(spheres: Array, cfg: Dictionary, car_mass: float) -> void:
 	for e in explicit:
 		var lo := mini(int(e[0]), int(e[1]))
 		var hi := maxi(int(e[0]), int(e[1]))
-		if lo == hi or hi >= n or seen.has(lo * 4096 + hi):
+		if lo == hi or hi >= n or seen.has(lo * 4096 + hi) or is_rig[lo] == 1 or is_rig[hi] == 1:
 			continue
 		var d := rest[lo].distance_to(rest[hi])
 		if d < 0.01:
@@ -146,8 +171,10 @@ func _init(spheres: Array, cfg: Dictionary, car_mass: float) -> void:
 		for a in n:
 			var near := []
 			var pa := rest[a]
+			if is_rig[a] == 1:
+				continue
 			for b in n:
-				if a == b or part_of[a] != part_of[b]:
+				if a == b or part_of[a] != part_of[b] or is_rig[b] == 1:
 					continue
 				var d := pa.distance_to(rest[b])
 				if d < reach and d > 0.02:
@@ -169,6 +196,7 @@ func _init(spheres: Array, cfg: Dictionary, car_mass: float) -> void:
 				beam_yield_of[i] = float(o.get("yield_force", beam_yield_of[i]))
 				beam_break_of[i] = float(o.get("break_force", beam_break_of[i]))
 	_safe_step()
+	_group_rigs()
 	repair()
 
 
@@ -181,7 +209,74 @@ func _add_beam(a: int, b: int, d: float, k: float, y: float, br: float) -> void:
 	beam_yield_of.append(y)
 	beam_break_of.append(br)
 	beam_alive.append(1)
+	beam_rig.append(1 if is_rig[a] == 1 or is_rig[b] == 1 else 0)
+	_rig_lam_b.append(0.0)
 	beam_count = beam_a.size()
+
+
+## A beam that is added afterwards (the link of a mount of a part, the arms of the suspension): its index. params:
+## {stiffness, yield_force, break_force} (N/m, N).
+func add_beam(a: int, b: int, params := {}) -> int:
+	for i in beam_count:
+		if (beam_a[i] == a and beam_b[i] == b) or (beam_a[i] == b and beam_b[i] == a):
+			return i
+	_add_beam(mini(a, b), maxi(a, b), rest[a].distance_to(rest[b]), float(params.get("stiffness", beam_k)),
+		float(params.get("yield_force", beam_yield)), float(params.get("break_force", beam_break)))
+	_safe_step()
+	_group_rigs()
+	return beam_count - 1
+
+
+## The strength and the mass of a node afterwards (the hub of a wheel): {yield, break (N, of its anchor), mass (kg),
+## anchor_scale, release (its anchor is gone: it is held by its beams only)}.
+func set_node(k: int, o: Dictionary) -> void:
+	if o.has("yield"):
+		node_yield[k] = float(o["yield"])
+	if o.has("break"):
+		node_break[k] = float(o["break"])
+	if o.has("mass"):
+		mass[k] = maxf(0.5, float(o["mass"]))
+	if o.has("anchor_scale"):
+		a_scale[k] = float(o["anchor_scale"])
+	if o.get("release", false):
+		anchor_alive[k] = 0
+		quiet = false
+	_safe_step()
+
+
+## The force in a beam now (N, along it: positive when it is stretched), for the load on a link of a part.
+func beam_force(i: int) -> float:
+	if beam_alive[i] == 0 or gone[beam_a[i]] == 1 or gone[beam_b[i]] == 1:
+		return 0.0
+	return beam_k_of[i] * (position(beam_b[i]).distance_to(position(beam_a[i])) - beam_rest[i])
+
+
+## The rigs of the wheels as groups: the nodes that the beams of the suspension join (a union of their ends).
+func _group_rigs() -> void:
+	var root := {}
+	var find := func(k: int) -> int:
+		while int(root.get(k, k)) != k:
+			k = int(root[k])
+		return k
+	for i in beam_count:
+		if beam_rig[i] == 1:
+			var ra: int = find.call(beam_a[i])
+			var rb: int = find.call(beam_b[i])
+			if ra != rb:
+				root[ra] = rb
+	var by_root := {}
+	for i in beam_count:
+		if beam_rig[i] == 0:
+			continue
+		var r: int = find.call(beam_a[i])
+		if not by_root.has(r):
+			by_root[r] = {"nodes": PackedInt32Array(), "beams": PackedInt32Array()}
+		var g: Dictionary = by_root[r]
+		g["beams"].append(i)
+		for k in [beam_a[i], beam_b[i]]:
+			if is_rig[k] == 1 and not (g["nodes"] as PackedInt32Array).has(k):
+				g["nodes"].append(k)
+	_rig_groups = by_root.values()
 
 
 ## The biggest step with which the nodes stay stable (safeStep of SoftBody.js): for every node the stiffness of its
@@ -192,9 +287,13 @@ func _safe_step() -> void:
 	k_sum.resize(count)
 	c_sum.resize(count)
 	for k in count:
-		k_sum[k] = anchor_k + contact_k
-		c_sum[k] = 2.0 * anchor_damping * sqrt(anchor_k * mass[k]) + 2.0 * contact_damping * sqrt(contact_k * mass[k])
+		# (the anchors and the beams of the suspension are solved by position: they do not limit the step)
+		var ka := 0.0 if is_rig[k] == 1 else anchor_k * a_scale[k]
+		k_sum[k] = ka + contact_k
+		c_sum[k] = 2.0 * anchor_damping * sqrt(ka * mass[k]) + 2.0 * contact_damping * sqrt(contact_k * mass[k])
 	for i in beam_count:
+		if beam_rig[i] == 1:
+			continue
 		var a := beam_a[i]
 		var b := beam_b[i]
 		var cb := 2.0 * beam_damping * sqrt(beam_k_of[i] * minf(mass[a], mass[b]))
@@ -242,6 +341,7 @@ func stats() -> Dictionary:
 
 ## The car is whole again.
 func repair() -> void:
+	_repair_from = []
 	u.fill(Vector3.ZERO)
 	w.fill(Vector3.ZERO)
 	q.fill(Vector3.ZERO)
@@ -311,13 +411,12 @@ func step(dt: float, contacts: Callable) -> bool:
 	steps_used = steps
 	var h := dt / steps
 	var share := h / dt
-	var ka := anchor_k
-	var cd := 2.0 * anchor_damping * sqrt(ka)
+	_rig_speed2 = 0.0
 	for s in steps:
 		contacts.call(h)
 		# the beams: a spring and a damper along each, with a yield (a new rest length) and a snap
 		for i in beam_count:
-			if beam_alive[i] == 0:
+			if beam_alive[i] == 0 or beam_rig[i] == 1:
 				continue
 			var na := beam_a[i]
 			var nb := beam_b[i]
@@ -354,7 +453,8 @@ func step(dt: float, contacts: Callable) -> bool:
 			if gone[k] == 1:
 				force[k] = Vector3.ZERO
 				continue
-			if anchor_alive[k] == 1:
+			if anchor_alive[k] == 1 and is_rig[k] == 0:
+				var ka := anchor_k * a_scale[k]
 				var d := u[k].length()
 				var yield_d := node_yield[k] / ka
 				if d > yield_d:
@@ -365,7 +465,7 @@ func step(dt: float, contacts: Callable) -> bool:
 					absorbed += node_yield[k] * shift.length()
 					d = u[k].length()
 					moved = true
-				var fa := u[k] * ka + w[k] * (cd * sqrt(mass[k]))
+				var fa := u[k] * ka + w[k] * (2.0 * anchor_damping * sqrt(ka * mass[k]))
 				if ka * d > node_break[k] and anchor_max_bend - q[k].length() > 1e-6:
 					anchor_alive[k] = 0
 					_loose(k)
@@ -379,8 +479,16 @@ func step(dt: float, contacts: Callable) -> bool:
 			var sp := w[k].length_squared()
 			if sp > max_speed2:
 				max_speed2 = sp
+			if is_rig[k] == 1:
+				_rig_old[k] = u[k]
 			u[k] += w[k] * h
 			force[k] = Vector3.ZERO
+		if not _rig_groups.is_empty():
+			var r := _rig_solve(h, share)
+			if r[0]:
+				moved = true
+			rf += r[1]
+			rt += r[2]
 	if not _sane() or not rf.is_finite() or not rt.is_finite():
 		# a shell that blew up goes back to its last good state; when that blows up as well it is made whole
 		blew_up += 1
@@ -402,7 +510,7 @@ func step(dt: float, contacts: Callable) -> bool:
 	# (nothing yields and nothing moves: a shell that keeps a dent stands in its own balance, its anchors pull nothing on
 	# the car in sum, and the steps can be left out until something hits it again. The browser game also asks for an
 	# elastic stretch under 0.1 mm, which a dent keeps for good: its shell was worked out in every step after a hit)
-	quiet = not moved and max_speed2 < 1e-6
+	quiet = not moved and max_speed2 < 1e-6 and _rig_speed2 < 1e-6
 	var any := moved
 	if not any:
 		for m in count:
@@ -412,6 +520,145 @@ func step(dt: float, contacts: Callable) -> bool:
 	if any:
 		_sync_displacement()
 	return true
+
+
+## The suspension by position (rigSolve of SoftBody.js): its beams and the anchors of its nodes are constraints with a
+## compliance of 1/k (XPBD: backward Euler for the springs, stable at any step), Gauss-Seidel over the few of a wheel;
+## then the speed from the move, the dampers as an impulse that cannot overshoot, yield and break from the final
+## lengths, and what the anchors pull on the car. A wheel whose rig nothing moves is left out. Returns [moved, force,
+## torque] (frame, the share of this small step).
+func _rig_solve(h: float, share: float) -> Array:
+	var hard := hardening
+	var h2 := h * h
+	var moved := false
+	var rf := Vector3.ZERO
+	var rt := Vector3.ZERO
+	for g: Dictionary in _rig_groups:
+		var nodes: PackedInt32Array = g["nodes"]
+		var beams: PackedInt32Array = g["beams"]
+		var busy := false
+		for k in nodes:
+			if gone[k] == 0 and (w[k].length_squared() > 1e-12 or u[k].length_squared() > 1e-12):
+				busy = true
+				break
+		if not busy:
+			continue
+		for k in nodes:
+			_rig_lam_a[k] = 0.0
+		for i in beams:
+			_rig_lam_b[i] = 0.0
+		for _it in RIG_ITERS:
+			for k in nodes:
+				if anchor_alive[k] == 0 or gone[k] == 1:
+					continue
+				var d := u[k].length()
+				if d < 1e-12:
+					continue
+				var alpha := 1.0 / (anchor_k * a_scale[k] * h2)
+				var wk := 1.0 / mass[k]
+				var dl := (-d - alpha * _rig_lam_a[k]) / (wk + alpha)
+				_rig_lam_a[k] += dl
+				u[k] += u[k] * (wk * dl / d)
+			for i in beams:
+				var na := beam_a[i]
+				var nb := beam_b[i]
+				if beam_alive[i] == 0 or gone[na] == 1 or gone[nb] == 1:
+					continue
+				var e := rest[nb] + u[nb] + q[nb] - rest[na] - u[na] - q[na]
+				var length := e.length()
+				if length < 1e-6:
+					continue
+				var wa := 1.0 / mass[na]
+				var wb := 1.0 / mass[nb]
+				var al := 1.0 / (beam_k_of[i] * h2)
+				var dlb := (beam_rest[i] - length - al * _rig_lam_b[i]) / (wa + wb + al)
+				_rig_lam_b[i] += dlb
+				var c := e / length * dlb
+				u[na] -= c * wa
+				u[nb] += c * wb
+		for k in nodes:
+			if gone[k] == 0:
+				w[k] = (u[k] - _rig_old[k]) / h
+		for i in beams:
+			var na := beam_a[i]
+			var nb := beam_b[i]
+			if beam_alive[i] == 0 or gone[na] == 1 or gone[nb] == 1:
+				continue
+			var e := rest[nb] + u[nb] + q[nb] - rest[na] - u[na] - q[na]
+			var l2 := e.length()
+			if l2 < 1e-6:
+				continue
+			var n := e / l2
+			var ma := mass[na]
+			var mb := mass[nb]
+			var rv := (w[nb] - w[na]).dot(n)
+			var cb := 2.0 * beam_damping * sqrt(beam_k_of[i] * minf(ma, mb))
+			var imp := rv * cb * h / (1.0 + cb * h * (1.0 / ma + 1.0 / mb))
+			w[na] += n * (imp / ma)
+			w[nb] -= n * (imp / mb)
+			var ext := l2 - beam_rest[i]
+			var fb := beam_k_of[i] * ext
+			if absf(fb) > beam_yield_of[i]:
+				var change := signf(ext) * (absf(ext) - beam_yield_of[i] / beam_k_of[i]) * (1.0 - hard)
+				beam_rest[i] += change
+				absorbed += beam_yield_of[i] * absf(change)
+				fb = beam_k_of[i] * (l2 - beam_rest[i])
+				moved = true
+			if absf(fb) > beam_break_of[i] or beam_rest[i] - beam_made[i] > beam_break_strain * beam_made[i]:
+				beam_alive[i] = 0
+				_loose(na)
+				_loose(nb)
+				moved = true
+		for k in nodes:
+			if gone[k] == 1:
+				continue
+			if anchor_alive[k] == 0:
+				_rig_speed2 = maxf(_rig_speed2, w[k].length_squared())
+				continue
+			var ka := anchor_k * a_scale[k]
+			var c := 2.0 * anchor_damping * sqrt(ka * mass[k])
+			w[k] *= 1.0 / (1.0 + c * h / mass[k])
+			var d := u[k].length()
+			var yield_d := node_yield[k] / ka
+			if d > yield_d:
+				var shift := u[k] * (minf((d - yield_d) * (1.0 - hard), maxf(0.0, anchor_max_bend - q[k].length())) / d)
+				q[k] += shift
+				u[k] -= shift
+				absorbed += node_yield[k] * shift.length()
+				d = u[k].length()
+				moved = true
+			_rig_speed2 = maxf(_rig_speed2, w[k].length_squared())
+			if ka * d > node_break[k] and anchor_max_bend - q[k].length() > 1e-6:
+				anchor_alive[k] = 0
+				_loose(k)
+				moved = true
+				continue
+			var fa := (u[k] * ka + w[k] * c) * share
+			rf += fa
+			rt += (rest[k] + u[k] + q[k]).cross(fa)
+	return [moved, rf, rt]
+
+
+## A repair that takes time (the pit stop): repair_start keeps the shape as it is, repair_to(share) puts every node
+## that share of the way back to its place (0: as it was, 1: where it belongs) and keeps it still; repair() at the end
+## makes it whole.
+func repair_start() -> void:
+	_repair_from = [u.duplicate(), q.duplicate()]
+
+
+func repair_to(share: float) -> void:
+	if _repair_from.is_empty():
+		return
+	var k := 1.0 - clampf(share, 0.0, 1.0)
+	var fu: PackedVector3Array = _repair_from[0]
+	var fq: PackedVector3Array = _repair_from[1]
+	for n in count:
+		u[n] = fu[n] * k
+		q[n] = fq[n] * k
+	w.fill(Vector3.ZERO)
+	force.fill(Vector3.ZERO)
+	_sync_displacement()
+
 
 
 func _sane() -> bool:

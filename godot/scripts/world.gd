@@ -88,6 +88,8 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	effects = TyreEffects.new()
 	effects.setup(car)
 	add_child(effects)
+	for fx: Node in [Marbles.new(), Debris.make(car)]:     # (the marbles, the debris)
+		add_child(fx)
 	var flames := ExhaustFlames.new()
 	flames.setup(car)
 	add_child(flames)
@@ -226,6 +228,7 @@ func to_start() -> void:
 		track.marks.restart()
 	if track.objects != null:
 		track.objects.reset()
+	get_tree().call_group("clear_at_start", "clear")     # (the pieces of what broke, the marbles, the debris)
 	if laps:
 		laps.restart()
 	if ai != null:

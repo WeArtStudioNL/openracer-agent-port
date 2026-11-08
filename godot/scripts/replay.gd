@@ -46,6 +46,7 @@ var running := false                # it plays (not paused)
 var direction := 1.0                # 1 forwards, -1 backwards (Rewind)
 var time := 0.0                     # s, from the start of the drive
 var speed := 1.0
+var soft: ReplaySoft = null          # the shells, the parts and the wheels (ReplaySoft)
 var scrubbing := false
 var viewer := false                 # a replay from a file: Exit goes back to the menu
 var file_path := ""                 # the file of this replay (saved, or opened)
@@ -89,6 +90,7 @@ func setup(w: Node, list: Array) -> void:
 	for c in list:
 		if c is Car and not c.is_ghost:
 			cars.append(c)
+	soft = ReplaySoft.new(cars)
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	process_priority = -10            # (the cars are placed before the cameras follow them)
 
@@ -139,6 +141,7 @@ func _physics_process(dt: float) -> void:
 		if is_instance_valid(cars[n]):
 			_write(row, n * STRIDE, cars[n])
 	samples.append_array(row)
+	soft.record(cars, count)
 	count += 1
 	var most := int(MAX_SECONDS * RATE)
 	if count > most + int(RATE * 60.0):
@@ -146,6 +149,7 @@ func _physics_process(dt: float) -> void:
 		var drop := count - most
 		samples = samples.slice(drop * cars.size() * STRIDE)
 		count -= drop
+		soft.trim(drop)
 		first_index += drop
 
 
@@ -213,6 +217,7 @@ func play() -> void:
 	bar = ReplayBar.new()
 	bar.setup(self)
 	add_child(bar)
+	soft.begin(cars)
 	_show(time)
 	RunLog.event("replay: %.1f s of recording" % duration())
 
@@ -222,6 +227,7 @@ func stop() -> void:
 	if not playing:
 		return
 	playing = false
+	soft.end(cars)
 	if filming != null:
 		filming.call("stop")
 	for n in cars.size():
@@ -364,6 +370,7 @@ func _show(t: float) -> void:
 		if n == 0:
 			info = {"speed": c.linear_velocity.length(), "gear": c.gear_name(), "rpm": c.engine.rpm(),
 				"throttle": c.engine.throttle_used, "brake": c.brake_input}
+	soft.show(cars, f)
 
 
 ## The sample of a car at a time, as numbers (the video editor bakes a new recording from these).
@@ -760,7 +767,8 @@ func pack(a := -1, b := -1) -> Dictionary:
 	var track_id := str(cars[0].get_meta("track_id", "")) if not cars.is_empty() else ""
 	var track_name := str(cars[0].get_meta("track_name", track_id)) if not cars.is_empty() else ""
 	return {"version": ReplayFiles.VERSION, "track": track_id, "track_name": track_name, "cars": ids, "names": names, "rate": RATE,
-		"count": to - from, "stride": STRIDE, "samples": part, "created": Time.get_datetime_string_from_system()}
+		"count": to - from, "stride": STRIDE, "samples": part, "created": Time.get_datetime_string_from_system(),
+		"soft": soft.save_data() if a < 0 and b < 0 and soft != null else []}
 
 
 ## Saves the whole recording (Save replay); the path, or "" when it failed. A second save of the same is not made.
@@ -825,6 +833,8 @@ func open_file(path: String, w: Node, first: Car, watch_edit := true) -> bool:
 		if r is Array and r.size() >= 2 and str(r[1]) in ["follow", "cockpit", "cinematic", "track"]:
 			_cam_runs.append(r)
 	_zoom_rows = data.get("zoom", []) if data.get("zoom") is Array else []
+	soft = ReplaySoft.new(cars)
+	soft.load_data(data.get("soft"), cars)
 	return true
 
 

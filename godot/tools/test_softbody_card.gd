@@ -68,7 +68,8 @@ func _run() -> void:
 	check(s != null and card.get("shown") and ed.bench.car != null, "shown: the car of the bench has a shell")
 	if s == null:
 		return
-	check(s.count == (raw["softbody"]["layout"] as Array).size() and s.beam_count > s.count, "the nodes of the layout (%d) and the beams (%d)" % [s.count, s.beam_count])
+	check(s.body_count == (raw["softbody"]["layout"] as Array).size() and s.beam_count > s.body_count,
+		"the nodes of the layout (%d, and %d of the suspension) and the beams (%d)" % [s.body_count, s.count - s.body_count, s.beam_count])
 	await _nodes(card)
 	await _select(ed, card)
 	await _parts(ed, card)
@@ -97,7 +98,7 @@ func _nodes(card: Object) -> void:
 		"Scan with rays: %d nodes, %d inside (%d ms)" % [(lay as Array).size() if lay is Array else 0, inner, Time.get_ticks_msec() - t0])
 	await _wait(0.5)
 	s = card.call("soft")
-	check(s != null and lay is Array and s.count == (lay as Array).size(), "the shell is made again from them (%d nodes)" % (s.count if s else 0))
+	check(s != null and lay is Array and s.body_count == (lay as Array).size(), "the shell is made again from them (%d nodes)" % (s.body_count if s else 0))
 
 
 func _select(ed: CarEditor, card: Object) -> void:
@@ -156,7 +157,7 @@ func _select(ed: CarEditor, card: Object) -> void:
 	card.call("remove_nodes", [before])
 	await _wait(0.5)
 	s = card.call("soft")
-	check((card.call("layout") as Array).size() == before and s.count == before, "Delete selected: removed again (%d)" % s.count)
+	check((card.call("layout") as Array).size() == before and s.body_count == before, "Delete selected: removed again (%d)" % s.body_count)
 	# the lasso: the middle mouse button pressed, dragged round the view and let go (the events the view hands the card first)
 	var size := ed.view.container.size
 	var press := InputEventMouseButton.new()

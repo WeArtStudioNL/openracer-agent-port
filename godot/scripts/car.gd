@@ -84,6 +84,9 @@ class Wheel:
 	var visual_offset := Vector3.ZERO
 	var lost := false               # a motorcycle: the second wheel of a pair is not there (no road, spring, drive, brake)
 	var lat_grip := 1.0             # a share of the grip across (a motorcycle in flat-track style: the tail steps out)
+	var toe_bend := 0.0             # rad to the left, a bent suspension (WheelRig)
+	var camber_bend := 0.0          # rad of lean to the left, a bent knuckle
+	var damage_grip := 1.0          # a bent wheel grips up to 40 % less
 	var hub_node: Node3D
 	var steer_node: Node3D
 	var spin_node: Node3D
@@ -903,13 +906,15 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	angles[2] = -tr
 	angles[3] = tr
 
+	if shell != null:
+		shell.wheels(dt)              # (the bend of the suspension, a wheel that comes off: WheelRig)
 	# ---- the suspension: each wheel looks down for the road
 	var max_len := susp_length + droop
 	var exclude := [get_rid()]
 	var comp_rate := [0.0, 0.0, 0.0, 0.0]
 	for i in 4:
 		var w := wheels[i]
-		w.steer = angles[i]
+		w.steer = angles[i] + w.toe_bend
 		var top := xf * (w.hub + Vector3.UP * susp_length)
 		var reach := max_len + w.radius + (0.25 if bike != null else 0.0)
 		var q := PhysicsRayQueryParameters3D.create(top, top - up * reach, 1, exclude)
@@ -1129,7 +1134,7 @@ func _lean(w: Wheel) -> float:
 		var track := front_track if w.front else rear_track
 		var roll_right := clampf(atan2(l.length - r.length, track), -0.26, 0.26)      # (the left side extended: the body leans right)
 		lean -= roll_right * roll_camber
-	return lean
+	return lean + w.camber_bend
 
 
 ## The fuel (fuelStep of Vehicle.js, with "Tyre temperature and wear" on, as the browser game has it with wear):
@@ -1252,7 +1257,7 @@ func _any_contact() -> bool:
 func _tyre_force(w: Wheel, load: float, surf: Dictionary, vref: float) -> void:
 	# the grip of the surface, the tyre (its kind, its grip of car.json), its condition (temperature, wear, pressure)
 	var loose: bool = surf.get("loose", false)
-	var grip := float(surf["static"]) * w.grip * w.condition * float(w.kind.get("grip", 1.0)) * (float(w.kind.get("looseGrip", 1.0)) if loose else 1.0)
+	var grip := float(surf["static"]) * w.grip * w.condition * w.damage_grip * float(w.kind.get("grip", 1.0)) * (float(w.kind.get("looseGrip", 1.0)) if loose else 1.0)
 	var mu := clampf(grip - 0.00007 * (load * 0.1 - 3500.0), 0.2 * grip, 1.4 * grip)
 	var spin_slide := w.omega * w.radius - w.forward_speed
 	var melt := smoothstep(4.0, 14.0, spin_slide)

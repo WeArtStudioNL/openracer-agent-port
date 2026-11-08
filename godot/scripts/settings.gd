@@ -87,7 +87,7 @@ const DEFAULTS := {
 	"gfx_exposure": 0.9,
 	"gfx_contrast": 1.05,
 	"gfx_saturation": 1.0,
-	"gfx_debris_rate": 1.0,       # the grass, sand and snow that the wheels throw up (not in Godot yet)
+	"gfx_debris_rate": 1.0,       # the grass, sand and gravel that the wheels throw up (Debris)
 	"gfx_debris_scale": 1.0,
 	"gfx_debris_max": 6000,
 	# the atmosphere (Atmosphere): the hour, where the sun is at noon, the phase of the moon, the weather

@@ -44,11 +44,11 @@ func _init(c: Car, s: SoftBody, part_objects: Dictionary) -> void:
 				break
 			n = n.get_parent()
 		var allowed := PackedInt32Array()
-		for k in sb.count:
+		for k in sb.body_count:              # (the nodes of the suspension are not part of the model)
 			if sb.part_of[k] == group:
 				allowed.append(k)
 		if allowed.is_empty():
-			for k in sb.count:
+			for k in sb.body_count:
 				if sb.part_of[k] == "":
 					allowed.append(k)
 		var surfaces: Array = []
