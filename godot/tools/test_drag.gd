@@ -16,6 +16,8 @@ func _ready() -> void:
 	add_child(world)
 	world.setup(Content.arg("car") if Content.arg("car") != "" else "openracer-muscle", "desert-drag-strip", {})
 	world.set_physics_process(false)
+	# (the brake held at the line must not put it in reverse; --user-dir keeps this out of the player's settings)
+	Settings.set_value("auto_reverse", false)
 	# (in the right lane: a barrier of the track lies along the middle of the strip, past the line)
 	await get_tree().create_timer(0.3).timeout
 	var st: Dictionary = world.track.start
@@ -38,8 +40,9 @@ func _physics_process(dt: float) -> void:
 		"idle", "approach":
 			var a := car.to_global(car.wheels[0].hub)
 			var s := (a - drag.origin).dot(drag.dir)
-			car.throttle_input = 0.25 if s < -1.5 and car.speed < 3.0 else 0.0
-			car.brake_input = 1.0 if s > -0.25 or car.speed > 3.0 else 0.0
+			# (slow, and the brake in time to stop at the line: at 10 km/h it rolled past it)
+			car.throttle_input = 0.25 if s < -1.5 and car.speed < 1.5 else 0.0
+			car.brake_input = 1.0 if s > -0.3 - car.speed * car.speed / 8.0 or car.speed > 2.0 else 0.0
 		"ready", "tree":
 			car.throttle_input = 0.0
 			car.brake_input = 1.0

@@ -205,7 +205,8 @@ func _plan_for() -> Dictionary:
 
 
 func _physics_process(dt: float) -> void:
-	if car == null or not is_instance_valid(car):
+	# (in a replay the stop is shown from what was recorded: ReplayExtras gives it its state, the car its place)
+	if car == null or not is_instance_valid(car) or ReplayFx.active:
 		return
 	if forced and done:
 		forced = false

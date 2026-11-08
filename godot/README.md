@@ -364,8 +364,8 @@ repair makes the tyres whole. The crash test takes `--puncture=1`.
 A loose part (and a wheel that came off) meets its own car, the track and its things, not the other cars and their
 parts, as in the browser, where each car's parts are in a physics world of their own (CarParts.keep_to_own). A wheel of
 the other car feels a hit through the nodes of its suspension in the shell, as in the browser (WheelRig: the hub is
-pushed, it bends, and past its limit it comes off; `res://tools/test_damage_cars.tscn`). Not yet from the browser game:
-the fading of the parts in the pit stop (they are put back at the end of the repair).
+pushed, it bends, and past its limit it comes off; `res://tools/test_damage_cars.tscn`). In the pit stop the parts
+fade where they lie and are brought back one by one, fading in (Pit stops and the drag strip).
 
 ## Marbles, debris and the parts library
 
@@ -792,12 +792,21 @@ with 6 L) and `--ai-pit-line=0` (the box mode on a track with a pit line).
 A track without pit boxes has the pit lane instead (`scripts/pit_lane.gd`, PitLane of Pit.js): the road of the
 surface `track01` beside the racing line; the AI cars drive through it at 16 m/s and stop in its middle, and a car
 standing still with its wheels on it is serviced (the player's too). No track of the game has one now.
-Not yet: the car is not lifted in the picture.
+In the picture (Car.js, Pit.js changeAt and showChange, Parts.js fetchFade and fetchTo): the player's car goes up
+10 cm on the jacks in the first 1.2 s, its wheels hanging on their springs, and falls on them when it is let go; a
+wheel whose tyre is changed comes off and out by 60 cm in the first 40 % of its turn, is gone, and the new one goes on
+in the last 40 %; the parts that came off fade where they lie while the car goes up and are then brought back one by
+one in their share of the repair, from 60 cm out to their place, fading in. Test: `--part=1` knocks the biggest part
+off first; without `--headless`, `--shot=<prefix>` saves `<prefix>-up.png`, `-off.png` and `-part.png`.
 
 The drag strip (`scripts/drag_strip.gd`, DragStrip.js): on a track with `dragstrip` the front wheels at the line,
 the car still, "Get ready" for 2 s, then the tree (stage, three ambers half a second apart, green, red for a false
 start); reaction time, the times and speeds at 60 ft, 330 ft, 1/8 mile, 1000 ft and 1/4 mile as notes, and a time
-slip at the finish; the 50 best runs per track in `user://drag.cfg`. Test: `res://tools/test_drag.tscn -- --ai=1`.
+slip at the finish; the 50 best runs per track in `user://drag.cfg`. The time slip has the rows of the browser's
+(the welcome, the time and the date, the car, R/T, every mark and the speeds, "COMPLETED RUN") on paper in a typewriter
+font, and Save PNG saves it at twice the size as `time-slip-<track>-<date>.png` in Downloads (the web version: a
+download). Test: `res://tools/test_drag.tscn -- --ai=1` (prints the slip; windowed, `--slip-dir=<folder>` saves the PNG
+there and `--shot=<file>` the screen with the slip).
 Note: on desert-drag-strip a barrier of the track model (`prefab_barrier_12`) lies along the middle of the strip
 just past the line, in the path of a car from the start position; the test starts in the right lane.
 
@@ -1082,12 +1091,12 @@ stop is replayed as the state of the PitStop (what draws the jacks and the wheel
 smoke after a jump is made again from the rows, not from the same random puffs; browser replay files open without
 their blocks (soft body, effects), and Godot does not write browser files.
 
-**Pit stop and drag strip**: the car is not lifted on the jacks in the picture, the wheels are not seen being changed,
-the parts that are put back do not fade; the drag time slip cannot be saved as a PNG.
+**Pit stop and drag strip**: a wheel that was torn off is not brought back in the pit stop's picture (it is on the car
+again at the end of the repair), nor a part that broke into pieces; the parts are not faded in a replay.
 
-**Effects and sound**: no tyre noise on loose ground and no thud of a hit, a landing or the bump stop (EngineSound.js);
-the smoke is not pushed aside by the car (Smoke.js wisps); the flame pictures of `web/images/flames/` are not used (a
-made gradient).
+**Effects and sound**: the smoke is GPU particles: the car pushes all smoke that is in its body out of it (Smoke.js
+only the smoke younger than 1.5 s; an older plume gives wisps in both), and the box of the body is the box of the
+model, not of the collision spheres of the shell.
 
 **Debug view**: the motorcycle crash rules are shown for a motorcycle only (the browser shows them for every car).
 
@@ -1118,8 +1127,9 @@ physics-worker-check.html (the headless tests stand in for them).
 | `scripts/main_menu.gd`, `menu/`, `settings_*.gd`, `pause_menu.gd`, `hud_*.gd` | the main menu, the settings, the pause menu, the gauge and the HUD editor |
 | `native/src/engine_sim.cpp` | the engine sound: EngineSimWorklet.js and the exhaust chain of EngineSim.js in C++ |
 | `native/src/tyre_shell.cpp`, `scripts/shell_tyres.gd`, `tyre_deform.gd` | the shell tyre: TyreShell.js in C++, the wheels on it (Vehicle.js), the tread of the model pushed in (TyreDeform.js) |
-| `scripts/engine_sim_params.gd`, `car_audio.gd` | the sound parameters of car.json; the engine and the tyre squeal of a car |
-| `scripts/tyre_effects.gd` | skid marks, tyre smoke and dust |
+| `scripts/engine_sim_params.gd`, `car_audio.gd` | the sound parameters of car.json; the engine, the tyre squeal, the noise of loose ground and the thuds of a car |
+| `scripts/tyre_effects.gd` | skid marks, tyre smoke (the plume, the small puffs, the wisps) and dust |
+| `scripts/exhaust_flames.gd` | the flames at the exhaust (the pictures of `web/images/flames/`) and the grey puffs after a bang |
 | `scripts/soft_body.gd`, `car_shell.gd`, `collision_proxy.gd`, `wall_grid.gd`, `soft_body_mesh.gd`, `car_parts.gd` | the shell that dents, its contacts, its nodes, the walls of the track, the model that bends, the parts that come off |
 | `scripts/wheel_rig.gd`, `shatter.gd`, `specks.gd`, `replay_soft.gd` | the suspension in the shell, a part that breaks, the small particles, the soft body in the replay |
 | `scripts/marbles.gd`, `debris.gd` | marbles, debris |
@@ -1131,6 +1141,16 @@ exhaust (a partitioned convolution), the drive, the tone, the muffler and a limi
 throttle and the ignition (the rev limiter cuts it, and unburnt fuel bangs in the exhaust). The cockpit and the
 bonnet camera hear it from inside (duller). The tyres heat with the power their slip burns: they squeal past the
 peak of their grip, smoke from about 220 C, and leave marks; on loose ground they throw up dust.
+The road under the tyres is heard too (EngineSound.js setGround, impact): noise through a filter per surface (sand low
+and soft, gravel high and sharp, mud dull, grass soft, earth), louder and higher with the speed, and a thud (low noise
+and a falling tone) as loud as a landing (faster than 3 m/s down) or a hit of the bump stop (faster than 2.5 m/s) was
+hard. Test: `res://tools/test_sound.tscn -- --log-sound=1` (headless nothing is heard: it logs what plays).
+The smoke (Smoke.js, `res://tools/test_smoke.tscn -- --shot=<prefix>`): a plume that lives about 11 s from a tyre that
+smokes hard and turns, small dense puffs at the tyre from the first smoke, both thrown the other way from where the
+tread spins; the body of the car pushes the smoke out of it, and where it drives through an older plume it takes small
+wisps along. The flames (Flames.js, `res://tools/test_flames.tscn -- [--car=stadium-truck] --shot=<prefix>`): the
+pictures of `web/images/flames/` (its index.json, or flame1.png, flame2.png, ...), stretched to the length and width of
+the flame of car.json along the way it flies as seen from the camera, pale to orange; the exports copy that folder.
 
 The physics follow `web/js/Vehicle.js` and `Wheel.js`: the body is a rigid body; each wheel casts a ray
 down its suspension; the spring, the damper, the bump stop and the anti-roll bars give the load of each

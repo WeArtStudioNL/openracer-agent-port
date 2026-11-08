@@ -463,15 +463,15 @@ func _slip_labels(scale: float) -> Array[Label]:
 ## The time slip as a PNG (DragStrip.js downloadSlip): the rows on paper at twice the size, for a sharp picture;
 ## in Downloads (the web version: a download of the browser; --slip-dir=<folder> for the tests). The path, or "".
 func save_slip_png(folder := "") -> String:
-	if slip_rows.is_empty():
-		return ""
+	if slip_rows.is_empty() or DisplayServer.get_name() == "headless":
+		return ""                   # (headless nothing is drawn)
 	const SCALE := 2.0
 	var inset := 18.0 * SCALE
 	var line_h := 14.0 * 1.45 * SCALE
 	var vp := SubViewport.new()
 	vp.size = Vector2i(roundi(330.0 * SCALE), roundi(inset + slip_rows.size() * line_h + 30.0 * SCALE))
 	vp.transparent_bg = false
-	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS      # (the labels are laid out in the first frame)
 	var bg := ColorRect.new()
 	bg.color = SLIP_PAPER
 	bg.size = Vector2(vp.size)
@@ -483,8 +483,8 @@ func save_slip_png(folder := "") -> String:
 		l.size = Vector2(vp.size.x - 2.0 * inset, line_h)
 		vp.add_child(l)
 	add_child(vp)
-	await RenderingServer.frame_post_draw
-	await RenderingServer.frame_post_draw
+	for k in 3:
+		await RenderingServer.frame_post_draw
 	var img := vp.get_texture().get_image()
 	vp.queue_free()
 	if img == null or img.is_empty():
