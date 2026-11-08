@@ -327,6 +327,9 @@ func _input(event: InputEvent) -> void:
 
 ## The first drive on this computer: the keys that matter, for a while at the side (Settings.js showKeysOnce).
 func _show_keys_once() -> void:
+	# (not for the test driver, --ai: a test must not use up the player's first drive)
+	if Content.arg("ai") != "":
+		return
 	Settings.set_value("keys_shown", true)
 	if world != null and world.get("touch") != null:
 		return
