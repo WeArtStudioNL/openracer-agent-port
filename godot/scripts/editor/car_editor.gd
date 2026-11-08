@@ -274,6 +274,14 @@ func _hook_call(method: String, args := []) -> void:
 			h.callv(method, args)
 
 
+## A card ported apart that takes a click in the view or a key first (the Driver: its nodes): true when one took it.
+func _hook_wants(method: String, args: Array) -> bool:
+	for h in hooks.values():
+		if h != null and h.has_method(method) and h.callv(method, args):
+			return true
+	return false
+
+
 func _close() -> void:
 	if dirty and not await ask("Leave the car editor?", "The car has changes that are not saved. They are lost.", "Leave", "Stay"):
 		return
@@ -1033,6 +1041,8 @@ func _on_view_click(mouse: Vector2) -> void:
 		if mount != "" and mount != layers.selected:
 			layers.select(mount)
 		return
+	if _hook_wants("click", [mouse]):
+		return
 	var hit := view.pick_marker(mouse, layers.pickables())
 	if hit != "":
 		if hit != layers.selected:
@@ -1144,7 +1154,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if focus is LineEdit or cmd or k.alt_pressed:
 		return
-	if layers.key(k.physical_keycode):
+	if _hook_wants("key", [k.physical_keycode]) or layers.key(k.physical_keycode):
 		get_viewport().set_input_as_handled()
 
 

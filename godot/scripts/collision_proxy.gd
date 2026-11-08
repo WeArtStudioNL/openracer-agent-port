@@ -10,7 +10,8 @@ extends RefCounted
 ##
 ## A model can bring its own shell: an object called "beams" (also softbody_beams, shell_beams) made of vertices and
 ## edges (glTF lines; Blender: Data > Mesh > Loose Edges in the export). Every vertex is a node and every edge a beam
-## (the car gets the edges as meta "model_beams"); it goes before a layout of car.json. The suspension of every wheel
+## (the car gets the edges as meta "model_beams"); a layout of car.json (the car editor) goes before it.
+## The suspension of every wheel
 ## comes last (a hub, a knuckle and the pivots of the arms, "rig": true, see WheelRig), unless "wheel_hubs" is false.
 
 const MAX_SPHERES := 90
@@ -44,7 +45,9 @@ static func spheres_of(car: Car) -> Array:
 static func _body_spheres(car: Car, cfg: Dictionary, floor_y: float, com: Vector3, r_front: float) -> Array:
 	var layout: Array = cfg.get("layout", [])
 	var out: Array = []
-	var found := beams_from_model(car) if car.model_root != null else {}
+	# (a layout of the car editor goes before the beams of the model, as SOFTBODY.md has it: the Soft body card edits
+	# the layout, and its changes must be the shell)
+	var found := beams_from_model(car) if car.model_root != null and layout.size() < 3 else {}
 	var model_beams := not found.is_empty()
 	if model_beams:
 		# (the nodes keep the numbers of the vertices: the beams point at them; the frame is the body's already)

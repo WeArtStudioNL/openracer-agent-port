@@ -1,90 +1,82 @@
 class_name SuspensionRig
-extends Node3D
-## The moving parts of the suspension and the steering of a model (web/js/SuspensionRig.js), when the model has them
-## (or the parts library built them: PartsLibrary of the car editor): wishbones that swing with the travel of the wheel, uprights that go
-## up and down with it and turn with the steering, springs, dampers and struts that get shorter and longer (a coilover
-## with a piston and a coil: the piston slides and the coil gets shorter), a steering rack that slides and tie rods that
-## follow it, a live axle that goes up and down and rolls, trailing arms, a Panhard rod, driveshafts and propshafts.
-## The physics is not changed by it: the parts follow the travel of every wheel and the steering.
+extends RefCounted
+## The moving parts of the suspension and the steering of a car (web/js/SuspensionRig.js): wishbones that swing with the
+## travel of the wheel, uprights that go up and down with the wheel and turn with the steering, springs, dampers and
+## struts that get shorter and longer (a coilover's piston slides and its coil is squeezed), a steering rack that slides
+## and tie rods that follow it, a live axle that goes up and down and rolls, trailing arms, a Panhard rod, driveshafts and
+## propshafts that turn. A part is used when a part of the model (or of the parts library, PartsLibrary.assemble, car.json
+## "suspension" and "driveline") has its name: susp_lowerarm_FL, susp_upperarm_FL, susp_upright_FL, susp_spring_FL,
+## susp_strut_FL, susp_damper_FL, steer_rack, steer_tierod_FL, susp_axle_rear, susp_trailingarm_RL, susp_panhard_rear,
+## susp_driveshaft_FL, propshaft_rear, susp_propshaft_rear ... (case and other characters do not matter, the corner at the
+## end). The physics is not changed by it; the parts follow the travel of every wheel and its steering.
 ##
-## The names (case and other characters do not matter), with the corner FL, FR, RL or RR at the end: susp_upperarm_FL,
-## susp_lowerarm_FL (the origin at the hinge on the body), susp_upright_FL (the origin at the middle of the wheel),
-## susp_spring_FL, susp_damper_FL, susp_strut_FL (the origin at the top mount), steer_rack, steer_tierod_FL (the origin
-## at the end on the rack), susp_axle_rear, susp_trailingarm_RL, susp_panhard_rear, susp_driveshaft_RL, propshaft.
-## Not ported: the steering column of a model with fixed tie rods and no rack (the rods follow the uprights here), the
-## turn of the wheel about the pin of the upright.
-##
-## The parts leave the model (the shell does not bend them) and hang in holders on the car, in the frame of the car.
+## Every part is put in a holder (a Node3D in the frame of the body, under the node "SuspensionRig" of the car) that is
+## moved every frame (update). The rest pose of the model is the car at rest on its springs (w.length = susp_length).
 
-const CORNERS := {"fl": 0, "fr": 1, "rl": 2, "rr": 3}
+const CORNERS := {"fl": 0, "fr": 1, "rl": 2, "rr": 3}    # the index of the wheel in Car.wheels (FL, FR, RL, RR)
+const SPRINGLIKE := ["spring", "tierod", "panhard", "shaft", "propaxle"]
+
+static var _regex := {}
 
 var car: Car
-var parts: Array = []               # {kind, wheel, rear, origin, far, holder, rest_q, ...}
-var rack_travel := 0.1
-var uprights := {}
+var root: Node3D                  # "SuspensionRig": the holders and the parts of the library that the rig did not take
+var parts: Array[Dictionary] = []
+var uprights := {}                # wheel -> the entry of its upright
+var rack: Dictionary = {}
+var rack_travel := 0.1            # m per radian of the front wheels (car.json steering.rack_travel)
+var hubs := {}                    # wheel -> the middle of the wheel (the upright turns it about its pin)
+var column: Dictionary = {}       # { centre, axis }: a steering column whose arm holds fixed tie rods (set by a steering wheel)
+var column_angle := 0.0
+var column_error := 0.0
+var built: Dictionary = {}        # what PartsLibrary.assemble made (or {})
+var _rods: Variant = null         # the fixed tie rods (found once), or []
+var _column_key := ""
 
 
-## The parts library of a car (when car.json says a type of suspension) and the rig of the parts of the suspension of
-## its model; a motorcycle has its own (MotorcycleModel).
-static func attach(c: Car) -> void:
+## The rig of a car: the parts of its model (body, the glb under the model pivot) and of the parts library. null when
+## there is none.
+static func build(c: Car, body: Node3D) -> SuspensionRig:
 	if c.bike != null:
-		return
-	var lib: Node3D = null
-	if str(c.config.get("wheels", {}).get("mode", "default")) != "model":
-		# (the hubs where car.json puts the wheels, as the browser game does for the demo wheels: the axle offsets do not
-		# move them)
-		var ch: Dictionary = c.config.get("chassis", {})
-		var wb := float(ch.get("wheelbase", 2.6)) / 2.0
-		var ft := float(ch.get("front_track", 1.5)) / 2.0
-		var rt := float(ch.get("rear_track", 1.5)) / 2.0
-		var out := PartsLibrary.assemble(c.config, {"FL": Vector3(ft, 0, wb), "FR": Vector3(-ft, 0, wb), "RL": Vector3(rt, 0, -wb),
-			"RR": Vector3(-rt, 0, -wb)}, float(ch.get("tire_diameter", 0.6)))
-		lib = out["group"]
-		# (the files it loaded are not kept in the game: the cache of the editor would hold them to the end)
-		for k: String in PartsLibrary._cache:
-			if PartsLibrary._cache[k] != null:
-				(PartsLibrary._cache[k] as Node).free()
-		PartsLibrary._cache.clear()
-		if lib.get_child_count() == 0:
-			lib.free()
-			lib = null
-		else:
-			lib.name = "PartsLibrary"
-			c.add_child(lib)
-	find(c, [c.model_root, lib])
-
-
-## Finds the parts of the suspension under the given roots (the model, and the parts the library built) and puts each
-## in a holder of the rig; null when there are none.
-static func find(c: Car, roots: Array) -> SuspensionRig:
-	var found: Array = []
-	for r in roots:
-		if r == null:
-			continue
-		for n in (r as Node).find_children("*", "Node3D", true, false):
-			var what := classify(str(n.name))
-			if not what.is_empty():
-				found.append([n, what])
-	# (a part inside a part, the coil and the piston of a coilover, goes with its parent)
-	found = found.filter(func(f: Array) -> bool:
-		for g in found:
-			if g != f and (g[0] as Node).is_ancestor_of(f[0]):
-				return false
-		return true)
-	if found.is_empty():
 		return null
 	var rig := SuspensionRig.new()
-	rig.name = "SuspensionRig"
 	rig.car = c
+	rig.root = Node3D.new()
+	rig.root.name = "SuspensionRig"
+	c.add_child(rig.root)
+	var roots: Array[Node3D] = []
+	if body != null:
+		roots.append(body)
+	var centres := {}
+	var diameter := 0.0
+	for w in c.wheels:
+		centres[w.slot] = w.hub + w.visual_offset
+		diameter += w.radius * 2.0 / 4.0
+	rig.hubs = {0: centres["FL"], 1: centres["FR"]}
+	if _uses_library(c.config):
+		rig.built = PartsLibrary.assemble(c.config, centres, diameter)
+		if not (rig.built["missing"] as Array).is_empty():
+			push_warning("PartsLibrary: missing " + ", ".join(rig.built["missing"]))
+		rig.root.add_child(rig.built["group"])
+		roots.append(rig.built["group"])
 	var st: Variant = c.config.get("steering", {})
-	if st is Dictionary and (st as Dictionary).has("rack_travel"):
+	if st is Dictionary and st.has("rack_travel"):
 		rig.rack_travel = float(st["rack_travel"])
-	c.add_child(rig)
-	rig._build(found)
+	rig._find(roots)
+	if rig.parts.is_empty() and rig.built.is_empty():
+		rig.root.queue_free()
+		return null
 	return rig
 
 
-static func _clean(n: String) -> String:
+static func _uses_library(cfg: Dictionary) -> bool:
+	for axle in ["front", "rear"]:
+		var t := PartsLibrary.type_of(cfg, axle)
+		if t != "model" and t != "none":
+			return true
+	return false
+
+
+static func clean(n: String) -> String:
 	var out := ""
 	for ch in n.to_lower():
 		if (ch >= "a" and ch <= "z") or (ch >= "0" and ch <= "9"):
@@ -92,46 +84,59 @@ static func _clean(n: String) -> String:
 	return out
 
 
-## What a part is, from its name: {kind, wheel, rear}, or {}.
-static func classify(raw: String) -> Dictionary:
-	var n := _clean(raw)
-	var re := func(p: String) -> bool: return RegEx.create_from_string(p).search(n) != null
-	if re.call("^susppropshaft(rear|front|back)"):
-		return {"kind": "propaxle", "rear": n.find("front") < 0}
-	if re.call("^(susp)?(propshaft|cardan)") or re.call("^(susp)?driveshaft(center|centre|middle|prop)"):
-		return {"kind": "prop"}
+## What a part is, from its name: { kind, wheel, rear } or {} (SuspensionRig.js classify).
+static func classify(node_name: String) -> Dictionary:
+	var n := clean(node_name)
+	if n == "":
+		return {}
+	if n.begins_with("susppropshaft") and (n.contains("rear") or n.contains("front") or n.contains("back")):
+		return {"kind": "propaxle", "wheel": -1, "rear": not n.contains("front")}
+	if _re("^(susp)?(propshaft|cardan)").search(n) != null or _re("^(susp)?driveshaft(center|centre|middle|prop)").search(n) != null:
+		return {"kind": "prop", "wheel": -1, "rear": false}
 	var wheel: int = CORNERS.get(n.right(2), -1)
-	if n.find("solidaxle") >= 0 or n.find("liveaxle") >= 0 or re.call("^(rear|front|back)?solid") or n.begins_with("axle"):
-		return {"kind": "axle", "rear": n.find("front") < 0}
-	if wheel >= 0 and n.find("trailing") >= 0:
-		return {"kind": "trailing", "wheel": wheel}
-	if wheel >= 0 and re.call("^(coilover|damper|shock|strut|spring)"):
-		return {"kind": "spring", "wheel": wheel}
+	if n.contains("solidaxle") or n.contains("liveaxle") or _re("^(rear|front|back)?solid").search(n) != null or n.begins_with("axle"):
+		return {"kind": "axle", "wheel": -1, "rear": not n.contains("front")}
+	if wheel >= 0 and n.contains("trailing"):
+		return {"kind": "trailing", "wheel": wheel, "rear": wheel >= 2}
+	if wheel >= 0 and _re("^(coilover|damper|shock|strut|spring)").search(n) != null:
+		return {"kind": "spring", "wheel": wheel, "rear": wheel >= 2}
 	if not n.begins_with("susp") and not n.begins_with("steer"):
 		return {}
+	return _classify_susp(n, wheel)
+
+
+static func _classify_susp(n: String, wheel: int) -> Dictionary:
 	if n == "steerrack" or n == "susprack":
-		return {"kind": "rack"}
-	if n.find("axle") >= 0:
-		return {"kind": "axle", "rear": n.find("rear") >= 0 or n.find("back") >= 0}
-	if n.find("panhard") >= 0 or n.find("watt") >= 0:
-		return {"kind": "panhard", "rear": n.find("front") < 0}
+		return {"kind": "rack", "wheel": -1, "rear": false}
+	if n.contains("axle"):
+		return {"kind": "axle", "wheel": -1, "rear": n.contains("rear") or n.contains("back")}
+	if n.contains("panhard") or n.contains("watt"):
+		return {"kind": "panhard", "wheel": -1, "rear": not n.contains("front")}
 	if wheel < 0:
 		return {}
-	for pair in [["trailing", "trailing"], ["driveshaft", "shaft"], ["halfshaft", "shaft"], ["shaft", "shaft"], ["arm", "arm"], ["wishbone", "arm"],
-			["link", "arm"], ["upright", "upright"], ["hub", "upright"], ["knuckle", "upright"], ["spring", "spring"], ["damper", "spring"], ["strut", "spring"],
-			["shock", "spring"], ["coilover", "spring"], ["tierod", "tierod"], ["trackrod", "tierod"]]:
-		if n.find(pair[0]) >= 0:
-			return {"kind": pair[1], "wheel": wheel}
+	var kinds := [["trailing", ["trailing"]], ["shaft", ["driveshaft", "halfshaft", "shaft"]], ["arm", ["arm", "wishbone", "link"]],
+		["upright", ["upright", "hub", "knuckle"]], ["spring", ["spring", "damper", "strut", "shock", "coilover"]], ["tierod", ["tierod", "trackrod"]]]
+	for k in kinds:
+		for word in k[1]:
+			if n.contains(word):
+				return {"kind": k[0], "wheel": wheel, "rear": wheel >= 2}
 	return {}
 
 
-## The box of a part in the frame of the car.
+static func _re(pattern: String) -> RegEx:
+	if not _regex.has(pattern):
+		_regex[pattern] = RegEx.create_from_string(pattern)
+	return _regex[pattern]
+
+
+# ---- finding the parts
+
 func _box(node: Node3D) -> AABB:
 	return CarModel.bounds(node, car)
 
 
-## The middle of the face of the box of a part that is farthest from its origin (the free end of an arm, the bottom of
-## a spring).
+## The end of a part farthest from its origin, in the frame of the body: the middle of the face of its box that is
+## farthest from the origin.
 func _far_end(node: Node3D, origin: Vector3) -> Vector3:
 	var box := _box(node)
 	var centre := box.get_center()
@@ -139,232 +144,444 @@ func _far_end(node: Node3D, origin: Vector3) -> Vector3:
 	if dir.length() < 1e-4:
 		return centre
 	dir = dir.normalized()
-	var half := absf(dir.x) * box.size.x / 2.0 + absf(dir.y) * box.size.y / 2.0 + absf(dir.z) * box.size.z / 2.0
+	var size := box.size
+	var half := absf(dir.x) * size.x / 2.0 + absf(dir.y) * size.y / 2.0 + absf(dir.z) * size.z / 2.0
 	return centre + dir * half
 
 
-func _build(found: Array) -> void:
-	for f in found:
-		var node: Node3D = f[0]
-		var what: Dictionary = f[1]
-		var xf := CarModel.relative(node, car)
-		var origin := xf.origin
-		var e := {"kind": what["kind"], "wheel": int(what.get("wheel", -1)), "rear": bool(what.get("rear", true)), "origin": origin}
-		var holder := Node3D.new()
-		holder.name = "rig-" + str(node.name)
-		holder.position = origin
-		var exact: Variant = node.get_meta("rig_far") if node.has_meta("rig_far") else null
-		var k: String = e["kind"]
-		if k == "trailing":
-			e["far"] = exact if exact != null else _far_end(node, origin)
-			e["arm"] = maxf(0.05, absf(e["far"].z - origin.z))
-			e["ahead"] = 1.0 if e["far"].z >= origin.z else -1.0
-		elif k in ["spring", "tierod", "panhard", "shaft", "propaxle"]:
-			e["far"] = exact if exact != null else _far_end(node, origin)
-			var d: Vector3 = e["far"] - origin
-			e["length"] = maxf(0.01, d.length())
-			holder.basis = Basis(Quaternion(Vector3.UP, d.normalized()))
-			if k == "spring":
-				e["strut"] = _clean(str(node.name)).find("strut") >= 0
-		elif k == "prop":
-			var box := _box(node)
-			if exact != null:
-				e["axis"] = ((exact as Vector3) - origin).normalized()
-				holder.position = (origin + exact) / 2.0
-			else:
-				var s := box.size
-				e["axis"] = Vector3.RIGHT if s.x >= s.y and s.x >= s.z else (Vector3.UP if s.y >= s.z else Vector3.FORWARD)
-				holder.position = box.get_center()
-		elif k == "arm":
-			e["far"] = exact if exact != null else _far_end(node, origin)
-			e["arm"] = maxf(0.05, absf(e["far"].x - origin.x))
-			e["side"] = 1.0 if e["far"].x >= origin.x else -1.0
-		add_child(holder)
-		node.get_parent().remove_child(node)
-		node.owner = null
-		holder.add_child(node)
-		node.transform = holder.transform.affine_inverse() * xf
-		e["holder"] = holder
-		e["rest_q"] = holder.basis.get_rotation_quaternion()
-		e["rest_pos"] = holder.position
-		if k == "spring":
-			e["inner"] = _inner(node, e)
-		if k == "upright":
-			uprights[e["wheel"]] = e
-		parts.append(e)
-	# a foot of a spring on an arm (it goes round the hinge of the arm), on a trailing arm, or on a live axle
-	for p: Dictionary in parts:
-		if p["kind"] != "trailing":
+## The tip of a rod-like mesh farthest from the origin: the middle of its end cap.
+func _tip_of(node: Node3D, origin: Vector3) -> Variant:
+	var points: Array[Vector3] = []
+	var far := 0.0
+	var list: Array[Node] = node.find_children("*", "MeshInstance3D", true, false)
+	if node is MeshInstance3D:
+		list.append(node)
+	for m in list:
+		var mi := m as MeshInstance3D
+		if mi.mesh == null:
 			continue
-		for a: Dictionary in parts:
-			if a["kind"] == "axle" and a["rear"] == (p["wheel"] >= 2) and absf(p["far"].z - a["origin"].z) < 0.15:
-				p["on_axle"] = a
-	for p: Dictionary in parts:
-		if p["kind"] != "spring" or p["strut"]:
-			continue
-		var best: Variant = null
-		var best_t: Variant = null
-		var axle: Variant = null
-		for a: Dictionary in parts:
-			if a["kind"] == "axle" and a["rear"] == (p["wheel"] >= 2):
-				axle = a
-		if axle != null and absf(p["far"].z - axle["origin"].z) < 0.15:
-			p["on_axle"] = axle
-			continue
-		for a: Dictionary in parts:
-			if a.get("wheel", -1) != p["wheel"]:
-				continue
-			if a["kind"] == "arm":
-				var lo := minf(a["origin"].x, a["far"].x)
-				var hi := maxf(a["origin"].x, a["far"].x)
-				if p["far"].x < lo - 0.02 or p["far"].x > hi + 0.02 or absf(p["far"].x - a["origin"].x) < 0.03:
-					continue
-				if best == null or a["origin"].y < best["origin"].y:
-					best = a
-			elif a["kind"] == "trailing":
-				var zlo := minf(a["origin"].z, a["far"].z)
-				var zhi := maxf(a["origin"].z, a["far"].z)
-				if p["far"].z < zlo - 0.02 or p["far"].z > zhi + 0.02 or absf(p["far"].z - a["origin"].z) < 0.03 or absf(p["far"].z - a["far"].z) < 0.05:
-					continue
-				if best_t == null or a["origin"].y < best_t["origin"].y:
-					best_t = a
-		if best != null:
-			p["on_arm"] = best
-		elif best_t != null:
-			p["on_trailing"] = best_t
-		elif axle != null:
-			p["on_axle"] = axle
+		var xf := CarModel.relative(mi, car)
+		for si in mi.mesh.get_surface_count():
+			var verts: PackedVector3Array = mi.mesh.surface_get_arrays(si)[Mesh.ARRAY_VERTEX]
+			for v in verts:
+				var p := xf * v
+				points.append(p)
+				far = maxf(far, p.distance_to(origin))
+	var sum := Vector3.ZERO
+	var count := 0
+	for p in points:
+		if p.distance_to(origin) > far - 0.012:
+			sum += p
+			count += 1
+	return sum / count if count > 0 else null
 
 
-## The parts inside a spring or a damper: a piston (piston, rod, shaft) slides along it with the travel, a coil (coil,
-## spring) gets shorter and longer about its own origin; the cylinder keeps its length. Without them the whole part is
-## scaled.
-func _inner(node: Node3D, e: Dictionary) -> Variant:
-	var out: Array = []
-	var axis: Vector3 = (e["far"] - e["origin"]).normalized()
-	for child in node.find_children("*", "Node3D", true, false):
-		var n := _clean(str(child.name))
-		var kind := "piston" if RegEx.create_from_string("piston|rod|shaft").search(n) else ("coil" if RegEx.create_from_string("coil(?!over)|spring").search(n) else "")
+## The parts inside a spring or a damper: a piston (piston, rod, shaft) slides along it, a coil (coil, spring) is
+## squeezed about its own origin; the cylinder keeps its length. axis: from the top mount to the far end (body frame).
+func _inner_parts(node: Node3D, axis: Vector3, rest_length: float) -> Array:
+	var inner := []
+	var piston_re := _re("piston|rod|shaft")
+	var coil_re := _re("coil(?!over)|spring")
+	for c in node.find_children("*", "Node3D", true, false):
+		var child := c as Node3D
+		var n := clean(str(child.name))
+		var kind := "piston" if piston_re.search(n) != null else ("coil" if coil_re.search(n) != null else "")
 		if kind == "":
 			continue
 		var holds := false
 		for g in child.find_children("*", "Node3D", true, false):
-			if RegEx.create_from_string("piston|rod|shaft|coil(?!over)|spring").search(_clean(str(g.name))):
+			var gn := clean(str(g.name))
+			if piston_re.search(gn) != null or coil_re.search(gn) != null:
 				holds = true
 		if holds:
 			continue
-		var c := child as Node3D
-		var parent_xf := CarModel.relative(c.get_parent() as Node3D, car)
-		var in_parent := (parent_xf.basis.inverse() * axis)
-		var kk := (parent_xf.basis * in_parent.normalized()).length()
-		var own := (CarModel.relative(c, car).basis.inverse() * axis).normalized()
-		var scale_axis := 0 if absf(own.x) >= absf(own.y) and absf(own.x) >= absf(own.z) else (1 if absf(own.y) >= absf(own.z) else 2)
-		in_parent = in_parent.normalized()
-		var along := clampf(c.position.dot(in_parent) * kk / maxf(0.01, e["length"]), 0.0, 1.0)
-		out.append({"node": c, "kind": kind, "rest": c.position, "rest_scale": c.scale, "in_parent": in_parent, "axis": scale_axis, "along": along, "k": kk})
-	return out if not out.is_empty() else null
+		var parent := child.get_parent() as Node3D
+		var pb := CarModel.relative(parent, car).basis
+		var raw := pb.inverse() * axis
+		var in_parent := raw.normalized()
+		var k := 1.0 / maxf(1e-6, raw.length())        # m in the body for a unit along in_parent
+		var own := CarModel.relative(child, car).basis.inverse() * axis
+		var sa := 0 if absf(own.x) >= absf(own.y) and absf(own.x) >= absf(own.z) else (1 if absf(own.y) >= absf(own.z) else 2)
+		var along := clampf(child.position.dot(in_parent) * k / maxf(0.01, rest_length), 0.0, 1.0)
+		inner.append({"node": child, "kind": kind, "rest": child.position, "rest_basis": child.basis, "in_parent": in_parent,
+			"axis": sa, "along": along, "k": k})
+	return inner
 
 
-## The travel of a wheel upwards from where the model has it (m).
+func _find(roots: Array[Node3D]) -> void:
+	var found: Array[Dictionary] = []
+	for r in roots:
+		var list: Array[Node] = r.find_children("*", "Node3D", true, false)
+		list.push_front(r)
+		for n in list:
+			var what := classify(str(n.name))
+			if not what.is_empty():
+				found.append({"node": n, "what": what})
+	# (a part inside a part, the coil and the piston of a coilover, goes with its parent)
+	var nodes := {}
+	for p in found:
+		nodes[p["node"]] = true
+	var top: Array[Dictionary] = []
+	for p in found:
+		var inside := false
+		var a: Node = (p["node"] as Node).get_parent()
+		while a != null and not inside:
+			inside = nodes.has(a)
+			a = a.get_parent()
+		if not inside:
+			top.append(p)
+	var has_rack := false
+	for p in top:
+		has_rack = has_rack or p["what"]["kind"] == "rack"
+	for p in top:
+		_add_part(p["node"], p["what"], has_rack)
+	_seat_parts()
+
+
+func _add_part(node: Node3D, what: Dictionary, has_rack: bool) -> void:
+	var origin := CarModel.relative(node, car).origin
+	var library := node.has_meta("rig_far") or (not built.is_empty() and (built["group"] as Node).is_ancestor_of(node))
+	var e := {"kind": what["kind"], "wheel": what["wheel"], "rear": what["rear"], "origin": origin, "node": node,
+		"parent": node.get_parent(), "rest_transform": node.transform, "library": library}
+	var holder := Node3D.new()
+	holder.name = "rig-" + str(node.name)
+	var basis := Basis.IDENTITY
+	var exact: Variant = node.get_meta("rig_far") if node.has_meta("rig_far") else null
+	var kind: String = e["kind"]
+	var centre := origin
+	if kind == "trailing":
+		e["far"] = exact if exact != null else _far_end(node, origin)
+		e["arm_length"] = maxf(0.05, absf(e["far"].z - origin.z))
+		e["ahead"] = 1.0 if e["far"].z >= origin.z else -1.0
+	elif kind in SPRINGLIKE:
+		var tip: Variant = _tip_of(node, origin) if kind == "tierod" and not has_rack and exact == null else null
+		e["far"] = exact if exact != null else (tip if tip != null else _far_end(node, origin))
+		var d: Vector3 = e["far"] - origin
+		e["rest_length"] = maxf(0.01, d.length())
+		e["rest_dir"] = d.normalized() if d.length() > 1e-6 else Vector3.DOWN
+		basis = _aim(e["rest_dir"])
+		if kind == "spring":
+			e["inner"] = _inner_parts(node, e["rest_dir"], e["rest_length"])
+			e["strut"] = clean(str(node.name)).contains("strut")
+	elif kind == "prop":
+		var box := _box(node)
+		centre = box.get_center()
+		if exact != null:
+			e["axis"] = ((exact as Vector3) - origin).normalized()
+			centre = (origin + (exact as Vector3)) * 0.5
+		else:
+			var s := box.size
+			e["axis"] = Vector3.RIGHT if s.x >= s.y and s.x >= s.z else (Vector3.UP if s.y >= s.z else Vector3.BACK)
+	elif kind == "arm":
+		e["far"] = exact if exact != null else _far_end(node, origin)
+		e["arm_length"] = maxf(0.05, absf(e["far"].x - origin.x))
+		e["side"] = 1.0 if e["far"].x >= origin.x else -1.0
+	holder.transform = Transform3D(basis, centre)
+	e["holder"] = holder
+	e["rest_basis"] = basis
+	e["centre"] = centre
+	root.add_child(holder)
+	# (the part keeps its place: its transform in the body, now under the holder)
+	var body_xf := CarModel.relative(node, car)
+	node.owner = null
+	node.get_parent().remove_child(node)
+	holder.add_child(node)
+	node.transform = holder.transform.affine_inverse() * body_xf
+	if kind == "rack":
+		rack = e
+	if kind == "upright":
+		uprights[e["wheel"]] = e
+	parts.append(e)
+
+
+## A spring whose far end sits on an arm of its wheel goes round the hinge of the arm with it; on a trailing arm
+## likewise; on a live axle it goes with the axle there. A trailing arm whose end is on a live axle stays on it.
+func _seat_parts() -> void:
+	for p in parts:
+		if p["kind"] != "trailing":
+			continue
+		for a in parts:
+			if a["kind"] == "axle" and a["rear"] == (int(p["wheel"]) >= 2) and absf(p["far"].z - a["origin"].z) < 0.15:
+				p["on_axle"] = a
+	for p in parts:
+		if p["kind"] != "spring" or p["strut"]:
+			continue
+		var best: Variant = null
+		var best_trailing: Variant = null
+		var axle: Variant = null
+		for a in parts:
+			if a["kind"] == "axle" and a["rear"] == (int(p["wheel"]) >= 2):
+				axle = a
+		if axle != null and absf(p["far"].z - axle["origin"].z) < 0.15:
+			p["on_axle"] = axle
+			continue
+		for a in parts:
+			if a["wheel"] != p["wheel"]:
+				continue
+			if a["kind"] == "arm" and _between(p["far"].x, a["origin"].x, a["far"].x) and absf(p["far"].x - a["origin"].x) >= 0.03:
+				if best == null or a["origin"].y < best["origin"].y:
+					best = a
+			elif a["kind"] == "trailing" and _between(p["far"].z, a["origin"].z, a["far"].z) and absf(p["far"].z - a["origin"].z) >= 0.03 \
+					and absf(p["far"].z - a["far"].z) >= 0.05:
+				if best_trailing == null or a["origin"].y < best_trailing["origin"].y:
+					best_trailing = a
+		if best != null:
+			p["on_arm"] = best
+		elif best_trailing != null:
+			p["on_trailing"] = best_trailing
+		elif axle != null:
+			p["on_axle"] = axle
+
+
+static func _between(v: float, a: float, b: float) -> bool:
+	return v >= minf(a, b) - 0.02 and v <= maxf(a, b) + 0.02
+
+
+## A basis whose Y axis points along dir (setFromUnitVectors(Y, dir)).
+static func _aim(dir: Vector3) -> Basis:
+	var d := dir.normalized()
+	if d.dot(Vector3.UP) < -0.99999:
+		return Basis(Vector3.RIGHT, PI)
+	return Basis(Quaternion(Vector3.UP, d))
+
+
+## Puts the parts back where the model had them (a new rig is made: the tuning changed the suspension) and frees the
+## holders and the parts of the library.
+func dispose() -> void:
+	for p in parts:
+		var node: Node3D = p["node"]
+		if not is_instance_valid(node) or p["library"]:
+			continue
+		node.get_parent().remove_child(node)
+		(p["parent"] as Node).add_child(node)
+		node.transform = p["rest_transform"]
+	parts.clear()
+	if is_instance_valid(root):
+		root.queue_free()
+
+
+# ---- every frame
+
+## The travel of a wheel upwards from where the model has it (m), as the wheel is drawn.
 func _travel(i: int) -> float:
-	var w := car.wheels[i]
+	var w: Car.Wheel = car.wheels[i]
 	return car.susp_length - w.length + w.offset
 
 
 ## How far up a live axle is at a distance x from its middle: the mean travel of its two wheels, and its roll.
-func _axle_at(rear: bool, x: float) -> float:
+func _axle_travel_at(rear: bool, x: float) -> float:
 	var l := _travel(2 if rear else 0)
 	var r := _travel(3 if rear else 1)
-	var track := car.rear_track if rear else car.front_track
-	return (l + r) / 2.0 + (l - r) / maxf(0.5, track) * x
+	var track := (car.rear_track if rear else car.front_track)
+	track = track if track > 0.0 else 1.5
+	return (l + r) / 2.0 + (l - r) / track * x
 
 
-func _process(_delta: float) -> void:
-	if car == null or not is_instance_valid(car):
-		return
-	var rack_shift := -rack_travel * car.steer_angle   # (along +x, to the left, for a steer to the right)
-	for p: Dictionary in parts:
+## The steer of a wheel (positive to the left, as Car.Wheel.steer).
+func _steer(i: int) -> float:
+	return car.wheels[i].steer if i < 2 else 0.0
+
+
+func _swing(travel: float, length: float) -> float:
+	return asin(clampf(travel / length, -1.0, 1.0))
+
+
+func update() -> void:
+	var rack_shift := -rack_travel * car.steer_angle         # along +x (to the left) for a steer to the right
+	_init_rods()
+	var col_angle: Variant = _fit_column() if not (_rods as Array).is_empty() else null
+	for p in parts:
 		var h: Node3D = p["holder"]
-		var k: String = p["kind"]
-		var rest_q: Quaternion = p["rest_q"]
-		match k:
+		match p["kind"]:
 			"arm":
-				var a: float = asin(clampf(_travel(p["wheel"]) / p["arm"], -1.0, 1.0)) * p["side"]
-				h.basis = Basis(Quaternion(Vector3.FORWARD, a) * rest_q)
+				var angle := _swing(_travel(p["wheel"]), p["arm_length"]) * float(p["side"])
+				h.basis = Basis(Vector3.BACK, angle) * (p["rest_basis"] as Basis)
 			"prop":
 				var turn := 0.0
 				for w in car.wheels:
 					turn += w.spin
 				h.basis = Basis(p["axis"], turn / 4.0)
 			"upright":
-				h.position = p["origin"] + Vector3.UP * _travel(p["wheel"])
+				var o: Vector3 = p["origin"]
+				h.position = Vector3(o.x, o.y + _travel(p["wheel"]), o.z)
 				if p["wheel"] < 2:
-					h.basis = Basis(Quaternion(Vector3.UP, car.wheels[p["wheel"]].steer) * rest_q)
+					h.basis = Basis(Vector3.UP, _steer(p["wheel"])) * (p["rest_basis"] as Basis)
 			"spring":
-				var t: Vector3
-				if p.has("on_arm"):
-					var arm: Dictionary = p["on_arm"]
-					var aa: float = asin(clampf(_travel(p["wheel"]) / arm["arm"], -1.0, 1.0)) * arm["side"]
-					t = arm["origin"] + Basis(Vector3.FORWARD, aa) * (p["far"] - arm["origin"])
-				elif p.has("on_trailing"):
-					var tr: Dictionary = p["on_trailing"]
-					var tt := _axle_at(tr["on_axle"]["rear"], tr["far"].x) if tr.has("on_axle") else _travel(p["wheel"])
-					var ta: float = -tr["ahead"] * asin(clampf(tt / tr["arm"], -1.0, 1.0))
-					t = tr["origin"] + Basis(Vector3.RIGHT, ta) * (p["far"] - tr["origin"])
-				elif p.has("on_axle"):
-					t = p["far"] + Vector3.UP * _axle_at(p["on_axle"]["rear"], p["far"].x)
-				else:
-					t = p["far"] + Vector3.UP * _travel(p["wheel"])
-				var d: Vector3 = t - p["origin"]
-				var length := d.length()
-				var q := Quaternion(Vector3.UP, d.normalized())
-				if p["strut"] and p["wheel"] < 2:
-					q = q * Quaternion(Vector3.UP, car.wheels[p["wheel"]].steer)
-				h.basis = Basis(q)
-				if p["inner"] != null:
-					var delta: float = length - p["length"]
-					for part: Dictionary in p["inner"]:
-						var n: Node3D = part["node"]
-						n.position = part["rest"] + part["in_parent"] * (delta / part["k"] * (1.0 if part["kind"] == "piston" else part["along"]))
-						if part["kind"] == "coil":
-							var s: Vector3 = part["rest_scale"]
-							s[part["axis"]] = s[part["axis"]] * maxf(0.2, (p["length"] + delta) / p["length"])
-							n.scale = s
-				else:
-					h.basis = h.basis.scaled_local(Vector3(1.0, maxf(0.2, length / p["length"]), 1.0))
+				_update_spring(p, h)
 			"rack":
-				h.position = p["origin"] + Vector3(rack_shift, 0.0, 0.0)
+				var ro: Vector3 = p["origin"]
+				h.position = Vector3(ro.x + rack_shift, ro.y, ro.z)
 			"tierod":
-				var up: Variant = uprights.get(p["wheel"])
-				var t: Vector3 = p["far"]
-				if up != null and p["wheel"] < 2:
-					t = up["origin"] + Basis(Vector3.UP, car.wheels[p["wheel"]].steer) * (t - up["origin"])
-				t += Vector3.UP * _travel(p["wheel"])
-				h.position = p["origin"] + Vector3(rack_shift if p["wheel"] < 2 else 0.0, 0.0, 0.0)
-				_aim(h, t - h.position, p["length"])
+				_update_tierod(p, h, rack_shift, col_angle)
 			"trailing":
-				var tt := _axle_at(p["on_axle"]["rear"], p["far"].x) if p.has("on_axle") else _travel(p["wheel"])
-				h.basis = Basis(Quaternion(Vector3.RIGHT, -p["ahead"] * asin(clampf(tt / p["arm"], -1.0, 1.0))) * rest_q)
+				var tt: float = _axle_travel_at(p["on_axle"]["rear"], p["far"].x) if p.has("on_axle") else _travel(p["wheel"])
+				h.basis = Basis(Vector3.RIGHT, -float(p["ahead"]) * _swing(tt, p["arm_length"])) * (p["rest_basis"] as Basis)
 			"shaft":
-				var hub: Variant = uprights.get(p["wheel"])
-				var t: Vector3 = (hub["origin"] if hub != null else p["far"]) + Vector3.UP * _travel(p["wheel"])
-				_aim(h, t - p["origin"], p["length"])
+				var hub: Dictionary = uprights.get(p["wheel"], {})
+				var target: Vector3 = hub["origin"] if not hub.is_empty() else p["far"]
+				_stretch(p, h, target + Vector3.UP * _travel(p["wheel"]))
 			"panhard":
-				_aim(h, p["far"] + Vector3.UP * _axle_at(p["rear"], p["far"].x) - p["origin"], p["length"])
+				_stretch(p, h, p["far"] + Vector3.UP * _axle_travel_at(p["rear"], p["far"].x))
 			"axle":
-				var l := _travel(2 if p["rear"] else 0)
-				var r := _travel(3 if p["rear"] else 1)
-				var track := car.rear_track if p["rear"] else car.front_track
-				h.position = p["rest_pos"] + Vector3.UP * _axle_at(p["rear"], p["origin"].x)
-				h.basis = Basis(Quaternion(Vector3.FORWARD, atan2(l - r, track)) * rest_q)
+				_update_axle(p, h)
 			"propaxle":
-				var al := _travel(2 if p["rear"] else 0)
-				var ar := _travel(3 if p["rear"] else 1)
-				var d: Vector3 = p["far"] + Vector3.UP * ((al + ar) / 2.0) - p["origin"]
-				var spin := (car.wheels[2 if p["rear"] else 0].spin + car.wheels[3 if p["rear"] else 1].spin) / 2.0
-				h.basis = Basis(Quaternion(Vector3.UP, d.normalized()) * Quaternion(Vector3.UP, spin)).scaled_local(Vector3(1.0, maxf(0.2, d.length() / p["length"]), 1.0))
+				var rear: bool = p["rear"]
+				var lift := (_travel(2 if rear else 0) + _travel(3 if rear else 1)) / 2.0
+				var d: Vector3 = p["far"] + Vector3.UP * lift - h.position
+				var spin := (car.wheels[2 if rear else 0].spin + car.wheels[3 if rear else 1].spin) / 2.0
+				h.basis = _aim(d) * Basis(Vector3.UP, spin) * Basis.from_scale(Vector3(1.0, maxf(0.2, d.length() / float(p["rest_length"])), 1.0))
 
 
-## A part along d from its origin, stretched to its length.
-static func _aim(h: Node3D, d: Vector3, rest_length: float) -> void:
-	h.basis = Basis(Quaternion(Vector3.UP, d.normalized())).scaled_local(Vector3(1.0, maxf(0.2, d.length() / rest_length), 1.0))
+## The wheels turn about the pin of their upright, not about their own middle: the hub moves along an arc. Called
+## after the car has placed the wheels.
+func move_hubs() -> void:
+	for i in 2:
+		var w: Car.Wheel = car.wheels[i]
+		if not uprights.has(i) or w.hub_node == null or not hubs.has(i):
+			continue
+		var o: Vector3 = uprights[i]["origin"]
+		var off := Vector3(hubs[i].x - o.x, 0.0, hubs[i].z - o.z)
+		w.hub_node.position += off.rotated(Vector3.UP, _steer(i)) - off
+
+
+## A part from its origin (on the body) to a point: aimed at it and stretched to it.
+func _stretch(p: Dictionary, h: Node3D, target: Vector3) -> void:
+	var d := target - h.position
+	h.basis = _aim(d) * Basis.from_scale(Vector3(1.0, maxf(0.2, d.length() / float(p["rest_length"])), 1.0))
+
+
+func _update_spring(p: Dictionary, h: Node3D) -> void:
+	var far: Vector3 = p["far"]
+	var wheel: int = p["wheel"]
+	var t := far
+	if p.has("on_arm"):
+		var arm: Dictionary = p["on_arm"]
+		var arm_angle := _swing(_travel(wheel), arm["arm_length"]) * float(arm["side"])
+		t = (far - arm["origin"]).rotated(Vector3.BACK, arm_angle) + arm["origin"]
+	elif p.has("on_trailing"):
+		var tr: Dictionary = p["on_trailing"]
+		var tt: float = _axle_travel_at(tr["on_axle"]["rear"], tr["far"].x) if tr.has("on_axle") else _travel(wheel)
+		t = (far - tr["origin"]).rotated(Vector3.RIGHT, -float(tr["ahead"]) * _swing(tt, tr["arm_length"])) + tr["origin"]
+	elif p.has("on_axle"):
+		t.y += _axle_travel_at(p["on_axle"]["rear"], far.x)
+	else:
+		t.y += _travel(wheel)
+	var d := t - (p["origin"] as Vector3)
+	var length := d.length()
+	var b := _aim(d)
+	# (a strut of a front wheel turns with the steering about its own length: its foot is clamped to the upright)
+	if p["strut"] and wheel < 2:
+		b = b * Basis(Vector3.UP, car.steer_angle)
+	var rest: float = p["rest_length"]
+	if (p["inner"] as Array).is_empty():
+		h.basis = b * Basis.from_scale(Vector3(1.0, maxf(0.2, length / rest), 1.0))
+		return
+	h.basis = b
+	var delta := length - rest
+	for part in p["inner"]:
+		var node: Node3D = part["node"]
+		var share: float = 1.0 if part["kind"] == "piston" else part["along"]
+		node.position = (part["rest"] as Vector3) + (part["in_parent"] as Vector3) * (delta / float(part["k"]) * share)
+		if part["kind"] == "coil":
+			var sc := Vector3.ONE
+			sc[int(part["axis"])] = maxf(0.2, (rest + delta) / rest)
+			node.basis = (part["rest_basis"] as Basis) * Basis.from_scale(sc)
+
+
+func _update_tierod(p: Dictionary, h: Node3D, rack_shift: float, col_angle: Variant) -> void:
+	var t: Vector3 = p["far"]
+	var wheel: int = p["wheel"]
+	var up: Dictionary = uprights.get(wheel, {})
+	if not up.is_empty() and wheel < 2:
+		t = (t - up["origin"]).rotated(Vector3.UP, _steer(wheel)) + up["origin"]
+	t.y += _travel(wheel)
+	var o: Vector3 = p["origin"]
+	if col_angle != null and p.has("far_now"):
+		h.position = (o - column["centre"]).rotated(column["axis"], col_angle) + column["centre"]
+	else:
+		h.position = Vector3(o.x + (rack_shift if wheel < 2 else 0.0), o.y, o.z)
+	_stretch(p, h, t)
+
+
+func _update_axle(p: Dictionary, h: Node3D) -> void:
+	var rear: bool = p["rear"]
+	var left := _travel(2 if rear else 0)
+	var right := _travel(3 if rear else 1)
+	var track := car.rear_track if rear else car.front_track
+	track = track if track > 0.0 else 1.5
+	var o: Vector3 = p["origin"]
+	h.position = Vector3(o.x, o.y + (left + right) / 2.0 + (left - right) / track * o.x, o.z)
+	h.basis = Basis(Vector3.BACK, atan2(left - right, track)) * (p["rest_basis"] as Basis)
+
+
+# ---- fixed tie rods on a steering column (a kart): the column turns to where the rods keep their length
+
+func _init_rods() -> void:
+	if _rods != null:
+		return
+	_rods = []
+	if not rack.is_empty() or column.is_empty():
+		return
+	for p in parts:
+		if p["kind"] == "tierod" and p["wheel"] < 2 and uprights.has(p["wheel"]):
+			p["far_now"] = Vector3.ZERO
+			(_rods as Array).append(p)
+
+
+func _far_point(p: Dictionary, steer: float) -> Vector3:
+	var up: Dictionary = uprights[p["wheel"]]
+	var out: Vector3 = ((p["far"] as Vector3) - up["origin"]).rotated(Vector3.UP, steer) + up["origin"]
+	out.y += _travel(p["wheel"])
+	return out
+
+
+## The angle of the steering column at which the rods fit the wheels best (radians).
+func _fit_column(steers: Variant = null) -> float:
+	var s0: float = _steer(0) if steers == null else steers[0]
+	var s1: float = _steer(1) if steers == null else steers[1]
+	var key := "%f,%f" % [s0, s1]
+	if key == _column_key:
+		return column_angle
+	_column_key = key
+	for p in _rods:
+		p["far_now"] = _far_point(p, s0 if p["wheel"] == 0 else s1)
+	var step := 0.004
+	var lo := -2.0
+	var errors := PackedFloat32Array()
+	var best := 0
+	var best_error := INF
+	var c: Vector3 = column["centre"]
+	var a := lo
+	while a <= 2.0:
+		var error := 0.0
+		for p in _rods:
+			var pin: Vector3 = ((p["origin"] as Vector3) - c).rotated(column["axis"], a) + c
+			var d: float = pin.distance_to(p["far_now"]) - float(p["rest_length"])
+			error += d * d
+		errors.append(error)
+		if error < best_error:
+			best_error = error
+			best = errors.size() - 1
+		a += step
+	var angle := lo + best * step
+	if best > 0 and best < errors.size() - 1:
+		var den := errors[best - 1] - 2.0 * errors[best] + errors[best + 1]
+		if den > 0.0:
+			angle += step * 0.5 * (errors[best - 1] - errors[best + 1]) / den
+	column_angle = angle
+	column_error = sqrt(best_error / maxf(1.0, (_rods as Array).size()))
+	return angle
+
+
+## The angle of the steering column at the lock of the front wheels, or -1 without fixed tie rods.
+func lock_angle(max_turn: float) -> float:
+	_init_rods()
+	if (_rods as Array).is_empty():
+		return -1.0
+	var saved := [_column_key, column_angle, column_error]
+	_column_key = ""
+	var angle := absf(_fit_column([max_turn, max_turn]))
+	_column_key = saved[0]
+	column_angle = saved[1]
+	column_error = saved[2]
+	return angle

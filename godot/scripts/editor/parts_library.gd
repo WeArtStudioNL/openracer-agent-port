@@ -358,7 +358,7 @@ static func _place(out: Dictionary, t: String, file: String, node_name: String, 
 		if float(rot[1]) != 0.0:
 			basis = basis * Basis(Vector3.UP, deg_to_rad(float(rot[1])) * s)
 		scale = Vector3(s, length, 1.0)
-		node.set_meta("rig_far", far)        # (the exact far end, for the moving parts of the game: SuspensionRig)
+		node.set_meta("rig_far", far)          # (the exact far end, for the rig: the box of a slanted part reaches past it)
 	else:
 		basis = Basis.from_euler(Vector3(deg_to_rad(float(rot[0])), deg_to_rad(float(rot[1])) * s, deg_to_rad(float(rot[2])) * s), EULER_ORDER_XYZ)
 		scale = Vector3(s, 1.0, 1.0)

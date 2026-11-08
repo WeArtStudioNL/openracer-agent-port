@@ -34,7 +34,7 @@ func _init(c: Car, s: SoftBody, part_objects: Dictionary) -> void:
 		_nodes.append(sb.rest[k])
 	for m in car.model_root.find_children("*", "MeshInstance3D", true, false):
 		var mi := m as MeshInstance3D
-		if mi.mesh == null or not mi.is_visible_in_tree() or CollisionProxy.hidden_object(mi):
+		if mi.mesh == null or not mi.is_visible_in_tree() or CollisionProxy.hidden_object(mi) or mi.has_meta("no_bend") or mi.has_meta("mirror_glass"):
 			continue
 		var group := ""
 		var n: Node = mi

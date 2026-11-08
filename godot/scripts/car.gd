@@ -244,9 +244,9 @@ func setup(id: String, cfg: Dictionary) -> void:
 	col.shape = shape
 	col.position = Vector3(0.0, bottom + shape.size.y / 2.0, 0.0)
 	add_child(col)
+	collision_mask = 1 | Track.SCENERY_LAYER       # (the road and the scenery of the track, Track)
 	_box = col
 	_build_visual()
-	SuspensionRig.attach(self)        # (the parts of the suspension that move, and the parts library of car.json)
 	_make_shell()
 	if Settings.get_value("damage") and not config.get("parts", []).is_empty():
 		parts = CarParts.new(self)
@@ -632,6 +632,9 @@ func _build_visual() -> void:
 		_library_wheel(w, lib.get("front" if w.front else "rear", {}))
 	if bike != null:
 		bike_model = MotorcycleModel.new(self, body)
+	else:
+		CarDriver.attach(self, body)       # the steering wheel of the model turns, the driver of car.json sits in the car (car_driver.gd)
+	add_child(CarVisuals.new(self, body))     # the suspension rig, the paint and materials, the mirrors (car_visuals.gd)
 
 
 func _library_wheel(w: Wheel, axle: Dictionary) -> void:

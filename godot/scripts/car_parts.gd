@@ -532,7 +532,7 @@ func _make_body(p: Part) -> void:
 	body.mass = maxf(0.2, p.mass)
 	body.continuous_cd = true
 	body.collision_layer = FREE_LAYER
-	body.collision_mask = 1 | FREE_LAYER | TrackObjects.LAYER_OBJECT
+	body.collision_mask = 1 | FREE_LAYER | TrackObjects.LAYER_OBJECT | Track.SCENERY_LAYER
 	var mat := PhysicsMaterial.new()
 	mat.friction = 0.8
 	mat.bounce = 0.12

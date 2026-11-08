@@ -4,11 +4,18 @@ extends Node3D
 ## surface that track.json gives it ("surfaces.meshes": road, grass, sand ...; "decor" has no collision), the
 ## start, and its Atmosphere (the sky, the sun, the weather and the ground).
 
+## The parts that the wheels do not drive on (scenery: walls, buildings, the objects that stand still) are on a layer of
+## their own: the wheels look only at layer 1, as the wheels of the browser game only meet the drivable triangles
+## (Ground.js); the body of a car and the loose parts meet both.
+const SCENERY_LAYER := 4
+const DRIVABLE := {"road": true, "track01": true, "wet": true, "grass": true, "ground": true, "sand": true, "gravel": true, "mud": true}
+
 var config: Dictionary = {}
 var track_id := ""
 var start := {"x": 0.0, "z": 0.0, "heading": 0.0}
 var marks: TrackMarks = null       # the grid boxes, the pit area and the checkpoints (TrackMarks)
 var objects: TrackObjects = null   # the objects of track.json and the rigid parts of the model (TrackObjects)
+var _loose_names := {}             # (the names of a list of track.json without dots and underscores, _named)
 var _colliders: Array[CollisionShape3D] = []
 var _walls: WallGrid = null
 
@@ -73,6 +80,8 @@ func _add_body(mi: MeshInstance3D, kind: String) -> void:
 	shape.backface_collision = true
 	var body := StaticBody3D.new()
 	body.set_meta("surface", kind)
+	if not DRIVABLE.has(kind):
+		body.collision_layer = SCENERY_LAYER
 	var mat := PhysicsMaterial.new()
 	mat.friction = 0.6
 	body.physics_material_override = mat
@@ -135,12 +144,50 @@ func walls() -> WallGrid:
 	return _walls
 
 
+## What a part is made of (TrackLoader.js trackRole): the role of track.json "surfaces.meshes" for its name or the name of a
+## node above it, else of "surfaces.materials" for its material; a part that is not mentioned is scenery (it is hit, not
+## driven on).
 func _surface_of(mi: MeshInstance3D, surfaces: Dictionary) -> String:
-	# the name in track.json is the name of the mesh or of its object in Blender
-	for key in [str(mi.name), mi.mesh.resource_name, str(mi.get_parent().name)]:
-		if surfaces.has(key):
-			return str(surfaces[key])
-	return "road"
+	var hit := _named(surfaces, mi.mesh.resource_name)
+	if hit != "":
+		return hit
+	var n: Node = mi
+	while n != null and n != self:
+		hit = _named(surfaces, str(n.name))
+		if hit != "":
+			return hit
+		n = n.get_parent()
+	var materials: Dictionary = config.get("surfaces", {}).get("materials", {}) if config.get("surfaces") is Dictionary else {}
+	var mat := mi.mesh.surface_get_material(0) if mi.mesh.get_surface_count() > 0 else null
+	if mat != null:
+		hit = _named(materials, mat.resource_name)
+		if hit != "":
+			return hit
+	return "scenery"
+
+
+## The value for a name of the model in a list of track.json, "" when it is not there. The names in track.json are
+## the ones three.js gives (it drops the dots of Blender: "road_tile.001" is "road_tile001"), Godot's importer makes
+## "road_tile_001" of it: without an exact match the names are compared without their dots and underscores.
+func _named(list: Dictionary, name: String) -> String:
+	if name == "":
+		return ""
+	if list.has(name):
+		return str(list[name])
+	if _loose_names.is_empty() and not list.is_empty():
+		for k in list:
+			_loose_names[_loose(str(k))] = str(list[k])
+		_loose_names["__of"] = str(list.hash())
+	if str(_loose_names.get("__of", "")) != str(list.hash()):
+		_loose_names.clear()
+		for k in list:
+			_loose_names[_loose(str(k))] = str(list[k])
+		_loose_names["__of"] = str(list.hash())
+	return str(_loose_names.get(_loose(name), ""))
+
+
+static func _loose(name: String) -> String:
+	return name.replace(".", "").replace("_", "").replace(" ", "").to_lower()
 
 
 func _flat_ground() -> void:
@@ -163,6 +210,6 @@ func ground_at(x: float, z: float) -> float:
 	if not is_inside_tree():
 		return 0.0
 	var space := get_world_3d().direct_space_state
-	var q := PhysicsRayQueryParameters3D.create(Vector3(x, 2000, z), Vector3(x, -2000, z))
+	var q := PhysicsRayQueryParameters3D.create(Vector3(x, 2000, z), Vector3(x, -2000, z), 1)
 	var hit := space.intersect_ray(q)
 	return float(hit["position"].y) if not hit.is_empty() else 0.0

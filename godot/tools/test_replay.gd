@@ -77,7 +77,7 @@ func _watch(path: String) -> void:
 
 
 func _process(dt: float) -> void:
-	if _step >= 50:
+	if _step == 50 or _step == 51:          # (the viewer of a file; step 100 is the game's free camera)
 		_time += dt
 		if _step == 50 and _time > 3.0:
 			var r := world.replay

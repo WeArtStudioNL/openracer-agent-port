@@ -43,12 +43,12 @@ func _ready() -> void:
 	cam = Camera3D.new()
 	add_child(cam)
 	cam.make_current()
-	var rig := car.get_node_or_null("SuspensionRig") as SuspensionRig
+	var rig := _rig()
 	var kinds := {}
 	if rig != null:
 		for p: Dictionary in rig.parts:
 			kinds[p["kind"]] = int(kinds.get(p["kind"], 0)) + 1
-	print("rig of %s: %s; parts library: %s" % [id, kinds if rig else "none", "yes" if car.get_node_or_null("PartsLibrary") != null else "no"])
+	print("rig of %s: %s; parts library: %s" % [id, kinds if rig else "none", "yes" if rig != null and not rig.built.is_empty() else "no"])
 
 
 func walls() -> WallGrid:
@@ -73,7 +73,7 @@ func _process(_delta: float) -> void:
 		_hide_body()
 		get_viewport().get_texture().get_image().save_png(_shot.replace(".png", "-1.png"))
 	if _time > 3.5:
-		var rig := car.get_node_or_null("SuspensionRig") as SuspensionRig
+		var rig := _rig()
 		if rig != null:
 			for part: Dictionary in rig.parts:
 				if part.get("wheel", -1) == 0 and part["kind"] in ["upright", "arm", "spring", "tierod"]:
@@ -94,3 +94,10 @@ func _hide_body() -> void:
 	if car.shell_mesh != null:
 		for m in car.shell_mesh.meshes:
 			m.visible = false
+
+
+func _rig() -> SuspensionRig:
+	for n in car.get_children():
+		if n is CarVisuals:
+			return (n as CarVisuals).rig
+	return null
