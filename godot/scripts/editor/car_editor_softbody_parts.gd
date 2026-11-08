@@ -8,7 +8,7 @@ extends RefCounted
 ## gravity, x left, y up, z forward). A row of the Layers panel opens the window at its part, or offers to add it.
 
 const MODES := [["hinge", "Hinge"], ["detachable", "Loose"], ["breakable", "Breakable (shatters)"]]
-const LOOSE_NAME := "(?i)wheel|tyre|tire|steer|^rig-|^susp_|brake_caliper"
+const LOOSE_NAME := "(?i)wheel|tyre|tire|steer|^rig-|^susp_|^ball_|brake_caliper"
 
 var card: Object                     # the Soft body card (car_editor_softbody.gd)
 var ed: CarEditor

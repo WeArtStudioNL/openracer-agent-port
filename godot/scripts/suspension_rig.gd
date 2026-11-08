@@ -303,7 +303,8 @@ func _gather_coilovers(roots: Array[Node3D]) -> void:
 				inner.transform = CarModel.relative(cylinder, car).affine_inverse() * xf
 
 
-## A brake caliper (brake_caliper_FL) goes with the upright of its wheel, or with the steering of the wheel when the car has
+## A brake caliper (brake_caliper_FL) and a ball joint (ball_lowerarm_FL, ball_upperarm_FL, ball_tierod_FL: a mesh, or an empty that
+## only marks the point) go with the upright of its wheel, or with the steering of the wheel when the car has
 ## no upright: it goes up and down and steers, and does not spin.
 func _attach_calipers(roots: Array[Node3D]) -> void:
 	var list: Array[Node] = []
@@ -312,7 +313,8 @@ func _attach_calipers(roots: Array[Node3D]) -> void:
 	for n in list:
 		var c := clean(str(n.name))
 		var wheel: int = CORNERS.get(c.right(2), -1)
-		if wheel < 0 or _re("caliper|brake").search(c) == null or _re("disc|disk|rotor").search(c) != null:
+		var joint := _re("^ball(lowerarm|upperarm|tierod)").search(c) != null        # (a ball joint is bolted to the upright: it goes with it, not with its arm)
+		if wheel < 0 or not (joint or (_re("caliper|brake").search(c) != null and _re("disc|disk|rotor").search(c) == null)):
 			continue
 		var node := n as Node3D
 		var up: Dictionary = uprights.get(wheel, {})

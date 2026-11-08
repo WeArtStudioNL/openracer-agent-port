@@ -17,7 +17,7 @@ const ORANGE := Color("#ff9f43")
 const PARTICLE_MATERIALS := [["glass", "Glass"], ["tinted", "Tinted glass"], ["red", "Red plastic"], ["orange", "Orange plastic"],
 	["white", "White plastic"], ["black", "Black plastic"], ["chrome", "Chrome"], ["custom", "Colour of its own"]]
 const SHAPES := [["shards", "Shards"], ["splinters", "Splinters"], ["grains", "Grains"]]
-const LOOSE_NAME := "(?i)wheel|tyre|tire|steer|^rig-|^susp_|brake_caliper"
+const LOOSE_NAME := "(?i)wheel|tyre|tire|steer|^rig-|^susp_|^ball_|brake_caliper"
 const BODY_SHARE := 0.45            # an object that covers this much of the car from above is the body, not a loose part
 
 var card: Object                     # the Soft body card (car_editor_softbody.gd)
