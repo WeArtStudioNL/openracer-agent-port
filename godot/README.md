@@ -321,6 +321,11 @@ and chain (`scripts/motorcycle_model.gd`) and the rider on it (`scripts/motorcyc
 - **Flat track**: the pelvis tilts against the bike (`push_pelvis_tilt`), the inside foot comes off the peg onto the
   road beside it, forward and out with the lean (`push_foot_out`, `push_foot_forward`, a ray for the road), and a foot
   is never below the road.
+- **The AI** brakes for 0.75 g on a road-race bike with fork dive (0.8 before and for a flat-track bike): with the
+  fork in the physics the 600 ran wide in the first bend of kartbaan-oldenzaal at 0.8 g.
+- **Test**: `Godot --fixed-fps 60 --path godot res://tools/test_moto.tscn -- --car=sports-motorcycle-600cc` (the shift
+  lever, the fork, the give and the brake lever on the brake, the limp rider, a crash into a wall, the ragdoll on the
+  floor; with a window `--shot=/folder` saves throttle, brake, levers, limp_ride, limp and crash pictures).
 - **Not ported**: model v2 (`"motorcycle": {"model": "v2"}`; no bike of the game uses it), the crash rules panel of
   the 0 key and its push rule, the head that stays upright to the road and looks along the racing line, the ORG bones
   of a Rigify rig that follow the DEF ones, the ragdoll in the replay, walking the bike back with the feet.
