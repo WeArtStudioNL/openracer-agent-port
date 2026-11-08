@@ -21,9 +21,6 @@ const SHIFT_BACK := 0.2
 const THROTTLE_ROLL := 0.75          # rad: the right grip at full throttle
 const LEVER_PULL := 0.3              # rad: a lever at a full pull
 ## the give in the g-forces (OpenRacer.RiderFeel: the amount, how quick he comes back in Hz, the damping)
-const FEEL_AMOUNT := 1.0
-const FEEL_HZ := 1.4
-const FEEL_DAMPING := 0.55
 
 var car: Car
 var cfg: Dictionary
@@ -368,9 +365,10 @@ func _g_spring(dt: float) -> void:
 	_last_p = pos
 	var b := car.global_transform.basis.orthonormalized()
 	var a := Vector3(g_acc.dot(b.x), g_acc.dot(b.y), g_acc.dot(b.z))        # left, up, forward
-	var w := TAU * FEEL_HZ
-	var z := FEEL_DAMPING
-	var gain := FEEL_AMOUNT * 0.06 / 9.81 * w * w
+	var f := Motorcycle.feel()          # (the panel of the debug view can change it)
+	var w := TAU * float(f["hz"])
+	var z := float(f["damping"])
+	var gain := float(f["amount"]) * 0.06 / 9.81 * w * w
 	var n := maxi(1, ceili(dt * 120.0))
 	var h := dt / n
 	for i in n:

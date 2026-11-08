@@ -18,11 +18,26 @@ extends RefCounted
 
 const G := 9.81
 const DEG := PI / 180.0
-## The rules of a crash (Motorcycle.CRASH_DEFAULTS; the panel of the 0 key in the browser, not here).
-const CRASH := {
-	"lowside_slip": 25.0, "lowside_lean": 25.0, "lowside_time": 2.0,
-	"spin_rate": 4.0, "blow_g": 7.0, "hit_loss": 8.0,
+## The rules of a crash (Motorcycle.js CRASH_DEFAULTS): each on or off with its limit, as the panel of the debug view
+## (0) sets them (kept in the prefs of the video and the debug, VideoPrefs "debug" "crash_rules"; crash_rules() fills in
+## what is not set). lean deg null: the bike's own crash_lean_deg. force: with it on, a hit (wall, hit, blow) only counts
+## when the road or a thing pushes on the body with more than kN.
+const CRASH_DEFAULTS := {
+	"lean": {"on": true, "deg": null},
+	"lowside": {"on": true, "slip": 25.0, "lean": 25.0, "time": 2.0},
+	"spin": {"on": true, "rate": 4.0},
+	"over": {"on": true},
+	"blow": {"on": true, "g": 7.0},
+	"hit": {"on": true, "loss": 8.0},
+	"wall": {"on": true, "kmh": 20.0},
+	"force": {"on": false, "kN": 15.0},
 }
+## How the rider gives with the g-forces (Driver.js RiderFeel; the panel of the debug view): the amount, how quick he
+## comes back (Hz) and the damping.
+const FEEL_DEFAULTS := {"amount": 1.0, "hz": 1.4, "damping": 0.55}
+
+static var _rules_set: Variant = null      # what the panel set (null: not read yet)
+static var _feel_set: Variant = null
 
 var s: Dictionary = {}
 # settings (readSettings)
@@ -84,6 +99,8 @@ var foot_down_l := 0.0
 var since_brake := 99.0
 var complied := 0.0
 var slide_time := 0.0
+var dbg_force := 0.0               # N: the most push of the road and the things on the body in the last tenth of a second (the panel)
+var dbg_accel := 0.0               # m/s2: the acceleration of the bike (the panel)
 var brace := 0.0
 var key_command := 0.0            # the keys bring the lean command over time
 var rider_key := 0                # -1: the rider is put back, 1: forward (the keys < and >, set by world.gd)
@@ -95,6 +112,7 @@ var counter_gain := 1.0
 var fork_slope := 0.0
 var swing_slope := 0.0
 var fork_dive := 1.0
+var _force_hist: Array = []        # [t, N]
 var _foot_still := false
 var _foot_wait := 0.0
 var _road := Vector3.UP
@@ -494,7 +512,7 @@ func physics(car: Car, state: PhysicsDirectBodyState3D, dt: float) -> void:
 			_last_flight = _air_time
 		_air_time = 0.0
 	if not crashed:
-		_crash_rules(car, st, v, xf.origin, u, dt)
+		_crash_rules(car, st, v, xf.origin, u, dt, state)
 	if crashed:
 		posture["lat"] = 0.0
 		posture["knee"] = 0.0
@@ -592,8 +610,91 @@ func _camber(car: Car, state: PhysicsDirectBodyState3D, st: Dictionary, xf: Tran
 		state.apply_force(left * camber * share_w, w.point - xf.origin)
 
 
-## The rules of a crash: past the lean, a lowside, a spin, a blow, a hit, on its back.
-func _crash_rules(car: Car, st: Dictionary, v: Vector3, pos: Vector3, u: float, dt: float) -> void:
+## The rules of a crash as they are: the defaults with what the panel set.
+static func crash_rules() -> Dictionary:
+	if _rules_set == null:
+		var kept: Variant = VideoPrefs.get_value("debug", "crash_rules", {})
+		_rules_set = kept if kept is Dictionary else {}
+	var out := {}
+	for k in CRASH_DEFAULTS:
+		var d: Dictionary = (CRASH_DEFAULTS[k] as Dictionary).duplicate()
+		var mine: Variant = (_rules_set as Dictionary).get(k, {})
+		if mine is Dictionary:
+			d.merge(mine, true)
+		out[k] = d
+	return out
+
+
+## A rule of the panel: its tick (field "on") or its limit; kept.
+static func set_crash_rule(key: String, field: String, value: Variant) -> void:
+	crash_rules()
+	var rules_set: Dictionary = _rules_set
+	if not rules_set.get(key) is Dictionary:
+		rules_set[key] = {}
+	rules_set[key][field] = value
+	VideoPrefs.set_value("debug", "crash_rules", rules_set)
+
+
+static func feel() -> Dictionary:
+	if _feel_set == null:
+		var kept: Variant = VideoPrefs.get_value("debug", "rider_feel", {})
+		_feel_set = kept if kept is Dictionary else {}
+	var out := FEEL_DEFAULTS.duplicate()
+	out.merge(_feel_set, true)
+	return out
+
+
+static func set_feel(key: String, value: float) -> void:
+	feel()
+	(_feel_set as Dictionary)[key] = value
+	VideoPrefs.set_value("debug", "rider_feel", _feel_set)
+
+
+## Back to the standard rules and the standard rider.
+static func reset_rules() -> void:
+	_rules_set = {}
+	_feel_set = {}
+	VideoPrefs.set_value("debug", "crash_rules", {})
+	VideoPrefs.set_value("debug", "rider_feel", {})
+
+
+## How hard the road and the things around push on the body now (N): the contacts of the body (the box) and the shell.
+func _push_now(car: Car, state: PhysicsDirectBodyState3D, dt: float) -> float:
+	var f := 0.0
+	for i in state.get_contact_count():
+		f += state.get_contact_impulse(i).length() / maxf(dt, 1e-4)
+	if car.shell != null:
+		f += car.shell.hit
+	return f
+
+
+## The body of the bike hit something: the speed into it (m/s), the most of the contacts of the body (Vehicle.js
+## lastImpact). (The bike reports its contacts: contact_monitor, set at its first step.)
+func _impact(state: PhysicsDirectBodyState3D) -> float:
+	var best := 0.0
+	for i in state.get_contact_count():
+		var n := state.get_contact_local_normal(i)
+		var vp := state.get_contact_local_velocity_at_position(i) - state.get_contact_collider_velocity_at_position(i)
+		best = maxf(best, absf(vp.dot(n)))
+	return best
+
+
+## The rules of a crash: past the lean, a lowside, a spin, a blow, a hit, a wall, on its back.
+func _crash_rules(car: Car, st: Dictionary, v: Vector3, pos: Vector3, u: float, dt: float, state: PhysicsDirectBodyState3D = null) -> void:
+	var r := crash_rules()
+	if state != null and not car.contact_monitor:
+		car.contact_monitor = true
+		car.max_contacts_reported = maxi(car.max_contacts_reported, 4)
+	var push := _push_now(car, state, dt) if state != null else 0.0
+	_force_hist.append([_now + dt, push])
+	while _force_hist.size() > 1 and float(_force_hist[0][0]) < _now + dt - 0.1:
+		_force_hist.pop_front()
+	dbg_force = 0.0
+	for h in _force_hist:
+		dbg_force = maxf(dbg_force, float(h[1]))
+	dbg_accel = _accel.length()
+	var hard: bool = not r["force"]["on"] or dbg_force > float(r["force"]["kN"]) * 1000.0
+	var wall: bool = r["wall"]["on"] and hard and state != null and _impact(state) > float(r["wall"]["kmh"]) / 3.6
 	_now += dt
 	_hist.append([_now, v, pos])
 	while _hist.size() > 2 and float(_hist[1][0]) < _now - 0.1:
@@ -607,23 +708,26 @@ func _crash_rules(car: Car, st: Dictionary, v: Vector3, pos: Vector3, u: float, 
 	var speed_old := Vector2(vo.x, vo.z).length()
 	var speed_now := Vector2(v.x, v.z).length()
 	var lost3 := vo.length() - v.length()
-	var loss: float = CRASH["hit_loss"]
-	var hit := speed_old - speed_now > loss and lost3 > loss and speed_old > 5.5
-	var over := float(st["up_n"]) < -0.17
+	var loss := float(r["hit"]["loss"])
+	var hit: bool = r["hit"]["on"] and hard and speed_old - speed_now > loss and lost3 > loss and speed_old > 5.5
+	var over: bool = r["over"]["on"] and float(st["up_n"]) < -0.17
 	var v_right := -v.dot(car.global_transform.basis.x)
 	var beta := atan2(v_right, maxf(absf(u), 1.0))
 	var rear := car.wheels[2]
 	var powerslide := car.throttle > 0.2 and rear.omega * rear.radius - rear.forward_speed > 1.5
-	var sliding: bool = absf(beta) > float(CRASH["lowside_slip"]) * DEG and absf(lean) > float(CRASH["lowside_lean"]) * DEG and absf(u) > 5.0 and not powerslide
+	var low: Dictionary = r["lowside"]
+	var sliding: bool = absf(beta) > float(low["slip"]) * DEG and absf(lean) > float(low["lean"]) * DEG and absf(u) > 5.0 and not powerslide
 	slide_time = slide_time + dt if sliding else 0.0
-	var lowside := slide_time > float(CRASH["lowside_time"])
-	var spin := absf(car.angular_velocity.dot(Vector3.UP)) > float(CRASH["spin_rate"]) and absf(u) > 5.0
-	var blow := _accel.length() > float(CRASH["blow_g"]) * G
-	var leaned := absf(lean) > (0.7 if limp else crash_lean)
+	var lowside: bool = low["on"] and slide_time > float(low["time"])
+	var spin: bool = r["spin"]["on"] and absf(car.angular_velocity.dot(Vector3.UP)) > float(r["spin"]["rate"]) and absf(u) > 5.0
+	var blow: bool = r["blow"]["on"] and hard and _accel.length() > float(r["blow"]["g"]) * G
+	var lean_limit: float = float(r["lean"]["deg"]) * DEG if r["lean"]["deg"] != null else crash_lean
+	var leaned: bool = absf(lean) > 0.7 if limp else (r["lean"]["on"] and absf(lean) > lean_limit)
 	var still := limp and absf(u) < 0.5
-	if leaned or still or over or lowside or spin or blow or hit:
+	if leaned or still or over or lowside or spin or blow or hit or wall:
 		crashed = true
-		crash_reason = "lean" if leaned else ("limp-still" if still else ("over" if over else ("lowside" if lowside else ("spin" if spin else ("blow" if blow else "hit")))))
+		crash_reason = "lean" if leaned else ("limp-still" if still else ("over" if over else ("lowside" if lowside else ("spin" if spin else ("blow" if blow
+			else ("wall" if wall else "hit"))))))
 		RunLog.event("motorcycle %s down (%s) at %.0f km/h, lean %.0f deg" % [car.name, crash_reason, v.length() * 3.6, lean / DEG])
 		_crash_speed = vo if hit else v
 

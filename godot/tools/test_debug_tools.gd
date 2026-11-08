@@ -19,6 +19,7 @@ func _ready() -> void:
 		push_error("test_debug_tools: give --video-cfg and --user-dir (nothing of a test goes into the player's data)")
 		get_tree().quit(2)
 		return
+	VideoPrefs.set_value("debug", "crash_open", Content.arg("shot") != "")      # (the picture: the crash rules of a motorcycle open)
 	world = World.new()
 	add_child(world)
 	world.setup(Content.arg("car") if Content.arg("car") != "" else "openracer-muscle", "testtrack", {"ghost": false, "records": false})
@@ -90,6 +91,52 @@ func _run() -> void:
 			_check(found == target, "part_of finds %s from its mesh" % target.name)
 			var said := car.parts.tool(target, "break")
 			_check(target.state != "held", "Break parts: %s %s" % [target.name, said])
+			# the middle mouse button on a part that is off the car: its body takes the hit
+			await _wait(0.5)
+			if target.body != null and is_instance_valid(target.body):
+				var v0 := target.body.linear_velocity
+				var meshes_off := target.body.find_children("*", "MeshInstance3D", true, false)
+				var what := dv._hit_part({"node": meshes_off[0] if meshes_off.size() > 0 else target.body, "position": target.body.global_position},
+					Vector3.FORWARD, 1000.0 * 50.0 / 3.6)
+				await get_tree().physics_frame          # (an impulse works in the next step)
+				_check(what == "part" and target.body.linear_velocity.distance_to(v0) > 1.0,
+					"a hit on the loose %s moves it (%.1f m/s)" % [target.name, target.body.linear_velocity.distance_to(v0)])
+		# Open hinges: a right click opens a hinge, another closes it where it was made
+		var hinge: CarParts.Part = null
+		for p in car.parts.parts:
+			if p.state == "held" and not p.hinge.is_empty():
+				hinge = p
+				break
+		if hinge != null:
+			var said := car.parts.tool(hinge, "hinge")
+			await _wait(0.6)
+			_check(hinge.state == "hinged", "Open hinges: %s %s" % [hinge.name, said])
+			said = car.parts.tool(hinge, "hinge")
+			await _wait(0.3)
+			_check(hinge.state == "held" and hinge.body == null, "again: %s %s" % [hinge.name, said])
+	# the middle mouse button on a tyre: the wheel takes the damage, the car the impulse
+	if car.shell != null and car.shell.rig != null:
+		var w := car.wheels[2]
+		var at_w := w.spin_node.global_transform.origin
+		var meshes_w := w.spin_node.find_children("*", "MeshInstance3D", true, false)
+		var into := (at_w - cam.global_position).normalized()
+		dv._hit_kmh = 50.0
+		_check(dv._hit_tyre({"node": meshes_w[0] if meshes_w.size() > 0 else w.spin_node, "position": at_w}, into, 1000.0 * 50.0 / 3.6),
+			"a hit on the tyre %s: %s" % [w.slot, dv._tool_text.text])
+		_check(float(car.shell.rig.damage[2]) > 0.3, "the wheel is damaged (%d%%)" % roundi(float(car.shell.rig.damage[2]) * 100.0))
+		dv._hit_tyre({"node": meshes_w[0] if meshes_w.size() > 0 else w.spin_node, "position": at_w}, into, 1000.0 * 200.0 / 3.6)
+		await _wait(0.2)
+		_check(car.shell.rig.lost[2], "a hit at 200 km/h tears it off")
+	# the rules of a motorcycle crash (the panel): set, kept, back to the standard
+	Motorcycle.set_crash_rule("wall", "kmh", 33.0)
+	Motorcycle.set_crash_rule("force", "on", true)
+	_check(float(Motorcycle.crash_rules()["wall"]["kmh"]) == 33.0 and Motorcycle.crash_rules()["force"]["on"] == true
+		and float(VideoPrefs.get_value("debug", "crash_rules", {}).get("wall", {}).get("kmh", 0.0)) == 33.0, "a crash rule is set and kept")
+	Motorcycle.reset_rules()
+	_check(float(Motorcycle.crash_rules()["wall"]["kmh"]) == 20.0 and Motorcycle.crash_rules()["force"]["on"] == false, "back to the standard rules")
+	if car.bike != null:
+		_check(dv._panel.find_children("*", "VBoxContainer", true, false).any(func(n: Node) -> bool: return n is DebugCrashRules),
+			"the panel has the crash rules of a motorcycle")
 	# Pit stop here
 	var pit: PitStop = null
 	for c in car.get_children():

@@ -543,6 +543,7 @@ func _make_body(p: Part) -> void:
 	col.shape = shape
 	body.add_child(col)
 	car.get_parent().add_child(body)
+	keep_to_own(body, car)
 	var gx := _parent_point(p)[0] as Transform3D if riding else Transform3D(xf.basis, xf * p.offset)
 	body.global_transform = gx
 	if riding:
@@ -953,6 +954,22 @@ func hit(p: Part, dir: Vector3, impulse: float, force: float) -> String:
 	return result
 
 
+## A loose part (or a wheel that came off) meets its own car, the track and its things, not the other cars and their
+## loose parts: in the browser every car's parts are in a physics world of their own (Parts.js). (Cars are in the group
+## "cars", Car.setup; the loose bodies in "loose_parts" with the car they came from.)
+static func keep_to_own(body: PhysicsBody3D, c: Car) -> void:
+	body.set_meta("car", c)
+	body.add_to_group("loose_parts")
+	if not body.is_inside_tree():
+		return
+	for other in body.get_tree().get_nodes_in_group("cars"):
+		if other != c and other is PhysicsBody3D:
+			body.add_collision_exception_with(other)
+	for other in body.get_tree().get_nodes_in_group("loose_parts"):
+		if other != body and other is PhysicsBody3D and other.get_meta("car", null) != c:
+			body.add_collision_exception_with(other)
+
+
 func part_named(object_name: String) -> Part:
 	for p in parts:
 		if p.name == object_name:
@@ -963,37 +980,42 @@ func part_named(object_name: String) -> Part:
 ## Every part back in its place, whole.
 func repair() -> void:
 	for p in parts:
-		if p.joint != null and is_instance_valid(p.joint):
-			p.joint.queue_free()
-		p.joint = null
-		if p.body != null and is_instance_valid(p.body):
-			if p.object.get_parent() == p.body:
-				p.body.remove_child(p.object)
-				p.home_parent.add_child(p.object)
-				p.object.transform = p.home_xf
-			p.body.queue_free()
-		p.body = null
-		for c in p.copies:
-			if is_instance_valid(c) and not c.is_queued_for_deletion():
-				c.queue_free()
-		p.copies.clear()
-		for h in p.hidden:
-			if is_instance_valid(h) and not (h is MeshInstance3D and p.copies.has(h)):
-				h.visible = true
-		p.hidden.clear()
-		for m in p.mounts:
-			m.alive = true
-		p.state = "held"
-		p.timer = -1.0
-		p.open_timer = -1.0
-		p.detach_timer = -1.0
-		p.has_v = false
-		p.acc = 0.0
-		p.load = 0.0
-		p.inertia = 0.0
-		p.wall_force = 0.0
-		p.pending = false
+		put_back(p)
 	_settle = 60
+
+
+## A part back in its place, whole (Parts.js putBack: a hinge that the debug view opened is closed again).
+func put_back(p: Part) -> void:
+	if p.joint != null and is_instance_valid(p.joint):
+		p.joint.queue_free()
+	p.joint = null
+	if p.body != null and is_instance_valid(p.body):
+		if p.object.get_parent() == p.body:
+			p.body.remove_child(p.object)
+			p.home_parent.add_child(p.object)
+			p.object.transform = p.home_xf
+		p.body.queue_free()
+	p.body = null
+	for c in p.copies:
+		if is_instance_valid(c) and not c.is_queued_for_deletion():
+			c.queue_free()
+	p.copies.clear()
+	for h in p.hidden:
+		if is_instance_valid(h) and not (h is MeshInstance3D and p.copies.has(h)):
+			h.visible = true
+	p.hidden.clear()
+	for m in p.mounts:
+		m.alive = true
+	p.state = "held"
+	p.timer = -1.0
+	p.open_timer = -1.0
+	p.detach_timer = -1.0
+	p.has_v = false
+	p.acc = 0.0
+	p.load = 0.0
+	p.inertia = 0.0
+	p.wall_force = 0.0
+	p.pending = false
 
 
 ## The parts that came off and lie about (the car is going away).
@@ -1077,12 +1099,7 @@ func part_of(node: Node) -> Part:
 ## The tools of the debug view: "hinge" opens a part on its hinge, "break" breaks it loose. What happened.
 func tool(p: Part, which: String) -> String:
 	if which == "hinge":
-		if p.hinge.is_empty() and p.mounts.is_empty():
-			return "it has no hinge"
-		if p.state != "held":
-			return "it is open already (%s)" % p.state
-		_start(p, "hinge")
-		return "opened"
+		return _hinge_tool(p)
 	if p.state == "broken" or p.state == "free":
 		return "it is loose already"
 	if p.mode == "breakable":
@@ -1090,6 +1107,21 @@ func tool(p: Part, which: String) -> String:
 		return "broken"
 	_start(p, "free")
 	return "broken loose"
+
+
+## Open hinges: a part on the car opens on its hinge; one that is open closes where it was made (Parts.js toggleHinge).
+func _hinge_tool(p: Part) -> String:
+	if p.hinge.is_empty() and p.mounts.is_empty():
+		return "it has no hinge"
+	if p.state == "hinged":
+		put_back(p)
+		_settle = maxi(_settle, 10)
+		_event(p, "closed")
+		return "closed"
+	if p.state != "held":
+		return "it cannot be opened now (%s)" % p.state
+	_start(p, "hinge")
+	return "opened"
 
 
 func count_off() -> int:

@@ -245,6 +245,7 @@ func setup(id: String, cfg: Dictionary) -> void:
 	car_id = id
 	config = cfg
 	name = "Car"
+	add_to_group("cars")             # (the loose parts of another car do not meet it: CarParts.keep_to_own)
 	_read_config()
 	# the body for knocks against walls and other things: from a little above the road to the roof
 	var dims: Dictionary = cfg.get("dimensions", {})
