@@ -77,6 +77,8 @@ func _ring(c: Vector2, r: float, from: float, to: float, w: float, col: Color) -
 
 
 func _text(t: String, at: Vector2, size: int, col: Color) -> void:
+	if size < 1:
+		return                        # (before the gauge has its size: a font of size 0 is an error of the text server)
 	var w := _font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 	var asc := _font.get_ascent(size)
 	var desc := _font.get_descent(size)
@@ -234,7 +236,7 @@ func _draw_lights(c: Vector2, r: float, stalled: bool) -> void:
 			_badge(n, Rect2(p - Vector2(badge, badge) / 2.0, Vector2(badge, badge)))
 			continue
 		var st: Array = LIGHT_STYLE.get(states[n], LIGHT_STYLE["off"])
-		var w := maxf(r * 0.2, _font.get_string_size(n, HORIZONTAL_ALIGNMENT_LEFT, -1, font).x + r * 0.1)
+		var w := maxf(r * 0.2, _font.get_string_size(n, HORIZONTAL_ALIGNMENT_LEFT, -1, maxi(1, font)).x + r * 0.1)
 		var box := StyleBoxFlat.new()
 		box.bg_color = st[1]
 		box.border_color = st[0]
