@@ -21,9 +21,6 @@ const SHIFT_BACK := 0.2
 const THROTTLE_ROLL := 0.75          # rad: the right grip at full throttle
 const LEVER_PULL := 0.3              # rad: a lever at a full pull
 ## the give in the g-forces (OpenRacer.RiderFeel: the amount, how quick he comes back in Hz, the damping)
-const FEEL_AMOUNT := 1.0
-const FEEL_HZ := 1.4
-const FEEL_DAMPING := 0.55
 
 var car: Car
 var cfg: Dictionary
@@ -50,6 +47,7 @@ var g_off := Vector3.ZERO         # the give in the g-forces: where the body is 
 var g_off_v := Vector3.ZERO
 var g_acc := Vector3.ZERO
 var ragdoll: RiderRagdoll = null
+var replay_hold := false          # a replay shows him (ReplayExtras): the ragdoll is not moved, a crash does not throw him
 var _last_v := Vector3.ZERO
 var _last_p := Vector3.ZERO
 var _have_last := false
@@ -368,9 +366,10 @@ func _g_spring(dt: float) -> void:
 	_last_p = pos
 	var b := car.global_transform.basis.orthonormalized()
 	var a := Vector3(g_acc.dot(b.x), g_acc.dot(b.y), g_acc.dot(b.z))        # left, up, forward
-	var w := TAU * FEEL_HZ
-	var z := FEEL_DAMPING
-	var gain := FEEL_AMOUNT * 0.06 / 9.81 * w * w
+	var f := Motorcycle.feel()          # (the panel of the debug view can change it)
+	var w := TAU * float(f["hz"])
+	var z := float(f["damping"])
+	var gain := float(f["amount"]) * 0.06 / 9.81 * w * w
 	var n := maxi(1, ceili(dt * 120.0))
 	var h := dt / n
 	for i in n:
@@ -440,6 +439,37 @@ func recover() -> void:
 	g_off_v = Vector3.ZERO
 
 
+## The ragdoll of a replay (ReplayExtras): the particles where they were recorded (COUNT places), posed; he is made a
+## ragdoll first when he is on the bike.
+func show_ragdoll(places: PackedVector3Array) -> void:
+	if places.size() != RiderRagdoll.COUNT:
+		return
+	if ragdoll == null:
+		if not can_ragdoll():
+			return
+		crash(false)
+	ragdoll.p = places.duplicate()
+	ragdoll.centre = places[RiderRagdoll.HIPS]
+	_pose_ragdoll()
+
+
+## A ragdoll that the replay took away is given back (the one of the game, with its particles as they were).
+func keep_ragdoll(r: RiderRagdoll, places: PackedVector3Array) -> void:
+	if r == null:
+		recover()
+		return
+	if ragdoll == null:
+		_root_keep = root.transform
+		skel.reset_bone_poses()
+		var keep := root.global_transform
+		root.top_level = true
+		root.global_transform = keep
+		root.visible = true
+	ragdoll = r
+	ragdoll.p = places.duplicate()
+	_pose_ragdoll()
+
+
 ## The skeleton on the particles: the root on the hips and the chest, the limbs by the inverse kinematics with the
 ## middle particle (pushed out to the side it bends to) as the pole, the head along the neck (as far as 50 degrees).
 func _pose_ragdoll() -> void:
@@ -478,7 +508,12 @@ func _pose_ragdoll() -> void:
 func update(dt: float, bike: Motorcycle) -> void:
 	if skel == null:
 		return
-	if ragdoll != null:
+	# (a replay shows him: the ragdoll as it was recorded, or on the bike; ReplayExtras)
+	if replay_hold:
+		if ragdoll != null:
+			return
+		root.visible = true
+	elif ragdoll != null:
 		ragdoll.seated = not bike.crashed and absf(bike.lean) < 0.5
 		ragdoll.step(minf(0.05, dt))
 		_pose_ragdoll()
@@ -490,7 +525,7 @@ func update(dt: float, bike: Motorcycle) -> void:
 			if Vector2(c.x - at.x, c.z - at.z).length() > 1.1 or c.y - at.y < -0.3:
 				bike.fall_off(car.linear_velocity)
 		return
-	if bike.crashed:
+	if bike.crashed and not replay_hold:
 		if can_ragdoll():
 			crash(false)
 		else:

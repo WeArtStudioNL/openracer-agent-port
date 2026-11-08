@@ -12,7 +12,8 @@ var others: Array[Car] = []       # the other cars of the race (to back off behi
 var pit: AIPit = null             # an AI car of a race: its pit stops (AIPit)
 var put_back_reason := ""         # why it should be put back ("": it drives on); the race (or the world) does it
 var ghost_left := 0.0             # s that it is still a ghost after it was put back: the other cars go through it
-var speed_cap := INF              # m/s at most (the player's car after the finish: half of the top speed it reached)
+var measured_grip := 0.0          # g, the grip of the car on the skidpad (0: not measured)
+var speed_cap := INF            # m/s at most (the player's car after the finish: half of the top speed it reached)
 var _index := -1
 var _speed_error_i := 0.0
 var _side := 0.0                  # m to the side of the line, to pass a car
@@ -57,6 +58,12 @@ func setup(c: Car, l: RacingLine, p := -1.0) -> void:
 	elif Content.arg("ai-pace") != "":
 		pace = float(Content.arg("ai-pace"))
 	var grip := 1.2 * float(c.config.get("tyres", {}).get("grip", 1.0))
+	# the grip of the car as the skidpad measured it (Skidpad.measured_grip, in g, for this car and setup), else the
+	# guess from tyres.grip (Opponent.js measuredGrip; --skidpad-grip=0 leaves it out)
+	measured_grip = Skidpad.measured_grip(c.config, c.car_id) if Content.arg("skidpad-grip") != "0" else 0.0
+	if measured_grip > 0.0:
+		grip = measured_grip
+		RunLog.line("AI %s: the grip measured on the skidpad, %.2f g" % [c.name, measured_grip])
 	var lateral := grip
 	var braking := grip * 0.75
 	if c.bike != null:
@@ -101,6 +108,13 @@ func _make_speeds() -> void:
 		for i in _speeds.size():
 			_speeds[i] = maxf(6.0, _base_speeds[i] * factors[i])
 		RacingLine.brake_pass(_speeds, _brake)
+
+
+## The line was settled, turned or shortened (World, once the road can be felt): its speeds again (what was learned
+## stays, as factors).
+func line_changed() -> void:
+	_make_speeds()
+	_index = -1
 
 
 ## Keeps what it learned (the speeds as factors of those of the line) for the next time.

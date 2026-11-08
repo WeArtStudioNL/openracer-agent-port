@@ -5,6 +5,8 @@ extends Node3D
 
 signal leave
 
+const CUT_MARGIN := 3.5             # m that the shortened racing line keeps from the edge of its surface
+
 var track: Track
 var car: Car
 var camera: ChaseCamera
@@ -29,7 +31,8 @@ var debug_view: Node = null         # what the physics sees (DebugView, the key 
 var telemetry: Node = null          # the values of the car (Telemetry, V)
 var _pause_box: Control
 var _results: CanvasLayer
-var _assist := 0.0                  # rad: the steering assist now (faded)
+var _steer := SteerModel.new()      # the steering of the keys, the stick and the touch screen (the browser's)
+var _pad_steers := false            # the stick steers (it moved, and no key steered since)
 var _after_cine := false            # after the finish: the cinematic camera of the track (main.js startAutopilot)
 var _top_speed := 0.0               # the top speed of the player in the race (the pace of the car after the finish)
 var _shot_path := ""
@@ -41,6 +44,12 @@ var _last_velocity := Vector3.ZERO
 var _tuning_paused := false
 var _saved_place := {}              # the place for the reset on a track without a racing line (the key 4)
 var _key_held := {"throttle": 0.0, "brake": 0.0}   # s that the key of a pedal is held (the easing of the keys)
+var _banners: VBoxContainer = null  # the messages at the top (banner)
+var _flyby_cam: Camera3D = null     # the camera of the fly-by over the grid (Race)
+var _flyby_note: CanvasLayer = null
+var _results_view: RichTextLabel = null
+var _results_shown := ""
+var _brake_to_stop := false         # after the finish on a track without a racing line
 
 
 ## options: mode ("practice", "race", "skidpad" or "replay"), opponents, laps, pole (the player starts in front), and from the
@@ -133,15 +142,21 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	if Content.arg("ai") != "" and line != null:
 		ai = AIDriver.new()
 		ai.setup(car, line)
+	# (main.js setupRace: a track without a finish line has no race; one without a racing line a race without AI cars)
 	if options.get("mode", "practice") == "race":
-		if line == null:
-			hud.toast.call_deferred("This track has no racing line for the AI: free driving")
-			RunLog.event("race asked, but the track has no racing line")
+		var opponents := int(options.get("opponents", 5))
+		if not laps.has_laps():
+			banner("This track has no finish line (no gates): there is no race here, only free driving.")
+			RunLog.event("race asked, but the track has no gates")
 		else:
+			if line == null and opponents > 0:
+				banner("No AI cars: this track has no racing line yet. Drive a lap here (it becomes the line), or draw the track in the track editor.")
+				RunLog.event("race without AI cars: the track has no racing line")
 			race = Race.new()
-			race.setup(self, line, track, car, int(options.get("opponents", 5)), int(options.get("laps", 3)), bool(options.get("pole", false)),
+			race.setup(self, line, track, car, opponents, int(options.get("laps", 3)), bool(options.get("pole", false)),
 				{"difficulty": options.get("difficulty", "normal"), "grid": options.get("grid", "front" if options.get("pole", false) else "back"),
 				"opp": options.get("opp", [])})
+			race.lap_timer = laps
 			race.finished.connect(_race_finished)
 			add_child(race)
 			hud.race = race
@@ -197,6 +212,77 @@ func _shot() -> void:
 		get_tree().quit()
 
 
+## The racing line on the road, once the road can be felt (main.js setupRace): its heights and surfaces from the
+## ground, turned the way of the start, and a line that was not driven shortened within the road (the AI cuts the
+## bends; --cut=0 leaves it as it is); then the AI makes its speeds for it again.
+func _prepare_line() -> void:
+	if line == null or options.get("mode", "") in ["replay", "skidpad"]:
+		return
+	var space := track.get_world_3d().direct_space_state
+	var t0 := Time.get_ticks_msec()
+	line.settle(space)
+	var s: Dictionary = track.start
+	var turned := cos(line.heading_at(float(s.get("x", 0)), float(s.get("z", 0))) - float(s.get("heading", 0))) < 0.0
+	if turned:
+		line.reverse()
+	var cut := not line.driven and Content.arg("cut") != "0"
+	if cut:
+		# (3.5 m from the edge of the surface, where the browser keeps 1.5 m: the Godot AI with the line 1.5 m from the
+		# edge ran over the kerbs and lost 4 s a lap on kartbaan-oldenzaal, at 3.5 m the kart gains 0.6 s; --cut-margin)
+		line.shorten(space, float(Content.arg("cut-margin")) if Content.arg("cut-margin") != "" else CUT_MARGIN)
+	RunLog.event("racing line: %d points settled%s%s (%d ms)" % [line.count(), ", turned the way of the start" if turned else "",
+		", shortened within the road" if cut else "", Time.get_ticks_msec() - t0])
+	if ai != null:
+		ai.line_changed()
+	if race != null:
+		for e in race.entries:
+			if e.driver != null:
+				e.driver.line_changed()
+
+
+## The messages of a start (main.js setupRace): no pit lane for the stops that the wear asks for; no best lap for the
+## ghost yet.
+func _start_banners() -> void:
+	if options.get("mode", "") in ["replay", "skidpad"] or recorder != null or not laps.has_laps():
+		return
+	if float(Settings.get_value("tyre_wear")) > 0.0 and line != null and PitStop.boxes_of(track.config).is_empty() \
+			and AIPit.path_of(track.config).is_empty() and PitLane.build(track, line) == null:
+		banner("This track has no pit lane: no pit stops here, mind the tyres and the fuel.")
+	if laps.use_ghost and laps.best_samples().is_empty() and laps.friend.is_empty():
+		banner("No best lap yet with this car on this track: the ghost appears from the next start, after a lap.")
+
+
+## A message at the top of the screen for nine seconds; several are stacked (main.js banner).
+func banner(text: String) -> void:
+	if not is_inside_tree():
+		banner.call_deferred(text)
+		return
+	if _banners == null:
+		var layer := CanvasLayer.new()
+		layer.layer = 4
+		add_child(layer)
+		_banners = VBoxContainer.new()
+		_banners.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+		_banners.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		_banners.alignment = BoxContainer.ALIGNMENT_BEGIN
+		_banners.position.y = 60
+		_banners.add_theme_constant_override("separation", 8)
+		_banners.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		layer.add_child(_banners)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", MenuStyle.flat(Color(0.078, 0.094, 0.122, 0.85), Color(0, 0, 0, 0), 6, 0, 10))
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 16)
+	panel.add_child(label)
+	_banners.add_child(panel)
+	RunLog.event("banner: %s" % text)
+	get_tree().create_timer(9.0).timeout.connect(panel.queue_free)
+
+
 func _ready() -> void:
 	if _shot_path != "":
 		# (a timer that also runs while the game is paused: the screenshot of a menu)
@@ -204,12 +290,14 @@ func _ready() -> void:
 	# the collision of the track is there after a physics frame
 	await get_tree().physics_frame
 	await get_tree().physics_frame
+	_prepare_line()
 	to_start()
 	car.freeze = false
 	if track.marks != null:
 		track.marks.follow(car)          # (the checkpoints follow the lap of the player: TrackMarks)
 	if race != null:
 		race.place_all()
+	_start_banners()
 	camera.follow(car)
 	camera.make_current()
 	RunLog.car = car
@@ -256,7 +344,7 @@ func to_start() -> void:
 		laps.restart()
 	if ai != null:
 		ai.lost()
-	if race != null and race.state != Race.State.COUNTDOWN:
+	if race != null and race.state not in [Race.State.FLYBY, Race.State.COUNTDOWN]:
 		_restart_race()
 		return
 	if camera.car != null:
@@ -314,43 +402,62 @@ func _restart_race() -> void:
 
 ## The player finished: the results, and the AI drives the player's car slowly on.
 func _race_finished() -> void:
-	ai = AIDriver.new()
-	ai.setup(car, line, 0.5)
-	# (half of the line's speed in the bends and half of the top speed that the player reached on the straights; the
-	# camera the cinematic one of the track, when it has cameras: C takes the game's back)
-	ai.speed_cap = maxf(3.0, 0.5 * (_top_speed if _top_speed > 1.0 else 20.0))
+	if line != null:
+		ai = AIDriver.new()
+		ai.setup(car, line, 0.5)
+		# (half of the line's speed in the bends and half of the top speed that the player reached on the straights; the
+		# camera the cinematic one of the track, when it has cameras: C takes the game's back)
+		ai.speed_cap = maxf(3.0, 0.5 * (_top_speed if _top_speed > 1.0 else 20.0))
+	else:
+		_brake_to_stop = true            # (no racing line to drive: it brakes to a stop, main.js startAutopilot)
 	_after_cine = replay != null and not replay.cinema_cameras().is_empty() and (free_cam == null or not free_cam.active)
 	_results = CanvasLayer.new()
 	_results.layer = 5
 	add_child(_results)
+	# (main.js showResults: the panel in the middle; the rows are written again as the others come in, the buttons
+	# stay, with the focus)
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_results.add_child(centre)
 	var panel := PanelContainer.new()
-	panel.anchor_left = 0.5
-	panel.anchor_right = 0.5
-	panel.anchor_top = 0.5
-	panel.anchor_bottom = 0.5
-	panel.offset_left = -330
-	panel.offset_right = 330
-	panel.offset_top = -200
-	panel.offset_bottom = 200
-	_results.add_child(panel)
+	panel.theme = MenuStyle.make_theme()
+	panel.add_theme_stylebox_override("panel", MenuStyle.flat(Color(0.094, 0.114, 0.137, 0.95), Color(0, 0, 0, 0), 10, 0, 24))
+	panel.custom_minimum_size = Vector2(476, 0)
+	centre.add_child(panel)
 	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
 	panel.add_child(box)
-	var text := Label.new()
-	text.text = race.results_text()
-	text.add_theme_font_override("font", SystemFont.new())
-	text.add_theme_font_size_override("font_size", 18)
-	box.add_child(text)
-	var again := Button.new()
-	again.text = "Race again"
-	again.pressed.connect(_restart_race)
-	box.add_child(again)
-	var menu := Button.new()
-	menu.text = "Main menu"
-	menu.pressed.connect(func():
+	_results_view = RichTextLabel.new()
+	_results_view.bbcode_enabled = true
+	_results_view.fit_content = true
+	_results_view.scroll_active = false
+	_results_view.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_results_view.custom_minimum_size = Vector2(428, 0)
+	_results_view.add_theme_font_size_override("normal_font_size", 15)
+	_results_view.add_theme_font_size_override("bold_font_size", 15)
+	box.add_child(_results_view)
+	_show_results()
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_END
+	row.add_theme_constant_override("separation", 8)
+	box.add_child(row)
+	# (a replay that was not saved is asked about, as Main menu does: Race again threw it away)
+	var again := MenuStyle.button("Race again", "primary", func():
+		if replay != null:
+			replay.confirm_leave(_restart_race, _results)
+		else:
+			_restart_race())
+	row.add_child(again)
+	var to_menu := func():
 		RunLog.car = null
 		ForceFeedback.neutral()
-		leave.emit())
-	box.add_child(menu)
+		leave.emit()
+	row.add_child(MenuStyle.button("Main menu", "", func():
+		if replay != null:
+			replay.confirm_leave(to_menu, _results)
+		else:
+			to_menu.call()))
 	again.grab_focus.call_deferred()
 	RunLog.line("RESULTS\n" + race.results_text())
 	if ai != null:
@@ -366,6 +473,11 @@ func _physics_process(_delta: float) -> void:
 			ForceFeedback.knock(dv)
 		_last_velocity = car.linear_velocity
 	if car.autopilot:
+		return
+	if _brake_to_stop:
+		car.steer_input = 0.0
+		car.throttle_input = 0.0
+		car.brake_input = 0.6
 		return
 	if race != null and race.is_held():
 		# the countdown: everyone is held on the grid (the throttle may rev the engine)
@@ -419,27 +531,32 @@ func _physics_process(_delta: float) -> void:
 		car.steer_input = clampf(s, -1.0, 1.0)
 		car.throttle_input = maxf(car.throttle_input, WheelInput.throttle)
 		car.brake_input = maxf(car.brake_input, WheelInput.brake)
+	elif car.bike != null:
+		car.steer_direct = false            # (a motorcycle: the keys ask for a lean, Motorcycle)
+		car.steer_input = keys_steer
 	else:
-		car.steer_direct = false
-		car.steer_input = keys_steer + _steer_assist(dt)
+		car.steer_direct = true             # (the angle of the browser's steering, SteerModel)
+		car.steer_input = _steer_angle(dt) / maxf(0.01, car.max_steer)
 	if wheel_on:
 		ForceFeedback.update(car, get_physics_process_delta_time(), stop)
 
 
-## The steering assist (Car.js keyAssist, controls.js padAssist; Settings, Keyboard and Gamepad): when the rear steps
-## out, the front wheels are turned into the slide (towards where the car goes, past two degrees of slip, at most 0.6
-## of the lock), faded in and out; driving forwards only, not a motorcycle. As a part of the steering now.
-func _steer_assist(dt: float) -> float:
-	var keys := Controls.key_held("steer_left") or Controls.key_held("steer_right")
-	var on := bool(Settings.get_value("key_assist")) if keys or (touch != null and bool(touch.get("engaged"))) else bool(Settings.get_value("pad_assist"))
-	var want := 0.0
-	if on and car.bike == null and car.speed > 3.0:
-		var b := car.global_transform.basis
-		var beta := atan2(car.linear_velocity.dot(b.x), car.linear_velocity.dot(b.z))      # (to the left of where it points: +)
-		want = clampf(signf(beta) * maxf(0.0, absf(beta) - 0.035) * 1.1, -0.6 * car.max_steer, 0.6 * car.max_steer)
-	_assist += (want - _assist) * minf(1.0, dt * 12.0)
-	var limit := car.max_steer / (1.0 + float(Settings.get_value("key_steer_at_speed")) * absf(car.speed) / 22.0)
-	return _assist / maxf(0.01, limit)
+## The angle of the front wheels from the keys, the stick or the touch screen (SteerModel): the keys while one is
+## held; the stick once it moves, until a key steers again (controls.js gamepadOwnsSteering).
+func _steer_angle(dt: float) -> float:
+	if touch != null and bool(touch.get("engaged")):
+		return _steer.pad(car, float(touch.get("steer")), dt, true)
+	var left := Controls.key_held("steer_left") and Input.is_action_pressed("steer_left")
+	var right := Controls.key_held("steer_right") and Input.is_action_pressed("steer_right")
+	if left or right:
+		_pad_steers = false
+		return _steer.keys(car, float(left) - float(right), dt)
+	var stick := Input.get_axis("steer_right", "steer_left")
+	if absf(stick) > 0.1:
+		_pad_steers = true
+	if _pad_steers:
+		return _steer.pad(car, stick, dt)
+	return _steer.keys(car, 0.0, dt)
 
 
 ## A pedal from its action: a key comes up over the time and the curve of the Keyboard settings (Settings.js
@@ -456,6 +573,14 @@ func _pedal(action: String, dt: float) -> float:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# (the fly-by over the grid: Enter, Space, a click or a tap skips it)
+	if race != null and race.state == Race.State.FLYBY and event.is_pressed() and not event.is_echo():
+		var key := event as InputEventKey
+		if (key != null and key.physical_keycode in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]) or event is InputEventMouseButton \
+				or event is InputEventScreenTouch or event.is_action_pressed("ui_accept"):
+			race.skip_flyby()
+			get_viewport().set_input_as_handled()
+			return
 	if WheelInput.calibrating and event is InputEventKey and event.pressed:
 		if event.physical_keycode == KEY_ESCAPE:
 			WheelInput.cancel()
@@ -733,8 +858,74 @@ func resume() -> void:
 	RunLog.event("resume")
 
 
+## The camera of the fly-by over the grid while the race has it (Race.flyby_camera), with the note how to skip it; the
+## camera of the game after.
+func _flyby() -> void:
+	var on := race.state == Race.State.FLYBY and (replay == null or not replay.playing)
+	if on:
+		if _flyby_cam == null:
+			_flyby_cam = Camera3D.new()
+			_flyby_cam.name = "FlybyCamera"
+			_flyby_cam.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+			_flyby_cam.far = 4000.0
+			_flyby_cam.fov = camera.fov
+			add_child(_flyby_cam)
+			_flyby_note = CanvasLayer.new()
+			_flyby_note.layer = 4
+			add_child(_flyby_note)
+			var note := Label.new()
+			note.text = "Tap to skip the fly-by" if touch != null else "Press Enter or click to skip the fly-by"
+			note.add_theme_font_size_override("font_size", 15)
+			note.add_theme_color_override("font_color", MenuStyle.MUTED)
+			note.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+			note.add_theme_constant_override("outline_size", 5)
+			note.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+			note.grow_horizontal = Control.GROW_DIRECTION_BOTH
+			note.grow_vertical = Control.GROW_DIRECTION_BEGIN
+			note.position.y -= 22
+			note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			_flyby_note.add_child(note)
+			RunLog.event("race: the fly-by over the grid")
+		var at: Array = race.flyby_camera()
+		_flyby_cam.global_position = at[0]
+		_flyby_cam.look_at(at[1], Vector3.UP)
+		_flyby_cam.make_current()
+	elif _flyby_cam != null:
+		_flyby_cam.queue_free()
+		_flyby_cam = null
+		_flyby_note.queue_free()
+		_flyby_note = null
+		if free_cam != null and free_cam.active:
+			free_cam.make_current()
+		else:
+			camera.make_current()
+		camera.snap()
+
+
+## The results after the finish, as they change while the others come in (Race.results).
+func _show_results() -> void:
+	var r := race.results()
+	var rows: Array = r[2]
+	var t := "[font_size=26][b]%s[/b][/font_size]\n[color=#9fb0c4]%s[/color]\n\n[table=4]" % [r[0], r[1]]
+	for head in ["#   ", "Car", "  Best lap", "  Time"]:
+		t += "[cell][color=#9fb0c4]%s[/color][/cell]" % head
+	for row: Array in rows:
+		var name_text := str(row[1]).replace("[", "[lb]")
+		var cells := ["%d" % row[0], name_text, "  " + str(row[2]), "  " + str(row[3])]
+		for c: String in cells:
+			t += "[cell]%s[/cell]" % (("[color=#%s][b]%s[/b][/color]" % [MenuStyle.ACCENT2.to_html(false), c]) if row[4] else c)
+	t += "[/table]"
+	if t != _results_shown:
+		_results_shown = t
+		_results_view.text = t
+
+
 func _process(delta: float) -> void:
 	_time += delta
+	if race != null:
+		_flyby()
+		if _results_view != null:
+			_show_results()
 	if race != null and _results == null and not car.freeze:
 		_top_speed = maxf(_top_speed, car.speed)
 	if _after_cine and replay != null and not replay.playing:

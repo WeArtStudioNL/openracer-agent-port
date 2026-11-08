@@ -610,8 +610,10 @@ func replay_clear(kind: String) -> void:
 
 
 ## The marks at time t: every strip that was made by then (the newest that fit).
-func replay_rebuild(kind: String, rows: Array, end: int, _t: float) -> void:
+func replay_rebuild(kind: String, rows: Array, end: int, t: float) -> void:
 	if kind != "skid":
+		ReplayExtras.smoke_rebuild(_smoke, _dust, rows, end, t)      # (the smoke of the last seconds, after a jump)
+		_hold = [0.0, 0.0, 0.0, 0.0]
 		return
 	clear()
 	for j in range(maxi(0, end - CHUNK * CHUNKS), end):

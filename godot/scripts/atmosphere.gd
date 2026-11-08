@@ -103,6 +103,8 @@ func setup(track_env: Dictionary, model: Node) -> void:
 	Settings.changed.connect(_on_setting)
 	replay_view = {}
 	apply()
+	# (the snow that the cars scraped and the rings in the puddles first: the atmos rows then push the ground to the shader)
+	ReplayFx.attach("ground", null, Ground.replayer())
 	ReplayFx.attach("atmos", null, self)
 
 
@@ -383,8 +385,9 @@ func replay_add(_kind: String, r: Array) -> void:
 	_apply_row(r)
 
 
-func replay_step(_kind: String, _dt: float) -> void:
-	pass
+## (the game is paused behind the replay: the ground of its time goes to the shader from here, the cleared snow too)
+func replay_step(_kind: String, dt: float) -> void:
+	_process(dt)
 
 
 func replay_clear(_kind: String) -> void:
@@ -396,6 +399,8 @@ func replay_rebuild(_kind: String, rows: Array, end: int, _t: float) -> void:
 		_apply_row(rows[end - 1])
 	elif not rows.is_empty():
 		_apply_row(rows[0])
+	_upload_in = 0.0
+	_process(0.0)
 
 
 func replay_snapshot(_kind: String) -> Variant:

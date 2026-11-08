@@ -30,6 +30,7 @@ var dir := Vector3.FORWARD
 var width := 12.0
 var length := 402.336
 var results: Array = []             # { label, metres, time, speed, finish }
+var lit := {}                       # the lamps of the tree that are lit: name -> bool
 var _clock := 0.0
 var _t_ready := 0.0
 var _t_tree := 0.0
@@ -177,6 +178,7 @@ func _build_tree(track: Node3D) -> void:
 
 
 func _lamp(lamp_name: String, on: bool) -> void:
+	lit[lamp_name] = on                 # (the replay records the lamps from this: ReplayExtras)
 	for m: MeshInstance3D in _lamps[lamp_name]:
 		var mat := m.material_override as StandardMaterial3D
 		mat.emission_energy_multiplier = 4.0 if on else 0.0

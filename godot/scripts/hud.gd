@@ -519,7 +519,7 @@ func _update_laps() -> void:
 func _gaps() -> String:
 	var order := race.order()
 	var i := order.find(race.player)
-	var length := maxf(1.0, race.line.length)
+	var length := maxf(1.0, race.line.length if race.line != null else 1.0)
 	var me := race.player.laps + race.player.fraction
 	var v := maxf(8.0, absf(car.speed))
 	var fmt := func(s: float) -> String: return LapTimer.format_time(s) if s >= 60.0 else "%.1f s" % s

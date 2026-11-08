@@ -16,7 +16,7 @@ extends RefCounted
 
 const STEP := 1.0 / 30.0
 const MAX_ROWS := 400000            # per effect (the oldest go first)
-const NOT_IN_FILES := ["pieces"]    # (the pieces of a part that broke hold meshes: not in a file)
+const NOT_IN_FILES := ["pieces"]    # (the pieces of a part that broke hold meshes: in a file only with their replay_pack)
 
 static var recording: ReplayFx = null
 static var active := false
@@ -28,6 +28,7 @@ var objects := {}                   # key -> [object, kind]
 var _cursor := {}
 var _base := {}                     # key -> the number of the first row kept
 var _snapshots := {}
+var _extra := {}                    # key -> what a file holds for an effect besides its rows (replay_pack)
 var _time := -1.0
 var _built := 0
 
@@ -107,6 +108,8 @@ func _attach(kind: String, car: Node, object: Object) -> void:
 	objects[key] = [object, kind]
 	if not rows.has(key):
 		rows[key] = []
+	if _extra.has(key) and object.has_method("replay_unpack"):
+		object.replay_unpack(kind, _extra[key])
 
 
 func _now() -> float:
@@ -239,10 +242,15 @@ func _build(key: String, t: float) -> void:
 # ---- the files
 
 ## The rows from time a to b (s) for a file: key -> Array of PackedFloat32Array (the time from a).
+## An effect whose rows need more than numbers (the pieces of a part that broke: their meshes) gives that with
+## replay_pack(kind, rows) (it may renumber the rows), kept as "<key>:data", and takes it back with replay_unpack.
 func pack(a: float, b: float) -> Dictionary:
 	var out := {}
 	for key in rows:
-		if (key as String).get_slice("/", 0) in NOT_IN_FILES:
+		var kind := (key as String).get_slice("/", 0)
+		var o: Array = objects.get(key, [null])
+		var packer: Object = o[0] if is_instance_valid(o[0]) and o[0].has_method("replay_pack") else null
+		if kind in NOT_IN_FILES and packer == null:
 			continue
 		var list: Array = rows[key]
 		var part: Array = []
@@ -251,6 +259,12 @@ func pack(a: float, b: float) -> Dictionary:
 			r[0] -= a
 			part.append(r)
 		if not part.is_empty():
+			if packer != null:
+				var extra: Variant = packer.replay_pack(kind, part)
+				if extra != null:
+					out[key + ":data"] = extra
+				elif kind in NOT_IN_FILES:
+					continue
 			out[key] = part
 	return out
 
@@ -260,6 +274,9 @@ func unpack(data: Variant) -> void:
 	if not (data is Dictionary):
 		return
 	for key in data:
+		if str(key).ends_with(":data"):
+			_extra[str(key).trim_suffix(":data")] = data[key]
+			continue
 		var list: Array = []
 		if not (data[key] is Array):
 			continue

@@ -351,6 +351,7 @@ func _build_panel() -> void:
 	_panel.offset_left = -290
 	_panel.offset_right = -16
 	_panel.offset_top = 14
+	_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN     # (wider than it was made: to the left, on the screen)
 	_panel.visible = false
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.055, 0.07, 0.094, 0.86)
@@ -384,6 +385,11 @@ func _build_panel() -> void:
 	shell.toggled.connect(func(v: bool): Settings.set_value("debug_show_shell", v))
 	box.add_child(shell)
 	_tools(box)
+	if world != null and world.car != null and world.car.bike != null:
+		# (a motorcycle: the rules of a crash and the rider, DebugView.js crashSection)
+		var rules := DebugCrashRules.new()
+		box.add_child(rules)
+		rules.setup(world)
 	var head := Label.new()
 	head.text = "Weather"
 	head.add_theme_color_override("font_color", Color(0.62, 0.69, 0.77))
@@ -419,7 +425,8 @@ func _tools(box: VBoxContainer) -> void:
 		return "%d km/h (%d kN)" % [roundi(v), roundi(HIT_MASS * v / 3.6 / 0.03 / 1000.0)])
 	hit.tooltip_text = "The hit of the middle mouse button: a block of a tonne and a metre at this speed"
 	var row := HBoxContainer.new()
-	for t in [["hinge", "Open hinges", "Right click a hinge (a door, the hood) to open it"], ["break", "Break parts", "Right click a part to break it loose"]]:
+	for t in [["hinge", "Open hinges", "Right click a hinge (a door, the hood) to open it, again to close it where it was"],
+			["break", "Break parts", "Right click a part to break it loose"]]:
 		var b := Button.new()
 		b.text = t[1]
 		b.tooltip_text = t[2]
@@ -431,7 +438,7 @@ func _tools(box: VBoxContainer) -> void:
 			for o in row.get_children():
 				if o != b:
 					(o as Button).set_pressed_no_signal(false)
-			_say("Right click a hinge to open it." if _tool == "hinge" else ("Right click a part to break it loose." if _tool == "break" else "")))
+			_say("Right click a hinge to open or close it." if _tool == "hinge" else ("Right click a part to break it loose." if _tool == "break" else "")))
 		row.add_child(b)
 	box.add_child(row)
 	var pit := Button.new()
@@ -623,6 +630,10 @@ func _push(h: float) -> void:
 ## False when the mouse is not on the car.
 func hit_car(mouse: Vector2) -> bool:
 	var car: Car = world.car
+	# (a tyre, and a part that is off the car, take the hit themselves: DebugView.js hitCar)
+	var other := _hit_tyre_or_part(mouse)
+	if other != "":
+		return other != "none"
 	if car.shell == null:
 		return false
 	var cam := get_viewport().get_camera_3d()
@@ -654,15 +665,70 @@ func hit_car(mouse: Vector2) -> bool:
 	return true
 
 
-## The surface of the car under the mouse: { position, normal (towards the camera), node }, or {}.
-func _surface_at(mouse: Vector2) -> Dictionary:
+## The middle mouse button on a tyre or on a part that is off the car (hinged open, loose): a tyre takes the damage of
+## the hit (WheelRig.hit_wheel) and the car the impulse where the tyre is; a part that is off takes the hit on its body
+## (CarParts.hit); a part on the car that can open or break gets the force, and the shell is hit as well. What was
+## done: "" (nothing of these: the shell), "tyre", "part" or "none" (a part on the car that held, and no shell).
+func _hit_tyre_or_part(mouse: Vector2) -> String:
+	var hit := _surface_at(mouse, true)
+	if hit.is_empty():
+		return ""
+	var into := get_viewport().get_camera_3d().project_ray_normal(mouse)
+	var impulse := HIT_MASS * _hit_kmh / 3.6
+	if _hit_tyre(hit, into, impulse):
+		return "tyre"
+	return _hit_part(hit, into, impulse)
+
+
+func _hit_tyre(hit: Dictionary, into: Vector3, impulse: float) -> bool:
+	var car: Car = world.car
+	var node: Node = hit["node"]
+	for i in car.wheels.size():
+		var w := car.wheels[i]
+		if w.hub_node == null or not (w.hub_node == node or w.hub_node.is_ancestor_of(node)):
+			continue
+		var torn := false
+		var dmg := 0.0
+		if car.shell != null and car.shell.rig != null:
+			torn = car.shell.rig.hit_wheel(i, impulse)
+			dmg = float(car.shell.rig.damage[i])
+		car.apply_impulse(into * impulse, Vector3(hit["position"]) - car.global_position)
+		_say("Tyre %s %s." % [w.slot, "torn off" if torn else "(%d%% damaged)" % roundi(minf(1.0, dmg) * 100.0)])
+		RunLog.event("debug view: a hit at %d km/h on the tyre %s" % [roundi(_hit_kmh), w.slot])
+		return true
+	return false
+
+
+## A part: one that is off the car, or one on it that can open or break (DebugView.js: after the hit a part that is
+## off takes it itself; one that held, the shell takes it too).
+func _hit_part(hit: Dictionary, into: Vector3, impulse: float) -> String:
+	var car: Car = world.car
+	var p: CarParts.Part = car.parts.part_of(hit["node"]) if car.parts != null else null
+	if p == null or p.state == "broken" or (p.state == "held" and p.mode != "hinge" and p.mode != "breakable" and not (p.break_force > 0.0)):
+		return ""
+	var what := car.parts.hit(p, into, impulse, impulse / 0.03)
+	_say("%s: %s" % [p.name, what])
+	RunLog.event("debug view: a hit at %d km/h on the part %s: %s" % [roundi(_hit_kmh), p.name, what])
+	if p.state != "held":
+		return "part"
+	return "" if car.shell != null else "none"
+
+
+## The surface of the car under the mouse: { position, normal (towards the camera), node }, or {}. loose: with the parts
+## that are off the car (their bodies lie in the world).
+func _surface_at(mouse: Vector2, loose := false) -> Dictionary:
 	var car: Car = world.car
 	var cam := get_viewport().get_camera_3d()
 	var from := cam.project_ray_origin(mouse)
 	var dir := cam.project_ray_normal(mouse)
 	var best := {}
 	var best_d := INF
-	for m in car.find_children("*", "MeshInstance3D", true, false):
+	var meshes := car.find_children("*", "MeshInstance3D", true, false)
+	if loose and car.parts != null:
+		for p in car.parts.parts:
+			if p.state in ["hinged", "free"] and p.body != null and is_instance_valid(p.body):
+				meshes.append_array(p.body.find_children("*", "MeshInstance3D", true, false))
+	for m in meshes:
 		var mi := m as MeshInstance3D
 		if mi.mesh == null or not mi.is_visible_in_tree() or mi.top_level:
 			continue

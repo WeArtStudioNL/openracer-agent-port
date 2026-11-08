@@ -8,7 +8,9 @@ const STEP := 2.0
 
 var points := PackedVector3Array()
 var speeds := PackedFloat32Array()
+var surfaces := PackedStringArray()  # the surface under every point (settle; empty before it)
 var length := 0.0
+var driven := false                  # the line of a lap that was driven (not shortened: it is the way a driver went)
 
 
 static func from_track(cfg: Dictionary) -> RacingLine:
@@ -41,7 +43,10 @@ static func from_lap(samples: PackedFloat32Array) -> RacingLine:
 	var raw: Array = []
 	for p in pts:
 		raw.append({"x": p.x, "y": p.y, "z": p.z})
-	return _build(raw)
+	var line := _build(raw)
+	if line != null:
+		line.driven = true
+	return line
 
 
 ## The best lap that any car drove on a track since its road or line was last changed (Records.anyGhost, track.json
@@ -210,12 +215,116 @@ func nearest_facing(pos: Vector3, dir: Vector3) -> int:
 	return best if best_d < INF else nearest(pos)
 
 
+## The line the other way round (a track can be drawn against the direction in which it is driven).
+func reverse() -> void:
+	points.reverse()
+	surfaces.reverse()
+	speeds = PackedFloat32Array()
+
+
+## The direction of the line at its point nearest to (x, z), as a heading from +x towards +z.
+func heading_at(x: float, z: float) -> float:
+	var i := nearest(Vector3(x, 0, z))
+	var a := point(i)
+	var b := point(i + 1)
+	return atan2(b.z - a.z, b.x - a.x)
+
+
+## The road at (x, z) (GroundWorld.query): the first thing of the track below y_top, { y, surface }, or {} when there
+## is nothing.
+static func ground_query(space: PhysicsDirectSpaceState3D, x: float, z: float, y_top: float) -> Dictionary:
+	var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(Vector3(x, y_top, z), Vector3(x, -2000.0, z), 1))
+	if hit.is_empty():
+		return {}
+	var col: Object = hit["collider"]
+	return {"y": float(hit["position"].y), "surface": str(col.get_meta("surface", "road")) if col != null else "road"}
+
+
+## The heights of the points from the road and the surface under each (RacingLine.settle): the surface at the height
+## of the point (under a bridge the road, not the deck above it); a point with no surface near its height (a line
+## drawn flat, at 0) takes the highest one.
+func settle(space: PhysicsDirectSpaceState3D) -> void:
+	surfaces.resize(points.size())
+	for i in points.size():
+		var p := points[i]
+		var road := ground_query(space, p.x, p.z, p.y + 1.5)
+		if road.is_empty() or float(road["y"]) < p.y - 1.5:
+			var top := ground_query(space, p.x, p.z, 2000.0)
+			if not top.is_empty():
+				road = top
+		if not road.is_empty():
+			points[i] = Vector3(p.x, road["y"], p.z)
+			surfaces[i] = road["surface"]
+
+
+## A line drawn along the middle of the road is not the quickest way round (RacingLine.shorten): every point moves
+## sideways within the road (the ground there is the surface of the line, up to margin metres from its edge) to the
+## smoothest line there is (a bend cut, a straight kept straight). The points are probed to either side every half
+## metre, up to reach metres; a point with no room (a one-lane stretch, a bridge) stays where it is. After settle.
+func shorten(space: PhysicsDirectSpaceState3D, margin := 1.5, reach := 6.0) -> void:
+	var n := points.size()
+	if n < 8 or surfaces.size() != n:
+		return
+	var base := points.duplicate()
+	var nrm := PackedVector2Array()
+	nrm.resize(n)
+	var left := PackedFloat32Array()
+	var right := PackedFloat32Array()
+	left.resize(n)
+	right.resize(n)
+	for i in n:
+		var t := Vector2(base[(i + 1) % n].x - base[posmod(i - 1, n)].x, base[(i + 1) % n].z - base[posmod(i - 1, n)].z)
+		var tl := t.length() if t.length() > 0.0 else 1.0
+		nrm[i] = Vector2(-t.y / tl, t.x / tl)             # (to the left of the direction of the line)
+		var p := base[i]
+		for side in [-1.0, 1.0]:
+			var room := 0.0
+			var d := 0.5
+			while d <= reach:
+				var q := ground_query(space, p.x + nrm[i].x * d * side, p.z + nrm[i].y * d * side, p.y + 1.1)
+				if q.is_empty() or str(q["surface"]) != surfaces[i] or absf(float(q["y"]) - p.y) > 0.5:
+					break
+				room = d
+				d += 0.5
+			if side < 0.0:
+				right[i] = maxf(0.0, room - margin)
+			else:
+				left[i] = maxf(0.0, room - margin)
+	var off := PackedFloat32Array()
+	off.resize(n)
+	for _it in 300:
+		for k in n:
+			var pa := posmod(k - 1, n)
+			var pb := (k + 1) % n
+			var mx := (base[pa].x + nrm[pa].x * off[pa] + base[pb].x + nrm[pb].x * off[pb]) / 2.0 - base[k].x
+			var mz := (base[pa].z + nrm[pa].y * off[pa] + base[pb].z + nrm[pb].y * off[pb]) / 2.0 - base[k].z
+			var want := mx * nrm[k].x + mz * nrm[k].y
+			off[k] = clampf(off[k] + (want - off[k]) * 0.5, -right[k], left[k])
+	for m in n:
+		points[m] = Vector3(base[m].x + nrm[m].x * off[m], base[m].y, base[m].z + nrm[m].y * off[m])
+	settle(space)
+
+
 ## The speed at every point (computeSpeeds of RacingLine.js): the bend (lateral acceleration a_lat), the braking
 ## (a_brake) that the slower points ahead ask for, at most v_max.
 func compute_speeds(a_lat: float, a_brake: float, v_max: float) -> PackedFloat32Array:
 	var n := points.size()
 	speeds = PackedFloat32Array()
 	speeds.resize(n)
+	# the grip of the surface under a point as a share of the road's (sand, grass: slower there; settle gives them),
+	# and the height smoothed over five points (the crests)
+	var grip := PackedFloat32Array()
+	grip.resize(n)
+	grip.fill(1.0)
+	if surfaces.size() == n:
+		var road := maxf(0.1, float(Content.surface("road")["static"]))
+		for i in n:
+			if surfaces[i] != "" and surfaces[i] != "road":
+				grip[i] = clampf(float(Content.surface(surfaces[i])["static"]) / road, 0.25, 1.0)
+	var height := PackedFloat32Array()
+	height.resize(n)
+	for i in n:
+		height[i] = (point(i - 2).y + point(i - 1).y + point(i).y + point(i + 1).y + point(i + 2).y) / 5.0
 	for i in n:
 		var a := point(i - 4)
 		var b := point(i)
@@ -226,12 +335,17 @@ func compute_speeds(a_lat: float, a_brake: float, v_max: float) -> PackedFloat32
 		var cross := ab.x * bc.y - ab.y * bc.x
 		var den := ab.length() * bc.length() * ac.length()
 		var curvature := absf(2.0 * cross / den) if den > 1e-6 else 0.0
-		speeds[i] = minf(v_max, sqrt(a_lat / curvature)) if curvature > 1e-4 else v_max
+		speeds[i] = minf(v_max, sqrt(a_lat * grip[i] / curvature)) if curvature > 1e-4 else v_max
+		# the crest: above sqrt(g / curvature) of the height along the line the car leaves the ground over the top (a
+		# hop of 15 % over that is allowed)
+		var d2 := (height[(i + 3) % n] - 2.0 * height[i] + height[posmod(i - 3, n)]) / (3.0 * STEP * 3.0 * STEP)
+		if d2 < -1e-4:
+			speeds[i] = minf(speeds[i], 1.15 * sqrt(9.81 / -d2))
 		speeds[i] = maxf(6.0, speeds[i])
 	for _pass in 2:
 		for k in range(n - 1, -1, -1):
 			var nxt := (k + 1) % n
-			var allowed := sqrt(speeds[nxt] * speeds[nxt] + 2.0 * a_brake * STEP)
+			var allowed := sqrt(speeds[nxt] * speeds[nxt] + 2.0 * a_brake * grip[k] * STEP)
 			if speeds[k] > allowed:
 				speeds[k] = allowed
 	return speeds

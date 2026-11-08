@@ -246,6 +246,11 @@ func _open_settings() -> void:
 
 
 func _start(car_id: String, track_id: String, opts := {}) -> void:
+	# (a car or a track that is not there: the menu says why, main.js ?missing=)
+	for m in [["car", car_id, "cars/%s/car.json"], ["track", track_id, "tracks/%s/track.json"]]:
+		if not (Content.load_json(str(m[2]) % m[1]) is Dictionary):
+			_missing(m[0], m[1])
+			return
 	CarInfo.showcase_end()
 	if world != null:
 		world.queue_free()
@@ -258,6 +263,25 @@ func _start(car_id: String, track_id: String, opts := {}) -> void:
 	world.setup(car_id, track_id, opts)
 	world.leave.connect(_back_to_menu)
 	add_child(world)
+
+
+## The dialog of a car or a track that is not there (MainMenu.js show, ?missing=): back on the home screen.
+func _missing(what: String, id: String) -> void:
+	RunLog.event("the %s %s is not here" % [what, id])
+	if world != null:
+		world.queue_free()
+		world = null
+	menu.visible = steps == null
+	var d := MenuDialog.new("The %s “%s” is not here" % [what, id],
+		"It is not in the game and not in the garage. A car or a track of someone else can be imported with Garage → Import.", 520)
+	d.theme = MenuStyle.make_theme()
+	add_child(d)
+	var ok := MenuStyle.button("OK", "primary", d.close)
+	d.foot([ok])
+	ok.grab_focus.call_deferred()
+	d.closed.connect(func():
+		if steps == null:
+			_focus_home())
 
 
 ## (Race again: the world made a new one of itself)

@@ -398,5 +398,49 @@ func replay_restore(kind: String, snap: Variant) -> void:
 		_place(p)
 
 
+## The looks of the pieces for a replay file (ReplayFx.pack): the meshes the rows name, as arrays and a colour (a
+## file holds no objects); the rows are renumbered to them.
+func replay_pack(kind: String, rows: Array) -> Variant:
+	if kind != "pieces":
+		return null
+	var index := {}
+	var looks: Array = []
+	for n in rows.size():
+		var r: PackedFloat32Array = rows[n]
+		var i := int(r[1])
+		if i < 0 or i >= _looks.size():
+			continue
+		if not index.has(i):
+			index[i] = looks.size()
+			var look: Dictionary = _looks[i]
+			var mesh := look["mesh"] as ArrayMesh
+			var surfaces: Array = []
+			for s in mesh.get_surface_count():
+				var mat := mesh.surface_get_material(s) as BaseMaterial3D
+				surfaces.append({"arrays": mesh.surface_get_arrays(s), "colour": mat.albedo_color if mat != null else Color(0.6, 0.6, 0.6)})
+			looks.append({"surfaces": surfaces, "centre": look["centre"], "flat": look["flat"], "half": look["half"], "radius": look["radius"]})
+		r[1] = index[i]
+		rows[n] = r
+	return {"looks": looks}
+
+
+## The looks of a file (replay_pack) in place of these: the rows of the file name them.
+func replay_unpack(kind: String, data: Variant) -> void:
+	if kind != "pieces" or not (data is Dictionary):
+		return
+	_looks.clear()
+	for l: Dictionary in data.get("looks", []):
+		var mesh := ArrayMesh.new()
+		for s: Dictionary in l.get("surfaces", []):
+			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, s["arrays"])
+			var mat := StandardMaterial3D.new()
+			mat.albedo_color = s.get("colour", Color.GRAY)
+			mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+			if mat.albedo_color.a < 0.99:
+				mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mesh.surface_set_material(mesh.get_surface_count() - 1, mat)
+		_looks.append({"mesh": mesh, "centre": l["centre"], "flat": l["flat"], "half": l["half"], "radius": l["radius"]})
+
+
 func count() -> Dictionary:
 	return {"pieces": _pieces.size(), "particles": specks.count_air()}
