@@ -162,7 +162,10 @@ ROADTEST
 
 **U** opens the tuning menu, as the browser game has it (web/js/Tuning.js, CarTuning.js): a panel at the right of
 the screen with the cards of the car editor in the browser's order (Wheels; Suspension and driveline; Chassis with
-Brakes, Aero and Size; Drivetrain; Engine with Fuel; Engine sound; Assists and extras; Cameras; Soft body), every
+Brakes, Aero and Size; Drivetrain; Engine with Fuel; Engine sound; Assists and extras; Cameras; Soft body; and for a
+motorcycle the Motorcycle card: the lean, the lean at speed, the rake, the rider's mass and hang off, the grip, the
+balance, the dive of the fork, the lean speed, the rates in the air, the flat-track style and the pose of the rider in
+either style, CarTuning.js), every
 group folded away. A row has the label, a number, the unit, ↺ (back to the setup that is chosen, or the car as made)
 and a slider with the units, ranges and steps of CarTuning.js; a changed value is orange. The brakes are a total and
 a bias, the gears a summary with Advanced (gear by gear, − and +) and a list of kinds of transmission, the tyre's fine
@@ -177,7 +180,7 @@ new… asks a name, Delete (or Undo changes for a tune that comes with the car).
 (`user://tunes/<car>/<name>.openracer-tune.json`, the format of the browser game: a whole car.json); the tunes that
 come with a car (car.json "tunes") are in the list too. The setup in use is remembered per car and used at the next
 start. Not ported: the engine build with its chart and dyno (the browser's Engine card), Export/Import of a tune
-file, the Mirrors card (the mirrors are in Settings, Mirrors), the Motorcycle card. `--tuning` opens the menu at the start, `--tuning-open=Chassis,Chassis/Brakes`
+file, the Mirrors card (the mirrors are in Settings, Mirrors). `--tuning` opens the menu at the start, `--tuning-open=Chassis,Chassis/Brakes`
 opens cards and groups (for screenshots). Test: `Godot --headless --path godot res://tools/test_tuning.tscn`.
 
 A kart (chassis.unsprung) stands on its tyres: the tyre is the spring (its rate with the pressure), the frame
@@ -327,7 +330,8 @@ A car with car.json "driver" (enabled, with a file: the hatchback, the go-karts,
 (`scripts/car_driver.gd`, Driver.js): the glb placed, turned and scaled about its hips, the bones of car.json or guessed
 from their names (Rigify, Mixamo), the hands on the steering wheel turning with it (the hand over at a long turn, or the
 keys of the car editor), the fingers closed by grip_curl, the feet on the pedals (left the brake, right the throttle), the
-elbows and the knees to their poles (`scripts/bone_ik.gd`, the two-bone IK shared with the motorcycle rider), the chest
+elbows and the knees to their poles (`scripts/bone_ik.gd`, the two-bone IK shared with the motorcycle rider: see
+Motorcycles), the chest
 and the head as set (or by their keys). In the cockpit view the head and the torso are not drawn (a copy of the mesh
 with the torso weight in CUSTOM0, made the first time), or the whole driver with cameras.cockpit.hide_driver. A part of
 the model called steeringwheel turns with the steering (`scripts/steering_wheel.gd`, CarLoader.js: about its middle and
@@ -336,6 +340,49 @@ the camera is not moved. The places of "driver" and the cockpit camera are in th
 browser (the cockpit camera no longer adds model.offset). Test: `Godot --headless --path godot res://tools/test_driver.tscn`
 (add `--cars=hatchback --shot=/tmp/folder` with a window for pictures). Not ported: the ragdoll of a crash and the give in
 the g-forces (motorcycle only in the browser).
+
+## Motorcycles
+
+`"type": "motorcycle"` (web/MOTORCYCLE.md): the physics of the cars with one wheel at each end (car.gd), the rider of
+Motorcycle.js that keeps it up and leans it (`scripts/motorcycle.gd`), the model with its front end, swingarm, shock
+and chain (`scripts/motorcycle_model.gd`) and the rider on it (`scripts/motorcycle_rider.gd`, Driver.js):
+
+- **The fork and the swingarm in the physics** (Vehicle.js feLoad): the front wheel moves along the fork and the rear
+  on the arc of the swingarm, so the road force along the wheel loads the spring with its share along the travel (the
+  slope from the `steerhead` empty or the rake, and from the pivot of the `swingarm` part): the fork dives under the
+  brake, a swingarm with its pivot above the axle resists squat. `motorcycle.fork_dive` (1; 0 off) scales it. The run
+  log's BIKE line has it (`fork`, `arm`, N).
+- **The rider keys**: `,` and `.` (hold) put the rider back or forward (tuck or sit up, his weight with it; in the air
+  the nose down or up). **9**: the rider goes limp where he sits (to try a crash): no throttle, steering or balance;
+  the seat holds his hips and knees while the bike is upright, his weight off the middle leans the bike, and it goes
+  down past 40 degrees, when it stops, or when he has slid off it.
+- **The ragdoll** (`scripts/rider_ragdoll.gd`, Driver.js crash): when the bike goes down the rider is thrown off: 15
+  particles (hips, chest, head, shoulders, elbows, hands, hip joints, knees, feet) with the speed they had (the bike's
+  at that place and his own movement), sticks, a rigid torso, the limits and the muscles of a body (a soft zone before
+  every limit, the tone towards the neutral posture, damping), the limbs out of each other, Verlet at 240 Hz, 0.55 g of
+  friction on the road, a sudden higher floor is a wall. He collides with the bike's collision box (here, not its
+  spheres) and gives it the hit in the first 0.3 s. The skeleton is posed on the particles (the root on the hips and
+  the chest, the limbs by the IK, the head along the neck). The follow camera watches him from where it was (2.5 to
+  5 m, at least 1.2 m up) until Reset or Repair. Not in the replay.
+- **The levers, the fingers and the shift lever**: the right grip rolls with the throttle; the hands keep their turn on
+  the grips (found once in the neutral pose, with `hands.rotation` on top); the fingers (not the thumb) point at
+  `frontbrake_R` and `clutch_L` (the middle finger is the base) and close with the brake or the pull of a shift; the
+  levers turn about their hinge (their vertex nearest the middle of the bike); `shifter_L` taps with every shift
+  (first gear down, the others up, neutral a half tap) and the left foot goes with its toe peg.
+- **The rider gives with the g-forces** (`gSpring`): a mass on a spring (1.4 Hz, damping 0.55) pushed by the
+  acceleration of the bike in its own frame, 6 cm at 1 g (at most 10 cm to the side, 12 forward and back, 8 down and
+  4 up), the trunk turning with it (1.2 degrees a cm). Only what is drawn.
+- **Flat track**: the pelvis tilts against the bike (`push_pelvis_tilt`), the inside foot comes off the peg onto the
+  road beside it, forward and out with the lean (`push_foot_out`, `push_foot_forward`, a ray for the road), and a foot
+  is never below the road.
+- **The AI** brakes for 0.75 g on a road-race bike with fork dive (0.8 before and for a flat-track bike): with the
+  fork in the physics the 600 ran wide in the first bend of kartbaan-oldenzaal at 0.8 g.
+- **Test**: `Godot --fixed-fps 60 --path godot res://tools/test_moto.tscn -- --car=sports-motorcycle-600cc` (the shift
+  lever, the fork, the give and the brake lever on the brake, the limp rider, a crash into a wall, the ragdoll on the
+  floor; with a window `--shot=/folder` saves throttle, brake, levers, limp_ride, limp and crash pictures).
+- **Not ported**: model v2 (`"motorcycle": {"model": "v2"}`; no bike of the game uses it), the crash rules panel of
+  the 0 key and its push rule, the head that stays upright to the road and looks along the racing line, the ORG bones
+  of a Rigify rig that follow the DEF ones, the ragdoll in the replay, walking the bike back with the feet.
 
 ## Garage
 
@@ -698,8 +745,8 @@ HUD, F3 the debug text, F2 a photo without the HUD (in the pictures folder, O-Ra
 ABS, ESC, launch control, two-step on and off (a short note says it), I starts the engine, E the engine sound, V the
 telemetry, 0 the debug view (- hides the car), U tuning, K calibrates a wheel, M the wheel on and off, F8 a mark in the
 log, Esc pause. A gamepad: the triggers gas and brake, the left stick steers, A handbrake, the shoulders shift, X camera,
-Y back on the line, Back repair, Start pause. The rider keys and the ragdoll of a motorcycle are bound but not in the
-Godot physics yet. 5 starts and stops a take (Take.js); the camera key goes through follow, cockpit, bonnet and the free
+Y back on the line, Back repair, Start pause. On a motorcycle `,` and `.` put the rider back and forward while held
+(and in the air the nose up and down), 9 makes the rider go limp (see Motorcycles). 5 starts and stops a take (Take.js); the camera key goes through follow, cockpit, bonnet and the free
 camera (FreeCam.js: its own keys while it is on, see Replay).
 
 All of it can be set in Settings, Controls: every action, by group, has chips of its inputs (Key, Pad, Wheel; ✎ a new one,
@@ -730,8 +777,10 @@ window (watch, download, delete, import). The choice is kept in `user://menu.cfg
 the browser, Car, Keyboard, Gamepad, Wheel (with the calibrated wheels and Forget), Display and sound, Mobile (with the touch
 controls), Graphics, Simulation, Tools (debug text, back up and restore the settings, the records and the tunes in one file,
 forget the records of a track, Save as HDR), Controls; Reset all settings. What the Godot game does not do yet is grey with
-the tooltip "Not in the Godot version yet" (the steering assists, the pad steering at speed, the motorcycle options, the
-debris, the simulation rows). The pause menu (`scripts/pause_menu.gd`): Resume, Replay, Tune the car, Restart, Back to the
+the tooltip "Not in the Godot version yet" (the steering assists, the pad steering at speed, the debris, the simulation
+rows). The motorcycle options (shown with a motorcycle): Motorcycle steering (lean only, or countersteer + lean: the
+push on the bars that starts a lean, off on the brake and back slowly after it), Wheelie control, Flat-track style for
+every bike, the Motorcycle follow camera (it rolls with the lean, or the classic chase of a car), the lean at top speed. The pause menu (`scripts/pause_menu.gd`): Resume, Replay, Tune the car, Restart, Back to the
 start, Settings, the drag strip Top 50, Main menu. `--settings --settings-tab=Wheel` opens a tab (`pause`: the pause menu).
 
 **HUD** (`scripts/hud.gd`, `hud_gauge.gd`, after Hud.js): the round gauge (the engine speed with the red zone and the shift
@@ -812,8 +861,10 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
    on a track, marbles, debris *(done)*.
 5. **Motorcycles**: the bike model of Motorcycle.js with its rider (`scripts/motorcycle.gd`): lean, steering from the
    lean, balance, camber thrust, posture, wheelie control, brakes, crash rules, camera roll; the front end, swingarm,
-   shock and chain (`motorcycle_model.gd`), the rider with IK (`motorcycle_rider.gd`), the AI rides them *(done; not
-   yet: the ragdoll of a crash, the levers and fingers, model v2, the menu options of the bikes)*.
+   shock and chain (`motorcycle_model.gd`), the rider with IK (`motorcycle_rider.gd`), the AI rides them; the ragdoll
+   of a crash, the levers, fingers and shift lever, the give in the g-forces, the fork and swingarm in the physics,
+   the rider keys, the options of the menu and the Motorcycle card of tuning *(done, see Motorcycles; not: model v2,
+   which no bike of the game uses)*.
 6. **Garage, tuning and editors**: tuning menu *(done)*, replays *(the core done)*, car editor *(done, see Car editor)*, track editor, garage.
 7. **Release**: export for the web (openracer.eu), macOS, Windows and Linux. macOS *(done)*: `sh godot/tools/export_macos.sh`
    makes `godot/build/macos/O-Racer.app` (universal, signed ad hoc, not notarised: the first start needs a right
