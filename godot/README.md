@@ -134,9 +134,16 @@ hairpin). A welded or locked axle is solved as one body.
 In the menu: Mode "Race against the AI", the number of opponents (1 to 7), the laps and the start (at the back of
 the grid or on pole). The opponents are cars of the player's kind (a car against cars, a kart against karts),
 on the grid of track.json; 3, 2, 1, GO holds everyone; the positions and the laps of the race are measured along
-the racing line from the finish; the AI backs off behind a slower car and moves aside to pass, and a car that is
-stuck is put back on the line. The AI learns where it ran off the road (the line before there a little slower)
-and keeps that per track and car (`user://ai/`), so it races cleaner the next time. The AI cars have the colours
+the racing line from the finish. The AI drives as `Opponent.js` (`scripts/ai_driver.gd`): it holds back for the car
+in its path (no faster than it can still stop behind it), and passes a car ahead on the side with room, beside that
+car and only as far as there is road (a ray at the point ahead: no gravel, no kerb, no barrier). Behind a car that
+stands it waits, and after six seconds it goes round it; pushing against something it backs up a moment. It is put
+back (with the reason in the run log) when it is on its side or its roof, fell out of the world, gets nowhere (no
+4 m in 8 s, or stuck for 7 s), or stays blocked for 15 s: a little further along the line, 3.5 m to its right where
+there is road, repaired (with fuel if the tank was empty), and a ghost for ten seconds (the other cars and their
+shells go through it). The player's car driven by the AI (`--ai`, after the finish) is put back the same way. The
+AI learns where it ran off the road and where it crashed (the line before there a little slower) and keeps that
+per track and car (`user://ai/`; with `--ai` in `user://test-ai/`), so it races cleaner the next time. The AI cars have the colours
 of the browser game (the materials called carpaint, or body); the three nearest are heard (3D, a lighter engine
 simulation). When the player finishes, the results show and the AI drives the player's car
 on. Home (back to the start), Restart in the pause menu or "Race again" starts it again. A track without a racing line has no race (free driving).

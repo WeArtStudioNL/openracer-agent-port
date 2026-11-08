@@ -34,8 +34,6 @@ var _log_every := 0.0
 var _time := 0.0
 var _next_log := 0.0
 var _last_velocity := Vector3.ZERO
-var _stuck := 0.0
-var _going := false
 var _tuning_paused := false
 var _saved_place := {}              # the place for the reset on a track without a racing line (the key 4)
 var _key_held := {"throttle": 0.0, "brake": 0.0}   # s that the key of a pedal is held (the easing of the keys)
@@ -354,15 +352,12 @@ func _physics_process(_delta: float) -> void:
 		if race != null:
 			ai.others.assign(race.entries.map(func(e): return e.car))
 		ai.drive(get_physics_process_delta_time())
-		# stuck (against a wall, on its side): back on the line
-		# (only once it was going: a car at the start is not stuck)
-		if absf(car.speed) > 5.0:
-			_going = true
-		_stuck = _stuck + get_physics_process_delta_time() if absf(car.speed) < 1.0 else 0.0
-		if _stuck > (4.0 if _going else 8.0):
-			_going = false
-			_stuck = 0.0
-			recover()
+		# stuck (against a wall, on its side, no headway): put back beside the line, as the AI cars (AIDriver)
+		if ai.put_back_reason != "":
+			RunLog.event("reset (the AI: %s)" % ai.put_back_reason)
+			laps.invalidate()
+			ai.put_back()
+			camera.snap()
 		return
 	var keys_steer := Input.get_axis("steer_right", "steer_left")
 	var dt := get_physics_process_delta_time()

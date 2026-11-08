@@ -23,8 +23,6 @@ class Entry:
 	var finish_time := -1.0
 	var lap_start := 0.0
 	var best_lap := -1.0
-	var stuck := 0.0
-	var going := false
 	var audio: CarAudio = null
 	var touching: Array = []
 	var knocks := 0
@@ -214,6 +212,7 @@ func _physics_process(dt: float) -> void:
 		if is_held():
 			e.car.throttle_input = 0.0
 			e.car.brake_input = 1.0
+			e.car.handbrake_input = 1.0
 			e.car.steer_input = 0.0
 			continue
 		e.driver.others = others
@@ -221,19 +220,15 @@ func _physics_process(dt: float) -> void:
 		pit.laps_left = laps - maxi(0, e.laps - 1)
 		pit.finished = e.finish_time >= 0.0
 		e.driver.drive(dt)
-		# stuck (against a wall, on its side): back on the line; in the pits only when it gets nowhere away from its
-		# stop for a while (not while it waits in its box)
-		if absf(e.car.speed) > 5.0:
-			e.going = true
-		e.stuck = e.stuck + dt if absf(e.car.speed) < 1.0 and not pit.pitting else 0.0
-		if e.stuck > (4.0 if e.going else 8.0) or pit.stuck(dt):
-			e.stuck = 0.0
-			e.going = false
-			var in_pits := pit.pitting
-			world.put_on_line(e.car)
-			e.driver.lost()
+		# put back on the line (AIDriver: on its side, lost, no headway, blocked for long; Opponent.js crashedAt); in
+		# the pits only when it gets nowhere away from its stop for a while (not while it waits in its box)
+		var why := e.driver.put_back_reason
+		if why == "" and pit.stuck(dt):
+			why = "stuck in the pits"
+		if why != "":
+			e.driver.put_back()
 			e.put_back += 1
-			RunLog.event("race: %s put back on the line%s" % [e.name, " (stuck in the pits)" if in_pits else ""])
+			RunLog.event("race: %s put back on the line (%s)" % [e.name, why])
 
 
 ## The lap and the part of it, along the line from the finish.

@@ -153,6 +153,9 @@ func _build_pairs() -> void:
 	for o in shells:
 		if o == self or o.sb == null or not is_instance_valid(o.car) or not o.car.is_inside_tree() or o.car.freeze:
 			continue
+		# (an AI car that was just put back is a ghost: the other cars go through it, AIDriver)
+		if o.car.has_meta("ghost") or car.has_meta("ghost"):
+			continue
 		var reach := bound + o.bound + 0.6
 		if o.xf.origin.distance_squared_to(xf.origin) > reach * reach:
 			continue
