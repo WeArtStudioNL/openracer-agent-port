@@ -107,6 +107,7 @@ var cg_height := 0.5
 var susp_length := 0.28
 var susp_travel := 0.1
 var droop := 0.15
+var droop_set := false           # car.json chassis.suspension_droop: the droop is given (m below the ride height), else it follows the travel
 var max_steer := deg_to_rad(30.0)
 var ackermann := 0.6
 var drag_area := 0.7            # Cd times the frontal area
@@ -441,7 +442,9 @@ func _read_config() -> void:
 	susp_length = float(ch.get("suspension_length", 0.28))
 	# (Vehicle.js: the travel to the bump stop leaves 5 cm of the room)
 	susp_travel = minf(float(ch.get("suspension_travel", 0.09)), maxf(0.05, susp_length - 0.05))
-	droop = maxf(0.08, susp_travel * 1.5)
+	var given_droop := float(ch.get("suspension_droop", 0.0))
+	droop_set = given_droop > 0.0
+	droop = given_droop if droop_set else maxf(0.08, susp_travel * 1.5)
 	max_steer = deg_to_rad(float(ch.get("max_steer_deg", 30)))
 	ackermann = float(ch.get("ackermann", 0.6))
 	var length := float(dims.get("length", 4.2))
@@ -1008,7 +1011,7 @@ func _ray_tyres(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> vo
 			along = bike.crown(w, up) if bike != null else w.radius
 		if hit.is_empty() or top.distance_to(hit["position"]) - along > max_len:
 			w.contact = false
-			w.length = max_len
+			w.length = move_toward(w.length, max_len, 2.5 * dt) if droop_set else max_len      # (a given droop: the wheel falls, it does not jump)
 			continue
 		w.contact = true
 		w.surface = "road"

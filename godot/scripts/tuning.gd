@@ -35,6 +35,7 @@ const GROUPS := [
 		["frame_torsion", "Frame stiffness against twisting (a kart: 0 is a rigid frame)", "N·m/°", 0, 2000, 10],
 		["inner_lift", "Inner rear wheel lift in a fast bend (a kart)", "mm", 0, 60, 1],
 		["suspension_travel", "Suspension travel before the bump stop", "cm", 1, 120, 1],
+		["suspension_droop", "Droop: how far a wheel hangs below the ride height (0: as far as its spring lets it)", "cm", 0, 120, 1],
 		["suspension_length", "Room for the travel (the spring from the mount to the middle of the wheel)", "cm", 10, 150, 1],
 		["spring_progression", "Progressive springs (extra stiffness at the end of the travel)", "%", 0, 800, 10],
 		["damping_rebound", "Rebound damping (against compression damping)", "×", 0.5, 6, 0.1],
@@ -336,6 +337,7 @@ const MAP := {
 	"spring_rear": ["chassis.spring_rear", 1000.0, 30000.0], "damping_front": ["chassis.damping_front", 0.01, 0.35],
 	"damping_rear": ["chassis.damping_rear", 0.01, 0.35], "frame_torsion": ["chassis.frame_torsion", 1.0, 0.0],
 	"inner_lift": ["chassis.inner_lift", 0.001, 0.0], "suspension_travel": ["chassis.suspension_travel", 0.01, 0.1],
+	"suspension_droop": ["chassis.suspension_droop", 0.01, 0.0],
 	"suspension_length": ["chassis.suspension_length", 0.01, 0.28], "spring_progression": ["chassis.spring_progression", 0.01, 0.0],
 	"damping_rebound": ["chassis.damping_rebound", 1.0, 1.5], "ride_front": ["chassis.ride_front", 0.001, 0.0], "ride_rear": ["chassis.ride_rear", 0.001, 0.0],
 	"roll_center_front": ["chassis.roll_center_front", 0.01, 0.1], "roll_center_rear": ["chassis.roll_center_rear", 0.01, 0.1],
@@ -725,7 +727,7 @@ static func visible(key: String, v: Dictionary) -> bool:
 			return not kart and not bike and v.get("drive") != "fwd"
 		"anti_lift_front":
 			return not kart and not bike and v.get("drive") in ["fwd", "awd"]
-		"spring_front", "spring_rear", "damping_front", "damping_rear", "suspension_travel", "suspension_length", "spring_progression", \
+		"spring_front", "spring_rear", "damping_front", "damping_rear", "suspension_travel", "suspension_droop", "suspension_length", "spring_progression", \
 				"damping_rebound", "ride_front", "ride_rear":
 			return not kart
 		"bike_hang_chest_roll", "bike_hang_knee_out", "bike_hang_knee_down", "bike_hang_tuck_pitch", "bike_hang_sit_pitch", "bike_hang_shift":
