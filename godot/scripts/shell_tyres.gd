@@ -395,6 +395,8 @@ func _springs(h: float, basis: Basis, up: Vector3, com: Vector3, tyre_load: Arra
 			var stop_damping := 2.5 * sqrt(stop_rate * unsprung_mass)
 			var c_tot := c_eff + (stop_damping if w.length < min_len or w.length > max_len else 0.0)
 			var bump := stop_rate * (min_len - w.length) if w.length < min_len else 0.0
+			if bump > 0.0 and xdot > 2.5:
+				car.sound_impact = maxf(car.sound_impact, minf(1.0, (xdot - 2.0) / 6.0))
 			var droop := -stop_rate * (w.length - max_len) if w.length > max_len else 0.0
 			var used := maxf(0.0, car.susp_length + (car.ride_front if w.front else car.ride_rear) - w.length)
 			var progressive := car.spring_progression * w.spring * used * used / maxf(0.01, car.susp_travel) if car.spring_progression > 0.0 else 0.0

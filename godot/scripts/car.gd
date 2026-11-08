@@ -215,6 +215,7 @@ var since_shift := 0.0
 var cvt_ratio := 3.0
 var steer_angle := 0.0
 var speed := 0.0                # m/s along the car
+var sound_impact := 0.0         # how hard the bump stop was hit since the sound took it (0..1, CarAudio)
 var clutch_engagement := 0.0
 var reverse_hold := 0.0
 var throttle := 0.0
@@ -971,6 +972,8 @@ func _ray_tyres(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> vo
 		var bump := susp_length - susp_travel - w.length
 		if bump > 0.0 and not unsprung:
 			f += bump * w.spring * 12.0 + maxf(0.0, rate) * w.damper * 2.0
+			if rate > 2.5:
+				sound_impact = maxf(sound_impact, minf(1.0, (rate - 2.0) / 6.0))
 		loads[i] = f - (bike.fork_load(self, w, dt) if bike != null else 0.0)      # (the fork and the swingarm)
 	for axle in 2:
 		var il := axle * 2
