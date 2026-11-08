@@ -40,6 +40,11 @@ static func attach(c: Car) -> void:
 		var out := PartsLibrary.assemble(c.config, {"FL": Vector3(ft, 0, wb), "FR": Vector3(-ft, 0, wb), "RL": Vector3(rt, 0, -wb),
 			"RR": Vector3(-rt, 0, -wb)}, float(ch.get("tire_diameter", 0.6)))
 		lib = out["group"]
+		# (the files it loaded are not kept in the game: the cache of the editor would hold them to the end)
+		for k: String in PartsLibrary._cache:
+			if PartsLibrary._cache[k] != null:
+				(PartsLibrary._cache[k] as Node).free()
+		PartsLibrary._cache.clear()
 		if lib.get_child_count() == 0:
 			lib.free()
 			lib = null
