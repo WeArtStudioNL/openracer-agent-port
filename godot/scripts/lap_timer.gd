@@ -7,6 +7,7 @@ extends Node
 ## (the body and the wheels, 30 times a second) in user://ghosts/, to be driven again by a see-through car.
 
 signal message(text: String)
+signal lap_done(samples: PackedFloat32Array)     # a lap was counted: its recording (the racing line recorder)
 
 const RECORDS := "user://records.cfg"
 const GHOSTS := "user://ghosts"
@@ -162,6 +163,7 @@ func _gate(g: int) -> void:
 			last_lap = t
 			lap_times.append(t)
 			laps_done += 1
+			lap_done.emit(_recording)
 			var record := not lap_invalid and (best_lap < 0.0 or t < best_lap)
 			RunLog.event("lap %d: %s%s%s" % [laps_done, format_time(t), "  RECORD" if record else "", "  (reset in the lap)" if lap_invalid else ""])
 			if best_lap > 0.0 and not lap_invalid:

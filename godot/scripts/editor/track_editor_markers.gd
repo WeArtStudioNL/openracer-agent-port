@@ -74,7 +74,8 @@ static func flat(c: Color, alpha: float, on_top := true) -> StandardMaterial3D:
 
 
 func screen_of(p: Vector3) -> Variant:
-	if ed.camera.is_position_behind(p):
+	# (in front of the camera as it is drawn, not only as it is placed: unproject_position uses the first)
+	if ed.camera.is_position_behind(p) or (ed.camera.get_camera_transform().affine_inverse() * p).z > -ed.camera.near:
 		return null
 	return ed.camera.unproject_position(p)
 

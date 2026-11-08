@@ -109,6 +109,7 @@ func _build_scene() -> void:
 	sun.look_at_from_position(Vector3(4, 8, 5), Vector3.ZERO)
 	viewport.add_child(sun)
 	camera = Camera3D.new()
+	camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF     # (moved in _process: no lag of its picture)
 	camera.fov = 40.0
 	camera.near = 0.05
 	camera.far = 200.0
@@ -151,6 +152,7 @@ func _build_scene() -> void:
 	thumb_viewport.msaa_3d = Viewport.MSAA_4X
 	add_child(thumb_viewport)
 	thumb_camera = Camera3D.new()
+	thumb_camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	thumb_camera.cull_mask = 1
 	thumb_camera.near = 0.05
 	thumb_camera.far = 300.0

@@ -269,11 +269,26 @@ static func add_to_library(ed: TrackEditor, path: String) -> void:
 	var j: Variant = JSON.parse_string(FileAccess.get_file_as_string(dir.path_join("objects.json"))) if FileAccess.file_exists(dir.path_join("objects.json")) else null
 	var list: Array = j.get("objects", []) if j is Dictionary else []
 	list = list.filter(func(e: Dictionary) -> bool: return e.get("id") != id)
-	list.append({"id": id, "name": id, "file": id + ".glb", "thumb": "", "kind": "rigid", "mass": 0})
+	var entry := {"id": id, "name": id, "file": id + ".glb", "thumb": "", "kind": "rigid", "mass": 0}
+	list.append(entry)
 	var f := FileAccess.open(dir.path_join("objects.json"), FileAccess.WRITE)
 	f.store_string(JSON.stringify({"objects": list}, " "))
 	f.close()
 	add_model(ed, dir.path_join(id + ".glb"), object_file_name(id), "rigid", 0.0)
+	# its picture next to it (keepInLibrary: <id>.webp), as soon as it is drawn
+	var glb := dir.path_join(id + ".glb")
+	ed.thumbs.request(glb, func() -> Node3D: return ModelThumbs.load_glb(glb), func(tex: Texture2D):
+		if tex == null or tex.get_image().save_webp(dir.path_join(id + ".webp"), false, 0.9) != OK:
+			return
+		var now: Variant = JSON.parse_string(FileAccess.get_file_as_string(dir.path_join("objects.json")))
+		if now is Dictionary:
+			for e in now.get("objects", []):
+				if e is Dictionary and e.get("id") == id:
+					e["thumb"] = id + ".webp"
+			var w := FileAccess.open(dir.path_join("objects.json"), FileAccess.WRITE)
+			w.store_string(JSON.stringify(now, " "))
+			w.close()
+		library(ed))
 
 
 ## A prefab of the designer as an object of a track with a model: its glb (with the texture chosen) in a folder of its own.

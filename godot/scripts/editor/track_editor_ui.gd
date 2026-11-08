@@ -482,7 +482,10 @@ static func _objects_card(ed: TrackEditor) -> void:
 	for type in DesignPrefabs.LIST:
 		var info: Dictionary = DesignPrefabs.INFO[type]
 		var tex := ""
-		flow.add_child(button("%s %s" % [info["icon"], info["label"]], func(): TrackEditorIO.use_prefab(ed, type, tex)))
+		var pb := button("%s %s" % [info["icon"], info["label"]], func(): TrackEditorIO.use_prefab(ed, type, tex))
+		_tile(pb)
+		ed.thumbs.request("prefab:" + type, func() -> Node3D: return DesignPrefabs.make(type, ""), _set_icon.bind(pb))
+		flow.add_child(pb)
 	pre.add_child(flow)
 	b.add_child(pre)
 	var list := VBoxContainer.new()
@@ -594,13 +597,15 @@ static func _cameras_card(ed: TrackEditor) -> void:
 
 static func _line_card(ed: TrackEditor) -> void:
 	var b := card(ed, "line", "AI racing line")
-	b.add_child(label("The line that the AI cars drive. Edit the line shows its nodes (about 8 m apart): drag a node, Shift + click on the road adds a node, " +
+	b.add_child(label("The line that the AI cars drive. Record AI racing line drives the saved track in the game: every lap you finish replaces the " +
+		"line, Esc or Stop saves the last one and comes back here. Edit the line shows its nodes (about 8 m apart): drag a node, Shift + click on the road adds a node, " +
 		"Delete takes the chosen one away, Apply line saves it. Draw the line makes a new line: click on the road node after node in the direction that the AI " +
 			"drives, all the way round. Without a line a road drawn with nodes is driven along its middle.", true, 12))
 	ed.ui["showLine"] = check("Show the line", true, func(on: bool):
 		ed.show_line = on
 		ed.refresh())
 	b.add_child(ed.ui["showLine"])
+	b.add_child(hbox([button("Record AI racing line", func(): _record_line(ed), "", true)]))
 	var row1 := hbox([button("Edit the line", func(): ed.line.start_line_edit(), "", true), button("Draw the line", func():
 		if ed.existing_id == "":
 			ed.status("Save the track first: the line is saved on the saved track.", "error")
@@ -812,6 +817,25 @@ static func _auto_gates(ed: TrackEditor) -> void:
 	ed.status("%d gates along the line (%d m), gate 1 just in front of the start. Check that each one is as wide as the road there." % [count, roundi(total)], "ok")
 
 
+## Record AI racing line (track-editor.js recordLine): the line is recorded on the saved track, so the changes are saved
+## first; a lap is counted through the gates, so there has to be one.
+static func _record_line(ed: TrackEditor) -> void:
+	if ed.existing_id == "":
+		ed.status("Save the track first: the line is recorded on the saved track.", "error")
+		return
+	var go := func():
+		if (ed.existing.get("gates", []) as Array).is_empty() and (ed.existing.get("checkpoints", []) as Array).is_empty():
+			ed.status("Place a gate at the start first and save: a lap is counted through the gates.", "error")
+			return
+		ed.record_line.emit(ed.existing_id)
+	if ed.history.unsaved():
+		ask(ed, "Save the track first?", "The line is recorded on the saved track. Save the changes and drive it?", "Save and record", func():
+			if TrackEditorIO.save(ed):
+				go.call())
+	else:
+		go.call()
+
+
 static func _test_drive(ed: TrackEditor) -> void:
 	if ed.history.unsaved() or ed.existing_id == "":
 		if not TrackEditorIO.save(ed):
@@ -883,7 +907,7 @@ static func _height_dialog(ed: TrackEditor) -> void:
 
 
 ## A question with OK and Cancel.
-static func ask(ed: TrackEditor, title: String, text: String, ok: String, then: Callable) -> void:
+static func ask(ed: TrackEditor, title: String, text: String, ok: String, then: Callable, otherwise := Callable()) -> void:
 	if Content.arg("editor-yes") != "":
 		then.call()
 		return
@@ -894,7 +918,10 @@ static func ask(ed: TrackEditor, title: String, text: String, ok: String, then: 
 	dlg.confirmed.connect(func():
 		dlg.queue_free()
 		then.call())
-	dlg.canceled.connect(dlg.queue_free)
+	dlg.canceled.connect(func():
+		dlg.queue_free()
+		if otherwise.is_valid():
+			otherwise.call())
 	ed.add_child(dlg)
 	dlg.popup_centered()
 
@@ -1133,11 +1160,14 @@ static func _library(ed: TrackEditor) -> void:
 				ed.set_mode("object")
 			else:
 				TrackEditorIO.add_model(ed, e["path"], file, e["kind"], e["mass"]), "Click to place it in the track")
-		if FileAccess.file_exists(e["thumb"]):
-			var img := Image.load_from_file(e["thumb"])
-			if img != null and not img.is_empty():
-				img.resize(48, 48)
-				b.icon = ImageTexture.create_from_image(img)
+		_tile(b)
+		var img := Image.load_from_file(e["thumb"]) if FileAccess.file_exists(e["thumb"]) else null
+		if img != null and not img.is_empty():
+			b.icon = _icon(ImageTexture.create_from_image(img))
+		else:
+			# (a model without its picture: one is drawn, as the browser draws the models of a track)
+			var path: String = e["path"]
+			ed.thumbs.request(path, func() -> Node3D: return ModelThumbs.load_glb(path), _set_icon.bind(b))
 		if ed.object_model == file:
 			b.add_theme_color_override("font_color", Color("ffd04d"))
 		flow.add_child(b)
@@ -1148,6 +1178,31 @@ static func _library(ed: TrackEditor) -> void:
 		var b := button(str(name).trim_prefix("obj-").trim_suffix(".glb") + " (track)", func():
 			ed.object_model = name
 			ed.set_mode("object"))
+		_tile(b)
+		var m: Dictionary = ed.models[name]
+		if m.get("scene") is Node3D:
+			ed.thumbs.request("track:%s:%s" % [name, m.get("source", "")], func() -> Node3D: return (m["scene"] as Node3D).duplicate(), _set_icon.bind(b))
 		if ed.object_model == name:
 			b.add_theme_color_override("font_color", Color("ffd04d"))
 		flow.add_child(b)
+
+
+## A tile of the library: the picture above the name.
+static func _tile(b: Button) -> void:
+	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+	b.custom_minimum_size = Vector2(84, 0)
+	b.clip_text = true
+
+
+static func _icon(tex: Texture2D) -> Texture2D:
+	var img := tex.get_image()
+	if img == null or img.is_empty():
+		return null
+	img.resize(64, 64, Image.INTERPOLATE_LANCZOS)
+	return ImageTexture.create_from_image(img)
+
+
+static func _set_icon(tex: Texture2D, b: Button) -> void:
+	if tex != null and is_instance_valid(b):
+		b.icon = _icon(tex)
