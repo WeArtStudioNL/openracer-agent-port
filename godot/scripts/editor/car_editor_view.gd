@@ -478,7 +478,7 @@ func pick_mesh(mouse: Vector2, root: Node3D) -> Variant:
 		var aabb: AABB = mi.global_transform * mi.mesh.get_aabb()
 		if aabb.grow(0.01).intersects_ray(from, dir) == null:
 			continue
-		var key := mi.get_instance_id()
+		var key := "%d/%d" % [mi.get_instance_id(), mi.mesh.get_rid().get_id()]      # (the soft body gives a mesh a new one: its triangles)
 		if not _tri_cache.has(key):
 			_tri_cache[key] = mi.mesh.generate_triangle_mesh()
 		var tm: TriangleMesh = _tri_cache[key]

@@ -719,7 +719,8 @@ func _beam_at(mouse: Vector2) -> int:
 ## The point of the model of the bench under the mouse: { position, normal (towards the camera), node } in the world, or {}.
 func surface_at(mouse: Vector2, root: Node3D = null) -> Dictionary:
 	if root == null:
-		root = car.model_root if car != null and is_instance_valid(car) else null
+		# (the whole car: once the shell bends the model, its meshes are copies under the skeleton "Shell" of the car, SoftBodyMesh)
+		root = car if car != null and is_instance_valid(car) else null
 	if root == null:
 		return {}
 	var from := ed.view.camera.project_ray_origin(mouse)
@@ -732,7 +733,7 @@ func surface_at(mouse: Vector2, root: Node3D = null) -> Dictionary:
 			continue
 		if (mi.global_transform * mi.mesh.get_aabb()).grow(0.01).intersects_ray(from, dir) == null:
 			continue
-		var key := mi.get_instance_id()
+		var key := "%d/%d" % [mi.get_instance_id(), mi.mesh.get_rid().get_id()]      # (the soft body gives a mesh a new one: its triangles)
 		if not _tri_cache.has(key):
 			_tri_cache[key] = mi.mesh.generate_triangle_mesh()
 		var tm: TriangleMesh = _tri_cache[key]
