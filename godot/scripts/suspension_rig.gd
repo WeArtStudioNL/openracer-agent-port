@@ -261,8 +261,12 @@ func _gather_coilovers(roots: Array[Node3D]) -> void:
 		for what in ["coiloverpiston", "coilovercoil"]:
 			var inner: Node3D = all.get(what + corner)
 			if inner != null and not cylinder.is_ancestor_of(inner):
+				# (by hand: the car is not in the tree yet when it is built, and reparent needs the global transform)
+				var xf := CarModel.relative(inner, car)
 				inner.owner = null
-				inner.reparent(cylinder, true)
+				inner.get_parent().remove_child(inner)
+				cylinder.add_child(inner)
+				inner.transform = CarModel.relative(cylinder, car).affine_inverse() * xf
 
 
 ## A brake caliper (brake_caliper_FL) goes with the upright of its wheel, or with the steering of the wheel when the car has
