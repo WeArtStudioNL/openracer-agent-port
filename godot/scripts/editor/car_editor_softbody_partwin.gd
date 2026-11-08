@@ -41,6 +41,7 @@ var _light: StandardMaterial3D
 var _foot := {}                      # object name -> its share of the car seen from above
 var _drag_from := Vector2.INF
 var _hover_at := Vector2.INF
+var _hover_gone := false
 
 
 func _init(owner_card: Object) -> void:
@@ -51,6 +52,7 @@ func _init(owner_card: Object) -> void:
 	panel.visible = false
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	ed.view.overlay.add_child(panel)
+	ed.view.container.mouse_exited.connect(func(): _hover_gone = true)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 6)
 	panel.add_child(col)
@@ -916,8 +918,9 @@ func frame(_dt: float) -> void:
 		var hit: Dictionary = card.call("surface_at", at) if c != null else _model_hit(at)
 		var under := loose_of(hit["node"]) if not hit.is_empty() else ""
 		_light_up(name if mode == "nodes" and name != "" else (under if under != "" else name))
-	elif _lit_name != name and _lit_name != "" and not is_open():
-		_light_up("")
+	elif _lit_name != name and (_hover_gone or ed.driver_editing() or (ed.bench.car != null and not ed.bench.parked)):
+		_light_up(name)              # (what is under a mouse that stands still stays lit: it goes when the mouse leaves the view)
+	_hover_gone = false
 	if _dirty:
 		_dirty = false
 		_draw()
