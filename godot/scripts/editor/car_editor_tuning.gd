@@ -331,6 +331,8 @@ func _row(parent: Control, d: Array) -> void:
 		item.tooltip_text = Tuning.NOT_YET
 		label.tooltip_text = Tuning.NOT_YET
 	var entry := {"key": key, "item": item, "label": label, "text": str(d[1])}
+	if key in CarEditorTyreNodes.KEYS:
+		item.set_meta("tyre_key", true)
 	if Tuning.SELECTS.has(key) or float(d[4]) <= float(d[3]):
 		var items: Array = Tuning.SELECTS.get(key, [])
 		if key == "tyre_damage":
@@ -476,6 +478,8 @@ func _row_select(parent: Control, d: Array, items: Array) -> void:
 
 func _change(key: String, value: Variant) -> void:
 	Tuning.set_value(ed.cfg, key, value, _cam())
+	if key in CarEditorTyreNodes.KEYS:
+		ed.bench.tyre_nodes.show(true)          # (the nodes of the tyres while a tyre setting is changed)
 	if key in TYRE_KEYS:
 		ed.io.rebuild_library()
 		ed.form.sync_tyre_field()

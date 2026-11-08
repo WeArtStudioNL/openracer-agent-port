@@ -10,7 +10,7 @@ const NOT_YET := "Not in the Godot version yet"
 ## The options that are in the menu for parity with the browser game, but that the Godot game does not use yet.
 const NOT_IN_GODOT := ["key_steer_curve", "key_assist", "pad_slow", "pad_assist", "bike_steering",
 	"bike_camera", "wheelie_control", "bike_fast_lean", "bike_push", "gfx_debris_rate", "gfx_debris_scale", "gfx_debris_max",
-	"sim_tyre_detail", "sim_ai_damage", "sim_ai_range", "sim_ai_steps"]
+	"sim_ai_damage", "sim_ai_range", "sim_ai_steps"]
 
 
 ## The curve of the easing of a key (Settings.js curveRow): the pedal from 0 to 1 over the time the key is held.
