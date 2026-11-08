@@ -301,6 +301,22 @@ func _cinema_and_marks() -> void:
 	_check(saved != "" and r.save() == saved, "Save replay (a second save is the same file)")
 	var head := ReplayFiles.read_head(saved)
 	_check(not head.is_empty() and absf(head["seconds"] - r.duration()) < 0.05, "its head: %s, %.1f s" % [head.get("track", "?"), head.get("seconds", 0.0)])
+	# the effects (ReplayFx): the weather every second, the skid marks as strips; a jump makes them as they were
+	var atmos: Array = r.fx.rows.get("atmos", [])
+	_check(atmos.size() >= 10, "the weather and the ground in the replay: %d rows" % atmos.size())
+	var skid: Array = r.fx.rows.get("skid/0", [])
+	print("skid marks: %d strips, smoke: %d rows, marbles: %d, debris: %d" % [skid.size(), r.fx.rows.get("smoke/0", []).size(),
+		r.fx.rows.get("marbles", []).size(), r.fx.rows.get("debris/0", []).size()])
+	var mid := r.start_time() + r.duration() * 0.5
+	r.seek(mid)
+	r.fx.call("_build", "skid/0", mid)
+	var shown := 0
+	for st: Array in world.effects.get("_strips"):
+		shown += st.size()
+	var want_strips := ReplayFx._first_after(skid, mid)
+	_check(shown == mini(want_strips, TyreEffects.CHUNK * TyreEffects.CHUNKS), "the marks at %.1f s: %d strips (%d made by then)" % [mid, shown, want_strips])
+	var file_fx: Dictionary = ReplayFiles.read(saved).get("fx", {})
+	_check(file_fx.has("atmos"), "the effects are in the file (%s)" % ", ".join(file_fx.keys()))
 
 
 func _probe(path: String, seconds: float) -> void:

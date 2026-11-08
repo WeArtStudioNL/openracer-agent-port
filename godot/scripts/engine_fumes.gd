@@ -64,6 +64,7 @@ func setup(c: Car) -> void:
 	_stain_kind.resize(STAINS)
 	_drops = _multimesh(DROPS, true)
 	_stains = _multimesh(STAINS, false)
+	ReplayFx.attach("leaks", c, self)
 
 
 func _multimesh(n: int, drops: bool) -> MultiMeshInstance3D:
@@ -128,7 +129,7 @@ func clear() -> void:
 
 
 func _process(delta: float) -> void:
-	if car == null or not is_instance_valid(car):
+	if car == null or not is_instance_valid(car) or ReplayFx.active:
 		return
 	delta = minf(delta, 0.1)
 	_clock += delta
@@ -210,6 +211,7 @@ func _ray(from: Vector3, to: Vector3) -> Dictionary:
 
 
 func _drop(at: Vector3, vel: Vector3, kind: int) -> void:
+	ReplayFx.add("leaks", car, [0.0, 1.0, at.x, at.y, at.z, vel.x, vel.y, vel.z, kind])
 	var i := _next_drop
 	_next_drop = (_next_drop + 1) % DROPS
 	_pos[i] = at
@@ -221,7 +223,7 @@ func _drop(at: Vector3, vel: Vector3, kind: int) -> void:
 	_floor[i] = float(hit["position"].y) if not hit.is_empty() else at.y - 3.0
 
 
-func _step_drops(delta: float) -> void:
+func _step_drops(delta: float, land := true) -> void:
 	var mm := _drops.multimesh
 	var shown := 0
 	var drag := exp(-0.7 * delta)
@@ -235,7 +237,7 @@ func _step_drops(delta: float) -> void:
 		_pos[i] += vv * delta
 		if _age[i] > 4.0 or _pos[i].y <= _floor[i] + 0.015:
 			_alive[i] = 0
-			if _age[i] <= 4.0:
+			if _age[i] <= 4.0 and land:
 				_land(_pos[i], _kind[i])
 			continue
 		var s := 0.05 if _kind[i] == OIL else 0.04
@@ -261,13 +263,16 @@ func _land(at: Vector3, kind: int) -> void:
 		_stain(hit["position"], hit["normal"], 0.06 + randf() * 0.14, COOLANT, 0.15 if loose else 0.32)
 
 
-func _stain(at: Vector3, normal: Vector3, radius: float, kind: int, alpha: float) -> void:
+func _stain(at: Vector3, normal: Vector3, radius: float, kind: int, alpha: float, turn := -1.0) -> void:
+	if turn < 0.0:
+		turn = randf() * TAU
+	ReplayFx.add("leaks", car, [0.0, 2.0, at.x, at.y, at.z, normal.x, normal.y, normal.z, radius, kind, alpha, turn])
 	var i := _next_stain
 	_next_stain = (_next_stain + 1) % STAINS
 	_used_stains = mini(STAINS, _used_stains + 1)
 	var y := normal.normalized()
 	var x := y.cross(Vector3.FORWARD if absf(y.z) < 0.9 else Vector3.RIGHT).normalized()
-	var basis := Basis(x, y, x.cross(y)).rotated(y, randf() * TAU).scaled(Vector3.ONE * radius * 2.0)
+	var basis := Basis(x, y, x.cross(y)).rotated(y, turn).scaled(Vector3.ONE * radius * 2.0)
 	var mm := _stains.multimesh
 	mm.set_instance_transform(i, Transform3D(basis, at + y * (0.014 + (i % 7) * 0.0006)))
 	mm.set_instance_color(i, _stain_colour(kind, alpha))
@@ -291,3 +296,83 @@ func _dry() -> void:
 		if left <= 0.0:
 			_peak[i] = 0.0
 		mm.set_instance_color(i, _stain_colour(COOLANT, _peak[i] * maxf(0.0, left)))
+
+
+# ---- the replay (ReplayFx: "leaks", a row is a drop (1) or a stain (2) as it was made)
+
+func replay_lookback(_which: String) -> float:
+	return 4.0
+
+
+func replay_add(_which: String, r: Array) -> void:
+	if int(r[1]) == 1:
+		_drop(Vector3(r[2], r[3], r[4]), Vector3(r[5], r[6], r[7]), int(r[8]))
+	else:
+		_stain(Vector3(r[2], r[3], r[4]), Vector3(r[5], r[6], r[7]), r[8], int(r[9]), r[10], r[11])
+		_born[(_next_stain - 1 + STAINS) % STAINS] = r[0]
+
+
+func replay_step(_which: String, dt: float) -> void:
+	_clock += dt
+	_step_drops(minf(dt, 0.1), false)
+	_dry()
+
+
+func replay_clear(_which: String) -> void:
+	clear()
+	_next_stain = 0
+	_used_stains = 0
+	_stains.multimesh.visible_instance_count = 0
+
+
+## The stains made by time t (the coolant dried as far as it had), and the drops of the last seconds falling.
+func replay_rebuild(kind: String, rows: Array, end: int, t: float) -> void:
+	replay_clear(kind)
+	_clock = t
+	var start := t - replay_lookback(kind)
+	var c := end
+	for j in end:
+		var r: Array = rows[j]
+		if int(r[1]) == 2:
+			replay_add(kind, r)
+		elif c == end and float(r[0]) > start:
+			c = j
+	_clock = start
+	var a := start
+	while a < t - 1e-9:
+		var b := t if a + 0.05 >= t - 1e-6 else a + 0.05
+		while c < end and float(rows[c][0]) <= b:
+			if int(rows[c][1]) == 1:
+				replay_add(kind, rows[c])
+			c += 1
+		_clock += b - a
+		_step_drops(b - a, false)
+		a = b
+	_clock = t
+	_dry()
+
+
+func replay_snapshot(_which: String) -> Variant:
+	return {"pos": _pos.duplicate(), "vel": _vel.duplicate(), "age": _age.duplicate(), "floor": _floor.duplicate(),
+		"kind": _kind.duplicate(), "alive": _alive.duplicate(), "next_drop": _next_drop, "next_stain": _next_stain,
+		"used": _used_stains, "born": _born.duplicate(), "peak": _peak.duplicate(), "stain_kind": _stain_kind.duplicate(),
+		"clock": _clock, "stains": _stains.multimesh.buffer.duplicate()}
+
+
+func replay_restore(_which: String, s: Variant) -> void:
+	_pos = s["pos"]
+	_vel = s["vel"]
+	_age = s["age"]
+	_floor = s["floor"]
+	_kind = s["kind"]
+	_alive = s["alive"]
+	_next_drop = s["next_drop"]
+	_next_stain = s["next_stain"]
+	_used_stains = s["used"]
+	_born = s["born"]
+	_peak = s["peak"]
+	_stain_kind = s["stain_kind"]
+	_clock = s["clock"]
+	if (s["stains"] as PackedFloat32Array).size() == _stains.multimesh.buffer.size() and _stains.multimesh.buffer.size() > 0:
+		_stains.multimesh.buffer = s["stains"]
+	_stains.multimesh.visible_instance_count = _used_stains

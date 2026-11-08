@@ -30,6 +30,8 @@ var _last: Array = [null, null, null, null]       # per wheel: {p, side, a}
 var _smoke: Array[GPUParticles3D] = []
 var _dust: Array[GPUParticles3D] = []
 var _mark_material: StandardMaterial3D
+var _smoke_in := [0.0, 0.0, 0.0, 0.0]          # (the replay: a row of the smoke of a wheel 15 times a second)
+var _hold := [0.0, 0.0, 0.0, 0.0]              # (in the replay: how long the smoke of a row goes on)
 
 
 func setup(c: Car) -> void:
@@ -62,6 +64,8 @@ func setup(c: Car) -> void:
 	var spray := GroundSpray.new()
 	spray.setup(c)
 	add_child(spray)
+	ReplayFx.attach("skid", c, self)
+	ReplayFx.attach("smoke", c, self)
 
 
 ## Across the strip: soft edges, a little uneven along it.
@@ -230,7 +234,7 @@ func clear() -> void:
 
 
 func _process(delta: float) -> void:
-	if car == null:
+	if car == null or ReplayFx.active:
 		return
 	for i in 4:
 		var w := car.wheels[i]
@@ -243,6 +247,10 @@ func _process(delta: float) -> void:
 			e.global_position = at
 			e.amount_ratio = mine
 			e.emitting = mine > 0.02
+		_smoke_in[i] -= delta
+		if amount > 0.02 and _smoke_in[i] <= 0.0:
+			_smoke_in[i] = 1.0 / 15.0
+			ReplayFx.add("smoke", car, [0.0, i, at.x, at.y, at.z, amount, 1.0 if loose else 0.0])
 	_rebuild_in -= delta
 	if _dirty and _rebuild_in <= 0.0:
 		_build(_chunk)
@@ -279,8 +287,25 @@ func _mark(i: int, w: Car.Wheel, dust: bool) -> void:
 		strips = []
 		_strips[_chunk] = strips
 	var q: Vector3 = prev["p"]
-	strips.append([q - prev_side, q + prev_side, p - side, p + side, float(prev["a"]), a, dust])
+	var strip := [q - prev_side, q + prev_side, p - side, p + side, float(prev["a"]), a, dust]
+	strips.append(strip)
 	_last[i] = {"p": p, "side": side, "a": a}
+	_dirty = true
+	var row := [0.0]
+	for k in 4:
+		var v: Vector3 = strip[k]
+		row.append_array([v.x, v.y, v.z])
+	row.append_array([strip[4], a, 1.0 if dust else 0.0])
+	ReplayFx.add("skid", car, row)
+
+
+## A strip of a mark in the chunk that is filled (a new chunk when it is full).
+func _push(strip: Array) -> void:
+	if (_strips[_chunk] as Array).size() >= CHUNK:
+		_build(_chunk)
+		_chunk = (_chunk + 1) % CHUNKS
+		_strips[_chunk] = []
+	(_strips[_chunk] as Array).append(strip)
 	_dirty = true
 
 
@@ -318,3 +343,89 @@ func _build(n: int) -> void:
 	arrays[Mesh.ARRAY_COLOR] = colors
 	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+
+
+# ---- the replay (ReplayFx): "skid" (a row is a strip of a mark), "smoke" (a row: the smoke or dust of a wheel, where)
+
+func replay_lookback(_kind: String) -> float:
+	return 0.0
+
+
+static func _strip_of(r: Array) -> Array:
+	return [Vector3(r[1], r[2], r[3]), Vector3(r[4], r[5], r[6]), Vector3(r[7], r[8], r[9]), Vector3(r[10], r[11], r[12]),
+		r[13], r[14], float(r[15]) > 0.5]
+
+
+func replay_add(kind: String, r: Array) -> void:
+	if kind == "skid":
+		_push(_strip_of(r))
+		return
+	var i := int(r[1])
+	var dust := float(r[6]) > 0.5
+	for e: GPUParticles3D in [_smoke[i], _dust[i]]:
+		var mine: float = r[5] if (e == _dust[i]) == dust else 0.0
+		e.global_position = Vector3(r[2], r[3], r[4])
+		e.amount_ratio = mine
+		e.emitting = mine > 0.02
+	_hold[i] = 0.12
+
+
+func replay_step(kind: String, dt: float) -> void:
+	if kind == "skid":
+		if _dirty:
+			_build(_chunk)
+		return
+	for i in 4:
+		if _hold[i] > 0.0:
+			_hold[i] -= dt
+			if _hold[i] <= 0.0:
+				_smoke[i].emitting = false
+				_dust[i].emitting = false
+
+
+func replay_clear(kind: String) -> void:
+	if kind == "skid":
+		clear()
+		return
+	for e: GPUParticles3D in _smoke + _dust:
+		e.emitting = false
+		e.restart()
+		e.emitting = false
+	_hold = [0.0, 0.0, 0.0, 0.0]
+
+
+## The marks at time t: every strip that was made by then (the newest that fit).
+func replay_rebuild(kind: String, rows: Array, end: int, _t: float) -> void:
+	if kind != "skid":
+		return
+	clear()
+	for j in range(maxi(0, end - CHUNK * CHUNKS), end):
+		_push(_strip_of(rows[j]))
+	for n in CHUNKS:
+		_build(n)
+
+
+func replay_snapshot(kind: String) -> Variant:
+	if kind == "skid":
+		var copy: Array = []
+		for st: Array in _strips:
+			copy.append(st.duplicate())
+		return {"strips": copy, "chunk": _chunk}
+	# (the smoke goes on in the replay, while the game is paused)
+	for e: GPUParticles3D in _smoke + _dust:
+		e.process_mode = Node.PROCESS_MODE_ALWAYS
+	replay_clear(kind)
+	return null
+
+
+func replay_restore(kind: String, snap: Variant) -> void:
+	if kind == "skid":
+		_strips = snap["strips"]
+		_chunk = snap["chunk"]
+		_last = [null, null, null, null]
+		for n in CHUNKS:
+			_build(n)
+		return
+	replay_clear(kind)
+	for e: GPUParticles3D in _smoke + _dust:
+		e.process_mode = Node.PROCESS_MODE_INHERIT

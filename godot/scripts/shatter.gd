@@ -22,6 +22,7 @@ const SHAPES := {"shards": 0, "splinters": 1, "grains": 2}
 
 var specks: Specks
 var _pieces: Array = []             # {mesh, p, q, s, v, w, age, life, lying, settle, from, to, flat, half, radius, landed}
+var _looks: Array = []              # (the replay: the looks of the pieces that were made, a row names one)
 
 
 ## The one of the scene of node (made when it is first asked for).
@@ -37,6 +38,8 @@ static func of(node: Node) -> Shatter:
 		s.add_to_group("clear_at_start")
 		var top := tree.current_scene if tree.current_scene != null else tree.root
 		top.add_child(s)
+		ReplayFx.attach("pieces", null, s)
+		ReplayFx.attach("shards", null, s)
 	return s
 
 
@@ -218,6 +221,11 @@ static func _piece(tris: Array, mat: Material) -> Dictionary:
 
 ## A piece out in the world: where its middle is, its speed and spin (world, rad/s).
 func piece(look: Dictionary, velocity: Vector3, spin: Vector3) -> void:
+	if not ReplayFx.active:
+		if _looks.size() >= 4000:
+			_looks.clear()
+		_looks.append(look)
+		ReplayFx.add("pieces", null, [0.0, _looks.size() - 1, velocity.x, velocity.y, velocity.z, spin.x, spin.y, spin.z])
 	if _pieces.size() >= MAX_PIECES:
 		_remove(0)
 	var mi := MeshInstance3D.new()
@@ -243,6 +251,7 @@ func _place(p: Dictionary) -> void:
 ## count particles from a place (within spread metres of it), with the speed of the car and some of their own; shape
 ## 0 shards, 1 splinters, 2 grains; colour linear; size in metres.
 func burst(at: Vector3, v: Vector3, count: int, shape: int, colour: Color, size: float, spread: float) -> void:
+	ReplayFx.add("shards", null, [0.0, at.x, at.y, at.z, v.x, v.y, v.z, count, shape, colour.r, colour.g, colour.b, size, spread])
 	var floor_y := _floor_at(at)
 	for n in mini(600, count):
 		var o := Vector3((randf() - 0.5) * 2.0 * spread, (randf() - 0.5) * spread, (randf() - 0.5) * 2.0 * spread)
@@ -263,10 +272,14 @@ func _floor_at(p: Vector3) -> float:
 
 func _process(delta: float) -> void:
 	delta = clampf(delta, 0.0, 0.05)
-	if delta <= 0.0:
+	if delta <= 0.0 or ReplayFx.active:
 		return
+	specks.step(delta, get_world_3d().direct_space_state)
+	_step_pieces(delta)
+
+
+func _step_pieces(delta: float) -> void:
 	var space := get_world_3d().direct_space_state
-	specks.step(delta, space)
 	var drag := exp(-0.25 * delta)
 	for i in range(_pieces.size() - 1, -1, -1):
 		var p: Dictionary = _pieces[i]
@@ -327,6 +340,62 @@ func clear() -> void:
 	while not _pieces.is_empty():
 		_remove(_pieces.size() - 1)
 	specks.clear()
+
+
+# ---- the replay (ReplayFx): "pieces" (a row: the look and the speed and spin), "shards" (a row: a burst)
+
+func replay_lookback(_kind: String) -> float:
+	return 12.0
+
+
+func replay_add(kind: String, r: Array) -> void:
+	if kind == "pieces":
+		var i := int(r[1])
+		if i >= 0 and i < _looks.size():
+			piece(_looks[i], Vector3(r[2], r[3], r[4]), Vector3(r[5], r[6], r[7]))
+	else:
+		burst(Vector3(r[1], r[2], r[3]), Vector3(r[4], r[5], r[6]), int(r[7]), int(r[8]), Color(r[9], r[10], r[11]), r[12], r[13])
+
+
+func replay_step(kind: String, dt: float) -> void:
+	if kind == "pieces":
+		_step_pieces(minf(dt, 0.05))
+	else:
+		specks.step(dt, get_world_3d().direct_space_state)
+
+
+func replay_clear(kind: String) -> void:
+	if kind == "pieces":
+		while not _pieces.is_empty():
+			_remove(_pieces.size() - 1)
+	else:
+		specks.clear()
+
+
+func replay_snapshot(kind: String) -> Variant:
+	if kind == "shards":
+		return specks.snapshot()
+	var out: Array = []
+	for p: Dictionary in _pieces:
+		var c := p.duplicate()
+		c["mesh"] = (p["mesh"] as MeshInstance3D).mesh
+		out.append(c)
+	return out
+
+
+func replay_restore(kind: String, snap: Variant) -> void:
+	replay_clear(kind)
+	if kind == "shards":
+		specks.restore(snap)
+		return
+	for c: Dictionary in snap:
+		var p := c.duplicate()
+		var mi := MeshInstance3D.new()
+		mi.mesh = c["mesh"]
+		add_child(mi)
+		p["mesh"] = mi
+		_pieces.append(p)
+		_place(p)
 
 
 func count() -> Dictionary:

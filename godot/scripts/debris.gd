@@ -41,12 +41,13 @@ static func make(c: Car) -> Debris:
 	d.specks = Specks.new(clampi(int(Settings.get_value("gfx_debris_max")), 100, 20000))
 	d.specks.drag = 0.7
 	d.add_child(d.specks)
+	ReplayFx.attach("debris", c, d)
 	return d
 
 
 func _process(delta: float) -> void:
 	delta = minf(delta, 0.05)
-	if car == null or not is_instance_valid(car) or delta <= 0.0 or get_tree().paused:
+	if car == null or not is_instance_valid(car) or delta <= 0.0 or get_tree().paused or ReplayFx.active:
 		return
 	amount = maxf(0.0, float(Settings.get_value("gfx_debris_rate")))
 	var size_scale := maxf(0.0, float(Settings.get_value("gfx_debris_scale")))
@@ -91,9 +92,13 @@ func _process(delta: float) -> void:
 			var shades: Array = SHADES[kind]
 			var sc: Array = shades[randi() % shades.size()]
 			var at := from.lerp(c, f) + Vector3((randf() - 0.5) * 0.12, 0.03, (randf() - 0.5) * 0.12)
-			specks.add(at, r * v + car.linear_velocity * 0.5 + Vector3.UP * (1.4 + randf() * (1.5 + strength * 3.2)),
-				Color(sc[0], sc[1], sc[2]).srgb_to_linear(),
-				float(look[1]) + randf() * (float(look[2]) - float(look[1])), int(look[0]), (randf() - 0.5) * 1.2, 0.7 + randf() * 0.9, at.y - 0.02)
+			var vel := r * v + car.linear_velocity * 0.5 + Vector3.UP * (1.4 + randf() * (1.5 + strength * 3.2))
+			var col := Color(sc[0], sc[1], sc[2]).srgb_to_linear()
+			var size := float(look[1]) + randf() * (float(look[2]) - float(look[1]))
+			var tilt := (randf() - 0.5) * 1.2
+			var life := 0.7 + randf() * 0.9
+			specks.add(at, vel, col, size, int(look[0]), tilt, life, at.y - 0.02)
+			ReplayFx.add("debris", car, [0.0, at.x, at.y, at.z, vel.x, vel.y, vel.z, col.r, col.g, col.b, size, look[0], tilt, life, at.y - 0.02])
 		_last[wi] = c
 	specks.step(delta)
 
@@ -101,4 +106,31 @@ func _process(delta: float) -> void:
 ## All gone (the car is put back at the start).
 func clear() -> void:
 	specks.clear()
+	_last = [null, null, null, null]
+
+
+# ---- the replay (ReplayFx: the rows are the pieces as they were thrown)
+
+func replay_lookback(_kind: String) -> float:
+	return 8.0
+
+
+func replay_add(_kind: String, r: Array) -> void:
+	specks.add(Vector3(r[1], r[2], r[3]), Vector3(r[4], r[5], r[6]), Color(r[7], r[8], r[9]), r[10], int(r[11]), r[12], r[13], r[14])
+
+
+func replay_step(_kind: String, dt: float) -> void:
+	specks.step(dt)
+
+
+func replay_clear(_kind: String) -> void:
+	specks.clear()
+
+
+func replay_snapshot(_kind: String) -> Variant:
+	return specks.snapshot()
+
+
+func replay_restore(_kind: String, snap: Variant) -> void:
+	specks.restore(snap)
 	_last = [null, null, null, null]
