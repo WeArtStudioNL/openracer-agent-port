@@ -138,10 +138,6 @@ func _build_menu() -> void:
 	track_editor.text = "Track editor"
 	track_editor.pressed.connect(_open_track_editor)
 	box.add_child(track_editor)
-	var garage := Button.new()
-	garage.text = "Import a car or track (zip)…"
-	garage.pressed.connect(_import_zip)
-	box.add_child(garage)
 	var car_editor := Button.new()
 	car_editor.text = "Car editor"
 	car_editor.pressed.connect(_open_car_editor)
@@ -297,23 +293,6 @@ func _open_garage() -> void:
 			_focus_home())
 	d.edit_car.connect(_open_car_editor)
 	d.new_car.connect(_open_car_editor.bind(""))
-
-
-## A car or a track from a zip into the garage (Garage): the menu is made again with it in its list.
-func _import_zip() -> void:
-	var dlg := FileDialog.new()
-	dlg.file_mode = FileDialog.FILE_MODE_OPEN_FILE
-	dlg.access = FileDialog.ACCESS_FILESYSTEM
-	dlg.use_native_dialog = true
-	dlg.filters = PackedStringArray(["*.zip ; Car or track"])
-	dlg.title = "A car or a track (zip)"
-	add_child(dlg)
-	dlg.file_selected.connect(func(p: String):
-		var r := Garage.import_zip(p)
-		dlg.queue_free()
-		_rebuild_menu(str(r.get("error", "")) if r.has("error") else "%s imported: %s" % ["Car" if r["kind"] == "cars" else "Track", r["id"]]))
-	dlg.canceled.connect(dlg.queue_free)
-	dlg.popup_centered_ratio(0.6)
 
 
 ## The car editor (scripts/editor/car_editor.gd): over the menu; Save and test drives the car, back in the editor after.
