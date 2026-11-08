@@ -13,6 +13,9 @@ var _phase := "drive"
 var _broke_at := -1.0
 var _leak_at := -1.0
 var _game_strips := 0
+var _bang_at := -1.0
+var _limp_at := -1.0
+var _pit_at := -1.0
 
 
 func _check(ok: bool, what: String) -> void:
@@ -44,6 +47,20 @@ func _physics_process(dt: float) -> void:
 	if world == null or world.car == null:
 		return
 	_time += dt
+	# (the bangs of the exhaust, a rider that goes limp, a pit stop where it stands: ReplayExtras)
+	if _phase == "drive" and _bang_at < 0.0 and _time > 6.0:
+		_bang_at = world.replay.end_time()
+		for k in 3:
+			world.car.bang.emit({"strength": 1.2, "loud": true, "flame": 1.5})
+	if _phase == "drive" and _limp_at < 0.0 and _time > 8.0 and world.car.bike_model != null:
+		_limp_at = world.replay.end_time()
+		world.car.bike_model.go_limp()
+	if _phase == "drive" and _pit_at < 0.0 and _time > 10.0:
+		var pit := world.car.get_node_or_null("PitStop") as PitStop
+		if pit != null:
+			world.car.wheels[0].wear = 0.6
+			pit.force_start()
+			_pit_at = world.replay.end_time()
 	if _phase == "drive" and _time > 14.0:
 		_phase = "break"
 		if world.car.parts != null:
@@ -65,6 +82,64 @@ func _physics_process(dt: float) -> void:
 		_game_strips = _strips()
 		world._start_replay()
 		_test.call_deferred()
+
+
+## The bangs, the rider as a ragdoll, the pit stop, the scraped snow (--set=gfx_ground:snow) and the pieces in a file.
+func _test_extras(r: Replay, fx: ReplayFx, shatter: Shatter) -> void:
+	var flames: ExhaustFlames = null
+	for n in world.get_children():
+		if n is ExhaustFlames and (n as ExhaustFlames).car == world.car:
+			flames = n
+	var lit := func() -> int:
+		var k := 0
+		for m: MeshInstance3D in flames.get("_sprites"):
+			k += 1 if m.visible else 0
+		return k
+	_check((fx.rows.get("bangs/0", []) as Array).size() >= 3, "the bangs are recorded: %d rows" % (fx.rows.get("bangs/0", []) as Array).size())
+	if flames != null and _bang_at > 0.0:
+		fx.call("_build", "bangs/0", _bang_at - 1.0)
+		var before: int = lit.call()
+		fx.call("_build", "bangs/0", _bang_at + 0.05)
+		var after: int = lit.call()
+		_check(before == 0 and after > 0, "the flames of the bangs: %d before, %d just after" % [before, after])
+	if _limp_at > 0.0:
+		var rider: MotorcycleRider = world.car.bike_model.rider
+		_check((fx.rows.get("rider/0", []) as Array).size() > 10, "the ragdoll is recorded: %d rows" % (fx.rows.get("rider/0", []) as Array).size())
+		fx.call("_build", "rider/0", _limp_at - 1.0)
+		var on_bike := rider.ragdoll == null
+		fx.call("_build", "rider/0", _limp_at + 1.5)
+		_check(on_bike and rider.ragdoll != null, "the rider: on the bike before, a ragdoll %.1f s after" % 1.5)
+	if _pit_at > 0.0:
+		var pit := world.car.get_node_or_null("PitStop") as PitStop
+		var rows: Array = fx.rows.get("pit/0", [])
+		_check(rows.size() >= 1, "the pit stop is recorded: %d rows" % rows.size())
+		fx.call("_build", "pit/0", _pit_at - 1.0)
+		var idle := not pit.active
+		fx.call("_build", "pit/0", _pit_at + 0.6)
+		_check(idle and pit.active and pit.elapsed > 0.4, "the pit stop: idle before, going %.1f s after (elapsed %.2f)" % [0.6, pit.elapsed])
+	var ground: Array = fx.rows.get("ground", [])
+	if Ground.snow > 0.03:
+		_check(ground.size() > 10, "the scraped snow is recorded: %d rows" % ground.size())
+		var at: Array = ground[ground.size() / 2]
+		fx.call("_build", "ground", r.start_time())
+		var fresh := Ground.clear_at(at[2], at[3])
+		fx.call("_build", "ground", r.end_time())
+		var bare := Ground.clear_at(at[2], at[3])
+		_check(fresh < 0.05 and bare > 0.2, "the snow where a wheel went: %.2f bare at the start, %.2f at the end" % [fresh, bare])
+	# the pieces in a file: their meshes go with the rows
+	if shatter != null and fx.rows.has("pieces"):
+		var data := fx.pack(r.start_time(), r.end_time() + 1.0)
+		_check(data.has("pieces") and data.has("pieces:data"), "a file has the pieces and their looks")
+		var bytes := var_to_bytes(data)
+		var again := ReplayFx.new(r)
+		again.unpack(bytes_to_var(bytes))
+		var keep: Array = shatter.get("_looks").duplicate()
+		shatter.set("_looks", [])
+		again._attach("pieces", null, shatter)
+		var looks: int = (shatter.get("_looks") as Array).size()
+		_check(looks > 0 and looks <= keep.size(), "the looks of the pieces back from the file: %d (of %d made)" % [looks, keep.size()])
+		shatter.set("_looks", keep)
+		fx._attach("pieces", null, shatter)
 
 
 func _test() -> void:
@@ -109,6 +184,7 @@ func _test() -> void:
 		fx.call("_build", "leaks/0", _leak_at + 0.5)
 		var stains_after: int = fumes.get("_used_stains")
 		_check(stains_before == 0 and stains_after >= 1, "the stain of the leak: %d before, %d after" % [stains_before, stains_after])
+	_test_extras(r, fx, shatter)
 	if Content.arg("shot") != "":
 		r.seek(r.end_time() - 0.5)
 		await get_tree().create_timer(1.0, true, false, true).timeout

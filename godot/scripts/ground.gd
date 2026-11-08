@@ -35,6 +35,8 @@ static var window_dirty := false
 static var _window_set := false
 static var _tiles := {}                               # Vector2i -> Array of TILE * TILE floats (an Array: written in place)
 static var _cache := {}
+static var _rec := {}                                 # (the replay: what a wheel or a car did to the snow since its last row)
+static var _replayer: Ground = null                   # (the object of the replay, ReplayFx "ground")
 static var _last_grip := -1.0
 ## A number that goes up when the grip of the road changed (the AI makes its speeds again).
 static var grip_version := 0
@@ -176,10 +178,15 @@ static func _cars(dt: float, cars: Array) -> void:
 				fwd = fwd.normalized()
 				var length := float(car.config.get("dimensions", {}).get("length", 4.0))
 				var width := maxf(0.8, car.front_track * 0.85)
-				var steps := maxi(2, roundi(length / 0.7))
-				for k in steps:
-					var along := (float(k) / (steps - 1) - 0.5) * length * 0.9
-					paint_clear(car.global_position.x + fwd.x * along, car.global_position.z + fwd.z * along, width * 0.5, 0.55 * dt)
+				_heat(car.global_position.x, car.global_position.z, fwd.x, fwd.z, length, width, 0.55 * dt)
+				# (the replay: the heat of a tenth of a second, where the car is then)
+				var rec: Array = _rec.get(car.get_instance_id(), [0.0, 0.0])
+				rec[0] += 0.55 * dt
+				rec[1] += dt
+				if rec[1] > 0.1:
+					ReplayFx.add("ground", null, [0.0, 1.0, car.global_position.x, car.global_position.z, fwd.x, fwd.z, length, width, rec[0]])
+					rec = [0.0, 0.0]
+				_rec[car.get_instance_id()] = rec
 		for w: Car.Wheel in car.wheels:
 			if not w.contact:
 				w.local_snow = snow
@@ -192,10 +199,20 @@ static func _cars(dt: float, cars: Array) -> void:
 				if w.ring_time > 0.07:
 					w.ring_time = 0.0
 					add_ring(w.point.x, w.point.z, minf(1.0, speed / 24.0) * water)
+					ReplayFx.add("ground", null, [0.0, 2.0, w.point.x, w.point.z, minf(1.0, speed / 24.0) * water])
 			if snow > 0.03:
 				var slip := Vector2(w.forward_speed - w.omega * w.radius, w.side_speed).length()
 				var scrape := clampf((slip - 1.0) / 5.0, 0.0, 1.0)
 				paint_clear(w.point.x, w.point.z, 0.16, (3.0 + 7.0 * scrape) * dt)
+				# (the replay: what a wheel takes away, added up over a tenth of a second, at the place where it is then)
+				var key := "%d/%d" % [car.get_instance_id(), car.wheels.find(w)]
+				var rec: Array = _rec.get(key, [0.0, 0.0])
+				rec[0] += (3.0 + 7.0 * scrape) * dt
+				rec[1] += dt
+				if rec[1] > 0.1:
+					ReplayFx.add("ground", null, [0.0, 0.0, w.point.x, w.point.z, 0.16, rec[0]])
+					rec = [0.0, 0.0]
+				_rec[key] = rec
 			var on_road := w.surface == "road" or w.surface == "track01" or w.surface == "wet"
 			w.local_snow = snow * (1.0 - clear_at(w.point.x, w.point.z)) * ((1.0 - road_melt) if on_road else 1.0)
 
@@ -349,3 +366,86 @@ static func _move_window(x: float, z: float) -> void:
 ## The middle of the window in the world (m), for the shader.
 static func window_middle() -> Vector2:
 	return Vector2((window_centre.x + 0.5) * CLEAR_CELL, (window_centre.y + 0.5) * CLEAR_CELL)
+
+
+## The heat of a car under it: discs along its length (x, z its middle, f the way it points).
+static func _heat(x: float, z: float, fx: float, fz: float, length: float, width: float, amount: float) -> void:
+	var steps := maxi(2, roundi(length / 0.7))
+	for k in steps:
+		var along := (float(k) / (steps - 1) - 0.5) * length * 0.9
+		paint_clear(x + fx * along, z + fz * along, width * 0.5, amount)
+
+
+# ---- the replay (ReplayFx "ground", Atmosphere.js groundRecord): what the cars did to the ground, as rows: [t, 0, x, z,
+# radius, amount] the snow a wheel took away in a tenth of a second, [t, 1, x, z, fx, fz, length, width, amount] the
+# heat of a car, [t, 2, x, z, strength] a ring of a wheel in a puddle. The replay makes the snow again by the same
+# scraping on the same places (a jump: everything until then), the rings of the last seconds.
+
+## The object that the replay attaches (Atmosphere).
+static func replayer() -> Ground:
+	if _replayer == null:
+		_replayer = Ground.new()
+	return _replayer
+
+
+static func _apply(r: Array, age := 0.0) -> void:
+	match int(r[1]):
+		0:
+			paint_clear(r[2], r[3], r[4], r[5])
+		1:
+			if r.size() >= 9:
+				_heat(r[2], r[3], r[4], r[5], r[6], r[7], r[8])
+		2:
+			if age < 1.6:
+				add_ring(r[2], r[3], r[4])
+				rings[-1].z = age
+
+
+## The window of the shader round the car that the replay follows.
+static func _follow_replay() -> void:
+	var rec := ReplayFx.recording
+	if rec == null or not is_instance_valid(rec.replay):
+		return
+	var body: Node3D = rec.replay.call("car_body", int(rec.replay.get("target")))
+	if body != null:
+		_move_window(body.global_position.x, body.global_position.z)
+
+
+func replay_lookback(_kind: String) -> float:
+	return 0.0
+
+
+func replay_add(_kind: String, r: Array) -> void:
+	_apply(r)
+
+
+func replay_step(_kind: String, dt: float) -> void:
+	_rings_and_cars(minf(dt, 0.25), [])
+	_follow_replay()
+
+
+func replay_clear(_kind: String) -> void:
+	pass
+
+
+func replay_rebuild(_kind: String, rows: Array, end: int, t: float) -> void:
+	_tiles.clear()
+	rings.clear()
+	for i in end:
+		_apply(rows[i], t - float(rows[i][0]))
+	_window_set = false
+	_follow_replay()
+	window_dirty = true
+
+
+func replay_snapshot(_kind: String) -> Variant:
+	return {"tiles": _tiles.duplicate(true), "rings": rings.duplicate()}
+
+
+func replay_restore(_kind: String, snap: Variant) -> void:
+	if not (snap is Dictionary):
+		return
+	_tiles = snap["tiles"]
+	rings.assign(snap["rings"])
+	_window_set = false              # (the window is filled again round the car of the game at the next step)
+	window_dirty = true

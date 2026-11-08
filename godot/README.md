@@ -236,8 +236,26 @@ per track and car (`user://ai/`; with `--ai` in `user://test-ai/`), so it races 
 (`--ai-learned=0`: a test without what was learned, and nothing kept). The run log has every put-back with its
 reason and every touch between two cars. The AI cars have the colours
 of the browser game (the materials called carpaint, or body); the three nearest are heard (3D, a lighter engine
-simulation). When the player finishes, the results show and the AI drives the player's car
-on. Home (back to the start), Restart in the pause menu or "Race again" starts it again. A track without a racing line has no race (free driving).
+simulation). Before the countdown the camera flies over the grid from the front to the back (six seconds; Enter,
+Space or a click skips it; `--flyby=0` leaves it out, the tests with `--ai` have none unless `--flyby=1`). When the
+player finishes, the results show as the browser has them: "You won!" or "Finished P2", the laps and the track, and a
+row per car with its best lap and the time of the winner, the gap of the others (+0:01.234) or how many laps a car that
+still runs is behind (+1 lap); the rows change as the others come in. The AI drives the player's car on. Home (back
+to the start), Restart in the pause menu or "Race again" starts it again (Restart and Race again ask first whether to
+save a replay of a minute or more, as Main menu does). A track without a racing line has a race without AI cars (the
+countdown and the laps of the gates, a message says why); a track without gates has no race (free driving, a message).
+
+The racing line is put on the road once the road can be felt (main.js setupRace): its heights and surfaces from the
+ground (the AI is slower where the line is on sand or grass, and over a crest above the speed at which it would fly),
+turned the way of the start, and a line that was not driven is shortened within the road (RacingLine.shorten: every
+point moves sideways, up to 3.5 m from the edge of its surface, to the smoothest line; the AI cuts the bends;
+`--cut=0` leaves the line as it is, `--cut-margin=1.5` is the browser's margin). Solo laps of the AI on
+kartbaan-oldenzaal (`--ai --ai-learned=0`): the kart 54.5 s uncut, 58.0 s at 1.5 m, 53.9 s at 3.5 m; the muscle car
+35.8, 38.5 and 36.1 s (the Godot AI on a line 1.5 m from the edge runs over the kerbs). The grip that the skidpad measured on asphalt for a car and its setup
+(`grip.cfg`, Skidpad.measured_grip, OpenRacer.SkidpadGrip) is the grip with which the AI drives that car; without one
+the guess from tyres.grip (`--skidpad-grip=0` leaves it out). At a start the messages of the browser: no pit lane for
+the stops that the wear asks for, and no best lap yet for the ghost. A car or a track that is not there is a dialog
+in the main menu (main.js `?missing=`).
 
     Godot --path godot -- --car=openracer-muscle --track=short-track --race --opponents=5 --laps=3 [--pole] [--ai]
 
@@ -679,7 +697,7 @@ the project of the video editor and the edit as it plays). Version 1 files are s
 `.openracer-replay` files open as well (gzip, "ORRP", the JSON header, 36 floats per car per sample): the place is
 fitted to where the wheels were, the rpm, the pedals, the gear labels and the squeal are taken over, and their camera
 track, clip cameras and zoom play; the blocks after the numbers (the dents and parts of the soft body, the skid marks,
-the smoke and the other effects, the rider as a ragdoll) are left out, as the Godot replay has none of these yet.
+the smoke and the other effects, the rider as a ragdoll) are left out.
 The main menu, Replays…: Watch (an edit when there is one), Edit (the video editor on the recording), Delete (to the
 Trash), Open a file… (copies a .oreplay or a browser file into the folder), Show the folder. Going to the main menu
 from a drive of a minute or more that was not saved asks Save the replay?
@@ -732,8 +750,15 @@ of a jump (from the rows of its last seconds, or rebuilt from all of them); what
 The skid marks (every strip), the tyre smoke and dust (where and how much, 15 times a second), the marbles (where they
 came to rest), the debris, the pieces and the shards of a part that broke, the drops and the stains of a leak (the
 coolant dried as far as it had), and every second the hour, the weather, the sun, the moon and the wet, snow and puddles
-of the ground. They are in the .oreplay files ("fx"; not the pieces, which hold meshes). Test:
-`res://tools/test_replay_fx.tscn -- --replay-dir=<tmp> --video-cfg=<tmp> --user-dir=<tmp> --steer=1`.
+of the ground; the snow that the wheels scraped and the heat of the cars melted (the tiles of the ground, a row per
+wheel every tenth of a second: a jump makes the snow again from all of them) and the rings of the wheels in a puddle;
+the tyre smoke and dust of the last seconds after a jump (the puffs emitted one by one with their age). Read from the
+game every sample (`scripts/replay_extras.gd`): the rider of a motorcycle that is a ragdoll (his fifteen particles), the
+lamps of the drag tree, the bangs of the exhaust (the flames at the pipes and the pop, made again) and the pit stops
+(the PitStop of a car gets the state of the stop at the replay's time, for what draws it). They are in the .oreplay
+files ("fx"; the pieces with their meshes as arrays and a colour, `pieces:data`). Test:
+`res://tools/test_replay_fx.tscn -- --replay-dir=<tmp> --video-cfg=<tmp> --user-dir=<tmp> --steer=1
+[--set=gfx_ground:snow] [--car=sports-motorcycle-600cc]`.
 
 After the finish of a race the camera is the cinematic camera of the track (main.js startAutopilot, `Replay.live_cine`;
 C takes the camera of the game back), and the AI drives the player's car at most half of the top speed reached in the
@@ -1023,19 +1048,10 @@ A pass over every file of `web/js/` and `web/tools/` and every menu, key, HUD el
 game (November 2026). What the Godot version still lacks or does otherwise, and why:
 
 **Race and modes** (main.js)
-- The fly-by of the camera over the grid before the countdown (Enter or Space skips it): not ported; the race starts
-  with the countdown at once.
-- The results: a table written once (absolute times, "lap n"), where the browser has a headline ("You won!",
-  "Finished P2"), the gaps (+1.234, +1 lap) and rows that change as the others come in.
-- A race on a track without a racing line: the browser runs the laps and the countdown without AI cars; Godot drives
-  free there (it says so).
-- The banners "no pit lane here" and "no best lap yet: the ghost comes from the next start": not shown.
-- The racing line: the browser shortens a recorded line inside the road (`shorten`, the AI cuts the bends; `?cut=0` is
-  the Godot behaviour), settles it on the ground and turns it the way of the start; Godot reverses only a line of a
-  designed road.
-- The grip measured on the skidpad (OpenRacer.SkidpadGrip) is not used by the AI.
-- "Save the replay?" is asked only from Main menu of the pause menu, not on Restart or Race again.
-- A car or a track that is missing: an error in the log, where the browser shows a dialog (`?missing=`).
+- The Godot AI keeps its own grip guess and braking share (0.75 of the lateral grip, Opponent.js 0.95) and no downforce
+  in its speeds; with a grip from the skidpad it takes that g as the lateral grip.
+- The finished AI cars drive on at their race pace (the browser: 0.6 of it).
+- The shortened racing line keeps 3.5 m from the edge of the road, the browser 1.5 m (see Racing against the AI).
 
 **Settings and keys**
 - The keys of the free camera P and O and the take key 5 are fixed, not in Settings, Controls.
@@ -1051,10 +1067,10 @@ editor); the mirrors are in Settings, Mirrors. Grey: the follow camera's look-ah
 **Main menu**: the browser turns every car on its tile; here the one under the mouse, with the focus or chosen (one
 viewport). No picture per setup. No "Copy game link" (`?import=`): the Godot game has no address.
 
-**Replay**: the pieces of a part that broke are in the replay but not in its files (they hold meshes); the snow scraped by
-the tyres (the tiles of the ground) and the rider's ragdoll, the drag tree lamps, the exhaust bangs and the pit stop's
-tyres and parts are not replayed; tyre smoke starts fresh after a jump (GPU particles cannot be wound back); browser
-replay files open without their blocks (soft body, effects), and Godot does not write browser files.
+**Replay**: the pieces of a part that broke keep only the colour of their material in a file (no texture); the pit
+stop is replayed as the state of the PitStop (what draws the jacks and the wheels being changed reads it); the
+smoke after a jump is made again from the rows, not from the same random puffs; browser replay files open without
+their blocks (soft body, effects), and Godot does not write browser files.
 
 **Pit stop and drag strip**: the car is not lifted on the jacks in the picture, the wheels are not seen being changed,
 the parts that are put back do not fade; the drag time slip cannot be saved as a PNG.
@@ -1069,9 +1085,8 @@ Open hinges opens, it does not close a hinge again; the motorcycle crash-rule sl
 **Damage**: a loose part of one car bounces off another car's body without denting it (in the browser the parts do not
 meet other cars at all); a wheel of the other car does not feel a hit.
 
-**Other**: no Take button on the touch controls; the motorcycle's ragdoll, levers and fingers and model v2 are another
-part of the port; in the editors the browser's part window of the soft
-body card, Full test of the bench, the flame test, the autosave draft, the touch layout and the loupe of the track editor.
+**Other**: no Take button on the touch controls; the motorcycle model v2 is another part of the port; in the track
+editor the touch layout and the loupe.
 
 **Browser-only, no port needed**: TextureBudget.js, PhysicsWorker.js and PhysicsLink.js (`?worker=`), the storage notes
 and "Ask the browser to keep my data", the permission of a linked folder, Zip.js, bootstrap.js, Scene.js's picture probe

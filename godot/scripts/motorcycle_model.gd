@@ -251,7 +251,7 @@ func update(dt: float) -> void:
 	if chain != null:
 		_update_chain()
 	if rider != null:
-		if rider.ragdoll != null and not bike.crashed and not bike.limp:
+		if rider.ragdoll != null and not bike.crashed and not bike.limp and not rider.replay_hold:
 			rider.recover()          # (a reset or a repair: the rider is back on the bike)
 		rider.update(dt, bike)
 

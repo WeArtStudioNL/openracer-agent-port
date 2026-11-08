@@ -48,6 +48,7 @@ var time := 0.0                     # s, from the start of the drive
 var speed := 1.0
 var soft: ReplaySoft = null          # the shells, the parts and the wheels (ReplaySoft)
 var fx: ReplayFx = null              # the skid marks, the smoke, the marbles, the debris, the pieces, the leaks, the weather (ReplayFx)
+var extras: ReplayExtras = null      # the rider as a ragdoll, the drag tree, the bangs, the pit stops (read every sample)
 var scrubbing := false
 var viewer := false                 # a replay from a file: Exit goes back to the menu
 var file_path := ""                 # the file of this replay (saved, or opened)
@@ -150,6 +151,9 @@ func _physics_process(dt: float) -> void:
 			_write(row, n * STRIDE, cars[n])
 	samples.append_array(row)
 	soft.record(cars, count)
+	if extras == null:
+		extras = ReplayExtras.new(self)
+	extras.record()
 	count += 1
 	var most := int(MAX_SECONDS * RATE)
 	if count > most + int(RATE * 60.0):
@@ -875,6 +879,10 @@ func open_file(path: String, w: Node, first: Car, watch_edit := true) -> bool:
 	fx = ReplayFx.new(self)
 	fx.record()
 	fx.unpack(data.get("fx"))
+	extras = ReplayExtras.new(self)
+	extras.attach_all()
+	if fx.rows.has("pieces") or fx.rows.has("shards"):
+		Shatter.of(w)                 # (the pieces and the shards of what broke: nothing breaks in a viewer to make it)
 	return true
 
 
