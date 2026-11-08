@@ -23,6 +23,7 @@ var root: Node3D                  # "SuspensionRig": the holders and the parts o
 var parts: Array[Dictionary] = []
 var uprights := {}                # wheel -> the entry of its upright
 var corners := {}                 # wheel -> {lower, upper, up, a, moved, camber}: wishbones and upright, solved as rigid parts
+var _rod_inner := {}              # wheel -> how far the inner end of its tie rod is along the rack from where the model has it
 var rack: Dictionary = {}
 var rack_travel := 0.1            # m per radian of the front wheels (car.json steering.rack_travel)
 var hubs := {}                    # wheel -> the middle of the wheel (the upright turns it about its pin)
@@ -509,6 +510,10 @@ func update() -> void:
 				var d: Vector3 = p["far"] + Vector3.UP * lift - h.position
 				var spin := (car.wheels[2 if rear else 0].spin + car.wheels[3 if rear else 1].spin) / 2.0
 				h.basis = _aim(d) * Basis(Vector3.UP, spin) * Basis.from_scale(Vector3(1.0, maxf(0.2, d.length() / float(p["rest_length"])), 1.0))
+	# (the rack goes where the two rods go together: the steering; what is left is what each rod does by itself with the travel)
+	if not rack.is_empty() and _rod_inner.has(0) and _rod_inner.has(1):
+		var ro: Vector3 = rack["origin"]
+		(rack["holder"] as Node3D).position = Vector3(ro.x + (float(_rod_inner[0]) + float(_rod_inner[1])) / 2.0, ro.y, ro.z)
 
 
 ## The wishbones and the upright of a wheel as the rigid parts they are. The arms turn about their hinges (along the car),
@@ -689,9 +694,21 @@ func _update_tierod(p: Dictionary, h: Node3D, rack_shift: float, col_angle: Vari
 	var o: Vector3 = p["origin"]
 	if col_angle != null and p.has("far_now"):
 		h.position = (o - column["centre"]).rotated(column["axis"], col_angle) + column["centre"]
+		_stretch(p, h, t)
+		return
+	# a rigid rod: the wheel keeps the angle of the physics, so what is left over goes into its inner end, which slides along
+	# the rack (a model whose rod follows the arc of the wishbones has nothing left over)
+	var inner := Vector3(o.x + (rack_shift if wheel < 2 else 0.0), o.y, o.z)
+	var rod := float(p["rest_length"])
+	var across := rod * rod - (t.y - o.y) * (t.y - o.y) - (t.z - o.z) * (t.z - o.z)
+	if across > 0.0:
+		inner.x = t.x - (1.0 if t.x >= inner.x else -1.0) * sqrt(across)
+		_rod_inner[wheel] = inner.x - o.x
+		h.position = inner
+		h.basis = _aim(t - inner)
 	else:
-		h.position = Vector3(o.x + (rack_shift if wheel < 2 else 0.0), o.y, o.z)
-	_stretch(p, h, t)
+		h.position = inner
+		_stretch(p, h, t)
 
 
 func _update_axle(p: Dictionary, h: Node3D) -> void:
