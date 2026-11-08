@@ -376,8 +376,17 @@ and chain (`scripts/motorcycle_model.gd`) and the rider on it (`scripts/motorcyc
   particles (hips, chest, head, shoulders, elbows, hands, hip joints, knees, feet) with the speed they had (the bike's
   at that place and his own movement), sticks, a rigid torso, the limits and the muscles of a body (a soft zone before
   every limit, the tone towards the neutral posture, damping), the limbs out of each other, Verlet at 240 Hz, 0.55 g of
-  friction on the road, a sudden higher floor is a wall. He collides with the bike's collision box (here, not its
-  spheres) and gives it the hit in the first 0.3 s. The skeleton is posed on the particles (the root on the hips and
+  friction on the road, a sudden higher floor is a wall. He collides with the bike's spheres, as in the browser (the
+  nodes of its shell, or its collision proxy without one; the collision box only for a bike with neither): a sphere a
+  part starts in is not solid for it until it has left it, the seat holds the hips, the hip joints and the knees, the
+  leathers grip; he gives the bike the hit in the first 0.3 s. Unlike the browser, a shoulder or a hip that starts
+  past the soft zone before its limit (the knees out against the tank: past the ellipse of the hip) has that limit
+  widened towards the way it started, as far as the riding pose; in the browser the muscles push it back at once,
+  the seat holds the thigh, and the push sits the limp rider up and throws his arms over his head. Also unlike the
+  browser: the damping of 0.998 a substep is on the speed of each part relative to the body (the body as a whole only
+  feels the air, about 0.45 m/s2 at 40 km/h, not 0.5 g); a part that the seat holds is not pushed by the other
+  spheres; and the spheres are where the bike was at each substep (found where it is at the end of the frame, they
+  were a frame ahead of him, and the seat dragged his hips forward under him). The skeleton is posed on the particles (the root on the hips and
   the chest, the limbs by the IK, the head along the neck). The follow camera watches him from where it was (2.5 to
   5 m, at least 1.2 m up) until Reset or Repair. Not in the replay.
 - **The levers, the fingers and the shift lever**: the right grip rolls with the throttle; the hands keep their turn on
@@ -395,7 +404,8 @@ and chain (`scripts/motorcycle_model.gd`) and the rider on it (`scripts/motorcyc
   fork in the physics the 600 ran wide in the first bend of kartbaan-oldenzaal at 0.8 g.
 - **Test**: `Godot --fixed-fps 60 --path godot res://tools/test_moto.tscn -- --car=sports-motorcycle-600cc` (the shift
   lever, the fork, the give and the brake lever on the brake, the limp rider, a crash into a wall, the ragdoll on the
-  floor; with a window `--shot=/folder` saves throttle, brake, levers, limp_ride, limp and crash pictures).
+  floor; with a window `--shot=/folder` saves throttle, brake, levers, limp_ride, limp and crash pictures, and the
+  limp rider and the crash at a few moments: limp_0.25 to limp_1.50, crash_0.15 to crash_1.80).
 - **Not ported**: model v2 (`"motorcycle": {"model": "v2"}`; no bike of the game uses it), the crash rules panel of
   the 0 key and its push rule, the head that stays upright to the road and looks along the racing line, the ORG bones
   of a Rigify rig that follow the DEF ones, the ragdoll in the replay, walking the bike back with the feet.
