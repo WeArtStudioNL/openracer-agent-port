@@ -316,7 +316,10 @@ GLTFDocument, the hidden triangles left out. The game draws what the editor make
 the grid boxes, the pit area and the checkpoints with the arrow to the next gate (`scripts/track_marks.gd`), the
 objects (`scripts/track_objects.gd`: a rigid one sleeps until a car's box pushes it and the push comes back to the
 car, a static one is a wall, decor only shows), `double_sided`, and on a road of nodes without a recorded line the
-middle of the road as the racing line (`scripts/racing_line.gd`).
+middle of the road as the racing line (`scripts/racing_line.gd`). A part of a model that track.json does not name is scenery, as in
+TrackLoader.js (it was road): scenery and static objects lie on a layer of their own (`Track.SCENERY_LAYER`) that the
+body of a car and the loose parts meet and the wheels do not, as the wheels of the browser meet only the drivable
+triangles (Ground.js).
 
 Test (never in the garage or in web/): `Godot --path godot res://tools/test_track_editor.tscn -- --out=/tmp/te`
 (with a window and `--shot-dir=/tmp` it takes screenshots) uses the tools with the mouse on testtrack, draws a new
