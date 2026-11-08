@@ -11,6 +11,7 @@ extends RefCounted
 
 var ed: CarEditor
 var car: Car = null
+var parked := false               # the car is there but stands still: no simulation until a test starts it
 var driving := false
 var tyre_nodes: CarEditorTyreNodes         # the nodes of the shell tyres while a tyre setting is changed
 var test_run := {}                   # the Full test that runs: stage, t, limiter_t, brake, ...
@@ -61,10 +62,11 @@ func _make_floor() -> void:
 
 
 ## The car built from the form and dropped from a height (m) with a tilt (degrees).
-func drop(height: float, tilt: float) -> void:
+func drop(height: float, tilt: float, hold := false) -> void:
 	_height = height
 	_tilt = tilt
 	stop()
+	parked = hold
 	var file := _model_file()
 	if file == "" or ed.model_root == null:
 		ed.status("Load a model first.", "error")
@@ -88,7 +90,15 @@ func drop(height: float, tilt: float) -> void:
 	_place()
 	for n in [ed.view.pivot, ed.view.helpers, ed.view.lib_preview, ed.view.extras]:
 		(n as Node3D).visible = false
-	ed.status("Test: the car with the physics of the game. ↺ stops the test and goes back to the model.", "ok")
+	if parked:
+		ed.status("The car stands still (no simulation): Drop car or another test starts it. ↺ goes back to the model.", "ok")
+	else:
+		ed.status("Test: the car with the physics of the game. ↺ stops the test and goes back to the model.", "ok")
+
+
+## The car on the bench for the shell and the windows of the parts, which need its frame: it stands still until a test.
+func park() -> void:
+	drop(0.0, 0.0, true)
 
 
 func _place() -> void:
@@ -99,7 +109,7 @@ func _place() -> void:
 		xf.basis = Basis(Vector3.BACK, deg_to_rad(_tilt)) * xf.basis
 		PhysicsServer3D.body_set_state(car.get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, xf)
 		car.global_transform = xf
-	car.freeze = false
+	car.freeze = parked
 
 
 func reset() -> void:
@@ -111,7 +121,7 @@ func reset() -> void:
 
 
 func toggle_drive() -> void:
-	if car == null:
+	if car == null or parked:
 		drop(0.05, 0.0)
 	if car == null:
 		return
@@ -131,6 +141,7 @@ func toggle_drive() -> void:
 
 func stop() -> void:
 	driving = false
+	parked = false
 	test_run = {}
 	_remove_wall()
 	if _audio != null:

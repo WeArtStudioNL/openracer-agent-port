@@ -47,7 +47,7 @@ func show(want: bool) -> void:
 		_clear()
 		return
 	if ed.bench.car == null and not _has_library():
-		ed.bench.drop(0.05, 0.0)
+		ed.status("The tyres of the wheels of a model get their nodes when the car runs: press Drop car.", "ok")
 
 
 func _has_library() -> bool:

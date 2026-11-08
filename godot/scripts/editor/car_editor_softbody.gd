@@ -540,9 +540,13 @@ func hide_shell() -> void:
 
 
 ## A new car on the bench from the form as it is (the shell made again); the selection is kept where it still fits.
-func restart_bench() -> void:
+## It only simulates when a test is running or asks for it (run); else the car stands still.
+func restart_bench(run := false) -> void:
 	_rebuild_in = -1.0
-	ed.bench.drop(0.05, 0.0)
+	if run or (ed.bench.car != null and not ed.bench.parked):
+		ed.bench.drop(0.05, 0.0)
+	else:
+		ed.bench.park()
 	car = ed.bench.car
 	var s := soft()
 	if s != null:

@@ -165,7 +165,7 @@ func start() -> void:
 	set_push(false)
 	if _cam.is_empty():
 		_cam = {"target": ed.view.target, "position": ed.view.camera.position}
-	card.call("restart_bench")
+	card.call("restart_bench", true)
 	var c := _car()
 	if c == null or c.shell == null:
 		ed.status("The car does not dent: tick “The car dents” first." if c != null else "Load a model first.", "error")
@@ -337,8 +337,8 @@ func set_push(on: bool) -> void:
 			return
 		if running():
 			stop()
-		if _car() == null:
-			card.call("restart_bench")
+		if _car() == null or ed.bench.parked:
+			card.call("restart_bench", true)
 		if _car() == null or _car().shell == null:
 			ed.status("The car does not dent: tick “The car dents” first.", "error")
 			return
