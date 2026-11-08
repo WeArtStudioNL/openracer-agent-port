@@ -70,6 +70,7 @@ var _player: AudioStreamPlayer
 var _playback: AudioStreamGeneratorPlayback
 var _playing := false
 var _sweep := -1.0
+var _run_down := 0.0                 # rpm while the engine runs down after the dyno (the slider rounds, small steps would be lost)
 var _ir_name := ""
 var _refreshing := false
 
@@ -587,6 +588,7 @@ func _dyno_frame(delta: float) -> void:
 	_dyno_button.disabled = false
 	if _playing:
 		_throttle.value = 0
+		_run_down = _rpm.value
 		_sweep = -2.0
 	var best: Dictionary = pts[0]
 	for p in pts:
@@ -966,8 +968,9 @@ func frame(delta: float) -> void:
 	elif _sweep < -1.5:
 		# (after the dyno: the engine runs down to idle, then the sound stops)
 		var idle := ed.num("engine.idle_rpm", 900.0)
-		_rpm.value = lerpf(_rpm.value, idle, 1.0 - exp(-delta / 1.5))
-		if absf(_rpm.value - idle) < 30.0:
+		_run_down = lerpf(_run_down, idle, 1.0 - exp(-delta / 1.5))
+		_rpm.value = _run_down
+		if absf(_run_down - idle) < 30.0:
 			_sweep = -1.0
 			if _dyno.get("sound", false):
 				stop_sound()
