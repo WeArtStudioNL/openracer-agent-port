@@ -516,7 +516,7 @@ func new_car(kind := "car") -> void:
 	status("")
 
 
-## A car of the list into the form (the tune that is chosen for it in the game, as the browser does).
+## A car of the list into the form: always the car as made (Default), whatever tune the game has chosen for it.
 func load_existing(id: String) -> void:
 	var raw: Variant = Content.load_json("cars/%s/car.json" % id)
 	if not raw is Dictionary:
@@ -527,15 +527,6 @@ func load_existing(id: String) -> void:
 	existing_id = id
 	existing = raw
 	var shown: Dictionary = (raw as Dictionary).duplicate(true)
-	var tune_path: String = str(Settings.get_value("tunes").get(id, ""))
-	var tune_note := ""
-	if tune_path != "":
-		var tuned := Tuning.load_tune(tune_path)
-		if not tuned.is_empty():
-			shown = tuned.duplicate(true)
-			shown["model"] = raw.get("model", {})
-			Tuning.keep_driver(shown, raw)
-			tune_note = " with the tune " + tune_path.get_file().trim_suffix(".openracer-tune.json")
 	cfg = io.normalise(shown)
 	car_id = id
 	id_edited = true
@@ -566,7 +557,7 @@ func load_existing(id: String) -> void:
 	_undo.clear()
 	_redo.clear()
 	_last_shot = _snapshot()
-	status("Loaded %s%s." % [cfg.get("name", id), tune_note])
+	status("Loaded %s." % cfg.get("name", id))
 
 
 ## Every card shows the car (after a load, a new car, a tune or an undo).

@@ -82,7 +82,7 @@ func chosen_tune() -> String:
 	return str(EditorStyle.value_of(_setup_pick)) if _setup_pick.selected > 0 else ""
 
 
-## A car was loaded: the next render_setups chooses the tune that the game has chosen for it.
+## A car was loaded: the next render_setups chooses Default.
 func forget_choice() -> void:
 	_shown_for = ""
 
@@ -102,14 +102,8 @@ func render_setups() -> void:
 			_paths[n] = d["own"] if d["own"] != "" else d["car"]
 			_setup_pick.add_item(str(n) + (" · with the car" if d["own"] == "" else (" · with the car, changed here" if d["car"] != "" else "")))
 			_setup_pick.set_item_metadata(_setup_pick.item_count - 1, n)
-		if same_car:                        # (a save, a new model: what is being edited stays chosen)
-			if _paths.has(kept):
-				EditorStyle.select_value(_setup_pick, kept)
-		else:                               # (a car that was just loaded: the tune that the game has chosen)
-			var active: String = str(Settings.get_value("tunes").get(ed.existing_id, ""))
-			for n in _paths:
-				if _paths[n] == active:
-					EditorStyle.select_value(_setup_pick, n)
+		if same_car and _paths.has(kept):   # (a save, a new model: what is being edited stays chosen; a car that was just loaded starts at Default)
+			EditorStyle.select_value(_setup_pick, kept)
 	_shown_for = ed.existing_id
 	_before = chosen_tune()
 	_setup_pick.disabled = not own
@@ -118,6 +112,8 @@ func render_setups() -> void:
 
 func update_tune_buttons() -> void:
 	var n := chosen_tune()
+	if ed.card_of.has("Model"):             # (the model belongs to the car, not to a tune)
+		(ed.card_of["Model"]["panel"] as Control).visible = n == ""
 	save_button.text = ("Save tune" if n != "" else "Save the car") + (" •" if ed.dirty else "")
 	save_button.tooltip_text = ("Overwrite the tune %s with the car as the form has it (car.json is not written)" % n) if n != "" else "Save the car (car.json)"
 	var where := "your garage" if not ed.save_to_repo else "web/cars (the repository)"
@@ -237,6 +233,7 @@ func save_tune_now() -> bool:
 	Tuning.save_tune(ed.car_id, n, c)
 	render_setups()
 	EditorStyle.select_value(_setup_pick, n)
+	update_tune_buttons()
 	ed.set_dirty(false)
 	ed.status("Tune %s saved%s." % [n, "; the driver is saved in car.json, for all setups" if drove else " (car.json is not written)"], "ok")
 	return true
