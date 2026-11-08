@@ -405,19 +405,15 @@ const MAP := {
 ## The sound of the engine (car.json sound.engine_sim): es_<key>.
 const SOUND_KEYS := ["volume", "convolution", "audio_volume", "hf_gain", "noise", "jitter", "exhaust_length", "primary_length", "idle_pressure"]
 
-## The values that the Godot physics do not use yet (the menu shows them grey, with NOT_YET as the tooltip): the
-## build-up of the locking differential and the centre differential (Godot's differential locks implicitly; four wheel
-## drive has a fixed split), and the look-ahead, field of view with speed and dolly of the follow camera. (The shell of
-## the tyres, tyre_width ... tyre_stiff_y and the height of the sidewall, is the shell tyre of ShellTyres.)
-const NOT_IN_GODOT := [
-	# (the build-up of the limited slip and the centre differential work now: CarDrivetrain)
-	"cam_follow_look_z", "cam_follow_fov_full_speed", "cam_follow_dolly",
-]
+## The values that the Godot physics do not use yet (the menu shows them grey, with NOT_YET as the tooltip). (The
+## build-up of the limited slip and the centre differential work now: CarDrivetrain; the look-ahead, the field of view
+## with speed and the dolly of the follow camera: ChaseCamera.)
+const NOT_IN_GODOT: Array[String] = []
 
-## The values that build the car again (the wheel library, the parts library): in the browser the car is loaded again
-## at once; here the setup is saved and the car is built with it at the next start (the menu says so).
+## The values that build the car again (the wheel library, the parts library): the car is built again at once, as in the
+## browser (Car.rebuild); a motorcycle at the next start.
 const AT_NEXT_START := ["rim_front", "tyre_front", "rim_rear", "tyre_rear", "susp_front", "susp_rear"]
-const NEXT_START := "The car is built with this at the next start (save the setup first): the wheels and the suspension of the parts library are part of the model."
+const NEXT_START := "The car is built again with this at once (a motorcycle: at the next start, save the setup first)."
 static var tunes_root := "user://tunes"     # (the tests put the tunes of the player in a folder of their own)
 
 
