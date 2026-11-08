@@ -1151,9 +1151,10 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
    target=template_release`: it needs only the Windows system libraries), Linux with zig (`brew install zig`; the
    objects with `scons platform=linux arch=x86_64 target=template_release use_static_cpp=no` through wrappers that
    call `zig cc/c++ -target x86_64-linux-gnu.2.28` and turn `-march=x86-64` into `-march=x86_64`, then linked by hand:
-   `zig c++ -target x86_64-linux-gnu.2.28 -shared -o ../bin/liboracer.linux.template_release.x86_64.so
+   `zig c++ -target x86_64-linux-gnu.2.28 -shared -Wl,-z,nodelete -o ../bin/liboracer.linux.template_release.x86_64.so
    src/*.o godot-cpp/bin/libgodot-cpp.linux.template_release.x86_64.a`, as scons on a Mac names the objects .os;
-   glibc 2.28 or newer). On Windows the force feedback looks up the SDL HID functions in the executable
+   glibc 2.28 or newer; `-z nodelete` keeps the library loaded to the end: Godot frees the last objects after it
+   unloads its extensions, and their destructors were gone, a crash at quit). On Windows the force feedback looks up the SDL HID functions in the executable
    (GetProcAddress); when Godot does not export them there, force feedback is off and the rest works.
    Web *(done, tested locally, not on openracer.eu yet)*: `sh godot/tools/export_web.sh` makes `godot/build/web/`:
    index.html (the shell `tools/web_shell.html`), the engine (index.js, index.wasm, index.side.wasm, the audio
