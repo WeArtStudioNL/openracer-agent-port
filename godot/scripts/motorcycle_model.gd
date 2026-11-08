@@ -122,6 +122,7 @@ func _make_head(body: Node3D) -> void:
 			head_axis = ax
 			head_custom = true
 	rake = atan2(-head_axis.z, head_axis.y)
+	car.bike.fork_slope = head_axis.z / head_axis.y      # (the physics: the fork dives under the brake, CarLoader.setForkGeometry)
 	head = Node3D.new()
 	head.name = "Steerhead"
 	head.position = head_pivot
@@ -161,6 +162,8 @@ func _make_swingarm(body: Node3D) -> void:
 	arm_axis = (t.basis.inverse() * Vector3.RIGHT).normalized()
 	arm_pivot_z = t.origin.z
 	arm_axle_z = axle.z
+	# (the physics: the tangent of the arc of the axle, forward over up, when the pivot is in front of the axle)
+	car.bike.swing_slope = (axle.y - t.origin.y) / (t.origin.z - axle.z) if t.origin.z > axle.z else 0.0
 	# the rear shock between the frame and the arm: its long axis from its mesh, the higher end on the frame
 	var re2 := RegEx.create_from_string("(?i)^(rear_?(spring|shock|damper|strut)|(spring|shock|damper|strut)_?rear)")
 	shock = _find(body, func(n: Node) -> bool: return re2.search(str(n.name)) != null)
@@ -248,7 +251,30 @@ func update(dt: float) -> void:
 	if chain != null:
 		_update_chain()
 	if rider != null:
+		if rider.ragdoll != null and not bike.crashed and not bike.limp:
+			rider.recover()          # (a reset or a repair: the rider is back on the bike)
 		rider.update(dt, bike)
+
+
+## The rider goes limp where he sits (the key 9, to try a crash: Car.js goLimp); the bike rides on without him until
+## his weight tips it over.
+func go_limp() -> void:
+	var bike := car.bike
+	if bike.crashed or bike.limp or not can_ragdoll():
+		return
+	bike.limp = true
+	rider.crash(true)
+	RunLog.event("motorcycle %s: the rider goes limp" % car.name)
+
+
+## The rider can be a ragdoll (a model with the bones of the arms and the legs).
+func can_ragdoll() -> bool:
+	return rider != null and rider.can_ragdoll()
+
+
+## The middle of the rider's ragdoll (the crash camera looks at it), or null.
+func rider_centre() -> Variant:
+	return rider.ragdoll.centre if rider != null and rider.ragdoll != null else null
 
 
 ## The rear shock: the top stays on the frame, the bottom goes round with the arm; the part is turned and stretched
