@@ -143,7 +143,9 @@ back (with the reason in the run log) when it is on its side or its roof, fell o
 there is road, repaired (with fuel if the tank was empty), and a ghost for ten seconds (the other cars and their
 shells go through it). The player's car driven by the AI (`--ai`, after the finish) is put back the same way. The
 AI learns where it ran off the road and where it crashed (the line before there a little slower) and keeps that
-per track and car (`user://ai/`; with `--ai` in `user://test-ai/`), so it races cleaner the next time. The AI cars have the colours
+per track and car (`user://ai/`; with `--ai` in `user://test-ai/`), so it races cleaner the next time
+(`--ai-learned=0`: a test without what was learned, and nothing kept). The run log has every put-back with its
+reason and every touch between two cars. The AI cars have the colours
 of the browser game (the materials called carpaint, or body); the three nearest are heard (3D, a lighter engine
 simulation). When the player finishes, the results show and the AI drives the player's car
 on. Home (back to the start), Restart in the pause menu or "Race again" starts it again. A track without a racing line has no race (free driving).
