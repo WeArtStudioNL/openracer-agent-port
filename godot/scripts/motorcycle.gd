@@ -86,6 +86,15 @@ var complied := 0.0
 var slide_time := 0.0
 var brace := 0.0
 var key_command := 0.0            # the keys bring the lean command over time
+var rider_key := 0                # -1: the rider is put back, 1: forward (the keys < and >, set by world.gd)
+var limp := false                 # the rider has gone limp on the bike (the key 9): no throttle, no steering, no balance
+var rider_load = null             # Vector3 or null: the middle of the limp rider (his ragdoll), whose weight leans the bike
+var counter_gain := 1.0
+## the travel of the front wheel along the fork and of the rear wheel on the arc of the swingarm (forward over up,
+## Vehicle.js forkSlope and swingSlope, from the model: MotorcycleModel), and fork_dive of car.json that scales it
+var fork_slope := 0.0
+var swing_slope := 0.0
+var fork_dive := 1.0
 var _foot_still := false
 var _foot_wait := 0.0
 var _road := Vector3.UP
@@ -142,8 +151,10 @@ func retune(settings: Dictionary) -> void:
 	push_drift = _num("push_drift", 0.3)
 	push_foot = _num("push_foot_kmh", 110.0) / 3.6
 	push_hang = _num("push_hang", -0.4)
+	fork_dive = maxf(0.0, _num("fork_dive", 1.0))
 	style = {"upright": _num("push_upright", 0.55), "forward": _num("push_forward", 0.0), "chest_pitch": _num("push_chest_pitch", 0.0),
 		"pelvis_slide": _num("push_pelvis_slide", 0.09), "foot_out": _num("push_foot_out", 0.14), "foot_forward": _num("push_foot_forward", 0.5),
+		"pelvis_tilt": _num("push_pelvis_tilt", 35.0),
 		"chest_roll": _num("hang_chest_roll", 14.0), "knee_out": _num("hang_knee_out", 0.6), "knee_down": _num("hang_knee_down", 0.5),
 		"tuck_pitch": _num("hang_tuck_pitch", 28.0), "sit_pitch": _num("hang_sit_pitch", 10.0), "shift": _num("hang_shift", 0.7)}
 
@@ -173,6 +184,16 @@ func lateral_g(car: Car) -> float:
 	return tan(clampf(lean_max + eps_full, 0.1, 1.3))
 
 
+## The limp rider is off the bike (beside it or on the road): nothing holds it up any more, it goes down as a body.
+func fall_off(v: Vector3) -> void:
+	if crashed:
+		return
+	crashed = true
+	crash_reason = "limp-off"
+	_crash_speed = v
+	RunLog.event("motorcycle down (limp-off) at %.0f km/h" % (v.length() * 3.6))
+
+
 ## After a reset or a repair: the rider is back on the bike.
 func recover() -> void:
 	_hist.clear()
@@ -181,6 +202,8 @@ func recover() -> void:
 	crash_reason = ""
 	foot_down = 0.0
 	foot_down_l = 0.0
+	limp = false
+	rider_load = null
 	_foot_still = false
 	_foot_wait = 0.0
 	brace = 0.0
@@ -193,8 +216,9 @@ func recover() -> void:
 	_rear_prev = -1.0
 
 
+## The riding style: flat track (car.json push, or the menu's "Flat-track style" for every bike) or hang off.
 func _pushed() -> bool:
-	return push
+	return push or bool(Settings.get_value("bike_push"))
 
 
 func _front_load(car: Car) -> float:
@@ -259,6 +283,10 @@ func _steering(car: Car, delta: float, u: float, dt: float) -> float:
 	if crashed:
 		steer += (0.0 - steer) * minf(1.0, dt / 0.1)
 		return steer
+	if limp:
+		# (nobody steers: the front wheel is let go and the tyres and the lean decide where the bike goes)
+		steer += (0.0 - steer) * minf(1.0, dt / 0.3)
+		return steer
 	var lock := car.max_steer
 	var c := clampf(delta / lock, -1.0, 1.0)
 	command = c
@@ -271,7 +299,10 @@ func _steering(car: Car, delta: float, u: float, dt: float) -> float:
 	var eps_full := atan(share * max_hang * (push_hang if _pushed() else 1.0) / car.cg_height)
 	var eps := atan(share * float(posture["lat"]) / car.cg_height)
 	var brake := clampf(car.brake, 0.0, 1.0)
-	var speed_max := max_lean - (max_lean - minf(max_lean, fast_lean)) * smooth(fast_from, fast_from + 22.0, au)
+	# (the menu: Motorcycle: lean at top speed, for every bike; car.json fast_lean_deg without it)
+	var menu_fast := float(Settings.get_value("bike_fast_lean"))
+	var fast_lean_now := menu_fast * DEG if menu_fast > 0.0 else fast_lean
+	var speed_max := max_lean - (max_lean - minf(max_lean, fast_lean_now)) * smooth(fast_from, fast_from + 22.0, au)
 	var extra := push_extra_lean * (1.0 - smooth(14.0, 26.0, au)) * (1.0 - smooth(0.05, 0.4, brake)) if _pushed() else 0.0
 	speed_max += extra
 	# (the circle of grip: what the tyres give along the bike they cannot give sideways)
@@ -302,8 +333,11 @@ func _steering(car: Car, delta: float, u: float, dt: float) -> float:
 	var counter := clampf(0.3 * (target_lean - float(st["lean"])), -c_limit, c_limit) * smooth(3.0, 10.0, au)
 	var straight := 1.0 - smooth(2.0 * DEG, 6.0 * DEG, absf(target_lean))
 	since_brake = 0.0 if brake > 0.05 else since_brake + dt
-	# (lean only: the countersteer that starts a lean is the menu's "Countersteer + lean", off by default)
-	counter *= straight
+	# (lean only: the countersteer that starts a lean is the menu's "Countersteer + lean", off by default; it is not
+	# used on the brake and comes back slowly after it)
+	counter_gain = smooth(counter_wait, counter_wait + counter_ramp, since_brake)
+	var pulse := counter_gain if str(Settings.get_value("bike_steering")) == "counter" else 0.0
+	counter *= straight + (1.0 - straight) * pulse
 	var geometric := c * lock
 	var w := 1.0 - smooth(2.0, 5.0, au)
 	# the front wheel castors into its own slip on the brake and in a slide (the rear keeps the bike straight)
@@ -343,12 +377,13 @@ func _feet_step(dt: float, u: float, nose_up: float, allowed: bool) -> void:
 func before_tyres(car: Car, dt: float) -> void:
 	var u := car.speed
 	# the wheelie control: the throttle is rolled off as the front goes light
-	if crashed:
+	if crashed or limp:
 		wheelie_scale = 0.0
 		throttle_scale = 0.0
 	else:
 		var airborne := not (car.wheels[0].contact or car.wheels[2].contact)
-		var want := clampf((_front_load(car) - 0.08) / 0.3, 0.15, 1.0) if not airborne and absf(u) > 0.5 and burnout < 0.5 else 1.0
+		var on := bool(Settings.get_value("wheelie_control"))
+		var want := clampf((_front_load(car) - 0.08) / 0.3, 0.15, 1.0) if on and not airborne and absf(u) > 0.5 and burnout < 0.5 else 1.0
 		wheelie_scale += (want - wheelie_scale) * minf(1.0, dt / (0.03 if want < wheelie_scale else 0.25))
 		# (at a walking pace with the bars far round: a third of the throttle)
 		var slow_lock := smooth(0.3, 1.2, absf(u)) * (1.0 - smooth(2.0, 4.0, absf(u))) * smooth(0.6, 0.95, absf(command))
@@ -382,10 +417,22 @@ func before_tyres(car: Car, dt: float) -> void:
 		front_brake = maxf(front_brake, burnout)
 	# flat track: on the gas in a bend the rear tyre gives up a part of its grip across (the tail steps out)
 	var drift_t := 0.0
-	if _pushed() and push_drift > 0.0:
+	if _pushed() and push_drift > 0.0 and not limp:
 		drift_t = push_drift * smooth(0.45, 0.9, car.throttle * wheelie_scale) * smooth(12.0 * DEG, 28.0 * DEG, absf(lean)) * (1.0 - smooth(18.0, 30.0, absf(u)))
 	drift += (drift_t - drift) * minf(1.0, dt / 0.2)
 	car.wheels[2].lat_grip = 1.0 - drift
+
+
+## The fork and the swingarm (Vehicle.js feLoad): the wheel moves along the fork (up and back) and on the arc of the
+## swingarm, so the road force along the wheel (the brake, the drive: last step's) loads the spring with its share
+## along the travel: the fork dives under the brake, a swingarm with its pivot above the axle lifts the rear under
+## power (anti-squat). The tyre gets the spring less that share (it goes through the rigid part of the fork), so the
+## spring is pushed in further for the same load on the road. Returns that share (N).
+func fork_load(car: Car, w: Car.Wheel, dt: float) -> float:
+	var stat := (car.weight_front if w.front else 1.0 - car.weight_front) * car.mass * G
+	var fe := clampf(fork_dive * (fork_slope if w.front else swing_slope) * w.fx, -1.5 * stat, 1.5 * stat)
+	w.fe_load += (fe - w.fe_load) * minf(1.0, dt / 0.03)
+	return w.fe_load
 
 
 ## The share of the brake of a wheel: in a bend the front brake stands the bike up, so it goes to a tenth (the one
@@ -471,10 +518,27 @@ func physics(car: Car, state: PhysicsDirectBodyState3D, dt: float) -> void:
 			state.apply_torque(-(st["a"] as Vector3) * side * 0.6 * car.mass * G * car.cg_height)
 		return
 	if airborne:
-		_air_steer(car, state, st, dt)
+		if not limp:
+			_air_steer(car, state, st, dt)
+		return
+	var m := car.mass
+	if limp:
+		# the rider does nothing: his weight off the middle of the bike leans it (the torque of the middle of his
+		# ragdoll about the bike, at most half a metre of arm)
+		posture["lat"] = 0.0
+		posture["knee"] = 0.0
+		posture["tuck"] = 0.0
+		posture["sit"] = 0.0
+		_have_prev = false
+		if rider_load != null:
+			var rel: Vector3 = (rider_load as Vector3) - xf.origin
+			rel.y = 0.0
+			if rel.length() > 0.5:
+				rel = rel.normalized() * 0.5
+			state.apply_torque(rel.cross(Vector3(0.0, -rider_mass * G, 0.0)))
+		_camber(car, state, st, xf, 1.0 - clampf((absf(lean) - 1.2) / 0.25, 0.0, 1.0))
 		return
 	_rider(car, state, st, dt)
-	var m := car.mass
 	var gh := m * G * car.cg_height
 	var inertia := m * car.cg_height * car.cg_height + car.inertia.z
 	# (a landing: the rider braces for a while after a flight of a quarter second or more)
@@ -507,8 +571,13 @@ func physics(car: Car, state: PhysicsDirectBodyState3D, dt: float) -> void:
 		state.apply_central_force(flat * clampf(m * 3.0 * (-1.2 - u), -900.0, 900.0))
 	elif u < -0.05 and u > -2.0 and car.throttle <= 0.05:
 		state.apply_central_force(flat * minf(700.0, m * 4.0 * -u))
-	# the camber thrust: a leaned tyre pushes the bike to the inside of the bend, at its contact patch, shared as the
-	# weight is at rest (load times tan(lean), the whole of it at most twice the weight of the bike)
+	_camber(car, state, st, xf, alive)
+
+
+## The camber thrust: a leaned tyre pushes the bike to the inside of the bend, at its contact patch, shared as the
+## weight is at rest (load times tan(lean), the whole of it at most twice the weight of the bike).
+func _camber(car: Car, state: PhysicsDirectBodyState3D, st: Dictionary, xf: Transform3D, alive: float) -> void:
+	var m := car.mass
 	var camber := camber_thrust * tan(clampf(lean, -1.05, 1.05)) * alive
 	var load_all := 0.0
 	for w in car.wheels:
@@ -550,10 +619,11 @@ func _crash_rules(car: Car, st: Dictionary, v: Vector3, pos: Vector3, u: float, 
 	var lowside := slide_time > float(CRASH["lowside_time"])
 	var spin := absf(car.angular_velocity.dot(Vector3.UP)) > float(CRASH["spin_rate"]) and absf(u) > 5.0
 	var blow := _accel.length() > float(CRASH["blow_g"]) * G
-	var leaned := absf(lean) > crash_lean
-	if leaned or over or lowside or spin or blow or hit:
+	var leaned := absf(lean) > (0.7 if limp else crash_lean)
+	var still := limp and absf(u) < 0.5
+	if leaned or still or over or lowside or spin or blow or hit:
 		crashed = true
-		crash_reason = "lean" if leaned else ("over" if over else ("lowside" if lowside else ("spin" if spin else ("blow" if blow else "hit"))))
+		crash_reason = "lean" if leaned else ("limp-still" if still else ("over" if over else ("lowside" if lowside else ("spin" if spin else ("blow" if blow else "hit")))))
 		RunLog.event("motorcycle %s down (%s) at %.0f km/h, lean %.0f deg" % [car.name, crash_reason, v.length() * 3.6, lean / DEG])
 		_crash_speed = vo if hit else v
 
@@ -582,6 +652,10 @@ func posture_step(dt: float, u: float, thr: float, brk: float, lean_want: float)
 	var fwd_speed := maxf(0.0, u)
 	var tuck := thr * smooth(12.0, 35.0, fwd_speed) * (1.0 - brk)
 	var sit := brk * smooth(4.0, 20.0, fwd_speed)
+	if rider_key != 0:
+		# (the keys < and >: the rider back or forward while they are held)
+		tuck = 1.0 if rider_key > 0 else 0.0
+		sit = 1.0 if rider_key < 0 else 0.0
 	var bend_t := smooth(8.0 * DEG, 40.0 * DEG, absf(lean_want)) * smooth(5.0, 12.0, absf(u))
 	var hang_t := maxf(bend_t, smooth(3.0 * DEG, 12.0 * DEG, absf(lean_want)) * smooth(30.0, 50.0, absf(u)))
 	var hang := signf(lean_want) * hang_t
@@ -612,7 +686,8 @@ func _air_steer(car: Car, state: PhysicsDirectBodyState3D, st: Dictionary, dt: f
 	var av := state.angular_velocity
 	var v := state.linear_velocity
 	var a := fwd.normalized()
-	var ask := clampf(car.throttle - car.brake, -1.0, 1.0)
+	# (nose up positive; the rider forward brings the nose down)
+	var ask := clampf(car.throttle - car.brake - 0.8 * signf(rider_key), -1.0, 1.0)
 	var nose_rate := -av.dot(side)
 	var lean_rate := -av.dot(a)
 	var hs := Vector2(v.x, v.z).length()
@@ -642,5 +717,6 @@ func _air_steer(car: Car, state: PhysicsDirectBodyState3D, st: Dictionary, dt: f
 
 ## The camera of the follow view rolls with a part of the lean, smoothed (cameraRoll).
 func camera_roll(dt: float) -> float:
-	roll += (lean * camera_roll_factor - roll) * minf(1.0, dt / 0.12)
+	var classic := str(Settings.get_value("bike_camera")) == "classic"      # (the menu: the chase camera of a car)
+	roll += ((0.0 if classic else lean * camera_roll_factor) - roll) * minf(1.0, dt / 0.12)
 	return roll

@@ -63,7 +63,9 @@ func setup(c: Car, l: RacingLine, p := -1.0) -> void:
 		# (Opponent.js); it leans as much as the bend that is asked needs
 		var m: Dictionary = c.config.get("motorcycle", {})
 		lateral = minf(minf(grip, c.bike.lateral_g(c)), minf(float(m.get("max_lateral_g", 0.9)), tan(deg_to_rad(minf(55.0, float(m.get("max_lean_deg", 50))))))) * 0.9
-		braking = minf(braking, 0.8) * pace
+		# (0.75 g with the fork that dives: the rear goes light sooner and the front brake is let off for it; at 0.8 g
+		# the 600 ran wide in the first bend of kartbaan-oldenzaal)
+		braking = minf(braking, 0.8 - 0.05 * minf(1.0, c.bike.fork_dive)) * pace
 		c.bike.lean_from_bend = true
 	# (its own speeds: the cars of a race differ, and it learns where it was too fast)
 	_lateral = lateral
