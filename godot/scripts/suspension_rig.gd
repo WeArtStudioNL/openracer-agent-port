@@ -13,6 +13,7 @@ extends RefCounted
 ## Every part is put in a holder (a Node3D in the frame of the body, under the node "SuspensionRig" of the car) that is
 ## moved every frame (update). The rest pose of the model is the car at rest on its springs (w.length = susp_length).
 
+const MAX_TOE := 0.6               # rad: the most that a rod turns a wheel away from the angle of the physics
 const CORNERS := {"fl": 0, "fr": 1, "rl": 2, "rr": 3}    # the index of the wheel in Car.wheels (FL, FR, RL, RR)
 const SPRINGLIKE := ["spring", "tierod", "panhard", "shaft", "propaxle"]
 
@@ -30,7 +31,7 @@ var column: Dictionary = {}       # { centre, axis }: a steering column whose ar
 var column_angle := 0.0
 var column_error := 0.0
 var built: Dictionary = {}        # what PartsLibrary.assemble made (or {})
-var _rod_inner := {}              # wheel -> how far the inner end of its tie rod is along the rack from where the model has it
+var _rack_now := 0.0              # m that the rack is across the car from where the model has it
 var _balls := {}                  # clean name of a ball joint empty -> its place in the frame of the car
 var _rods: Variant = null         # the fixed tie rods (found once), or []
 var _column_key := ""
@@ -495,6 +496,8 @@ func update() -> void:
 	_init_rods()
 	var col_angle: Variant = _fit_column() if not (_rods as Array).is_empty() else null
 	_solve_corners()                 # (the arms and the uprights first: the springs and the rods sit on them)
+	_rack_now = _rack_shift(rack_shift)
+	_solve_toe()
 	for p in parts:
 		if p["kind"] == "arm" and not corners.has(p["wheel"]):
 			(p["holder"] as Node3D).basis = Basis(Vector3.BACK, _swing(_travel(p["wheel"]), p["arm_length"]) * float(p["side"])) * (p["rest_basis"] as Basis)
@@ -509,7 +512,7 @@ func update() -> void:
 			"upright":
 				var o: Vector3 = p["origin"]
 				if corners.has(p["wheel"]) and corners[p["wheel"]].has("moved"):
-					h.transform = _upright_pose(corners[p["wheel"]], _steer(p["wheel"])) * Transform3D(p["rest_basis"], o)
+					h.transform = _upright_pose(corners[p["wheel"]], _steer_now(p["wheel"])) * Transform3D(p["rest_basis"], o)
 				else:
 					h.position = Vector3(o.x, o.y + _travel(p["wheel"]), o.z)
 					if p["wheel"] < 2:
@@ -518,9 +521,9 @@ func update() -> void:
 				_update_spring(p, h)
 			"rack":
 				var ro: Vector3 = p["origin"]
-				h.position = Vector3(ro.x + rack_shift, ro.y, ro.z)
+				h.position = Vector3(ro.x + _rack_now, ro.y, ro.z)
 			"tierod":
-				_update_tierod(p, h, rack_shift, col_angle)
+				_update_tierod(p, h, col_angle)
 			"trailing":
 				var tt: float = _axle_travel_at(p["on_axle"]["rear"], p["far"].x) if p.has("on_axle") else _travel(p["wheel"])
 				h.basis = Basis(Vector3.RIGHT, -float(p["ahead"]) * _swing(tt, p["arm_length"])) * (p["rest_basis"] as Basis)
@@ -543,11 +546,7 @@ func update() -> void:
 				h.basis = _aim(d) * Basis(Vector3.UP, spin) * Basis.from_scale(Vector3(1.0, maxf(0.2, d.length() / float(p["rest_length"])), 1.0))
 	for p in parts:
 		if p["kind"] == "mount":
-			(p["holder"] as Node3D).position.x = float(_rod_inner.get(p["wheel"], 0.0))
-	# (the rack goes where the two rods go together: the steering; what is left is what each rod does by itself with the travel)
-	if not rack.is_empty() and _rod_inner.has(0) and _rod_inner.has(1):
-		var ro: Vector3 = rack["origin"]
-		(rack["holder"] as Node3D).position = Vector3(ro.x + (float(_rod_inner[0]) + float(_rod_inner[1])) / 2.0, ro.y, ro.z)
+			(p["holder"] as Node3D).position.x = _rack_now if p["wheel"] < 2 else 0.0
 
 
 ## The wishbones and the upright of a wheel as the rigid parts they are. The arms turn about their hinges (along the car),
@@ -634,6 +633,58 @@ static func _circles(p1: Vector2, r1: float, p2: Vector2, r2: float, near: Vecto
 	return m + s if (m + s).distance_squared_to(near) <= (m - s).distance_squared_to(near) else m - s
 
 
+## Where the rack has to be for the steering of the physics, with the car at rest on its springs: the mean of what its two rods
+## want, so that the travel of one wheel does not move it. Without two rods on solved wheels: as far as the steering says.
+func _rack_shift(by_steering: float) -> float:
+	var sum := 0.0
+	var count := 0
+	for p in parts:
+		if p["kind"] != "tierod" or p["wheel"] >= 2 or not _solved(p["wheel"]) or p.has("far_now"):
+			continue
+		var c: Dictionary = corners[p["wheel"]]
+		var at: Vector3 = c["lower"]["far"]
+		var pin: Vector3 = ((c["upper"]["far"] as Vector3) - at).normalized() if c["upper"] != null else Vector3.UP
+		pin = -pin if pin.y < 0.0 else pin
+		var far: Vector3 = p["far"]
+		var outer := at + Basis(pin, _steer(p["wheel"])) * (far - at)
+		var o: Vector3 = p["origin"]
+		var rod := float(p["rest_length"])
+		var across := rod * rod - (outer.y - o.y) * (outer.y - o.y) - (outer.z - o.z) * (outer.z - o.z)
+		if across <= 0.0:
+			return by_steering
+		sum += outer.x - (1.0 if far.x >= o.x else -1.0) * sqrt(across) - o.x
+		count += 1
+	return sum / count if count == 2 else by_steering
+
+
+## A tie rod is rigid and its inner end is on the rack, so the rod decides how the upright stands: it is turned from the angle of
+## the physics until the rod fits. A rod that does not follow the arc of the wishbones steers the wheel with the travel (bump steer).
+func _solve_toe() -> void:
+	for p in parts:
+		if p["kind"] != "tierod" or not _solved(p["wheel"]) or p.has("far_now"):
+			continue
+		var wheel: int = p["wheel"]
+		var c: Dictionary = corners[wheel]
+		var o: Vector3 = p["origin"]
+		var inner := Vector3(o.x + (_rack_now if wheel < 2 and not rack.is_empty() else 0.0), o.y, o.z)
+		var rod := float(p["rest_length"])
+		var base := _steer(wheel)
+		var turn: float = c.get("steer", base)
+		for _i in 8:
+			var e := (_upright_pose(c, turn) * (p["far"] as Vector3)).distance_to(inner) - rod
+			if absf(e) < 1e-5:
+				break
+			var slope := ((_upright_pose(c, turn + 1e-3) * (p["far"] as Vector3)).distance_to(inner) - rod - e) / 1e-3
+			if absf(slope) < 1e-4:
+				break
+			turn = clampf(turn - e / slope, base - MAX_TOE, base + MAX_TOE)
+		c["steer"] = turn
+
+
+func _steer_now(wheel: int) -> float:
+	return float(corners[wheel].get("steer", _steer(wheel))) if corners.has(wheel) else _steer(wheel)
+
+
 ## How the upright has moved from where the model has it (the frame of the body), with a steering angle: the steering
 ## turns it about the line through its ball joints.
 func _upright_pose(c: Dictionary, steer: float) -> Transform3D:
@@ -657,9 +708,10 @@ func move_hubs() -> void:
 		if w.hub_node == null or not _solved(i):
 			continue
 		var rest := w.hub + w.visual_offset
-		var at := _upright_pose(corners[i], _steer(i)) * rest
+		var at := _upright_pose(corners[i], _steer_now(i)) * rest
 		w.hub_node.position += at - (rest + Vector3.UP * _travel(i))
 		w.hub_node.rotation.z = float(corners[i]["camber"]) - w.camber_bend
+		w.steer_node.rotation.y = _steer_now(i)
 	for i in 2:
 		var w: Car.Wheel = car.wheels[i]
 		if not uprights.has(i) or w.hub_node == null or not hubs.has(i) or _solved(i):
@@ -715,12 +767,12 @@ func _update_spring(p: Dictionary, h: Node3D) -> void:
 			node.basis = (part["rest_basis"] as Basis) * Basis.from_scale(sc)
 
 
-func _update_tierod(p: Dictionary, h: Node3D, rack_shift: float, col_angle: Variant) -> void:
+func _update_tierod(p: Dictionary, h: Node3D, col_angle: Variant) -> void:
 	var t: Vector3 = p["far"]
 	var wheel: int = p["wheel"]
 	var up: Dictionary = uprights.get(wheel, {})
 	if _solved(wheel):
-		t = _on_upright(wheel, t, _steer(wheel))
+		t = _on_upright(wheel, t, _steer_now(wheel))
 	else:
 		if not up.is_empty() and wheel < 2:
 			t = (t - up["origin"]).rotated(Vector3.UP, _steer(wheel)) + up["origin"]
@@ -730,18 +782,12 @@ func _update_tierod(p: Dictionary, h: Node3D, rack_shift: float, col_angle: Vari
 		h.position = (o - column["centre"]).rotated(column["axis"], col_angle) + column["centre"]
 		_stretch(p, h, t)
 		return
-	# a rigid rod: the wheel keeps the angle of the physics, so what is left over goes into its inner end, which slides along
-	# the rack (a model whose rod follows the arc of the wishbones has nothing left over)
-	var inner := Vector3(o.x + (rack_shift if wheel < 2 else 0.0), o.y, o.z)
-	var rod := float(p["rest_length"])
-	var across := rod * rod - (t.y - o.y) * (t.y - o.y) - (t.z - o.z) * (t.z - o.z)
-	if across > 0.0:
-		inner.x = t.x - (1.0 if t.x >= inner.x else -1.0) * sqrt(across)
-		_rod_inner[wheel] = inner.x - o.x
-		h.position = inner
+	# a rigid rod from the rack (or the body, at the rear) to the upright: _solve_toe has turned the upright so that it fits
+	var inner := Vector3(o.x + (_rack_now if wheel < 2 and not rack.is_empty() else 0.0), o.y, o.z)
+	h.position = inner
+	if _solved(wheel):
 		h.basis = _aim(t - inner)
 	else:
-		h.position = inner
 		_stretch(p, h, t)
 
 
