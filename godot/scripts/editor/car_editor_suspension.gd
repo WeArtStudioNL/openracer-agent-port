@@ -253,7 +253,8 @@ func _build(cfg: Dictionary, meas: Dictionary) -> void:
 	var model_names := []
 	for n in ed.nodes:
 		model_names.append(str(n["name"]))
-	var out := PartsLibrary.assemble(cfg, meas["centres"], meas["diameter"], model_names)
+	var frame: Node3D = ed.model_root.get_parent() as Node3D if ed.model_root != null else null
+	var out := PartsLibrary.assemble(cfg, meas["centres"], meas["diameter"], model_names, PartsLibrary.own_diffs(ed.model_root, frame, meas["centres"]))
 	_group = out["group"]
 	_group.visible = not _hidden
 	ed.view.extras.add_child(_group)

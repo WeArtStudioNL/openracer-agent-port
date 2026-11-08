@@ -227,7 +227,8 @@ static func default_driveline_mount(mount: String, cfg: Dictionary, geo: Diction
 	if mount == "engine":
 		p = [0.0, yw + 0.35, zf - 0.35] if place == "front" else ([0.0, yw + 0.3, (zf + zr) / 2.0 - 0.4] if place == "mid" else [0.0, yw + 0.3, zr - 0.2])
 	elif mount == "gearbox":
-		p = [0.0, yw + 0.1, zr + 0.5] if place == "rear" else ([0.0, yw + 0.15, zf - 1.05] if place == "front" else [0.0, yw + 0.1, (zf + zr) / 2.0 - 1.1])
+		var front_only: bool = place == "front" and not driven(cfg)["rear"]      # (a transaxle beside the engine, on the axle: no propshaft)
+		p = [0.0, yw + 0.1, zr + 0.3] if place == "rear" else ([0.3, yw + 0.1, zf - 0.2] if front_only else ([0.0, yw + 0.15, zf - 1.05] if place == "front" else [0.0, yw + 0.1, (zf + zr) / 2.0 - 1.1]))
 	elif mount == "diff_front":
 		p = [0.0, yw, zf]
 	elif mount == "diff_rear":
@@ -446,7 +447,8 @@ static func _build_driveline(out: Dictionary, cfg: Dictionary, geo: Dictionary) 
 		var target := Vector3(0.0, w.y, w.z)
 		if not is_live(t):
 			target = _mirrored(dm["diff_" + axle]["position"], 1.0)
-			_place(out, "driveline", "differential", "differential_" + axle, target, null, dm["diff_" + axle], false)
+			if not axle in out["own_diffs"]:
+				_place(out, "driveline", "differential", "differential_" + axle, target, null, dm["diff_" + axle], false)
 			var corners := ["FL", "FR"] if axle == "front" else ["RL", "RR"]
 			for i in 2:
 				var side := 1.0 if i == 0 else -1.0
@@ -456,6 +458,22 @@ static func _build_driveline(out: Dictionary, cfg: Dictionary, geo: Dictionary) 
 			var pe := _mirrored(dm["prop_%s_end" % axle]["position"], 1.0)
 			if ps.distance_to(pe) > 0.1:
 				_place(out, "driveline", "propshaft", ("susp_propshaft_" if is_live(t) else "propshaft_") + axle, ps, pe, dm["prop_%s_start" % axle], false)
+
+
+## The axles ("front", "rear") that have a differential or a transaxle of the model (an object differential..., transaxle...: the
+## nearest axle): the library does not place one there.
+static func own_diffs(body: Node3D, frame: Node3D, centres: Dictionary) -> Array:
+	var out := []
+	if body == null or not centres.has("FL") or not centres.has("RL"):
+		return out
+	for n in body.find_children("*", "Node3D", true, false):
+		var c := SuspensionRig.clean(str(n.name))
+		if c.begins_with("differential") or c.begins_with("transaxle"):
+			var z := CarModel.relative(n as Node3D, frame).origin.z
+			var axle := "front" if absf(z - float(centres["FL"].z)) < absf(z - float(centres["RL"].z)) else "rear"
+			if not axle in out:
+				out.append(axle)
+	return out
 
 
 ## The moving parts that a model has itself, from the names of its objects (https://openracer.eu/docs.html#car-names):
@@ -515,10 +533,10 @@ static func _re_any(n: String, words: Array) -> bool:
 
 ## The parts placed in the frame of the car: { group (Node3D), names, missing, from_model }. model_names: the names of
 ## the objects of the model of the car.
-static func assemble(cfg: Dictionary, centres: Dictionary, diameter: float, model_names: Array = []) -> Dictionary:
+static func assemble(cfg: Dictionary, centres: Dictionary, diameter: float, model_names: Array = [], diffs: Array = []) -> Dictionary:
 	var group := Node3D.new()
 	group.name = "parts-library"
-	var out := {"group": group, "names": [], "missing": [], "axle": "front", "engine_model": engine_model(cfg), "model": model_parts(model_names),
+	var out := {"group": group, "names": [], "missing": [], "axle": "front", "engine_model": engine_model(cfg), "model": model_parts(model_names), "own_diffs": diffs,
 		"from_model": {"front": [], "rear": [], "driveline": []},
 		"hidden": {"front": hidden_of(cfg, "front"), "rear": hidden_of(cfg, "rear"), "driveline": hidden_of(cfg, "driveline")}}
 	if not centres.has("FL"):

@@ -32,6 +32,8 @@ var column: Dictionary = {}       # { centre, axis }: a steering column whose ar
 var column_angle := 0.0
 var column_error := 0.0
 var built: Dictionary = {}        # what PartsLibrary.assemble made (or {})
+var _axle_turn := [0.0, 0.0]       # rad that the wheels of the front and of the rear axle have turned, not wrapped (Wheel.spin is)
+var _spin_was := [0.0, 0.0, 0.0, 0.0]
 var _rack_now := 0.0              # m that the rack is across the car from where the model has it
 var _balls := {}                  # clean name of a ball joint empty -> its place in the frame of the car
 var _rods: Variant = null         # the fixed tie rods (found once), or []
@@ -62,7 +64,7 @@ static func build(c: Car, body: Node3D) -> SuspensionRig:
 		if body != null:
 			for n in body.find_children("*", "Node3D", true, false):
 				model_names.append(str(n.name))
-		rig.built = PartsLibrary.assemble(c.config, centres, diameter, model_names)
+		rig.built = PartsLibrary.assemble(c.config, centres, diameter, model_names, PartsLibrary.own_diffs(body, c, centres))
 		PartsLibrary.clear_cache()          # (the templates: the car has its copies)
 		if not (rig.built["missing"] as Array).is_empty():
 			push_warning("PartsLibrary: missing " + ", ".join(rig.built["missing"]))
@@ -251,6 +253,7 @@ func _find(roots: Array[Node3D]) -> void:
 	_seat_parts()
 	_find_corners()
 	_attach_calipers(roots)
+	_seat_props(roots)
 
 
 ## The ball joints that a model marks with empties: ball_lowerarm_FL, ball_upperarm_FL, ball_tierod_FL (the point on the upright
@@ -303,6 +306,46 @@ func _gather_coilovers(roots: Array[Node3D]) -> void:
 				inner.get_parent().remove_child(inner)
 				cylinder.add_child(inner)
 				inner.transform = CarModel.relative(cylinder, car).affine_inverse() * xf
+
+
+## The longest axis of the meshes of a part and the middle of that mesh, in the frame of the body, or {}.
+func _long_axis(node: Node3D) -> Dictionary:
+	var list: Array[Node] = node.find_children("*", "MeshInstance3D", true, false)
+	if node is MeshInstance3D:
+		list.append(node)
+	var best := 0.0
+	var out := {}
+	for m in list:
+		var mi := m as MeshInstance3D
+		if mi.mesh == null:
+			continue
+		var box := mi.mesh.get_aabb()
+		var xf := CarModel.relative(mi, car)
+		for i in 3:
+			var length := xf.basis[i].length() * box.size[i]
+			if length > best:
+				best = length
+				out = {"axis": xf.basis[i].normalized(), "centre": xf * box.get_center()}
+	return out
+
+
+## Which axle a propshaft turns with: the driven one; with four driven wheels the one on its side of the transaxle (or the gearbox).
+func _seat_props(roots: Array[Node3D]) -> void:
+	var transfer := INF
+	var gearbox := INF
+	for r in roots:
+		for n in r.find_children("*", "Node3D", true, false):
+			var c := clean(str(n.name))
+			if c.begins_with("transaxle"):
+				transfer = CarModel.relative(n as Node3D, car).origin.z
+			elif c.begins_with("gearbox"):
+				gearbox = CarModel.relative(n as Node3D, car).origin.z
+	var at := transfer if transfer != INF else gearbox
+	if at == INF:
+		at = (car.wheels[0].hub.z + car.wheels[2].hub.z) / 2.0
+	for p in parts:
+		if p["kind"] == "prop":
+			p["on_rear"] = car.drive == "rwd" or (car.drive != "fwd" and (p["centre"] as Vector3).z < at)
 
 
 ## A brake caliper (brake_caliper_FL) and a ball joint (ball_lowerarm_FL, ball_upperarm_FL, ball_tierod_FL: a mesh, or an empty that
@@ -369,8 +412,13 @@ func _add_part(node: Node3D, what: Dictionary, has_rack: bool) -> void:
 			e["axis"] = ((exact as Vector3) - origin).normalized()
 			centre = (origin + (exact as Vector3)) * 0.5
 		else:
-			var s := box.size
-			e["axis"] = Vector3.RIGHT if s.x >= s.y and s.x >= s.z else (Vector3.UP if s.y >= s.z else Vector3.BACK)
+			var long := _long_axis(node)
+			if long.is_empty():
+				var s := box.size
+				e["axis"] = Vector3.RIGHT if s.x >= s.y and s.x >= s.z else (Vector3.UP if s.y >= s.z else Vector3.BACK)
+			else:                          # (along its own length: a shaft that lies at an angle must not swing round the axis of the car)
+				e["axis"] = long["axis"]
+				centre = long["centre"]
 	elif kind == "arm":
 		var ball: Variant = exact if exact != null else _ball_of(node, "arm")      # (the ball joint: its empty, or the end of the arm farthest from its hinge)
 		if ball == null:
@@ -421,7 +469,7 @@ func _seat_parts() -> void:
 			if a["wheel"] != p["wheel"]:
 				continue
 			if a["kind"] == "arm" and _between(p["far"].x, a["origin"].x, a["far"].x) and absf(p["far"].x - a["origin"].x) >= 0.03:
-				if best == null or a["origin"].y < best["origin"].y:
+				if best == null or _gap_to_arm(p["far"], a) < _gap_to_arm(p["far"], best):      # (the arm that its foot is on, the upper or the lower one)
 					best = a
 			elif a["kind"] == "trailing" and _between(p["far"].z, a["origin"].z, a["far"].z) and absf(p["far"].z - a["origin"].z) >= 0.03 \
 					and absf(p["far"].z - a["far"].z) >= 0.05:
@@ -433,6 +481,16 @@ func _seat_parts() -> void:
 			p["on_trailing"] = best_trailing
 		elif axle != null:
 			p["on_axle"] = axle
+
+
+## How far a point is from the line of an arm (hinge to ball), across the car.
+static func _gap_to_arm(point: Vector3, arm: Dictionary) -> float:
+	var a := _xy(arm["origin"])
+	var b := _xy(arm["far"])
+	var q := _xy(point)
+	var along := b - a
+	var share := clampf((q - a).dot(along) / maxf(1e-9, along.length_squared()), 0.0, 1.0)
+	return q.distance_to(a + along * share)
 
 
 static func _between(v: float, a: float, b: float) -> bool:
@@ -493,6 +551,10 @@ func _swing(travel: float, length: float) -> float:
 
 
 func update() -> void:
+	for i in 4:
+		var w: Car.Wheel = car.wheels[i]
+		_axle_turn[0 if i < 2 else 1] += wrapf(w.spin - float(_spin_was[i]), -PI, PI) / 2.0
+		_spin_was[i] = w.spin
 	var rack_shift := -rack_travel * car.steer_angle         # along +x (to the left) for a steer to the right
 	_init_rods()
 	var col_angle: Variant = _fit_column() if not (_rods as Array).is_empty() else null
@@ -506,10 +568,7 @@ func update() -> void:
 		var h: Node3D = p["holder"]
 		match p["kind"]:
 			"prop":
-				var turn := 0.0
-				for w in car.wheels:
-					turn += w.spin
-				h.basis = Basis(p["axis"], turn / 4.0)
+				h.basis = Basis(p["axis"], fmod(float(_axle_turn[1 if p["on_rear"] else 0]) * car.final_drive, TAU))
 			"upright":
 				var o: Vector3 = p["origin"]
 				if corners.has(p["wheel"]) and corners[p["wheel"]].has("moved"):
@@ -529,12 +588,7 @@ func update() -> void:
 				var tt: float = _axle_travel_at(p["on_axle"]["rear"], p["far"].x) if p.has("on_axle") else _travel(p["wheel"])
 				h.basis = Basis(Vector3.RIGHT, -float(p["ahead"]) * _swing(tt, p["arm_length"])) * (p["rest_basis"] as Basis)
 			"shaft":
-				var hub: Dictionary = uprights.get(p["wheel"], {})
-				var target: Vector3 = hub["origin"] if not hub.is_empty() else p["far"]
-				if _solved(p["wheel"]):
-					_stretch(p, h, _on_upright(p["wheel"], target, 0.0))
-				else:
-					_stretch(p, h, target + Vector3.UP * _travel(p["wheel"]))
+				_update_shaft(p, h)
 			"panhard":
 				_stretch(p, h, p["far"] + Vector3.UP * _axle_travel_at(p["rear"], p["far"].x))
 			"axle":
@@ -543,7 +597,7 @@ func update() -> void:
 				var rear: bool = p["rear"]
 				var lift := (_travel(2 if rear else 0) + _travel(3 if rear else 1)) / 2.0
 				var d: Vector3 = p["far"] + Vector3.UP * lift - h.position
-				var spin := (car.wheels[2 if rear else 0].spin + car.wheels[3 if rear else 1].spin) / 2.0
+				var spin := fmod(float(_axle_turn[1 if rear else 0]) * car.final_drive, TAU)
 				h.basis = _aim(d) * Basis(Vector3.UP, spin) * Basis.from_scale(Vector3(1.0, maxf(0.2, d.length() / float(p["rest_length"])), 1.0))
 	for p in parts:
 		if p["kind"] == "mount":
@@ -723,9 +777,25 @@ func move_hubs() -> void:
 
 
 ## A part from its origin (on the body) to a point: aimed at it and stretched to it.
-func _stretch(p: Dictionary, h: Node3D, target: Vector3) -> void:
+func _stretch(p: Dictionary, h: Node3D, target: Vector3, turn := 0.0) -> void:
 	var d := target - h.position
-	h.basis = _aim(d) * Basis.from_scale(Vector3(1.0, maxf(0.2, d.length() / float(p["rest_length"])), 1.0))
+	h.basis = _aim(d) * Basis(Vector3.UP, turn) * Basis.from_scale(Vector3(1.0, maxf(0.2, d.length() / float(p["rest_length"])), 1.0))
+
+
+## A driveshaft: from the differential to its own end on the upright, and it turns with its wheel (the two sides look opposite ways).
+func _update_shaft(p: Dictionary, h: Node3D) -> void:
+	var wheel: int = p["wheel"]
+	var far: Vector3 = p["far"]
+	var o: Vector3 = p["origin"]
+	var t := far
+	if _solved(wheel):
+		t = _on_upright(wheel, far, _steer_now(wheel))
+	else:
+		var up: Dictionary = uprights.get(wheel, {})
+		if not up.is_empty() and wheel < 2:
+			t = (far - up["origin"]).rotated(Vector3.UP, _steer(wheel)) + up["origin"]
+		t.y += _travel(wheel)
+	_stretch(p, h, t, car.wheels[wheel].spin * (1.0 if far.x >= o.x else -1.0))
 
 
 func _update_spring(p: Dictionary, h: Node3D) -> void:
