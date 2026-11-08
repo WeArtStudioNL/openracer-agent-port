@@ -73,6 +73,7 @@ func _run() -> void:
 	await _nodes(card)
 	await _select(ed, card)
 	await _parts(ed, card)
+	await _part_window(ed, card)
 	await _crash(ed, card)
 	await _push(ed, card)
 
@@ -219,6 +220,102 @@ func _parts(ed: CarEditor, card: Object) -> void:
 	parts.call("toggle")
 
 
+func _buttons(root: Node, text: String) -> Array:
+	return root.find_children("*", "Button", true, false).filter(func(b: Button) -> bool: return b.text == text)
+
+
+func _part_window(ed: CarEditor, card: Object) -> void:
+	print("5b. the window of a loose part")
+	ed.load_existing("hatchback")
+	await get_tree().process_frame
+	var pw: Object = card.get("partwin")
+	card.call("open_part", "hood")
+	await _wait(0.5)
+	var body: Node = pw.get("_body")
+	check(pw.get("name") == "hood" and (pw.get("panel") as Control).visible and ed.bench.car != null, "a row of the layers opens the window of hood (the bench runs)")
+	check(_buttons(body, "X").size() == 1 and _buttons(body, "+ add").size() == 1, "its pin point with the axes X Y Z, and + add")
+	var hood_mesh := ed.bench.car.model_root.find_child("hood", true, false) as Node3D
+	var mesh_of_hood: Node = hood_mesh.find_children("*", "MeshInstance3D", true, false)[0] if not hood_mesh is MeshInstance3D else hood_mesh
+	check(pw.call("loose_of", mesh_of_hood) == "hood", "a click on its mesh is a click on hood (the loose object)")
+	await get_tree().process_frame
+	check((pw.get("_tris") as ImmediateMesh).get_surface_count() > 0 and ed.view.gizmo.target == pw.get("_pivot"),
+		"the fan of the free axis is drawn and the turn gizmo is on the pin")
+	(_buttons(body, "+ add")[0] as Button).pressed.emit()
+	check(pw.get("mode") == "pin", "+ add waits for a click on the surface")
+	pw.call("_add_pin", Vector3(0.1, 0.5, 1.6))
+	await get_tree().process_frame
+	body = pw.get("_body")
+	var mounts: Array = pw.call("pins")
+	check(mounts.size() == 2 and mounts[1]["point"] == [0.1, 0.5, 1.6] and pw.call("part")["hinge"]["origin"] == [0.1, 0.5, 1.6],
+		"a second pin point there, the origin of the hinge with it")
+	(_buttons(body, "Y")[1] as Button).pressed.emit()
+	await get_tree().process_frame
+	body = pw.get("_body")
+	check(mounts[1]["axes"] == {"x": true, "y": true, "z": false}, "Y is a free axis of pin 2 too")
+	var sliders: Array = body.find_children("*", "HSlider", true, false)
+	var limit: HSlider = null
+	for sl in sliders:
+		if (sl as HSlider).min_value == -180.0:
+			limit = sl
+	if limit != null:
+		limit.value = -40.0
+	check(limits_of_pin(mounts[1], "y") == [-40.0, 90.0] and mounts[1]["limits"].has("y"), "a limit slider sets the min of the Y axis of pin 2 (%s)" %
+		str(mounts[1].get("limits")))
+	var pivot: Node3D = pw.get("_pivot")
+	pivot.rotate_object_local(Vector3.RIGHT, 0.5)
+	pw.call("_gizmo_moved")
+	var sel: int = pw.get("pin_sel")
+	check(mounts[sel].get("rot") is Array and absf(float(mounts[sel]["rot"][0])) > 0.1, "the turn gizmo turns the pin (rot %s)" % str(mounts[sel].get("rot")))
+	print("    nodes of the part")
+	var before: int = (pw.call("own_nodes") as Array).size()
+	pw.call("_start_nodes")
+	check(pw.get("mode") == "nodes" and (pw.get("_faded") as Array).size() > 10, "Add nodes: the rest of the car is faded (%d meshes)" % (pw.get("_faded") as Array).size())
+	pw.call("_add_node", Vector3(0, 0.45, 1.5))
+	check((pw.call("own_nodes") as Array).size() == before + 1, "a node of hood is added (%d)" % (before + 1))
+	pw.call("_end_nodes")
+	check(pw.get("mode") == "" and (pw.get("_faded") as Array).is_empty(), "and it stops, the car seen again")
+	card.call("set_locked", true)
+	var any_on := false
+	for b in pw.get("_body").find_children("*", "Button", true, false):
+		any_on = any_on or not (b as Button).disabled
+	check(not any_on, "a tune is chosen: the window is locked")
+	card.call("set_locked", false)
+	print("    a breakable part")
+	pw.call("open", "left-taillight")
+	await get_tree().process_frame
+	body = pw.get("_body")
+	check(_buttons(body, "Break it now").size() == 1 and (body.find_children("*", "CheckBox", true, false)[0] as CheckBox).button_pressed,
+		"left-taillight: it shatters, with Break it now")
+	var state: String = await pw.call("break_now")
+	check(state == "broken", "Break it now: it broke on the bench (%s)" % state)
+	print("    an object that is no part yet")
+	var free_name := ""
+	var parts_now := {}
+	for q in ed.cfg["parts"]:
+		parts_now[str(q["object"])] = true
+	for e in ed.nodes:
+		var nm := str(e["name"])
+		var o := ed.bench.car.model_root.find_child(nm, true, false) as Node3D if ed.bench.car != null else null
+		if o != null and not parts_now.has(nm) and pw.call("loose_of", o) == nm:
+			free_name = nm
+			break
+	pw.call("open", free_name)
+	await get_tree().process_frame
+	body = pw.get("_body")
+	check(free_name != "" and _buttons(body, "Breakable only").size() == 1, "%s: Hinge part or Breakable only" % free_name)
+	if free_name != "":
+		(_buttons(body, "Breakable only")[0] as Button).pressed.emit()
+		check(pw.call("part").get("mode") == "detachable" and float(pw.call("part").get("break_force", 0)) == 3000.0, "Breakable only: a part at 3 kN")
+	pw.call("close")
+	check(not (pw.get("panel") as Control).visible, "closed")
+	ed.bench.stop()
+
+
+static func limits_of_pin(pin: Dictionary, a: String) -> Array:
+	var l: Variant = pin.get("limits", {}).get(a) if pin.get("limits") is Dictionary else null
+	return [float(l[0]), float(l[1])] if l is Array else [float(pin.get("min", -90)), float(pin.get("max", 90))]
+
+
 func _crash(ed: CarEditor, card: Object) -> void:
 	print("6. the crash test of the bench (the hatchback as it is)")
 	ed.load_existing("hatchback")
@@ -266,5 +363,16 @@ func _push(ed: CarEditor, card: Object) -> void:
 	var text: String = card.get("ui")["result"].text
 	print("    ", text)
 	check(st["absorbed"] > 0.0 and text.contains("peak"), "the shell took it (%.1f kJ, bend %.1f cm)" % [st["absorbed"] / 1000.0, st["max_bend"] * 100.0])
+	print("    a cube at the left door: the part feels the hit itself")
+	var door := ed.bench.car.model_root.find_child("body_left-door", true, false) as Node3D
+	var mid: Vector3 = card.get("partwin").call("_box", door).get_center()
+	ed.view.camera.position = mid + Vector3(5, 0.5, 0)
+	ed.view.camera.look_at(mid)
+	await get_tree().process_frame
+	crash.call("fire", ed.view.camera.unproject_position(mid))
+	var cube: Dictionary = crash.get("cube")
+	print("    ", cube.get("part", "no part"))
+	check(str(cube.get("part", "")).begins_with("body_left-door: ") and ed.bench.car.parts.part_named("body_left-door").state != "held",
+		"the door opened or tore off (%s)" % cube.get("part", "no part"))
 	crash.call("set_push", false)
 	ed.bench.stop()

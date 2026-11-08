@@ -101,6 +101,14 @@ func _run() -> void:
 	check(steer[0] < -0.3 and steer[1] > 0.3, "the steering to both locks (%.0f°, %.0f°)" % [rad_to_deg(steer[0]), rad_to_deg(steer[1])])
 	check(hit_kmh > 40.0, "full throttle into the wall (%d km/h)" % roundi(hit_kmh))
 	check(ed.bench.car == null and ed.bench.test_run.is_empty(), "the full test ends by itself, back at the model")
+	print("1d. the flame test of the exhaust points")
+	ed.layers.set_flame_test(true)
+	ed.layers.flames_frame(10.0)
+	var lit := 0
+	for m in ed.layers._flames.get_children():
+		lit += 1 if (m as Node3D).visible else 0
+	check(lit > 0 and ed.layers._flames.root == ed.view.extras, "a bang makes flames at the exhaust point (%d)" % lit)
+	ed.layers.set_flame_test(false)
 	print("2. change it as a user does")
 	_type(ed, "name", "Hatchback editor test")
 	ed.form._id_edit.text = "zz-editor-test"
@@ -210,6 +218,16 @@ func _run() -> void:
 		"Take off the car: the file and the list are gone")
 	Settings._overrides.erase("garage_folder")
 	Tuning.tunes_root = "user://tunes"
+	print("3c. the window of Save and test: the track and the conditions")
+	var dlg := ed.open_test_dialog()
+	await get_tree().process_frame
+	var labels := []
+	for b in dlg.find_children("*", "Button", true, false):
+		labels.append((b as Button).text)
+	check(labels.has("Rain") and labels.has("Dusk") and labels.has("Wet") and labels.has("Follows the weather"),
+		"the weather, the time of day and the ground to choose")
+	check(labels.any(func(t: String) -> bool: return t.begins_with("Use last settings: ")), "and Use last settings")
+	dlg.hide()
 	EditorStyle.select_value(ed.tuning._setup_pick, "")
 	print("4. a new car from a glb (the kart of the game)")
 	ed.new_car("car")

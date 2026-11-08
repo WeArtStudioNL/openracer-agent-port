@@ -402,6 +402,31 @@ func fire(mouse: Vector2) -> void:
 	_arrow.visible = false
 	ed.status("Cube of %d m and %d kg fired at %d km/h%s. Click again to fire another." % [CUBE_SIDE, CUBE_MASS, roundi(kmh),
 		" at the nodes of " + str(cube["group"]) if cube["group"] != "" else ""], "ok")
+	# a part that hangs on a hinge (not opened yet) or breaks (glass, a lamp) feels the hit itself: it opens past its
+	# latch, tears at its force, shatters (CarParts.hit); the impulse it gets is at most what sends it off at twice the
+	# speed of the cube (the browser gave a door the whole impulse of the tonne)
+	var pname := part_hit(hit["node"], c)
+	if pname != "":
+		var p: CarParts.Part = c.parts.part_named(pname)
+		var speed := kmh / 3.6
+		var force := CUBE_MASS * speed / 0.03
+		var what := c.parts.hit(p, -Vector3(hit["normal"]), minf(CUBE_MASS * speed, p.mass * speed * 2.0), force)
+		cube["part"] = "%s: %s" % [pname, what]
+		ed.status("%s: %s (cube of %d km/h, %d kN)." % [pname, what, roundi(kmh), roundi(force / 1000.0)], "ok")
+
+
+## The loose part (car.json "parts") whose object holds what was hit, when it is one that feels a hit itself (one on a
+## hinge, one that breaks, one that comes off at a force, or one that is off already), else "".
+func part_hit(node: Node, c: Car) -> String:
+	if c.parts == null:
+		return ""
+	var n: Node = card.get("partwin").source(node)
+	while n != null and n != c:
+		var p := c.parts.part_named(str(n.name))
+		if p != null:
+			return p.name if p.state != "held" or p.mode in ["hinge", "breakable"] or p.break_force > 0.0 else ""
+		n = n.get_parent()
+	return ""
 
 
 ## The part of the object that was hit when it has nodes of its own (only those are pushed), else "" (the nodes of the body).
@@ -470,9 +495,10 @@ func _push_reading(c: Car) -> void:
 		return
 	var st := c.shell.sb.stats()
 	var done: bool = cube.get("done", false)
-	_result("%s %d km/h: peak %d kg of force, %.1f cm into the shell · bend %.1f cm · took up %.1f kJ · %d anchors and %d beams torn" % [
+	_result("%s %d km/h: peak %d kg of force, %.1f cm into the shell · bend %.1f cm · took up %.1f kJ · %d anchors and %d beams torn%s" % [
 		"Hit with" if done else "Cube at", roundi(cube["kmh"]), roundi(cube["peak"] / 9.81), maxf(0.0, cube["max_in"]) * 100.0,
-		st["max_bend"] * 100.0, st["absorbed"] / 1000.0, st["torn_anchors"], st["torn_beams"]])
+		st["max_bend"] * 100.0, st["absorbed"] / 1000.0, st["torn_anchors"], st["torn_beams"],
+		" · " + str(cube["part"]) if cube.has("part") else ""])
 	if done:
 		_shot.visible = false
 		ed.status(ui["result"].text, "ok")

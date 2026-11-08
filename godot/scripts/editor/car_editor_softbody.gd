@@ -17,6 +17,7 @@ extends RefCounted
 const NodesTool := preload("res://scripts/editor/car_editor_softbody_nodes.gd")
 const PartsPanel := preload("res://scripts/editor/car_editor_softbody_parts.gd")
 const CrashTest := preload("res://scripts/editor/car_editor_softbody_crash.gd")
+const PartWindow := preload("res://scripts/editor/car_editor_softbody_partwin.gd")
 # the numbers of the Strengths window: [path in softbody, hint, step, scale (what is shown is the value times it), the default]
 const STRENGTHS := [
 	["Anchor: node to the car", [["anchor.stiffness", "stiffness (kN/mm)", 0.1, 1e-6, "0.8"], ["anchor.yield_force", "yield (kN)", 5.0, 1e-3, "80"],
@@ -52,6 +53,7 @@ var sel_beam := -1
 var pick := Callable()               # a Set button of the Parts window waits for a click on the model: pick.call(local, node)
 var parts: PartsPanel
 var crash: CrashTest
+var partwin: PartWindow              # the window of one loose part (a click on it in the view, or its row in the layers)
 var shell_node: Node3D               # in the frame of the car of the bench (it follows the car)
 var pivot: Node3D                    # what the gizmo moves: the middle of the selected nodes
 var ui := {}
@@ -68,7 +70,7 @@ var _lasso_line: Line2D
 var _lasso_fill: Polygon2D
 var _tri_cache := {}                 # MeshInstance3D id -> TriangleMesh (the surface under the mouse)
 var _strengths := {}
-var _force_boxes: Array[Callable] = []
+var _force_boxes: Array = []           # [field, refresh] (a window made again leaves its old fields behind)
 var _locked := false                 # a tune is chosen: the shell and the parts are the car's, shown but not changed here
 
 
@@ -94,6 +96,7 @@ func setup(editor: CarEditor, card_body: VBoxContainer) -> void:
 	ed.view.overlay.add_child(_lasso_line)
 	parts = PartsPanel.new(self)
 	crash = CrashTest.new(self)
+	partwin = PartWindow.new(self)
 	_build(card_body)
 	ed.view.input_hook = _input
 	ed.view.gizmo.drag_started.connect(_drag_started)
@@ -295,7 +298,7 @@ func force_slider(f: EditorStyle.NumberField, off: String) -> void:
 			f.set_value(null)
 			f.committed.emit(NAN))
 	f.edit.text_changed.connect(func(_t: String): refresh.call())
-	_force_boxes.append(refresh)
+	_force_boxes.append([f, refresh])
 	refresh.call()
 
 
@@ -309,8 +312,9 @@ static func force_text(kn: float, off: String) -> String:
 
 ## The sliders of the forces follow their fields (a preset, the defaults, a car loaded).
 func refresh_forces() -> void:
-	for r in _force_boxes:
-		r.call()
+	_force_boxes = _force_boxes.filter(func(e: Array) -> bool: return is_instance_valid(e[0]))
+	for e in _force_boxes:
+		(e[1] as Callable).call()
 
 
 ## A tune is chosen (locked): the shell, the strengths and the parts are the car's (every tune uses them), so they are
@@ -327,6 +331,7 @@ func set_locked(on: bool) -> void:
 	if not _strengths.is_empty():
 		lock_tree(_strengths["body"], on)
 	parts.render()
+	partwin.render()
 	show_selection()
 
 
@@ -382,6 +387,7 @@ func fill(_cfg: Dictionary) -> void:
 	sel_nodes.clear()
 	sel_beam = -1
 	pick = Callable()
+	partwin.close()
 	parts.render()
 	refresh_forces()
 	if shown or crash.running():
@@ -561,6 +567,7 @@ func frame(dt: float) -> void:
 			car = ed.bench.car
 			_info()
 	crash.frame(dt)
+	partwin.frame(dt)
 	if shown and soft() != null:
 		_draw()
 
@@ -764,6 +771,8 @@ func click(mouse: Vector2) -> bool:
 			pick = Callable()
 			f.call(car.global_transform.affine_inverse() * Vector3(hit["position"]), hit["node"])
 		return true
+	if partwin.click(mouse):
+		return true
 	if not shown or soft() == null:
 		return false
 	return _click_shell(mouse)
@@ -799,6 +808,11 @@ func picked(hit: Dictionary) -> void:
 		var f := pick
 		pick = Callable()
 		f.call(Vector3(hit["position"]), hit["node"])
+		return
+	# (a loose object of the model: its window, as a click on it with the bench running)
+	var loose := partwin.loose_of(hit["node"])
+	if loose != "":
+		partwin.open(loose)
 
 
 ## The tab Crash test of the test bar (CarEditorEngine.build_test_bar): the crash test and Apply force.
@@ -806,14 +820,18 @@ func crash_tab(pane: VBoxContainer) -> void:
 	crash.build(pane)
 
 
-## A part chosen in the Layers panel: its row in the Parts window.
+## A part chosen in the Layers panel: its window (again: it closes), and its row in the Parts window when that is open.
 func open_part(part_name: String) -> void:
-	parts.open_part(part_name)
+	partwin.toggle(part_name)
+	if parts.is_open():
+		parts.open_part(part_name)
 
 
 func _input(event: InputEvent) -> bool:
 	if crash.input(event):
 		return true
+	if event is InputEventMouseMotion and _lasso.is_empty():
+		partwin.hover((event as InputEventMouseMotion).position)
 	if not shown or soft() == null:
 		return false
 	var mb := event as InputEventMouseButton
@@ -1124,18 +1142,25 @@ func _drag_ended() -> void:
 ## A key (CarEditor._unhandled_key_input): Delete removes the selected nodes, Escape stops a pick, Apply force or editing.
 func key(code: Key) -> bool:
 	if code == KEY_ESCAPE:
-		if pick.is_valid():
-			pick = Callable()
-			status("")
-			return true
-		if crash.escape():
-			return true
-		if editing:
-			set_editing(false)
-			return true
-		return false
+		return _escape()
 	if editing and (code == KEY_DELETE or code == KEY_BACKSPACE) and not sel_nodes.is_empty():
 		delete_selected()
+		return true
+	return false
+
+
+## Escape: a mode of the part window, a pick, Apply force or editing stops (true when one did).
+func _escape() -> bool:
+	if partwin.escape():
+		return true
+	if pick.is_valid():
+		pick = Callable()
+		status("")
+		return true
+	if crash.escape():
+		return true
+	if editing:
+		set_editing(false)
 		return true
 	return false
 

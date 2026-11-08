@@ -968,31 +968,80 @@ func save_and_test() -> void:
 			return
 	elif not await save():
 		return
+	open_test_dialog()
+
+
+## The window of Save and test (car-editor.js openTestDialog): the track and the conditions (the weather, the time of day
+## and the ground are the settings of the game: what is chosen here is what the drive starts with), or Use last settings.
+func open_test_dialog() -> ConfirmationDialog:
 	var tracks := Content.list_tracks()
+	var last := {"track": str(Settings.get_value("editor_test_track")), "weather": str(Settings.get_value("gfx_weather")),
+		"time": float(Settings.get_value("gfx_time")), "ground": str(Settings.get_value("gfx_ground"))}
+	if not tracks.any(func(t: Dictionary) -> bool: return t["id"] == last["track"]) and not tracks.is_empty():
+		last["track"] = tracks[0]["id"]
+	var picked := last.duplicate()
 	var d := ConfirmationDialog.new()
 	d.title = "Test the car"
 	d.ok_button_text = "Start"
 	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
 	box.add_child(EditorStyle.label("Track", 12, Color("#b9c3d0")))
 	var pick := OptionButton.new()
 	for t in tracks:
 		pick.add_item(str(t["name"]))
 		pick.set_item_metadata(pick.item_count - 1, t["id"])
-	EditorStyle.select_value(pick, "testtrack")
+	EditorStyle.select_value(pick, last["track"])
+	pick.item_selected.connect(func(_i: int): picked["track"] = str(EditorStyle.value_of(pick)))
 	box.add_child(pick)
-	box.add_child(EditorStyle.hint("The weather, the time of day and the ground of the browser game are not in the Godot version yet."))
+	var name_of := func(list: Array, v: Variant) -> String:
+		for e in list:
+			if e[0] == v:
+				return str(e[1])
+		return str(v)
+	for c in [["Weather", GraphicsPage.WEATHERS, "weather"], ["Time of day", GraphicsPage.TIMES, "time"], ["Ground", GraphicsPage.GROUNDS, "ground"]]:
+		box.add_child(EditorStyle.label(c[0], 12, Color("#b9c3d0")))
+		var flow := HFlowContainer.new()
+		box.add_child(flow)
+		var buttons := []
+		for e in c[1]:
+			var b := EditorStyle.button(str(e[1]), "small" + (" accent" if e[0] == picked[c[2]] else " ghost"))
+			b.pressed.connect(func():
+				picked[c[2]] = e[0]
+				for o in buttons:
+					EditorStyle.style_button(o, "small accent" if o == b else "small ghost"))
+			buttons.append(b)
+			flow.add_child(b)
+	var track_name := str(last["track"])
+	for t in tracks:
+		if t["id"] == last["track"]:
+			track_name = str(t["name"])
+	var again := EditorStyle.button("Use last settings: %s, %s, %s" % [track_name, name_of.call(GraphicsPage.WEATHERS, last["weather"]).to_lower(),
+		name_of.call(GraphicsPage.TIMES, last["time"]).to_lower()], "small ghost")
+	again.pressed.connect(func():
+		d.hide()
+		_start_test(last))
+	box.add_child(again)
 	d.add_child(box)
 	add_child(d)
-	d.confirmed.connect(func():
-		var track := str(EditorStyle.value_of(pick))
-		visible = false
-		engine.stop_sound()
-		test_drive.emit(existing_id, track)
-		_watch_test())
+	d.confirmed.connect(func(): _start_test(picked))
 	d.visibility_changed.connect(func():
 		if not d.visible:
 			d.queue_free())
-	d.popup_centered(Vector2i(420, 0))
+	d.popup_centered(Vector2i(520, 0))
+	return d
+
+
+## The conditions go into the settings of the game (the rest stays as it is), the track is remembered; the drive starts.
+func _start_test(choice: Dictionary) -> void:
+	Settings.set_value("gfx_weather", choice["weather"])
+	Settings.set_value("gfx_time", choice["time"])
+	Settings.set_value("gfx_ground", choice["ground"])
+	Settings.set_value("editor_test_track", choice["track"])
+	visible = false
+	engine.stop_sound()
+	bench.stop()
+	test_drive.emit(existing_id, str(choice["track"]))
+	_watch_test()
 
 
 ## The test drive ends (Esc, Main menu): back here.

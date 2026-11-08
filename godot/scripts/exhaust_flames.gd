@@ -46,6 +46,7 @@ func _make(config: Dictionary) -> void:
 	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mat.billboard_keep_scale = true          # (without it a billboard ignores the scale: every flame was a quad of a metre)
 	mat.vertex_color_use_as_albedo = true
 	var g := Gradient.new()
 	g.offsets = PackedFloat32Array([0.0, 0.35, 1.0])
@@ -115,6 +116,8 @@ func emit_bang(event: Dictionary) -> void:
 			_age[i] = 0.0
 			_life[i] = 0.07 + randf() * 0.13 * minf(1.5, s)
 			_size[i] = float(p["length"]) * (0.4 + 0.4 * randf()) * minf(2.0, flame) * float(p["brightness"])
+			m.scale = Vector3.ONE * maxf(0.01, _size[i] * 0.4)      # (the size of its start: until _process it had the size of the last one, or a metre)
+			m.transparency = 0.0
 			m.visible = true
 
 
