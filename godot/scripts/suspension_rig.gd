@@ -54,6 +54,7 @@ static func build(c: Car, body: Node3D) -> SuspensionRig:
 	rig.hubs = {0: centres["FL"], 1: centres["FR"]}
 	if _uses_library(c.config):
 		rig.built = PartsLibrary.assemble(c.config, centres, diameter)
+		PartsLibrary.clear_cache()          # (the templates: the car has its copies)
 		if not (rig.built["missing"] as Array).is_empty():
 			push_warning("PartsLibrary: missing " + ", ".join(rig.built["missing"]))
 		rig.root.add_child(rig.built["group"])

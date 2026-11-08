@@ -302,6 +302,16 @@ static func files_for(cfg: Dictionary) -> Array:
 	return out
 
 
+## Frees the scenes of the parts that were loaded (they are kept while the car editor builds again and again; a car of
+## the game frees them once it is assembled: kept, they were instances leaked at the exit).
+static func clear_cache() -> void:
+	for r in _cache:
+		var n: Node3D = _cache[r]
+		if n != null and is_instance_valid(n):
+			n.free()
+	_cache.clear()
+
+
 static func _template(t: String, file: String) -> Node3D:
 	var r := rel(t, file)
 	if not _cache.has(r):

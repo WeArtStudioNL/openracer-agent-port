@@ -108,6 +108,11 @@ func _ready() -> void:
 	add_child(_late)
 
 
+func _exit_tree() -> void:
+	if fx != null:
+		ReplayFx.forget(fx)
+
+
 func start_time() -> float:
 	return first_index / RATE
 

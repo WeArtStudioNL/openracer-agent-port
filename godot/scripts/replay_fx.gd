@@ -69,6 +69,14 @@ static func now() -> float:
 	return recording._now() if recording != null and is_instance_valid(recording.replay) else 0.0
 
 
+## The replay of the drive is gone (the drive ends): nothing records, nothing is kept.
+static func forget(r: ReplayFx) -> void:
+	if recording == r:
+		recording = null
+		active = false
+	_pending.clear()
+
+
 func _init(r: Node) -> void:
 	replay = r
 
