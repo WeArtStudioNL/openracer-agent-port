@@ -213,7 +213,7 @@ static func car_picture(id: String, cfg: Dictionary, host: Node, on_ready: Calla
 	var t := _webp("cars/%s/preview.webp" % id) if key == "" or key == id else null
 	if t != null:
 		return t
-	var file := Settings.path("previews/%s.png" % (key if key != "" else id).validate_filename())
+	var file := Settings.path("previews/lit-%s.png" % (key if key != "" else id).validate_filename())
 	if _textures.has(file):
 		return _textures[file]
 	if FileAccess.file_exists(file):
@@ -241,6 +241,30 @@ static func _webp(rel: String) -> Texture2D:
 	return tex
 
 
+## The light of the pictures of the cars (MainMenu.js showcase: a room to reflect, a light from above and below, the
+## filmic tone mapping): a bright sky that is only seen in the paint and the metal (the viewports are transparent).
+static func _studio() -> WorldEnvironment:
+	var mat := ProceduralSkyMaterial.new()
+	mat.sky_top_color = Color(1.0, 1.0, 1.0)
+	mat.sky_horizon_color = Color(0.72, 0.74, 0.78)
+	mat.ground_horizon_color = Color(0.5, 0.5, 0.52)
+	mat.ground_bottom_color = Color(0.2, 0.2, 0.2)
+	mat.sun_angle_max = 0.0
+	var sky := Sky.new()
+	sky.sky_material = mat
+	var e := Environment.new()
+	e.background_mode = Environment.BG_SKY
+	e.sky = sky
+	e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	e.ambient_light_energy = 1.0
+	e.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+	e.tonemap_mode = Environment.TONE_MAPPER_ACES
+	e.tonemap_exposure = 1.1
+	var env := WorldEnvironment.new()
+	env.environment = e
+	return env
+
+
 ## The car drawn once in a viewport of its own, from the front at an angle (showcase.still), and kept as a png.
 static func _render(id: String, cfg: Dictionary, host: Node, file: String, on_ready: Callable) -> void:
 	var vp := SubViewport.new()
@@ -258,12 +282,7 @@ static func _render(id: String, cfg: Dictionary, host: Node, file: String, on_re
 	sun.rotation_degrees = Vector3(-50, 35, 0)
 	sun.light_energy = 1.6
 	vp.add_child(sun)
-	var env := WorldEnvironment.new()
-	env.environment = Environment.new()
-	env.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.environment.ambient_light_color = Color(0.6, 0.62, 0.66)
-	env.environment.background_mode = Environment.BG_CLEAR_COLOR
-	vp.add_child(env)
+	vp.add_child(_studio())
 	var cam := Camera3D.new()
 	cam.fov = 32.0
 	vp.add_child(cam)
@@ -336,12 +355,7 @@ static func showcase(bg: TextureRect, id: String, cfg: Dictionary, host: Node) -
 		sun.rotation_degrees = Vector3(-50, 35, 0)
 		sun.light_energy = 1.6
 		_show.add_child(sun)
-		var env := WorldEnvironment.new()
-		env.environment = Environment.new()
-		env.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-		env.environment.ambient_light_color = Color(0.6, 0.62, 0.66)
-		env.environment.background_mode = Environment.BG_CLEAR_COLOR
-		_show.add_child(env)
+		_show.add_child(_studio())
 		host.get_tree().root.add_child(_show)
 	_show.add(bg, id, cfg)
 

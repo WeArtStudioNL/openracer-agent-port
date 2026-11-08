@@ -172,6 +172,8 @@ func _make_grid() -> void:
 
 
 func _process(_delta: float) -> void:
+	if world != null and world.camera != null:
+		world.camera.right_taken = on and _tool != ""
 	if not on or world == null or world.car == null:
 		return
 	var car: Car = world.car

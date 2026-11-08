@@ -10,6 +10,9 @@ var distance := 6.0
 var height := 2.4
 var look_height := 0.6
 var smoothing := 3.5
+var zoom := 1.0                   # the follow camera nearer or further (the mouse wheel), times its distance
+var elev := 0.0                   # rad: the follow camera higher or lower about the car (right mouse button and drag)
+var right_taken := false          # (the debug view has a tool on the right mouse button)
 var film_step := -1.0             # (a video is made, ReplayFilm: > 0 the step of this picture, 0 rests until the next picture; -1 not filming)
 var fov_standing := 50.0
 var fov_fast := 70.0
@@ -23,6 +26,7 @@ var _pos := Vector3.ZERO
 var _look_dir := Vector3.FORWARD
 var _fov := -1.0                  # the field of view of the follow camera now (it follows the speed, smoothed)
 var _crash_off: Variant = null    # a motorcycle that went down: the camera follows the rider at this offset (Car.js)
+var _orbiting := false            # the right mouse button is down: a drag turns the camera
 
 
 func follow(c: Car) -> void:
@@ -92,6 +96,47 @@ func _flat_forward(xf: Transform3D) -> Vector3:
 	return f.normalized() if f.length() > 0.01 else Vector3.FORWARD
 
 
+## The follow camera with the mouse (Car.js): the right button and a drag turn it about the car and lift or lower it,
+## the wheel brings it nearer or further.
+func _unhandled_input(event: InputEvent) -> void:
+	if mode != Mode.FOLLOW or not current or car == null:
+		return
+	var mb := event as InputEventMouseButton
+	if mb != null and mb.pressed:
+		if mb.button_index == MOUSE_BUTTON_RIGHT and not right_taken:
+			_orbiting = true
+			get_viewport().set_input_as_handled()
+		elif mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_zoom_by((1.0 if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN else -1.0) * 0.15 * maxf(mb.factor, 0.2) if mb.factor != 0.0 else 0.0)
+			get_viewport().set_input_as_handled()
+	elif event is InputEventPanGesture:          # (a trackpad: two fingers)
+		_zoom_by(clampf((event as InputEventPanGesture).delta.y * 0.05, -0.45, 0.45))
+		get_viewport().set_input_as_handled()
+
+
+func _input(event: InputEvent) -> void:
+	if not _orbiting:
+		return
+	var mb := event as InputEventMouseButton
+	if mb != null and mb.button_index == MOUSE_BUTTON_RIGHT and not mb.pressed:
+		_orbiting = false
+	elif event is InputEventMouseMotion:
+		var rel := (event as InputEventMouseMotion).relative
+		orbit = wrapf(orbit - rel.x * 0.006, -PI, PI)
+		elev = clampf(elev + rel.y * 0.005, -0.15, 1.2)
+
+
+func _zoom_by(amount: float) -> void:
+	zoom = clampf(zoom * exp(amount), 0.3, 4.0)
+
+
+## The key that puts the camera back behind the car.
+func reset_view() -> void:
+	orbit = 0.0
+	elev = 0.0
+	zoom = 1.0
+
+
 func _process(delta: float) -> void:
 	if car == null:
 		return
@@ -120,7 +165,8 @@ func _process(delta: float) -> void:
 			_fov = fov_want if _fov < 0.0 else _fov + (fov_want - _fov) * (1.0 - exp(-4.0 * minf(delta, 0.1)))
 			var scale := 1.0 + dolly * (tan(deg_to_rad(fov_standing) / 2.0) / tan(deg_to_rad(_fov) / 2.0) - 1.0)
 			var dir := _look_dir.rotated(Vector3.UP, orbit)
-			var target := xf.origin - dir * distance * scale + Vector3.UP * (look_height + (height - look_height) * scale)
+			var far := distance * scale * zoom
+			var target := xf.origin - dir * far + Vector3.UP * (look_height + (height - look_height) * scale + tan(elev) * far)
 			_pos = _pos.lerp(target, 1.0 - exp(-delta * smoothing * 2.5))
 			global_transform = Transform3D(Basis.IDENTITY, _pos).looking_at(xf.origin + dir * look_z + Vector3.UP * look_height, Vector3.UP)
 			if car.bike != null:

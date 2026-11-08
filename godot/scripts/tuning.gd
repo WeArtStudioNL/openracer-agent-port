@@ -860,6 +860,16 @@ static func load_tune(path: String) -> Dictionary:
 	return t.get("config", {}) if t is Dictionary else {}
 
 
+## The car with a tune: what the tune has over the car as made. (A tune may have no model, which is the car's.)
+static func tuned_config(path: String, base: Dictionary) -> Dictionary:
+	var t := load_tune(path)
+	if t.is_empty():
+		return {}
+	var cfg := base.duplicate(true)
+	cfg.merge(t, true)
+	return cfg
+
+
 static func save_tune(car_id: String, tune_name: String, cfg: Dictionary) -> String:
 	DirAccess.make_dir_recursive_absolute(tunes_dir(car_id))
 	var safe := tune_name.validate_filename().replace(" ", "-").to_lower()

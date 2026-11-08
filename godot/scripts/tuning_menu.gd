@@ -674,7 +674,7 @@ func _pick_setup(i: int) -> void:
 
 func _switch(n: String) -> void:
 	var path := _path_of(n)
-	var cfg := Tuning.load_tune(path) if path != "" else base.duplicate(true)
+	var cfg := Tuning.tuned_config(path, base) if path != "" else base.duplicate(true)
 	if cfg.is_empty():
 		_message.text = "This setup could not be read."
 		return
@@ -701,7 +701,7 @@ func _remember(path: String) -> void:
 func _update_reference(cfg := {}) -> void:
 	if cfg.is_empty():
 		var path: String = Settings.get_value("tunes").get(car.car_id, "")
-		cfg = Tuning.load_tune(path) if path != "" else {}
+		cfg = Tuning.tuned_config(path, base) if path != "" else {}
 		if cfg.is_empty():
 			cfg = base
 	_reference = Tuning.values_of(cfg, _cam())
@@ -778,7 +778,7 @@ func export_to(path: String) -> bool:
 	if n != "" and _differs(_reference):
 		title = n + " (changed)"
 	elif n != "":
-		var saved := Tuning.load_tune(_path_of(n))
+		var saved := Tuning.tuned_config(_path_of(n), base)
 		cfg = saved if not saved.is_empty() else car.config
 	var err := TuningFiles.export_file(path, car.car_id, title, cfg)
 	_message.text = ("Tune %s saved as %s." % [title, path.get_file()]) if err == "" else "The tune was not saved: %s." % err

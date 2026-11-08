@@ -73,7 +73,7 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	var tune_path: String = Settings.get_value("tunes").get(car_id, "")
 	var tune_name := ""
 	if tune_path != "":
-		var tuned := Tuning.load_tune(tune_path)
+		var tuned := Tuning.tuned_config(tune_path, base_config)
 		if not tuned.is_empty():
 			cfg_use = tuned
 			var tunes := Tuning.list(car_id, base_config)
@@ -656,7 +656,7 @@ func _more_actions(event: InputEvent) -> void:
 	elif event.is_action_pressed("camera_left") or event.is_action_pressed("camera_right"):
 		camera.orbit = wrapf(camera.orbit + (0.35 if event.is_action_pressed("camera_left") else -0.35), -PI, PI)
 	elif event.is_action_pressed("camera_reset"):
-		camera.orbit = 0.0
+		camera.reset_view()
 	elif event.is_action_pressed("start_engine"):
 		car.engine.start()
 	elif event.is_action_pressed("repair"):

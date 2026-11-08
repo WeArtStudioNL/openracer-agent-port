@@ -87,7 +87,7 @@ func setup(w: Node, l: RacingLine, t: Track, player_car: Car, opponents: int, ra
 		# (a car of the menu with a setup of its own: the tune, as the player's car takes one)
 		if i < chosen.size() and str(chosen[i].get("tune", "")) != "" and cfg is Dictionary:
 			var tune_path: String = Tuning.list(id, cfg).get(str(chosen[i]["tune"]), "")
-			var tuned := Tuning.load_tune(tune_path) if tune_path != "" else {}
+			var tuned := Tuning.tuned_config(tune_path, cfg) if tune_path != "" else {}
 			if not tuned.is_empty():
 				cfg = tuned
 		# (Settings, Simulation: the AI cars without a soft body: rigid, Opponent.js aiDamage "off")

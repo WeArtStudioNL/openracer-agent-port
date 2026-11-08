@@ -725,7 +725,7 @@ func _opponents_step() -> void:
 		var id := str(o["car"])
 		var cfg := car_config(id)
 		if o["tune"] != "":
-			var t := Tuning.load_tune(str(tunes_of(id).get(o["tune"], "")))
+			var t := Tuning.tuned_config(str(tunes_of(id).get(o["tune"], "")), cfg)
 			if not t.is_empty():
 				cfg = t
 		var tile := car_tile(id, cfg, false, self, size, str(car_config(id).get("name", id)), str(o["tune"]) if o["tune"] != "" else "Default")
