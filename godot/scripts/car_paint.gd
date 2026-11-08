@@ -83,13 +83,19 @@ static func apply_override(m: BaseMaterial3D, o: Variant) -> void:
 		v.merge(o, true)
 	var c := Color(str(v["color"]))
 	var opacity := float(v["opacity"])
-	m.albedo_color = Color(c.r, c.g, c.b, opacity)
-	m.metallic = float(v["metalness"])
+	var metal := clampf(float(v["metalness"]), 0.0, 1.0)
+	# The reflection (three.js envMapIntensity scales what the surroundings give): Godot has no such factor per material.
+	# The part of a dielectric is the strength of its specular (0.5 is the default, at 1); a metal reflects in its own
+	# colour, so its colour is scaled by it (at most to white); a clear coat reflects the surroundings and goes with it.
+	var refl := maxf(0.0, float(v["envMapIntensity"]))
+	var k := lerpf(1.0, refl, metal)
+	m.albedo_color = Color(minf(1.0, c.r * k), minf(1.0, c.g * k), minf(1.0, c.b * k), opacity)
+	m.metallic = metal
 	m.roughness = float(v["roughness"])
 	m.clearcoat_enabled = float(v["clearcoat"]) > 0.0
-	m.clearcoat = float(v["clearcoat"])
+	m.clearcoat = float(v["clearcoat"]) * minf(1.0, refl)
 	m.clearcoat_roughness = float(v["clearcoatRoughness"])
-	m.metallic_specular = clampf(0.5 * float(v["envMapIntensity"]), 0.0, 1.0)
+	m.metallic_specular = clampf(0.5 * refl, 0.0, 1.0)
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA if opacity < 1.0 else int(v.get("transparency", BaseMaterial3D.TRANSPARENCY_DISABLED))
 
 

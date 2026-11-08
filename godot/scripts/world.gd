@@ -18,6 +18,7 @@ var race: Race = null
 var replay: Replay = null
 var free_cam: GameFreeCamera = null    # the fourth camera (C: follow, cockpit, bonnet, free)
 var take: Take = null                  # the 5 key (Take)
+var recorder: LineRecorder = null      # the racing line is recorded for the track editor (options record_line)
 var options := {}
 var base_config := {}
 var pause_layer: CanvasLayer
@@ -108,10 +109,20 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	laps.message.connect(hud.toast)
 	add_child(laps)
 	hud.laps = laps
+	# (the track editor's Record AI racing line: the laps that are driven are the line; Esc or Stop saves it and leaves)
+	if options.get("record_line", false):
+		recorder = LineRecorder.new()
+		recorder.setup(self, track_id, laps)
+		recorder.done.connect(func(_r: String):
+			RunLog.car = null
+			ForceFeedback.neutral()
+			leave.emit())
+		add_child(recorder)
 	# the best lap that was driven here (by any car, since the road or the line was last changed) is the line of the
-	# AI, as main.js has it; else the line of track.json (--bestline=0 leaves the lap out; the tests of --ai do too)
+	# AI, as main.js has it; else the line of track.json (--bestline=0 leaves the lap out; the tests of --ai and the
+	# recording of a line do too)
 	line = null
-	if Content.arg("ai") == "" and Content.arg("bestline") != "0":
+	if Content.arg("ai") == "" and Content.arg("bestline") != "0" and recorder == null:
 		line = RacingLine.from_lap(RacingLine.best_lap_of(track_id, str(track.config.get("line_date", ""))))
 		if line != null:
 			RunLog.event("racing line: the best lap driven on this track")
@@ -379,6 +390,9 @@ func _physics_process(_delta: float) -> void:
 		return
 	var keys_steer := Input.get_axis("steer_right", "steer_left")
 	var dt := get_physics_process_delta_time()
+	if car.bike != null:
+		# (a motorcycle: < and > put the rider back or forward while they are held)
+		car.bike.rider_key = int(Input.is_action_pressed("rider_forward")) - int(Input.is_action_pressed("rider_back"))
 	car.throttle_input = _pedal("throttle", dt)
 	car.brake_input = _pedal("brake", dt)
 	car.handbrake_input = 1.0 if parking_brake else Input.get_action_strength("handbrake")
@@ -530,9 +544,9 @@ func _more_actions(event: InputEvent) -> void:
 		WheelInput.active = not WheelInput.active and not Settings.profile(WheelInput.guid).is_empty()
 		Controls.rebind(WheelInput.device if WheelInput.active else -1)
 		hud.notice("Wheel %s" % ("on" if WheelInput.active else "off"))
-	elif event.is_action_pressed("ragdoll") or event.is_action_pressed("rider_back") or event.is_action_pressed("rider_forward"):
-		if car.bike != null:
-			hud.notice("Not in the Godot version yet")
+	elif event.is_action_pressed("ragdoll"):
+		if car.bike_model != null:
+			car.bike_model.go_limp()
 
 
 ## A driver aid on or off by its key, with a short line in the middle of the screen (Settings.js aid).

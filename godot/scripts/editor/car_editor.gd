@@ -115,6 +115,8 @@ func _ready() -> void:
 	engine.build_test_bar()
 	layers.build_view_tools()
 	_refresh_list()
+	# a .glb or .gltf dropped on the window is the model (car-editor.js: the drop on the page)
+	get_window().files_dropped.connect(_files_dropped)
 	var wanted := Content.arg("editor-car")
 	if wanted != "" and _has_car(wanted):
 		load_existing(wanted)
@@ -315,6 +317,8 @@ func ask(title: String, text: String, ok := "OK", cancel := "Cancel") -> bool:
 	d.confirmed.connect(func(): result[0] = true)
 	d.popup_centered()
 	await d.visibility_changed
+	# (OK hides the dialog before it sends confirmed: the answer is there a frame later)
+	await get_tree().process_frame
 	d.queue_free()
 	return result[0]
 
@@ -336,6 +340,7 @@ func ask_text(title: String, text: String, value := "") -> String:
 	d.popup_centered()
 	edit.grab_focus.call_deferred()
 	await d.visibility_changed
+	await get_tree().process_frame
 	d.queue_free()
 	return result[0]
 
@@ -588,6 +593,17 @@ func _set_root(root: Node3D) -> void:
 
 
 ## Files picked in the dialog (a .glb, or a .gltf with its .bin and textures).
+func _files_dropped(files: PackedStringArray) -> void:
+	if not is_visible_in_tree():
+		return
+	var models := Array(files).filter(func(f: String) -> bool: return f.get_extension().to_lower() in ["glb", "gltf"])
+	if models.is_empty():
+		status("Drop a .glb (or a .gltf with its files) to load it as the model.", "error")
+		return
+	# (a .gltf comes with its .bin and pictures: the files dropped with it)
+	load_model_files(files if models[0].get_extension().to_lower() == "gltf" else PackedStringArray([models[0]]))
+
+
 func load_model_files(paths: PackedStringArray) -> void:
 	var main := ""
 	for p in paths:
@@ -871,7 +887,7 @@ func update_helpers() -> void:
 		view.grid.position.y = -radius
 	engine.update_speed_info()
 	var box := CarEditorView.bounds_of(view.pivot)
-	view.hud.text = "Import a .glb model to make a car (Model card)" if model_root == null else (
+	view.hud.text = "Drop a .glb file here, or import one (Model card), to make a car" if model_root == null else (
 		"Blue arrow: forward. The axes are the origin: it has to be at the height of the " +
 		"wheel axles, between the axles.\nModel %.2f x %.2f x %.2f m (width x height x length)" % [box.size.x, box.size.y, box.size.z])
 	layers.update_camera_markers()
@@ -965,31 +981,85 @@ func save_and_test() -> void:
 			return
 	elif not await save():
 		return
+	open_test_dialog()
+
+
+## The window of Save and test (car-editor.js openTestDialog): the track and the conditions (the weather, the time of day
+## and the ground are the settings of the game: what is chosen here is what the drive starts with), or Use last settings.
+func open_test_dialog() -> ConfirmationDialog:
 	var tracks := Content.list_tracks()
+	var last := {"track": str(Settings.get_value("editor_test_track")), "weather": str(Settings.get_value("gfx_weather")),
+		"time": float(Settings.get_value("gfx_time")), "ground": str(Settings.get_value("gfx_ground"))}
+	if not tracks.any(func(t: Dictionary) -> bool: return t["id"] == last["track"]) and not tracks.is_empty():
+		last["track"] = tracks[0]["id"]
+	var picked := last.duplicate()
 	var d := ConfirmationDialog.new()
 	d.title = "Test the car"
 	d.ok_button_text = "Start"
 	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
 	box.add_child(EditorStyle.label("Track", 12, Color("#b9c3d0")))
 	var pick := OptionButton.new()
 	for t in tracks:
 		pick.add_item(str(t["name"]))
 		pick.set_item_metadata(pick.item_count - 1, t["id"])
-	EditorStyle.select_value(pick, "testtrack")
+	EditorStyle.select_value(pick, last["track"])
+	pick.item_selected.connect(func(_i: int): picked["track"] = str(EditorStyle.value_of(pick)))
 	box.add_child(pick)
-	box.add_child(EditorStyle.hint("The weather, the time of day and the ground of the browser game are not in the Godot version yet."))
+	var name_of := func(list: Array, v: Variant) -> String:
+		for e in list:
+			if e[0] == v:
+				return str(e[1])
+		return str(v)
+	for c in [["Weather", GraphicsPage.WEATHERS, "weather"], ["Time of day", GraphicsPage.TIMES, "time"], ["Ground", GraphicsPage.GROUNDS, "ground"]]:
+		box.add_child(EditorStyle.label(c[0], 12, Color("#b9c3d0")))
+		var flow := HFlowContainer.new()
+		box.add_child(flow)
+		var buttons := []
+		for e in c[1]:
+			var b := EditorStyle.button(str(e[1]), "small" + (" accent" if e[0] == picked[c[2]] else " ghost"))
+			b.pressed.connect(func():
+				picked[c[2]] = e[0]
+				for o in buttons:
+					EditorStyle.style_button(o, "small accent" if o == b else "small ghost"))
+			buttons.append(b)
+			flow.add_child(b)
+	var track_name := str(last["track"])
+	for t in tracks:
+		if t["id"] == last["track"]:
+			track_name = str(t["name"])
+	var again := EditorStyle.button("Use last settings: %s, %s, %s" % [track_name, name_of.call(GraphicsPage.WEATHERS, last["weather"]).to_lower(),
+		name_of.call(GraphicsPage.TIMES, last["time"]).to_lower()], "small ghost")
+	again.pressed.connect(func():
+		d.hide()
+		_start_test(last))
+	box.add_child(again)
 	d.add_child(box)
 	add_child(d)
-	d.confirmed.connect(func():
-		var track := str(EditorStyle.value_of(pick))
-		visible = false
-		engine.stop_sound()
-		test_drive.emit(existing_id, track)
-		_watch_test())
+	d.confirmed.connect(func(): _start_test(picked))
 	d.visibility_changed.connect(func():
 		if not d.visible:
 			d.queue_free())
-	d.popup_centered(Vector2i(420, 0))
+	d.min_size = Vector2i(580, 0)
+	d.popup_centered(Vector2i(580, 0))
+	# (the rows of chips knew their height only once they were laid out: the window is made as small as they let it)
+	(func():
+		d.reset_size()
+		d.move_to_center()).call_deferred()
+	return d
+
+
+## The conditions go into the settings of the game (the rest stays as it is), the track is remembered; the drive starts.
+func _start_test(choice: Dictionary) -> void:
+	Settings.set_value("gfx_weather", choice["weather"])
+	Settings.set_value("gfx_time", choice["time"])
+	Settings.set_value("gfx_ground", choice["ground"])
+	Settings.set_value("editor_test_track", choice["track"])
+	visible = false
+	engine.stop_sound()
+	bench.stop()
+	test_drive.emit(existing_id, str(choice["track"]))
+	_watch_test()
 
 
 ## The test drive ends (Esc, Main menu): back here.
@@ -1133,6 +1203,7 @@ func _process(delta: float) -> void:
 		update_summary()
 		refresh_ready()
 	layers.frame()
+	layers.flames_frame(delta)
 	engine.frame(delta)
 	bench.frame(delta)
 	_hook_call("frame", [delta])

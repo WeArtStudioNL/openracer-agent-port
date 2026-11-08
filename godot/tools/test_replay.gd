@@ -131,6 +131,10 @@ func _process(dt: float) -> void:
 				_time = 0.0
 				_wait = 0.5
 		4:
+			_cinema()
+			_step = 41
+			_wait = 0.5
+		41:
 			_cinema_and_marks()
 			_step = 5
 			_wait = 0.5
@@ -265,13 +269,18 @@ func _in_replay() -> void:
 	_shot("replay_free_camera")
 
 
-func _cinema_and_marks() -> void:
+## The cinematic camera (the cameras of the track editor, track.json "cameras"): on for half a second, its picture taken.
+func _cinema() -> void:
 	var r := world.replay
 	if not r.cinema_cameras().is_empty():
 		r.set_camera("cinematic")
 		r.update_cine(0.1)
 		_check(r.cine_on and r._cine_cam.current, "the cinematic camera of the track (%d cameras)" % r.cinema_cameras().size())
 		_shot("replay_cinematic")
+
+
+func _cinema_and_marks() -> void:
+	var r := world.replay
 	r.set_camera("follow")
 	_check(world.camera.current and r.camera_name() == "follow", "back to the follow camera")
 	r.time = r.end_time() - 8.0

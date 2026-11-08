@@ -109,6 +109,8 @@ static func open(ed: TrackEditor, id: String) -> void:
 	if not (cfg is Dictionary):
 		ed.status("Could not load the track “%s”." % id, "error")
 		return
+	if not ed.has_meta("out") and Content.arg("editor-out") == "" and DisplayServer.get_name() != "headless":
+		Settings.set_value("editor_last_track", id)          # (the start dialog offers it again; not in a test run)
 	_reset(ed)
 	ed.existing_id = id
 	ed.existing = (cfg as Dictionary).duplicate(true)
@@ -258,6 +260,100 @@ static func library(ed: TrackEditor) -> Array:
 	return out
 
 
+## Whether a model of the library can be changed here: the player's own, or the game's when it runs from the repository.
+static func library_writable(path: String) -> bool:
+	var own := ProjectSettings.globalize_path(LIB_DIR)
+	return path.begins_with(own) or (repo_writable() and path.begins_with(Content.root.path_join("objects")))
+
+
+static func _library_json(dir: String) -> Dictionary:
+	var j: Variant = JSON.parse_string(FileAccess.get_file_as_string(dir.path_join("objects.json"))) if FileAccess.file_exists(dir.path_join("objects.json")) else null
+	return j if j is Dictionary else {"objects": []}
+
+
+static func _write_library_json(dir: String, j: Dictionary) -> void:
+	var f := FileAccess.open(dir.path_join("objects.json"), FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(j, " "))
+		f.close()
+
+
+## × of a tile: the model and its picture out of the library (the tracks that use it keep their copy).
+static func remove_from_library(ed: TrackEditor, e: Dictionary) -> void:
+	var path: String = e["path"]
+	if not library_writable(path):
+		return
+	var dir := path.get_base_dir()
+	var j := _library_json(dir)
+	j["objects"] = (j.get("objects", []) as Array).filter(func(o: Variant) -> bool: return not (o is Dictionary and o.get("id") == e["id"]))
+	_write_library_json(dir, j)
+	for f in [path, str(e.get("thumb", ""))]:
+		if f != "" and FileAccess.file_exists(f) and f.get_base_dir() == dir:
+			OS.move_to_trash(f)
+	library(ed)
+	ed.status("“%s” is out of the library." % e["name"], "ok")
+
+
+## + of a model of the track that the library has not got: a copy in the player's library, with its picture.
+static func keep_in_library(ed: TrackEditor, name: String) -> bool:
+	var m: Dictionary = ed.models.get(name, {})
+	var src := str(m.get("source", ""))
+	if src == "" or not FileAccess.file_exists(src):
+		src = old_file(ed, name)
+	if src == "" or not FileAccess.file_exists(src):
+		ed.status("Could not keep it: the file of the model is not here.", "error")
+		return false
+	var dir := ProjectSettings.globalize_path(LIB_DIR)
+	DirAccess.make_dir_recursive_absolute(dir)
+	var id := name.trim_prefix("obj-").trim_suffix(".glb").to_lower()
+	var j := _library_json(dir)
+	var list: Array = j.get("objects", [])
+	var base := id
+	var k := 2
+	while list.any(func(o: Variant) -> bool: return o is Dictionary and o.get("id") == id):
+		id = "%s-%d" % [base, k]
+		k += 1
+	DirAccess.copy_absolute(src, dir.path_join(id + ".glb"))
+	list.append({"id": id, "name": id, "file": id + ".glb", "thumb": "", "kind": m.get("kind", "rigid"), "mass": m.get("mass", 0)})
+	j["objects"] = list
+	_write_library_json(dir, j)
+	_picture_into_library(ed, dir, id)
+	library(ed)
+	return true
+
+
+## What is chosen for a model of the library (rigid, static or decor, the mass) goes into the library too: the next track gets it.
+static func remember_in_library(ed: TrackEditor, m: Dictionary) -> void:
+	var src := str(m.get("source", ""))
+	if not library_writable(src):
+		return
+	var dir := src.get_base_dir()
+	var j := _library_json(dir)
+	var changed := false
+	for o in j.get("objects", []):
+		if o is Dictionary and str(o.get("file", "")) == src.get_file():
+			o["kind"] = m.get("kind", "rigid")
+			o["mass"] = m.get("mass", 0)
+			changed = true
+	if changed:
+		_write_library_json(dir, j)
+		library(ed)
+
+
+## The picture of a model of the library (keepInLibrary: <id>.webp next to it), as soon as it is drawn.
+static func _picture_into_library(ed: TrackEditor, dir: String, id: String) -> void:
+	var glb := dir.path_join(id + ".glb")
+	ed.thumbs.request(glb, func() -> Node3D: return ModelThumbs.load_glb(glb), func(tex: Texture2D):
+		if tex == null or tex.get_image().save_webp(dir.path_join(id + ".webp"), false, 0.9) != OK:
+			return
+		var now := _library_json(dir)
+		for e in now.get("objects", []):
+			if e is Dictionary and e.get("id") == id:
+				e["thumb"] = id + ".webp"
+		_write_library_json(dir, now)
+		library(ed))
+
+
 ## A glb that is added with +: in the player's library (with the others: the same in every track) and in this track.
 static func add_to_library(ed: TrackEditor, path: String) -> void:
 	var dir := ProjectSettings.globalize_path(LIB_DIR)
@@ -269,11 +365,13 @@ static func add_to_library(ed: TrackEditor, path: String) -> void:
 	var j: Variant = JSON.parse_string(FileAccess.get_file_as_string(dir.path_join("objects.json"))) if FileAccess.file_exists(dir.path_join("objects.json")) else null
 	var list: Array = j.get("objects", []) if j is Dictionary else []
 	list = list.filter(func(e: Dictionary) -> bool: return e.get("id") != id)
-	list.append({"id": id, "name": id, "file": id + ".glb", "thumb": "", "kind": "rigid", "mass": 0})
+	var entry := {"id": id, "name": id, "file": id + ".glb", "thumb": "", "kind": "rigid", "mass": 0}
+	list.append(entry)
 	var f := FileAccess.open(dir.path_join("objects.json"), FileAccess.WRITE)
 	f.store_string(JSON.stringify({"objects": list}, " "))
 	f.close()
 	add_model(ed, dir.path_join(id + ".glb"), object_file_name(id), "rigid", 0.0)
+	_picture_into_library(ed, dir, id)
 
 
 ## A prefab of the designer as an object of a track with a model: its glb (with the texture chosen) in a folder of its own.
@@ -397,17 +495,36 @@ static func ref_scale_click(ed: TrackEditor, pos: Vector2) -> void:
 	var a: Vector3 = ed.measure_points[0]
 	var b: Vector3 = ed.measure_points[1]
 	var now := Vector2(a.x - b.x, a.z - b.z).length()
-	TrackEditorUI.ask_number(ed, "Scale by two points", "The distance between the two points in metres (it is %.1f m now)." % now, now, func(v: float):
-		if v > 0.0 and now > 0.0:
-			var k := v / now
-			var rr := ed.reference
-			rr["width"] = TrackDesign.r2(float(rr["width"]) * k)
-			rr["x"] = TrackDesign.r2(a.x + (float(rr["x"]) - a.x) * k)
-			rr["z"] = TrackDesign.r2(a.z + (float(rr["z"]) - a.z) * k)
-			place_reference(ed)
+	if now < 1e-6:
+		ed.status("The two points are the same place: click two points further apart.", "error")
+		ed.measure_points.clear()
+		return
+	TrackEditorUI.ask_text(ed, "How far apart are the two points?", "The distance in the world, in metres (or in feet: 400 ft). The picture is " +
+		"scaled about the first point. It is %.1f m now." % now, func(answer: String):
 		ed.measure_points.clear()
 		ed.mode = "view"
-		ed.changed())
+		var v := distance_of(answer)
+		if not (v > 0.0):
+			if answer != "":
+				ed.status("That is not a distance: type a number, like 120 or 400 ft.", "error")
+			ed.changed()
+			return
+		var k := v / now
+		var rr := ed.reference
+		rr["width"] = TrackDesign.r2(float(rr["width"]) * k)
+		rr["x"] = TrackDesign.r2(a.x + (float(rr["x"]) - a.x) * k)
+		rr["z"] = TrackDesign.r2(a.z + (float(rr["z"]) - a.z) * k)
+		place_reference(ed)
+		ed.changed()
+		ed.status("The picture is scaled ×%.3f: it is %.1f m wide now." % [k, float(rr["width"])], "ok"))
+
+
+## A distance typed as 120, 120 m or 400 ft (in metres; NAN when it is not one).
+static func distance_of(text: String) -> float:
+	var m := RegEx.create_from_string("(?i)^([0-9]*\\.?[0-9]+)\\s*(m|meter|meters|metres|ft|feet|foot)?$").search(text.strip_edges().replace(",", "."))
+	if m == null:
+		return NAN
+	return float(m.get_string(1)) * (0.3048 if m.get_string(2).to_lower().begins_with("f") else 1.0)
 
 
 # ---- a model that is imported
@@ -470,7 +587,7 @@ static func old_file(ed: TrackEditor, file: String) -> String:
 	return Content.path("tracks/%s/%s" % [ed.existing_id, file]) if ed.existing_id != "" else ""
 
 
-static func save(ed: TrackEditor) -> bool:
+static func save(ed: TrackEditor, replace_ok := false) -> bool:
 	var name := str(ed.ui["name"].text).strip_edges()
 	var id := str(ed.ui["id"].text).strip_edges()
 	if id == "":
@@ -489,6 +606,10 @@ static func save(ed: TrackEditor) -> bool:
 		return false
 	if ed.design != null and (ed.design.data["nodes"] as Array).size() < 3:
 		ed.status("A track needs at least three nodes.", "error")
+		return false
+	# (another track with this id: asked first; Save again after the answer)
+	if not replace_ok and id != ed.existing_id and ed.tracks.any(func(t: Dictionary) -> bool: return t["id"] == id):
+		TrackEditorUI.ask(ed, "Replace the track “%s”?" % id, "There already is a track with this id.", "Replace", func(): save(ed, true))
 		return false
 	var dir := target_dir(ed, id)
 	DirAccess.make_dir_recursive_absolute(dir)

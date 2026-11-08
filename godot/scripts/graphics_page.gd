@@ -7,6 +7,7 @@ extends VBoxContainer
 const TIMES := [[5.25, "Dawn"], [8.0, "Morning"], [12.0, "Noon"], [15.0, "Afternoon"], [17.5, "Evening"], [19.0, "Sunset"],
 	[20.25, "Dusk"], [23.5, "Night"]]
 const WEATHERS := [["clear", "Clear"], ["cloudy", "Cloudy"], ["fog", "Fog"], ["rain", "Rain"], ["snow", "Snow"]]
+const GROUNDS := [["auto", "Follows the weather"], ["dry", "Dry"], ["wet", "Wet"], ["snow", "Snow"]]
 
 var _status: Label
 
@@ -70,6 +71,7 @@ func _build() -> void:
 	_pick("Moon", Settings.get_value("gfx_moon"), [[0.0, "New"], [0.25, "Crescent"], [0.5, "Half"], [0.75, "Gibbous"], [1.0, "Full"]],
 		_setter("gfx_moon"))
 	_pick("Weather", Settings.get_value("gfx_weather"), WEATHERS, _setter("gfx_weather"))
+	_pick("Ground", Settings.get_value("gfx_ground"), GROUNDS, _setter("gfx_ground"))
 	_note("The sky is the same on every track. Rain wets the road and snow lies on it and stays: both give less grip (the AI drives "
 		+ "slower), snow most. Wet comes in about 40 seconds and dries in a few minutes; snow builds up in a few minutes and melts "
 		+ "slowly. There are no headlights yet: the night is dark.")

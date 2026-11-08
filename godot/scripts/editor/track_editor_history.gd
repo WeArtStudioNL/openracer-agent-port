@@ -1,14 +1,18 @@
 class_name TrackEditorHistory
 extends RefCounted
 ## Undo and redo of the whole track editor (snapshots of what would be saved), and whether there are changes that are
-## not saved.
+## not saved. The draft (track-editor.js saveDraft, offerDraft): what has not been saved is kept every few seconds and when
+## the editor closes (user://track-editor-draft.json; the tests: in their folder); the next time that track is opened the
+## editor offers to restore it. Saving the track throws the draft away.
 
 var ed: TrackEditor
+var draft_resolved := false          # (no draft is written before the one that was there has been offered)
 var _history: Array[String] = []
 var _future: Array[String] = []
 var _last_snapshot := ""
 var _saved_print := ""
 var _restoring := false
+var _draft_in := 8.0
 
 
 func _init(editor: TrackEditor) -> void:
@@ -109,6 +113,67 @@ func fingerprint() -> String:
 
 func mark_saved() -> void:
 	_saved_print = fingerprint()
+	if draft_resolved:
+		clear_draft()
+
+
+# ---- the draft
+
+func draft_path() -> String:
+	var out: String = ed.get_meta("out", Content.arg("editor-out"))
+	return out.path_join("track-editor-draft.json") if out != "" else "user://track-editor-draft.json"
+
+
+func _draft_id() -> String:
+	return str(ed.ui["id"].text).strip_edges() if ed.ui.has("id") else ""
+
+
+func read_draft() -> Dictionary:
+	var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(draft_path())) if FileAccess.file_exists(draft_path()) else null
+	return d if d is Dictionary else {}
+
+
+func clear_draft() -> void:
+	if FileAccess.file_exists(draft_path()):
+		DirAccess.remove_absolute(draft_path())
+
+
+## Keeps what has not been saved (every 8 s, and when the editor closes).
+func save_draft() -> void:
+	if not draft_resolved or not unsaved() or _draft_id() == "":
+		return
+	var f := FileAccess.open(draft_path(), FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify({"id": _draft_id(), "at": Time.get_unix_time_from_system(), "editor": snapshot()}))
+		f.close()
+
+
+func frame(dt: float) -> void:
+	_draft_in -= dt
+	if _draft_in <= 0.0:
+		_draft_in = 8.0
+		save_draft()
+
+
+## The track that was opened has a draft of changes that were never saved: restore them?
+func offer_draft() -> void:
+	var d := read_draft()
+	draft_resolved = true
+	if d.is_empty() or str(d.get("id", "")) == "" or str(d["id"]) != _draft_id() or not (d.get("editor") is String):
+		return
+	if str(d["editor"]) == snapshot():
+		clear_draft()
+		return
+	var when := Time.get_datetime_string_from_unix_time(int(d.get("at", 0)), true)
+	TrackEditorUI.ask(ed, "Restore the unsaved changes?", "The editor kept changes to “%s” from %s that were never saved." % [d["id"], when], "Restore",
+		func(): restore_draft(d), clear_draft)
+
+
+func restore_draft(d: Dictionary) -> void:
+	note()
+	_restore(str(d["editor"]))
+	ed.changed()
+	ed.status("The changes that were not saved are back. Save to keep them.", "ok")
 
 
 func unsaved() -> bool:

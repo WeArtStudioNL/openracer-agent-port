@@ -54,6 +54,7 @@ static func start(weather: String) -> void:
 	window = PackedFloat32Array()
 	window.resize(CLEAR_N * CLEAR_N)
 	window_dirty = true
+	_fixed(str(Settings.get_value("gfx_ground")))
 	_changed(true)
 
 
@@ -105,6 +106,9 @@ static func step(dt: float, weather: String, cars: Array) -> void:
 	var raining := weather == "rain"
 	var snowing := weather == "snow"
 	rain += ((1.0 if raining else 0.0) - rain) * minf(1.0, dt * 0.5)
+	if _fixed(str(Settings.get_value("gfx_ground"))):
+		_rings_and_cars(dt, cars)
+		return
 	puddle = minf(1.0, puddle + dt / 90.0) if raining else maxf(0.0, puddle - dt / 420.0)
 	if raining:
 		wet = minf(1.0, wet + dt / 40.0)
@@ -122,11 +126,38 @@ static func step(dt: float, weather: String, cars: Array) -> void:
 			regrow += dt / 1100.0
 			window_dirty = true
 	_changed(false)
+	_rings_and_cars(dt, cars)
+
+
+static func _rings_and_cars(dt: float, cars: Array) -> void:
 	for i in range(rings.size() - 1, -1, -1):
 		rings[i].z += dt
 		if rings[i].z > 1.6:
 			rings.remove_at(i)
 	_cars(dt, cars)
+
+
+## The ground fixed by the setting gfx_ground (Atmosphere.js groundOverride: the car editor's Save and test): dry, wet or
+## snow at once and kept so; "auto" (false) leaves it to the weather.
+static func _fixed(mode: String) -> bool:
+	match mode:
+		"dry":
+			wet = 0.0
+			snow = 0.0
+			puddle = 0.0
+		"wet":
+			wet = 1.0
+			snow = 0.0
+			puddle = 0.7
+		"snow":
+			wet = 0.0
+			snow = 1.0
+			puddle = 0.0
+			road_melt = maxf(road_melt, 0.34)
+		_:
+			return false
+	_changed(false)
+	return true
 
 
 static func _cars(dt: float, cars: Array) -> void:

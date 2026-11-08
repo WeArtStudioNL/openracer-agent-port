@@ -310,14 +310,15 @@ static func _drawer(ed: TrackEditor) -> void:
 	# Surfaces
 	var pa := VBoxContainer.new()
 	ed.ui["page_patches"] = pa
-	var keys := TrackDesign.PATCH_SURFACES.keys()
-	ed.ui["dsPatchSurface"] = kit.options(keys.map(func(k: String) -> String: return TrackDesign.PATCH_SURFACES[k]["label"]), keys.find("gravel"), func(i: int):
-		ed.patch_surface = keys[i]
+	ed.ui["dsPatchSurface"] = kit.options([], 0, func(i: int):
+		var key := str((ed.ui["dsPatchSurface"] as OptionButton).get_item_metadata(i))
+		ed.patch_surface = key
 		if ed.sel["kind"] == "patch" and not ed.has_meta("filling"):
-			design.call()["patches"][ed.sel["i"]]["surface"] = keys[i]
+			design.call()["patches"][ed.sel["i"]]["surface"] = key
 			ed.design.build_patches()
 			ed.parts_kit.design_parts_changed()
-			ed.changed())
+			ed.changed()
+		_surface_buttons(ed))
 	ed.ui["dsPatchConnect"] = kit.check("Connect to road", false, func(on: bool):
 		ed.patch_connect = on
 		if ed.sel["kind"] == "patch" and not ed.has_meta("filling"):
@@ -335,8 +336,15 @@ static func _drawer(ed: TrackEditor) -> void:
 		if ed.sel["kind"] == "patch":
 			ed.sel["node"] = -1
 			ed.road.delete_extra_point())]))
-	pa.add_child(kit.label("An area of road, gravel, sand, grass or dirt on the ground: click its corners, and the first corner again (or Enter) to close it. With " +
-		"Connect to road a line along the road is enough.", true, 12))
+	ed.ui["dsSurfaceNew"] = kit.button("New surface", func(): _surface_editor(ed, "new"), "A surface of your own: a colour or a repeating texture, with a grip")
+	ed.ui["dsSurfaceEdit"] = kit.button("Edit surface", func():
+		var key := str(ed.patch_surface)
+		if key.begins_with("c:"):
+			_surface_editor(ed, key.substr(2)))
+	pa.add_child(kit.hbox([ed.ui["dsSurfaceNew"], ed.ui["dsSurfaceEdit"]]))
+	_surface_form(ed, pa)
+	pa.add_child(kit.label("An area of road, gravel, sand, grass, dirt or a surface of your own (a colour or a repeating texture, with the grip of the game that you " +
+		"choose) on the ground: click its corners, and the first corner again (or Enter) to close it. With Connect to road a line along the road is enough.", true, 12))
 	v.add_child(pa)
 	# Prefabs
 	var pr := VBoxContainer.new()
@@ -507,7 +515,9 @@ static func _props_refresh(ed: TrackEditor) -> void:
 	if sk == "drag":
 		fields.append_array([["Width (m)", "width", 1.0], ["Length (m)", "length", 1.0]])
 	if sk == "object":
-		fields.append(["Scale", "sx", 1.0])
+		# (tilted and stretched as the gizmo of the browser does it: E turns about every axis, R scales each one)
+		fields.append_array([["Tilt forward (°)", "pitch", 0.0], ["Tilt sideways (°)", "roll", 0.0], ["Scale", "sx", 1.0],
+			["Scale x", "only_x", 1.0], ["Scale y (height)", "sy", 1.0], ["Scale z", "sz", 1.0]])
 	if sk == "camera":
 		fields.append(["Range (m)", "range", 1.0])
 	var key := "%s%d" % [sk, ed.sel["i"]]
@@ -534,8 +544,10 @@ static func _props_refresh(ed: TrackEditor) -> void:
 			continue
 		var v: float
 		match f[1]:
-			"heading":
-				v = rad_to_deg(float(it.get("heading", 0)))
+			"heading", "pitch", "roll":
+				v = rad_to_deg(float(it.get(f[1], 0)))
+			"only_x":
+				v = float(it.get("sx", 1))
 			"range":
 				v = float(it.get("range", {"r": 30.0})["r"])
 			_:
@@ -548,8 +560,14 @@ static func _prop_set(ed: TrackEditor, key: String, v: float) -> void:
 	if it.is_empty():
 		return
 	match key:
-		"heading":
-			it["heading"] = deg_to_rad(v)
+		"heading", "pitch", "roll":
+			it[key] = deg_to_rad(v)
+		"only_x":
+			if v > 0.0:
+				it["sx"] = v
+		"sy", "sz":
+			if v > 0.0:
+				it[key] = v
 		"range":
 			if v >= 2.0:
 				var r: Dictionary = it.get("range", {"x": it["x"], "z": it["z"], "r": 30.0})
@@ -659,11 +677,12 @@ static func _drawer_refresh(ed: TrackEditor) -> void:
 		ed.ui["dsBranchWidth"].set_value_no_signal(float(b.get("width", 8)))
 		ed.ui["dsBranchNodeWidth"].set_value_no_signal(float(b["nodes"][ed.sel["node"]].get("width", 0)) if ed.sel["node"] >= 0 else 0.0)
 		ed.ui["dsInfo"].text = "Branch %d: %d nodes" % [ed.sel["i"] + 1, (b["nodes"] as Array).size()]
+	_fill_surfaces(ed)
 	if sk == "patch" and ed.sel["i"] < (d["patches"] as Array).size():
 		var pa: Dictionary = d["patches"][ed.sel["i"]]
-		var keys := TrackDesign.PATCH_SURFACES.keys()
-		ed.ui["dsPatchSurface"].select(maxi(0, keys.find(str(pa.get("surface", "gravel")))))
+		ed.patch_surface = str(pa.get("surface", "gravel"))
 		ed.ui["dsPatchConnect"].set_pressed_no_signal(pa.get("connect", false))
+	_select_surface(ed, str(ed.patch_surface))
 	for type in DesignPrefabs.LIST:
 		ed.ui["pal_" + type].set_pressed_no_signal(type == ed.prefab_type)
 	var p := _prefab(ed)
@@ -711,3 +730,145 @@ static func hint_text(ed: TrackEditor) -> String:
 		text = "The line: click a node and drag it, Shift + click on the road adds a node, Delete takes the chosen one away." + \
 			(" Click on the road for the next node." if ed.line_edit["drawing"] else "")
 	return text
+
+
+# ---- the surfaces of the track (track-design.js fillSurfaceSelect, showSurfaceEditor, dsSurfaceSave, dsSurfaceDelete): design.surfaces
+# [{ id, label, kind: "colour" | "texture", colour, texture, size, grip }]; an area uses one as "c:<id>"
+
+## The list of surfaces: the ones of the editor and the ones of this track (made again when those change).
+static func _fill_surfaces(ed: TrackEditor) -> void:
+	var o: OptionButton = ed.ui["dsPatchSurface"]
+	var customs: Array = ed.design.data.get("surfaces", []) if ed.design != null and ed.design.data.get("surfaces") is Array else []
+	var sig := JSON.stringify(customs.map(func(c: Dictionary) -> Array: return [c.get("id"), c.get("label")]))
+	if o.get_meta("sig", "-") == sig:
+		return
+	o.set_meta("sig", sig)
+	o.clear()
+	for k in TrackDesign.PATCH_SURFACES:
+		o.add_item(str(TrackDesign.PATCH_SURFACES[k]["label"]))
+		o.set_item_metadata(o.item_count - 1, k)
+	for c in customs:
+		o.add_item(str(c.get("label", "Surface")))
+		o.set_item_metadata(o.item_count - 1, "c:" + str(c.get("id", "")))
+
+
+static func _select_surface(ed: TrackEditor, key: String) -> void:
+	var o: OptionButton = ed.ui["dsPatchSurface"]
+	for i in o.item_count:
+		if str(o.get_item_metadata(i)) == key:
+			o.select(i)
+	_surface_buttons(ed)
+
+
+static func _surface_buttons(ed: TrackEditor) -> void:
+	(ed.ui["dsSurfaceEdit"] as Control).visible = str(ed.patch_surface).begins_with("c:")
+
+
+static func _surface_form(ed: TrackEditor, parent: Control) -> void:
+	var kit := TrackEditorUI
+	var box := VBoxContainer.new()
+	box.visible = false
+	ed.ui["dsSurfaceBox"] = box
+	var name := LineEdit.new()
+	name.max_length = 40
+	name.custom_minimum_size.x = 140
+	ed.ui["dsSurfaceName"] = name
+	var tex_keys := MeshKit.TEXTURES.keys()
+	var kind := kit.options(["Colour", "Repeating texture"], 0, func(_i: int): _surface_form_sync(ed))
+	ed.ui["dsSurfaceKind"] = kind
+	ed.ui["dsSurfaceColour"] = kit.colour("#8a7a5a", func(_c: Color): pass)
+	ed.ui["dsSurfaceTexture"] = kit.options(tex_keys.map(func(k: String) -> String: return MeshKit.TEXTURES[k]["label"]), tex_keys.find("gravel"), func(i: int):
+		(ed.ui["dsSurfaceSize"] as SpinBox).value = float(MeshKit.TEXTURES[tex_keys[i]]["size"]))
+	ed.ui["dsSurfaceSize"] = kit.number(3.0, 0.25, 100.0, 0.25, func(_v: float): pass)
+	ed.ui["dsSurfaceGrip"] = kit.options(TrackDesign.GRIP_CHOICES.map(func(g: Array) -> String: return g[1]), 2, func(_i: int): pass)
+	ed.ui["dsSurfaceColourBox"] = kit.field("Colour", ed.ui["dsSurfaceColour"])
+	ed.ui["dsSurfaceTextureBox"] = kit.field("Texture", ed.ui["dsSurfaceTexture"])
+	ed.ui["dsSurfaceSizeBox"] = kit.field("Tile (m)", ed.ui["dsSurfaceSize"])
+	box.add_child(kit.hbox([kit.field("Name", name), kit.field("Look", kind), ed.ui["dsSurfaceColourBox"], ed.ui["dsSurfaceTextureBox"],
+		ed.ui["dsSurfaceSizeBox"], kit.field("Grip", ed.ui["dsSurfaceGrip"])]))
+	ed.ui["dsSurfaceDelete"] = kit.button("Delete", func(): _surface_delete(ed))
+	box.add_child(kit.hbox([kit.button("Save", func(): _surface_save(ed), "", true), ed.ui["dsSurfaceDelete"], kit.button("Close", func():
+		ed.set_meta("surface_editing", "")
+		box.visible = false)]))
+	parent.add_child(box)
+
+
+static func _surface_form_sync(ed: TrackEditor) -> void:
+	var texture: bool = (ed.ui["dsSurfaceKind"] as OptionButton).selected == 1
+	(ed.ui["dsSurfaceColourBox"] as Control).visible = not texture
+	(ed.ui["dsSurfaceTextureBox"] as Control).visible = texture
+	(ed.ui["dsSurfaceSizeBox"] as Control).visible = texture
+
+
+## The form of a surface: "new", or the id of one of the track.
+static func _surface_editor(ed: TrackEditor, id: String) -> void:
+	if ed.design == null:
+		return
+	var c: Dictionary = {"label": "My surface", "kind": "colour", "colour": "#8a7a5a", "texture": "gravel", "size": MeshKit.TEXTURES["gravel"]["size"], "grip": "ground"}
+	if id != "new":
+		var found: Array = (ed.design.data.get("surfaces", []) as Array).filter(func(q: Dictionary) -> bool: return str(q.get("id")) == id)
+		if found.is_empty():
+			return
+		c = found[0]
+	ed.set_meta("surface_editing", id)
+	(ed.ui["dsSurfaceName"] as LineEdit).text = str(c.get("label", "Surface"))
+	(ed.ui["dsSurfaceKind"] as OptionButton).select(1 if c.get("kind") == "texture" else 0)
+	(ed.ui["dsSurfaceColour"] as ColorPickerButton).color = Color(str(c.get("colour", "#8a7a5a")))
+	var tex_keys := MeshKit.TEXTURES.keys()
+	var tex := str(c.get("texture", "gravel"))
+	(ed.ui["dsSurfaceTexture"] as OptionButton).select(maxi(0, tex_keys.find(tex if MeshKit.TEXTURES.has(tex) else "gravel")))
+	(ed.ui["dsSurfaceSize"] as SpinBox).value = float(c.get("size", 0)) if float(c.get("size", 0)) > 0.0 else float(MeshKit.TEXTURES["gravel"]["size"])
+	var grips := TrackDesign.GRIP_CHOICES.map(func(g: Array) -> String: return g[0])
+	(ed.ui["dsSurfaceGrip"] as OptionButton).select(maxi(0, grips.find(str(c.get("grip", "ground")))))
+	(ed.ui["dsSurfaceDelete"] as Control).visible = id != "new"
+	_surface_form_sync(ed)
+	(ed.ui["dsSurfaceBox"] as Control).visible = true
+
+
+static func _surface_save(ed: TrackEditor) -> void:
+	var editing := str(ed.get_meta("surface_editing", ""))
+	if ed.design == null or editing == "":
+		return
+	var id := editing if editing != "new" else "s" + String.num_int64(Time.get_ticks_msec() + int(Time.get_unix_time_from_system() * 1000.0), 36)
+	var tex_keys := MeshKit.TEXTURES.keys()
+	var tex: String = tex_keys[maxi(0, (ed.ui["dsSurfaceTexture"] as OptionButton).selected)]
+	var label := (ed.ui["dsSurfaceName"] as LineEdit).text.strip_edges().substr(0, 40)
+	var def := {"id": id, "label": label if label != "" else "Surface", "kind": "texture" if (ed.ui["dsSurfaceKind"] as OptionButton).selected == 1 else "colour",
+		"colour": "#" + (ed.ui["dsSurfaceColour"] as ColorPickerButton).color.to_html(false), "texture": tex,
+		"size": maxf(0.25, float((ed.ui["dsSurfaceSize"] as SpinBox).value)), "grip": TrackDesign.GRIP_CHOICES[maxi(0, (ed.ui["dsSurfaceGrip"] as OptionButton).selected)][0]}
+	if not (ed.design.data.get("surfaces") is Array):
+		ed.design.data["surfaces"] = []
+	var list: Array = ed.design.data["surfaces"]
+	var at := -1
+	for i in list.size():
+		if str(list[i].get("id")) == id:
+			at = i
+	if at >= 0:
+		list[at] = def
+	else:
+		list.append(def)
+	ed.patch_surface = "c:" + id
+	if ed.sel["kind"] == "patch" and ed.sel["i"] < (ed.design.data.get("patches", []) as Array).size():
+		ed.design.data["patches"][ed.sel["i"]]["surface"] = ed.patch_surface
+	ed.set_meta("surface_editing", "")
+	(ed.ui["dsSurfaceBox"] as Control).visible = false
+	ed.design.build_patches()
+	ed.parts_kit.design_parts_changed()
+	ed.changed()
+
+
+static func _surface_delete(ed: TrackEditor) -> void:
+	var id := str(ed.get_meta("surface_editing", ""))
+	if ed.design == null or id == "" or id == "new":
+		return
+	ed.design.data["surfaces"] = (ed.design.data.get("surfaces", []) as Array).filter(func(q: Dictionary) -> bool: return str(q.get("id")) != id)
+	for q in ed.design.data.get("patches", []):
+		if str(q.get("surface", "")) == "c:" + id:
+			q["surface"] = "gravel"
+	if ed.patch_surface == "c:" + id:
+		ed.patch_surface = "gravel"
+	ed.set_meta("surface_editing", "")
+	(ed.ui["dsSurfaceBox"] as Control).visible = false
+	ed.design.build_patches()
+	ed.parts_kit.design_parts_changed()
+	ed.changed()

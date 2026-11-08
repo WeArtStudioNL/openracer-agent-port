@@ -27,6 +27,8 @@ func _ready() -> void:
 				"grid": "front" if Content.arg("pole") != "" else "back", "difficulty": Content.arg("difficulty") if Content.arg("difficulty") != "" else "normal"}
 		elif Content.arg("mode") == "skidpad":
 			opts = {"mode": "skidpad", "surface": Content.arg("surface") if Content.arg("surface") != "" else "road"}
+		elif Content.arg("record-line") != "":
+			opts = {"mode": "practice", "record_line": true, "ghost": false, "records": false}
 		_start(c if c != "" else "openracer-muscle", t if t != "" else ("skidpad" if opts.get("mode") == "skidpad" else "testtrack"), opts)
 	elif Content.arg("menu-step") != "":
 		_test_menu.call_deferred(Content.arg("menu-step"))
@@ -266,12 +268,14 @@ func _open_replays() -> void:
 
 ## The track editor (TrackEditor): Test drive saves the track and drives it with the car chosen in the menu; leaving it
 ## comes back here with the tracks of the garage in the list.
-func _open_track_editor(track_id := "") -> void:
+func _open_track_editor(track_id := "", line_result := "") -> void:
 	CarInfo.showcase_end()
 	menu.visible = false
 	var ed := TrackEditor.new()
 	if track_id != "":
 		ed.set_meta("open", track_id)
+	if line_result != "":
+		ed.set_meta("line_result", line_result)
 	ed.leave.connect(func():
 		ed.queue_free()
 		_rebuild_menu(""))
@@ -279,8 +283,23 @@ func _open_track_editor(track_id := "") -> void:
 		ed.queue_free()
 		_rebuild_menu("")
 		menu.visible = false
-		_start(str(steps.choice["car"]) if steps != null and str(steps.choice["car"]) != "" else "openracer-muscle", id, {"mode": "practice"}))
+		_start(_editor_car(), id, {"mode": "practice"}))
+	# Record AI racing line: the track is driven alone, the laps are the line; Esc or Stop comes back to the editor with it
+	ed.record_line.connect(func(id: String):
+		ed.queue_free()
+		_start(_editor_car(), id, {"mode": "practice", "record_line": true, "ghost": false, "records": false})
+		world.leave.disconnect(_back_to_menu)
+		world.leave.connect(func():
+			var result := str(world.recorder.result) if world.recorder != null else ""
+			world.queue_free()
+			world = null
+			_open_track_editor(id, result)))
 	add_child(ed)
+
+
+## The car of the test drives of the track editor: the one chosen in the menu, else the muscle car.
+func _editor_car() -> String:
+	return str(steps.choice["car"]) if steps != null and str(steps.choice["car"]) != "" else "openracer-muscle"
 
 
 ## The garage (GarageDialog): its cars and tracks, import, export, delete, a folder of the player's own.

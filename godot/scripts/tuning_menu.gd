@@ -254,6 +254,8 @@ func _section(parent: Control, title: String, id: String, card: bool) -> VBoxCon
 
 func _card(parent: Control, card: Array) -> void:
 	var name_text: String = card[0]
+	if name_text == "Motorcycle" and values.get("vehicle_type") != "motorcycle":
+		return                      # (a car has no Motorcycle card)
 	var content := _section(parent, name_text, name_text, true)
 	if name_text == "Assists and extras":
 		for f in Tuning.FEATURES:
@@ -291,7 +293,7 @@ func _row(parent: Control, d: Array) -> void:
 		_gears_row(parent)
 	elif key == "body_color" or key == "rim_color":
 		_color_row(parent, d)
-	elif key == "cam_cockpit_hide_driver":
+	elif key == "cam_cockpit_hide_driver" or key == "bike_push":
 		_bool_row(parent, d)
 	elif _options(key).size() > 0 or float(d[4]) <= float(d[3]):
 		_select_row(parent, key, d[1])

@@ -12,6 +12,7 @@ extends Control
 
 signal leave
 signal drive(track_id: String)
+signal record_line(track_id: String)     # Record AI racing line: the saved track is driven, its laps are the line (LineRecorder)
 
 const ROLES := [["road", "Road"], ["track01", "Pit lane"], ["grass", "Grass"], ["ground", "Ground"], ["sand", "Sand"], ["gravel", "Gravel"],
 	["mud", "Mud"], ["scenery", "Scenery"], ["decor", "Decor"]]
@@ -35,6 +36,7 @@ var parts := {}                     # name -> Array[MeshInstance3D]
 var roles := {}                     # name -> role
 var selected_part := ""
 var design: TrackDesign = null
+var thumbs: ModelThumbs             # the pictures of the models of the library
 var grid: Array = []                # the boxes of the grid: { x, y, z, heading }; box 1 is the start
 var pit_boxes: Array = []
 var pit_line: Array = []            # { x, y, z }
@@ -108,6 +110,8 @@ func _ready() -> void:
 	size = get_viewport_rect().size
 	get_viewport().size_changed.connect(func(): size = get_viewport_rect().size)
 	theme = TrackEditorUI.make_theme()
+	thumbs = ModelThumbs.new()
+	add_child(thumbs)
 	_build_world()
 	input = TrackEditorInput.new(self)
 	curbs_kit = TrackEditorCurbs.new(self)
@@ -125,6 +129,20 @@ func _ready() -> void:
 		TrackEditorIO.open(self, want)
 	else:
 		TrackEditorIO.new_track(self)
+		# (opened from the menu without a track: what to do; not for the tests, which give their folder)
+		if want == "" and not has_meta("out") and Content.arg("editor-out") == "" and Content.arg("shot") == "":
+			TrackEditorUI.start_dialog.call_deferred(self)
+	history.offer_draft.call_deferred()
+	# back from recording the racing line: what came of it
+	match str(get_meta("line_result", "")):
+		"":
+			pass
+		"none":
+			status("No lap was finished: the line is as it was. Drive through all the gates and over the finish line to record one.", "error")
+		"failed":
+			status("The line could not be saved.", "error")
+		var n:
+			status("The line is recorded (%s points): the AI drives it from the next start." % n, "ok")
 	RunLog.event("track editor opened")
 	# (a screenshot of the editor for the tests: --shot=file.png --shot-at=seconds --quit)
 	if Content.arg("shot") != "":
@@ -147,6 +165,9 @@ func _build_world() -> void:
 	view.msaa_3d = Viewport.MSAA_2X
 	view_box.add_child(view)
 	camera = Camera3D.new()
+	# (moved in _process: with the physics interpolation of the project its picture lagged behind its place, and a marker
+	# just in front of it was projected from where it had been: "p.d == 0" while drawing)
+	camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	camera.fov = 45.0
 	camera.near = 0.5
 	camera.far = 20000.0
@@ -171,13 +192,16 @@ func _build_world() -> void:
 
 
 func _notification(what: int) -> void:
+	if (what == NOTIFICATION_EXIT_TREE or what == NOTIFICATION_WM_CLOSE_REQUEST) and history != null:
+		history.save_draft()
 	if what == NOTIFICATION_RESIZED and ui.has("side"):
 		(ui["side"] as Control).size.y = size.y
 		parts_kit.layout_view((ui["side"] as Control).size.x)
 
 
-func _process(_dt: float) -> void:
+func _process(dt: float) -> void:
 	_place_camera()
+	history.frame(dt)
 	if markers != null:
 		markers.overlay.queue_redraw()
 
@@ -339,6 +363,7 @@ func start_design(d: Variant) -> void:
 	design = TrackDesign.new()
 	design.set_data(d if d is Dictionary else TrackDesign.default_design())
 	design.ground_y = func(x: float, z: float, hint: float) -> float: return ground_y(x, z, hint)
+	design.curbs_of = func() -> Array: return curbs
 	track_group.add_child(design)
 	rebuild_design(true)
 	design.rebuild_prefabs()

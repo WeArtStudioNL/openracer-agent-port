@@ -3,7 +3,9 @@ extends Node
 ## Opens the car editor on a car, opens cards (--open=Wheels,Chassis), selects a layer (--select=follow, ex1, model), shows
 ## the test bar (--tests), edits the driver (--driver=edit|handL|model|wheel, --steer=-90), or opens a window
 ## (--window=Cameras, Materials, Sound, Strengths, Parts), shows the shell of the Soft body card (--shell=1|edit, --sel=3,4),
-## runs its crash test (--crash=50 --angle=20) or shows the tab Crash test (--crashtab=1), waits and saves a picture of the window.
+## runs its crash test (--crash=50 --angle=20) or shows the tab Crash test (--crashtab=1), opens the window of a loose part
+## (--partwin=hood --pin=0), the flame test (--flames=1), the Full test (--fulltest=1) or the window of Save and test
+## (--savetest=1), puts the camera (--cam=x,y,z --look=x,y,z), waits and saves a picture of the window.
 ## Nothing is saved.
 
 
@@ -54,6 +56,26 @@ func _ready() -> void:
 		(cr.get("ui")["speed"] as HSlider).value = float(Content.arg("crash"))
 		(cr.get("ui")["angle"] as HSlider).value = float(Content.arg("angle")) if Content.arg("angle") != "" else 0.0
 		cr.call("start")
+	if sbc != null and Content.arg("partwin") != "":
+		# (--partwin=hood: the window of that loose part; --pin=1 chooses its pin; --flames=1: the flame test of the exhaust)
+		sbc.call("open_part", Content.arg("partwin"))
+		if Content.arg("pin") != "":
+			sbc.get("partwin").set("pin_sel", int(Content.arg("pin")))
+			sbc.get("partwin").call("render")
+			sbc.get("partwin").set("_dirty", true)
+	if Content.arg("flames") != "":
+		ed.layers.set_flame_test(true)
+	if Content.arg("fulltest") != "":
+		ed.bench.full_test()
+	if Content.arg("savetest") != "":
+		ed.open_test_dialog()
+	if Content.arg("cam") != "":
+		# (--cam=x,y,z: the camera of the view there, looking at --look=x,y,z)
+		var c := Array(Content.arg("cam").split(",")).map(func(x: String) -> float: return float(x))
+		var l := Array((Content.arg("look") if Content.arg("look") != "" else "0,0.5,0").split(",")).map(func(x: String) -> float: return float(x))
+		ed.view.target = Vector3(l[0], l[1], l[2])
+		ed.view.camera.position = Vector3(c[0], c[1], c[2])
+		ed.view.camera.look_at(ed.view.target)
 	if Content.arg("crashtab") != "":
 		ed.engine.show_test_bar(true)
 		var tabs := ed.engine.crash_pane.get_parent().get_child(0)
@@ -94,6 +116,9 @@ func _ready() -> void:
 	ed.engine.stop_sound()
 	var shot := Content.arg("shot")
 	if shot != "":
+		if Content.arg("flames") != "":
+			ed.layers.flames_frame(10.0)          # (a bang just before the picture: a flame lives a tenth of a second)
+			await get_tree().process_frame
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(shot)
 		print("saved ", shot)

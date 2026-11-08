@@ -9,11 +9,10 @@ const NOT_YET := "Not in the Godot version yet"
 
 ## The options that are in the menu for parity with the browser game, but that the Godot game does not use yet.
 ## key_steer_curve: the keys steer by a rate of their own here (key_steer_speed, key_steer_at_speed), not by the
-## ramp the curve of the browser shapes; pad_slow: the stick goes through the same rate; the motorcycle options are
-## of the motorcycle (another part of the port); sim_tyre_detail: the tyre shell (TyreShell.js) is not in the Godot
-## physics; sim_ai_steps: the shell of Godot takes fixed small steps (16 a physics step), not a number per frame.
-const NOT_IN_GODOT := ["key_steer_curve", "pad_slow", "bike_steering",
-	"bike_camera", "wheelie_control", "bike_fast_lean", "bike_push", "sim_tyre_detail", "sim_ai_steps"]
+## ramp the curve of the browser shapes; pad_slow: the stick goes through the same rate; sim_tyre_detail: the tyre
+## shell (TyreShell.js) is not in the Godot physics; sim_ai_steps: the shell of Godot takes fixed small steps (16 a
+## physics step), not a number per frame.
+const NOT_IN_GODOT := ["key_steer_curve", "pad_slow", "sim_tyre_detail", "sim_ai_steps"]
 
 
 ## The curve of the easing of a key (Settings.js curveRow): the pedal from 0 to 1 over the time the key is held.

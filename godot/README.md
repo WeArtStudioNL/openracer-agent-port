@@ -106,7 +106,10 @@ engine, the mass goes down with it, an empty tank stops the engine.
 
 **U** opens the tuning menu, as the browser game has it (web/js/Tuning.js, CarTuning.js): a panel at the right of
 the screen with the cards of the car editor in the browser's order (Wheels; Suspension and driveline; Chassis with
-Brakes, Aero and Size; Drivetrain; Engine with Fuel; Engine sound; Assists and extras; Cameras; Soft body), every
+Brakes, Aero and Size; Drivetrain; Engine with Fuel; Engine sound; Assists and extras; Cameras; Soft body; and for a
+motorcycle the Motorcycle card: the lean, the lean at speed, the rake, the rider's mass and hang off, the grip, the
+balance, the dive of the fork, the lean speed, the rates in the air, the flat-track style and the pose of the rider in
+either style, CarTuning.js), every
 group folded away. A row has the label, a number, the unit, ↺ (back to the setup that is chosen, or the car as made)
 and a slider with the units, ranges and steps of CarTuning.js; a changed value is orange. The brakes are a total and
 a bias, the gears a summary with Advanced (gear by gear, − and +) and a list of kinds of transmission, the tyre's fine
@@ -121,7 +124,7 @@ new… asks a name, Delete (or Undo changes for a tune that comes with the car).
 (`user://tunes/<car>/<name>.openracer-tune.json`, the format of the browser game: a whole car.json); the tunes that
 come with a car (car.json "tunes") are in the list too. The setup in use is remembered per car and used at the next
 start. Not ported: the engine build with its chart and dyno (the browser's Engine card), Export/Import of a tune
-file, the Mirrors card (the mirrors are in Settings, Mirrors), the Motorcycle card. `--tuning` opens the menu at the start, `--tuning-open=Chassis,Chassis/Brakes`
+file, the Mirrors card (the mirrors are in Settings, Mirrors). `--tuning` opens the menu at the start, `--tuning-open=Chassis,Chassis/Brakes`
 opens cards and groups (for screenshots). Test: `Godot --headless --path godot res://tools/test_tuning.tscn`.
 
 A kart (chassis.unsprung) stands on its tyres: the tyre is the spring (its rate with the pressure), the frame
@@ -273,7 +276,8 @@ A car with car.json "driver" (enabled, with a file: the hatchback, the go-karts,
 (`scripts/car_driver.gd`, Driver.js): the glb placed, turned and scaled about its hips, the bones of car.json or guessed
 from their names (Rigify, Mixamo), the hands on the steering wheel turning with it (the hand over at a long turn, or the
 keys of the car editor), the fingers closed by grip_curl, the feet on the pedals (left the brake, right the throttle), the
-elbows and the knees to their poles (`scripts/bone_ik.gd`, the two-bone IK shared with the motorcycle rider), the chest
+elbows and the knees to their poles (`scripts/bone_ik.gd`, the two-bone IK shared with the motorcycle rider: see
+Motorcycles), the chest
 and the head as set (or by their keys). In the cockpit view the head and the torso are not drawn (a copy of the mesh
 with the torso weight in CUSTOM0, made the first time), or the whole driver with cameras.cockpit.hide_driver. A part of
 the model called steeringwheel turns with the steering (`scripts/steering_wheel.gd`, CarLoader.js: about its middle and
@@ -282,6 +286,49 @@ the camera is not moved. The places of "driver" and the cockpit camera are in th
 browser (the cockpit camera no longer adds model.offset). Test: `Godot --headless --path godot res://tools/test_driver.tscn`
 (add `--cars=hatchback --shot=/tmp/folder` with a window for pictures). Not ported: the ragdoll of a crash and the give in
 the g-forces (motorcycle only in the browser).
+
+## Motorcycles
+
+`"type": "motorcycle"` (web/MOTORCYCLE.md): the physics of the cars with one wheel at each end (car.gd), the rider of
+Motorcycle.js that keeps it up and leans it (`scripts/motorcycle.gd`), the model with its front end, swingarm, shock
+and chain (`scripts/motorcycle_model.gd`) and the rider on it (`scripts/motorcycle_rider.gd`, Driver.js):
+
+- **The fork and the swingarm in the physics** (Vehicle.js feLoad): the front wheel moves along the fork and the rear
+  on the arc of the swingarm, so the road force along the wheel loads the spring with its share along the travel (the
+  slope from the `steerhead` empty or the rake, and from the pivot of the `swingarm` part): the fork dives under the
+  brake, a swingarm with its pivot above the axle resists squat. `motorcycle.fork_dive` (1; 0 off) scales it. The run
+  log's BIKE line has it (`fork`, `arm`, N).
+- **The rider keys**: `,` and `.` (hold) put the rider back or forward (tuck or sit up, his weight with it; in the air
+  the nose down or up). **9**: the rider goes limp where he sits (to try a crash): no throttle, steering or balance;
+  the seat holds his hips and knees while the bike is upright, his weight off the middle leans the bike, and it goes
+  down past 40 degrees, when it stops, or when he has slid off it.
+- **The ragdoll** (`scripts/rider_ragdoll.gd`, Driver.js crash): when the bike goes down the rider is thrown off: 15
+  particles (hips, chest, head, shoulders, elbows, hands, hip joints, knees, feet) with the speed they had (the bike's
+  at that place and his own movement), sticks, a rigid torso, the limits and the muscles of a body (a soft zone before
+  every limit, the tone towards the neutral posture, damping), the limbs out of each other, Verlet at 240 Hz, 0.55 g of
+  friction on the road, a sudden higher floor is a wall. He collides with the bike's collision box (here, not its
+  spheres) and gives it the hit in the first 0.3 s. The skeleton is posed on the particles (the root on the hips and
+  the chest, the limbs by the IK, the head along the neck). The follow camera watches him from where it was (2.5 to
+  5 m, at least 1.2 m up) until Reset or Repair. Not in the replay.
+- **The levers, the fingers and the shift lever**: the right grip rolls with the throttle; the hands keep their turn on
+  the grips (found once in the neutral pose, with `hands.rotation` on top); the fingers (not the thumb) point at
+  `frontbrake_R` and `clutch_L` (the middle finger is the base) and close with the brake or the pull of a shift; the
+  levers turn about their hinge (their vertex nearest the middle of the bike); `shifter_L` taps with every shift
+  (first gear down, the others up, neutral a half tap) and the left foot goes with its toe peg.
+- **The rider gives with the g-forces** (`gSpring`): a mass on a spring (1.4 Hz, damping 0.55) pushed by the
+  acceleration of the bike in its own frame, 6 cm at 1 g (at most 10 cm to the side, 12 forward and back, 8 down and
+  4 up), the trunk turning with it (1.2 degrees a cm). Only what is drawn.
+- **Flat track**: the pelvis tilts against the bike (`push_pelvis_tilt`), the inside foot comes off the peg onto the
+  road beside it, forward and out with the lean (`push_foot_out`, `push_foot_forward`, a ray for the road), and a foot
+  is never below the road.
+- **The AI** brakes for 0.75 g on a road-race bike with fork dive (0.8 before and for a flat-track bike): with the
+  fork in the physics the 600 ran wide in the first bend of kartbaan-oldenzaal at 0.8 g.
+- **Test**: `Godot --fixed-fps 60 --path godot res://tools/test_moto.tscn -- --car=sports-motorcycle-600cc` (the shift
+  lever, the fork, the give and the brake lever on the brake, the limp rider, a crash into a wall, the ragdoll on the
+  floor; with a window `--shot=/folder` saves throttle, brake, levers, limp_ride, limp and crash pictures).
+- **Not ported**: model v2 (`"motorcycle": {"model": "v2"}`; no bike of the game uses it), the crash rules panel of
+  the 0 key and its push rule, the head that stays upright to the road and looks along the racing line, the ORG bones
+  of a Rigify rig that follow the DEF ones, the ragdoll in the replay, walking the bike back with the feet.
 
 ## Garage
 
@@ -300,16 +347,20 @@ cards of the browser editor in its order, the 3D view in the middle and the laye
 `editor.css`.
 
 - **Header**: the tune of the car (Default is car.json; Save writes to what is chosen, + New tune, Tune file: delete,
-  export and import a tune file; the tunes are those of the tuning menu, `user://tunes/<car>/`), the summary (mass,
+  export and import a tune file; the tunes are those of the tuning menu, `user://tunes/<car>/`; Ship with the car puts
+  the tune that is chosen as `<name>.openracer-tune.json` next to car.json and in its "tunes", for everyone who has the
+  car, and Take off the car takes it away again; a tune with the car that was changed here: Ship the changes), the summary (mass,
   front/rear, power, top speed, a wheelie warning for a motorcycle). Footer: Changes (what differs from the saved car),
   the ready check (what is missing before it can be saved), the status, Delete (to the Trash), Save and test (saves,
-  asks a track and drives it in the game; Esc, Main menu comes back to the editor). Ctrl/Cmd+S saves, Ctrl/Cmd+Z undoes
+  asks the track and the conditions: the weather, the time of day and the ground, the settings of the game the drive
+  starts with, or Use last settings; drives it in the game; Esc, Main menu comes back to the editor). Ctrl/Cmd+S saves, Ctrl/Cmd+Z undoes
   (Shift: redo).
 - **Car**: open a car of the list (the game's and the garage's; the tune in use goes into the form), + Car, + Motorcycle,
   Make a copy, Export zip, the type, name, id (`^[a-z0-9][a-z0-9_-]{0,63}$`, made from the name until it is typed) and
   description, and where Save writes: the garage (`user://garage/cars/<id>/`, the default) or, when the game runs from the
   repository, the game's folder `web/cars/<id>/` (and `web/cars/index.json`, as tools/serve.py does).
-- **Model**: Import model… (a native file dialog: a .glb, or a .gltf with its .bin and textures; a name the game does not
+- **Model**: Import model… (a native file dialog: a .glb, or a .gltf with its .bin and textures; or dropped on the
+  window; a name the game does not
   allow is made safe), turn, scale, the offset, Fit to the wheels and the floor. A new model is set up by itself (the
   wheels found, the size and the chassis measured, the model on the floor, glass that arrived opaque made see-through);
   a new model for a car that exists keeps what still fits (the transform, the wheels by name, the materials).
@@ -338,10 +389,13 @@ cards of the browser editor in its order, the 3D view in the middle and the laye
   the edges. The gizmo (`editor_gizmo.gd`, where the browser has TransformControls) moves the cameras (follow, its look
   point, cockpit), the model and the exhaust points, and turns the exhaust points and the mounts (W, E). A click on a dot
   selects it; a click on the model shows its part in the layers.
-- **Layers**: the cameras, the model, the steering wheel, the suspension rig, the wheels, the exhaust points (+ Add, ×,
+- **Layers**: the cameras, the model, the steering wheel, the suspension rig, the wheels, the exhaust points (Test: on
+  shows the flames of the pops and bangs at them now and then, as the game makes them, ExhaustFlames; + Add, ×,
   a window with the place, the turn, the diameter, smoke, flame length and width, brightness), every named object of the
   model with an eye and folding, a search, and the thumbnail of the selected camera.
-- **Tests**: Drop car (`car_editor_bench.gd`: the car built by the game's Car from the form, saved or not, dropped from a
+- **Tests**: Full test (a drop from 1 m at 5°, two seconds later the engine in neutral to the rev limiter and a second on
+  it, a metre forwards and a metre back, the steering to both locks, then a wall 100 m ahead and full throttle into it,
+  the view with the car until the hit; the engine is heard), Drop car (`car_editor_bench.gd`: the car built by the game's Car from the form, saved or not, dropped from a
   height and a tilt on a floor), Drive (the keys of the game, the view follows, the engine heard), ↺ back to the model.
 
 - **Driver** (`scripts/editor/car_editor_driver.gd`, driver-editor.js): The car has a driver, Load the driver model… (a
@@ -370,7 +424,18 @@ cards of the browser editor in its order, the 3D view in the middle and the laye
   model), behaviour (hinge, loose, breakable), mass, break force and delay, the nodes that hold it and its own nodes (Set =
   selected nodes), the hinge points A and B (a node or a point picked on the surface, each with its tear force), the
   origin (the object, a node, a point) and the axis (A→B, X, Y, Z), the angles, spring, damper, latch and tear force; a
-  part chosen in the layers opens its row or offers to add it. With a tune chosen the card is shown but locked (the shell
+  part chosen in the Parts window opens its row or offers to add it. **The window of a part**
+  (`car_editor_softbody_partwin.gd`): a click on a loose object in the view (lit in orange under the mouse) or its row in
+  the layers opens a window over the view for it: Hinge part (a first pin point at the origin of the object) or Breakable
+  only; the mass, Remove from loose parts; a breakable part has its break force and delay and "Breakable: it shatters"
+  (its faces, the mesh `<name>_broken` or particles only, the most pieces, the particles with their shape, size and
+  material or colour, Show the broken mesh, Break it now: a new car on the bench and the part breaks); a hinge part has
+  its pin points (+ add: a click on the surface), each with its free axes X Y Z, the limits of every free axis (sliders),
+  the turn of the pin (three angles, Reset, and the turn gizmo in the view), Opens at and Breaks off at (with a warning
+  when they do not fit, or when the part lies outside its limits), and its deformation nodes (Add nodes: a click on the
+  part puts one there with the rest of the car faded; the strength of all of them; the list with ✕). The view shows the
+  pin points, the fan of every free axis between its limits (white: the zero, yellow: where the part lies). A model with
+  an object "beams" has its shell from it: the scan, the fill and the editing of nodes are not shown then. With a tune chosen the card is shown but locked (the shell
   and the parts belong to the car; Go to Default). Ctrl/Cmd+Z undoes the nodes too (they are in the form).
 - **Crash test** (the second tab of the test bar): Crash into the wall (speed, angle of the wall): a new car on the bench
   drives on its own throttle, kept on its line, into a wall of 80 m (a StaticBody3D for the body, and the walls of the
@@ -379,7 +444,9 @@ cards of the browser editor in its order, the 3D view in the middle and the laye
   of the car, the torn anchors and beams and the parts that came off. Apply force (km/h): an arrow on the surface under
   the mouse, a click fires an invisible cube of a tonne and a metre at the car there (`CarShell.pusher`, a contact of
   its face with the nodes under it, or the own nodes of the part that was hit), and the card says its peak force, how far
-  it went into the shell and what it did.
+  it went into the shell and what it did. A part that hangs on a hinge, breaks or comes off at a force feels the hit
+  itself (`CarParts.hit`): it opens past its latch or the force of a pin, tears at its break force, shatters; the card
+  says what it did. The view helpers (the camera markers, the axes, the arrow, the grid) go while a crash test runs.
 
 The Soft body and the Driver cards are ported apart: the editor loads `scripts/editor/car_editor_softbody.gd` and
 `car_editor_driver.gd` when they are there (`CarEditor.CARD_HOOKS`): an object with `setup(editor, card_body)`,
@@ -387,40 +454,51 @@ The Soft body and the Driver cards are ported apart: the editor loads `scripts/e
 `on_model(root)`, `picked(hit)` (a click on the model), `open_part(name)` (a click on a part in the layers), `click`,
 `key`, `crash_tab(pane)` and `bench_stopped`.
 
-Not ported: the part window of the browser's Soft body card (a click on a loose object: pin points with free axes,
-limits per axis and a turn gizmo, Opens at, the shatter settings, Break it now, nodes added on the part with the rest
-faded; the Godot game has no swinging hinges and no shattering yet, so those settings of car.json are kept as they are but
-cannot be set here), Full test of the bench, the flame test of the exhaust points, the nodes of the
-tyre shells on the bench (the Godot physics have no tyre shells), the weather, time of day and ground of Save and test,
-Ship with the car of a tune, and the material field "reflection" (envMapIntensity) is saved but only approximated (the specular of the material).
+Not ported: the nodes of the tyre shells on the bench (the Godot physics have no tyre shells), the rider of a motorcycle
+on its grips and pegs; the material field "reflection" (envMapIntensity) has no counterpart per material in Godot: it
+scales the specular of a dielectric, the colour of a metal (to white at most) and the clear coat, which is closer but
+not the same. Of the browser's page also not: the width of the Layers panel by dragging, the cards, the test bar and the
+engine mode remembered, the big chart beside the side bar, the car of last time opened at the start. The menu picture of
+a car is made again after a save (its preview.webp to the Trash, as the browser does); the cockpit thumbnail leaves the
+driver out, as the game does inside.
 
 Test of the Soft body card: `Godot --headless --fixed-fps 120 --path godot res://tools/test_softbody_card.tscn` (the
 hatchback in and out of the card unchanged, the shell on the bench, the scan, a node and a beam set, a strength, a node
-added and removed, the lasso, the gizmo, the Parts window, the lock of a tune, the crash test and Apply force; nothing is
-saved). Pictures: `shot_car_editor.tscn -- --car=hatchback --open="Soft body" --scroll="Soft body" --shell=1|edit
+added and removed, the lasso, the gizmo, the Parts window, the window of a part (hood: a pin added, an axis, a limit, the
+turn gizmo, nodes of the part with the rest faded, the lock; left-taillight: Break it now; an object that is no part
+yet: Breakable only), the lock of a tune, the crash test and Apply force (also at the left door, which opens or tears
+off); nothing is saved). Pictures: `shot_car_editor.tscn -- --car=hatchback --open="Soft body" --scroll="Soft body" --shell=1|edit
 --sel=3,4`, `--window=Strengths|Parts`, `--crashtab=1`, `--crash=50 --angle=20 --wait=12`.
 
 Test of the Driver card and the driver: `Godot --headless --path godot res://tools/test_driver.tscn -- --out=/tmp/folder`
 (see "The driver"); pictures: `shot_car_editor.tscn -- --car=go-kart-250cc --open=Driver --scroll=Driver --driver=handL --steer=-90`.
 
 Tests: `Godot --headless --path godot res://tools/test_car_editor.tscn -- --out=/tmp/folder` opens the hatchback, drops it
-on the bench, changes fields, saves it as zz-editor-test into that folder (never the garage or web/), checks the car.json
-(the keys, their order and the number format of the browser), and makes a new car from Kart.glb. The game drives a car of
+on the bench, runs the Full test (every stage, the limiter, a metre each way, both locks, the wall), the flame test,
+changes fields, saves it as zz-editor-test into that folder (never the garage or web/), checks the car.json
+(the keys, their order and the number format of the browser), ships a tune with it and takes it off again (the tunes
+of the test in its folder: `Tuning.tunes_root`), opens the window of Save and test, and makes a new car from Kart.glb. The game drives a car of
 that folder with `--set=garage_folder:'"/tmp/folder"'` (add `--keep` to the test to keep the files). Pictures:
 `Godot --path godot res://tools/shot_car_editor.tscn -- --car=openracer-muscle --open=Engine --scroll=Engine --dyno=1
 --shot=/tmp/editor.png` (also `--select=follow|ex1|model|mt:front:lower_ball`, `--suspension=1`, `--tests`, `--drop=1`,
-`--window=Cameras|Materials|Sound`).
+`--window=Cameras|Materials|Sound`, `--partwin=hood --pin=0`, `--flames=1 --cam=x,y,z --look=x,y,z`, `--fulltest=1`,
+`--savetest=1`).
 
 ## Track editor
 
 The track editor of the browser (`web/tools/track-editor.html`, track-editor.js, track-design.js, heightmap.js) in
 `scripts/editor/`: main menu, "Track editor", or `-- --editor` (`--editor=<id>` opens that track). The side bar has
 the cards of the browser: Track (open a track, New track, Delete… for a track of the garage, Height map…, name, id,
-description), Ready to race, Reference image (a picture to draw over: opacity, place, Scale by two points), Model
+description; opened without a track it asks what to do: the track of last time, Open track with the pictures of the
+tracks and a search, Import height map or New track), Ready to race, Reference image (a picture to draw over: opacity,
+place, Scale by two points in metres or feet), Model
 (import a .glb or .gltf), Surfaces (the role of every part: road, pit lane, grass, ground, sand, gravel, mud,
 scenery, decor), Start and lap gates (Fill the grid, Gate 1 at the start, Auto gates, Show the checkpoints), Pit
 boxes and the pit line, Objects (the library of `web/objects` and `user://garage/objects`, + adds a glb; the
-prefabs on a track with a model; rigid, static or decor, mass, origin), Curbs (width, height, colour, connect to the
+prefabs on a track with a model, with the texture of a prefab that has a choice; every tile with a picture of its
+model, drawn in the editor when it has none (`model_thumbs.gd`) and kept beside a model added to the player's
+library; × takes a model out of the library, + keeps a model of the track in it; rigid, static or decor and the mass,
+also written into the library; origin), Curbs (width, height, colour, connect to the
 road, the size and the offset of a node, Taper the ends), Cinematic cameras (and their range), AI racing line (Edit
 the line, Draw the line, Apply, Forget) and Sky and light; at the bottom Thumbnail (preview.webp), Export zip, Test
 drive (saves and drives it with the car of the menu) and Save. The view: the tools in a bar at the bottom (1 to 0:
@@ -430,14 +508,28 @@ the colours of the surfaces, Snap 1/2/5 m, From above, Undo/Redo (all of the tra
 panel of what is chosen with its numbers, the drag strip window and the drawer of the road (Track, Branches,
 Surfaces, Prefabs). Left drag turns the view, right drag moves it, the wheel zooms to the pointer; what is chosen
 has handles: the middle moves it, the ring turns it, the square scales it, the arrow lifts a node of the road.
-Keys as in the browser: Delete, Escape, Enter, Ctrl+Z/Y/D/S, F, T, End, W E R.
+Keys as in the browser: Delete, Escape, Enter, Ctrl+Z/Y/D/S, F, T, End, W E R. The panel of a chosen object also has
+its tilt (forward, sideways) and its scale per axis. Saving under the id of another track asks Replace the track?; Fill
+the grid, Fill the pit boxes, Auto gates and the Clear buttons ask before they replace more than one; removing a model
+that is placed asks too. The old pit area of a track of before (a polygon) is drawn and has Remove.
+
+Record AI racing line (the AI racing line card; main.js recordLine): the saved track (changes are saved first; it needs
+a gate) is driven in the game with the car of the menu, alone, without ghost or records (`scripts/line_recorder.gd`): every lap
+that counts replaces the line, Esc or Stop writes the last one as "racing_line" of track.json (every third sample,
+rounded to centimetres, and line_date) and comes back to the editor, which says what came of it.
+`-- --car=<car> --track=<track> --record-line=1 --ai --record-laps=1` records a lap of the AI. The draft: what is not
+saved is kept every 8 s and when the editor closes (`user://track-editor-draft.json`; the tests: their folder); the next
+time that track is opened the editor offers to restore it, and a save throws it away.
 
 A track is saved as `track.json` in the format of the browser (the numbers rounded as it does) with its files, in
 the garage (`user://garage/tracks/<id>/`; files it has not got come from the game's folder of that id) or, when the
 game runs from the repository and "Save in the repository" is ticked, in `web/tracks/<id>/` (and `index.json`). A
 road of nodes is built as track-design.js builds it (the same centripetal Catmull-Rom curve as three.js,
 `scripts/catmull_rom.gd`; the road, shoulders, terrain, branches, surfaces and prefabs come out part for part as
-the browser's, `res://tools/test_design.tscn -- --track=go-kart-track-1`) and written as `<id>.glb` with
+the browser's, `res://tools/test_design.tscn -- --track=go-kart-track-1`; surfaces of the track's own: New surface, Edit
+surface with a name, a colour or a repeating texture with its tile size, and the grip; an area with Connect to road
+closes along the visible edge of the roads and the curbs, over the outside of a curb that lies on the edge and back,
+as edgeGraph does) and written as `<id>.glb` with
 GLTFDocument, the hidden triangles left out. The game draws what the editor makes: curbs (`scripts/curbs.gd`, road),
 the grid boxes, the pit area and the checkpoints with the arrow to the next gate (`scripts/track_marks.gd`), the
 objects (`scripts/track_objects.gd`: a rigid one sleeps until a car's box pushes it and the push comes back to the
@@ -451,10 +543,13 @@ Test (never in the garage or in web/): `Godot --path godot res://tools/test_trac
 (with a window and `--shot-dir=/tmp` it takes screenshots) uses the tools with the mouse on testtrack, draws a new
 road with a node, a prefab row, a tree and a gravel area, saves both into `/tmp/te/tracks/`, checks the fields of
 track.json, and saves go-kart-track-1 again unchanged (its design, grid, gates, pit, objects and surfaces equal,
-the curb points within 1 mm). A saved track drives with `-- --content=<a folder with tracks/ and links to web/cars>`.
-Not yet: recording the racing line by driving (draw or edit it instead), the touch layout and the loupe of the
-browser, the draft that is kept every few seconds, thumbnails of the library models, the cinematic cameras in the
-replay. On desert-drag-strip the barrier on the strip (`prefab_barrier_1` of the design) is scenery in the browser
+the curb points within 1 mm); it also checks the way of a connected surface over a curb, the draft and its
+restore, Record AI racing line, a picture of a model, a surface of the track's own, the feet, and two cameras of the
+editor that `test_replay.tscn -- --content=<that folder> --track=te-test-design` films from. A saved track drives with `-- --content=<a folder with tracks/ and links to web/cars>`.
+Not yet: the touch layout and the loupe of the browser, the side bar that narrows to the
+card of the work at hand, the gizmo of the reference image (its place is in fields), the tracks in the old
+geometry/scene format, the size and depth of a height map shown when it is chosen. The cameras of the editor are not
+interpolated (the physics interpolation of the project drew a marker from where the camera had been: "p.d == 0"). On desert-drag-strip the barrier on the strip (`prefab_barrier_1` of the design) is scenery in the browser
 too: its rail and posts (0.78 m) are higher than what a car drives over (0.13 + 0.3 m, Vehicle.js), so both games
 stop a car there.
 
@@ -591,7 +686,8 @@ the browser's SSGI), the tone mapping (Neutral is Filmic in Godot), exposure, co
 the sun direction, the moon, the weather and the smoke. In a drive it also has "Save as HDR"
 (`scripts/environment_export.gd`, EnvironmentExport.js): the surroundings of the car as an equirect .hdr (Radiance)
 in `user://environments/`, for the world of Blender. The main menu chooses the weather and the time of day of a race;
-a free drive starts clear, as in the browser.
+a free drive starts clear, as in the browser. The ground can also be fixed (`gfx_ground`: Follows the weather, Dry,
+Wet, Snow; the Graphics page and Save and test of the car editor), as Atmosphere.js groundOverride does.
 
     Godot --headless --fixed-fps 120 --path godot -- --car=openracer-muscle --track=kartbaan-oldenzaal --ai --quit-after=100 --set=gfx_weather:rain
     Godot --path godot res://tools/test_graphics.tscn -- --ai [--shot=file.png] [--hdr=file.hdr]
@@ -645,8 +741,8 @@ HUD, F3 the debug text, F2 a photo without the HUD (in the pictures folder, O-Ra
 ABS, ESC, launch control, two-step on and off (a short note says it), I starts the engine, E the engine sound, V the
 telemetry, 0 the debug view (- hides the car), U tuning, K calibrates a wheel, M the wheel on and off, F8 a mark in the
 log, Esc pause. A gamepad: the triggers gas and brake, the left stick steers, A handbrake, the shoulders shift, X camera,
-Y back on the line, Back repair, Start pause. The rider keys and the ragdoll of a motorcycle are bound but not in the
-Godot physics yet. 5 starts and stops a take (Take.js); the camera key goes through follow, cockpit, bonnet and the free
+Y back on the line, Back repair, Start pause. On a motorcycle `,` and `.` put the rider back and forward while held
+(and in the air the nose up and down), 9 makes the rider go limp (see Motorcycles). 5 starts and stops a take (Take.js); the camera key goes through follow, cockpit, bonnet and the free
 camera (FreeCam.js: its own keys while it is on, see Replay).
 
 All of it can be set in Settings, Controls: every action, by group, has chips of its inputs (Key, Pad, Wheel; ✎ a new one,
@@ -677,8 +773,10 @@ window (watch, download, delete, import). The choice is kept in `user://menu.cfg
 the browser, Car, Keyboard, Gamepad, Wheel (with the calibrated wheels and Forget), Display and sound, Mobile (with the touch
 controls), Graphics, Simulation, Tools (debug text, back up and restore the settings, the records and the tunes in one file,
 forget the records of a track, Save as HDR), Controls; Reset all settings. What the Godot game does not do yet is grey with
-the tooltip "Not in the Godot version yet" (the steering assists, the pad steering at speed, the motorcycle options, the
-debris, the simulation rows). The pause menu (`scripts/pause_menu.gd`): Resume, Replay, Tune the car, Restart, Back to the
+the tooltip "Not in the Godot version yet" (the steering assists, the pad steering at speed, the debris, the simulation
+rows). The motorcycle options (shown with a motorcycle): Motorcycle steering (lean only, or countersteer + lean: the
+push on the bars that starts a lean, off on the brake and back slowly after it), Wheelie control, Flat-track style for
+every bike, the Motorcycle follow camera (it rolls with the lean, or the classic chase of a car), the lean at top speed. The pause menu (`scripts/pause_menu.gd`): Resume, Replay, Tune the car, Restart, Back to the
 start, Settings, the drag strip Top 50, Main menu. `--settings --settings-tab=Wheel` opens a tab (`pause`: the pause menu).
 
 **HUD** (`scripts/hud.gd`, `hud_gauge.gd`, after Hud.js): the round gauge (the engine speed with the red zone and the shift
@@ -758,8 +856,10 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
    on a track, marbles, debris *(done)*.
 5. **Motorcycles**: the bike model of Motorcycle.js with its rider (`scripts/motorcycle.gd`): lean, steering from the
    lean, balance, camber thrust, posture, wheelie control, brakes, crash rules, camera roll; the front end, swingarm,
-   shock and chain (`motorcycle_model.gd`), the rider with IK (`motorcycle_rider.gd`), the AI rides them *(done; not
-   yet: the ragdoll of a crash, the levers and fingers, model v2, the menu options of the bikes)*.
+   shock and chain (`motorcycle_model.gd`), the rider with IK (`motorcycle_rider.gd`), the AI rides them; the ragdoll
+   of a crash, the levers, fingers and shift lever, the give in the g-forces, the fork and swingarm in the physics,
+   the rider keys, the options of the menu and the Motorcycle card of tuning *(done, see Motorcycles; not: model v2,
+   which no bike of the game uses)*.
 6. **Garage, tuning and editors**: tuning menu *(done)*, replays *(the core done)*, car editor *(done, see Car editor)*, track editor, garage.
 7. **Release**: export for the web (openracer.eu), macOS, Windows and Linux. macOS *(done)*: `sh godot/tools/export_macos.sh`
    makes `godot/build/macos/O-Racer.app` (universal, signed ad hoc, not notarised: the first start needs a right
