@@ -1,6 +1,6 @@
 extends Node
 ## (a scene, for the autoloads: Godot --headless --fixed-fps 120 --path godot res://tools/test_effects.tscn -- [--car=openracer-muscle])
-## The things of the track and of the tyres (RigidObjects.js, Debris.js, Marbles.js) on the desert track: the car drives
+## The things of the track and of the tyres (RigidObjects.js: TrackObjects, Debris.js, Marbles.js) on the desert track: the car drives
 ## into a stack of boxes (track.json "objects") and the boxes must fly; it spins its wheels on the sand (the debris
 ## must fly); its tyres are made hot and it slides on the road (marbles must fall and lie). Without --headless,
 ## --shot=prefix saves a picture of each (prefix-objects.png, -debris.png, -marbles.png).
@@ -8,7 +8,7 @@ extends Node
 var world: World
 var _time := 0.0
 var _phase := "wait"
-var _objects: RigidObjects
+var _objects: TrackObjects
 var _homes: Array[Vector3] = []
 var _shot := ""
 
@@ -22,6 +22,10 @@ func _ready() -> void:
 	world.set_physics_process(false)          # (the inputs are the test's, not the keys')
 	_shot = Content.arg("shot")
 	process_mode = Node.PROCESS_MODE_ALWAYS
+
+
+func _awake() -> int:
+	return _objects.bodies.filter(func(b: RigidBody3D) -> bool: return not b.sleeping).size() if _objects else 0
 
 
 func _place(target: Vector3, heading: float, back: float) -> void:
@@ -45,8 +49,8 @@ func _physics_process(dt: float) -> void:
 	match _phase:
 		"wait":
 			if _time > 1.0:
-				_objects = world.get_node_or_null("RigidObjects") as RigidObjects
-				print("objects: %d, asleep %d" % [_objects.bodies.size() if _objects else 0, _objects.bodies.size() - _objects.awake() if _objects else 0])
+				_objects = world.track.objects
+				print("objects: %d, asleep %d" % [_objects.bodies.size() if _objects else 0, _objects.bodies.size() - _awake() if _objects else 0])
 				for b in _objects.bodies:
 					_homes.append(b.global_position)
 				# the stack of boxes (15 of them, 3 layers) at 285.91, 393.68
@@ -62,7 +66,7 @@ func _physics_process(dt: float) -> void:
 				for i in _objects.bodies.size():
 					if _objects.bodies[i].global_position.distance_to(_homes[i]) > 0.2:
 						moved += 1
-				print("into the boxes at 40 km/h: %d objects moved, %d awake, the car at %.1f km/h" % [moved, _objects.awake(), car.speed * 3.6])
+				print("into the boxes at 40 km/h: %d objects moved, %d awake, the car at %.1f km/h" % [moved, _awake(), car.speed * 3.6])
 				# on the sand beside the road, the wheels spinning
 				_place(Vector3(car.global_position.x + 30.0, 0.0, car.global_position.z + 30.0), 1.2, 0.0)
 				_phase = "debris"
@@ -97,5 +101,5 @@ func _physics_process(dt: float) -> void:
 				print("hot tyres sliding on %s at %.1f km/h: marbles made %d" % [str(surfaces), car.speed * 3.6, m.count() if m else -1])
 				_snap("marbles")
 				world.to_start()
-				print("back at the start: marbles %d, objects asleep at home %s" % [m.count() if m else -1, _objects.awake() == 0])
+				print("back at the start: marbles %d, objects asleep at home %s" % [m.count() if m else -1, _awake() == 0])
 				get_tree().quit()

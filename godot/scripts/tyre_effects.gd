@@ -58,6 +58,10 @@ func setup(c: Car) -> void:
 		_dust.append(d)
 		add_child(s)
 		add_child(d)
+	# the water of the puddles and the snow (the condition of the ground, Ground)
+	var spray := GroundSpray.new()
+	spray.setup(c)
+	add_child(spray)
 
 
 ## Across the strip: soft edges, a little uneven along it.
@@ -233,7 +237,7 @@ func _process(delta: float) -> void:
 		var loose: bool = Content.surface(w.surface).get("loose", false)
 		_mark(i, w, loose)
 		var at := w.point if w.contact else car.to_global(w.hub)
-		var amount := clampf(w.smoke, 0.0, 1.0)
+		var amount := clampf(w.smoke * float(Settings.get_value("gfx_smoke")) / 100.0, 0.0, 1.0)       # (the Smoke of the Graphics settings)
 		for e: GPUParticles3D in [_smoke[i], _dust[i]]:
 			var mine := amount if (e == _dust[i]) == loose else 0.0
 			e.global_position = at

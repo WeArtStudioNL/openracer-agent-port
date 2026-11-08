@@ -104,10 +104,15 @@ func setup(c: Car, track_cfg: Dictionary, index: int, hold: bool) -> void:
 	hold_car = hold
 
 
-## Whether all four wheels are in a box (a little room round it), at least two of them on the ground.
+## Whether all four wheels are in a box (a little room round it), at least two of them on the ground; on a track
+## without boxes, whether the car stands on the pit lane (PitLane).
 func in_box() -> bool:
 	if boxes.is_empty():
-		return false
+		# (a track without boxes: the pit lane, all four wheels on the road of the surface track01)
+		for w in car.wheels:
+			if not w.contact or w.surface != "track01":
+				return false
+		return true
 	var list: Array = [boxes[box_index]] if box_index >= 0 else boxes
 	for b in list:
 		var cs := cos(float(b["heading"]))

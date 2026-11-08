@@ -25,6 +25,9 @@ var _last_index := -1
 var _base_speeds := PackedFloat32Array()
 var _rolled := 0.0                # a motorcycle: the throttle as it is rolled on
 var _beside := NAN                # a motorcycle: how far it was to the left of the line
+var _lateral := 1.0               # the g of the line in the dry (before the pace)
+var _braking := 1.0
+var _speeds_grip := 1.2           # the grip of the road that the speeds were made for (Ground: the wet and the snow)
 
 
 func setup(c: Car, l: RacingLine, p := -1.0) -> void:
@@ -45,9 +48,9 @@ func setup(c: Car, l: RacingLine, p := -1.0) -> void:
 		braking = minf(braking, 0.8) * pace
 		c.bike.lean_from_bend = true
 	# (its own speeds: the cars of a race differ, and it learns where it was too fast)
-	_speeds = line.compute_speeds(lateral * Car.G * pace, braking * Car.G, 90.0).duplicate()
-	_brake = braking * Car.G
-	_base_speeds = _speeds.duplicate()
+	_lateral = lateral
+	_braking = braking
+	_make_speeds()
 	# what an AI with this car learned on this track before (where it ran off the road), as factors on the speeds
 	var f := _learned_path()
 	if FileAccess.file_exists(f):
@@ -56,6 +59,24 @@ func setup(c: Car, l: RacingLine, p := -1.0) -> void:
 			for i in _speeds.size():
 				_speeds[i] = maxf(6.0, _base_speeds[i] * factors[i])
 			RacingLine.brake_pass(_speeds, _brake)
+
+
+## The speeds of the line for the grip of the road now (Opponent.js buildSpeeds: a wet or a snowy road takes from the
+## g of the bends and the brakes alike); what was learned stays, as factors on them.
+func _make_speeds() -> void:
+	var factors := PackedFloat32Array()
+	if not _base_speeds.is_empty():
+		for i in _speeds.size():
+			factors.append(_speeds[i] / maxf(0.1, _base_speeds[i]))
+	_speeds_grip = Ground.road_grip()
+	var wetness := _speeds_grip / 1.2
+	_speeds = line.compute_speeds(_lateral * Car.G * pace * wetness, _braking * Car.G * wetness, 90.0).duplicate()
+	_brake = _braking * Car.G * wetness
+	_base_speeds = _speeds.duplicate()
+	if factors.size() == _speeds.size():
+		for i in _speeds.size():
+			_speeds[i] = maxf(6.0, _base_speeds[i] * factors[i])
+		RacingLine.brake_pass(_speeds, _brake)
 
 
 ## Keeps what it learned (the speeds as factors of those of the line) for the next time.
@@ -87,6 +108,8 @@ func lost() -> void:
 
 
 func drive(dt: float) -> void:
+	if absf(Ground.road_grip() - _speeds_grip) > 0.03:
+		_make_speeds()
 	var xf := car.global_transform
 	_index = line.nearest_facing(xf.origin, xf.basis.z) if _index < 0 else line.nearest(xf.origin, _index)
 	var v := absf(car.speed)

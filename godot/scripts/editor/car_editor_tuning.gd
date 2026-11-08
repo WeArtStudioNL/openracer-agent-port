@@ -1,0 +1,549 @@
+class_name CarEditorTuning
+extends RefCounted
+## The settings of the tuning menu in the cards of the car editor (car-editor.js, the Tuning card): every group of the
+## tuning table (Tuning.GROUPS, after CarTuning.js) that the form does not have in fields of its own goes into the card it
+## is about (Tyres into Wheels, Fuel and Engine into Engine, Transmission into Drivetrain, ...), each setting a line with a
+## number, its unit and ↺ (back to the car as loaded) over a slider; the paint of the body and the rims; the systems and
+## the extras (a tick each) in Assists and extras. And the setups of the car (the tunes, Tuning.save_tune): Default is the
+## car as made (car.json); Save writes to what is chosen; + New tune, Delete, Export and Import of a tune file.
+
+## The rows of the tuning menu that the form has as its own fields.
+const EDITOR_HAS := ["mass", "front_weight", "cg_height", "drag_coefficient", "max_steer_deg", "idle_rpm", "limiter_rpm", "engine_inertia",
+	"final_drive", "reverse_ratio", "brake_total", "brake_bias", "diff_preload", "diff_power", "diff_coast", "center_split", "suspension_travel",
+	"efficiency", "length", "width", "height", "steering_degrees", "steering_stop", "sb_max_nodes", "sb_wheel_strength", "unsprung",
+	"cam_follow_distance", "cam_follow_height", "cam_follow_look_height", "cam_follow_look_z", "cam_follow_smoothing", "cam_follow_fov_standing",
+	"cam_follow_fov_fast", "cam_follow_fov_full_speed", "cam_follow_dolly", "cam_cockpit_x", "cam_cockpit_y", "cam_cockpit_z", "cam_cockpit_fov",
+	"cam_cockpit_hide_driver", "drive", "diff", "center_diff", "gearbox", "gears", "cvt_rpm", "tc_stall_rpm", "tc_ratio", "tc_lockup",
+	"rim_front", "rim_rear", "tyre_front", "tyre_rear", "susp_front", "susp_rear", "engine_place", "es_convolution",
+	"body_color", "rim_color", "body_finish", "rim_finish", "body_pattern", "rim_pattern", "body_uv", "rim_uv", "body_flake", "rim_flake"]
+## The card each group of the table goes into.
+const HOMES := {"Chassis": "Chassis", "Brakes": "Chassis", "Aerodynamics and steering": "Chassis", "Size and steering wheel": "Chassis", "Tyres": "Wheels",
+	"Fuel": "Engine", "Engine": "Engine", "Transmission": "Drivetrain", "Suspension and driveline": "Suspension and driveline", "Engine sound": "Engine sound"}
+const PAINT := ["body", "rim"]
+const TYRE_KEYS := ["tyre_diameter_front", "tyre_diameter_rear", "tyre_height_front", "tyre_height_rear", "rubber_front", "rubber_rear", "tread_front", "tread_rear",
+	"tyre_width", "tyre_width_rear", "tyre_inner_ratio", "tyre_rings", "tyre_segments", "tyre_carcass"]
+
+var ed: CarEditor
+var save_button: Button
+var base := {}                       # the values of the car as it was loaded (↺ goes back to them)
+var _rows: Array = []                # { key, item, label, slider, num, reset, kind }
+var _groups: Array = []              # the folds that were put in the cards
+var _features: Array = []
+var _setup_pick: OptionButton
+var _save_to: Label
+var _tune_menu: MenuButton
+var _paths := {}                     # tune name -> its file
+var _refreshing := false
+
+
+func _init(editor: CarEditor) -> void:
+	ed = editor
+
+
+# ---- the setups
+
+func build_setup_bar(parent: VBoxContainer) -> void:
+	_setup_pick = EditorStyle.options([["", "Default (the car as made)"]])
+	_setup_pick.tooltip_text = "The tune of the car: Default is the car as made (car.json), a tune is a setup kept by the game (the tuning menu, U)"
+	_setup_pick.item_selected.connect(func(_i: int): _pick_setup())
+	parent.add_child(_setup_pick)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	parent.add_child(row)
+	save_button = EditorStyle.button("Save the car", "primary", "Save the car (car.json)")
+	save_button.pressed.connect(save_pressed)
+	row.add_child(save_button)
+	var new_tune := EditorStyle.button("+ New tune", "small", "Keep the car as the form has it as a new tune (a name is asked)")
+	new_tune.pressed.connect(_new_tune)
+	row.add_child(new_tune)
+	_tune_menu = MenuButton.new()
+	_tune_menu.text = "Tune file ▾"
+	_tune_menu.flat = false
+	_tune_menu.tooltip_text = "Delete, export or import a tune"
+	var pm := _tune_menu.get_popup()
+	pm.add_item("Delete tune", 0)
+	pm.add_item("Export tune file…", 1)
+	pm.add_item("Import tune file…", 2)
+	pm.id_pressed.connect(_tune_action)
+	row.add_child(_tune_menu)
+	_save_to = EditorStyle.hint("Save writes car.json")
+	parent.add_child(_save_to)
+
+
+func chosen_tune() -> String:
+	return str(EditorStyle.value_of(_setup_pick)) if _setup_pick.selected > 0 else ""
+
+
+func render_setups() -> void:
+	var own := ed.car_id != "" and ed.car_id == ed.existing_id
+	_setup_pick.clear()
+	_setup_pick.add_item("Default (the car as made)")
+	_setup_pick.set_item_metadata(0, "")
+	_paths = {}
+	if own:
+		var detail := Tuning.list_detail(ed.existing_id, ed.existing)
+		for n in detail:
+			var d: Dictionary = detail[n]
+			_paths[n] = d["own"] if d["own"] != "" else d["car"]
+			_setup_pick.add_item(str(n) + (" · with the car" if d["own"] == "" else (" · with the car, changed here" if d["car"] != "" else "")))
+			_setup_pick.set_item_metadata(_setup_pick.item_count - 1, n)
+		var active: String = str(Settings.get_value("tunes").get(ed.existing_id, ""))
+		for n in _paths:
+			if _paths[n] == active:
+				EditorStyle.select_value(_setup_pick, n)
+	_setup_pick.disabled = not own
+	update_tune_buttons()
+
+
+func update_tune_buttons() -> void:
+	var n := chosen_tune()
+	save_button.text = ("Save tune" if n != "" else "Save the car") + (" •" if ed.dirty else "")
+	save_button.tooltip_text = ("Overwrite the tune %s with the car as the form has it (car.json is not written)" % n) if n != "" else "Save the car (car.json)"
+	var where := "your garage" if not ed.save_to_repo else "web/cars (the repository)"
+	_save_to.text = ("Save writes to the tune " + n) if n != "" else "Save writes car.json in " + where
+
+
+func save_pressed() -> void:
+	if chosen_tune() == "":
+		await ed.save()
+		return
+	save_tune_now()
+
+
+## The tune that is chosen, overwritten with the form (the model of a car is not part of a tune).
+func save_tune_now() -> bool:
+	var n := chosen_tune()
+	if not ed.model_files.is_empty():
+		ed.status("A new model is part of the car, not of a tune: choose “Default (the car as made)” and save the car to keep it.", "error")
+		return false
+	var c := ed.build_config(ed.car_id)
+	if c.has("_error"):
+		ed.status("Could not save the tune: " + str(c["_error"]), "error")
+		return false
+	if not ed.overrides.is_empty():
+		c["materials"] = ed.overrides.duplicate(true)
+	c.erase("model")
+	Tuning.save_tune(ed.car_id, n, c)
+	render_setups()
+	EditorStyle.select_value(_setup_pick, n)
+	ed.set_dirty(false)
+	ed.status("Tune %s saved (car.json is not written)." % n, "ok")
+	return true
+
+
+func _new_tune() -> void:
+	if ed.car_id == "" or ed.car_id != ed.existing_id:
+		ed.status("Save the car first: a tune belongs to a car that is saved.", "error")
+		return
+	var n := await ed.ask_text("New tune", "The name of the new tune")
+	n = n.substr(0, 40)
+	if n == "":
+		return
+	var c := ed.build_config(ed.car_id)
+	if c.has("_error"):
+		ed.status("Could not save the tune: " + str(c["_error"]), "error")
+		return
+	c.erase("model")
+	if not ed.overrides.is_empty():
+		c["materials"] = ed.overrides.duplicate(true)
+	Tuning.save_tune(ed.car_id, n, c)
+	render_setups()
+	EditorStyle.select_value(_setup_pick, n)
+	update_tune_buttons()
+	ed.status("Tune %s saved; the tuning menu of the game (U) has it." % n, "ok")
+
+
+func _pick_setup() -> void:
+	if _refreshing:
+		return
+	var n := chosen_tune()
+	if ed.dirty and not await ed.ask("Switch to %s?" % ("“%s”" % n if n != "" else "Default"),
+			"The car in the form has changes that are not saved. They are lost when you switch.",
+			"Switch", "Stay"):
+		render_setups()
+		return
+	var c: Dictionary
+	if n == "":
+		c = ed.existing.duplicate(true)
+	else:
+		c = Tuning.load_tune(str(_paths.get(n, "")))
+		if c.is_empty():
+			ed.status("Could not read the tune %s." % n, "error")
+			return
+		c["model"] = ed.existing.get("model", {})
+	var keep_model: Dictionary = ed.cfg.get("model", {})
+	ed.cfg = ed.io.normalise(c)
+	ed.cfg["model"] = keep_model if not keep_model.is_empty() else ed.cfg["model"]
+	if c.get("materials") is Dictionary:
+		ed.overrides = (c["materials"] as Dictionary).duplicate(true)
+		ed.mats.apply_all()
+	ed._fill_all()
+	EditorStyle.select_value(_setup_pick, n)
+	update_tune_buttons()
+	ed.set_dirty(false)
+	ed.status(("Tune %s is in the form." % n) if n != "" else "Default, the car as made, is in the form.")
+
+
+func _tune_action(id: int) -> void:
+	var n := chosen_tune()
+	match id:
+		0:
+			if n == "":
+				ed.status("Choose a tune first.", "error")
+				return
+			var path := str(_paths.get(n, ""))
+			if not path.begins_with("user://"):
+				ed.status("This tune comes with the car: it is not deleted here.", "error")
+				return
+			if not await ed.ask("Delete the tune %s?" % n, "Its file is removed.", "Delete"):
+				return
+			Tuning.delete_tune(path)
+			render_setups()
+			ed.status("Tune %s deleted." % n, "ok")
+		1:
+			_export_tune(n)
+		2:
+			_import_tune()
+
+
+func _file_dialog(mode: FileDialog.FileMode, file_name := "") -> FileDialog:
+	var dlg := FileDialog.new()
+	dlg.file_mode = mode
+	dlg.access = FileDialog.ACCESS_FILESYSTEM
+	dlg.use_native_dialog = true
+	dlg.filters = PackedStringArray(["*.json ; A tune file"])
+	dlg.current_file = file_name
+	ed.add_child(dlg)
+	dlg.canceled.connect(dlg.queue_free)
+	return dlg
+
+
+func _export_tune(n: String) -> void:
+	if ed.car_id == "":
+		ed.status("Give the car an id first.", "error")
+		return
+	var c: Dictionary = Tuning.load_tune(str(_paths[n])) if n != "" else ed.build_config(ed.car_id)
+	if c.has("_error"):
+		ed.status(str(c["_error"]), "error")
+		return
+	var title := n if n != "" else str(ed.cfg.get("name", ed.car_id)) + " as in the editor"
+	var dlg := _file_dialog(FileDialog.FILE_MODE_SAVE_FILE, (ed.car_id + "-" + title).validate_filename().replace(" ", "-") + ".openracer-tune.json")
+	dlg.file_selected.connect(func(p: String):
+		var f := FileAccess.open(p, FileAccess.WRITE)
+		if f != null:
+			f.store_string(JSON.stringify({"openracer-tune": 1, "car": ed.car_id, "name": title, "saved": Time.get_datetime_string_from_system(true) + "Z", "config": c}, "  "))
+			f.close()
+			ed.status("Tune saved as %s." % p.get_file(), "ok")
+		dlg.queue_free())
+	dlg.popup_centered_ratio(0.6)
+
+
+func _import_tune() -> void:
+	if ed.car_id == "" or ed.car_id != ed.existing_id:
+		ed.status("Save the car first, then import a tune for it.", "error")
+		return
+	var dlg := _file_dialog(FileDialog.FILE_MODE_OPEN_FILE)
+	dlg.file_selected.connect(func(p: String):
+		dlg.queue_free()
+		var t: Variant = JSON.parse_string(FileAccess.get_file_as_string(p))
+		if not t is Dictionary or not t.get("config") is Dictionary:
+			ed.status("This is not a tune file of OpenRacer.", "error")
+			return
+		var n := await ed.ask_text("Import a tune", "The name of this tune" + (" (it was made for %s)" % t.get("car") if str(t.get("car", "")) != ed.car_id else ""),
+			str(t.get("name", p.get_file())))
+		if n == "":
+			return
+		Tuning.save_tune(ed.car_id, n.substr(0, 40), t["config"])
+		render_setups()
+		EditorStyle.select_value(_setup_pick, n.substr(0, 40))
+		ed.set_dirty(false)
+		_pick_setup()
+		ed.status("Tune %s imported and loaded into the form." % n, "ok"))
+	dlg.popup_centered_ratio(0.6)
+
+
+# ---- the groups of the tuning table in the cards
+
+func build_groups() -> void:
+	render_groups()
+
+
+func _cam() -> Dictionary:
+	return {}
+
+
+## The groups made again (a car was loaded, the engine changed the turbo, a rim was chosen).
+func render_groups() -> void:
+	for g in _groups:
+		if is_instance_valid(g):
+			g.queue_free()
+	_groups = []
+	_rows = []
+	_features = []
+	for group in Tuning.GROUPS:
+		var gname: String = group[0]
+		if not HOMES.has(gname):
+			continue
+		var items := []
+		for item in group[1]:
+			if not item[0] in EDITOR_HAS:
+				items.append(item)
+		if items.is_empty() and gname != "Chassis":
+			continue
+		var body := ed.body_of(HOMES[gname])
+		var title := gname + " settings" if HOMES[gname] == gname else gname
+		var fold := EditorStyle.fold(body, title)
+		_groups.append(fold.get_parent().get_parent())
+		if gname == "Chassis":
+			_paint(fold)
+		var fine: VBoxContainer = null
+		for item in items:
+			var target := fold
+			if gname == "Tyres" and item[0] in Tuning.TYRE_FINE:
+				if fine == null:
+					fine = EditorStyle.fold(fold, "Fine-tune the tyre (on top of the kind)")
+				target = fine
+			_row(target, item)
+		if fine != null:
+			fold.move_child(fine.get_parent().get_parent(), fold.get_child_count() - 1)
+	var assists := ed.body_of("Assists and extras")
+	var box := VBoxContainer.new()
+	assists.add_child(box)
+	_groups.append(box)
+	for f in Tuning.FEATURES:
+		_feature(box, f)
+	refresh()
+
+
+func _row(parent: Control, d: Array) -> void:
+	var key: String = d[0]
+	var item := VBoxContainer.new()
+	item.add_theme_constant_override("separation", 0)
+	parent.add_child(item)
+	var line := HBoxContainer.new()
+	line.add_theme_constant_override("separation", 6)
+	item.add_child(line)
+	var label := EditorStyle.label(str(d[1]), 12, EditorStyle.MUTED)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.mouse_filter = Control.MOUSE_FILTER_PASS
+	line.add_child(label)
+	if key in Tuning.NOT_IN_GODOT:
+		item.tooltip_text = Tuning.NOT_YET
+		label.tooltip_text = Tuning.NOT_YET
+	var entry := {"key": key, "item": item, "label": label, "text": str(d[1])}
+	if Tuning.SELECTS.has(key) or float(d[4]) <= float(d[3]):
+		var items: Array = Tuning.SELECTS.get(key, [])
+		if key == "tyre_damage":
+			var tick := CheckBox.new()
+			tick.text = ""
+			tick.focus_mode = Control.FOCUS_NONE
+			tick.toggled.connect(func(on: bool):
+				if not _refreshing:
+					_change(key, "on" if on else "off"))
+			line.add_child(tick)
+			entry["kind"] = "tick"
+			entry["check"] = tick
+			label.text = "Tyre damage (a hard hit can puncture a tyre)"
+		else:
+			var pick := EditorStyle.options(items)
+			pick.custom_minimum_size.x = 170
+			pick.size_flags_horizontal = Control.SIZE_FILL
+			pick.item_selected.connect(func(_i: int):
+				if not _refreshing:
+					_change(key, EditorStyle.value_of(pick)))
+			line.add_child(pick)
+			entry["kind"] = "select"
+			entry["pick"] = pick
+	else:
+		var num := EditorStyle.NumberField.new("", float(d[5]))
+		num.custom_minimum_size.x = 84
+		num.size_flags_horizontal = Control.SIZE_FILL
+		line.add_child(num)
+		var unit := EditorStyle.label(str(d[2]), 11, EditorStyle.MUTED, false)
+		unit.custom_minimum_size.x = 44
+		line.add_child(unit)
+		var twin := key.trim_suffix("_rear") + "_front" if key.ends_with("_rear") else ""
+		if twin != "" and not twin in EDITOR_HAS and Tuning.MAP.has(twin):
+			var same := EditorStyle.button("= front", "small ghost", "The value of the front")
+			same.pressed.connect(func():
+				var v := Tuning.values_of(ed.cfg)
+				if v.has(twin):
+					_change(key, v[twin]))
+			line.add_child(same)
+		var reset := EditorStyle.button("↺", "small ghost", "Back to the value of the car as loaded")
+		reset.pressed.connect(func():
+			if base.has(key):
+				_change(key, base[key]))
+		line.add_child(reset)
+		var slider := HSlider.new()
+		slider.min_value = float(d[3])
+		slider.max_value = float(d[4])
+		slider.step = float(d[5])
+		slider.focus_mode = Control.FOCUS_NONE
+		slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		item.add_child(slider)
+		var lo := float(d[3])
+		var hi := float(d[4])
+		slider.value_changed.connect(func(x: float):
+			if not _refreshing:
+				_change(key, x))
+		num.committed.connect(func(x: float):
+			if not _refreshing and not is_nan(x):
+				_change(key, clampf(x, lo * 2.0 if lo < 0.0 else lo / 2.0, hi * 2.0)))
+		entry.merge({"kind": "slider", "slider": slider, "num": num, "reset": reset})
+	_rows.append(entry)
+
+
+func _feature(parent: Control, f: Array) -> void:
+	var key: String = f[0] + "_on"
+	var wrap := VBoxContainer.new()
+	parent.add_child(wrap)
+	var line := HBoxContainer.new()
+	var tick := CheckBox.new()
+	tick.focus_mode = Control.FOCUS_NONE
+	tick.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	line.add_child(tick)
+	var text := EditorStyle.label(str(f[1]), 13)
+	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text.mouse_filter = Control.MOUSE_FILTER_STOP
+	text.gui_input.connect(func(e: InputEvent):
+		if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
+			tick.button_pressed = not tick.button_pressed)
+	line.add_child(text)
+	wrap.add_child(line)
+	var inner := MarginContainer.new()
+	inner.add_theme_constant_override("margin_left", 14)
+	var rows := VBoxContainer.new()
+	inner.add_child(rows)
+	wrap.add_child(inner)
+	tick.toggled.connect(func(on: bool):
+		inner.visible = on
+		if not _refreshing:
+			_change(key, on))
+	for d in f[2]:
+		_row(rows, d)
+	if key in Tuning.NOT_IN_GODOT:
+		tick.tooltip_text = Tuning.NOT_YET
+	_features.append({"key": key, "feature": f[0], "wrap": wrap, "check": tick, "inner": inner})
+
+
+## The paint of the body (the material carpaint) and of the rims (rimpaint), as the tuning menu of the game has it.
+func _paint(parent: VBoxContainer) -> void:
+	var fold := EditorStyle.fold(parent, "Paint (the materials carpaint and rimpaint)")
+	for part in PAINT:
+		var label := "body" if part == "body" else "rims"
+		var line := HBoxContainer.new()
+		var l := EditorStyle.label("Colour of the " + label, 12, EditorStyle.MUTED)
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		line.add_child(l)
+		var pick := ColorPickerButton.new()
+		pick.custom_minimum_size = Vector2(52, 26)
+		pick.edit_alpha = false
+		pick.focus_mode = Control.FOCUS_NONE
+		pick.color_changed.connect(func(c: Color):
+			if not _refreshing:
+				_change(part + "_color", "#" + c.to_html(false)))
+		line.add_child(pick)
+		var reset := EditorStyle.button("↺", "small ghost", "The colour of the model")
+		reset.pressed.connect(func(): _change(part + "_color", ""))
+		line.add_child(reset)
+		fold.add_child(line)
+		_rows.append({"key": part + "_color", "kind": "color", "pick": pick, "item": line, "label": l, "text": l.text})
+		for k in ["_finish", "_pattern", "_uv"]:
+			var key: String = part + k
+			var base_key: String = "body" + k
+			var d := [key, {"_finish": "Finish of the ", "_pattern": "Flake pattern of the ", "_uv": "Flake map of the "}[k] + label, "", 0, 0, 0]
+			_row_select(fold, d, Tuning.SELECTS[base_key])
+		_row(fold, [part + "_flake", "Flake size of the %s (metal flake)" % label, "%", 2, 400, 1])
+
+
+func _row_select(parent: Control, d: Array, items: Array) -> void:
+	var key: String = d[0]
+	var line := HBoxContainer.new()
+	var l := EditorStyle.label(str(d[1]), 12, EditorStyle.MUTED)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.add_child(l)
+	var pick := EditorStyle.options(items)
+	pick.custom_minimum_size.x = 170
+	pick.size_flags_horizontal = Control.SIZE_FILL
+	pick.item_selected.connect(func(_i: int):
+		if not _refreshing:
+			_change(key, EditorStyle.value_of(pick)))
+	line.add_child(pick)
+	parent.add_child(line)
+	_rows.append({"key": key, "kind": "select", "pick": pick, "item": line, "label": l, "text": str(d[1])})
+
+
+func _change(key: String, value: Variant) -> void:
+	Tuning.set_value(ed.cfg, key, value, _cam())
+	if key in TYRE_KEYS:
+		ed.io.rebuild_library()
+		ed.form.sync_tyre_field()
+		ed.update_helpers()
+	if key.ends_with("_color") or key.ends_with("_finish"):
+		ed.mats.apply_paint()
+	if key.begins_with("es_"):
+		ed.engine.sound_changed()
+	if key in ["idle_rpm", "limiter_rpm", "turbo_share", "final_drive"]:
+		ed.engine.update_speed_info()
+	ed.refresh_fields()
+	refresh()
+	ed.changed()
+
+
+## Every row shows the car; a setting that cannot do anything with the others is hidden (Tuning.visible).
+func refresh() -> void:
+	_refreshing = true
+	var v := Tuning.values_of(ed.cfg, _cam())
+	for r in _rows:
+		if not is_instance_valid(r["item"]):
+			continue
+		var key: String = r["key"]
+		var value: Variant = v.get(key)
+		(r["item"] as Control).visible = Tuning.visible(key, v)
+		match r["kind"]:
+			"slider":
+				var x := float(value) if (value is float or value is int) else float((r["slider"] as HSlider).min_value)
+				(r["slider"] as HSlider).set_value_no_signal(x)
+				if not (r["num"] as EditorStyle.NumberField).edit.has_focus():
+					(r["num"] as EditorStyle.NumberField).set_value(x)
+				var changed: bool = base.has(key) and (base[key] is float or base[key] is int) and absf(float(base[key]) - x) > 1e-9
+				(r["label"] as Label).add_theme_color_override("font_color", EditorStyle.ACCENT2 if changed else EditorStyle.MUTED)
+				(r["reset"] as Button).modulate.a = 1.0 if changed else 0.0
+				if key.begins_with("rubber_"):
+					(r["label"] as Label).text = str(r["text"]) + " · " + _rubber_label(x)
+			"select":
+				EditorStyle.select_value(r["pick"], value if value != null else "")
+			"tick":
+				(r["check"] as CheckBox).set_pressed_no_signal(value == "on")
+			"color":
+				(r["pick"] as ColorPickerButton).color = Color(str(value)) if value is String and str(value) != "" else Color(0.53, 0.53, 0.53)
+	for f in _features:
+		var on: bool = v.get(f["key"], true) != false
+		(f["check"] as CheckBox).set_pressed_no_signal(on)
+		(f["inner"] as Control).visible = on
+		(f["wrap"] as Control).visible = Tuning.visible_feature(f["feature"], v)
+	_refreshing = false
+
+
+## What kind of tyre a rubber is (rubberLabel of Wheel.js): the nearest of the kinds.
+static func _rubber_label(x: float) -> String:
+	var names := {"eco": "eco", "road": "road", "sport": "sport", "semislick": "semi-slick", "slick": "race slick", "drag": "drag slick"}
+	var best := "road"
+	var d := INF
+	for s in TyreCompounds.RUBBER_STOPS:
+		if absf(float(s[1]) - x) < d:
+			d = absf(float(s[1]) - x)
+			best = s[0]
+	return names.get(best, best)
+
+
+func sync_visibility() -> void:
+	refresh()
+
+
+## The car into the cards: its values are the base of ↺, the setups of the car are listed.
+func fill() -> void:
+	base = Tuning.values_of(ed.cfg, _cam())
+	render_groups()
+	render_setups()

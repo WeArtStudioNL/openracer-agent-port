@@ -43,7 +43,8 @@ func _folder() -> String:
 func _header() -> void:
 	var commit := ""
 	var out := []
-	if OS.execute("git", ["-C", ProjectSettings.globalize_path("res://"), "log", "-1", "--format=%h %s"], out) == 0 and not out.is_empty():
+	# (no programs to run in the browser)
+	if not OS.has_feature("web") and OS.execute("git",["-C", ProjectSettings.globalize_path("res://"), "log", "-1", "--format=%h %s"], out) == 0 and not out.is_empty():
 		commit = str(out[0]).strip_edges()
 	line("RUN %s" % Time.get_datetime_string_from_system())
 	line("version %s  godot %s  commit %s" % [ProjectSettings.get_setting("application/config/version"), Engine.get_version_info()["string"], commit])
@@ -58,6 +59,8 @@ func _header() -> void:
 
 ## Writes a line with the time since the start.
 func line(text: String) -> void:
+	if OS.has_feature("web") and not text.begins_with("CAR ") and not text.begins_with("BIKE "):
+		print("%9.3f  %s" % [_time, text])          # (the web version: the log, without the telemetry, in the console)
 	if _file == null:
 		return
 	_file.store_line("%9.3f  %s" % [_time, text])

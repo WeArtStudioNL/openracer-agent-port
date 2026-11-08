@@ -87,6 +87,7 @@ func _ready() -> void:
 	hs.content_margin_bottom = 6
 	header.add_theme_stylebox_override("panel", hs)
 	outer.add_child(header)
+	Movable.make(self, "tuning", header)       # (drag the title to move it, the corner to scale it: Movable.js)
 	var hrow := HBoxContainer.new()
 	header.add_child(hrow)
 	var title := Label.new()

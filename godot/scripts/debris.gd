@@ -1,15 +1,16 @@
 class_name Debris
 extends Node3D
-## Small pieces of grass, sand, gravel, mud, earth and snow that a wheel throws up from loose ground (web/js/Debris.js).
+## Small pieces of grass, sand, gravel, mud and earth that a wheel throws up from loose ground (web/js/Debris.js; the water
+## and the snow are GroundSpray).
 ## Next to the dust (TyreEffects, the cloud) these are the bits that fly and fall (Specks): a thin green blade for grass
 ## (turned along the way it flies, now and then a clod of earth), tiny round grains for sand, angular chunks for gravel,
-## clumps for mud and earth, soft flakes for snow.
+## clumps for mud and earth.
 ##
-## A wheel on a loose surface (Content.SURFACES "loose"), or on any surface under snow, throws them when its tyre slips
+## A wheel on a loose surface (Content.SURFACES "loose") throws them when its tyre slips
 ## against the ground, the way the tread moves against it: a driven wheel that spins throws them backwards, a wheel
 ## that slides sideways the way the slide goes. The faster the slip, the more there are and the further they fly. They
-## are made along the path of the tyre. Not ported: the spray of a puddle (the game has no water yet) and the options
-## of the Graphics page (rate, size, most at once: 1, 1, 6000 here).
+## are made along the path of the tyre. The Graphics settings: how many (gfx_debris_rate), how big (gfx_debris_scale),
+## the most at once (gfx_debris_max, read when the drive starts).
 
 const SHADES := {
 	"grass": [[0.22, 0.46, 0.08], [0.3, 0.56, 0.1], [0.4, 0.62, 0.14], [0.18, 0.38, 0.07], [0.5, 0.6, 0.18], [0.3, 0.5, 0.1]],
@@ -18,13 +19,11 @@ const SHADES := {
 	"gravel": [[0.8, 0.7, 0.54], [0.7, 0.6, 0.45], [0.86, 0.78, 0.62], [0.6, 0.52, 0.4], [0.66, 0.64, 0.6]],
 	"mud": [[0.28, 0.2, 0.13], [0.2, 0.14, 0.09], [0.36, 0.26, 0.16]],
 	"ground": [[0.55, 0.43, 0.3], [0.46, 0.36, 0.24], [0.62, 0.5, 0.36]],
-	"snow": [[2.2, 2.2, 2.2], [2.0, 2.1, 2.2], [2.2, 2.2, 2.2]],
 }
 # the shape, the size (m: the length of a blade, the width of the rest), the number made against the rest, how far they fly
 const LOOK := {
 	"grass": [1, 0.1, 0.2, 1.3, 1.0], "clod": [2, 0.025, 0.05, 1.0, 0.8], "sand": [2, 0.008, 0.02, 3.2, 1.0],
 	"gravel": [0, 0.012, 0.03, 2.0, 0.9], "mud": [2, 0.03, 0.07, 0.9, 0.7], "ground": [2, 0.02, 0.045, 1.2, 0.9],
-	"snow": [2, 0.01, 0.026, 1.1, 0.9],
 }
 
 var car: Car
@@ -39,27 +38,23 @@ static func make(c: Car) -> Debris:
 	d.name = "Debris"
 	d.car = c
 	d.add_to_group("clear_at_start")
-	d.specks = Specks.new(6000)
+	d.specks = Specks.new(clampi(int(Settings.get_value("gfx_debris_max")), 100, 20000))
 	d.specks.drag = 0.7
 	d.add_child(d.specks)
 	return d
-
-
-func _snow() -> float:
-	var atmos := get_tree().get_first_node_in_group("atmosphere")
-	return float(atmos.get("snow")) if atmos != null and atmos.get("snow") != null else 0.0
 
 
 func _process(delta: float) -> void:
 	delta = minf(delta, 0.05)
 	if car == null or not is_instance_valid(car) or delta <= 0.0 or get_tree().paused:
 		return
-	var snow := _snow()
+	amount = maxf(0.0, float(Settings.get_value("gfx_debris_rate")))
+	var size_scale := maxf(0.0, float(Settings.get_value("gfx_debris_scale")))
+	specks.set_look(1.0, size_scale)
 	for wi in 4:
 		var w := car.wheels[wi]
 		var loose: bool = Content.surface(w.surface).get("loose", false)
-		var snowy := snow > 0.35
-		if amount <= 0.0 or not w.contact or not (loose or snowy):
+		if amount <= 0.0 or size_scale <= 0.0 or not w.contact or not loose:
 			_last[wi] = null
 			continue
 		var fwd := Vector3(w.fp.x, 0.0, w.fp.z)
@@ -75,7 +70,7 @@ func _process(delta: float) -> void:
 			_last[wi] = null
 			continue
 		var strength := minf(1.0, (slip - 1.0) / 6.0)
-		var main := "snow" if snowy and (not loose or randf() < snow) else (w.surface if SHADES.has(w.surface) else "ground")
+		var main := w.surface if SHADES.has(w.surface) else "ground"
 		_carry[wi] += (70.0 + 330.0 * strength) * float(LOOK[main][3]) * amount * delta
 		var count := mini(ceili(120.0 * maxf(1.0, amount)), floori(_carry[wi]))
 		_carry[wi] = minf(_carry[wi] - count, 1.0)
@@ -97,7 +92,7 @@ func _process(delta: float) -> void:
 			var sc: Array = shades[randi() % shades.size()]
 			var at := from.lerp(c, f) + Vector3((randf() - 0.5) * 0.12, 0.03, (randf() - 0.5) * 0.12)
 			specks.add(at, r * v + car.linear_velocity * 0.5 + Vector3.UP * (1.4 + randf() * (1.5 + strength * 3.2)),
-				Color(sc[0], sc[1], sc[2]).srgb_to_linear() if kind != "snow" else Color(sc[0], sc[1], sc[2]),
+				Color(sc[0], sc[1], sc[2]).srgb_to_linear(),
 				float(look[1]) + randf() * (float(look[2]) - float(look[1])), int(look[0]), (randf() - 0.5) * 1.2, 0.7 + randf() * 0.9, at.y - 0.02)
 		_last[wi] = c
 	specks.step(delta)

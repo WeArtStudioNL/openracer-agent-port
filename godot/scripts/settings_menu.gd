@@ -1,219 +1,270 @@
 class_name SettingsMenu
 extends PanelContainer
-## The settings: sound, driving, keyboard, racing wheel and force feedback (Settings), with the calibration and the
-## test of the force feedback. Used by the main menu and the pause menu.
+## The settings (the Escape menu of web/js/Settings.js): the tabs Car, Keyboard, Gamepad, Wheel, Display and sound,
+## Mobile, Graphics, Simulation, Tools and Controls (SettingsPages, SettingsControlsPage), a hint line, Reset all
+## and the version. Used by the main menu and the pause menu (PauseMenu). With a gamepad (PadNav.js): the D-pad or the
+## stick moves, A chooses, left and right change a list or a slider, L1 and R1 change the tab, B (and Esc) closes.
 
 signal closed
 
-var _wheel_status: Label
-var _controls_page: VBoxContainer
-var _capture_label: Label
+const TABS := ["Car", "Keyboard", "Gamepad", "Wheel", "Display and sound", "Mobile", "Graphics", "Simulation", "Tools", "Controls"]
+
+var world: Node = null              # the drive behind the menu (null in the main menu)
+var pages: SettingsPages
+var _tabs: TabContainer
+var _hint: Label
+var _controls: SettingsControlsPage
 var _capture_action := ""            # the action that waits for an input ("" when none)
 var _capture_index := 0
 
 
+## The buttons of a gamepad in the menus of Godot (PadNav.js): A is ui_accept, B is ui_cancel (Godot's own ui_cancel has
+## no joypad button; the D-pad and the stick are in ui_up, ui_down, ui_left and ui_right already).
+static func pad_ui() -> void:
+	for spec in [["ui_accept", JOY_BUTTON_A], ["ui_cancel", JOY_BUTTON_B]]:
+		var has := false
+		for e in InputMap.action_get_events(spec[0]):
+			has = has or (e is InputEventJoypadButton and (e as InputEventJoypadButton).button_index == spec[1])
+		if not has:
+			var e := InputEventJoypadButton.new()
+			e.device = -1
+			e.button_index = spec[1]
+			InputMap.action_add_event(spec[0], e)
+
+
 func _ready() -> void:
+	pad_ui()
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	custom_minimum_size = Vector2(620, 0)
+	world = _find_world()
+	var vp := get_viewport_rect().size
+	custom_minimum_size = Vector2(minf(1000.0, vp.x - 40.0), minf(860.0, vp.y - 40.0))
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0.085, 0.1, 0.125, 0.97)
+	bg.set_corner_radius_all(8)
+	bg.border_color = Color(0.2, 0.24, 0.29)
+	bg.set_border_width_all(1)
+	add_theme_stylebox_override("panel", bg)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 20)
+		margin.add_theme_constant_override("margin_" + side, 18)
 	add_child(margin)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	margin.add_child(box)
+	var top := HBoxContainer.new()
+	box.add_child(top)
+	var head := VBoxContainer.new()
+	head.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(head)
 	var title := Label.new()
 	title.text = "Settings"
 	title.add_theme_font_size_override("font_size", 28)
-	box.add_child(title)
-	var tabs := TabContainer.new()
-	tabs.custom_minimum_size = Vector2(600, 430)
-	box.add_child(tabs)
+	head.add_child(title)
+	var sub := Label.new()
+	sub.text = ("The game is paused. " if world != null else "") + "Esc closes this menu."
+	sub.modulate.a = 0.7
+	head.add_child(sub)
+	var close := Button.new()
+	close.text = "Back" if world != null else "Close"
+	close.custom_minimum_size = Vector2(120, 40)
+	SettingsRows.style(close)
+	close.pressed.connect(func(): closed.emit())
+	top.add_child(close)
+	_tabs = TabContainer.new()
+	_tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(_tabs)
+	var foot := HBoxContainer.new()
+	box.add_child(foot)
+	var reset := Button.new()
+	reset.text = "Reset all settings to the defaults"
+	SettingsRows.style(reset)
+	reset.pressed.connect(func():
+		pages._confirm("Reset all settings?", "Every option of every tab goes back to the default (the controls, the setups and the "
+			+ "calibration of the wheel stay).", "Reset", func():
+				Settings.reset()
+				rebuild()
+				hint("The settings are back to the defaults.")))
+	foot.add_child(reset)
+	_hint = Label.new()
+	_hint.add_theme_color_override("font_color", Color(1, 0.75, 0.45))
+	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD
+	_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	foot.add_child(_hint)
+	var version := Label.new()
+	version.text = "OpenRacer " + str(ProjectSettings.get_setting("application/config/version"))
+	version.modulate.a = 0.5
+	foot.add_child(version)
+	_build_pages()
+	var want := Content.arg("settings-tab")
+	if want == "" or want == "pause":
+		want = str(Settings.get_value("settings_tab"))
+	_select_tab(want)
+	_tabs.tab_changed.connect(func(i: int): Settings.set_value("settings_tab", _tabs.get_tab_title(i)))
+	Controls.changed.connect(_controls_changed)
+	_focus_first.call_deferred()
 
-	var sound := _page(tabs, "Sound")
-	_slider(sound, "Engine volume", "volume", 0.0, 1.5, 0.05, true)
-	_slider(sound, "Tyre volume", "tyre_volume", 0.0, 1.5, 0.05, true)
 
-	var driving := _page(tabs, "Driving")
-	_check(driving, "ABS", "abs")
-	_check(driving, "Traction control", "tc")
-	_check(driving, "Stability control", "esc")
-	_check(driving, "Launch control (brake and full throttle at a standstill, let go of the brake)", "launch_control")
-	_slider(driving, "Tyre temperature and wear (0: off)", "tyre_wear", 0.0, 5.0, 0.5, false)
-	_check(driving, "Damage: the cars dent and lose parts (from the next start of a drive)", "damage")
-	_check(driving, "Hold the brake at a standstill for reverse", "auto_reverse")
-	_slider(driving, "Keys: steering speed", "key_steer_speed", 0.4, 2.0, 0.1, true)
-	_slider(driving, "Keys: less steering at speed", "key_steer_at_speed", 0.0, 1.5, 0.1, true)
+func _find_world() -> Node:
+	for w in get_tree().root.find_children("World", "Node3D", true, false):
+		if w.get("car") is Car:
+			return w
+	return null
 
-	var wheel := _page(tabs, "Wheel")
-	_wheel_status = Label.new()
-	_wheel_status.autowrap_mode = TextServer.AUTOWRAP_WORD
-	wheel.add_child(_wheel_status)
-	var row := HBoxContainer.new()
-	var cal := Button.new()
-	cal.text = "Calibrate the wheel (K)"
-	cal.pressed.connect(func():
-		closed.emit()
-		WheelInput.calibrate())
-	row.add_child(cal)
-	var test := Button.new()
-	test.text = "Test force feedback"
-	test.pressed.connect(ForceFeedback.test)
-	row.add_child(test)
-	wheel.add_child(row)
-	_slider(wheel, "Wheel rotation (degrees, lock to lock)", "wheel_degrees", 180, 1080, 10, false)
-	_check(wheel, "Turn as far as the steering wheel of the car", "wheel_match")
-	_slider(wheel, "Steering range", "wheel_range", 0.3, 1.0, 0.05, true)
-	_slider(wheel, "Dead zone (%)", "wheel_deadzone", 0.0, 10.0, 0.5, false)
-	_check(wheel, "Force feedback", "ffb")
-	_slider(wheel, "Strength", "ffb_strength", 0.0, 1.5, 0.05, true)
-	_slider(wheel, "Centring spring", "ffb_spring", 0.0, 1.0, 0.05, true)
-	_slider(wheel, "Damping", "ffb_damping", 0.0, 1.0, 0.05, true)
-	_slider(wheel, "Road detail", "ffb_road", 0.0, 1.5, 0.05, true)
-	_check(wheel, "Reverse the force", "ffb_invert")
 
-	_controls_page = _page(tabs, "Controls")
-	if Content.arg("settings-tab") != "":
-		tabs.set_deferred("current_tab", int(Content.arg("settings-tab")))      # (the screenshots of the tests)
-	_build_controls()
-	Controls.changed.connect(_build_controls)
+func _build_pages() -> void:
+	pages = SettingsPages.new(self, world)
+	for t in TABS:
+		if t == "Mobile" and not _touch_on():
+			continue
+		var page := _page(t)
+		match t:
+			"Car": pages.car_page(page)
+			"Keyboard": pages.keyboard_page(page)
+			"Gamepad": pages.gamepad_page(page)
+			"Wheel": pages.wheel_page(page)
+			"Display and sound": pages.display_page(page)
+			"Mobile": pages.mobile_page(page)
+			"Graphics": pages.graphics_page(page)
+			"Simulation": pages.simulation_page(page)
+			"Tools": pages.tools_page(page)
+			"Controls":
+				_controls = SettingsControlsPage.new(self, page)
+				_controls.build()
 
-	_capture_label = Label.new()
-	_capture_label.add_theme_color_override("font_color", Color(1, 0.8, 0.3))
-	_capture_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-	box.add_child(_capture_label)
 
-	var done := Button.new()
-	done.text = "Done"
-	done.custom_minimum_size.y = 40
-	done.pressed.connect(func(): closed.emit())
-	box.add_child(done)
-	done.grab_focus.call_deferred()
+func _touch_on() -> bool:
+	return (world != null and world.get("touch") != null) or str(Settings.get_value("touch")) == "on"
+
+
+## Every page again (after a reset, a wheel forgotten), on the same tab.
+func rebuild() -> void:
+	var tab := _tabs.get_tab_title(_tabs.current_tab) if _tabs.get_tab_count() > 0 else ""
+	for c in _tabs.get_children():
+		_tabs.remove_child(c)
+		c.queue_free()
+	_build_pages()
+	_select_tab(tab)
+
+
+func _select_tab(want: String) -> void:
+	for i in _tabs.get_tab_count():
+		if _tabs.get_tab_title(i).to_lower() == want.to_lower() or str(i) == want:
+			_tabs.current_tab = i
+
+
+func hint(text: String) -> void:
+	if _hint != null:
+		_hint.text = text
+
+
+func capturing(action: String, index: int) -> bool:
+	return _capture_action == action and _capture_index == index
 
 
 func _process(_delta: float) -> void:
-	if _wheel_status == null:
-		return
-	var w := "No wheel or joypad connected"
-	if WheelInput.device >= 0:
-		w = "%s: %s" % [WheelInput.wheel_name, "calibrated" if WheelInput.active else "not calibrated yet"]
-	_wheel_status.text = "%s\n%s" % [w, ForceFeedback.status]
+	if pages != null:
+		pages.update_wheel_status()
 
 
-## Every action with what works it: a button per binding (click: a new one in its place) and + (add one).
-func _build_controls() -> void:
-	for c in _controls_page.get_children():
-		c.queue_free()
-	var note := Label.new()
-	note.text = ("Click a binding and press a key, a button or a stick of a gamepad, or a button of the wheel. + adds one. "
-		+ "The steering and the pedals of a wheel are set with its calibration (Wheel tab).")
-	note.autowrap_mode = TextServer.AUTOWRAP_WORD
-	note.modulate.a = 0.75
-	_controls_page.add_child(note)
-	for a in Controls.ACTIONS:
-		var action: String = a[0]
-		var row := HBoxContainer.new()
-		var l := Label.new()
-		l.text = a[1]
-		l.custom_minimum_size.x = 210
-		row.add_child(l)
-		var list: Array = Controls.bindings(action)
-		for i in list.size():
-			var b := Button.new()
-			b.text = Controls.describe(list[i])
-			b.pressed.connect(_capture.bind(action, i))
-			row.add_child(b)
-		var add := Button.new()
-		add.text = "+"
-		add.tooltip_text = "Add a binding"
-		add.pressed.connect(_capture.bind(action, list.size()))
-		row.add_child(add)
-		_controls_page.add_child(row)
-	var reset := Button.new()
-	reset.text = "Reset all to the defaults"
-	reset.pressed.connect(Controls.reset_defaults)
-	_controls_page.add_child(reset)
+func _controls_changed() -> void:
+	if _controls != null:
+		_controls.build()
 
 
 func _capture(action: String, index: int) -> void:
 	_capture_action = action
 	_capture_index = index
-	var name_text := ""
-	for a in Controls.ACTIONS:
-		if a[0] == action:
-			name_text = a[1]
-	_capture_label.text = "%s: press a key, a gamepad button or stick, or a wheel button  (Esc: cancel, Delete: remove this one)" % name_text
+	hint("%s: press a key, a gamepad button or stick, or a wheel button  (Esc: cancel, Delete: remove this one)" % Controls.label(action))
+	_controls.build()
 
 
-## While a binding waits for an input, every input goes here (and to nothing else).
+## While a binding waits for an input, every input goes here (and to nothing else); else the keys and the buttons of
+## the menu: Esc and B close it, L1 and R1 change the tab, left and right change a list.
 func _input(event: InputEvent) -> void:
 	if _capture_action == "":
+		_navigate(event)
 		return
 	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_ESCAPE:
-		_end_capture()
+		_end_capture("")
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_DELETE:
 		Controls.clear_binding(_capture_action, _capture_index)
-		_end_capture()
+		_end_capture("")
 		get_viewport().set_input_as_handled()
 		return
 	var b: Variant = Controls.binding_of(event)
 	if b == null:
-		if event is InputEventKey or event is InputEventJoypadButton or event is InputEventJoypadMotion:
+		if event is InputEventKey or event is InputEventJoypadButton or event is InputEventJoypadMotion or event is InputEventMouseButton:
 			get_viewport().set_input_as_handled()
 		return
 	RunLog.event("binding %s %d = %s" % [_capture_action, _capture_index, Controls.describe(b)])
-	Controls.set_binding(_capture_action, _capture_index, b)
-	_end_capture()
+	var action := _capture_action
+	_capture_action = ""
+	var taken := Controls.set_binding(action, _capture_index, b)
+	_end_capture("That input was used for %s: it is moved to %s." % [taken, Controls.label(action)] if taken != "" else "")
 	get_viewport().set_input_as_handled()
 
 
-func _end_capture() -> void:
+func _end_capture(text: String) -> void:
 	_capture_action = ""
-	_capture_label.text = ""
+	hint(text)
+	if _controls != null:
+		_controls.build()
+	_focus_first.call_deferred()
 
 
-func _page(tabs: TabContainer, name_text: String) -> VBoxContainer:
+func _navigate(event: InputEvent) -> void:
+	if not is_visible_in_tree() or not event.is_pressed() or event.is_echo() and not event is InputEventKey:
+		return
+	for w in find_children("*", "Window", true, false):
+		if (w as Window).visible:
+			return              # (a question or a window over the menu: its own keys)
+	if event.is_action_pressed("ui_cancel") or event.is_action_pressed("menu"):
+		get_viewport().set_input_as_handled()
+		closed.emit()
+		return
+	if event is InputEventJoypadButton and event.button_index in [JOY_BUTTON_LEFT_SHOULDER, JOY_BUTTON_RIGHT_SHOULDER]:
+		var n := _tabs.get_tab_count()
+		_tabs.current_tab = (_tabs.current_tab + (1 if event.button_index == JOY_BUTTON_RIGHT_SHOULDER else -1) + n) % n
+		get_viewport().set_input_as_handled()
+		_focus_first.call_deferred()
+		return
+	var focus := get_viewport().gui_get_focus_owner()
+	if focus is OptionButton and (event.is_action_pressed("ui_left") or event.is_action_pressed("ui_right")):
+		var o := focus as OptionButton
+		var i := clampi(o.selected + (1 if event.is_action_pressed("ui_right") else -1), 0, o.item_count - 1)
+		if i != o.selected and not o.disabled:
+			o.select(i)
+			o.item_selected.emit(i)
+		get_viewport().set_input_as_handled()
+
+
+## The focus on the first thing that can be chosen on the tab that is open (a gamepad starts there).
+func _focus_first() -> void:
+	if _tabs == null or _tabs.get_current_tab_control() == null:
+		return
+	for c in _tabs.get_current_tab_control().find_children("*", "Control", true, false):
+		var ctl := c as Control
+		if ctl.focus_mode == Control.FOCUS_ALL and ctl.is_visible_in_tree() and not (ctl is BaseButton and (ctl as BaseButton).disabled) \
+				and not ctl is ScrollBar:
+			ctl.grab_focus()
+			return
+
+
+func _page(name_text: String) -> VBoxContainer:
 	var scroll := ScrollContainer.new()
 	scroll.name = name_text
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true
+	var margin := MarginContainer.new()
+	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.add_theme_constant_override("margin_right", 14)
+	margin.add_theme_constant_override("margin_top", 6)
+	scroll.add_child(margin)
 	var page := VBoxContainer.new()
 	page.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	page.add_theme_constant_override("separation", 6)
-	scroll.add_child(page)
-	tabs.add_child(scroll)
+	margin.add_child(page)
+	_tabs.add_child(scroll)
 	return page
-
-
-func _slider(page: VBoxContainer, text: String, key: String, lo: float, hi: float, step: float, percent: bool) -> void:
-	var row := HBoxContainer.new()
-	var label := Label.new()
-	label.text = text
-	label.custom_minimum_size.x = 300
-	row.add_child(label)
-	var slider := HSlider.new()
-	slider.min_value = lo
-	slider.max_value = hi
-	slider.step = step
-	slider.value = float(Settings.get_value(key))
-	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	slider.custom_minimum_size.x = 180
-	row.add_child(slider)
-	var value := Label.new()
-	value.custom_minimum_size.x = 64
-	var show := func(v: float) -> void: value.text = "%d%%" % roundi(v * 100) if percent else str(snappedf(v, step))
-	show.call(slider.value)
-	row.add_child(value)
-	slider.value_changed.connect(func(v: float):
-		show.call(v)
-		Settings.set_value(key, v))
-	page.add_child(row)
-
-
-func _check(page: VBoxContainer, text: String, key: String) -> void:
-	var c := CheckBox.new()
-	c.text = text
-	c.button_pressed = bool(Settings.get_value(key))
-	c.toggled.connect(func(on: bool): Settings.set_value(key, on))
-	page.add_child(c)

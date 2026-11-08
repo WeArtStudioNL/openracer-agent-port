@@ -1,7 +1,7 @@
 class_name SuspensionRig
 extends Node3D
 ## The moving parts of the suspension and the steering of a model (web/js/SuspensionRig.js), when the model has them
-## (or the parts library built them, PartsLibrary): wishbones that swing with the travel of the wheel, uprights that go
+## (or the parts library built them: PartsLibrary of the car editor): wishbones that swing with the travel of the wheel, uprights that go
 ## up and down with it and turn with the steering, springs, dampers and struts that get shorter and longer (a coilover
 ## with a piston and a coil: the piston slides and the coil gets shorter), a steering rack that slides and tie rods that
 ## follow it, a live axle that goes up and down and rolls, trailing arms, a Panhard rod, driveshafts and propshafts.
@@ -29,9 +29,23 @@ var uprights := {}
 static func attach(c: Car) -> void:
 	if c.bike != null:
 		return
-	var lib := PartsLibrary.assemble(c)
-	if lib != null:
-		c.add_child(lib)
+	var lib: Node3D = null
+	if str(c.config.get("wheels", {}).get("mode", "default")) != "model":
+		# (the hubs where car.json puts the wheels, as the browser game does for the demo wheels: the axle offsets do not
+		# move them)
+		var ch: Dictionary = c.config.get("chassis", {})
+		var wb := float(ch.get("wheelbase", 2.6)) / 2.0
+		var ft := float(ch.get("front_track", 1.5)) / 2.0
+		var rt := float(ch.get("rear_track", 1.5)) / 2.0
+		var out := PartsLibrary.assemble(c.config, {"FL": Vector3(ft, 0, wb), "FR": Vector3(-ft, 0, wb), "RL": Vector3(rt, 0, -wb),
+			"RR": Vector3(-rt, 0, -wb)}, float(ch.get("tire_diameter", 0.6)))
+		lib = out["group"]
+		if lib.get_child_count() == 0:
+			lib.free()
+			lib = null
+		else:
+			lib.name = "PartsLibrary"
+			c.add_child(lib)
 	find(c, [c.model_root, lib])
 
 

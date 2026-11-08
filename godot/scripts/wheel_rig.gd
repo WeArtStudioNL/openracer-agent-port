@@ -215,7 +215,7 @@ func _spawn(i: int, gx: Transform3D, lin: Vector3, ang: Vector3) -> void:
 	body.mass = clampf(20.0 * pow(w.radius / 0.33, 2.0), 3.0, 40.0)
 	body.continuous_cd = true
 	body.collision_layer = FREE_LAYER
-	body.collision_mask = 1 | FREE_LAYER
+	body.collision_mask = 1 | FREE_LAYER | TrackObjects.LAYER_OBJECT
 	body.linear_damp = 0.05
 	body.angular_damp = 0.1
 	var mat := PhysicsMaterial.new()
