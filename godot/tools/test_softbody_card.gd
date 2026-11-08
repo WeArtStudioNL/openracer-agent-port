@@ -365,8 +365,10 @@ func _push(ed: CarEditor, card: Object) -> void:
 	check(st["absorbed"] > 0.0 and text.contains("peak"), "the shell took it (%.1f kJ, bend %.1f cm)" % [st["absorbed"] / 1000.0, st["max_bend"] * 100.0])
 	print("    a cube at the left door: the part feels the hit itself")
 	var door := ed.bench.car.model_root.find_child("body_left-door", true, false) as Node3D
-	var mid: Vector3 = card.get("partwin").call("_box", door).get_center()
-	ed.view.camera.position = mid + Vector3(5, 0.5, 0)
+	# (a little under the middle, straight from the side: the mirror stands above it and can be in the line of a view
+	# from above, the more so once the first cube has bent the front)
+	var mid: Vector3 = card.get("partwin").call("_box", door).get_center() + Vector3(0, -0.12, 0)
+	ed.view.camera.position = mid + Vector3(5, 0, 0)
 	ed.view.camera.look_at(mid)
 	await get_tree().process_frame
 	crash.call("fire", ed.view.camera.unproject_position(mid))
