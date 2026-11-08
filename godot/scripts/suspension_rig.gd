@@ -208,12 +208,14 @@ func _inner_parts(node: Node3D, axis: Vector3, rest_length: float) -> Array:
 		var own := CarModel.relative(child, car).basis.inverse() * axis
 		var sa := 0 if absf(own.x) >= absf(own.y) and absf(own.x) >= absf(own.z) else (1 if absf(own.y) >= absf(own.z) else 2)
 		var along := clampf(child.position.dot(in_parent) * k / maxf(0.01, rest_length), 0.0, 1.0)
+		var mesh_length := CarModel.bounds(child, child).size[sa] * CarModel.relative(child, car).basis.get_scale()[sa]
 		inner.append({"node": child, "kind": kind, "rest": child.position, "rest_basis": child.basis, "in_parent": in_parent,
-			"axis": sa, "along": along, "k": k})
+			"axis": sa, "along": along, "k": k, "length": absf(mesh_length)})
 	return inner
 
 
 func _find(roots: Array[Node3D]) -> void:
+	_gather_coilovers(roots)
 	var found: Array[Dictionary] = []
 	for r in roots:
 		var list: Array[Node] = r.find_children("*", "Node3D", true, false)
@@ -241,6 +243,49 @@ func _find(roots: Array[Node3D]) -> void:
 	for p in top:
 		_add_part(p["node"], p["what"], has_rack)
 	_seat_parts()
+	_attach_calipers(roots)
+
+
+## The piston and the coil of a coilover are parts of its cylinder, also when the model has them loose beside it (Blender
+## without parents): else each would be a spring of its own, stretched from its own origin.
+func _gather_coilovers(roots: Array[Node3D]) -> void:
+	var all := {}
+	for r in roots:
+		for n in r.find_children("*", "Node3D", true, false):
+			all[clean(str(n.name))] = n
+	for key: String in all:
+		if not key.begins_with("coilovercylinder"):
+			continue
+		var corner := key.right(2)
+		var cylinder: Node3D = all[key]
+		for what in ["coiloverpiston", "coilovercoil"]:
+			var inner: Node3D = all.get(what + corner)
+			if inner != null and not cylinder.is_ancestor_of(inner):
+				inner.owner = null
+				inner.reparent(cylinder, true)
+
+
+## A brake caliper (brake_caliper_FL) goes with the upright of its wheel, or with the steering of the wheel when the car has
+## no upright: it goes up and down and steers, and does not spin.
+func _attach_calipers(roots: Array[Node3D]) -> void:
+	var list: Array[Node] = []
+	for r in roots:
+		list.append_array(r.find_children("*", "Node3D", true, false))
+	for n in list:
+		var c := clean(str(n.name))
+		var wheel: int = CORNERS.get(c.right(2), -1)
+		if wheel < 0 or _re("caliper|brake").search(c) == null or _re("disc|disk|rotor").search(c) != null:
+			continue
+		var node := n as Node3D
+		var up: Dictionary = uprights.get(wheel, {})
+		var target: Node3D = up["holder"] if not up.is_empty() else car.wheels[wheel].steer_node
+		parts.append({"kind": "caliper", "wheel": wheel, "rear": wheel >= 2, "node": node, "parent": node.get_parent(), "rest_transform": node.transform,
+			"library": false, "origin": Vector3.ZERO, "holder": target})
+		var xf := CarModel.relative(node, car)
+		node.owner = null
+		node.get_parent().remove_child(node)
+		target.add_child(node)
+		node.transform = CarModel.relative(target, car).affine_inverse() * xf
 
 
 func _add_part(node: Node3D, what: Dictionary, has_rack: bool) -> void:
@@ -278,7 +323,8 @@ func _add_part(node: Node3D, what: Dictionary, has_rack: bool) -> void:
 			var s := box.size
 			e["axis"] = Vector3.RIGHT if s.x >= s.y and s.x >= s.z else (Vector3.UP if s.y >= s.z else Vector3.BACK)
 	elif kind == "arm":
-		e["far"] = exact if exact != null else _far_end(node, origin)
+		var ball: Variant = _tip_of(node, origin) if exact == null else exact     # (the ball joint: the end of the arm farthest from its hinge)
+		e["far"] = ball if ball != null else _far_end(node, origin)
 		e["arm_length"] = maxf(0.05, absf(e["far"].x - origin.x))
 		e["side"] = 1.0 if e["far"].x >= origin.x else -1.0
 	holder.transform = Transform3D(basis, centre)
@@ -395,12 +441,12 @@ func update() -> void:
 	var rack_shift := -rack_travel * car.steer_angle         # along +x (to the left) for a steer to the right
 	_init_rods()
 	var col_angle: Variant = _fit_column() if not (_rods as Array).is_empty() else null
+	for p in parts:                  # (the arms first: the springs sit on them)
+		if p["kind"] == "arm":
+			_update_arm(p, p["holder"])
 	for p in parts:
 		var h: Node3D = p["holder"]
 		match p["kind"]:
-			"arm":
-				var angle := _swing(_travel(p["wheel"]), p["arm_length"]) * float(p["side"])
-				h.basis = Basis(Vector3.BACK, angle) * (p["rest_basis"] as Basis)
 			"prop":
 				var turn := 0.0
 				for w in car.wheels:
@@ -437,6 +483,37 @@ func update() -> void:
 				h.basis = _aim(d) * Basis(Vector3.UP, spin) * Basis.from_scale(Vector3(1.0, maxf(0.2, d.length() / float(p["rest_length"])), 1.0))
 
 
+## A wishbone stays on its upright: it turns about its hinge to where its ball joint has gone with the upright (the travel,
+## the steering) and is as much longer or shorter as that takes. Without an upright it swings with the travel.
+func _update_arm(p: Dictionary, h: Node3D) -> void:
+	var wheel: int = p["wheel"]
+	var up: Dictionary = uprights.get(wheel, {})
+	if up.is_empty():
+		h.basis = Basis(Vector3.BACK, _swing(_travel(wheel), p["arm_length"]) * float(p["side"])) * (p["rest_basis"] as Basis)
+		return
+	h.basis = _arm_basis(p, _steer(wheel) if wheel < 2 else 0.0)
+	p["travel_basis"] = _arm_basis(p, 0.0)         # (what a spring on it sees: the steering does not press the spring)
+
+
+func _arm_basis(p: Dictionary, steer: float) -> Basis:
+	var up: Dictionary = uprights[p["wheel"]]
+	var o: Vector3 = p["origin"]
+	var far: Vector3 = p["far"]
+	var t := far
+	if steer != 0.0:
+		t = (t - up["origin"]).rotated(Vector3.UP, steer) + up["origin"]
+	t.y += _travel(p["wheel"])
+	var was := far - o
+	var now := t - o
+	if was.length() < 1e-4 or now.length() < 1e-4:
+		return Basis.IDENTITY
+	var u := was.normalized()
+	var k := now.length() / was.length() - 1.0
+	var stretch := Basis(Vector3(1.0 + k * u.x * u.x, k * u.x * u.y, k * u.x * u.z), Vector3(k * u.y * u.x, 1.0 + k * u.y * u.y, k * u.y * u.z),
+		Vector3(k * u.z * u.x, k * u.z * u.y, 1.0 + k * u.z * u.z))
+	return Basis(Quaternion(u, now.normalized())) * stretch
+
+
 ## The wheels turn about the pin of their upright, not about their own middle: the hub moves along an arc. Called
 ## after the car has placed the wheels.
 func move_hubs() -> void:
@@ -461,8 +538,8 @@ func _update_spring(p: Dictionary, h: Node3D) -> void:
 	var t := far
 	if p.has("on_arm"):
 		var arm: Dictionary = p["on_arm"]
-		var arm_angle := _swing(_travel(wheel), arm["arm_length"]) * float(arm["side"])
-		t = (far - arm["origin"]).rotated(Vector3.BACK, arm_angle) + arm["origin"]
+		var arm_basis: Basis = arm["travel_basis"] if arm.has("travel_basis") else (arm["holder"] as Node3D).basis
+		t = (arm["origin"] as Vector3) + arm_basis * (far - (arm["origin"] as Vector3))
 	elif p.has("on_trailing"):
 		var tr: Dictionary = p["on_trailing"]
 		var tt: float = _axle_travel_at(tr["on_axle"]["rear"], tr["far"].x) if tr.has("on_axle") else _travel(wheel)
@@ -489,7 +566,8 @@ func _update_spring(p: Dictionary, h: Node3D) -> void:
 		node.position = (part["rest"] as Vector3) + (part["in_parent"] as Vector3) * (delta / float(part["k"]) * share)
 		if part["kind"] == "coil":
 			var sc := Vector3.ONE
-			sc[int(part["axis"])] = maxf(0.2, (rest + delta) / rest)
+			var coil_length := maxf(0.02, float(part["length"]))         # (one end stays at the top, the other goes with the piston)
+			sc[int(part["axis"])] = maxf(0.2, (coil_length + delta) / coil_length)
 			node.basis = (part["rest_basis"] as Basis) * Basis.from_scale(sc)
 
 
