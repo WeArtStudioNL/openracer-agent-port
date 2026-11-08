@@ -4,7 +4,7 @@ extends RefCounted
 ## Display and sound, Mobile (with the touch controls), Graphics, Simulation, Tools. (Controls: SettingsControlsPage.)
 
 const R := preload("res://scripts/settings_rows.gd")
-const CAMERAS := [[0, "Follow (smooth, FOV with speed)"], [1, "Cockpit"], [2, "Bonnet"]]
+const CAMERAS := [[0, "Follow (smooth, FOV with speed)"], [1, "Cockpit"], [2, "Bonnet"], [3, "Free camera"]]
 
 var menu: SettingsMenu
 var world: Node = null              # the drive behind the menu, or null in the main menu
@@ -42,7 +42,9 @@ func car_page(page: VBoxContainer) -> void:
 	R.pick(page, "Camera", Settings.get_value("camera"), CAMERAS, func(v: Variant):
 		Settings.set_value("camera", v)
 		var cam: Variant = world.get("camera") if world != null else null
-		if cam is ChaseCamera:
+		if world != null and world.has_method("set_free_camera"):
+			world.set_free_camera(int(v) == 3)          # (the free camera of FreeCam.js, the fourth of the camera key)
+		if cam is ChaseCamera and int(v) < 3:
 			(cam as ChaseCamera).mode = int(v) as ChaseCamera.Mode
 			(cam as ChaseCamera).snap()
 			world.audio.set_inside(int(v) != 0))
