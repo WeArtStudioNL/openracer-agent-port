@@ -451,6 +451,7 @@ func num(path: String, fallback := 0.0) -> float:
 ## A change of the car: Save lights up, the ready check and the summary follow, and a step of undo is kept.
 func changed(step := true) -> void:
 	set_dirty(true)
+	bench.form_changed()
 	if step:
 		_remember_timer = 0.3
 
@@ -1235,7 +1236,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if focus is LineEdit or cmd or k.alt_pressed:
 		return
-	if _hook_wants("key", [k.physical_keycode]) or layers.key(k.physical_keycode):
+	if bench.key(k.physical_keycode) or _hook_wants("key", [k.physical_keycode]) or layers.key(k.physical_keycode):
 		get_viewport().set_input_as_handled()
 
 

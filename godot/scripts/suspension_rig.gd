@@ -23,7 +23,6 @@ var root: Node3D                  # "SuspensionRig": the holders and the parts o
 var parts: Array[Dictionary] = []
 var uprights := {}                # wheel -> the entry of its upright
 var corners := {}                 # wheel -> {lower, upper, up, a, moved, camber}: wishbones and upright, solved as rigid parts
-var _rod_inner := {}              # wheel -> how far the inner end of its tie rod is along the rack from where the model has it
 var rack: Dictionary = {}
 var rack_travel := 0.1            # m per radian of the front wheels (car.json steering.rack_travel)
 var hubs := {}                    # wheel -> the middle of the wheel (the upright turns it about its pin)
@@ -31,6 +30,7 @@ var column: Dictionary = {}       # { centre, axis }: a steering column whose ar
 var column_angle := 0.0
 var column_error := 0.0
 var built: Dictionary = {}        # what PartsLibrary.assemble made (or {})
+var _rod_inner := {}              # wheel -> how far the inner end of its tie rod is along the rack from where the model has it
 var _rods: Variant = null         # the fixed tie rods (found once), or []
 var _column_key := ""
 

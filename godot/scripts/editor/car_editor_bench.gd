@@ -12,6 +12,7 @@ extends RefCounted
 var ed: CarEditor
 var car: Car = null
 var grabber: RefCounted            # the node grabber of the tests (car_editor_grabber.gd)
+var brake_held := true             # (the node grabber, P) the parking brake holds all the wheels
 var parked := false               # the car is there but stands still: no simulation until a test starts it
 var driving := false
 var tyre_nodes: CarEditorTyreNodes         # the nodes of the shell tyres while a tyre setting is changed
@@ -22,6 +23,7 @@ var _height := 1.0
 var _tilt := 0.0
 var _wall: StaticBody3D = null
 var _view_before := []             # the target and the place of the camera before the test
+var _rebuild_in := -1.0            # s until the car is built again from the form (-1: not)
 
 
 func _init(editor: CarEditor) -> void:
@@ -68,6 +70,7 @@ func _make_floor() -> void:
 func drop(height: float, tilt: float, hold := false) -> void:
 	_height = height
 	_tilt = tilt
+	_rebuild_in = -1.0
 	# (the view of before the first test, for when the test is stopped)
 	if not hold and _view_before.is_empty():
 		_view_before = [ed.view.target, ed.view.camera.position]
@@ -145,6 +148,38 @@ func toggle_drive() -> void:
 		_audio = null
 
 
+## The form changed: a car that stands on the bench (Drop car, the node grabber) is built again from it, half a second after
+## the last change, so that the new mass, springs and limits can be felt at once. Not during a run that would be broken off.
+func form_changed() -> void:
+	if car != null and not parked:
+		_rebuild_in = 0.5
+
+
+func _live_rebuild(delta: float) -> void:
+	if _rebuild_in < 0.0:
+		return
+	_rebuild_in -= delta
+	if _rebuild_in >= 0.0:
+		return
+	var sb: Variant = ed.hooks.get("Soft body")
+	if car == null or parked or driving or not test_run.is_empty() or (sb != null and sb.crash.running()) or grabber.holding():
+		_rebuild_in = 0.25 if car != null and not parked and grabber.holding() else -1.0
+		return
+	if ed.build_config(ed.car_id if ed.car_id != "" else "bench", true).has("_error"):
+		return
+	drop(0.05, 0.0)
+	ed.status("The car is built again from the form.", "ok")
+
+
+## P with the node grabber on: the parking brake on or off.
+func key(code: Key) -> bool:
+	if code != KEY_P or not grabber.on or car == null or parked:
+		return false
+	brake_held = not brake_held
+	ed.status("Parking brake %s (P): all four wheels %s." % ["on" if brake_held else "off", "are held" if brake_held else "roll"], "ok")
+	return true
+
+
 ## The test ends: back at the model, and the camera where it was before the test.
 func end_test() -> void:
 	var view := _view_before
@@ -175,15 +210,17 @@ func stop(keep_view := false) -> void:
 func frame(delta: float) -> void:
 	tyre_nodes.frame()
 	grabber.frame()
+	_live_rebuild(delta)
 	if car == null:
 		return
 	if not test_run.is_empty():
 		_run_script(delta)
 		return
 	if not driving:
+		var hold: bool = brake_held or not grabber.on
 		car.throttle_input = 0.0
-		car.brake_input = 0.0
-		car.handbrake_input = 1.0
+		car.brake_input = 1.0 if grabber.on and brake_held else 0.0
+		car.handbrake_input = 1.0 if hold else 0.0
 		return
 	car.throttle_input = Input.get_action_strength("throttle")
 	car.brake_input = Input.get_action_strength("brake")

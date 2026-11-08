@@ -843,7 +843,8 @@ func build_test_bar() -> void:
 		ed.bench.toggle_drive()
 		drive.text = "Stop driving" if ed.bench.driving else "Drive")
 	row.add_child(drive)
-	var grab := EditorStyle.button("Node grabber", "small", "Show the nodes near the mouse and pull one with the left mouse button: the body, the wheels and the suspension")
+	var grab := EditorStyle.button("Node grabber", "small",
+		"Show the nodes near the mouse and pull one with the left mouse button: the body, the wheels and the suspension. P: the parking brake on or off")
 	grab.toggle_mode = true
 	grab.toggled.connect(func(v: bool): ed.bench.grabber.set_on(v))
 	ed.bench.grabber.button = grab
