@@ -410,7 +410,7 @@ const SOUND_KEYS := ["volume", "convolution", "audio_volume", "hf_gain", "noise"
 ## drive has a fixed split), and the look-ahead, field of view with speed and dolly of the follow camera. (The shell of
 ## the tyres, tyre_width ... tyre_stiff_y and the height of the sidewall, is the shell tyre of ShellTyres.)
 const NOT_IN_GODOT := [
-	"diff_lock", "center_diff",
+	# (the build-up of the limited slip and the centre differential work now: CarDrivetrain)
 	"cam_follow_look_z", "cam_follow_fov_full_speed", "cam_follow_dolly",
 ]
 

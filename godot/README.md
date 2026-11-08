@@ -168,7 +168,7 @@ The bench, browser (node) against Godot, the same tyre on a flat road:
 | relaxation length (m) | 0.09 | 0.09 | | 0.12 |
 | cost (ms a step of a tyre) | 1.09 | 0.09 | | 0.13 |
 
-The road test of the Muscle (`node tools/physics-bench.js openracer-muscle`, the browser game's car on its shell
+Before the physics parity (see Physics parity for the figures now), the road test of the Muscle (`node tools/physics-bench.js openracer-muscle`, the browser game's car on its shell
 tyres, against test_shell_car with the traction control on and no ESC):
 
 | | browser (shell) | Godot shell | Godot simple |
@@ -199,8 +199,7 @@ and a slider with the units, ranges and steps of CarTuning.js; a changed value i
 a bias, the gears a summary with Advanced (gear by gear, − and +) and a list of kinds of transmission, the tyre's fine
 settings are folded apart, the systems and the extras have a tick that opens their settings. A setting that cannot do
 anything with the others is hidden (CarTuning.visible); one that the Godot physics do not use yet is grey with a
-tooltip (Tuning.NOT_IN_GODOT: the build-up of the
-locking differential and the centre differential; look-ahead, fov with speed and dolly of the follow camera). The rows
+tooltip (Tuning.NOT_IN_GODOT: look-ahead, fov with speed and dolly of the follow camera). The rows
 of the wheel library and the parts library suspension build the car again: the browser loads it again at once, here the
 tooltip says it is built with them at the next start (Tuning.AT_NEXT_START). The shift pattern (normal, sport, drag,
 manual), the heating and the life of the tyres, the steering wheel stop and degrees, hide the driver and the boost gauge
@@ -918,6 +917,106 @@ showcase; one viewport for it, the other tiles keep their pictures, where the br
 picture per setup, the Take button of the touch controls, the browser's storage notes; TextureBudget.js (the phones of
 the browser) has no use here.
 
+## Physics parity
+
+The physics of every car and bike are held against the browser game's own: `godot/tools/parity-bench.js` runs
+web/js/Vehicle.js (with Engine.js, Wheel.js, TyreShell.js, Motorcycle.js) headless in node, set up as the game sets
+up a car (vehicleParams and the retune of Opponent.js, the rubber, tread and size of a custom tyre and the shift
+style as Car.js gives them), and `res://tools/test_parity.tscn` runs the same road test in Godot with the same
+controllers, on a flat floor: full throttle from a standstill (0-50, 0-100 km/h, the top speed, every upshift with
+the engine speed before it), the brakes from 100 km/h (50 when the top speed is under 110), and a skidpad of 40 m
+(the steering held on the curvature of the path, the speed raised by 0.25 m/s a second: the most speed x yaw rate
+while the car follows the circle). TC on (as the AI drives) when the car has it, ESC off, ABS on, no wear and fuel.
+
+    godot/tools/parity.sh [simple|shell] [car ...]        # both, side by side (PARALLEL=4 cars at once)
+    node godot/tools/parity-bench.js <car> [--shell] [--verbose]
+    Godot --headless --path godot res://tools/test_parity.tscn -- --car=<car> [--tyres=simple|shell]
+        --user-dir=/tmp/x --set=tc:true,esc:false,abs:true,tyre_wear:0 [--only=brake|skidpad|coast --from=150] [--verbose]
+
+What was different, and is now as Vehicle.js has it:
+
+- The drivetrain (`scripts/car_drivetrain.gd`, new, out of car.gd): the CVT (the ratio for the engine speed the
+  throttle asks for, from the road speed, at most e^cvt_rate a second; the kart's went to its top ratio on the spinning
+  wheels), the automatic gearbox and the timing of every shift (shift_time; a dual clutch 0.08-0.15 s with its cut and
+  blip, an automated manual half a second at least; the clutch open and taken up in the last 0.14 s; the throttle at
+  15 %), the ABS (a wheel past the peak of its tyre, released to 5 %), the torque converter's stall at 35 % of the
+  limiter without tc_stall_rpm, the limited slip with diff_lock and its calm above 25 km/h, the centre differential
+  (lsd, locked), the welded axle as Vehicle.js steps it, the clutch of car.json for every gearbox (1050/2000 rpm).
+- The simple tyre: the slip along the wheel relaxed over 0.35 m as the slip across, the wheel turned explicitly in steps
+  of 1/360 s (Vehicle.js: 3 ms at most), the damping of the slip speed (400 N per m/s), and the rolling resistance as a
+  force at the contact (not a torque on the wheel), four times on grass; the brake over the same inertia as the grip
+  (a braked wheel settled where its tyre gave (I + dt slope) / I times the brake torque: the hatchback stopped in 31 m
+  where the browser needs 40).
+- The centre of gravity between the axles where they are (front_axle_offset, rear_axle_offset moved the axles and not
+  the centre of gravity: the dune buggy had a third less on its front and stood nose up, 200 N of the springs against
+  the travel).
+- The camber of the roll (Vehicle.wheelLean adds the roll of the body to the lean of a wheel: the outer wheel leans into
+  the bend; Godot took it away), a kart's from the twist of its frame and the lift of its inner rear wheel.
+- The drag area 0.85 x width x height (it was 0.82) and the air 1.29 kg/m3 (1.225); the anti-roll bars of
+  Vehicle.layout (a bar on the axle short of its share only); the wheel inertia (1.6 kg m2, a light vehicle by its mass
+  and its tyre); the defaults of car.json (a limited slip with 150 N m of preload, rebound 1.7, tc_ratio 1.9, the
+  travel 5 cm short of the room); the engine inertia of car.json (0.4 without one; it was held at 0.06 at least).
+- The engine braking: Engine.js holds the motoring of a small engine at 0.3 of the 580 N m engine, Godot had 0.04 so a
+  kart engine of 30 N m idles; now 0.04 at idle and the floor of Engine.js from twice the idle speed, for a car. A
+  motorcycle keeps the lighter one (with the floor of Engine.js the AI's Sports 600 went light at the rear on the
+  brakes into the last bend of Kartbaan Oldenzaal, ran on to the grass and fell).
+
+The simple tyre (the AI cars, and the player's car on Simple), browser / Godot before / Godot after:
+
+| car | 0-50 (s): browser / before / after | 0-100 (s): browser / before / after | top (km/h): browser / before / after | brake (m): browser / before / after | skidpad R40 (g): browser / before / after |
+|---|---|---|---|---|---|
+| dune-buggy | 2.5 / 3.0 / **2.5** | 6.9 / 8.1 / **6.9** | 212.9 / 196.6 / **209.2** | 38.4 / 33.6 / **37.8** (100-0) | 1.26 / 1.01 / **1.13** |
+| enduro-600 | 3.3 / 3.2 / **3.0** | 7.4 / 6.7 / **6.3** | 183.2 / 181.6 / **184.0** | 48.3 / 58.4 / **44.6** (100-0) | 0.25 / 0.31 / **0.31** |
+| go-kart-250cc | 4.5 / 5.9 / **4.3** | 12.2 / 13.2 / **11.7** | 157.5 / 157.6 / **157.5** | 40.1 / 54.5 / **38.9** (100-0) | 1.62 / 2.15 / **1.79** |
+| hatchback | 8.1 / 8.1 / **7.4** | 18.2 / 18.1 / **17.6** | 154.7 / 158.7 / **154.3** | 40.4 / 30.9 / **39.9** (100-0) | 1.74 / 1.63 / **1.68** |
+| openracer-kart | 12.7 / 12.9 / **11.6** | - / - / **-** | 72.0 / 72.0 / **72.0** | 12.3 / 15.2 / **12.5** (50-0) | 1.00 / 1.01 / **1.01** |
+| openracer-muscle | 1.6 / 1.4 / **1.5** | 4.3 / 4.2 / **4.2** | 213.6 / 213.6 / **213.6** | 27.9 / 28.8 / **29.3** (100-0) | 1.56 / 1.63 / **1.63** |
+| sports-motorcycle-600cc | 2.8 / 2.2 / **2.2** | 6.8 / 4.2 / **4.2** | 213.8 / 240.8 / **240.9** | 47.7 / 49.9 / **57.5** (100-0) | 0.75 / 0.85 / **0.85** |
+| stadium-truck | 27.0 / 31.2 / **29.3** | - / - / **-** | 59.8 / 60.9 / **59.5** | 7.5 / 5.6 / **7.6** (50-0) | 0.00 / 0.00 / **0.01** |
+| supermoto-700 | 3.3 / 2.6 / **2.6** | 10.8 / 5.8 / **6.8** | 152.8 / 177.5 / **177.6** | 45.8 / 37.4 / **38.8** (100-0) | 0.58 / 0.66 / **0.66** |
+
+The shell tyre (the player's car), browser / Godot before / Godot after:
+
+| car | 0-50 (s): browser / before / after | 0-100 (s): browser / before / after | top (km/h): browser / before / after | brake (m): browser / before / after | skidpad R40 (g): browser / before / after |
+|---|---|---|---|---|---|
+| openracer-muscle | 2.4 / 2.2 / **3.3** | 5.1 / 5.2 / **6.4** | 203.6 / 194.6 / **194.3** | 33.6 / 33.4 / **33.4** (100-0) | 1.27 / 1.26 / **1.26** |
+| hatchback | 5.5 / 6.3 / **6.4** | 16.2 / 20.1 / **20.5** | 123.6 / 125.9 / **124.1** | 33.4 / 36.7 / **35.3** (100-0) | 1.23 / 1.09 / **1.13** |
+| go-kart-250cc | 3.8 / 4.3 / **3.1** | - / 12.2 / **9.6** | 86.9 / 119.7 / **119.3** | 12.7 / 41.0 / **50.9** (50-0) | 0.14 / 0.49 / **0.50** |
+| dune-buggy | 1.7 / 2.4 / **1.5** | 4.9 / 5.3 / **3.9** | 232.2 / 206.4 / **215.6** | 41.2 / 33.2 / **34.2** (100-0) | 1.17 / 1.15 / **1.20** |
+| stadium-truck | 19.2 / 20.1 / **19.2** | - / - / **-** | 59.8 / 68.0 / **66.7** | 8.4 / 10.8 / **9.7** (50-0) | 0.60 / 0.64 / **0.63** |
+
+The shift points are the browser's within 1 %, every gear of every car (the dune buggy shifts at 7136-7138 rpm in
+both, the Sports 600 at 13 600-13 800).
+
+Still different, and why:
+
+- The motorcycles accelerate faster and reach a higher top speed in Godot (the Supermoto 0-100 in 6.8 s against
+  10.8, 178 km/h against 153). In the browser the front wheel of a bike on the simple tyre hops (its load drops to
+  nothing several times a second, also at 200 km/h), and the wheelie control takes the throttle away at every hop
+  within 0.03 s and gives it back over 0.25 s: the bike runs at about 60 % of its throttle. Godot's front wheel stays
+  on the road; copying the hop would be copying a fault. The coast-down of a bike is the same (1.42 against 1.44 m/s2
+  from 150 km/h), and so are the shift points. Their braking differs by their engine braking (above) and the bike's
+  fork and swingarm, which are Godot's (MotorcycleModel).
+- The browser's simple tyre on a braked wheel that does not drive gives more than its brake (the force of the relaxed
+  slip goes to the body while the wheel is only brought back to the road speed): the Muscle's front tyres give up to
+  2.7 times their brake torque at a walking pace. Godot steps it the same way, in the same steps, and is within 5 %.
+- The skidpads of the karts: the browser's kart on the simple tyre hops on its stiff tyres (its loads drop to nothing)
+  and its lateral acceleration is noisy; the go-kart is 10 % over, the dune buggy (welded front and rear) 10 % under.
+- The stadium truck (the committed car.json: a 37 N m engine, which the user is changing) takes 27 s to 50 km/h in
+  both and does not follow the circle of the skidpad at walking pace in either.
+- The shell tyre: the braking and the skidpad are within a few percent; the acceleration of the Muscle is slower
+  (6.4 s to 100 against 5.1: the traction control cuts more on the shell, whose rear tyres run at 15-20 % of slip; with
+  the engine inertia of before, 0.06, it is 5.2 s), and the go-kart on the browser's shell tyre is a car of its own (top
+  speed 87 km/h, 0.14 g on the skidpad: it spins).
+- In the browser, without the traction control, the Muscle on the simple tyre does not get past 32 km/h: its welded
+  rear axle rings at the launch with the engine of 0.02 kg m2. The bench therefore runs with TC on.
+
+The AI on Kartbaan Oldenzaal (`--ai --ai-learned=0`, 220 s), before / after: the go-kart 33.1 / 38.1 s a lap (the CVT
+now holds the engine at the speed the throttle asks, and the engine brakes as in the browser), the Muscle 36.2 / 35.8,
+the Sports 600 45.2 (a lap not counted) / 44.9, the hatchback 43.7 / 42.4, the Supermoto 44.7 / 45.7, the dune buggy
+63-67 / 55-57, the stadium truck 52.5 / 52.3, all clean; a race of three laps (the Muscle and three AI cars) clean, no
+car put back, every car finished.
+
 ## Parity: what is still different
 
 A pass over every file of `web/js/` and `web/tools/` and every menu, key, HUD element, setting and mode of the browser
@@ -947,9 +1046,7 @@ game (November 2026). What the Godot version still lacks or does otherwise, and 
 
 **Tuning** (Tuning.js): Save on Default does not write car.json; no Export/Import of a tune file and no Export to vehicle
 in the tuning menu (the car editor has them); no Engine card (the build, the chart, the dyno: they are in the car
-editor); the mirrors are in Settings, Mirrors. Grey: the diff build-up and the centre differential
-(the Godot drivetrain has an implicit locking differential and a fixed split for four wheel drive), the follow camera's
-look-ahead, fov with speed and dolly. The rows of the wheel and parts library build the car at the next start, not at once.
+editor); the mirrors are in Settings, Mirrors. Grey: the follow camera's look-ahead, fov with speed and dolly. The rows of the wheel and parts library build the car at the next start, not at once.
 
 **Main menu**: the browser turns every car on its tile; here the one under the mouse, with the focus or chosen (one
 viewport). No picture per setup. No "Copy game link" (`?import=`): the Godot game has no address.
@@ -986,7 +1083,9 @@ physics-worker-check.html (the headless tests stand in for them).
 | file | what |
 | --- | --- |
 | `scripts/content.gd` | finds `web/`, reads json, loads glb models, the surfaces (Surfaces.js) |
-| `scripts/car.gd` | the car: rigid body (Jolt), raycast suspension, tyres, drivetrain |
+| `scripts/car.gd` | the car: rigid body (Jolt), raycast suspension, tyres |
+| `scripts/car_drivetrain.gd` | the gearbox, the clutch or converter, the differentials, the brakes and the wheel speeds (Vehicle.js) |
+| `tools/parity-bench.js`, `tools/test_parity.tscn`, `tools/parity.sh` | the physics parity bench (Physics parity) |
 | `scripts/engine.gd` | torque curve, friction, idle control, limiter |
 | `scripts/car_model.gd` | the body model and the wheels (model wheels or library rim + tyre) |
 | `scripts/car_visuals.gd`, `suspension_rig.gd`, `car_paint.gd`, `car_mirrors.gd` | the suspension rig, the materials and paint, the mirrors |
