@@ -40,7 +40,7 @@ static func tyre_effects(w: Car.Wheel, dt: float) -> void:
 ## The temperature and the wear of a tyre (wearStep of Vehicle.js): the power that the slip burns and the flexing
 ## under the load heat it, the air cools it; outside its window it grips less; it wears with the slip, faster when
 ## it is too hot. Off (Settings "tyre_wear" 0): the tyre is at its best temperature and does not wear.
-static func wear_step(w: Car.Wheel, dt: float) -> void:
+static func wear_step(w: Car.Wheel, dt: float, heating := 1.0, life := 1.0) -> void:
 	var k := w.kind
 	var scale := float(Settings.get_value("tyre_wear"))
 	if scale <= 0.0:
@@ -49,7 +49,7 @@ static func wear_step(w: Car.Wheel, dt: float) -> void:
 		return
 	var spin := w.omega * w.radius - w.forward_speed
 	var slide_power := (absf(w.fx * spin) + absf(w.fy * w.side_speed)) if w.contact else 0.0
-	var heat_in := (slide_power + (w.load * absf(w.forward_speed) * 0.025 if w.contact else 0.0)) * float(k.get("heating", 1.0)) * w.pressure_roll
+	var heat_in := (slide_power + (w.load * absf(w.forward_speed) * 0.025 if w.contact else 0.0)) * heating * float(k.get("heating", 1.0)) * w.pressure_roll
 	var size := clampf(pow(w.radius / 0.315, 3.0), 0.04, 2.5)
 	var cooling := (40.0 + 3.0 * absf(w.forward_speed)) * size * (w.temp - 25.0)
 	w.temp += (heat_in - cooling) / (20000.0 * size) * dt
@@ -57,7 +57,7 @@ static func wear_step(w: Car.Wheel, dt: float) -> void:
 	var window := float(k.get("window", 15))
 	var overheated := clampf((w.temp - (optimum + window)) / 30.0, 0.0, 2.0)
 	var counted := slide_power * 0.35 if absf(w.forward_speed) < 8.0 else slide_power
-	w.wear += counted * (1.0 + 2.0 * overheated) * dt / (4.8e7 * float(k.get("life", 1.0))) * scale
+	w.wear += counted * (1.0 + 2.0 * overheated) * dt / (4.8e7 * life * float(k.get("life", 1.0))) * scale
 	var off := maxf(0.0, absf(w.temp - optimum) - window) / float(k.get("cold", 45))
 	var by_temp := 1.0 - float(k.get("coldLoss", 0.22)) * minf(1.0, off)
 	var by_wear := 1.0 - 0.2 * pow(minf(1.0, w.wear), 1.5) - (0.15 if w.wear >= 1.0 else 0.0)

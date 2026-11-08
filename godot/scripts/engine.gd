@@ -272,3 +272,15 @@ func net_torque(throttle: float, dt: float) -> float:
 	var boosted := boost_factor(boost * turbo_bar) if turbo_bar > 0.0 else 1.0 - turbo_share * (1.0 - boost)
 	last_torque = full_torque(r) * power_scale * health_scale * boosted * t - (1.0 - t) * motoring(r) * (0.5 if als_active else 1.0)
 	return last_torque
+
+
+## The shift points of an automatic gearbox for its pattern (Vehicle.js shiftStyle): "sport" holds the gears longer,
+## "drag" goes up at the rev limiter and does not kick down; else as they are. Vector2(up, down) in rpm.
+static func shift_pattern(style: String, up: float, down: float, limit: float, thr: float, prev_ratio: float) -> Vector2:
+	if style == "sport":
+		up = maxf(up, limit * (0.62 + 0.3 * thr))
+		down = minf(maxf(down, limit * (0.3 + 0.2 * thr)), up / maxf(1.0, prev_ratio) * 0.9)
+	elif style == "drag":
+		up = limit * 0.965
+		down = limit * 0.12
+	return Vector2(up, down)

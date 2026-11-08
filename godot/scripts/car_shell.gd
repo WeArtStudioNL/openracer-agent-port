@@ -24,6 +24,7 @@ var car_contacts := 0
 var steps := 0                      # the steps of the shell that were worked out (not quiet)
 var step_usec := 0                  # the time of the last of them
 var pusher := Callable()            # (Apply force of the car editor) more forces on the nodes in every small step: pusher.call(h)
+var skip := false                   # (an AI car far from the player, Settings sim_ai_damage "near": its shell is not worked out)
 # the state of the car in this step (also what the other cars read)
 var xf := Transform3D.IDENTITY
 var lin_v := Vector3.ZERO
@@ -104,7 +105,7 @@ func step(state: PhysicsDirectBodyState3D) -> void:
 		_cand = _walls_near()
 	_build_pairs()
 	var touching := _build_node_tris() or pusher.is_valid()
-	if sb.quiet and not touching:
+	if (sb.quiet and not touching) or skip:
 		return
 	var t0 := Time.get_ticks_usec()
 	sb.step(dt, _contacts)

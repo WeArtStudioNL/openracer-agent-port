@@ -28,6 +28,7 @@ var debug_view: Node = null         # what the physics sees (DebugView, the key 
 var telemetry: Node = null          # the values of the car (Telemetry, V)
 var _pause_box: Control
 var _results: CanvasLayer
+var _assist := 0.0                  # rad: the steering assist now (faded)
 var _after_cine := false            # after the finish: the cinematic camera of the track (main.js startAutopilot)
 var _top_speed := 0.0               # the top speed of the player in the race (the pace of the car after the finish)
 var _shot_path := ""
@@ -405,9 +406,25 @@ func _physics_process(_delta: float) -> void:
 		car.brake_input = maxf(car.brake_input, WheelInput.brake)
 	else:
 		car.steer_direct = false
-		car.steer_input = keys_steer
+		car.steer_input = keys_steer + _steer_assist(dt)
 	if wheel_on:
 		ForceFeedback.update(car, get_physics_process_delta_time(), stop)
+
+
+## The steering assist (Car.js keyAssist, controls.js padAssist; Settings, Keyboard and Gamepad): when the rear steps
+## out, the front wheels are turned into the slide (towards where the car goes, past two degrees of slip, at most 0.6
+## of the lock), faded in and out; driving forwards only, not a motorcycle. As a part of the steering now.
+func _steer_assist(dt: float) -> float:
+	var keys := Controls.key_held("steer_left") or Controls.key_held("steer_right")
+	var on := bool(Settings.get_value("key_assist")) if keys or (touch != null and bool(touch.get("engaged"))) else bool(Settings.get_value("pad_assist"))
+	var want := 0.0
+	if on and car.bike == null and car.speed > 3.0:
+		var b := car.global_transform.basis
+		var beta := atan2(car.linear_velocity.dot(b.x), car.linear_velocity.dot(b.z))      # (to the left of where it points: +)
+		want = clampf(signf(beta) * maxf(0.0, absf(beta) - 0.035) * 1.1, -0.6 * car.max_steer, 0.6 * car.max_steer)
+	_assist += (want - _assist) * minf(1.0, dt * 12.0)
+	var limit := car.max_steer / (1.0 + float(Settings.get_value("key_steer_at_speed")) * absf(car.speed) / 22.0)
+	return _assist / maxf(0.01, limit)
 
 
 ## A pedal from its action: a key comes up over the time and the curve of the Keyboard settings (Settings.js

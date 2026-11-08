@@ -175,6 +175,8 @@ var final_drive := 3.7
 var efficiency := 0.92
 var shift_time := 0.3
 var gearbox := "gears"
+var shift_style := "normal"         # an automatic: normal, sport (holds the gears), drag (up at the limiter), manual (the driver)
+var tyre_factors := Vector2.ONE     # the heating and the life of the tyres: factors of the tuning (Vehicle.js tyreHeating, tyreLife)
 var cvt_rpm := 4000.0
 var clutch_capacity := 500.0
 var clutch_start := 1100.0
@@ -356,6 +358,7 @@ func _read_config() -> void:
 	var dt: Dictionary = cfg.get("drivetrain", {})
 	var ty: Dictionary = cfg.get("tyres", {})
 	tyre_damage = bool(ty.get("damage", false))
+	tyre_factors = Vector2(float(ty.get("heating", 1.0)), maxf(0.01, float(ty.get("life", 1.0))))
 	var br: Dictionary = cfg.get("brakes", {})
 	mass = float(ch.get("mass", 1200)) + Motorcycle.rider_mass_of(cfg)
 	if str(cfg.get("type", "car")) == "motorcycle":
@@ -416,6 +419,7 @@ func _read_config() -> void:
 	efficiency = float(dt.get("efficiency", 0.92))
 	shift_time = float(dt.get("shift_time", 0.3))
 	gearbox = str(dt.get("gearbox", "gears"))
+	shift_style = str(dt.get("shift_style", "normal")) if str(dt.get("shift_style", "normal")) in ["sport", "drag", "manual"] else "normal"
 	cvt_rpm = float(dt.get("cvt_rpm", 4000))
 	engine.setup(cfg.get("engine", {}))
 	engine.set_extras(cfg.get("extras", {}))
@@ -803,7 +807,7 @@ func _gear_total() -> float:
 
 func _auto_shift(dt: float) -> void:
 	since_shift += dt
-	if manual or gear <= 0 or gearbox == "cvt" or shift_timer > 0.0:
+	if manual or gear <= 0 or gearbox == "cvt" or shift_timer > 0.0 or shift_style == "manual":
 		return
 	# (the automatic gearbox of Vehicle.js) the engine speed that the road speed asks for in this gear: spinning
 	# wheels must not cause a shift
@@ -839,8 +843,9 @@ func _auto_shift(dt: float) -> void:
 	if peak > 0.0:
 		up_rpm = maxf(up_rpm, peak * 1.25)
 		down_rpm = minf(peak * (0.6 + 0.3 * thr), up_rpm / maxf(1.0, prev_ratio) * 0.9)
-	down_rpm = minf(down_rpm, up_rpm / maxf(1.0, prev_ratio) * 0.9)
-	up_rpm = minf(up_rpm, limit * 0.94)
+	var pattern := CarEngine.shift_pattern(shift_style, up_rpm, down_rpm, limit, thr, prev_ratio)   # (sport, drag)
+	down_rpm = minf(pattern.y, pattern.x / maxf(1.0, prev_ratio) * 0.9)
+	up_rpm = minf(pattern.x, limit * (0.965 if shift_style == "drag" else 0.94))
 	# (a converter that is not locked runs the engine faster than the road: at full throttle the engine speed counts)
 	var shift_rpm := road_rpm
 	if gearbox == "torque-converter" and tc_lock < 0.9 and thr > 0.5:
@@ -1056,7 +1061,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	_pitch_links = new_pitch
 	for w in wheels:
 		CarWear.tyre_effects(w, dt)
-		CarWear.wear_step(w, dt)
+		CarWear.wear_step(w, dt, tyre_factors.x, tyre_factors.y)
 	_fuel_step(dt)
 	if engine_damage != null and (shell == null or not engine_damage_on):
 		engine_damage.repair()

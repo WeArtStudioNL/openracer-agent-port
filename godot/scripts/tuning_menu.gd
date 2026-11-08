@@ -325,6 +325,8 @@ func _item(parent: Control, key: String) -> Array:
 	if key in Tuning.NOT_IN_GODOT:
 		item.modulate.a = GREY
 		item.tooltip_text = Tuning.NOT_YET
+	elif key in Tuning.AT_NEXT_START:
+		item.tooltip_text = Tuning.NEXT_START
 	return [item, line]
 
 
@@ -333,6 +335,8 @@ func _row_label(line: HBoxContainer, text: String, key: String) -> Label:
 	label.mouse_filter = Control.MOUSE_FILTER_PASS
 	if key in Tuning.NOT_IN_GODOT:
 		label.tooltip_text = Tuning.NOT_YET
+	elif key in Tuning.AT_NEXT_START:
+		label.tooltip_text = Tuning.NEXT_START
 	line.add_child(label)
 	return label
 
@@ -788,7 +792,21 @@ func _change(key: String, value: Variant) -> void:
 func _apply(cfg: Dictionary, what: String) -> void:
 	var cams_before: Variant = car.config.get("cameras")
 	var sound_before: Variant = car.config.get("sound")
+	var wheel_before: Variant = car.config.get("steering_wheel")
 	car.apply_config(cfg)
+	# (the steering wheel turns as far as its degrees, and stops where the rods or the degrees say; the driver hides
+	# in the cockpit as the camera row says)
+	var frame := car.get_node_or_null("Driver")
+	if frame != null:
+		var sw: Variant = frame.get("wheel")
+		if sw != null and cfg.get("steering_wheel") != wheel_before and cfg.get("steering_wheel") is Dictionary:
+			var s: Dictionary = cfg["steering_wheel"]
+			sw.degrees = float(s.get("degrees", 450.0)) if float(s.get("degrees", 450.0)) > 0.0 else 450.0
+			sw.stop = "degrees" if str(s.get("stop", "")) == "degrees" else "rods"
+		if frame.get("driver") != null and cfg.get("cameras") != cams_before:
+			var inside: bool = frame.get("inside")
+			frame.set("inside", not inside)
+			CarDriver.camera_inside(car, inside)
 	if world != null:
 		var c: ChaseCamera = world.get("camera")
 		if c != null and cfg.get("cameras") != cams_before:
