@@ -38,13 +38,16 @@ func _ready() -> void:
 	get_tree().create_timer(900.0).timeout.connect(get_tree().quit)
 	_id = Content.arg("car") if Content.arg("car") != "" else "openracer-muscle"
 	add_to_group("track")
+	# the floor: a strip of tiles of 400 m along z, 20 km long and 2 km wide (the shell tyre finds the road in a grid of the triangles of
+	# the ground: one box of 20 km was too big a triangle for it, and the car fell through)
 	var floor_body := StaticBody3D.new()
-	var floor_col := CollisionShape3D.new()
-	var floor_shape := BoxShape3D.new()
-	floor_shape.size = Vector3(20000, 1, 20000)
-	floor_col.shape = floor_shape
-	floor_col.position = Vector3(0, -0.5, 0)
-	floor_body.add_child(floor_col)
+	for k in 50:
+		var floor_col := CollisionShape3D.new()
+		var floor_shape := BoxShape3D.new()
+		floor_shape.size = Vector3(2000, 1, 402)      # (a little over each other; wide: a bike drifts some hundred metres to the side)
+		floor_col.shape = floor_shape
+		floor_col.position = Vector3(0, -0.5, -9800.0 + 400.0 * k)
+		floor_body.add_child(floor_col)
 	add_child(floor_body)
 	var cfg: Variant = Content.load_json("cars/%s/car.json" % _id)
 	_cfg = cfg if cfg is Dictionary else {}
@@ -104,8 +107,8 @@ func _physics_process(dt: float) -> void:
 				var ws := []
 				for w in car.wheels:
 					ws.append("%.1f/%d/%d/%.3f" % [w.omega, roundi(w.load), roundi(w.fx), w.slip_ratio])
-				print("   t %.0f  %.1f km/h  gear %d  rpm %d  clutch %.2f  slip %.2f  thr %.2f  %s" % [_t, u / KMH, car.gear, roundi(car.engine.rpm()),
-					car.clutch_engagement, car.tc_slip, car.tc_factor, ws])
+				print("   t %.0f  %.1f km/h  gear %d  rpm %d  clutch %.2f  slip %.2f  thr %.2f  pos %s  %s" % [_t, u / KMH, car.gear, roundi(car.engine.rpm()),
+					car.clutch_engagement, car.tc_slip, car.tc_factor, car.global_position.snapped(Vector3.ONE * 0.1), ws])
 			if (_t - _top_at > 8.0 and _t > 20.0) or _t > 120.0:
 				_out["0-50 (s)"] = _t50 if _t50 >= 0.0 else null
 				_out["0-100 (s)"] = _t100 if _t100 >= 0.0 else null

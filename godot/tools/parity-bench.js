@@ -66,7 +66,8 @@ function makeCar(config, shell) {
         rolling_resistance: tyres.rolling_resistance !== undefined ? tyres.rolling_resistance : 0.015,
         power: engine.power_scale !== undefined ? engine.power_scale : 1, engine_braking: engine.braking_scale !== undefined ? engine.braking_scale : 1,
         clutch: config.drivetrain.clutch !== undefined ? config.drivetrain.clutch : 1.5,
-        tc_allowance: assists.tc_allowance !== undefined ? assists.tc_allowance : 1, esc_gain: assists.esc_gain !== undefined ? assists.esc_gain : 1
+        tc_allowance: assists.tc_allowance !== undefined ? assists.tc_allowance : 1, esc_gain: assists.esc_gain !== undefined ? assists.esc_gain : 1,
+        shift_style: config.drivetrain.shift_style || "normal"      // (Car.js gives it to the player's car, Godot to every car)
     });
     // the custom tyre of the wheel library (Car.js): its rubber and tread per axle, and its size (the wheels of the model are measured from it)
     const cf = custom(config, "front"), cr = custom(config, "rear");
