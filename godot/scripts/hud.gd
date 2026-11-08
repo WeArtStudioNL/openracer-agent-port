@@ -684,4 +684,14 @@ func _debug_text() -> void:
 		lines.append("%s  load %5d N  slip %+.2f  angle %+.2f  s %.2f  fx %+6d  fy %+6d  %s%s" % [
 			w.slot, roundi(w.load), w.slip_ratio, w.slip_tan, w.s, roundi(w.fx), roundi(w.fy), w.surface,
 			"" if w.contact else "  (air)"])
+	if car.shell_tyres != null:
+		# (the shell tyre, Scene.js and Car.js: its nodes, the small steps it takes, and how far each tyre is in)
+		var r: Dictionary = car.shell_tyres.results[0]
+		var t: Object = car.shell_tyres.tyres[0]
+		var ins := PackedStringArray()
+		for i in 4:
+			ins.append("%s %d mm" % [car.wheels[i].slot, roundi(float(car.shell_tyres.results[i].get("sag", 0.0)) * 1000.0)])
+		lines.append("Tyre shell: %d rings x %d segments = %d nodes a tyre, %d substeps in a step of %.1f ms  |  in: %s" % [int(t.call("get_rings")),
+			int(t.call("get_segments")), int(t.call("get_rings")) * int(t.call("get_segments")), int(r.get("substeps", 0)),
+			1000.0 / Engine.physics_ticks_per_second / ShellTyres.STEPS, "  ".join(ins)])
 	_debug.text = "\n".join(lines)

@@ -1,6 +1,7 @@
-// The native part of O-Racer (a GDExtension): the engine sound and the force feedback of a racing wheel.
+// The native part of O-Racer (a GDExtension): the engine sound, the force feedback of a racing wheel and the shell tyre.
 
 #include "engine_sim.h"
+#include "tyre_shell.h"
 #include "wheel_force.h"
 
 #include <gdextension_interface.h>
@@ -16,6 +17,8 @@ void initialize_oracer(ModuleInitializationLevel p_level) {
 	}
 	GDREGISTER_CLASS(orsound::EngineSimSynth);
 	GDREGISTER_CLASS(orsound::WheelForce);
+	GDREGISTER_CLASS(orsound::TyreGround);
+	GDREGISTER_CLASS(orsound::TyreShell);
 }
 
 void uninitialize_oracer(ModuleInitializationLevel p_level) {

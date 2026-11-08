@@ -12,6 +12,7 @@ extends RefCounted
 var ed: CarEditor
 var car: Car = null
 var driving := false
+var tyre_nodes: CarEditorTyreNodes         # the nodes of the shell tyres while a tyre setting is changed
 var test_run := {}                   # the Full test that runs: stage, t, limiter_t, brake, ...
 var _floor: StaticBody3D = null
 var _audio: CarAudio = null
@@ -22,6 +23,7 @@ var _wall: StaticBody3D = null
 
 func _init(editor: CarEditor) -> void:
 	ed = editor
+	tyre_nodes = CarEditorTyreNodes.new(editor)
 
 
 ## The model of the car as the bench loads it: the file that was picked, else the file of the car as saved.
@@ -80,6 +82,7 @@ func drop(height: float, tilt: float) -> void:
 	_make_floor()
 	_floor.position.y = ed.view.grid.position.y
 	car = Car.new()
+	car.player_tyres = true          # (the shell tyre of the browser game, ShellTyres)
 	car.setup("editor-bench", c)
 	ed.view.viewport.add_child(car)
 	_place()
@@ -141,6 +144,7 @@ func stop() -> void:
 
 
 func frame(delta: float) -> void:
+	tyre_nodes.frame()
 	if car == null:
 		return
 	if not test_run.is_empty():

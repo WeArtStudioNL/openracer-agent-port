@@ -62,3 +62,42 @@ static func wear_step(w: Car.Wheel, dt: float, heating := 1.0, life := 1.0) -> v
 	var by_temp := 1.0 - float(k.get("coldLoss", 0.22)) * minf(1.0, off)
 	var by_wear := 1.0 - 0.2 * pow(minf(1.0, w.wear), 1.5) - (0.15 if w.wear >= 1.0 else 0.0)
 	w.condition = by_temp * by_wear * w.pressure_grip
+
+
+## The magic formula of Wheel.js (tyreForce): the slip along and across in units of the slip at the peak gives
+## how far the tyre is towards its limit; the curve gives the share of the peak force, which is the friction
+## times the load, in the direction of the slip.
+static func tyre_force(w: Car.Wheel, load: float, surf: Dictionary, vref: float, cornering: float) -> void:
+	# the grip of the surface, the tyre (its kind, its grip of car.json), its condition (temperature, wear, pressure)
+	var loose: bool = surf.get("loose", false)
+	var grip := float(surf["static"]) * w.grip * w.condition * w.damage_grip * float(w.kind.get("grip", 1.0)) * (float(w.kind.get("looseGrip", 1.0)) if loose else 1.0)
+	var mu := clampf(grip - 0.00007 * (load * 0.1 - 3500.0), 0.2 * grip, 1.4 * grip)
+	var spin_slide := w.omega * w.radius - w.forward_speed
+	var melt := smoothstep(4.0, 14.0, spin_slide)
+	var ratio := float(surf["kinetic"]) / float(surf["static"])
+	if loose and float(w.kind.get("looseSlide", 0.0)) > ratio:
+		ratio = float(w.kind["looseSlide"])            # (a knobbly tyre that slides keeps its grip)
+	var sliding_ratio := minf(0.98, ratio) * (1.0 - 0.45 * melt)
+	var c := 2.0 - (2.0 / PI) * asin(sliding_ratio)
+	var peak := tan(PI / (2.0 * c))
+	var slip_peak := 0.14
+	var angle_peak := 0.15 / (cornering * float(w.kind.get("lateral", 1.0)) * w.stiffness_bias * w.pressure_corner)
+	var sx := w.slip_ratio / slip_peak
+	# the camber: a leaning tyre pushes to the side it leans to, like a little slip angle (camber thrust, Vehicle.js)
+	var sy := (w.slip_tan - 0.5 * w.lean * angle_peak / 0.15) / angle_peak
+	var s := sqrt(sx * sx + sy * sy)
+	w.s = s
+	var f := sin(c * atan(peak * s))
+	var d := mu * load
+	if s > 1e-9:
+		w.fx = d * f * sx / s
+		w.fy = -d * 1.05 * f * sy / s * w.lat_grip
+	else:
+		w.fx = 0.0
+		w.fy = 0.0
+	# how fast the torque of the tyre on the wheel grows with the wheel speed (N m per rad/s), for the implicit step
+	# of the wheel: the secant of the curve from no slip to where the tyre is (the steepest slope near no slip),
+	# so that one step can bring the wheel to the speed of the road but never past it (with the local slope, a
+	# wheel past the peak jumped over the whole curve in one step and the wheels of a heavy four wheel drive rang)
+	var secant := d * (f / s if s > 1e-6 else c * peak) / slip_peak
+	w.tyre_slope = secant * w.radius * w.radius / vref

@@ -88,6 +88,7 @@ class Wheel:
 	var toe_bend := 0.0             # rad to the left, a bent suspension (WheelRig)
 	var camber_bend := 0.0          # rad of lean to the left, a bent knuckle
 	var damage_grip := 1.0          # a bent wheel grips up to 40 % less
+	var omega_from_tyre := false    # the shell tyre turns the wheel itself in its small steps (ShellTyres)
 	var hub_node: Node3D
 	var steer_node: Node3D
 	var spin_node: Node3D
@@ -209,6 +210,8 @@ var throttle := 0.0
 var brake := 0.0
 var model_root: Node3D
 var shell: CarShell = null      # the shell that dents (damage on, Settings), or null
+var player_tyres := false       # the player's car (World, the bench of the car editor): it can have the shell tyre (ShellTyres)
+var shell_tyres: ShellTyres = null
 var shell_mesh: SoftBodyMesh = null
 var parts: CarParts = null      # the parts that come off (damage on)
 var engine_damage: EngineDamage = null   # what a crash does to the engine (damage on, not for the AI)
@@ -876,14 +879,10 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	if is_ghost:
 		return
 	var dt := state.step
-	var xf := state.transform
-	var basis := xf.basis
+	var basis := state.transform.basis
 	var up := basis.y
-	var origin := xf.origin
-	var com := state.center_of_mass
 	var v := state.linear_velocity
 	var av := state.angular_velocity
-	var space := state.get_space_state()
 	speed = v.dot(basis.z)
 	if shift_timer > 0.0:
 		shift_timer = maxf(0.0, shift_timer - dt)
@@ -913,6 +912,61 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 
 	if shell != null:
 		shell.wheels(dt)              # (the bend of the suspension, a wheel that comes off: WheelRig)
+	# ---- the tyres: the shell of nodes of the browser game (ShellTyres, the player's car), or the ray and the slip curve
+	if player_tyres and ShellTyres.wanted(self):
+		if shell_tyres == null:
+			shell_tyres = ShellTyres.new(self)
+		shell_tyres.physics(state, dt, angles)
+	else:
+		_ray_tyres(state, dt, angles)
+	for w in wheels:
+		CarWear.tyre_effects(w, dt)
+		CarWear.wear_step(w, dt, tyre_factors.x, tyre_factors.y)
+	_fuel_step(dt)
+	if engine_damage != null and (shell == null or not engine_damage_on):
+		engine_damage.repair()
+		engine_damage = null
+		if has_node("EngineFumes"):
+			get_node("EngineFumes").queue_free()
+	if shell != null and engine_damage_on:
+		if engine_damage == null:
+			var ed: Variant = config.get("engine", {}).get("damage", {})
+			engine_damage = EngineDamage.new(self, ed if ed is Dictionary else {})
+			if not is_ghost and is_inside_tree():
+				var fumes := EngineFumes.new()
+				fumes.setup(self)
+				add_child.call_deferred(fumes)
+		engine_damage.update(dt)
+	_traction_control(dt)
+
+	# ---- the air: the drag, and the downforce (or lift) of each axle along the up axis of the body, at the axle
+	var vv := v.length()
+	if vv > 0.1:
+		state.apply_central_force(-v * vv * 0.5 * AIR * drag_area * (bike.drag_scale() if bike != null else 1.0))
+	var u2 := speed * speed
+	if u2 > 1.0 and (downforce_front != 0.0 or downforce_rear != 0.0):
+		state.apply_force(-up * downforce_front * u2, basis * Vector3(0.0, 0.0, wheels[0].hub.z))
+		state.apply_force(-up * downforce_rear * u2, basis * Vector3(0.0, 0.0, wheels[2].hub.z))
+
+	# ---- a motorcycle: the rider and the camber thrust of the tyres
+	if bike != null:
+		bike.physics(self, state, dt)
+	# ---- the shell: the walls and the other cars on its nodes, and its anchors on the body
+	if shell != null:
+		shell.step(state)
+
+
+## The simple tyre (the AI cars of the browser game, Vehicle.simpleTyres): each wheel looks down its suspension with a
+## ray, and the slip curve of the magic formula gives the force; the wheels and the drivetrain in SUBSTEPS.
+func _ray_tyres(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> void:
+	var xf := state.transform
+	var basis := xf.basis
+	var up := basis.y
+	var origin := xf.origin
+	var com := state.center_of_mass
+	var v := state.linear_velocity
+	var av := state.angular_velocity
+	var space := state.get_space_state()
 	# ---- the suspension: each wheel looks down for the road
 	var max_len := susp_length + droop
 	var exclude := [get_rid()]
@@ -1035,7 +1089,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 				continue
 			w.slip_ratio = clampf((w.omega * w.radius - w.forward_speed) / w.vref, -12.0, 12.0)
 			var surf := Ground.surface(w.surface, w.local_snow, w.local_water)
-			_tyre_force(w, w.grip_load, surf, w.vref)
+			CarWear.tyre_force(w, w.grip_load, surf, w.vref, cornering)
 			sum_fx[i] += w.fx
 			sum_fy[i] += w.fy
 			var loose_roll := float(w.kind.get("looseRolling", 1.0)) if surf.get("loose", false) else 1.0
@@ -1059,42 +1113,6 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		new_pitch += anti * w.fx * below
 	_axle_fy = new_axle_fy
 	_pitch_links = new_pitch
-	for w in wheels:
-		CarWear.tyre_effects(w, dt)
-		CarWear.wear_step(w, dt, tyre_factors.x, tyre_factors.y)
-	_fuel_step(dt)
-	if engine_damage != null and (shell == null or not engine_damage_on):
-		engine_damage.repair()
-		engine_damage = null
-		if has_node("EngineFumes"):
-			get_node("EngineFumes").queue_free()
-	if shell != null and engine_damage_on:
-		if engine_damage == null:
-			var ed: Variant = config.get("engine", {}).get("damage", {})
-			engine_damage = EngineDamage.new(self, ed if ed is Dictionary else {})
-			if not is_ghost and is_inside_tree():
-				var fumes := EngineFumes.new()
-				fumes.setup(self)
-				add_child.call_deferred(fumes)
-		engine_damage.update(dt)
-	_traction_control(dt)
-
-	# ---- the air: the drag, and the downforce (or lift) of each axle along the up axis of the body, at the axle
-	var vv := v.length()
-	if vv > 0.1:
-		state.apply_central_force(-v * vv * 0.5 * AIR * drag_area * (bike.drag_scale() if bike != null else 1.0))
-	var u2 := speed * speed
-	if u2 > 1.0 and (downforce_front != 0.0 or downforce_rear != 0.0):
-		state.apply_force(-up * downforce_front * u2, basis * Vector3(0.0, 0.0, wheels[0].hub.z))
-		state.apply_force(-up * downforce_rear * u2, basis * Vector3(0.0, 0.0, wheels[2].hub.z))
-
-	# ---- a motorcycle: the rider and the camber thrust of the tyres
-	if bike != null:
-		bike.physics(self, state, dt)
-	# ---- the shell: the walls and the other cars on its nodes, and its anchors on the body
-	if shell != null:
-		shell.step(state)
-
 
 ## Launch control, two-step and transbrake (Vehicle.js). Launch control (Settings; when the car has it): the brake
 ## and full throttle at a standstill hold the engine at its launch speed with the clutch open; letting go of the
@@ -1256,45 +1274,6 @@ func _any_contact() -> bool:
 	return false
 
 
-## The magic formula of Wheel.js (tyreForce): the slip along and across in units of the slip at the peak gives
-## how far the tyre is towards its limit; the curve gives the share of the peak force, which is the friction
-## times the load, in the direction of the slip.
-func _tyre_force(w: Wheel, load: float, surf: Dictionary, vref: float) -> void:
-	# the grip of the surface, the tyre (its kind, its grip of car.json), its condition (temperature, wear, pressure)
-	var loose: bool = surf.get("loose", false)
-	var grip := float(surf["static"]) * w.grip * w.condition * w.damage_grip * float(w.kind.get("grip", 1.0)) * (float(w.kind.get("looseGrip", 1.0)) if loose else 1.0)
-	var mu := clampf(grip - 0.00007 * (load * 0.1 - 3500.0), 0.2 * grip, 1.4 * grip)
-	var spin_slide := w.omega * w.radius - w.forward_speed
-	var melt := smoothstep(4.0, 14.0, spin_slide)
-	var ratio := float(surf["kinetic"]) / float(surf["static"])
-	if loose and float(w.kind.get("looseSlide", 0.0)) > ratio:
-		ratio = float(w.kind["looseSlide"])            # (a knobbly tyre that slides keeps its grip)
-	var sliding_ratio := minf(0.98, ratio) * (1.0 - 0.45 * melt)
-	var c := 2.0 - (2.0 / PI) * asin(sliding_ratio)
-	var peak := tan(PI / (2.0 * c))
-	var slip_peak := 0.14
-	var angle_peak := 0.15 / (cornering * float(w.kind.get("lateral", 1.0)) * w.stiffness_bias * w.pressure_corner)
-	var sx := w.slip_ratio / slip_peak
-	# the camber: a leaning tyre pushes to the side it leans to, like a little slip angle (camber thrust, Vehicle.js)
-	var sy := (w.slip_tan - 0.5 * w.lean * angle_peak / 0.15) / angle_peak
-	var s := sqrt(sx * sx + sy * sy)
-	w.s = s
-	var f := sin(c * atan(peak * s))
-	var d := mu * load
-	if s > 1e-9:
-		w.fx = d * f * sx / s
-		w.fy = -d * 1.05 * f * sy / s * w.lat_grip
-	else:
-		w.fx = 0.0
-		w.fy = 0.0
-	# how fast the torque of the tyre on the wheel grows with the wheel speed (N m per rad/s), for the implicit step
-	# of the wheel: the secant of the curve from no slip to where the tyre is (the steepest slope near no slip),
-	# so that one step can bring the wheel to the speed of the road but never past it (with the local slope, a
-	# wheel past the peak jumped over the whole curve in one step and the wheels of a heavy four wheel drive rang)
-	var secant := d * (f / s if s > 1e-6 else c * peak) / slip_peak
-	w.tyre_slope = secant * w.radius * w.radius / vref
-
-
 func _drivetrain(dt: float, tyre_torque: Array) -> void:
 	# the brakes, with ABS
 	var brake_torque := [0.0, 0.0, 0.0, 0.0]
@@ -1447,7 +1426,7 @@ func _drivetrain(dt: float, tyre_torque: Array) -> void:
 		var i_eff := wj.inertia + dt * wj.tyre_slope
 		var d_om: float = dt * tyre_torque[j] / i_eff
 		var over := wj.omega - wj.forward_speed / wj.radius
-		if absf(wheel_drive[j]) < 5.0 and over * d_om < 0.0 and absf(d_om) > absf(over):
+		if absf(wheel_drive[j]) < 5.0 and over * d_om < 0.0 and absf(d_om) > absf(over) and not wj.omega_from_tyre:      # (the shell tyre turns it)
 			d_om = -over
 		var om: float = wj.omega + d_om + dt * wheel_drive[j] / i_eff
 		var bt: float = brake_torque[j]
@@ -1477,6 +1456,8 @@ func _process(_delta: float) -> void:
 		w.hub_node.position = w.hub + w.visual_offset + Vector3.UP * (susp_length - w.length + w.offset)
 		w.steer_node.rotation.y = w.steer
 		w.spin_node.rotation.x = w.spin
+	if shell_tyres != null:
+		shell_tyres.draw()              # (the tread of the model pushed in as the shell is, TyreDeform)
 	if bike_model != null:
 		bike_model.update(get_process_delta_time())
 

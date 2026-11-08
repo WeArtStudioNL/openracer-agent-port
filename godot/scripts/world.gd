@@ -56,6 +56,7 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	track.setup(track_id, tcfg if tcfg is Dictionary else {})
 	add_child(track)
 	car = Car.new()
+	car.player_tyres = true          # (the shell tyre of the browser game, ShellTyres)
 	var ccfg: Variant = Content.load_json("cars/%s/car.json" % car_id)
 	base_config = ccfg if ccfg is Dictionary else {}
 	# the tune in use for this car (the tuning menu), else the car as car.json makes it

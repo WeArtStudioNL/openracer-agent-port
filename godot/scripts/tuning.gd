@@ -405,13 +405,11 @@ const MAP := {
 ## The sound of the engine (car.json sound.engine_sim): es_<key>.
 const SOUND_KEYS := ["volume", "convolution", "audio_volume", "hf_gain", "noise", "jitter", "exhaust_length", "primary_length", "idle_pressure"]
 
-## The values that the Godot physics do not use yet (the menu shows them grey, with NOT_YET as the tooltip): the tyre
-## shell (TyreShell.js: its size, rings, segments, carcass and the stiffness of its tread), the build-up of the locking
-## differential and the centre differential (Godot's differential locks implicitly; four wheel drive has a fixed split),
-## and the look-ahead, field of view with speed and dolly of the follow camera.
+## The values that the Godot physics do not use yet (the menu shows them grey, with NOT_YET as the tooltip): the
+## build-up of the locking differential and the centre differential (Godot's differential locks implicitly; four wheel
+## drive has a fixed split), and the look-ahead, field of view with speed and dolly of the follow camera. (The shell of
+## the tyres, tyre_width ... tyre_stiff_y and the height of the sidewall, is the shell tyre of ShellTyres.)
 const NOT_IN_GODOT := [
-	"tyre_height_front", "tyre_height_rear",
-	"tyre_width", "tyre_width_rear", "tyre_rings", "tyre_segments", "tyre_inner_ratio", "tyre_carcass", "tyre_stiff_x", "tyre_stiff_y",
 	"diff_lock", "center_diff",
 	"cam_follow_look_z", "cam_follow_fov_full_speed", "cam_follow_dolly",
 ]
