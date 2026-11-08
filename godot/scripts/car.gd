@@ -844,9 +844,8 @@ func _auto_shift(dt: float) -> void:
 	if peak > 0.0:
 		up_rpm = maxf(up_rpm, peak * 1.25)
 		down_rpm = minf(peak * (0.6 + 0.3 * thr), up_rpm / maxf(1.0, prev_ratio) * 0.9)
-	var pattern := CarEngine.shift_pattern(shift_style, up_rpm, down_rpm, limit, thr, prev_ratio)   # (sport, drag)
-	down_rpm = minf(pattern.y, pattern.x / maxf(1.0, prev_ratio) * 0.9)
-	up_rpm = minf(pattern.x, limit * (0.965 if shift_style == "drag" else 0.94))
+	down_rpm = CarEngine.shift_pattern(shift_style, up_rpm, down_rpm, limit, thr, prev_ratio).y   # (sport, drag)
+	up_rpm = CarEngine.shift_pattern(shift_style, up_rpm, down_rpm, limit, thr, prev_ratio).x
 	# (a converter that is not locked runs the engine faster than the road: at full throttle the engine speed counts)
 	var shift_rpm := road_rpm
 	if gearbox == "torque-converter" and tc_lock < 0.9 and thr > 0.5:

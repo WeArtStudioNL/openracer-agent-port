@@ -275,7 +275,7 @@ func net_torque(throttle: float, dt: float) -> float:
 
 
 ## The shift points of an automatic gearbox for its pattern (Vehicle.js shiftStyle): "sport" holds the gears longer,
-## "drag" goes up at the rev limiter and does not kick down; else as they are. Vector2(up, down) in rpm.
+## "drag" goes up at the rev limiter and does not kick down; then the limits of every pattern. Vector2(up, down) in rpm.
 static func shift_pattern(style: String, up: float, down: float, limit: float, thr: float, prev_ratio: float) -> Vector2:
 	if style == "sport":
 		up = maxf(up, limit * (0.62 + 0.3 * thr))
@@ -283,4 +283,6 @@ static func shift_pattern(style: String, up: float, down: float, limit: float, t
 	elif style == "drag":
 		up = limit * 0.965
 		down = limit * 0.12
-	return Vector2(up, down)
+	# (the downshift not past where it would shift up again; the upshift under the rev limiter)
+	down = minf(down, up / maxf(1.0, prev_ratio) * 0.9)
+	return Vector2(minf(up, limit * (0.965 if style == "drag" else 0.94)), down)

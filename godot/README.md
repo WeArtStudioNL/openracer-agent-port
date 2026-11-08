@@ -69,6 +69,18 @@ it is no record). The dashboard shows the lap, the last and the best time, and a
 behind the best lap you are. The best lap per track and car is kept in `user://records.cfg`, its recording in
 `user://ghosts/`, and a see-through car drives it again in the next laps.
 
+The ghost as a file (`scripts/ghost_files.gd`, Ghost.js): the pause menu has a row Ghost with **Save lap** (the best lap
+of this car on this track as an `.openracer-ghost` in Downloads, the browser's format: t, the place and the turn of the
+body, the four wheel centres, the steering and the spin, 30 a second), **Race a ghost** (a file that someone sent: its
+lap is the ghost, also in the next drives on this track with this car, and the HUD shows its time as the best) and
+**Own lap** (back to the own best lap). Files of the browser game open here and the other way round: the place of the
+body is fitted to the wheel centres (the bodies have their origin elsewhere). Settings, Tools: **Save my best lap as
+the line** writes the lap (every third sample, in centimetres) as `racing_line` with `line_date` into the track.json of
+the garage (RacingLine.save; the files of the track stay the game's). As in main.js, the best lap that any car drove
+on a track since its `line_date` is the line of the AI in a race (smoothed, RacingLine.fromLap); without one the line
+of track.json (`--bestline=0` leaves the lap out, and so do the tests with `--ai`). Test:
+`Godot --headless --path godot res://tools/test_ghost.tscn -- --out=/tmp/folder --user-dir=/tmp/folder/u`.
+
 R puts the car back on the racing line where it is nearest, facing along it.
 
 The AI (`scripts/ai_driver.gd`) drives along the racing line (`scripts/racing_line.gd`, with the speed profile
@@ -84,7 +96,7 @@ the AI go to `user://test-records.cfg`, not to the player's records.)
 The tyres have the kinds of Wheel.js (eco to drag slick, off-road, winter; a custom tyre has a rubber of 0 to 100
 between them, and a tread): grip, the stiffness across the tyre, the rolling resistance, what they do on loose
 ground. The pressure of car.json works on the grip (best at 2.2 bar), the stiffness and the rolling. With "Tyre
-temperature and wear" (Settings, Driving; off by default, as in the browser game) the tyres heat with the power
+temperature and wear" (Settings, Driving; off by default here, on in the browser game: see Parity) the tyres heat with the power
 of their slip and the flexing, grip less outside their window, and wear; the dashboard shows the temperature and
 what is left of each. Downforce per axle (chassis.downforce_front/rear) presses with the square of the speed.
 The torque converter of Vehicle.js (it multiplies the torque while it slips, creeps at idle, locks up at speed).
@@ -115,9 +127,12 @@ and a slider with the units, ranges and steps of CarTuning.js; a changed value i
 a bias, the gears a summary with Advanced (gear by gear, − and +) and a list of kinds of transmission, the tyre's fine
 settings are folded apart, the systems and the extras have a tick that opens their settings. A setting that cannot do
 anything with the others is hidden (CarTuning.visible); one that the Godot physics do not use yet is grey with a
-tooltip (Tuning.NOT_IN_GODOT: the wheel library, the tyre shell and tread stiffness, heating and life,
-tyre damage, the shift pattern, diff build-up, the centre differential, the parts library suspension and engine
-place, the steering wheel stops, look-ahead/fov-speed/dolly/hide-driver of the cameras, the boost gauge). A change
+tooltip (Tuning.NOT_IN_GODOT: the tyre shell, its size, rings, carcass and tread stiffness; the build-up of the
+locking differential and the centre differential; look-ahead, fov with speed and dolly of the follow camera). The rows
+of the wheel library and the parts library suspension build the car again: the browser loads it again at once, here the
+tooltip says it is built with them at the next start (Tuning.AT_NEXT_START). The shift pattern (normal, sport, drag,
+manual), the heating and the life of the tyres, the steering wheel stop and degrees, hide the driver and the boost gauge
+work. A change
 works at once while the car drives (the cameras and the engine sound follow too); in a race the game waits while the
 menu is open. Setups: "Default (the car as made)" is car.json; Save overwrites the setup that is chosen, Save as
 new… asks a name, Delete (or Undo changes for a tune that comes with the car). A setup is a tune
@@ -249,9 +264,11 @@ it leaks 0.05 to 0.15 bar a second down to 0.15 bar, and its grip, its sidewall 
 repair makes the tyres whole. The crash test takes `--puncture=1`.
 
 Not yet from the browser game: the shell tyre (TyreShell.js, TyreDeform.js: the tyres of the player's car as rings of
-nodes; Godot has the ray and the slip curve of the simple tyre of the AI cars), the hit of a loose part of one car on
-another car, a wheel of the other car feeling a hit, the plate and the node grabber of the debug view, the fading of
-the parts in the pit stop (they are put back at the end of the repair).
+nodes; Godot has the ray and the slip curve of the simple tyre of the AI cars), a wheel of the other car feeling a hit,
+the fading of the parts in the pit stop (they are put back at the end of the repair). A loose part of one car and
+another car: in the browser each car's parts are in a physics world of their own (its own car, the track and its
+objects), so they do not meet another car; in Godot a loose part (layer FREE) meets the bodies of the other cars
+(layer 1) as a rigid box and bounces off them, without denting their shells.
 
 ## Marbles, debris and the parts library
 
@@ -338,7 +355,9 @@ The garage (`scripts/garage.gd`, Garage.js): cars and tracks of the player next 
 only its car.json keeps using the files of the game's one. Main menu, "Import a car or track (zip)…" puts the item of
 a zip (car.json or track.json at its root or in one folder, as the browser game exports it) in the garage; it shows in
 the lists with "(garage)". The car editor and the track editor save into the garage (the track editor also deletes from
-it, the car editor exports a car as a zip). Not yet: deleting from the main menu.
+it, the car editor exports a car as a zip). The Garage window of the main menu deletes (to the Trash), exports, imports a
+zip or **a zip at a link** (downloaded with HTTPRequest, Garage.js importUrl), links a folder, and **Load** and **New**
+open a car in the car editor or a track in the track editor (`tools/test_garage_link.tscn` with a local http server).
 
 ## Car editor
 
@@ -626,10 +645,20 @@ Test: `res://tools/test_replay.tscn -- --ai --replay-dir=<tmp> --video-cfg=<tmp>
 required, so a test never writes into the player's data; --video needs a window). The soft body is in it
 (`scripts/replay_soft.gd`): a record of the shell, the parts and the wheels of a car whenever one changed, played
 back with the dent of the time, the parts that were off as copies where they were (with the dent they had when they
-came off) and the wheels with their bend or off; it is in the saved file too (`test_crash.tscn -- --replay=1`). Not
-yet: the pieces of a part that broke, the marbles, the debris,
-the effects (skid marks, smoke) and the rider's ragdoll in the replay; Godot does not write browser files (it reads
-them); the live "cinematic camera after a race" of main.js; the Godot replay of the weather is the weather of now.
+came off) and the wheels with their bend or off; it is in the saved file too (`test_crash.tscn -- --replay=1`).
+
+The effects are in the replay too (`scripts/replay_fx.gd`, Replay.js attach): every effect records what it makes as a
+row with the time, and the replay makes it again with the same code, forwards in small steps, or as it was at the time
+of a jump (from the rows of its last seconds, or rebuilt from all of them); what the game showed is put back at the end.
+The skid marks (every strip), the tyre smoke and dust (where and how much, 15 times a second), the marbles (where they
+came to rest), the debris, the pieces and the shards of a part that broke, the drops and the stains of a leak (the
+coolant dried as far as it had), and every second the hour, the weather, the sun, the moon and the wet, snow and puddles
+of the ground. They are in the .oreplay files ("fx"; not the pieces, which hold meshes). Test:
+`res://tools/test_replay_fx.tscn -- --replay-dir=<tmp> --video-cfg=<tmp> --user-dir=<tmp> --steer=1`.
+
+After the finish of a race the camera is the cinematic camera of the track (main.js startAutopilot, `Replay.live_cine`;
+C takes the camera of the game back), and the AI drives the player's car at most half of the top speed reached in the
+race.
 
 ## Pit stops and the drag strip
 
@@ -694,9 +723,8 @@ Wet, Snow; the Graphics page and Save and test of the car editor), as Atmosphere
 
 The test sets the presets and the weathers for that run only and prints what the viewport, the environment and the
 ground are. The AI on kartbaan-oldenzaal with the muscle car: 35.9 s dry, 41.1 s in the rain, 45.3 s for the first lap
-in snow (it gets slower as the snow builds up). Not yet: the debris of loose ground (grass, sand, gravel of
-Debris.js), the weather in the replay (a replay shows the weather of now), headlights (the night is dark, as in the
-browser).
+in snow (it gets slower as the snow builds up). No headlights: the night is dark, as in the browser (Atmosphere.js and
+Car.js have no light of the car; its menu says so too).
 
 ## The look of a car: suspension rig, paint and mirrors
 
@@ -765,16 +793,19 @@ units, the power), its setup (the tunes), the track (cards with the picture, the
 the wear, the damage and More options), the weather, the race (laps, opponents, difficulty, the start: pole, random,
 last; damage, wear, the ghost, save records) and the opponents (the cars and their setups on the places of the grid). The
 skidpad (`scripts/skidpad.gd`): the car circles faster and faster on the chosen ground until it lets go; the g it held.
-The Garage window (export, delete to the Trash, import, link a folder, Load and New open the car editor) and the Replays
-window (watch, download, delete, import). The choice is kept in `user://menu.cfg`. Screenshots: `--menu-step=car --mode=race
+The Garage window (export, delete to the Trash, import a zip or a zip at a link, link a folder, Load and New open the car
+editor or the track editor) and the Replays window (`ReplayFiles.open_dialog`: watch, edit, delete, open a file, the
+folder). The choice is kept in `user://menu.cfg`. Screenshots: `--menu-step=car --mode=race
 --menu-shot=file.png --shot-at=3` (home, mode, car, tune, track, weather, race, opponents, surface, garage, replays).
 
 **Settings** (`scripts/settings_menu.gd`, `settings_pages.gd`, `settings_rows.gd`, `settings_controls_page.gd`): the tabs of
 the browser, Car, Keyboard, Gamepad, Wheel (with the calibrated wheels and Forget), Display and sound, Mobile (with the touch
 controls), Graphics, Simulation, Tools (debug text, back up and restore the settings, the records and the tunes in one file,
 forget the records of a track, Save as HDR), Controls; Reset all settings. What the Godot game does not do yet is grey with
-the tooltip "Not in the Godot version yet" (the steering assists, the pad steering at speed, the debris, the simulation
-rows). The motorcycle options (shown with a motorcycle): Motorcycle steering (lean only, or countersteer + lean: the
+the tooltip "Not in the Godot version yet" (SettingsRows.NOT_IN_GODOT: the curve of the key steering and the pad's
+"slower at speed", as the Godot keys and stick steer by a rate of their own; the detail of the tyre shell; the soft body
+steps of the AI cars). The steering assist of the keys and the pad (the front wheels turn into a slide), AI cars damage
+(always, only near my car within its range, off) and the debris rows work. The motorcycle options (shown with a motorcycle): Motorcycle steering (lean only, or countersteer + lean: the
 push on the bars that starts a lean, off on the brake and back slowly after it), Wheelie control, Flat-track style for
 every bike, the Motorcycle follow camera (it rolls with the lean, or the classic chase of a car), the lean at top speed. The pause menu (`scripts/pause_menu.gd`): Resume, Replay, Tune the car, Restart, Back to the
 start, Settings, the drag strip Top 50, Main menu. `--settings --settings-tab=Wheel` opens a tab (`pause`: the pause menu).
@@ -793,15 +824,86 @@ resumes (in the main menu it goes on), L1/R1 change the tab of the settings; the
 a race.
 
 **Debug view** (0, `scripts/debug_view.gd`, DebugView.js): the triangles of the track near the car, the nodes and beams of
-the shell, the engine bay and the radiator, the contacts of the wheels; a panel with the weather and the time of day.
+the shell, the engine bay and the radiator, the contacts of the wheels; a panel with the node grabber (the left mouse
+button on a node drags it on an elastic; its strength a slider), the hit of the middle mouse button (a cube of a tonne at
+the speed of the slider, along the view, against the shell; the car feels it), Open hinges and Break parts (a right
+click on a part), Pit stop here (a stop where the car stands), the weather and the time of day. Test:
+`res://tools/test_debug_tools.tscn -- --user-dir=<tmp> --video-cfg=<tmp>`.
 **Telemetry** (V, `scripts/telemetry.gd`): every value of the car and the wheels. **Touch controls**
 (`scripts/touch_controls.gd`, TouchControls.js): on a touch screen (or `--touch=1`, Settings Mobile): the steering stick
 on the left half, the pedals, the gear buttons and the top buttons. **Movable panels** (`scripts/movable.gd`): the tuning
 menu, the debug panel and the HUD editor are dragged and scaled, and kept. Icons of Lucide (`scripts/icons.gd`).
 
-Not ported: the turning 3D cars on the tiles (stills), a picture per setup, the ghost files (Save lap, Race a ghost), saving
-a lap as the racing line, the node grabber and the hit of the debug view, the Take button of the touch controls (the video
-editor), import from a link, the browser's storage notes; TextureBudget.js (the phones of the browser) has no use here.
+The car tiles: the car under the mouse, with the focus, or the chosen one turns in 3D on its tile (MainMenu.js
+showcase; one viewport for it, the other tiles keep their pictures, where the browser turns all of them). Not ported: a
+picture per setup, the Take button of the touch controls, the browser's storage notes; TextureBudget.js (the phones of
+the browser) has no use here.
+
+## Parity: what is still different
+
+A pass over every file of `web/js/` and `web/tools/` and every menu, key, HUD element, setting and mode of the browser
+game (November 2026). What the Godot version still lacks or does otherwise, and why:
+
+**Race and modes** (main.js)
+- The fly-by of the camera over the grid before the countdown (Enter or Space skips it): not ported; the race starts
+  with the countdown at once.
+- The results: a table written once (absolute times, "lap n"), where the browser has a headline ("You won!",
+  "Finished P2"), the gaps (+1.234, +1 lap) and rows that change as the others come in.
+- A race on a track without a racing line: the browser runs the laps and the countdown without AI cars; Godot drives
+  free there (it says so).
+- The banners "no pit lane here" and "no best lap yet: the ghost comes from the next start": not shown.
+- The racing line: the browser shortens a recorded line inside the road (`shorten`, the AI cuts the bends; `?cut=0` is
+  the Godot behaviour), settles it on the ground and turns it the way of the start; Godot reverses only a line of a
+  designed road.
+- The grip measured on the skidpad (OpenRacer.SkidpadGrip) is not used by the AI.
+- Tyre wear and fuel are on by default in the browser (`wear=1`) and off here: the lap times of the tests and of the
+  player's records are with it off; switching the default is the player's choice (Settings, Driving).
+- "Save the replay?" is asked only from Main menu of the pause menu, not on Restart or Race again.
+- A car or a track that is missing: an error in the log, where the browser shows a dialog (`?missing=`).
+
+**Settings and keys**
+- The keys of the free camera P and O and the take key 5 are fixed, not in Settings, Controls.
+- A touch device does not start on the Low graphics preset.
+- The curve of the key steering and the pad's "slower at speed" (grey): the Godot keys and stick steer by a rate of their
+  own (key_steer_speed, key_steer_at_speed).
+- The soft-body steps of the AI cars (grey): the Godot shell takes fixed small steps.
+
+**Tuning** (Tuning.js): Save on Default does not write car.json; no Export/Import of a tune file and no Export to vehicle
+in the tuning menu (the car editor has them); no Engine card (the build, the chart, the dyno: they are in the car
+editor); the mirrors are in Settings, Mirrors. Grey: the tyre shell rows, the diff build-up and the centre differential
+(the Godot drivetrain has an implicit locking differential and a fixed split for four wheel drive), the follow camera's
+look-ahead, fov with speed and dolly. The rows of the wheel and parts library build the car at the next start, not at once.
+
+**Main menu**: the browser turns every car on its tile; here the one under the mouse, with the focus or chosen (one
+viewport). No picture per setup. No "Copy game link" (`?import=`): the Godot game has no address.
+
+**Replay**: the pieces of a part that broke are in the replay but not in its files (they hold meshes); the snow scraped by
+the tyres (the tiles of the ground) and the rider's ragdoll, the drag tree lamps, the exhaust bangs and the pit stop's
+tyres and parts are not replayed; tyre smoke starts fresh after a jump (GPU particles cannot be wound back); browser
+replay files open without their blocks (soft body, effects), and Godot does not write browser files.
+
+**Pit stop and drag strip**: the car is not lifted on the jacks in the picture, the wheels are not seen being changed,
+the parts that are put back do not fade; the drag time slip cannot be saved as a PNG.
+
+**Effects and sound**: no tyre noise on loose ground and no thud of a hit, a landing or the bump stop (EngineSound.js);
+the smoke is not pushed aside by the car (Smoke.js wisps); the flame pictures of `web/images/flames/` are not used (a
+made gradient).
+
+**Debug view**: the hit of the middle mouse button pushes the shell only (not a tyre, not a part that is off the car);
+Open hinges opens, it does not close a hinge again; the motorcycle crash-rule sliders are not there.
+
+**Damage**: a loose part of one car bounces off another car's body without denting it (in the browser the parts do not
+meet other cars at all); a wheel of the other car does not feel a hit; the shell tyre is not ported (another part of the
+work).
+
+**Other**: no Take button on the touch controls; the motorcycle's ragdoll, levers and fingers and model v2, and the tyre
+shell (TyreShell.js, TyreDeform.js) are other parts of the port; in the editors the browser's part window of the soft
+body card, Full test of the bench, the flame test, the autosave draft, the touch layout and the loupe of the track editor.
+
+**Browser-only, no port needed**: TextureBudget.js, PhysicsWorker.js and PhysicsLink.js (`?worker=`), the storage notes
+and "Ask the browser to keep my data", the permission of a linked folder, Zip.js, bootstrap.js, Scene.js's picture probe
+(F9), EngineSimWorklet.js (C++ here), the save API of tools/serve.py, Version.js, physics-check.html and
+physics-worker-check.html (the headless tests stand in for them).
 
 ## How it works
 
