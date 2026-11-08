@@ -304,7 +304,8 @@ func _gather_coilovers(roots: Array[Node3D]) -> void:
 
 
 ## A brake caliper (brake_caliper_FL) and a ball joint (ball_lowerarm_FL, ball_upperarm_FL, ball_tierod_FL: a mesh, or an empty that
-## only marks the point) go with the upright of its wheel, or with the steering of the wheel when the car has
+## only marks the point) go with the upright of its wheel; ball_tierod_mount_FL, at the inner end of the tie rod, goes along the rack
+## with that end, or with the steering of the wheel when the car has
 ## no upright: it goes up and down and steers, and does not spin.
 func _attach_calipers(roots: Array[Node3D]) -> void:
 	var list: Array[Node] = []
@@ -314,12 +315,17 @@ func _attach_calipers(roots: Array[Node3D]) -> void:
 		var c := clean(str(n.name))
 		var wheel: int = CORNERS.get(c.right(2), -1)
 		var joint := _re("^ball(lowerarm|upperarm|tierod)").search(c) != null        # (a ball joint is bolted to the upright: it goes with it, not with its arm)
+		var mount := c.begins_with("balltierodmount")                                 # (but this one is on the rack, at the inner end of the rod)
 		if wheel < 0 or not (joint or (_re("caliper|brake").search(c) != null and _re("disc|disk|rotor").search(c) == null)):
 			continue
 		var node := n as Node3D
 		var up: Dictionary = uprights.get(wheel, {})
 		var target: Node3D = up["holder"] if not up.is_empty() else car.wheels[wheel].steer_node
-		parts.append({"kind": "caliper", "wheel": wheel, "rear": wheel >= 2, "node": node, "parent": node.get_parent(), "rest_transform": node.transform,
+		if mount:
+			target = Node3D.new()
+			target.name = "rig-" + str(node.name)
+			root.add_child(target)
+		parts.append({"kind": "mount" if mount else "caliper", "wheel": wheel, "rear": wheel >= 2, "node": node, "parent": node.get_parent(), "rest_transform": node.transform,
 			"library": false, "origin": Vector3.ZERO, "holder": target})
 		var xf := CarModel.relative(node, car)
 		node.owner = null
@@ -535,6 +541,9 @@ func update() -> void:
 				var d: Vector3 = p["far"] + Vector3.UP * lift - h.position
 				var spin := (car.wheels[2 if rear else 0].spin + car.wheels[3 if rear else 1].spin) / 2.0
 				h.basis = _aim(d) * Basis(Vector3.UP, spin) * Basis.from_scale(Vector3(1.0, maxf(0.2, d.length() / float(p["rest_length"])), 1.0))
+	for p in parts:
+		if p["kind"] == "mount":
+			(p["holder"] as Node3D).position.x = float(_rod_inner.get(p["wheel"], 0.0))
 	# (the rack goes where the two rods go together: the steering; what is left is what each rod does by itself with the travel)
 	if not rack.is_empty() and _rod_inner.has(0) and _rod_inner.has(1):
 		var ro: Vector3 = rack["origin"]

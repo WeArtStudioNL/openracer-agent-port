@@ -849,7 +849,7 @@ Car.js have no light of the car; its menu says so too).
 
 ## The look of a car: suspension rig, paint and mirrors
 
-The wishbones and the tie rods are rigid. Objects called `ball_lowerarm_FL`, `ball_upperarm_FL` and `ball_tierod_FL` (and the other corners; an empty, or a mesh of the joint with its origin at the pivot, which is bolted to the upright and goes with it) mark the ball joints on the upright; without them the end of the part farthest from its origin is taken. The browser game does not read them yet.
+The wishbones and the tie rods are rigid. Objects called `ball_lowerarm_FL`, `ball_upperarm_FL` and `ball_tierod_FL` (and the other corners; an empty, or a mesh of the joint with its origin at the pivot, which is bolted to the upright and goes with it) mark the ball joints on the upright; `ball_tierod_mount_FL` is the mount at the inner end of the tie rod and goes along the rack with it; without them the end of the part farthest from its origin is taken. The browser game does not read them yet.
 
 `scripts/car_visuals.gd` (one node per car, made by `Car._build_visual`) holds three parts:
 
