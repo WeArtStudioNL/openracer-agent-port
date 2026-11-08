@@ -532,6 +532,7 @@ func load_existing(id: String) -> void:
 		if not tuned.is_empty():
 			shown = tuned.duplicate(true)
 			shown["model"] = raw.get("model", {})
+			Tuning.keep_driver(shown, raw)
 			tune_note = " with the tune " + tune_path.get_file().trim_suffix(".openracer-tune.json")
 	cfg = io.normalise(shown)
 	car_id = id
@@ -1105,7 +1106,16 @@ func copy_car() -> void:
 
 # ---- the view
 
+## The nodes of the driver are being edited: nothing else in the view can be picked or lit.
+func driver_editing() -> bool:
+	var d: Variant = hooks.get("Driver")
+	return d != null and d.editing
+
+
 func _on_view_click(mouse: Vector2) -> void:
+	if driver_editing():
+		hooks["Driver"].click(mouse)
+		return
 	if suspension.editing:
 		var mount := view.pick_marker(mouse, suspension.pickables())
 		if mount != "" and mount != layers.selected:

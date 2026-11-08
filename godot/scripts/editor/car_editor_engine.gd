@@ -843,9 +843,21 @@ func build_test_bar() -> void:
 		ed.bench.toggle_drive()
 		drive.text = "Stop driving" if ed.bench.driving else "Drive")
 	row.add_child(drive)
+	var grab := EditorStyle.button("Node grabber", "small", "Show the nodes near the mouse and pull one with the left mouse button: the body, the wheels and the suspension")
+	grab.toggle_mode = true
+	grab.toggled.connect(func(v: bool): ed.bench.grabber.set_on(v))
+	ed.bench.grabber.button = grab
+	row.add_child(grab)
+	var elastic: Array = slider.call("Elastic", 2.0, 5.3, log(ed.bench.grabber.strength) / log(10.0))
+	elastic[0].step = 0.01
+	elastic[0].tooltip_text = "How hard the node grabber pulls"
+	elastic[1].text = "Elastic  %d N/m" % roundi(ed.bench.grabber.strength)
+	elastic[0].value_changed.connect(func(v: float):
+		ed.bench.grabber.set_strength(roundf(pow(10.0, v)))
+		elastic[1].text = "Elastic  %d N/m" % roundi(ed.bench.grabber.strength))
 	var back := EditorStyle.button("↺", "small ghost", "Stop the test: back to the model as it is")
 	back.pressed.connect(func():
-		ed.bench.stop()
+		ed.bench.end_test()
 		ed._hook_call("bench_stopped")
 		drive.text = "Drive")
 	tabs.add_child(back)

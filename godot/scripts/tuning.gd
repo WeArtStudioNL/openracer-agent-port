@@ -867,7 +867,16 @@ static func tuned_config(path: String, base: Dictionary) -> Dictionary:
 		return {}
 	var cfg := base.duplicate(true)
 	cfg.merge(t, true)
+	keep_driver(cfg, base)
 	return cfg
+
+
+## The driver (the model and every position) belongs to the car: the same for all its tunes and the default.
+static func keep_driver(cfg: Dictionary, base: Dictionary) -> void:
+	if base.get("driver") is Dictionary:
+		cfg["driver"] = (base["driver"] as Dictionary).duplicate(true)
+	else:
+		cfg.erase("driver")
 
 
 static func save_tune(car_id: String, tune_name: String, cfg: Dictionary) -> String:

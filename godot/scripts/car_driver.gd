@@ -125,6 +125,9 @@ static func with_defaults(c: Variant) -> Dictionary:
 	var fo: Dictionary = feet.get("offset", {}) if feet.get("offset") is Dictionary else {}
 	feet["offset"] = {"left": fo.get("left", [0, 0, 0]) if fo.get("left") is Array else [0, 0, 0],
 		"right": fo.get("right", [0, 0, 0]) if fo.get("right") is Array else [0, 0, 0]}
+	var fr: Dictionary = feet.get("rotation", {}) if feet.get("rotation") is Dictionary else {}
+	feet["rotation"] = {"left": fr.get("left", [0, 0, 0]) if fr.get("left") is Array else [0, 0, 0],
+		"right": fr.get("right", [0, 0, 0]) if fr.get("right") is Array else [0, 0, 0]}
 	out["feet"] = feet
 	out["bones"] = given.get("bones", {}) if given.get("bones") is Dictionary else {}
 	for k in ["keys", "poles", "wheel"]:
@@ -500,6 +503,11 @@ func update(dt: float, throttle_now: float, brake_now: float) -> void:
 		var target := BoneIK.vec(feet[e[1]]) + travel * float(e[3])
 		var pole := _pole(e[0], _body_pos(chain[0]) + Vector3(float(e[2]) * float(cfg["knee_out"]), 0.35, 1.0))
 		BoneIK.solve(skel, chain, to_skel * target, to_skel * pole, true)
+		# (the way the foot points, set in the car editor: a turn about the axes of the car on top of how the leg leaves it)
+		var foot_turn := BoneIK.vec(feet["rotation"][e[1]])
+		if foot_turn.length() > 1e-3:
+			var q := turn_skel * BoneIK.euler(foot_turn) * turn_skel.inverse()
+			BoneIK.set_global_basis(skel, chain[2], q * BoneIK.global(skel, chain[2]).basis.orthonormalized())
 	# in the cockpit the head is in the way of the camera
 	if not show_head and bones["head"] >= 0:
 		skel.set_bone_pose_scale(bones["head"], skel.get_bone_rest(bones["head"]).basis.get_scale() * 0.001)

@@ -851,9 +851,11 @@ func open_part(part_name: String) -> void:
 
 
 func _input(event: InputEvent) -> bool:
+	if ed.bench.grabber.input(event):
+		return true
 	if crash.input(event):
 		return true
-	if event is InputEventMouseMotion and _lasso.is_empty():
+	if event is InputEventMouseMotion and _lasso.is_empty() and not ed.driver_editing():
 		partwin.hover((event as InputEventMouseMotion).position)
 	if not shown or soft() == null:
 		return false

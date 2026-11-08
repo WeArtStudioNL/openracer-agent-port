@@ -11,6 +11,7 @@ extends RefCounted
 
 var ed: CarEditor
 var car: Car = null
+var grabber: RefCounted            # the node grabber of the tests (car_editor_grabber.gd)
 var parked := false               # the car is there but stands still: no simulation until a test starts it
 var driving := false
 var tyre_nodes: CarEditorTyreNodes         # the nodes of the shell tyres while a tyre setting is changed
@@ -20,11 +21,13 @@ var _audio: CarAudio = null
 var _height := 1.0
 var _tilt := 0.0
 var _wall: StaticBody3D = null
+var _view_before := []             # the target and the place of the camera before the test
 
 
 func _init(editor: CarEditor) -> void:
 	ed = editor
 	tyre_nodes = CarEditorTyreNodes.new(editor)
+	grabber = load("res://scripts/editor/car_editor_grabber.gd").new(editor)
 
 
 ## The model of the car as the bench loads it: the file that was picked, else the file of the car as saved.
@@ -65,7 +68,10 @@ func _make_floor() -> void:
 func drop(height: float, tilt: float, hold := false) -> void:
 	_height = height
 	_tilt = tilt
-	stop()
+	# (the view of before the first test, for when the test is stopped)
+	if not hold and _view_before.is_empty():
+		_view_before = [ed.view.target, ed.view.camera.position]
+	stop(true)
 	parked = hold
 	var file := _model_file()
 	if file == "" or ed.model_root == null:
@@ -139,7 +145,19 @@ func toggle_drive() -> void:
 		_audio = null
 
 
-func stop() -> void:
+## The test ends: back at the model, and the camera where it was before the test.
+func end_test() -> void:
+	var view := _view_before
+	stop()
+	if view.size() == 2:
+		ed.view.target = view[0]
+		ed.view.camera.position = view[1]
+		ed.view.camera.look_at(ed.view.target)
+
+
+func stop(keep_view := false) -> void:
+	if not keep_view:
+		_view_before = []
 	driving = false
 	parked = false
 	test_run = {}
@@ -156,6 +174,7 @@ func stop() -> void:
 
 func frame(delta: float) -> void:
 	tyre_nodes.frame()
+	grabber.frame()
 	if car == null:
 		return
 	if not test_run.is_empty():
@@ -189,7 +208,7 @@ func full_test() -> void:
 	drop(1.0, 5.0)
 	if car == null:
 		return
-	test_run = {"stage": "drop", "t": 0.0, "limiter_t": 0.0, "brake": 0.0, "view": [ed.view.target, ed.view.camera.position]}
+	test_run = {"stage": "drop", "t": 0.0, "limiter_t": 0.0, "brake": 0.0}
 	car.manual = true
 	car.gear = 0
 	_audio = CarAudio.new()
@@ -337,11 +356,7 @@ func _wall_stage(dt: float) -> void:
 	sc["still"] = float(sc["still"]) + dt if sc["hit"] and absf(car.speed) < 0.3 else 0.0
 	if float(sc["still"]) > 1.5 or float(sc["t"]) > 60.0:
 		RunLog.event("car editor full test: done, hit at %d km/h" % roundi(absf(float(sc.get("hit_speed", 0.0))) * 3.6))
-		# (the view where it was before the test)
-		ed.view.target = sc["view"][0]
-		ed.view.camera.position = sc["view"][1]
-		ed.view.camera.look_at(ed.view.target)
-		stop()
+		end_test()
 		ed._hook_call("bench_stopped")
 		ed.status("Full test done.", "ok")
 

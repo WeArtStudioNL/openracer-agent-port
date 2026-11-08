@@ -10,6 +10,7 @@ const ORDER := ["name", "description", "type", "model", "wheels", "dimensions", 
 
 const BIKE_TYRE := {"front": "moto-120-70-17", "rear": "moto-180-55-17"}
 
+var driver_written := false         # (save_driver) the driver went in car.json
 var ed: CarEditor
 
 
@@ -521,6 +522,36 @@ func save() -> bool:
 		return false
 	_saved(id, dir, plan["config"])
 	return true
+
+
+## The driver belongs to the car: when it was changed it goes in car.json of the car, also when a tune is chosen (only
+## its "driver"; the rest of car.json stays as it is). An error, or "".
+func save_driver(c: Dictionary) -> String:
+	driver_written = false
+	var card: Variant = ed.hooks.get("Driver")
+	if card == null or not card.touched:
+		return ""
+	var dir := ed.save_dir().path_join(ed.existing_id)
+	var file := dir.path_join("car.json")
+	var disk: Variant = JSON.parse_string(FileAccess.get_file_as_string(file)) if FileAccess.file_exists(file) else null
+	var out: Dictionary = disk if disk is Dictionary else ed.existing.duplicate(true)
+	var uploads := []
+	if c.get("driver") is Dictionary:
+		var d: Dictionary = (c["driver"] as Dictionary).duplicate(true)
+		var f := str(d.get("file", ""))
+		if f.is_absolute_path():
+			uploads.append([f, "driver.glb"])
+			d["file"] = "cars/%s/driver.glb" % ed.existing_id
+		out["driver"] = d
+	else:
+		out.erase("driver")
+	var e := _write(dir, {"config": out, "uploads": uploads})
+	if e != "":
+		return e
+	ed.existing = out.duplicate(true)
+	ed._hook_call("saved", [out])
+	driver_written = true
+	return ""
 
 
 ## What is saved: { config, uploads: [[from, file name]] }, or { error }.

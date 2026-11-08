@@ -212,12 +212,18 @@ func save_tune_now() -> bool:
 		return false
 	if not ed.overrides.is_empty():
 		c["materials"] = ed.overrides.duplicate(true)
+	var driver_error := ed.io.save_driver(c)
+	if driver_error != "":
+		ed.status(driver_error, "error")
+		return false
+	var drove: bool = ed.io.driver_written
 	c.erase("model")
+	c.erase("driver")
 	Tuning.save_tune(ed.car_id, n, c)
 	render_setups()
 	EditorStyle.select_value(_setup_pick, n)
 	ed.set_dirty(false)
-	ed.status("Tune %s saved (car.json is not written)." % n, "ok")
+	ed.status("Tune %s saved%s." % [n, "; the driver is saved in car.json, for all setups" if drove else " (car.json is not written)"], "ok")
 	return true
 
 
@@ -233,7 +239,12 @@ func _new_tune() -> void:
 	if c.has("_error"):
 		ed.status("Could not save the tune: " + str(c["_error"]), "error")
 		return
+	var driver_error := ed.io.save_driver(c)
+	if driver_error != "":
+		ed.status(driver_error, "error")
+		return
 	c.erase("model")
+	c.erase("driver")
 	if not ed.overrides.is_empty():
 		c["materials"] = ed.overrides.duplicate(true)
 	Tuning.save_tune(ed.car_id, n, c)
@@ -261,6 +272,7 @@ func _pick_setup() -> void:
 			ed.status("Could not read the tune %s." % n, "error")
 			return
 		c["model"] = ed.existing.get("model", {})
+		Tuning.keep_driver(c, ed.existing)
 	var keep_model: Dictionary = ed.cfg.get("model", {})
 	ed.cfg = ed.io.normalise(c)
 	ed.cfg["model"] = keep_model if not keep_model.is_empty() else ed.cfg["model"]

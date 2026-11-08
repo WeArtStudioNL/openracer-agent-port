@@ -228,12 +228,8 @@ func stop() -> void:
 	_clear_wall()
 	_bar.visible = false
 	ed.engine.show_test_bar(true)
-	if not _cam.is_empty():
-		ed.view.target = _cam["target"]
-		ed.view.camera.position = _cam["position"]
-		ed.view.camera.look_at(ed.view.target)
-		_cam = {}
-	ed.bench.stop()
+	_cam = {}
+	ed.bench.end_test()
 	card.call("bench_stopped")
 
 

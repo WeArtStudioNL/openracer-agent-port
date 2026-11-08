@@ -22,6 +22,7 @@ const POLE_COLOUR := {"pArmL": Color("#a8e0ff"), "pArmR": Color("#ffb3b3"), "pLe
 const PLACES := [["model", "Driver"], ["handL", "Left hand"], ["handR", "Right hand"], ["footL", "Left foot (brake)"], ["footR", "Right foot (gas)"],
 	["wheel", "Wheel (ring)"], ["chest", "Chest"], ["head", "Head"]]
 const HAND_SIDE := {"handL": "left", "handR": "right"}
+const TURNABLE := ["model", "wheel", "handL", "handR", "footL", "footR"]     # (the ones with Move and Rotate)
 const KEY_NAME := {"handL": "left", "handR": "right", "chest": "chest", "head": "head"}
 const KEY_COLOURS := [["left", Color("#5ec8ff"), 0.0], ["right", Color("#ff6b6b"), 8.0], ["chest", Color("#ffe2a8"), 16.0], ["head", Color("#e8c8ff"), 24.0]]
 
@@ -30,6 +31,7 @@ var body: Node3D                     # the space of the body of the car in the v
 var marks: Node3D                    # the nodes of the hands, the feet, the chest, the head, the poles and the ring
 var driver: CarDriver = null
 var enabled := false
+var touched := false                 # the driver was changed since it was saved (it goes in car.json, whatever tune is chosen)
 var editing := false
 var selected := ""
 var mode := "move"
@@ -46,6 +48,7 @@ var ui := {}
 var _scenes := {}                    # file -> the loaded scene (a copy for every figure)
 var _quiet := false
 var _bench_was := false
+var _ring_was := Transform3D.IDENTITY     # the ring as it was: the hands go with it when it is moved
 
 
 func _notification(what: int) -> void:
@@ -74,12 +77,11 @@ func setup(editor: CarEditor, card_body: VBoxContainer) -> void:
 func _make_markers() -> void:
 	for k in MARK:
 		var m := CarEditorView.sphere(0.03 if k.begins_with("hand") else 0.045, MARK[k], true)
-		if k.begins_with("hand"):
-			# the turn of a hand: a small cross (red x, green y, blue z of the car)
-			var a := CarEditorView.lines([Vector3.ZERO, Vector3.RIGHT * 0.07, Vector3.ZERO, Vector3.UP * 0.07, Vector3.ZERO, Vector3.BACK * 0.07],
-				[Color.RED, Color.RED, Color.GREEN, Color.GREEN, Color(0.3, 0.5, 1), Color(0.3, 0.5, 1)], true)
-			a.layers = CarEditorView.MARKER_LAYER
-			m.add_child(a)
+		# the turn of a hand or a foot: a small cross (red x, green y, blue z of the car)
+		var a := CarEditorView.lines([Vector3.ZERO, Vector3.RIGHT * 0.07, Vector3.ZERO, Vector3.UP * 0.07, Vector3.ZERO, Vector3.BACK * 0.07],
+			[Color.RED, Color.RED, Color.GREEN, Color.GREEN, Color(0.3, 0.5, 1), Color(0.3, 0.5, 1)], true)
+		a.layers = CarEditorView.MARKER_LAYER
+		m.add_child(a)
 		_add_marker(k, m)
 	for k in TORSO:
 		_add_marker(k, CarEditorView.sphere(0.05, Color(TORSO[k], 0.9), true))
@@ -220,7 +222,8 @@ func _build_edit_box(b: VBoxContainer) -> void:
 	grip.add_child(EditorStyle.labelled(curl, "Direction the fingers close", false))
 	ui["curl"] = curl
 	grip.add_child(EditorStyle.hint("Rotate (E) turns the hand."))
-	box.add_child(EditorStyle.hint("Click a ball, a cube or the top of the ring in the view to take it."))
+	box.add_child(EditorStyle.hint("Click a ball, a cube or the top of the ring in the view to take it. The ring carries the hands. " +
+		"A foot: Move is the place the leg reaches for, Rotate (E) the way the foot points."))
 	var reset := EditorStyle.button("Reset the elbows and knees", "small ghost")
 	reset.pressed.connect(func():
 		if driver != null:
@@ -348,6 +351,10 @@ func set_editing(on: bool) -> void:
 	e.disabled = driver == null or not enabled or ed.bench.car != null
 	if not editing:
 		_deselect()
+	else:
+		var sb: Variant = ed.hooks.get("Soft body")      # (no part stays lit under the nodes of the driver)
+		if sb != null:
+			sb.partwin.close()
 	_show_markers()
 
 
@@ -365,6 +372,7 @@ func _info() -> void:
 
 ## A change of the driver: car.json "driver" of the form follows (the test bench and undo see it).
 func _changed(step := true) -> void:
+	touched = true
 	if driver != null:
 		ed.cfg["driver"] = to_config()
 	elif removed:
@@ -464,6 +472,7 @@ func fill(cfg: Dictionary) -> void:
 	var dc: Variant = cfg.get("driver")
 	if driver != null and dc is Dictionary and JSON.stringify(dc) == JSON.stringify(to_config()):
 		return
+	touched = false
 	if driver != null:
 		driver.dispose()
 		driver = null
@@ -497,6 +506,7 @@ func on_model(root: Node3D) -> void:
 
 ## The car was saved: the file of the figure is the one that went with it.
 func saved(c: Dictionary) -> void:
+	touched = false
 	if c.get("driver") is Dictionary and driver != null:
 		file = str(c["driver"].get("file", file))
 		if ed.cfg.get("driver") is Dictionary:
@@ -521,6 +531,8 @@ func to_config() -> Dictionary:
 		out["keys"] = c["keys"].duplicate(true)
 	out["feet"] = {"left": (f["left"] as Array).duplicate(), "right": (f["right"] as Array).duplicate(), "travel": f["travel"],
 		"direction": (f["direction"] as Array).duplicate(), "offset": f["offset"].duplicate(true)}
+	if BoneIK.vec(f["rotation"]["left"]).length() > 1e-3 or BoneIK.vec(f["rotation"]["right"]).length() > 1e-3:
+		out["feet"]["rotation"] = f["rotation"].duplicate(true)
 	out["elbow_out"] = c["elbow_out"]
 	out["knee_out"] = c["knee_out"]
 	if c.get("wheel") is Dictionary:
@@ -625,7 +637,7 @@ func _attach() -> void:
 		var how := "move"
 		if TORSO.has(selected):
 			how = "rotate"
-		elif selected in ["model", "wheel", "handL", "handR"]:
+		elif selected in TURNABLE:
 			how = mode
 		g.attach(_node_of(selected), how)
 	_mark_buttons()
@@ -637,7 +649,7 @@ func _mark_buttons() -> void:
 	for m in ui["mode_buttons"]:
 		EditorStyle.style_button(ui["mode_buttons"][m], "small accent" if m == mode else "small ghost")
 	var hand := HAND_SIDE.has(selected)
-	ui["modes"].visible = selected in ["model", "wheel", "handL", "handR"]
+	ui["modes"].visible = selected in TURNABLE
 	ui["grip_box"].visible = hand and driver != null
 	if hand and driver != null:
 		_quiet = true
@@ -662,11 +674,7 @@ func click(mouse: Vector2) -> bool:
 		if key != selected:
 			select(key)
 		return true
-	if enabled and ed.view.pick_mesh(mouse, driver.root) != null:
-		if selected != "model":
-			select("model")
-		return true
-	return false
+	return true
 
 
 ## A key (CarEditor._unhandled_key_input): Escape stops editing, W moves, E turns; true when it was used.
@@ -676,7 +684,7 @@ func key(code: Key) -> bool:
 	if code == KEY_ESCAPE:
 		set_editing(false)
 		return true
-	if selected in ["model", "wheel", "handL", "handR"] and (code == KEY_W or code == KEY_E):
+	if selected in TURNABLE and (code == KEY_W or code == KEY_E):
 		mode = "move" if code == KEY_W else "rotate"
 		_attach()
 		return true
@@ -694,6 +702,7 @@ func _moved() -> void:
 	elif HAND_SIDE.has(selected) and driver.keys_active():
 		_set_hand_key(HAND_SIDE[selected])
 	elif selected == "wheel":
+		_carry_hands()
 		_ring_to_config()
 	elif selected == "model":
 		c["position"] = BoneIK.arr(t.position)
@@ -708,6 +717,8 @@ func _moved() -> void:
 		c["hands"]["rotation"][HAND_SIDE[selected]] = BoneIK.arr(BoneIK.euler_deg(t.basis))
 	elif HAND_SIDE.has(selected):
 		c["hands"][HAND_SIDE[selected]] = BoneIK.arr(t.position)
+	elif mode == "rotate":
+		c["feet"]["rotation"]["left" if selected == "footL" else "right"] = BoneIK.arr(BoneIK.euler_deg(t.basis))
 	else:
 		c["feet"]["left" if selected == "footL" else "right"] = BoneIK.arr(t.position)
 	_refresh_keys()
@@ -719,8 +730,8 @@ func _sync_targets() -> void:
 	var c := driver.cfg
 	for e in [["handL", "left"], ["handR", "right"]]:
 		targets[e[0]].transform = Transform3D(BoneIK.euler(BoneIK.vec(c["hands"]["rotation"][e[1]])), BoneIK.vec(c["hands"][e[1]]))
-	targets["footL"].position = BoneIK.vec(c["feet"]["left"])
-	targets["footR"].position = BoneIK.vec(c["feet"]["right"])
+	for e in [["footL", "left"], ["footR", "right"]]:
+		targets[e[0]].transform = Transform3D(BoneIK.euler(BoneIK.vec(c["feet"]["rotation"][e[1]])), BoneIK.vec(c["feet"][e[1]]))
 
 
 func _sync_fields() -> void:
@@ -768,6 +779,30 @@ func _ring_from_config() -> void:
 		var rr := BoneIK.vec(c["hands"]["right"])
 		ring.transform = Transform3D(Basis(Quaternion(Vector3.BACK, Vector3(0, 0.3, -1).normalized())).scaled(Vector3.ONE * maxf(0.05, l.distance_to(rr) / 2.0)),
 			(l + rr) / 2.0)
+	_ring_was = _ring_pose()
+
+
+func _ring_pose() -> Transform3D:
+	return Transform3D(ring.basis.orthonormalized(), ring.position)
+
+
+## The ring was moved or turned: the two hands (and their keys) go with it, as children of it.
+func _carry_hands() -> void:
+	var now := _ring_pose()
+	var d := now * _ring_was.affine_inverse()
+	_ring_was = now
+	var c := driver.cfg
+	for side in ["left", "right"]:
+		c["hands"][side] = BoneIK.arr(d * BoneIK.vec(c["hands"][side]), 0.0001)
+		c["hands"]["rotation"][side] = BoneIK.arr(BoneIK.euler_deg(d.basis * BoneIK.euler(BoneIK.vec(c["hands"]["rotation"][side]))))
+		var keys: Variant = c["keys"].get(side) if c.get("keys") is Dictionary else null
+		if keys is Array:
+			for k in keys:
+				if k.has("pos"):
+					k["pos"] = BoneIK.arr(d * BoneIK.vec(k["pos"]), 0.0001)
+				if k.has("rot"):
+					k["rot"] = BoneIK.arr(BoneIK.euler_deg(d.basis * BoneIK.euler(BoneIK.vec(k["rot"]))), 0.1)
+	_sync_targets()
 
 
 func _ring_to_config() -> void:
