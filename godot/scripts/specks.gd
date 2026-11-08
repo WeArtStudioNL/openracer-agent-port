@@ -174,5 +174,29 @@ func clear() -> void:
 	multimesh.visible_instance_count = 0
 
 
+## All of it as it is (the replay keeps what the game showed, ReplayFx).
+func snapshot() -> Dictionary:
+	return {"pos": _pos.duplicate(), "vel": _vel.duplicate(), "floor": _floor.duplicate(), "size": _size.duplicate(),
+		"end": _end.duplicate(), "quick": _quick.duplicate(), "air": _air.duplicate(), "next": _next, "used": _used, "now": now,
+		"buffer": multimesh.buffer.duplicate()}
+
+
+func restore(s: Dictionary) -> void:
+	_pos = s["pos"]
+	_vel = s["vel"]
+	_floor = s["floor"]
+	_size = s["size"]
+	_end = s["end"]
+	_quick = s["quick"]
+	_air = s["air"]
+	_next = s["next"]
+	_used = s["used"]
+	now = s["now"]
+	if (s["buffer"] as PackedFloat32Array).size() == multimesh.buffer.size() and multimesh.buffer.size() > 0:
+		multimesh.buffer = s["buffer"]
+	multimesh.visible_instance_count = _used
+	_mat.set_shader_parameter("now", now)
+
+
 func count_air() -> int:
 	return _air.size()

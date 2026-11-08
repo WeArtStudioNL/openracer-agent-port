@@ -29,7 +29,7 @@ for c in "${CARS[@]}"; do
         node godot/tools/parity-bench.js "$c" --json $SHELLARG > "$OUT/web-$c.json" &
     fi
     "$GODOT" --headless --path godot res://tools/test_parity.tscn -- --car="$c" --tyres="$TYRES" --user-dir="$USERDIR/$c" \
-        --set=tc:true,esc:false,abs:true 2>&1 | grep "^PARITY " | sed 's/^PARITY //' > "$OUT/godot-$c.json" &
+        --set=tc:true,esc:false,abs:true,tyre_wear:0 2>&1 | grep "^PARITY " | sed 's/^PARITY //' > "$OUT/godot-$c.json" &
     n=$((n + 1))
     [ $((n % PARALLEL)) -eq 0 ] && wait
 done

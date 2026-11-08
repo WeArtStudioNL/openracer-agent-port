@@ -402,6 +402,13 @@ static func car_tile(id: String, cfg: Dictionary, selected: bool, host: Node, si
 	bg.texture = CarInfo.car_picture(id, cfg, host, func(t: Texture2D):
 		if is_instance_valid(bg):
 			bg.texture = t)
+	# (the showcase: the car under the mouse, with the focus or chosen turns in 3D on its tile)
+	tile.mouse_entered.connect(func(): CarInfo.showcase(bg, id, cfg, host))
+	tile.focus_entered.connect(func(): CarInfo.showcase(bg, id, cfg, host))
+	tile.mouse_exited.connect(func(): CarInfo.showcase_leave(bg))
+	tile.focus_exited.connect(func(): CarInfo.showcase_leave(bg))
+	if selected:
+		tile.ready.connect(func(): CarInfo.showcase(bg, id, cfg, host, true), CONNECT_DEFERRED)
 	var over := VBoxContainer.new()
 	over.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	over.offset_left = 14

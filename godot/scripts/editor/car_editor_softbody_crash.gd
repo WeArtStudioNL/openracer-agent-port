@@ -398,6 +398,13 @@ func fire(mouse: Vector2) -> void:
 	var kmh: float = ui["kmh"].value() if ui["kmh"].value() > 0.0 else 50.0
 	cube = {"face": local + n * CUBE_START, "d": d, "u": u, "w": d.cross(u), "v": kmh / 3.6, "x": 0.0, "t": 0.0, "peak": 0.0, "max_in": 0.0,
 		"group": _group_of(hit["node"], c), "kmh": kmh}
+	# (only the nodes in front of the face when it is fired: one already inside the cube was shot off by the whole depth
+	# at once, as the debug view found)
+	var front := PackedByteArray()
+	front.resize(c.shell.sb.count)
+	for i in c.shell.sb.count:
+		front[i] = 1 if c.shell.sb.radius[i] - (c.shell.sb.position(i) - Vector3(cube["face"])).dot(d) <= 0.0 else 0
+	cube["front"] = front
 	c.shell.pusher = _push
 	_place_arrow(_shot, hit["position"], hit["normal"])
 	_shot.visible = true
@@ -457,10 +464,10 @@ func _push(h: float) -> void:
 	var v: float = cube["v"]
 	var total := 0.0
 	for k in s.count:
-		if s.anchor_alive[k] == 0 or s.part_of[k] != group:
+		if s.anchor_alive[k] == 0 or s.part_of[k] != group or (cube["front"] as PackedByteArray)[k] == 0:
 			continue
 		var rel := s.position(k) - face
-		var depth := rel.dot(d) + s.radius[k]
+		var depth := s.radius[k] - rel.dot(d)        # (how far the leading face of the cube has gone past the node)
 		if depth <= 0.0 or depth > CUBE_SIDE:
 			continue
 		if absf(rel.dot(cube["u"])) > half or absf(rel.dot(cube["w"])) > half:

@@ -1,7 +1,7 @@
 extends Node3D
 ## The physics parity test (a scene, for the autoloads):
 ##     Godot --headless --path godot res://tools/test_parity.tscn -- --car=<id> [--tyres=simple|shell] --user-dir=/tmp/x
-##         --set=tc:true,esc:false,abs:true [--verbose]
+##         --set=tc:true,esc:false,abs:true,tyre_wear:0 [--verbose]
 ## The same road test as godot/tools/parity-bench.js runs on the browser's Vehicle.js in node, with the same controllers,
 ## on a flat floor: full throttle from a standstill (0-50, 0-100 km/h, the top speed, every upshift: the gear, the
 ## engine speed just before it and the road speed), the brakes from 100 km/h (50 when the top speed is under 110) to a

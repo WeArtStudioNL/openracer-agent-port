@@ -405,14 +405,19 @@ const MAP := {
 ## The sound of the engine (car.json sound.engine_sim): es_<key>.
 const SOUND_KEYS := ["volume", "convolution", "audio_volume", "hf_gain", "noise", "jitter", "exhaust_length", "primary_length", "idle_pressure"]
 
-## The values that the Godot physics do not use yet (the menu shows them grey, with NOT_YET as the tooltip). (The shell of
+## The values that the Godot physics do not use yet (the menu shows them grey, with NOT_YET as the tooltip): the
+## build-up of the locking differential and the centre differential (Godot's differential locks implicitly; four wheel
+## drive has a fixed split), and the look-ahead, field of view with speed and dolly of the follow camera. (The shell of
 ## the tyres, tyre_width ... tyre_stiff_y and the height of the sidewall, is the shell tyre of ShellTyres.)
 const NOT_IN_GODOT := [
-	"rim_front", "tyre_front", "rim_rear", "tyre_rear",
-	"tyre_heating", "tyre_life", "shift_style", "diff_lock", "center_diff", "susp_front", "susp_rear", "steering_stop",
-	"cam_follow_look_z", "cam_follow_fov_full_speed", "cam_follow_dolly", "cam_cockpit_hide_driver", "boost_gauge_on", "boost_full", "boost_scale",
+	"diff_lock", "center_diff",
+	"cam_follow_look_z", "cam_follow_fov_full_speed", "cam_follow_dolly",
 ]
 
+## The values that build the car again (the wheel library, the parts library): in the browser the car is loaded again
+## at once; here the setup is saved and the car is built with it at the next start (the menu says so).
+const AT_NEXT_START := ["rim_front", "tyre_front", "rim_rear", "tyre_rear", "susp_front", "susp_rear"]
+const NEXT_START := "The car is built with this at the next start (save the setup first): the wheels and the suspension of the parts library are part of the model."
 static var tunes_root := "user://tunes"     # (the tests put the tunes of the player in a folder of their own)
 
 

@@ -6,6 +6,26 @@ extends RefCounted
 
 static var _textures := {}
 static var _rendering := {}
+static var _show: Showcase = null
+static var _chosen := {}                # the chosen tile: bg, id, cfg, host (it turns when no other does)
+
+
+## The showcase (MainMenu.js showcase): the tile whose car turns in 3D is the one under the mouse or with the focus,
+## else the chosen one. One viewport draws it (a car model each is too much for a list of cars); the other tiles keep
+## their pictures.
+class Showcase:
+	extends SubViewport
+	var car: Car
+	var car_id := ""
+	var clock := 0.0
+	var radius := 0.33
+	var shown: TextureRect = null    # the picture that shows it now, and what it showed before
+	var still: Texture2D = null
+
+	func _process(dt: float) -> void:
+		clock += dt
+		if car != null and is_instance_valid(car):
+			car.place(Vector3(0, radius, 0), clock * 0.35 + 0.75)
 
 
 ## The peak power in HP from the torque curve, times the power scale of the tuning.
@@ -207,3 +227,89 @@ static func kind(cfg: Dictionary) -> String:
 		return "motorcycle"
 	var light := float(cfg.get("chassis", {}).get("mass", 1000)) < 400
 	return "kart" if light or str(cfg.get("name", "")).to_lower().contains("kart") else "car"
+
+
+# ---- the showcase (MainMenu.js showcase): the 3D model of a car turns slowly on its tile
+
+## The car of a tile turns on it (bg: its picture). chosen: the tile of the chosen car (it turns when no other does).
+static func showcase(bg: TextureRect, id: String, cfg: Dictionary, host: Node, chosen := false) -> void:
+	if chosen:
+		_chosen = {"bg": bg, "id": id, "cfg": cfg, "host": host}
+	if host == null or not host.is_inside_tree() or DisplayServer.get_name() == "headless":
+		return
+	if _show == null or not is_instance_valid(_show):
+		_show = Showcase.new()
+		_show.size = Vector2i(400, 400)
+		_show.own_world_3d = true
+		_show.transparent_bg = true
+		_show.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		var sun := DirectionalLight3D.new()
+		sun.rotation_degrees = Vector3(-50, 35, 0)
+		sun.light_energy = 1.6
+		_show.add_child(sun)
+		var env := WorldEnvironment.new()
+		env.environment = Environment.new()
+		env.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		env.environment.ambient_light_color = Color(0.6, 0.62, 0.66)
+		env.environment.background_mode = Environment.BG_CLEAR_COLOR
+		_show.add_child(env)
+		var cam := Camera3D.new()
+		cam.name = "Camera"
+		cam.fov = 32.0
+		_show.add_child(cam)
+		host.get_tree().root.add_child(_show)
+	if _show.shown != null and is_instance_valid(_show.shown) and _show.shown != bg:
+		_show.shown.texture = _show.still
+	if _show.shown != bg:
+		_show.still = bg.texture
+		_show.shown = bg
+	if _show.car_id != id:
+		if _show.car != null and is_instance_valid(_show.car):
+			_show.car.queue_free()
+		var car := Car.new()
+		car.engine_damage_on = false
+		car.setup(id, cfg)
+		car.freeze = true
+		_show.add_child(car)
+		_show.car = car
+		_show.car_id = id
+		var length := float(cfg.get("dimensions", {}).get("length", 4.5))
+		_show.radius = float(cfg.get("chassis", {}).get("tire_diameter", 0.65)) / 2.0
+		# (the camera by the size of the model as it is, not by the figures of car.json: MainMenu.js modelOf)
+		car.place(Vector3(0, _show.radius, 0), 0.0)
+		var box := AABB()
+		var first := true
+		for m in car.find_children("*", "MeshInstance3D", true, false):
+			var mi := m as MeshInstance3D
+			if mi.mesh == null or not mi.is_visible_in_tree():
+				continue
+			var b := mi.global_transform * mi.get_aabb()
+			box = b if first else box.merge(b)
+			first = false
+		if not first and box.size.x > 1.0 and box.size.z > 1.0:
+			length = maxf(box.size.x, box.size.z)
+		var cam := _show.get_node("Camera") as Camera3D
+		var d := length * 2.1          # (a little further than the still: the car turns, its diagonal must fit)
+		cam.position = Vector3(sin(0.6) * d, length * 0.4 + _show.radius, cos(0.6) * d)
+		cam.look_at(Vector3(0, _show.radius * 1.3, 0))
+		cam.make_current()
+	bg.texture = _show.get_texture()
+
+
+## The mouse or the focus left a tile: the chosen car turns again (or nothing, when it was the chosen one).
+static func showcase_leave(bg: TextureRect) -> void:
+	if _show == null or not is_instance_valid(_show) or _show.shown != bg:
+		return
+	var c := _chosen
+	if not c.is_empty() and is_instance_valid(c["bg"]) and c["bg"] != bg:
+		showcase(c["bg"], c["id"], c["cfg"], c["host"])
+
+
+## The menu is gone (a drive starts): the viewport and its car go.
+static func showcase_end() -> void:
+	if _show != null and is_instance_valid(_show):
+		if _show.shown != null and is_instance_valid(_show.shown):
+			_show.shown.texture = _show.still
+		_show.queue_free()
+	_show = null
+	_chosen = {}

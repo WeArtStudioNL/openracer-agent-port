@@ -29,6 +29,10 @@ const SKY_HORIZON := "#d3e4f4"
 const AMBIENT := "#576777"
 const ATMOSPHERE_KEYS := ["gfx_time", "gfx_weather", "gfx_sun_azimuth", "gfx_moon"]
 
+const _WEATHERS := ["clear", "cloudy", "fog", "rain", "snow"]
+
+static var replay_view := {}            # (the replay: the hour, the weather, the sun and the moon of its time, ReplayFx)
+
 var env: Environment
 var sun: DirectionalLight3D
 var post: CanvasLayer
@@ -46,6 +50,8 @@ var _upload_in := 0.0
 var _log_in := 0.0
 var _weather := ""
 var _applied := false
+var _record_in := 0.0
+var _recorded: Array = []
 
 
 ## track_env: the "environment" of track.json; model: the track model (its surfaces get the ground look).
@@ -95,7 +101,9 @@ func setup(track_env: Dictionary, model: Node) -> void:
 	_weather = str(Settings.get_value("gfx_weather"))
 	Ground.start(_weather)
 	Settings.changed.connect(_on_setting)
+	replay_view = {}
 	apply()
+	ReplayFx.attach("atmos", null, self)
 
 
 func _ready() -> void:
@@ -137,7 +145,7 @@ static func _v3(c: Color) -> Vector3:
 
 ## The hour now (gfx_time; below 0: 14:00).
 static func hour_now() -> float:
-	var h := float(Settings.get_value("gfx_time"))
+	var h := float(replay_view.get("hour", Settings.get_value("gfx_time")))
 	return h if h >= 0.0 else 14.0
 
 
@@ -145,10 +153,10 @@ static func hour_now() -> float:
 ## in linear light, as three.js does.
 func apply() -> void:
 	var hour := hour_now()
-	var kind := str(Settings.get_value("gfx_weather"))
+	var kind := str(replay_view.get("weather", Settings.get_value("gfx_weather")))
 	var w: Dictionary = WEATHER.get(kind, WEATHER["clear"])
-	var azimuth := float(Settings.get_value("gfx_sun_azimuth"))
-	var phase := float(Settings.get_value("gfx_moon"))
+	var azimuth := float(replay_view.get("azimuth", Settings.get_value("gfx_sun_azimuth")))
+	var phase := float(replay_view.get("moon", Settings.get_value("gfx_moon")))
 	var raw := _sun_height(hour)
 	var az := azimuth + (hour - 12.0) * 15.0
 	var daylight := smoothstep(-12.0, 8.0, raw)
@@ -297,6 +305,14 @@ func _find_cars() -> Array:
 
 
 func _physics_process(dt: float) -> void:
+	if ReplayFx.active:
+		return
+	_record_in -= dt
+	var row := _row()
+	if _record_in <= 0.0 or row.slice(1, 6) != _recorded.slice(1, 6):
+		_record_in = 1.0
+		_recorded = row
+		ReplayFx.add("atmos", null, row.duplicate())
 	_cars_in -= dt
 	if _cars_in <= 0.0:
 		_cars_in = 1.0
@@ -337,3 +353,56 @@ func _process(delta: float) -> void:
 		var img := Image.create_from_data(Ground.CLEAR_N, Ground.CLEAR_N, false, Image.FORMAT_RF, Ground.window.to_byte_array())
 		img.convert(Image.FORMAT_RH)
 		_clear_tex.update(img)
+
+
+# ---- the replay (ReplayFx: "atmos", a row every second and at a change: the hour, the weather, the sun, the moon and
+# the ground: wet, snow, puddles, the melt of the road, the rain on the puddles, the snow that grew back)
+
+
+func _row() -> Array:
+	return [0.0, hour_now(), _WEATHERS.find(str(Settings.get_value("gfx_weather"))), float(Settings.get_value("gfx_sun_azimuth")),
+		float(Settings.get_value("gfx_moon")), Ground.wet, Ground.snow, Ground.puddle, Ground.road_melt, Ground.rain, Ground.regrow]
+
+
+func _apply_row(r: Array) -> void:
+	replay_view = {"hour": r[1], "weather": _WEATHERS[clampi(int(r[2]), 0, 4)], "azimuth": r[3], "moon": r[4]}
+	Ground.wet = r[5]
+	Ground.snow = r[6]
+	Ground.puddle = r[7]
+	Ground.road_melt = r[8]
+	Ground.rain = r[9]
+	Ground.regrow = r[10]
+	apply()
+
+
+func replay_lookback(_kind: String) -> float:
+	return 0.0
+
+
+func replay_add(_kind: String, r: Array) -> void:
+	_apply_row(r)
+
+
+func replay_step(_kind: String, _dt: float) -> void:
+	pass
+
+
+func replay_clear(_kind: String) -> void:
+	pass
+
+
+func replay_rebuild(_kind: String, rows: Array, end: int, _t: float) -> void:
+	if end > 0:
+		_apply_row(rows[end - 1])
+	elif not rows.is_empty():
+		_apply_row(rows[0])
+
+
+func replay_snapshot(_kind: String) -> Variant:
+	return _row()
+
+
+func replay_restore(_kind: String, snap: Variant) -> void:
+	_apply_row(snap)
+	replay_view = {}
+	apply()

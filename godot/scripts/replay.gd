@@ -47,6 +47,7 @@ var direction := 1.0                # 1 forwards, -1 backwards (Rewind)
 var time := 0.0                     # s, from the start of the drive
 var speed := 1.0
 var soft: ReplaySoft = null          # the shells, the parts and the wheels (ReplaySoft)
+var fx: ReplayFx = null              # the skid marks, the smoke, the marbles, the debris, the pieces, the leaks, the weather (ReplayFx)
 var scrubbing := false
 var viewer := false                 # a replay from a file: Exit goes back to the menu
 var file_path := ""                 # the file of this replay (saved, or opened)
@@ -91,6 +92,8 @@ func setup(w: Node, list: Array) -> void:
 		if c is Car and not c.is_ghost:
 			cars.append(c)
 	soft = ReplaySoft.new(cars)
+	fx = ReplayFx.new(self)
+	fx.record()
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	process_priority = -10            # (the cars are placed before the cameras follow them)
 
@@ -103,6 +106,11 @@ func _ready() -> void:
 	_late.set_script(_LATE)
 	_late.set_meta("replay", self)
 	add_child(_late)
+
+
+func _exit_tree() -> void:
+	if fx != null:
+		ReplayFx.forget(fx)
 
 
 func start_time() -> float:
@@ -151,6 +159,7 @@ func _physics_process(dt: float) -> void:
 		count -= drop
 		soft.trim(drop)
 		first_index += drop
+		fx.trim(start_time())
 
 
 static func _write(row: PackedFloat32Array, o: int, c: Car) -> void:
@@ -218,6 +227,8 @@ func play() -> void:
 	bar.setup(self)
 	add_child(bar)
 	soft.begin(cars)
+	if fx != null:
+		fx.begin()
 	_show(time)
 	RunLog.event("replay: %.1f s of recording" % duration())
 
@@ -228,6 +239,8 @@ func stop() -> void:
 		return
 	playing = false
 	soft.end(cars)
+	if fx != null:
+		fx.end()
 	if filming != null:
 		filming.call("stop")
 	for n in cars.size():
@@ -322,6 +335,8 @@ func _process(delta: float) -> void:
 	else:
 		_step_held = 0.0
 	_show(time)
+	if fx != null:
+		fx.show(time)
 	_cameras(delta)
 	var live := (running or editor_playing or filming != null) and not scrubbing and direction > 0.0
 	_sound(live)
@@ -688,6 +703,27 @@ func update_cine(delta: float) -> void:
 	_cine_cam.fov = _cine_fov
 
 
+## The cinematic camera of the track live, in the game after the finish (Replay.js liveCine): false when the track has
+## no cameras.
+func live_cine(delta: float) -> bool:
+	if cinema_cameras().is_empty() or cars.is_empty():
+		return false
+	if _cine_cam == null:
+		_cine_cam = _camera("Cinematic")
+		_cine_index = -1
+	target = 0
+	update_cine(delta)
+	if not _cine_cam.current:
+		_cine_cam.make_current()
+	return true
+
+
+func live_cine_off() -> void:
+	if _cine_cam != null and not playing:
+		_cine_cam.queue_free()
+		_cine_cam = null
+
+
 ## The camera of a clip of the video editor: "follow", "cockpit", "cinematic" or "track" (lead: the look ahead).
 func set_clip_camera(mode: String, lead := -1.0) -> void:
 	cine_override = lead if mode == "cinematic" and lead >= 0.0 else -1.0
@@ -768,7 +804,8 @@ func pack(a := -1, b := -1) -> Dictionary:
 	var track_name := str(cars[0].get_meta("track_name", track_id)) if not cars.is_empty() else ""
 	return {"version": ReplayFiles.VERSION, "track": track_id, "track_name": track_name, "cars": ids, "names": names, "rate": RATE,
 		"count": to - from, "stride": STRIDE, "samples": part, "created": Time.get_datetime_string_from_system(),
-		"soft": soft.save_data() if a < 0 and b < 0 and soft != null else []}
+		"soft": soft.save_data() if a < 0 and b < 0 and soft != null else [],
+		"fx": fx.pack(from / RATE, to / RATE) if fx != null and to > from else {}}
 
 
 ## Saves the whole recording (Save replay); the path, or "" when it failed. A second save of the same is not made.
@@ -835,6 +872,9 @@ func open_file(path: String, w: Node, first: Car, watch_edit := true) -> bool:
 	_zoom_rows = data.get("zoom", []) if data.get("zoom") is Array else []
 	soft = ReplaySoft.new(cars)
 	soft.load_data(data.get("soft"), cars)
+	fx = ReplayFx.new(self)
+	fx.record()
+	fx.unpack(data.get("fx"))
 	return true
 
 

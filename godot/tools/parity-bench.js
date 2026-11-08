@@ -7,7 +7,7 @@
  * and the retune of Opponent.js, the rubber and the size of a custom tyre of the wheel library as Car.js gives them), and measures
  * what res://tools/test_parity.tscn measures in Godot, with the same controllers:
  *
- *   (TC on as the AI has it when the car has it, ESC off, ABS on, in every test)
+ *   (TC on as the AI has it when the car has it, ESC off, ABS on, in every test; no wear and fuel: Godot tyre_wear:0)
  *   accelerate   full throttle from a standstill: 0-50, 0-100 km/h, the top speed, and every upshift
  *                (the gear, the engine speed just before it, the road speed)
  *   brake        from 100 km/h (50 when the top speed is under 110) to a standstill, ABS on: the distance

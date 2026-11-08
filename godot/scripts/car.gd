@@ -176,7 +176,6 @@ var centre_split := 0.4
 var cvt_low := 3.0              # the ratios of a CVT (the first and the last of gear_ratios unless car.json says)
 var cvt_high := 1.0
 var cvt_rate := 1.8             # the ratio changes by at most e^rate a second
-var shift_style := "normal"     # normal, sport, drag (an automatic)
 var shift_duration := 0.3       # the shift that is going on takes this long
 var shift_up := false           # the shift that is going on is an upshift
 var last_gear_key := -99
@@ -189,6 +188,8 @@ var final_drive := 3.7
 var efficiency := 0.92
 var shift_time := 0.3
 var gearbox := "gears"
+var shift_style := "normal"         # an automatic: normal, sport (holds the gears), drag (up at the limiter), manual (the driver)
+var tyre_factors := Vector2.ONE     # the heating and the life of the tyres: factors of the tuning (Vehicle.js tyreHeating, tyreLife)
 var cvt_rpm := 4000.0
 var clutch_capacity := 500.0
 var clutch_start := 1100.0
@@ -370,6 +371,7 @@ func _read_config() -> void:
 	var dt: Dictionary = cfg.get("drivetrain", {})
 	var ty: Dictionary = cfg.get("tyres", {})
 	tyre_damage = bool(ty.get("damage", false))
+	tyre_factors = Vector2(float(ty.get("heating", 1.0)), maxf(0.01, float(ty.get("life", 1.0))))
 	var br: Dictionary = cfg.get("brakes", {})
 	mass = float(ch.get("mass", 1200)) + Motorcycle.rider_mass_of(cfg)
 	if str(cfg.get("type", "car")) == "motorcycle":
@@ -437,7 +439,7 @@ func _read_config() -> void:
 	final_drive = float(dt.get("final_drive", 3.7))
 	efficiency = float(dt.get("efficiency", 0.92))
 	shift_time = float(dt.get("shift_time", 0.32))
-	shift_style = str(dt.get("shift_style", "normal"))
+	shift_style = str(dt.get("shift_style", "normal")) if str(dt.get("shift_style", "normal")) in ["sport", "drag", "manual"] else "normal"
 	gearbox = str(dt.get("gearbox", "gears"))
 	cvt_rpm = float(dt.get("cvt_rpm", 0))      # (0: 85 % of the limiter)
 	cvt_rate = float(dt.get("cvt_rate", 1.8))
@@ -874,7 +876,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		_ray_tyres(state, dt, angles)
 	for w in wheels:
 		CarWear.tyre_effects(w, dt)
-		CarWear.wear_step(w, dt)
+		CarWear.wear_step(w, dt, tyre_factors.x, tyre_factors.y)
 	_fuel_step(dt)
 	if engine_damage != null and (shell == null or not engine_damage_on):
 		engine_damage.repair()

@@ -246,6 +246,7 @@ func _open_settings() -> void:
 
 
 func _start(car_id: String, track_id: String, opts := {}) -> void:
+	CarInfo.showcase_end()
 	if world != null:
 		world.queue_free()
 	menu.visible = false
@@ -268,6 +269,7 @@ func _open_replays() -> void:
 ## The track editor (TrackEditor): Test drive saves the track and drives it with the car chosen in the menu; leaving it
 ## comes back here with the tracks of the garage in the list.
 func _open_track_editor(track_id := "", line_result := "") -> void:
+	CarInfo.showcase_end()
 	menu.visible = false
 	var ed := TrackEditor.new()
 	if track_id != "":
@@ -312,10 +314,13 @@ func _open_garage() -> void:
 			_focus_home())
 	d.edit_car.connect(_open_car_editor)
 	d.new_car.connect(_open_car_editor.bind(""))
+	d.edit_track.connect(_open_track_editor)
+	d.new_track.connect(_open_track_editor.bind(""))
 
 
 ## The car editor (scripts/editor/car_editor.gd): over the menu; Save and test drives the car, back in the editor after.
 func _open_car_editor(car_id := "") -> void:
+	CarInfo.showcase_end()
 	var ed := CarEditor.new()
 	add_child(ed)
 	menu.visible = false

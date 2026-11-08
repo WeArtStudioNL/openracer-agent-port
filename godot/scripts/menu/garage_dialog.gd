@@ -1,14 +1,17 @@
 class_name GarageDialog
 extends MenuDialog
 ## The garage (MainMenu.js showGarage): the cars and the tracks of the player (Garage) with a picture, Export zip and
-## Delete; Load (a car opens in the car editor), New (a car in the car editor), Import (zips), and a folder of the
-## player's own (Settings garage_folder) to link or unlink. (The tracks go to the track editor, another part.)
+## Delete; Load (a car opens in the car editor, a track in the track editor), New (a car or a track in its editor),
+## Import (zips, or a zip at a link), and a folder of the player's own (Settings garage_folder) to link or unlink.
 
 signal edit_car(car_id: String)
 signal new_car
+signal edit_track(track_id: String)
+signal new_track
 
 var changed := false               # something was imported or deleted: the menu reads its lists again
 var _list: VBoxContainer
+var _link_input: LineEdit
 
 
 func _init() -> void:
@@ -24,6 +27,17 @@ func _init() -> void:
 	tools.add_child(MenuStyle.button("Close", "", close))
 	box.add_child(tools)
 	box.move_child(tools, 1)
+	# a link to a zip (MainMenu.js: Import from a link)
+	var link_row := HBoxContainer.new()
+	link_row.add_theme_constant_override("separation", 8)
+	_link_input = LineEdit.new()
+	_link_input.placeholder_text = "Link to a zip (https://…)"
+	_link_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_link_input.text_submitted.connect(func(_t: String): import_url(_link_input.text))
+	link_row.add_child(_link_input)
+	link_row.add_child(MenuStyle.button("Import", "ghost", func(): import_url(_link_input.text)))
+	box.add_child(link_row)
+	box.move_child(link_row, 2)
 	_list = VBoxContainer.new()
 	_list.add_theme_constant_override("separation", 6)
 	box.add_child(_list)
@@ -199,9 +213,9 @@ func _link() -> void:
 		say("The folder is linked: %d car%s and %d track%s found." % [cars, "" if cars == 1 else "s", tracks, "" if tracks == 1 else "s"], cars + tracks == 0))
 
 
-## Load: the cars and the tracks as pictures; a car opens in the car editor.
+## Load: the cars and the tracks as pictures; a car opens in the car editor, a track in the track editor.
 func _load() -> void:
-	var d := MenuDialog.new("Load", "Click a car to open it in the car editor.", 960)
+	var d := MenuDialog.new("Load", "Click a car or a track to open it in its editor.", 960)
 	get_parent().add_child(d)
 	d.box.add_child(MenuStyle.label("CARS", 12, MenuStyle.MUTED))
 	var grid := GridContainer.new()
@@ -218,11 +232,26 @@ func _load() -> void:
 		grid.add_child(tile)
 	d.box.add_child(grid)
 	d.box.add_child(MenuStyle.label("TRACKS", 12, MenuStyle.MUTED))
+	var tracks := GridContainer.new()
+	tracks.columns = 4
+	tracks.add_theme_constant_override("h_separation", 12)
+	tracks.add_theme_constant_override("v_separation", 12)
 	for t in Content.list_tracks():
 		var b := MenuStyle.button(str(t["name"]), "")
-		b.disabled = true
-		b.tooltip_text = "Tracks open in the track editor."
-		d.box.add_child(b)
+		b.custom_minimum_size = Vector2(210, 60)
+		var pic := CarInfo.track_picture(str(t["id"]))
+		if pic != null:
+			b.icon = pic
+			b.expand_icon = true
+			b.custom_minimum_size = Vector2(210, 150)
+			b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+		b.tooltip_text = "Open %s in the track editor" % t["name"]
+		b.pressed.connect(func():
+			d.close()
+			close()
+			edit_track.emit(str(t["id"])))
+		tracks.add_child(b)
+	d.box.add_child(tracks)
 	d.foot([MenuStyle.button("Cancel", "ghost", d.close)])
 	d.focus_first.call_deferred()
 
@@ -234,8 +263,45 @@ func _new() -> void:
 		d.close()
 		close()
 		new_car.emit())
-	var track := MenuStyle.button("Track", "primary")
-	track.disabled = true
-	track.tooltip_text = "A new track is made in the track editor."
+	var track := MenuStyle.button("Track", "primary", func():
+		d.close()
+		close()
+		new_track.emit())
 	d.foot([car, track, MenuStyle.button("Cancel", "ghost", d.close)])
 	car.grab_focus.call_deferred()
+
+
+## Imports the zip at a link (Garage.js importUrl): it is downloaded into the folder for temporary files and put in the garage as
+## a zip that was chosen (Garage.import_zip). The message says what came of it.
+func import_url(url: String) -> void:
+	url = url.strip_edges()
+	if not (url.begins_with("http://") or url.begins_with("https://")):
+		say("Give a link that starts with https:// (or http://).", true)
+		return
+	say("Downloading…")
+	var http := HTTPRequest.new()
+	http.body_size_limit = 512 * 1048576
+	http.timeout = 120.0
+	var tmp := OS.get_temp_dir().path_join("openracer-download-%d.zip" % Time.get_ticks_msec())
+	DirAccess.make_dir_recursive_absolute(tmp.get_base_dir())
+	http.download_file = tmp
+	add_child(http)
+	http.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, _b: PackedByteArray):
+		http.queue_free()
+		if result != HTTPRequest.RESULT_SUCCESS or code < 200 or code >= 300:
+			DirAccess.remove_absolute(tmp)
+			say("Could not download it (%s)." % ("HTTP %d" % code if result == HTTPRequest.RESULT_SUCCESS else "error %d" % result), true)
+			return
+		var r := Garage.import_zip(tmp)
+		DirAccess.remove_absolute(tmp)
+		if r.has("error"):
+			say("Could not import it: %s" % r["error"], true)
+			return
+		changed = true
+		build()
+		say("Imported %s %s." % [str(r["kind"]).trim_suffix("s"), r["id"]])
+		RunLog.event("garage: imported from %s" % url))
+	var err := http.request(url)
+	if err != OK:
+		http.queue_free()
+		say("Could not download it (error %d)." % err, true)

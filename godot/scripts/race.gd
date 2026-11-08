@@ -85,6 +85,11 @@ func setup(w: Node, l: RacingLine, track: Track, player_car: Car, opponents: int
 			var tuned := Tuning.load_tune(tune_path) if tune_path != "" else {}
 			if not tuned.is_empty():
 				cfg = tuned
+		# (Settings, Simulation: the AI cars without a soft body: rigid, Opponent.js aiDamage "off")
+		if str(Settings.get_value("sim_ai_damage")) == "off" and cfg is Dictionary:
+			cfg = (cfg as Dictionary).duplicate(true)
+			var sbc: Variant = cfg.get("softbody", {})
+			cfg["softbody"] = (sbc as Dictionary).merged({"enabled": false}, true) if sbc is Dictionary else {"enabled": false}
 		var e := Entry.new()
 		e.car = Car.new()
 		e.car.engine_damage_on = false
@@ -208,6 +213,10 @@ func _physics_process(dt: float) -> void:
 					e.knocks += 1
 					RunLog.line("race: %s touches %s at %.0f km/h" % [e.car.name, (b as Car).name, absf(e.car.speed) * 3.6])
 		e.touching = now
+		# (Settings, Simulation: "Only near my car": the shell of an AI car further than the range is not worked out)
+		if e.driver != null and e.car.shell != null:
+			e.car.shell.skip = str(Settings.get_value("sim_ai_damage")) == "near" and player != null \
+				and e.car.global_position.distance_to(player.car.global_position) > float(Settings.get_value("sim_ai_range"))
 		if e.driver == null:
 			continue
 		if is_held():

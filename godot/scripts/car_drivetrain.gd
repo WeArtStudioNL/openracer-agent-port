@@ -45,7 +45,7 @@ static func controls(c: Car, dt: float) -> void:
 	var u := c.speed
 	if c.gearbox == "cvt":
 		_cvt(c, dt, thr)
-	elif not c.manual and c.gear > 0:
+	elif not c.manual and c.gear > 0 and c.shift_style != "manual":
 		_automatic(c, dt, thr, u, gears)
 	var key := c.gear
 	if c.last_gear_key != -99 and key != c.last_gear_key:
@@ -98,14 +98,9 @@ static func _automatic(c: Car, dt: float, thr: float, u: float, gears: int) -> v
 	if peak > 0.0:
 		up_rpm = maxf(up_rpm, peak * 1.25)
 		down_rpm = minf(peak * (0.6 + 0.3 * thr), up_rpm / maxf(1.0, prev_ratio) * 0.9)
-	if c.shift_style == "sport":
-		up_rpm = maxf(up_rpm, limit * (0.62 + 0.3 * thr))
-		down_rpm = minf(maxf(down_rpm, limit * (0.3 + 0.2 * thr)), up_rpm / maxf(1.0, prev_ratio) * 0.9)
-	elif c.shift_style == "drag":
-		up_rpm = limit * 0.965
-		down_rpm = limit * 0.12
-	down_rpm = minf(down_rpm, up_rpm / maxf(1.0, prev_ratio) * 0.9)
-	up_rpm = minf(up_rpm, limit * (0.965 if c.shift_style == "drag" else 0.94))
+	var pattern := CarEngine.shift_pattern(c.shift_style, up_rpm, down_rpm, limit, thr, prev_ratio)      # (sport, drag)
+	up_rpm = pattern.x
+	down_rpm = pattern.y
 	var engine_rpm := c.engine.rpm()
 	var shift_rpm := rpm
 	if c.gearbox == "torque-converter" and c.tc_lock < 0.9 and thr > 0.5:

@@ -1057,6 +1057,41 @@ func copy_of(p: Part, disp: PackedVector3Array) -> Node3D:
 	return holder
 
 
+## The part a mesh of the model belongs to (the debug view), or null.
+func part_of(node: Node) -> Part:
+	if node == null:
+		return null
+	var found: Part = null
+	for p in parts:
+		if p.object == null or not is_instance_valid(p.object):
+			continue
+		var mine := p.object == node or p.object.is_ancestor_of(node) or (node is MeshInstance3D and node.has_meta("source") and _belongs(node, p))
+		if not mine and p.body != null and is_instance_valid(p.body) and p.body.is_ancestor_of(node):
+			mine = true
+		# (the deepest: a part that rides on another)
+		if mine and (found == null or found.object.is_ancestor_of(p.object)):
+			found = p
+	return found
+
+
+## The tools of the debug view: "hinge" opens a part on its hinge, "break" breaks it loose. What happened.
+func tool(p: Part, which: String) -> String:
+	if which == "hinge":
+		if p.hinge.is_empty() and p.mounts.is_empty():
+			return "it has no hinge"
+		if p.state != "held":
+			return "it is open already (%s)" % p.state
+		_start(p, "hinge")
+		return "opened"
+	if p.state == "broken" or p.state == "free":
+		return "it is loose already"
+	if p.mode == "breakable":
+		_break(p)
+		return "broken"
+	_start(p, "free")
+	return "broken loose"
+
+
 func count_off() -> int:
 	var n := 0
 	for p in parts:

@@ -4,7 +4,7 @@ extends RefCounted
 ## Display and sound, Mobile (with the touch controls), Graphics, Simulation, Tools. (Controls: SettingsControlsPage.)
 
 const R := preload("res://scripts/settings_rows.gd")
-const CAMERAS := [[0, "Follow (smooth, FOV with speed)"], [1, "Cockpit"], [2, "Bonnet"]]
+const CAMERAS := [[0, "Follow (smooth, FOV with speed)"], [1, "Cockpit"], [2, "Bonnet"], [3, "Free camera"]]
 
 var menu: SettingsMenu
 var world: Node = null              # the drive behind the menu, or null in the main menu
@@ -42,7 +42,9 @@ func car_page(page: VBoxContainer) -> void:
 	R.pick(page, "Camera", Settings.get_value("camera"), CAMERAS, func(v: Variant):
 		Settings.set_value("camera", v)
 		var cam: Variant = world.get("camera") if world != null else null
-		if cam is ChaseCamera:
+		if world != null and world.has_method("set_free_camera"):
+			world.set_free_camera(int(v) == 3)          # (the free camera of FreeCam.js, the fourth of the camera key)
+		if cam is ChaseCamera and int(v) < 3:
 			(cam as ChaseCamera).mode = int(v) as ChaseCamera.Mode
 			(cam as ChaseCamera).snap()
 			world.audio.set_inside(int(v) != 0))
@@ -248,8 +250,17 @@ func tools_page(page: VBoxContainer) -> void:
 	var track: Track = world.get("track")
 	if track.config.get("dragstrip") is Dictionary:
 		R.action(page, "Drag strip of this track", "Top 50 and tickets", func(): DragTopWindow.open(menu, track.track_id, track.config))
-	var line_b := R.action(page, "Racing line of this track", "Save my best lap as the line", func(): pass)
-	R.grey(line_b.get_parent(), "The Godot version does not write tracks: draw the line in the track editor of the browser game")
+	R.action(page, "Racing line of this track", "Save my best lap as the line", func():
+		var laps: LapTimer = world.get("laps")
+		if laps == null or laps.best_samples().size() < 10 * LapTimer.FIELDS:
+			menu.hint("No best lap yet: drive a lap first.")
+			return
+		var count := RacingLine.save_lap(track.track_id, laps.best_samples())
+		if count < 0:
+			menu.hint("Could not save the line.")
+		else:
+			track.config["racing_line"] = Content.load_json("tracks/%s/track.json" % track.track_id).get("racing_line", [])
+			menu.hint("The line is saved with the track in your garage (%d points): the AI drives it from the next start." % count))
 	R.action(page, "Records of this track", "Forget them", _forget_records.bind(track))
 	var hdr_status := Label.new()
 	var hdr := R.action(page, "Surroundings for Blender", "Save as HDR", func(): pass)
