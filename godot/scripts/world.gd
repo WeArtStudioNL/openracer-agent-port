@@ -28,6 +28,8 @@ var debug_view: Node = null         # what the physics sees (DebugView, the key 
 var telemetry: Node = null          # the values of the car (Telemetry, V)
 var _pause_box: Control
 var _results: CanvasLayer
+var _after_cine := false            # after the finish: the cinematic camera of the track (main.js startAutopilot)
+var _top_speed := 0.0               # the top speed of the player in the race (the pace of the car after the finish)
 var _shot_path := ""
 var _shot_at := -1.0
 var _log_every := 0.0
@@ -301,6 +303,10 @@ func _restart_race() -> void:
 func _race_finished() -> void:
 	ai = AIDriver.new()
 	ai.setup(car, line, 0.5)
+	# (half of the line's speed in the bends and half of the top speed that the player reached on the straights; the
+	# camera the cinematic one of the track, when it has cameras: C takes the game's back)
+	ai.speed_cap = maxf(3.0, 0.5 * (_top_speed if _top_speed > 1.0 else 20.0))
+	_after_cine = replay != null and not replay.cinema_cameras().is_empty() and (free_cam == null or not free_cam.active)
 	_results = CanvasLayer.new()
 	_results.layer = 5
 	add_child(_results)
@@ -432,7 +438,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("tuning"):
 		open_tuning()
 	elif event.is_action_pressed("camera"):
-		if free_cam != null and free_cam.active:
+		if _after_cine:
+			_after_cine = false
+			replay.live_cine_off()
+			camera.make_current()
+		elif free_cam != null and free_cam.active:
 			set_free_camera(false)
 		elif camera.mode == ChaseCamera.Mode.BONNET:
 			set_free_camera(true)
@@ -693,6 +703,10 @@ func resume() -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
+	if race != null and _results == null and not car.freeze:
+		_top_speed = maxf(_top_speed, car.speed)
+	if _after_cine and replay != null and not replay.playing:
+		replay.live_cine(delta)
 	if _log_every > 0.0 and _time >= _next_log and not car.freeze:
 		_next_log = _time + _log_every
 		var p := car.global_position

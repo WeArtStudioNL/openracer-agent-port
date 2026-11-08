@@ -698,6 +698,27 @@ func update_cine(delta: float) -> void:
 	_cine_cam.fov = _cine_fov
 
 
+## The cinematic camera of the track live, in the game after the finish (Replay.js liveCine): false when the track has
+## no cameras.
+func live_cine(delta: float) -> bool:
+	if cinema_cameras().is_empty() or cars.is_empty():
+		return false
+	if _cine_cam == null:
+		_cine_cam = _camera("Cinematic")
+		_cine_index = -1
+	target = 0
+	update_cine(delta)
+	if not _cine_cam.current:
+		_cine_cam.make_current()
+	return true
+
+
+func live_cine_off() -> void:
+	if _cine_cam != null and not playing:
+		_cine_cam.queue_free()
+		_cine_cam = null
+
+
 ## The camera of a clip of the video editor: "follow", "cockpit", "cinematic" or "track" (lead: the look ahead).
 func set_clip_camera(mode: String, lead := -1.0) -> void:
 	cine_override = lead if mode == "cinematic" and lead >= 0.0 else -1.0

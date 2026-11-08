@@ -12,6 +12,7 @@ var others: Array[Car] = []       # the other cars of the race (to back off behi
 var pit: AIPit = null             # an AI car of a race: its pit stops (AIPit)
 var put_back_reason := ""         # why it should be put back ("": it drives on); the race (or the world) does it
 var ghost_left := 0.0             # s that it is still a ghost after it was put back: the other cars go through it
+var speed_cap := INF              # m/s at most (the player's car after the finish: half of the top speed it reached)
 var _index := -1
 var _speed_error_i := 0.0
 var _side := 0.0                  # m to the side of the line, to pass a car
@@ -144,7 +145,7 @@ func drive(dt: float) -> void:
 	if car.bike != null:
 		ahead = int(clampf(3.0 + v * 0.75, 7.0, 35.0) / RacingLine.STEP)      # (Opponent.js: a bike leans into a bend before it turns)
 	var target := line.point(_index + ahead)
-	var want := _speeds[posmod(_index + int((3.0 + v * 0.3) / RacingLine.STEP), line.count())]
+	var want := minf(speed_cap, _speeds[posmod(_index + int((3.0 + v * 0.3) / RacingLine.STEP), line.count())])
 	# the pits (AIPit): a speed of the pit lane, and a point on the pit line or at the box to steer at
 	var pits: Dictionary = pit.update(dt, _index, v) if pit != null else {}
 	if not pits.is_empty():
